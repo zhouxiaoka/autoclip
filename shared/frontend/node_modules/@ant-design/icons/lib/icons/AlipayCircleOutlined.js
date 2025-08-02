@@ -1,0 +1,28 @@
+"use strict";
+
+var _interopRequireWildcard = require("@babel/runtime/helpers/interopRequireWildcard").default;
+var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault").default;
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _extends2 = _interopRequireDefault(require("@babel/runtime/helpers/extends"));
+var React = _interopRequireWildcard(require("react"));
+var _AlipayCircleOutlined = _interopRequireDefault(require("@ant-design/icons-svg/lib/asn/AlipayCircleOutlined"));
+var _AntdIcon = _interopRequireDefault(require("../components/AntdIcon"));
+// GENERATE BY ./scripts/generate.ts
+// DON NOT EDIT IT MANUALLY
+
+var AlipayCircleOutlined = function AlipayCircleOutlined(props, ref) {
+  return /*#__PURE__*/React.createElement(_AntdIcon.default, (0, _extends2.default)({}, props, {
+    ref: ref,
+    icon: _AlipayCircleOutlined.default
+  }));
+};
+
+/**![alipay-circle](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiNjYWNhY2EiIGZpbGwtcnVsZT0iZXZlbm9kZCIgdmlld0JveD0iNjQgNjQgODk2IDg5NiIgZm9jdXNhYmxlPSJmYWxzZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNNTEyIDY0YzI0Ny40MiAwIDQ0OCAyMDAuNTggNDQ4IDQ0OFM3NTkuNDIgOTYwIDUxMiA5NjAgNjQgNzU5LjQyIDY0IDUxMiAyNjQuNTggNjQgNTEyIDY0bTMyLjUgMTY4Yy02OS42NyAwLTg2LjA2IDE2Ljg0LTg2LjcyIDM5LjA4bC0uMDIgMS40M3Y0Ni42MkgyOTEuNDVjLTkuOTIgMC0xNC4yOCAyMy4wNS0xNC4yNyAzOS4zIDAgMi43IDIuMDggNC45MyA0Ljc3IDQuOTNoMTc1LjgxdjU4LjNoLTExNi41Yy05Ljk2IDAtMTQuMyAyMy43Ni0xNC4yNyAzOS40N2E0Ljc3IDQuNzcgMCAwMDQuNzcgNC43NmgyMzMuNDVjLTQuNTMgNDEuMDYtMTUuNDMgNzcuNTktMzAuNzIgMTA5LjMybC0xLjIyIDIuNS0uMzItLjI4Yy02MC4yNC0yOC40Ny0xMjAuNDMtNTIuNTctMTk0LjQtNTIuNTdsLTIuNjIuMDFjLTg0Ljk4IDEuMTEtMTQ0LjcxIDU2LjUtMTQ1LjkxIDEyNy4wNGwtLjAyIDEuMjIuMDIgMi4xM2MxLjI0IDcwLjQgNjMuNTYgMTI2LjQ1IDE0OC41MiAxMjYuNDUgNjEuMjUgMCAxMTYuMzgtMTYuODUgMTYzLjQ2LTQ1LjAyYTEzOC41OCAxMzguNTggMCAwMDE0LjA3LTcuOTYgMzQ1LjYgMzQ1LjYgMCAwMDUwLjMtNDEuMTZsOS40NSA2LjM1IDEyLjQ2IDguMzJjNTcuNTMgMzguMjYgMTEzLjc2IDcyLjYyIDE2OS44NiA3OS4yN2ExNDIuNjIgMTQyLjYyIDAgMDAxOC4zMSAxLjE2YzQzLjAyIDAgNTUtNTIuNjggNTcuMzktOTUuNTFsLjE0LTIuODRjLjQtOC40Ni02LjItMTUuNi0xNC42NS0xNS44Ni03NS40Ni0yLjM3LTEzNi40NS0yMi4wNS0xOTItNDYuMTFsLTYuMjctMi43NWMzNS4xNS01Ni44IDU2LjY2LTEyMS44MSA1Ny4xNS0xODYuNjZsLjA5LTEuMDhjLjQtNS41MS00LTEwLjItOS41Mi0xMC4ySDU0OS4zM3YtNTguM2gxNjUuNzNjOS45MiAwIDE0LjI4LTIyLjEyIDE0LjI3LTM5LjMxYTQuODUgNC44NSAwIDAwLTQuNzgtNC45Mkg1NDkuMzJ2LTgyLjM1YTQuOCA0LjggMCAwMC00LjgzLTQuNzhNMzI4IDU4My44NWM1NC42MyAwIDEwNy4wOCAyMi40MSAxNTguMSA1Mi4xOWw1Ljc2IDMuNGMtMTAzLjU3IDExOS44NC0yNDcuMTcgOTUuOS0yNjEuNzIgMjYuMzdhNjYuODkgNjYuODkgMCAwMS0xLjE0LTkuODNsLS4wNi0yLjM0LjAyLS45Yy45Ny00MC4xMiA0NS4zMy02OC45IDk5LjA0LTY4LjkiIC8+PC9zdmc+) */
+var RefIcon = /*#__PURE__*/React.forwardRef(AlipayCircleOutlined);
+if (process.env.NODE_ENV !== 'production') {
+  RefIcon.displayName = 'AlipayCircleOutlined';
+}
+var _default = exports.default = RefIcon;

@@ -1,0 +1,20 @@
+import _extends from "@babel/runtime/helpers/esm/extends";
+// GENERATE BY ./scripts/generate.ts
+// DON NOT EDIT IT MANUALLY
+
+import * as React from 'react';
+import DeploymentUnitOutlinedSvg from "@ant-design/icons-svg/es/asn/DeploymentUnitOutlined";
+import AntdIcon from "../components/AntdIcon";
+var DeploymentUnitOutlined = function DeploymentUnitOutlined(props, ref) {
+  return /*#__PURE__*/React.createElement(AntdIcon, _extends({}, props, {
+    ref: ref,
+    icon: DeploymentUnitOutlinedSvg
+  }));
+};
+
+/**![deployment-unit](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiNjYWNhY2EiIHZpZXdCb3g9IjY0IDY0IDg5NiA4OTYiIGZvY3VzYWJsZT0iZmFsc2UiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTg4OC4zIDY5My4yYy00Mi41LTI0LjYtOTQuMy0xOC0xMjkuMiAxMi44bC01My0zMC43VjUyMy42YzAtMTUuNy04LjQtMzAuMy0yMi0zOC4xbC0xMzYtNzguM3YtNjcuMWM0NC4yLTE1IDc2LTU2LjggNzYtMTA2LjEgMC02MS45LTUwLjEtMTEyLTExMi0xMTJzLTExMiA1MC4xLTExMiAxMTJjMCA0OS4zIDMxLjggOTEuMSA3NiAxMDYuMXY2Ny4xbC0xMzYgNzguM2MtMTMuNiA3LjgtMjIgMjIuNC0yMiAzOC4xdjE1MS42bC01MyAzMC43Yy0zNC45LTMwLjgtODYuOC0zNy40LTEyOS4yLTEyLjgtNTMuNSAzMS03MS43IDk5LjQtNDEgMTUyLjkgMzAuOCA1My41IDk4LjkgNzEuOSAxNTIuMiA0MSA0Mi41LTI0LjYgNjIuNy03MyA1My42LTExOC44bDQ4LjctMjguMyAxNDAuNiA4MWM2LjggMy45IDE0LjQgNS45IDIyIDUuOXMxNS4yLTIgMjItNS45TDY3NC41IDc0MGw0OC43IDI4LjNjLTkuMSA0NS43IDExLjIgOTQuMiA1My42IDExOC44IDUzLjMgMzAuOSAxMjEuNSAxMi42IDE1Mi4yLTQxIDMwLjgtNTMuNiAxMi42LTEyMi00MC43LTE1Mi45em0tNjczIDEzOC40YTQ3LjYgNDcuNiAwIDAxLTY1LjItMTcuNmMtMTMuMi0yMi45LTUuNC01Mi4zIDE3LjUtNjUuNWE0Ny42IDQ3LjYgMCAwMTY1LjIgMTcuNmMxMy4yIDIyLjkgNS40IDUyLjMtMTcuNSA2NS41ek01MjIgNDYzLjh6TTQ2NCAyMzRhNDguMDEgNDguMDEgMCAwMTk2IDAgNDguMDEgNDguMDEgMCAwMS05NiAwem0xNzAgNDQ2LjJsLTEyMiA3MC4zLTEyMi03MC4zVjUzOS44bDEyMi03MC4zIDEyMiA3MC4zdjE0MC40em0yMzkuOSAxMzMuOWMtMTMuMiAyMi45LTQyLjQgMzAuOC02NS4yIDE3LjYtMjIuOC0xMy4yLTMwLjctNDIuNi0xNy41LTY1LjVzNDIuNC0zMC44IDY1LjItMTcuNmMyMi45IDEzLjIgMzAuNyA0Mi41IDE3LjUgNjUuNXoiIC8+PC9zdmc+) */
+var RefIcon = /*#__PURE__*/React.forwardRef(DeploymentUnitOutlined);
+if (process.env.NODE_ENV !== 'production') {
+  RefIcon.displayName = 'DeploymentUnitOutlined';
+}
+export default RefIcon;

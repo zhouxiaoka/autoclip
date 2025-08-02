@@ -1,0 +1,20 @@
+import _extends from "@babel/runtime/helpers/esm/extends";
+// GENERATE BY ./scripts/generate.ts
+// DON NOT EDIT IT MANUALLY
+
+import * as React from 'react';
+import SmileTwoToneSvg from "@ant-design/icons-svg/es/asn/SmileTwoTone";
+import AntdIcon from "../components/AntdIcon";
+var SmileTwoTone = function SmileTwoTone(props, ref) {
+  return /*#__PURE__*/React.createElement(AntdIcon, _extends({}, props, {
+    ref: ref,
+    icon: SmileTwoToneSvg
+  }));
+};
+
+/**![smile](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiNjYWNhY2EiIHZpZXdCb3g9IjY0IDY0IDg5NiA4OTYiIGZvY3VzYWJsZT0iZmFsc2UiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTUxMiA2NEMyNjQuNiA2NCA2NCAyNjQuNiA2NCA1MTJzMjAwLjYgNDQ4IDQ0OCA0NDggNDQ4LTIwMC42IDQ0OC00NDhTNzU5LjQgNjQgNTEyIDY0em0wIDgyMGMtMjA1LjQgMC0zNzItMTY2LjYtMzcyLTM3MnMxNjYuNi0zNzIgMzcyLTM3MiAzNzIgMTY2LjYgMzcyIDM3Mi0xNjYuNiAzNzItMzcyIDM3MnoiIGZpbGw9IiMxNjc3ZmYiIC8+PHBhdGggZD0iTTUxMiAxNDBjLTIwNS40IDAtMzcyIDE2Ni42LTM3MiAzNzJzMTY2LjYgMzcyIDM3MiAzNzIgMzcyLTE2Ni42IDM3Mi0zNzItMTY2LjYtMzcyLTM3Mi0zNzJ6TTI4OCA0MjFhNDguMDEgNDguMDEgMCAwMTk2IDAgNDguMDEgNDguMDEgMCAwMS05NiAwem0yMjQgMjcyYy04NS41IDAtMTU1LjYtNjcuMy0xNjAtMTUxLjZhOCA4IDAgMDE4LTguNGg0OC4xYzQuMiAwIDcuOCAzLjIgOC4xIDcuNEM0MjAgNTg5LjkgNDYxLjUgNjI5IDUxMiA2MjlzOTIuMS0zOS4xIDk1LjgtODguNmMuMy00LjIgMy45LTcuNCA4LjEtNy40SDY2NGE4IDggMCAwMTggOC40QzY2Ny42IDYyNS43IDU5Ny41IDY5MyA1MTIgNjkzem0xNzYtMjI0YTQ4LjAxIDQ4LjAxIDAgMDEwLTk2IDQ4LjAxIDQ4LjAxIDAgMDEwIDk2eiIgZmlsbD0iI2U2ZjRmZiIgLz48cGF0aCBkPSJNMjg4IDQyMWE0OCA0OCAwIDEwOTYgMCA0OCA0OCAwIDEwLTk2IDB6bTM3NiAxMTJoLTQ4LjFjLTQuMiAwLTcuOCAzLjItOC4xIDcuNC0zLjcgNDkuNS00NS4zIDg4LjYtOTUuOCA4OC42cy05Mi0zOS4xLTk1LjgtODguNmMtLjMtNC4yLTMuOS03LjQtOC4xLTcuNEgzNjBhOCA4IDAgMDAtOCA4LjRjNC40IDg0LjMgNzQuNSAxNTEuNiAxNjAgMTUxLjZzMTU1LjYtNjcuMyAxNjAtMTUxLjZhOCA4IDAgMDAtOC04LjR6bS0yNC0xMTJhNDggNDggMCAxMDk2IDAgNDggNDggMCAxMC05NiAweiIgZmlsbD0iIzE2NzdmZiIgLz48L3N2Zz4=) */
+var RefIcon = /*#__PURE__*/React.forwardRef(SmileTwoTone);
+if (process.env.NODE_ENV !== 'production') {
+  RefIcon.displayName = 'SmileTwoTone';
+}
+export default RefIcon;

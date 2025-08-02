@@ -1,0 +1,34 @@
+# FastAPI后端服务依赖
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+aiofiles==23.2.1
+
+# 数据库相关
+sqlalchemy==2.0.23
+alembic==1.13.1
+# psycopg2-binary==2.9.9  # 暂时注释，开发环境使用SQLite
+
+# 任务队列相关
+celery==5.3.4
+redis==5.0.1
+flower==2.0.1
+
+# 异步和并发
+asyncio-mqtt==0.16.1
+websockets==12.0
+
+# B站相关依赖
+requests>=2.32.3
+aiohttp==3.9.1
+
+# 原有项目依赖
+dashscope
+pydub
+pysrt
+
+# 测试相关
+pytest==8.0.0
+pytest-asyncio==0.23.2
+pytest-cov==4.1.0
+pytest-mock==3.12.0

@@ -1,0 +1,340 @@
+/* 配置页面样式 - 深色主题优化 */
+
+.settings-page {
+  padding: 24px;
+  background-color: #0f0f0f;
+  min-height: 100vh;
+}
+
+.settings-container {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* 标题样式 */
+.settings-title {
+  color: #ffffff !important;
+  margin-bottom: 32px !important;
+  font-weight: 600;
+}
+
+.settings-title .anticon {
+  color: #4facfe;
+  margin-right: 12px;
+}
+
+/* 卡片样式 */
+.settings-card {
+  background-color: #1a1a1a !important;
+  border: 1px solid #2d2d2d !important;
+  border-radius: 16px !important;
+  margin-bottom: 24px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.settings-card .ant-card-head {
+  background-color: #1a1a1a !important;
+  border-bottom: 1px solid #2d2d2d !important;
+  border-radius: 16px 16px 0 0 !important;
+}
+
+.settings-card .ant-card-head-title {
+  color: #ffffff !important;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.settings-card .ant-card-body {
+  padding: 24px;
+  background-color: #1a1a1a !important;
+  border-radius: 0 0 16px 16px !important;
+}
+
+/* 警告框样式 */
+.settings-alert {
+  margin-bottom: 24px !important;
+  border-radius: 12px !important;
+  border: 1px solid #2d2d2d !important;
+}
+
+.settings-alert .ant-alert-message {
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.settings-alert .ant-alert-description {
+  color: #cccccc !important;
+  line-height: 1.6;
+}
+
+/* 表单样式 */
+.settings-form {
+  margin-top: 24px;
+}
+
+.form-item {
+  margin-bottom: 20px !important;
+}
+
+.form-item .ant-form-item-label > label {
+  color: #ffffff !important;
+  font-weight: 500;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+/* 输入框样式 */
+.settings-input {
+  background-color: #2d2d2d !important;
+  border: 1px solid #404040 !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  font-size: 14px;
+  height: 40px;
+  transition: all 0.3s ease;
+}
+
+.settings-input:hover {
+  border-color: #555555 !important;
+}
+
+.settings-input:focus {
+  border-color: #4facfe !important;
+  box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.2) !important;
+}
+
+.settings-input::placeholder {
+  color: #888888 !important;
+}
+
+/* 输入框前缀图标 */
+.settings-input .ant-input-prefix {
+  color: #4facfe !important;
+  margin-right: 8px;
+}
+
+/* 输入框后缀 */
+.settings-input .ant-input-group-addon {
+  background-color: #404040 !important;
+  border-color: #404040 !important;
+  color: #cccccc !important;
+  font-size: 12px;
+}
+
+/* 按钮样式 */
+.test-button {
+  background-color: #2d2d2d !important;
+  border: 1px solid #404040 !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  height: 40px;
+  padding: 0 16px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.test-button:hover {
+  background-color: #404040 !important;
+  border-color: #555555 !important;
+  color: #ffffff !important;
+}
+
+.test-button .anticon {
+  color: #4facfe !important;
+  margin-right: 8px;
+}
+
+.save-button {
+  background: linear-gradient(135deg, #4facfe 0%, #00a8ff 100%) !important;
+  border: none !important;
+  color: #ffffff !important;
+  border-radius: 12px !important;
+  height: 48px;
+  padding: 0 32px;
+  font-weight: 600;
+  font-size: 16px;
+  box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
+  transition: all 0.3s ease;
+}
+
+.save-button:hover {
+  background: linear-gradient(135deg, #00a8ff 0%, #0097e6 100%) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
+}
+
+.save-button .anticon {
+  margin-right: 8px;
+}
+
+/* 分割线样式 */
+.settings-divider {
+  border-color: #2d2d2d !important;
+  margin: 32px 0 !important;
+}
+
+.settings-divider .ant-divider-inner-text {
+  color: #888888 !important;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* 章节标题 */
+.section-title {
+  color: #ffffff !important;
+  font-weight: 600;
+  margin-bottom: 24px !important;
+  font-size: 18px;
+}
+
+/* 说明文字样式 */
+.instructions-space {
+  width: 100%;
+}
+
+.instruction-item {
+  padding: 16px;
+  background-color: #2d2d2d;
+  border-radius: 12px;
+  border: 1px solid #404040;
+  transition: all 0.3s ease;
+}
+
+.instruction-item:hover {
+  background-color: #333333;
+  border-color: #555555;
+}
+
+.instruction-title {
+  color: #ffffff !important;
+  font-weight: 600;
+  margin-bottom: 12px !important;
+  display: flex;
+  align-items: center;
+}
+
+.instruction-title .anticon {
+  color: #4facfe;
+  margin-right: 8px;
+  font-size: 16px;
+}
+
+.instruction-text {
+  color: #cccccc !important;
+  line-height: 1.6;
+  margin-bottom: 0 !important;
+  font-size: 14px;
+}
+
+.instruction-text strong {
+  color: #4facfe !important;
+  font-weight: 600;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .settings-page {
+    padding: 16px;
+  }
+  
+  .settings-container {
+    max-width: 100%;
+  }
+  
+  .settings-card .ant-card-body {
+    padding: 16px;
+  }
+  
+  .form-item {
+    margin-bottom: 16px !important;
+  }
+  
+  .save-button {
+    width: 100%;
+    height: 44px;
+  }
+}
+
+/* 数字输入框特殊样式 */
+.settings-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.settings-input[type="number"]::-webkit-outer-spin-button,
+.settings-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* 密码输入框特殊样式 */
+.settings-input.ant-input-password {
+  padding-right: 40px;
+}
+
+.settings-input.ant-input-password .ant-input-suffix {
+  color: #888888;
+}
+
+.settings-input.ant-input-password .ant-input-suffix:hover {
+  color: #4facfe;
+}
+
+/* 表单验证错误样式 */
+.form-item .ant-form-item-explain-error {
+  color: #ff6b6b !important;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* 加载状态样式 */
+.test-button.ant-btn-loading,
+.save-button.ant-btn-loading {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* 焦点状态增强 */
+.settings-input:focus-within {
+  border-color: #4facfe !important;
+  box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.2) !important;
+}
+
+/* 悬停效果增强 */
+.settings-card:hover {
+  border-color: #404040 !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* 动画效果 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.settings-card {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* 滚动条样式 */
+.settings-page::-webkit-scrollbar {
+  width: 6px;
+}
+
+.settings-page::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.settings-page::-webkit-scrollbar-thumb {
+  background: #404040;
+  border-radius: 3px;
+}
+
+.settings-page::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+} 

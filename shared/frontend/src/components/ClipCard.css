@@ -1,0 +1,47 @@
+.clip-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.clip-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(24, 144, 255, 0.1);
+}
+
+.clip-card:hover .ant-card-body {
+  background: linear-gradient(135deg, #1f1f1f 0%, #333333 100%);
+}
+
+.video-overlay {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(2px);
+}
+
+.clip-card:hover .video-overlay {
+  opacity: 1 !important;
+  background: rgba(0,0,0,0.6) !important;
+}
+
+.video-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.clip-card:hover .video-thumbnail {
+  transform: scale(1.05);
+}
+
+/* 自定义按钮悬停效果 */
+.clip-card .ant-btn-primary:hover {
+  background: linear-gradient(45deg, #40a9ff, #52c41a) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.3);
+}
+
+/* 评分标签动画 */
+.clip-card:hover [style*="getScoreColor"] {
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+}

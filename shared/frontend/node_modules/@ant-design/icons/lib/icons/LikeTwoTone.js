@@ -1,0 +1,28 @@
+"use strict";
+
+var _interopRequireWildcard = require("@babel/runtime/helpers/interopRequireWildcard").default;
+var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault").default;
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _extends2 = _interopRequireDefault(require("@babel/runtime/helpers/extends"));
+var React = _interopRequireWildcard(require("react"));
+var _LikeTwoTone = _interopRequireDefault(require("@ant-design/icons-svg/lib/asn/LikeTwoTone"));
+var _AntdIcon = _interopRequireDefault(require("../components/AntdIcon"));
+// GENERATE BY ./scripts/generate.ts
+// DON NOT EDIT IT MANUALLY
+
+var LikeTwoTone = function LikeTwoTone(props, ref) {
+  return /*#__PURE__*/React.createElement(_AntdIcon.default, (0, _extends2.default)({}, props, {
+    ref: ref,
+    icon: _LikeTwoTone.default
+  }));
+};
+
+/**![like](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiNjYWNhY2EiIHZpZXdCb3g9IjY0IDY0IDg5NiA4OTYiIGZvY3VzYWJsZT0iZmFsc2UiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTI3MyA0OTUuOXY0MjhsLjMtNDI4em01MzguMi04OC4zSDQ5Ni44bDkuNi0xOTguNGMuNi0xMS45LTQuNy0yMy4xLTE0LjYtMzAuNS02LjEtNC41LTEzLjYtNi44LTIxLjEtNi43LTE5LjYuMS0zNi45IDEzLjQtNDIuMiAzMi4zLTM3LjEgMTM0LjQtNjQuOSAyMzUuMi04My41IDMwMi41Vjg1MmgzOTkuNGE1Ni44NSA1Ni44NSAwIDAwMzMuNi01MS44YzAtOS43LTIuMy0xOC45LTYuOS0yNy4zbC0xMy45LTI1LjQgMjEuOS0xOWE1Ni43NiA1Ni43NiAwIDAwMTkuNi00M2MwLTkuNy0yLjMtMTguOS02LjktMjcuM2wtMTMuOS0yNS40IDIxLjktMTlhNTYuNzYgNTYuNzYgMCAwMDE5LjYtNDNjMC05LjctMi4zLTE4LjktNi45LTI3LjNsLTE0LTI1LjUgMjEuOS0xOWE1Ni43NiA1Ni43NiAwIDAwMTkuNi00M2MwLTE5LjEtMTEtMzcuNS0yOC44LTQ4LjR6IiBmaWxsPSIjZTZmNGZmIiAvPjxwYXRoIGQ9Ik0xMTIgNTI4djM2NGMwIDE3LjcgMTQuMyAzMiAzMiAzMmg2NVY0OTZoLTY1Yy0xNy43IDAtMzIgMTQuMy0zMiAzMnptNzczLjkgNS43YzE2LjgtMjIuMiAyNi4xLTQ5LjQgMjYuMS03Ny43IDAtNDQuOS0yNS4xLTg3LjUtNjUuNS0xMTFhNjcuNjcgNjcuNjcgMCAwMC0zNC4zLTkuM0g1NzIuM2w2LTEyMi45YzEuNS0yOS43LTktNTcuOS0yOS41LTc5LjRhMTA2LjQgMTA2LjQgMCAwMC03Ny45LTMzLjRjLTUyIDAtOTggMzUtMTExLjggODUuMWwtODUuOCAzMTAuOC0uMyA0MjhoNDcyLjFjOS4zIDAgMTguMi0xLjggMjYuNS01LjQgNDcuNi0yMC4zIDc4LjMtNjYuOCA3OC4zLTExOC40IDAtMTIuNi0xLjgtMjUtNS40LTM3IDE2LjgtMjIuMiAyNi4xLTQ5LjQgMjYuMS03Ny43IDAtMTIuNi0xLjgtMjUtNS40LTM3IDE2LjgtMjIuMiAyNi4xLTQ5LjQgMjYuMS03Ny43IDAtMTIuNi0xLjgtMjUtNS40LTM3ek04MjAuNCA0OTlsLTIxLjkgMTkgMTQgMjUuNWE1Ni4yIDU2LjIgMCAwMTYuOSAyNy4zYzAgMTYuNS03LjEgMzIuMi0xOS42IDQzbC0yMS45IDE5IDEzLjkgMjUuNGE1Ni4yIDU2LjIgMCAwMTYuOSAyNy4zYzAgMTYuNS03LjEgMzIuMi0xOS42IDQzbC0yMS45IDE5IDEzLjkgMjUuNGE1Ni4yIDU2LjIgMCAwMTYuOSAyNy4zYzAgMjIuNC0xMy4yIDQyLjYtMzMuNiA1MS44SDM0NVY1MDYuOGMxOC42LTY3LjIgNDYuNC0xNjggODMuNS0zMDIuNWE0NC4yOCA0NC4yOCAwIDAxNDIuMi0zMi4zYzcuNS0uMSAxNSAyLjIgMjEuMSA2LjcgOS45IDcuNCAxNS4yIDE4LjYgMTQuNiAzMC41bC05LjYgMTk4LjRoMzE0LjRDODI5IDQxOC41IDg0MCA0MzYuOSA4NDAgNDU2YzAgMTYuNS03LjEgMzIuMi0xOS42IDQzeiIgZmlsbD0iIzE2NzdmZiIgLz48L3N2Zz4=) */
+var RefIcon = /*#__PURE__*/React.forwardRef(LikeTwoTone);
+if (process.env.NODE_ENV !== 'production') {
+  RefIcon.displayName = 'LikeTwoTone';
+}
+var _default = exports.default = RefIcon;

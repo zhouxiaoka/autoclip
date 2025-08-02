@@ -1,0 +1,28 @@
+"use strict";
+
+var _interopRequireWildcard = require("@babel/runtime/helpers/interopRequireWildcard").default;
+var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault").default;
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _extends2 = _interopRequireDefault(require("@babel/runtime/helpers/extends"));
+var React = _interopRequireWildcard(require("react"));
+var _FullscreenOutlined = _interopRequireDefault(require("@ant-design/icons-svg/lib/asn/FullscreenOutlined"));
+var _AntdIcon = _interopRequireDefault(require("../components/AntdIcon"));
+// GENERATE BY ./scripts/generate.ts
+// DON NOT EDIT IT MANUALLY
+
+var FullscreenOutlined = function FullscreenOutlined(props, ref) {
+  return /*#__PURE__*/React.createElement(_AntdIcon.default, (0, _extends2.default)({}, props, {
+    ref: ref,
+    icon: _FullscreenOutlined.default
+  }));
+};
+
+/**![fullscreen](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiNjYWNhY2EiIHZpZXdCb3g9IjY0IDY0IDg5NiA4OTYiIGZvY3VzYWJsZT0iZmFsc2UiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTI5MCAyMzYuNGw0My45LTQzLjlhOC4wMSA4LjAxIDAgMDAtNC43LTEzLjZMMTY5IDE2MGMtNS4xLS42LTkuNSAzLjctOC45IDguOUwxNzkgMzI5LjFjLjggNi42IDguOSA5LjQgMTMuNiA0LjdsNDMuNy00My43TDM3MCA0MjMuN2MzLjEgMy4xIDguMiAzLjEgMTEuMyAwbDQyLjQtNDIuM2MzLjEtMy4xIDMuMS04LjIgMC0xMS4zTDI5MCAyMzYuNHptMzUyLjcgMTg3LjNjMy4xIDMuMSA4LjIgMy4xIDExLjMgMGwxMzMuNy0xMzMuNiA0My43IDQzLjdhOC4wMSA4LjAxIDAgMDAxMy42LTQuN0w4NjMuOSAxNjljLjYtNS4xLTMuNy05LjUtOC45LTguOUw2OTQuOCAxNzljLTYuNi44LTkuNCA4LjktNC43IDEzLjZsNDMuOSA0My45TDYwMC4zIDM3MGE4LjAzIDguMDMgMCAwMDAgMTEuM2w0Mi40IDQyLjR6TTg0NSA2OTQuOWMtLjgtNi42LTguOS05LjQtMTMuNi00LjdsLTQzLjcgNDMuN0w2NTQgNjAwLjNhOC4wMyA4LjAzIDAgMDAtMTEuMyAwbC00Mi40IDQyLjNhOC4wMyA4LjAzIDAgMDAwIDExLjNMNzM0IDc4Ny42bC00My45IDQzLjlhOC4wMSA4LjAxIDAgMDA0LjcgMTMuNkw4NTUgODY0YzUuMS42IDkuNS0zLjcgOC45LTguOUw4NDUgNjk0Ljl6bS00NjMuNy05NC42YTguMDMgOC4wMyAwIDAwLTExLjMgMEwyMzYuMyA3MzMuOWwtNDMuNy00My43YTguMDEgOC4wMSAwIDAwLTEzLjYgNC43TDE2MC4xIDg1NWMtLjYgNS4xIDMuNyA5LjUgOC45IDguOUwzMjkuMiA4NDVjNi42LS44IDkuNC04LjkgNC43LTEzLjZMMjkwIDc4Ny42IDQyMy43IDY1NGMzLjEtMy4xIDMuMS04LjIgMC0xMS4zbC00Mi40LTQyLjR6IiAvPjwvc3ZnPg==) */
+var RefIcon = /*#__PURE__*/React.forwardRef(FullscreenOutlined);
+if (process.env.NODE_ENV !== 'production') {
+  RefIcon.displayName = 'FullscreenOutlined';
+}
+var _default = exports.default = RefIcon;

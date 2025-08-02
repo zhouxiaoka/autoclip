@@ -1,0 +1,75 @@
+{
+  "name": "@rc-component/async-validator",
+  "version": "5.0.4",
+  "description": "Validate form asynchronous",
+  "keywords": [
+    "async-validator",
+    "form"
+  ],
+  "homepage": "http://github.com/react-component/async-validator",
+  "bugs": {
+    "url": "http://github.com/react-component/async-validator/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:react-component/async-validator.git"
+  },
+  "license": "MIT",
+  "main": "./lib/index",
+  "module": "./es/index",
+  "types": "./lib/index.d.ts",
+  "files": [
+    "es",
+    "lib"
+  ],
+  "scripts": {
+    "compile": "father build",
+    "docs:build": "dumi build",
+    "docs:deploy": "gh-pages -d .docs-dist",
+    "gh-pages": "npm run docs:build && npm run docs:deploy",
+    "lint": "eslint src --ext .tsx,.ts,.jsx,.js",
+    "now-build": "npm run docs:build",
+    "prepublishOnly": "npm run compile && np --yolo --no-publish",
+    "prettier": "prettier . --write",
+    "postpublish": "npm run gh-pages",
+    "start": "dumi dev",
+    "test": "rc-test",
+    "coverage": "rc-test --coverage",
+    "tsc": "tsc --noEmit"
+  },
+  "pre-commit": [
+    "lint-staged"
+  ],
+  "lint-staged": {
+    "*.{tsx,js,jsx,ts,json}": [
+      "prettier --write"
+    ]
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.24.4"
+  },
+  "devDependencies": {
+    "@rc-component/father-plugin": "^1.0.2",
+    "@types/jest": "^29.5.12",
+    "@types/react": "18.x",
+    "@types/react-dom": "18.x",
+    "@umijs/fabric": "^4.0.1",
+    "dumi": "^2.2.17",
+    "eslint": "^8.0.0",
+    "father": "^4.4.0",
+    "gh-pages": "^6.1.1",
+    "lint-staged": "^15.2.2",
+    "np": "^10.0.3",
+    "prettier": "^3.2.5",
+    "rc-test": "^7.0.15",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "5.x"
+  },
+  "engines": {
+    "node": ">=14.x"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

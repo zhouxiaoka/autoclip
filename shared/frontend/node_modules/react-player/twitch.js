@@ -1,0 +1,9 @@
+
+      var createReactPlayer = require('./lib/ReactPlayer').createReactPlayer
+      var Player = require('./lib/players/Twitch').default
+      module.exports = createReactPlayer([{
+        key: 'twitch',
+        canPlay: Player.canPlay,
+        lazyPlayer: Player
+      }])
+    

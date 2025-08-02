@@ -1,0 +1,189 @@
+.add-clip-modal .ant-modal-content {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border: 1px solid #404040;
+}
+
+.add-clip-modal .ant-modal-header {
+  background: transparent;
+  border-bottom: 1px solid #404040;
+}
+
+.add-clip-modal .ant-modal-title {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.add-clip-modal .ant-modal-close {
+  color: #ffffff;
+}
+
+.add-clip-modal .ant-modal-close:hover {
+  color: #1890ff;
+}
+
+.add-clip-modal-content {
+  max-height: 500px;
+  display: flex;
+  flex-direction: column;
+}
+
+.search-section {
+  margin-bottom: 16px;
+}
+
+.action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.clips-list-container {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 400px;
+  border: 1px solid #404040;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.clip-list-item {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #333 !important;
+  padding: 12px 16px !important;
+  background: transparent;
+}
+
+.clip-list-item:hover {
+  background: rgba(24, 144, 255, 0.1) !important;
+}
+
+.clip-list-item.selected {
+  background: rgba(24, 144, 255, 0.2) !important;
+  border-left: 3px solid #1890ff;
+}
+
+.clip-item-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+}
+
+.clip-checkbox {
+  margin-top: 2px;
+}
+
+.clip-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.clip-title {
+  color: #ffffff;
+  font-weight: 500;
+  font-size: 14px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.clip-meta {
+  margin-bottom: 6px;
+}
+
+.clip-reason {
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.clip-content {
+  line-height: 1.3;
+}
+
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+}
+
+/* 自定义滚动条 */
+.clips-list-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.clips-list-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.clips-list-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.clips-list-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* 搜索框样式 */
+.add-clip-modal .ant-input-affix-wrapper {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #404040;
+  color: #ffffff;
+}
+
+.add-clip-modal .ant-input {
+  background: transparent;
+  color: #ffffff;
+}
+
+.add-clip-modal .ant-input::placeholder {
+  color: #888;
+}
+
+.add-clip-modal .ant-input-prefix {
+  color: #888;
+}
+
+/* 复选框样式 */
+.add-clip-modal .ant-checkbox-wrapper {
+  color: #ffffff;
+}
+
+.add-clip-modal .ant-checkbox-inner {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: #404040;
+}
+
+.add-clip-modal .ant-checkbox-checked .ant-checkbox-inner {
+  background-color: #1890ff;
+  border-color: #1890ff;
+}
+
+/* 按钮样式 */
+.add-clip-modal .ant-btn-link {
+  color: #1890ff;
+}
+
+.add-clip-modal .ant-btn-link:hover {
+  color: #40a9ff;
+}
+
+/* 标签样式 */
+.add-clip-modal .ant-tag {
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+/* 列表样式 */
+.add-clip-modal .ant-list {
+  background: transparent;
+}
+
+.add-clip-modal .ant-list-item {
+  border-bottom-color: #333 !important;
+}
+
+.add-clip-modal .ant-list-item:last-child {
+  border-bottom: none !important;
+}

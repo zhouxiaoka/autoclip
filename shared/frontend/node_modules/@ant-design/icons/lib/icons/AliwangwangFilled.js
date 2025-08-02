@@ -1,0 +1,28 @@
+"use strict";
+
+var _interopRequireWildcard = require("@babel/runtime/helpers/interopRequireWildcard").default;
+var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault").default;
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _extends2 = _interopRequireDefault(require("@babel/runtime/helpers/extends"));
+var React = _interopRequireWildcard(require("react"));
+var _AliwangwangFilled = _interopRequireDefault(require("@ant-design/icons-svg/lib/asn/AliwangwangFilled"));
+var _AntdIcon = _interopRequireDefault(require("../components/AntdIcon"));
+// GENERATE BY ./scripts/generate.ts
+// DON NOT EDIT IT MANUALLY
+
+var AliwangwangFilled = function AliwangwangFilled(props, ref) {
+  return /*#__PURE__*/React.createElement(_AntdIcon.default, (0, _extends2.default)({}, props, {
+    ref: ref,
+    icon: _AliwangwangFilled.default
+  }));
+};
+
+/**![aliwangwang](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiNjYWNhY2EiIHZpZXdCb3g9IjY0IDY0IDg5NiA4OTYiIGZvY3VzYWJsZT0iZmFsc2UiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTg2OC4yIDM3Ny40Yy0xOC45LTQ1LjEtNDYuMy04NS42LTgxLjItMTIwLjZhMzc3LjI2IDM3Ny4yNiAwIDAwLTEyMC41LTgxLjJBMzc1LjY1IDM3NS42NSAwIDAwNTE5IDE0NS44Yy00MS45IDAtODIuOSA2LjctMTIxLjkgMjBDMzA2IDEyMy4zIDIwMC44IDEyMCAxNzAuNiAxMjBjLTIuMiAwLTcuNCAwLTkuNC4yLTExLjkuNC0yMi44IDYuNS0yOS4yIDE2LjQtNi41IDkuOS03LjcgMjIuNC0zLjQgMzMuNWw2NC4zIDE2MS42YTM3OC41OSAzNzguNTkgMCAwMC01Mi44IDE5My4yYzAgNTEuNCAxMCAxMDEgMjkuOCAxNDcuNiAxOC45IDQ1IDQ2LjIgODUuNiA4MS4yIDEyMC41IDM0LjcgMzQuOCA3NS40IDYyLjEgMTIwLjUgODEuMkM0MTguMyA4OTQgNDY3LjkgOTA0IDUxOSA5MDRjNTEuMyAwIDEwMC45LTEwIDE0Ny43LTI5LjggNDQuOS0xOC45IDg1LjUtNDYuMyAxMjAuNC04MS4yIDM0LjctMzQuOCA2Mi4xLTc1LjQgODEuMi0xMjAuNmEzNzYuNSAzNzYuNSAwIDAwMjkuOC0xNDcuNmMtLjItNTEuMi0xMC4xLTEwMC44LTI5LjktMTQ3LjR6bS0zMjUuMiA3OWMwIDIwLjQtMTYuNiAzNy4xLTM3LjEgMzcuMS0yMC40IDAtMzcuMS0xNi43LTM3LjEtMzcuMXYtNTUuMWMwLTIwLjQgMTYuNi0zNy4xIDM3LjEtMzcuMSAyMC40IDAgMzcuMSAxNi42IDM3LjEgMzcuMXY1NS4xem0xNzUuMiAwYzAgMjAuNC0xNi42IDM3LjEtMzcuMSAzNy4xUzY0NCA0NzYuOCA2NDQgNDU2LjR2LTU1LjFjMC0yMC40IDE2LjctMzcuMSAzNy4xLTM3LjEgMjAuNCAwIDM3LjEgMTYuNiAzNy4xIDM3LjF2NTUuMXoiIC8+PC9zdmc+) */
+var RefIcon = /*#__PURE__*/React.forwardRef(AliwangwangFilled);
+if (process.env.NODE_ENV !== 'production') {
+  RefIcon.displayName = 'AliwangwangFilled';
+}
+var _default = exports.default = RefIcon;

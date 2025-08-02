@@ -1,0 +1,3 @@
+"""
+Shared package for AutoClip
+""" 

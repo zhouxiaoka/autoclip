@@ -1,0 +1,28 @@
+"use strict";
+
+var _interopRequireWildcard = require("@babel/runtime/helpers/interopRequireWildcard").default;
+var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault").default;
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _extends2 = _interopRequireDefault(require("@babel/runtime/helpers/extends"));
+var React = _interopRequireWildcard(require("react"));
+var _InstagramFilled = _interopRequireDefault(require("@ant-design/icons-svg/lib/asn/InstagramFilled"));
+var _AntdIcon = _interopRequireDefault(require("../components/AntdIcon"));
+// GENERATE BY ./scripts/generate.ts
+// DON NOT EDIT IT MANUALLY
+
+var InstagramFilled = function InstagramFilled(props, ref) {
+  return /*#__PURE__*/React.createElement(_AntdIcon.default, (0, _extends2.default)({}, props, {
+    ref: ref,
+    icon: _InstagramFilled.default
+  }));
+};
+
+/**![instagram](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiNjYWNhY2EiIHZpZXdCb3g9IjY0IDY0IDg5NiA4OTYiIGZvY3VzYWJsZT0iZmFsc2UiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTUxMiAzNzguN2MtNzMuNCAwLTEzMy4zIDU5LjktMTMzLjMgMTMzLjNTNDM4LjYgNjQ1LjMgNTEyIDY0NS4zIDY0NS4zIDU4NS40IDY0NS4zIDUxMiA1ODUuNCAzNzguNyA1MTIgMzc4Ljd6TTkxMS44IDUxMmMwLTU1LjIuNS0xMDkuOS0yLjYtMTY1LTMuMS02NC0xNy43LTEyMC44LTY0LjUtMTY3LjYtNDYuOS00Ni45LTEwMy42LTYxLjQtMTY3LjYtNjQuNS01NS4yLTMuMS0xMDkuOS0yLjYtMTY1LTIuNi01NS4yIDAtMTA5LjktLjUtMTY1IDIuNi02NCAzLjEtMTIwLjggMTcuNy0xNjcuNiA2NC41QzEzMi42IDIyNi4zIDExOC4xIDI4MyAxMTUgMzQ3Yy0zLjEgNTUuMi0yLjYgMTA5LjktMi42IDE2NXMtLjUgMTA5LjkgMi42IDE2NWMzLjEgNjQgMTcuNyAxMjAuOCA2NC41IDE2Ny42IDQ2LjkgNDYuOSAxMDMuNiA2MS40IDE2Ny42IDY0LjUgNTUuMiAzLjEgMTA5LjkgMi42IDE2NSAyLjYgNTUuMiAwIDEwOS45LjUgMTY1LTIuNiA2NC0zLjEgMTIwLjgtMTcuNyAxNjcuNi02NC41IDQ2LjktNDYuOSA2MS40LTEwMy42IDY0LjUtMTY3LjYgMy4yLTU1LjEgMi42LTEwOS44IDIuNi0xNjV6TTUxMiA3MTcuMWMtMTEzLjUgMC0yMDUuMS05MS42LTIwNS4xLTIwNS4xUzM5OC41IDMwNi45IDUxMiAzMDYuOSA3MTcuMSAzOTguNSA3MTcuMSA1MTIgNjI1LjUgNzE3LjEgNTEyIDcxNy4xem0yMTMuNS0zNzAuN2MtMjYuNSAwLTQ3LjktMjEuNC00Ny45LTQ3LjlzMjEuNC00Ny45IDQ3LjktNDcuOSA0Ny45IDIxLjQgNDcuOSA0Ny45YTQ3Ljg0IDQ3Ljg0IDAgMDEtNDcuOSA0Ny45eiIgLz48L3N2Zz4=) */
+var RefIcon = /*#__PURE__*/React.forwardRef(InstagramFilled);
+if (process.env.NODE_ENV !== 'production') {
+  RefIcon.displayName = 'InstagramFilled';
+}
+var _default = exports.default = RefIcon;
