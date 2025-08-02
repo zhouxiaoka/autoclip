@@ -1,0 +1,28 @@
+"use strict";
+
+var _interopRequireWildcard = require("@babel/runtime/helpers/interopRequireWildcard").default;
+var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault").default;
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _extends2 = _interopRequireDefault(require("@babel/runtime/helpers/extends"));
+var React = _interopRequireWildcard(require("react"));
+var _AudioMutedOutlined = _interopRequireDefault(require("@ant-design/icons-svg/lib/asn/AudioMutedOutlined"));
+var _AntdIcon = _interopRequireDefault(require("../components/AntdIcon"));
+// GENERATE BY ./scripts/generate.ts
+// DON NOT EDIT IT MANUALLY
+
+var AudioMutedOutlined = function AudioMutedOutlined(props, ref) {
+  return /*#__PURE__*/React.createElement(_AntdIcon.default, (0, _extends2.default)({}, props, {
+    ref: ref,
+    icon: _AudioMutedOutlined.default
+  }));
+};
+
+/**![audio-muted](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiNjYWNhY2EiIHZpZXdCb3g9IjY0IDY0IDg5NiA4OTYiIGZvY3VzYWJsZT0iZmFsc2UiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHN0eWxlIC8+PC9kZWZzPjxwYXRoIGQ9Ik02ODIgNDU1VjMxMWwtNzYgNzZ2NjhjLS4xIDUwLjctNDIgOTIuMS05NCA5MmE5NS44IDk1LjggMCAwMS01Mi0xNWwtNTQgNTVjMjkuMSAyMi40IDY1LjkgMzYgMTA2IDM2IDkzLjggMCAxNzAtNzUuMSAxNzAtMTY4eiIgLz48cGF0aCBkPSJNODMzIDQ0NmgtNjBjLTQuNCAwLTggMy42LTggOCAwIDE0MC4zLTExMy43IDI1NC0yNTQgMjU0LTYzIDAtMTIwLjctMjMtMTY1LTYxbC01NCA1NGEzMzQuMDEgMzM0LjAxIDAgMDAxNzkgODF2MTAySDMyNmMtMTMuOSAwLTI0LjkgMTQuMy0yNSAzMnYzNmMuMSA0LjQgMi45IDggNiA4aDQwOGMzLjIgMCA2LTMuNiA2LTh2LTM2YzAtMTcuNy0xMS0zMi0yNS0zMkg1NDdWNzgyYzE2NS4zLTE3LjkgMjk0LTE1Ny45IDI5NC0zMjggMC00LjQtMy42LTgtOC04em0xMy4xLTM3Ny43bC00My41LTQxLjlhOCA4IDAgMDAtMTEuMi4xbC0xMjkgMTI5QzYzNC4zIDEwMS4yIDU3NyA2NCA1MTEgNjRjLTkzLjkgMC0xNzAgNzUuMy0xNzAgMTY4djIyNGMwIDYuNy40IDEzLjMgMS4yIDE5LjhsLTY4IDY4QTI1Mi4zMyAyNTIuMzMgMCAwMTI1OCA0NTRjLS4yLTQuNC0zLjgtOC04LThoLTYwYy00LjQgMC04IDMuNi04IDggMCA1MyAxMi41IDEwMyAzNC42IDE0Ny40bC0xMzcgMTM3YTguMDMgOC4wMyAwIDAwMCAxMS4zbDQyLjcgNDIuN2MzLjEgMy4xIDguMiAzLjEgMTEuMyAwTDg0Ni4yIDc5LjhsLjEtLjFjMy4xLTMuMiAzLTguMy0uMi0xMS40ek00MTcgNDAxVjIzMmMwLTUwLjYgNDEuOS05MiA5NC05MiA0NiAwIDg0LjEgMzIuMyA5Mi4zIDc0LjdMNDE3IDQwMXoiIC8+PC9zdmc+) */
+var RefIcon = /*#__PURE__*/React.forwardRef(AudioMutedOutlined);
+if (process.env.NODE_ENV !== 'production') {
+  RefIcon.displayName = 'AudioMutedOutlined';
+}
+var _default = exports.default = RefIcon;

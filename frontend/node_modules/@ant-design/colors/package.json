@@ -1,0 +1,50 @@
+{
+  "name": "@ant-design/colors",
+  "version": "7.2.1",
+  "description": "Color palettes calculator of Ant Design",
+  "homepage": "https://github.com/ant-design/ant-design-colors#readme",
+  "bugs": {
+    "url": "https://github.com/ant-design/ant-design-colors/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ant-design/ant-design-colors.git"
+  },
+  "license": "MIT",
+  "author": "afc163 <afc163@gmail.com>",
+  "main": "./lib/index",
+  "module": "./es/index",
+  "typings": "es/index.d.ts",
+  "files": [
+    "lib",
+    "es"
+  ],
+  "scripts": {
+    "bench": "vitest bench",
+    "coverage": "npm test -- --coverage",
+    "compile": "father build",
+    "lint": "eslint src --ext .ts",
+    "prepare": "tsx generate-presets",
+    "prepublishOnly": "npm run compile && np --no-cleanup --no-publish --branch=antd-5.x",
+    "prettier": "prettier --write \"**/*.{js,jsx,tsx,ts,less,md,json}\"",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@ant-design/fast-color": "^2.0.6"
+  },
+  "devDependencies": {
+    "@ctrl/tinycolor": "^3.6.1",
+    "@types/jest": "^26.0.24",
+    "@types/node": "^20.14.9",
+    "@umijs/fabric": "^3.0.0",
+    "eslint": "^7.32.0",
+    "father": "^4.4.4",
+    "jest": "^26.6.3",
+    "np": "^7.7.0",
+    "prettier": "^2.8.8",
+    "ts-jest": "^26.5.6",
+    "tsx": "^4.16.1",
+    "typescript": "~5.8.2",
+    "vitest": "^1.6.0"
+  }
+}

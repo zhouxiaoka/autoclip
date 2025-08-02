@@ -1,0 +1,8 @@
+logs/
+__pycache__/
+*.mp4
+*.mkv
+*.zip
+*.tar.gz
+*.pt
+*.ckpt

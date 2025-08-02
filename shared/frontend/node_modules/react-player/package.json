@@ -1,0 +1,102 @@
+{
+  "name": "react-player",
+  "version": "2.16.0",
+  "description": "A React component for playing a variety of URLs, including file paths, YouTube, Facebook, Twitch, SoundCloud, Streamable, Vimeo, Wistia and DailyMotion",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "scripts": {
+    "clean": "rimraf lib lazy demo coverage *.d.ts",
+    "start": "cp -r examples/react/public/ demo & npm run build:lib --watch=forever & builder examples/react/src/index.js --format=iife --bundle --outdir=demo --watch --servedir=demo --livereload",
+    "lint": "standard --verbose | snazzy",
+    "lint:fix": "standard --fix",
+    "lint:ts": "ts-standard --verbose types/*.d.ts | snazzy",
+    "lint:ts:fix": "ts-standard --fix types/*.d.ts",
+    "test": "tester test/*.js test/*/*.js --outdir=disttest --platform=node --format=esm --bundle --external:sinon --external:zora --target=esnext --sourcemap=inline",
+    "test:coverage": "c8 --src src --exclude 'test/**' --exclude 'node_modules/**' --exclude 'scripts/**' --exclude-after-remap npm test",
+    "test:codecov": "npm run test:coverage && c8 report --reporter json && codecov -f coverage/coverage-final.json",
+    "build": "npm run build:lib && npm run build:lazy && npm run build:dist && npm run build:es6",
+    "build:demo": "cp -r examples/react/public demo && npm run build:lib && builder examples/react/src/index.js --format=iife --bundle --outdir=demo --minify --sourcemap",
+    "build:lib": "builder src/*.js src/players/*.js --outdir=lib --format=cjs",
+    "build:lazy": "builder src/*.js src/players/*.js --outdir=lazy --format=cjs",
+    "build:dist": "builder src/index.js --outfile=dist/ReactPlayer.js --format=iife --bundle --minify --sourcemap --global-name=ReactPlayer --external:react --plugin:global-externals='{\"react\":\"globalThis.React\"}' --footer:js='ReactPlayer = ReactPlayer.default;'",
+    "build:standalone": "builder src/standalone.js --outfile=dist/ReactPlayer.standalone.js --format=iife --bundle --minify --sourcemap --global-name=renderReactPlayer --footer:js='renderReactPlayer = renderReactPlayer.default;'",
+    "build:es6": "builder src/standalone.js --outfile=dist/ReactPlayer.standalone.es6.js --format=esm --bundle --minify",
+    "preversion": "npm run lint && npm run test",
+    "version": "auto-changelog -p && npm run build:dist && npm run build:standalone && git add CHANGELOG.md dist",
+    "prepublishOnly": "npm run build && node scripts/pre-publish.js && cp -r types/* .",
+    "postpublish": "node scripts/post-publish.js && npm run clean"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cookpete/react-player.git"
+  },
+  "author": "Pete Cook (https://github.com/cookpete)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/cookpete/react-player/issues"
+  },
+  "homepage": "https://github.com/cookpete/react-player",
+  "peerDependencies": {
+    "react": ">=16.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^14.0.24",
+    "@types/react": "^17.0.0",
+    "auto-changelog": "^2.0.0",
+    "builder": "file:./scripts/builder",
+    "c8": "^8.0.1",
+    "codecov": "^3.6.5",
+    "cross-env": "^7.0.2",
+    "esbuild": "^0.19.4",
+    "react": "^16.13.1",
+    "react-dom": "^16.13.1",
+    "react-test-renderer": "^16.13.1",
+    "rimraf": "^3.0.2",
+    "screenfull": "^5.0.2",
+    "sinon": "^16.0.0",
+    "snazzy": "^8.0.0",
+    "standard": "^17.1.0",
+    "tester": "file:./scripts/tester",
+    "ts-standard": "^12.0.2",
+    "typescript": "^4.1.2",
+    "zora": "^5.2.0"
+  },
+  "dependencies": {
+    "deepmerge": "^4.0.0",
+    "load-script": "^1.0.0",
+    "memoize-one": "^5.1.1",
+    "prop-types": "^15.7.2",
+    "react-fast-compare": "^3.0.1"
+  },
+  "standard": {
+    "ignore": [
+      "/dist/*",
+      "/examples/*"
+    ]
+  },
+  "auto-changelog": {
+    "breakingPattern": "Breaking changes:"
+  },
+  "sideEffects": [
+    "./src/standalone.js",
+    "./test/**/*"
+  ],
+  "keywords": [
+    "react",
+    "media",
+    "player",
+    "video",
+    "audio",
+    "youtube",
+    "facebook",
+    "twitch",
+    "soundcloud",
+    "streamable",
+    "vimeo",
+    "wistia",
+    "dailymotion",
+    "hls",
+    "dash",
+    "react-component"
+  ]
+}

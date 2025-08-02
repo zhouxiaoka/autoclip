@@ -1,0 +1,3 @@
+"""
+AutoClip FastAPI Application Package
+""" 

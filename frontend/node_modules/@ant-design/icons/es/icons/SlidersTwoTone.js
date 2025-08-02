@@ -1,0 +1,20 @@
+import _extends from "@babel/runtime/helpers/esm/extends";
+// GENERATE BY ./scripts/generate.ts
+// DON NOT EDIT IT MANUALLY
+
+import * as React from 'react';
+import SlidersTwoToneSvg from "@ant-design/icons-svg/es/asn/SlidersTwoTone";
+import AntdIcon from "../components/AntdIcon";
+var SlidersTwoTone = function SlidersTwoTone(props, ref) {
+  return /*#__PURE__*/React.createElement(AntdIcon, _extends({}, props, {
+    ref: ref,
+    icon: SlidersTwoToneSvg
+  }));
+};
+
+/**![sliders](data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIGZpbGw9IiNjYWNhY2EiIHZpZXdCb3g9IjY0IDY0IDg5NiA4OTYiIGZvY3VzYWJsZT0iZmFsc2UiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTE4MCAyOTJoODB2NDQwaC04MHptMzY5IDE4MGgtNzRhMyAzIDAgMDAtMyAzdjc0YTMgMyAwIDAwMyAzaDc0YTMgMyAwIDAwMy0zdi03NGEzIDMgMCAwMC0zLTN6bTIxNS0xMDhoODB2Mjk2aC04MHoiIGZpbGw9IiNlNmY0ZmYiIC8+PHBhdGggZD0iTTkwNCAyOTZoLTY2di05NmMwLTQuNC0zLjYtOC04LThoLTUyYy00LjQgMC04IDMuNi04IDh2OTZoLTY2Yy00LjQgMC04IDMuNi04IDh2NDE2YzAgNC40IDMuNiA4IDggOGg2NnY5NmMwIDQuNCAzLjYgOCA4IDhoNTJjNC40IDAgOC0zLjYgOC04di05Nmg2NmM0LjQgMCA4LTMuNiA4LThWMzA0YzAtNC40LTMuNi04LTgtOHptLTYwIDM2NGgtODBWMzY0aDgwdjI5NnpNNjEyIDQwNGgtNjZWMjMyYzAtNC40LTMuNi04LTgtOGgtNTJjLTQuNCAwLTggMy42LTggOHYxNzJoLTY2Yy00LjQgMC04IDMuNi04IDh2MjAwYzAgNC40IDMuNiA4IDggOGg2NnYxNzJjMCA0LjQgMy42IDggOCA4aDUyYzQuNCAwIDgtMy42IDgtOFY2MjBoNjZjNC40IDAgOC0zLjYgOC04VjQxMmMwLTQuNC0zLjYtOC04LTh6bS02MCAxNDVhMyAzIDAgMDEtMyAzaC03NGEzIDMgMCAwMS0zLTN2LTc0YTMgMyAwIDAxMy0zaDc0YTMgMyAwIDAxMyAzdjc0ek0zMjAgMjI0aC02NnYtNTZjMC00LjQtMy42LTgtOC04aC01MmMtNC40IDAtOCAzLjYtOCA4djU2aC02NmMtNC40IDAtOCAzLjYtOCA4djU2MGMwIDQuNCAzLjYgOCA4IDhoNjZ2NTZjMCA0LjQgMy42IDggOCA4aDUyYzQuNCAwIDgtMy42IDgtOHYtNTZoNjZjNC40IDAgOC0zLjYgOC04VjIzMmMwLTQuNC0zLjYtOC04LTh6bS02MCA1MDhoLTgwVjI5Mmg4MHY0NDB6IiBmaWxsPSIjMTY3N2ZmIiAvPjwvc3ZnPg==) */
+var RefIcon = /*#__PURE__*/React.forwardRef(SlidersTwoTone);
+if (process.env.NODE_ENV !== 'production') {
+  RefIcon.displayName = 'SlidersTwoTone';
+}
+export default RefIcon;
