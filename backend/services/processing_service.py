@@ -8,14 +8,14 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 
-from backend.models.task import Task, TaskStatus, TaskType
-from backend.repositories.task_repository import TaskRepository
-from backend.services.config_manager import ProjectConfigManager, ProcessingStep
-from backend.services.pipeline_adapter import PipelineAdapter
-from backend.services.processing_orchestrator import ProcessingOrchestrator
-from backend.services.processing_context import ProcessingContext
-from backend.services.exceptions import ServiceError, ProcessingError, TaskError, ProjectError, handle_service_error
-from backend.services.concurrency_manager import with_concurrency_control
+from models.task import Task, TaskStatus, TaskType
+from repositories.task_repository import TaskRepository
+from services.config_manager import ProjectConfigManager, ProcessingStep
+from services.pipeline_adapter import PipelineAdapter
+from services.processing_orchestrator import ProcessingOrchestrator
+from services.processing_context import ProcessingContext
+from services.exceptions import ServiceError, ProcessingError, TaskError, ProjectError, handle_service_error
+from services.concurrency_manager import with_concurrency_control
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class ProcessingService:
         
         # 更新项目状态为已完成
         try:
-            from backend.models.project import Project, ProjectStatus
+            from models.project import Project, ProjectStatus
             project = self.db.query(Project).filter(Project.id == project_id).first()
             if project:
                 project.status = ProjectStatus.COMPLETED
@@ -233,7 +233,7 @@ class ProcessingService:
         
         # 更新项目状态为已完成
         try:
-            from backend.models.project import Project, ProjectStatus
+            from models.project import Project, ProjectStatus
             project = self.db.query(Project).filter(Project.id == project_id).first()
             if project:
                 project.status = ProjectStatus.COMPLETED

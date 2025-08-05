@@ -1,6 +1,5 @@
-"""
-视频处理Celery任务
-包含WebSocket实时通知
+"""视频处理Celery任务
+包含WebSocket实时通知和Pipeline适配器集成
 """
 
 import os
@@ -8,11 +7,16 @@ import logging
 import asyncio
 from typing import Dict, Any, Optional
 from celery import current_task
+from pathlib import Path
 
-from backend.core.celery_app import celery_app
-from backend.services.websocket_notification_service import notification_service
-from backend.services.processing_service import ProcessingService
-from backend.core.database import SessionLocal
+from core.celery_app import celery_app
+from services.websocket_notification_service import notification_service
+from services.processing_service import ProcessingService
+from services.pipeline_adapter import create_pipeline_adapter_sync
+from core.database import SessionLocal
+from core.progress_manager import get_progress_manager
+from models.project import Project, ProjectStatus
+from models.task import Task, TaskStatus
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +31,14 @@ def run_async_notification(coro):
     return loop.run_until_complete(coro)
 
 @celery_app.task(bind=True, name='backend.tasks.processing.process_video_pipeline')
-def process_video_pipeline(self, project_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+def process_video_pipeline(self, project_id: int, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
     """
-    处理视频流水线任务
+    处理视频流水线任务 - 使用Pipeline适配器
     
     Args:
         project_id: 项目ID
-        config: 处理配置
+        input_video_path: 输入视频路径
+        input_srt_path: 输入SRT路径
         
     Returns:
         处理结果
@@ -42,80 +47,46 @@ def process_video_pipeline(self, project_id: str, config: Dict[str, Any]) -> Dic
     logger.info(f"开始处理视频流水线: {project_id}, 任务ID: {task_id}")
     
     try:
-        # 发送开始通知
-        run_async_notification(
-            notification_service.send_processing_start(project_id, task_id)
-        )
-        
         # 创建数据库会话
         db = SessionLocal()
         
         try:
-            # 创建处理服务
-            processing_service = ProcessingService(db)
+            # 创建任务记录
+            task = Task(
+                name=f"视频处理流水线",
+                description=f"处理项目 {project_id} 的完整视频流水线",
+                type="pipeline",
+                project_id=project_id,
+                celery_task_id=task_id,
+                status=TaskStatus.RUNNING,
+                progress=0,
+                current_step="初始化",
+                total_steps=6
+            )
+            db.add(task)
+            db.commit()
+            db.refresh(task)  # 确保获取到task.id
             
-            # 步骤1: 大纲生成 (20%)
-            logger.info("步骤1: 生成大纲")
+            # 发送开始通知
             run_async_notification(
-                notification_service.send_processing_progress(project_id, task_id, 20, "生成大纲")
+                notification_service.send_processing_start(project_id, task_id)
             )
             
-            outline_result = processing_service.generate_outline(project_id, config)
-            if not outline_result.get("success"):
-                raise Exception(f"大纲生成失败: {outline_result.get('error')}")
+            # 获取进度管理器
+            progress_manager = get_progress_manager(db)
             
-            # 步骤2: 时间轴提取 (40%)
-            logger.info("步骤2: 提取时间轴")
-            run_async_notification(
-                notification_service.send_processing_progress(project_id, task_id, 40, "提取时间轴")
-            )
+            # 创建Pipeline适配器，传入task.id以启用进度管理
+            pipeline_adapter = create_pipeline_adapter_sync(db, task.id)
             
-            timeline_result = processing_service.extract_timeline(project_id, config)
-            if not timeline_result.get("success"):
-                raise Exception(f"时间轴提取失败: {timeline_result.get('error')}")
+            # 执行Pipeline处理
+            result = pipeline_adapter.process_project_sync(project_id, input_video_path, input_srt_path)
             
-            # 步骤3: 标题生成 (60%)
-            logger.info("步骤3: 生成标题")
-            run_async_notification(
-                notification_service.send_processing_progress(project_id, task_id, 60, "生成标题")
-            )
-            
-            title_result = processing_service.generate_titles(project_id, config)
-            if not title_result.get("success"):
-                raise Exception(f"标题生成失败: {title_result.get('error')}")
-            
-            # 步骤4: 视频切片 (80%)
-            logger.info("步骤4: 视频切片")
-            run_async_notification(
-                notification_service.send_processing_progress(project_id, task_id, 80, "视频切片")
-            )
-            
-            clip_result = processing_service.extract_clips(project_id, config)
-            if not clip_result.get("success"):
-                raise Exception(f"视频切片失败: {clip_result.get('error')}")
-            
-            # 步骤5: 合集生成 (100%)
-            logger.info("步骤5: 生成合集")
-            run_async_notification(
-                notification_service.send_processing_progress(project_id, task_id, 100, "生成合集")
-            )
-            
-            collection_result = processing_service.generate_collections(project_id, config)
-            if not collection_result.get("success"):
-                raise Exception(f"合集生成失败: {collection_result.get('error')}")
-            
-            # 处理完成
-            result = {
-                "success": True,
-                "project_id": project_id,
-                "task_id": task_id,
-                "outline": outline_result,
-                "timeline": timeline_result,
-                "titles": title_result,
-                "clips": clip_result,
-                "collections": collection_result,
-                "message": "视频处理流水线完成"
-            }
+            # 更新任务状态为完成
+            task.status = TaskStatus.COMPLETED
+            task.progress = 100
+            task.current_step = "处理完成"
+            task.result = result
+            db.commit()
             
             # 发送完成通知
             run_async_notification(
@@ -123,7 +94,13 @@ def process_video_pipeline(self, project_id: str, config: Dict[str, Any]) -> Dic
             )
             
             logger.info(f"视频流水线处理完成: {project_id}")
-            return result
+            return {
+                "success": True,
+                "project_id": project_id,
+                "task_id": task_id,
+                "result": result,
+                "message": "视频处理流水线完成"
+            }
             
         finally:
             db.close()
@@ -131,6 +108,18 @@ def process_video_pipeline(self, project_id: str, config: Dict[str, Any]) -> Dic
     except Exception as e:
         error_msg = f"视频流水线处理失败: {str(e)}"
         logger.error(error_msg)
+        
+        # 更新任务状态为失败
+        try:
+            db = SessionLocal()
+            task = db.query(Task).filter(Task.celery_task_id == task_id).first()
+            if task:
+                task.status = TaskStatus.FAILED
+                task.error_message = error_msg
+                db.commit()
+            db.close()
+        except Exception as db_error:
+            logger.error(f"更新任务状态失败: {str(db_error)}")
         
         # 发送错误通知
         run_async_notification(
