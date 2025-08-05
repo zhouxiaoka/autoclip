@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Dict, Any, List
 from celery import current_task
 
-from backend.core.celery_app import celery_app
-from backend.core.database import SessionLocal
-from backend.models.clip import Clip, ClipStatus
-from backend.models.collection import Collection, CollectionStatus
-from backend.repositories.clip_repository import ClipRepository
-from backend.repositories.collection_repository import CollectionRepository
+from core.celery_app import celery_app
+from core.database import SessionLocal
+from models.clip import Clip, ClipStatus
+from models.collection import Collection, CollectionStatus
+from repositories.clip_repository import ClipRepository
+from repositories.collection_repository import CollectionRepository
 
 logger = logging.getLogger(__name__)
 

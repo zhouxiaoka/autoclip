@@ -8,10 +8,10 @@ from typing import Dict, Any, Optional
 from celery import current_task
 from datetime import datetime
 
-from backend.core.celery_app import celery_app
-from backend.core.database import SessionLocal
-from backend.models.task import Task, TaskStatus
-from backend.repositories.task_repository import TaskRepository
+from core.celery_app import celery_app
+from core.database import SessionLocal
+from models.task import Task, TaskStatus
+from repositories.task_repository import TaskRepository
 
 logger = logging.getLogger(__name__)
 

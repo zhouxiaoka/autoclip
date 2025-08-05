@@ -20,7 +20,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 使用绝对导入
-from api.v1 import health, projects, clips, collections, tasks, settings
+from api.v1 import health, projects, clips, collections, tasks as task_routes, settings
+from api.v1.tasks import router as tasks_router
+from api.v1 import websocket
 from core.database import engine
 from models.base import Base
 
@@ -67,11 +69,9 @@ app.include_router(health.router, prefix="/api/v1/health", tags=["health"])
 app.include_router(projects.router, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(clips.router, prefix="/api/v1/clips", tags=["clips"])
 app.include_router(collections.router, prefix="/api/v1/collections", tags=["collections"])
-app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
+app.include_router(task_routes.router, prefix="/api/v1/tasks", tags=["tasks"])
+app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"])
 app.include_router(settings.router, prefix="/api/v1/settings", tags=["settings"])
-
-# Include WebSocket routes
-from api.v1 import websocket
 app.include_router(websocket.router, prefix="/api/v1", tags=["websocket"])
 
 # 添加独立的video-categories端点
@@ -81,49 +81,63 @@ async def get_video_categories():
     return {
         "categories": [
             {
+                "value": "default",
+                "name": "默认",
+                "description": "通用视频内容处理",
+                "icon": "🎬",
+                "color": "#4facfe"
+            },
+            {
                 "value": "knowledge",
                 "name": "知识科普",
                 "description": "科学、技术、历史、文化等知识类内容",
-                "icon": "book",
-                "color": "#1890ff"
-            },
-            {
-                "value": "entertainment", 
-                "name": "娱乐休闲",
-                "description": "游戏、音乐、电影、综艺等娱乐内容",
-                "icon": "play-circle",
+                "icon": "📚",
                 "color": "#52c41a"
-            },
-            {
-                "value": "experience",
-                "name": "生活经验",
-                "description": "生活技巧、美食、旅行、手工等实用内容",
-                "icon": "heart",
-                "color": "#fa8c16"
-            },
-            {
-                "value": "opinion",
-                "name": "观点评论",
-                "description": "时事评论、观点分享、社会话题等",
-                "icon": "message",
-                "color": "#722ed1"
             },
             {
                 "value": "business",
                 "name": "商业财经",
                 "description": "商业分析、财经资讯、投资理财等",
-                "icon": "dollar",
+                "icon": "💼",
+                "color": "#faad14"
+            },
+            {
+                "value": "opinion",
+                "name": "观点评论",
+                "description": "时事评论、观点分享、社会话题等",
+                "icon": "💭",
+                "color": "#722ed1"
+            },
+            {
+                "value": "experience",
+                "name": "经验分享",
+                "description": "生活技巧、经验分享、实用内容等",
+                "icon": "🌟",
                 "color": "#13c2c2"
             },
             {
                 "value": "speech",
-                "name": "演讲访谈",
-                "description": "演讲、访谈、对话等口语化内容",
-                "icon": "sound",
+                "name": "演讲脱口秀",
+                "description": "演讲、访谈、脱口秀等口语化内容",
+                "icon": "🎤",
                 "color": "#eb2f96"
+            },
+            {
+                "value": "content_review",
+                "name": "内容解说",
+                "description": "影视解说、内容点评等",
+                "icon": "🎭",
+                "color": "#f5222d"
+            },
+            {
+                "value": "entertainment",
+                "name": "娱乐内容",
+                "description": "游戏、音乐、娱乐等轻松内容",
+                "icon": "🎪",
+                "color": "#fa8c16"
             }
         ],
-        "default_category": "knowledge"
+        "default_category": "default"
     }
 
 # Root endpoint

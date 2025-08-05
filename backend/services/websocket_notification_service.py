@@ -8,7 +8,7 @@ import asyncio
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from backend.core.websocket_manager import manager, WebSocketMessage
+from core.websocket_manager import manager, WebSocketMessage
 
 logger = logging.getLogger(__name__)
 

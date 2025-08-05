@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from typing import Generator
-from backend.models.base import Base
+from models.base import Base
 
 # 数据库配置
 DATABASE_URL = os.getenv(

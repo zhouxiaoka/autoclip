@@ -2107,3 +2107,23 @@
 2025-08-03 00:42:23,266 - services.processing_orchestrator - INFO - 流水线模块导入成功
 2025-08-03 00:44:52,612 - services.processing_orchestrator - INFO - 流水线模块导入成功
 2025-08-03 00:45:00,752 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 01:57:45,784 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 01:57:56,276 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 01:58:17,520 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 01:58:17,561 - fastapi - ERROR - Form data requires "python-multipart" to be installed. 
+You can install "python-multipart" with: 
+
+pip install python-multipart
+
+2025-08-06 01:58:34,095 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 01:58:34,168 - app.main - INFO - 启动AutoClip API服务...
+2025-08-06 01:58:34,171 - app.main - INFO - 数据库表创建完成
+2025-08-06 01:58:34,172 - app.main - INFO - API密钥已加载到环境变量
+2025-08-06 02:03:30,178 - app.main - ERROR - 全局异常处理: WebSocketNotificationService() takes no arguments
+2025-08-06 02:07:15,951 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 02:07:16,022 - app.main - INFO - 启动AutoClip API服务...
+2025-08-06 02:07:16,023 - app.main - INFO - 数据库表创建完成
+2025-08-06 02:07:16,023 - app.main - INFO - API密钥已加载到环境变量
+2025-08-06 02:10:49,379 - app.main - INFO - 访问根端点
+2025-08-06 02:11:25,987 - app.main - ERROR - 全局异常处理: WebSocketNotificationService() takes no arguments
+2025-08-06 02:11:50,877 - app.main - ERROR - 全局异常处理: WebSocketNotificationService() takes no arguments

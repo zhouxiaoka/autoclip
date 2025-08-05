@@ -6,9 +6,14 @@ import { Project } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
+import timezone from 'dayjs/plugin/timezone'
+import utc from 'dayjs/plugin/utc'
 import 'dayjs/locale/zh-cn'
 
 dayjs.extend(relativeTime)
+dayjs.extend(timezone)
+dayjs.extend(utc)
+dayjs.locale('zh-cn')
 
 const { Text, Title } = Typography
 const { Meta } = Card
@@ -35,6 +40,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [currentLogIndex, setCurrentLogIndex] = useState(0)
 
+  // 格式化创建时间，确保正确的时区处理
+  const formatCreatedTime = (createdAt: string) => {
+    const now = dayjs().tz('Asia/Shanghai')
+    const created = dayjs(createdAt).tz('Asia/Shanghai')
+    return created.from(now)
+  }
+
   // 获取分类信息
   const getCategoryInfo = (category?: string) => {
     const categoryMap: Record<string, { name: string; icon: string; color: string }> = {
@@ -56,7 +68,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // 生成项目视频缩略图（带缓存）
   useEffect(() => {
     const generateThumbnail = async () => {
-      if (!project.video_path) return
+      if (!project.video_path) {
+        console.log('项目没有视频路径:', project.id)
+        return
+      }
       
       // 检查缓存
       const cachedThumbnail = localStorage.getItem(thumbnailCacheKey)
@@ -71,66 +86,108 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
         const video = document.createElement('video')
         video.crossOrigin = 'anonymous'
         video.muted = true
+        video.preload = 'metadata'
         
-        const videoUrl = projectApi.getProjectFileUrl(project.id, 'input/input.mp4')
+        // 尝试多个可能的视频文件路径
+        const possiblePaths = [
+          'input/input.mp4',
+          'input.mp4',
+          project.video_path,
+          `${project.video_path}/input.mp4`
+        ].filter(Boolean)
         
-        video.onloadedmetadata = () => {
-          video.currentTime = Math.min(5, video.duration / 4) // 取视频1/4处或5秒处的帧
-        }
+        let videoLoaded = false
         
-        video.onseeked = () => {
+        for (const path of possiblePaths) {
+          if (videoLoaded) break
+          
           try {
-            const canvas = document.createElement('canvas')
-            const ctx = canvas.getContext('2d')
-            if (!ctx) return
+            const videoUrl = projectApi.getProjectFileUrl(project.id, path)
+            console.log('尝试加载视频:', videoUrl)
             
-            // 设置合适的缩略图尺寸
-            const maxWidth = 320
-            const maxHeight = 180
-            const aspectRatio = video.videoWidth / video.videoHeight
-            
-            let width = maxWidth
-            let height = maxHeight
-            
-            if (aspectRatio > maxWidth / maxHeight) {
-              height = maxWidth / aspectRatio
-            } else {
-              width = maxHeight * aspectRatio
-            }
-            
-            canvas.width = width
-            canvas.height = height
-            ctx.drawImage(video, 0, 0, width, height)
-            
-            const thumbnail = canvas.toDataURL('image/jpeg', 0.7)
-            setVideoThumbnail(thumbnail)
-            
-            // 缓存缩略图
-            try {
-              localStorage.setItem(thumbnailCacheKey, thumbnail)
-            } catch (e) {
-              // 如果localStorage空间不足，清理旧缓存
-              const keys = Object.keys(localStorage).filter(key => key.startsWith('thumbnail_'))
-              if (keys.length > 50) { // 保留最多50个缩略图缓存
-                keys.slice(0, 10).forEach(key => localStorage.removeItem(key))
-                localStorage.setItem(thumbnailCacheKey, thumbnail)
+            await new Promise((resolve, reject) => {
+              const timeoutId = setTimeout(() => {
+                reject(new Error('视频加载超时'))
+              }, 10000) // 10秒超时
+              
+              video.onloadedmetadata = () => {
+                clearTimeout(timeoutId)
+                console.log('视频元数据加载成功:', videoUrl)
+                video.currentTime = Math.min(5, video.duration / 4) // 取视频1/4处或5秒处的帧
               }
-            }
+              
+              video.onseeked = () => {
+                clearTimeout(timeoutId)
+                try {
+                  const canvas = document.createElement('canvas')
+                  const ctx = canvas.getContext('2d')
+                  if (!ctx) {
+                    reject(new Error('无法获取canvas上下文'))
+                    return
+                  }
+                  
+                  // 设置合适的缩略图尺寸
+                  const maxWidth = 320
+                  const maxHeight = 180
+                  const aspectRatio = video.videoWidth / video.videoHeight
+                  
+                  let width = maxWidth
+                  let height = maxHeight
+                  
+                  if (aspectRatio > maxWidth / maxHeight) {
+                    height = maxWidth / aspectRatio
+                  } else {
+                    width = maxHeight * aspectRatio
+                  }
+                  
+                  canvas.width = width
+                  canvas.height = height
+                  ctx.drawImage(video, 0, 0, width, height)
+                  
+                  const thumbnail = canvas.toDataURL('image/jpeg', 0.7)
+                  setVideoThumbnail(thumbnail)
+                  
+                  // 缓存缩略图
+                  try {
+                    localStorage.setItem(thumbnailCacheKey, thumbnail)
+                  } catch (e) {
+                    // 如果localStorage空间不足，清理旧缓存
+                    const keys = Object.keys(localStorage).filter(key => key.startsWith('thumbnail_'))
+                    if (keys.length > 50) { // 保留最多50个缩略图缓存
+                      keys.slice(0, 10).forEach(key => localStorage.removeItem(key))
+                      localStorage.setItem(thumbnailCacheKey, thumbnail)
+                    }
+                  }
+                  
+                  videoLoaded = true
+                  resolve(thumbnail)
+                } catch (error) {
+                  reject(error)
+                }
+              }
+              
+              video.onerror = (error) => {
+                clearTimeout(timeoutId)
+                console.error('视频加载失败:', videoUrl, error)
+                reject(error)
+              }
+              
+              video.src = videoUrl
+            })
+            
+            break // 如果成功加载，跳出循环
           } catch (error) {
-            console.error('生成缩略图失败:', error)
-          } finally {
-            setThumbnailLoading(false)
+            console.warn(`路径 ${path} 加载失败:`, error)
+            continue // 尝试下一个路径
           }
         }
         
-        video.onerror = (error) => {
-          console.error('视频加载失败:', error)
-          setThumbnailLoading(false)
+        if (!videoLoaded) {
+          console.error('所有视频路径都加载失败')
         }
-        
-        video.src = videoUrl
       } catch (error) {
         console.error('生成缩略图时发生错误:', error)
+      } finally {
         setThumbnailLoading(false)
       }
     }
@@ -366,7 +423,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             height: '28px'
           }}>
             <Text style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.8)' }}>
-              {dayjs(project.updated_at).fromNow()}
+              {formatCreatedTime(project.created_at)}
             </Text>
             
             {/* 操作按钮 */}

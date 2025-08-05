@@ -9,10 +9,10 @@ from typing import Dict, Any, List, Optional, Callable
 from pathlib import Path
 from sqlalchemy.orm import Session
 
-from backend.models.task import Task, TaskStatus, TaskType
-from backend.repositories.task_repository import TaskRepository
-from backend.services.config_manager import ProjectConfigManager, ProcessingStep
-from backend.services.pipeline_adapter import PipelineAdapter
+from models.task import Task, TaskStatus, TaskType
+from repositories.task_repository import TaskRepository
+from services.config_manager import ProjectConfigManager, ProcessingStep
+from services.pipeline_adapter import PipelineAdapter
 
 logger = logging.getLogger(__name__)
 
