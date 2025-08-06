@@ -53,10 +53,9 @@ cd ..
 
 # 启动Celery
 echo -e "${BLUE}⚙️  启动Celery...${NC}"
-cd backend
-celery -A core.celery_app worker --loglevel=info --concurrency=1 &
+export PYTHONPATH=.:$PYTHONPATH
+celery -A backend.core.celery_app worker --loglevel=info --concurrency=1 &
 CELERY_PID=$!
-cd ..
 
 # 启动前端
 echo -e "${BLUE}🎨 启动前端...${NC}"
@@ -68,7 +67,7 @@ cd ..
 sleep 3
 
 echo -e "\n${GREEN}✅ 所有服务已启动！${NC}"
-echo -e "${GREEN}📱 前端:${NC} http://localhost:5173"
+echo -e "${GREEN}📱 前端:${NC} http://localhost:3000"
 echo -e "${GREEN}🔌 后端:${NC} http://localhost:8000"
 echo -e "${RED}按 Ctrl+C 停止所有服务${NC}"
 
