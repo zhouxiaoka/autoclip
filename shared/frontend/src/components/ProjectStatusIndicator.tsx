@@ -4,7 +4,9 @@ import {
   LoadingOutlined, 
   CheckCircleOutlined, 
   ExclamationCircleOutlined,
-  ClockCircleOutlined
+  ClockCircleOutlined,
+  StopOutlined,
+  QuestionCircleOutlined
 } from '@ant-design/icons'
 import { Project } from '../store/useProjectStore'
 
@@ -23,11 +25,11 @@ const ProjectStatusIndicator: React.FC<ProjectStatusIndicatorProps> = ({
 }) => {
   const getStatusConfig = () => {
     switch (project.status) {
-      case 'uploading':
+      case 'pending':
         return {
           color: '#1890ff',
           icon: <ClockCircleOutlined />,
-          text: '等待处理',
+          text: '等待中',
           badgeStatus: 'processing' as const
         }
       case 'processing':
@@ -41,10 +43,10 @@ const ProjectStatusIndicator: React.FC<ProjectStatusIndicatorProps> = ({
         return {
           color: '#52c41a',
           icon: <CheckCircleOutlined />,
-          text: '处理完成',
+          text: '已完成',
           badgeStatus: 'success' as const
         }
-      case 'error':
+      case 'failed':
         return {
           color: '#ff4d4f',
           icon: <ExclamationCircleOutlined />,
@@ -54,14 +56,14 @@ const ProjectStatusIndicator: React.FC<ProjectStatusIndicatorProps> = ({
       default:
         return {
           color: '#d9d9d9',
-          icon: <ClockCircleOutlined />,
+          icon: <QuestionCircleOutlined />,
           text: '未知状态',
           badgeStatus: 'default' as const
         }
     }
   }
 
-  const statusConfig = getStatusConfig()
+  const config = getStatusConfig()
   const progress = project.status === 'processing' 
     ? ((project.current_step || 0) / (project.total_steps || 6)) * 100
     : project.status === 'completed' ? 100 : 0
@@ -78,48 +80,36 @@ const ProjectStatusIndicator: React.FC<ProjectStatusIndicatorProps> = ({
       }
       return stepNames[project.current_step as keyof typeof stepNames] || '处理中'
     }
-    return statusConfig.text
+    return config.text
   }
 
   if (size === 'small') {
     return (
       <Tooltip title={getStepName()}>
-        <Badge status={statusConfig.badgeStatus} text={statusConfig.text} />
+        <Badge status={config.badgeStatus} text={config.text} />
       </Tooltip>
     )
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <div style={{ color: statusConfig.color, fontSize: size === 'large' ? '16px' : '14px' }}>
-        {statusConfig.icon}
-      </div>
-      <div style={{ flex: 1 }}>
-        <Text style={{ 
-          color: statusConfig.color, 
-          fontSize: size === 'large' ? '14px' : '12px',
-          fontWeight: 500
-        }}>
-          {getStepName()}
-        </Text>
-        {showProgress && project.status === 'processing' && (
-          <div style={{ marginTop: '4px' }}>
-            <Progress 
-              percent={progress} 
-              size="small" 
-              strokeColor={statusConfig.color}
-              showInfo={false}
-            />
-          </div>
-        )}
-        {project.error_message && (
-          <div style={{ marginTop: '4px' }}>
-            <Text type="danger" style={{ fontSize: '11px' }}>
-              {project.error_message}
-            </Text>
-          </div>
-        )}
-      </div>
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '100%',
+      padding: '4px 8px',
+      borderRadius: '4px',
+      backgroundColor: `${config.color}15`,
+      border: `1px solid ${config.color}30`,
+      color: config.color,
+      fontSize: '12px',
+      fontWeight: 500,
+      minHeight: '24px'
+    }}>
+      <span style={{ marginRight: '4px', display: 'flex', alignItems: 'center' }}>
+        {config.icon}
+      </span>
+      <span>{config.text}</span>
     </div>
   )
 }

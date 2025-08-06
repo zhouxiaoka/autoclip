@@ -1,16 +1,16 @@
 """
 切片服务
-提供切片相关的业务逻辑操作
+提供切片相关的业务逻辑
 """
 
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
-from backend.services.base import BaseService
-from backend.repositories.clip_repository import ClipRepository
-from backend.models.clip import Clip
-from backend.schemas.clip import ClipCreate, ClipUpdate, ClipResponse, ClipListResponse, ClipFilter
-from backend.schemas.base import PaginationParams, PaginationResponse
+from services.base import BaseService
+from repositories.clip_repository import ClipRepository
+from models.clip import Clip
+from schemas.clip import ClipCreate, ClipUpdate, ClipResponse, ClipListResponse, ClipFilter
+from schemas.base import PaginationParams, PaginationResponse
 
 
 class ClipService(BaseService[Clip, ClipCreate, ClipUpdate, ClipResponse]):

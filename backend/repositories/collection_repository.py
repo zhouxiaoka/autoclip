@@ -7,7 +7,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func
 from .base import BaseRepository
-from backend.models.collection import Collection, CollectionStatus
+from models.collection import Collection, CollectionStatus
 
 class CollectionRepository(BaseRepository[Collection]):
     """合集Repository类"""

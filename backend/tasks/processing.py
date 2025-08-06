@@ -1,22 +1,17 @@
-"""视频处理Celery任务
-包含WebSocket实时通知和Pipeline适配器集成
+"""
+视频处理任务
+使用Celery处理视频文件
 """
 
 import os
 import logging
-import asyncio
-from typing import Dict, Any, Optional
-from celery import current_task
 from pathlib import Path
-
-from backend.core.celery_app import celery_app
-from backend.services.websocket_notification_service import notification_service
-from backend.services.processing_service import ProcessingService
-from backend.services.pipeline_adapter import create_pipeline_adapter_sync
-from backend.core.database import SessionLocal
-from backend.core.progress_manager import get_progress_manager
-from backend.models.project import Project, ProjectStatus
-from backend.models.task import Task, TaskStatus, TaskType
+from typing import Dict, Any, Optional
+from celery import shared_task
+from core.celery_app import celery_app
+from services.processing_orchestrator import ProcessingOrchestrator
+from services.pipeline_adapter import PipelineAdapter
+from core.config import get_data_directory
 
 logger = logging.getLogger(__name__)
 

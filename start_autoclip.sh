@@ -178,7 +178,9 @@ import os
 # 添加项目根目录到Python路径
 project_root = os.path.abspath('.')
 sys.path.insert(0, project_root)
-from backend.core.database import create_tables, init_database
+# 切换到backend目录进行导入
+os.chdir('backend')
+from core.database import create_tables, init_database
 create_tables()
 init_database()
 print('数据库初始化完成')

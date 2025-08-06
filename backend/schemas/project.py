@@ -16,7 +16,6 @@ class ProjectStatus(str, Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
-    CANCELLED = "cancelled"
 
 
 class ProjectType(str, Enum):

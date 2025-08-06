@@ -28,7 +28,7 @@ export interface Project {
   name: string
   description?: string
   project_type?: string
-  status: string
+  status: 'pending' | 'processing' | 'completed' | 'failed'
   source_url?: string
   source_file?: string
   settings?: any
