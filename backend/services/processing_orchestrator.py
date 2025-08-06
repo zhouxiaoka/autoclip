@@ -5,6 +5,7 @@
 
 import logging
 import time
+import sys
 from typing import Dict, Any, List, Optional, Callable
 from pathlib import Path
 from sqlalchemy.orm import Session
@@ -13,24 +14,13 @@ from models.task import Task, TaskStatus, TaskType
 from repositories.task_repository import TaskRepository
 from services.config_manager import ProjectConfigManager, ProcessingStep
 from services.pipeline_adapter import PipelineAdapter
+from core.config import get_project_root
 
 logger = logging.getLogger(__name__)
 
 # 导入流水线步骤
-import sys
-from pathlib import Path
-
-# 添加项目根目录到Python路径
-import os
-# 从backend目录启动时，需要向上两级才能到达项目根目录
-current_dir = Path(os.getcwd())
-if current_dir.name == "backend":
-    # 从backend目录启动
-    project_root = current_dir.parent
-else:
-    # 从项目根目录启动
-    project_root = current_dir
-
+# 添加shared目录到Python路径
+project_root = get_project_root()
 shared_path = project_root / "shared"
 if str(shared_path) not in sys.path:
     sys.path.insert(0, str(shared_path))
@@ -65,6 +55,7 @@ except ImportError as e:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(mock_output, f, ensure_ascii=False, indent=2)
         return {"status": "skipped", "message": "流水线模块未正确导入"}
+    
     def run_step2_timeline(**kwargs): 
         logger.warning("流水线模块未正确导入，使用占位符函数")
         # 生成模拟输出
@@ -84,6 +75,7 @@ except ImportError as e:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(mock_output, f, ensure_ascii=False, indent=2)
         return {"status": "skipped", "message": "流水线模块未正确导入"}
+    
     def run_step3_scoring(**kwargs): 
         logger.warning("流水线模块未正确导入，使用占位符函数")
         # 生成模拟输出
@@ -102,6 +94,7 @@ except ImportError as e:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(mock_output, f, ensure_ascii=False, indent=2)
         return {"status": "skipped", "message": "流水线模块未正确导入"}
+    
     def run_step4_title(**kwargs): 
         logger.warning("流水线模块未正确导入，使用占位符函数")
         # 生成模拟输出
@@ -110,9 +103,9 @@ except ImportError as e:
             import json
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
-                "titled_clips": [
-                    {"clip_id": "1", "title": "爆点标题1", "content": "内容1"},
-                    {"clip_id": "2", "title": "爆点标题2", "content": "内容2"}
+                "titles": [
+                    {"clip_id": "1", "title": "测试标题1"},
+                    {"clip_id": "2", "title": "测试标题2"}
                 ],
                 "status": "completed",
                 "message": "占位符函数生成的模拟输出"
@@ -120,6 +113,7 @@ except ImportError as e:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(mock_output, f, ensure_ascii=False, indent=2)
         return {"status": "skipped", "message": "流水线模块未正确导入"}
+    
     def run_step5_clustering(**kwargs): 
         logger.warning("流水线模块未正确导入，使用占位符函数")
         # 生成模拟输出
@@ -129,8 +123,8 @@ except ImportError as e:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "collections": [
-                    {"collection_id": "1", "title": "合集1", "clips": ["1", "2"]},
-                    {"collection_id": "2", "title": "合集2", "clips": ["3", "4"]}
+                    {"collection_id": "1", "title": "测试合集1", "clips": ["1", "2"]},
+                    {"collection_id": "2", "title": "测试合集2", "clips": ["3", "4"]}
                 ],
                 "status": "completed",
                 "message": "占位符函数生成的模拟输出"
@@ -138,6 +132,7 @@ except ImportError as e:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(mock_output, f, ensure_ascii=False, indent=2)
         return {"status": "skipped", "message": "流水线模块未正确导入"}
+    
     def run_step6_video(**kwargs): 
         logger.warning("流水线模块未正确导入，使用占位符函数")
         # 生成模拟输出
@@ -147,8 +142,8 @@ except ImportError as e:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "videos": [
-                    {"video_id": "1", "path": "clip_1.mp4", "title": "视频1"},
-                    {"video_id": "2", "path": "clip_2.mp4", "title": "视频2"}
+                    {"clip_id": "1", "video_path": "output/clip_1.mp4"},
+                    {"clip_id": "2", "video_path": "output/clip_2.mp4"}
                 ],
                 "status": "completed",
                 "message": "占位符函数生成的模拟输出"

@@ -98,20 +98,13 @@ async def upload_files(
             project_type=ProjectType(project.project_type.value),
             status=ProjectStatus(project.status.value),
             source_url=project.project_metadata.get("source_url") if project.project_metadata else None,
-            source_file=str(project.video_path) if project.video_path else None,
-            settings=project.processing_config or {},
-            created_at=project.created_at,
-            updated_at=project.updated_at,
-            completed_at=project.completed_at,
-            total_clips=0,
-            total_collections=0,
-            total_tasks=0
+            source_file=project.project_metadata.get("source_file") if project.project_metadata else None,
+            settings=project.processing_config,
+            created_at=project.created_at.isoformat() if project.created_at else None,
+            updated_at=project.updated_at.isoformat() if project.updated_at else None
         )
-        
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
 
 
 @router.post("/", response_model=ProjectResponse)
