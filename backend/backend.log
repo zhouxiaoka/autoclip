@@ -37,3 +37,13 @@
 2025-08-06 13:32:31,014 - main_simple - INFO - AutoClip 后端服务启动完成
 2025-08-06 13:56:27,431 - services.pipeline_adapter - INFO - 流水线模块导入成功
 2025-08-06 13:56:27,432 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:20:05,022 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:20:05,023 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:20:05,096 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:20:05,099 - main - INFO - 数据库表创建完成
+2025-08-06 16:20:05,099 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:27:17,417 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:27:17,419 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:27:17,506 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:27:17,506 - main - INFO - 数据库表创建完成
+2025-08-06 16:27:17,507 - main - INFO - API密钥已加载到环境变量
