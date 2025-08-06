@@ -9,14 +9,14 @@ from typing import Dict, Any, Optional
 from celery import current_task
 from pathlib import Path
 
-from core.celery_app import celery_app
-from services.websocket_notification_service import notification_service
-from services.processing_service import ProcessingService
-from services.pipeline_adapter import create_pipeline_adapter_sync
-from core.database import SessionLocal
-from core.progress_manager import get_progress_manager
-from models.project import Project, ProjectStatus
-from models.task import Task, TaskStatus
+from backend.core.celery_app import celery_app
+from backend.services.websocket_notification_service import notification_service
+from backend.services.processing_service import ProcessingService
+from backend.services.pipeline_adapter import create_pipeline_adapter_sync
+from backend.core.database import SessionLocal
+from backend.core.progress_manager import get_progress_manager
+from backend.models.project import Project, ProjectStatus
+from backend.models.task import Task, TaskStatus
 
 logger = logging.getLogger(__name__)
 

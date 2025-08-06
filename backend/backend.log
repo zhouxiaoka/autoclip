@@ -1,0 +1,39 @@
+2025-08-06 12:14:05,411 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 12:14:05,413 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 12:14:05,484 - main - INFO - 启动AutoClip API服务...
+2025-08-06 12:14:05,485 - main - INFO - 数据库表创建完成
+2025-08-06 12:14:05,485 - main - WARNING - 未找到API密钥配置
+2025-08-06 12:29:58,642 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 12:29:58,643 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 12:29:58,710 - main - INFO - 启动AutoClip API服务...
+2025-08-06 12:29:58,711 - main - INFO - 数据库表创建完成
+2025-08-06 12:29:58,711 - main - WARNING - 未找到API密钥配置
+2025-08-06 12:34:56,689 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 12:34:56,689 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 12:36:02,668 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 12:36:02,669 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 12:36:39,092 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 12:36:39,093 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 12:37:21,829 - main_simple - INFO - AutoClip 后端服务正在启动...
+2025-08-06 12:37:21,830 - main_simple - INFO - 数据库表创建/更新完成
+2025-08-06 12:37:21,830 - main_simple - INFO - AutoClip 后端服务启动完成
+2025-08-06 12:37:33,987 - main_simple - INFO - AutoClip 后端服务正在关闭...
+2025-08-06 12:37:49,017 - main_simple - INFO - AutoClip 后端服务正在启动...
+2025-08-06 12:37:49,018 - main_simple - INFO - 数据库表创建/更新完成
+2025-08-06 12:37:49,018 - main_simple - INFO - AutoClip 后端服务启动完成
+2025-08-06 13:07:48,547 - main_simple - INFO - AutoClip 后端服务正在关闭...
+2025-08-06 13:07:48,952 - main_simple - INFO - AutoClip 后端服务正在启动...
+2025-08-06 13:07:48,953 - main_simple - INFO - 数据库表创建/更新完成
+2025-08-06 13:07:48,953 - main_simple - INFO - AutoClip 后端服务启动完成
+2025-08-06 13:29:01,549 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 13:29:01,549 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 13:30:47,820 - main_simple - INFO - AutoClip 后端服务正在关闭...
+2025-08-06 13:30:48,222 - main_simple - INFO - AutoClip 后端服务正在启动...
+2025-08-06 13:30:48,223 - main_simple - INFO - 数据库表创建/更新完成
+2025-08-06 13:30:48,223 - main_simple - INFO - AutoClip 后端服务启动完成
+2025-08-06 13:32:30,636 - main_simple - INFO - AutoClip 后端服务正在关闭...
+2025-08-06 13:32:31,013 - main_simple - INFO - AutoClip 后端服务正在启动...
+2025-08-06 13:32:31,014 - main_simple - INFO - 数据库表创建/更新完成
+2025-08-06 13:32:31,014 - main_simple - INFO - AutoClip 后端服务启动完成
+2025-08-06 13:56:27,431 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 13:56:27,432 - services.processing_orchestrator - INFO - 流水线模块导入成功
