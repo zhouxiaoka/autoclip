@@ -1,27 +1,23 @@
-"""任务API路由
-处理Celery任务相关的操作
+"""
+任务API路由
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from celery.result import AsyncResult
-
-from backend.core.database import get_db
-from backend.services.processing_service import ProcessingService
-from backend.services.websocket_notification_service import WebSocketNotificationService
-from backend.core.websocket_manager import manager as websocket_manager
-from backend.core.celery_app import celery_app
-from backend.models.task import Task
-from backend.schemas.task import TaskResponse, TaskListResponse, TaskStatus, TaskCreate
-from backend.schemas.base import PaginationParams, PaginationResponse
+from core.database import get_db
+from services.task_service import TaskService
+from services.processing_service import ProcessingService
+from services.websocket_notification_service import WebSocketNotificationService
+from schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskListResponse
+from schemas.base import PaginationParams
 
 router = APIRouter()
 
 
-def get_processing_service(db: Session = Depends(get_db)) -> ProcessingService:
+def get_processing_service(db: Session = Depends(get_db)) -> TaskService:
     """Dependency to get processing service."""
-    return ProcessingService(db)
+    return TaskService(db)
 
 
 def get_websocket_service(db: Session = Depends(get_db)) -> WebSocketNotificationService:

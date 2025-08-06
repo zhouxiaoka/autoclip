@@ -9,8 +9,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from typing import Generator
-from backend.models.base import Base
-from backend.core.config import get_database_url, get_data_directory
+from models.base import Base
+from core.config import get_database_url, get_data_directory
 
 # 数据库配置
 DATABASE_URL = get_database_url()

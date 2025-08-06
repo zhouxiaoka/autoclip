@@ -5,12 +5,10 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from backend.core.database import get_db
-from backend.services.clip_service import ClipService
-from backend.schemas.clip import (
-    ClipCreate, ClipUpdate, ClipResponse, ClipListResponse, ClipFilter, ClipStatus
-)
-from backend.schemas.base import PaginationParams
+from core.database import get_db
+from services.clip_service import ClipService
+from schemas.clip import ClipCreate, ClipUpdate, ClipResponse, ClipListResponse, ClipStatus
+from schemas.base import PaginationParams
 
 router = APIRouter()
 

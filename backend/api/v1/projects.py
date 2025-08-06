@@ -7,6 +7,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from core.database import get_db
+from core.celery_app import celery_app
 from services.project_service import ProjectService
 from services.processing_service import ProcessingService
 from services.websocket_notification_service import WebSocketNotificationService
@@ -373,7 +374,7 @@ async def retry_processing(
         # 创建新的处理任务记录
         task_result = processing_service._create_processing_task(
             project_id=project_id,
-            task_type="video_pipeline_retry"
+            task_type="video_processing"
         )
         
         return {
@@ -392,6 +393,90 @@ async def retry_processing(
                 project_id=project_id,
                 error=str(e),
                 step="retry_initialization"
+            )
+        except:
+            pass
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{project_id}/cancel")
+async def cancel_project(
+    project_id: str,
+    project_service: ProjectService = Depends(get_project_service),
+    websocket_service: WebSocketNotificationService = Depends(get_websocket_service)
+):
+    """Cancel a project processing."""
+    try:
+        print(f"开始取消项目: {project_id}")
+        
+        # 获取项目信息
+        project = project_service.get(project_id)
+        if not project:
+            print(f"项目不存在: {project_id}")
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        print(f"项目状态: {project.status}")
+        
+        # 检查项目状态
+        if project.status not in ["pending", "processing"]:
+            print(f"项目状态不允许取消: {project.status}")
+            raise HTTPException(status_code=400, detail="Project is not in pending or processing status")
+        
+        # 取消相关的Celery任务
+        if project.tasks:
+            print(f"找到 {len(project.tasks)} 个任务需要取消")
+            for task in project.tasks:
+                if task.celery_task_id:
+                    try:
+                        print(f"取消Celery任务: {task.celery_task_id}")
+                        celery_app.control.revoke(task.celery_task_id, terminate=True)
+                    except Exception as e:
+                        print(f"取消Celery任务失败: {e}")
+                        # 即使Celery取消失败，我们也要更新数据库状态
+                        pass
+        else:
+            print("没有找到需要取消的任务")
+        
+        # 更新项目状态
+        print(f"更新项目状态为cancelled")
+        try:
+            result = project_service.update_project_status(project_id, "cancelled")
+            print(f"更新状态结果: {result}")
+            if not result:
+                raise Exception("Failed to update project status")
+        except Exception as e:
+            print(f"更新项目状态失败: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to update project status: {str(e)}")
+        
+        # 发送WebSocket通知
+        try:
+            await websocket_service.send_processing_error(
+                project_id=project_id,
+                error="项目已取消",
+                step="cancelled"
+            )
+        except Exception as e:
+            print(f"发送WebSocket通知失败: {e}")
+        
+        print(f"项目取消成功: {project_id}")
+        return {
+            "message": "Project cancelled successfully",
+            "project_id": project_id,
+            "status": "cancelled"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"取消项目时发生错误: {e}")
+        print(f"错误类型: {type(e)}")
+        import traceback
+        print(f"错误堆栈: {traceback.format_exc()}")
+        try:
+            await websocket_service.send_processing_error(
+                project_id=project_id,
+                error=str(e),
+                step="cancel_error"
             )
         except:
             pass

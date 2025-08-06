@@ -56,8 +56,8 @@ const ProcessingPage: React.FC = () => {
         return
       }
       
-      // 如果项目状态是上传中，开始处理
-      if (project.status === 'uploading') {
+      // 如果项目状态是等待处理，开始处理
+      if (project.status === 'pending') {
         await startProcessing()
       }
     } catch (error) {
