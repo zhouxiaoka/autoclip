@@ -1,26 +1,26 @@
 """
 维护任务
-系统维护、清理、健康检查等任务
 """
 
+import os
 import logging
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any, List
-from celery import current_task
+from typing import Dict, Any, List, Optional
+from celery import current_task, shared_task
 
-from backend.core.celery_app import celery_app
-from backend.core.database import SessionLocal
-from backend.models.task import Task, TaskStatus
-from backend.models.project import Project, ProjectStatus
-from backend.repositories.task_repository import TaskRepository
-from backend.repositories.project_repository import ProjectRepository
+from core.celery_app import celery_app
+from core.database import SessionLocal
+from models.task import Task, TaskStatus
+from models.project import Project, ProjectStatus
+from repositories.task_repository import TaskRepository
+from repositories.project_repository import ProjectRepository
 
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, name='backend.tasks.maintenance.cleanup_expired_tasks')
+@shared_task(bind=True, name='backend.tasks.maintenance.cleanup_expired_tasks')
 def cleanup_expired_tasks(self, days: int = 7) -> Dict[str, Any]:
     """
     清理过期任务
@@ -83,7 +83,7 @@ def cleanup_expired_tasks(self, days: int = 7) -> Dict[str, Any]:
         raise
 
 
-@celery_app.task(bind=True, name='backend.tasks.maintenance.health_check')
+@shared_task(bind=True, name='backend.tasks.maintenance.health_check')
 def health_check(self) -> Dict[str, Any]:
     """
     系统健康检查
@@ -152,7 +152,7 @@ def health_check(self) -> Dict[str, Any]:
         raise
 
 
-@celery_app.task(bind=True, name='backend.tasks.maintenance.backup_project_data')
+@shared_task(bind=True, name='backend.tasks.maintenance.backup_project_data')
 def backup_project_data(self, project_id: str, backup_path: str = None) -> Dict[str, Any]:
     """
     备份项目数据

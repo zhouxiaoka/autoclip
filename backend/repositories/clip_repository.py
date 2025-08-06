@@ -7,7 +7,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func
 from .base import BaseRepository
-from backend.models.clip import Clip, ClipStatus
+from models.clip import Clip, ClipStatus
 
 class ClipRepository(BaseRepository[Clip]):
     """切片Repository类"""

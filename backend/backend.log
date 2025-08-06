@@ -131,3 +131,166 @@
 2025-08-06 17:50:59,434 - main - INFO - 启动AutoClip API服务...
 2025-08-06 17:50:59,434 - main - INFO - 数据库表创建完成
 2025-08-06 17:50:59,435 - main - INFO - API密钥已加载到环境变量
+2025-08-06 20:41:14,375 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:41:14,376 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:41:14,414 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:41:14,461 - main - INFO - 启动AutoClip API服务...
+2025-08-06 20:41:14,462 - main - INFO - 数据库表创建完成
+2025-08-06 20:41:14,462 - main - INFO - API密钥已加载到环境变量
+2025-08-06 20:41:30,127 - services.websocket_notification_service - INFO - 项目更新通知已发送: 324a9c81-1b4f-4ce6-96d4-3b7a75e34b05 - processing
+2025-08-06 20:47:45,036 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:47:45,037 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:47:45,039 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:47:45,087 - main - INFO - 启动AutoClip API服务...
+2025-08-06 20:47:45,088 - main - INFO - 数据库表创建完成
+2025-08-06 20:47:45,088 - main - INFO - API密钥已加载到环境变量
+2025-08-06 20:48:20,488 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:48:20,488 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:48:20,490 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:48:20,534 - main - INFO - 启动AutoClip API服务...
+2025-08-06 20:48:20,535 - main - INFO - 数据库表创建完成
+2025-08-06 20:48:20,535 - main - INFO - API密钥已加载到环境变量
+2025-08-06 20:50:09,922 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:50:09,923 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:50:09,925 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:50:09,973 - main - INFO - 启动AutoClip API服务...
+2025-08-06 20:50:09,974 - main - INFO - 数据库表创建完成
+2025-08-06 20:50:09,974 - main - INFO - API密钥已加载到环境变量
+2025-08-06 20:51:03,587 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:51:03,587 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:51:03,589 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:51:03,635 - main - INFO - 启动AutoClip API服务...
+2025-08-06 20:51:03,636 - main - INFO - 数据库表创建完成
+2025-08-06 20:51:03,636 - main - INFO - API密钥已加载到环境变量
+2025-08-06 20:52:52,263 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:52:52,264 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:53:00,538 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:53:00,538 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:53:13,629 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:53:13,630 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:53:20,344 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:53:20,344 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:53:29,868 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:53:29,868 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:53:38,527 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:53:38,527 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:53:46,290 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:53:46,290 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:53:52,735 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:53:52,735 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:54:20,431 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:54:20,431 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:54:27,749 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:54:27,749 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:54:37,774 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:54:37,774 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:54:46,474 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:54:46,474 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:54:58,016 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:54:58,016 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:55:04,691 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:55:04,691 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:55:14,137 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:55:14,137 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:55:21,286 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:55:21,286 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:55:31,940 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:55:31,941 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:55:40,049 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:55:40,049 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:55:54,538 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:55:54,538 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:56:01,927 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:56:01,927 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:56:12,282 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:56:12,283 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:56:22,577 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:56:22,577 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:56:33,361 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:56:33,362 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:56:45,305 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:56:45,305 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:56:55,809 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:56:55,810 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:57:02,665 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:57:02,666 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:57:16,274 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:57:16,275 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:57:23,510 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:57:23,511 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:57:34,594 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:57:34,595 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:57:42,224 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:57:42,224 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:57:54,900 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:57:54,901 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:58:06,456 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:58:06,457 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:58:18,037 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:58:18,037 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:58:25,752 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:58:25,752 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:58:35,444 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:58:35,445 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:58:42,943 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:58:42,944 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:58:51,680 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:58:51,681 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:58:58,769 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:58:58,770 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:59:07,260 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:59:07,260 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:59:21,053 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:59:21,054 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:59:34,830 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:59:34,830 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:59:44,847 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:59:44,847 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:59:53,932 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 20:59:53,932 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 20:59:53,968 - main - INFO - 启动AutoClip API服务...
+2025-08-06 20:59:53,969 - main - INFO - 数据库表创建完成
+2025-08-06 20:59:53,969 - main - INFO - API密钥已加载到环境变量
+2025-08-06 21:00:01,941 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 21:00:01,941 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 21:01:01,475 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 21:01:01,475 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 21:01:01,522 - main - INFO - 启动AutoClip API服务...
+2025-08-06 21:01:01,523 - main - INFO - 数据库表创建完成
+2025-08-06 21:01:01,523 - main - INFO - API密钥已加载到环境变量
+2025-08-06 21:04:04,554 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 21:04:04,554 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 21:04:04,590 - main - INFO - 启动AutoClip API服务...
+2025-08-06 21:04:04,591 - main - INFO - 数据库表创建完成
+2025-08-06 21:04:04,591 - main - INFO - API密钥已加载到环境变量
+2025-08-06 21:08:23,485 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 21:08:23,486 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 21:08:23,522 - main - INFO - 启动AutoClip API服务...
+2025-08-06 21:08:23,523 - main - INFO - 数据库表创建完成
+2025-08-06 21:08:23,523 - main - INFO - API密钥已加载到环境变量
+2025-08-06 21:14:31,541 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 21:14:31,541 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 21:14:31,578 - main - INFO - 启动AutoClip API服务...
+2025-08-06 21:14:31,579 - main - INFO - 数据库表创建完成
+2025-08-06 21:14:31,579 - main - INFO - API密钥已加载到环境变量
+2025-08-06 21:21:17,713 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 21:21:17,714 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 21:21:17,753 - main - INFO - 启动AutoClip API服务...
+2025-08-06 21:21:17,756 - main - INFO - 数据库表创建完成
+2025-08-06 21:21:17,756 - main - INFO - API密钥已加载到环境变量
+2025-08-06 21:22:14,925 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 21:22:14,926 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 21:22:14,963 - main - INFO - 启动AutoClip API服务...
+2025-08-06 21:22:14,964 - main - INFO - 数据库表创建完成
+2025-08-06 21:22:14,964 - main - INFO - API密钥已加载到环境变量
+2025-08-06 21:23:32,153 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 21:23:32,153 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 21:23:32,196 - main - INFO - 启动AutoClip API服务...
+2025-08-06 21:23:32,198 - main - INFO - 数据库表创建完成
+2025-08-06 21:23:32,198 - main - INFO - API密钥已加载到环境变量
+2025-08-06 21:25:09,066 - services.websocket_notification_service - INFO - 项目更新通知已发送: d6811ff2-747d-4215-ba3d-dfc861688290 - processing
+2025-08-06 21:26:18,205 - services.exceptions - ERROR - 未处理的异常: 'PipelineAdapter' object has no attribute 'adapt_step1_outline'
+2025-08-06 21:26:18,205 - services.exceptions - ERROR - ServiceError: SYSTEM_ERROR - 系统错误: 'PipelineAdapter' object has no attribute 'adapt_step1_outline' | Cause: 'PipelineAdapter' object has no attribute 'adapt_step1_outline'
+2025-08-06 21:26:18,218 - services.exceptions - ERROR - 未处理的异常: 'PipelineAdapter' object has no attribute 'adapt_step1_outline'
+2025-08-06 21:26:18,218 - services.exceptions - ERROR - ServiceError: SYSTEM_ERROR - 系统错误: 'PipelineAdapter' object has no attribute 'adapt_step1_outline' | Cause: 'PipelineAdapter' object has no attribute 'adapt_step1_outline'
+2025-08-06 21:26:32,434 - services.websocket_notification_service - INFO - 项目更新通知已发送: 215344dc-316d-4429-9a0b-b20bc2bf5927 - processing

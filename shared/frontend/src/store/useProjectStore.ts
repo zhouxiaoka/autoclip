@@ -27,7 +27,7 @@ export interface Project {
   id: string
   name: string
   video_path: string
-  status: 'uploading' | 'processing' | 'completed' | 'error'
+  status: 'pending' | 'processing' | 'completed' | 'failed'
   created_at: string
   updated_at: string
   video_category?: string

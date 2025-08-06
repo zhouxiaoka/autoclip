@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Card, Tag, Button, Space, Typography, Progress, Popconfirm, message, Tooltip } from 'antd'
-import { PlayCircleOutlined, DeleteOutlined, EyeOutlined, DownloadOutlined, ReloadOutlined, LoadingOutlined } from '@ant-design/icons'
+import { PlayCircleOutlined, DeleteOutlined, EyeOutlined, DownloadOutlined, ReloadOutlined, LoadingOutlined, StopOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { Project } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
@@ -273,8 +273,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     switch (status) {
       case 'completed': return 'success'
       case 'processing': return 'processing'
-      case 'error': return 'error'
-      case 'uploading': return 'default'
+      case 'failed': return 'error'
+      case 'pending': return 'default'
       default: return 'default'
     }
   }
@@ -283,15 +283,15 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     switch (status) {
       case 'completed': return '已完成'
       case 'processing': return '处理中'
-      case 'error': return '处理失败'
-      case 'uploading': return '上传中'
+      case 'failed': return '处理失败'
+      case 'pending': return '等待中'
       default: return '未知状态'
     }
   }
 
   const getProgressPercent = () => {
     if (project.status === 'completed') return 100
-    if (project.status === 'error') return 0
+    if (project.status === 'failed') return 0
     if (project.current_step && project.total_steps) {
       return Math.round((project.current_step / project.total_steps) * 100)
     }
@@ -468,33 +468,62 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 transition: 'opacity 0.3s ease'
               }}
             >
-              {/* 失败状态：只显示重试和删除按钮 */}
-              {project.status === 'error' ? (
-                <>
+              {/* pending/processing状态：显示删除按钮 */}
+              {(project.status === 'pending' || project.status === 'processing') ? (
+                <Popconfirm
+                  title="确定要删除这个项目吗？"
+                  description="删除后无法恢复，所有数据将被删除"
+                  onConfirm={(e) => {
+                    e?.stopPropagation()
+                    onDelete(project.id)
+                  }}
+                  onCancel={(e) => {
+                    e?.stopPropagation()
+                  }}
+                  okText="确定"
+                  cancelText="取消"
+                >
                   <Button
                     type="text"
-                    icon={<ReloadOutlined />}
-                    loading={isRetrying}
+                    icon={<DeleteOutlined />}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                    }}
+                    style={{
+                      height: '24px',
+                      width: '24px',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ff4d4f'
+                    }}
+                  />
+                </Popconfirm>
+              ) : (
+                <>
+                  {/* failed/completed状态：显示重试和删除按钮 */}
+                  <Button
+                    type="text"
+                    icon={<ReloadOutlined spin={isRetrying} />}
                     onClick={(e) => {
                       e.stopPropagation()
                       handleRetry()
                     }}
+                    disabled={isRetrying}
                     style={{
-                      height: '20px',
-                      width: '20px',
-                      borderRadius: '3px',
-                      color: '#52c41a',
-                      border: '1px solid rgba(82, 196, 26, 0.5)',
-                      background: 'rgba(82, 196, 26, 0.1)',
+                      height: '24px',
+                      width: '24px',
                       padding: 0,
-                      minWidth: '20px',
-                      fontSize: '10px'
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#1890ff'
                     }}
                   />
-                  
                   <Popconfirm
                     title="确定要删除这个项目吗？"
-                    description="删除后无法恢复"
+                    description="删除后无法恢复，所有数据将被删除"
                     onConfirm={(e) => {
                       e?.stopPropagation()
                       onDelete(project.id)
@@ -512,83 +541,18 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                         e.stopPropagation()
                       }}
                       style={{
-                        height: '20px',
-                        width: '20px',
-                        borderRadius: '3px',
-                        color: '#ff6b6b',
-                        border: '1px solid rgba(255, 107, 107, 0.5)',
-                        background: 'rgba(255, 107, 107, 0.1)',
+                        height: '24px',
+                        width: '24px',
                         padding: 0,
-                        minWidth: '20px',
-                        fontSize: '10px'
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ff4d4f'
                       }}
                     />
                   </Popconfirm>
                 </>
-              ) : (
-                /* 其他状态：显示下载和删除按钮 */
-                <>
-                  <Space size={4}>
-                    {/* 下载按钮 - 仅在完成状态显示 */}
-                    {project.status === 'completed' && (
-                      <Button
-                        type="text"
-                        icon={<DownloadOutlined />}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          // 实现下载功能
-                          message.info('下载功能开发中...')
-                        }}
-                        style={{
-                          width: '20px',
-                          height: '20px',
-                          borderRadius: '3px',
-                          color: 'rgba(255, 255, 255, 0.8)',
-                          border: '1px solid rgba(255, 255, 255, 0.2)',
-                          background: 'rgba(255, 255, 255, 0.1)',
-                          padding: 0,
-                          minWidth: '20px',
-                          fontSize: '10px'
-                        }}
-                      />
-                    )}
-                    
-                    {/* 删除按钮 */}
-                    <Popconfirm
-                      title="确定要删除这个项目吗？"
-                      description="删除后无法恢复"
-                      onConfirm={(e) => {
-                        e?.stopPropagation()
-                        onDelete(project.id)
-                      }}
-                      onCancel={(e) => {
-                        e?.stopPropagation()
-                      }}
-                      okText="确定"
-                      cancelText="取消"
-                    >
-                      <Button
-                        type="text"
-                        icon={<DeleteOutlined />}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                        }}
-                        style={{
-                          width: '20px',
-                          height: '20px',
-                          borderRadius: '3px',
-                          color: 'rgba(255, 255, 255, 0.8)',
-                          border: '1px solid rgba(255, 255, 255, 0.2)',
-                          background: 'rgba(255, 255, 255, 0.1)',
-                          padding: 0,
-                          minWidth: '20px',
-                          fontSize: '10px'
-                        }}
-                      />
-                    </Popconfirm>
-                  </Space>
-                 </>
-               )}
+              )}
             </div>
           </div>
         </div>
@@ -689,11 +653,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             <div style={{
               background: project.status === 'completed' ? 'rgba(82, 196, 26, 0.15)' :
                          project.status === 'processing' ? 'rgba(24, 144, 255, 0.15)' :
-                         project.status === 'error' ? 'rgba(255, 77, 79, 0.15)' :
+                         project.status === 'failed' ? 'rgba(255, 77, 79, 0.15)' :
+                         project.status === 'pending' ? 'rgba(217, 217, 217, 0.15)' :
                          'rgba(217, 217, 217, 0.15)',
               border: project.status === 'completed' ? '1px solid rgba(82, 196, 26, 0.3)' :
                       project.status === 'processing' ? '1px solid rgba(24, 144, 255, 0.3)' :
-                      project.status === 'error' ? '1px solid rgba(255, 77, 79, 0.3)' :
+                      project.status === 'failed' ? '1px solid rgba(255, 77, 79, 0.3)' :
+                      project.status === 'pending' ? '1px solid rgba(217, 217, 217, 0.3)' :
                       '1px solid rgba(217, 217, 217, 0.3)',
               borderRadius: '3px',
               padding: '4px 6px',
@@ -704,7 +670,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               <div style={{ 
                 color: project.status === 'completed' ? '#52c41a' :
                        project.status === 'processing' ? '#1890ff' :
-                       project.status === 'error' ? '#ff4d4f' :
+                       project.status === 'failed' ? '#ff4d4f' :
+                       project.status === 'pending' ? '#d9d9d9' :
                        '#d9d9d9',
                 fontSize: '12px', 
                 fontWeight: 600, 
@@ -713,21 +680,23 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 {project.status === 'processing' && project.current_step && project.total_steps 
                   ? `${Math.round((project.current_step / project.total_steps) * 100)}%`
                   : project.status === 'completed' ? '✓'
-                  : project.status === 'error' ? '✗'
+                  : project.status === 'failed' ? '✗'
+                  : project.status === 'pending' ? '○'
                   : '○'
                 }
               </div>
               <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
                 {project.status === 'completed' ? '已完成' :
                  project.status === 'processing' ? '处理中' :
-                 project.status === 'error' ? '失败' :
-                 '等待中'
+                 project.status === 'failed' ? '失败' :
+                 project.status === 'pending' ? '等待中' :
+                 '已终止'
                 }
               </div>
             </div>
             
-            {/* 仅在非等待状态时显示切片和合集数量 */}
-            {project.status !== 'pending' && (
+            {/* 仅在completed状态时显示切片和合集数量 */}
+            {project.status === 'completed' && (
               <>
                 {/* 切片数量 */}
                 <div style={{
@@ -748,14 +717,14 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 
                 {/* 合集数量 */}
                 <div style={{
-                  background: 'rgba(118, 75, 162, 0.15)',
-                  border: '1px solid rgba(118, 75, 162, 0.3)',
+                  background: 'rgba(255, 107, 107, 0.15)',
+                  border: '1px solid rgba(255, 107, 107, 0.3)',
                   borderRadius: '3px',
                   padding: '4px 6px',
                   textAlign: 'center',
                   flex: 1
                 }}>
-                  <div style={{ color: '#764ba2', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
+                  <div style={{ color: '#ff6b6b', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
                     {project.collections?.length || 0}
                   </div>
                   <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>

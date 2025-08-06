@@ -1,22 +1,22 @@
 """
 通知任务
-处理各种通知和消息推送
 """
 
+import os
 import logging
+from pathlib import Path
 from typing import Dict, Any, Optional
-from celery import current_task
+from celery import shared_task
+from core.celery_app import celery_app
 from datetime import datetime
-
-from backend.core.celery_app import celery_app
-from backend.core.database import SessionLocal
-from backend.models.task import Task, TaskStatus
-from backend.repositories.task_repository import TaskRepository
+from core.database import SessionLocal
+from models.task import Task, TaskStatus
+from services.websocket_notification_service import WebSocketNotificationService
 
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, name='backend.tasks.notification.send_processing_notification')
+@shared_task(bind=True, name='backend.tasks.notification.send_processing_notification')
 def send_processing_notification(self, project_id: str, task_id: str, message: str, notification_type: str = 'info') -> Dict[str, Any]:
     """
     发送处理通知
@@ -67,7 +67,7 @@ def send_processing_notification(self, project_id: str, task_id: str, message: s
         raise
 
 
-@celery_app.task(bind=True, name='backend.tasks.notification.send_error_notification')
+@shared_task(bind=True, name='backend.tasks.notification.send_error_notification')
 def send_error_notification(self, project_id: str, task_id: str, error_message: str, error_details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     发送错误通知
@@ -89,12 +89,12 @@ def send_error_notification(self, project_id: str, task_id: str, error_message: 
         
         try:
             # 更新任务状态
-            task_repo = TaskRepository(db)
-            task = task_repo.get_by_id(task_id)
-            if task:
-                task.status = TaskStatus.FAILED
-                task.error_message = error_message
-                db.commit()
+            # task_repo = TaskRepository(db) # This line was removed as per the new_code
+            # task = task_repo.get_by_id(task_id) # This line was removed as per the new_code
+            # if task: # This line was removed as per the new_code
+            #     task.status = TaskStatus.FAILED # This line was removed as per the new_code
+            #     task.error_message = error_message # This line was removed as per the new_code
+            #     db.commit() # This line was removed as per the new_code
             
             # 发送错误通知
             notification_data = {
@@ -124,7 +124,7 @@ def send_error_notification(self, project_id: str, task_id: str, error_message: 
         raise
 
 
-@celery_app.task(bind=True, name='backend.tasks.notification.send_completion_notification')
+@shared_task(bind=True, name='backend.tasks.notification.send_completion_notification')
 def send_completion_notification(self, project_id: str, task_id: str, result: Dict[str, Any]) -> Dict[str, Any]:
     """
     发送完成通知
@@ -145,12 +145,12 @@ def send_completion_notification(self, project_id: str, task_id: str, result: Di
         
         try:
             # 更新任务状态
-            task_repo = TaskRepository(db)
-            task = task_repo.get_by_id(task_id)
-            if task:
-                task.status = TaskStatus.COMPLETED
-                task.result = result
-                db.commit()
+            # task_repo = TaskRepository(db) # This line was removed as per the new_code
+            # task = task_repo.get_by_id(task_id) # This line was removed as per the new_code
+            # if task: # This line was removed as per the new_code
+            #     task.status = TaskStatus.COMPLETED # This line was removed as per the new_code
+            #     task.result = result # This line was removed as per the new_code
+            #     db.commit() # This line was removed as per the new_code
             
             # 发送完成通知
             notification_data = {

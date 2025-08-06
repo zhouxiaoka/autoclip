@@ -1,15 +1,17 @@
 """
 WebSocket API路由
-处理WebSocket连接和消息
 """
 
 import json
 import logging
-from typing import Dict, Any
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from typing import Dict, Any, List, Optional
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
-from backend.core.websocket_manager import manager, WebSocketMessage
+from core.database import get_db
+from core.websocket_manager import manager, WebSocketMessage
+from services.websocket_notification_service import WebSocketNotificationService
 
 logger = logging.getLogger(__name__)
 
