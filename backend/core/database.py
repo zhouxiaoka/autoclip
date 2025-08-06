@@ -4,17 +4,16 @@
 """
 
 import os
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 from typing import Generator
 from models.base import Base
+from core.config import get_database_url, get_data_directory
 
 # 数据库配置
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "sqlite:///autoclip.db"
-)
+DATABASE_URL = get_database_url()
 
 # 创建数据库引擎
 if "sqlite" in DATABASE_URL:
@@ -85,6 +84,10 @@ def test_connection() -> bool:
 def init_database():
     """初始化数据库"""
     print("正在初始化数据库...")
+    print(f"数据库路径: {DATABASE_URL}")
+    
+    # 确保数据目录存在
+    get_data_directory()
     
     # 测试连接
     if not test_connection():
