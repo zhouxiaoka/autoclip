@@ -8,7 +8,7 @@ import asyncio
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from backend.core.websocket_manager import manager, WebSocketMessage
+from core.websocket_manager import manager, WebSocketMessage
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +180,16 @@ class WebSocketNotificationService:
             "processing_error",
             f"项目 {project_id} 处理失败",
             {"project_id": project_id, "task_id": task_id, "error": error}
+        )
+    
+    @staticmethod
+    async def send_processing_started(project_id: str, message: str = "开始视频处理流程"):
+        """发送处理开始通知（别名方法）"""
+        await WebSocketNotificationService.send_project_update(
+            project_id=project_id,
+            status="processing",
+            progress=0,
+            message=message
         )
 
 # 全局通知服务实例

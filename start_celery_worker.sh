@@ -6,5 +6,6 @@ export PYTHONPATH=.:$PYTHONPATH
 # 激活虚拟环境
 source venv/bin/activate
 
-# 启动Celery worker (在项目根目录运行)
-celery -A backend.core.celery_app worker --loglevel=info --concurrency=1
+# 启动Celery worker (在backend目录运行)
+cd backend
+celery -A core.celery_app worker --loglevel=info --concurrency=1

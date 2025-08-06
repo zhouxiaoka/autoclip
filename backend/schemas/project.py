@@ -47,6 +47,7 @@ class ProjectUpdate(BaseSchema):
     description: Optional[str] = Field(default=None, max_length=1000, description="Project description")
     status: Optional[ProjectStatus] = Field(default=None, description="Project status")
     settings: Optional[dict] = Field(default=None, description="Project settings")
+    processing_config: Optional[dict] = Field(default=None, description="Processing configuration")
 
 
 class ProjectResponse(BaseSchema):

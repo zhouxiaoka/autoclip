@@ -160,29 +160,29 @@ echo -e "${GREEN}✅ 前端依赖检查完成${NC}"
 
 # 初始化数据库
 echo -e "${BLUE}🗄️  初始化数据库...${NC}"
-cd backend || handle_error "进入backend目录失败"
-
-# 设置环境变量
-export PYTHONPATH=$PYTHONPATH:$(pwd)
 
 # 检查并创建.env文件
-if [ ! -f "../.env" ]; then
+if [ ! -f ".env" ]; then
     echo -e "${YELLOW}📝 创建.env配置文件...${NC}"
-    cp ../env.example ../.env
+    cp env.example .env
     echo -e "${YELLOW}⚠️  请编辑.env文件设置API密钥等配置${NC}"
 fi
+
+# 设置环境变量 - 从项目根目录设置
+export PYTHONPATH=$PYTHONPATH:$(pwd)
 
 # 初始化数据库表
 python -c "
 import sys
-sys.path.insert(0, '.')
-from core.database import create_tables, init_database
+import os
+# 添加项目根目录到Python路径
+project_root = os.path.abspath('.')
+sys.path.insert(0, project_root)
+from backend.core.database import create_tables, init_database
 create_tables()
 init_database()
 print('数据库初始化完成')
 " || handle_error "数据库初始化失败"
-
-cd .. || handle_error "返回根目录失败"
 echo -e "${GREEN}✅ 数据库初始化完成${NC}"
 
 # 启动服务
@@ -195,8 +195,10 @@ export PYTHONPATH=.:$PYTHONPATH
 
 # 尝试启动完整版后端（从项目根目录启动）
 echo "尝试启动完整版后端..."
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload &
+cd backend
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
+cd ..
 
 # 等待后端启动
 echo "等待后端服务启动..."
@@ -216,8 +218,10 @@ fi
 echo -e "${BLUE}⚙️  启动Celery工作进程...${NC}"
 source venv/bin/activate
 export PYTHONPATH=.:$PYTHONPATH
-celery -A backend.core.celery_app worker --loglevel=info --concurrency=1 &
+cd backend
+celery -A core.celery_app worker --loglevel=info --concurrency=1 &
 CELERY_PID=$!
+cd ..
 echo -e "${GREEN}✅ Celery工作进程已启动 (PID: $CELERY_PID)${NC}"
 
 # 3. 启动前端开发服务器

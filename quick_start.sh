@@ -54,8 +54,10 @@ cd ..
 # 启动Celery
 echo -e "${BLUE}⚙️  启动Celery...${NC}"
 export PYTHONPATH=.:$PYTHONPATH
-celery -A backend.core.celery_app worker --loglevel=info --concurrency=1 &
+cd backend
+celery -A core.celery_app worker --loglevel=info --concurrency=1 &
 CELERY_PID=$!
+cd ..
 
 # 启动前端
 echo -e "${BLUE}🎨 启动前端...${NC}"

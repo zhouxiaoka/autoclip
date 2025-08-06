@@ -10,11 +10,11 @@ from typing import Dict, Any, List, Optional, Callable
 from pathlib import Path
 from sqlalchemy.orm import Session
 
-from backend.models.task import Task, TaskStatus, TaskType
-from backend.repositories.task_repository import TaskRepository
-from backend.services.config_manager import ProjectConfigManager, ProcessingStep
-from backend.services.pipeline_adapter import PipelineAdapter
-from backend.core.config import get_project_root
+from models.task import Task, TaskStatus, TaskType
+from repositories.task_repository import TaskRepository
+from services.config_manager import ProjectConfigManager, ProcessingStep
+from services.pipeline_adapter import PipelineAdapter
+from core.config import get_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,10 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "outlines": [
@@ -62,6 +66,10 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "timeline": [
@@ -82,6 +90,10 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "scored_clips": [
@@ -101,6 +113,10 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "titles": [
@@ -120,6 +136,10 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "collections": [
@@ -139,6 +159,10 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "videos": [

@@ -47,3 +47,87 @@
 2025-08-06 16:27:17,506 - main - INFO - 启动AutoClip API服务...
 2025-08-06 16:27:17,506 - main - INFO - 数据库表创建完成
 2025-08-06 16:27:17,507 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:37:34,139 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:37:34,140 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:37:34,207 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:37:34,208 - main - INFO - 数据库表创建完成
+2025-08-06 16:37:34,208 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:38:47,321 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:38:47,322 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:38:47,374 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:38:47,375 - main - INFO - 数据库表创建完成
+2025-08-06 16:38:47,375 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:39:43,400 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:39:43,400 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:39:43,453 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:39:43,454 - main - INFO - 数据库表创建完成
+2025-08-06 16:39:43,454 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:41:37,870 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:41:37,870 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:41:37,937 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:41:37,938 - main - INFO - 数据库表创建完成
+2025-08-06 16:41:37,938 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:41:49,381 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:41:49,381 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:41:49,434 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:41:49,435 - main - INFO - 数据库表创建完成
+2025-08-06 16:41:49,435 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:42:12,124 - backend.services.websocket_notification_service - INFO - 项目更新通知已发送: f70ba71d-53e3-4162-acc0-c80da61a05eb - processing
+2025-08-06 16:42:23,765 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:42:23,766 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:42:23,836 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:42:23,836 - main - INFO - 数据库表创建完成
+2025-08-06 16:42:23,836 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:43:02,751 - backend.services.websocket_notification_service - INFO - 项目更新通知已发送: f70ba71d-53e3-4162-acc0-c80da61a05eb - processing
+2025-08-06 16:43:25,482 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:43:25,482 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:43:25,536 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:43:25,537 - main - INFO - 数据库表创建完成
+2025-08-06 16:43:25,537 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:43:40,539 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:43:40,539 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:43:40,591 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:43:40,592 - main - INFO - 数据库表创建完成
+2025-08-06 16:43:40,592 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:44:07,516 - backend.services.websocket_notification_service - INFO - 项目更新通知已发送: f70ba71d-53e3-4162-acc0-c80da61a05eb - processing
+2025-08-06 16:44:27,637 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:44:27,637 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:44:27,692 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:44:27,693 - main - INFO - 数据库表创建完成
+2025-08-06 16:44:27,693 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:44:43,074 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:44:43,074 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:44:43,127 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:44:43,128 - main - INFO - 数据库表创建完成
+2025-08-06 16:44:43,128 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:45:13,621 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 16:45:13,622 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 16:45:13,676 - main - INFO - 启动AutoClip API服务...
+2025-08-06 16:45:13,677 - main - INFO - 数据库表创建完成
+2025-08-06 16:45:13,677 - main - INFO - API密钥已加载到环境变量
+2025-08-06 16:45:39,549 - backend.services.websocket_notification_service - INFO - 项目更新通知已发送: 9e930785-38da-468c-b4f3-875e0c5eb501 - processing
+2025-08-06 17:41:42,018 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 17:41:49,745 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 17:42:08,512 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 17:42:08,515 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 17:42:15,599 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 17:42:15,600 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 17:44:16,206 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 17:44:16,208 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 17:44:22,473 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 17:44:22,473 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 17:44:22,855 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 17:44:22,855 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 17:47:17,234 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 17:47:17,235 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 17:47:17,263 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 17:47:17,310 - main - INFO - 启动AutoClip API服务...
+2025-08-06 17:47:17,311 - main - INFO - 数据库表创建完成
+2025-08-06 17:47:17,311 - main - INFO - API密钥已加载到环境变量
+2025-08-06 17:48:13,664 - main - INFO - 访问根端点
+2025-08-06 17:50:59,350 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 17:50:59,351 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-06 17:50:59,386 - backend.services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-06 17:50:59,434 - main - INFO - 启动AutoClip API服务...
+2025-08-06 17:50:59,434 - main - INFO - 数据库表创建完成
+2025-08-06 17:50:59,435 - main - INFO - API密钥已加载到环境变量
