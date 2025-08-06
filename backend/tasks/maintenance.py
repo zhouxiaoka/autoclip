@@ -10,12 +10,12 @@ from pathlib import Path
 from typing import Dict, Any, List
 from celery import current_task
 
-from core.celery_app import celery_app
-from core.database import SessionLocal
-from models.task import Task, TaskStatus
-from models.project import Project, ProjectStatus
-from repositories.task_repository import TaskRepository
-from repositories.project_repository import ProjectRepository
+from backend.core.celery_app import celery_app
+from backend.core.database import SessionLocal
+from backend.models.task import Task, TaskStatus
+from backend.models.project import Project, ProjectStatus
+from backend.repositories.task_repository import TaskRepository
+from backend.repositories.project_repository import ProjectRepository
 
 logger = logging.getLogger(__name__)
 

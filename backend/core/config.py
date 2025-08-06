@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", description="运行环境")
     debug: bool = Field(default=True, description="调试模式")
     
+    # 日志配置字段（直接映射.env中的字段）
+    log_level: str = Field(default="INFO", description="日志级别")
+    log_format: str = Field(default="%(asctime)s - %(name)s - %(levelname)s - %(message)s", description="日志格式")
+    log_file: str = Field(default="backend.log", description="日志文件")
+    
     # 子配置
     database: DatabaseConfig = DatabaseConfig()
     redis: RedisConfig = RedisConfig()
@@ -85,6 +90,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"  # 忽略额外字段
 
 # 全局配置实例
 settings = Settings()
@@ -179,9 +185,9 @@ def get_processing_config() -> Dict[str, Any]:
 def get_logging_config() -> Dict[str, Any]:
     """获取日志配置"""
     return {
-        "level": settings.logging.level,
-        "format": settings.logging.format,
-        "file": settings.logging.file
+        "level": settings.log_level,
+        "format": settings.log_format,
+        "file": settings.log_file
     }
 
 # 初始化路径配置

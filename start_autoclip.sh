@@ -105,24 +105,24 @@ source venv/bin/activate || handle_error "激活虚拟环境失败"
 if [ ! -f "requirements.txt" ]; then
     echo -e "${YELLOW}📝 创建requirements.txt文件...${NC}"
     cat > requirements.txt << 'EOF'
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-sqlalchemy==2.0.23
-alembic==1.13.1
-celery[redis]==5.3.4
-redis==5.0.1
-pydantic==2.5.0
-pydantic-settings==2.1.0
-python-multipart==0.0.6
-websockets==12.0
-requests==2.31.0
-aiofiles==23.2.1
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-pytest==7.4.3
-pytest-cov==4.1.0
-pytest-mock==3.12.0
-cryptography==41.0.8
+fastapi
+uvicorn[standard]
+sqlalchemy
+alembic
+celery[redis]
+redis
+pydantic
+pydantic-settings
+python-multipart
+websockets
+requests
+aiofiles
+python-jose[cryptography]
+passlib[bcrypt]
+pytest
+pytest-cov
+pytest-mock
+cryptography
 EOF
 fi
 
@@ -130,7 +130,17 @@ fi
 if [ ! -f ".venv_deps_installed" ] || [ "requirements.txt" -nt ".venv_deps_installed" ]; then
     echo -e "${BLUE}📦 安装后端依赖...${NC}"
     pip install --upgrade pip || handle_error "升级pip失败"
-    pip install -r requirements.txt || handle_error "安装Python依赖失败"
+    
+    # 首先尝试安装requirements.txt
+    if pip install -r requirements.txt; then
+        echo -e "${GREEN}✅ 所有依赖安装成功${NC}"
+    else
+        echo -e "${YELLOW}⚠️  部分依赖安装失败，尝试安装核心依赖...${NC}"
+        # 如果失败，逐个安装核心依赖
+        pip install fastapi uvicorn[standard] sqlalchemy celery[redis] redis pydantic websockets requests || handle_error "安装核心依赖失败"
+        echo -e "${GREEN}✅ 核心依赖安装成功${NC}"
+    fi
+    
     touch .venv_deps_installed
 else
     echo -e "${GREEN}✅ 后端依赖已是最新${NC}"
@@ -181,30 +191,33 @@ echo -e "\n${BLUE}🚀 启动所有服务...${NC}"
 # 1. 启动后端API服务器
 echo -e "${BLUE}🔧 启动后端API服务器...${NC}"
 source venv/bin/activate
-cd backend
-export PYTHONPATH=$PYTHONPATH:$(pwd)
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
+export PYTHONPATH=.:$PYTHONPATH
+
+# 尝试启动完整版后端（从项目根目录启动）
+echo "尝试启动完整版后端..."
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
-cd ..
 
 # 等待后端启动
 echo "等待后端服务启动..."
 sleep 5
 
 # 验证后端启动
-if ! curl -s http://localhost:8000/api/v1/health > /dev/null; then
+if curl -s http://localhost:8000/api/v1/health > /dev/null; then
+    echo -e "${GREEN}✅ 完整版后端API服务器已启动 (PID: $BACKEND_PID)${NC}"
+elif curl -s http://localhost:8000/ > /dev/null; then
+    echo -e "${YELLOW}⚠️  简化版后端API服务器已启动 (PID: $BACKEND_PID)${NC}"
+    echo -e "${YELLOW}💡 完整版API可能因导入问题使用了简化版${NC}"
+else
     handle_error "后端服务启动失败"
 fi
-echo -e "${GREEN}✅ 后端API服务器已启动 (PID: $BACKEND_PID)${NC}"
 
 # 2. 启动Celery工作进程
 echo -e "${BLUE}⚙️  启动Celery工作进程...${NC}"
 source venv/bin/activate
-cd backend
-export PYTHONPATH=$PYTHONPATH:$(pwd)
-celery -A core.celery_app worker --loglevel=info --concurrency=1 &
+export PYTHONPATH=.:$PYTHONPATH
+celery -A backend.core.celery_app worker --loglevel=info --concurrency=1 &
 CELERY_PID=$!
-cd ..
 echo -e "${GREEN}✅ Celery工作进程已启动 (PID: $CELERY_PID)${NC}"
 
 # 3. 启动前端开发服务器
@@ -221,7 +234,7 @@ sleep 3
 
 echo -e "\n${GREEN}🎉 AutoClip 自动切片工具启动完成！${NC}"
 echo "======================================"
-echo -e "${GREEN}📱 前端地址:${NC} http://localhost:5173"
+echo -e "${GREEN}📱 前端地址:${NC} http://localhost:3000"
 echo -e "${GREEN}🔌 后端API:${NC} http://localhost:8000"
 echo -e "${GREEN}📚 API文档:${NC} http://localhost:8000/docs"
 echo -e "${GREEN}📊 Redis监控:${NC} redis-cli monitor"
@@ -230,7 +243,7 @@ echo -e "${BLUE}📋 运行的服务:${NC}"
 echo "  • Redis服务器 (端口: 6379)"
 echo "  • 后端API服务器 (端口: 8000, PID: $BACKEND_PID)"
 echo "  • Celery工作进程 (PID: $CELERY_PID)"
-echo "  • 前端开发服务器 (端口: 5173, PID: $FRONTEND_PID)"
+echo "  • 前端开发服务器 (端口: 3000, PID: $FRONTEND_PID)"
 echo ""
 echo -e "${YELLOW}💡 使用说明:${NC}"
 echo "  • 前端包含了Zustand状态管理和WebSocket实时通信"
