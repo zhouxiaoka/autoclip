@@ -12,8 +12,8 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-from backend.models.project import ProjectType
-from backend.core.database import get_db
+from models.project import ProjectType
+from core.database import get_db
 
 logger = logging.getLogger(__name__)
 

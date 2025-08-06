@@ -61,17 +61,18 @@ async def get_tasks(
             task_responses.append(TaskResponse(
                 id=str(task.id),
                 project_id=task.project_id,
-                name=task.name,  # 添加name字段
+                name=task.name,
                 task_type=task.task_type,
                 status=TaskStatus(task.status),
-                celery_task_id=task.celery_task_id,
-                current_step=task.current_step,
-                total_steps=task.total_steps,
                 progress=task.progress,
-                error_message=task.error_message,
+                task_config=task.task_config or {},
                 result=task.result_data,
+                error_message=task.error_message,
+                priority=task.priority,
+                metadata=task.task_metadata or {},
                 created_at=task.created_at,
                 updated_at=task.updated_at,
+                started_at=task.started_at,
                 completed_at=task.completed_at
             ))
         
@@ -335,7 +336,7 @@ async def retry_task(
 
 @router.get("/project/{project_id}", response_model=TaskListResponse)
 async def get_project_tasks(
-    project_id: int,
+    project_id: str,
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
     status: Optional[str] = Query(None, description="Filter by task status"),

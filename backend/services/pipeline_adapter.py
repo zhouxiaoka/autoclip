@@ -9,11 +9,11 @@ from pathlib import Path
 from datetime import datetime
 
 # 导入新架构的模型和服务
-from backend.models.project import Project, ProjectStatus
-from backend.models.task import Task, TaskStatus
-from backend.core.database import get_db
-from backend.core.progress_manager import get_progress_manager
-from backend.core.config import get_project_root, get_data_directory, get_output_directory
+from models.project import Project, ProjectStatus
+from models.task import Task, TaskStatus
+from core.database import get_db
+from core.progress_manager import get_progress_manager
+from core.config import get_project_root, get_data_directory, get_output_directory
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,11 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
+            # 确保父目录存在
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "outlines": [
@@ -62,6 +67,10 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "timeline": [
@@ -82,6 +91,10 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "scored_clips": [
@@ -101,6 +114,10 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "titles": [
@@ -120,6 +137,10 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "collections": [
@@ -139,6 +160,10 @@ except ImportError as e:
         output_path = kwargs.get('output_path')
         if output_path:
             import json
+            from pathlib import Path
+            # 确保output_path是Path对象
+            if isinstance(output_path, str):
+                output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             mock_output = {
                 "videos": [
@@ -171,7 +196,7 @@ class PipelineAdapter:
             {"name": "video", "description": "生成视频", "weight": 15}
         ]
         
-    def process_project_sync(self, project_id: int, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
+    def process_project_sync(self, project_id: str, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
         """同步处理整个项目的Pipeline流程"""
         try:
             # 获取项目信息
@@ -256,35 +281,43 @@ class PipelineAdapter:
             raise FileNotFoundError(f"SRT文件不存在: {srt_path}")
         
         output_path = project_dir / "step1_outline.json"
-        result = run_step1_outline(srt_path=str(srt_file), output_path=str(output_path))
+        result = run_step1_outline(srt_file, output_path=output_path)
         
         return result
     
     def _step2_timeline_sync(self, outline_result: Dict[str, Any], project_dir: Path) -> Dict[str, Any]:
         """步骤2: 生成时间线"""
+        # 使用上一步的输出作为输入
+        outline_path = project_dir / "step1_outline.json"
         output_path = project_dir / "step2_timeline.json"
-        result = run_step2_timeline(output_path=str(output_path))
+        result = run_step2_timeline(outline_path, output_path=output_path)
         
         return result
     
     def _step3_scoring_sync(self, timeline_result: Dict[str, Any], project_dir: Path) -> Dict[str, Any]:
         """步骤3: 内容评分"""
+        # 使用上一步的输出作为输入
+        timeline_path = project_dir / "step2_timeline.json"
         output_path = project_dir / "step3_scored_clips.json"
-        result = run_step3_scoring(output_path=str(output_path))
+        result = run_step3_scoring(timeline_path, output_path=output_path)
         
         return result
     
     def _step4_title_sync(self, scoring_result: Dict[str, Any], project_dir: Path) -> Dict[str, Any]:
         """步骤4: 生成标题"""
+        # 使用上一步的输出作为输入
+        high_score_clips_path = project_dir / "step3_scored_clips.json"
         output_path = project_dir / "step4_titles.json"
-        result = run_step4_title(output_path=str(output_path))
+        result = run_step4_title(high_score_clips_path, output_path=output_path)
         
         return result
     
     def _step5_clustering_sync(self, title_result: Dict[str, Any], project_dir: Path) -> Dict[str, Any]:
         """步骤5: 主题聚类"""
+        # 使用上一步的输出作为输入
+        clips_with_titles_path = project_dir / "step4_titles.json"
         output_path = project_dir / "step5_collections.json"
-        result = run_step5_clustering(output_path=str(output_path))
+        result = run_step5_clustering(clips_with_titles_path, output_path=output_path)
         
         return result
     
@@ -294,15 +327,15 @@ class PipelineAdapter:
         if not input_video.exists():
             raise FileNotFoundError(f"输入视频不存在: {input_video_path}")
         
+        # 使用上一步的输出作为输入
+        clips_with_titles_path = project_dir / "step4_titles.json"
+        collections_path = project_dir / "step5_collections.json"
         output_path = project_dir / "step6_video_result.json"
-        result = run_step6_video(
-            video_path=str(input_video),
-            output_path=str(output_path)
-        )
+        result = run_step6_video(clips_with_titles_path, collections_path, input_video, output_path)
         
         return result
     
-    def _update_progress_sync(self, project_id: int, progress: int, message: str, step_result: Optional[Dict[str, Any]] = None):
+    def _update_progress_sync(self, project_id: str, progress: int, message: str, step_result: Optional[Dict[str, Any]] = None):
         """同步更新项目进度"""
         try:
             # 更新数据库中的项目进度
@@ -322,7 +355,7 @@ class PipelineAdapter:
         except Exception as e:
             logger.error(f"更新进度失败: {str(e)}")
     
-    def get_project_status(self, project_id: int) -> Dict[str, Any]:
+    def get_project_status(self, project_id: str) -> Dict[str, Any]:
         """获取项目状态"""
         project = self.db.query(Project).filter(Project.id == project_id).first()
         if not project:

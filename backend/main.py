@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 # 导入配置管理
-from backend.core.config import settings, get_logging_config, get_api_key
+from core.config import settings, get_logging_config, get_api_key
 
 # 配置日志
 logging_config = get_logging_config()
@@ -21,12 +21,12 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# 使用绝对导入
-from backend.api.v1 import health, projects, clips, collections, tasks as task_routes, settings as settings_routes
-from backend.api.v1.tasks import router as tasks_router
-from backend.api.v1 import websocket
-from backend.core.database import engine
-from backend.models.base import Base
+# 使用相对导入
+from api.v1 import health, projects, clips, collections, tasks as task_routes, settings as settings_routes
+from api.v1.tasks import router as tasks_router
+from api.v1 import websocket
+from core.database import engine
+from models.base import Base
 
 # Create FastAPI app
 app = FastAPI(

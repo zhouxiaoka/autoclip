@@ -57,15 +57,15 @@ class TaskResponse(BaseSchema):
     task_type: TaskType = Field(description="Task type")
     status: TaskStatus = Field(description="Task status")
     progress: float = Field(default=0, description="Task progress percentage")
-    task_config: dict = Field(description="Task configuration")
-    result: Optional[dict] = Field(description="Task result")
-    error_message: Optional[str] = Field(description="Error message if failed")
-    priority: int = Field(description="Task priority")
-    metadata: dict = Field(description="Additional metadata")
+    task_config: Optional[dict] = Field(default_factory=dict, description="Task configuration")
+    result: Optional[dict] = Field(default=None, description="Task result")
+    error_message: Optional[str] = Field(default=None, description="Error message if failed")
+    priority: int = Field(default=0, description="Task priority")
+    metadata: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
     created_at: datetime = Field(description="Creation timestamp")
     updated_at: datetime = Field(description="Last update timestamp")
-    started_at: Optional[datetime] = Field(description="Start timestamp")
-    completed_at: Optional[datetime] = Field(description="Completion timestamp")
+    started_at: Optional[datetime] = Field(default=None, description="Start timestamp")
+    completed_at: Optional[datetime] = Field(default=None, description="Completion timestamp")
 
 
 class TaskListResponse(BaseSchema):
