@@ -7,14 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from celery.result import AsyncResult
 
-from core.database import get_db
-from services.processing_service import ProcessingService
-from services.websocket_notification_service import WebSocketNotificationService
-from core.websocket_manager import manager as websocket_manager
-from core.celery_app import celery_app
-from models.task import Task
-from schemas.task import TaskResponse, TaskListResponse, TaskStatus
-from schemas.base import PaginationParams
+from backend.core.database import get_db
+from backend.services.processing_service import ProcessingService
+from backend.services.websocket_notification_service import WebSocketNotificationService
+from backend.core.websocket_manager import manager as websocket_manager
+from backend.core.celery_app import celery_app
+from backend.models.task import Task
+from backend.schemas.task import TaskResponse, TaskListResponse, TaskStatus, TaskCreate
+from backend.schemas.base import PaginationParams, PaginationResponse
 
 router = APIRouter()
 
@@ -26,7 +26,7 @@ def get_processing_service(db: Session = Depends(get_db)) -> ProcessingService:
 
 def get_websocket_service(db: Session = Depends(get_db)) -> WebSocketNotificationService:
     """Dependency to get websocket notification service."""
-    return WebSocketNotificationService(websocket_manager)
+    return WebSocketNotificationService()
 
 
 @router.get("/", response_model=TaskListResponse)
@@ -61,6 +61,7 @@ async def get_tasks(
             task_responses.append(TaskResponse(
                 id=str(task.id),
                 project_id=task.project_id,
+                name=task.name,  # 添加name字段
                 task_type=task.task_type,
                 status=TaskStatus(task.status),
                 celery_task_id=task.celery_task_id,
@@ -68,7 +69,7 @@ async def get_tasks(
                 total_steps=task.total_steps,
                 progress=task.progress,
                 error_message=task.error_message,
-                result=task.result,
+                result=task.result_data,
                 created_at=task.created_at,
                 updated_at=task.updated_at,
                 completed_at=task.completed_at
@@ -79,10 +80,67 @@ async def get_tasks(
             total=total,
             page=page,
             size=size,
-            pages=(total + size - 1) // size
+            pages=(total + size - 1) // size,
+            pagination=PaginationResponse(
+                total=total,
+                page=page,
+                size=size,
+                pages=(total + size - 1) // size,
+                has_next=page < (total + size - 1) // size,
+                has_prev=page > 1
+            )
         )
         
     except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/", response_model=TaskResponse)
+async def create_task(
+    task_data: TaskCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new task."""
+    try:
+        # 创建任务记录
+        task = Task(
+            name=task_data.name,
+            description=task_data.description,
+            project_id=task_data.project_id,
+            task_type=task_data.task_type,
+            status=TaskStatus.PENDING,
+            progress=0.0,
+            task_config=task_data.task_config or {},
+            result_data=task_data.metadata or {}
+        )
+        
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        
+        return TaskResponse(
+            id=str(task.id),
+            project_id=task.project_id,
+            name=task.name,
+            task_type=task.task_type,
+            status=TaskStatus(task.status),
+            celery_task_id=task.celery_task_id,
+            current_step=task.current_step,
+            total_steps=task.total_steps,
+            progress=task.progress,
+            error_message=task.error_message,
+            result=task.result_data,  # 使用result_data字段
+            task_config=task.task_config or {},
+            priority=task.priority,
+            metadata=task.task_metadata or {},
+            created_at=task.created_at,
+            updated_at=task.updated_at,
+            started_at=task.started_at,
+            completed_at=task.completed_at
+        )
+        
+    except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -100,6 +158,7 @@ async def get_task(
         return TaskResponse(
             id=str(task.id),
             project_id=task.project_id,
+            name=task.name,  # 添加name字段
             task_type=task.task_type,
             status=TaskStatus(task.status),
             celery_task_id=task.celery_task_id,
@@ -107,9 +166,13 @@ async def get_task(
             total_steps=task.total_steps,
             progress=task.progress,
             error_message=task.error_message,
-            result=task.result,
+            result=task.result_data,  # 使用result_data字段
+            task_config=task.task_config or {},
+            priority=task.priority,
+            metadata=task.task_metadata or {},
             created_at=task.created_at,
             updated_at=task.updated_at,
+            started_at=task.started_at,
             completed_at=task.completed_at
         )
         
@@ -299,6 +362,7 @@ async def get_project_tasks(
             task_responses.append(TaskResponse(
                 id=str(task.id),
                 project_id=task.project_id,
+                name=task.name,  # 添加name字段
                 task_type=task.task_type,
                 status=TaskStatus(task.status),
                 celery_task_id=task.celery_task_id,
@@ -306,9 +370,13 @@ async def get_project_tasks(
                 total_steps=task.total_steps,
                 progress=task.progress,
                 error_message=task.error_message,
-                result=task.result,
+                result=task.result_data,  # 使用result_data字段
+                task_config=task.task_config or {},
+                priority=task.priority,
+                metadata=task.task_metadata or {},
                 created_at=task.created_at,
                 updated_at=task.updated_at,
+                started_at=task.started_at,
                 completed_at=task.completed_at
             ))
         
@@ -317,7 +385,15 @@ async def get_project_tasks(
             total=total,
             page=page,
             size=size,
-            pages=(total + size - 1) // size
+            pages=(total + size - 1) // size,
+            pagination=PaginationResponse(
+                total=total,
+                page=page,
+                size=size,
+                pages=(total + size - 1) // size,
+                has_next=page < (total + size - 1) // size,
+                has_prev=page > 1
+            )
         )
         
     except Exception as e:

@@ -8,10 +8,10 @@ from typing import Dict, Any, Optional, Callable
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from models.task import Task
-from models.project import Project
-from services.websocket_notification_service import WebSocketNotificationService
-from core.websocket_manager import manager as websocket_manager
+from backend.models.task import Task
+from backend.models.project import Project
+from backend.services.websocket_notification_service import WebSocketNotificationService
+from backend.core.websocket_manager import manager as websocket_manager
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class ProgressManager:
     
     def __init__(self, db: Session):
         self.db = db
-        self.websocket_service = WebSocketNotificationService(websocket_manager)
+        self.websocket_service = WebSocketNotificationService()
         self._callbacks: Dict[str, Callable] = {}
     
     def register_callback(self, callback_id: str, callback: Callable):

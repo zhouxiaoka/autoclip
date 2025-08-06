@@ -5,9 +5,9 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from core.database import get_db
-from services.collection_service import CollectionService
-from schemas.collection import (
+from backend.core.database import get_db
+from backend.services.collection_service import CollectionService
+from backend.schemas.collection import (
     CollectionCreate, CollectionUpdate, CollectionResponse, CollectionListResponse
 )
 

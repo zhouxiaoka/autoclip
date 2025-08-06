@@ -42,9 +42,41 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
 
   // 格式化创建时间，确保正确的时区处理
   const formatCreatedTime = (createdAt: string) => {
-    const now = dayjs().tz('Asia/Shanghai')
-    const created = dayjs(createdAt).tz('Asia/Shanghai')
-    return created.from(now)
+    if (!createdAt) return '未知时间'
+    
+    try {
+      // 确保dayjs使用中文语言包
+      dayjs.locale('zh-cn')
+      
+      // 解析时间字符串，处理不同的时间格式
+      let created
+      if (createdAt.includes('T') && createdAt.includes('Z')) {
+        // ISO 8601格式，带UTC时区
+        created = dayjs.utc(createdAt).local()
+      } else if (createdAt.includes('T') && (createdAt.includes('+') || createdAt.includes('-'))) {
+        // ISO 8601格式，带时区偏移
+        created = dayjs(createdAt)
+      } else if (createdAt.includes('T')) {
+        // ISO 8601格式，没有时区信息 - 假设是本地时间
+        created = dayjs(createdAt)
+      } else {
+        // 其他格式，尝试直接解析
+        created = dayjs(createdAt)
+      }
+      
+      const now = dayjs()
+      
+      // 如果时间差小于1分钟，显示"刚刚"
+      const diffMinutes = now.diff(created, 'minute')
+      if (diffMinutes < 1) {
+        return '刚刚'
+      }
+      
+      return created.from(now)
+    } catch (error) {
+      console.error('时间格式化错误:', error)
+      return '未知时间'
+    }
   }
 
   // 获取分类信息
@@ -68,7 +100,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // 生成项目视频缩略图（带缓存）
   useEffect(() => {
     const generateThumbnail = async () => {
-      if (!project.video_path) {
+      if (!project.video_path && !project.source_file) {
         console.log('项目没有视频路径:', project.id)
         return
       }
@@ -90,11 +122,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
         
         // 尝试多个可能的视频文件路径
         const possiblePaths = [
-          'input/input.mp4',
-          'input.mp4',
-          project.video_path,
-          `${project.video_path}/input.mp4`
-        ].filter(Boolean)
+          projectApi.getProjectVideoUrl(project.id),
+          projectApi.getProjectFileUrl(project.id, 'input/input.mp4'),
+          projectApi.getProjectFileUrl(project.id, 'input.mp4'),
+          projectApi.getProjectFileUrl(project.id, project.video_path || ''),
+          projectApi.getProjectFileUrl(project.id, project.source_file || '')
+        ].filter((path): path is string => Boolean(path))
         
         let videoLoaded = false
         
@@ -102,17 +135,16 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           if (videoLoaded) break
           
           try {
-            const videoUrl = projectApi.getProjectFileUrl(project.id, path)
-            console.log('尝试加载视频:', videoUrl)
+            console.log('尝试加载视频:', path)
             
             await new Promise((resolve, reject) => {
               const timeoutId = setTimeout(() => {
                 reject(new Error('视频加载超时'))
-              }, 10000) // 10秒超时
+              }, 15000) // 增加到15秒超时
               
               video.onloadedmetadata = () => {
                 clearTimeout(timeoutId)
-                console.log('视频元数据加载成功:', videoUrl)
+                console.log('视频元数据加载成功:', path)
                 video.currentTime = Math.min(5, video.duration / 4) // 取视频1/4处或5秒处的帧
               }
               
@@ -168,11 +200,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               
               video.onerror = (error) => {
                 clearTimeout(timeoutId)
-                console.error('视频加载失败:', videoUrl, error)
+                console.error('视频加载失败:', path, error)
                 reject(error)
               }
               
-              video.src = videoUrl
+              video.src = path
             })
             
             break // 如果成功加载，跳出循环
@@ -193,7 +225,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     }
     
     generateThumbnail()
-  }, [project.id, project.video_path, thumbnailCacheKey])
+  }, [project.id, project.video_path, project.source_file, thumbnailCacheKey])
 
   // 获取项目日志（仅在处理中时）
   useEffect(() => {
@@ -666,7 +698,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               borderRadius: '3px',
               padding: '4px 6px',
               textAlign: 'center',
-              flex: 1
+              flex: project.status === 'pending' ? 1 : undefined,
+              width: project.status === 'pending' ? '100%' : undefined
             }}>
               <div style={{ 
                 color: project.status === 'completed' ? '#52c41a' :
@@ -693,39 +726,44 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               </div>
             </div>
             
-            {/* 切片数量 */}
-            <div style={{
-              background: 'rgba(102, 126, 234, 0.15)',
-              border: '1px solid rgba(102, 126, 234, 0.3)',
-              borderRadius: '3px',
-              padding: '4px 6px',
-              textAlign: 'center',
-              flex: 1
-            }}>
-              <div style={{ color: '#667eea', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
-                {project.clips?.length || 0}
-              </div>
-              <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
-                切片
-              </div>
-            </div>
-            
-            {/* 合集数量 */}
-            <div style={{
-              background: 'rgba(118, 75, 162, 0.15)',
-              border: '1px solid rgba(118, 75, 162, 0.3)',
-              borderRadius: '3px',
-              padding: '4px 6px',
-              textAlign: 'center',
-              flex: 1
-            }}>
-              <div style={{ color: '#764ba2', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
-                {project.collections?.length || 0}
-              </div>
-              <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
-                合集
-              </div>
-            </div>
+            {/* 仅在非等待状态时显示切片和合集数量 */}
+            {project.status !== 'pending' && (
+              <>
+                {/* 切片数量 */}
+                <div style={{
+                  background: 'rgba(102, 126, 234, 0.15)',
+                  border: '1px solid rgba(102, 126, 234, 0.3)',
+                  borderRadius: '3px',
+                  padding: '4px 6px',
+                  textAlign: 'center',
+                  flex: 1
+                }}>
+                  <div style={{ color: '#667eea', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
+                    {project.clips?.length || 0}
+                  </div>
+                  <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
+                    切片
+                  </div>
+                </div>
+                
+                {/* 合集数量 */}
+                <div style={{
+                  background: 'rgba(118, 75, 162, 0.15)',
+                  border: '1px solid rgba(118, 75, 162, 0.3)',
+                  borderRadius: '3px',
+                  padding: '4px 6px',
+                  textAlign: 'center',
+                  flex: 1
+                }}>
+                  <div style={{ color: '#764ba2', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
+                    {project.collections?.length || 0}
+                  </div>
+                  <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
+                    合集
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
         </div>

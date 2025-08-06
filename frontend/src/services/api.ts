@@ -398,9 +398,14 @@ export const projectApi = {
     }
   },
 
-  // 获取项目独立的文件URL
-  getProjectFileUrl: (projectId: string, filePath: string): string => {
-    return `http://localhost:8000/api/v1/projects/${projectId}/files/${filePath}`
+  // 获取项目文件URL
+  getProjectFileUrl: (projectId: string, filename: string): string => {
+    return `${api.defaults.baseURL}/projects/${projectId}/files/${filename}`
+  },
+
+  // 获取项目视频URL
+  getProjectVideoUrl: (projectId: string): string => {
+    return `${api.defaults.baseURL}/projects/${projectId}/video`
   },
 
   // 获取切片视频URL

@@ -1,16 +1,24 @@
 import React from 'react';
-import { List, Card, Tag, Space, Typography, Button, Badge } from 'antd';
-import { 
-  InfoCircleOutlined, 
-  CheckCircleOutlined, 
-  ExclamationCircleOutlined, 
-  CloseCircleOutlined,
-  DeleteOutlined,
-  CheckOutlined
-} from '@ant-design/icons';
-import { Notification } from '../hooks/useNotifications';
+import { List, Card, Button, Space, Typography, Tag, Badge } from 'antd';
+import { CheckOutlined, DeleteOutlined, InfoCircleOutlined, CheckCircleOutlined, ExclamationCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+// 配置dayjs插件
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const { Text, Paragraph } = Typography;
+
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  level: 'info' | 'success' | 'warning' | 'error';
+  timestamp: string;
+  read: boolean;
+}
 
 interface NotificationListProps {
   notifications: Notification[];
@@ -33,7 +41,7 @@ const getNotificationIcon = (level: Notification['level']) => {
     case 'error':
       return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
     default:
-      return <InfoCircleOutlined />;
+      return <InfoCircleOutlined style={{ color: '#1890ff' }} />;
   }
 };
 
@@ -53,9 +61,10 @@ const getNotificationColor = (level: Notification['level']) => {
 };
 
 const formatTime = (timestamp: string) => {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
+  // 正确处理时区转换，确保显示本地时间
+  const now = dayjs().tz('Asia/Shanghai');
+  const notificationTime = dayjs(timestamp).tz('Asia/Shanghai');
+  const diff = now.diff(notificationTime, 'millisecond');
   
   if (diff < 60000) { // 1分钟内
     return '刚刚';
@@ -64,7 +73,7 @@ const formatTime = (timestamp: string) => {
   } else if (diff < 86400000) { // 24小时内
     return `${Math.floor(diff / 3600000)}小时前`;
   } else {
-    return date.toLocaleDateString('zh-CN');
+    return notificationTime.format('MM-DD HH:mm');
   }
 };
 
