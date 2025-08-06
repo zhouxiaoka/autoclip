@@ -6,12 +6,12 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
-from backend.services.base import BaseService
-from backend.repositories.project_repository import ProjectRepository
-from backend.models.project import Project
-from backend.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse, ProjectFilter
-from backend.schemas.base import PaginationParams, PaginationResponse
-from backend.schemas.project import ProjectType, ProjectStatus
+from services.base import BaseService
+from repositories.project_repository import ProjectRepository
+from models.project import Project
+from schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse, ProjectFilter
+from schemas.base import PaginationParams, PaginationResponse
+from schemas.project import ProjectType, ProjectStatus
 
 
 class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectResponse]):
@@ -46,7 +46,17 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         if not update_data:
             return self.get(project_id)
         
-        return self.update(project_id, **update_data)
+        # Map schema fields to ORM fields
+        orm_data = {}
+        for key, value in update_data.items():
+            if key == "settings":
+                orm_data["processing_config"] = value
+            elif key == "processing_config":
+                orm_data["processing_config"] = value
+            else:
+                orm_data[key] = value
+        
+        return self.update(project_id, **orm_data)
     
     def get_project_with_stats(self, project_id: str) -> Optional[ProjectResponse]:
         """Get project with statistics."""
@@ -144,4 +154,14 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             settings["error_message"] = error_message
         
         self.update(project_id, status="failed", settings=settings)
+        return True
+    
+    def update_project_status(self, project_id: str, status: str) -> bool:
+        """Update project status."""
+        project = self.get(project_id)
+        if not project:
+            return False
+        
+        # Update status
+        self.update(project_id, status=status)
         return True 

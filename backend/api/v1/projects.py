@@ -6,17 +6,18 @@ from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from backend.core.database import get_db
-from backend.services.project_service import ProjectService
-from backend.services.processing_service import ProcessingService
-from backend.services.websocket_notification_service import WebSocketNotificationService
-from backend.tasks.processing import process_video_pipeline
-from backend.core.websocket_manager import manager as websocket_manager
-from backend.schemas.project import (
+from core.database import get_db
+from services.project_service import ProjectService
+from services.processing_service import ProcessingService
+from services.websocket_notification_service import WebSocketNotificationService
+from tasks.processing import process_video_pipeline
+from core.websocket_manager import manager as websocket_manager
+from schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse, ProjectFilter,
     ProjectType, ProjectStatus
 )
-from backend.schemas.base import PaginationParams
+from schemas.task import TaskType
+from schemas.base import PaginationParams
 from pathlib import Path
 
 router = APIRouter()
@@ -95,8 +96,8 @@ async def upload_files(
             id=str(project.id),
             name=str(project.name),
             description=str(project.description) if project.description else None,
-            project_type=ProjectType(project.project_type.value),
-            status=ProjectStatus(project.status.value),
+            project_type=ProjectType(project.project_type) if hasattr(project.project_type, 'value') else ProjectType(project.project_type),
+            status=ProjectStatus(project.status) if hasattr(project.status, 'value') else ProjectStatus(project.status),
             source_url=project.project_metadata.get("source_url") if project.project_metadata else None,
             source_file=project.project_metadata.get("source_file") if project.project_metadata else None,
             settings=project.processing_config,
@@ -124,8 +125,8 @@ async def create_project(
             id=str(project.id),  # Use actual project ID
             name=str(project.name),
             description=str(project.description) if project.description else None,
-            project_type=ProjectType(project.project_type.value),
-            status=ProjectStatus(project.status.value),
+            project_type=ProjectType(project.project_type) if hasattr(project.project_type, 'value') else ProjectType(project.project_type),
+            status=ProjectStatus(project.status) if hasattr(project.status, 'value') else ProjectStatus(project.status),
             source_url=project.project_metadata.get("source_url") if project.project_metadata else None,
             source_file=str(project.video_path) if project.video_path else None,
             settings=project.processing_config or {},
@@ -195,19 +196,19 @@ async def update_project(
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
-        # Convert to response (simplified)
+        # Convert to response using the updated project data
         return ProjectResponse(
-            id=str(project_id),  # Keep as string for UUID
-            name=project_data.name or "Updated Project",
-            description=project_data.description,
-            project_type=ProjectType.DEFAULT,  # Use enum
-            status=ProjectStatus.PENDING,  # Use enum
-            source_url=None,
-            source_file=None,
-            settings=project_data.settings or {},
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-            completed_at=None,
+            id=str(project_id),
+            name=project.name,
+            description=project.description,
+            project_type=ProjectType(project.project_type.value if hasattr(project.project_type, 'value') else project.project_type),
+            status=ProjectStatus(project.status.value if hasattr(project.status, 'value') else project.status),
+            source_url=project.project_metadata.get("source_url") if project.project_metadata else None,
+            source_file=str(project.video_path) if project.video_path else None,
+            settings=project.processing_config or {},
+            created_at=project.created_at,
+            updated_at=project.updated_at,
+            completed_at=project.completed_at,
             total_clips=0,
             total_collections=0,
             total_tasks=0
@@ -250,7 +251,7 @@ async def start_processing(
             raise HTTPException(status_code=404, detail="Project not found")
         
         # 检查项目状态
-        if project.status.value not in ["pending", "failed"]:
+        if project.status not in ["pending", "failed"]:
             raise HTTPException(status_code=400, detail="Project is not in pending or failed status")
         
         # 获取视频和SRT文件路径
@@ -277,22 +278,21 @@ async def start_processing(
         
         # 发送WebSocket通知：处理开始
         await websocket_service.send_processing_started(
-            project_id=int(project_id),
+            project_id=project_id,
             message="开始视频处理流程"
         )
         
         # 提交Celery任务
         celery_task = process_video_pipeline.delay(
-            project_id=int(project_id),
+            project_id=project_id,
             input_video_path=str(video_path),
             input_srt_path=str(srt_path)
         )
         
         # 创建处理任务记录
         task_result = processing_service._create_processing_task(
-            project_id=int(project_id),
-            task_type="video_pipeline",
-            celery_task_id=celery_task.id
+            project_id=project_id,
+            task_type=TaskType.VIDEO_PROCESSING
         )
         
         return {
@@ -309,7 +309,7 @@ async def start_processing(
         # 发送错误通知
         try:
             await websocket_service.send_processing_error(
-                project_id=int(project_id),
+                project_id=project_id,
                 error=str(e),
                 step="initialization"
             )
@@ -333,7 +333,7 @@ async def retry_processing(
             raise HTTPException(status_code=404, detail="Project not found")
         
         # 检查项目状态
-        if project.status.value not in ["failed", "completed"]:
+        if project.status not in ["failed", "completed"]:
             raise HTTPException(status_code=400, detail="Project is not in failed or completed status")
         
         # 重置项目状态
@@ -341,7 +341,7 @@ async def retry_processing(
         
         # 发送WebSocket通知
         await websocket_service.send_processing_started(
-            project_id=int(project_id),
+            project_id=project_id,
             message="重新开始处理流程"
         )
         
@@ -365,16 +365,15 @@ async def retry_processing(
         
         # 提交Celery任务
         celery_task = process_video_pipeline.delay(
-            project_id=int(project_id),
+            project_id=project_id,
             input_video_path=str(video_path),
             input_srt_path=str(srt_path)
         )
         
         # 创建新的处理任务记录
         task_result = processing_service._create_processing_task(
-            project_id=int(project_id),
-            task_type="video_pipeline_retry",
-            celery_task_id=celery_task.id
+            project_id=project_id,
+            task_type="video_pipeline_retry"
         )
         
         return {
@@ -390,7 +389,7 @@ async def retry_processing(
     except Exception as e:
         try:
             await websocket_service.send_processing_error(
-                project_id=int(project_id),
+                project_id=project_id,
                 error=str(e),
                 step="retry_initialization"
             )
@@ -415,7 +414,7 @@ async def resume_processing(
             raise HTTPException(status_code=404, detail="Project not found")
         
         # 检查项目状态
-        if project.status.value not in ["failed", "processing", "pending"]:
+        if project.status not in ["failed", "processing", "pending"]:
             raise HTTPException(status_code=400, detail="Project is not in failed, processing, or pending status")
         
         # 验证步骤名称
@@ -447,7 +446,7 @@ async def resume_processing(
         
         # 发送WebSocket通知
         await websocket_service.send_processing_started(
-            project_id=int(project_id),
+            project_id=project_id,
             message=f"从步骤 {start_step} 恢复处理流程"
         )
         
@@ -471,7 +470,7 @@ async def resume_processing(
     except Exception as e:
         try:
             await websocket_service.send_processing_error(
-                project_id=int(project_id),
+                project_id=project_id,
                 error=str(e),
                 step=f"resume_{start_step}"
             )

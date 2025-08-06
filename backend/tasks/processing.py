@@ -16,7 +16,7 @@ from backend.services.pipeline_adapter import create_pipeline_adapter_sync
 from backend.core.database import SessionLocal
 from backend.core.progress_manager import get_progress_manager
 from backend.models.project import Project, ProjectStatus
-from backend.models.task import Task, TaskStatus
+from backend.models.task import Task, TaskStatus, TaskType
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def run_async_notification(coro):
     return loop.run_until_complete(coro)
 
 @celery_app.task(bind=True, name='backend.tasks.processing.process_video_pipeline')
-def process_video_pipeline(self, project_id: int, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
+def process_video_pipeline(self, project_id: str, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
     """
     处理视频流水线任务 - 使用Pipeline适配器
     
@@ -55,7 +55,7 @@ def process_video_pipeline(self, project_id: int, input_video_path: str, input_s
             task = Task(
                 name=f"视频处理流水线",
                 description=f"处理项目 {project_id} 的完整视频流水线",
-                type="pipeline",
+                task_type=TaskType.VIDEO_PROCESSING,
                 project_id=project_id,
                 celery_task_id=task_id,
                 status=TaskStatus.RUNNING,
@@ -85,7 +85,7 @@ def process_video_pipeline(self, project_id: int, input_video_path: str, input_s
             task.status = TaskStatus.COMPLETED
             task.progress = 100
             task.current_step = "处理完成"
-            task.result = result
+            task.result_data = result
             db.commit()
             
             # 发送完成通知

@@ -7,7 +7,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
 from .base import BaseRepository
-from backend.models.project import Project, ProjectStatus, ProjectType
+from models.project import Project, ProjectStatus, ProjectType
 
 class ProjectRepository(BaseRepository[Project]):
     """项目Repository类"""
