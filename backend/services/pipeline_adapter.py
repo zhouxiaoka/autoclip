@@ -9,11 +9,11 @@ from pathlib import Path
 from datetime import datetime
 
 # 导入新架构的模型和服务
-from models.project import Project, ProjectStatus
-from models.task import Task, TaskStatus
-from core.database import get_db
-from core.progress_manager import get_progress_manager
-from core.config import get_project_root, get_data_directory, get_output_directory
+from backend.models.project import Project, ProjectStatus
+from backend.models.task import Task, TaskStatus
+from backend.core.database import get_db
+from backend.core.progress_manager import get_progress_manager
+from backend.core.config import get_project_root, get_data_directory, get_output_directory
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)

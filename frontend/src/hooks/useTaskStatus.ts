@@ -8,6 +8,7 @@ export interface TaskStatus {
   message?: string;
   error?: string;
   updatedAt: string;
+  project_id?: string; // 添加项目ID字段
 }
 
 export interface ProjectStatus {

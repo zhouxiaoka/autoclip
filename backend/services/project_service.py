@@ -6,12 +6,12 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
-from services.base import BaseService
-from repositories.project_repository import ProjectRepository
-from models.project import Project
-from schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse, ProjectFilter
-from schemas.base import PaginationParams, PaginationResponse
-from schemas.project import ProjectType, ProjectStatus
+from backend.services.base import BaseService
+from backend.repositories.project_repository import ProjectRepository
+from backend.models.project import Project
+from backend.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse, ProjectFilter
+from backend.schemas.base import PaginationParams, PaginationResponse
+from backend.schemas.project import ProjectType, ProjectStatus
 
 
 class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectResponse]):

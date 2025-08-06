@@ -7,13 +7,13 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from pathlib import Path
 
-from services.base import BaseService
-from repositories.collection_repository import CollectionRepository
-from models.collection import Collection
-from schemas.collection import CollectionCreate, CollectionUpdate, CollectionResponse, CollectionListResponse, CollectionFilter
-from schemas.base import PaginationParams, PaginationResponse
-from models.project import Project
-from models.clip import Clip
+from backend.services.base import BaseService
+from backend.repositories.collection_repository import CollectionRepository
+from backend.models.collection import Collection
+from backend.schemas.collection import CollectionCreate, CollectionUpdate, CollectionResponse, CollectionListResponse, CollectionFilter
+from backend.schemas.base import PaginationParams, PaginationResponse
+from backend.models.project import Project
+from backend.models.clip import Clip
 
 logger = logging.getLogger(__name__)
 

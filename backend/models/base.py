@@ -4,7 +4,7 @@
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, MetaData
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.dialects.postgresql import UUID
@@ -15,19 +15,23 @@ metadata = MetaData()
 # 创建基础类
 Base = declarative_base(metadata=metadata)
 
+def get_utc_now():
+    """获取当前UTC时间"""
+    return datetime.now(timezone.utc)
+
 class TimestampMixin:
     """时间戳混入类，为模型添加创建和更新时间"""
     
     created_at = Column(
-        DateTime, 
-        default=datetime.utcnow, 
+        DateTime(timezone=True), 
+        default=get_utc_now, 
         nullable=False,
         comment="创建时间"
     )
     updated_at = Column(
-        DateTime, 
-        default=datetime.utcnow, 
-        onupdate=datetime.utcnow, 
+        DateTime(timezone=True), 
+        default=get_utc_now, 
+        onupdate=get_utc_now, 
         nullable=False,
         comment="更新时间"
     )

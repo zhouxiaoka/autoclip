@@ -163,7 +163,26 @@ def get_redis_url() -> str:
 
 def get_api_key() -> Optional[str]:
     """获取API密钥"""
-    return settings.api.dashscope_api_key
+    # 首先尝试从环境变量获取
+    api_key = settings.api.dashscope_api_key
+    if api_key:
+        return api_key
+    
+    # 如果环境变量中没有，尝试从settings.json文件读取
+    try:
+        import json
+        from pathlib import Path
+        
+        settings_file = Path(__file__).parent.parent.parent / "data" / "settings.json"
+        if settings_file.exists():
+            with open(settings_file, 'r', encoding='utf-8') as f:
+                settings_data = json.load(f)
+                if settings_data.get("dashscope_api_key"):
+                    return settings_data["dashscope_api_key"]
+    except Exception as e:
+        print(f"读取settings.json文件失败: {e}")
+    
+    return None
 
 def get_model_config() -> Dict[str, Any]:
     """获取模型配置"""

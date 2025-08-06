@@ -34,16 +34,17 @@ export const RealTimeStatus: React.FC<RealTimeStatusProps> = ({ userId }) => {
       
       if (response.ok) {
         const data = await response.json();
-        const projectTasks = data.data.tasks || [];
+        const projectTasks = data.items || []; // 使用正确的字段名
         console.log('📋 获取到任务数量:', projectTasks.length);
         
         // 转换为TaskProgress组件期望的格式
         const formattedTasks = projectTasks.map((task: any) => ({
-          id: task.task_id,
+          id: task.id,
           status: task.status,
           progress: task.progress || 0,
-          message: task.name,
-          updatedAt: task.updated_at || new Date().toISOString()
+          message: task.name || `任务 ${task.id}`, // 使用name字段或默认值
+          updatedAt: task.created_at || task.updated_at || new Date().toISOString(),
+          project_id: task.project_id // 添加项目ID字段
         }));
         
         setTasks(formattedTasks);
@@ -229,8 +230,12 @@ export const RealTimeStatus: React.FC<RealTimeStatusProps> = ({ userId }) => {
                   暂无任务
                 </div>
               ) : (
-                tasks.map((task, index) => (
-                  <TaskProgress key={task.id || `task-${index}`} task={task} />
+                tasks.map((task) => (
+                  <TaskProgress 
+                    key={task.id} 
+                    task={task} 
+                    projectId={task.project_id || userId} // 使用任务的项目ID，如果没有则使用userId作为fallback
+                  />
                 ))
               )}
             </div>

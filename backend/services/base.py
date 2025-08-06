@@ -6,8 +6,8 @@
 from typing import Generic, TypeVar, Type, Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
-from repositories.base import BaseRepository, ModelType as RepoModelType
-from schemas.base import BaseSchema, PaginationParams, PaginationResponse
+from backend.repositories.base import BaseRepository, ModelType as RepoModelType
+from backend.schemas.base import BaseSchema, PaginationParams, PaginationResponse
 
 
 CreateSchemaType = TypeVar("CreateSchemaType")

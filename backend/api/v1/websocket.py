@@ -9,7 +9,7 @@ from typing import Dict, Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse
 
-from core.websocket_manager import manager, WebSocketMessage
+from backend.core.websocket_manager import manager, WebSocketMessage
 
 logger = logging.getLogger(__name__)
 

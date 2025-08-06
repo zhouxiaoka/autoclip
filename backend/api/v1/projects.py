@@ -6,17 +6,17 @@ from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from core.database import get_db
-from services.project_service import ProjectService
-from services.processing_service import ProcessingService
-from services.websocket_notification_service import WebSocketNotificationService
-from tasks.processing import process_video_pipeline
-from core.websocket_manager import manager as websocket_manager
-from schemas.project import (
+from backend.core.database import get_db
+from backend.services.project_service import ProjectService
+from backend.services.processing_service import ProcessingService
+from backend.services.websocket_notification_service import WebSocketNotificationService
+from backend.tasks.processing import process_video_pipeline
+from backend.core.websocket_manager import manager as websocket_manager
+from backend.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse, ProjectFilter,
     ProjectType, ProjectStatus
 )
-from schemas.base import PaginationParams
+from backend.schemas.base import PaginationParams
 from pathlib import Path
 
 router = APIRouter()
@@ -34,7 +34,7 @@ def get_processing_service(db: Session = Depends(get_db)) -> ProcessingService:
 
 def get_websocket_service(db: Session = Depends(get_db)) -> WebSocketNotificationService:
     """Dependency to get websocket notification service."""
-    return WebSocketNotificationService(websocket_manager)
+    return WebSocketNotificationService()
 
 
 @router.post("/upload", response_model=ProjectResponse)
@@ -100,8 +100,12 @@ async def upload_files(
             source_url=project.project_metadata.get("source_url") if project.project_metadata else None,
             source_file=project.project_metadata.get("source_file") if project.project_metadata else None,
             settings=project.processing_config,
-            created_at=project.created_at.isoformat() if project.created_at else None,
-            updated_at=project.updated_at.isoformat() if project.updated_at else None
+            created_at=project.created_at,
+            updated_at=project.updated_at,
+            completed_at=project.completed_at,
+            total_clips=0,
+            total_collections=0,
+            total_tasks=0
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
@@ -550,6 +554,46 @@ async def get_project_logs(
                 }
             ]
         }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) 
+
+
+@router.get("/{project_id}/video")
+async def get_project_video(
+    project_id: str,
+    project_service: ProjectService = Depends(get_project_service)
+):
+    """Get the main video file for a project."""
+    try:
+        from pathlib import Path
+        from fastapi.responses import FileResponse
+        
+        # 构建项目目录路径
+        project_root = Path(__file__).parent.parent.parent / "data" / "projects" / project_id
+        raw_dir = project_root / "raw"
+        
+        if not raw_dir.exists():
+            raise HTTPException(status_code=404, detail="Project raw directory not found")
+        
+        # 查找视频文件
+        video_files = list(raw_dir.glob("*.mp4"))
+        if not video_files:
+            raise HTTPException(status_code=404, detail="No video file found in project")
+        
+        video_file = video_files[0]  # 使用第一个找到的视频文件
+        
+        # 检查文件是否存在
+        if not video_file.exists():
+            raise HTTPException(status_code=404, detail="Video file not found")
+        
+        # 返回文件流
+        return FileResponse(
+            path=str(video_file),
+            media_type="video/mp4",
+            filename=video_file.name
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) 
 

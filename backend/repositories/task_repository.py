@@ -7,7 +7,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func
 from .base import BaseRepository
-from models.task import Task, TaskStatus, TaskType
+from backend.models.task import Task, TaskStatus, TaskType
 
 class TaskRepository(BaseRepository[Task]):
     """任务Repository类"""
