@@ -294,3 +294,10 @@
 2025-08-06 21:26:18,218 - services.exceptions - ERROR - 未处理的异常: 'PipelineAdapter' object has no attribute 'adapt_step1_outline'
 2025-08-06 21:26:18,218 - services.exceptions - ERROR - ServiceError: SYSTEM_ERROR - 系统错误: 'PipelineAdapter' object has no attribute 'adapt_step1_outline' | Cause: 'PipelineAdapter' object has no attribute 'adapt_step1_outline'
 2025-08-06 21:26:32,434 - services.websocket_notification_service - INFO - 项目更新通知已发送: 215344dc-316d-4429-9a0b-b20bc2bf5927 - processing
+2025-08-07 10:53:54,088 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-07 10:53:54,089 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-07 10:53:54,123 - main - INFO - 启动AutoClip API服务...
+2025-08-07 10:53:54,124 - main - INFO - 数据库表创建完成
+2025-08-07 10:53:54,124 - main - INFO - API密钥已加载到环境变量
+2025-08-07 10:54:27,814 - services.websocket_notification_service - INFO - 项目更新通知已发送: dc73710e-34b0-4d15-ba12-8504785f0f78 - processing
+2025-08-07 11:03:00,113 - services.websocket_notification_service - INFO - 项目更新通知已发送: c6adc51a-4351-4aa0-a463-47a6199f9228 - processing
