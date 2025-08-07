@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Tag, Button, Space, Typography, Progress, Popconfirm, message, Tooltip } from 'antd'
-import { PlayCircleOutlined, DeleteOutlined, EyeOutlined, DownloadOutlined, ReloadOutlined, LoadingOutlined, StopOutlined } from '@ant-design/icons'
+import { Card, Tag, Button, Typography, Popconfirm, message, Tooltip } from 'antd'
+import { PlayCircleOutlined, DeleteOutlined, ReloadOutlined, LoadingOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { Project } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
@@ -15,8 +15,7 @@ dayjs.extend(timezone)
 dayjs.extend(utc)
 dayjs.locale('zh-cn')
 
-const { Text, Title } = Typography
-const { Meta } = Card
+const { Text } = Typography
 
 interface ProjectCardProps {
   project: Project
@@ -25,20 +24,13 @@ interface ProjectCardProps {
   onClick?: () => void
 }
 
-interface LogEntry {
-  timestamp: string
-  module: string
-  level: string
-  message: string
-}
+
 
 const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick }) => {
   const navigate = useNavigate()
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [thumbnailLoading, setThumbnailLoading] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [currentLogIndex, setCurrentLogIndex] = useState(0)
 
   // 格式化创建时间，确保正确的时区处理
   const formatCreatedTime = (createdAt: string) => {
@@ -227,76 +219,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     generateThumbnail()
   }, [project.id, project.video_path, project.source_file, thumbnailCacheKey])
 
-  // 获取项目日志（仅在处理中时）
-  useEffect(() => {
-    if (project.status !== 'processing') {
-      setLogs([])
-      return
-    }
 
-    const fetchLogs = async () => {
-      try {
-        const response = await projectApi.getProjectLogs(project.id, 20)
-        setLogs(response.logs.filter(log => 
-          log.message.includes('Step') || 
-          log.message.includes('开始') || 
-          log.message.includes('完成') ||
-          log.message.includes('处理') ||
-          log.level === 'ERROR'
-        ))
-      } catch (error) {
-        console.error('获取日志失败:', error)
-      }
-    }
 
-    // 立即获取一次
-    fetchLogs()
-    
-    // 每3秒更新一次日志
-    const logInterval = setInterval(fetchLogs, 3000)
-    
-    return () => clearInterval(logInterval)
-  }, [project.id, project.status])
 
-  // 日志轮播
-  useEffect(() => {
-    if (logs.length <= 1) return
-    
-    const interval = setInterval(() => {
-      setCurrentLogIndex(prev => (prev + 1) % logs.length)
-    }, 2000) // 每2秒切换一条日志
-    
-    return () => clearInterval(interval)
-  }, [logs.length])
-
-  const getStatusColor = (status: Project['status']) => {
-    switch (status) {
-      case 'completed': return 'success'
-      case 'processing': return 'processing'
-      case 'failed': return 'error'
-      case 'pending': return 'default'
-      default: return 'default'
-    }
-  }
-
-  const getStatusText = (status: Project['status']) => {
-    switch (status) {
-      case 'completed': return '已完成'
-      case 'processing': return '处理中'
-      case 'failed': return '处理失败'
-      case 'pending': return '等待中'
-      default: return '未知状态'
-    }
-  }
-
-  const getProgressPercent = () => {
-    if (project.status === 'completed') return 100
-    if (project.status === 'failed') return 0
-    if (project.current_step && project.total_steps) {
-      return Math.round((project.current_step / project.total_steps) * 100)
-    }
-    return 0
-  }
 
   const handleRetry = async () => {
     if (isRetrying) return
@@ -560,66 +485,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     >
       <div style={{ padding: '0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         <div>
-          {/* 仅在处理中时显示实时日志 */}
-          {project.status === 'processing' && logs.length > 0 && (
-            <div style={{ marginBottom: '8px' }}>
-                <div style={{
-                  background: 'rgba(0, 0, 0, 0.3)',
-                  borderRadius: '3px',
-                  padding: '6px 8px',
-                  minHeight: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  border: '1px solid rgba(102, 126, 234, 0.2)'
-                }}>
-                  <LoadingOutlined style={{ color: '#667eea', fontSize: '12px' }} />
-                  <div style={{ flex: 1, overflow: 'hidden' }}>
-                    <Text style={{ 
-                      fontSize: '10px', 
-                      color: '#ffffff',
-                      lineHeight: '12px',
-                      display: 'block',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}>
-                      {logs[currentLogIndex]?.message || '正在处理...'}
-                    </Text>
-                    <Text style={{ 
-                      fontSize: '9px', 
-                      color: '#999999',
-                      lineHeight: '10px'
-                    }}>
-                      {logs[currentLogIndex]?.timestamp ? 
-                        dayjs(logs[currentLogIndex].timestamp).format('HH:mm:ss') : 
-                        ''
-                      }
-                    </Text>
-                  </div>
-                  {logs.length > 1 && (
-                    <div style={{
-                      display: 'flex',
-                      gap: '2px'
-                    }}>
-                      {logs.slice(0, Math.min(3, logs.length)).map((_, index) => (
-                        <div
-                          key={index}
-                          style={{
-                            width: '4px',
-                            height: '4px',
-                            borderRadius: '50%',
-                            background: index === currentLogIndex % Math.min(3, logs.length) ? '#667eea' : 'rgba(255, 255, 255, 0.3)',
-                            transition: 'background 0.3s'
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-            </div>
-          )}
-          
           {/* 项目名称 */}
           <div style={{ marginBottom: '12px', position: 'relative' }}>
             <Tooltip title={project.name} placement="top">
@@ -650,50 +515,71 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             gap: '6px'
           }}>
             {/* 状态显示 */}
-            <div style={{
-              background: project.status === 'completed' ? 'rgba(82, 196, 26, 0.15)' :
-                         project.status === 'processing' ? 'rgba(24, 144, 255, 0.15)' :
-                         project.status === 'failed' ? 'rgba(255, 77, 79, 0.15)' :
-                         project.status === 'pending' ? 'rgba(217, 217, 217, 0.15)' :
-                         'rgba(217, 217, 217, 0.15)',
-              border: project.status === 'completed' ? '1px solid rgba(82, 196, 26, 0.3)' :
-                      project.status === 'processing' ? '1px solid rgba(24, 144, 255, 0.3)' :
-                      project.status === 'failed' ? '1px solid rgba(255, 77, 79, 0.3)' :
-                      project.status === 'pending' ? '1px solid rgba(217, 217, 217, 0.3)' :
-                      '1px solid rgba(217, 217, 217, 0.3)',
-              borderRadius: '3px',
-              padding: '4px 6px',
-              textAlign: 'center',
-              flex: project.status === 'pending' ? 1 : undefined,
-              width: project.status === 'pending' ? '100%' : undefined
-            }}>
-              <div style={{ 
-                color: project.status === 'completed' ? '#52c41a' :
-                       project.status === 'processing' ? '#1890ff' :
-                       project.status === 'failed' ? '#ff4d4f' :
-                       project.status === 'pending' ? '#d9d9d9' :
-                       '#d9d9d9',
-                fontSize: '12px', 
-                fontWeight: 600, 
-                lineHeight: '14px' 
+            {project.status === 'processing' ? (
+              /* 处理中状态：显示合并的loading动画和文案 */
+              <div style={{
+                background: 'rgba(24, 144, 255, 0.15)',
+                border: '1px solid rgba(24, 144, 255, 0.3)',
+                borderRadius: '3px',
+                padding: '6px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                width: '100%',
+                justifyContent: 'center'
               }}>
-                {project.status === 'processing' && project.current_step && project.total_steps 
-                  ? `${Math.round((project.current_step / project.total_steps) * 100)}%`
-                  : project.status === 'completed' ? '✓'
-                  : project.status === 'failed' ? '✗'
-                  : project.status === 'pending' ? '○'
-                  : '○'
-                }
+                <LoadingOutlined style={{ color: '#1890ff', fontSize: '12px' }} />
+                <div style={{ 
+                  color: '#1890ff',
+                  fontSize: '11px', 
+                  fontWeight: 500,
+                  lineHeight: '14px',
+                  textAlign: 'center'
+                }}>
+                  正在处理中...
+                </div>
               </div>
-              <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
-                {project.status === 'completed' ? '已完成' :
-                 project.status === 'processing' ? '处理中' :
-                 project.status === 'failed' ? '失败' :
-                 project.status === 'pending' ? '等待中' :
-                 '已终止'
-                }
+            ) : (
+              /* 其他状态：显示原有的状态指示器 */
+              <div style={{
+                background: project.status === 'completed' ? 'rgba(82, 196, 26, 0.15)' :
+                           project.status === 'failed' ? 'rgba(255, 77, 79, 0.15)' :
+                           project.status === 'pending' ? 'rgba(217, 217, 217, 0.15)' :
+                           'rgba(217, 217, 217, 0.15)',
+                border: project.status === 'completed' ? '1px solid rgba(82, 196, 26, 0.3)' :
+                        project.status === 'failed' ? '1px solid rgba(255, 77, 79, 0.3)' :
+                        project.status === 'pending' ? '1px solid rgba(217, 217, 217, 0.3)' :
+                        '1px solid rgba(217, 217, 217, 0.3)',
+                borderRadius: '3px',
+                padding: '4px 6px',
+                textAlign: 'center',
+                flex: project.status === 'pending' ? 1 : undefined,
+                width: project.status === 'pending' ? '100%' : undefined
+              }}>
+                <div style={{ 
+                  color: project.status === 'completed' ? '#52c41a' :
+                         project.status === 'failed' ? '#ff4d4f' :
+                         project.status === 'pending' ? '#d9d9d9' :
+                         '#d9d9d9',
+                  fontSize: '12px', 
+                  fontWeight: 600, 
+                  lineHeight: '14px' 
+                }}>
+                  {project.status === 'completed' ? '✓' :
+                   project.status === 'failed' ? '✗' :
+                   project.status === 'pending' ? '○' :
+                   '○'
+                  }
+                </div>
+                <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
+                  {project.status === 'completed' ? '已完成' :
+                   project.status === 'failed' ? '失败' :
+                   project.status === 'pending' ? '等待中' :
+                   '已终止'
+                  }
+                </div>
               </div>
-            </div>
+            )}
             
             {/* 仅在completed状态时显示切片和合集数量 */}
             {project.status === 'completed' && (
