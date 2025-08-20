@@ -4,6 +4,7 @@
 """
 
 import enum
+from typing import Optional
 from sqlalchemy import Column, String, Text, JSON, Enum, Integer, DateTime
 from sqlalchemy.orm import relationship
 from .base import BaseModel
@@ -63,6 +64,11 @@ class Project(BaseModel):
         nullable=True, 
         comment="视频文件路径"
     )
+    subtitle_path = Column(
+        String(500), 
+        nullable=True, 
+        comment="字幕文件路径"
+    )
     video_duration = Column(
         Integer, 
         nullable=True, 
@@ -80,8 +86,26 @@ class Project(BaseModel):
     project_metadata = Column(
         JSON, 
         nullable=True, 
-        comment="项目元数据"
+        comment="项目元数据（精简版，完整数据存储在文件系统）"
     )
+    
+    # 添加计算属性
+    @property
+    def storage_initialized(self) -> bool:
+        """存储服务是否已初始化"""
+        if self.project_metadata and 'storage_service_initialized' in self.project_metadata:
+            return self.project_metadata['storage_service_initialized']
+        return False
+    
+    @property
+    def has_video_file(self) -> bool:
+        """是否有视频文件"""
+        return self.video_path is not None
+    
+    @property
+    def has_subtitle_file(self) -> bool:
+        """是否有字幕文件"""
+        return self.subtitle_path is not None
     
     # 完成时间
     completed_at = Column(

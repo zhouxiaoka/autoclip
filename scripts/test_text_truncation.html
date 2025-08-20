@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文本截断测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            padding: 20px;
+        }
+        
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .test-card {
+            background: linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%);
+            border: 1px solid #303030;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 20px;
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .title {
+            font-size: 16px;
+            font-weight: 600;
+            line-height: 1.4;
+            color: #ffffff;
+            margin-bottom: 8px;
+            min-height: 44px;
+        }
+        
+        .content {
+            flex: 1;
+            margin-bottom: 12px;
+            min-height: 58px;
+        }
+        
+        .text-truncated {
+            font-size: 13px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.5;
+            color: #b0b0b0;
+            cursor: pointer;
+            word-break: break-word;
+        }
+        
+        .text-normal {
+            font-size: 13px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.5;
+            color: #b0b0b0;
+            word-break: break-word;
+        }
+        
+        .info {
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>文本截断测试</h1>
+        
+        <div class="info">
+            <h3>测试说明：</h3>
+            <p>• 文本限制为3行显示</p>
+            <p>• 超出3行的文本会显示省略号</p>
+            <p>• 鼠标悬停时会显示完整内容</p>
+        </div>
+        
+        <div class="test-card">
+            <div class="title">短文本测试</div>
+            <div class="content">
+                <div class="text-normal" id="short-text">
+                    这是一段很短的文本，应该能够完整显示，不需要截断。
+                </div>
+            </div>
+        </div>
+        
+        <div class="test-card">
+            <div class="title">中等长度文本测试</div>
+            <div class="content">
+                <div class="text-truncated" id="medium-text" title="这是一段中等长度的文本，可能会超出3行的限制，需要截断显示。如果文本确实被截断了，鼠标悬停时会显示完整内容。">
+                    这是一段中等长度的文本，可能会超出3行的限制，需要截断显示。如果文本确实被截断了，鼠标悬停时会显示完整内容。
+                </div>
+            </div>
+        </div>
+        
+        <div class="test-card">
+            <div class="title">长文本测试</div>
+            <div class="content">
+                <div class="text-truncated" id="long-text" title="这是一段很长的文本，肯定会超出3行的限制，需要截断显示。这段文本包含了多个句子，用来测试文本截断功能是否正常工作。如果文本确实被截断了，鼠标悬停时会显示完整内容。这样可以确保用户能够看到所有的重要信息。">
+                    这是一段很长的文本，肯定会超出3行的限制，需要截断显示。这段文本包含了多个句子，用来测试文本截断功能是否正常工作。如果文本确实被截断了，鼠标悬停时会显示完整内容。这样可以确保用户能够看到所有的重要信息。
+                </div>
+            </div>
+        </div>
+        
+        <div class="test-card">
+            <div class="title">超长文本测试</div>
+            <div class="content">
+                <div class="text-truncated" id="very-long-text" title="这是一段超长的文本，绝对会超出3行的限制，需要截断显示。这段文本包含了大量的内容，用来测试文本截断功能在极端情况下的表现。如果文本确实被截断了，鼠标悬停时会显示完整内容。这样可以确保用户能够看到所有的重要信息，同时保持界面的整洁性。文本截断功能应该能够智能地处理各种长度的文本内容。">
+                    这是一段超长的文本，绝对会超出3行的限制，需要截断显示。这段文本包含了大量的内容，用来测试文本截断功能在极端情况下的表现。如果文本确实被截断了，鼠标悬停时会显示完整内容。这样可以确保用户能够看到所有的重要信息，同时保持界面的整洁性。文本截断功能应该能够智能地处理各种长度的文本内容。
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 检测文本是否被截断
+        function checkTruncation() {
+            const texts = ['short-text', 'medium-text', 'long-text', 'very-long-text'];
+            
+            texts.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    const isTruncated = element.scrollHeight > element.clientHeight;
+                    console.log(`${id}:`, {
+                        scrollHeight: element.scrollHeight,
+                        clientHeight: element.clientHeight,
+                        isTruncated: isTruncated
+                    });
+                    
+                    // 更新样式
+                    if (isTruncated) {
+                        element.style.cursor = 'pointer';
+                        element.title = element.textContent;
+                    } else {
+                        element.style.cursor = 'default';
+                        element.title = '';
+                    }
+                }
+            });
+        }
+        
+        // 页面加载完成后检测
+        window.addEventListener('load', () => {
+            setTimeout(checkTruncation, 100);
+        });
+        
+        // 窗口大小改变时重新检测
+        window.addEventListener('resize', () => {
+            setTimeout(checkTruncation, 100);
+        });
+    </script>
+</body>
+</html>
+

@@ -18,23 +18,30 @@ export const useProjectPolling = ({
   const [lastUpdateTime, setLastUpdateTime] = useState<number>(Date.now())
   const isDragging = useProjectStore(state => state.isDragging)
 
-  const startPolling = () => {
+    const startPolling = () => {
     if (!enabled || intervalRef.current) return
 
     setIsPolling(true)
     
     const poll = async () => {
       try {
+        // 实时获取isDragging状态
+        const currentIsDragging = useProjectStore.getState().isDragging
+        
         // 如果正在拖拽，跳过这次轮询
-        if (isDragging) {
+        if (currentIsDragging) {
           console.log('Skipping poll: dragging in progress')
           return
         }
         
+        console.log('Polling projects...')
         const projects = await projectApi.getProjects()
+        console.log('Polled projects:', projects)
+        
         const hasProcessingProjects = projects.some(p => p.status === 'processing')
         
         if (onProjectsUpdate) {
+          console.log('Calling onProjectsUpdate with:', projects)
           onProjectsUpdate(projects)
         }
         

@@ -74,12 +74,16 @@ const ProjectDetailPage: React.FC = () => {
             projectApi.getCollections(id)
           ])
           
+          console.log('🎬 Loaded clips in ProjectDetailPage:', clips)
+          console.log('📚 Loaded collections in ProjectDetailPage:', collections)
+          
           const projectWithData = {
             ...project,
             clips: clips || [],
             collections: collections || []
           }
           
+          console.log('🎯 Final project with data:', projectWithData)
           setCurrentProject(projectWithData)
         } catch (error) {
           console.error('Failed to load clips/collections:', error)

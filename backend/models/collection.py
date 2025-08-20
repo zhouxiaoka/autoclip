@@ -4,6 +4,7 @@
 """
 
 import enum
+from typing import Optional, List
 from sqlalchemy import Column, String, Integer, ForeignKey, Enum, JSON, DateTime, Text, Table
 from sqlalchemy.orm import relationship
 from .base import BaseModel
@@ -93,12 +94,39 @@ class Collection(BaseModel):
         comment="处理结果数据"
     )
     
+    # 导出信息
+    export_path = Column(
+        String(500), 
+        nullable=True, 
+        comment="合集导出文件路径"
+    )
+    
     # 元数据
     collection_metadata = Column(
         JSON, 
         nullable=True, 
-        comment="合集元数据"
+        comment="合集元数据（精简版，完整数据存储在文件系统）"
     )
+    
+    # 添加计算属性
+    @property
+    def metadata_file_path(self) -> Optional[str]:
+        """获取完整元数据文件路径"""
+        if self.collection_metadata and 'metadata_file' in self.collection_metadata:
+            return self.collection_metadata['metadata_file']
+        return None
+    
+    @property
+    def has_full_content(self) -> bool:
+        """是否有完整内容文件"""
+        return self.metadata_file_path is not None
+    
+    @property
+    def clip_ids(self) -> List[str]:
+        """获取切片ID列表"""
+        if self.collection_metadata and 'clip_ids' in self.collection_metadata:
+            return self.collection_metadata['clip_ids']
+        return []
     
     # 外键关联
     project_id = Column(

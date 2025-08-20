@@ -1,0 +1,302 @@
+ 
+ -------------- celery@zhoukakadeMacBook-Pro.local v5.5.3 (immunity)
+--- ***** ----- 
+-- ******* ---- macOS-15.6-arm64-arm-64bit-Mach-O 2025-08-20 00:30:44
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         autoclip:0x103a67620
+- ** ---------- .> transport:   redis://localhost:6379/0
+- ** ---------- .> results:     redis://localhost:6379/0
+- *** --- * --- .> concurrency: 1 (prefork)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
+
+[tasks]
+  . backend.tasks.maintenance.backup_project_data
+  . backend.tasks.maintenance.cleanup_expired_tasks
+  . backend.tasks.maintenance.health_check
+  . backend.tasks.notification.send_completion_notification
+  . backend.tasks.notification.send_error_notification
+  . backend.tasks.notification.send_processing_notification
+  . backend.tasks.processing.process_single_step
+  . backend.tasks.processing.process_video_pipeline
+  . backend.tasks.processing.retry_processing_step
+  . backend.tasks.video.extract_video_clips
+  . backend.tasks.video.generate_video_collections
+  . backend.tasks.video.optimize_video_quality
+
+[2025-08-20 00:30:45,041: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2025-08-20 00:30:45,042: INFO/MainProcess] mingle: searching for neighbors
+[2025-08-20 00:30:46,047: INFO/MainProcess] mingle: all alone
+[2025-08-20 00:30:46,055: INFO/MainProcess] celery@zhoukakadeMacBook-Pro.local ready.
+
+SIGHUP not supported: Restarting with SIGHUP is unstable on this platform!
+[2025-08-20 10:41:46,611: ERROR/MainProcess] Process 'ForkPoolWorker-1' pid:60810 exited with 'exitcode 70'
+[2025-08-20 11:34:15,160: INFO/MainProcess] Task backend.tasks.processing.process_video_pipeline[a25dddbb-1ec4-4007-901b-db4e1b06b5ce] received
+[2025-08-20 11:34:15,163: INFO/ForkPoolWorker-2] 开始处理视频流水线: 21d3e619-f071-41ae-88f0-a85992596f57, 任务ID: a25dddbb-1ec4-4007-901b-db4e1b06b5ce
+[2025-08-20 11:34:15,190: INFO/ForkPoolWorker-2] 验证项目存在: 21d3e619-f071-41ae-88f0-a85992596f57
+[2025-08-20 11:34:15,195: INFO/ForkPoolWorker-2] 任务更新通知已发送: a25dddbb-1ec4-4007-901b-db4e1b06b5ce - started
+[2025-08-20 11:34:15,195: INFO/ForkPoolWorker-2] 项目更新通知已发送: 21d3e619-f071-41ae-88f0-a85992596f57 - processing
+[2025-08-20 11:34:15,196: INFO/ForkPoolWorker-2] Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+[2025-08-20 11:34:15,197: INFO/ForkPoolWorker-2] 开始处理项目: 21d3e619-f071-41ae-88f0-a85992596f57
+[2025-08-20 11:34:15,198: INFO/ForkPoolWorker-2] 开始步骤1: 大纲提取
+[2025-08-20 11:34:15,204: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:34:15,205: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:34:15,207: INFO/ForkPoolWorker-2] 开始提取视频大纲...
+[2025-08-20 11:34:15,215: INFO/ForkPoolWorker-2] 文本已按~30分钟/块切分，共1个块
+[2025-08-20 11:34:15,216: INFO/ForkPoolWorker-2] 所有文本块已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/step1_chunks
+[2025-08-20 11:34:15,217: INFO/ForkPoolWorker-2] 所有SRT块已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/step1_srt_chunks
+[2025-08-20 11:34:15,217: INFO/ForkPoolWorker-2] 处理第1/1个文本块: chunk_0.txt
+[2025-08-20 11:34:15,218: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-20 11:34:38,812: INFO/ForkPoolWorker-2] 大纲提取完成，共6个话题
+[2025-08-20 11:34:38,813: INFO/ForkPoolWorker-2] 大纲已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/step1_outline/step1_outline.json
+[2025-08-20 11:34:38,814: INFO/ForkPoolWorker-2] 步骤1完成: [{'title': 'AI工具如何重塑个人工作模式', 'subtopics': ['作者分享自己与AI工具Cursor的深度协作经历', 'AI如何成为个人的“外脑”与知识库', '工作流程从传统CRM转向AI代理系统的变化', 'Cursor在信息整理与CRM管理中的高效应用示例'], 'chunk_index': 0}, {'title': '软件系统演化与工作组织方式的变迁', 'subtopics': ['软件1.0时代：企业内部IT部门主导流程执行', '软件2.0时代：SaaS兴起与企业执行层变为“胶水层”', 'SaaS标准化带来的限制与“假工作”（fake work）的产生', '当前工作流中大量低价值任务的现状与困境'], 'chunk_index': 0}, {'title': 'AI如何替代白领“假工作”', 'subtopics': ['AI对文书、标注类白领工作的替代趋势', '企业内部高层与中层对“人力 vs 算力”的选择转变', '大厂裁员背后的AI替代逻辑', '市场已出现AI替代运营、开发、市场等岗位的早期信号'], 'chunk_index': 0}, {'title': '假工作的来源与信息官僚主义的本质', 'subtopics': ['组织协同复杂性源于智能不足', 'CRM等工具的本质是人类记忆能力的延伸', 'fake work是信息处理能力不足的产物', 'AI带来的信息整理能力将极大削减这类工作'], 'chunk_index': 0}, {'title': '未来十年AI对职业结构的重塑', 'subtopics': ['执行层岗位将大量消失并转化为AI能力的一部分', '有行业背景的“超级个体”将被吸纳进AI公司', '少量AI+行业专家即可支撑整个行业的服务供给', 'AI公司从“按使用量收费”向“按结果收费”的演进'], 'chunk_index': 0}, {'title': '超级个体与AI结合的确定性机会', 'subtopics': ['Prompt Master：内部员工通过AI提升效率的早期形态', '行业专家参与AI训练与数据标注的新角色', '一人团队或小团队创业成为新时代主流', '唯一确定性机会：拥抱AI、深度使用AI、成为超级个体'], 'chunk_index': 0}]
+[2025-08-20 11:34:38,814: INFO/ForkPoolWorker-2] 开始步骤2: 时间定位
+[2025-08-20 11:34:38,819: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:34:38,820: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:34:38,824: INFO/ForkPoolWorker-2] 开始提取话题时间区间...
+[2025-08-20 11:34:38,825: INFO/ForkPoolWorker-2] 处理块 0，其中包含 6 个话题...
+[2025-08-20 11:34:38,826: INFO/ForkPoolWorker-2]   > 未找到LLM缓存，开始调用API...
+[2025-08-20 11:34:38,827: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-20 11:35:10,718: INFO/ForkPoolWorker-2] 调试响应已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/debug_responses/chunk_0_original_response.txt
+[2025-08-20 11:35:10,719: INFO/ForkPoolWorker-2]   > 定位成功: AI工具如何重塑个人工作模式 (00:00:00,120 -> 00:04:20,899)
+[2025-08-20 11:35:10,719: INFO/ForkPoolWorker-2]   > 定位成功: 软件系统演化与工作组织方式的变迁 (00:04:20,899 -> 00:08:02,960)
+[2025-08-20 11:35:10,719: INFO/ForkPoolWorker-2]   > 定位成功: AI如何替代白领“假工作” (00:08:02,960 -> 00:11:10,920)
+[2025-08-20 11:35:10,719: INFO/ForkPoolWorker-2]   > 定位成功: 假工作的来源与信息官僚主义的本质 (00:11:10,920 -> 00:14:21,700)
+[2025-08-20 11:35:10,719: INFO/ForkPoolWorker-2]   > 定位成功: 未来十年AI对职业结构的重塑 (00:14:21,700 -> 00:15:55,800)
+[2025-08-20 11:35:10,719: INFO/ForkPoolWorker-2]   > 定位成功: 超级个体与AI结合的确定性机会 (00:15:55,800 -> 00:16:07,380)
+[2025-08-20 11:35:10,720: INFO/ForkPoolWorker-2]   > 块 0 成功解析 6 个时间段
+[2025-08-20 11:35:10,721: INFO/ForkPoolWorker-2] 所有块处理完毕，开始从中间文件拼接最终结果...
+[2025-08-20 11:35:10,722: INFO/ForkPoolWorker-2] 成功从 1 个块文件中加载了 6 个话题。
+[2025-08-20 11:35:10,722: INFO/ForkPoolWorker-2] 按开始时间对所有话题进行最终排序...
+[2025-08-20 11:35:10,722: INFO/ForkPoolWorker-2] 排序完成。
+[2025-08-20 11:35:10,722: INFO/ForkPoolWorker-2] 为所有片段按时间顺序分配固定ID...
+[2025-08-20 11:35:10,723: INFO/ForkPoolWorker-2] 已为 6 个片段分配了固定ID（1-6）
+[2025-08-20 11:35:10,723: INFO/ForkPoolWorker-2] 时间数据已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/step2_timeline/step2_timeline.json
+[2025-08-20 11:35:10,724: INFO/ForkPoolWorker-2] 步骤2完成: [{'id': '1', 'start_time': '00:00:00,120', 'end_time': '00:04:20,899', 'outline': 'AI工具如何重塑个人工作模式', 'content': ['今年以来的话我发现我跟cursor工作的时间远远超过我跟其他的软件系统或者人在一起工作的时间', '因为软件必须有确定性每个SAAS为了标准化把自己的性能做出来的曲线', '所以我们不得不制造很多fake work来充实我们的工作量', '我用cursor的方式也从还有这个东西帮我写code很好变成了说cursor变成了我的外脑', 'Cursor变成一个信息的knowledge base我所有吸纳到的信息都会直接保存到本地信息vault', '传统的CRM是一个很复杂的数据库系统现在完全构建了一个agent base的外脑', '我的信息在这个外脑里不断的沉淀在这个过程里个人正在逐渐变成超级个体', '我相信不止我一个人这么使用这样的软件系统AI作为一种工具跟传统工具最大的区别是极度灵活和robust的interface', 'Cursor会按照自己提前写好的prompt去整理会议记录自动生成CRM item', '我知道这个过程15秒这个对我来说是一个捕获的过程'], 'chunk_index': 0}, {'id': '2', 'start_time': '00:04:20,899', 'end_time': '00:08:02,960', 'outline': '软件系统演化与工作组织方式的变迁', 'content': ['工作的组织正在变化我们看到的一个趋势是说工作和人和工具的这个组织形式是按照这个软件被软件塑造的', '软件1.0时代公司内部的it department在做定制化软件', '到了2.0的时代公司内部的it department被剥离出来变成市面上无数的SaaS公司', 'SaaS标准化带来的限制创造出了大量的没有意义的basic world', '企业内部这一层运营再变成一个胶水层做大量的只有人能做的判断', '这些运营在浪费大量的时间在做假的工作', '大量的fake work产生了大量的会议产生了大量的跨部门的coordination'], 'chunk_index': 0}, {'id': '3', 'start_time': '00:08:02,960', 'end_time': '00:11:10,920', 'outline': 'AI如何替代白领“假工作”', 'content': ['AI系统正在替换掉很多这种白领的假的工作', '文书的工作有律师起草一个公文的工作这种类标注的创造但其实是在按照一个template用人类认知能力做灵活的creation', '很多大厂的裁员本质是高层会问中层你是要high count还是要算力', '底层的执行层的工作机会就开始被削减我们看到大量的公司开始今年不停的裁员', '大量的这种官僚工作就不需要了明白了我all in就把它搞定'], 'chunk_index': 0}, {'id': '4', 'start_time': '00:11:10,920', 'end_time': '00:14:21,700', 'outline': '假工作的来源与信息官僚主义的本质', 'content': ['这些没意义的工作很多时候是来自于整体智能的缺陷', '当任务复杂度上升的时候你的coronation就是你的协同就会增加', '我们本质上信息整理和处理信息的能力的不足制造出了CRM这样的东西', 'CRM之所以存在不就是我们脑子里记不住2000个人吗', '大量的fake work是因为能力的不足产生的哦明白了那现在我们有一个无线的便宜的信息整理能力出现了'], 'chunk_index': 0}, {'id': '5', 'start_time': '00:14:21,700', 'end_time': '00:15:55,800', 'outline': '未来十年AI对职业结构的重塑', 'content': ['大量的执行层的工作会消失并且这些执行层的工作会被转化到AI的公司里面去', '原来这些在公司执行层的超级个体会被吸纳到这个外部供应商里面去', '极少量的这种人就可以支撑整个行业', 'AI仍然在短时间内是没法完全替代掉这些人的判断力人对行业的认知'], 'chunk_index': 0}, {'id': '6', 'start_time': '00:15:55,800', 'end_time': '00:16:07,380', 'outline': '超级个体与AI结合的确定性机会', 'content': ['公司内部的prompt master他会去理解流程然后去想很多用通用工具做出来的prompt可以给公司提效', '行业专家参与AI训练与数据标注的新角色', '一人团队或小团队创业成为新时代主流', '现在唯一确定性的应该做的事就是使用AI去找到怎么能和AI结合变成一个超级个体'], 'chunk_index': 0}]
+[2025-08-20 11:35:10,724: INFO/ForkPoolWorker-2] 开始步骤3: 内容评分
+[2025-08-20 11:35:10,727: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:35:10,728: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:35:10,731: INFO/ForkPoolWorker-2] 开始为 6 个切片进行批量评分...
+[2025-08-20 11:35:10,732: INFO/ForkPoolWorker-2] 处理块 0，其中包含 6 个话题...
+[2025-08-20 11:35:10,733: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-20 11:35:49,701: INFO/ForkPoolWorker-2]   > 评分成功: AI工具如何重塑个人工作模式... [分数: 0.95]
+[2025-08-20 11:35:49,701: INFO/ForkPoolWorker-2]   > 评分成功: 软件系统演化与工作组织方式的变迁... [分数: 0.88]
+[2025-08-20 11:35:49,702: INFO/ForkPoolWorker-2]   > 评分成功: AI如何替代白领“假工作”... [分数: 0.93]
+[2025-08-20 11:35:49,702: INFO/ForkPoolWorker-2]   > 评分成功: 假工作的来源与信息官僚主义的本质... [分数: 0.89]
+[2025-08-20 11:35:49,702: INFO/ForkPoolWorker-2]   > 评分成功: 未来十年AI对职业结构的重塑... [分数: 0.91]
+[2025-08-20 11:35:49,702: INFO/ForkPoolWorker-2]   > 评分成功: 超级个体与AI结合的确定性机会... [分数: 0.94]
+[2025-08-20 11:35:49,703: INFO/ForkPoolWorker-2] 按评分排序完成，保持原有固定ID不变
+[2025-08-20 11:35:49,703: INFO/ForkPoolWorker-2] 按ID排序完成，保持时间顺序
+[2025-08-20 11:35:49,703: INFO/ForkPoolWorker-2] 所有切片评分完成
+[2025-08-20 11:35:49,705: INFO/ForkPoolWorker-2] 评分结果已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/step3_all_scored.json
+[2025-08-20 11:35:49,706: INFO/ForkPoolWorker-2] 评分结果已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/step3_scoring/step3_scoring.json
+[2025-08-20 11:35:49,707: INFO/ForkPoolWorker-2] 步骤3完成: [{'id': '1', 'start_time': '00:00:00,120', 'end_time': '00:04:20,899', 'outline': 'AI工具如何重塑个人工作模式', 'content': ['今年以来的话我发现我跟cursor工作的时间远远超过我跟其他的软件系统或者人在一起工作的时间', '因为软件必须有确定性每个SAAS为了标准化把自己的性能做出来的曲线', '所以我们不得不制造很多fake work来充实我们的工作量', '我用cursor的方式也从还有这个东西帮我写code很好变成了说cursor变成了我的外脑', 'Cursor变成一个信息的knowledge base我所有吸纳到的信息都会直接保存到本地信息vault', '传统的CRM是一个很复杂的数据库系统现在完全构建了一个agent base的外脑', '我的信息在这个外脑里不断的沉淀在这个过程里个人正在逐渐变成超级个体', '我相信不止我一个人这么使用这样的软件系统AI作为一种工具跟传统工具最大的区别是极度灵活和robust的interface', 'Cursor会按照自己提前写好的prompt去整理会议记录自动生成CRM item', '我知道这个过程15秒这个对我来说是一个捕获的过程'], 'chunk_index': 0, 'final_score': 0.95, 'recommend_reason': '深度揭示AI如何赋能个体，打造未来职场核心竞争力，极具启发性。'}, {'id': '2', 'start_time': '00:04:20,899', 'end_time': '00:08:02,960', 'outline': '软件系统演化与工作组织方式的变迁', 'content': ['工作的组织正在变化我们看到的一个趋势是说工作和人和工具的这个组织形式是按照这个软件被软件塑造的', '软件1.0时代公司内部的it department在做定制化软件', '到了2.0的时代公司内部的it department被剥离出来变成市面上无数的SaaS公司', 'SaaS标准化带来的限制创造出了大量的没有意义的basic world', '企业内部这一层运营再变成一个胶水层做大量的只有人能做的判断', '这些运营在浪费大量的时间在做假的工作', '大量的fake work产生了大量的会议产生了大量的跨部门的coordination'], 'chunk_index': 0, 'final_score': 0.88, 'recommend_reason': '犀利剖析软件演变对组织效率的深层影响，观点深刻，值得职场人深思。'}, {'id': '3', 'start_time': '00:08:02,960', 'end_time': '00:11:10,920', 'outline': 'AI如何替代白领“假工作”', 'content': ['AI系统正在替换掉很多这种白领的假的工作', '文书的工作有律师起草一个公文的工作这种类标注的创造但其实是在按照一个template用人类认知能力做灵活的creation', '很多大厂的裁员本质是高层会问中层你是要high count还是要算力', '底层的执行层的工作机会就开始被削减我们看到大量的公司开始今年不停的裁员', '大量的这种官僚工作就不需要了明白了我all in就把它搞定'], 'chunk_index': 0, 'final_score': 0.93, 'recommend_reason': '直击职场痛点，预测AI将如何重塑白领工作结构，话题敏感且极具传播力。'}, {'id': '4', 'start_time': '00:11:10,920', 'end_time': '00:14:21,700', 'outline': '假工作的来源与信息官僚主义的本质', 'content': ['这些没意义的工作很多时候是来自于整体智能的缺陷', '当任务复杂度上升的时候你的coronation就是你的协同就会增加', '我们本质上信息整理和处理信息的能力的不足制造出了CRM这样的东西', 'CRM之所以存在不就是我们脑子里记不住2000个人吗', '大量的fake work是因为能力的不足产生的哦明白了那现在我们有一个无线的便宜的信息整理能力出现了'], 'chunk_index': 0, 'final_score': 0.89, 'recommend_reason': '从信息处理角度拆解职场低效本质，观点新颖，适合引发深度讨论。'}, {'id': '5', 'start_time': '00:14:21,700', 'end_time': '00:15:55,800', 'outline': '未来十年AI对职业结构的重塑', 'content': ['大量的执行层的工作会消失并且这些执行层的工作会被转化到AI的公司里面去', '原来这些在公司执行层的超级个体会被吸纳到这个外部供应商里面去', '极少量的这种人就可以支撑整个行业', 'AI仍然在短时间内是没法完全替代掉这些人的判断力人对行业的认知'], 'chunk_index': 0, 'final_score': 0.91, 'recommend_reason': '前瞻视角揭示AI对职业生态的深层重构，适合职场人提前布局未来。'}, {'id': '6', 'start_time': '00:15:55,800', 'end_time': '00:16:07,380', 'outline': '超级个体与AI结合的确定性机会', 'content': ['公司内部的prompt master他会去理解流程然后去想很多用通用工具做出来的prompt可以给公司提效', '行业专家参与AI训练与数据标注的新角色', '一人团队或小团队创业成为新时代主流', '现在唯一确定性的应该做的事就是使用AI去找到怎么能和AI结合变成一个超级个体'], 'chunk_index': 0, 'final_score': 0.94, 'recommend_reason': '揭示AI时代个体崛起的路径，为职场人提供清晰的转型方向和行动指南。'}]
+[2025-08-20 11:35:49,707: INFO/ForkPoolWorker-2] 开始步骤4: 标题生成
+[2025-08-20 11:35:49,711: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:35:49,712: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:35:49,715: INFO/ForkPoolWorker-2] 开始为 6 个高分片段进行批量标题生成...
+[2025-08-20 11:35:49,715: INFO/ForkPoolWorker-2] 处理块 0，其中包含 6 个片段...
+[2025-08-20 11:35:49,716: INFO/ForkPoolWorker-2]   > 开始调用API生成标题...
+[2025-08-20 11:35:49,716: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-20 11:35:54,109: INFO/ForkPoolWorker-2]   > LLM原始响应已保存到 /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/step4_llm_raw_output/chunk_0.txt
+[2025-08-20 11:35:54,109: INFO/ForkPoolWorker-2]   > 为片段 1 ('AI工具如何重塑个人工作模式...') 生成标题: 我跟Cursor工作的时间超过跟人在一起：AI工具如何重塑个人工作模式
+[2025-08-20 11:35:54,110: INFO/ForkPoolWorker-2]   > 为片段 2 ('软件系统演化与工作组织方式的变迁...') 生成标题: 从SaaS标准化到大量假工作产生：软件系统如何重塑工作组织方式？
+[2025-08-20 11:35:54,110: INFO/ForkPoolWorker-2]   > 为片段 3 ('AI如何替代白领“假工作”...') 生成标题: AI正在替换白领假工作：大量执行层岗位将消失？
+[2025-08-20 11:35:54,110: INFO/ForkPoolWorker-2]   > 为片段 4 ('假工作的来源与信息官僚主义的本质...') 生成标题: 信息处理能力不足制造了大量CRM：假工作究竟从何而来？
+[2025-08-20 11:35:54,110: INFO/ForkPoolWorker-2]   > 为片段 5 ('未来十年AI对职业结构的重塑...') 生成标题: 未来十年AI将重塑职业结构：执行层岗位面临消失
+[2025-08-20 11:35:54,110: INFO/ForkPoolWorker-2]   > 为片段 6 ('超级个体与AI结合的确定性机会...') 生成标题: 成为超级个体是AI时代的确定性机会：你准备好了吗？
+[2025-08-20 11:35:54,110: INFO/ForkPoolWorker-2] 所有高分片段标题生成完成
+[2025-08-20 11:35:54,111: INFO/ForkPoolWorker-2] 带标题的片段数据已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/step4_title/step4_title.json
+[2025-08-20 11:35:54,112: INFO/ForkPoolWorker-2] 步骤4完成: [{'id': '1', 'start_time': '00:00:00,120', 'end_time': '00:04:20,899', 'outline': 'AI工具如何重塑个人工作模式', 'content': ['今年以来的话我发现我跟cursor工作的时间远远超过我跟其他的软件系统或者人在一起工作的时间', '因为软件必须有确定性每个SAAS为了标准化把自己的性能做出来的曲线', '所以我们不得不制造很多fake work来充实我们的工作量', '我用cursor的方式也从还有这个东西帮我写code很好变成了说cursor变成了我的外脑', 'Cursor变成一个信息的knowledge base我所有吸纳到的信息都会直接保存到本地信息vault', '传统的CRM是一个很复杂的数据库系统现在完全构建了一个agent base的外脑', '我的信息在这个外脑里不断的沉淀在这个过程里个人正在逐渐变成超级个体', '我相信不止我一个人这么使用这样的软件系统AI作为一种工具跟传统工具最大的区别是极度灵活和robust的interface', 'Cursor会按照自己提前写好的prompt去整理会议记录自动生成CRM item', '我知道这个过程15秒这个对我来说是一个捕获的过程'], 'chunk_index': 0, 'final_score': 0.95, 'recommend_reason': '深度揭示AI如何赋能个体，打造未来职场核心竞争力，极具启发性。', 'generated_title': '我跟Cursor工作的时间超过跟人在一起：AI工具如何重塑个人工作模式'}, {'id': '2', 'start_time': '00:04:20,899', 'end_time': '00:08:02,960', 'outline': '软件系统演化与工作组织方式的变迁', 'content': ['工作的组织正在变化我们看到的一个趋势是说工作和人和工具的这个组织形式是按照这个软件被软件塑造的', '软件1.0时代公司内部的it department在做定制化软件', '到了2.0的时代公司内部的it department被剥离出来变成市面上无数的SaaS公司', 'SaaS标准化带来的限制创造出了大量的没有意义的basic world', '企业内部这一层运营再变成一个胶水层做大量的只有人能做的判断', '这些运营在浪费大量的时间在做假的工作', '大量的fake work产生了大量的会议产生了大量的跨部门的coordination'], 'chunk_index': 0, 'final_score': 0.88, 'recommend_reason': '犀利剖析软件演变对组织效率的深层影响，观点深刻，值得职场人深思。', 'generated_title': '从SaaS标准化到大量假工作产生：软件系统如何重塑工作组织方式？'}, {'id': '3', 'start_time': '00:08:02,960', 'end_time': '00:11:10,920', 'outline': 'AI如何替代白领“假工作”', 'content': ['AI系统正在替换掉很多这种白领的假的工作', '文书的工作有律师起草一个公文的工作这种类标注的创造但其实是在按照一个template用人类认知能力做灵活的creation', '很多大厂的裁员本质是高层会问中层你是要high count还是要算力', '底层的执行层的工作机会就开始被削减我们看到大量的公司开始今年不停的裁员', '大量的这种官僚工作就不需要了明白了我all in就把它搞定'], 'chunk_index': 0, 'final_score': 0.93, 'recommend_reason': '直击职场痛点，预测AI将如何重塑白领工作结构，话题敏感且极具传播力。', 'generated_title': 'AI正在替换白领假工作：大量执行层岗位将消失？'}, {'id': '4', 'start_time': '00:11:10,920', 'end_time': '00:14:21,700', 'outline': '假工作的来源与信息官僚主义的本质', 'content': ['这些没意义的工作很多时候是来自于整体智能的缺陷', '当任务复杂度上升的时候你的coronation就是你的协同就会增加', '我们本质上信息整理和处理信息的能力的不足制造出了CRM这样的东西', 'CRM之所以存在不就是我们脑子里记不住2000个人吗', '大量的fake work是因为能力的不足产生的哦明白了那现在我们有一个无线的便宜的信息整理能力出现了'], 'chunk_index': 0, 'final_score': 0.89, 'recommend_reason': '从信息处理角度拆解职场低效本质，观点新颖，适合引发深度讨论。', 'generated_title': '信息处理能力不足制造了大量CRM：假工作究竟从何而来？'}, {'id': '5', 'start_time': '00:14:21,700', 'end_time': '00:15:55,800', 'outline': '未来十年AI对职业结构的重塑', 'content': ['大量的执行层的工作会消失并且这些执行层的工作会被转化到AI的公司里面去', '原来这些在公司执行层的超级个体会被吸纳到这个外部供应商里面去', '极少量的这种人就可以支撑整个行业', 'AI仍然在短时间内是没法完全替代掉这些人的判断力人对行业的认知'], 'chunk_index': 0, 'final_score': 0.91, 'recommend_reason': '前瞻视角揭示AI对职业生态的深层重构，适合职场人提前布局未来。', 'generated_title': '未来十年AI将重塑职业结构：执行层岗位面临消失'}, {'id': '6', 'start_time': '00:15:55,800', 'end_time': '00:16:07,380', 'outline': '超级个体与AI结合的确定性机会', 'content': ['公司内部的prompt master他会去理解流程然后去想很多用通用工具做出来的prompt可以给公司提效', '行业专家参与AI训练与数据标注的新角色', '一人团队或小团队创业成为新时代主流', '现在唯一确定性的应该做的事就是使用AI去找到怎么能和AI结合变成一个超级个体'], 'chunk_index': 0, 'final_score': 0.94, 'recommend_reason': '揭示AI时代个体崛起的路径，为职场人提供清晰的转型方向和行动指南。', 'generated_title': '成为超级个体是AI时代的确定性机会：你准备好了吗？'}]
+[2025-08-20 11:35:54,112: INFO/ForkPoolWorker-2] 开始步骤5: 主题聚类
+[2025-08-20 11:35:54,116: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:35:54,117: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:35:54,121: INFO/ForkPoolWorker-2] 开始进行主题聚类...
+[2025-08-20 11:35:54,122: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-20 11:35:58,638: WARNING/ForkPoolWorker-2] LLM聚类结果不理想，使用预聚类结果
+[2025-08-20 11:35:58,638: INFO/ForkPoolWorker-2] 主题聚类完成，共1个合集
+[2025-08-20 11:35:58,639: INFO/ForkPoolWorker-2] 合集数据已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/step5_clustering/step5_clustering.json
+[2025-08-20 11:35:58,640: INFO/ForkPoolWorker-2] 步骤5完成: [{'id': '1', 'collection_title': '职场成长记', 'collection_summary': '探讨职业发展、技能提升与职场心态变化。', 'clip_ids': ['1', '2', '3', '4', '5']}]
+[2025-08-20 11:35:58,640: INFO/ForkPoolWorker-2] 开始步骤6: 视频切割
+[2025-08-20 11:35:58,646: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:35:58,647: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 11:35:58,651: INFO/ForkPoolWorker-2] 开始生成切片视频...
+[2025-08-20 11:35:58,651: INFO/ForkPoolWorker-2] 提取切片 1: 00:00:00,120 -> 00:04:20,899, 输出: /Users/zhoukk/autoclip/data/output/clips/1_我跟Cursor工作的时间超过跟人在一起：AI工具如何重塑个人工作模式.mp4
+[2025-08-20 11:35:58,868: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/1_我跟Cursor工作的时间超过跟人在一起：AI工具如何重塑个人工作模式.mp4 (00:00:00.120 -> 00:04:20.899, 时长: 260.78秒)
+[2025-08-20 11:35:58,868: INFO/ForkPoolWorker-2] 切片 1 提取成功
+[2025-08-20 11:35:58,868: INFO/ForkPoolWorker-2] 提取切片 2: 00:04:20,899 -> 00:08:02,960, 输出: /Users/zhoukk/autoclip/data/output/clips/2_从SaaS标准化到大量假工作产生：软件系统如何重塑工作组织方式？.mp4
+[2025-08-20 11:35:58,950: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/2_从SaaS标准化到大量假工作产生：软件系统如何重塑工作组织方式？.mp4 (00:04:20.899 -> 00:08:02.960, 时长: 222.06秒)
+[2025-08-20 11:35:58,950: INFO/ForkPoolWorker-2] 切片 2 提取成功
+[2025-08-20 11:35:58,950: INFO/ForkPoolWorker-2] 提取切片 3: 00:08:02,960 -> 00:11:10,920, 输出: /Users/zhoukk/autoclip/data/output/clips/3_AI正在替换白领假工作：大量执行层岗位将消失？.mp4
+[2025-08-20 11:35:59,021: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/3_AI正在替换白领假工作：大量执行层岗位将消失？.mp4 (00:08:02.960 -> 00:11:10.920, 时长: 187.96秒)
+[2025-08-20 11:35:59,022: INFO/ForkPoolWorker-2] 切片 3 提取成功
+[2025-08-20 11:35:59,022: INFO/ForkPoolWorker-2] 提取切片 4: 00:11:10,920 -> 00:14:21,700, 输出: /Users/zhoukk/autoclip/data/output/clips/4_信息处理能力不足制造了大量CRM：假工作究竟从何而来？.mp4
+[2025-08-20 11:35:59,091: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/4_信息处理能力不足制造了大量CRM：假工作究竟从何而来？.mp4 (00:11:10.920 -> 00:14:21.700, 时长: 190.78秒)
+[2025-08-20 11:35:59,092: INFO/ForkPoolWorker-2] 切片 4 提取成功
+[2025-08-20 11:35:59,092: INFO/ForkPoolWorker-2] 提取切片 5: 00:14:21,700 -> 00:15:55,800, 输出: /Users/zhoukk/autoclip/data/output/clips/5_未来十年AI将重塑职业结构：执行层岗位面临消失.mp4
+[2025-08-20 11:35:59,141: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/5_未来十年AI将重塑职业结构：执行层岗位面临消失.mp4 (00:14:21.700 -> 00:15:55.800, 时长: 94.10秒)
+[2025-08-20 11:35:59,141: INFO/ForkPoolWorker-2] 切片 5 提取成功
+[2025-08-20 11:35:59,142: INFO/ForkPoolWorker-2] 提取切片 6: 00:15:55,800 -> 00:16:07,380, 输出: /Users/zhoukk/autoclip/data/output/clips/6_成为超级个体是AI时代的确定性机会：你准备好了吗？.mp4
+[2025-08-20 11:35:59,179: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/6_成为超级个体是AI时代的确定性机会：你准备好了吗？.mp4 (00:15:55.800 -> 00:16:07.380, 时长: 11.58秒)
+[2025-08-20 11:35:59,180: INFO/ForkPoolWorker-2] 切片 6 提取成功
+[2025-08-20 11:35:59,180: INFO/ForkPoolWorker-2] 切片视频生成完成，共6个切片
+[2025-08-20 11:35:59,180: INFO/ForkPoolWorker-2] 开始生成合集视频...
+[2025-08-20 11:35:59,180: INFO/ForkPoolWorker-2] 找到合集 1 的切片: 1_用AI当外脑是什么体验？Cursor如何彻底改变了我的工作效率.mp4
+[2025-08-20 11:35:59,180: INFO/ForkPoolWorker-2] 找到合集 1 的切片: 2_传统软件把我们关进系统牢笼，AI才是打破僵局的真正出口.mp4
+[2025-08-20 11:35:59,181: INFO/ForkPoolWorker-2] 找到合集 1 的切片: 3_AI正在替换白领假工作：大量执行层岗位将消失？.mp4
+[2025-08-20 11:35:59,181: INFO/ForkPoolWorker-2] 找到合集 1 的切片: 4_大量职场‘虚假工作’即将消失，AI让信息整理变得无限廉价.mp4
+[2025-08-20 11:35:59,181: INFO/ForkPoolWorker-2] 找到合集 1 的切片: 5_AI时代需要怎样的人才？超级个体如何用prompt工程重塑行业价值.mp4
+[2025-08-20 11:35:59,433: INFO/ForkPoolWorker-2] 成功创建合集: /Users/zhoukk/autoclip/data/output/collections/职场成长记.mp4
+[2025-08-20 11:35:59,434: INFO/ForkPoolWorker-2] 成功创建合集 1: /Users/zhoukk/autoclip/data/output/collections/职场成长记.mp4
+[2025-08-20 11:35:59,434: INFO/ForkPoolWorker-2] 合集视频生成完成，共1个合集
+[2025-08-20 11:35:59,434: INFO/ForkPoolWorker-2] 切片元数据已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/clips_metadata.json
+[2025-08-20 11:35:59,434: INFO/ForkPoolWorker-2] 合集元数据已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/collections_metadata.json
+[2025-08-20 11:35:59,434: INFO/ForkPoolWorker-2] 视频生成完成: 6个切片, 1个合集
+[2025-08-20 11:35:59,434: INFO/ForkPoolWorker-2] 步骤6结果已保存到: /Users/zhoukk/autoclip/data/projects/21d3e619-f071-41ae-88f0-a85992596f57/step6_video/step6_video_output.json
+[2025-08-20 11:35:59,437: INFO/ForkPoolWorker-2] 成功保存 6 个切片到数据库
+[2025-08-20 11:35:59,437: ERROR/ForkPoolWorker-2] 保存合集到数据库失败: 'collection_type' is an invalid keyword argument for Collection
+[2025-08-20 11:35:59,437: INFO/ForkPoolWorker-2] 步骤6完成: {'clips_generated': 6, 'collections_generated': 1, 'clip_paths': ['/Users/zhoukk/autoclip/data/output/clips/1_我跟Cursor工作的时间超过跟人在一起：AI工具如何重塑个人工作模式.mp4', '/Users/zhoukk/autoclip/data/output/clips/2_从SaaS标准化到大量假工作产生：软件系统如何重塑工作组织方式？.mp4', '/Users/zhoukk/autoclip/data/output/clips/3_AI正在替换白领假工作：大量执行层岗位将消失？.mp4', '/Users/zhoukk/autoclip/data/output/clips/4_信息处理能力不足制造了大量CRM：假工作究竟从何而来？.mp4', '/Users/zhoukk/autoclip/data/output/clips/5_未来十年AI将重塑职业结构：执行层岗位面临消失.mp4', '/Users/zhoukk/autoclip/data/output/clips/6_成为超级个体是AI时代的确定性机会：你准备好了吗？.mp4'], 'collection_paths': ['/Users/zhoukk/autoclip/data/output/collections/职场成长记.mp4']}
+[2025-08-20 11:35:59,438: INFO/ForkPoolWorker-2] 项目处理完成: 21d3e619-f071-41ae-88f0-a85992596f57
+[2025-08-20 11:35:59,440: INFO/ForkPoolWorker-2] 任务更新通知已发送: a25dddbb-1ec4-4007-901b-db4e1b06b5ce - completed
+[2025-08-20 11:35:59,440: INFO/ForkPoolWorker-2] 项目更新通知已发送: 21d3e619-f071-41ae-88f0-a85992596f57 - completed
+[2025-08-20 11:35:59,440: INFO/ForkPoolWorker-2] 系统通知已发送: 处理完成 - 项目 21d3e619-f071-41ae-88f0-a85992596f57 的视频处理已完成
+[2025-08-20 11:35:59,440: INFO/ForkPoolWorker-2] 视频流水线处理完成: 21d3e619-f071-41ae-88f0-a85992596f57
+[2025-08-20 11:35:59,442: INFO/ForkPoolWorker-2] Task backend.tasks.processing.process_video_pipeline[a25dddbb-1ec4-4007-901b-db4e1b06b5ce] succeeded in 104.27904891700018s: {'success': True, 'project_id': '21d3e619-f071-41ae-88f0-a85992596f57', 'task_id': 'a25dddbb-1ec4-4007-901b-db4e1b06b5ce', 'result': {'project_id': '21d3e619-f071-41ae-88f0-a85992596f57', 'status': 'completed', 'steps': {'step1': [...], 'step2': [...], 'step3': [...], 'step4': [...], 'step5': [...], 'step6': {...}}, 'message': '项目处理完成'}, 'message': '视频处理流水线完成'}
+[2025-08-20 19:56:29,933: INFO/MainProcess] Task backend.tasks.processing.process_video_pipeline[44b171eb-7dc4-4c57-bbb8-e5fdcd9e2d16] received
+[2025-08-20 19:56:29,937: INFO/ForkPoolWorker-2] 开始处理视频流水线: 5c48803d-0aa7-48d7-a270-2b33e4954f25, 任务ID: 44b171eb-7dc4-4c57-bbb8-e5fdcd9e2d16
+[2025-08-20 19:56:29,946: INFO/ForkPoolWorker-2] 验证项目存在: 5c48803d-0aa7-48d7-a270-2b33e4954f25
+[2025-08-20 19:56:29,952: INFO/ForkPoolWorker-2] 任务更新通知已发送: 44b171eb-7dc4-4c57-bbb8-e5fdcd9e2d16 - started
+[2025-08-20 19:56:29,952: INFO/ForkPoolWorker-2] 项目更新通知已发送: 5c48803d-0aa7-48d7-a270-2b33e4954f25 - processing
+[2025-08-20 19:56:29,953: INFO/ForkPoolWorker-2] Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+[2025-08-20 19:56:29,953: INFO/ForkPoolWorker-2] 开始处理项目: 5c48803d-0aa7-48d7-a270-2b33e4954f25
+[2025-08-20 19:56:29,957: INFO/ForkPoolWorker-2] 开始步骤1: 大纲提取
+[2025-08-20 19:56:29,960: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:56:29,961: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:56:29,963: INFO/ForkPoolWorker-2] 开始提取视频大纲...
+[2025-08-20 19:56:29,971: INFO/ForkPoolWorker-2] 文本已按~30分钟/块切分，共1个块
+[2025-08-20 19:56:29,971: INFO/ForkPoolWorker-2] 所有文本块已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/step1_chunks
+[2025-08-20 19:56:29,974: INFO/ForkPoolWorker-2] 所有SRT块已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/step1_srt_chunks
+[2025-08-20 19:56:29,974: INFO/ForkPoolWorker-2] 处理第1/1个文本块: chunk_0.txt
+[2025-08-20 19:56:29,974: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-20 19:56:47,264: INFO/ForkPoolWorker-2] 大纲提取完成，共6个话题
+[2025-08-20 19:56:47,266: INFO/ForkPoolWorker-2] 大纲已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/step1_outline/step1_outline.json
+[2025-08-20 19:56:47,266: INFO/ForkPoolWorker-2] 步骤1完成: [{'title': '关于“非共识观点”的本质探讨', 'subtopics': ['真正基于个人原则的非共识观点非常少见', '多数所谓的非共识是小圈子内部的共识传播', '投资人圈子与技术圈、大众圈的非共识认知差异', '“非共识”更多是信息获取渠道的差异，而非独立思考的结果'], 'chunk_index': 0}, {'title': 'MCP技术趋势与认知差异的案例分析', 'subtopics': ['投资人圈与技术开发者圈对MCP的认知错位', '技术圈对MCP的早期尝试与性能验证', '投资人社群中非共识如何演变为共识并推动创业', '技术圈领先于投资人圈的认知验证案例'], 'chunk_index': 0}, {'title': 'AI技术普及周期与创业结构变化趋势', 'subtopics': ['AI技术普及的两个阶段：企业级应用先行、消费级创业兴起', '早期AI创业者的典型背景：成熟创业者、技术专家、企业服务经验', '当前趋势：2C创业门槛降低，年轻创业者涌入', '年轻创业者的特征：早期产品经验、社区运营能力、快速试错能力'], 'chunk_index': 0}, {'title': 'AI如何重构职业能力与经验价值体系', 'subtopics': ['AI拉平经验积累差距：大学生与资深工程师起点趋同', '大厂员工面临认知包袱与身份挑战', '职业发展核心能力从技能积累转向问题定义与决策能力', '开发者、设计师、创业者的核心竞争力本质趋同'], 'chunk_index': 0}, {'title': 'AI时代下的能力重构与个人定位思考', 'subtopics': ['传统教育体系对“原能力”培养的缺失', '应试思维导致对可迁移能力的认知不足', '从技术专家到团队管理者的能力跃迁逻辑', '在AI时代重新思考个人核心竞争力的构建'], 'chunk_index': 0}, {'title': 'AI协作模式与未来工作范式探索', 'subtopics': ['AI网络（Information Network）中人与算法的协作关系', '人类角色转变为“硅基智能管理者”（Silicon Intelligence Manager）', '有效协作模式：弱模型做决策，强模型做执行', '未来超级个体的可能形态：与AI深度结合的小型专业团队'], 'chunk_index': 0}]
+[2025-08-20 19:56:47,267: INFO/ForkPoolWorker-2] 开始步骤2: 时间定位
+[2025-08-20 19:56:47,271: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:56:47,272: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:56:47,275: INFO/ForkPoolWorker-2] 开始提取话题时间区间...
+[2025-08-20 19:56:47,275: INFO/ForkPoolWorker-2] 处理块 0，其中包含 6 个话题...
+[2025-08-20 19:56:47,277: INFO/ForkPoolWorker-2]   > 未找到LLM缓存，开始调用API...
+[2025-08-20 19:56:47,278: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-20 19:57:08,060: INFO/ForkPoolWorker-2] 调试响应已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/debug_responses/chunk_0_original_response.txt
+[2025-08-20 19:57:08,061: INFO/ForkPoolWorker-2]   > 定位成功: 关于“非共识观点”的本质探讨 (00:00:00,000 -> 00:05:40,240)
+[2025-08-20 19:57:08,061: INFO/ForkPoolWorker-2]   > 定位成功: MCP技术趋势与认知差异的案例分析 (00:05:40,240 -> 00:12:20,920)
+[2025-08-20 19:57:08,061: INFO/ForkPoolWorker-2]   > 定位成功: AI技术普及周期与创业结构变化趋势 (00:12:20,920 -> 00:17:40,840)
+[2025-08-20 19:57:08,061: WARNING/ForkPoolWorker-2]   > 调整话题 'AI如何重构职业能力与经验价值体系' 的结束时间从 00:23:00.440 到 00:19:22,440
+[2025-08-20 19:57:08,062: INFO/ForkPoolWorker-2]   > 定位成功: AI如何重构职业能力与经验价值体系 (00:17:40,840 -> 00:19:22,440)
+[2025-08-20 19:57:08,062: WARNING/ForkPoolWorker-2]   > 调整话题 'AI时代下的能力重构与个人定位思考' 的结束时间从 00:28:30.600 到 00:19:22,440
+[2025-08-20 19:57:08,062: INFO/ForkPoolWorker-2]   > 定位成功: AI时代下的能力重构与个人定位思考 (00:23:00,440 -> 00:19:22,440)
+[2025-08-20 19:57:08,062: WARNING/ForkPoolWorker-2]   > 调整话题 'AI协作模式与未来工作范式探索' 的结束时间从 00:34:00.800 到 00:19:22,440
+[2025-08-20 19:57:08,063: INFO/ForkPoolWorker-2]   > 定位成功: AI协作模式与未来工作范式探索 (00:28:30,600 -> 00:19:22,440)
+[2025-08-20 19:57:08,063: INFO/ForkPoolWorker-2]   > 块 0 成功解析 6 个时间段
+[2025-08-20 19:57:08,064: INFO/ForkPoolWorker-2] 所有块处理完毕，开始从中间文件拼接最终结果...
+[2025-08-20 19:57:08,064: INFO/ForkPoolWorker-2] 成功从 1 个块文件中加载了 6 个话题。
+[2025-08-20 19:57:08,064: INFO/ForkPoolWorker-2] 按开始时间对所有话题进行最终排序...
+[2025-08-20 19:57:08,065: INFO/ForkPoolWorker-2] 排序完成。
+[2025-08-20 19:57:08,065: INFO/ForkPoolWorker-2] 为所有片段按时间顺序分配固定ID...
+[2025-08-20 19:57:08,065: INFO/ForkPoolWorker-2] 已为 6 个片段分配了固定ID（1-6）
+[2025-08-20 19:57:08,067: INFO/ForkPoolWorker-2] 时间数据已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/step2_timeline/step2_timeline.json
+[2025-08-20 19:57:08,067: INFO/ForkPoolWorker-2] 步骤2完成: [{'id': '1', 'start_time': '00:00:00,000', 'end_time': '00:05:40,240', 'outline': '关于“非共识观点”的本质探讨', 'content': ['真正基于个人原则的非共识观点非常少见', '多数所谓的非共识是小圈子内部的共识传播', '投资人圈子与技术圈、大众圈的非共识认知差异', '“非共识”更多是信息获取渠道的差异，而非独立思考的结果'], 'chunk_index': 0}, {'id': '2', 'start_time': '00:05:40,240', 'end_time': '00:12:20,920', 'outline': 'MCP技术趋势与认知差异的案例分析', 'content': ['投资人圈与技术开发者圈对MCP的认知错位', '技术圈对MCP的早期尝试与性能验证', '投资人社群中非共识如何演变为共识并推动创业', '技术圈领先于投资人圈的认知验证案例'], 'chunk_index': 0}, {'id': '3', 'start_time': '00:12:20,920', 'end_time': '00:17:40,840', 'outline': 'AI技术普及周期与创业结构变化趋势', 'content': ['AI技术普及的两个阶段：企业级应用先行、消费级创业兴起', '早期AI创业者的典型背景：成熟创业者、技术专家、企业服务经验', '当前趋势：2C创业门槛降低，年轻创业者涌入', '年轻创业者的特征：早期产品经验、社区运营能力、快速试错能力'], 'chunk_index': 0}, {'id': '4', 'start_time': '00:17:40,840', 'end_time': '00:19:22,440', 'outline': 'AI如何重构职业能力与经验价值体系', 'content': ['AI拉平经验积累差距：大学生与资深工程师起点趋同', '大厂员工面临认知包袱与身份挑战', '职业发展核心能力从技能积累转向问题定义与决策能力', '开发者、设计师、创业者的核心竞争力本质趋同'], 'chunk_index': 0}, {'id': '5', 'start_time': '00:23:00,440', 'end_time': '00:19:22,440', 'outline': 'AI时代下的能力重构与个人定位思考', 'content': ['传统教育体系对“原能力”培养的缺失', '应试思维导致对可迁移能力的认知不足', '从技术专家到团队管理者的能力跃迁逻辑', '在AI时代重新思考个人核心竞争力的构建'], 'chunk_index': 0}, {'id': '6', 'start_time': '00:28:30,600', 'end_time': '00:19:22,440', 'outline': 'AI协作模式与未来工作范式探索', 'content': ['AI网络（Information Network）中人与算法的协作关系', '人类角色转变为“硅基智能管理者”（Silicon Intelligence Manager）', '有效协作模式：弱模型做决策，强模型做执行', '未来超级个体的可能形态：与AI深度结合的小型专业团队'], 'chunk_index': 0}]
+[2025-08-20 19:57:08,067: INFO/ForkPoolWorker-2] 开始步骤3: 内容评分
+[2025-08-20 19:57:08,071: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:57:08,071: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:57:08,075: INFO/ForkPoolWorker-2] 开始为 6 个切片进行批量评分...
+[2025-08-20 19:57:08,075: INFO/ForkPoolWorker-2] 处理块 0，其中包含 6 个话题...
+[2025-08-20 19:57:08,075: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-20 19:57:33,834: INFO/ForkPoolWorker-2]   > 评分成功: 关于“非共识观点”的本质探讨... [分数: 0.93]
+[2025-08-20 19:57:33,836: INFO/ForkPoolWorker-2]   > 评分成功: MCP技术趋势与认知差异的案例分析... [分数: 0.87]
+[2025-08-20 19:57:33,836: INFO/ForkPoolWorker-2]   > 评分成功: AI技术普及周期与创业结构变化趋势... [分数: 0.91]
+[2025-08-20 19:57:33,837: INFO/ForkPoolWorker-2]   > 评分成功: AI如何重构职业能力与经验价值体系... [分数: 0.95]
+[2025-08-20 19:57:33,837: INFO/ForkPoolWorker-2]   > 评分成功: AI时代下的能力重构与个人定位思考... [分数: 0.89]
+[2025-08-20 19:57:33,837: INFO/ForkPoolWorker-2]   > 评分成功: AI协作模式与未来工作范式探索... [分数: 0.96]
+[2025-08-20 19:57:33,837: INFO/ForkPoolWorker-2] 按评分排序完成，保持原有固定ID不变
+[2025-08-20 19:57:33,837: INFO/ForkPoolWorker-2] 按ID排序完成，保持时间顺序
+[2025-08-20 19:57:33,838: INFO/ForkPoolWorker-2] 所有切片评分完成
+[2025-08-20 19:57:33,839: INFO/ForkPoolWorker-2] 评分结果已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/step3_all_scored.json
+[2025-08-20 19:57:33,840: INFO/ForkPoolWorker-2] 评分结果已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/step3_scoring/step3_scoring.json
+[2025-08-20 19:57:33,840: INFO/ForkPoolWorker-2] 步骤3完成: [{'id': '1', 'start_time': '00:00:00,000', 'end_time': '00:05:40,240', 'outline': '关于“非共识观点”的本质探讨', 'content': ['真正基于个人原则的非共识观点非常少见', '多数所谓的非共识是小圈子内部的共识传播', '投资人圈子与技术圈、大众圈的非共识认知差异', '“非共识”更多是信息获取渠道的差异，而非独立思考的结果'], 'chunk_index': 0, 'final_score': 0.93, 'recommend_reason': '颠覆认知！真正非共识观点稀缺，多数只是圈子内的共识传播。'}, {'id': '2', 'start_time': '00:05:40,240', 'end_time': '00:12:20,920', 'outline': 'MCP技术趋势与认知差异的案例分析', 'content': ['投资人圈与技术开发者圈对MCP的认知错位', '技术圈对MCP的早期尝试与性能验证', '投资人社群中非共识如何演变为共识并推动创业', '技术圈领先于投资人圈的认知验证案例'], 'chunk_index': 0, 'final_score': 0.87, 'recommend_reason': '深度拆解MCP技术趋势，揭示投资人与技术圈的认知错位与转化机制。'}, {'id': '3', 'start_time': '00:12:20,920', 'end_time': '00:17:40,840', 'outline': 'AI技术普及周期与创业结构变化趋势', 'content': ['AI技术普及的两个阶段：企业级应用先行、消费级创业兴起', '早期AI创业者的典型背景：成熟创业者、技术专家、企业服务经验', '当前趋势：2C创业门槛降低，年轻创业者涌入', '年轻创业者的特征：早期产品经验、社区运营能力、快速试错能力'], 'chunk_index': 0, 'final_score': 0.91, 'recommend_reason': 'AI创业正在从企业走向大众，年轻创业者迎来新机遇。'}, {'id': '4', 'start_time': '00:17:40,840', 'end_time': '00:19:22,440', 'outline': 'AI如何重构职业能力与经验价值体系', 'content': ['AI拉平经验积累差距：大学生与资深工程师起点趋同', '大厂员工面临认知包袱与身份挑战', '职业发展核心能力从技能积累转向问题定义与决策能力', '开发者、设计师、创业者的核心竞争力本质趋同'], 'chunk_index': 0, 'final_score': 0.95, 'recommend_reason': 'AI正在重塑职场规则，经验优势不再，核心能力全面重构。'}, {'id': '5', 'start_time': '00:23:00,440', 'end_time': '00:19:22,440', 'outline': 'AI时代下的能力重构与个人定位思考', 'content': ['传统教育体系对“原能力”培养的缺失', '应试思维导致对可迁移能力的认知不足', '从技术专家到团队管理者的能力跃迁逻辑', '在AI时代重新思考个人核心竞争力的构建'], 'chunk_index': 0, 'final_score': 0.89, 'recommend_reason': '反思教育短板，重新定义AI时代个人核心竞争力的成长路径。'}, {'id': '6', 'start_time': '00:28:30,600', 'end_time': '00:19:22,440', 'outline': 'AI协作模式与未来工作范式探索', 'content': ['AI网络（Information Network）中人与算法的协作关系', '人类角色转变为“硅基智能管理者”（Silicon Intelligence Manager）', '有效协作模式：弱模型做决策，强模型做执行', '未来超级个体的可能形态：与AI深度结合的小型专业团队'], 'chunk_index': 0, 'final_score': 0.96, 'recommend_reason': '未来工作已来，人与AI协作将催生超级个体新形态。'}]
+[2025-08-20 19:57:33,841: INFO/ForkPoolWorker-2] 开始步骤4: 标题生成
+[2025-08-20 19:57:33,845: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:57:33,846: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:57:33,848: INFO/ForkPoolWorker-2] 开始为 6 个高分片段进行批量标题生成...
+[2025-08-20 19:57:33,849: INFO/ForkPoolWorker-2] 处理块 0，其中包含 6 个片段...
+[2025-08-20 19:57:33,849: INFO/ForkPoolWorker-2]   > 开始调用API生成标题...
+[2025-08-20 19:57:33,849: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-20 19:57:36,935: INFO/ForkPoolWorker-2]   > LLM原始响应已保存到 /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/step4_llm_raw_output/chunk_0.txt
+[2025-08-20 19:57:36,936: INFO/ForkPoolWorker-2]   > 为片段 1 ('关于“非共识观点”的本质探讨...') 生成标题: 真正非共识观点有多稀缺？多数只是圈子内的共识传播
+[2025-08-20 19:57:36,937: INFO/ForkPoolWorker-2]   > 为片段 2 ('MCP技术趋势与认知差异的案例分析...') 生成标题: 投资人与技术圈的认知错位，如何推动MCP技术走向创业风口？
+[2025-08-20 19:57:36,937: INFO/ForkPoolWorker-2]   > 为片段 3 ('AI技术普及周期与创业结构变化趋势...') 生成标题: AI创业从企业走向大众，年轻创业者迎来新一波入场机会
+[2025-08-20 19:57:36,938: INFO/ForkPoolWorker-2]   > 为片段 4 ('AI如何重构职业能力与经验价值体系...') 生成标题: AI正在拉平经验差距，职场人的核心能力面临全面重构
+[2025-08-20 19:57:36,938: INFO/ForkPoolWorker-2]   > 为片段 5 ('AI时代下的能力重构与个人定位思考...') 生成标题: 教育体系的短板暴露，AI时代如何重新定义个人竞争力？
+[2025-08-20 19:57:36,938: INFO/ForkPoolWorker-2]   > 为片段 6 ('AI协作模式与未来工作范式探索...') 生成标题: 未来工作已来，人类将成为硅基智能的管理者
+[2025-08-20 19:57:36,939: INFO/ForkPoolWorker-2] 所有高分片段标题生成完成
+[2025-08-20 19:57:36,940: INFO/ForkPoolWorker-2] 带标题的片段数据已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/step4_title/step4_title.json
+[2025-08-20 19:57:36,941: INFO/ForkPoolWorker-2] 步骤4完成: [{'id': '1', 'start_time': '00:00:00,000', 'end_time': '00:05:40,240', 'outline': '关于“非共识观点”的本质探讨', 'content': ['真正基于个人原则的非共识观点非常少见', '多数所谓的非共识是小圈子内部的共识传播', '投资人圈子与技术圈、大众圈的非共识认知差异', '“非共识”更多是信息获取渠道的差异，而非独立思考的结果'], 'chunk_index': 0, 'final_score': 0.93, 'recommend_reason': '颠覆认知！真正非共识观点稀缺，多数只是圈子内的共识传播。', 'generated_title': '真正非共识观点有多稀缺？多数只是圈子内的共识传播'}, {'id': '2', 'start_time': '00:05:40,240', 'end_time': '00:12:20,920', 'outline': 'MCP技术趋势与认知差异的案例分析', 'content': ['投资人圈与技术开发者圈对MCP的认知错位', '技术圈对MCP的早期尝试与性能验证', '投资人社群中非共识如何演变为共识并推动创业', '技术圈领先于投资人圈的认知验证案例'], 'chunk_index': 0, 'final_score': 0.87, 'recommend_reason': '深度拆解MCP技术趋势，揭示投资人与技术圈的认知错位与转化机制。', 'generated_title': '投资人与技术圈的认知错位，如何推动MCP技术走向创业风口？'}, {'id': '3', 'start_time': '00:12:20,920', 'end_time': '00:17:40,840', 'outline': 'AI技术普及周期与创业结构变化趋势', 'content': ['AI技术普及的两个阶段：企业级应用先行、消费级创业兴起', '早期AI创业者的典型背景：成熟创业者、技术专家、企业服务经验', '当前趋势：2C创业门槛降低，年轻创业者涌入', '年轻创业者的特征：早期产品经验、社区运营能力、快速试错能力'], 'chunk_index': 0, 'final_score': 0.91, 'recommend_reason': 'AI创业正在从企业走向大众，年轻创业者迎来新机遇。', 'generated_title': 'AI创业从企业走向大众，年轻创业者迎来新一波入场机会'}, {'id': '4', 'start_time': '00:17:40,840', 'end_time': '00:19:22,440', 'outline': 'AI如何重构职业能力与经验价值体系', 'content': ['AI拉平经验积累差距：大学生与资深工程师起点趋同', '大厂员工面临认知包袱与身份挑战', '职业发展核心能力从技能积累转向问题定义与决策能力', '开发者、设计师、创业者的核心竞争力本质趋同'], 'chunk_index': 0, 'final_score': 0.95, 'recommend_reason': 'AI正在重塑职场规则，经验优势不再，核心能力全面重构。', 'generated_title': 'AI正在拉平经验差距，职场人的核心能力面临全面重构'}, {'id': '5', 'start_time': '00:23:00,440', 'end_time': '00:19:22,440', 'outline': 'AI时代下的能力重构与个人定位思考', 'content': ['传统教育体系对“原能力”培养的缺失', '应试思维导致对可迁移能力的认知不足', '从技术专家到团队管理者的能力跃迁逻辑', '在AI时代重新思考个人核心竞争力的构建'], 'chunk_index': 0, 'final_score': 0.89, 'recommend_reason': '反思教育短板，重新定义AI时代个人核心竞争力的成长路径。', 'generated_title': '教育体系的短板暴露，AI时代如何重新定义个人竞争力？'}, {'id': '6', 'start_time': '00:28:30,600', 'end_time': '00:19:22,440', 'outline': 'AI协作模式与未来工作范式探索', 'content': ['AI网络（Information Network）中人与算法的协作关系', '人类角色转变为“硅基智能管理者”（Silicon Intelligence Manager）', '有效协作模式：弱模型做决策，强模型做执行', '未来超级个体的可能形态：与AI深度结合的小型专业团队'], 'chunk_index': 0, 'final_score': 0.96, 'recommend_reason': '未来工作已来，人与AI协作将催生超级个体新形态。', 'generated_title': '未来工作已来，人类将成为硅基智能的管理者'}]
+[2025-08-20 19:57:36,942: INFO/ForkPoolWorker-2] 开始步骤5: 主题聚类
+[2025-08-20 19:57:36,946: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:57:36,947: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:57:36,950: INFO/ForkPoolWorker-2] 开始进行主题聚类...
+[2025-08-20 19:57:36,951: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-20 19:57:44,856: WARNING/ForkPoolWorker-2] 合集 1 有效片段少于2个，跳过
+[2025-08-20 19:57:44,858: WARNING/ForkPoolWorker-2] 合集 3 有效片段少于2个，跳过
+[2025-08-20 19:57:44,859: WARNING/ForkPoolWorker-2] LLM聚类结果不理想，使用预聚类结果
+[2025-08-20 19:57:44,859: INFO/ForkPoolWorker-2] 主题聚类完成，共1个合集
+[2025-08-20 19:57:44,860: INFO/ForkPoolWorker-2] 合集数据已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/step5_clustering/step5_clustering.json
+[2025-08-20 19:57:44,861: INFO/ForkPoolWorker-2] 步骤5完成: [{'id': '1', 'collection_title': '职场成长记', 'collection_summary': '探讨职业发展、技能提升与职场心态变化。', 'clip_ids': ['4', '5', '6']}]
+[2025-08-20 19:57:44,861: INFO/ForkPoolWorker-2] 开始步骤6: 视频切割
+[2025-08-20 19:57:44,866: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:57:44,867: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-20 19:57:44,870: INFO/ForkPoolWorker-2] 开始生成切片视频...
+[2025-08-20 19:57:44,870: INFO/ForkPoolWorker-2] 提取切片 1: 00:00:00,000 -> 00:05:40,240, 输出: /Users/zhoukk/autoclip/data/output/clips/1_真正非共识观点有多稀缺？多数只是圈子内的共识传播.mp4
+[2025-08-20 19:57:45,280: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/1_真正非共识观点有多稀缺？多数只是圈子内的共识传播.mp4 (00:00:00.000 -> 00:05:40.240, 时长: 340.24秒)
+[2025-08-20 19:57:45,280: INFO/ForkPoolWorker-2] 切片 1 提取成功
+[2025-08-20 19:57:45,280: INFO/ForkPoolWorker-2] 提取切片 2: 00:05:40,240 -> 00:12:20,920, 输出: /Users/zhoukk/autoclip/data/output/clips/2_投资人与技术圈的认知错位，如何推动MCP技术走向创业风口？.mp4
+[2025-08-20 19:57:45,406: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/2_投资人与技术圈的认知错位，如何推动MCP技术走向创业风口？.mp4 (00:05:40.240 -> 00:12:20.920, 时长: 400.68秒)
+[2025-08-20 19:57:45,406: INFO/ForkPoolWorker-2] 切片 2 提取成功
+[2025-08-20 19:57:45,406: INFO/ForkPoolWorker-2] 提取切片 3: 00:12:20,920 -> 00:17:40,840, 输出: /Users/zhoukk/autoclip/data/output/clips/3_AI创业从企业走向大众，年轻创业者迎来新一波入场机会.mp4
+[2025-08-20 19:57:45,512: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/3_AI创业从企业走向大众，年轻创业者迎来新一波入场机会.mp4 (00:12:20.920 -> 00:17:40.840, 时长: 319.92秒)
+[2025-08-20 19:57:45,513: INFO/ForkPoolWorker-2] 切片 3 提取成功
+[2025-08-20 19:57:45,513: INFO/ForkPoolWorker-2] 提取切片 4: 00:17:40,840 -> 00:19:22,440, 输出: /Users/zhoukk/autoclip/data/output/clips/4_AI正在拉平经验差距，职场人的核心能力面临全面重构.mp4
+[2025-08-20 19:57:45,573: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/4_AI正在拉平经验差距，职场人的核心能力面临全面重构.mp4 (00:17:40.840 -> 00:19:22.440, 时长: 101.60秒)
+[2025-08-20 19:57:45,574: INFO/ForkPoolWorker-2] 切片 4 提取成功
+[2025-08-20 19:57:45,574: INFO/ForkPoolWorker-2] 提取切片 5: 00:23:00,440 -> 00:19:22,440, 输出: /Users/zhoukk/autoclip/data/output/clips/5_教育体系的短板暴露，AI时代如何重新定义个人竞争力？.mp4
+[2025-08-20 19:57:45,614: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/5_教育体系的短板暴露，AI时代如何重新定义个人竞争力？.mp4 (00:23:00.440 -> 00:19:22.440, 时长: -218.00秒)
+[2025-08-20 19:57:45,614: INFO/ForkPoolWorker-2] 切片 5 提取成功
+[2025-08-20 19:57:45,614: INFO/ForkPoolWorker-2] 提取切片 6: 00:28:30,600 -> 00:19:22,440, 输出: /Users/zhoukk/autoclip/data/output/clips/6_未来工作已来，人类将成为硅基智能的管理者.mp4
+[2025-08-20 19:57:45,654: INFO/ForkPoolWorker-2] 成功提取视频片段: /Users/zhoukk/autoclip/data/output/clips/6_未来工作已来，人类将成为硅基智能的管理者.mp4 (00:28:30.600 -> 00:19:22.440, 时长: -548.16秒)
+[2025-08-20 19:57:45,655: INFO/ForkPoolWorker-2] 切片 6 提取成功
+[2025-08-20 19:57:45,655: INFO/ForkPoolWorker-2] 切片视频生成完成，共6个切片
+[2025-08-20 19:57:45,655: INFO/ForkPoolWorker-2] 开始生成合集视频...
+[2025-08-20 19:57:45,655: INFO/ForkPoolWorker-2] 找到合集 1 的切片: 4_大量职场‘虚假工作’即将消失，AI让信息整理变得无限廉价.mp4
+[2025-08-20 19:57:45,655: INFO/ForkPoolWorker-2] 找到合集 1 的切片: 5_教育体系的短板暴露，AI时代如何重新定义个人竞争力？.mp4
+[2025-08-20 19:57:45,655: INFO/ForkPoolWorker-2] 找到合集 1 的切片: 6_AI不会取代你，但会用AI的‘超级个体’会碾压你.mp4
+[2025-08-20 19:57:45,735: INFO/ForkPoolWorker-2] 成功创建合集: /Users/zhoukk/autoclip/data/output/collections/职场成长记.mp4
+[2025-08-20 19:57:45,735: INFO/ForkPoolWorker-2] 成功创建合集 1: /Users/zhoukk/autoclip/data/output/collections/职场成长记.mp4
+[2025-08-20 19:57:45,735: INFO/ForkPoolWorker-2] 合集视频生成完成，共1个合集
+[2025-08-20 19:57:45,736: INFO/ForkPoolWorker-2] 切片元数据已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/clips_metadata.json
+[2025-08-20 19:57:45,736: INFO/ForkPoolWorker-2] 合集元数据已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/collections_metadata.json
+[2025-08-20 19:57:45,736: INFO/ForkPoolWorker-2] 视频生成完成: 6个切片, 1个合集
+[2025-08-20 19:57:45,736: INFO/ForkPoolWorker-2] 步骤6结果已保存到: /Users/zhoukk/autoclip/data/projects/5c48803d-0aa7-48d7-a270-2b33e4954f25/step6_video/step6_video_output.json
+[2025-08-20 19:57:45,738: INFO/ForkPoolWorker-2] 成功保存 6 个切片到数据库
+[2025-08-20 19:57:45,739: ERROR/ForkPoolWorker-2] 保存合集到数据库失败: 'collection_type' is an invalid keyword argument for Collection
+[2025-08-20 19:57:45,739: INFO/ForkPoolWorker-2] 步骤6完成: {'clips_generated': 6, 'collections_generated': 1, 'clip_paths': ['/Users/zhoukk/autoclip/data/output/clips/1_真正非共识观点有多稀缺？多数只是圈子内的共识传播.mp4', '/Users/zhoukk/autoclip/data/output/clips/2_投资人与技术圈的认知错位，如何推动MCP技术走向创业风口？.mp4', '/Users/zhoukk/autoclip/data/output/clips/3_AI创业从企业走向大众，年轻创业者迎来新一波入场机会.mp4', '/Users/zhoukk/autoclip/data/output/clips/4_AI正在拉平经验差距，职场人的核心能力面临全面重构.mp4', '/Users/zhoukk/autoclip/data/output/clips/5_教育体系的短板暴露，AI时代如何重新定义个人竞争力？.mp4', '/Users/zhoukk/autoclip/data/output/clips/6_未来工作已来，人类将成为硅基智能的管理者.mp4'], 'collection_paths': ['/Users/zhoukk/autoclip/data/output/collections/职场成长记.mp4']}
+[2025-08-20 19:57:45,740: INFO/ForkPoolWorker-2] 项目处理完成: 5c48803d-0aa7-48d7-a270-2b33e4954f25
+[2025-08-20 19:57:45,741: INFO/ForkPoolWorker-2] 任务更新通知已发送: 44b171eb-7dc4-4c57-bbb8-e5fdcd9e2d16 - completed
+[2025-08-20 19:57:45,741: INFO/ForkPoolWorker-2] 项目更新通知已发送: 5c48803d-0aa7-48d7-a270-2b33e4954f25 - completed
+[2025-08-20 19:57:45,741: INFO/ForkPoolWorker-2] 系统通知已发送: 处理完成 - 项目 5c48803d-0aa7-48d7-a270-2b33e4954f25 的视频处理已完成
+[2025-08-20 19:57:45,741: INFO/ForkPoolWorker-2] 视频流水线处理完成: 5c48803d-0aa7-48d7-a270-2b33e4954f25
+[2025-08-20 19:57:45,742: INFO/ForkPoolWorker-2] Task backend.tasks.processing.process_video_pipeline[44b171eb-7dc4-4c57-bbb8-e5fdcd9e2d16] succeeded in 75.80394383397652s: {'success': True, 'project_id': '5c48803d-0aa7-48d7-a270-2b33e4954f25', 'task_id': '44b171eb-7dc4-4c57-bbb8-e5fdcd9e2d16', 'result': {'project_id': '5c48803d-0aa7-48d7-a270-2b33e4954f25', 'status': 'completed', 'steps': {'step1': [...], 'step2': [...], 'step3': [...], 'step4': [...], 'step5': [...], 'step6': {...}}, 'message': '项目处理完成'}, 'message': '视频处理流水线完成'}

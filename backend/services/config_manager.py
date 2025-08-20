@@ -311,8 +311,8 @@ class ProjectConfigManager:
         # 尝试从数据库获取项目配置
         try:
             from sqlalchemy.orm import Session
-            from backend.core.database import SessionLocal
-            from backend.models.project import Project
+            from core.database import SessionLocal
+            from models.project import Project
             
             db = SessionLocal()
             try:

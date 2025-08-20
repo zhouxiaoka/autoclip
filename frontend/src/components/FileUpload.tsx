@@ -84,11 +84,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
       return
     }
 
-    if (!files.srt) {
-      message.error('请同时导入字幕文件(.srt)')
-      return
-    }
-
     if (!projectName.trim()) {
       message.error('请输入项目名称')
       return
@@ -98,20 +93,22 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
     setUploadProgress(0)
     
     try {
-      // 模拟上传进度
+      // 模拟上传进度，更真实的进度显示
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => {
-          if (prev >= 90) {
+          if (prev >= 85) {
             clearInterval(progressInterval)
             return prev
           }
-          return prev + 10
+          // 使用递减的增量，模拟真实上传进度
+          const increment = Math.max(1, Math.floor((90 - prev) / 10))
+          return prev + increment
         })
-      }, 200)
+      }, 300)
 
       console.log('开始上传文件:', {
         video_file: files.video.name,
-        srt_file: files.srt.name,
+        srt_file: files.srt?.name || '(将使用语音识别生成)',
         project_name: projectName.trim(),
         video_category: selectedCategory
       })
@@ -146,12 +143,28 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
       
     } catch (error: any) {
       console.error('上传失败，详细错误:', error)
-      console.error('错误响应:', error.response)
-      console.error('错误状态:', error.response?.status)
-      console.error('错误数据:', error.response?.data)
       
       let errorMessage = '上传失败，请重试'
-      if (error.response?.data?.detail) {
+      let errorType = 'error'
+      
+      // 根据错误类型提供更友好的错误信息
+      if (error.response?.status === 413) {
+        errorMessage = '文件太大，请选择较小的视频文件'
+        errorType = 'warning'
+      } else if (error.response?.status === 415) {
+        errorMessage = '不支持的文件格式，请选择MP4、AVI、MOV、MKV或WEBM格式的视频'
+        errorType = 'warning'
+      } else if (error.response?.status === 400) {
+        if (error.response?.data?.detail) {
+          errorMessage = error.response.data.detail
+        } else {
+          errorMessage = '文件格式或内容有问题，请检查后重试'
+        }
+      } else if (error.response?.status === 500) {
+        errorMessage = '服务器处理文件时出错，请稍后重试'
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = '上传超时，请检查网络连接后重试'
+      } else if (error.response?.data?.detail) {
         errorMessage = error.response.data.detail
       } else if (error.userMessage) {
         errorMessage = error.userMessage
@@ -159,7 +172,17 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
         errorMessage = error.message
       }
       
-      message.error(errorMessage)
+      // 显示错误信息
+      if (errorType === 'warning') {
+        message.warning(errorMessage)
+      } else {
+        message.error(errorMessage)
+      }
+      
+      // 如果是网络错误，提供重试建议
+      if (error.code === 'ECONNABORTED' || error.response?.status >= 500) {
+        message.info('如果问题持续存在，请检查网络连接或联系技术支持', 5)
+      }
     } finally {
       setUploading(false)
     }
@@ -241,7 +264,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
             {isDragActive ? '松开鼠标导入文件' : '点击或拖拽文件到此区域'}
           </Text>
           <Text style={{ color: '#cccccc', fontSize: '14px', lineHeight: '1.5' }}>
-            支持 MP4、AVI、MOV、MKV、WebM 格式，<Text style={{ color: '#ff9500', fontWeight: 600 }}>必须同时导入字幕文件(.srt)</Text>
+            支持 MP4、AVI、MOV、MKV、WebM 格式，<Text style={{ color: '#52c41a', fontWeight: 600 }}>可选择导入字幕文件(.srt)或使用AI自动生成</Text>
           </Text>
         </div>
       </div>
@@ -434,21 +457,21 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
             )}
           </Space>
           
-          {/* 缺少字幕文件提示 */}
+          {/* AI字幕生成提示 */}
           {files.video && !files.srt && (
             <div style={{
               marginTop: '12px',
               padding: '12px 16px',
-              background: 'rgba(255, 149, 0, 0.1)',
-              border: '1px solid rgba(255, 149, 0, 0.3)',
+              background: 'rgba(82, 196, 26, 0.1)',
+              border: '1px solid rgba(82, 196, 26, 0.3)',
               borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               gap: '8px'
             }}>
-              <SubnodeOutlined style={{ color: '#ff9500', fontSize: '16px' }} />
-              <Text style={{ color: '#ff9500', fontSize: '14px', fontWeight: 500 }}>
-                请添加字幕文件(.srt)以完成导入
+              <SubnodeOutlined style={{ color: '#52c41a', fontSize: '16px' }} />
+              <Text style={{ color: '#52c41a', fontSize: '14px', fontWeight: 500 }}>
+                将使用AI语音识别自动生成字幕文件
               </Text>
             </div>
           )}
@@ -496,7 +519,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
             type="primary" 
             size="large"
             loading={uploading}
-            disabled={!files.video || !files.srt || !projectName.trim()}
+            disabled={!files.video || !projectName.trim()}
             onClick={handleUpload}
             style={{
               height: '48px',

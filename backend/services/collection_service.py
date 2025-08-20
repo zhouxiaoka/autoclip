@@ -7,6 +7,7 @@ import logging
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from pathlib import Path
+import json
 
 from services.base import BaseService
 from repositories.collection_repository import CollectionRepository
@@ -43,6 +44,51 @@ class CollectionService(BaseService[Collection, CollectionCreate, CollectionUpda
     def get_collections_by_project(self, project_id: str, skip: int = 0, limit: int = 100) -> List[Collection]:
         """Get collections by project ID."""
         return self.repository.find_by(project_id=project_id)
+    
+    def get_collections_paginated(
+        self, 
+        pagination: PaginationParams,
+        filters: Optional[CollectionFilter] = None
+    ) -> CollectionListResponse:
+        """Get paginated collections with filtering."""
+        filter_dict = {}
+        if filters:
+            filter_data = filters.model_dump()
+            filter_dict = {k: v for k, v in filter_data.items() if v is not None}
+        
+        items, pagination_response = self.get_paginated(pagination, filter_dict)
+        
+        # Convert to response schemas
+        collection_responses = []
+        for collection in items:
+            status_obj = getattr(collection, 'status', None)
+            status_value = status_obj.value if hasattr(status_obj, 'value') else 'created'
+            
+            # 获取clip_ids
+            clip_ids = []
+            metadata = getattr(collection, 'collection_metadata', {}) or {}
+            if metadata and 'clip_ids' in metadata:
+                clip_ids = metadata['clip_ids']
+            
+            collection_responses.append(CollectionResponse(
+                id=str(collection.id),
+                project_id=str(collection.project_id),
+                name=str(collection.name),
+                description=str(collection.description) if collection.description else None,
+                theme=getattr(collection, 'theme', None),
+                status=status_value,
+                tags=getattr(collection, 'tags', []) or [],
+                metadata=getattr(collection, 'collection_metadata', {}) or {},
+                created_at=getattr(collection, 'created_at', None) if isinstance(getattr(collection, 'created_at', None), (type(None), __import__('datetime').datetime)) else None,
+                updated_at=getattr(collection, 'updated_at', None) if isinstance(getattr(collection, 'updated_at', None), (type(None), __import__('datetime').datetime)) else None,
+                total_clips=getattr(collection, 'clips_count', 0) or 0,
+                clip_ids=clip_ids
+            ))
+        
+        return CollectionListResponse(
+            items=collection_responses,
+            pagination=pagination_response
+        )
     
     def create_collections_from_pipeline_result(self, project_id: int, clustering_result: Dict[str, Any]) -> List[Collection]:
         """从Pipeline聚类结果创建合集
@@ -270,3 +316,60 @@ class CollectionService(BaseService[Collection, CollectionCreate, CollectionUpda
             'average_duration_per_collection': total_duration / total_collections if total_collections > 0 else 0,
             'theme_statistics': theme_stats
         }
+    
+    def delete(self, collection_id: str) -> bool:
+        """删除合集 - 删除数据库记录并记录删除信息"""
+        try:
+            # 获取合集信息
+            collection = self.get(collection_id)
+            if not collection:
+                logger.warning(f"合集不存在: {collection_id}")
+                return False
+            
+            # 获取项目目录
+            from core.config import get_data_directory
+            data_dir = get_data_directory()
+            project_dir = data_dir / "projects" / collection.project_id
+            
+            # 删除数据库记录
+            success = super().delete(collection_id)
+            if not success:
+                logger.error(f"删除数据库记录失败: {collection_id}")
+                return False
+            
+            # 记录删除信息到文件系统
+            self._record_collection_deletion(project_dir, collection_id)
+            
+            logger.info(f"合集删除成功: {collection_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"删除合集失败: {collection_id}, 错误: {str(e)}")
+            return False
+    
+    def _record_collection_deletion(self, project_dir: Path, collection_id: str):
+        """记录合集删除信息到文件系统"""
+        try:
+            deleted_file = project_dir / "deleted_collections.json"
+            
+            # 读取现有的删除记录
+            deleted_collections = {"deleted_collection_ids": []}
+            if deleted_file.exists():
+                try:
+                    with open(deleted_file, 'r', encoding='utf-8') as f:
+                        deleted_collections = json.load(f)
+                except Exception as e:
+                    logger.warning(f"读取删除记录失败: {e}")
+            
+            # 添加新的删除记录
+            if collection_id not in deleted_collections["deleted_collection_ids"]:
+                deleted_collections["deleted_collection_ids"].append(collection_id)
+                
+                # 写入文件
+                with open(deleted_file, 'w', encoding='utf-8') as f:
+                    json.dump(deleted_collections, f, ensure_ascii=False, indent=2)
+                
+                logger.info(f"已记录合集删除: {collection_id}")
+            
+        except Exception as e:
+            logger.error(f"记录合集删除失败: {collection_id}, 错误: {str(e)}")

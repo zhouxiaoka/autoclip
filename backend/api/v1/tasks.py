@@ -9,8 +9,9 @@ from core.database import get_db
 from services.task_service import TaskService
 from services.processing_service import ProcessingService
 from services.websocket_notification_service import WebSocketNotificationService
-from schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskListResponse
-from schemas.base import PaginationParams
+from schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskListResponse, TaskStatus
+from schemas.base import PaginationParams, PaginationResponse
+from models.task import Task
 
 router = APIRouter()
 
@@ -40,7 +41,7 @@ async def get_tasks(
         
         # 应用过滤器
         if project_id:
-            query = query.filter(Task.project_id == project_id)
+            query = query.filter(Task.project_id == str(project_id))
         if status:
             query = query.filter(Task.status == status)
         if task_type:
@@ -148,7 +149,7 @@ async def get_task(
 ):
     """Get a task by ID."""
     try:
-        task = db.query(Task).filter(Task.id == int(task_id)).first()
+        task = db.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         
@@ -186,7 +187,7 @@ async def get_task_status(
 ):
     """Get detailed task status including Celery task info."""
     try:
-        task = db.query(Task).filter(Task.id == int(task_id)).first()
+        task = db.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         
@@ -234,7 +235,7 @@ async def cancel_task(
 ):
     """Cancel a running task."""
     try:
-        task = db.query(Task).filter(Task.id == int(task_id)).first()
+        task = db.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         

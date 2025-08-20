@@ -5,15 +5,31 @@
 
 import os
 import logging
+import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional
 from celery import shared_task
-from core.celery_app import celery_app
+from core.celery_simple import celery_app
+import sys
+from pathlib import Path
+
+# 添加项目根目录到Python路径
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 from services.processing_orchestrator import ProcessingOrchestrator
-from services.pipeline_adapter import PipelineAdapter
+from services.pipeline_adapter import PipelineAdapter, create_pipeline_adapter_sync
 from core.config import get_data_directory
+from core.database import SessionLocal
+from models.task import Task, TaskStatus, TaskType
+from core.progress_manager import get_progress_manager
+from services.websocket_notification_service import WebSocketNotificationService
 
 logger = logging.getLogger(__name__)
+
+# 初始化通知服务
+notification_service = WebSocketNotificationService()
 
 def run_async_notification(coro):
     """运行异步通知的辅助函数"""
@@ -46,6 +62,14 @@ def process_video_pipeline(self, project_id: str, input_video_path: str, input_s
         db = SessionLocal()
         
         try:
+            # 验证项目是否存在
+            from models.project import Project
+            project = db.query(Project).filter(Project.id == project_id).first()
+            if not project:
+                raise ValueError(f"项目 {project_id} 不存在")
+            
+            logger.info(f"验证项目存在: {project_id}")
+            
             # 创建任务记录
             task = Task(
                 name=f"视频处理流水线",
@@ -71,7 +95,7 @@ def process_video_pipeline(self, project_id: str, input_video_path: str, input_s
             progress_manager = get_progress_manager(db)
             
             # 创建Pipeline适配器，传入task.id以启用进度管理
-            pipeline_adapter = create_pipeline_adapter_sync(db, task.id)
+            pipeline_adapter = create_pipeline_adapter_sync(db, task.id, project_id)
             
             # 执行Pipeline处理
             result = pipeline_adapter.process_project_sync(project_id, input_video_path, input_srt_path)
