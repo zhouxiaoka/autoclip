@@ -5094,3 +5094,8 @@ whisper: error: argument --word_timestamps: expected one argument
 2025-08-21 01:02:20,353 - main - INFO - 启动AutoClip API服务...
 2025-08-21 01:02:20,354 - main - INFO - 数据库表创建完成
 2025-08-21 01:02:20,354 - main - INFO - API密钥已加载到环境变量
+2025-08-21 01:05:24,553 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 01:05:24,553 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 01:05:24,652 - main - INFO - 启动AutoClip API服务...
+2025-08-21 01:05:24,653 - main - INFO - 数据库表创建完成
+2025-08-21 01:05:24,653 - main - INFO - API密钥已加载到环境变量
