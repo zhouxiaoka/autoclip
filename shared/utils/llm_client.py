@@ -49,11 +49,19 @@ class LLMClient:
             try:
                 from pathlib import Path
                 # 尝试从项目根目录的data/settings.json读取
-                settings_file = Path(__file__).parent.parent.parent.parent / "data" / "settings.json"
+                # 修复路径计算：从shared/utils/llm_client.py到项目根目录
+                current_file = Path(__file__)
+                project_root = current_file.parent.parent.parent  # shared/utils -> shared -> project_root
+                settings_file = project_root / "data" / "settings.json"
+                
                 if settings_file.exists():
                     with open(settings_file, 'r', encoding='utf-8') as f:
                         settings = json.load(f)
                         api_key = settings.get("dashscope_api_key", "")
+                        if api_key:
+                            logger.info(f"从设置文件读取到API密钥: {api_key[:10]}...")
+                else:
+                    logger.warning(f"设置文件不存在: {settings_file}")
             except Exception as e:
                 logger.warning(f"无法从设置文件读取API Key: {e}")
         

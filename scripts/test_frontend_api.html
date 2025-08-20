@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>API测试页面</h1>
+    <button onclick="testClipsAPI()">测试切片API</button>
+    <button onclick="testCollectionsAPI()">测试合集API</button>
+    <div id="result"></div>
+
+    <script>
+        const api = axios.create({
+            baseURL: 'http://localhost:8000/api/v1',
+            timeout: 300000,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        async function testClipsAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '测试中...';
+            
+            try {
+                const projectId = '1fdb0bf1-7f3c-44f7-a69d-90c5a1d26fbe';
+                const response = await api.get(`/clips/?project_id=${projectId}`);
+                const clips = response.data.items || response.data || [];
+                
+                let html = '<h3>切片API测试结果:</h3>';
+                html += `<p>找到 ${clips.length} 个切片</p>`;
+                
+                clips.forEach((clip, index) => {
+                    html += `<div style="border: 1px solid #ccc; margin: 10px; padding: 10px;">`;
+                    html += `<h4>切片 ${index + 1}:</h4>`;
+                    html += `<p><strong>ID:</strong> ${clip.id}</p>`;
+                    html += `<p><strong>标题:</strong> ${clip.title}</p>`;
+                    html += `<p><strong>开始时间:</strong> ${clip.start_time}秒</p>`;
+                    html += `<p><strong>结束时间:</strong> ${clip.end_time}秒</p>`;
+                    html += `<p><strong>分数:</strong> ${clip.score}</p>`;
+                    
+                    const metadata = clip.clip_metadata || {};
+                    html += `<p><strong>推荐理由:</strong> ${metadata.recommend_reason || '无'}</p>`;
+                    html += `<p><strong>内容要点:</strong> ${(metadata.content || []).length} 个</p>`;
+                    html += '</div>';
+                });
+                
+                resultDiv.innerHTML = html;
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: red;">错误: ${error.message}</p>`;
+                console.error('API错误:', error);
+            }
+        }
+
+        async function testCollectionsAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '测试中...';
+            
+            try {
+                const projectId = '1fdb0bf1-7f3c-44f7-a69d-90c5a1d26fbe';
+                const response = await api.get(`/collections/?project_id=${projectId}`);
+                const collections = response.data.items || response.data || [];
+                
+                let html = '<h3>合集API测试结果:</h3>';
+                html += `<p>找到 ${collections.length} 个合集</p>`;
+                
+                collections.forEach((collection, index) => {
+                    html += `<div style="border: 1px solid #ccc; margin: 10px; padding: 10px;">`;
+                    html += `<h4>合集 ${index + 1}:</h4>`;
+                    html += `<p><strong>ID:</strong> ${collection.id}</p>`;
+                    html += `<p><strong>名称:</strong> ${collection.name}</p>`;
+                    html += `<p><strong>描述:</strong> ${collection.description}</p>`;
+                    html += `<p><strong>切片ID:</strong> ${collection.clip_ids.join(', ')}</p>`;
+                    html += '</div>';
+                });
+                
+                resultDiv.innerHTML = html;
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: red;">错误: ${error.message}</p>`;
+                console.error('API错误:', error);
+            }
+        }
+    </script>
+</body>
+</html>
+

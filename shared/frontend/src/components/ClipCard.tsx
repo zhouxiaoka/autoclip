@@ -108,7 +108,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
 
 
   const formatTime = (timeStr: string) => {
-    // 将 SRT 时间格式转换为显示格式
+    // 将 SRT 时间格式转换为显示格式，移除小数点后的毫秒部分
     return timeStr.replace(',', '.').substring(0, 8)
   }
 
@@ -123,10 +123,12 @@ const ClipCard: React.FC<ClipCardProps> = ({
   }
 
   const getScoreColor = (score: number) => {
-    if (score >= 0.9) return '#52c41a'
-    if (score >= 0.8) return '#1890ff'
-    if (score >= 0.7) return '#faad14'
-    return '#ff4d4f'
+    // 根据分数区间设置不同的颜色
+    if (score >= 0.9) return '#52c41a' // 绿色 - 优秀
+    if (score >= 0.8) return '#1890ff' // 蓝色 - 良好
+    if (score >= 0.7) return '#faad14' // 橙色 - 一般
+    if (score >= 0.6) return '#ff7a45' // 红橙色 - 较差
+    return '#ff4d4f' // 红色 - 差
   }
 
   // 生成内容要点的tooltip内容
@@ -146,14 +148,35 @@ const ClipCard: React.FC<ClipCardProps> = ({
     return '暂无内容要点'
   }
 
+  // 获取要显示的内容要点
+  const getDisplayContent = () => {
+    if (clip.content && clip.content.length > 0) {
+      return clip.content.join(' ')
+    }
+    return clip.recommend_reason || '暂无内容要点'
+  }
+
+  // 检查文本是否需要截断
+  const [isTextTruncated, setIsTextTruncated] = useState(false)
+  const textRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    // 延迟检测，确保DOM已经渲染
+    const timer = setTimeout(() => {
+      if (textRef.current) {
+        const element = textRef.current
+        const isTruncated = element.scrollHeight > element.clientHeight
+        setIsTextTruncated(isTruncated)
+        console.log('Text truncation check:', { scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, isTruncated })
+      }
+    }, 100)
+    
+    return () => clearTimeout(timer)
+  }, [clip.content, clip.recommend_reason])
+
   return (
     <>
-      <Tooltip 
-        title={getContentTooltip()}
-        placement="top"
-        overlayStyle={{ maxWidth: '300px' }}
-      >
-        <Card
+      <Card
           className="clip-card"
           hoverable
           style={{ 
@@ -243,51 +266,32 @@ const ClipCard: React.FC<ClipCardProps> = ({
                 </div>
               </div>
               
-              {/* 底部信息栏 */}
+              {/* 右下角分数信息 */}
               <div 
                 style={{
                   position: 'absolute',
                   bottom: '12px',
-                  left: '12px',
                   right: '12px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <div style={{
-                  background: 'rgba(0,0,0,0.7)',
+                  background: getScoreColor(clip.final_score),
                   color: 'white',
                   padding: '4px 8px',
                   borderRadius: '8px',
-                  fontSize: '11px'
-                }}>
-                  {formatTime(clip.start_time)} - {formatTime(clip.end_time)}
-                </div>
-                <div 
-                  style={{
-                    background: getScoreColor(clip.final_score),
-                    color: 'white',
-                    padding: '4px 8px',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
-                  }}
-                >
-                  <StarFilled style={{ fontSize: '12px' }} />
-                  {(clip.final_score * 100).toFixed(0)}分
-                </div>
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <StarFilled style={{ fontSize: '12px' }} />
+                {(clip.final_score * 100).toFixed(0)}分
               </div>
             </div>
           }
         >
           <div style={{ padding: '16px', height: '180px', display: 'flex', flexDirection: 'column' }}>
             {/* 标题区域 */}
-            <div style={{ marginBottom: '12px' }}>
+            <div style={{ marginBottom: '8px' }}>
               <Title 
                 level={5} 
                 ellipsis={{ rows: 2 }} 
@@ -304,28 +308,37 @@ const ClipCard: React.FC<ClipCardProps> = ({
               </Title>
             </div>
             
-            {/* 推荐理由 */}
-            <div style={{ flex: 1, marginBottom: '12px' }}>
-              <Text 
-                type="secondary" 
-                style={{ 
-                  fontSize: '13px',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 4,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  lineHeight: '1.5',
-                  color: '#b0b0b0'
-                }}
+            {/* 内容要点 */}
+            <div style={{ flex: 1, marginBottom: '12px', minHeight: '58px' }}>
+              <Tooltip 
+                title={isTextTruncated ? getDisplayContent() : ''} 
+                placement="top" 
+                overlayStyle={{ maxWidth: '300px' }}
+                open={isTextTruncated ? undefined : false}
               >
-                {clip.recommend_reason || '暂无推荐理由'}
-              </Text>
+                <Text 
+                  ref={textRef}
+                  type="secondary" 
+                  style={{ 
+                    fontSize: '13px',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    lineHeight: '1.5',
+                    color: '#b0b0b0',
+                    cursor: isTextTruncated ? 'pointer' : 'default',
+                    wordBreak: 'break-word'
+                  }}
+                >
+                  {getDisplayContent()}
+                </Text>
+              </Tooltip>
             </div>
             
 
           </div>
         </Card>
-      </Tooltip>
 
       {/* 视频播放模态框 */}
       <Modal

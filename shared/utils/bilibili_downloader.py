@@ -147,16 +147,18 @@ class BilibiliDownloader:
         # 清理文件名，移除特殊字符
         safe_title = self._sanitize_filename(video_info.title)
         
-        # 设置下载选项 - 简化配置，专注AI字幕
+        # 设置下载选项 - 改进字幕下载策略
         ydl_opts = {
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'writesubtitles': True,
-            'subtitleslangs': ['ai-zh'],  # 专注AI字幕
+            'writeautomaticsub': True,  # 同时尝试下载自动生成字幕
+            'subtitleslangs': ['ai-zh', 'zh-Hans', 'zh', 'en'],  # 多种字幕语言
             'subtitlesformat': 'srt',  # 强制SRT格式
             'outtmpl': str(self.download_dir / f'{safe_title}.%(ext)s'),
             'noplaylist': True,
             'quiet': True,
             'progress': True,
+            'no_warnings': False,  # 显示警告信息以便调试
         }
         
         if self.browser:
@@ -182,6 +184,11 @@ class BilibiliDownloader:
             video_path = self._find_downloaded_video(safe_title)
             subtitle_path = self._find_downloaded_subtitle(safe_title)
             
+            # 如果第一次尝试没有找到字幕，尝试不同的字幕获取策略
+            if not subtitle_path:
+                logger.info("第一次字幕下载失败，尝试备用策略...")
+                subtitle_path = await self._try_alternative_subtitle_strategies(url, safe_title)
+            
             if progress_callback:
                 progress_callback("下载完成", 100)
             
@@ -199,6 +206,127 @@ class BilibiliDownloader:
             if progress_callback:
                 progress_callback(error_msg, 0)
             raise ProcessingError(error_msg)
+    
+    async def _try_alternative_subtitle_strategies(self, url: str, safe_title: str) -> Optional[Path]:
+        """尝试多种字幕获取策略"""
+        strategies = [
+            self._try_download_with_different_langs,
+            self._try_download_without_cookies,
+            self._try_extract_from_video_metadata
+        ]
+        
+        for strategy in strategies:
+            try:
+                subtitle_path = await strategy(url, safe_title)
+                if subtitle_path:
+                    logger.info(f"备用字幕策略成功: {strategy.__name__}")
+                    return subtitle_path
+            except Exception as e:
+                logger.warning(f"备用字幕策略失败 {strategy.__name__}: {e}")
+                continue
+        
+        logger.warning("所有字幕获取策略都失败了")
+        return None
+    
+    async def _try_download_with_different_langs(self, url: str, safe_title: str) -> Optional[Path]:
+        """尝试下载不同语言的字幕"""
+        logger.info("尝试下载不同语言的字幕...")
+        
+        # 尝试不同的字幕语言组合
+        lang_combinations = [
+            ['zh-Hans', 'zh'],  # 简体中文
+            ['en', 'en-US'],    # 英文
+            ['ai-zh'],          # AI中文字幕
+            ['auto']            # 自动检测
+        ]
+        
+        for langs in lang_combinations:
+            try:
+                ydl_opts = {
+                    'skip_download': True,  # 只下载字幕，不下载视频
+                    'writesubtitles': True,
+                    'writeautomaticsub': True,
+                    'subtitleslangs': langs,
+                    'subtitlesformat': 'srt',
+                    'outtmpl': str(self.download_dir / f'{safe_title}_sub.%(ext)s'),
+                    'noplaylist': True,
+                    'quiet': True,
+                }
+                
+                if self.browser:
+                    ydl_opts['cookiesfrombrowser'] = (self.browser.lower(),)
+                
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, self._download_sync, url, ydl_opts)
+                
+                # 查找字幕文件
+                subtitle_path = self._find_downloaded_subtitle(safe_title + "_sub")
+                if subtitle_path:
+                    return subtitle_path
+                    
+            except Exception as e:
+                logger.debug(f"尝试语言 {langs} 失败: {e}")
+                continue
+        
+        return None
+    
+    async def _try_download_without_cookies(self, url: str, safe_title: str) -> Optional[Path]:
+        """尝试不使用cookies下载字幕（某些公开字幕可能不需要登录）"""
+        logger.info("尝试不使用cookies下载字幕...")
+        
+        try:
+            ydl_opts = {
+                'skip_download': True,  # 只下载字幕，不下载视频
+                'writesubtitles': True,
+                'writeautomaticsub': True,
+                'subtitleslangs': ['zh-Hans', 'zh', 'en'],
+                'subtitlesformat': 'srt',
+                'outtmpl': str(self.download_dir / f'{safe_title}_nocookie.%(ext)s'),
+                'noplaylist': True,
+                'quiet': True,
+            }
+            
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._download_sync, url, ydl_opts)
+            
+            subtitle_path = self._find_downloaded_subtitle(safe_title + "_nocookie")
+            return subtitle_path
+            
+        except Exception as e:
+            logger.debug(f"不使用cookies下载失败: {e}")
+            return None
+    
+    async def _try_extract_from_video_metadata(self, url: str, safe_title: str) -> Optional[Path]:
+        """尝试从视频元数据中提取字幕信息"""
+        logger.info("尝试从视频元数据提取字幕信息...")
+        
+        try:
+            # 获取视频详细信息
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+            }
+            
+            if self.browser:
+                ydl_opts['cookiesfrombrowser'] = (self.browser.lower(),)
+            
+            loop = asyncio.get_event_loop()
+            info_dict = await loop.run_in_executor(None, self._extract_info_sync, url, ydl_opts)
+            
+            # 检查是否有字幕信息
+            subtitles = info_dict.get('subtitles', {})
+            auto_subtitles = info_dict.get('automatic_captions', {})
+            
+            if subtitles or auto_subtitles:
+                logger.info(f"发现字幕信息: {list(subtitles.keys()) + list(auto_subtitles.keys())}")
+                # 这里可以进一步处理字幕信息
+                return None  # 暂时返回None，后续可以扩展
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"提取视频元数据失败: {e}")
+            return None
     
     def _download_sync(self, url: str, ydl_opts: Dict[str, Any]):
         """同步方式下载"""

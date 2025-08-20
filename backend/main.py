@@ -22,7 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 使用相对导入
-from api.v1 import health, projects, clips, collections, tasks as task_routes, settings as settings_routes
+from api.v1 import health, projects, clips, collections, tasks as task_routes, settings as settings_routes, bilibili, youtube, speech_recognition, files
 from api.v1.tasks import router as tasks_router
 from api.v1 import websocket
 from core.database import engine
@@ -67,9 +67,12 @@ app.include_router(health.router, prefix="/api/v1/health", tags=["health"])
 app.include_router(projects.router, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(clips.router, prefix="/api/v1/clips", tags=["clips"])
 app.include_router(collections.router, prefix="/api/v1/collections", tags=["collections"])
-app.include_router(task_routes.router, prefix="/api/v1/tasks", tags=["tasks"])
+app.include_router(files.router, prefix="/api/v1", tags=["files"])
 app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"])
 app.include_router(settings_routes.router, prefix="/api/v1/settings", tags=["settings"])
+app.include_router(bilibili.router, prefix="/api/v1/bilibili", tags=["bilibili"])
+app.include_router(youtube.router, prefix="/api/v1/youtube", tags=["youtube"])
+app.include_router(speech_recognition.router, prefix="/api/v1", tags=["speech-recognition"])
 app.include_router(websocket.router, prefix="/api/v1", tags=["websocket"])
 
 # 添加独立的video-categories端点

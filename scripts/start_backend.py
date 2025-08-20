@@ -33,7 +33,7 @@ def main():
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8003,  # 修改端口避免与其他服务冲突
         reload=True,
         log_level="info"
     )

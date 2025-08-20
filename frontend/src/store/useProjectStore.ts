@@ -84,29 +84,20 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   setProjects: (projects) => {
     const state = get()
-    const now = Date.now()
-    const timeSinceLastEdit = now - state.lastEditTimestamp
     
     console.log('setProjects called:', {
-      timeSinceLastEdit,
-      lastEditTimestamp: state.lastEditTimestamp,
       isDragging: state.isDragging,
-      shouldSkipUpdate: state.isDragging || timeSinceLastEdit < 5000,
-      projectsCount: projects.length
+      projectsCount: projects.length,
+      projects: projects
     })
     
-    // 如果正在拖拽或最近5秒内有编辑操作，则跳过更新以避免冲突
+    // 如果正在拖拽，则跳过更新以避免冲突
     if (state.isDragging) {
       console.log('Skipping update: dragging in progress')
       return
     }
     
-    if (timeSinceLastEdit < 5000) {
-      console.log('Skipping update: recent edit detected, preserving user changes')
-      return
-    }
-    
-    console.log('Applying normal update')
+    console.log('Applying update with new data')
     set({ projects })
   },
   
@@ -338,11 +329,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     
     // 调用后端API
     try {
-      console.log('Reordering collection clips:', { projectId, collectionId, newClipIds })
-      await projectApi.updateCollection(projectId, collectionId, { clip_ids: newClipIds })
-      console.log('Collection clips reordered successfully')
+      console.log('Calling backend API for reorder...')
+      await projectApi.reorderCollectionClips(projectId, collectionId, newClipIds)
+      console.log('Backend API call successful')
     } catch (error) {
-      console.error('Failed to reorder collection clips, rolling back:', error)
+      console.error('Backend API call failed:', error)
       // 回滚到原始状态
       updateState(originalClipIds)
       throw error

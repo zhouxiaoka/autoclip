@@ -3,9 +3,10 @@
 提供切片相关的数据访问操作
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func
+from pathlib import Path
 from .base import BaseRepository
 from models.clip import Clip, ClipStatus
 
@@ -104,6 +105,65 @@ class ClipRepository(BaseRepository[Clip]):
             self.model.start_time >= start_time,
             self.model.end_time <= end_time
         ).order_by(asc(self.model.start_time)).all()
+    
+    def create_clip(self, clip_data: Dict[str, Any]) -> Clip:
+        """创建切片记录（分离存储模式）"""
+        from services.storage_service import StorageService
+        import uuid
+        
+        # 生成切片ID（如果没有提供）
+        if "id" not in clip_data:
+            clip_data["id"] = str(uuid.uuid4())
+        
+        # 1. 保存切片文件到文件系统
+        storage_service = StorageService(clip_data["project_id"])
+        video_path = storage_service.save_clip_file(clip_data, clip_data["id"])
+        
+        # 2. 保存完整数据到文件系统
+        metadata_path = storage_service.save_metadata(clip_data, f"clip_{clip_data['id']}")
+        
+        # 3. 保存元数据到数据库（只存储路径引用）
+        clip = Clip(
+            id=clip_data["id"],
+            project_id=clip_data["project_id"],
+            title=clip_data["title"],
+            description=clip_data.get("description"),
+            start_time=clip_data["start_time"],
+            end_time=clip_data["end_time"],
+            duration=clip_data["duration"],
+            score=clip_data.get("score"),
+            video_path=video_path,  # 只存储路径
+            clip_metadata={
+                'metadata_file': metadata_path,  # 完整数据文件路径
+                'clip_id': clip_data["id"],
+                'created_at': clip_data.get("created_at")
+            }
+        )
+        
+        self.db.add(clip)
+        self.db.commit()
+        return clip
+    
+    def get_clip_file(self, clip_id: str) -> Optional[Path]:
+        """获取切片文件路径"""
+        clip = self.get_by_id(clip_id)
+        if clip and clip.video_path:
+            return Path(clip.video_path)
+        return None
+    
+    def get_clip_content(self, clip_id: str) -> Optional[Dict[str, Any]]:
+        """获取切片完整内容"""
+        clip = self.get_by_id(clip_id)
+        if not clip:
+            return None
+        
+        # 从文件系统获取完整数据
+        if clip.clip_metadata and 'metadata_file' in clip.clip_metadata:
+            from services.storage_service import StorageService
+            storage_service = StorageService(clip.project_id)
+            return storage_service.get_file_content(clip.clip_metadata['metadata_file'])
+        
+        return None
     
     def search_clips(self, project_id: str, keyword: str) -> List[Clip]:
         """

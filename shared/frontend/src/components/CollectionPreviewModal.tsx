@@ -321,7 +321,18 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
                         </div>
                         <div className="video-meta">
                           <Tag color="blue">{formatDuration(currentClip)}</Tag>
-                          <Tag color="green">分数: {(currentClip.final_score * 100).toFixed(0)}</Tag>
+                          <Tag 
+                            style={{
+                              background: currentClip.final_score >= 0.9 ? '#52c41a' : 
+                                           currentClip.final_score >= 0.8 ? '#1890ff' : 
+                                           currentClip.final_score >= 0.7 ? '#faad14' : 
+                                           currentClip.final_score >= 0.6 ? '#ff7a45' : '#ff4d4f',
+                              color: 'white',
+                              border: 'none'
+                            }}
+                          >
+                            分数: {(currentClip.final_score * 100).toFixed(0)}
+                          </Tag>
                           <Text style={{ color: '#999', marginLeft: 8 }}>
                             {currentClipIndex + 1} / {collectionClips.length}
                           </Text>
@@ -415,9 +426,24 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
                                     {clip.title || clip.generated_title}
                                   </div>
                                   <div className="clip-meta">
-                                    <Text type="secondary" style={{ fontSize: '12px' }}>
-                                      {formatDuration(clip)} • 分数: {(clip.final_score * 100).toFixed(0)}
-                                    </Text>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+                                      <Text type="secondary">
+                                        {formatDuration(clip)}
+                                      </Text>
+                                      <span style={{
+                                        background: clip.final_score >= 0.9 ? '#52c41a' : 
+                                                   clip.final_score >= 0.8 ? '#1890ff' : 
+                                                   clip.final_score >= 0.7 ? '#faad14' : 
+                                                   clip.final_score >= 0.6 ? '#ff7a45' : '#ff4d4f',
+                                        color: 'white',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        fontSize: '11px',
+                                        fontWeight: 'bold'
+                                      }}>
+                                        分数: {(clip.final_score * 100).toFixed(0)}
+                                      </span>
+                                    </div>
                                   </div>
                                   {clip.recommend_reason && (
                                     <div className="clip-reason">

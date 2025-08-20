@@ -1,5 +1,6 @@
-"""WebSocket API路由
-处理WebSocket连接和实时通信
+"""
+WebSocket API路由
+提供实时通信功能
 """
 
 import logging

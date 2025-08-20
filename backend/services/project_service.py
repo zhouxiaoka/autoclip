@@ -31,7 +31,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         orm_data = {
             "name": project_dict["name"],
             "description": project_dict.get("description"),
-            "project_type": project_dict.get("project_type", "default"),  # Map project_type to project_type
+            "project_type": project_dict.get("project_type", "default").value if hasattr(project_dict.get("project_type", "default"), 'value') else project_dict.get("project_type", "default"),  # Map project_type to project_type
             "video_path": project_dict.get("source_file"),  # Map source_file to video_path
             "processing_config": project_dict.get("settings", {}),  # Map settings to processing_config
             "project_metadata": {"source_url": project_dict.get("source_url")}  # Map source_url to metadata
@@ -64,7 +64,16 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         if not project:
             return None
         
-        # Convert to response schema (simplified for now)
+        # Get actual statistics from database
+        from models.clip import Clip
+        from models.collection import Collection
+        from models.task import Task
+        
+        total_clips = self.db.query(Clip).filter(Clip.project_id == project_id).count()
+        total_collections = self.db.query(Collection).filter(Collection.project_id == project_id).count()
+        total_tasks = self.db.query(Task).filter(Task.project_id == project_id).count()
+        
+        # Convert to response schema
         return ProjectResponse(
             id=str(getattr(project, 'id', '')),
             name=str(getattr(project, 'name', '')),
@@ -74,12 +83,12 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             source_url=project.project_metadata.get("source_url") if getattr(project, 'project_metadata', None) else None,
             source_file=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,
             settings=getattr(project, 'processing_config', {}) or {},
-            created_at=getattr(project, 'created_at', None) if isinstance(getattr(project, 'created_at', None), (type(None), __import__('datetime').datetime)) else None,
-            updated_at=getattr(project, 'updated_at', None) if isinstance(getattr(project, 'updated_at', None), (type(None), __import__('datetime').datetime)) else None,
-            completed_at=getattr(project, 'completed_at', None) if isinstance(getattr(project, 'completed_at', None), (type(None), __import__('datetime').datetime)) else None,
-            total_clips=0,
-            total_collections=0,
-            total_tasks=0
+            created_at=self._convert_utc_to_local(getattr(project, 'created_at', None)),
+            updated_at=self._convert_utc_to_local(getattr(project, 'updated_at', None)),
+            completed_at=self._convert_utc_to_local(getattr(project, 'completed_at', None)),
+            total_clips=total_clips,
+            total_collections=total_collections,
+            total_tasks=total_tasks
         )
     
     def get_projects_paginated(
@@ -99,6 +108,16 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         # Convert to response schemas
         project_responses = []
         for project in items:
+            # Get actual statistics for each project
+            from models.clip import Clip
+            from models.collection import Collection
+            from models.task import Task
+            
+            project_id = str(project.id)
+            total_clips = self.db.query(Clip).filter(Clip.project_id == project_id).count()
+            total_collections = self.db.query(Collection).filter(Collection.project_id == project_id).count()
+            total_tasks = self.db.query(Task).filter(Task.project_id == project_id).count()
+            
             project_responses.append(ProjectResponse(
                 id=str(getattr(project, 'id', '')),
                 name=str(getattr(project, 'name', '')),
@@ -108,12 +127,12 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
                 source_url=project.project_metadata.get("source_url") if getattr(project, 'project_metadata', None) else None,
                 source_file=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,
                 settings=getattr(project, 'processing_config', {}) or {},
-                created_at=getattr(project, 'created_at', None) if isinstance(getattr(project, 'created_at', None), (type(None), __import__('datetime').datetime)) else None,
-                updated_at=getattr(project, 'updated_at', None) if isinstance(getattr(project, 'updated_at', None), (type(None), __import__('datetime').datetime)) else None,
-                completed_at=getattr(project, 'completed_at', None) if isinstance(getattr(project, 'completed_at', None), (type(None), __import__('datetime').datetime)) else None,
-                total_clips=0,
-                total_collections=0,
-                total_tasks=0
+                created_at=self._convert_utc_to_local(getattr(project, 'created_at', None)),
+                updated_at=self._convert_utc_to_local(getattr(project, 'updated_at', None)),
+                completed_at=self._convert_utc_to_local(getattr(project, 'completed_at', None)),
+                total_clips=total_clips,
+                total_collections=total_collections,
+                total_tasks=total_tasks
             ))
         
         return ProjectListResponse(
@@ -164,4 +183,22 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         
         # Update status
         self.update(project_id, status=status)
-        return True 
+        return True
+    
+    def _convert_utc_to_local(self, dt):
+        """将UTC时间转换为本地时间（SQLite存储时丢失了时区信息）"""
+        if dt is None:
+            return None
+        
+        from datetime import datetime, timezone
+        import pytz
+        
+        # 由于SQLite存储时丢失了时区信息，我们假设这些时间是UTC时间
+        # 将其转换为本地时间
+        local_tz = pytz.timezone('Asia/Shanghai')
+        utc_time = dt.replace(tzinfo=timezone.utc)
+        local_time = utc_time.astimezone(local_tz)
+        
+        return local_time
+    
+ 

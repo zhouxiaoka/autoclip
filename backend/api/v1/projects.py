@@ -20,6 +20,10 @@ from schemas.project import (
 from schemas.task import TaskType
 from schemas.base import PaginationParams
 from pathlib import Path
+import logging
+from models.task import TaskType
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -42,24 +46,28 @@ def get_websocket_service(db: Session = Depends(get_db)) -> WebSocketNotificatio
 @router.post("/upload", response_model=ProjectResponse)
 async def upload_files(
     video_file: UploadFile = File(...),
-    srt_file: UploadFile = File(...),
+    srt_file: Optional[UploadFile] = File(None),
     project_name: str = Form(...),
     video_category: Optional[str] = Form(None),
-    project_service: ProjectService = Depends(get_project_service)
+    project_service: ProjectService = Depends(get_project_service),
+    processing_service: ProcessingService = Depends(get_processing_service),
+    websocket_service: WebSocketNotificationService = Depends(get_websocket_service)
 ):
-    """Upload video and subtitle files to create a new project."""
+    """Upload video file and optionally subtitle file to create a new project. If no subtitle is provided, speech recognition will be used."""
     try:
         # 验证文件类型
         if not video_file.filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')):
             raise HTTPException(status_code=400, detail="Invalid video file format")
         
-        if not srt_file.filename.lower().endswith('.srt'):
+        # 如果提供了字幕文件，验证其格式
+        if srt_file and not srt_file.filename.lower().endswith('.srt'):
             raise HTTPException(status_code=400, detail="Invalid subtitle file format")
         
         # 创建项目数据
+        subtitle_info = f", Subtitle: {srt_file.filename}" if srt_file else " (Will generate subtitle using speech recognition)"
         project_data = ProjectCreate(
             name=project_name,
-            description=f"Video: {video_file.filename}, Subtitle: {srt_file.filename}",
+            description=f"Video: {video_file.filename}{subtitle_info}",
             project_type=ProjectType.KNOWLEDGE,  # 默认类型
             status=ProjectStatus.PENDING,
             source_url=None,
@@ -67,7 +75,8 @@ async def upload_files(
             settings={
                 "video_category": video_category or "knowledge",
                 "video_file": video_file.filename,
-                "srt_file": srt_file.filename
+                "srt_file": srt_file.filename if srt_file else None,
+                "auto_generate_subtitle": srt_file is None
             }
         )
         
@@ -76,21 +85,135 @@ async def upload_files(
         
         # 保存文件到项目目录
         project_id = str(project.id)
-        project_dir = Path(__file__).parent.parent.parent / "data" / "projects" / project_id
-        raw_dir = project_dir / "raw"
-        raw_dir.mkdir(parents=True, exist_ok=True)
+        from core.path_utils import get_project_raw_directory, ensure_directory_exists
+        raw_dir = ensure_directory_exists(get_project_raw_directory(project_id))
+        
+        logger.info(f"开始保存文件到项目目录: {project_dir}")
         
         # 保存视频文件
         video_path = raw_dir / video_file.filename
-        with open(video_path, "wb") as f:
-            content = await video_file.read()
-            f.write(content)
+        logger.info(f"保存视频文件: {video_path}")
+        try:
+            with open(video_path, "wb") as f:
+                content = await video_file.read()
+                f.write(content)
+            logger.info(f"视频文件保存成功: {video_path}, 大小: {len(content)} bytes")
+        except Exception as e:
+            logger.error(f"视频文件保存失败: {e}")
+            raise
         
-        # 保存字幕文件
-        srt_path = raw_dir / srt_file.filename
-        with open(srt_path, "wb") as f:
-            content = await srt_file.read()
-            f.write(content)
+        # 处理字幕文件
+        srt_path = None
+        if srt_file:
+            # 保存用户提供的字幕文件
+            srt_path = raw_dir / srt_file.filename
+            logger.info(f"保存用户字幕文件: {srt_path}")
+            try:
+                with open(srt_path, "wb") as f:
+                    content = await srt_file.read()
+                    f.write(content)
+                logger.info(f"用户字幕文件保存成功: {srt_path}, 大小: {len(content)} bytes")
+            except Exception as e:
+                logger.error(f"用户字幕文件保存失败: {e}")
+                raise
+        else:
+            # 使用语音识别生成字幕文件
+            logger.info("未提供字幕文件，开始使用语音识别生成字幕")
+            try:
+                from shared.utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
+                
+                # 生成字幕文件
+                srt_path = raw_dir / f"{video_file.filename.rsplit('.', 1)[0]}.srt"
+                logger.info(f"开始语音识别，输出路径: {srt_path}")
+                
+                # 根据视频分类确定语言
+                language = "auto"  # 默认自动检测
+                if video_category == "business" or video_category == "knowledge":
+                    language = "zh"  # 中文内容
+                elif video_category == "entertainment":
+                    language = "auto"  # 娱乐内容可能是多语言
+                
+                generated_srt = generate_subtitle_for_video(
+                    video_path, 
+                    srt_path, 
+                    language=language,
+                    model="base"  # 使用平衡的模型
+                )
+                if generated_srt:
+                    logger.info(f"语音识别字幕生成成功: {generated_srt}")
+                    srt_path = generated_srt
+                else:
+                    raise SpeechRecognitionError("语音识别返回空结果")
+                
+            except SpeechRecognitionError as e:
+                logger.error(f"语音识别失败: {e}")
+                # 更新项目状态为失败
+                project_service.update_project_status(project_id, "failed")
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"语音识别失败: {e}。请手动上传字幕文件或检查语音识别服务配置。"
+                )
+            except Exception as e:
+                logger.error(f"语音识别过程中发生未知错误: {e}")
+                project_service.update_project_status(project_id, "failed")
+                raise HTTPException(
+                    status_code=500, 
+                    detail=f"语音识别过程中发生错误: {e}"
+                )
+        
+        logger.info(f"文件保存完成，项目目录: {project_dir}")
+        
+        # 验证文件是否存在
+        if not video_path.exists():
+            logger.error(f"视频文件不存在: {video_path}")
+            raise HTTPException(status_code=500, detail="视频文件保存失败")
+        
+        if not srt_path:
+            logger.error("字幕文件路径为空")
+            raise HTTPException(status_code=500, detail="字幕文件路径生成失败")
+        
+        if not srt_path.exists():
+            logger.error(f"字幕文件不存在: {srt_path}")
+            raise HTTPException(status_code=500, detail=f"字幕文件不存在: {srt_path}")
+        
+        logger.info(f"文件验证成功: video={video_path.exists()}, srt={srt_path.exists()}")
+        
+        # 自动启动处理流程
+        try:
+            # 更新项目状态为处理中
+            project_service.update_project_status(project_id, "processing")
+            
+            # 发送WebSocket通知：处理开始
+            await websocket_service.send_processing_started(
+                project_id=project_id,
+                message="开始视频处理流程"
+            )
+            
+            # 提交Celery任务
+            logger.info(f"准备提交Celery任务: {project_id}")
+            from tasks.processing import process_video_pipeline
+            logger.info(f"Celery任务导入成功")
+            
+            celery_task = process_video_pipeline.delay(
+                project_id=project_id,
+                input_video_path=str(video_path),
+                input_srt_path=str(srt_path)
+            )
+            logger.info(f"Celery任务已提交: {celery_task.id}")
+            
+            # 创建处理任务记录
+            task_result = processing_service._create_processing_task(
+                project_id=project_id,
+                task_type=TaskType.VIDEO_PROCESSING
+            )
+            logger.info(f"处理任务记录已创建: {task_result}")
+            
+            logger.info(f"项目 {project_id} 处理任务已启动，Celery任务ID: {celery_task.id}")
+            
+        except Exception as e:
+            logger.error(f"启动项目 {project_id} 处理失败: {str(e)}")
+            # 即使处理启动失败，也要返回项目创建成功
+            # 用户可以通过重试按钮重新启动处理
         
         # 返回项目响应
         return ProjectResponse(
@@ -109,6 +232,9 @@ async def upload_files(
             total_collections=0,
             total_tasks=0
         )
+    except HTTPException:
+        # 重新抛出HTTP异常，不要被通用异常处理器捕获
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
 
@@ -256,16 +382,33 @@ async def start_processing(
             raise HTTPException(status_code=400, detail="Project is not in pending or failed status")
         
         # 获取视频和SRT文件路径
-        project_root = Path(__file__).parent.parent.parent / "data" / "projects" / project_id
+        from core.path_utils import get_project_raw_directory
+        raw_dir = get_project_raw_directory(project_id)
         
         video_path = None
         srt_path = None
         
-        if project.processing_config:
-            if "video_file" in project.processing_config:
-                video_path = project_root / "raw" / project.processing_config["video_file"]
-            if "srt_file" in project.processing_config:
-                srt_path = project_root / "raw" / project.processing_config["srt_file"]
+        # 从项目配置中获取文件路径
+        # 从video_path获取视频路径
+        if project.video_path:
+            video_path = Path(project.video_path)
+        
+        # 从processing_config或project_metadata中获取SRT路径
+        if project.processing_config and "srt_file" in project.processing_config:
+            srt_path = raw_dir / project.processing_config["srt_file"]
+        elif project.project_metadata and "subtitle_path" in project.project_metadata:
+            srt_path = Path(project.project_metadata["subtitle_path"])
+        
+        # 如果路径不存在，尝试从raw目录查找
+        if not video_path or not video_path.exists():
+            video_files = list(raw_dir.glob("*.mp4"))
+            if video_files:
+                video_path = video_files[0]
+        
+        if not srt_path or not srt_path.exists():
+            srt_files = list(raw_dir.glob("*.srt"))
+            if srt_files:
+                srt_path = srt_files[0]
         
         # 验证文件存在
         if not video_path or not video_path.exists():
@@ -347,16 +490,33 @@ async def retry_processing(
         )
         
         # 获取文件路径并重新提交任务
-        project_root = Path(__file__).parent.parent.parent / "data" / "projects" / project_id
+        from core.path_utils import get_project_raw_directory
+        raw_dir = get_project_raw_directory(project_id)
         
         video_path = None
         srt_path = None
         
-        if project.processing_config:
-            if "video_file" in project.processing_config:
-                video_path = project_root / "raw" / project.processing_config["video_file"]
-            if "srt_file" in project.processing_config:
-                srt_path = project_root / "raw" / project.processing_config["srt_file"]
+        # 从项目配置中获取文件路径
+        # 从video_path获取视频路径
+        if project.video_path:
+            video_path = Path(project.video_path)
+        
+        # 从processing_config或project_metadata中获取SRT路径
+        if project.processing_config and "srt_file" in project.processing_config:
+            srt_path = raw_dir / project.processing_config["srt_file"]
+        elif project.project_metadata and "subtitle_path" in project.project_metadata:
+            srt_path = Path(project.project_metadata["subtitle_path"])
+        
+        # 如果路径不存在，尝试从raw目录查找
+        if not video_path or not video_path.exists():
+            video_files = list(raw_dir.glob("*.mp4"))
+            if video_files:
+                video_path = video_files[0]
+        
+        if not srt_path or not srt_path.exists():
+            srt_files = list(raw_dir.glob("*.srt"))
+            if srt_files:
+                srt_path = srt_files[0]
         
         if not video_path or not video_path.exists():
             raise HTTPException(status_code=400, detail=f"Video file not found: {video_path}")
@@ -508,16 +668,17 @@ async def resume_processing(
             raise HTTPException(status_code=400, detail=f"Invalid step: {start_step}. Valid steps: {valid_steps}")
         
         # 获取文件路径
-        project_root = Path(__file__).parent.parent.parent / "data" / "projects" / project_id
+        from core.path_utils import get_project_raw_directory
+        raw_dir = get_project_raw_directory(project_id)
         
         video_path = None
         srt_path = None
         
         if project.processing_config:
             if "video_file" in project.processing_config:
-                video_path = project_root / "raw" / project.processing_config["video_file"]
+                video_path = raw_dir / project.processing_config["video_file"]
             if "srt_file" in project.processing_config:
-                srt_path = project_root / "raw" / project.processing_config["srt_file"]
+                srt_path = raw_dir / project.processing_config["srt_file"]
         
         # 对于从第一步开始的情况，需要验证原始文件
         if start_step == "step1_outline":
@@ -653,22 +814,34 @@ async def get_project_video(
         from fastapi.responses import FileResponse
         
         # 构建项目目录路径
-        project_root = Path(__file__).parent.parent.parent / "data" / "projects" / project_id
-        raw_dir = project_root / "raw"
+        from core.path_utils import get_project_raw_directory
+        raw_dir = get_project_raw_directory(project_id)
+        
+        logger.info(f"查找项目视频: project_id={project_id}")
+        logger.info(f"原始文件目录: {raw_dir}")
+        logger.info(f"原始文件目录存在: {raw_dir.exists()}")
         
         if not raw_dir.exists():
+            logger.error(f"项目原始文件目录不存在: {raw_dir}")
             raise HTTPException(status_code=404, detail="Project raw directory not found")
         
         # 查找视频文件
         video_files = list(raw_dir.glob("*.mp4"))
+        logger.info(f"找到的视频文件: {[f.name for f in video_files]}")
+        
         if not video_files:
+            logger.error(f"项目中没有找到视频文件: {raw_dir}")
             raise HTTPException(status_code=404, detail="No video file found in project")
         
         video_file = video_files[0]  # 使用第一个找到的视频文件
+        logger.info(f"选择的视频文件: {video_file}")
         
         # 检查文件是否存在
         if not video_file.exists():
+            logger.error(f"视频文件不存在: {video_file}")
             raise HTTPException(status_code=404, detail="Video file not found")
+        
+        logger.info(f"返回视频文件: {video_file}")
         
         # 返回文件流
         return FileResponse(
@@ -679,6 +852,7 @@ async def get_project_video(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"获取项目视频时发生错误: {e}")
         raise HTTPException(status_code=400, detail=str(e)) 
 
 
@@ -694,8 +868,13 @@ async def get_project_file(
         import json
         
         # 构建文件路径
-        project_root = Path(__file__).parent.parent.parent / "data" / "projects" / project_id
-        file_path = project_root / "metadata" / filename
+        from core.path_utils import get_project_directory
+        project_dir = get_project_directory(project_id)
+        file_path = project_dir / filename
+        
+        logger.info(f"查找项目文件: project_id={project_id}, filename={filename}")
+        logger.info(f"文件路径: {file_path}")
+        logger.info(f"文件存在: {file_path.exists()}")
         
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
@@ -721,19 +900,60 @@ async def get_project_clip(
     try:
         from pathlib import Path
         import os
+        from models.clip import Clip
+        from core.database import SessionLocal
+        
+        # 获取clip信息
+        db = SessionLocal()
+        try:
+            clip = db.query(Clip).filter(Clip.id == clip_id).first()
+            if not clip:
+                raise HTTPException(status_code=404, detail=f"Clip not found: {clip_id}")
+            
+            # 获取original_id
+            original_id = clip.clip_metadata.get('id') if clip.clip_metadata else None
+            if not original_id:
+                # 如果没有id字段，尝试使用chunk_index
+                chunk_index = clip.clip_metadata.get('chunk_index') if clip.clip_metadata else None
+                if chunk_index is not None:
+                    original_id = str(chunk_index + 1)  # chunk_index从0开始，文件ID从1开始
+                else:
+                    # 从元数据文件中读取id
+                    metadata_file = clip.clip_metadata.get('metadata_file') if clip.clip_metadata else None
+                    if metadata_file and Path(metadata_file).exists():
+                        try:
+                            with open(metadata_file, 'r', encoding='utf-8') as f:
+                                metadata_data = json.load(f)
+                                original_id = metadata_data.get('id')
+                        except Exception as e:
+                            logger.error(f"读取元数据文件失败: {e}")
+                    
+                    if not original_id:
+                        raise HTTPException(status_code=404, detail=f"Clip id not found in metadata: {clip_id}")
+            
+        finally:
+            db.close()
         
         # 构建视频文件路径
-        project_root = Path(__file__).parent.parent.parent.parent
-        clips_dir = project_root / "output" / "clips"
+        from core.path_utils import get_clips_directory
+        clips_dir = get_clips_directory()
+        
+        logger.info(f"查找clip视频: clip_id={clip_id}, original_id={original_id}")
+        logger.info(f"clips目录: {clips_dir}")
+        logger.info(f"clips目录存在: {clips_dir.exists()}")
         
         # 确保路径存在
         if not clips_dir.exists():
+            logger.error(f"Clips目录不存在: {clips_dir}")
             raise HTTPException(status_code=404, detail=f"Clips directory not found: {clips_dir}")
         
         # 查找对应的视频文件
-        video_files = list(clips_dir.glob(f"{clip_id}_*.mp4"))
+        video_files = list(clips_dir.glob(f"{original_id}_*.mp4"))
+        logger.info(f"找到的视频文件: {[f.name for f in video_files]}")
+        
         if not video_files:
-            raise HTTPException(status_code=404, detail=f"Clip video file not found for clip_id: {clip_id}")
+            logger.error(f"没有找到original_id={original_id}的视频文件")
+            raise HTTPException(status_code=404, detail=f"Clip video file not found for original_id: {original_id}")
         
         video_file = video_files[0]
         
@@ -751,4 +971,57 @@ async def get_project_clip(
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/{project_id}/collections/{collection_id}/reorder")
+async def reorder_project_collection_clips(
+    project_id: str,
+    collection_id: str,
+    clip_ids: List[str],
+    project_service: ProjectService = Depends(get_project_service)
+):
+    """Reorder clips in a collection for a specific project."""
+    try:
+        from services.collection_service import CollectionService
+        from core.database import SessionLocal
+        
+        db = SessionLocal()
+        try:
+            collection_service = CollectionService(db)
+            
+            # 获取合集
+            collection = collection_service.get(collection_id)
+            if not collection:
+                raise HTTPException(status_code=404, detail="Collection not found")
+            
+            # 验证合集属于指定项目
+            if collection.project_id != project_id:
+                raise HTTPException(status_code=403, detail="Collection does not belong to the specified project")
+            
+            # 更新collection_metadata中的clip_ids
+            metadata = getattr(collection, 'collection_metadata', {}) or {}
+            metadata['clip_ids'] = clip_ids
+            
+            # 直接更新数据库中的collection_metadata字段
+            from sqlalchemy import update
+            from models.collection import Collection
+            
+            stmt = update(Collection).where(Collection.id == collection_id).values(
+                collection_metadata=metadata
+            )
+            db.execute(stmt)
+            db.commit()
+            
+            logger.info(f"合集排序更新成功: project_id={project_id}, collection_id={collection_id}")
+            
+            return {"message": "Collection clips reordered successfully", "clip_ids": clip_ids}
+            
+        finally:
+            db.close()
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"合集排序更新失败: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
