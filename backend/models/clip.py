@@ -4,6 +4,7 @@
 """
 
 import enum
+from typing import Optional
 from sqlalchemy import Column, String, Integer, Float, ForeignKey, Enum, JSON, DateTime, Text
 from sqlalchemy.orm import relationship
 from .base import BaseModel
@@ -87,11 +88,6 @@ class Clip(BaseModel):
         nullable=True, 
         comment="处理步骤（1-6）"
     )
-    processing_result = Column(
-        JSON, 
-        nullable=True, 
-        comment="处理结果数据"
-    )
     
     # 标签和元数据
     tags = Column(
@@ -102,8 +98,21 @@ class Clip(BaseModel):
     clip_metadata = Column(
         JSON, 
         nullable=True, 
-        comment="切片元数据"
+        comment="切片元数据（精简版，完整数据存储在文件系统）"
     )
+    
+    # 添加计算属性
+    @property
+    def metadata_file_path(self) -> Optional[str]:
+        """获取完整元数据文件路径"""
+        if self.clip_metadata and 'metadata_file' in self.clip_metadata:
+            return self.clip_metadata['metadata_file']
+        return None
+    
+    @property
+    def has_full_content(self) -> bool:
+        """是否有完整内容文件"""
+        return self.metadata_file_path is not None
     
     # 外键关联
     project_id = Column(

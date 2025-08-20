@@ -257,12 +257,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       console.log('Clip removed successfully')
     } catch (error) {
       console.error('Failed to remove clip from collection, rolling back:', error)
-      console.error('Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        status: (error as unknown)?.response?.status,
-        statusText: (error as unknown)?.response?.statusText,
-        data: (error as unknown)?.response?.data
-      })
+      console.error('Backend API call failed:', error)
       // 回滚到原始状态
       updateState(originalClipIds)
       throw error
@@ -328,17 +323,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     
     // 调用后端API
     try {
-      console.log('Calling backend API:', { projectId, collectionId, newClipIds })
-      const result = await projectApi.updateCollection(projectId, collectionId, { clip_ids: newClipIds })
-      console.log('Backend update successful, result:', result)
+      console.log('Calling backend API for reorder...')
+      await projectApi.reorderCollectionClips(projectId, collectionId, newClipIds)
+      console.log('Backend API call successful')
     } catch (error) {
-      console.error('Backend update failed, rolling back:', error)
-      console.error('Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        status: (error as unknown)?.response?.status,
-        statusText: (error as unknown)?.response?.statusText,
-        data: (error as unknown)?.response?.data
-      })
+      console.error('Backend API call failed:', error)
       // 回滚到原始状态
       updateState(originalClipIds)
       throw error
@@ -409,12 +398,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       console.log('Clips added successfully')
     } catch (error) {
       console.error('Failed to add clips to collection, rolling back:', error)
-      console.error('Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        status: (error as unknown)?.response?.status,
-        statusText: (error as unknown)?.response?.statusText,
-        data: (error as unknown)?.response?.data
-      })
+      console.error('Backend API call failed:', error)
       // 回滚到原始状态
       updateState(originalClipIds)
       throw error

@@ -54,6 +54,9 @@ class CollectionResponse(BaseSchema):
     
     # Statistics
     total_clips: int = Field(default=0, description="Total number of clips in collection")
+    
+    # Clip IDs for frontend compatibility
+    clip_ids: List[str] = Field(default_factory=list, description="List of clip IDs in this collection")
 
 
 class CollectionListResponse(BaseSchema):
@@ -69,7 +72,7 @@ class CollectionWithClipsResponse(CollectionResponse):
 
 class CollectionFilter(BaseSchema):
     """Schema for collection filtering."""
-    project_id: Optional[int] = Field(default=None, description="Filter by project ID")
+    project_id: Optional[str] = Field(default=None, description="Filter by project ID")
     status: Optional[CollectionStatus] = Field(default=None, description="Filter by status")
     theme: Optional[str] = Field(default=None, description="Filter by theme")
     tags: Optional[List[str]] = Field(default=None, description="Filter by tags")

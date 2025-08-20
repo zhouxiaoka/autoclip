@@ -220,10 +220,8 @@ fi
 echo -e "${BLUE}⚙️  启动Celery工作进程...${NC}"
 source venv/bin/activate
 export PYTHONPATH=.:$PYTHONPATH
-cd backend
-celery -A core.celery_app worker --loglevel=info --concurrency=1 &
+celery -A backend.core.celery_simple worker --loglevel=info --concurrency=1 &
 CELERY_PID=$!
-cd ..
 echo -e "${GREEN}✅ Celery工作进程已启动 (PID: $CELERY_PID)${NC}"
 
 # 3. 启动前端开发服务器

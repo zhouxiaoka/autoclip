@@ -1,10 +1,9 @@
 """
 WebSocket通知服务
-从Celery任务发送实时通知到前端
+提供实时通知功能
 """
 
 import logging
-import asyncio
 from typing import Dict, Any, Optional
 from datetime import datetime
 

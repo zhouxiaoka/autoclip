@@ -1,6 +1,6 @@
 """
-依赖注入模块
-提供FastAPI依赖项
+依赖注入配置
+提供FastAPI的依赖注入服务
 """
 
 from typing import Generator

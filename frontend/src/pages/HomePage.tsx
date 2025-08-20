@@ -198,34 +198,14 @@ const HomePage: React.FC = () => {
                   <BilibiliDownload onDownloadSuccess={async (projectId: string) => {
                     // 处理完成后刷新项目列表
                     await loadProjects()
-                    
-                    // 延迟一下再开始处理，确保项目状态已更新
-                    setTimeout(async () => {
-                      try {
-                        await handleStartProcessing(projectId)
-                      } catch (error) {
-                        // 如果启动处理失败，至少确保项目列表是最新的
-                        console.error('Failed to start processing after download:', error)
-                        loadProjects()
-                      }
-                    }, 500)
+                    message.success('项目创建成功，正在处理中...')
                   }} />
                 )}
                 {activeTab === 'upload' && (
                   <FileUpload onUploadSuccess={async (projectId: string) => {
                     // 处理完成后刷新项目列表
                     await loadProjects()
-                    
-                    // 延迟一下再开始处理，确保项目状态已更新
-                    setTimeout(async () => {
-                      try {
-                        await handleStartProcessing(projectId)
-                      } catch (error) {
-                        // 如果启动处理失败，至少确保项目列表是最新的
-                        console.error('Failed to start processing after upload:', error)
-                        loadProjects()
-                      }
-                    }, 500)
+                    message.success('项目创建成功，正在处理中...')
                   }} />
                 )}
               </div>

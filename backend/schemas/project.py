@@ -63,6 +63,11 @@ class ProjectResponse(BaseSchema):
     updated_at: datetime = Field(description="Last update timestamp")
     completed_at: Optional[datetime] = Field(description="Completion timestamp")
     
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+    
     # Statistics
     total_clips: int = Field(default=0, description="Total number of clips")
     total_collections: int = Field(default=0, description="Total number of collections")

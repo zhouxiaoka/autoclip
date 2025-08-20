@@ -99,21 +99,32 @@ const ClipCard: React.FC<ClipCardProps> = ({
   }
 
   const formatTime = (timeStr: string) => {
-    if (!timeStr) return '00:00'
-    return timeStr.replace(',', '.')
+    if (!timeStr) return '00:00:00'
+    // 移除小数点后的毫秒部分，只保留时分秒
+    return timeStr.replace(',', '.').substring(0, 8)
+  }
+
+  const formatDuration = (seconds: number) => {
+    if (!seconds || seconds <= 0) return '00:00'
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = Math.floor(seconds % 60)
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
   }
 
   const getDuration = () => {
     if (!clip.start_time || !clip.end_time) return '00:00'
     const start = clip.start_time.replace(',', '.')
     const end = clip.end_time.replace(',', '.')
-    return `${start} - ${end}`
+    return `${start.substring(0, 8)} - ${end.substring(0, 8)}`
   }
 
   const getScoreColor = (score: number) => {
-    if (score >= 8) return '#52c41a'
-    if (score >= 6) return '#faad14'
-    return '#ff4d4f'
+    // 根据分数区间设置不同的颜色
+    if (score >= 0.9) return '#52c41a' // 绿色 - 优秀
+    if (score >= 0.8) return '#1890ff' // 蓝色 - 良好
+    if (score >= 0.7) return '#faad14' // 橙色 - 一般
+    if (score >= 0.6) return '#ff7a45' // 红橙色 - 较差
+    return '#ff4d4f' // 红色 - 差
   }
 
   const getContentTooltip = () => {
@@ -123,14 +134,19 @@ const ClipCard: React.FC<ClipCardProps> = ({
     return '暂无内容要点'
   }
 
+  // 获取要显示的内容要点
+  const getDisplayContent = () => {
+    if (clip.content && clip.content.length > 0) {
+      return clip.content.join(' ')
+    }
+    return clip.recommend_reason || '暂无内容要点'
+  }
+
+  const textRef = useRef<HTMLDivElement>(null)
+
   return (
     <>
-      <Tooltip 
-        title={getContentTooltip()} 
-        placement="top" 
-        overlayStyle={{ maxWidth: '300px' }}
-      >
-        <Card
+      <Card
           className="clip-card"
           hoverable
           style={{ 
@@ -177,79 +193,73 @@ const ClipCard: React.FC<ClipCardProps> = ({
                 <PlayCircleOutlined style={{ fontSize: '40px', color: 'white' }} />
               </div>
               
-              {/* 顶部信息栏 */}
+              {/* 右上角推荐分数 */}
               <div 
                 style={{
                   position: 'absolute',
                   top: '12px',
-                  left: '12px',
                   right: '12px',
+                  background: getScoreColor(clip.final_score),
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 500,
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  gap: '4px'
                 }}
               >
-                <Tag 
-                  color="geekblue" 
-                  style={{ 
-                    margin: 0, 
-                    fontSize: '11px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: 'rgba(24, 144, 255, 0.9)',
-                    color: 'white',
-                    fontWeight: 500
-                  }}
-                >
-                  {clip.outline}
-                </Tag>
-                <div 
-                  style={{
-                    background: 'rgba(0,0,0,0.7)',
-                    color: 'white',
-                    padding: '4px 8px',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    fontWeight: 500,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <StarFilled style={{ fontSize: '12px' }} />
-                  {(clip.final_score * 100).toFixed(0)}分
-                </div>
+                <StarFilled style={{ fontSize: '12px' }} />
+                {(clip.final_score * 100).toFixed(0)}分
               </div>
               
-              {/* 底部信息栏 */}
+              {/* 左下角时间区间 */}
               <div 
                 style={{
                   position: 'absolute',
                   bottom: '12px',
                   left: '12px',
-                  right: '12px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <div style={{
                   background: 'rgba(0,0,0,0.7)',
                   color: 'white',
                   padding: '4px 8px',
                   borderRadius: '8px',
-                  fontSize: '11px'
-                }}>
-                  {formatTime(clip.start_time)} - {formatTime(clip.end_time)}
-                </div>
-
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <ClockCircleOutlined style={{ fontSize: '12px' }} />
+                {getDuration()}
+              </div>
+              
+              {/* 右下角视频时长 */}
+              <div 
+                style={{
+                  position: 'absolute',
+                  bottom: '12px',
+                  right: '12px',
+                  background: 'rgba(0,0,0,0.7)',
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                {formatDuration(clip.duration || 0)}
               </div>
             </div>
           }
         >
           <div style={{ padding: '16px', height: '180px', display: 'flex', flexDirection: 'column' }}>
             {/* 标题区域 */}
-            <div style={{ marginBottom: '12px' }}>
+            <div style={{ marginBottom: '8px' }}>
               <Title 
                 level={5} 
                 ellipsis={{ rows: 2 }} 
@@ -266,22 +276,32 @@ const ClipCard: React.FC<ClipCardProps> = ({
               </Title>
             </div>
             
-            {/* 推荐理由 */}
-            <div style={{ flex: 1, marginBottom: '12px' }}>
-              <Text 
-                type="secondary" 
-                style={{ 
-                  fontSize: '13px',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 4,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  lineHeight: '1.5',
-                  color: '#b0b0b0'
-                }}
+            {/* 内容要点 */}
+            <div style={{ flex: 1, marginBottom: '12px', minHeight: '58px' }}>
+              <Tooltip 
+                title={getDisplayContent()} 
+                placement="top" 
+                overlayStyle={{ maxWidth: '300px' }}
+                mouseEnterDelay={0.5}
               >
-                {clip.recommend_reason || '暂无推荐理由'}
-              </Text>
+                <div 
+                  ref={textRef}
+                  style={{ 
+                    fontSize: '13px',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    lineHeight: '1.5',
+                    color: '#b0b0b0',
+                    cursor: 'pointer',
+                    wordBreak: 'break-word',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {getDisplayContent()}
+                </div>
+              </Tooltip>
             </div>
             
             {/* 操作按钮 */}
@@ -323,7 +343,6 @@ const ClipCard: React.FC<ClipCardProps> = ({
             </div>
           </div>
         </Card>
-      </Tooltip>
 
       {/* 视频播放模态框 */}
       <Modal

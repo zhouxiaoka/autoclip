@@ -8,8 +8,8 @@ from celery import Celery
 from celery.schedules import crontab
 from pathlib import Path
 
-# 设置默认Django设置模块
-os.environ.setdefault('CELERY_CONFIG_MODULE', 'backend.core.celery_config')
+# 设置默认配置模块
+# os.environ.setdefault('CELERY_CONFIG_MODULE', 'backend.core.celery_app')
 
 # 创建Celery应用
 celery_app = Celery('autoclip')

@@ -38,346 +38,638 @@ except ImportError as e:
     # 定义占位符函数
     def run_step1_outline(**kwargs): 
         logger.warning("流水线模块未正确导入，使用占位符函数")
-        # 生成模拟输出
-        srt_path = kwargs.get('srt_path')
-        output_path = kwargs.get('output_path')
-        if output_path:
-            import json
-            from pathlib import Path
-            # 确保output_path是Path对象
-            if isinstance(output_path, str):
-                output_path = Path(output_path)
-            # 确保父目录存在
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            mock_output = {
-                "outlines": [
-                    {"topic": "测试话题1", "start_time": "00:00:00", "end_time": "00:00:05", "content": "测试内容1"},
-                    {"topic": "测试话题2", "start_time": "00:00:05", "end_time": "00:00:10", "content": "测试内容2"}
-                ],
-                "status": "completed",
-                "message": "占位符函数生成的模拟输出"
-            }
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(mock_output, f, ensure_ascii=False, indent=2)
         return {"status": "skipped", "message": "流水线模块未正确导入"}
     
     def run_step2_timeline(**kwargs): 
         logger.warning("流水线模块未正确导入，使用占位符函数")
-        # 生成模拟输出
-        output_path = kwargs.get('output_path')
-        if output_path:
-            import json
-            from pathlib import Path
-            # 确保output_path是Path对象
-            if isinstance(output_path, str):
-                output_path = Path(output_path)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            mock_output = {
-                "timeline": [
-                    {"time": "00:00:00", "event": "开始"},
-                    {"time": "00:00:05", "event": "话题1"},
-                    {"time": "00:00:10", "event": "话题2"}
-                ],
-                "status": "completed",
-                "message": "占位符函数生成的模拟输出"
-            }
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(mock_output, f, ensure_ascii=False, indent=2)
         return {"status": "skipped", "message": "流水线模块未正确导入"}
     
     def run_step3_scoring(**kwargs): 
         logger.warning("流水线模块未正确导入，使用占位符函数")
-        # 生成模拟输出
-        output_path = kwargs.get('output_path')
-        if output_path:
-            import json
-            from pathlib import Path
-            # 确保output_path是Path对象
-            if isinstance(output_path, str):
-                output_path = Path(output_path)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            mock_output = {
-                "scored_clips": [
-                    {"clip_id": "1", "score": 0.8, "content": "高分内容1"},
-                    {"clip_id": "2", "score": 0.7, "content": "高分内容2"}
-                ],
-                "status": "completed",
-                "message": "占位符函数生成的模拟输出"
-            }
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(mock_output, f, ensure_ascii=False, indent=2)
         return {"status": "skipped", "message": "流水线模块未正确导入"}
     
     def run_step4_title(**kwargs): 
         logger.warning("流水线模块未正确导入，使用占位符函数")
-        # 生成模拟输出
-        output_path = kwargs.get('output_path')
-        if output_path:
-            import json
-            from pathlib import Path
-            # 确保output_path是Path对象
-            if isinstance(output_path, str):
-                output_path = Path(output_path)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            mock_output = {
-                "titles": [
-                    {"clip_id": "1", "title": "测试标题1"},
-                    {"clip_id": "2", "title": "测试标题2"}
-                ],
-                "status": "completed",
-                "message": "占位符函数生成的模拟输出"
-            }
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(mock_output, f, ensure_ascii=False, indent=2)
         return {"status": "skipped", "message": "流水线模块未正确导入"}
     
     def run_step5_clustering(**kwargs): 
         logger.warning("流水线模块未正确导入，使用占位符函数")
-        # 生成模拟输出
-        output_path = kwargs.get('output_path')
-        if output_path:
-            import json
-            from pathlib import Path
-            # 确保output_path是Path对象
-            if isinstance(output_path, str):
-                output_path = Path(output_path)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            mock_output = {
-                "collections": [
-                    {"collection_id": "1", "title": "测试合集1", "clips": ["1", "2"]},
-                    {"collection_id": "2", "title": "测试合集2", "clips": ["3", "4"]}
-                ],
-                "status": "completed",
-                "message": "占位符函数生成的模拟输出"
-            }
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(mock_output, f, ensure_ascii=False, indent=2)
         return {"status": "skipped", "message": "流水线模块未正确导入"}
     
     def run_step6_video(**kwargs): 
         logger.warning("流水线模块未正确导入，使用占位符函数")
-        # 生成模拟输出
-        output_path = kwargs.get('output_path')
-        if output_path:
-            import json
-            from pathlib import Path
-            # 确保output_path是Path对象
-            if isinstance(output_path, str):
-                output_path = Path(output_path)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            mock_output = {
-                "videos": [
-                    {"clip_id": "1", "video_path": "output/clip_1.mp4"},
-                    {"clip_id": "2", "video_path": "output/clip_2.mp4"}
-                ],
-                "status": "completed",
-                "message": "占位符函数生成的模拟输出"
-            }
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(mock_output, f, ensure_ascii=False, indent=2)
         return {"status": "skipped", "message": "流水线模块未正确导入"}
 
 class PipelineAdapter:
-    """Pipeline适配器 - 桥接旧Pipeline和新架构"""
+    """Pipeline适配器，将shared/pipeline中的处理逻辑集成到新架构"""
     
-    def __init__(self, db: Session, task_id: Optional[int] = None, progress_callback: Optional[Callable[[int, int, str], Any]] = None):
+    def __init__(self, db: Session, task_id: Optional[str] = None, project_id: Optional[str] = None):
         self.db = db
         self.task_id = task_id
-        self.progress_callback = progress_callback
-        self.progress_manager = get_progress_manager(db) if task_id else None
+        self.project_id = project_id
+        self.progress_manager = get_progress_manager(db)
         
-        # 步骤配置
-        self.steps = [
-            {"name": "outline", "description": "提取视频大纲", "weight": 15},
-            {"name": "timeline", "description": "生成时间线", "weight": 20},
-            {"name": "scoring", "description": "内容评分", "weight": 20},
-            {"name": "title", "description": "生成标题", "weight": 15},
-            {"name": "clustering", "description": "主题聚类", "weight": 15},
-            {"name": "video", "description": "生成视频", "weight": 15}
-        ]
+        # 获取项目根目录和输出目录
+        self.project_root = get_project_root()
+        self.data_dir = get_data_directory()
+        self.output_dir = get_output_directory()
         
+        # 初始化存储服务
+        if project_id:
+            from .storage_service import StorageService
+            self.storage_service = StorageService(project_id)
+        else:
+            self.storage_service = None
+        
+        logger.info(f"Pipeline适配器初始化完成: project_root={self.project_root}, data_dir={self.data_dir}, output_dir={self.output_dir}")
+    
     def process_project_sync(self, project_id: str, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
-        """同步处理整个项目的Pipeline流程"""
+        """
+        同步处理项目 - 执行完整的6步处理流程
+        
+        Args:
+            project_id: 项目ID
+            input_video_path: 输入视频路径
+            input_srt_path: 输入SRT路径
+            
+        Returns:
+            处理结果
+        """
+        logger.info(f"开始处理项目: {project_id}")
+        
         try:
-            # 获取项目信息
-            project = self.db.query(Project).filter(Project.id == project_id).first()
-            if not project:
-                raise ValueError(f"项目 {project_id} 不存在")
+            # 更新项目状态为处理中
+            self._update_project_status(project_id, ProjectStatus.PROCESSING)
             
-            # 更新项目状态
-            project.status = ProjectStatus.PROCESSING
-            project.started_at = datetime.utcnow()
-            self.db.commit()
-            
-            # 创建项目工作目录
-            data_dir = get_data_directory()
-            project_dir = data_dir / "projects" / str(project_id)
+            # 准备项目目录
+            project_dir = self.data_dir / "projects" / project_id
             project_dir.mkdir(parents=True, exist_ok=True)
             
-            # 执行6个步骤
-            results = {}
-            total_progress = 0
+            # 准备输出目录
+            output_dir = self.output_dir / "metadata" / f"step1_chunks"
+            output_dir.mkdir(parents=True, exist_ok=True)
             
-            for i, step in enumerate(self.steps):
-                step_name = step["name"]
-                step_description = step["description"]
-                step_weight = step["weight"]
-                
-                logger.info(f"开始执行步骤 {i+1}/6: {step_description}")
-                
-                # 更新进度
-                self._update_progress_sync(project_id, total_progress, f"正在{step_description}...")
-                
-                try:
-                    # 执行具体步骤
-                    if step_name == "outline":
-                        results[step_name] = self._step1_outline_sync(input_srt_path, project_dir)
-                    elif step_name == "timeline":
-                        results[step_name] = self._step2_timeline_sync(results["outline"], project_dir)
-                    elif step_name == "scoring":
-                        results[step_name] = self._step3_scoring_sync(results["timeline"], project_dir)
-                    elif step_name == "title":
-                        results[step_name] = self._step4_title_sync(results["scoring"], project_dir)
-                    elif step_name == "clustering":
-                        results[step_name] = self._step5_clustering_sync(results["title"], project_dir)
-                    elif step_name == "video":
-                        results[step_name] = self._step6_video_sync(results["clustering"], input_video_path, project_dir)
-                    
-                    total_progress += step_weight
-                    self._update_progress_sync(project_id, total_progress, f"{step_description}完成", results[step_name])
-                
-                except Exception as e:
-                    logger.error(f"步骤 {step_name} 执行失败: {str(e)}")
-                    self._update_progress_sync(project_id, total_progress, f"{step_description}失败: {str(e)}")
-                    raise
+            # 步骤1: 大纲提取
+            logger.info("开始步骤1: 大纲提取")
+            self._update_progress(project_id, 16, "大纲提取")
+            step1_result = self._run_step1_outline(project_id, input_srt_path, project_dir)
+            
+            # 步骤2: 时间定位
+            logger.info("开始步骤2: 时间定位")
+            self._update_progress(project_id, 33, "时间定位")
+            step2_result = self._run_step2_timeline(project_id, project_dir)
+            
+            # 步骤3: 内容评分
+            logger.info("开始步骤3: 内容评分")
+            self._update_progress(project_id, 50, "内容评分")
+            step3_result = self._run_step3_scoring(project_id, project_dir)
+            
+            # 步骤4: 标题生成
+            logger.info("开始步骤4: 标题生成")
+            self._update_progress(project_id, 66, "标题生成")
+            step4_result = self._run_step4_title(project_id, project_dir)
+            
+            # 步骤5: 主题聚类
+            logger.info("开始步骤5: 主题聚类")
+            self._update_progress(project_id, 83, "主题聚类")
+            step5_result = self._run_step5_clustering(project_id, project_dir)
+            
+            # 步骤6: 视频切割
+            logger.info("开始步骤6: 视频切割")
+            self._update_progress(project_id, 100, "视频切割")
+            step6_result = self._run_step6_video(project_id, input_video_path, project_dir)
             
             # 更新项目状态为完成
-            project.status = ProjectStatus.COMPLETED
-            project.completed_at = datetime.utcnow()
-            project.result_data = results
-            self.db.commit()
+            self._update_project_status(project_id, ProjectStatus.COMPLETED)
             
-            self._update_progress_sync(project_id, 100, "项目处理完成")
+            # 返回完整结果
+            result = {
+                "project_id": project_id,
+                "status": "completed",
+                "steps": {
+                    "step1": step1_result,
+                    "step2": step2_result,
+                    "step3": step3_result,
+                    "step4": step4_result,
+                    "step5": step5_result,
+                    "step6": step6_result
+                },
+                "message": "项目处理完成"
+            }
             
-            logger.info(f"项目 {project_id} 处理完成")
-            return results
+            logger.info(f"项目处理完成: {project_id}")
+            return result
             
         except Exception as e:
+            error_msg = f"项目处理失败: {str(e)}"
+            logger.error(error_msg)
+            
             # 更新项目状态为失败
-            project = self.db.query(Project).filter(Project.id == project_id).first()
-            if project:
-                project.status = ProjectStatus.FAILED
-                project.error_message = str(e)
-                self.db.commit()
+            self._update_project_status(project_id, ProjectStatus.FAILED)
             
-            self._update_progress_sync(project_id, -1, f"处理失败: {str(e)}")
-            logger.error(f"项目 {project_id} 处理失败: {str(e)}")
-            raise
+            raise Exception(error_msg)
     
-    def _step1_outline_sync(self, srt_path: str, project_dir: Path) -> Dict[str, Any]:
-        """步骤1: 提取视频大纲"""
-        srt_file = Path(srt_path)
-        if not srt_file.exists():
-            raise FileNotFoundError(f"SRT文件不存在: {srt_path}")
-        
-        output_path = project_dir / "step1_outline.json"
-        result = run_step1_outline(srt_file, output_path=output_path)
-        
-        return result
-    
-    def _step2_timeline_sync(self, outline_result: Dict[str, Any], project_dir: Path) -> Dict[str, Any]:
-        """步骤2: 生成时间线"""
-        # 使用上一步的输出作为输入
-        outline_path = project_dir / "step1_outline.json"
-        output_path = project_dir / "step2_timeline.json"
-        result = run_step2_timeline(outline_path, output_path=output_path)
-        
-        return result
-    
-    def _step3_scoring_sync(self, timeline_result: Dict[str, Any], project_dir: Path) -> Dict[str, Any]:
-        """步骤3: 内容评分"""
-        # 使用上一步的输出作为输入
-        timeline_path = project_dir / "step2_timeline.json"
-        output_path = project_dir / "step3_scored_clips.json"
-        result = run_step3_scoring(timeline_path, output_path=output_path)
-        
-        return result
-    
-    def _step4_title_sync(self, scoring_result: Dict[str, Any], project_dir: Path) -> Dict[str, Any]:
-        """步骤4: 生成标题"""
-        # 使用上一步的输出作为输入
-        high_score_clips_path = project_dir / "step3_scored_clips.json"
-        output_path = project_dir / "step4_titles.json"
-        result = run_step4_title(high_score_clips_path, output_path=output_path)
-        
-        return result
-    
-    def _step5_clustering_sync(self, title_result: Dict[str, Any], project_dir: Path) -> Dict[str, Any]:
-        """步骤5: 主题聚类"""
-        # 使用上一步的输出作为输入
-        clips_with_titles_path = project_dir / "step4_titles.json"
-        output_path = project_dir / "step5_collections.json"
-        result = run_step5_clustering(clips_with_titles_path, output_path=output_path)
-        
-        return result
-    
-    def _step6_video_sync(self, clustering_result: Dict[str, Any], input_video_path: str, project_dir: Path) -> Dict[str, Any]:
-        """步骤6: 生成视频"""
-        input_video = Path(input_video_path)
-        if not input_video.exists():
-            raise FileNotFoundError(f"输入视频不存在: {input_video_path}")
-        
-        # 使用上一步的输出作为输入
-        clips_with_titles_path = project_dir / "step4_titles.json"
-        collections_path = project_dir / "step5_collections.json"
-        output_path = project_dir / "step6_video_result.json"
-        result = run_step6_video(clips_with_titles_path, collections_path, input_video, output_path)
-        
-        return result
-    
-    def _update_progress_sync(self, project_id: str, progress: int, message: str, step_result: Optional[Dict[str, Any]] = None):
-        """同步更新项目进度"""
+    def _run_step1_outline(self, project_id: str, srt_path: str, project_dir: Path) -> Dict[str, Any]:
+        """运行步骤1: 大纲提取"""
         try:
-            # 更新数据库中的项目进度
-            project = self.db.query(Project).filter(Project.id == project_id).first()
-            if project:
-                project.progress = progress
-                project.current_step = message
-                self.db.commit()
+            output_dir = project_dir / "step1_outline"
+            output_dir.mkdir(parents=True, exist_ok=True)
             
-            # 使用进度管理器更新进度
-            if self.progress_manager and self.task_id:
-                # 这里需要异步调用，但在同步环境中我们跳过
-                pass
+            # 验证SRT文件路径
+            srt_file_path = Path(srt_path) if srt_path and srt_path.strip() else None
             
-            logger.info(f"项目 {project_id} 进度: {progress}% - {message}")
-                
+            if not srt_file_path or not srt_file_path.exists():
+                logger.warning(f"SRT文件不存在或路径无效: {srt_path}")
+                # 返回空结果，让后续步骤处理
+                result = []
+            else:
+                result = run_step1_outline(
+                    srt_path=srt_file_path,
+                    output_path=output_dir / "step1_outline.json",
+                    metadata_dir=project_dir
+                )
+            
+            logger.info(f"步骤1完成: {result}")
+            return result
+            
         except Exception as e:
-            logger.error(f"更新进度失败: {str(e)}")
+            logger.error(f"步骤1失败: {str(e)}")
+            return {"status": "failed", "error": str(e)}
     
-    def get_project_status(self, project_id: str) -> Dict[str, Any]:
-        """获取项目状态"""
+    def _run_step2_timeline(self, project_id: str, project_dir: Path) -> Dict[str, Any]:
+        """运行步骤2: 时间定位"""
+        try:
+            step1_output = project_dir / "step1_outline" / "step1_outline.json"
+            output_dir = project_dir / "step2_timeline"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            result = run_step2_timeline(
+                outline_path=step1_output,
+                output_path=output_dir / "step2_timeline.json",
+                metadata_dir=project_dir
+            )
+            
+            logger.info(f"步骤2完成: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"步骤2失败: {str(e)}")
+            return {"status": "failed", "error": str(e)}
+    
+    def _run_step3_scoring(self, project_id: str, project_dir: Path) -> Dict[str, Any]:
+        """运行步骤3: 内容评分"""
+        try:
+            step2_output = project_dir / "step2_timeline" / "step2_timeline.json"
+            output_dir = project_dir / "step3_scoring"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            result = run_step3_scoring(
+                timeline_path=step2_output,
+                output_path=output_dir / "step3_scoring.json",
+                metadata_dir=project_dir
+            )
+            
+            logger.info(f"步骤3完成: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"步骤3失败: {str(e)}")
+            return {"status": "failed", "error": str(e)}
+    
+    def _run_step4_title(self, project_id: str, project_dir: Path) -> Dict[str, Any]:
+        """运行步骤4: 标题生成"""
+        try:
+            step3_output = project_dir / "step3_scoring" / "step3_scoring.json"
+            output_dir = project_dir / "step4_title"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            result = run_step4_title(
+                high_score_clips_path=step3_output,
+                output_path=output_dir / "step4_title.json",
+                metadata_dir=str(project_dir)
+            )
+            
+            logger.info(f"步骤4完成: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"步骤4失败: {str(e)}")
+            return {"status": "failed", "error": str(e)}
+    
+    def _run_step5_clustering(self, project_id: str, project_dir: Path) -> Dict[str, Any]:
+        """运行步骤5: 主题聚类"""
+        try:
+            step4_output = project_dir / "step4_title" / "step4_title.json"
+            output_dir = project_dir / "step5_clustering"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            result = run_step5_clustering(
+                clips_with_titles_path=step4_output,
+                output_path=output_dir / "step5_clustering.json",
+                metadata_dir=str(project_dir)
+            )
+            
+            logger.info(f"步骤5完成: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"步骤5失败: {str(e)}")
+            return {"status": "failed", "error": str(e)}
+    
+    def _run_step6_video(self, project_id: str, input_video_path: str, project_dir: Path) -> Dict[str, Any]:
+        """运行步骤6: 视频切割"""
+        try:
+            step4_output = project_dir / "step4_title" / "step4_title.json"
+            step5_output = project_dir / "step5_clustering" / "step5_clustering.json"
+            output_dir = project_dir / "step6_video"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 准备视频输出目录
+            clips_dir = self.output_dir / "clips"
+            collections_dir = self.output_dir / "collections"
+            clips_dir.mkdir(parents=True, exist_ok=True)
+            collections_dir.mkdir(parents=True, exist_ok=True)
+            
+            result = run_step6_video(
+                clips_with_titles_path=step4_output,
+                collections_path=step5_output,
+                input_video=Path(input_video_path),
+                output_dir=output_dir,
+                clips_dir=str(clips_dir),
+                collections_dir=str(collections_dir),
+                metadata_dir=str(project_dir)
+            )
+            
+            # 将数据保存到数据库
+            if result.get('clips_generated', 0) > 0:
+                self._save_clips_to_database(project_id, step4_output)
+            
+            if result.get('collections_generated', 0) > 0:
+                self._save_collections_to_database(project_id, step5_output)
+            
+            logger.info(f"步骤6完成: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"步骤6失败: {str(e)}")
+            return {"status": "failed", "error": str(e)}
+    
+    def _update_progress(self, project_id: str, progress: int, current_step: str):
+        """更新处理进度"""
+        if self.progress_manager and self.task_id:
+            # 使用正确的方法名和参数
+            import asyncio
+            try:
+                # 计算当前步骤
+                step_mapping = {
+                    "大纲提取": 1,
+                    "时间定位": 2,
+                    "内容评分": 3,
+                    "标题生成": 4,
+                    "主题聚类": 5,
+                    "视频切割": 6
+                }
+                current_step_num = step_mapping.get(current_step, 1)
+                
+                # 创建事件循环并运行异步方法
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(
+                    self.progress_manager.update_task_progress(
+                        task_id=self.task_id,  # 不转换为int，保持UUID字符串
+                        current_step=current_step_num,
+                        total_steps=6,
+                        step_name=current_step,
+                        progress=progress
+                    )
+                )
+                loop.close()
+            except Exception as e:
+                logger.warning(f"更新进度失败: {e}")
+        
+        # 直接更新数据库中的任务
+        if self.task_id:
+            task = self.db.query(Task).filter(Task.id == self.task_id).first()
+            if task:
+                task.progress = progress
+                task.current_step = current_step
+                self.db.commit()
+    
+    def _update_project_status(self, project_id: str, status: ProjectStatus):
+        """更新项目状态"""
         project = self.db.query(Project).filter(Project.id == project_id).first()
-        if not project:
-            return {"error": "项目不存在"}
+        if project:
+            project.status = status
+            if status == ProjectStatus.COMPLETED:
+                project.completed_at = datetime.now()
+            self.db.commit()
+    
+    def _save_clips_to_database(self, project_id: str, clips_file: Path):
+        """将切片数据保存到数据库（分离存储模式）"""
+        try:
+            import json
+            from models.clip import Clip
+            from datetime import datetime
+            import uuid
+            
+            # 确保存储服务可用
+            if not self.storage_service:
+                self.storage_service = StorageService(project_id)
+            
+            # 读取切片数据
+            with open(clips_file, 'r', encoding='utf-8') as f:
+                clips_data = json.load(f)
+            
+            # 保存到数据库（只保存元数据）
+            for clip_data in clips_data:
+                # 转换时间格式
+                start_time = self._convert_time_to_seconds(clip_data['start_time'])
+                end_time = self._convert_time_to_seconds(clip_data['end_time'])
+                duration = end_time - start_time
+                
+                # 生成切片ID
+                clip_id = str(uuid.uuid4())
+                
+                # 保存切片文件到文件系统
+                video_path = self.storage_service.save_clip_file(clip_data, clip_id)
+                
+                # 保存完整数据到文件系统
+                metadata_path = self.storage_service.save_metadata(clip_data, f"clip_{clip_id}")
+                
+                # 创建切片记录（只保存元数据和路径引用）
+                clip = Clip(
+                    id=clip_id,
+                    project_id=project_id,
+                    title=clip_data.get('generated_title', clip_data.get('outline', '')),
+                    description=clip_data.get('recommend_reason', ''),
+                    start_time=start_time,
+                    end_time=end_time,
+                    duration=duration,
+                    score=clip_data.get('final_score', 0.0),
+                    video_path=video_path,  # 只存储路径引用
+                    clip_metadata={
+                        'metadata_file': metadata_path,  # 完整数据文件路径
+                        'clip_id': clip_id,
+                        'created_at': datetime.now().isoformat(),
+                        # 添加完整的元数据字段
+                        'recommend_reason': clip_data.get('recommend_reason', ''),
+                        'outline': clip_data.get('outline', ''),
+                        'content': clip_data.get('content', []),
+                        'chunk_index': clip_data.get('chunk_index', 0),
+                        'generated_title': clip_data.get('generated_title', '')
+                    },
+                    status='completed'
+                )
+                
+                self.db.add(clip)
+            
+            self.db.commit()
+            logger.info(f"成功保存 {len(clips_data)} 个切片（分离存储模式）")
+            
+        except Exception as e:
+            logger.error(f"保存切片到数据库失败: {str(e)}")
+            self.db.rollback()
+    
+    def _save_collections_to_database(self, project_id: str, collections_file: Path):
+        """将合集数据保存到数据库（分离存储模式）"""
+        try:
+            import json
+            from models.collection import Collection
+            from datetime import datetime
+            import uuid
+            
+            # 确保存储服务可用
+            if not self.storage_service:
+                self.storage_service = StorageService(project_id)
+            
+            # 读取合集数据
+            with open(collections_file, 'r', encoding='utf-8') as f:
+                collections_data = json.load(f)
+            
+            # 保存到数据库（只保存元数据）
+            for collection_data in collections_data:
+                # 生成合集ID
+                collection_id = str(uuid.uuid4())
+                
+                # 保存合集文件到文件系统
+                export_path = self.storage_service.save_collection_file(collection_data, collection_id)
+                
+                # 保存完整数据到文件系统
+                metadata_path = self.storage_service.save_metadata(collection_data, f"collection_{collection_id}")
+                
+                # 创建合集记录（只保存元数据和路径引用）
+                collection = Collection(
+                    id=collection_id,
+                    project_id=project_id,
+                    name=collection_data.get('collection_title', ''),
+                    description=collection_data.get('collection_summary', ''),
+                    export_path=str(self.output_dir / "collections" / f"{collection_data.get('collection_title', '')}.mp4"),  # 使用正确的路径
+                    collection_metadata={
+                        'metadata_file': metadata_path,  # 完整数据文件路径
+                        'clip_ids': collection_data.get('clip_ids', []),
+                        'collection_type': 'ai_recommended',
+                        'collection_id': collection_id,
+                        'created_at': datetime.now().isoformat(),
+                        # 添加完整的元数据字段
+                        'collection_title': collection_data.get('collection_title', ''),
+                        'collection_summary': collection_data.get('collection_summary', '')
+                    }
+                )
+                
+                self.db.add(collection)
+            
+            self.db.commit()
+            logger.info(f"成功保存 {len(collections_data)} 个合集（分离存储模式）")
+            
+        except Exception as e:
+            logger.error(f"保存合集到数据库失败: {str(e)}")
+            self.db.rollback()
+    
+    def _convert_time_to_seconds(self, time_str: str) -> int:
+        """将时间字符串转换为秒数"""
+        try:
+            # 处理格式 "00:00:00,120" 或 "00:00:00.120"
+            time_str = time_str.replace(',', '.')
+            parts = time_str.split(':')
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds_parts = parts[2].split('.')
+            seconds = int(seconds_parts[0])
+            milliseconds = int(seconds_parts[1]) if len(seconds_parts) > 1 else 0
+            
+            total_seconds = hours * 3600 + minutes * 60 + seconds + milliseconds / 1000
+            return int(total_seconds)
+        except Exception as e:
+            logger.error(f"时间转换失败: {time_str}, 错误: {e}")
+            return 0
+
+    # 为ProcessingOrchestrator添加适配器方法
+    def adapt_step1_outline(self, srt_path: str) -> Dict[str, Any]:
+        """适配步骤1参数"""
+        project_dir = self.data_dir / "projects" / self.project_id
+        output_dir = project_dir / "step1_outline"
+        output_dir.mkdir(parents=True, exist_ok=True)
         
         return {
-            "id": project.id,
-            "name": project.name,
-            "status": project.status.value,
-            "progress": project.progress or 0,
-            "current_step": project.current_step or "",
-            "started_at": project.started_at.isoformat() if project.started_at else None,
-            "completed_at": project.completed_at.isoformat() if project.completed_at else None,
-            "error_message": project.error_message
+            "srt_path": Path(srt_path),
+            "metadata_dir": project_dir,
+            "output_path": output_dir / "step1_outline.json"
         }
+    
+    def adapt_step2_timeline(self) -> Dict[str, Any]:
+        """适配步骤2参数"""
+        project_dir = self.data_dir / "projects" / self.project_id
+        step1_output = project_dir / "step1_outline" / "step1_outline.json"
+        output_dir = project_dir / "step2_timeline"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        return {
+            "outline_path": step1_output,
+            "output_path": output_dir / "step2_timeline.json",
+            "metadata_dir": project_dir
+        }
+    
+    def adapt_step3_scoring(self) -> Dict[str, Any]:
+        """适配步骤3参数"""
+        project_dir = self.data_dir / "projects" / self.project_id
+        step2_output = project_dir / "step2_timeline" / "step2_timeline.json"
+        output_dir = project_dir / "step3_scoring"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        return {
+            "timeline_path": step2_output,
+            "output_path": output_dir / "step3_scoring.json",
+            "metadata_dir": project_dir
+        }
+    
+    def adapt_step4_title(self) -> Dict[str, Any]:
+        """适配步骤4参数"""
+        project_dir = self.data_dir / "projects" / self.project_id
+        step3_output = project_dir / "step3_scoring" / "step3_scoring.json"
+        output_dir = project_dir / "step4_title"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        return {
+            "high_score_clips_path": step3_output,
+            "output_path": output_dir / "step4_title.json",
+            "metadata_dir": project_dir
+        }
+    
+    def adapt_step5_clustering(self) -> Dict[str, Any]:
+        """适配步骤5参数"""
+        project_dir = self.data_dir / "projects" / self.project_id
+        step4_output = project_dir / "step4_title" / "step4_title.json"
+        output_dir = project_dir / "step5_clustering"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        return {
+            "clips_with_titles_path": step4_output,
+            "output_path": output_dir / "step5_clustering.json",
+            "metadata_dir": project_dir
+        }
+    
+    def adapt_step6_video(self) -> Dict[str, Any]:
+        """适配步骤6参数"""
+        project_dir = self.data_dir / "projects" / self.project_id
+        step5_output = project_dir / "step5_clustering" / "step5_clustering.json"
+        step4_output = project_dir / "step4_title" / "step4_title.json"
+        output_dir = project_dir / "step6_video"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 准备视频输出目录
+        clips_dir = self.output_dir / "clips"
+        collections_dir = self.output_dir / "collections"
+        clips_dir.mkdir(parents=True, exist_ok=True)
+        collections_dir.mkdir(parents=True, exist_ok=True)
+        
+        return {
+            "clips_with_titles_path": step4_output,
+            "collections_path": step5_output,
+            "input_video": project_dir / "raw" / "input.mp4",
+            "output_dir": output_dir,
+            "clips_dir": str(clips_dir),
+            "collections_dir": str(collections_dir),
+            "metadata_dir": str(project_dir)
+        }
+    
+    def prepare_step_environment(self, step_name: str):
+        """准备步骤执行环境"""
+        logger.info(f"准备步骤环境: {step_name}")
+        # 这里可以添加步骤特定的环境准备逻辑
+        pass
 
-# 工厂函数
-def create_pipeline_adapter(db: Session, task_id: Optional[int] = None, progress_callback: Optional[Callable[[int, int, str], Any]] = None) -> PipelineAdapter:
-    """创建Pipeline适配器实例"""
-    return PipelineAdapter(db, task_id, progress_callback)
+    def validate_pipeline_prerequisites(self) -> List[str]:
+        """
+        验证流水线前置条件
+        
+        Returns:
+            错误信息列表，空列表表示验证通过
+        """
+        errors = []
+        
+        try:
+            # 检查项目目录是否存在
+            if not hasattr(self, 'project_id') or not self.project_id:
+                errors.append("项目ID未设置")
+                return errors
+            
+            # 检查项目目录结构
+            project_dir = self.data_dir / "projects" / self.project_id
+            if not project_dir.exists():
+                errors.append(f"项目目录不存在: {project_dir}")
+            
+            # 检查raw目录
+            raw_dir = project_dir / "raw"
+            if not raw_dir.exists():
+                errors.append(f"项目raw目录不存在: {raw_dir}")
+            
+            # 检查视频文件
+            video_files = list(raw_dir.glob("*.mp4")) if raw_dir.exists() else []
+            if not video_files:
+                errors.append("未找到视频文件(.mp4)")
+            
+            # 检查字幕文件
+            srt_files = list(raw_dir.glob("*.srt")) if raw_dir.exists() else []
+            if not srt_files:
+                errors.append("未找到字幕文件(.srt)")
+            
+            # 检查输出目录权限
+            output_dir = self.output_dir
+            if not output_dir.exists():
+                try:
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    errors.append(f"无法创建输出目录: {e}")
+            
+            # 检查API密钥配置
+            import os
+            import json
+            
+            # 首先检查环境变量
+            api_key = os.getenv('DASHSCOPE_API_KEY') or os.getenv('OPENAI_API_KEY')
+            
+            # 如果环境变量中没有，尝试从配置文件读取
+            if not api_key:
+                try:
+                    settings_path = self.data_dir / "settings.json"
+                    if settings_path.exists():
+                        with open(settings_path, 'r', encoding='utf-8') as f:
+                            settings = json.load(f)
+                            api_key = settings.get('dashscope_api_key') or settings.get('openai_api_key')
+                except Exception as e:
+                    logger.warning(f"读取配置文件失败: {e}")
+            
+            if not api_key:
+                errors.append("未配置API密钥(DASHSCOPE_API_KEY或OPENAI_API_KEY)")
+            
+            logger.info(f"流水线前置条件验证完成，发现 {len(errors)} 个错误")
+            return errors
+            
+        except Exception as e:
+            logger.error(f"验证流水线前置条件时发生错误: {e}")
+            errors.append(f"验证过程发生错误: {e}")
+            return errors
 
-# 同步版本的工厂函数，用于在非异步环境中使用
-def create_pipeline_adapter_sync(db: Session, task_id: Optional[int] = None) -> PipelineAdapter:
-    """创建同步版本的Pipeline适配器实例"""
-    return PipelineAdapter(db, task_id, None)
+def create_pipeline_adapter_sync(db: Session, task_id: Optional[str] = None, project_id: Optional[str] = None) -> PipelineAdapter:
+    """创建同步Pipeline适配器"""
+    return PipelineAdapter(db, task_id, project_id)

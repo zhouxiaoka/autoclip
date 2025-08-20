@@ -1,6 +1,6 @@
 """
 切片服务
-提供切片相关的业务逻辑
+提供切片相关的业务逻辑操作
 """
 
 from typing import Optional, List, Dict, Any
@@ -75,6 +75,7 @@ class ClipService(BaseService[Clip, ClipCreate, ClipUpdate, ClipResponse]):
                 description=str(clip.description) if clip.description else None,
                 start_time=getattr(clip, 'start_time', 0),
                 end_time=getattr(clip, 'end_time', 0),
+                duration=int(getattr(clip, 'duration', 0)),
                 score=getattr(clip, 'score', None),
                 status=status_value,
                 tags=getattr(clip, 'tags', []) or [],

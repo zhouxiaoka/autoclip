@@ -187,7 +187,7 @@ class ProcessingOrchestrator:
         
         # 初始化组件
         self.config_manager = ProjectConfigManager(project_id)
-        self.adapter = PipelineAdapter(project_id)
+        self.adapter = PipelineAdapter(db, task_id, project_id)
         self.task_repo = TaskRepository(db)
         
         # 步骤映射
@@ -352,7 +352,10 @@ class ProcessingOrchestrator:
                 progress = ((i + 1) / total_steps) * 100
                 self._update_task_status(TaskStatus.RUNNING, progress=progress)
             
-            # 流水线执行完成
+            # 流水线执行完成，保存数据到数据库
+            self._save_pipeline_results_to_database(results)
+            
+            # 更新任务状态为完成
             self._update_task_status(TaskStatus.COMPLETED, progress=100)
             
             logger.info(f"项目 {self.project_id} 流水线执行完成")
@@ -416,6 +419,32 @@ class ProcessingOrchestrator:
         # 比如切片结果保存到Clip表，合集结果保存到Collection表
         logger.info(f"步骤 {step.value} 结果已保存")
     
+    def _save_pipeline_results_to_database(self, results: Dict[str, Any]):
+        """将流水线执行结果保存到数据库"""
+        try:
+            logger.info(f"开始保存项目 {self.project_id} 流水线结果到数据库")
+            
+            # 获取项目目录
+            project_dir = self.adapter.data_dir / "projects" / self.project_id
+            
+            # 保存切片数据到数据库
+            step4_result = results.get('step4_title', {}).get('result', [])
+            if step4_result:
+                logger.info(f"保存 {len(step4_result)} 个切片到数据库")
+                self.adapter._save_clips_to_database(self.project_id, project_dir / "step4_title" / "step4_title.json")
+            
+            # 保存合集数据到数据库
+            step5_result = results.get('step5_clustering', {}).get('result', [])
+            if step5_result:
+                logger.info(f"保存 {len(step5_result)} 个合集到数据库")
+                self.adapter._save_collections_to_database(self.project_id, project_dir / "step5_clustering" / "step5_clustering.json")
+            
+            logger.info(f"项目 {self.project_id} 流水线结果已全部保存到数据库")
+            
+        except Exception as e:
+            logger.error(f"保存流水线结果到数据库失败: {e}")
+            # 不抛出异常，避免影响整个流水线的完成状态
+    
     def _validate_step_dependencies(self, steps_to_execute: List[ProcessingStep]):
         """验证步骤依赖关系"""
         # 定义步骤依赖关系
@@ -450,15 +479,12 @@ class ProcessingOrchestrator:
         if not task:
             return {"error": "任务不存在"}
         
-        pipeline_status = self.adapter.get_pipeline_status()
-        
         return {
             "task_id": self.task_id,
             "project_id": self.project_id,
             "task_status": task.status.value,
             "task_progress": task.progress,
             "error_message": task.error_message,
-            "pipeline_status": pipeline_status,
             "step_status": self.step_status,
             "step_timings": self.step_timings,
             "created_at": task.created_at.isoformat() if task.created_at else None,

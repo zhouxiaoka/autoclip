@@ -30,7 +30,8 @@ class ApiKeyTestResponse(BaseModel):
 
 def get_settings_file_path() -> Path:
     """获取设置文件路径"""
-    return Path(__file__).parent.parent.parent.parent / "data" / "settings.json"
+    from core.path_utils import get_settings_file_path as get_settings_path
+    return get_settings_path()
 
 def load_settings() -> Dict[str, Any]:
     """加载设置"""
@@ -120,7 +121,7 @@ async def test_api_key(request: ApiKeyTestRequest) -> ApiKeyTestResponse:
             from pathlib import Path
             
             # 添加项目根目录到Python路径
-            project_root = Path(__file__).parent.parent.parent.parent
+            project_root = Path(__file__).parent.parent.parent
             if str(project_root) not in sys.path:
                 sys.path.insert(0, str(project_root))
             

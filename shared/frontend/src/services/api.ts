@@ -140,7 +140,9 @@ export const projectApi = {
 
   // 获取所有项目
   getProjects: async (): Promise<Project[]> => {
-    return api.get('/projects')
+    const response = await api.get('/projects/')
+    // 处理分页响应结构，返回items数组
+    return (response as any).items || response || []
   },
 
   // 获取单个项目
@@ -365,6 +367,11 @@ export const projectApi = {
   // 获取合集视频URL
   getCollectionVideoUrl: (projectId: string, collectionId: string): string => {
     return `http://localhost:8000/api/projects/${projectId}/files/output/collections/${collectionId}.mp4`
+  },
+
+  // 重新排序合集切片
+  reorderCollectionClips: (projectId: string, collectionId: string, clipIds: string[]): Promise<Collection> => {
+    return api.patch(`/projects/${projectId}/collections/${collectionId}/reorder`, clipIds)
   }
 }
 

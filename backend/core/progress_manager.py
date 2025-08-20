@@ -46,7 +46,7 @@ class ProgressManager:
     
     async def update_task_progress(
         self,
-        task_id: int,
+        task_id: str,  # 改为str类型，因为Task.id是UUID字符串
         current_step: int,
         total_steps: int,
         step_name: str,

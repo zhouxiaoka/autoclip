@@ -89,13 +89,33 @@ const ProcessingPage: React.FC = () => {
       
       // 如果处理完成，跳转到项目详情页
       if (statusData.status === 'completed') {
-        message.success('视频处理完成！')
+        message.success('🎉 视频处理完成！正在跳转到结果页面...')
         setTimeout(() => {
           navigate(`/project/${id}`)
-        }, 1500)
+        }, 2000)
       }
-    } catch (error) {
+      
+      // 如果处理失败，显示详细错误信息
+      if (statusData.status === 'error') {
+        const errorMsg = statusData.error_message || '处理过程中发生未知错误'
+        message.error(`处理失败: ${errorMsg}`)
+        
+        // 提供重试选项
+        message.info('您可以返回首页重新上传文件或联系技术支持', 5)
+      }
+      
+    } catch (error: any) {
       console.error('Check status error:', error)
+      
+      // 根据错误类型提供不同的处理建议
+      if (error.response?.status === 404) {
+        message.error('项目不存在或已被删除')
+        setTimeout(() => navigate('/'), 2000)
+      } else if (error.code === 'ECONNABORTED') {
+        message.warning('网络连接超时，正在重试...')
+      } else {
+        message.error('获取处理状态失败，请刷新页面重试')
+      }
     }
   }
 
@@ -151,11 +171,25 @@ const ProcessingPage: React.FC = () => {
         {status?.status === 'error' && (
           <Alert
             message="处理失败"
-            description={status.error_message || '处理过程中发生未知错误'}
+            description={
+              <div>
+                <p>{status.error_message || '处理过程中发生未知错误'}</p>
+                <p style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
+                  可能的原因：文件格式不支持、文件损坏、网络问题或服务器错误
+                </p>
+              </div>
+            }
             type="error"
             showIcon
             action={
-              <Button size="small" onClick={() => navigate('/')}>返回首页</Button>
+              <Space>
+                <Button size="small" onClick={() => window.location.reload()}>
+                  刷新页面
+                </Button>
+                <Button size="small" onClick={() => navigate('/')}>
+                  返回首页
+                </Button>
+              </Space>
             }
           />
         )}

@@ -64,13 +64,59 @@ class VideoProcessor:
         将SRT时间格式转换为FFmpeg时间格式
         
         Args:
-            srt_time: SRT时间格式 (如 "00:00:06,140")
+            srt_time: SRT时间格式 (如 "00:00:06,140" 或 "00:00:06.140")
             
         Returns:
             FFmpeg时间格式 (如 "00:00:06.140")
         """
         # 将逗号替换为点
         return srt_time.replace(',', '.')
+    
+    @staticmethod
+    def convert_seconds_to_ffmpeg_time(seconds: float) -> str:
+        """
+        将秒数转换为FFmpeg时间格式
+        
+        Args:
+            seconds: 秒数
+            
+        Returns:
+            FFmpeg时间格式 (如 "00:00:06.140")
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        milliseconds = int((seconds % 1) * 1000)
+        
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}.{milliseconds:03d}"
+    
+    @staticmethod
+    def convert_ffmpeg_time_to_seconds(time_str: str) -> float:
+        """
+        将FFmpeg时间格式转换为秒数
+        
+        Args:
+            time_str: FFmpeg时间格式 (如 "00:00:06.140")
+            
+        Returns:
+            秒数
+        """
+        try:
+            # 处理毫秒部分
+            if '.' in time_str:
+                time_part, ms_part = time_str.split('.')
+                milliseconds = int(ms_part)
+            else:
+                time_part = time_str
+                milliseconds = 0
+            
+            # 解析时分秒
+            h, m, s = map(int, time_part.split(':'))
+            
+            return h * 3600 + m * 60 + s + milliseconds / 1000
+        except Exception as e:
+            logger.error(f"时间格式转换失败: {time_str}, 错误: {e}")
+            return 0.0
     
     @staticmethod
     def extract_clip(input_video: Path, output_path: Path, 
@@ -96,14 +142,8 @@ class VideoProcessor:
             ffmpeg_end_time = VideoProcessor.convert_srt_time_to_ffmpeg_time(end_time)
             
             # 计算持续时间
-            def time_to_seconds(time_str: str) -> float:
-                """将时间字符串转换为秒数"""
-                h, m, s = time_str.split(':')
-                s, ms = s.split('.')
-                return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
-            
-            start_seconds = time_to_seconds(ffmpeg_start_time)
-            end_seconds = time_to_seconds(ffmpeg_end_time)
+            start_seconds = VideoProcessor.convert_ffmpeg_time_to_seconds(ffmpeg_start_time)
+            end_seconds = VideoProcessor.convert_ffmpeg_time_to_seconds(ffmpeg_end_time)
             duration = end_seconds - start_seconds
             
             # 构建优化的FFmpeg命令
@@ -243,13 +283,24 @@ class VideoProcessor:
             start_time = clip_data['start_time']
             end_time = clip_data['end_time']
             
+            # 处理时间格式 - 如果是秒数，转换为SRT格式
+            if isinstance(start_time, (int, float)):
+                start_time = VideoProcessor.convert_seconds_to_ffmpeg_time(start_time)
+            if isinstance(end_time, (int, float)):
+                end_time = VideoProcessor.convert_seconds_to_ffmpeg_time(end_time)
+            
             # 使用标题作为文件名，并清理不合法的字符
             # 在文件名中包含clip_id，便于后续合集拼接时查找
             safe_title = VideoProcessor.sanitize_filename(title)
             output_path = self.clips_dir / f"{clip_id}_{safe_title}.mp4"
             
+            logger.info(f"提取切片 {clip_id}: {start_time} -> {end_time}, 输出: {output_path}")
+            
             if VideoProcessor.extract_clip(input_video, output_path, start_time, end_time):
                 successful_clips.append(output_path)
+                logger.info(f"切片 {clip_id} 提取成功")
+            else:
+                logger.error(f"切片 {clip_id} 提取失败")
         
         return successful_clips
     

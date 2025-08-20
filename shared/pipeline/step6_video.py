@@ -163,11 +163,16 @@ def run_step6_video(clips_with_titles_path: Path, collections_path: Path,
     # 生成合集视频
     successful_collections = generator.generate_collections(collections_data)
     
-    # 保存元数据
+    # 保存元数据到项目目录
     # 注意：clips_metadata.json在这里保存，包含最终的切片元数据（包含视频路径等信息）
     # 这与step4的step4_titles.json不同，step4只保存带标题的片段数据
-    generator.save_clip_metadata(clips_with_titles)
-    generator.save_collection_metadata(collections_data)
+    if metadata_dir:
+        project_metadata_dir = Path(metadata_dir)
+        generator.save_clip_metadata(clips_with_titles, project_metadata_dir / "clips_metadata.json")
+        generator.save_collection_metadata(collections_data, project_metadata_dir / "collections_metadata.json")
+    else:
+        generator.save_clip_metadata(clips_with_titles)
+        generator.save_collection_metadata(collections_data)
     
     # 返回结果信息
     result = {

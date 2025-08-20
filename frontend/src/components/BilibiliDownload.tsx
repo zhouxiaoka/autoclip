@@ -60,15 +60,48 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
     }
   }, [pollingInterval])
 
-  const validateBilibiliUrl = (url: string): boolean => {
-    const patterns = [
+  const validateVideoUrl = (url: string): boolean => {
+    const bilibiliPatterns = [
       /^https?:\/\/www\.bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
       /^https?:\/\/bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
       /^https?:\/\/b23\.tv\/[0-9A-Za-z]+/,
       /^https?:\/\/www\.bilibili\.com\/video\/av\d+/,
       /^https?:\/\/bilibili\.com\/video\/av\d+/
     ]
-    return patterns.some(pattern => pattern.test(url))
+    
+    const youtubePatterns = [
+      /^https?:\/\/(www\.)?youtube\.com\/watch\?v=[a-zA-Z0-9_-]+/,
+      /^https?:\/\/youtu\.be\/[a-zA-Z0-9_-]+/,
+      /^https?:\/\/(www\.)?youtube\.com\/embed\/[a-zA-Z0-9_-]+/,
+      /^https?:\/\/(www\.)?youtube\.com\/v\/[a-zA-Z0-9_-]+/
+    ]
+    
+    return bilibiliPatterns.some(pattern => pattern.test(url)) || 
+           youtubePatterns.some(pattern => pattern.test(url))
+  }
+  
+  const getVideoType = (url: string): 'bilibili' | 'youtube' | null => {
+    const bilibiliPatterns = [
+      /^https?:\/\/www\.bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
+      /^https?:\/\/bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
+      /^https?:\/\/b23\.tv\/[0-9A-Za-z]+/,
+      /^https?:\/\/www\.bilibili\.com\/video\/av\d+/,
+      /^https?:\/\/bilibili\.com\/video\/av\d+/
+    ]
+    
+    const youtubePatterns = [
+      /^https?:\/\/(www\.)?youtube\.com\/watch\?v=[a-zA-Z0-9_-]+/,
+      /^https?:\/\/youtu\.be\/[a-zA-Z0-9_-]+/,
+      /^https?:\/\/(www\.)?youtube\.com\/embed\/[a-zA-Z0-9_-]+/,
+      /^https?:\/\/(www\.)?youtube\.com\/v\/[a-zA-Z0-9_-]+/
+    ]
+    
+    if (bilibiliPatterns.some(pattern => pattern.test(url))) {
+      return 'bilibili'
+    } else if (youtubePatterns.some(pattern => pattern.test(url))) {
+      return 'youtube'
+    }
+    return null
   }
 
   const parseVideoInfo = async () => {
@@ -77,8 +110,9 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
       return
     }
 
-    if (!validateBilibiliUrl(url.trim())) {
-      setError('请输入正确的视频链接')
+    const videoType = getVideoType(url.trim())
+    if (!videoType) {
+      setError('请输入正确的B站或YouTube视频链接')
       return
     }
 
@@ -86,12 +120,13 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
     setError('') // 清除之前的错误信息
     
     try {
-      const requestBody: any = { url: url.trim() }
-      if (selectedBrowser) {
-        requestBody.browser = selectedBrowser
+      let response
+      if (videoType === 'bilibili') {
+        response = await bilibiliApi.parseVideoInfo(url.trim(), selectedBrowser)
+      } else if (videoType === 'youtube') {
+        response = await bilibiliApi.parseYouTubeVideoInfo(url.trim(), selectedBrowser)
       }
-
-      const response = await bilibiliApi.parseVideoInfo(url.trim(), selectedBrowser)
+      
       const parsedVideoInfo = response.video_info
       
       setVideoInfo(parsedVideoInfo)
@@ -111,10 +146,15 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
     }
   }
 
-  const startPolling = (taskId: string) => {
+  const startPolling = (taskId: string, videoType: 'bilibili' | 'youtube') => {
     const interval = setInterval(async () => {
       try {
-        const task = await bilibiliApi.getTaskStatus(taskId)
+        let task
+        if (videoType === 'bilibili') {
+          task = await bilibiliApi.getTaskStatus(taskId)
+        } else {
+          task = await bilibiliApi.getYouTubeTaskStatus(taskId)
+        }
         setCurrentTask(task)
         
         if (task.status === 'completed') {
@@ -145,12 +185,13 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
 
   const handleDownload = async () => {
     if (!url.trim()) {
-      message.error('请输入B站视频链接')
+      message.error('请输入视频链接')
       return
     }
 
-    if (!validateBilibiliUrl(url.trim())) {
-      message.error('请输入有效的B站视频链接')
+    const videoType = getVideoType(url.trim())
+    if (!videoType) {
+      message.error('请输入有效的B站或YouTube视频链接')
       return
     }
 
@@ -170,23 +211,19 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
         requestBody.browser = selectedBrowser
       }
 
-      const response = await bilibiliApi.createDownloadTask(requestBody)
-      message.success('下载任务创建成功，正在处理...')
+      let response
+      if (videoType === 'bilibili') {
+        response = await bilibiliApi.createDownloadTask(requestBody)
+        message.success('B站下载任务创建成功，正在处理...')
+      } else {
+        response = await bilibiliApi.createYouTubeDownloadTask(requestBody)
+        message.success('YouTube下载任务创建成功，正在处理...')
+      }
       
-      setCurrentTask({
-        task_id: response.task_id,
-        url: url.trim(),
-        project_name: projectName.trim() || '',
-        video_category: selectedCategory,
-        browser: selectedBrowser,
-        status: 'pending',
-        progress: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      setCurrentTask(response)
       
       // 开始轮询任务状态
-      startPolling(response.task_id)
+      startPolling(response.id, videoType)
       
     } catch (error: any) {
       setDownloading(false)
@@ -227,7 +264,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
         <Space direction="vertical" style={{ width: '100%' }} size={16}>
           <div>
             <Input.TextArea
-              placeholder="请粘贴B站视频链接，支持：• https://www.bilibili.com/video/BV1xx411c7mu • https://b23.tv/xxxxxxx"
+              placeholder="请粘贴B站或YouTube视频链接，支持：• B站：https://www.bilibili.com/video/BV1xx411c7mu • YouTube：https://www.youtube.com/watch?v=xxxxx"
               value={url}
               onChange={(e) => {
                 setUrl(e.target.value)
@@ -242,7 +279,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
               }}
               onBlur={() => {
                 // 失去焦点时自动解析
-                if (url.trim() && !videoInfo && validateBilibiliUrl(url.trim())) {
+                if (url.trim() && !videoInfo && validateVideoUrl(url.trim())) {
                   parseVideoInfo();
                 }
               }}
@@ -278,7 +315,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
                  alignItems: 'center',
                  gap: '8px'
                }}>
-                 <span>请输入正确的视频链接</span>
+                 <span>{error}</span>
                </div>
              )}
           </div>
@@ -299,7 +336,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
                 {videoInfo.title}
               </Text>
               <Text style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '12px' }}>
-                UP主: {videoInfo.uploader || '未知'} • 时长: {videoInfo.duration ? `${Math.floor(videoInfo.duration / 60)}:${String(Math.floor(videoInfo.duration % 60)).padStart(2, '0')}` : '未知'}
+                {getVideoType(url) === 'bilibili' ? 'UP主' : '频道'}: {videoInfo.uploader || '未知'} • 时长: {videoInfo.duration ? `${Math.floor(videoInfo.duration / 60)}:${String(Math.floor(videoInfo.duration % 60)).padStart(2, '0')}` : '未知'}
               </Text>
             </div>
           )}

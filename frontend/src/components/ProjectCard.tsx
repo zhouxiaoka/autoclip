@@ -50,6 +50,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
         created = dayjs(createdAt)
       } else if (createdAt.includes('T')) {
         // ISO 8601格式，没有时区信息 - 假设是本地时间
+        // 如果包含时区信息（如+08:00），dayjs会自动处理
         created = dayjs(createdAt)
       } else {
         // 其他格式，尝试直接解析
@@ -594,7 +595,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                   flex: 1
                 }}>
                   <div style={{ color: '#667eea', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
-                    {project.clips?.length || 0}
+                    {project.total_clips || 0}
                   </div>
                   <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
                     切片
@@ -611,7 +612,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                   flex: 1
                 }}>
                   <div style={{ color: '#ff6b6b', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
-                    {project.collections?.length || 0}
+                    {project.total_collections || 0}
                   </div>
                   <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
                     合集

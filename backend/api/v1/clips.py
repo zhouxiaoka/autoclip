@@ -7,8 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from core.database import get_db
 from services.clip_service import ClipService
-from schemas.clip import ClipCreate, ClipUpdate, ClipResponse, ClipListResponse, ClipStatus
+from schemas.clip import ClipCreate, ClipUpdate, ClipResponse, ClipListResponse, ClipStatus, ClipFilter
 from schemas.base import PaginationParams
+from models.clip import Clip
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -124,3 +128,126 @@ async def delete_clip(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/cleanup-duplicates")
+async def cleanup_duplicate_clips(
+    project_id: str,
+    db: Session = Depends(get_db)
+):
+    """清理项目中的重复切片数据"""
+    try:
+        from models.project import Project
+        import json
+        from pathlib import Path
+        from core.config import get_data_directory
+        
+        # 获取项目
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        
+        # 获取数据库中的所有切片
+        db_clips = db.query(Clip).filter(Clip.project_id == project_id).all()
+        logger.info(f"数据库中有 {len(db_clips)} 个切片")
+        
+        # 读取文件系统中的原始数据
+        data_dir = get_data_directory()
+        project_dir = data_dir / "projects" / project_id
+        clips_metadata_file = project_dir / "clips_metadata.json"
+        
+        if not clips_metadata_file.exists():
+            raise HTTPException(status_code=404, detail="切片元数据文件不存在")
+        
+        with open(clips_metadata_file, 'r', encoding='utf-8') as f:
+            original_clips = json.load(f)
+        
+        logger.info(f"文件系统中有 {len(original_clips)} 个切片")
+        
+        # 创建原始切片的ID映射
+        original_clip_ids = {clip['id']: clip for clip in original_clips}
+        
+        # 清理重复数据
+        deleted_count = 0
+        kept_count = 0
+        
+        for db_clip in db_clips:
+            metadata = db_clip.clip_metadata or {}
+            original_id = metadata.get('id')
+            
+            if original_id and original_id in original_clip_ids:
+                # 这个切片是有效的，保留
+                kept_count += 1
+                logger.info(f"保留切片: {db_clip.title} (ID: {original_id})")
+            else:
+                # 这个切片是重复的或无效的，删除
+                logger.info(f"删除重复切片: {db_clip.title} (DB ID: {db_clip.id})")
+                db.delete(db_clip)
+                deleted_count += 1
+        
+        db.commit()
+        
+        return {
+            "project_id": project_id,
+            "project_name": project.name,
+            "original_count": len(original_clips),
+            "db_before_count": len(db_clips),
+            "kept_count": kept_count,
+            "deleted_count": deleted_count,
+            "message": f"清理完成：保留 {kept_count} 个，删除 {deleted_count} 个重复切片"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"清理重复切片失败: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"清理失败: {str(e)}")
+
+
+@router.post("/resync-project")
+async def resync_project_clips(
+    project_id: str,
+    db: Session = Depends(get_db)
+):
+    """重新同步项目的切片数据"""
+    try:
+        from models.project import Project
+        from services.data_sync_service import DataSyncService
+        from pathlib import Path
+        from core.config import get_data_directory
+        
+        # 获取项目
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        
+        # 删除现有的切片数据
+        existing_clips = db.query(Clip).filter(Clip.project_id == project_id).all()
+        deleted_count = len(existing_clips)
+        for clip in existing_clips:
+            db.delete(clip)
+        db.commit()
+        logger.info(f"删除了 {deleted_count} 个现有切片")
+        
+        # 重新同步数据
+        data_dir = get_data_directory()
+        project_dir = data_dir / "projects" / project_id
+        
+        sync_service = DataSyncService(db)
+        synced_count = sync_service._sync_clips_from_filesystem(project_id, project_dir)
+        
+        return {
+            "project_id": project_id,
+            "project_name": project.name,
+            "deleted_count": deleted_count,
+            "synced_count": synced_count,
+            "message": f"重新同步完成：删除 {deleted_count} 个，同步 {synced_count} 个切片"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"重新同步切片失败: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"重新同步失败: {str(e)}")

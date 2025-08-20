@@ -165,7 +165,10 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
                 </Text>
                 <div 
                   style={{
-                    background: averageScore >= 0.8 ? '#52c41a' : averageScore >= 0.7 ? '#1890ff' : '#faad14',
+                    background: averageScore >= 0.9 ? '#52c41a' : 
+                               averageScore >= 0.8 ? '#1890ff' : 
+                               averageScore >= 0.7 ? '#faad14' : 
+                               averageScore >= 0.6 ? '#ff7a45' : '#ff4d4f',
                     color: 'white',
                     padding: '2px 6px',
                     borderRadius: '12px',

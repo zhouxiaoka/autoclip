@@ -33,21 +33,25 @@ const ClipDetailModal: React.FC<ClipDetailModalProps> = ({
   const playerRef = useRef<ReactPlayer>(null)
 
   const formatTime = (timeStr: string) => {
-    if (!timeStr) return '00:00'
-    return timeStr.replace(',', '.')
+    if (!timeStr) return '00:00:00'
+    // 移除小数点后的毫秒部分，只保留时分秒
+    return timeStr.replace(',', '.').substring(0, 8)
   }
 
   const getDuration = () => {
-    if (!clip?.start_time || !clip?.end_time) return '00:00'
+    if (!clip?.start_time || !clip?.end_time) return '00:00:00'
     const start = clip.start_time.replace(',', '.')
     const end = clip.end_time.replace(',', '.')
-    return `${start} - ${end}`
+    return `${start.substring(0, 8)} - ${end.substring(0, 8)}`
   }
 
   const getScoreColor = (score: number) => {
-    if (score >= 8) return '#52c41a'
-    if (score >= 6) return '#faad14'
-    return '#ff4d4f'
+    // 根据分数区间设置不同的颜色
+    if (score >= 0.9) return '#52c41a' // 绿色 - 优秀
+    if (score >= 0.8) return '#1890ff' // 蓝色 - 良好
+    if (score >= 0.7) return '#faad14' // 橙色 - 一般
+    if (score >= 0.6) return '#ff7a45' // 红橙色 - 较差
+    return '#ff4d4f' // 红色 - 差
   }
 
   const handleDownload = async () => {
@@ -131,11 +135,14 @@ const ClipDetailModal: React.FC<ClipDetailModalProps> = ({
                 </Tag>
                 {clip.final_score && (
                   <Tag 
-                    color="green" 
                     icon={<StarFilled />}
-                    style={{ color: getScoreColor(clip.final_score) }}
+                    style={{ 
+                      background: getScoreColor(clip.final_score),
+                      color: 'white',
+                      border: 'none'
+                    }}
                   >
-                    评分: {clip.final_score.toFixed(1)}
+                    评分: {(clip.final_score * 100).toFixed(0)}分
                   </Tag>
                 )}
                 {clip.outline && (

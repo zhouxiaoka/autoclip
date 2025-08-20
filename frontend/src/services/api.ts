@@ -109,12 +109,12 @@ export interface BilibiliDownloadRequest {
 }
 
 export interface BilibiliDownloadTask {
-  task_id: string
+  id: string
   url: string
   project_name: string
   video_category?: string
   browser?: string
-  status: 'pending' | 'downloading' | 'completed' | 'failed'
+  status: 'pending' | 'processing' | 'completed' | 'failed'
   progress: number
   error_message?: string
   video_info?: BilibiliVideoInfo
@@ -150,7 +150,7 @@ export const projectApi = {
 
   // 获取所有项目
   getProjects: async (): Promise<Project[]> => {
-    const response = await api.get('/projects')
+    const response = await api.get('/projects/')
     // 处理分页响应结构，返回items数组
     return (response as any).items || response || []
   },
@@ -207,46 +207,46 @@ export const projectApi = {
   // 获取项目切片
   getClips: async (projectId: string): Promise<any[]> => {
     try {
-      // 首先尝试从API获取
-      const response = await api.get(`/clips?project_id=${projectId}`)
+      // 只从数据库获取数据，不再回退到文件系统
+      console.log('🔍 Calling clips API for project:', projectId)
+      const response = await api.get(`/clips/?project_id=${projectId}`)
+      console.log('📦 Raw API response:', response)
       const clips = (response as any).items || response || []
+      console.log('📋 Extracted clips:', clips.length, 'clips found')
       
-      if (clips.length > 0) {
-        // 转换后端数据格式为前端期望的格式
-        return clips.map((clip: any) => ({
+      // 转换后端数据格式为前端期望的格式
+      const convertedClips = clips.map((clip: any) => {
+        // 转换秒数为时间字符串格式
+        const formatSecondsToTime = (seconds: number) => {
+          const hours = Math.floor(seconds / 3600)
+          const minutes = Math.floor((seconds % 3600) / 60)
+          const secs = Math.floor(seconds % 60)
+          return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+        }
+        
+        // 获取metadata中的内容
+        const metadata = clip.clip_metadata || {}
+        
+        return {
           id: clip.id,
           title: clip.title,
-          generated_title: clip.title, // 使用title作为generated_title
-          start_time: formatTime(clip.start_time), // 转换为字符串格式
-          end_time: formatTime(clip.end_time), // 转换为字符串格式
-          final_score: clip.score || 0, // 使用score作为final_score
-          recommend_reason: clip.description || '', // 使用description作为recommend_reason
-          outline: clip.description || '',
-          content: [clip.description || ''],
-          chunk_index: 0
-        }))
-      }
+          generated_title: clip.title,
+          start_time: formatSecondsToTime(clip.start_time),
+          end_time: formatSecondsToTime(clip.end_time),
+          duration: clip.duration || 0,
+          final_score: clip.score || 0,
+          recommend_reason: metadata.recommend_reason || clip.description || '',
+          outline: metadata.outline || clip.description || '',
+          content: metadata.content || [clip.description || ''],
+          chunk_index: metadata.chunk_index || 0
+        }
+      })
       
-      // 如果API没有数据，尝试从文件系统读取
-      const fileResponse = await api.get(`/projects/${projectId}/files/clips_metadata.json`)
-      if (fileResponse && Array.isArray(fileResponse)) {
-        return fileResponse.map((clip: any) => ({
-          id: clip.id || `clip_${clip.chunk_index || 0}`,
-          title: clip.title || clip.generated_title || '',
-          generated_title: clip.generated_title || clip.title || '',
-          start_time: clip.start_time || '00:00:00,000',
-          end_time: clip.end_time || '00:00:00,000',
-          final_score: clip.final_score || clip.score || 0,
-          recommend_reason: clip.recommend_reason || clip.description || '',
-          outline: clip.outline || '',
-          content: clip.content || [clip.recommend_reason || ''],
-          chunk_index: clip.chunk_index || 0
-        }))
-      }
-      
-      return []
+      console.log('✅ Converted clips:', convertedClips.length, 'clips')
+      console.log('📄 First clip sample:', convertedClips[0])
+      return convertedClips
     } catch (error) {
-      console.error('Failed to get clips:', error)
+      console.error('❌ Failed to get clips:', error)
       return []
     }
   },
@@ -254,36 +254,19 @@ export const projectApi = {
   // 获取项目合集
   getCollections: async (projectId: string): Promise<any[]> => {
     try {
-      // 首先尝试从API获取
-      const response = await api.get(`/collections?project_id=${projectId}`)
+      // 只从数据库获取数据，不再回退到文件系统
+      const response = await api.get(`/collections/?project_id=${projectId}`)
       const collections = (response as any).items || response || []
       
-      if (collections.length > 0) {
-        // 转换后端数据格式为前端期望的格式
-        return collections.map((collection: any) => ({
-          id: collection.id,
-          collection_title: collection.title || collection.collection_title || '',
-          collection_summary: collection.description || collection.collection_summary || '',
-          clip_ids: collection.clip_ids || [],
-          collection_type: collection.collection_type || 'manual',
-          created_at: collection.created_at
-        }))
-      }
-      
-      // 如果API没有数据，尝试从文件系统读取
-      const fileResponse = await api.get(`/projects/${projectId}/files/collections_metadata.json`)
-      if (fileResponse && Array.isArray(fileResponse)) {
-        return fileResponse.map((collection: any) => ({
-          id: collection.id || `collection_${Date.now()}`,
-          collection_title: collection.collection_title || collection.title || '',
-          collection_summary: collection.collection_summary || collection.description || '',
-          clip_ids: collection.clip_ids || [],
-          collection_type: collection.collection_type || 'ai_recommended',
-          created_at: collection.created_at || new Date().toISOString()
-        }))
-      }
-      
-      return []
+      // 转换后端数据格式为前端期望的格式
+      return collections.map((collection: any) => ({
+        id: collection.id,
+        collection_title: collection.name || collection.collection_title || '',
+        collection_summary: collection.description || collection.collection_summary || '',
+        clip_ids: collection.clip_ids || collection.metadata?.clip_ids || [],
+        collection_type: collection.collection_type || 'ai_recommended',
+        created_at: collection.created_at
+      }))
     } catch (error) {
       console.error('Failed to get collections:', error)
       return []
@@ -302,17 +285,30 @@ export const projectApi = {
 
   // 创建合集
   createCollection: (projectId: string, collectionData: { collection_title: string, collection_summary: string, clip_ids: string[] }): Promise<Collection> => {
-    return api.post(`/projects/${projectId}/collections`, collectionData)
+    return api.post(`/collections/`, {
+      project_id: projectId,
+      name: collectionData.collection_title,
+      description: collectionData.collection_summary,
+      metadata: {
+        clip_ids: collectionData.clip_ids,
+        collection_type: 'manual'
+      }
+    })
   },
 
   // 更新合集信息
   updateCollection: (projectId: string, collectionId: string, updates: Partial<Collection>): Promise<Collection> => {
-    return api.patch(`/projects/${projectId}/collections/${collectionId}`, updates)
+    return api.put(`/collections/${collectionId}`, updates)
+  },
+
+  // 重新排序合集切片
+  reorderCollectionClips: (projectId: string, collectionId: string, clipIds: string[]): Promise<Collection> => {
+    return api.patch(`/projects/${projectId}/collections/${collectionId}/reorder`, clipIds)
   },
 
   // 删除合集
   deleteCollection: (projectId: string, collectionId: string): Promise<{message: string, deleted_collection: string}> => {
-    return api.delete(`/projects/${projectId}/collections/${collectionId}`)
+    return api.delete(`/collections/${collectionId}`)
   },
 
   // 下载切片视频
@@ -416,11 +412,11 @@ export const projectApi = {
 
   // 获取合集视频URL
   getCollectionVideoUrl: (projectId: string, collectionId: string): string => {
-    return `http://localhost:8000/api/v1/projects/${projectId}/files/output/collections/${collectionId}.mp4`
+    return `http://localhost:8000/api/v1/collections/${collectionId}/download`
   }
 }
 
-// B站相关API
+// 视频下载相关API
 export const bilibiliApi = {
   // 解析B站视频信息
   parseVideoInfo: async (url: string, browser?: string): Promise<{success: boolean, video_info: BilibiliVideoInfo}> => {
@@ -436,9 +432,28 @@ export const bilibiliApi = {
     })
   },
 
+  // 解析YouTube视频信息
+  parseYouTubeVideoInfo: async (url: string, browser?: string): Promise<{success: boolean, video_info: BilibiliVideoInfo}> => {
+    const formData = new FormData()
+    formData.append('url', url)
+    if (browser) {
+      formData.append('browser', browser)
+    }
+    return api.post('/youtube/parse', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+
   // 创建B站下载任务
   createDownloadTask: async (data: BilibiliDownloadRequest): Promise<BilibiliDownloadTask> => {
     return api.post('/bilibili/download', data)
+  },
+
+  // 创建YouTube下载任务
+  createYouTubeDownloadTask: async (data: BilibiliDownloadRequest): Promise<BilibiliDownloadTask> => {
+    return api.post('/youtube/download', data)
   },
 
   // 获取下载任务状态
@@ -446,9 +461,19 @@ export const bilibiliApi = {
     return api.get(`/bilibili/tasks/${taskId}`)
   },
 
+  // 获取YouTube下载任务状态
+  getYouTubeTaskStatus: async (taskId: string): Promise<BilibiliDownloadTask> => {
+    return api.get(`/youtube/tasks/${taskId}`)
+  },
+
   // 获取所有下载任务
   getAllTasks: async (): Promise<BilibiliDownloadTask[]> => {
     return api.get('/bilibili/tasks')
+  },
+
+  // 获取所有YouTube下载任务
+  getAllYouTubeTasks: async (): Promise<BilibiliDownloadTask[]> => {
+    return api.get('/youtube/tasks')
   }
 }
 

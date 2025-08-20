@@ -168,7 +168,16 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
                         <div className="clip-meta">
                           <Space size="small">
                             <Tag color="blue">{formatDuration(clip)}</Tag>
-                            <Tag color="green">
+                            <Tag 
+                              style={{
+                                background: clip.final_score >= 0.9 ? '#52c41a' : 
+                                           clip.final_score >= 0.8 ? '#1890ff' : 
+                                           clip.final_score >= 0.7 ? '#faad14' : 
+                                           clip.final_score >= 0.6 ? '#ff7a45' : '#ff4d4f',
+                                color: 'white',
+                                border: 'none'
+                              }}
+                            >
                               分数: {(clip.final_score * 100).toFixed(0)}
                             </Tag>
                           </Space>

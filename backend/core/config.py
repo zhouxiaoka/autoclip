@@ -100,12 +100,9 @@ def get_project_root() -> Path:
     if settings.paths.project_root:
         return settings.paths.project_root
     
-    # 自动检测项目根目录
-    current_file = Path(__file__)
-    # backend/core/config.py -> backend -> project_root
-    backend_dir = current_file.parent.parent
-    project_root = backend_dir.parent
-    return project_root
+    # 使用新的路径工具
+    from core.path_utils import get_project_root as get_root
+    return get_root()
 
 def get_data_directory() -> Path:
     """获取数据目录"""
@@ -173,7 +170,8 @@ def get_api_key() -> Optional[str]:
         import json
         from pathlib import Path
         
-        settings_file = Path(__file__).parent.parent.parent / "data" / "settings.json"
+        from core.path_utils import get_settings_file_path
+        settings_file = get_settings_file_path()
         if settings_file.exists():
             with open(settings_file, 'r', encoding='utf-8') as f:
                 settings_data = json.load(f)

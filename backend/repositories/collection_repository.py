@@ -3,9 +3,10 @@
 提供合集相关的数据访问操作
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func
+from pathlib import Path
 from .base import BaseRepository
 from models.collection import Collection, CollectionStatus
 
@@ -110,6 +111,67 @@ class CollectionRepository(BaseRepository[Collection]):
             self.model.project_id == project_id,
             self.model.clips_count >= min_clips
         ).order_by(desc(self.model.clips_count)).all()
+    
+    def create_collection(self, collection_data: Dict[str, Any]) -> Collection:
+        """创建合集记录（分离存储模式）"""
+        from services.storage_service import StorageService
+        import uuid
+        
+        # 生成合集ID（如果没有提供）
+        if "id" not in collection_data:
+            collection_data["id"] = str(uuid.uuid4())
+        
+        # 1. 保存合集文件到文件系统
+        storage_service = StorageService(collection_data["project_id"])
+        export_path = storage_service.save_collection_file(collection_data, collection_data["id"])
+        
+        # 2. 保存完整数据到文件系统
+        metadata_path = storage_service.save_metadata(collection_data, f"collection_{collection_data['id']}")
+        
+        # 3. 保存元数据到数据库（只存储路径引用）
+        collection = Collection(
+            id=collection_data["id"],
+            project_id=collection_data["project_id"],
+            name=collection_data["name"],
+            description=collection_data.get("description"),
+            theme=collection_data.get("theme"),
+            tags=collection_data.get("tags"),
+            total_duration=collection_data.get("total_duration"),
+            clips_count=collection_data.get("clips_count", 0),
+            export_path=export_path,  # 只存储路径
+            collection_metadata={
+                'metadata_file': metadata_path,  # 完整数据文件路径
+                'clip_ids': collection_data.get('clip_ids', []),
+                'collection_type': collection_data.get('collection_type', 'ai_recommended'),
+                'collection_id': collection_data["id"],
+                'created_at': collection_data.get("created_at")
+            }
+        )
+        
+        self.db.add(collection)
+        self.db.commit()
+        return collection
+    
+    def get_collection_file(self, collection_id: str) -> Optional[Path]:
+        """获取合集文件路径"""
+        collection = self.get_by_id(collection_id)
+        if collection and collection.export_path:
+            return Path(collection.export_path)
+        return None
+    
+    def get_collection_content(self, collection_id: str) -> Optional[Dict[str, Any]]:
+        """获取合集完整内容"""
+        collection = self.get_by_id(collection_id)
+        if not collection:
+            return None
+        
+        # 从文件系统获取完整数据
+        if collection.collection_metadata and 'metadata_file' in collection.collection_metadata:
+            from services.storage_service import StorageService
+            storage_service = StorageService(collection.project_id)
+            return storage_service.get_file_content(collection.collection_metadata['metadata_file'])
+        
+        return None
     
     def get_collections_by_duration_range(self, project_id: str, min_duration: int, max_duration: int) -> List[Collection]:
         """
