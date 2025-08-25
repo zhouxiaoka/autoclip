@@ -59,7 +59,7 @@ class ProjectConfigManager:
         self.config_path = self.project_dir / "config.yaml"
         # 使用绝对路径指向项目根目录的prompt文件夹
         project_root = Path(__file__).parent.parent.parent
-        self.prompt_dir = project_root / "prompt"
+        self.prompt_dir = Path(__file__).parent.parent / "prompt"
         
         # 确保项目目录存在
         self.project_dir.mkdir(parents=True, exist_ok=True)

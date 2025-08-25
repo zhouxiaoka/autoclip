@@ -300,3 +300,157 @@ SIGHUP not supported: Restarting with SIGHUP is unstable on this platform!
 [2025-08-20 19:57:45,741: INFO/ForkPoolWorker-2] 系统通知已发送: 处理完成 - 项目 5c48803d-0aa7-48d7-a270-2b33e4954f25 的视频处理已完成
 [2025-08-20 19:57:45,741: INFO/ForkPoolWorker-2] 视频流水线处理完成: 5c48803d-0aa7-48d7-a270-2b33e4954f25
 [2025-08-20 19:57:45,742: INFO/ForkPoolWorker-2] Task backend.tasks.processing.process_video_pipeline[44b171eb-7dc4-4c57-bbb8-e5fdcd9e2d16] succeeded in 75.80394383397652s: {'success': True, 'project_id': '5c48803d-0aa7-48d7-a270-2b33e4954f25', 'task_id': '44b171eb-7dc4-4c57-bbb8-e5fdcd9e2d16', 'result': {'project_id': '5c48803d-0aa7-48d7-a270-2b33e4954f25', 'status': 'completed', 'steps': {'step1': [...], 'step2': [...], 'step3': [...], 'step4': [...], 'step5': [...], 'step6': {...}}, 'message': '项目处理完成'}, 'message': '视频处理流水线完成'}
+[2025-08-21 01:10:53,029: INFO/MainProcess] Task backend.tasks.processing.process_video_pipeline[cbde4453-bb9f-4a1c-a966-6649822a713f] received
+[2025-08-21 01:10:53,034: INFO/ForkPoolWorker-2] 开始处理视频流水线: 17752274-a2e0-42c7-825a-5329b71d1099, 任务ID: cbde4453-bb9f-4a1c-a966-6649822a713f
+[2025-08-21 01:10:53,041: INFO/ForkPoolWorker-2] 验证项目存在: 17752274-a2e0-42c7-825a-5329b71d1099
+[2025-08-21 01:10:53,048: INFO/ForkPoolWorker-2] 任务更新通知已发送: cbde4453-bb9f-4a1c-a966-6649822a713f - started
+[2025-08-21 01:10:53,049: INFO/ForkPoolWorker-2] 项目更新通知已发送: 17752274-a2e0-42c7-825a-5329b71d1099 - processing
+[2025-08-21 01:10:53,050: INFO/ForkPoolWorker-2] Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+[2025-08-21 01:10:53,050: INFO/ForkPoolWorker-2] 开始处理项目: 17752274-a2e0-42c7-825a-5329b71d1099
+[2025-08-21 01:10:53,053: INFO/ForkPoolWorker-2] 开始步骤1: 大纲提取
+[2025-08-21 01:10:53,057: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:10:53,058: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:10:53,060: INFO/ForkPoolWorker-2] 开始提取视频大纲...
+[2025-08-21 01:10:53,062: INFO/ForkPoolWorker-2] 文本已按~30分钟/块切分，共1个块
+[2025-08-21 01:10:53,062: INFO/ForkPoolWorker-2] 所有文本块已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/step1_chunks
+[2025-08-21 01:10:53,063: INFO/ForkPoolWorker-2] 所有SRT块已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/step1_srt_chunks
+[2025-08-21 01:10:53,063: INFO/ForkPoolWorker-2] 处理第1/1个文本块: chunk_0.txt
+[2025-08-21 01:10:53,063: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-21 01:11:05,722: INFO/ForkPoolWorker-2] 大纲提取完成，共7个话题
+[2025-08-21 01:11:05,724: INFO/ForkPoolWorker-2] 大纲已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/step1_outline/step1_outline.json
+[2025-08-21 01:11:05,724: INFO/ForkPoolWorker-2] 步骤1完成: [{'title': '开场介绍与“福”字文化表达', 'subtopics': ['Jackson Wang自我介绍与视频目的说明', '“福”字在中文文化中的象征意义', '倒置“福”字的设计理念与个人佩戴习惯', '相关纹身的含义与个人幸运象征'], 'chunk_index': 0}, {'title': '个人收藏与时尚品味展示', 'subtopics': ['展示运动鞋收藏：Palm Angels、Clark、Supreme等品牌联名款', '对Star Walk、Strip等中国品牌的支持与合作', '自定义设计细节：左右鞋图案、链条装饰等个性化元素', '耳环、戒指等配饰的风格与偏好'], 'chunk_index': 0}, {'title': '香水与香调偏好分享', 'subtopics': ['对尤特（可能指Yves Saint Laurent或类似品牌）香水的喜爱', '偏好自然、有机香调，不喜浓烈香味的个人品味'], 'chunk_index': 0}, {'title': '王队（TEAM WANG）品牌与艺术跨界合作', 'subtopics': ['王队唱片与音乐游戏的联动', '王队设计与莫奈的合作项目', '大地球仪设计展示与品牌理念表达'], 'chunk_index': 0}, {'title': '珠宝与个性化饰品展示', 'subtopics': ['MCI珠宝项链与造型师赠礼', '自制中国麻将项链与朋友合作纪念品', '与Cara合作歌曲主题项链与芬尼瓶收藏'], 'chunk_index': 0}, {'title': '品牌周边与生活收藏分享', 'subtopics': ['TEAM WANG系列菲包与毛绒饼干挂件展示', '强调收藏品与创作、巡演生活的关联性'], 'chunk_index': 0}, {'title': '对粉丝的情感表达与未来期待', 'subtopics': ['表达对粉丝和观众的感激与思念之情', '对疫情后见面、演出、互动的期待', '承诺将为粉丝带来表演、音乐、舞蹈与欢乐'], 'chunk_index': 0}]
+[2025-08-21 01:11:05,725: INFO/ForkPoolWorker-2] 开始步骤2: 时间定位
+[2025-08-21 01:11:05,729: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:11:05,730: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:11:05,734: INFO/ForkPoolWorker-2] 开始提取话题时间区间...
+[2025-08-21 01:11:05,735: INFO/ForkPoolWorker-2] 处理块 0，其中包含 7 个话题...
+[2025-08-21 01:11:05,736: INFO/ForkPoolWorker-2]   > 未找到LLM缓存，开始调用API...
+[2025-08-21 01:11:05,737: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-21 01:11:36,505: INFO/ForkPoolWorker-2] 调试响应已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/debug_responses/chunk_0_original_response.txt
+[2025-08-21 01:11:36,506: INFO/ForkPoolWorker-2]   > 定位成功: {'title': '开场介绍与“福”字文化表达', 'subtopics': ['Jackson Wang自我介绍与视频目的说明', '“福”字在中文文化中的象征意义', '倒置“福”字的设计理念与个人佩戴习惯', '相关纹身的含义与个人幸运象征']} (00:00:00,080 -> 00:01:58,450)
+[2025-08-21 01:11:36,507: INFO/ForkPoolWorker-2]   > 定位成功: {'title': '个人收藏与时尚品味展示', 'subtopics': ['展示运动鞋收藏：Palm Angels、Clark、Supreme等品牌联名款', '对Star Walk、Strip等中国品牌的支持与合作', '自定义设计细节：左右鞋图案、链条装饰等个性化元素', '耳环、戒指等配饰的风格与偏好']} (00:01:58,450 -> 00:02:47,430)
+[2025-08-21 01:11:36,507: INFO/ForkPoolWorker-2]   > 定位成功: {'title': '珠宝与个性化饰品展示', 'subtopics': ['MCI珠宝项链与造型师赠礼', '自制中国麻将项链与朋友合作纪念品', '与Cara合作歌曲主题项链与芬尼瓶收藏']} (00:02:47,430 -> 00:03:35,560)
+[2025-08-21 01:11:36,507: INFO/ForkPoolWorker-2]   > 定位成功: {'title': '对粉丝的情感表达与未来期待', 'subtopics': ['表达对粉丝和观众的感激与思念之情', '对疫情后见面、演出、互动的期待', '承诺将为粉丝带来表演、音乐、舞蹈与欢乐']} (00:03:35,560 -> 00:04:03,740)
+[2025-08-21 01:11:36,509: INFO/ForkPoolWorker-2]   > 块 0 成功解析 4 个时间段
+[2025-08-21 01:11:36,510: INFO/ForkPoolWorker-2] 所有块处理完毕，开始从中间文件拼接最终结果...
+[2025-08-21 01:11:36,511: INFO/ForkPoolWorker-2] 成功从 1 个块文件中加载了 4 个话题。
+[2025-08-21 01:11:36,511: INFO/ForkPoolWorker-2] 按开始时间对所有话题进行最终排序...
+[2025-08-21 01:11:36,512: INFO/ForkPoolWorker-2] 排序完成。
+[2025-08-21 01:11:36,512: INFO/ForkPoolWorker-2] 为所有片段按时间顺序分配固定ID...
+[2025-08-21 01:11:36,512: INFO/ForkPoolWorker-2] 已为 4 个片段分配了固定ID（1-4）
+[2025-08-21 01:11:36,514: INFO/ForkPoolWorker-2] 时间数据已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/step2_timeline/step2_timeline.json
+[2025-08-21 01:11:36,514: INFO/ForkPoolWorker-2] 步骤2完成: [{'id': '1', 'start_time': '00:00:00,080', 'end_time': '00:01:58,450', 'outline': {'title': '开场介绍与“福”字文化表达', 'subtopics': ['Jackson Wang自我介绍与视频目的说明', '“福”字在中文文化中的象征意义', '倒置“福”字的设计理念与个人佩戴习惯', '相关纹身的含义与个人幸运象征']}, 'content': ['这是汉字', '中文里的“幸运”一词', '我们发音为“福”', '通常我会佩戴这个', '你知道我是如何设计整个作品的', '因为在我国我就是这样佩戴的', '当“幸运”字倒过来时', '就像这样', '意味着“福到”', '幸运已至', '嘿大家', '我是Jackson Wang', '今天我来到《Esquire》与大家分享', '并分享一些我的', '收藏品', '这些都是运动鞋', '我觉得很酷', '比如Palm Angels和', 'Clark联名款很酷', '这是Palm Joe与Supreme的联名款', '非常酷', '我超爱这个', '我要感谢Star Walk', '中国品牌Strip品牌太棒了', '我还在上面画了图案', '这代表右鞋', '这代表左鞋', '这里还有一个', '像小巧的链条', '还有我的耳环和戒指', '我想谈谈这两件', '因为对于这个', '它象征幸运', '这是汉字', '呃', '中文里的“幸运”一词', '我们发音为“福”', '通常我会佩戴这个', '你知道我是如何设计整个作品的', '因为在我国我就是这样佩戴的', '当“幸运”字倒过来时', '就像这样', '这代表乌陶', '好运已经降临', '这也是为什么我这里也有个写着幸运的纹身', '完全一样的东西', '完全相同的词语', '而且是倒过来指向我', '所以我感觉', '哦 这运气属于我'], 'chunk_index': 0}, {'id': '2', 'start_time': '00:01:58,450', 'end_time': '00:02:47,430', 'outline': {'title': '个人收藏与时尚品味展示', 'subtopics': ['展示运动鞋收藏：Palm Angels、Clark、Supreme等品牌联名款', '对Star Walk、Strip等中国品牌的支持与合作', '自定义设计细节：左右鞋图案、链条装饰等个性化元素', '耳环、戒指等配饰的风格与偏好']}, 'content': ['香水', '我真的很喜欢尤特的香水香调', '我不太喜欢太浓烈的香味', '我更希望保持自然有机', '是啊', '然后这里还有一个项链', '像王队的星球', '有王队唱片', '参与音乐游戏', '而王队设计也涉足时尚界', '这件作品背后是王队设计与莫奈的合作'], 'chunk_index': 0}, {'id': '3', 'start_time': '00:02:47,430', 'end_time': '00:03:35,560', 'outline': {'title': '珠宝与个性化饰品展示', 'subtopics': ['MCI珠宝项链与造型师赠礼', '自制中国麻将项链与朋友合作纪念品', '与Cara合作歌曲主题项链与芬尼瓶收藏']}, 'content': ['这是我的珠宝系列之一', '我收到了造型师的礼物', '这些项链来自MCI珠宝', '朋友送我的', '中国麻将', '这在中文中有某种含义', '意思是不要富有', '但这不是我关心的', '但这是一条项链', '一位非常好的朋友', '我可能听到这条项链', '我自己做了这条项链', '这是我和她Cara合作的歌曲名字', '这是我非常喜欢的芬尼瓶', '我还没用过', '因为我太珍惜它了', '这是菲包', '这又是王队系列', '哈哈', '我们有这个挂件', '一个小毛绒绒的挂件', '来自我们毛绒饼干系列', '这就是我的精选系列'], 'chunk_index': 0}, {'id': '4', 'start_time': '00:03:35,560', 'end_time': '00:04:03,740', 'outline': {'title': '对粉丝的情感表达与未来期待', 'subtopics': ['表达对粉丝和观众的感激与思念之情', '对疫情后见面、演出、互动的期待', '承诺将为粉丝带来表演、音乐、舞蹈与欢乐']}, 'content': ['正如我说的', '我总在路上', '在路上创作音乐', '其他一切', '所以我现在几乎不回家', '我的收藏献给所有粉丝', '献给所有支持者', '我爱你们', '非常想念你们', '等一切结束我都迫不及待', '等疫情结束我要去见你们', '来逗你们开心', '抱抱你们', '为你们表演', '为你们歌唱', '为你们跳舞', '我非常想念你们', '嗯', '正如你们所期待的'], 'chunk_index': 0}]
+[2025-08-21 01:11:36,515: INFO/ForkPoolWorker-2] 开始步骤3: 内容评分
+[2025-08-21 01:11:36,520: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:11:36,521: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:11:36,524: INFO/ForkPoolWorker-2] 开始为 4 个切片进行批量评分...
+[2025-08-21 01:11:36,524: INFO/ForkPoolWorker-2] 处理块 0，其中包含 4 个话题...
+[2025-08-21 01:11:36,525: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-21 01:12:08,865: ERROR/ForkPoolWorker-2] LLM批量评估失败: slice(None, 20, None)
+[2025-08-21 01:12:08,867: INFO/ForkPoolWorker-2] 按评分排序完成，保持原有固定ID不变
+[2025-08-21 01:12:08,867: INFO/ForkPoolWorker-2] 按ID排序完成，保持时间顺序
+[2025-08-21 01:12:08,868: INFO/ForkPoolWorker-2] 所有切片评分完成
+[2025-08-21 01:12:08,869: INFO/ForkPoolWorker-2] 评分结果已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/step3_all_scored.json
+[2025-08-21 01:12:08,869: INFO/ForkPoolWorker-2] 评分结果已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/step3_scoring/step3_scoring.json
+[2025-08-21 01:12:08,870: INFO/ForkPoolWorker-2] 步骤3完成: []
+[2025-08-21 01:12:08,870: INFO/ForkPoolWorker-2] 开始步骤4: 标题生成
+[2025-08-21 01:12:08,875: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:12:08,875: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:12:08,881: INFO/ForkPoolWorker-2] 带标题的片段数据已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/step4_title/step4_title.json
+[2025-08-21 01:12:08,882: INFO/ForkPoolWorker-2] 步骤4完成: []
+[2025-08-21 01:12:08,882: INFO/ForkPoolWorker-2] 开始步骤5: 主题聚类
+[2025-08-21 01:12:08,887: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:12:08,887: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:12:08,890: INFO/ForkPoolWorker-2] 开始进行主题聚类...
+[2025-08-21 01:12:08,891: INFO/ForkPoolWorker-2] 从设置文件读取到API密钥: sk-1280fee...
+[2025-08-21 01:12:21,915: WARNING/ForkPoolWorker-2] 合集 0 有效片段少于2个，跳过
+[2025-08-21 01:12:21,917: WARNING/ForkPoolWorker-2] 合集 1 有效片段少于2个，跳过
+[2025-08-21 01:12:21,918: WARNING/ForkPoolWorker-2] 合集 2 有效片段少于2个，跳过
+[2025-08-21 01:12:21,918: WARNING/ForkPoolWorker-2] 合集 3 有效片段少于2个，跳过
+[2025-08-21 01:12:21,918: WARNING/ForkPoolWorker-2] 合集 4 有效片段少于2个，跳过
+[2025-08-21 01:12:21,918: WARNING/ForkPoolWorker-2] 合集 5 有效片段少于2个，跳过
+[2025-08-21 01:12:21,918: WARNING/ForkPoolWorker-2] 合集 6 有效片段少于2个，跳过
+[2025-08-21 01:12:21,919: WARNING/ForkPoolWorker-2] 合集 7 有效片段少于2个，跳过
+[2025-08-21 01:12:21,919: WARNING/ForkPoolWorker-2] LLM聚类结果不理想，使用预聚类结果
+[2025-08-21 01:12:21,919: INFO/ForkPoolWorker-2] 主题聚类完成，共0个合集
+[2025-08-21 01:12:21,920: INFO/ForkPoolWorker-2] 合集数据已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/step5_clustering/step5_clustering.json
+[2025-08-21 01:12:21,920: INFO/ForkPoolWorker-2] 步骤5完成: []
+[2025-08-21 01:12:21,921: INFO/ForkPoolWorker-2] 开始步骤6: 视频切割
+[2025-08-21 01:12:21,926: ERROR/ForkPoolWorker-2] 更新任务进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:12:21,927: WARNING/ForkPoolWorker-2] 更新进度失败: WebSocketNotificationService.send_processing_progress() got an unexpected keyword argument 'current_step'
+[2025-08-21 01:12:21,931: INFO/ForkPoolWorker-2] 开始生成切片视频...
+[2025-08-21 01:12:21,932: INFO/ForkPoolWorker-2] 切片视频生成完成，共0个切片
+[2025-08-21 01:12:21,932: INFO/ForkPoolWorker-2] 开始生成合集视频...
+[2025-08-21 01:12:21,932: INFO/ForkPoolWorker-2] 合集视频生成完成，共0个合集
+[2025-08-21 01:12:21,933: INFO/ForkPoolWorker-2] 切片元数据已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/clips_metadata.json
+[2025-08-21 01:12:21,934: INFO/ForkPoolWorker-2] 合集元数据已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/collections_metadata.json
+[2025-08-21 01:12:21,934: INFO/ForkPoolWorker-2] 视频生成完成: 0个切片, 0个合集
+[2025-08-21 01:12:21,934: INFO/ForkPoolWorker-2] 步骤6结果已保存到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/step6_video/step6_video_output.json
+[2025-08-21 01:12:21,935: INFO/ForkPoolWorker-2] 步骤6完成: {'clips_generated': 0, 'collections_generated': 0, 'clip_paths': [], 'collection_paths': []}
+[2025-08-21 01:12:21,938: INFO/ForkPoolWorker-2] 项目处理完成: 17752274-a2e0-42c7-825a-5329b71d1099
+[2025-08-21 01:12:21,941: INFO/ForkPoolWorker-2] 任务更新通知已发送: cbde4453-bb9f-4a1c-a966-6649822a713f - completed
+[2025-08-21 01:12:21,942: INFO/ForkPoolWorker-2] 项目更新通知已发送: 17752274-a2e0-42c7-825a-5329b71d1099 - completed
+[2025-08-21 01:12:21,942: INFO/ForkPoolWorker-2] 系统通知已发送: 处理完成 - 项目 17752274-a2e0-42c7-825a-5329b71d1099 的视频处理已完成
+[2025-08-21 01:12:21,942: INFO/ForkPoolWorker-2] 视频流水线处理完成: 17752274-a2e0-42c7-825a-5329b71d1099
+[2025-08-21 01:12:21,945: INFO/ForkPoolWorker-2] Task backend.tasks.processing.process_video_pipeline[cbde4453-bb9f-4a1c-a966-6649822a713f] succeeded in 88.91246995900292s: {'success': True, 'project_id': '17752274-a2e0-42c7-825a-5329b71d1099', 'task_id': 'cbde4453-bb9f-4a1c-a966-6649822a713f', 'result': {'project_id': '17752274-a2e0-42c7-825a-5329b71d1099', 'status': 'completed', 'steps': {'step1': [...], 'step2': [...], 'step3': [...], 'step4': [...], 'step5': [...], 'step6': {...}}, 'message': '项目处理完成'}, 'message': '视频处理流水线完成'}
+[2025-08-22 01:03:28,696: WARNING/MainProcess] consumer: Connection to broker lost. Trying to re-establish the connection...
+Traceback (most recent call last):
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py", line 341, in start
+    blueprint.start(self)
+    ~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/celery/bootsteps.py", line 116, in start
+    step.start(parent)
+    ~~~~~~~~~~^^^^^^^^
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py", line 772, in start
+    c.loop(*c.loop_args())
+    ~~~~~~^^^^^^^^^^^^^^^^
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/celery/worker/loops.py", line 97, in asynloop
+    next(loop)
+    ~~~~^^^^^^
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/kombu/asynchronous/hub.py", line 373, in create_loop
+    cb(*cbargs)
+    ~~^^^^^^^^^
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/kombu/transport/redis.py", line 1359, in on_readable
+    self.cycle.on_readable(fileno)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/kombu/transport/redis.py", line 576, in on_readable
+    chan.handlers[type]()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/kombu/transport/redis.py", line 974, in _brpop_read
+    dest__item = self.client.parse_response(self.client.connection,
+                                            'BRPOP',
+                                            **options)
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/redis/client.py", line 584, in parse_response
+    response = connection.read_response()
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/redis/connection.py", line 592, in read_response
+    response = self._parser.read_response(disable_decoding=disable_decoding)
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/redis/_parsers/resp2.py", line 15, in read_response
+    result = self._read_response(disable_decoding=disable_decoding)
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/redis/_parsers/resp2.py", line 25, in _read_response
+    raw = self._buffer.readline()
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/redis/_parsers/socket.py", line 115, in readline
+    self._read_from_socket()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/redis/_parsers/socket.py", line 68, in _read_from_socket
+    raise ConnectionError(SERVER_CLOSED_CONNECTION_ERROR)
+redis.exceptions.ConnectionError: Connection closed by server.
+[2025-08-22 01:03:28,708: WARNING/MainProcess] /Users/zhoukk/autoclip/venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py:392: CPendingDeprecationWarning: 
+In Celery 5.1 we introduced an optional breaking change which
+on connection loss cancels all currently executed tasks with late acknowledgement enabled.
+These tasks cannot be acknowledged as the connection is gone, and the tasks are automatically redelivered
+back to the queue. You can enable this behavior using the worker_cancel_long_running_tasks_on_connection_loss
+setting. In Celery 5.1 it is set to False by default. The setting will be set to True by default in Celery 6.0.
+
+  warnings.warn(CANCEL_TASKS_BY_DEFAULT, CPendingDeprecationWarning)
+
+[2025-08-22 01:03:28,711: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 2.00 seconds... (1/100)
+
+[2025-08-22 01:03:30,723: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 4.00 seconds... (2/100)
+
+[2025-08-22 01:03:35,327: ERROR/MainProcess] consumer: Cannot connect to redis://localhost:6379/0: Error 61 connecting to localhost:6379. Connection refused..
+Trying again in 6.00 seconds... (3/100)
+
+
+worker: Warm shutdown (MainProcess)

@@ -120,7 +120,7 @@ async def upload_files(
             # 使用语音识别生成字幕文件
             logger.info("未提供字幕文件，开始使用语音识别生成字幕")
             try:
-                from shared.utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
+                from backend.utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
                 
                 # 生成字幕文件
                 srt_path = raw_dir / f"{video_file.filename.rsplit('.', 1)[0]}.srt"
@@ -477,8 +477,28 @@ async def retry_processing(
             raise HTTPException(status_code=404, detail="Project not found")
         
         # 检查项目状态
-        if project.status not in ["failed", "completed"]:
-            raise HTTPException(status_code=400, detail="Project is not in failed or completed status")
+        if project.status not in ["failed", "completed", "processing"]:
+            raise HTTPException(status_code=400, detail="Project is not in failed, completed, or processing status")
+        
+        # 如果项目正在处理中，先取消当前任务
+        if project.status == "processing":
+            # 查找当前正在运行的任务
+            from models.task import Task, TaskStatus
+            db_session = next(get_db())
+            try:
+                current_task = db_session.query(Task).filter(
+                    Task.project_id == project_id,
+                    Task.status == TaskStatus.RUNNING
+                ).first()
+                
+                if current_task:
+                    # 更新任务状态为取消
+                    current_task.status = TaskStatus.CANCELLED
+                    current_task.updated_at = datetime.utcnow()
+                    db_session.commit()
+                    logger.info(f"已取消项目 {project_id} 的当前任务 {current_task.id}")
+            finally:
+                db_session.close()
         
         # 重置项目状态
         project_service.update_project_status(project_id, "pending")
@@ -551,8 +571,8 @@ async def retry_processing(
         try:
             await websocket_service.send_processing_error(
                 project_id=project_id,
-                error=str(e),
-                step="retry_initialization"
+                task_id="retry-error",  # 添加task_id参数
+                error=str(e)
             )
         except:
             pass
@@ -910,26 +930,8 @@ async def get_project_clip(
             if not clip:
                 raise HTTPException(status_code=404, detail=f"Clip not found: {clip_id}")
             
-            # 获取original_id
-            original_id = clip.clip_metadata.get('id') if clip.clip_metadata else None
-            if not original_id:
-                # 如果没有id字段，尝试使用chunk_index
-                chunk_index = clip.clip_metadata.get('chunk_index') if clip.clip_metadata else None
-                if chunk_index is not None:
-                    original_id = str(chunk_index + 1)  # chunk_index从0开始，文件ID从1开始
-                else:
-                    # 从元数据文件中读取id
-                    metadata_file = clip.clip_metadata.get('metadata_file') if clip.clip_metadata else None
-                    if metadata_file and Path(metadata_file).exists():
-                        try:
-                            with open(metadata_file, 'r', encoding='utf-8') as f:
-                                metadata_data = json.load(f)
-                                original_id = metadata_data.get('id')
-                        except Exception as e:
-                            logger.error(f"读取元数据文件失败: {e}")
-                    
-                    if not original_id:
-                        raise HTTPException(status_code=404, detail=f"Clip id not found in metadata: {clip_id}")
+            # 直接使用clip_id查找文件，不再使用original_id
+            logger.info(f"查找clip视频: clip_id={clip_id}")
             
         finally:
             db.close()
@@ -938,7 +940,6 @@ async def get_project_clip(
         from core.path_utils import get_clips_directory
         clips_dir = get_clips_directory()
         
-        logger.info(f"查找clip视频: clip_id={clip_id}, original_id={original_id}")
         logger.info(f"clips目录: {clips_dir}")
         logger.info(f"clips目录存在: {clips_dir.exists()}")
         
@@ -947,13 +948,13 @@ async def get_project_clip(
             logger.error(f"Clips目录不存在: {clips_dir}")
             raise HTTPException(status_code=404, detail=f"Clips directory not found: {clips_dir}")
         
-        # 查找对应的视频文件
-        video_files = list(clips_dir.glob(f"{original_id}_*.mp4"))
+        # 使用clip_id查找对应的视频文件
+        video_files = list(clips_dir.glob(f"{clip_id}_*.mp4"))
         logger.info(f"找到的视频文件: {[f.name for f in video_files]}")
         
         if not video_files:
-            logger.error(f"没有找到original_id={original_id}的视频文件")
-            raise HTTPException(status_code=404, detail=f"Clip video file not found for original_id: {original_id}")
+            logger.error(f"没有找到clip_id={clip_id}的视频文件")
+            raise HTTPException(status_code=404, detail=f"Clip video file not found for clip_id: {clip_id}")
         
         video_file = video_files[0]
         
@@ -971,6 +972,7 @@ async def get_project_clip(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"获取项目切片视频时发生错误: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

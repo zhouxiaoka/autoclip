@@ -5099,3 +5099,411 @@ whisper: error: argument --word_timestamps: expected one argument
 2025-08-21 01:05:24,652 - main - INFO - 启动AutoClip API服务...
 2025-08-21 01:05:24,653 - main - INFO - 数据库表创建完成
 2025-08-21 01:05:24,653 - main - INFO - API密钥已加载到环境变量
+2025-08-21 01:08:35,386 - services.pipeline_adapter - INFO - Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+2025-08-21 01:08:35,428 - services.pipeline_adapter - INFO - Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+2025-08-21 01:08:35,442 - api.v1.projects - INFO - 查找clip视频: clip_id=c7d2249e-b1bf-49f5-8250-01852703c81a, original_id=6
+2025-08-21 01:08:35,442 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-21 01:08:35,444 - api.v1.projects - INFO - clips目录存在: True
+2025-08-21 01:08:35,444 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-21 01:08:35,444 - api.v1.projects - ERROR - 没有找到original_id=6的视频文件
+2025-08-21 01:08:35,445 - api.v1.projects - INFO - 查找clip视频: clip_id=09f691d3-b099-42e8-b4d9-3599b32766cc, original_id=4
+2025-08-21 01:08:35,445 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-21 01:08:35,445 - api.v1.projects - INFO - clips目录存在: True
+2025-08-21 01:08:35,446 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-21 01:08:35,446 - api.v1.projects - ERROR - 没有找到original_id=4的视频文件
+2025-08-21 01:08:35,446 - api.v1.projects - INFO - 查找clip视频: clip_id=be8c824b-c04b-4a30-ba80-4f9ff1723373, original_id=1
+2025-08-21 01:08:35,446 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-21 01:08:35,446 - api.v1.projects - INFO - clips目录存在: True
+2025-08-21 01:08:35,446 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-21 01:08:35,446 - api.v1.projects - ERROR - 没有找到original_id=1的视频文件
+2025-08-21 01:08:35,447 - api.v1.projects - INFO - 查找clip视频: clip_id=6e4fad2e-9e26-469e-ac49-455ef8ed4005, original_id=3
+2025-08-21 01:08:35,447 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-21 01:08:35,447 - api.v1.projects - INFO - clips目录存在: True
+2025-08-21 01:08:35,447 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-21 01:08:35,447 - api.v1.projects - ERROR - 没有找到original_id=3的视频文件
+2025-08-21 01:08:35,447 - api.v1.projects - INFO - 查找clip视频: clip_id=832c7185-1c1f-4323-b0b0-31aece7114b2, original_id=5
+2025-08-21 01:08:35,447 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-21 01:08:35,447 - api.v1.projects - INFO - clips目录存在: True
+2025-08-21 01:08:35,447 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-21 01:08:35,447 - api.v1.projects - ERROR - 没有找到original_id=5的视频文件
+2025-08-21 01:08:35,448 - api.v1.projects - INFO - 查找clip视频: clip_id=7f550333-6ea6-412f-8256-6f2bb696bb36, original_id=2
+2025-08-21 01:08:35,448 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-21 01:08:35,448 - api.v1.projects - INFO - clips目录存在: True
+2025-08-21 01:08:35,448 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-21 01:08:35,448 - api.v1.projects - ERROR - 没有找到original_id=2的视频文件
+2025-08-21 01:08:45,037 - api.v1.projects - INFO - 查找clip视频: clip_id=c7d2249e-b1bf-49f5-8250-01852703c81a, original_id=6
+2025-08-21 01:08:45,038 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-21 01:08:45,038 - api.v1.projects - INFO - clips目录存在: True
+2025-08-21 01:08:45,038 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-21 01:08:45,038 - api.v1.projects - ERROR - 没有找到original_id=6的视频文件
+2025-08-21 01:10:20,156 - api.v1.bilibili - INFO - 开始解析B站视频: https://www.bilibili.com/video/BV1JqeMzfEMh/
+2025-08-21 01:10:21,111 - api.v1.bilibili - INFO - 视频信息解析成功: 王嘉尔家私藏曝光！
+2025-08-21 01:10:28,053 - api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1JqeMzfEMh/
+2025-08-21 01:10:52,980 - shared.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 王嘉尔家私藏曝光！
+2025-08-21 01:10:52,980 - shared.utils.bilibili_downloader - INFO - 重命名AI字幕文件: 王嘉尔家私藏曝光！.ai-zh.srt -> 王嘉尔家私藏曝光！.srt
+2025-08-21 01:10:52,980 - shared.utils.bilibili_downloader - INFO - 下载完成: 王嘉尔家私藏曝光！
+2025-08-21 01:10:52,983 - api.v1.bilibili - INFO - 视频文件已移动到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/raw/input.mp4
+2025-08-21 01:10:52,983 - api.v1.bilibili - INFO - 字幕文件已移动到: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/raw/input.srt
+2025-08-21 01:10:52,984 - api.v1.bilibili - INFO - B站下载任务完成: 16fb607a-5d8a-4172-87b5-298ec7bcd72f, 项目ID: 17752274-a2e0-42c7-825a-5329b71d1099
+2025-08-21 01:10:52,985 - api.v1.bilibili - INFO - 准备提交Celery任务: 17752274-a2e0-42c7-825a-5329b71d1099
+2025-08-21 01:10:53,027 - api.v1.bilibili - INFO - Celery任务已提交: cbde4453-bb9f-4a1c-a966-6649822a713f
+2025-08-21 01:10:53,029 - api.v1.bilibili - INFO - B站项目 17752274-a2e0-42c7-825a-5329b71d1099 处理任务已启动，Celery任务ID: cbde4453-bb9f-4a1c-a966-6649822a713f
+2025-08-21 01:10:54,097 - api.v1.projects - INFO - 查找项目视频: project_id=17752274-a2e0-42c7-825a-5329b71d1099
+2025-08-21 01:10:54,097 - api.v1.projects - INFO - 原始文件目录: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/raw
+2025-08-21 01:10:54,097 - api.v1.projects - INFO - 原始文件目录存在: True
+2025-08-21 01:10:54,098 - api.v1.projects - INFO - 找到的视频文件: ['input.mp4']
+2025-08-21 01:10:54,098 - api.v1.projects - INFO - 选择的视频文件: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/raw/input.mp4
+2025-08-21 01:10:54,098 - api.v1.projects - INFO - 返回视频文件: /Users/zhoukk/autoclip/data/projects/17752274-a2e0-42c7-825a-5329b71d1099/raw/input.mp4
+2025-08-21 01:11:21,831 - services.pipeline_adapter - INFO - Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+2025-08-21 01:11:21,840 - services.pipeline_adapter - INFO - Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+2025-08-21 01:12:30,062 - services.pipeline_adapter - INFO - Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+2025-08-21 11:26:07,392 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 11:26:07,393 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 11:26:07,513 - main - INFO - 启动AutoClip API服务...
+2025-08-21 11:26:07,514 - main - INFO - 数据库表创建完成
+2025-08-21 11:26:07,514 - main - INFO - API密钥已加载到环境变量
+2025-08-21 11:26:23,001 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 11:26:23,001 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 11:26:23,066 - main - INFO - 启动AutoClip API服务...
+2025-08-21 11:26:23,066 - main - INFO - 数据库表创建完成
+2025-08-21 11:26:23,067 - main - INFO - API密钥已加载到环境变量
+2025-08-21 11:26:32,184 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 11:26:32,185 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 11:26:32,250 - main - INFO - 启动AutoClip API服务...
+2025-08-21 11:26:32,251 - main - INFO - 数据库表创建完成
+2025-08-21 11:26:32,251 - main - INFO - API密钥已加载到环境变量
+2025-08-21 11:26:41,068 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 11:26:41,068 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 11:26:41,133 - main - INFO - 启动AutoClip API服务...
+2025-08-21 11:26:41,134 - main - INFO - 数据库表创建完成
+2025-08-21 11:26:41,134 - main - INFO - API密钥已加载到环境变量
+2025-08-21 11:26:49,336 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 11:26:49,336 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 11:26:49,400 - main - INFO - 启动AutoClip API服务...
+2025-08-21 11:26:49,400 - main - INFO - 数据库表创建完成
+2025-08-21 11:26:49,401 - main - INFO - API密钥已加载到环境变量
+2025-08-21 11:26:57,411 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 11:26:57,411 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 11:26:57,475 - main - INFO - 启动AutoClip API服务...
+2025-08-21 11:26:57,476 - main - INFO - 数据库表创建完成
+2025-08-21 11:26:57,476 - main - INFO - API密钥已加载到环境变量
+2025-08-21 11:27:06,046 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 11:27:06,046 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 11:27:06,109 - main - INFO - 启动AutoClip API服务...
+2025-08-21 11:27:06,110 - main - INFO - 数据库表创建完成
+2025-08-21 11:27:06,110 - main - INFO - API密钥已加载到环境变量
+2025-08-21 11:27:13,414 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 11:27:13,414 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 11:27:13,478 - main - INFO - 启动AutoClip API服务...
+2025-08-21 11:27:13,479 - main - INFO - 数据库表创建完成
+2025-08-21 11:27:13,479 - main - INFO - API密钥已加载到环境变量
+2025-08-21 11:27:21,173 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 11:27:21,173 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 11:27:21,236 - main - INFO - 启动AutoClip API服务...
+2025-08-21 11:27:21,237 - main - INFO - 数据库表创建完成
+2025-08-21 11:27:21,237 - main - INFO - API密钥已加载到环境变量
+2025-08-21 11:27:30,360 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 11:27:30,361 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 11:27:41,663 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 11:27:41,663 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 11:27:41,728 - main - INFO - 启动AutoClip API服务...
+2025-08-21 11:27:41,730 - main - INFO - 数据库表创建完成
+2025-08-21 11:27:41,730 - main - INFO - API密钥已加载到环境变量
+2025-08-21 14:03:57,087 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 14:03:57,088 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 14:03:57,169 - main - INFO - 启动AutoClip API服务...
+2025-08-21 14:03:57,170 - main - INFO - 数据库表创建完成
+2025-08-21 14:03:57,171 - main - INFO - API密钥已加载到环境变量
+2025-08-21 14:04:10,760 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 14:04:10,760 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 14:04:10,844 - main - INFO - 启动AutoClip API服务...
+2025-08-21 14:04:10,845 - main - INFO - 数据库表创建完成
+2025-08-21 14:04:10,845 - main - INFO - API密钥已加载到环境变量
+2025-08-21 14:06:37,013 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 14:06:37,014 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 14:06:37,092 - main - INFO - 启动AutoClip API服务...
+2025-08-21 14:06:37,092 - main - INFO - 数据库表创建完成
+2025-08-21 14:06:37,093 - main - INFO - API密钥已加载到环境变量
+2025-08-21 14:07:34,195 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 14:07:34,195 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 14:07:34,257 - main - INFO - 启动AutoClip API服务...
+2025-08-21 14:07:34,258 - main - INFO - 数据库表创建完成
+2025-08-21 14:07:34,258 - main - INFO - API密钥已加载到环境变量
+2025-08-21 14:08:52,480 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-21 14:08:52,480 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-21 14:08:52,542 - main - INFO - 启动AutoClip API服务...
+2025-08-21 14:08:52,543 - main - INFO - 数据库表创建完成
+2025-08-21 14:08:52,543 - main - INFO - API密钥已加载到环境变量
+2025-08-22 10:57:58,339 - services.pipeline_adapter - WARNING - 无法导入流水线模块: No module named 'config'
+2025-08-22 10:57:58,340 - services.processing_orchestrator - WARNING - 无法导入流水线模块: No module named 'config'
+2025-08-22 10:57:58,476 - main - INFO - 启动AutoClip API服务...
+2025-08-22 10:57:58,483 - main - INFO - 数据库表创建完成
+2025-08-22 10:57:58,483 - main - INFO - API密钥已加载到环境变量
+2025-08-22 10:58:37,133 - api.v1.bilibili - INFO - 开始解析B站视频: https://www.bilibili.com/video/BV1JqeMzfEMh/
+2025-08-22 10:58:38,151 - api.v1.bilibili - INFO - 视频信息解析成功: 王嘉尔家私藏曝光！
+2025-08-22 10:58:43,616 - api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1JqeMzfEMh/
+2025-08-22 10:58:57,161 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 王嘉尔家私藏曝光！
+2025-08-22 10:58:57,161 - backend.utils.bilibili_downloader - INFO - 重命名AI字幕文件: 王嘉尔家私藏曝光！.ai-zh.srt -> 王嘉尔家私藏曝光！.srt
+2025-08-22 10:58:57,161 - backend.utils.bilibili_downloader - INFO - 下载完成: 王嘉尔家私藏曝光！
+2025-08-22 10:58:57,165 - api.v1.bilibili - INFO - 视频文件已移动到: /Users/zhoukk/autoclip/data/projects/b94b9985-4ac5-4c47-be08-b0d799ce1afa/raw/input.mp4
+2025-08-22 10:58:57,165 - api.v1.bilibili - INFO - 字幕文件已移动到: /Users/zhoukk/autoclip/data/projects/b94b9985-4ac5-4c47-be08-b0d799ce1afa/raw/input.srt
+2025-08-22 10:58:57,166 - api.v1.bilibili - INFO - B站下载任务完成: e1152c2f-306a-4cf7-93a7-6f59891a5a08, 项目ID: b94b9985-4ac5-4c47-be08-b0d799ce1afa
+2025-08-22 10:58:57,167 - api.v1.bilibili - INFO - 准备提交Celery任务: b94b9985-4ac5-4c47-be08-b0d799ce1afa
+2025-08-22 10:58:57,210 - api.v1.bilibili - INFO - Celery任务已提交: d18baaee-1eb6-4c9a-8992-a8a2bcac69ef
+2025-08-22 10:58:57,212 - api.v1.bilibili - INFO - B站项目 b94b9985-4ac5-4c47-be08-b0d799ce1afa 处理任务已启动，Celery任务ID: d18baaee-1eb6-4c9a-8992-a8a2bcac69ef
+2025-08-22 10:58:57,663 - api.v1.projects - INFO - 查找项目视频: project_id=b94b9985-4ac5-4c47-be08-b0d799ce1afa
+2025-08-22 10:58:57,664 - api.v1.projects - INFO - 原始文件目录: /Users/zhoukk/autoclip/data/projects/b94b9985-4ac5-4c47-be08-b0d799ce1afa/raw
+2025-08-22 10:58:57,666 - api.v1.projects - INFO - 原始文件目录存在: True
+2025-08-22 10:58:57,670 - api.v1.projects - INFO - 找到的视频文件: ['input.mp4']
+2025-08-22 10:58:57,670 - api.v1.projects - INFO - 选择的视频文件: /Users/zhoukk/autoclip/data/projects/b94b9985-4ac5-4c47-be08-b0d799ce1afa/raw/input.mp4
+2025-08-22 10:58:57,671 - api.v1.projects - INFO - 返回视频文件: /Users/zhoukk/autoclip/data/projects/b94b9985-4ac5-4c47-be08-b0d799ce1afa/raw/input.mp4
+2025-08-22 11:00:49,221 - services.pipeline_adapter - WARNING - 无法导入流水线模块: No module named 'config'
+2025-08-22 11:00:49,221 - services.processing_orchestrator - WARNING - 无法导入流水线模块: No module named 'config'
+2025-08-22 11:00:49,301 - main - INFO - 启动AutoClip API服务...
+2025-08-22 11:00:49,302 - main - INFO - 数据库表创建完成
+2025-08-22 11:00:49,302 - main - INFO - API密钥已加载到环境变量
+2025-08-22 11:01:28,544 - services.pipeline_adapter - WARNING - 无法导入流水线模块: No module named 'config'
+2025-08-22 11:01:28,544 - services.processing_orchestrator - WARNING - 无法导入流水线模块: No module named 'config'
+2025-08-22 11:01:28,633 - main - INFO - 启动AutoClip API服务...
+2025-08-22 11:01:28,634 - main - INFO - 数据库表创建完成
+2025-08-22 11:01:28,634 - main - INFO - API密钥已加载到环境变量
+2025-08-22 11:01:48,711 - services.pipeline_adapter - WARNING - 无法导入流水线模块: No module named 'config'
+2025-08-22 11:01:48,711 - services.processing_orchestrator - WARNING - 无法导入流水线模块: No module named 'config'
+2025-08-22 11:01:48,775 - main - INFO - 启动AutoClip API服务...
+2025-08-22 11:01:48,776 - main - INFO - 数据库表创建完成
+2025-08-22 11:01:48,776 - main - INFO - API密钥已加载到环境变量
+2025-08-22 11:02:12,801 - services.pipeline_adapter - WARNING - 无法导入流水线模块: cannot import name 'PROMPT_FILES' from 'config' (/Users/zhoukk/autoclip/backend/config.py)
+2025-08-22 11:02:12,802 - services.processing_orchestrator - WARNING - 无法导入流水线模块: cannot import name 'PROMPT_FILES' from 'config' (/Users/zhoukk/autoclip/backend/config.py)
+2025-08-22 11:02:12,882 - main - INFO - 启动AutoClip API服务...
+2025-08-22 11:02:12,883 - main - INFO - 数据库表创建完成
+2025-08-22 11:02:12,884 - main - INFO - API密钥已加载到环境变量
+2025-08-22 11:02:14,777 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-22 11:02:14,777 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-22 11:02:14,842 - main - INFO - 启动AutoClip API服务...
+2025-08-22 11:02:14,843 - main - INFO - 数据库表创建完成
+2025-08-22 11:02:14,843 - main - INFO - API密钥已加载到环境变量
+2025-08-22 11:02:27,136 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-22 11:02:27,137 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-22 11:02:27,201 - main - INFO - 启动AutoClip API服务...
+2025-08-22 11:02:27,202 - main - INFO - 数据库表创建完成
+2025-08-22 11:02:27,202 - main - INFO - API密钥已加载到环境变量
+2025-08-22 11:02:36,659 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-22 11:02:36,662 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-22 11:02:36,726 - main - INFO - 启动AutoClip API服务...
+2025-08-22 11:02:36,727 - main - INFO - 数据库表创建完成
+2025-08-22 11:02:36,727 - main - INFO - API密钥已加载到环境变量
+2025-08-22 11:03:07,646 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-22 11:03:07,646 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-22 11:03:07,711 - main - INFO - 启动AutoClip API服务...
+2025-08-22 11:03:07,712 - main - INFO - 数据库表创建完成
+2025-08-22 11:03:07,712 - main - INFO - API密钥已加载到环境变量
+2025-08-25 23:30:13,509 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-25 23:30:13,510 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-25 23:30:13,610 - main - INFO - 启动AutoClip API服务...
+2025-08-25 23:30:13,615 - main - INFO - 数据库表创建完成
+2025-08-25 23:30:13,615 - main - INFO - API密钥已加载到环境变量
+2025-08-25 23:31:39,947 - api.v1.bilibili - INFO - 开始解析B站视频: https://www.bilibili.com/video/BV1F8hbz5ETk/
+2025-08-25 23:31:41,309 - api.v1.bilibili - INFO - 视频信息解析成功: 王嘉尔自曝最想要的超能力，竟是为了看透人心！
+2025-08-25 23:31:46,349 - api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1F8hbz5ETk/
+2025-08-25 23:32:01,000 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 王嘉尔自曝最想要的超能力，竟是为了看透人心！
+2025-08-25 23:32:01,002 - backend.utils.bilibili_downloader - INFO - 重命名AI字幕文件: 王嘉尔自曝最想要的超能力，竟是为了看透人心！.ai-zh.srt -> 王嘉尔自曝最想要的超能力，竟是为了看透人心！.srt
+2025-08-25 23:32:01,002 - backend.utils.bilibili_downloader - INFO - 下载完成: 王嘉尔自曝最想要的超能力，竟是为了看透人心！
+2025-08-25 23:32:01,004 - api.v1.bilibili - INFO - 视频文件已移动到: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/raw/input.mp4
+2025-08-25 23:32:01,004 - api.v1.bilibili - INFO - 字幕文件已移动到: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/raw/input.srt
+2025-08-25 23:32:01,006 - api.v1.bilibili - INFO - B站下载任务完成: 1ddfa667-9bf0-4891-a40d-0227c58d2f8b, 项目ID: 86f9aa12-2f35-4618-b265-74b3d9a4cf2d
+2025-08-25 23:32:01,007 - api.v1.bilibili - INFO - 准备提交Celery任务: 86f9aa12-2f35-4618-b265-74b3d9a4cf2d
+2025-08-25 23:32:01,050 - api.v1.bilibili - INFO - Celery任务已提交: b9235a3e-0af2-4460-ae5e-8b817d966a51
+2025-08-25 23:32:01,052 - api.v1.bilibili - INFO - B站项目 86f9aa12-2f35-4618-b265-74b3d9a4cf2d 处理任务已启动，Celery任务ID: b9235a3e-0af2-4460-ae5e-8b817d966a51
+2025-08-25 23:32:02,391 - api.v1.projects - INFO - 查找项目视频: project_id=86f9aa12-2f35-4618-b265-74b3d9a4cf2d
+2025-08-25 23:32:02,391 - api.v1.projects - INFO - 原始文件目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/raw
+2025-08-25 23:32:02,391 - api.v1.projects - INFO - 原始文件目录存在: True
+2025-08-25 23:32:02,391 - api.v1.projects - INFO - 找到的视频文件: ['input.mp4']
+2025-08-25 23:32:02,391 - api.v1.projects - INFO - 选择的视频文件: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/raw/input.mp4
+2025-08-25 23:32:02,391 - api.v1.projects - INFO - 返回视频文件: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/raw/input.mp4
+2025-08-25 23:35:32,580 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-25 23:35:32,580 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-25 23:35:32,666 - main - INFO - 启动AutoClip API服务...
+2025-08-25 23:35:32,667 - main - INFO - 数据库表创建完成
+2025-08-25 23:35:32,668 - main - INFO - API密钥已加载到环境变量
+2025-08-25 23:35:53,347 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-25 23:35:53,347 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-25 23:35:53,412 - main - INFO - 启动AutoClip API服务...
+2025-08-25 23:35:53,413 - main - INFO - 数据库表创建完成
+2025-08-25 23:35:53,413 - main - INFO - API密钥已加载到环境变量
+2025-08-25 23:38:12,169 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-25 23:38:12,170 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-25 23:38:12,252 - main - INFO - 启动AutoClip API服务...
+2025-08-25 23:38:12,253 - main - INFO - 数据库表创建完成
+2025-08-25 23:38:12,253 - main - INFO - API密钥已加载到环境变量
+2025-08-25 23:38:12,537 - services.websocket_notification_service - INFO - 项目更新通知已发送: 86f9aa12-2f35-4618-b265-74b3d9a4cf2d - processing
+2025-08-25 23:50:51,039 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-25 23:50:51,039 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-25 23:50:51,120 - main - INFO - 启动AutoClip API服务...
+2025-08-25 23:50:51,121 - main - INFO - 数据库表创建完成
+2025-08-25 23:50:51,122 - main - INFO - API密钥已加载到环境变量
+2025-08-25 23:51:13,734 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-25 23:51:13,735 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-25 23:51:13,814 - main - INFO - 启动AutoClip API服务...
+2025-08-25 23:51:13,814 - main - INFO - 数据库表创建完成
+2025-08-25 23:51:13,815 - main - INFO - API密钥已加载到环境变量
+2025-08-25 23:51:28,646 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-25 23:51:28,646 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-25 23:51:28,709 - main - INFO - 启动AutoClip API服务...
+2025-08-25 23:51:28,709 - main - INFO - 数据库表创建完成
+2025-08-25 23:51:28,710 - main - INFO - API密钥已加载到环境变量
+2025-08-25 23:53:49,727 - services.websocket_notification_service - INFO - 项目更新通知已发送: 86f9aa12-2f35-4618-b265-74b3d9a4cf2d - processing
+2025-08-25 23:54:19,998 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-25 23:54:19,999 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-25 23:54:20,078 - main - INFO - 启动AutoClip API服务...
+2025-08-25 23:54:20,079 - main - INFO - 数据库表创建完成
+2025-08-25 23:54:20,079 - main - INFO - API密钥已加载到环境变量
+2025-08-25 23:57:13,710 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-25 23:57:13,710 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-25 23:57:13,774 - main - INFO - 启动AutoClip API服务...
+2025-08-25 23:57:13,775 - main - INFO - 数据库表创建完成
+2025-08-25 23:57:13,776 - main - INFO - API密钥已加载到环境变量
+2025-08-26 00:03:21,581 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-26 00:03:21,583 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-26 00:03:21,687 - main - INFO - 启动AutoClip API服务...
+2025-08-26 00:03:21,687 - main - INFO - 数据库表创建完成
+2025-08-26 00:03:21,688 - main - INFO - API密钥已加载到环境变量
+2025-08-26 00:06:10,420 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-26 00:06:10,420 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-26 00:06:10,495 - main - INFO - 启动AutoClip API服务...
+2025-08-26 00:06:10,496 - main - INFO - 数据库表创建完成
+2025-08-26 00:06:10,496 - main - INFO - API密钥已加载到环境变量
+2025-08-26 00:09:04,067 - services.websocket_notification_service - INFO - 项目更新通知已发送: 86f9aa12-2f35-4618-b265-74b3d9a4cf2d - processing
+2025-08-26 00:10:51,802 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-26 00:10:51,802 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-26 00:10:51,890 - main - INFO - 启动AutoClip API服务...
+2025-08-26 00:10:51,891 - main - INFO - 数据库表创建完成
+2025-08-26 00:10:51,891 - main - INFO - API密钥已加载到环境变量
+2025-08-26 00:11:01,204 - services.websocket_notification_service - INFO - 项目更新通知已发送: 86f9aa12-2f35-4618-b265-74b3d9a4cf2d - processing
+2025-08-26 00:12:22,107 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-26 00:12:22,107 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-26 00:12:22,187 - main - INFO - 启动AutoClip API服务...
+2025-08-26 00:12:22,188 - main - INFO - 数据库表创建完成
+2025-08-26 00:12:22,188 - main - INFO - API密钥已加载到环境变量
+2025-08-26 00:12:41,237 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-26 00:12:41,238 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-26 00:12:41,305 - main - INFO - 启动AutoClip API服务...
+2025-08-26 00:12:41,305 - main - INFO - 数据库表创建完成
+2025-08-26 00:12:41,305 - main - INFO - API密钥已加载到环境变量
+2025-08-26 00:12:59,483 - services.pipeline_adapter - INFO - Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+2025-08-26 00:12:59,572 - services.pipeline_adapter - INFO - Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+2025-08-26 00:12:59,586 - api.v1.projects - INFO - 查找clip视频: clip_id=3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a
+2025-08-26 00:12:59,587 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:12:59,587 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:12:59,588 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:12:59,588 - api.v1.projects - ERROR - 没有找到clip_id=3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a的视频文件
+2025-08-26 00:12:59,590 - api.v1.projects - INFO - 查找clip视频: clip_id=f7af86c3-7a32-4821-b341-f04841820bf4
+2025-08-26 00:12:59,590 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:12:59,590 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:12:59,590 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:12:59,590 - api.v1.projects - ERROR - 没有找到clip_id=f7af86c3-7a32-4821-b341-f04841820bf4的视频文件
+2025-08-26 00:12:59,593 - api.v1.projects - INFO - 查找clip视频: clip_id=325a2e1f-b7c3-4688-a94d-3dbd919a3ddf
+2025-08-26 00:12:59,594 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:12:59,594 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:12:59,594 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:12:59,595 - api.v1.projects - ERROR - 没有找到clip_id=325a2e1f-b7c3-4688-a94d-3dbd919a3ddf的视频文件
+2025-08-26 00:12:59,596 - api.v1.projects - INFO - 查找clip视频: clip_id=678a8c4b-16ac-4893-a8d9-1b28c3bb4c81
+2025-08-26 00:12:59,597 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:12:59,597 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:12:59,597 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:12:59,597 - api.v1.projects - ERROR - 没有找到clip_id=678a8c4b-16ac-4893-a8d9-1b28c3bb4c81的视频文件
+2025-08-26 00:12:59,598 - api.v1.projects - INFO - 查找clip视频: clip_id=ac0b2b4c-3ea5-474a-92c5-d3f782ff134e
+2025-08-26 00:12:59,598 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:12:59,599 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:12:59,599 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:12:59,599 - api.v1.projects - ERROR - 没有找到clip_id=ac0b2b4c-3ea5-474a-92c5-d3f782ff134e的视频文件
+2025-08-26 00:12:59,599 - api.v1.projects - INFO - 查找clip视频: clip_id=1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c
+2025-08-26 00:12:59,600 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:12:59,600 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:12:59,600 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:12:59,600 - api.v1.projects - ERROR - 没有找到clip_id=1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c的视频文件
+2025-08-26 00:12:59,605 - api.v1.projects - INFO - 查找clip视频: clip_id=0dd5616b-1d39-4118-bb15-580633e59932
+2025-08-26 00:12:59,605 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:12:59,605 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:12:59,605 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:12:59,605 - api.v1.projects - ERROR - 没有找到clip_id=0dd5616b-1d39-4118-bb15-580633e59932的视频文件
+2025-08-26 00:12:59,606 - api.v1.projects - INFO - 查找clip视频: clip_id=94512d2e-87ca-41fc-9405-903433f88a6e
+2025-08-26 00:12:59,606 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:12:59,606 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:12:59,606 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:12:59,606 - api.v1.projects - ERROR - 没有找到clip_id=94512d2e-87ca-41fc-9405-903433f88a6e的视频文件
+2025-08-26 00:12:59,607 - api.v1.projects - INFO - 查找clip视频: clip_id=93562f59-dad0-4f3c-b129-69036d1e80a6
+2025-08-26 00:12:59,607 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:12:59,607 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:12:59,607 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:12:59,607 - api.v1.projects - ERROR - 没有找到clip_id=93562f59-dad0-4f3c-b129-69036d1e80a6的视频文件
+2025-08-26 00:12:59,609 - api.v1.projects - INFO - 查找clip视频: clip_id=db6241be-29e8-4680-b458-37b74b11441c
+2025-08-26 00:12:59,610 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:12:59,610 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:12:59,610 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:12:59,610 - api.v1.projects - ERROR - 没有找到clip_id=db6241be-29e8-4680-b458-37b74b11441c的视频文件
+2025-08-26 00:13:05,183 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-26 00:13:05,183 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-26 00:13:05,265 - main - INFO - 启动AutoClip API服务...
+2025-08-26 00:13:05,266 - main - INFO - 数据库表创建完成
+2025-08-26 00:13:05,266 - main - INFO - API密钥已加载到环境变量
+2025-08-26 00:15:22,232 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-26 00:15:22,232 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-26 00:15:22,297 - main - INFO - 启动AutoClip API服务...
+2025-08-26 00:15:22,298 - main - INFO - 数据库表创建完成
+2025-08-26 00:15:22,298 - main - INFO - API密钥已加载到环境变量
+2025-08-26 00:16:41,191 - services.pipeline_adapter - INFO - Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+2025-08-26 00:16:41,202 - api.v1.projects - INFO - 查找clip视频: clip_id=3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a
+2025-08-26 00:16:41,203 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:16:41,203 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:16:41,203 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:16:41,204 - api.v1.projects - ERROR - 没有找到clip_id=3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a的视频文件
+2025-08-26 00:16:41,205 - api.v1.projects - INFO - 查找clip视频: clip_id=f7af86c3-7a32-4821-b341-f04841820bf4
+2025-08-26 00:16:41,205 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:16:41,205 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:16:41,205 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:16:41,205 - api.v1.projects - ERROR - 没有找到clip_id=f7af86c3-7a32-4821-b341-f04841820bf4的视频文件
+2025-08-26 00:16:41,205 - api.v1.projects - INFO - 查找clip视频: clip_id=325a2e1f-b7c3-4688-a94d-3dbd919a3ddf
+2025-08-26 00:16:41,205 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:16:41,205 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:16:41,205 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:16:41,205 - api.v1.projects - ERROR - 没有找到clip_id=325a2e1f-b7c3-4688-a94d-3dbd919a3ddf的视频文件
+2025-08-26 00:16:41,206 - api.v1.projects - INFO - 查找clip视频: clip_id=1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c
+2025-08-26 00:16:41,206 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:16:41,206 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:16:41,206 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:16:41,206 - api.v1.projects - ERROR - 没有找到clip_id=1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c的视频文件
+2025-08-26 00:16:41,206 - api.v1.projects - INFO - 查找clip视频: clip_id=678a8c4b-16ac-4893-a8d9-1b28c3bb4c81
+2025-08-26 00:16:41,206 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:16:41,206 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:16:41,206 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:16:41,206 - api.v1.projects - ERROR - 没有找到clip_id=678a8c4b-16ac-4893-a8d9-1b28c3bb4c81的视频文件
+2025-08-26 00:16:41,207 - api.v1.projects - INFO - 查找clip视频: clip_id=ac0b2b4c-3ea5-474a-92c5-d3f782ff134e
+2025-08-26 00:16:41,207 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:16:41,207 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:16:41,207 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:16:41,207 - api.v1.projects - ERROR - 没有找到clip_id=ac0b2b4c-3ea5-474a-92c5-d3f782ff134e的视频文件
+2025-08-26 00:16:41,213 - api.v1.projects - INFO - 查找clip视频: clip_id=93562f59-dad0-4f3c-b129-69036d1e80a6
+2025-08-26 00:16:41,213 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:16:41,214 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:16:41,214 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:16:41,214 - api.v1.projects - ERROR - 没有找到clip_id=93562f59-dad0-4f3c-b129-69036d1e80a6的视频文件
+2025-08-26 00:16:41,214 - api.v1.projects - INFO - 查找clip视频: clip_id=db6241be-29e8-4680-b458-37b74b11441c
+2025-08-26 00:16:41,215 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:16:41,215 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:16:41,215 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:16:41,215 - api.v1.projects - ERROR - 没有找到clip_id=db6241be-29e8-4680-b458-37b74b11441c的视频文件
+2025-08-26 00:16:41,215 - api.v1.projects - INFO - 查找clip视频: clip_id=94512d2e-87ca-41fc-9405-903433f88a6e
+2025-08-26 00:16:41,215 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:16:41,215 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:16:41,215 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:16:41,215 - api.v1.projects - ERROR - 没有找到clip_id=94512d2e-87ca-41fc-9405-903433f88a6e的视频文件
+2025-08-26 00:16:41,215 - api.v1.projects - INFO - 查找clip视频: clip_id=0dd5616b-1d39-4118-bb15-580633e59932
+2025-08-26 00:16:41,215 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:16:41,215 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:16:41,216 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:16:41,216 - api.v1.projects - ERROR - 没有找到clip_id=0dd5616b-1d39-4118-bb15-580633e59932的视频文件
+2025-08-26 00:16:41,952 - api.v1.projects - INFO - 查找clip视频: clip_id=3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a
+2025-08-26 00:16:41,953 - api.v1.projects - INFO - clips目录: /Users/zhoukk/autoclip/data/output/clips
+2025-08-26 00:16:41,953 - api.v1.projects - INFO - clips目录存在: True
+2025-08-26 00:16:41,953 - api.v1.projects - INFO - 找到的视频文件: []
+2025-08-26 00:16:41,953 - api.v1.projects - ERROR - 没有找到clip_id=3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a的视频文件

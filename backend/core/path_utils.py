@@ -82,13 +82,13 @@ def get_srt_file_path(project_id: str, filename: str) -> Path:
 
 def get_clip_file_path(clip_id: str, title: str) -> Path:
     """获取切片文件路径"""
-    from shared.utils.video_processor import VideoProcessor
+    from utils.video_processor import VideoProcessor
     safe_title = VideoProcessor.sanitize_filename(title)
     return get_clips_directory() / f"{clip_id}_{safe_title}.mp4"
 
 def get_collection_file_path(collection_title: str) -> Path:
     """获取合集文件路径"""
-    from shared.utils.video_processor import VideoProcessor
+    from utils.video_processor import VideoProcessor
     safe_title = VideoProcessor.sanitize_filename(collection_title)
     return get_collections_directory() / f"{safe_title}.mp4"
 

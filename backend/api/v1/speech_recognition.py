@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from pathlib import Path
 
-from shared.utils.speech_recognizer import (
+from backend.utils.speech_recognizer import (
     get_available_speech_recognition_methods,
     get_supported_languages,
     get_whisper_models,
