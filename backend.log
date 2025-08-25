@@ -745,3 +745,8 @@ INFO:     Finished server process [12779]
 2025-08-26 00:34:07,725 - __main__ - INFO - 启动AutoClip API服务...
 2025-08-26 00:34:07,727 - __main__ - INFO - 数据库表创建完成
 2025-08-26 00:34:07,727 - __main__ - INFO - API密钥已加载到环境变量
+2025-08-26 06:10:57,336 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-26 06:10:57,337 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-26 06:10:57,445 - __main__ - INFO - 启动AutoClip API服务...
+2025-08-26 06:10:57,446 - __main__ - INFO - 数据库表创建完成
+2025-08-26 06:10:57,447 - __main__ - INFO - API密钥已加载到环境变量

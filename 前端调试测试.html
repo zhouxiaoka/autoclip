@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>前端拖拽排序测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        button { margin: 5px; padding: 10px 20px; cursor: pointer; }
+        .success { color: green; }
+        .error { color: red; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>前端拖拽排序测试</h1>
+    
+    <div class="test-section">
+        <h3>1. 测试后端API连接</h3>
+        <button onclick="testApiConnection()">测试连接</button>
+        <div id="connection-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. 获取合集数据</h3>
+        <button onclick="getCollections()">获取合集</button>
+        <div id="collections-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. 测试拖拽排序API</h3>
+        <button onclick="testReorderAPI()">测试排序</button>
+        <div id="reorder-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>4. 模拟前端store调用</h3>
+        <button onclick="testStoreCall()">测试Store</button>
+        <div id="store-result"></div>
+    </div>
+
+    <script>
+        const PROJECT_ID = '86f9aa12-2f35-4618-b265-74b3d9a4cf2d';
+        const COLLECTION_ID = '5e5dafc8-f29a-4705-8e87-b2bb06f2a5de';
+        const BASE_URL = 'http://localhost:8000/api/v1';
+
+        function log(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            const className = isError ? 'error' : 'success';
+            element.innerHTML = `<div class="${className}">${message}</div>`;
+        }
+
+        function logResult(elementId, data) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+
+        async function testApiConnection() {
+            try {
+                log('connection-result', '正在测试连接...');
+                
+                const response = await fetch(`${BASE_URL}/collections/?project_id=${PROJECT_ID}`);
+                
+                if (response.ok) {
+                    log('connection-result', `✅ 连接成功! 状态码: ${response.status}`);
+                } else {
+                    log('connection-result', `❌ 连接失败! 状态码: ${response.status}`, true);
+                }
+            } catch (error) {
+                log('connection-result', `❌ 连接异常: ${error.message}`, true);
+            }
+        }
+
+        async function getCollections() {
+            try {
+                log('collections-result', '正在获取合集数据...');
+                
+                const response = await fetch(`${BASE_URL}/collections/?project_id=${PROJECT_ID}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log('collections-result', `✅ 获取成功! 找到 ${data.items.length} 个合集`);
+                    logResult('collections-result', data);
+                } else {
+                    log('collections-result', `❌ 获取失败! ${data.detail}`, true);
+                }
+            } catch (error) {
+                log('collections-result', `❌ 获取异常: ${error.message}`, true);
+            }
+        }
+
+        async function testReorderAPI() {
+            try {
+                log('reorder-result', '正在测试拖拽排序API...');
+                
+                // 先获取当前数据
+                const getResponse = await fetch(`${BASE_URL}/collections/?project_id=${PROJECT_ID}`);
+                const getData = await getResponse.json();
+                const collection = getData.items.find(c => c.id === COLLECTION_ID);
+                
+                if (!collection) {
+                    log('reorder-result', '❌ 未找到目标合集', true);
+                    return;
+                }
+                
+                const currentClipIds = collection.clip_ids;
+                console.log('当前clip_ids:', currentClipIds);
+                
+                // 交换前两个元素
+                const newClipIds = currentClipIds.length >= 2 
+                    ? [currentClipIds[1], currentClipIds[0], ...currentClipIds.slice(2)]
+                    : currentClipIds;
+                
+                console.log('新顺序:', newClipIds);
+                
+                // 发送排序请求
+                const response = await fetch(`${BASE_URL}/projects/${PROJECT_ID}/collections/${COLLECTION_ID}/reorder`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(newClipIds)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    log('reorder-result', `✅ 排序成功! ${result.message}`);
+                    logResult('reorder-result', result);
+                } else {
+                    log('reorder-result', `❌ 排序失败! ${result.detail}`, true);
+                }
+                
+            } catch (error) {
+                log('reorder-result', `❌ 排序异常: ${error.message}`, true);
+            }
+        }
+
+        async function testStoreCall() {
+            try {
+                log('store-result', '正在测试Store调用...');
+                
+                // 检查是否有store
+                if (typeof window.useProjectStore === 'undefined') {
+                    log('store-result', '❌ 未找到useProjectStore，请在项目页面中运行此测试', true);
+                    return;
+                }
+                
+                // 调用store方法
+                const store = window.useProjectStore.getState();
+                
+                await store.reorderCollectionClips(
+                    PROJECT_ID,
+                    COLLECTION_ID,
+                    ['3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a', '678a8c4b-16ac-4893-a8d9-1b28c3bb4c81']
+                );
+                
+                log('store-result', '✅ Store调用成功!');
+                
+            } catch (error) {
+                log('store-result', `❌ Store调用失败: ${error.message}`, true);
+            }
+        }
+
+        // 页面加载完成后自动测试连接
+        window.onload = function() {
+            testApiConnection();
+        };
+    </script>
+</body>
+</html>
+

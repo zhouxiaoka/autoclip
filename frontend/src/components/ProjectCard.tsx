@@ -266,12 +266,14 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
         e.currentTarget.style.transform = 'translateY(0)'
         e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)'
       }}
-      bodyStyle={{
-        padding: '12px',
-        background: 'transparent',
-        height: 'calc(100% - 120px)',
-        display: 'flex',
-        flexDirection: 'column'
+      styles={{
+        body: {
+          padding: '12px',
+          background: 'transparent',
+          height: 'calc(100% - 120px)',
+          display: 'flex',
+          flexDirection: 'column'
+        }
       }}
       cover={
         <div 
