@@ -120,20 +120,22 @@ class WebSocketNotificationService:
         )
     
     @staticmethod
-    async def send_processing_progress(project_id: str, task_id: str, progress: int, step: str):
+    async def send_processing_progress(project_id: str, task_id: str, progress: int, step: str, 
+                                     current_step: int = None, total_steps: int = None, 
+                                     step_name: str = None, message: str = None):
         """发送处理进度通知"""
         await WebSocketNotificationService.send_task_update(
             task_id=task_id,
             status="processing",
             progress=progress,
-            message=f"正在执行: {step}"
+            message=message or f"正在执行: {step}"
         )
         
         await WebSocketNotificationService.send_project_update(
             project_id=project_id,
             status="processing",
             progress=progress,
-            message=f"处理进度: {progress}% - {step}"
+            message=message or f"处理进度: {progress}% - {step}"
         )
     
     @staticmethod

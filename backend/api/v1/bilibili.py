@@ -10,7 +10,7 @@ from pydantic import BaseModel
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from shared.utils.bilibili_downloader import BilibiliDownloader, get_bilibili_video_info
+from backend.utils.bilibili_downloader import BilibiliDownloader, get_bilibili_video_info
 from core.config import get_data_directory
 from pathlib import Path
 import uuid
@@ -154,7 +154,7 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest):
         download_dir = data_dir / "temp"
         download_dir.mkdir(exist_ok=True)
         
-        from shared.utils.bilibili_downloader import download_bilibili_video
+        from backend.utils.bilibili_downloader import download_bilibili_video
         download_result = await download_bilibili_video(
             request.url, 
             download_dir, 
@@ -168,7 +168,7 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest):
         if not subtitle_path and video_path:
             logger.warning("未找到字幕文件，尝试生成字幕")
             try:
-                from shared.utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
+                from backend.utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
                 from pathlib import Path
                 video_file_path = Path(video_path)
                 generated_subtitle = generate_subtitle_for_video(video_file_path)

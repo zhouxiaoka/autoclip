@@ -78,9 +78,13 @@ class StorageService:
     
     def save_clip_file(self, clip_data: Dict[str, Any], clip_id: str) -> str:
         """保存切片文件并返回路径"""
-        # 这里应该包含实际的视频文件保存逻辑
-        # 暂时返回模拟路径
-        clip_file = f"clip_{clip_id}.mp4"
+        # 获取标题并清理文件名
+        title = clip_data.get('title', f'clip_{clip_id}')
+        from utils.video_processor import VideoProcessor
+        safe_title = VideoProcessor.sanitize_filename(title)
+        
+        # 使用统一的命名格式：{clip_id}_{safe_title}.mp4
+        clip_file = f"{clip_id}_{safe_title}.mp4"
         target_path = self.project_dir / "output" / "clips" / clip_file
         target_path.parent.mkdir(parents=True, exist_ok=True)
         

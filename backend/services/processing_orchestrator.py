@@ -19,11 +19,6 @@ from core.config import get_project_root
 logger = logging.getLogger(__name__)
 
 # 导入流水线步骤
-# 添加shared目录到Python路径
-project_root = get_project_root()
-shared_path = project_root / "shared"
-if str(shared_path) not in sys.path:
-    sys.path.insert(0, str(shared_path))
 
 try:
     from pipeline.step1_outline import run_step1_outline

@@ -210,7 +210,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         if not subtitle_path:
             logger.warning("所有字幕获取策略都失败，尝试生成字幕")
             try:
-                from shared.utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
+                from backend.utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
                 video_file_path = Path(video_path)
                 generated_subtitle = generate_subtitle_for_video(video_file_path)
                 subtitle_path = str(generated_subtitle)

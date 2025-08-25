@@ -18,8 +18,8 @@ sys.path.insert(0, str(project_root))
 
 # 导入视频处理模块
 try:
-    from shared.utils.video_processor import VideoProcessor
-    from shared.config import get_legacy_config
+    from backend.utils.video_processor import VideoProcessor
+    from backend.core.shared_config import get_legacy_config
     print("✅ 成功导入视频处理模块")
 except ImportError as e:
     print(f"❌ 导入视频处理模块失败: {e}")

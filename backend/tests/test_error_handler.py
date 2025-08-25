@@ -5,7 +5,7 @@ import time
 from unittest.mock import patch, MagicMock
 
 import pytest
-from shared.utils.error_handler import (
+from backend.utils.error_handler import (
     AutoClipsException, APIError, NetworkError, ConfigurationError,
     FileIOError, ProcessingError, ValidationError,
     ErrorLevel, ErrorCategory, RetryConfig, CircuitBreaker,

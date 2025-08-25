@@ -21,8 +21,8 @@ os.environ['PYTHONPATH'] = str(project_root)
 backend_dir = project_root / "backend"
 sys.path.insert(0, str(backend_dir))
 
-from shared.utils.bilibili_downloader import BilibiliDownloader, get_bilibili_video_info
-from shared.utils.speech_recognizer import get_available_speech_recognition_methods
+from backend.utils.bilibili_downloader import BilibiliDownloader, get_bilibili_video_info
+from backend.utils.speech_recognizer import get_available_speech_recognition_methods
 import yt_dlp
 
 # 配置日志

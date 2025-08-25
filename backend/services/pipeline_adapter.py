@@ -1,4 +1,4 @@
-"""Pipeline适配器服务 - 将shared/pipeline中的处理逻辑集成到新架构"""
+"""Pipeline适配器服务 - 将backend/pipeline中的处理逻辑集成到新架构"""
 
 import json
 import logging
@@ -18,20 +18,20 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-# 添加shared目录到Python路径
-project_root = get_project_root()
-shared_path = project_root / "shared"
-if str(shared_path) not in sys.path:
-    sys.path.insert(0, str(shared_path))
-
-# 导入shared/pipeline中的处理步骤
+# 导入backend/pipeline中的处理步骤
 try:
-    from pipeline.step1_outline import run_step1_outline
-    from pipeline.step2_timeline import run_step2_timeline
-    from pipeline.step3_scoring import run_step3_scoring
-    from pipeline.step4_title import run_step4_title
-    from pipeline.step5_clustering import run_step5_clustering
-    from pipeline.step6_video import run_step6_video
+    # 添加backend目录到Python路径
+    import sys
+    backend_path = Path(__file__).parent.parent
+    if str(backend_path) not in sys.path:
+        sys.path.insert(0, str(backend_path))
+    
+    from pipeline.step1_outline import OutlineExtractor
+    from pipeline.step2_timeline import TimelineExtractor
+    from pipeline.step3_scoring import ClipScorer
+    from pipeline.step4_title import TitleGenerator
+    from pipeline.step5_clustering import ClusteringEngine
+    from pipeline.step6_video import VideoGenerator
     logger.info("流水线模块导入成功")
 except ImportError as e:
     logger.warning(f"无法导入流水线模块: {e}")
@@ -61,7 +61,7 @@ except ImportError as e:
         return {"status": "skipped", "message": "流水线模块未正确导入"}
 
 class PipelineAdapter:
-    """Pipeline适配器，将shared/pipeline中的处理逻辑集成到新架构"""
+    """Pipeline适配器，将backend/pipeline中的处理逻辑集成到新架构"""
     
     def __init__(self, db: Session, task_id: Optional[str] = None, project_id: Optional[str] = None):
         self.db = db
@@ -139,23 +139,61 @@ class PipelineAdapter:
             self._update_progress(project_id, 100, "视频切割")
             step6_result = self._run_step6_video(project_id, input_video_path, project_dir)
             
-            # 更新项目状态为完成
-            self._update_project_status(project_id, ProjectStatus.COMPLETED)
+            # 检查所有步骤的结果
+            all_steps = [step1_result, step2_result, step3_result, step4_result, step5_result, step6_result]
+            failed_steps = [step for step in all_steps if step.get('status') == 'failed']
+            skipped_steps = [step for step in all_steps if step.get('status') == 'skipped']
             
-            # 返回完整结果
-            result = {
-                "project_id": project_id,
-                "status": "completed",
-                "steps": {
-                    "step1": step1_result,
-                    "step2": step2_result,
-                    "step3": step3_result,
-                    "step4": step4_result,
-                    "step5": step5_result,
-                    "step6": step6_result
-                },
-                "message": "项目处理完成"
-            }
+            # 如果有失败的步骤，整个项目失败
+            if failed_steps:
+                self._update_project_status(project_id, ProjectStatus.FAILED)
+                result = {
+                    "project_id": project_id,
+                    "status": "failed",
+                    "steps": {
+                        "step1": step1_result,
+                        "step2": step2_result,
+                        "step3": step3_result,
+                        "step4": step4_result,
+                        "step5": step5_result,
+                        "step6": step6_result
+                    },
+                    "message": f"项目处理失败: {len(failed_steps)} 个步骤失败",
+                    "failed_steps": [step.get('error', '未知错误') for step in failed_steps]
+                }
+            # 如果所有步骤都被跳过，也标记为失败
+            elif len(skipped_steps) == len(all_steps):
+                self._update_project_status(project_id, ProjectStatus.FAILED)
+                result = {
+                    "project_id": project_id,
+                    "status": "failed",
+                    "steps": {
+                        "step1": step1_result,
+                        "step2": step2_result,
+                        "step3": step3_result,
+                        "step4": step4_result,
+                        "step5": step5_result,
+                        "step6": step6_result
+                    },
+                    "message": "项目处理失败: 所有步骤都被跳过",
+                    "failed_steps": ["所有处理步骤都被跳过，可能是配置问题或文件缺失"]
+                }
+            else:
+                # 更新项目状态为完成
+                self._update_project_status(project_id, ProjectStatus.COMPLETED)
+                result = {
+                    "project_id": project_id,
+                    "status": "completed",
+                    "steps": {
+                        "step1": step1_result,
+                        "step2": step2_result,
+                        "step3": step3_result,
+                        "step4": step4_result,
+                        "step5": step5_result,
+                        "step6": step6_result
+                    },
+                    "message": "项目处理完成"
+                }
             
             logger.info(f"项目处理完成: {project_id}")
             return result
@@ -180,17 +218,23 @@ class PipelineAdapter:
             
             if not srt_file_path or not srt_file_path.exists():
                 logger.warning(f"SRT文件不存在或路径无效: {srt_path}")
-                # 返回空结果，让后续步骤处理
-                result = []
-            else:
-                result = run_step1_outline(
-                    srt_path=srt_file_path,
-                    output_path=output_dir / "step1_outline.json",
-                    metadata_dir=project_dir
-                )
+                return {"status": "failed", "error": "SRT文件不存在"}
             
-            logger.info(f"步骤1完成: {result}")
-            return result
+            # 使用OutlineExtractor类
+            try:
+                extractor = OutlineExtractor()
+                outlines = extractor.extract_outline(srt_file_path)
+                
+                # 保存结果
+                with open(output_dir / "step1_outline.json", 'w', encoding='utf-8') as f:
+                    json.dump(outlines, f, ensure_ascii=False, indent=2)
+                
+                logger.info(f"步骤1完成: 提取了 {len(outlines)} 个大纲项")
+                return {"status": "completed", "outlines": outlines, "count": len(outlines)}
+                
+            except Exception as step_error:
+                logger.error(f"大纲提取失败: {str(step_error)}")
+                return {"status": "failed", "error": str(step_error)}
             
         except Exception as e:
             logger.error(f"步骤1失败: {str(e)}")
@@ -203,14 +247,29 @@ class PipelineAdapter:
             output_dir = project_dir / "step2_timeline"
             output_dir.mkdir(parents=True, exist_ok=True)
             
-            result = run_step2_timeline(
-                outline_path=step1_output,
-                output_path=output_dir / "step2_timeline.json",
-                metadata_dir=project_dir
-            )
+            # 检查步骤1的输出
+            if not step1_output.exists():
+                logger.warning("步骤1输出文件不存在，跳过步骤2")
+                return {"status": "skipped", "message": "步骤1输出文件不存在"}
             
-            logger.info(f"步骤2完成: {result}")
-            return result
+            # 使用TimelineExtractor类
+            try:
+                extractor = TimelineExtractor()
+                with open(step1_output, 'r', encoding='utf-8') as f:
+                    outlines = json.load(f)
+                
+                timeline_data = extractor.extract_timeline(outlines)
+                
+                # 保存结果
+                with open(output_dir / "step2_timeline.json", 'w', encoding='utf-8') as f:
+                    json.dump(timeline_data, f, ensure_ascii=False, indent=2)
+                
+                logger.info(f"步骤2完成: 提取了 {len(timeline_data)} 个时间点")
+                return {"status": "completed", "timeline": timeline_data, "count": len(timeline_data)}
+                
+            except Exception as step_error:
+                logger.error(f"时间定位失败: {str(step_error)}")
+                return {"status": "failed", "error": str(step_error)}
             
         except Exception as e:
             logger.error(f"步骤2失败: {str(e)}")
@@ -223,14 +282,29 @@ class PipelineAdapter:
             output_dir = project_dir / "step3_scoring"
             output_dir.mkdir(parents=True, exist_ok=True)
             
-            result = run_step3_scoring(
-                timeline_path=step2_output,
-                output_path=output_dir / "step3_scoring.json",
-                metadata_dir=project_dir
-            )
+            # 检查步骤2的输出
+            if not step2_output.exists():
+                logger.warning("步骤2输出文件不存在，跳过步骤3")
+                return {"status": "skipped", "message": "步骤2输出文件不存在"}
             
-            logger.info(f"步骤3完成: {result}")
-            return result
+            # 使用ClipScorer类
+            try:
+                scorer = ClipScorer()
+                with open(step2_output, 'r', encoding='utf-8') as f:
+                    timeline_data = json.load(f)
+                
+                scored_data = scorer.score_clips(timeline_data)
+                
+                # 保存结果
+                with open(output_dir / "step3_scoring.json", 'w', encoding='utf-8') as f:
+                    json.dump(scored_data, f, ensure_ascii=False, indent=2)
+                
+                logger.info(f"步骤3完成: 评分了 {len(scored_data)} 个片段")
+                return {"status": "completed", "scored": scored_data, "count": len(scored_data)}
+                
+            except Exception as step_error:
+                logger.error(f"内容评分失败: {str(step_error)}")
+                return {"status": "failed", "error": str(step_error)}
             
         except Exception as e:
             logger.error(f"步骤3失败: {str(e)}")
@@ -243,14 +317,29 @@ class PipelineAdapter:
             output_dir = project_dir / "step4_title"
             output_dir.mkdir(parents=True, exist_ok=True)
             
-            result = run_step4_title(
-                high_score_clips_path=step3_output,
-                output_path=output_dir / "step4_title.json",
-                metadata_dir=str(project_dir)
-            )
+            # 检查步骤3的输出
+            if not step3_output.exists():
+                logger.warning("步骤3输出文件不存在，跳过步骤4")
+                return {"status": "skipped", "message": "步骤3输出文件不存在"}
             
-            logger.info(f"步骤4完成: {result}")
-            return result
+            # 使用TitleGenerator类
+            try:
+                generator = TitleGenerator()
+                with open(step3_output, 'r', encoding='utf-8') as f:
+                    scored_data = json.load(f)
+                
+                titled_data = generator.generate_titles(scored_data)
+                
+                # 保存结果
+                with open(output_dir / "step4_title.json", 'w', encoding='utf-8') as f:
+                    json.dump(titled_data, f, ensure_ascii=False, indent=2)
+                
+                logger.info(f"步骤4完成: 生成了 {len(titled_data)} 个标题")
+                return {"status": "completed", "titled": titled_data, "count": len(titled_data)}
+                
+            except Exception as step_error:
+                logger.error(f"标题生成失败: {str(step_error)}")
+                return {"status": "failed", "error": str(step_error)}
             
         except Exception as e:
             logger.error(f"步骤4失败: {str(e)}")
@@ -263,14 +352,29 @@ class PipelineAdapter:
             output_dir = project_dir / "step5_clustering"
             output_dir.mkdir(parents=True, exist_ok=True)
             
-            result = run_step5_clustering(
-                clips_with_titles_path=step4_output,
-                output_path=output_dir / "step5_clustering.json",
-                metadata_dir=str(project_dir)
-            )
+            # 检查步骤4的输出
+            if not step4_output.exists():
+                logger.warning("步骤4输出文件不存在，跳过步骤5")
+                return {"status": "skipped", "message": "步骤4输出文件不存在"}
             
-            logger.info(f"步骤5完成: {result}")
-            return result
+            # 使用ClusteringEngine类
+            try:
+                clusterer = ClusteringEngine()
+                with open(step4_output, 'r', encoding='utf-8') as f:
+                    titled_data = json.load(f)
+                
+                clustered_data = clusterer.cluster_clips(titled_data)
+                
+                # 保存结果
+                with open(output_dir / "step5_clustering.json", 'w', encoding='utf-8') as f:
+                    json.dump(clustered_data, f, ensure_ascii=False, indent=2)
+                
+                logger.info(f"步骤5完成: 聚类了 {len(clustered_data)} 个合集")
+                return {"status": "completed", "clustered": clustered_data, "count": len(clustered_data)}
+                
+            except Exception as step_error:
+                logger.error(f"主题聚类失败: {str(step_error)}")
+                return {"status": "failed", "error": str(step_error)}
             
         except Exception as e:
             logger.error(f"步骤5失败: {str(e)}")
@@ -290,25 +394,64 @@ class PipelineAdapter:
             clips_dir.mkdir(parents=True, exist_ok=True)
             collections_dir.mkdir(parents=True, exist_ok=True)
             
-            result = run_step6_video(
-                clips_with_titles_path=step4_output,
-                collections_path=step5_output,
-                input_video=Path(input_video_path),
-                output_dir=output_dir,
-                clips_dir=str(clips_dir),
-                collections_dir=str(collections_dir),
-                metadata_dir=str(project_dir)
-            )
+            # 检查输入文件
+            if not Path(input_video_path).exists():
+                logger.warning("输入视频文件不存在，跳过步骤6")
+                return {"status": "skipped", "message": "输入视频文件不存在"}
             
-            # 将数据保存到数据库
-            if result.get('clips_generated', 0) > 0:
-                self._save_clips_to_database(project_id, step4_output)
+            # 检查步骤4和5的输出
+            if not step4_output.exists():
+                logger.warning("步骤4输出文件不存在，跳过步骤6")
+                return {"status": "skipped", "message": "步骤4输出文件不存在"}
             
-            if result.get('collections_generated', 0) > 0:
-                self._save_collections_to_database(project_id, step5_output)
+            if not step5_output.exists():
+                logger.warning("步骤5输出文件不存在，跳过步骤6")
+                return {"status": "skipped", "message": "步骤5输出文件不存在"}
             
-            logger.info(f"步骤6完成: {result}")
-            return result
+            # 使用VideoGenerator类
+            try:
+                processor = VideoGenerator()
+                with open(step4_output, 'r', encoding='utf-8') as f:
+                    clips_data = json.load(f)
+                with open(step5_output, 'r', encoding='utf-8') as f:
+                    collections_data = json.load(f)
+                
+                # 生成切片视频
+                clips_paths = processor.generate_clips(clips_data, Path(input_video_path))
+                
+                # 生成合集视频
+                collections_paths = processor.generate_collections(collections_data)
+                
+                # 保存元数据
+                processor.save_clip_metadata(clips_data, output_dir / "clips_metadata.json")
+                processor.save_collection_metadata(collections_data, output_dir / "collections_metadata.json")
+                
+                result = {
+                    'clips_generated': len(clips_paths),
+                    'collections_generated': len(collections_paths),
+                    'clips_count': len(clips_data),
+                    'collections_count': len(collections_data),
+                    'clips_paths': [str(p) for p in clips_paths],
+                    'collections_paths': [str(p) for p in collections_paths]
+                }
+                
+                # 保存结果
+                with open(output_dir / "step6_video_output.json", 'w', encoding='utf-8') as f:
+                    json.dump(result, f, ensure_ascii=False, indent=2)
+                
+                # 将数据保存到数据库
+                if result.get('clips_generated', 0) > 0:
+                    self._save_clips_to_database(project_id, step4_output)
+                
+                if result.get('collections_generated', 0) > 0:
+                    self._save_collections_to_database(project_id, step5_output)
+                
+                logger.info(f"步骤6完成: 生成了 {result.get('clips_count', 0)} 个片段和 {result.get('collections_count', 0)} 个合集")
+                return {"status": "completed", "result": result}
+                
+            except Exception as step_error:
+                logger.error(f"视频切割失败: {str(step_error)}")
+                return {"status": "failed", "error": str(step_error)}
             
         except Exception as e:
             logger.error(f"步骤6失败: {str(e)}")
