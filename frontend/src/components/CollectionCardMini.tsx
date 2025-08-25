@@ -51,9 +51,11 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
         background: 'linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)',
         position: 'relative'
       }}
-      bodyStyle={{ 
-        padding: '16px',
-        height: '100%'
+      styles={{
+        body: {
+          padding: '16px',
+          height: '100%'
+        }
       }}
       onClick={() => onView(collection)}
       onMouseEnter={() => setIsHovered(true)}

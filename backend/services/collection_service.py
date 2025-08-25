@@ -391,6 +391,15 @@ class CollectionService(BaseService[Collection, CollectionCreate, CollectionUpda
             实际的clip UUID列表
         """
         try:
+            # 检查是否已经是UUID格式（UUID是36个字符，包含4个连字符）
+            def is_uuid_format(clip_id: str) -> bool:
+                return len(clip_id) == 36 and clip_id.count('-') == 4
+            
+            # 如果所有ID都已经是UUID格式，直接返回
+            if all(is_uuid_format(clip_id) for clip_id in numeric_clip_ids):
+                logger.info("所有clip_ids已经是UUID格式，跳过映射")
+                return numeric_clip_ids
+            
             # 获取项目中的所有clips，按创建时间排序
             clips = self.db.query(Clip).filter(Clip.project_id == project_id).order_by(Clip.created_at).all()
             
@@ -401,11 +410,15 @@ class CollectionService(BaseService[Collection, CollectionCreate, CollectionUpda
             
             # 映射clip_ids
             mapped_clip_ids = []
-            for numeric_id in numeric_clip_ids:
-                if numeric_id in id_mapping:
-                    mapped_clip_ids.append(id_mapping[numeric_id])
+            for clip_id in numeric_clip_ids:
+                if is_uuid_format(clip_id):
+                    # 如果已经是UUID格式，直接使用
+                    mapped_clip_ids.append(clip_id)
+                elif clip_id in id_mapping:
+                    # 如果是数字ID，进行映射
+                    mapped_clip_ids.append(id_mapping[clip_id])
                 else:
-                    logger.warning(f"无法找到数字ID {numeric_id} 对应的clip")
+                    logger.warning(f"无法找到数字ID {clip_id} 对应的clip")
             
             return mapped_clip_ids
             

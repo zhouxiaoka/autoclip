@@ -85,6 +85,13 @@ const ProjectDetailPage: React.FC = () => {
           
           console.log('🎯 Final project with data:', projectWithData)
           setCurrentProject(projectWithData)
+          
+          // 同时更新projects数组，确保Store中的数据同步
+          const { projects } = useProjectStore.getState()
+          const updatedProjects = projects.map(p => 
+            p.id === id ? projectWithData : p
+          )
+          useProjectStore.setState({ projects: updatedProjects })
         } catch (error) {
           console.error('Failed to load clips/collections:', error)
           // 即使clips/collections加载失败，也设置项目基本信息

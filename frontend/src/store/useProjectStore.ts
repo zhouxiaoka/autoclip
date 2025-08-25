@@ -277,10 +277,33 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     
     // 获取原始状态
     const state = get()
-    const originalProject = state.projects.find(p => p.id === projectId)
-    const originalCollection = originalProject?.collections?.find(c => c.id === collectionId)
+    console.log('Current state projects:', state.projects.map(p => ({ id: p.id, collectionsCount: p.collections?.length || 0 })))
+    console.log('Current state currentProject:', state.currentProject ? { id: state.currentProject.id, collectionsCount: state.currentProject.collections?.length || 0 } : null)
+    
+    // 优先从currentProject中查找，如果找不到再从projects数组中查找
+    let originalProject = state.currentProject?.id === projectId ? state.currentProject : null
+    let originalCollection = originalProject?.collections?.find(c => c.id === collectionId)
+    
+    // 如果currentProject中没有找到，尝试从projects数组中查找
+    if (!originalCollection) {
+      const projectFromArray = state.projects.find(p => p.id === projectId)
+      if (projectFromArray) {
+        originalProject = projectFromArray
+        originalCollection = originalProject.collections?.find(c => c.id === collectionId)
+      }
+    }
+    
+    console.log('Found project:', originalProject ? { id: originalProject.id, collectionsCount: originalProject.collections?.length || 0 } : null)
+    
+    if (originalProject?.collections) {
+      console.log('Project collections:', originalProject.collections.map(c => ({ id: c.id, title: c.collection_title })))
+    }
+    
+    console.log('Found collection:', originalCollection ? { id: originalCollection.id, title: originalCollection.collection_title } : null)
     
     if (!originalCollection) {
+      console.error('Collection not found in store. Available collections:', 
+        originalProject?.collections?.map(c => c.id) || [])
       throw new Error('Collection not found')
     }
     
@@ -345,8 +368,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     
     // 获取原始状态
     const state = get()
-    const originalProject = state.projects.find(p => p.id === projectId)
-    const originalCollection = originalProject?.collections?.find(c => c.id === collectionId)
+    
+    // 优先从currentProject中查找，如果找不到再从projects数组中查找
+    let originalProject = state.currentProject?.id === projectId ? state.currentProject : null
+    let originalCollection = originalProject?.collections?.find(c => c.id === collectionId)
+    
+    // 如果currentProject中没有找到，尝试从projects数组中查找
+    if (!originalCollection) {
+      const projectFromArray = state.projects.find(p => p.id === projectId)
+      if (projectFromArray) {
+        originalProject = projectFromArray
+        originalCollection = originalProject.collections?.find(c => c.id === collectionId)
+      }
+    }
     
     if (!originalCollection) {
       throw new Error('Collection not found')
