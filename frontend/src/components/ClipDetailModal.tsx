@@ -80,10 +80,12 @@ const ClipDetailModal: React.FC<ClipDetailModalProps> = ({
       centered
       destroyOnClose
       style={{ top: 20 }}
-      bodyStyle={{
-        padding: 0,
-        background: 'rgba(26, 26, 46, 0.95)',
-        borderRadius: '12px'
+      styles={{
+        body: {
+          padding: 0,
+          background: 'rgba(26, 26, 46, 0.95)',
+          borderRadius: '12px'
+        }
       }}
     >
       <div style={{ padding: '24px' }}>

@@ -157,7 +157,11 @@ const ClipCard: React.FC<ClipCardProps> = ({
             overflow: 'hidden',
             cursor: 'pointer'
           }}
-          bodyStyle={{ padding: 0 }}
+          styles={{
+            body: {
+              padding: 0,
+            },
+          }}
           cover={
             <div 
               style={{ 
