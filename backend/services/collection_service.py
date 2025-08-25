@@ -68,7 +68,12 @@ class CollectionService(BaseService[Collection, CollectionCreate, CollectionUpda
             clip_ids = []
             metadata = getattr(collection, 'collection_metadata', {}) or {}
             if metadata and 'clip_ids' in metadata:
-                clip_ids = metadata['clip_ids']
+                numeric_clip_ids = metadata['clip_ids']
+                # 将数字ID映射到实际的UUID
+                clip_ids = self._map_numeric_clip_ids_to_uuids(str(collection.project_id), numeric_clip_ids)
+            
+            # 计算实际的total_clips
+            total_clips = len(clip_ids) if clip_ids else 0
             
             collection_responses.append(CollectionResponse(
                 id=str(collection.id),
@@ -81,7 +86,7 @@ class CollectionService(BaseService[Collection, CollectionCreate, CollectionUpda
                 metadata=getattr(collection, 'collection_metadata', {}) or {},
                 created_at=getattr(collection, 'created_at', None) if isinstance(getattr(collection, 'created_at', None), (type(None), __import__('datetime').datetime)) else None,
                 updated_at=getattr(collection, 'updated_at', None) if isinstance(getattr(collection, 'updated_at', None), (type(None), __import__('datetime').datetime)) else None,
-                total_clips=getattr(collection, 'clips_count', 0) or 0,
+                total_clips=total_clips,
                 clip_ids=clip_ids
             ))
         
@@ -373,3 +378,37 @@ class CollectionService(BaseService[Collection, CollectionCreate, CollectionUpda
             
         except Exception as e:
             logger.error(f"记录合集删除失败: {collection_id}, 错误: {str(e)}")
+
+    def _map_numeric_clip_ids_to_uuids(self, project_id: str, numeric_clip_ids: List[str]) -> List[str]:
+        """
+        将数字clip ID映射到实际的UUID
+        
+        Args:
+            project_id: 项目ID
+            numeric_clip_ids: 数字格式的clip ID列表
+            
+        Returns:
+            实际的clip UUID列表
+        """
+        try:
+            # 获取项目中的所有clips，按创建时间排序
+            clips = self.db.query(Clip).filter(Clip.project_id == project_id).order_by(Clip.created_at).all()
+            
+            # 创建数字ID到UUID的映射
+            id_mapping = {}
+            for i, clip in enumerate(clips, 1):  # 从1开始编号
+                id_mapping[str(i)] = str(clip.id)
+            
+            # 映射clip_ids
+            mapped_clip_ids = []
+            for numeric_id in numeric_clip_ids:
+                if numeric_id in id_mapping:
+                    mapped_clip_ids.append(id_mapping[numeric_id])
+                else:
+                    logger.warning(f"无法找到数字ID {numeric_id} 对应的clip")
+            
+            return mapped_clip_ids
+            
+        except Exception as e:
+            logger.error(f"映射clip ID失败: {str(e)}")
+            return numeric_clip_ids  # 如果映射失败，返回原始ID

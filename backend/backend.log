@@ -5507,3 +5507,130 @@ whisper: error: argument --word_timestamps: expected one argument
 2025-08-26 00:16:41,953 - api.v1.projects - INFO - clips目录存在: True
 2025-08-26 00:16:41,953 - api.v1.projects - INFO - 找到的视频文件: []
 2025-08-26 00:16:41,953 - api.v1.projects - ERROR - 没有找到clip_id=3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a的视频文件
+2025-08-26 00:44:05,710 - services.pipeline_adapter - INFO - 流水线模块导入成功
+2025-08-26 00:44:05,711 - services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-08-26 00:44:05,786 - main - INFO - 启动AutoClip API服务...
+2025-08-26 00:44:05,787 - main - INFO - 数据库表创建完成
+2025-08-26 00:44:05,787 - main - INFO - API密钥已加载到环境变量
+2025-08-26 00:44:09,280 - services.pipeline_adapter - INFO - Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+2025-08-26 00:44:09,528 - services.pipeline_adapter - INFO - Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
+2025-08-26 00:44:09,554 - api.v1.projects - INFO - 查找clip视频: clip_id=3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a, title=相信自己、依靠直觉，这是你想传给下一代的人生信条吗？
+2025-08-26 00:44:09,554 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:09,554 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:09,554 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a_clip_3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a.mp4']
+2025-08-26 00:44:09,554 - api.v1.projects - WARNING - 视频文件为空或不存在: 3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a_clip_3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a.mp4
+2025-08-26 00:44:09,554 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:09,554 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:09,554 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:09,554 - api.v1.projects - INFO - 尝试根据标题查找: 相信自己、依靠直觉，这是你想传给下一代的人生信条吗？
+2025-08-26 00:44:09,555 - api.v1.projects - INFO - 根据标题找到视频文件: 7_相信自己、依靠直觉，这是你想传给下一代的人生信条吗？.mp4
+2025-08-26 00:44:09,555 - api.v1.projects - INFO - 查找clip视频: clip_id=f7af86c3-7a32-4821-b341-f04841820bf4, title=致敬MJ、王子和詹姆斯·布朗，这才是真正的艺术传承
+2025-08-26 00:44:09,555 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:09,555 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:09,555 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['f7af86c3-7a32-4821-b341-f04841820bf4_clip_f7af86c3-7a32-4821-b341-f04841820bf4.mp4']
+2025-08-26 00:44:09,555 - api.v1.projects - WARNING - 视频文件为空或不存在: f7af86c3-7a32-4821-b341-f04841820bf4_clip_f7af86c3-7a32-4821-b341-f04841820bf4.mp4
+2025-08-26 00:44:09,556 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:09,556 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:09,556 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:09,556 - api.v1.projects - INFO - 尝试根据标题查找: 致敬MJ、王子和詹姆斯·布朗，这才是真正的艺术传承
+2025-08-26 00:44:09,556 - api.v1.projects - INFO - 根据标题找到视频文件: 4_致敬MJ、王子和詹姆斯·布朗，这才是真正的艺术传承.mp4
+2025-08-26 00:44:09,557 - api.v1.projects - INFO - 查找clip视频: clip_id=ac0b2b4c-3ea5-474a-92c5-d3f782ff134e, title=父母回家的画面让他一生难忘，这背后藏着多少感动？
+2025-08-26 00:44:09,557 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:09,558 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:09,558 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['ac0b2b4c-3ea5-474a-92c5-d3f782ff134e_clip_ac0b2b4c-3ea5-474a-92c5-d3f782ff134e.mp4']
+2025-08-26 00:44:09,558 - api.v1.projects - WARNING - 视频文件为空或不存在: ac0b2b4c-3ea5-474a-92c5-d3f782ff134e_clip_ac0b2b4c-3ea5-474a-92c5-d3f782ff134e.mp4
+2025-08-26 00:44:09,558 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:09,558 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:09,558 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:09,558 - api.v1.projects - INFO - 尝试根据标题查找: 父母回家的画面让他一生难忘，这背后藏着多少感动？
+2025-08-26 00:44:09,558 - api.v1.projects - INFO - 根据标题找到视频文件: 9_父母回家的画面让他一生难忘，这背后藏着多少感动？.mp4
+2025-08-26 00:44:09,559 - api.v1.projects - INFO - 查找clip视频: clip_id=678a8c4b-16ac-4893-a8d9-1b28c3bb4c81, title=专注、真实、诚实，这三个词能描述你的Mindset吗？
+2025-08-26 00:44:09,559 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:09,559 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:09,559 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['678a8c4b-16ac-4893-a8d9-1b28c3bb4c81_clip_678a8c4b-16ac-4893-a8d9-1b28c3bb4c81.mp4']
+2025-08-26 00:44:09,559 - api.v1.projects - WARNING - 视频文件为空或不存在: 678a8c4b-16ac-4893-a8d9-1b28c3bb4c81_clip_678a8c4b-16ac-4893-a8d9-1b28c3bb4c81.mp4
+2025-08-26 00:44:09,559 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:09,559 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:09,559 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:09,559 - api.v1.projects - INFO - 尝试根据标题查找: 专注、真实、诚实，这三个词能描述你的Mindset吗？
+2025-08-26 00:44:09,560 - api.v1.projects - INFO - 根据标题找到视频文件: 2_专注、真实、诚实，这三个词能描述你的Mindset吗？.mp4
+2025-08-26 00:44:09,561 - api.v1.projects - INFO - 查找clip视频: clip_id=1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c, title=Jackson Wang开场合集：我们是外星人？未来视角大开篇
+2025-08-26 00:44:09,561 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:09,561 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:09,561 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c_clip_1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c.mp4']
+2025-08-26 00:44:09,561 - api.v1.projects - WARNING - 视频文件为空或不存在: 1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c_clip_1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c.mp4
+2025-08-26 00:44:09,561 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:09,561 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:09,561 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:09,561 - api.v1.projects - INFO - 尝试根据标题查找: Jackson Wang开场合集：我们是外星人？未来视角大开篇
+2025-08-26 00:44:09,561 - api.v1.projects - INFO - 根据标题找到视频文件: 1_Jackson Wang开场合集：我们是外星人？未来视角大开篇.mp4
+2025-08-26 00:44:09,562 - api.v1.projects - INFO - 查找clip视频: clip_id=325a2e1f-b7c3-4688-a94d-3dbd919a3ddf, title=从艺人到朋友，Jackson Wang对粉丝的爱有多坚定？
+2025-08-26 00:44:09,562 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:09,562 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:09,563 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['325a2e1f-b7c3-4688-a94d-3dbd919a3ddf_clip_325a2e1f-b7c3-4688-a94d-3dbd919a3ddf.mp4']
+2025-08-26 00:44:09,563 - api.v1.projects - WARNING - 视频文件为空或不存在: 325a2e1f-b7c3-4688-a94d-3dbd919a3ddf_clip_325a2e1f-b7c3-4688-a94d-3dbd919a3ddf.mp4
+2025-08-26 00:44:09,563 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:09,563 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:09,563 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:09,563 - api.v1.projects - INFO - 尝试根据标题查找: 从艺人到朋友，Jackson Wang对粉丝的爱有多坚定？
+2025-08-26 00:44:09,563 - api.v1.projects - INFO - 根据标题找到视频文件: 10_从艺人到朋友，Jackson Wang对粉丝的爱有多坚定？.mp4
+2025-08-26 00:44:09,598 - api.v1.projects - INFO - 查找clip视频: clip_id=0dd5616b-1d39-4118-bb15-580633e59932, title=如果可以选择时代，他宁愿等500年后再生活
+2025-08-26 00:44:09,598 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:09,598 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:09,599 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['0dd5616b-1d39-4118-bb15-580633e59932_clip_0dd5616b-1d39-4118-bb15-580633e59932.mp4']
+2025-08-26 00:44:09,599 - api.v1.projects - WARNING - 视频文件为空或不存在: 0dd5616b-1d39-4118-bb15-580633e59932_clip_0dd5616b-1d39-4118-bb15-580633e59932.mp4
+2025-08-26 00:44:09,600 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:09,600 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:09,600 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:09,601 - api.v1.projects - INFO - 尝试根据标题查找: 如果可以选择时代，他宁愿等500年后再生活
+2025-08-26 00:44:09,601 - api.v1.projects - INFO - 根据标题找到视频文件: 5_如果可以选择时代，他宁愿等500年后再生活.mp4
+2025-08-26 00:44:09,602 - api.v1.projects - INFO - 查找clip视频: clip_id=94512d2e-87ca-41fc-9405-903433f88a6e, title=想和蜘蛛侠拍特技？Jackson Wang这些隐藏技能你绝对想不到
+2025-08-26 00:44:09,602 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:09,602 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:09,602 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['94512d2e-87ca-41fc-9405-903433f88a6e_clip_94512d2e-87ca-41fc-9405-903433f88a6e.mp4']
+2025-08-26 00:44:09,602 - api.v1.projects - WARNING - 视频文件为空或不存在: 94512d2e-87ca-41fc-9405-903433f88a6e_clip_94512d2e-87ca-41fc-9405-903433f88a6e.mp4
+2025-08-26 00:44:09,602 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:09,602 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:09,603 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:09,603 - api.v1.projects - INFO - 尝试根据标题查找: 想和蜘蛛侠拍特技？Jackson Wang这些隐藏技能你绝对想不到
+2025-08-26 00:44:09,603 - api.v1.projects - INFO - 根据标题找到视频文件: 8_想和蜘蛛侠拍特技？Jackson Wang这些隐藏技能你绝对想不到.mp4
+2025-08-26 00:44:09,611 - api.v1.projects - INFO - 查找clip视频: clip_id=93562f59-dad0-4f3c-b129-69036d1e80a6, title=二十件同款T恤、潜水工作室，Jackson的日常有多真实？
+2025-08-26 00:44:09,611 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:09,611 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:09,612 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['93562f59-dad0-4f3c-b129-69036d1e80a6_clip_93562f59-dad0-4f3c-b129-69036d1e80a6.mp4']
+2025-08-26 00:44:09,612 - api.v1.projects - WARNING - 视频文件为空或不存在: 93562f59-dad0-4f3c-b129-69036d1e80a6_clip_93562f59-dad0-4f3c-b129-69036d1e80a6.mp4
+2025-08-26 00:44:09,612 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:09,612 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:09,612 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:09,612 - api.v1.projects - INFO - 尝试根据标题查找: 二十件同款T恤、潜水工作室，Jackson的日常有多真实？
+2025-08-26 00:44:09,612 - api.v1.projects - INFO - 根据标题找到视频文件: 6_二十件同款T恤、潜水工作室，Jackson的日常有多真实？.mp4
+2025-08-26 00:44:09,624 - api.v1.projects - INFO - 查找clip视频: clip_id=db6241be-29e8-4680-b458-37b74b11441c, title=怕蟑螂却不怕丧尸？Jackson的生存哲学太有道理
+2025-08-26 00:44:09,625 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:09,625 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:09,625 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['db6241be-29e8-4680-b458-37b74b11441c_clip_db6241be-29e8-4680-b458-37b74b11441c.mp4']
+2025-08-26 00:44:09,626 - api.v1.projects - WARNING - 视频文件为空或不存在: db6241be-29e8-4680-b458-37b74b11441c_clip_db6241be-29e8-4680-b458-37b74b11441c.mp4
+2025-08-26 00:44:09,626 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:09,626 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:09,626 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:09,626 - api.v1.projects - INFO - 尝试根据标题查找: 怕蟑螂却不怕丧尸？Jackson的生存哲学太有道理
+2025-08-26 00:44:09,626 - api.v1.projects - INFO - 根据标题找到视频文件: 3_怕蟑螂却不怕丧尸？Jackson的生存哲学太有道理.mp4
+2025-08-26 00:44:11,370 - api.v1.projects - INFO - 查找clip视频: clip_id=93562f59-dad0-4f3c-b129-69036d1e80a6, title=二十件同款T恤、潜水工作室，Jackson的日常有多真实？
+2025-08-26 00:44:11,370 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:11,370 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:11,371 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['93562f59-dad0-4f3c-b129-69036d1e80a6_clip_93562f59-dad0-4f3c-b129-69036d1e80a6.mp4']
+2025-08-26 00:44:11,371 - api.v1.projects - WARNING - 视频文件为空或不存在: 93562f59-dad0-4f3c-b129-69036d1e80a6_clip_93562f59-dad0-4f3c-b129-69036d1e80a6.mp4
+2025-08-26 00:44:11,371 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:11,371 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:11,371 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:11,371 - api.v1.projects - INFO - 尝试根据标题查找: 二十件同款T恤、潜水工作室，Jackson的日常有多真实？
+2025-08-26 00:44:11,371 - api.v1.projects - INFO - 根据标题找到视频文件: 6_二十件同款T恤、潜水工作室，Jackson的日常有多真实？.mp4
+2025-08-26 00:44:14,177 - api.v1.projects - INFO - 查找clip视频: clip_id=94512d2e-87ca-41fc-9405-903433f88a6e, title=想和蜘蛛侠拍特技？Jackson Wang这些隐藏技能你绝对想不到
+2025-08-26 00:44:14,178 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
+2025-08-26 00:44:14,178 - api.v1.projects - INFO - 项目clips目录存在: True
+2025-08-26 00:44:14,178 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['94512d2e-87ca-41fc-9405-903433f88a6e_clip_94512d2e-87ca-41fc-9405-903433f88a6e.mp4']
+2025-08-26 00:44:14,178 - api.v1.projects - WARNING - 视频文件为空或不存在: 94512d2e-87ca-41fc-9405-903433f88a6e_clip_94512d2e-87ca-41fc-9405-903433f88a6e.mp4
+2025-08-26 00:44:14,178 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
+2025-08-26 00:44:14,178 - api.v1.projects - INFO - 全局clips目录存在: True
+2025-08-26 00:44:14,178 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
+2025-08-26 00:44:14,178 - api.v1.projects - INFO - 尝试根据标题查找: 想和蜘蛛侠拍特技？Jackson Wang这些隐藏技能你绝对想不到
+2025-08-26 00:44:14,178 - api.v1.projects - INFO - 根据标题找到视频文件: 8_想和蜘蛛侠拍特技？Jackson Wang这些隐藏技能你绝对想不到.mp4
