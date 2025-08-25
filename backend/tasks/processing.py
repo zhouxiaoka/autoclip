@@ -35,11 +35,24 @@ def run_async_notification(coro):
     """运行异步通知的辅助函数"""
     try:
         loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            # 如果事件循环已关闭，创建一个新的
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+        else:
+            return loop.run_until_complete(coro)
     except RuntimeError:
+        # 如果没有事件循环，创建一个新的
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    
-    return loop.run_until_complete(coro)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
 
 @celery_app.task(bind=True, name='backend.tasks.processing.process_video_pipeline')
 def process_video_pipeline(self, project_id: str, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:

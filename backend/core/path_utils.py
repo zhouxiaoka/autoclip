@@ -45,10 +45,22 @@ def get_project_output_directory(project_id: str) -> Path:
 
 def get_clips_directory() -> Path:
     """获取切片目录"""
+    # 首先检查backend/output/clips目录是否存在且有文件
+    backend_clips_dir = get_project_root() / "backend" / "output" / "clips"
+    if backend_clips_dir.exists() and any(backend_clips_dir.iterdir()):
+        return backend_clips_dir
+    
+    # 如果backend目录不存在或为空，使用data目录
     return get_data_directory() / "output" / "clips"
 
 def get_collections_directory() -> Path:
     """获取合集目录"""
+    # 首先检查backend/output/collections目录是否存在且有文件
+    backend_collections_dir = get_project_root() / "backend" / "output" / "collections"
+    if backend_collections_dir.exists() and any(backend_collections_dir.iterdir()):
+        return backend_collections_dir
+    
+    # 如果backend目录不存在或为空，使用data目录
     return get_data_directory() / "output" / "collections"
 
 def get_metadata_directory() -> Path:
