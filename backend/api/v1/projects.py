@@ -911,12 +911,8 @@ async def get_project_file(
 
 
 @router.get("/{project_id}/clips/{clip_id}")
-async def get_project_clip(
-    project_id: str,
-    clip_id: str,
-    project_service: ProjectService = Depends(get_project_service)
-):
-    """Get a specific clip video file for a project."""
+async def get_clip_video(project_id: str, clip_id: str):
+    """获取项目切片视频"""
     try:
         from pathlib import Path
         import os
@@ -930,27 +926,96 @@ async def get_project_clip(
             if not clip:
                 raise HTTPException(status_code=404, detail=f"Clip not found: {clip_id}")
             
-            # 直接使用clip_id查找文件，不再使用original_id
-            logger.info(f"查找clip视频: clip_id={clip_id}")
+            logger.info(f"查找clip视频: clip_id={clip_id}, title={clip.title}")
             
         finally:
             db.close()
         
-        # 构建视频文件路径
-        from core.path_utils import get_clips_directory
-        clips_dir = get_clips_directory()
+        # 首先尝试在项目特定的clips目录中查找
+        from core.path_utils import get_project_output_directory
+        project_clips_dir = get_project_output_directory(project_id) / "clips"
         
-        logger.info(f"clips目录: {clips_dir}")
-        logger.info(f"clips目录存在: {clips_dir.exists()}")
+        logger.info(f"项目clips目录: {project_clips_dir}")
+        logger.info(f"项目clips目录存在: {project_clips_dir.exists()}")
+        
+        # 在项目特定目录中查找
+        if project_clips_dir.exists():
+            video_files = list(project_clips_dir.glob(f"{clip_id}_*.mp4"))
+            logger.info(f"在项目目录中找到的视频文件: {[f.name for f in video_files]}")
+            
+            # 检查文件是否为空
+            valid_video_files = []
+            for video_file in video_files:
+                if video_file.exists() and video_file.stat().st_size > 0:
+                    valid_video_files.append(video_file)
+                    logger.info(f"找到有效的视频文件: {video_file.name}, 大小: {video_file.stat().st_size} bytes")
+                else:
+                    logger.warning(f"视频文件为空或不存在: {video_file.name}")
+            
+            if valid_video_files:
+                video_file = valid_video_files[0]
+                # 返回文件流
+                from fastapi.responses import FileResponse
+                return FileResponse(
+                    path=str(video_file),
+                    media_type="video/mp4",
+                    filename=video_file.name
+                )
+        
+        # 如果项目目录中没有找到，尝试全局clips目录
+        from core.path_utils import get_clips_directory
+        global_clips_dir = get_clips_directory()
+        
+        logger.info(f"全局clips目录: {global_clips_dir}")
+        logger.info(f"全局clips目录存在: {global_clips_dir.exists()}")
         
         # 确保路径存在
-        if not clips_dir.exists():
-            logger.error(f"Clips目录不存在: {clips_dir}")
-            raise HTTPException(status_code=404, detail=f"Clips directory not found: {clips_dir}")
+        if not global_clips_dir.exists():
+            logger.error(f"全局Clips目录不存在: {global_clips_dir}")
+            raise HTTPException(status_code=404, detail=f"Clips directory not found: {global_clips_dir}")
         
-        # 使用clip_id查找对应的视频文件
-        video_files = list(clips_dir.glob(f"{clip_id}_*.mp4"))
-        logger.info(f"找到的视频文件: {[f.name for f in video_files]}")
+        # 方法1: 使用clip_id查找对应的视频文件
+        video_files = list(global_clips_dir.glob(f"{clip_id}_*.mp4"))
+        logger.info(f"使用clip_id在全局目录中找到的视频文件: {[f.name for f in video_files]}")
+        
+        # 方法2: 如果clip_id没找到，尝试根据标题查找
+        if not video_files and clip.title:
+            # 清理标题中的特殊字符，用于文件名匹配
+            from utils.video_processor import VideoProcessor
+            safe_title = VideoProcessor.sanitize_filename(clip.title)
+            logger.info(f"尝试根据标题查找: {safe_title}")
+            
+            # 查找包含标题的文件
+            for video_file in global_clips_dir.glob("*.mp4"):
+                if safe_title in video_file.name or clip.title in video_file.name:
+                    video_files = [video_file]
+                    logger.info(f"根据标题找到视频文件: {video_file.name}")
+                    break
+        
+        # 方法3: 如果还是没找到，尝试根据clip在数据库中的顺序查找
+        if not video_files:
+            db = SessionLocal()
+            try:
+                # 获取项目中的所有clips，按创建时间排序
+                from models.clip import Clip
+                project_clips = db.query(Clip).filter(Clip.project_id == project_id).order_by(Clip.created_at).all()
+                
+                # 找到当前clip的索引
+                clip_index = None
+                for i, project_clip in enumerate(project_clips):
+                    if project_clip.id == clip_id:
+                        clip_index = i + 1  # 从1开始编号
+                        break
+                
+                if clip_index is not None:
+                    # 查找对应编号的视频文件
+                    for video_file in global_clips_dir.glob(f"{clip_index}_*.mp4"):
+                        video_files = [video_file]
+                        logger.info(f"根据索引{clip_index}找到视频文件: {video_file.name}")
+                        break
+                        
+            finally:
+                db.close()
         
         if not video_files:
             logger.error(f"没有找到clip_id={clip_id}的视频文件")
@@ -958,9 +1023,10 @@ async def get_project_clip(
         
         video_file = video_files[0]
         
-        # 检查文件是否存在
-        if not video_file.exists():
-            raise HTTPException(status_code=404, detail="Clip video file not found")
+        # 检查文件是否存在且不为空
+        if not video_file.exists() or video_file.stat().st_size == 0:
+            logger.error(f"视频文件不存在或为空: {video_file}")
+            raise HTTPException(status_code=404, detail="Clip video file not found or empty")
         
         # 返回文件流
         from fastapi.responses import FileResponse
