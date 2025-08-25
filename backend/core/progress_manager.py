@@ -100,17 +100,18 @@ class ProgressManager:
             # 发送WebSocket通知
             await self.websocket_service.send_processing_progress(
                 project_id=task.project_id,
+                task_id=task_id,
+                progress=progress,
+                step=step_name,
                 current_step=current_step,
                 total_steps=total_steps,
                 step_name=step_name,
-                progress=progress,
                 message=message or f"正在执行步骤 {current_step}/{total_steps}: {step_name}"
             )
             
             # 发送任务更新通知
             await self.websocket_service.send_task_update(
                 task_id=task_id,
-                project_id=task.project_id,
                 status=task.status,
                 progress=progress,
                 message=message or f"步骤 {current_step}: {step_name}"
@@ -191,8 +192,8 @@ class ProgressManager:
             # 发送WebSocket错误通知
             await self.websocket_service.send_processing_error(
                 project_id=task.project_id,
-                error=error_message,
-                step=step_name or f"step_{current_step}" if current_step else "unknown"
+                task_id=task_id,
+                error=error_message
             )
             
             # 发送任务更新通知

@@ -554,8 +554,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 borderRadius: '3px',
                 padding: '4px 6px',
                 textAlign: 'center',
-                flex: project.status === 'pending' ? 1 : undefined,
-                width: project.status === 'pending' ? '100%' : undefined
+                flex: (project.status === 'pending' || project.status === 'failed') ? 1 : undefined,
+                width: (project.status === 'pending' || project.status === 'failed') ? '100%' : undefined
               }}>
                 <div style={{ 
                   color: project.status === 'completed' ? '#52c41a' :

@@ -125,7 +125,7 @@ async def test_api_key(request: ApiKeyTestRequest) -> ApiKeyTestResponse:
             if str(project_root) not in sys.path:
                 sys.path.insert(0, str(project_root))
             
-            from shared.utils.llm_client import LLMClient
+            from backend.utils.llm_client import LLMClient
             
             llm_client = LLMClient()
             # 发送一个简单的测试请求

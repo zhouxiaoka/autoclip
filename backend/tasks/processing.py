@@ -100,17 +100,41 @@ def process_video_pipeline(self, project_id: str, input_video_path: str, input_s
             # 执行Pipeline处理
             result = pipeline_adapter.process_project_sync(project_id, input_video_path, input_srt_path)
             
-            # 更新任务状态为完成
-            task.status = TaskStatus.COMPLETED
-            task.progress = 100
-            task.current_step = "处理完成"
-            task.result_data = result
-            db.commit()
-            
-            # 发送完成通知
-            run_async_notification(
-                notification_service.send_processing_complete(project_id, task_id, result)
-            )
+            # 根据处理结果更新任务状态
+            if result.get('status') == 'failed':
+                # 处理失败
+                task.status = TaskStatus.FAILED
+                task.progress = 100
+                task.current_step = "处理失败"
+                task.result_data = result
+                task.error_message = result.get('message', '处理失败')
+                db.commit()
+                
+                # 发送失败通知
+                run_async_notification(
+                    notification_service.send_processing_error(project_id, task_id, result.get('message', '处理失败'))
+                )
+                
+                logger.error(f"视频流水线处理失败: {project_id}, 错误: {result.get('message')}")
+                return {
+                    "success": False,
+                    "project_id": project_id,
+                    "task_id": task_id,
+                    "result": result,
+                    "message": "视频处理流水线失败"
+                }
+            else:
+                # 处理成功
+                task.status = TaskStatus.COMPLETED
+                task.progress = 100
+                task.current_step = "处理完成"
+                task.result_data = result
+                db.commit()
+                
+                # 发送完成通知
+                run_async_notification(
+                    notification_service.send_processing_complete(project_id, task_id, result)
+                )
             
             logger.info(f"视频流水线处理完成: {project_id}")
             return {
