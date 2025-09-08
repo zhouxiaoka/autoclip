@@ -1,0 +1,4 @@
+processing_params:
+  max_clips: 50
+  max_duration: 300.0
+  min_duration: 10.0

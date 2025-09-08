@@ -235,9 +235,10 @@ export const projectApi = {
           end_time: formatSecondsToTime(clip.end_time),
           duration: clip.duration || 0,
           final_score: clip.score || 0,
-          recommend_reason: metadata.recommend_reason || clip.description || '',
-          outline: metadata.outline || clip.description || '',
-          content: metadata.content || [clip.description || ''],
+          recommend_reason: metadata.recommend_reason || '',
+          outline: metadata.outline || '',
+          // 只使用metadata中的content，避免使用description（可能是转写文本）
+          content: metadata.content || [],
           chunk_index: metadata.chunk_index || 0
         }
       })
@@ -313,14 +314,14 @@ export const projectApi = {
 
   // 下载切片视频
   downloadClip: (projectId: string, clipId: string): Promise<Blob> => {
-    return api.get(`/projects/${projectId}/clips/${clipId}`, {
+    return api.get(`/files/projects/${projectId}/clips/${clipId}`, {
       responseType: 'blob'
     })
   },
 
   // 下载合集视频
   downloadCollection: (projectId: string, collectionId: string): Promise<Blob> => {
-    return api.get(`/projects/${projectId}/collections/${collectionId}/download`, {
+    return api.get(`/files/projects/${projectId}/collections/${collectionId}`, {
       responseType: 'blob'
     })
   },
@@ -406,13 +407,14 @@ export const projectApi = {
 
   // 获取切片视频URL
   getClipVideoUrl: (projectId: string, clipId: string, clipTitle?: string): string => {
-    // 直接使用clipId，让后端处理文件查找
-    return `http://localhost:8000/api/v1/projects/${projectId}/clips/${clipId}`
+    // 使用files路由获取切片视频
+    return `http://localhost:8000/api/v1/files/projects/${projectId}/clips/${clipId}`
   },
 
   // 获取合集视频URL
   getCollectionVideoUrl: (projectId: string, collectionId: string): string => {
-    return `http://localhost:8000/api/v1/collections/${collectionId}/download`
+    // 使用files路由获取合集视频
+    return `http://localhost:8000/api/v1/files/projects/${projectId}/collections/${collectionId}`
   }
 }
 

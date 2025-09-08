@@ -7,10 +7,10 @@ import logging
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from sqlalchemy.orm import Session
-from models.clip import Clip, ClipStatus
-from models.collection import Collection, CollectionStatus
-from models.project import Project, ProjectStatus, ProjectType
-from models.task import Task, TaskStatus, TaskType
+from backend.models.clip import Clip, ClipStatus
+from backend.models.collection import Collection, CollectionStatus
+from backend.models.project import Project, ProjectStatus, ProjectType
+from backend.models.task import Task, TaskStatus, TaskType
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -108,6 +108,9 @@ class DataSyncService:
             # 同步合集数据
             collections_count = self._sync_collections_from_filesystem(project_id, project_dir)
             
+            # 检查项目是否已完成处理，更新项目状态
+            self._update_project_status_if_completed(project_id, project_dir)
+            
             return {
                 "success": True,
                 "project_id": project_id,
@@ -143,6 +146,7 @@ class DataSyncService:
         try:
             # 查找切片数据文件
             clips_files = [
+                project_dir / "step6_video" / "clips_metadata.json",  # 最完整的数据源
                 project_dir / "step3_all_scored.json",  # 优先使用正确的数据源
                 project_dir / "step4_title" / "step4_title.json",
                 project_dir / "step4_titles.json",
@@ -225,6 +229,7 @@ class DataSyncService:
         try:
             # 查找合集数据文件
             collections_files = [
+                project_dir / "step6_video" / "collections_metadata.json",  # 最完整的数据源
                 project_dir / "step5_clustering" / "step5_clustering.json",
                 project_dir / "collections_metadata.json",
                 project_dir / "metadata" / "collections_metadata.json"
@@ -498,3 +503,38 @@ class DataSyncService:
         except Exception as e:
             logger.error(f"时间转换失败: {time_str}, 错误: {e}")
             return 0
+    
+    def _update_project_status_if_completed(self, project_id: str, project_dir: Path):
+        """检查项目是否已完成处理，如果是则更新状态为completed"""
+        try:
+            # 检查是否有step6_video_output.json文件，这是处理完成的标志
+            step6_output_file = project_dir / "step6_video" / "step6_video_output.json"
+            
+            if step6_output_file.exists():
+                # 获取项目记录
+                project = self.db.query(Project).filter(Project.id == project_id).first()
+                if project and project.status != ProjectStatus.COMPLETED:
+                    # 读取step6输出文件获取统计信息
+                    try:
+                        with open(step6_output_file, 'r', encoding='utf-8') as f:
+                            step6_output = json.load(f)
+                        
+                        # 更新项目状态和统计信息
+                        project.status = ProjectStatus.COMPLETED
+                        project.total_clips = step6_output.get("clips_count", 0)
+                        project.total_collections = step6_output.get("collections_count", 0)
+                        project.completed_at = datetime.now()
+                        
+                        self.db.commit()
+                        logger.info(f"项目 {project_id} 状态已更新为已完成，切片数: {project.total_clips}, 合集数: {project.total_collections}")
+                        
+                    except Exception as e:
+                        logger.error(f"读取step6输出文件失败: {e}")
+                        # 即使读取失败，也标记为已完成
+                        project.status = ProjectStatus.COMPLETED
+                        project.completed_at = datetime.now()
+                        self.db.commit()
+                        logger.info(f"项目 {project_id} 状态已更新为已完成（无统计信息）")
+                        
+        except Exception as e:
+            logger.error(f"更新项目状态失败: {e}")

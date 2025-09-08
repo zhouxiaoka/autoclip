@@ -30,7 +30,7 @@ class ApiKeyTestResponse(BaseModel):
 
 def get_settings_file_path() -> Path:
     """获取设置文件路径"""
-    from core.path_utils import get_settings_file_path as get_settings_path
+    from ...core.path_utils import get_settings_file_path as get_settings_path
     return get_settings_path()
 
 def load_settings() -> Dict[str, Any]:
@@ -125,7 +125,7 @@ async def test_api_key(request: ApiKeyTestRequest) -> ApiKeyTestResponse:
             if str(project_root) not in sys.path:
                 sys.path.insert(0, str(project_root))
             
-            from backend.utils.llm_client import LLMClient
+            from ...utils.llm_client import LLMClient
             
             llm_client = LLMClient()
             # 发送一个简单的测试请求

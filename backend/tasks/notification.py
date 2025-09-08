@@ -7,11 +7,11 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from celery import shared_task
-from core.celery_app import celery_app
+from ..core.celery_app import celery_app
 from datetime import datetime
-from core.database import SessionLocal
-from models.task import Task, TaskStatus
-from services.websocket_notification_service import WebSocketNotificationService
+from ..core.database import SessionLocal
+from ..models.task import Task, TaskStatus
+from ..services.websocket_notification_service import WebSocketNotificationService
 
 logger = logging.getLogger(__name__)
 

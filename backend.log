@@ -1,752 +1,244 @@
-2025-08-17 23:18:09,032 - services.pipeline_adapter - INFO - 流水线模块导入成功
-2025-08-17 23:18:09,033 - services.processing_orchestrator - INFO - 流水线模块导入成功
-INFO:     Started server process [12779]
-INFO:     Waiting for application startup.
-2025-08-17 23:18:09,104 - main - INFO - 启动AutoClip API服务...
-2025-08-17 23:18:09,105 - main - INFO - 数据库表创建完成
-2025-08-17 23:18:09,105 - main - INFO - API密钥已加载到环境变量
-INFO:     Application startup complete.
+INFO:     Will watch for changes in these directories: ['/Users/zhoukk/autoclip']
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:18:19,027 - api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1yoYzzpEQc
-INFO:     127.0.0.1:55649 - "POST /api/v1/bilibili/download HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-WARNING: [BiliBili] Subtitles are only available when logged in. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies
-2025-08-17 23:18:21,968 - shared.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 「Github一周热点83期」Google Analytics替代、Mac应用清理工具、prompt的编排标记语言、个人理财应用和网盘搜索工具
-2025-08-17 23:18:21,969 - shared.utils.bilibili_downloader - WARNING - 未找到字幕文件，标题: 「Github一周热点83期」Google Analytics替代、Mac应用清理工具、prompt的编排标记语言、个人理财应用和网盘搜索工具
-2025-08-17 23:18:21,969 - shared.utils.bilibili_downloader - INFO - 下载完成: 「Github一周热点83期」Google Analytics替代、Mac应用清理工具、prompt的编排标记语言、个人理财应用和网盘搜索工具
-2025-08-17 23:18:21,972 - api.v1.bilibili - INFO - B站下载任务完成: bde1eb2e-c8e9-4fce-b1c3-459b2b7d730c, 项目ID: c5746369-e6af-421f-831d-b9d069cbcc22
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55685 - "GET /api/v1/bilibili/tasks/bde1eb2e-c8e9-4fce-b1c3-459b2b7d730c HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B983%E6%9C%9F%E3%80%8DGoogle%20Analytics%E6%9B%BF%E4%BB%A3%E3%80%81Mac%E5%BA%94%E7%94%A8%E6%B8%85%E7%90%86%E5%B7%A5%E5%85%B7%E3%80%81prompt%E7%9A%84%E7%BC%96%E6%8E%92%E6%A0%87%E8%AE%B0%E8%AF%AD%E8%A8%80%E3%80%81%E4%B8%AA%E4%BA%BA%E7%90%86%E8%B4%A2%E5%BA%94%E7%94%A8%E5%92%8C%E7%BD%91%E7%9B%98%E6%90%9C%E7%B4%A2%E5%B7%A5%E5%85%B7.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55703 - "GET /api/v1/bilibili/tasks/bde1eb2e-c8e9-4fce-b1c3-459b2b7d730c HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55712 - "GET /api/v1/bilibili/tasks/bde1eb2e-c8e9-4fce-b1c3-459b2b7d730c HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55715 - "GET /api/v1/bilibili/tasks/bde1eb2e-c8e9-4fce-b1c3-459b2b7d730c HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55717 - "GET /api/v1/bilibili/tasks/bde1eb2e-c8e9-4fce-b1c3-459b2b7d730c HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55727 - "GET /api/v1/bilibili/tasks/bde1eb2e-c8e9-4fce-b1c3-459b2b7d730c HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55734 - "GET /api/v1/bilibili/tasks/bde1eb2e-c8e9-4fce-b1c3-459b2b7d730c HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55746 - "GET /api/v1/bilibili/tasks/bde1eb2e-c8e9-4fce-b1c3-459b2b7d730c HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55647 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55754 - "GET /api/v1/bilibili/tasks/bde1eb2e-c8e9-4fce-b1c3-459b2b7d730c HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55756 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-2025-08-17 23:20:41,688 - api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1MrtszzEEs
-INFO:     127.0.0.1:55752 - "POST /api/v1/bilibili/download HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-[download]   0.0% of   15.32MiB at  Unknown B/s ETA Unknown[download]   0.0% of   15.32MiB at    1.75MiB/s ETA 00:08  [download]   0.0% of   15.32MiB at    2.98MiB/s ETA 00:05[download]   0.1% of   15.32MiB at  425.42KiB/s ETA 00:36[download]   0.2% of   15.32MiB at  618.39KiB/s ETA 00:25[download]   0.4% of   15.32MiB at  779.79KiB/s ETA 00:20[download]   0.8% of   15.32MiB at  827.03KiB/s ETA 00:18[download]   1.6% of   15.32MiB at    1.39MiB/s ETA 00:10[download]   3.3% of   15.32MiB at    2.04MiB/s ETA 00:07[download]   6.5% of   15.32MiB at    3.17MiB/s ETA 00:04[download]  13.0% of   15.32MiB at    4.59MiB/s ETA 00:02INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-[download]  26.1% of   15.32MiB at    5.84MiB/s ETA 00:01[download]  52.2% of   15.32MiB at    7.10MiB/s ETA 00:01[download]  78.3% of   15.32MiB at    7.55MiB/s ETA 00:00[download] 100.0% of   15.32MiB at    7.65MiB/s ETA 00:00[download] 100% of   15.32MiB in 00:00:02 at 7.10MiB/s                                                         [download]   0.0% of    8.34MiB at  Unknown B/s ETA Unknown[download]   0.0% of    8.34MiB at    1.93MiB/s ETA 00:04  [download]   0.1% of    8.34MiB at    2.80MiB/s ETA 00:02[download]   0.2% of    8.34MiB at  418.85KiB/s ETA 00:20[download]   0.4% of    8.34MiB at  616.52KiB/s ETA 00:13[download]   0.7% of    8.34MiB at  778.57KiB/s ETA 00:10[download]   1.5% of    8.34MiB at    1.09MiB/s ETA 00:07[download]   3.0% of    8.34MiB at    1.61MiB/s ETA 00:05[download]   6.0% of    8.34MiB at    2.50MiB/s ETA 00:03INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-[download]  12.0% of    8.34MiB at    3.83MiB/s ETA 00:01[download]  24.0% of    8.34MiB at    5.12MiB/s ETA 00:01[download]  48.0% of    8.34MiB at    6.14MiB/s ETA 00:00[download]  96.0% of    8.34MiB at    6.89MiB/s ETA 00:00[download] 100.0% of    8.34MiB at    6.98MiB/s ETA 00:00[download] 100% of    8.34MiB in 00:00:01 at 5.74MiB/s                                                         2025-08-17 23:20:54,781 - shared.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 「Github一周热点82期」OpenAI最强开源模型、实时语音活动检测工具、团队知识库工具、 本地 AI 应用开发工具和命令行工具的帮助集合
-2025-08-17 23:20:54,782 - shared.utils.bilibili_downloader - INFO - 重命名AI字幕文件: 「Github一周热点82期」OpenAI最强开源模型、实时语音活动检测工具、团队知识库工具、 本地 AI 应用开发工具和命令行工具的帮助集合.ai-zh.srt -> 「Github一周热点82期」OpenAI最强开源模型、实时语音活动检测工具、团队知识库工具、 本地 AI 应用开发工具和命令行工具的帮助集合.srt
-2025-08-17 23:20:54,782 - shared.utils.bilibili_downloader - INFO - 下载完成: 「Github一周热点82期」OpenAI最强开源模型、实时语音活动检测工具、团队知识库工具、 本地 AI 应用开发工具和命令行工具的帮助集合
-2025-08-17 23:20:54,783 - api.v1.bilibili - INFO - B站下载任务完成: 39a95830-66e3-469e-a1ae-7d381ee03406, 项目ID: 73d4ec32-1554-4fcf-8d1c-981c40d0fab5
-INFO:     127.0.0.1:55752 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55752 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B983%E6%9C%9F%E3%80%8DGoogle%20Analytics%E6%9B%BF%E4%BB%A3%E3%80%81Mac%E5%BA%94%E7%94%A8%E6%B8%85%E7%90%86%E5%B7%A5%E5%85%B7%E3%80%81prompt%E7%9A%84%E7%BC%96%E6%8E%92%E6%A0%87%E8%AE%B0%E8%AF%AD%E8%A8%80%E3%80%81%E4%B8%AA%E4%BA%BA%E7%90%86%E8%B4%A2%E5%BA%94%E7%94%A8%E5%92%8C%E7%BD%91%E7%9B%98%E6%90%9C%E7%B4%A2%E5%B7%A5%E5%85%B7.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-2025-08-17 23:21:06,118 - api.v1.bilibili - INFO - 开始解析B站视频: https://www.bilibili.com/video/BV1MrtszzEEs
-2025-08-17 23:21:07,008 - api.v1.bilibili - INFO - 视频信息解析成功: 「Github一周热点82期」OpenAI最强开源模型、实时语音活动检测工具、团队知识库工具、 本地 AI 应用开发工具和命令行工具的帮助集合
-INFO:     127.0.0.1:55950 - "POST /api/v1/bilibili/parse HTTP/1.1" 200 OK
-2025-08-17 23:21:08,942 - api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1MrtszzEEs
-INFO:     127.0.0.1:55950 - "POST /api/v1/bilibili/download HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-WARNING: [BiliBili] Subtitles are only available when logged in. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies
-2025-08-17 23:21:11,465 - shared.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 「Github一周热点82期」OpenAI最强开源模型、实时语音活动检测工具、团队知识库工具、 本地 AI 应用开发工具和命令行工具的帮助集合
-2025-08-17 23:21:11,465 - shared.utils.bilibili_downloader - INFO - 找到标准字幕文件: 「Github一周热点82期」OpenAI最强开源模型、实时语音活动检测工具、团队知识库工具、 本地 AI 应用开发工具和命令行工具的帮助集合.srt
-2025-08-17 23:21:11,465 - shared.utils.bilibili_downloader - INFO - 下载完成: 「Github一周热点82期」OpenAI最强开源模型、实时语音活动检测工具、团队知识库工具、 本地 AI 应用开发工具和命令行工具的帮助集合
-2025-08-17 23:21:11,468 - api.v1.bilibili - INFO - B站下载任务完成: 868a92ac-808b-4df5-b59c-f136db3d7c9e, 项目ID: 3a363ca4-18e8-4f24-9eda-1d514d4836a6
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "OPTIONS /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "DELETE /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "OPTIONS /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "DELETE /api/v1/projects/73d4ec32-1554-4fcf-8d1c-981c40d0fab5 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/bilibili/tasks/undefined HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56108 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:55950 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56121 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56121 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56129 - "GET /api/v1/projects/c5746369-e6af-421f-831d-b9d069cbcc22 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56131 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56137 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56139 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56169 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56201 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56239 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:23:46,433 - api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1yoYzzpEQc
-INFO:     127.0.0.1:56272 - "POST /api/v1/bilibili/download HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56284 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-WARNING: [BiliBili] Subtitles are only available when logged in. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies
-2025-08-17 23:23:49,106 - shared.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 「Github一周热点83期」Google Analytics替代、Mac应用清理工具、prompt的编排标记语言、个人理财应用和网盘搜索工具
-2025-08-17 23:23:49,107 - shared.utils.bilibili_downloader - WARNING - 未找到字幕文件，标题: 「Github一周热点83期」Google Analytics替代、Mac应用清理工具、prompt的编排标记语言、个人理财应用和网盘搜索工具
-2025-08-17 23:23:49,107 - shared.utils.bilibili_downloader - INFO - 下载完成: 「Github一周热点83期」Google Analytics替代、Mac应用清理工具、prompt的编排标记语言、个人理财应用和网盘搜索工具
-2025-08-17 23:23:49,108 - api.v1.bilibili - INFO - B站下载任务完成: e6e448db-2cd6-4bd9-869f-eec53a6ab4ed, 项目ID: 69eaeade-e5af-4c77-b52b-d9d71271d550
-INFO:     127.0.0.1:56322 - "GET /api/v1/bilibili/tasks/e6e448db-2cd6-4bd9-869f-eec53a6ab4ed HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56334 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56334 - "GET /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56334 - "GET /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56334 - "GET /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56334 - "GET /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56334 - "GET /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B983%E6%9C%9F%E3%80%8DGoogle%20Analytics%E6%9B%BF%E4%BB%A3%E3%80%81Mac%E5%BA%94%E7%94%A8%E6%B8%85%E7%90%86%E5%B7%A5%E5%85%B7%E3%80%81prompt%E7%9A%84%E7%BC%96%E6%8E%92%E6%A0%87%E8%AE%B0%E8%AF%AD%E8%A8%80%E3%80%81%E4%B8%AA%E4%BA%BA%E7%90%86%E8%B4%A2%E5%BA%94%E7%94%A8%E5%92%8C%E7%BD%91%E7%9B%98%E6%90%9C%E7%B4%A2%E5%B7%A5%E5%85%B7.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56517 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56518 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56517 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56517 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56518 - "GET /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56518 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56517 - "GET /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56517 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56518 - "GET /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56518 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56517 - "GET /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56517 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56518 - "GET /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B983%E6%9C%9F%E3%80%8DGoogle%20Analytics%E6%9B%BF%E4%BB%A3%E3%80%81Mac%E5%BA%94%E7%94%A8%E6%B8%85%E7%90%86%E5%B7%A5%E5%85%B7%E3%80%81prompt%E7%9A%84%E7%BC%96%E6%8E%92%E6%A0%87%E8%AE%B0%E8%AF%AD%E8%A8%80%E3%80%81%E4%B8%AA%E4%BA%BA%E7%90%86%E8%B4%A2%E5%BA%94%E7%94%A8%E5%92%8C%E7%BD%91%E7%9B%98%E6%90%9C%E7%B4%A2%E5%B7%A5%E5%85%B7.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56518 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56529 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:25:12,747 - api.v1.youtube - INFO - 开始解析YouTube视频: https://www.youtube.com/watch?v=sPLAdu6WZ5k
-INFO:     127.0.0.1:56542 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:25:26,918 - api.v1.youtube - INFO - YouTube视频信息解析成功: Naval Ravikant：停止改造他人！掌握3大人生决策心法，选对伴侣、事业和城市
-INFO:     127.0.0.1:56529 - "POST /api/v1/youtube/parse HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56590 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56590 - "OPTIONS /api/v1/bilibili/download HTTP/1.1" 200 OK
-2025-08-17 23:25:33,005 - api.v1.bilibili - INFO - 创建B站下载任务: https://www.youtube.com/watch?v=sPLAdu6WZ5k
-INFO:     127.0.0.1:56590 - "POST /api/v1/bilibili/download HTTP/1.1" 200 OK
-2025-08-17 23:25:33,007 - api.v1.bilibili - ERROR - 处理下载任务失败: [VALIDATION] 无效的B站视频链接: https://www.youtube.com/watch?v=sPLAdu6WZ5k
-INFO:     127.0.0.1:56590 - "GET /api/v1/bilibili/tasks/1f81a952-e565-4945-8555-ab3e78a41ef1 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56592 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:25:46,102 - api.v1.youtube - INFO - 开始解析YouTube视频: https://youtu.be/sPLAdu6WZ5k?si=aWOg-kqK0eMuyHY8
-2025-08-17 23:25:52,292 - api.v1.youtube - INFO - YouTube视频信息解析成功: Naval Ravikant：停止改造他人！掌握3大人生决策心法，选对伴侣、事业和城市
-INFO:     127.0.0.1:56592 - "POST /api/v1/youtube/parse HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56592 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:25:54,421 - api.v1.bilibili - INFO - 创建B站下载任务: https://youtu.be/sPLAdu6WZ5k?si=aWOg-kqK0eMuyHY8
-INFO:     127.0.0.1:56592 - "POST /api/v1/bilibili/download HTTP/1.1" 200 OK
-2025-08-17 23:25:54,422 - api.v1.bilibili - ERROR - 处理下载任务失败: [VALIDATION] 无效的B站视频链接: https://youtu.be/sPLAdu6WZ5k?si=aWOg-kqK0eMuyHY8
-INFO:     127.0.0.1:56592 - "GET /api/v1/bilibili/tasks/bc0d5a98-714a-4907-9989-1a00ef35e53c HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56619 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56631 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56641 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56673 - "OPTIONS /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56673 - "DELETE /api/v1/projects/69eaeade-e5af-4c77-b52b-d9d71271d550 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56673 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56734 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56747 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56772 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56788 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56818 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56819 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56818 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56818 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56818 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56818 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56818 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56818 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:56861 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56878 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56903 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56912 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56925 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56943 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56961 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56965 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56973 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56975 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56985 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56994 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57000 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57008 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57010 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57015 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57024 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57032 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57062 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57075 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57079 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57088 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57092 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57100 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57128 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57140 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57145 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57145 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57160 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57145 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57145 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57145 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57145 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57145 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57145 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57179 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57306 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57306 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57330 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57330 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57350 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57370 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57392 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57411 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57428 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57437 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57451 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57466 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57484 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57494 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57515 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57526 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57527 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57526 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57526 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57526 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57526 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57526 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57526 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57557 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57564 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57568 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57582 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57619 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57629 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57666 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57688 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57688 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57709 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57688 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57688 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57688 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57688 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57688 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57688 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:57688 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-2025-08-17 23:35:41,837 - api.v1.youtube - INFO - 开始解析YouTube视频: https://youtu.be/sPLAdu6WZ5k?si=aWOg-kqK0eMuyHY8
-INFO:     127.0.0.1:57726 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:35:55,185 - api.v1.youtube - INFO - YouTube视频信息解析成功: Naval Ravikant：停止改造他人！掌握3大人生决策心法，选对伴侣、事业和城市
-INFO:     127.0.0.1:57688 - "POST /api/v1/youtube/parse HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57688 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57765 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57775 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57780 - "OPTIONS /api/v1/youtube/download HTTP/1.1" 200 OK
-2025-08-17 23:36:26,497 - api.v1.youtube - INFO - 创建YouTube下载任务: https://youtu.be/sPLAdu6WZ5k?si=aWOg-kqK0eMuyHY8
-INFO:     127.0.0.1:57780 - "POST /api/v1/youtube/download HTTP/1.1" 200 OK
-2025-08-17 23:36:26,498 - api.v1.youtube - ERROR - 处理YouTube下载任务失败: name 'get_data_directory' is not defined
-INFO:     127.0.0.1:57780 - "GET /api/v1/youtube/tasks/4a22e61a-2312-479c-a996-c205abf817bd HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57780 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57805 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57836 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57861 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57910 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57968 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58033 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58058 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58079 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58082 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58105 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58114 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58128 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58138 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58158 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58164 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58179 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58201 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58217 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58232 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58240 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58254 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58273 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58305 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58329 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58335 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58344 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58461 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58471 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58478 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:41:25,445 - api.v1.youtube - INFO - 创建YouTube下载任务: https://youtu.be/sPLAdu6WZ5k?si=aWOg-kqK0eMuyHY8
-INFO:     127.0.0.1:58485 - "POST /api/v1/youtube/download HTTP/1.1" 200 OK
-2025-08-17 23:41:25,452 - api.v1.youtube - ERROR - 处理YouTube下载任务失败: name 'get_data_directory' is not defined
-INFO:     127.0.0.1:58485 - "GET /api/v1/youtube/tasks/a8d4e7e0-775f-45aa-90e1-667577e29750 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58485 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58485 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58506 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58485 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58485 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:58485 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:58485 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:58485 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:58485 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:58485 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-2025-08-17 23:41:36,124 - api.v1.youtube - INFO - 开始解析YouTube视频: https://youtu.be/sPLAdu6WZ5k?si=aWOg-kqK0eMuyHY8
-INFO:     127.0.0.1:58556 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:41:48,515 - api.v1.youtube - INFO - YouTube视频信息解析成功: Naval Ravikant：停止改造他人！掌握3大人生决策心法，选对伴侣、事业和城市
-INFO:     127.0.0.1:58485 - "POST /api/v1/youtube/parse HTTP/1.1" 200 OK
-2025-08-17 23:41:52,480 - api.v1.youtube - INFO - 创建YouTube下载任务: https://youtu.be/sPLAdu6WZ5k?si=aWOg-kqK0eMuyHY8
-INFO:     127.0.0.1:58485 - "POST /api/v1/youtube/download HTTP/1.1" 200 OK
-2025-08-17 23:41:52,481 - api.v1.youtube - ERROR - 处理YouTube下载任务失败: name 'get_data_directory' is not defined
-INFO:     127.0.0.1:58485 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58485 - "GET /api/v1/youtube/tasks/0c62dec7-50de-40ae-b86c-f3613540d0d9 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58592 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58602 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58621 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58637 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58643 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58649 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58661 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58676 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58698 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58706 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58712 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58725 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58727 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58747 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58758 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58774 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58778 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58800 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58807 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58811 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58829 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58867 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58879 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58891 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58904 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58911 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58927 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58927 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58951 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58927 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58927 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:58927 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:58927 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:58927 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:58927 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:58927 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-2025-08-17 23:46:30,257 - api.v1.youtube - INFO - 开始解析YouTube视频: https://youtu.be/sPLAdu6WZ5k?si=aWOg-kqK0eMuyHY8
-INFO:     127.0.0.1:59016 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:46:40,133 - api.v1.youtube - INFO - YouTube视频信息解析成功: Naval Ravikant：停止改造他人！掌握3大人生决策心法，选对伴侣、事业和城市
-INFO:     127.0.0.1:58927 - "POST /api/v1/youtube/parse HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58927 - "OPTIONS /api/v1/youtube/download HTTP/1.1" 200 OK
-2025-08-17 23:46:44,564 - api.v1.youtube - INFO - 创建YouTube下载任务: https://youtu.be/sPLAdu6WZ5k?si=aWOg-kqK0eMuyHY8
-INFO:     127.0.0.1:58927 - "POST /api/v1/youtube/download HTTP/1.1" 200 OK
-2025-08-17 23:46:44,565 - api.v1.youtube - ERROR - 处理YouTube下载任务失败: name 'get_data_directory' is not defined
-INFO:     127.0.0.1:58927 - "GET /api/v1/youtube/tasks/957c0270-6b66-49ca-b00d-d84c9fecd0dd HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58927 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59040 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:47:07,570 - api.v1.bilibili - INFO - 开始解析B站视频: https://www.bilibili.com/video/BV1MrtszzEEs/
-INFO:     127.0.0.1:59050 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-2025-08-17 23:47:10,708 - api.v1.bilibili - INFO - 视频信息解析成功: 「Github一周热点82期」OpenAI最强开源模型、实时语音活动检测工具、团队知识库工具、 本地 AI 应用开发工具和命令行工具的帮助集合
-INFO:     127.0.0.1:59048 - "POST /api/v1/bilibili/parse HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59048 - "OPTIONS /api/v1/bilibili/download HTTP/1.1" 200 OK
-2025-08-17 23:47:12,555 - api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1MrtszzEEs/
-INFO:     127.0.0.1:59048 - "POST /api/v1/bilibili/download HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59048 - "GET /api/v1/bilibili/tasks/59900d9d-9a31-4599-867b-0c4b12c16f6e HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59048 - "GET /api/v1/bilibili/tasks/59900d9d-9a31-4599-867b-0c4b12c16f6e HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59048 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59048 - "GET /api/v1/bilibili/tasks/59900d9d-9a31-4599-867b-0c4b12c16f6e HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59048 - "GET /api/v1/bilibili/tasks/59900d9d-9a31-4599-867b-0c4b12c16f6e HTTP/1.1" 200 OK
-2025-08-17 23:47:21,703 - shared.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 「Github一周热点82期」OpenAI最强开源模型、实时语音活动检测工具、团队知识库工具、 本地 AI 应用开发工具和命令行工具的帮助集合
-2025-08-17 23:47:21,703 - shared.utils.bilibili_downloader - INFO - 下载完成: 「Github一周热点82期」OpenAI最强开源模型、实时语音活动检测工具、团队知识库工具、 本地 AI 应用开发工具和命令行工具的帮助集合
-2025-08-17 23:47:21,705 - api.v1.bilibili - INFO - B站下载任务完成: 59900d9d-9a31-4599-867b-0c4b12c16f6e, 项目ID: 3d5a6277-bd1e-4b36-a0b1-5122842b5ace
-INFO:     127.0.0.1:59048 - "GET /api/v1/bilibili/tasks/59900d9d-9a31-4599-867b-0c4b12c16f6e HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59048 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59048 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59087 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59087 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59048 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59048 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59087 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59087 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59048 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59048 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59087 - "GET /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59101 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59119 - "OPTIONS /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59119 - "DELETE /api/v1/projects/3a363ca4-18e8-4f24-9eda-1d514d4836a6 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59119 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59119 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59123 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/status HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59123 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/status HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59123 - "GET /api/v1/video-categories HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59119 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59123 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59119 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59123 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59119 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/video HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59123 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files/input/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59119 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59123 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files/input.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59123 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59119 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files/ HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59119 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59119 - "GET /api/v1/projects/3d5a6277-bd1e-4b36-a0b1-5122842b5ace/files//Users/zhoukk/autoclip/data/temp/%E3%80%8CGithub%E4%B8%80%E5%91%A8%E7%83%AD%E7%82%B982%E6%9C%9F%E3%80%8DOpenAI%E6%9C%80%E5%BC%BA%E5%BC%80%E6%BA%90%E6%A8%A1%E5%9E%8B%E3%80%81%E5%AE%9E%E6%97%B6%E8%AF%AD%E9%9F%B3%E6%B4%BB%E5%8A%A8%E6%A3%80%E6%B5%8B%E5%B7%A5%E5%85%B7%E3%80%81%E5%9B%A2%E9%98%9F%E7%9F%A5%E8%AF%86%E5%BA%93%E5%B7%A5%E5%85%B7%E3%80%81%20%E6%9C%AC%E5%9C%B0%20AI%20%E5%BA%94%E7%94%A8%E5%BC%80%E5%8F%91%E5%B7%A5%E5%85%B7%E5%92%8C%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7%E7%9A%84%E5%B8%AE%E5%8A%A9%E9%9B%86%E5%90%88.mp4 HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:59162 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59171 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59175 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59190 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59210 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59216 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59232 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59250 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59258 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59278 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59293 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59319 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59388 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59422 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59467 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59495 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59551 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59557 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59651 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59670 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59686 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59715 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59727 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59751 - "GET /api/v1/projects/ HTTP/1.1" 200 OK
+INFO:     Started reloader process [95399] using WatchFiles
+2025-09-08 16:04:35,003 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+INFO:     Started server process [95407]
+INFO:     Waiting for application startup.
+2025-09-08 16:04:35,184 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:04:35,185 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:04:35,185 - backend.main - INFO - API密钥已加载到环境变量
+INFO:     Application startup complete.
+INFO:     127.0.0.1:54151 - "GET /api/v1/health/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54154 - "GET /api/v1/health/ HTTP/1.1" 200 OK
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [12779]
-2025-08-21 00:40:46,692 - services.pipeline_adapter - INFO - 流水线模块导入成功
-2025-08-21 00:40:46,693 - services.processing_orchestrator - INFO - 流水线模块导入成功
-2025-08-21 00:40:46,813 - __main__ - INFO - 启动AutoClip API服务...
-2025-08-21 00:40:46,814 - __main__ - INFO - 数据库表创建完成
-2025-08-21 00:40:46,815 - __main__ - INFO - API密钥已加载到环境变量
-2025-08-22 11:02:47,397 - services.pipeline_adapter - INFO - 流水线模块导入成功
-2025-08-22 11:02:47,398 - services.processing_orchestrator - INFO - 流水线模块导入成功
-2025-08-22 11:02:47,484 - __main__ - INFO - 启动AutoClip API服务...
-2025-08-22 11:02:47,484 - __main__ - INFO - 数据库表创建完成
-2025-08-22 11:02:47,485 - __main__ - INFO - API密钥已加载到环境变量
-2025-08-22 11:03:14,294 - services.pipeline_adapter - INFO - 流水线模块导入成功
-2025-08-22 11:03:14,295 - services.processing_orchestrator - INFO - 流水线模块导入成功
-2025-08-22 11:03:14,383 - __main__ - INFO - 启动AutoClip API服务...
-2025-08-22 11:03:14,384 - __main__ - INFO - 数据库表创建完成
-2025-08-22 11:03:14,384 - __main__ - INFO - API密钥已加载到环境变量
-2025-08-22 11:03:29,038 - services.pipeline_adapter - INFO - 流水线模块导入成功
-2025-08-22 11:03:29,038 - services.processing_orchestrator - INFO - 流水线模块导入成功
-2025-08-22 11:03:29,281 - __main__ - INFO - 启动AutoClip API服务...
-2025-08-22 11:03:29,285 - __main__ - INFO - 数据库表创建完成
-2025-08-22 11:03:29,286 - __main__ - INFO - API密钥已加载到环境变量
-2025-08-22 11:03:43,570 - services.pipeline_adapter - INFO - 流水线模块导入成功
-2025-08-22 11:03:43,570 - services.processing_orchestrator - INFO - 流水线模块导入成功
-2025-08-22 11:03:43,657 - __main__ - INFO - 启动AutoClip API服务...
-2025-08-22 11:03:43,658 - __main__ - INFO - 数据库表创建完成
-2025-08-22 11:03:43,658 - __main__ - INFO - API密钥已加载到环境变量
-2025-08-26 00:27:36,906 - services.pipeline_adapter - INFO - 流水线模块导入成功
-2025-08-26 00:27:36,906 - services.processing_orchestrator - INFO - 流水线模块导入成功
-2025-08-26 00:27:36,997 - __main__ - INFO - 启动AutoClip API服务...
-2025-08-26 00:27:36,998 - __main__ - INFO - 数据库表创建完成
-2025-08-26 00:27:36,998 - __main__ - INFO - API密钥已加载到环境变量
-2025-08-26 00:29:12,285 - api.v1.projects - INFO - 查找clip视频: clip_id=1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c
-2025-08-26 00:29:12,285 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:29:12,285 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:29:12,285 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c_clip_1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c.mp4']
-2025-08-26 00:29:12,286 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:29:12,286 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:29:12,286 - api.v1.projects - INFO - 在全局目录中找到的视频文件: []
-2025-08-26 00:29:12,286 - api.v1.projects - ERROR - 没有找到clip_id=1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c的视频文件
-2025-08-26 00:29:59,228 - api.v1.projects - INFO - 查找clip视频: clip_id=1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c
-2025-08-26 00:29:59,228 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:29:59,228 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:29:59,228 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c_clip_1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c.mp4']
-2025-08-26 00:29:59,228 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:29:59,228 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:29:59,228 - api.v1.projects - INFO - 在全局目录中找到的视频文件: []
-2025-08-26 00:29:59,228 - api.v1.projects - ERROR - 没有找到clip_id=1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c的视频文件
-2025-08-26 00:30:16,752 - services.pipeline_adapter - INFO - 流水线模块导入成功
-2025-08-26 00:30:16,752 - services.processing_orchestrator - INFO - 流水线模块导入成功
-2025-08-26 00:30:16,835 - __main__ - INFO - 启动AutoClip API服务...
-2025-08-26 00:30:16,836 - __main__ - INFO - 数据库表创建完成
-2025-08-26 00:30:16,836 - __main__ - INFO - API密钥已加载到环境变量
-2025-08-26 00:30:21,174 - api.v1.projects - INFO - 查找clip视频: clip_id=1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c, title=Jackson Wang开场合集：我们是外星人？未来视角大开篇
-2025-08-26 00:30:21,175 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:30:21,175 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:30:21,175 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c_clip_1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c.mp4']
-2025-08-26 00:30:21,175 - api.v1.projects - WARNING - 视频文件为空或不存在: 1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c_clip_1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c.mp4
-2025-08-26 00:30:21,175 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:30:21,175 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:30:21,175 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
-2025-08-26 00:30:21,175 - api.v1.projects - INFO - 尝试根据标题查找: Jackson Wang开场合集：我们是外星人？未来视角大开篇
-2025-08-26 00:30:21,176 - api.v1.projects - INFO - 根据标题找到视频文件: 1_Jackson Wang开场合集：我们是外星人？未来视角大开篇.mp4
-2025-08-26 00:30:43,990 - services.pipeline_adapter - INFO - Pipeline适配器初始化完成: project_root=/Users/zhoukk/autoclip, data_dir=/Users/zhoukk/autoclip/data, output_dir=/Users/zhoukk/autoclip/data/output
-2025-08-26 00:30:44,002 - api.v1.projects - INFO - 查找clip视频: clip_id=3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a, title=相信自己、依靠直觉，这是你想传给下一代的人生信条吗？
-2025-08-26 00:30:44,025 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:30:44,026 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:30:44,027 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a_clip_3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a.mp4']
-2025-08-26 00:30:44,028 - api.v1.projects - WARNING - 视频文件为空或不存在: 3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a_clip_3d0bb0b6-dd8d-4105-9219-b1bce74c7b4a.mp4
-2025-08-26 00:30:44,031 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:30:44,032 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:30:44,032 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
-2025-08-26 00:30:44,033 - api.v1.projects - INFO - 尝试根据标题查找: 相信自己、依靠直觉，这是你想传给下一代的人生信条吗？
-2025-08-26 00:30:44,033 - api.v1.projects - INFO - 根据标题找到视频文件: 7_相信自己、依靠直觉，这是你想传给下一代的人生信条吗？.mp4
-2025-08-26 00:30:44,035 - api.v1.projects - INFO - 查找clip视频: clip_id=ac0b2b4c-3ea5-474a-92c5-d3f782ff134e, title=父母回家的画面让他一生难忘，这背后藏着多少感动？
-2025-08-26 00:30:44,035 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:30:44,035 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:30:44,035 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['ac0b2b4c-3ea5-474a-92c5-d3f782ff134e_clip_ac0b2b4c-3ea5-474a-92c5-d3f782ff134e.mp4']
-2025-08-26 00:30:44,035 - api.v1.projects - WARNING - 视频文件为空或不存在: ac0b2b4c-3ea5-474a-92c5-d3f782ff134e_clip_ac0b2b4c-3ea5-474a-92c5-d3f782ff134e.mp4
-2025-08-26 00:30:44,035 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:30:44,035 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:30:44,035 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
-2025-08-26 00:30:44,035 - api.v1.projects - INFO - 尝试根据标题查找: 父母回家的画面让他一生难忘，这背后藏着多少感动？
-2025-08-26 00:30:44,036 - api.v1.projects - INFO - 根据标题找到视频文件: 9_父母回家的画面让他一生难忘，这背后藏着多少感动？.mp4
-2025-08-26 00:30:44,036 - api.v1.projects - INFO - 查找clip视频: clip_id=325a2e1f-b7c3-4688-a94d-3dbd919a3ddf, title=从艺人到朋友，Jackson Wang对粉丝的爱有多坚定？
-2025-08-26 00:30:44,036 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:30:44,036 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:30:44,036 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['325a2e1f-b7c3-4688-a94d-3dbd919a3ddf_clip_325a2e1f-b7c3-4688-a94d-3dbd919a3ddf.mp4']
-2025-08-26 00:30:44,036 - api.v1.projects - WARNING - 视频文件为空或不存在: 325a2e1f-b7c3-4688-a94d-3dbd919a3ddf_clip_325a2e1f-b7c3-4688-a94d-3dbd919a3ddf.mp4
-2025-08-26 00:30:44,037 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:30:44,037 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:30:44,037 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
-2025-08-26 00:30:44,037 - api.v1.projects - INFO - 尝试根据标题查找: 从艺人到朋友，Jackson Wang对粉丝的爱有多坚定？
-2025-08-26 00:30:44,037 - api.v1.projects - INFO - 根据标题找到视频文件: 10_从艺人到朋友，Jackson Wang对粉丝的爱有多坚定？.mp4
-2025-08-26 00:30:44,039 - api.v1.projects - INFO - 查找clip视频: clip_id=f7af86c3-7a32-4821-b341-f04841820bf4, title=致敬MJ、王子和詹姆斯·布朗，这才是真正的艺术传承
-2025-08-26 00:30:44,039 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:30:44,039 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:30:44,039 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['f7af86c3-7a32-4821-b341-f04841820bf4_clip_f7af86c3-7a32-4821-b341-f04841820bf4.mp4']
-2025-08-26 00:30:44,039 - api.v1.projects - WARNING - 视频文件为空或不存在: f7af86c3-7a32-4821-b341-f04841820bf4_clip_f7af86c3-7a32-4821-b341-f04841820bf4.mp4
-2025-08-26 00:30:44,040 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:30:44,040 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:30:44,040 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
-2025-08-26 00:30:44,040 - api.v1.projects - INFO - 尝试根据标题查找: 致敬MJ、王子和詹姆斯·布朗，这才是真正的艺术传承
-2025-08-26 00:30:44,040 - api.v1.projects - INFO - 根据标题找到视频文件: 4_致敬MJ、王子和詹姆斯·布朗，这才是真正的艺术传承.mp4
-2025-08-26 00:30:44,042 - api.v1.projects - INFO - 查找clip视频: clip_id=1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c, title=Jackson Wang开场合集：我们是外星人？未来视角大开篇
-2025-08-26 00:30:44,042 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:30:44,042 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:30:44,043 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c_clip_1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c.mp4']
-2025-08-26 00:30:44,043 - api.v1.projects - WARNING - 视频文件为空或不存在: 1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c_clip_1bcc6de5-8d03-47bb-80e3-c6ef9a201a3c.mp4
-2025-08-26 00:30:44,043 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:30:44,043 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:30:44,043 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
-2025-08-26 00:30:44,043 - api.v1.projects - INFO - 尝试根据标题查找: Jackson Wang开场合集：我们是外星人？未来视角大开篇
-2025-08-26 00:30:44,043 - api.v1.projects - INFO - 根据标题找到视频文件: 1_Jackson Wang开场合集：我们是外星人？未来视角大开篇.mp4
-2025-08-26 00:30:44,045 - api.v1.projects - INFO - 查找clip视频: clip_id=678a8c4b-16ac-4893-a8d9-1b28c3bb4c81, title=专注、真实、诚实，这三个词能描述你的Mindset吗？
-2025-08-26 00:30:44,046 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:30:44,046 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:30:44,046 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['678a8c4b-16ac-4893-a8d9-1b28c3bb4c81_clip_678a8c4b-16ac-4893-a8d9-1b28c3bb4c81.mp4']
-2025-08-26 00:30:44,046 - api.v1.projects - WARNING - 视频文件为空或不存在: 678a8c4b-16ac-4893-a8d9-1b28c3bb4c81_clip_678a8c4b-16ac-4893-a8d9-1b28c3bb4c81.mp4
-2025-08-26 00:30:44,047 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:30:44,047 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:30:44,047 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
-2025-08-26 00:30:44,047 - api.v1.projects - INFO - 尝试根据标题查找: 专注、真实、诚实，这三个词能描述你的Mindset吗？
-2025-08-26 00:30:44,047 - api.v1.projects - INFO - 根据标题找到视频文件: 2_专注、真实、诚实，这三个词能描述你的Mindset吗？.mp4
-2025-08-26 00:30:44,091 - api.v1.projects - INFO - 查找clip视频: clip_id=0dd5616b-1d39-4118-bb15-580633e59932, title=如果可以选择时代，他宁愿等500年后再生活
-2025-08-26 00:30:44,092 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:30:44,092 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:30:44,093 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['0dd5616b-1d39-4118-bb15-580633e59932_clip_0dd5616b-1d39-4118-bb15-580633e59932.mp4']
-2025-08-26 00:30:44,094 - api.v1.projects - WARNING - 视频文件为空或不存在: 0dd5616b-1d39-4118-bb15-580633e59932_clip_0dd5616b-1d39-4118-bb15-580633e59932.mp4
-2025-08-26 00:30:44,094 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:30:44,094 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:30:44,094 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
-2025-08-26 00:30:44,094 - api.v1.projects - INFO - 尝试根据标题查找: 如果可以选择时代，他宁愿等500年后再生活
-2025-08-26 00:30:44,094 - api.v1.projects - INFO - 根据标题找到视频文件: 5_如果可以选择时代，他宁愿等500年后再生活.mp4
-2025-08-26 00:30:44,101 - api.v1.projects - INFO - 查找clip视频: clip_id=94512d2e-87ca-41fc-9405-903433f88a6e, title=想和蜘蛛侠拍特技？Jackson Wang这些隐藏技能你绝对想不到
-2025-08-26 00:30:44,102 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:30:44,102 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:30:44,103 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['94512d2e-87ca-41fc-9405-903433f88a6e_clip_94512d2e-87ca-41fc-9405-903433f88a6e.mp4']
-2025-08-26 00:30:44,103 - api.v1.projects - WARNING - 视频文件为空或不存在: 94512d2e-87ca-41fc-9405-903433f88a6e_clip_94512d2e-87ca-41fc-9405-903433f88a6e.mp4
-2025-08-26 00:30:44,103 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:30:44,104 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:30:44,105 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
-2025-08-26 00:30:44,106 - api.v1.projects - INFO - 尝试根据标题查找: 想和蜘蛛侠拍特技？Jackson Wang这些隐藏技能你绝对想不到
-2025-08-26 00:30:44,107 - api.v1.projects - INFO - 根据标题找到视频文件: 8_想和蜘蛛侠拍特技？Jackson Wang这些隐藏技能你绝对想不到.mp4
-2025-08-26 00:30:44,119 - api.v1.projects - INFO - 查找clip视频: clip_id=93562f59-dad0-4f3c-b129-69036d1e80a6, title=二十件同款T恤、潜水工作室，Jackson的日常有多真实？
-2025-08-26 00:30:44,120 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:30:44,120 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:30:44,120 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['93562f59-dad0-4f3c-b129-69036d1e80a6_clip_93562f59-dad0-4f3c-b129-69036d1e80a6.mp4']
-2025-08-26 00:30:44,120 - api.v1.projects - WARNING - 视频文件为空或不存在: 93562f59-dad0-4f3c-b129-69036d1e80a6_clip_93562f59-dad0-4f3c-b129-69036d1e80a6.mp4
-2025-08-26 00:30:44,121 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:30:44,121 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:30:44,121 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
-2025-08-26 00:30:44,121 - api.v1.projects - INFO - 尝试根据标题查找: 二十件同款T恤、潜水工作室，Jackson的日常有多真实？
-2025-08-26 00:30:44,122 - api.v1.projects - INFO - 根据标题找到视频文件: 6_二十件同款T恤、潜水工作室，Jackson的日常有多真实？.mp4
-2025-08-26 00:30:44,173 - api.v1.projects - INFO - 查找clip视频: clip_id=db6241be-29e8-4680-b458-37b74b11441c, title=怕蟑螂却不怕丧尸？Jackson的生存哲学太有道理
-2025-08-26 00:30:44,174 - api.v1.projects - INFO - 项目clips目录: /Users/zhoukk/autoclip/data/projects/86f9aa12-2f35-4618-b265-74b3d9a4cf2d/output/clips
-2025-08-26 00:30:44,174 - api.v1.projects - INFO - 项目clips目录存在: True
-2025-08-26 00:30:44,175 - api.v1.projects - INFO - 在项目目录中找到的视频文件: ['db6241be-29e8-4680-b458-37b74b11441c_clip_db6241be-29e8-4680-b458-37b74b11441c.mp4']
-2025-08-26 00:30:44,175 - api.v1.projects - WARNING - 视频文件为空或不存在: db6241be-29e8-4680-b458-37b74b11441c_clip_db6241be-29e8-4680-b458-37b74b11441c.mp4
-2025-08-26 00:30:44,176 - api.v1.projects - INFO - 全局clips目录: /Users/zhoukk/autoclip/backend/output/clips
-2025-08-26 00:30:44,176 - api.v1.projects - INFO - 全局clips目录存在: True
-2025-08-26 00:30:44,177 - api.v1.projects - INFO - 使用clip_id在全局目录中找到的视频文件: []
-2025-08-26 00:30:44,177 - api.v1.projects - INFO - 尝试根据标题查找: 怕蟑螂却不怕丧尸？Jackson的生存哲学太有道理
-2025-08-26 00:30:44,177 - api.v1.projects - INFO - 根据标题找到视频文件: 3_怕蟑螂却不怕丧尸？Jackson的生存哲学太有道理.mp4
-2025-08-26 00:32:44,080 - services.pipeline_adapter - INFO - 流水线模块导入成功
-2025-08-26 00:32:44,081 - services.processing_orchestrator - INFO - 流水线模块导入成功
-2025-08-26 00:32:44,199 - __main__ - INFO - 启动AutoClip API服务...
-2025-08-26 00:32:44,201 - __main__ - INFO - 数据库表创建完成
-2025-08-26 00:32:44,201 - __main__ - INFO - API密钥已加载到环境变量
-2025-08-26 00:34:07,634 - services.pipeline_adapter - INFO - 流水线模块导入成功
-2025-08-26 00:34:07,634 - services.processing_orchestrator - INFO - 流水线模块导入成功
-2025-08-26 00:34:07,725 - __main__ - INFO - 启动AutoClip API服务...
-2025-08-26 00:34:07,727 - __main__ - INFO - 数据库表创建完成
-2025-08-26 00:34:07,727 - __main__ - INFO - API密钥已加载到环境变量
-2025-08-26 06:10:57,336 - services.pipeline_adapter - INFO - 流水线模块导入成功
-2025-08-26 06:10:57,337 - services.processing_orchestrator - INFO - 流水线模块导入成功
-2025-08-26 06:10:57,445 - __main__ - INFO - 启动AutoClip API服务...
-2025-08-26 06:10:57,446 - __main__ - INFO - 数据库表创建完成
-2025-08-26 06:10:57,447 - __main__ - INFO - API密钥已加载到环境变量
+INFO:     Finished server process [95407]
+INFO:     Stopping reloader process [95399]
+2025-09-08 16:29:31,680 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:29:32,354 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:29:32,355 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:29:32,355 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:30:03,566 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:30:03,937 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:30:03,938 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:30:03,938 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:32:25,789 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:32:25,965 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:32:25,966 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:32:25,966 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:33:11,660 - backend.api.v1.bilibili - INFO - 开始解析B站视频: https://www.bilibili.com/video/BV1eBYjzTE1r/
+2025-09-08 16:33:12,981 - backend.api.v1.bilibili - INFO - 视频信息解析成功: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响
+2025-09-08 16:33:20,867 - backend.api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1eBYjzTE1r/
+2025-09-08 16:33:23,849 - backend.api.v1.bilibili - ERROR - 处理下载任务失败: 'Settings' object has no attribute 'paths'
+2025-09-08 16:34:13,890 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:34:14,151 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:34:14,152 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:34:14,152 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:34:22,387 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:34:22,565 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:34:22,566 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:34:22,566 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:34:27,477 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:34:27,656 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:34:27,657 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:34:27,657 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:34:32,614 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:34:32,784 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:34:32,784 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:34:32,784 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:34:36,898 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:34:37,074 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:34:37,074 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:34:37,075 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:36:13,969 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:36:14,159 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:36:14,160 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:36:14,160 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:37:20,556 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:37:20,791 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:37:20,792 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:37:20,792 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:43:01,600 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:43:01,923 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:43:01,924 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:43:01,924 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:43:17,768 - backend.api.v1.bilibili - INFO - 开始解析B站视频: https://www.bilibili.com/video/BV1eBYjzTE1r/
+2025-09-08 16:43:18,483 - backend.api.v1.bilibili - INFO - 视频信息解析成功: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响
+2025-09-08 16:43:22,125 - backend.api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1eBYjzTE1r/
+2025-09-08 16:43:39,583 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响
+2025-09-08 16:43:39,586 - backend.utils.bilibili_downloader - INFO - 重命名AI字幕文件: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响.ai-zh.srt -> 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响.srt
+2025-09-08 16:43:39,586 - backend.utils.bilibili_downloader - INFO - 下载完成: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响
+2025-09-08 16:43:39,590 - backend.api.v1.bilibili - INFO - 视频文件已移动到: /Users/zhoukk/autoclip/data/projects/ea59bbd8-aaea-45df-a31f-fa6c345fe699/raw/input.mp4
+2025-09-08 16:43:39,590 - backend.api.v1.bilibili - INFO - 字幕文件已移动到: /Users/zhoukk/autoclip/data/projects/ea59bbd8-aaea-45df-a31f-fa6c345fe699/raw/input.srt
+2025-09-08 16:43:39,591 - backend.api.v1.bilibili - INFO - B站下载任务完成: fbb571f2-5533-4895-b359-fbed13682adc, 项目ID: ea59bbd8-aaea-45df-a31f-fa6c345fe699
+2025-09-08 16:43:39,591 - backend.api.v1.bilibili - INFO - B站项目 ea59bbd8-aaea-45df-a31f-fa6c345fe699 下载完成，等待自动化流水线启动
+2025-09-08 16:43:39,591 - backend.api.v1.bilibili - ERROR - 启动B站项目 ea59bbd8-aaea-45df-a31f-fa6c345fe699 自动化流水线失败: this event loop is already running.
+2025-09-08 16:43:39,591 - backend.services.auto_pipeline_service - INFO - 自动启动项目流水线: ea59bbd8-aaea-45df-a31f-fa6c345fe699
+2025-09-08 16:43:39,594 - backend.services.auto_pipeline_service - INFO - 创建处理任务: 76af4c4a-b06c-4372-a594-b9fe31c7b9f6
+2025-09-08 16:43:39,595 - backend.services.auto_pipeline_service - INFO - 项目 ea59bbd8-aaea-45df-a31f-fa6c345fe699 状态已更新为处理中
+2025-09-08 16:43:39,596 - backend.services.progress_update_service - INFO - 开始监控任务进度: 76af4c4a-b06c-4372-a594-b9fe31c7b9f6
+2025-09-08 16:43:39,599 - backend.services.auto_pipeline_service - INFO - 准备提交Celery任务: ea59bbd8-aaea-45df-a31f-fa6c345fe699
+2025-09-08 16:43:39,600 - backend.services.auto_pipeline_service - INFO - 视频文件: /Users/zhoukk/autoclip/data/projects/ea59bbd8-aaea-45df-a31f-fa6c345fe699/raw/input.mp4
+2025-09-08 16:43:39,600 - backend.services.auto_pipeline_service - INFO - 字幕文件: /Users/zhoukk/autoclip/data/projects/ea59bbd8-aaea-45df-a31f-fa6c345fe699/raw/input.srt
+2025-09-08 16:43:39,600 - backend.utils.task_submission_utils - INFO - 提交视频流水线任务: ea59bbd8-aaea-45df-a31f-fa6c345fe699
+2025-09-08 16:43:39,600 - backend.utils.task_submission_utils - INFO - 准备提交任务到队列...
+2025-09-08 16:43:39,600 - backend.utils.task_submission_utils - INFO - 任务名称: backend.tasks.processing.process_video_pipeline
+2025-09-08 16:43:39,600 - backend.utils.task_submission_utils - INFO - 任务参数: ['ea59bbd8-aaea-45df-a31f-fa6c345fe699', '/Users/zhoukk/autoclip/data/projects/ea59bbd8-aaea-45df-a31f-fa6c345fe699/raw/input.mp4', '/Users/zhoukk/autoclip/data/projects/ea59bbd8-aaea-45df-a31f-fa6c345fe699/raw/input.srt']
+2025-09-08 16:43:39,655 - backend.utils.task_submission_utils - INFO - 视频流水线任务已提交: b88ab24c-26a9-432b-b96a-e18863480a08
+2025-09-08 16:43:39,656 - backend.utils.task_submission_utils - INFO - 任务状态: PENDING
+2025-09-08 16:43:39,656 - backend.utils.task_submission_utils - INFO - Redis队列长度: 0
+2025-09-08 16:43:39,656 - backend.services.auto_pipeline_service - INFO - Celery任务提交结果: {'success': True, 'task_id': 'b88ab24c-26a9-432b-b96a-e18863480a08', 'status': 'PENDING', 'message': '视频流水线任务已提交'}
+2025-09-08 16:43:39,656 - backend.services.auto_pipeline_service - INFO - Celery任务已提交: b88ab24c-26a9-432b-b96a-e18863480a08
+2025-09-08 16:53:22,632 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:53:22,862 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:53:22,863 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:53:22,863 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:53:27,929 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:53:28,086 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:53:28,087 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:53:28,087 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:53:44,286 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:53:45,040 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:53:45,042 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:53:45,042 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:54:38,846 - backend.services.auto_pipeline_service - INFO - 自动启动项目流水线: ea59bbd8-aaea-45df-a31f-fa6c345fe699
+2025-09-08 16:54:38,849 - backend.services.auto_pipeline_service - INFO - 创建处理任务: e5581006-150e-4b61-96e0-fa5d8d684ca3
+2025-09-08 16:54:38,851 - backend.services.auto_pipeline_service - INFO - 项目 ea59bbd8-aaea-45df-a31f-fa6c345fe699 状态已更新为处理中
+2025-09-08 16:54:38,853 - backend.services.progress_update_service - INFO - 开始监控任务进度: e5581006-150e-4b61-96e0-fa5d8d684ca3
+2025-09-08 16:54:38,853 - backend.services.auto_pipeline_service - INFO - 准备提交Celery任务: ea59bbd8-aaea-45df-a31f-fa6c345fe699
+2025-09-08 16:54:38,853 - backend.services.auto_pipeline_service - INFO - 视频文件: /Users/zhoukk/autoclip/data/projects/ea59bbd8-aaea-45df-a31f-fa6c345fe699/raw/input.mp4
+2025-09-08 16:54:38,853 - backend.services.auto_pipeline_service - INFO - 字幕文件: /Users/zhoukk/autoclip/data/projects/ea59bbd8-aaea-45df-a31f-fa6c345fe699/raw/input.srt
+2025-09-08 16:54:38,853 - backend.utils.task_submission_utils - INFO - 提交视频流水线任务: ea59bbd8-aaea-45df-a31f-fa6c345fe699
+2025-09-08 16:54:38,853 - backend.utils.task_submission_utils - INFO - 准备提交任务到队列...
+2025-09-08 16:54:38,853 - backend.utils.task_submission_utils - INFO - 任务名称: backend.tasks.processing.process_video_pipeline
+2025-09-08 16:54:38,853 - backend.utils.task_submission_utils - INFO - 任务参数: ['ea59bbd8-aaea-45df-a31f-fa6c345fe699', '/Users/zhoukk/autoclip/data/projects/ea59bbd8-aaea-45df-a31f-fa6c345fe699/raw/input.mp4', '/Users/zhoukk/autoclip/data/projects/ea59bbd8-aaea-45df-a31f-fa6c345fe699/raw/input.srt']
+2025-09-08 16:54:38,881 - backend.utils.task_submission_utils - INFO - 视频流水线任务已提交: dbdfef65-bb86-4205-a3c9-2fe465bd5961
+2025-09-08 16:54:38,882 - backend.utils.task_submission_utils - INFO - 任务状态: PENDING
+2025-09-08 16:54:38,883 - backend.utils.task_submission_utils - INFO - Redis队列长度: 1
+2025-09-08 16:54:38,883 - backend.services.auto_pipeline_service - INFO - Celery任务提交结果: {'success': True, 'task_id': 'dbdfef65-bb86-4205-a3c9-2fe465bd5961', 'status': 'PENDING', 'message': '视频流水线任务已提交'}
+2025-09-08 16:54:38,883 - backend.services.auto_pipeline_service - INFO - Celery任务已提交: dbdfef65-bb86-4205-a3c9-2fe465bd5961
+2025-09-08 16:56:15,551 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:56:16,303 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:56:16,305 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:56:16,305 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:57:44,741 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 16:57:44,955 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 16:57:44,956 - backend.main - INFO - 数据库表创建完成
+2025-09-08 16:57:44,956 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 16:57:52,358 - backend.api.v1.bilibili - INFO - 开始解析B站视频: https://www.bilibili.com/video/BV1eBYjzTE1r/
+2025-09-08 16:57:53,269 - backend.api.v1.bilibili - INFO - 视频信息解析成功: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响
+2025-09-08 16:57:56,749 - backend.api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1eBYjzTE1r/
+2025-09-08 16:58:15,227 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响
+2025-09-08 16:58:15,228 - backend.utils.bilibili_downloader - INFO - 重命名AI字幕文件: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响.ai-zh.srt -> 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响.srt
+2025-09-08 16:58:15,228 - backend.utils.bilibili_downloader - INFO - 下载完成: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响
+2025-09-08 16:58:15,231 - backend.api.v1.bilibili - INFO - 视频文件已移动到: /Users/zhoukk/autoclip/data/projects/2d6ee4e4-546f-4e4c-8f79-2668daef11e3/raw/input.mp4
+2025-09-08 16:58:15,231 - backend.api.v1.bilibili - INFO - 字幕文件已移动到: /Users/zhoukk/autoclip/data/projects/2d6ee4e4-546f-4e4c-8f79-2668daef11e3/raw/input.srt
+2025-09-08 16:58:15,232 - backend.api.v1.bilibili - INFO - B站下载任务完成: 05700812-d53f-43c3-8854-92bcfd8172f3, 项目ID: 2d6ee4e4-546f-4e4c-8f79-2668daef11e3
+2025-09-08 16:58:15,232 - backend.api.v1.bilibili - INFO - B站项目 2d6ee4e4-546f-4e4c-8f79-2668daef11e3 下载完成，等待自动化流水线启动
+2025-09-08 16:58:15,232 - backend.api.v1.bilibili - ERROR - 启动B站项目 2d6ee4e4-546f-4e4c-8f79-2668daef11e3 自动化流水线失败: this event loop is already running.
+2025-09-08 16:58:15,233 - backend.services.auto_pipeline_service - INFO - 自动启动项目流水线: 2d6ee4e4-546f-4e4c-8f79-2668daef11e3
+2025-09-08 16:58:15,235 - backend.services.auto_pipeline_service - INFO - 创建处理任务: 0f6a48a3-dd6f-4b95-bda8-d0af31f4b760
+2025-09-08 16:58:15,236 - backend.services.auto_pipeline_service - INFO - 项目 2d6ee4e4-546f-4e4c-8f79-2668daef11e3 状态已更新为处理中
+2025-09-08 16:58:15,237 - backend.services.progress_update_service - INFO - 开始监控任务进度: 0f6a48a3-dd6f-4b95-bda8-d0af31f4b760
+2025-09-08 16:58:15,237 - backend.services.auto_pipeline_service - INFO - 准备提交Celery任务: 2d6ee4e4-546f-4e4c-8f79-2668daef11e3
+2025-09-08 16:58:15,237 - backend.services.auto_pipeline_service - INFO - 视频文件: /Users/zhoukk/autoclip/data/projects/2d6ee4e4-546f-4e4c-8f79-2668daef11e3/raw/input.mp4
+2025-09-08 16:58:15,237 - backend.services.auto_pipeline_service - INFO - 字幕文件: /Users/zhoukk/autoclip/data/projects/2d6ee4e4-546f-4e4c-8f79-2668daef11e3/raw/input.srt
+2025-09-08 16:58:15,237 - backend.utils.task_submission_utils - INFO - 提交视频流水线任务: 2d6ee4e4-546f-4e4c-8f79-2668daef11e3
+2025-09-08 16:58:15,238 - backend.utils.task_submission_utils - INFO - 准备提交任务到队列...
+2025-09-08 16:58:15,238 - backend.utils.task_submission_utils - INFO - 任务名称: backend.tasks.processing.process_video_pipeline
+2025-09-08 16:58:15,238 - backend.utils.task_submission_utils - INFO - 任务参数: ['2d6ee4e4-546f-4e4c-8f79-2668daef11e3', '/Users/zhoukk/autoclip/data/projects/2d6ee4e4-546f-4e4c-8f79-2668daef11e3/raw/input.mp4', '/Users/zhoukk/autoclip/data/projects/2d6ee4e4-546f-4e4c-8f79-2668daef11e3/raw/input.srt']
+2025-09-08 16:58:15,281 - backend.utils.task_submission_utils - INFO - 视频流水线任务已提交: 39991bd9-3fd1-4d2d-be3a-4a1a625589c1
+2025-09-08 16:58:15,282 - backend.utils.task_submission_utils - INFO - 任务状态: PENDING
+2025-09-08 16:58:15,282 - backend.utils.task_submission_utils - INFO - Redis队列长度: 0
+2025-09-08 16:58:15,282 - backend.services.auto_pipeline_service - INFO - Celery任务提交结果: {'success': True, 'task_id': '39991bd9-3fd1-4d2d-be3a-4a1a625589c1', 'status': 'PENDING', 'message': '视频流水线任务已提交'}
+2025-09-08 16:58:15,282 - backend.services.auto_pipeline_service - INFO - Celery任务已提交: 39991bd9-3fd1-4d2d-be3a-4a1a625589c1
+2025-09-08 17:03:10,432 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 17:03:10,655 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 17:03:10,657 - backend.main - INFO - 数据库表创建完成
+2025-09-08 17:03:10,657 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 17:03:17,369 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 17:03:17,540 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 17:03:17,541 - backend.main - INFO - 数据库表创建完成
+2025-09-08 17:03:17,541 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 17:05:17,206 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 17:05:17,900 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 17:05:17,901 - backend.main - INFO - 数据库表创建完成
+2025-09-08 17:05:17,901 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 17:05:49,529 - backend.api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1eBYjzTE1r/
+2025-09-08 17:05:58,477 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响
+2025-09-08 17:05:58,477 - backend.utils.bilibili_downloader - WARNING - 未找到字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响
+2025-09-08 17:05:58,477 - backend.utils.bilibili_downloader - INFO - 第一次字幕下载失败，尝试备用策略...
+2025-09-08 17:05:58,477 - backend.utils.bilibili_downloader - INFO - 尝试下载不同语言的字幕...
+2025-09-08 17:05:59,119 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响_sub
+2025-09-08 17:05:59,125 - backend.utils.bilibili_downloader - WARNING - 未找到字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响_sub
+2025-09-08 17:05:59,721 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响_sub
+2025-09-08 17:05:59,721 - backend.utils.bilibili_downloader - WARNING - 未找到字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响_sub
+2025-09-08 17:06:00,274 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响_sub
+2025-09-08 17:06:00,275 - backend.utils.bilibili_downloader - WARNING - 未找到字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响_sub
+2025-09-08 17:06:00,971 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响_sub
+2025-09-08 17:06:00,971 - backend.utils.bilibili_downloader - WARNING - 未找到字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响_sub
+2025-09-08 17:06:00,971 - backend.utils.bilibili_downloader - INFO - 尝试不使用cookies下载字幕...
+2025-09-08 17:06:01,526 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响_nocookie
+2025-09-08 17:06:01,526 - backend.utils.bilibili_downloader - WARNING - 未找到字幕文件，标题: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响_nocookie
+2025-09-08 17:06:01,526 - backend.utils.bilibili_downloader - INFO - 尝试从视频元数据提取字幕信息...
+2025-09-08 17:06:02,222 - backend.utils.bilibili_downloader - WARNING - 所有字幕获取策略都失败了
+2025-09-08 17:06:02,222 - backend.utils.bilibili_downloader - INFO - 下载完成: 【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响
+2025-09-08 17:06:02,222 - backend.api.v1.bilibili - INFO - 优先使用Whisper生成高质量字幕
+2025-09-08 17:06:02,222 - backend.api.v1.bilibili - INFO - 使用Whisper生成字幕 - 语言: auto, 模型: base
+2025-09-08 17:06:03,976 - backend.utils.speech_recognizer - INFO - 开始使用本地Whisper生成字幕: /Users/zhoukk/autoclip/data/temp/【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响.mp4
+2025-09-08 17:06:03,976 - backend.utils.speech_recognizer - INFO - 执行Whisper命令: whisper /Users/zhoukk/autoclip/data/temp/【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响.mp4 --output_dir /Users/zhoukk/autoclip/data/temp --output_format srt --model base
+2025-09-08 17:09:16,380 - backend.utils.speech_recognizer - INFO - 本地Whisper字幕生成成功: /Users/zhoukk/autoclip/data/temp/【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响.srt
+2025-09-08 17:09:16,380 - backend.api.v1.bilibili - INFO - Whisper字幕生成成功: /Users/zhoukk/autoclip/data/temp/【Z哥0907直播】前村长事件---市场噪音解读，对大A会有什么影响.srt
+2025-09-08 17:09:16,391 - backend.api.v1.bilibili - INFO - 视频文件已移动到: /Users/zhoukk/autoclip/data/projects/e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785/raw/input.mp4
+2025-09-08 17:09:16,391 - backend.api.v1.bilibili - INFO - 字幕文件已移动到: /Users/zhoukk/autoclip/data/projects/e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785/raw/input.srt
+2025-09-08 17:09:16,393 - backend.api.v1.bilibili - INFO - B站下载任务完成: 391627c3-3be1-4d83-bc05-f82fffd51462, 项目ID: e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785
+2025-09-08 17:09:16,393 - backend.api.v1.bilibili - INFO - B站项目 e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785 下载完成，等待自动化流水线启动
+2025-09-08 17:09:16,393 - backend.api.v1.bilibili - ERROR - 启动B站项目 e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785 自动化流水线失败: this event loop is already running.
+2025-09-08 17:09:16,393 - backend.services.auto_pipeline_service - INFO - 自动启动项目流水线: e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785
+2025-09-08 17:09:16,397 - backend.services.auto_pipeline_service - INFO - 创建处理任务: 9d7444cc-a844-4c05-a1e3-cb37da52e2ba
+2025-09-08 17:09:16,398 - backend.services.auto_pipeline_service - INFO - 项目 e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785 状态已更新为处理中
+2025-09-08 17:09:16,400 - backend.services.progress_update_service - INFO - 开始监控任务进度: 9d7444cc-a844-4c05-a1e3-cb37da52e2ba
+2025-09-08 17:09:16,400 - backend.services.auto_pipeline_service - INFO - 准备提交Celery任务: e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785
+2025-09-08 17:09:16,400 - backend.services.auto_pipeline_service - INFO - 视频文件: /Users/zhoukk/autoclip/data/projects/e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785/raw/input.mp4
+2025-09-08 17:09:16,400 - backend.services.auto_pipeline_service - INFO - 字幕文件: /Users/zhoukk/autoclip/data/projects/e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785/raw/input.srt
+2025-09-08 17:09:16,400 - backend.utils.task_submission_utils - INFO - 提交视频流水线任务: e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785
+2025-09-08 17:09:16,400 - backend.utils.task_submission_utils - INFO - 准备提交任务到队列...
+2025-09-08 17:09:16,400 - backend.utils.task_submission_utils - INFO - 任务名称: backend.tasks.processing.process_video_pipeline
+2025-09-08 17:09:16,400 - backend.utils.task_submission_utils - INFO - 任务参数: ['e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785', '/Users/zhoukk/autoclip/data/projects/e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785/raw/input.mp4', '/Users/zhoukk/autoclip/data/projects/e21fdd3d-e7e0-4fcb-8d7e-42a1c88cc785/raw/input.srt']
+2025-09-08 17:09:16,448 - backend.utils.task_submission_utils - INFO - 视频流水线任务已提交: 4e0dd318-87aa-48b4-aa0b-66d62c2b3c25
+2025-09-08 17:09:16,448 - backend.utils.task_submission_utils - INFO - 任务状态: PENDING
+2025-09-08 17:09:16,449 - backend.utils.task_submission_utils - INFO - Redis队列长度: 0
+2025-09-08 17:09:16,449 - backend.services.auto_pipeline_service - INFO - Celery任务提交结果: {'success': True, 'task_id': '4e0dd318-87aa-48b4-aa0b-66d62c2b3c25', 'status': 'PENDING', 'message': '视频流水线任务已提交'}
+2025-09-08 17:09:16,449 - backend.services.auto_pipeline_service - INFO - Celery任务已提交: 4e0dd318-87aa-48b4-aa0b-66d62c2b3c25
+2025-09-08 17:11:57,189 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-08 17:11:57,417 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-08 17:11:57,418 - backend.main - INFO - 数据库表创建完成
+2025-09-08 17:11:57,418 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-08 17:18:20,836 - backend.api.v1.bilibili - INFO - 开始解析B站视频: https://www.bilibili.com/video/BV1Zmedz4EfA/
+2025-09-08 17:18:21,620 - backend.api.v1.bilibili - INFO - 视频信息解析成功: 颜值与智慧双杀：Claude Code华人产品经理Cat Wu的硬核开发哲学
+2025-09-08 17:18:25,077 - backend.api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1Zmedz4EfA/
+2025-09-08 17:18:36,081 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 颜值与智慧双杀：Claude Code华人产品经理Cat Wu的硬核开发哲学
+2025-09-08 17:18:36,081 - backend.utils.bilibili_downloader - INFO - 重命名AI字幕文件: 颜值与智慧双杀：Claude Code华人产品经理Cat Wu的硬核开发哲学.ai-zh.srt -> 颜值与智慧双杀：Claude Code华人产品经理Cat Wu的硬核开发哲学.srt
+2025-09-08 17:18:36,081 - backend.utils.bilibili_downloader - INFO - 下载完成: 颜值与智慧双杀：Claude Code华人产品经理Cat Wu的硬核开发哲学
+2025-09-08 17:18:36,086 - backend.api.v1.bilibili - INFO - 视频文件已移动到: /Users/zhoukk/autoclip/data/projects/dafc2875-6c8c-49fd-90c4-b0ba645b2112/raw/input.mp4
+2025-09-08 17:18:36,086 - backend.api.v1.bilibili - INFO - 字幕文件已移动到: /Users/zhoukk/autoclip/data/projects/dafc2875-6c8c-49fd-90c4-b0ba645b2112/raw/input.srt
+2025-09-08 17:18:36,087 - backend.api.v1.bilibili - INFO - B站下载任务完成: d3cbf3db-762a-40a8-863e-297f828dc85a, 项目ID: dafc2875-6c8c-49fd-90c4-b0ba645b2112
+2025-09-08 17:18:36,087 - backend.api.v1.bilibili - INFO - B站项目 dafc2875-6c8c-49fd-90c4-b0ba645b2112 下载完成，等待自动化流水线启动
+2025-09-08 17:18:36,087 - backend.api.v1.bilibili - ERROR - 启动B站项目 dafc2875-6c8c-49fd-90c4-b0ba645b2112 自动化流水线失败: this event loop is already running.
+2025-09-08 17:18:36,087 - backend.services.auto_pipeline_service - INFO - 自动启动项目流水线: dafc2875-6c8c-49fd-90c4-b0ba645b2112
+2025-09-08 17:18:36,090 - backend.services.auto_pipeline_service - INFO - 创建处理任务: 0036a3e7-2fb4-4a78-9c7d-24f4cd4f3c55
+2025-09-08 17:18:36,091 - backend.services.auto_pipeline_service - INFO - 项目 dafc2875-6c8c-49fd-90c4-b0ba645b2112 状态已更新为处理中
+2025-09-08 17:18:36,092 - backend.services.progress_update_service - INFO - 开始监控任务进度: 0036a3e7-2fb4-4a78-9c7d-24f4cd4f3c55
+2025-09-08 17:18:36,092 - backend.services.auto_pipeline_service - INFO - 准备提交Celery任务: dafc2875-6c8c-49fd-90c4-b0ba645b2112
+2025-09-08 17:18:36,092 - backend.services.auto_pipeline_service - INFO - 视频文件: /Users/zhoukk/autoclip/data/projects/dafc2875-6c8c-49fd-90c4-b0ba645b2112/raw/input.mp4
+2025-09-08 17:18:36,092 - backend.services.auto_pipeline_service - INFO - 字幕文件: /Users/zhoukk/autoclip/data/projects/dafc2875-6c8c-49fd-90c4-b0ba645b2112/raw/input.srt
+2025-09-08 17:18:36,092 - backend.utils.task_submission_utils - INFO - 提交视频流水线任务: dafc2875-6c8c-49fd-90c4-b0ba645b2112
+2025-09-08 17:18:36,092 - backend.utils.task_submission_utils - INFO - 准备提交任务到队列...
+2025-09-08 17:18:36,092 - backend.utils.task_submission_utils - INFO - 任务名称: backend.tasks.processing.process_video_pipeline
+2025-09-08 17:18:36,092 - backend.utils.task_submission_utils - INFO - 任务参数: ['dafc2875-6c8c-49fd-90c4-b0ba645b2112', '/Users/zhoukk/autoclip/data/projects/dafc2875-6c8c-49fd-90c4-b0ba645b2112/raw/input.mp4', '/Users/zhoukk/autoclip/data/projects/dafc2875-6c8c-49fd-90c4-b0ba645b2112/raw/input.srt']
+2025-09-08 17:18:36,137 - backend.utils.task_submission_utils - INFO - 视频流水线任务已提交: 9599e8de-52ce-48f9-97df-6061fd45c8ad
+2025-09-08 17:18:36,138 - backend.utils.task_submission_utils - INFO - 任务状态: PENDING
+2025-09-08 17:18:36,138 - backend.utils.task_submission_utils - INFO - Redis队列长度: 0
+2025-09-08 17:18:36,138 - backend.services.auto_pipeline_service - INFO - Celery任务提交结果: {'success': True, 'task_id': '9599e8de-52ce-48f9-97df-6061fd45c8ad', 'status': 'PENDING', 'message': '视频流水线任务已提交'}
+2025-09-08 17:18:36,138 - backend.services.auto_pipeline_service - INFO - Celery任务已提交: 9599e8de-52ce-48f9-97df-6061fd45c8ad

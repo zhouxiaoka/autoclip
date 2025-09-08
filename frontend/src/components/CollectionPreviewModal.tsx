@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Modal, Row, Col, Button, Space, Typography, Tag, message, Popconfirm } from 'antd'
-import { PlayCircleOutlined, DeleteOutlined, MenuOutlined, CloseOutlined, LeftOutlined, RightOutlined, PlusOutlined } from '@ant-design/icons'
+import { PlayCircleOutlined, DeleteOutlined, MenuOutlined, CloseOutlined, LeftOutlined, RightOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import ReactPlayer from 'react-player'
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd'
 import { Collection, Clip, useProjectStore } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
 import AddClipToCollectionModal from './AddClipToCollectionModal'
 import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
+import UploadModal from './UploadModal'
 import './CollectionPreviewModal.css'
 
 const { Title, Text } = Typography
@@ -42,6 +43,7 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
 
   const [showAddClipModal, setShowAddClipModal] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
   const playerRef = useRef<ReactPlayer>(null)
   const { setDragging } = useProjectStore()
   const { isGenerating, generateAndDownloadCollectionVideo } = useCollectionVideoDownload()
@@ -254,6 +256,13 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
                 onClick={handleGenerateVideo}
               >
                 导出完整视频
+              </Button>
+              <Button 
+                type="default" 
+                icon={<UploadOutlined />}
+                onClick={() => setShowUploadModal(true)}
+              >
+                投稿到B站
               </Button>
               {onDelete && (
                 <Popconfirm
@@ -502,6 +511,19 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
         existingClipIds={latestCollection?.clip_ids || []}
         onCancel={() => setShowAddClipModal(false)}
         onConfirm={handleAddClips}
+      />
+
+      {/* 投稿弹窗 */}
+      <UploadModal
+        visible={showUploadModal}
+        onCancel={() => setShowUploadModal(false)}
+        projectId={projectId}
+        clipIds={collectionClips.map(clip => clip.id)}
+        clipTitles={collectionClips.map(clip => clip.generated_title || clip.title || '视频片段')}
+        onSuccess={() => {
+          // 投稿成功后可以刷新数据或显示提示
+          console.log('合集投稿成功')
+        }}
       />
     </Modal>
   )

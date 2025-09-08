@@ -12,7 +12,7 @@ from collections.abc import Generator
 
 # 修复导入问题
 try:
-    from core.shared_config import MODEL_NAME
+    from ..core.shared_config import MODEL_NAME
 except ImportError:
     # 如果相对导入失败，尝试绝对导入
     import sys

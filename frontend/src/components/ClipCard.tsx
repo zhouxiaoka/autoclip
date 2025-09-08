@@ -1,25 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Card, Typography, Button, Tag, Tooltip, Modal } from 'antd'
-import { PlayCircleOutlined, DownloadOutlined, ClockCircleOutlined, StarFilled } from '@ant-design/icons'
+import { Card, Typography, Button, Tooltip, Modal } from 'antd'
+import { PlayCircleOutlined, DownloadOutlined, ClockCircleOutlined, StarFilled, EditOutlined, UploadOutlined } from '@ant-design/icons'
 import ReactPlayer from 'react-player'
 import { Clip } from '../store/useProjectStore'
+import SubtitleEditor from './SubtitleEditor'
+import { subtitleEditorApi } from '../services/subtitleEditorApi'
+import { SubtitleSegment, VideoEditOperation } from '../types/subtitle'
+import UploadModal from './UploadModal'
 import './ClipCard.css'
 
-const { Text, Title } = Typography
+const { Title } = Typography
 
 interface ClipCardProps {
   clip: Clip
   videoUrl?: string
   onDownload: (clipId: string) => void
+  projectId?: string
 }
 
 const ClipCard: React.FC<ClipCardProps> = ({ 
   clip, 
   videoUrl, 
-  onDownload
+  onDownload,
+  projectId
 }) => {
   const [showPlayer, setShowPlayer] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
+  const [showSubtitleEditor, setShowSubtitleEditor] = useState(false)
+  const [subtitleData, setSubtitleData] = useState<SubtitleSegment[]>([])
+  const [loadingSubtitles, setLoadingSubtitles] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
   const playerRef = useRef<ReactPlayer>(null)
 
   // 生成视频缩略图
@@ -98,6 +108,62 @@ const ClipCard: React.FC<ClipCardProps> = ({
     setShowPlayer(false)
   }
 
+  const handleOpenSubtitleEditor = async () => {
+    if (!projectId) {
+      console.error('ProjectId is required for subtitle editor')
+      return
+    }
+    
+    console.log('Opening subtitle editor for clip:', clip.id)
+    setLoadingSubtitles(true)
+    try {
+      // 获取字幕数据
+      const response = await subtitleEditorApi.getClipSubtitles(projectId, clip.id)
+      console.log('Subtitle data received:', response)
+      setSubtitleData(response.segments)
+      setShowSubtitleEditor(true)
+      console.log('Subtitle editor should be visible now')
+    } catch (error) {
+      console.error('获取字幕数据失败:', error)
+    } finally {
+      setLoadingSubtitles(false)
+    }
+  }
+
+  const handleSubtitleEditorClose = () => {
+    setShowSubtitleEditor(false)
+    setSubtitleData([])
+  }
+
+  const handleSubtitleEditorSave = async (operations: VideoEditOperation[]) => {
+    if (!projectId) return
+    
+    try {
+      // 提取要删除的字幕段ID
+      const deletedSegments = operations
+        .filter(op => op.type === 'delete')
+        .flatMap(op => op.segmentIds)
+
+      if (deletedSegments.length === 0) {
+        console.log('没有删除操作')
+        return
+      }
+
+      // 执行视频编辑
+      const result = await subtitleEditorApi.editClipBySubtitles(
+        projectId,
+        clip.id,
+        deletedSegments
+      )
+
+      if (result.success) {
+        console.log('视频编辑成功:', result)
+      }
+    } catch (error) {
+      console.error('视频编辑失败:', error)
+    }
+  }
+
   const formatTime = (timeStr: string) => {
     if (!timeStr) return '00:00:00'
     // 移除小数点后的毫秒部分，只保留时分秒
@@ -109,6 +175,33 @@ const ClipCard: React.FC<ClipCardProps> = ({
     const minutes = Math.floor(seconds / 60)
     const remainingSeconds = Math.floor(seconds % 60)
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
+  }
+
+  const calculateDuration = (startTime: string, endTime: string): number => {
+    if (!startTime || !endTime) return 0
+    
+    try {
+      // 解析时间格式 "HH:MM:SS,mmm" 或 "HH:MM:SS.mmm"
+      const parseTime = (timeStr: string): number => {
+        const normalized = timeStr.replace(',', '.')
+        const parts = normalized.split(':')
+        if (parts.length !== 3) return 0
+        
+        const hours = parseInt(parts[0]) || 0
+        const minutes = parseInt(parts[1]) || 0
+        const seconds = parseFloat(parts[2]) || 0
+        
+        return hours * 3600 + minutes * 60 + seconds
+      }
+      
+      const start = parseTime(startTime)
+      const end = parseTime(endTime)
+      
+      return Math.max(0, end - start)
+    } catch (error) {
+      console.error('Error calculating duration:', error)
+      return 0
+    }
   }
 
   const getDuration = () => {
@@ -134,12 +227,35 @@ const ClipCard: React.FC<ClipCardProps> = ({
     return '暂无内容要点'
   }
 
-  // 获取要显示的内容要点
+  // 获取要显示的简介内容
   const getDisplayContent = () => {
-    if (clip.content && clip.content.length > 0) {
-      return clip.content.join(' ')
+    // 优先显示推荐理由（这是AI生成的内容要点）
+    if (clip.recommend_reason && clip.recommend_reason.trim()) {
+      return clip.recommend_reason
     }
-    return clip.recommend_reason || '暂无内容要点'
+    
+    // 如果没有推荐理由，尝试从content中获取非转写文本的内容要点
+    if (clip.content && clip.content.length > 0) {
+      // 过滤掉可能是转写文本的内容（通常转写文本很长且包含标点符号）
+      const contentPoints = clip.content.filter(item => {
+        const text = item.trim()
+        // 如果文本长度超过100字符或包含大量标点符号，可能是转写文本
+        if (text.length > 100) return false
+        if (text.split(/[，。！？；：""''（）【】]/).length > 3) return false
+        return true
+      })
+      
+      if (contentPoints.length > 0) {
+        return contentPoints.join(' ')
+      }
+    }
+    
+    // 最后回退到outline（大纲）
+    if (clip.outline && clip.outline.trim()) {
+      return clip.outline
+    }
+    
+    return '暂无内容要点'
   }
 
   const textRef = useRef<HTMLDivElement>(null)
@@ -256,7 +372,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
                   gap: '4px'
                 }}
               >
-                {formatDuration(clip.duration || 0)}
+                {formatDuration(calculateDuration(clip.start_time, clip.end_time))}
               </div>
             </div>
           }
@@ -357,13 +473,34 @@ const ClipCard: React.FC<ClipCardProps> = ({
           <Button key="download" type="primary" icon={<DownloadOutlined />} onClick={handleDownloadWithTitle}>
             下载视频
           </Button>,
-          <Button key="close" onClick={handleClosePlayer}>
-            关闭
+          <Button 
+            key="subtitle" 
+            icon={<EditOutlined />} 
+            loading={loadingSubtitles}
+            onClick={handleOpenSubtitleEditor}
+            disabled={!projectId}
+          >
+            字幕编辑
+          </Button>,
+          <Button 
+            key="upload" 
+            type="default" 
+            icon={<UploadOutlined />} 
+            onClick={() => setShowUploadModal(true)}
+            disabled={!projectId}
+          >
+            投稿到B站
           </Button>
         ]}
         width={800}
         centered
         destroyOnClose
+        styles={{
+          header: {
+            borderBottom: '1px solid #303030',
+            background: '#1f1f1f'
+          }
+        }}
       >
         {videoUrl && (
           <ReactPlayer
@@ -392,6 +529,32 @@ const ClipCard: React.FC<ClipCardProps> = ({
           />
         )}
       </Modal>
+
+      {/* 字幕编辑器 */}
+      {showSubtitleEditor && (
+        <>
+          {console.log('Rendering SubtitleEditor with:', { showSubtitleEditor, subtitleDataLength: subtitleData.length })}
+          <SubtitleEditor
+            videoUrl={videoUrl || ''}
+            subtitles={subtitleData}
+            onSave={handleSubtitleEditorSave}
+            onClose={handleSubtitleEditorClose}
+          />
+        </>
+      )}
+
+      {/* 投稿弹窗 */}
+      <UploadModal
+        visible={showUploadModal}
+        onCancel={() => setShowUploadModal(false)}
+        projectId={projectId || ''}
+        clipIds={[clip.id]}
+        clipTitles={[clip.generated_title || clip.title || '视频片段']}
+        onSuccess={() => {
+          // 投稿成功后可以刷新数据或显示提示
+          console.log('投稿成功')
+        }}
+      />
     </>
   )
 }

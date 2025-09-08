@@ -1,6 +1,6 @@
 import React from 'react'
 import { Layout, Button } from 'antd'
-import { SettingOutlined, HomeOutlined } from '@ant-design/icons'
+import { SettingOutlined, HomeOutlined, DashboardOutlined } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 const { Header: AntHeader } = Layout
@@ -81,6 +81,8 @@ const Header: React.FC = () => {
             返回首页
           </Button>
         )}
+        
+        
         <Button 
           type="text" 
           icon={<SettingOutlined />}

@@ -23,6 +23,55 @@
   margin-right: 12px;
 }
 
+/* Tabs样式 */
+.settings-tabs {
+  background-color: #1a1a1a !important;
+  border: 1px solid #2d2d2d !important;
+  border-radius: 16px !important;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.settings-tabs .ant-tabs-nav {
+  margin-bottom: 24px !important;
+}
+
+.settings-tabs .ant-tabs-nav::before {
+  border-bottom: 1px solid #2d2d2d !important;
+}
+
+.settings-tabs .ant-tabs-tab {
+  color: #cccccc !important;
+  font-weight: 500;
+  padding: 12px 24px !important;
+  border-radius: 8px 8px 0 0 !important;
+  transition: all 0.3s ease;
+}
+
+.settings-tabs .ant-tabs-tab:hover {
+  color: #ffffff !important;
+  background-color: #2d2d2d !important;
+}
+
+.settings-tabs .ant-tabs-tab.ant-tabs-tab-active {
+  color: #4facfe !important;
+  background-color: #1a1a1a !important;
+  border-bottom: 2px solid #4facfe !important;
+}
+
+.settings-tabs .ant-tabs-tab .anticon {
+  margin-right: 8px;
+  font-size: 16px;
+}
+
+.settings-tabs .ant-tabs-content-holder {
+  padding: 0;
+}
+
+.settings-tabs .ant-tabs-tabpane {
+  padding: 0;
+}
+
 /* 卡片样式 */
 .settings-card {
   background-color: #1a1a1a !important;
@@ -252,6 +301,14 @@
   .save-button {
     width: 100%;
     height: 44px;
+  }
+  
+  .settings-tabs {
+    padding: 12px;
+  }
+  
+  .settings-tabs .ant-tabs-tab {
+    padding: 8px 16px !important;
   }
 }
 

@@ -1,16 +1,10 @@
 import React from 'react'
-import { Badge, Progress, Tooltip, Typography } from 'antd'
-import { 
-  LoadingOutlined, 
-  CheckCircleOutlined, 
-  ExclamationCircleOutlined,
-  ClockCircleOutlined,
-  StopOutlined,
-  QuestionCircleOutlined
-} from '@ant-design/icons'
+import { Badge, Tooltip } from 'antd'
 import { Project } from '../store/useProjectStore'
-
-const { Text } = Typography
+// import { 
+//   getProjectStatusConfig, 
+//   normalizeProjectStatus 
+// } from '../utils/statusUtils'
 
 interface ProjectStatusIndicatorProps {
   project: Project
@@ -20,56 +14,13 @@ interface ProjectStatusIndicatorProps {
 
 const ProjectStatusIndicator: React.FC<ProjectStatusIndicatorProps> = ({
   project,
-  showProgress = true,
   size = 'default'
 }) => {
-  const getStatusConfig = () => {
-    switch (project.status) {
-      case 'pending':
-        return {
-          color: '#1890ff',
-          icon: <ClockCircleOutlined />,
-          text: '等待中',
-          badgeStatus: 'processing' as const
-        }
-      case 'processing':
-        return {
-          color: '#52c41a',
-          icon: <LoadingOutlined spin />,
-          text: `处理中 (${project.current_step || 0}/${project.total_steps || 6})`,
-          badgeStatus: 'processing' as const
-        }
-      case 'completed':
-        return {
-          color: '#52c41a',
-          icon: <CheckCircleOutlined />,
-          text: '已完成',
-          badgeStatus: 'success' as const
-        }
-      case 'failed':
-        return {
-          color: '#ff4d4f',
-          icon: <ExclamationCircleOutlined />,
-          text: '处理失败',
-          badgeStatus: 'error' as const
-        }
-      default:
-        return {
-          color: '#d9d9d9',
-          icon: <QuestionCircleOutlined />,
-          text: '未知状态',
-          badgeStatus: 'default' as const
-        }
-    }
-  }
-
-  const config = getStatusConfig()
-  const progress = project.status === 'processing' 
-    ? ((project.current_step || 0) / (project.total_steps || 6)) * 100
-    : project.status === 'completed' ? 100 : 0
+  // 暂时使用简单的状态处理
+  const normalizedStatus = project.status === 'error' ? 'failed' : project.status
 
   const getStepName = () => {
-    if (project.status === 'processing' && project.current_step) {
+    if (normalizedStatus === 'processing' && project.current_step) {
       const stepNames = {
         1: '内容大纲分析',
         2: '时间轴生成',
@@ -107,7 +58,7 @@ const ProjectStatusIndicator: React.FC<ProjectStatusIndicatorProps> = ({
       minHeight: '24px'
     }}>
       <span style={{ marginRight: '4px', display: 'flex', alignItems: 'center' }}>
-        {config.icon}
+        {config.text}
       </span>
       <span>{config.text}</span>
     </div>

@@ -19,7 +19,7 @@ except ImportError:
     # 独立运行时的导入
     import sys
     sys.path.append(str(Path(__file__).parent.parent))
-    from utils.error_handler import FileIOError, ValidationError, ProcessingError
+    from ..utils.error_handler import FileIOError, ValidationError, ProcessingError
 
 logger = logging.getLogger(__name__)
 

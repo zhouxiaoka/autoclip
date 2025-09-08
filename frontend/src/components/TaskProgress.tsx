@@ -1,321 +1,217 @@
 import React, { useState, useEffect } from 'react';
-import { Progress, Card, Tag, Space, Typography, Tooltip } from 'antd';
-import { ClockCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, PlayCircleOutlined, LoadingOutlined } from '@ant-design/icons';
-import { TaskStatus } from '../hooks/useTaskStatus';
-import dayjs from 'dayjs';
-import utc from 'dayjs/plugin/utc';
-import timezone from 'dayjs/plugin/timezone';
+import { Progress, Card, Tag, Space, Typography, Spin } from 'antd';
+import { PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
 
-// 配置dayjs插件
-dayjs.extend(utc);
-dayjs.extend(timezone);
-
-const { Text, Paragraph } = Typography;
+const { Text, Title } = Typography;
 
 interface TaskProgressProps {
-  task: TaskStatus;
-  showDetails?: boolean;
-  projectId?: string; // 添加项目ID参数
+  projectId: string;
+  taskId?: string;
+  status: string;
+  onProgressUpdate?: (progress: number, step: string) => void;
 }
 
-const getStatusColor = (status: TaskStatus['status']) => {
-  switch (status) {
-    case 'pending':
-      return 'default';
-    case 'running':
-      return 'processing';
-    case 'completed':
-      return 'success';
-    case 'failed':
-      return 'error';
-    case 'cancelled':
-      return 'default';
-    default:
-      return 'default';
-  }
-};
+interface TaskProgressData {
+  id: string;
+  name: string;
+  status: string;
+  progress: number;
+  current_step: string;
+  realtime_progress?: number;
+  realtime_step?: string;
+  step_details?: string;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
 
-const getStatusIcon = (status: TaskStatus['status']) => {
-  switch (status) {
-    case 'pending':
-      return <ClockCircleOutlined />;
-    case 'running':
-      return <ClockCircleOutlined spin />;
-    case 'completed':
-      return <CheckCircleOutlined />;
-    case 'failed':
-      return <CloseCircleOutlined />;
-    case 'cancelled':
-      return <ExclamationCircleOutlined />;
-    default:
-      return <ClockCircleOutlined />;
-  }
-};
+const TaskProgress: React.FC<TaskProgressProps> = ({ 
+  projectId, 
+  taskId, 
+  status, 
+  onProgressUpdate 
+}) => {
+  const [progressData, setProgressData] = useState<TaskProgressData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-const getStatusText = (status: TaskStatus['status']) => {
-  switch (status) {
-    case 'pending':
-      return '等待中';
-    case 'running':
-      return '运行中';
-    case 'completed':
-      return '已完成';
-    case 'failed':
-      return '失败';
-    case 'cancelled':
-      return '已取消';
-    default:
-      return '未知';
-  }
-};
-
-export const TaskProgress: React.FC<TaskProgressProps> = ({ task, showDetails = true, projectId }) => {
-  const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
-  const [thumbnailLoading, setThumbnailLoading] = useState(false);
-
-  const formatTime = (timestamp: string) => {
-    // 正确处理时区转换，确保显示本地时间
-    const now = dayjs().tz('Asia/Shanghai');
-    const taskTime = dayjs(timestamp).tz('Asia/Shanghai');
-    return taskTime.from(now);
+  // 获取任务进度
+  const fetchTaskProgress = async () => {
+    if (!projectId) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(`http://localhost:8000/api/v1/progress/project/${projectId}`);
+      if (!response.ok) {
+        throw new Error('获取进度失败');
+      }
+      
+      const data = await response.json();
+      if (data.tasks && data.tasks.length > 0) {
+        // 找到当前任务或第一个运行中的任务
+        const currentTask = taskId 
+          ? data.tasks.find((t: TaskProgressData) => t.id === taskId)
+          : data.tasks.find((t: TaskProgressData) => t.status === 'running') || data.tasks[0];
+        
+        setProgressData(currentTask);
+        
+        // 通知父组件进度更新
+        if (onProgressUpdate) {
+          const progress = currentTask.realtime_progress || currentTask.progress;
+          const step = currentTask.realtime_step || currentTask.current_step;
+          onProgressUpdate(progress, step);
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '未知错误');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // 生成视频缩略图
+  // 定期更新进度
   useEffect(() => {
-    if (!projectId) return;
+    if (status === 'processing') {
+      // 立即获取一次
+      fetchTaskProgress();
+      
+      // 每5秒更新一次
+      const interval = setInterval(fetchTaskProgress, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [projectId, taskId, status]);
 
-    const generateThumbnail = async () => {
-      // 检查缓存
-      const thumbnailCacheKey = `task_thumbnail_${task.id}`;
-      const cachedThumbnail = localStorage.getItem(thumbnailCacheKey);
-      if (cachedThumbnail) {
-        setVideoThumbnail(cachedThumbnail);
-        return;
-      }
+  // 获取状态图标和颜色
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case 'running':
+        return { icon: <PlayCircleOutlined />, color: 'processing', text: '处理中' };
+      case 'completed':
+        return { icon: <CheckCircleOutlined />, color: 'success', text: '已完成' };
+      case 'failed':
+        return { icon: <CloseCircleOutlined />, color: 'error', text: '失败' };
+      case 'pending':
+        return { icon: <ClockCircleOutlined />, color: 'default', text: '等待中' };
+      default:
+        return { icon: <ClockCircleOutlined />, color: 'default', text: status };
+    }
+  };
 
-      setThumbnailLoading(true);
+  // 获取进度条状态
+  const getProgressStatus = (status: string) => {
+    switch (status) {
+      case 'running':
+        return 'active';
+      case 'completed':
+        return 'success';
+      case 'failed':
+        return 'exception';
+      default:
+        return 'normal';
+    }
+  };
 
-      try {
-        const video = document.createElement('video');
-        video.crossOrigin = 'anonymous';
-        video.muted = true;
-        video.preload = 'metadata';
+  if (loading) {
+    return (
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <Spin size="large" />
+          <div style={{ marginTop: 16 }}>
+            <Text>正在获取任务进度...</Text>
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
-        // 尝试多个可能的视频文件路径
-        const possiblePaths = [
-          'input/input.mp4',
-          'input.mp4',
-          'raw/input.mp4'
-        ];
+  if (error) {
+    return (
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <CloseCircleOutlined style={{ fontSize: 24, color: '#ff4d4f' }} />
+          <div style={{ marginTop: 16 }}>
+            <Text type="danger">{error}</Text>
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
-        let videoLoaded = false;
+  if (!progressData) {
+    return null;
+  }
 
-        for (const path of possiblePaths) {
-          if (videoLoaded) break;
-
-          try {
-            const videoUrl = `http://localhost:8000/api/v1/projects/${projectId}/files/${path}`;
-            console.log('尝试加载任务视频:', videoUrl);
-
-            await new Promise((resolve, reject) => {
-              const timeoutId = setTimeout(() => {
-                reject(new Error('视频加载超时'));
-              }, 5000); // 5秒超时
-
-              video.onloadedmetadata = () => {
-                clearTimeout(timeoutId);
-                console.log('任务视频元数据加载成功:', videoUrl);
-                video.currentTime = Math.min(3, video.duration / 4); // 取视频1/4处或3秒处的帧
-              };
-
-              video.onseeked = () => {
-                clearTimeout(timeoutId);
-                try {
-                  const canvas = document.createElement('canvas');
-                  const ctx = canvas.getContext('2d');
-                  if (!ctx) {
-                    reject(new Error('无法获取canvas上下文'));
-                    return;
-                  }
-
-                  // 设置合适的缩略图尺寸
-                  const maxWidth = 200;
-                  const maxHeight = 120;
-                  const aspectRatio = video.videoWidth / video.videoHeight;
-
-                  let width = maxWidth;
-                  let height = maxHeight;
-
-                  if (aspectRatio > maxWidth / maxHeight) {
-                    height = maxWidth / aspectRatio;
-                  } else {
-                    width = maxHeight * aspectRatio;
-                  }
-
-                  canvas.width = width;
-                  canvas.height = height;
-                  ctx.drawImage(video, 0, 0, width, height);
-
-                  const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
-                  setVideoThumbnail(thumbnail);
-
-                  // 缓存缩略图
-                  try {
-                    localStorage.setItem(thumbnailCacheKey, thumbnail);
-                  } catch (e) {
-                    // 如果localStorage空间不足，清理旧缓存
-                    const keys = Object.keys(localStorage).filter(key => key.startsWith('task_thumbnail_'));
-                    if (keys.length > 20) { // 保留最多20个任务缩略图缓存
-                      keys.slice(0, 5).forEach(key => localStorage.removeItem(key));
-                      localStorage.setItem(thumbnailCacheKey, thumbnail);
-                    }
-                  }
-
-                  videoLoaded = true;
-                  resolve(thumbnail);
-                } catch (error) {
-                  reject(error);
-                }
-              };
-
-              video.onerror = () => {
-                clearTimeout(timeoutId);
-                reject(new Error(`视频加载失败: ${videoUrl}`));
-              };
-
-              video.src = videoUrl;
-            });
-          } catch (error) {
-            console.log('尝试下一个视频路径:', error);
-            continue;
-          }
-        }
-      } catch (error) {
-        console.error('生成任务缩略图失败:', error);
-      } finally {
-        setThumbnailLoading(false);
-      }
-    };
-
-    generateThumbnail();
-  }, [projectId, task.id]);
+  const statusConfig = getStatusConfig(progressData.status);
+  const progressStatus = getProgressStatus(progressData.status);
+  const currentProgress = progressData.realtime_progress || progressData.progress;
+  const currentStep = progressData.realtime_step || progressData.current_step;
 
   return (
-    <Card 
-      size="small" 
-      style={{ marginBottom: 8 }}
-      styles={{
-        body: { padding: 12 }
-      }}
-      cover={
-        projectId ? (
-          <div 
-            style={{ 
-              height: 80, 
-              position: 'relative',
-              background: videoThumbnail 
-                ? `url(${videoThumbnail}) center/cover` 
-                : 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'hidden'
-            }}
-          >
-            {/* 缩略图加载状态 */}
-            {thumbnailLoading && (
-              <div style={{ 
-                textAlign: 'center',
-                color: 'rgba(255, 255, 255, 0.8)'
-              }}>
-                <LoadingOutlined 
-                  style={{ 
-                    fontSize: '16px', 
-                    marginBottom: '2px'
-                  }} 
-                />
-                <div style={{ 
-                  fontSize: '10px',
-                  fontWeight: 500
-                }}>
-                  生成封面中...
-                </div>
-              </div>
-            )}
-            
-            {/* 无缩略图时的默认显示 */}
-            {!videoThumbnail && !thumbnailLoading && (
-              <div style={{ textAlign: 'center' }}>
-                <PlayCircleOutlined 
-                  style={{ 
-                    fontSize: '24px', 
-                    color: 'rgba(255, 255, 255, 0.9)',
-                    marginBottom: '2px',
-                    filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.3))'
-                  }} 
-                />
-                <div style={{ 
-                  color: 'rgba(255, 255, 255, 0.8)', 
-                  fontSize: '10px',
-                  fontWeight: 500
-                }}>
-                  视频封面
-                </div>
-              </div>
-            )}
-          </div>
-        ) : undefined
-      }
-    >
-      <Space direction="vertical" style={{ width: '100%' }}>
-        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Space>
-            {getStatusIcon(task.status)}
-            <Text strong>{task.id}</Text>
-            <Tag color={getStatusColor(task.status)}>
-              {getStatusText(task.status)}
-            </Tag>
-          </Space>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {formatTime(task.updatedAt)}
-          </Text>
+    <Card size="small" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+        <Space>
+          {statusConfig.icon}
+          <Title level={5} style={{ margin: 0 }}>
+            {progressData.name || '视频处理任务'}
+          </Title>
+          <Tag color={statusConfig.color}>
+            {statusConfig.text}
+          </Tag>
         </Space>
+      </div>
 
-        <Progress 
-          percent={task.progress} 
-          status={task.status === 'failed' ? 'exception' : undefined}
-          size="small"
-          showInfo={false}
+      <div style={{ marginBottom: 16 }}>
+        <Progress
+          percent={currentProgress}
+          status={progressStatus}
+          strokeColor={{
+            '0%': '#108ee9',
+            '100%': '#87d068',
+          }}
         />
+      </div>
 
-        {showDetails && (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            {task.message && (
-              <Paragraph style={{ margin: 0, fontSize: 12 }}>
-                {task.message}
-              </Paragraph>
-            )}
-            
-            {task.error && (
-              <Tooltip title={task.error}>
-                <Paragraph 
-                  style={{ 
-                    margin: 0, 
-                    fontSize: 12, 
-                    color: '#ff4d4f',
-                    maxWidth: 200,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  错误: {task.error}
-                </Paragraph>
-              </Tooltip>
-            )}
-          </Space>
-        )}
-      </Space>
+      <div style={{ marginBottom: 8 }}>
+        <Text strong>当前步骤: </Text>
+        <Text>{currentStep || '未知'}</Text>
+      </div>
+
+      {progressData.step_details && (
+        <div style={{ marginBottom: 8 }}>
+          <Text strong>详细信息: </Text>
+          <Text type="secondary">{progressData.step_details}</Text>
+        </div>
+      )}
+
+      <div style={{ fontSize: '12px', color: '#999' }}>
+        <Space split={<Text type="secondary">|</Text>}>
+          {progressData.created_at && (
+            <Text type="secondary">
+              创建: {new Date(progressData.created_at).toLocaleString()}
+            </Text>
+          )}
+          {progressData.started_at && (
+            <Text type="secondary">
+              开始: {new Date(progressData.started_at).toLocaleString()}
+            </Text>
+          )}
+          {progressData.completed_at && (
+            <Text type="secondary">
+              完成: {new Date(progressData.completed_at).toLocaleString()}
+            </Text>
+          )}
+        </Space>
+      </div>
+
+      {status === 'processing' && (
+        <div style={{ marginTop: 16, textAlign: 'center' }}>
+          <Text type="secondary">进度每5秒自动更新</Text>
+        </div>
+      )}
     </Card>
   );
-}; 
+};
+
+export default TaskProgress; 
