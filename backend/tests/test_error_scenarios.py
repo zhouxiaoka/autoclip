@@ -13,13 +13,13 @@ import os
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
-from services.exceptions import (
+from backend.services.exceptions import (
     ServiceError, ConfigurationError, FileOperationError, 
     ProcessingError, TaskError, ProjectError, ConcurrentError
 )
-from services.processing_context import ProcessingContext
-from services.config_manager import ProjectConfigManager
-from services.pipeline_adapter import PipelineAdapter
+from backend.services.processing_context import ProcessingContext
+from backend.services.config_manager import ProjectConfigManager
+from backend.services.pipeline_adapter import PipelineAdapter
 
 
 class TestConfigurationErrorScenarios:

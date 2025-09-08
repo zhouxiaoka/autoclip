@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Tag, Button, Typography, Popconfirm, message, Tooltip } from 'antd'
-import { PlayCircleOutlined, DeleteOutlined, ReloadOutlined, LoadingOutlined } from '@ant-design/icons'
+import { Card, Tag, Button, Space, Typography, Progress, Popconfirm, message, Tooltip } from 'antd'
+import { PlayCircleOutlined, DeleteOutlined, EyeOutlined, DownloadOutlined, ReloadOutlined, LoadingOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { Project } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
+// import { 
+//   getProjectStatusConfig, 
+//   calculateProjectProgress, 
+//   normalizeProjectStatus,
+//   getProgressStatus 
+// } from '../utils/statusUtils'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import timezone from 'dayjs/plugin/timezone'
@@ -15,7 +21,8 @@ dayjs.extend(timezone)
 dayjs.extend(utc)
 dayjs.locale('zh-cn')
 
-const { Text } = Typography
+const { Text, Title } = Typography
+const { Meta } = Card
 
 interface ProjectCardProps {
   project: Project
@@ -24,53 +31,20 @@ interface ProjectCardProps {
   onClick?: () => void
 }
 
-
+interface LogEntry {
+  timestamp: string
+  module: string
+  level: string
+  message: string
+}
 
 const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick }) => {
   const navigate = useNavigate()
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [thumbnailLoading, setThumbnailLoading] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
-
-  // 格式化创建时间，确保正确的时区处理
-  const formatCreatedTime = (createdAt: string) => {
-    if (!createdAt) return '未知时间'
-    
-    try {
-      // 确保dayjs使用中文语言包
-      dayjs.locale('zh-cn')
-      
-      // 解析时间字符串，处理不同的时间格式
-      let created
-      if (createdAt.includes('T') && createdAt.includes('Z')) {
-        // ISO 8601格式，带UTC时区
-        created = dayjs.utc(createdAt).local()
-      } else if (createdAt.includes('T') && (createdAt.includes('+') || createdAt.includes('-'))) {
-        // ISO 8601格式，带时区偏移
-        created = dayjs(createdAt)
-      } else if (createdAt.includes('T')) {
-        // ISO 8601格式，没有时区信息 - 假设是本地时间
-        // 如果包含时区信息（如+08:00），dayjs会自动处理
-        created = dayjs(createdAt)
-      } else {
-        // 其他格式，尝试直接解析
-        created = dayjs(createdAt)
-      }
-      
-      const now = dayjs()
-      
-      // 如果时间差小于1分钟，显示"刚刚"
-      const diffMinutes = now.diff(created, 'minute')
-      if (diffMinutes < 1) {
-        return '刚刚'
-      }
-      
-      return created.from(now)
-    } catch (error) {
-      console.error('时间格式化错误:', error)
-      return '未知时间'
-    }
-  }
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [currentLogIndex, setCurrentLogIndex] = useState(0)
 
   // 获取分类信息
   const getCategoryInfo = (category?: string) => {
@@ -93,7 +67,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // 生成项目视频缩略图（带缓存）
   useEffect(() => {
     const generateThumbnail = async () => {
-      if (!project.video_path && !project.source_file) {
+      if (!project.video_path) {
         console.log('项目没有视频路径:', project.id)
         return
       }
@@ -115,12 +89,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
         
         // 尝试多个可能的视频文件路径
         const possiblePaths = [
-          projectApi.getProjectVideoUrl(project.id),
-          projectApi.getProjectFileUrl(project.id, 'input/input.mp4'),
-          projectApi.getProjectFileUrl(project.id, 'input.mp4'),
-          projectApi.getProjectFileUrl(project.id, project.video_path || ''),
-          projectApi.getProjectFileUrl(project.id, project.source_file || '')
-        ].filter((path): path is string => Boolean(path))
+          'input/input.mp4',
+          'input.mp4',
+          project.video_path,
+          `${project.video_path}/input.mp4`
+        ].filter(Boolean)
         
         let videoLoaded = false
         
@@ -128,16 +101,17 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           if (videoLoaded) break
           
           try {
-            console.log('尝试加载视频:', path)
+            const videoUrl = projectApi.getProjectFileUrl(project.id, path)
+            console.log('尝试加载视频:', videoUrl)
             
             await new Promise((resolve, reject) => {
               const timeoutId = setTimeout(() => {
                 reject(new Error('视频加载超时'))
-              }, 15000) // 增加到15秒超时
+              }, 10000) // 10秒超时
               
               video.onloadedmetadata = () => {
                 clearTimeout(timeoutId)
-                console.log('视频元数据加载成功:', path)
+                console.log('视频元数据加载成功:', videoUrl)
                 video.currentTime = Math.min(5, video.duration / 4) // 取视频1/4处或5秒处的帧
               }
               
@@ -193,11 +167,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               
               video.onerror = (error) => {
                 clearTimeout(timeoutId)
-                console.error('视频加载失败:', path, error)
+                console.error('视频加载失败:', videoUrl, error)
                 reject(error)
               }
               
-              video.src = path
+              video.src = videoUrl
             })
             
             break // 如果成功加载，跳出循环
@@ -218,11 +192,69 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     }
     
     generateThumbnail()
-  }, [project.id, project.video_path, project.source_file, thumbnailCacheKey])
+  }, [project.id, project.video_path, thumbnailCacheKey])
 
+  // 获取项目日志（仅在处理中时）
+  useEffect(() => {
+    if (project.status !== 'processing') {
+      setLogs([])
+      return
+    }
 
+    const fetchLogs = async () => {
+      try {
+        const response = await projectApi.getProjectLogs(project.id, 20)
+        setLogs(response.logs.filter(log => 
+          log.message.includes('Step') || 
+          log.message.includes('开始') || 
+          log.message.includes('完成') ||
+          log.message.includes('处理') ||
+          log.level === 'ERROR'
+        ))
+      } catch (error) {
+        console.error('获取日志失败:', error)
+      }
+    }
 
+    // 立即获取一次
+    fetchLogs()
+    
+    // 每3秒更新一次日志
+    const logInterval = setInterval(fetchLogs, 3000)
+    
+    return () => clearInterval(logInterval)
+  }, [project.id, project.status])
 
+  // 日志轮播
+  useEffect(() => {
+    if (logs.length <= 1) return
+    
+    const interval = setInterval(() => {
+      setCurrentLogIndex(prev => (prev + 1) % logs.length)
+    }, 2000) // 每2秒切换一条日志
+    
+    return () => clearInterval(interval)
+  }, [logs.length])
+
+  const getStatusColor = (status: Project['status']) => {
+    switch (status) {
+      case 'completed': return 'success'
+      case 'processing': return 'processing'
+      case 'error': return 'error'
+      case 'uploading': return 'default'
+      default: return 'default'
+    }
+  }
+
+  // 状态标准化处理
+  const normalizedStatus = project.status === 'error' ? 'failed' : project.status
+  
+  // 计算进度百分比
+  const progressPercent = project.status === 'completed' ? 100 : 
+                         project.status === 'failed' ? 0 :
+                         project.current_step && project.total_steps ? 
+                         Math.round((project.current_step / project.total_steps) * 100) : 
+                         project.status === 'processing' ? 10 : 0
 
   const handleRetry = async () => {
     if (isRetrying) return
@@ -266,14 +298,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
         e.currentTarget.style.transform = 'translateY(0)'
         e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)'
       }}
-      styles={{
-        body: {
-          padding: '12px',
-          background: 'transparent',
-          height: 'calc(100% - 120px)',
-          display: 'flex',
-          flexDirection: 'column'
-        }
+      bodyStyle={{
+        padding: '12px',
+        background: 'transparent',
+        height: 'calc(100% - 120px)',
+        display: 'flex',
+        flexDirection: 'column'
       }}
       cover={
         <div 
@@ -383,7 +413,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             height: '28px'
           }}>
             <Text style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.8)' }}>
-              {formatCreatedTime(project.created_at)}
+              {dayjs(project.created_at).tz('Asia/Shanghai').fromNow()}
             </Text>
             
             {/* 操作按钮 */}
@@ -396,62 +426,33 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 transition: 'opacity 0.3s ease'
               }}
             >
-              {/* pending/processing状态：显示删除按钮 */}
-              {(project.status === 'pending' || project.status === 'processing') ? (
-                <Popconfirm
-                  title="确定要删除这个项目吗？"
-                  description="删除后无法恢复，所有数据将被删除"
-                  onConfirm={(e) => {
-                    e?.stopPropagation()
-                    onDelete(project.id)
-                  }}
-                  onCancel={(e) => {
-                    e?.stopPropagation()
-                  }}
-                  okText="确定"
-                  cancelText="取消"
-                >
-                  <Button
-                    type="text"
-                    icon={<DeleteOutlined />}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                    }}
-                    style={{
-                      height: '24px',
-                      width: '24px',
-                      padding: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#ff4d4f'
-                    }}
-                  />
-                </Popconfirm>
-              ) : (
+              {/* 失败状态：只显示重试和删除按钮 */}
+              {normalizedStatus === 'failed' ? (
                 <>
-                  {/* failed/completed状态：显示重试和删除按钮 */}
                   <Button
                     type="text"
-                    icon={<ReloadOutlined spin={isRetrying} />}
+                    icon={<ReloadOutlined />}
+                    loading={isRetrying}
                     onClick={(e) => {
                       e.stopPropagation()
                       handleRetry()
                     }}
-                    disabled={isRetrying}
                     style={{
-                      height: '24px',
-                      width: '24px',
+                      height: '20px',
+                      width: '20px',
+                      borderRadius: '3px',
+                      color: '#52c41a',
+                      border: '1px solid rgba(82, 196, 26, 0.5)',
+                      background: 'rgba(82, 196, 26, 0.1)',
                       padding: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#1890ff'
+                      minWidth: '20px',
+                      fontSize: '10px'
                     }}
                   />
+                  
                   <Popconfirm
                     title="确定要删除这个项目吗？"
-                    description="删除后无法恢复，所有数据将被删除"
+                    description="删除后无法恢复"
                     onConfirm={(e) => {
                       e?.stopPropagation()
                       onDelete(project.id)
@@ -469,18 +470,83 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                         e.stopPropagation()
                       }}
                       style={{
-                        height: '24px',
-                        width: '24px',
+                        height: '20px',
+                        width: '20px',
+                        borderRadius: '3px',
+                        color: '#ff6b6b',
+                        border: '1px solid rgba(255, 107, 107, 0.5)',
+                        background: 'rgba(255, 107, 107, 0.1)',
                         padding: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#ff4d4f'
+                        minWidth: '20px',
+                        fontSize: '10px'
                       }}
                     />
                   </Popconfirm>
                 </>
-              )}
+              ) : (
+                /* 其他状态：显示下载和删除按钮 */
+                <>
+                  <Space size={4}>
+                    {/* 下载按钮 - 仅在完成状态显示 */}
+                    {normalizedStatus === 'completed' && (
+                      <Button
+                        type="text"
+                        icon={<DownloadOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          // 实现下载功能
+                          message.info('下载功能开发中...')
+                        }}
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '3px',
+                          color: 'rgba(255, 255, 255, 0.8)',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
+                          background: 'rgba(255, 255, 255, 0.1)',
+                          padding: 0,
+                          minWidth: '20px',
+                          fontSize: '10px'
+                        }}
+                      />
+                    )}
+                    
+                    {/* 删除按钮 */}
+                    <Popconfirm
+                      title="确定要删除这个项目吗？"
+                      description="删除后无法恢复"
+                      onConfirm={(e) => {
+                        e?.stopPropagation()
+                        onDelete(project.id)
+                      }}
+                      onCancel={(e) => {
+                        e?.stopPropagation()
+                      }}
+                      okText="确定"
+                      cancelText="取消"
+                    >
+                      <Button
+                        type="text"
+                        icon={<DeleteOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                        }}
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '3px',
+                          color: 'rgba(255, 255, 255, 0.8)',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
+                          background: 'rgba(255, 255, 255, 0.1)',
+                          padding: 0,
+                          minWidth: '20px',
+                          fontSize: '10px'
+                        }}
+                      />
+                    </Popconfirm>
+                  </Space>
+                 </>
+               )}
             </div>
           </div>
         </div>
@@ -488,7 +554,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     >
       <div style={{ padding: '0', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         <div>
-          {/* 项目名称 */}
+          {/* 项目名称 - 始终在顶部 */}
           <div style={{ marginBottom: '12px', position: 'relative' }}>
             <Tooltip title={project.name} placement="top">
               <Text 
@@ -512,117 +578,123 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             </Tooltip>
           </div>
           
-          {/* 状态和统计信息 */}
-          <div style={{ 
-            display: 'flex', 
-            gap: '6px'
-          }}>
-            {/* 状态显示 */}
-            {project.status === 'processing' ? (
-              /* 处理中状态：显示合并的loading动画和文案 */
+          {/* 处理状态 - 在标题下方 */}
+          {normalizedStatus === 'processing' && (
+            <div style={{ marginBottom: '12px' }}>
               <div style={{
                 background: 'rgba(24, 144, 255, 0.15)',
                 border: '1px solid rgba(24, 144, 255, 0.3)',
-                borderRadius: '3px',
-                padding: '6px 8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                width: '100%',
-                justifyContent: 'center'
+                borderRadius: '4px',
+                padding: '8px 12px',
+                textAlign: 'center'
               }}>
-                <LoadingOutlined style={{ color: '#1890ff', fontSize: '12px' }} />
                 <div style={{ 
                   color: '#1890ff',
-                  fontSize: '11px', 
-                  fontWeight: 500,
-                  lineHeight: '14px',
-                  textAlign: 'center'
-                }}>
-                  正在处理中...
-                </div>
-              </div>
-            ) : (
-              /* 其他状态：显示原有的状态指示器 */
-              <div style={{
-                background: project.status === 'completed' ? 'rgba(82, 196, 26, 0.15)' :
-                           project.status === 'failed' ? 'rgba(255, 77, 79, 0.15)' :
-                           project.status === 'pending' ? 'rgba(217, 217, 217, 0.15)' :
-                           'rgba(217, 217, 217, 0.15)',
-                border: project.status === 'completed' ? '1px solid rgba(82, 196, 26, 0.3)' :
-                        project.status === 'failed' ? '1px solid rgba(255, 77, 79, 0.3)' :
-                        project.status === 'pending' ? '1px solid rgba(217, 217, 217, 0.3)' :
-                        '1px solid rgba(217, 217, 217, 0.3)',
-                borderRadius: '3px',
-                padding: '4px 6px',
-                textAlign: 'center',
-                flex: (project.status === 'pending' || project.status === 'failed') ? 1 : undefined,
-                width: (project.status === 'pending' || project.status === 'failed') ? '100%' : undefined
-              }}>
-                <div style={{ 
-                  color: project.status === 'completed' ? '#52c41a' :
-                         project.status === 'failed' ? '#ff4d4f' :
-                         project.status === 'pending' ? '#d9d9d9' :
-                         '#d9d9d9',
                   fontSize: '12px', 
-                  fontWeight: 600, 
-                  lineHeight: '14px' 
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
                 }}>
-                  {project.status === 'completed' ? '✓' :
-                   project.status === 'failed' ? '✗' :
-                   project.status === 'pending' ? '○' :
-                   '○'
-                  }
+                  <LoadingOutlined style={{ fontSize: '14px' }} />
+                  正在处理中
                 </div>
-                <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
-                  {project.status === 'completed' ? '已完成' :
-                   project.status === 'failed' ? '失败' :
-                   project.status === 'pending' ? '等待中' :
-                   '已终止'
-                  }
-                </div>
+                {project.current_step && project.total_steps && (
+                  <div style={{ 
+                    color: '#1890ff',
+                    fontSize: '10px',
+                    marginTop: '4px',
+                    opacity: 0.8
+                  }}>
+                    步骤 {project.current_step}/{project.total_steps}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+          )}
+          
+          {/* 状态和统计信息 - 处理中时隐藏 */}
+          {normalizedStatus !== 'processing' && (
+            <div style={{ 
+              display: 'flex', 
+              gap: '6px'
+            }}>
+            {/* 状态显示 */}
+            <div style={{
+              background: normalizedStatus === 'completed' ? 'rgba(82, 196, 26, 0.15)' :
+                         normalizedStatus === 'processing' ? 'rgba(24, 144, 255, 0.15)' :
+                         normalizedStatus === 'failed' ? 'rgba(255, 77, 79, 0.15)' :
+                         'rgba(217, 217, 217, 0.15)',
+              border: normalizedStatus === 'completed' ? '1px solid rgba(82, 196, 26, 0.3)' :
+                      normalizedStatus === 'processing' ? '1px solid rgba(24, 144, 255, 0.3)' :
+                      normalizedStatus === 'failed' ? '1px solid rgba(255, 77, 79, 0.3)' :
+                      '1px solid rgba(217, 217, 217, 0.3)',
+              borderRadius: '3px',
+              padding: '4px 6px',
+              textAlign: 'center',
+              flex: 1
+            }}>
+              <div style={{ 
+                color: normalizedStatus === 'completed' ? '#52c41a' :
+                       normalizedStatus === 'processing' ? '#1890ff' :
+                       normalizedStatus === 'failed' ? '#ff4d4f' :
+                       '#d9d9d9',
+                fontSize: '12px', 
+                fontWeight: 600, 
+                lineHeight: '14px'
+              }}>
+                {normalizedStatus === 'processing' ? (
+                  project.current_step && project.total_steps ? `${progressPercent}%` : '⏳'
+                ) : normalizedStatus === 'completed' ? '✓' :
+                  normalizedStatus === 'failed' ? '✗' : '○'
+                }
+              </div>
+              <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
+                {normalizedStatus === 'completed' ? '已完成' :
+                 normalizedStatus === 'processing' ? '正在处理中' :
+                 normalizedStatus === 'failed' ? '失败' :
+                 '等待中'
+                }
+              </div>
+            </div>
             
-            {/* 仅在completed状态时显示切片和合集数量 */}
-            {project.status === 'completed' && (
-              <>
-                {/* 切片数量 */}
-                <div style={{
-                  background: 'rgba(102, 126, 234, 0.15)',
-                  border: '1px solid rgba(102, 126, 234, 0.3)',
-                  borderRadius: '3px',
-                  padding: '4px 6px',
-                  textAlign: 'center',
-                  flex: 1
-                }}>
-                  <div style={{ color: '#667eea', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
-                    {project.total_clips || 0}
-                  </div>
-                  <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
-                    切片
-                  </div>
-                </div>
-                
-                {/* 合集数量 */}
-                <div style={{
-                  background: 'rgba(255, 107, 107, 0.15)',
-                  border: '1px solid rgba(255, 107, 107, 0.3)',
-                  borderRadius: '3px',
-                  padding: '4px 6px',
-                  textAlign: 'center',
-                  flex: 1
-                }}>
-                  <div style={{ color: '#ff6b6b', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
-                    {project.total_collections || 0}
-                  </div>
-                  <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
-                    合集
-                  </div>
-                </div>
-              </>
-            )}
+            {/* 切片数量 */}
+            <div style={{
+              background: 'rgba(102, 126, 234, 0.15)',
+              border: '1px solid rgba(102, 126, 234, 0.3)',
+              borderRadius: '3px',
+              padding: '4px 6px',
+              textAlign: 'center',
+              flex: 1
+            }}>
+              <div style={{ color: '#667eea', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
+                {project.total_clips || 0}
+              </div>
+              <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
+                切片
+              </div>
+            </div>
+            
+            
+            {/* 合集数量 */}
+            <div style={{
+              background: 'rgba(118, 75, 162, 0.15)',
+              border: '1px solid rgba(118, 75, 162, 0.3)',
+              borderRadius: '3px',
+              padding: '4px 6px',
+              textAlign: 'center',
+              flex: 1
+            }}>
+              <div style={{ color: '#764ba2', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
+                {project.total_collections || 0}
+              </div>
+              <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
+                合集
+              </div>
+            </div>
           </div>
+          )}
 
         </div>
       </div>

@@ -9,9 +9,9 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, De
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from core.database import get_db
-from core.websocket_manager import manager, WebSocketMessage
-from services.websocket_notification_service import WebSocketNotificationService
+from ...core.database import get_db
+from ...core.websocket_manager import manager, WebSocketMessage
+from ...services.websocket_notification_service import WebSocketNotificationService
 
 logger = logging.getLogger(__name__)
 

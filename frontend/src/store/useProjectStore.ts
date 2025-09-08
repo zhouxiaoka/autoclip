@@ -23,12 +23,15 @@ export interface Collection {
   created_at?: string
 }
 
+// 项目状态类型定义，与后端保持一致
+type ProjectStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'error'
+
 export interface Project {
   id: string
   name: string
   description?: string
   project_type?: string
-  status: 'pending' | 'processing' | 'completed' | 'failed'
+  status: ProjectStatus
   source_url?: string
   source_file?: string
   settings?: any

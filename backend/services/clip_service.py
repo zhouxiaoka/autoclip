@@ -6,11 +6,11 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
-from services.base import BaseService
-from repositories.clip_repository import ClipRepository
-from models.clip import Clip
-from schemas.clip import ClipCreate, ClipUpdate, ClipResponse, ClipListResponse, ClipFilter
-from schemas.base import PaginationParams, PaginationResponse
+from ..services.base import BaseService
+from ..repositories.clip_repository import ClipRepository
+from ..models.clip import Clip
+from ..schemas.clip import ClipCreate, ClipUpdate, ClipResponse, ClipListResponse, ClipFilter
+from ..schemas.base import PaginationParams, PaginationResponse
 
 
 class ClipService(BaseService[Clip, ClipCreate, ClipUpdate, ClipResponse]):

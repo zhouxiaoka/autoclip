@@ -10,23 +10,23 @@ from typing import Dict, Any, List, Optional, Callable
 from pathlib import Path
 from sqlalchemy.orm import Session
 
-from models.task import Task, TaskStatus, TaskType
-from repositories.task_repository import TaskRepository
-from services.config_manager import ProjectConfigManager, ProcessingStep
-from services.pipeline_adapter import PipelineAdapter
-from core.config import get_project_root
+from backend.models.task import Task, TaskStatus, TaskType
+from backend.repositories.task_repository import TaskRepository
+from backend.services.config_manager import ProjectConfigManager, ProcessingStep
+# from backend.services.pipeline_adapter import PipelineAdapter  # 临时注释，文件不存在
+from backend.core.config import get_project_root
 
 logger = logging.getLogger(__name__)
 
 # 导入流水线步骤
 
 try:
-    from pipeline.step1_outline import run_step1_outline
-    from pipeline.step2_timeline import run_step2_timeline
-    from pipeline.step3_scoring import run_step3_scoring
-    from pipeline.step4_title import run_step4_title
-    from pipeline.step5_clustering import run_step5_clustering
-    from pipeline.step6_video import run_step6_video
+    from backend.pipeline.step1_outline import run_step1_outline
+    from backend.pipeline.step2_timeline import run_step2_timeline
+    from backend.pipeline.step3_scoring import run_step3_scoring
+    from backend.pipeline.step4_title import run_step4_title
+    from backend.pipeline.step5_clustering import run_step5_clustering
+    from backend.pipeline.step6_video import run_step6_video
     logger.info("流水线模块导入成功")
 except ImportError as e:
     logger.warning(f"无法导入流水线模块: {e}")
@@ -182,7 +182,7 @@ class ProcessingOrchestrator:
         
         # 初始化组件
         self.config_manager = ProjectConfigManager(project_id)
-        self.adapter = PipelineAdapter(db, task_id, project_id)
+        # self.adapter = PipelineAdapter(db, task_id, project_id)  # 临时注释，文件不存在
         self.task_repo = TaskRepository(db)
         
         # 步骤映射
@@ -195,14 +195,14 @@ class ProcessingOrchestrator:
             ProcessingStep.STEP6_VIDEO: run_step6_video
         }
         
-        # 步骤适配器映射
+        # 步骤适配器映射 - 暂时禁用
         self.step_adapters = {
-            ProcessingStep.STEP1_OUTLINE: self.adapter.adapt_step1_outline,
-            ProcessingStep.STEP2_TIMELINE: self.adapter.adapt_step2_timeline,
-            ProcessingStep.STEP3_SCORING: self.adapter.adapt_step3_scoring,
-            ProcessingStep.STEP4_TITLE: self.adapter.adapt_step4_title,
-            ProcessingStep.STEP5_CLUSTERING: self.adapter.adapt_step5_clustering,
-            ProcessingStep.STEP6_VIDEO: self.adapter.adapt_step6_video
+            # ProcessingStep.STEP1_OUTLINE: self.adapter.adapt_step1_outline,
+            # ProcessingStep.STEP2_TIMELINE: self.adapter.adapt_step2_timeline,
+            # ProcessingStep.STEP3_SCORING: self.adapter.adapt_step3_scoring,
+            # ProcessingStep.STEP4_TITLE: self.adapter.adapt_step4_title,
+            # ProcessingStep.STEP5_CLUSTERING: self.adapter.adapt_step5_clustering,
+            # ProcessingStep.STEP6_VIDEO: self.adapter.adapt_step6_video
         }
         
         # 步骤状态管理

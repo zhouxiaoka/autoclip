@@ -7,7 +7,7 @@ import logging
 import shutil
 from pathlib import Path
 from typing import Dict, Any, Optional
-from core.config import get_data_directory
+from ..core.config import get_data_directory
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class StorageService:
         """保存切片文件并返回路径"""
         # 获取标题并清理文件名
         title = clip_data.get('title', f'clip_{clip_id}')
-        from utils.video_processor import VideoProcessor
+        from ..utils.video_processor import VideoProcessor
         safe_title = VideoProcessor.sanitize_filename(title)
         
         # 使用统一的命名格式：{clip_id}_{safe_title}.mp4

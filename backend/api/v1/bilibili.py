@@ -10,8 +10,8 @@ from pydantic import BaseModel
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from backend.utils.bilibili_downloader import BilibiliDownloader, get_bilibili_video_info
-from core.config import get_data_directory
+from ...utils.bilibili_downloader import BilibiliDownloader, get_bilibili_video_info
+from ...core.config import get_data_directory
 from pathlib import Path
 import uuid
 import asyncio
@@ -154,7 +154,7 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest):
         download_dir = data_dir / "temp"
         download_dir.mkdir(exist_ok=True)
         
-        from backend.utils.bilibili_downloader import download_bilibili_video
+        from ...utils.bilibili_downloader import download_bilibili_video
         download_result = await download_bilibili_video(
             request.url, 
             download_dir, 
@@ -164,27 +164,52 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest):
         video_path = download_result.get('video_path', '')
         subtitle_path = download_result.get('subtitle_path', '')
         
-        # 如果没有字幕文件，尝试生成字幕
+        # 如果没有字幕文件，优先使用Whisper生成字幕
         if not subtitle_path and video_path:
-            logger.warning("未找到字幕文件，尝试生成字幕")
+            logger.info("优先使用Whisper生成高质量字幕")
             try:
-                from backend.utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
+                from ...utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
                 from pathlib import Path
                 video_file_path = Path(video_path)
-                generated_subtitle = generate_subtitle_for_video(video_file_path)
+                
+                # 根据视频信息选择合适的模型
+                model = "base"  # 默认使用平衡模型
+                language = "auto"  # 默认自动检测语言
+                
+                # 可以根据视频标题或描述判断内容类型
+                if video_info.title and any(keyword in video_info.title.lower() for keyword in ['教程', '教学', '知识', '科普']):
+                    model = "small"  # 知识类内容使用更准确的模型
+                    language = "zh"
+                elif video_info.title and any(keyword in video_info.title.lower() for keyword in ['演讲', '讲座', '分享']):
+                    model = "medium"  # 演讲内容使用高精度模型
+                    language = "zh"
+                
+                logger.info(f"使用Whisper生成字幕 - 语言: {language}, 模型: {model}")
+                
+                generated_subtitle = generate_subtitle_for_video(
+                    video_file_path,
+                    language=language,
+                    model=model
+                )
                 subtitle_path = str(generated_subtitle)
-                logger.info(f"字幕生成成功: {subtitle_path}")
+                logger.info(f"Whisper字幕生成成功: {subtitle_path}")
             except SpeechRecognitionError as e:
-                logger.error(f"语音识别失败: {e}")
-                # 语音识别失败，但不影响下载任务，只是没有字幕
+                logger.error(f"Whisper字幕生成失败: {e}")
+                # Whisper失败时，可以考虑尝试下载平台字幕作为备用
+                logger.info("尝试下载平台字幕作为备用方案")
+                try:
+                    # 这里可以添加下载平台字幕的逻辑
+                    pass
+                except Exception as backup_error:
+                    logger.error(f"备用字幕获取也失败: {backup_error}")
             except Exception as e:
-                logger.error(f"生成字幕失败: {e}")
+                logger.error(f"生成字幕过程中发生未知错误: {e}")
         
         download_tasks[task_id].progress = 80.0
         
         # 创建项目
-        from services.project_service import ProjectService
-        from core.database import SessionLocal
+        from ...services.project_service import ProjectService
+        from ...core.database import SessionLocal
         
         db = SessionLocal()
         try:
@@ -209,14 +234,14 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest):
             }
             
             # 创建项目数据
-            from schemas.project import ProjectCreate
+            from ...schemas.project import ProjectCreate
             
             project_create_data = ProjectCreate(
                 name=project_data["name"],
                 description=project_data["description"],
                 project_type=project_data["project_type"],
                 source_url=project_data["source_url"],
-                source_file=project_data["source_file"],
+                video_path=project_data["source_file"],  # 映射到video_path
                 settings=project_data["settings"]
             )
             
@@ -269,46 +294,36 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest):
             
             # 自动启动处理流程
             try:
-                # 更新项目状态为处理中
-                from schemas.project import ProjectStatus
-                project.status = ProjectStatus.PROCESSING
+                # 更新项目状态为等待处理
+                from ...schemas.project import ProjectStatus
+                project.status = ProjectStatus.PENDING  # 改为PENDING，让自动化服务启动
                 db.commit()
                 
-                # 提交Celery任务
-                logger.info(f"准备提交Celery任务: {project.id}")
-                from tasks.processing import process_video_pipeline
+                logger.info(f"B站项目 {project.id} 下载完成，等待自动化流水线启动")
                 
-                # 准备处理参数
-                input_video_path = str(new_video_path) if video_path else ""
-                input_srt_path = str(new_subtitle_path) if subtitle_path and subtitle_path.strip() else ""
+                # 异步启动自动化流水线
+                import asyncio
+                from ...services.auto_pipeline_service import auto_pipeline_service
                 
-                celery_task = process_video_pipeline.delay(
-                    project_id=str(project.id),
-                    input_video_path=input_video_path,
-                    input_srt_path=input_srt_path
+                # 创建事件循环来运行异步函数
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                # 启动自动化流水线
+                pipeline_result = loop.run_until_complete(
+                    auto_pipeline_service.auto_start_pipeline(str(project.id))
                 )
-                logger.info(f"Celery任务已提交: {celery_task.id}")
                 
-                # 创建处理任务记录
-                from models.task import Task, TaskType, TaskStatus
-                task = Task(
-                    name=f"B站视频处理流水线",
-                    description=f"处理B站项目 {project.id} 的完整视频流水线",
-                    task_type=TaskType.VIDEO_PROCESSING,
-                    project_id=str(project.id),
-                    celery_task_id=celery_task.id,
-                    status=TaskStatus.RUNNING,
-                    progress=0,
-                    current_step="初始化",
-                    total_steps=6
-                )
-                db.add(task)
-                db.commit()
-                
-                logger.info(f"B站项目 {project.id} 处理任务已启动，Celery任务ID: {celery_task.id}")
+                if pipeline_result['status'] == 'started':
+                    logger.info(f"B站项目 {project.id} 自动化流水线已启动: {pipeline_result}")
+                else:
+                    logger.warning(f"B站项目 {project.id} 自动化流水线启动结果: {pipeline_result}")
                 
             except Exception as e:
-                logger.error(f"启动B站项目 {project.id} 处理失败: {str(e)}")
+                logger.error(f"启动B站项目 {project.id} 自动化流水线失败: {str(e)}")
                 # 即使处理启动失败，也要返回下载成功
                 # 用户可以通过重试按钮重新启动处理
             

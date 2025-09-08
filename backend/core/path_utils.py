@@ -25,47 +25,57 @@ def get_project_root() -> Path:
 
 def get_data_directory() -> Path:
     """获取数据目录"""
-    return get_project_root() / "data"
+    data_dir = get_project_root() / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+def get_projects_directory() -> Path:
+    """获取项目目录"""
+    projects_dir = get_data_directory() / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    return projects_dir
 
 def get_output_directory() -> Path:
     """获取输出目录"""
-    return get_project_root() / "output"
+    output_dir = get_project_root() / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
 
 def get_project_directory(project_id: str) -> Path:
     """获取项目目录"""
-    return get_data_directory() / "projects" / project_id
+    project_dir = get_projects_directory() / project_id
+    project_dir.mkdir(parents=True, exist_ok=True)
+    return project_dir
 
 def get_project_raw_directory(project_id: str) -> Path:
     """获取项目原始文件目录"""
-    return get_project_directory(project_id) / "raw"
+    raw_dir = get_project_directory(project_id) / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    return raw_dir
 
 def get_project_output_directory(project_id: str) -> Path:
     """获取项目输出目录"""
-    return get_project_directory(project_id) / "output"
+    output_dir = get_project_directory(project_id) / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
 
 def get_clips_directory() -> Path:
     """获取切片目录"""
-    # 首先检查backend/output/clips目录是否存在且有文件
-    backend_clips_dir = get_project_root() / "backend" / "output" / "clips"
-    if backend_clips_dir.exists() and any(backend_clips_dir.iterdir()):
-        return backend_clips_dir
-    
-    # 如果backend目录不存在或为空，使用data目录
-    return get_data_directory() / "output" / "clips"
+    clips_dir = get_output_directory() / "clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+    return clips_dir
 
 def get_collections_directory() -> Path:
     """获取合集目录"""
-    # 首先检查backend/output/collections目录是否存在且有文件
-    backend_collections_dir = get_project_root() / "backend" / "output" / "collections"
-    if backend_collections_dir.exists() and any(backend_collections_dir.iterdir()):
-        return backend_collections_dir
-    
-    # 如果backend目录不存在或为空，使用data目录
-    return get_data_directory() / "output" / "collections"
+    collections_dir = get_output_directory() / "collections"
+    collections_dir.mkdir(parents=True, exist_ok=True)
+    return collections_dir
 
 def get_metadata_directory() -> Path:
     """获取元数据目录"""
-    return get_output_directory() / "metadata"
+    metadata_dir = get_output_directory() / "metadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    return metadata_dir
 
 def get_settings_file_path() -> Path:
     """获取设置文件路径"""
@@ -73,11 +83,15 @@ def get_settings_file_path() -> Path:
 
 def get_uploads_directory() -> Path:
     """获取上传目录"""
-    return get_data_directory() / "uploads"
+    uploads_dir = get_data_directory() / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    return uploads_dir
 
 def get_temp_directory() -> Path:
     """获取临时目录"""
-    return get_data_directory() / "temp"
+    temp_dir = get_data_directory() / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    return temp_dir
 
 def ensure_directory_exists(path: Path) -> Path:
     """确保目录存在"""
@@ -94,96 +108,65 @@ def get_srt_file_path(project_id: str, filename: str) -> Path:
 
 def get_clip_file_path(clip_id: str, title: str) -> Path:
     """获取切片文件路径"""
-    from utils.video_processor import VideoProcessor
-    safe_title = VideoProcessor.sanitize_filename(title)
+    # 清理文件名，移除特殊字符
+    safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+    safe_title = safe_title.replace(' ', '_')
     return get_clips_directory() / f"{clip_id}_{safe_title}.mp4"
 
-def get_collection_file_path(collection_title: str) -> Path:
+def get_collection_file_path(collection_id: str, title: str) -> Path:
     """获取合集文件路径"""
-    from utils.video_processor import VideoProcessor
-    safe_title = VideoProcessor.sanitize_filename(collection_title)
-    return get_collections_directory() / f"{safe_title}.mp4"
+    # 清理文件名，移除特殊字符
+    safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+    safe_title = safe_title.replace(' ', '_')
+    return get_collections_directory() / f"{collection_id}_{safe_title}.mp4"
 
-def find_video_files(project_id: str) -> list[Path]:
-    """查找项目中的所有视频文件"""
-    raw_dir = get_project_raw_directory(project_id)
-    if not raw_dir.exists():
-        return []
-    
-    video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.webm']
-    video_files = []
-    
-    for ext in video_extensions:
-        video_files.extend(raw_dir.glob(f"*{ext}"))
-    
-    return video_files
+def get_metadata_file_path(project_id: str) -> Path:
+    """获取项目元数据文件路径"""
+    return get_metadata_directory() / f"{project_id}_metadata.json"
 
-def find_srt_files(project_id: str) -> list[Path]:
-    """查找项目中的所有SRT文件"""
-    raw_dir = get_project_raw_directory(project_id)
-    if not raw_dir.exists():
-        return []
-    
-    return list(raw_dir.glob("*.srt"))
+def get_log_file_path() -> Path:
+    """获取日志文件路径"""
+    return get_project_root() / "backend.log"
 
-def find_clip_files(clip_id: str) -> list[Path]:
-    """查找切片文件"""
-    clips_dir = get_clips_directory()
-    if not clips_dir.exists():
-        return []
-    
-    return list(clips_dir.glob(f"{clip_id}_*.mp4"))
+def get_cache_directory() -> Path:
+    """获取缓存目录"""
+    cache_dir = get_data_directory() / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
 
-def get_project_paths(project_id: str) -> dict[str, Path]:
-    """获取项目的所有相关路径"""
-    return {
-        "project_dir": get_project_directory(project_id),
-        "raw_dir": get_project_raw_directory(project_id),
-        "output_dir": get_project_output_directory(project_id),
-        "clips_dir": get_clips_directory(),
-        "collections_dir": get_collections_directory(),
-        "metadata_dir": get_metadata_directory(),
-        "temp_dir": get_temp_directory()
-    }
+def get_backup_directory() -> Path:
+    """获取备份目录"""
+    backup_dir = get_data_directory() / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    return backup_dir
 
-def ensure_project_directories(project_id: str) -> dict[str, Path]:
-    """确保项目所有目录存在"""
-    paths = get_project_paths(project_id)
+def cleanup_temp_files(max_age_hours: int = 24):
+    """清理临时文件"""
+    import time
+    temp_dir = get_temp_directory()
+    current_time = time.time()
     
-    for key, path in paths.items():
-        if key != "clips_dir" and key != "collections_dir" and key != "metadata_dir":
-            # 项目特定目录
-            ensure_directory_exists(path)
-        else:
-            # 全局目录
-            ensure_directory_exists(path)
-    
-    return paths
+    for file_path in temp_dir.iterdir():
+        if file_path.is_file():
+            file_age = current_time - file_path.stat().st_mtime
+            if file_age > (max_age_hours * 3600):
+                try:
+                    file_path.unlink()
+                except Exception as e:
+                    print(f"清理临时文件失败: {file_path}, 错误: {e}")
 
-def get_relative_path(absolute_path: Path, base_path: Optional[Path] = None) -> str:
-    """获取相对路径"""
-    if base_path is None:
-        base_path = get_project_root()
-    
+def validate_file_path(file_path: Path) -> bool:
+    """验证文件路径是否安全"""
     try:
-        return str(absolute_path.relative_to(base_path))
-    except ValueError:
-        return str(absolute_path)
-
-def is_safe_path(path: Path, base_path: Path) -> bool:
-    """检查路径是否安全（在基础路径内）"""
-    try:
-        path.resolve().relative_to(base_path.resolve())
-        return True
-    except ValueError:
+        # 检查路径是否在允许的目录内
+        allowed_dirs = [
+            get_data_directory(),
+            get_output_directory(),
+            get_project_root()
+        ]
+        
+        file_path = file_path.resolve()
+        return any(file_path.is_relative_to(allowed_dir) for allowed_dir in allowed_dirs)
+    except Exception:
         return False
-
-# 向后兼容的函数
-def get_legacy_project_root() -> Path:
-    """向后兼容的项目根目录获取函数"""
-    return Path(__file__).parent.parent.parent
-
-def get_legacy_data_directory() -> Path:
-    """向后兼容的数据目录获取函数"""
-    return get_legacy_project_root() / "data"
 

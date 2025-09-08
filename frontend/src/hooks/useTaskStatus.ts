@@ -131,7 +131,8 @@ export const useTaskStatus = () => {
               status: task.status as TaskStatus['status'],
               progress: task.progress || 0,
               message: task.name,
-              updatedAt: task.updated_at
+              updatedAt: task.updated_at,
+              project_id: task.project_id || projectId
             });
           });
           return newTasks;

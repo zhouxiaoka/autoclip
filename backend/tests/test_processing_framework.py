@@ -15,12 +15,12 @@ import os
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
-from services.config_manager import ProjectConfigManager, ProcessingStep
-from services.pipeline_adapter import PipelineAdapter
-from services.processing_orchestrator import ProcessingOrchestrator
-from services.processing_service import ProcessingService
-from services.processing_context import ProcessingContext
-from services.exceptions import ServiceError, ConfigurationError, FileOperationError, ProcessingError
+from backend.services.config_manager import ProjectConfigManager, ProcessingStep
+from backend.services.pipeline_adapter import PipelineAdapter
+from backend.services.processing_orchestrator import ProcessingOrchestrator
+from backend.services.processing_service import ProcessingService
+from backend.services.processing_context import ProcessingContext
+from backend.services.exceptions import ServiceError, ConfigurationError, FileOperationError, ProcessingError
 
 
 class TestProjectConfigManager:

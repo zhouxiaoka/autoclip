@@ -1,0 +1,15 @@
+{
+  "timestamp": "1756884998.5577822",
+  "status": "HEALTHY",
+  "summary": {
+    "total_issues": 0,
+    "total_warnings": 0,
+    "critical_issues": 0,
+    "data_integrity_issues": 0
+  },
+  "issues": [],
+  "warnings": [],
+  "recommendations": [
+    "系统状态良好，建议定期运行此检查"
+  ]
+}
