@@ -74,7 +74,7 @@ VIDEO_CATEGORIES_CONFIG = {
 }
 
 # 项目根目录
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 # 输入文件路径
 INPUT_DIR = PROJECT_ROOT / "input"
@@ -83,7 +83,7 @@ INPUT_SRT = INPUT_DIR / "input.srt"
 INPUT_TXT = INPUT_DIR / "input.txt"
 
 # 输出目录
-OUTPUT_DIR = PROJECT_ROOT / "output"
+OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
 CLIPS_DIR = OUTPUT_DIR / "clips"
 COLLECTIONS_DIR = OUTPUT_DIR / "collections"
 METADATA_DIR = OUTPUT_DIR / "metadata"
@@ -295,12 +295,13 @@ class ConfigManager:
     
     def get_project_paths(self, project_id: str) -> Dict[str, Path]:
         """获取项目路径配置"""
-        uploads_dir = self.get_path_config().uploads_dir
-        project_base = uploads_dir / project_id
+        data_dir = self.get_path_config().data_dir
+        projects_dir = data_dir / "projects"
+        project_base = projects_dir / project_id
         
         return {
             "project_base": project_base,
-            "input_dir": project_base / "input",
+            "input_dir": project_base / "raw",  # 修改为raw目录
             "output_dir": project_base / "output",
             "clips_dir": project_base / "output" / "clips",
             "collections_dir": project_base / "output" / "collections",

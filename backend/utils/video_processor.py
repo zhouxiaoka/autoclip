@@ -10,7 +10,7 @@ from pathlib import Path
 
 # 修复导入问题
 try:
-    from core.shared_config import CLIPS_DIR, COLLECTIONS_DIR
+    from ..core.shared_config import CLIPS_DIR, COLLECTIONS_DIR
 except ImportError:
     # 如果相对导入失败，尝试绝对导入
     import sys
@@ -18,7 +18,7 @@ except ImportError:
     backend_path = Path(__file__).parent.parent
     if str(backend_path) not in sys.path:
         sys.path.insert(0, str(backend_path))
-    from core.shared_config import CLIPS_DIR, COLLECTIONS_DIR
+    from ..core.shared_config import CLIPS_DIR, COLLECTIONS_DIR
 
 logger = logging.getLogger(__name__)
 

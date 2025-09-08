@@ -6,11 +6,11 @@
 from typing import Generator
 from sqlalchemy.orm import Session
 
-from core.database import get_db
-from services.project_service import ProjectService
-from services.clip_service import ClipService
-from services.collection_service import CollectionService
-from services.task_service import TaskService
+from ..core.database import get_db
+from ..services.project_service import ProjectService
+from ..services.clip_service import ClipService
+from ..services.collection_service import CollectionService
+from ..services.task_service import TaskService
 
 
 def get_project_service(db: Session) -> ProjectService:

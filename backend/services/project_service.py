@@ -6,12 +6,12 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
-from services.base import BaseService
-from repositories.project_repository import ProjectRepository
-from models.project import Project
-from schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse, ProjectFilter
-from schemas.base import PaginationParams, PaginationResponse
-from schemas.project import ProjectType, ProjectStatus
+from ..services.base import BaseService
+from ..repositories.project_repository import ProjectRepository
+from ..models.project import Project
+from ..schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse, ProjectFilter
+from ..schemas.base import PaginationParams, PaginationResponse
+from ..schemas.project import ProjectType, ProjectStatus
 
 
 class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectResponse]):
@@ -65,9 +65,9 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             return None
         
         # Get actual statistics from database
-        from models.clip import Clip
-        from models.collection import Collection
-        from models.task import Task
+        from ..models.clip import Clip
+        from ..models.collection import Collection
+        from ..models.task import Task
         
         total_clips = self.db.query(Clip).filter(Clip.project_id == project_id).count()
         total_collections = self.db.query(Collection).filter(Collection.project_id == project_id).count()
@@ -82,6 +82,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             status=ProjectStatus(getattr(project, 'status').value) if hasattr(project, 'status') and getattr(project, 'status', None) is not None else ProjectStatus.PENDING,
             source_url=project.project_metadata.get("source_url") if getattr(project, 'project_metadata', None) else None,
             source_file=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,
+            video_path=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,  # 添加video_path字段供前端使用
             settings=getattr(project, 'processing_config', {}) or {},
             created_at=self._convert_utc_to_local(getattr(project, 'created_at', None)),
             updated_at=self._convert_utc_to_local(getattr(project, 'updated_at', None)),
@@ -109,9 +110,9 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         project_responses = []
         for project in items:
             # Get actual statistics for each project
-            from models.clip import Clip
-            from models.collection import Collection
-            from models.task import Task
+            from ..models.clip import Clip
+            from ..models.collection import Collection
+            from ..models.task import Task
             
             project_id = str(project.id)
             total_clips = self.db.query(Clip).filter(Clip.project_id == project_id).count()
@@ -126,6 +127,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
                 status=ProjectStatus(getattr(project, 'status').value) if hasattr(project, 'status') and getattr(project, 'status', None) is not None else ProjectStatus.PENDING,
                 source_url=project.project_metadata.get("source_url") if getattr(project, 'project_metadata', None) else None,
                 source_file=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,
+                video_path=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,  # 添加video_path字段供前端使用
                 settings=getattr(project, 'processing_config', {}) or {},
                 created_at=self._convert_utc_to_local(getattr(project, 'created_at', None)),
                 updated_at=self._convert_utc_to_local(getattr(project, 'updated_at', None)),

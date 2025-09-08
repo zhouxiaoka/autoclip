@@ -7,13 +7,34 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func
 from .base import BaseRepository
-from models.task import Task, TaskStatus, TaskType
+from ..models.task import Task, TaskStatus, TaskType
 
 class TaskRepository(BaseRepository[Task]):
     """任务Repository类"""
     
     def __init__(self, db: Session):
         super().__init__(Task, db)
+    
+    def find_all(self, skip: int = 0, limit: int = 100, **filters) -> List[Task]:
+        """
+        获取所有任务，支持过滤和分页
+        
+        Args:
+            skip: 跳过的记录数
+            limit: 返回的记录数限制
+            **filters: 过滤条件
+            
+        Returns:
+            任务列表
+        """
+        query = self.db.query(self.model)
+        
+        # 应用过滤条件
+        for key, value in filters.items():
+            if hasattr(self.model, key) and value is not None:
+                query = query.filter(getattr(self.model, key) == value)
+        
+        return query.offset(skip).limit(limit).all()
     
     def get_by_project(self, project_id: str) -> List[Task]:
         """

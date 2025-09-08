@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from core.websocket_manager import manager, WebSocketMessage
+from ..core.websocket_manager import manager, WebSocketMessage
 
 logger = logging.getLogger(__name__)
 
@@ -105,83 +105,95 @@ class WebSocketNotificationService:
     @staticmethod
     async def send_processing_start(project_id: str, task_id: str):
         """发送处理开始通知"""
-        await WebSocketNotificationService.send_task_update(
-            task_id=task_id,
-            status="started",
-            progress=0,
-            message="视频处理已开始"
-        )
-        
-        await WebSocketNotificationService.send_project_update(
-            project_id=project_id,
-            status="processing",
-            progress=0,
-            message="项目处理已开始"
-        )
+        try:
+            notification = WebSocketMessage.create_task_update(
+                task_id=task_id,
+                status="running",
+                progress=0,
+                message="开始处理项目"
+            )
+            
+            # 广播给所有连接的用户
+            await manager.broadcast(notification)
+            
+            # 同时发送给特定项目主题的订阅者
+            topic = f"project_{project_id}"
+            await manager.broadcast_to_topic(notification, topic)
+            
+            logger.info(f"处理开始通知已发送: {project_id} - {task_id}")
+            
+        except Exception as e:
+            logger.error(f"发送处理开始通知失败: {e}")
     
     @staticmethod
-    async def send_processing_progress(project_id: str, task_id: str, progress: int, step: str, 
-                                     current_step: int = None, total_steps: int = None, 
-                                     step_name: str = None, message: str = None):
+    async def send_processing_progress(project_id: str, task_id: str, progress: int, message: str, 
+                                     current_step: int = 0, total_steps: int = 6, step_name: str = ""):
         """发送处理进度通知"""
-        await WebSocketNotificationService.send_task_update(
-            task_id=task_id,
-            status="processing",
-            progress=progress,
-            message=message or f"正在执行: {step}"
-        )
-        
-        await WebSocketNotificationService.send_project_update(
-            project_id=project_id,
-            status="processing",
-            progress=progress,
-            message=message or f"处理进度: {progress}% - {step}"
-        )
+        try:
+            notification = WebSocketMessage.create_task_update(
+                task_id=task_id,
+                status="running",
+                progress=progress,
+                message=message
+            )
+            
+            # 广播给所有连接的用户
+            await manager.broadcast(notification)
+            
+            # 同时发送给特定项目主题的订阅者
+            topic = f"project_{project_id}"
+            await manager.broadcast_to_topic(notification, topic)
+            
+            logger.info(f"处理进度通知已发送: {project_id} - {task_id} - {progress}%")
+            
+        except Exception as e:
+            logger.error(f"发送处理进度通知失败: {e}")
     
     @staticmethod
-    async def send_processing_complete(project_id: str, task_id: str, result: Dict[str, Any]):
+    async def send_processing_complete(project_id: str, task_id: str, result: dict):
         """发送处理完成通知"""
-        await WebSocketNotificationService.send_task_update(
-            task_id=task_id,
-            status="completed",
-            progress=100,
-            message="视频处理已完成"
-        )
-        
-        await WebSocketNotificationService.send_project_update(
-            project_id=project_id,
-            status="completed",
-            progress=100,
-            message="项目处理已完成"
-        )
-        
-        await WebSocketNotificationService.send_system_notification(
-            "processing_complete",
-            "处理完成",
-            f"项目 {project_id} 的视频处理已完成",
-            "success"
-        )
+        try:
+            notification = WebSocketMessage.create_task_update(
+                task_id=task_id,
+                status="completed",
+                progress=100,
+                message="项目处理完成"
+            )
+            
+            # 广播给所有连接的用户
+            await manager.broadcast(notification)
+            
+            # 同时发送给特定项目主题的订阅者
+            topic = f"project_{project_id}"
+            await manager.broadcast_to_topic(notification, topic)
+            
+            logger.info(f"处理完成通知已发送: {project_id} - {task_id}")
+            
+        except Exception as e:
+            logger.error(f"发送处理完成通知失败: {e}")
     
     @staticmethod
-    async def send_processing_error(project_id: str, task_id: str, error: str):
+    async def send_processing_error(project_id: str, task_id: str, error_message: str):
         """发送处理错误通知"""
-        await WebSocketNotificationService.send_task_update(
-            task_id=task_id,
-            status="failed",
-            error=error
-        )
-        
-        await WebSocketNotificationService.send_project_update(
-            project_id=project_id,
-            status="failed",
-            message=f"处理失败: {error}"
-        )
-        
-        await WebSocketNotificationService.send_error_notification(
-            "processing_error",
-            f"项目 {project_id} 处理失败",
-            {"project_id": project_id, "task_id": task_id, "error": error}
-        )
+        try:
+            notification = WebSocketMessage.create_task_update(
+                task_id=task_id,
+                status="failed",
+                progress=0,
+                error=error_message
+            )
+            
+            # 广播给所有连接的用户
+            await manager.broadcast(notification)
+            
+            # 同时发送给特定项目主题的订阅者
+            topic = f"project_{project_id}"
+            await manager.broadcast_to_topic(notification, topic)
+            
+            logger.info(f"处理错误通知已发送: {project_id} - {task_id} - {error_message}")
+            
+        except Exception as e:
+            logger.error(f"发送处理错误通知失败: {e}")
     
     @staticmethod
     async def send_processing_started(project_id: str, message: str = "开始视频处理流程"):

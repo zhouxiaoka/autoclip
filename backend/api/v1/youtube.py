@@ -10,7 +10,7 @@ from pydantic import BaseModel
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from core.config import get_data_directory
+from ...core.config import get_data_directory
 import uuid
 import asyncio
 from datetime import datetime
@@ -160,7 +160,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         
         # 使用yt-dlp下载视频
         import yt_dlp
-        from core.config import get_data_directory
+        from ...core.config import get_data_directory
         
         data_dir = get_data_directory()
         download_dir = data_dir / "temp"
@@ -201,38 +201,56 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         video_path = str(video_files[0])
         subtitle_path = str(subtitle_files[0]) if subtitle_files else ""
         
-        # 如果没有字幕文件，尝试多种策略获取字幕
+        # 如果没有字幕文件，优先使用Whisper生成字幕
         if not subtitle_path:
-            logger.warning("未找到字幕文件，尝试备用策略...")
-            subtitle_path = await _try_youtube_subtitle_strategies(request.url, download_dir, request.browser)
-        
-        # 如果仍然没有字幕文件，尝试生成字幕
-        if not subtitle_path:
-            logger.warning("所有字幕获取策略都失败，尝试生成字幕")
+            logger.info("优先使用Whisper生成高质量字幕")
             try:
-                from backend.utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
+                from ...utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
                 video_file_path = Path(video_path)
-                generated_subtitle = generate_subtitle_for_video(video_file_path)
+                
+                # 根据视频信息选择合适的模型
+                model = "base"  # 默认使用平衡模型
+                language = "auto"  # 默认自动检测语言
+                
+                # 可以根据视频标题判断内容类型
+                # 这里可以添加更智能的内容类型判断逻辑
+                
+                logger.info(f"使用Whisper生成字幕 - 语言: {language}, 模型: {model}")
+                
+                generated_subtitle = generate_subtitle_for_video(
+                    video_file_path,
+                    language=language,
+                    model=model
+                )
                 subtitle_path = str(generated_subtitle)
-                logger.info(f"字幕生成成功: {subtitle_path}")
+                logger.info(f"Whisper字幕生成成功: {subtitle_path}")
             except SpeechRecognitionError as e:
-                logger.error(f"语音识别失败: {e}")
-                # 语音识别失败，但不影响下载任务，只是没有字幕
+                logger.error(f"Whisper字幕生成失败: {e}")
+                # Whisper失败时，尝试多种策略获取平台字幕作为备用
+                logger.info("尝试下载平台字幕作为备用方案")
+                try:
+                    subtitle_path = await _try_youtube_subtitle_strategies(request.url, download_dir, request.browser)
+                    if subtitle_path:
+                        logger.info(f"备用字幕获取成功: {subtitle_path}")
+                    else:
+                        logger.warning("所有字幕获取策略都失败了")
+                except Exception as backup_error:
+                    logger.error(f"备用字幕获取也失败: {backup_error}")
             except Exception as e:
-                logger.error(f"生成字幕失败: {e}")
+                logger.error(f"生成字幕过程中发生未知错误: {e}")
         
         logger.info(f"下载完成 - 视频文件: {video_path}, 字幕文件: {subtitle_path}")
         
         # 创建项目
-        from services.project_service import ProjectService
-        from core.database import SessionLocal
+        from ...services.project_service import ProjectService
+        from ...core.database import SessionLocal
         
         db = SessionLocal()
         try:
             project_service = ProjectService(db)
             
             # 创建项目
-            from schemas.project import ProjectCreate, ProjectType, ProjectStatus
+            from ...schemas.project import ProjectCreate, ProjectType, ProjectStatus
             
             project_data = ProjectCreate(
                 name=request.project_name,

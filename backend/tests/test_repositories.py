@@ -22,11 +22,11 @@ from repositories.factory import (
     get_collection_repository,
     get_task_repository
 )
-from core.database import get_db, init_database, reset_database
-from models.project import ProjectStatus, ProjectType
-from models.clip import ClipStatus
-from models.collection import CollectionStatus
-from models.task import TaskStatus, TaskType
+from backend.core.database import get_db, init_database, reset_database
+from backend.models.project import ProjectStatus, ProjectType
+from backend.models.clip import ClipStatus
+from backend.models.collection import CollectionStatus
+from backend.models.task import TaskStatus, TaskType
 
 class TestRepositoryPattern:
     """Repository模式测试类"""

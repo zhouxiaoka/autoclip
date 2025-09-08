@@ -1,58 +1,34 @@
-"""
-视频处理任务
-使用Celery处理视频文件
+"""视频处理Celery任务
+包含WebSocket实时通知和Pipeline适配器集成
 """
 
 import os
 import logging
 import asyncio
-from pathlib import Path
 from typing import Dict, Any, Optional
-from celery import shared_task
-from core.celery_simple import celery_app
-import sys
+from celery import current_task
 from pathlib import Path
 
-# 添加项目根目录到Python路径
-project_root = Path(__file__).parent.parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-
-from services.processing_orchestrator import ProcessingOrchestrator
-from services.pipeline_adapter import PipelineAdapter, create_pipeline_adapter_sync
-from core.config import get_data_directory
-from core.database import SessionLocal
-from models.task import Task, TaskStatus, TaskType
-from core.progress_manager import get_progress_manager
-from services.websocket_notification_service import WebSocketNotificationService
+from backend.core.celery_app import celery_app
+from backend.services.websocket_notification_service import notification_service
+from backend.services.processing_service import ProcessingService
+from backend.services.pipeline_adapter import create_pipeline_adapter
+from backend.core.database import SessionLocal
+from backend.models.project import Project, ProjectStatus
+from backend.models.task import Task, TaskStatus, TaskType
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
-
-# 初始化通知服务
-notification_service = WebSocketNotificationService()
 
 def run_async_notification(coro):
     """运行异步通知的辅助函数"""
     try:
         loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            # 如果事件循环已关闭，创建一个新的
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(coro)
-            finally:
-                loop.close()
-        else:
-            return loop.run_until_complete(coro)
     except RuntimeError:
-        # 如果没有事件循环，创建一个新的
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(coro)
-        finally:
-            loop.close()
+    
+    return loop.run_until_complete(coro)
 
 @celery_app.task(bind=True, name='backend.tasks.processing.process_video_pipeline')
 def process_video_pipeline(self, project_id: str, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
@@ -75,14 +51,6 @@ def process_video_pipeline(self, project_id: str, input_video_path: str, input_s
         db = SessionLocal()
         
         try:
-            # 验证项目是否存在
-            from models.project import Project
-            project = db.query(Project).filter(Project.id == project_id).first()
-            if not project:
-                raise ValueError(f"项目 {project_id} 不存在")
-            
-            logger.info(f"验证项目存在: {project_id}")
-            
             # 创建任务记录
             task = Task(
                 name=f"视频处理流水线",
@@ -97,44 +65,48 @@ def process_video_pipeline(self, project_id: str, input_video_path: str, input_s
             )
             db.add(task)
             db.commit()
-            db.refresh(task)  # 确保获取到task.id
             
             # 发送开始通知
             run_async_notification(
                 notification_service.send_processing_start(project_id, task_id)
             )
             
-            # 获取进度管理器
-            progress_manager = get_progress_manager(db)
-            
-            # 创建Pipeline适配器，传入task.id以启用进度管理
-            pipeline_adapter = create_pipeline_adapter_sync(db, task.id, project_id)
-            
-            # 执行Pipeline处理
-            result = pipeline_adapter.process_project_sync(project_id, input_video_path, input_srt_path)
-            
-            # 根据处理结果更新任务状态
-            if result.get('status') == 'failed':
-                # 处理失败
-                task.status = TaskStatus.FAILED
-                task.progress = 100
-                task.current_step = "处理失败"
-                task.result_data = result
-                task.error_message = result.get('message', '处理失败')
+            # 创建进度回调函数
+            async def progress_callback(proj_id: int, progress: int, message: str):
+                # 更新任务进度
+                task.progress = progress
+                task.current_step = message
                 db.commit()
                 
-                # 发送失败通知
+                # 发送WebSocket通知
+                await notification_service.send_processing_progress(str(proj_id), task_id, progress, message)
+            
+            # 创建Pipeline适配器
+            pipeline_adapter = create_pipeline_adapter(db, str(task.id), str(project_id), progress_callback)
+            
+            # 执行Pipeline处理
+            result = pipeline_adapter.process_project_sync(input_video_path, input_srt_path)
+            
+            # 检查处理结果
+            if result.get("status") == "failed":
+                # 处理失败
+                error_msg = result.get("message", "处理失败")
+                task.status = TaskStatus.FAILED
+                task.error_message = error_msg
+                task.result_data = result
+                db.commit()
+                
+                # 发送错误通知
                 run_async_notification(
-                    notification_service.send_processing_error(project_id, task_id, result.get('message', '处理失败'))
+                    notification_service.send_processing_error(project_id, task_id, error_msg)
                 )
                 
-                logger.error(f"视频流水线处理失败: {project_id}, 错误: {result.get('message')}")
                 return {
                     "success": False,
                     "project_id": project_id,
                     "task_id": task_id,
-                    "result": result,
-                    "message": "视频处理流水线失败"
+                    "error": error_msg,
+                    "result": result
                 }
             else:
                 # 处理成功
@@ -142,6 +114,15 @@ def process_video_pipeline(self, project_id: str, input_video_path: str, input_s
                 task.progress = 100
                 task.current_step = "处理完成"
                 task.result_data = result
+                
+                # 更新项目状态为已完成
+                project = db.query(Project).filter(Project.id == project_id).first()
+                if project:
+                    project.status = ProjectStatus.COMPLETED
+                    project.completed_at = datetime.utcnow()
+                    project.updated_at = datetime.utcnow()
+                    logger.info(f"项目状态已更新为已完成: {project_id}")
+                
                 db.commit()
                 
                 # 发送完成通知
@@ -172,6 +153,14 @@ def process_video_pipeline(self, project_id: str, input_video_path: str, input_s
             if task:
                 task.status = TaskStatus.FAILED
                 task.error_message = error_msg
+                
+                # 更新项目状态为失败
+                project = db.query(Project).filter(Project.id == project_id).first()
+                if project:
+                    project.status = ProjectStatus.FAILED
+                    project.updated_at = datetime.utcnow()
+                    logger.info(f"项目状态已更新为失败: {project_id}")
+                
                 db.commit()
             db.close()
         except Exception as db_error:

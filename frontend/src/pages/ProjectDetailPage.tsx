@@ -24,6 +24,7 @@ import CollectionCardMini from '../components/CollectionCardMini'
 import CollectionPreviewModal from '../components/CollectionPreviewModal'
 import CreateCollectionModal from '../components/CreateCollectionModal'
 import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
+import { ProjectTaskManager } from '../components/ProjectTaskManager'
 
 const { Content } = Layout
 const { Title, Text } = Typography
@@ -422,24 +423,26 @@ const ProjectDetailPage: React.FC = () => {
                   </Radio.Group>
                 </div>
                 
-                {(!currentProject.collections || currentProject.collections.length === 0) && (
-                  <Button 
-                    type="primary" 
-                    icon={<PlusOutlined />}
-                    onClick={() => setShowCreateCollection(true)}
-                    style={{
-                      borderRadius: '8px',
-                      background: 'linear-gradient(45deg, #1890ff, #36cfc9)',
-                      border: 'none',
-                      fontWeight: 500,
-                      height: '40px',
-                      padding: '0 20px',
-                      fontSize: '14px'
-                    }}
-                  >
-                    创建合集
-                  </Button>
-                )}
+                <Space>
+                  {(!currentProject.collections || currentProject.collections.length === 0) && (
+                    <Button 
+                      type="primary" 
+                      icon={<PlusOutlined />}
+                      onClick={() => setShowCreateCollection(true)}
+                      style={{
+                        borderRadius: '8px',
+                        background: 'linear-gradient(45deg, #1890ff, #36cfc9)',
+                        border: 'none',
+                        fontWeight: 500,
+                        height: '40px',
+                        padding: '0 20px',
+                        fontSize: '14px'
+                      }}
+                    >
+                      创建合集
+                    </Button>
+                  )}
+                </Space>
               </div>
             </div>
             
@@ -456,6 +459,7 @@ const ProjectDetailPage: React.FC = () => {
                   <ClipCard
                     key={clip.id}
                     clip={clip}
+                    projectId={currentProject.id}
                     videoUrl={projectApi.getClipVideoUrl(currentProject.id, clip.id, clip.generated_title || clip.title)}
                     onDownload={(clipId) => projectApi.downloadVideo(currentProject.id, clipId)}
                   />
@@ -480,18 +484,27 @@ const ProjectDetailPage: React.FC = () => {
           </Card>
         </div>
       ) : (
-        <Card>
-          <Empty 
-            image={<PlayCircleOutlined style={{ fontSize: '64px', color: '#d9d9d9' }} />}
-            description={
-              <div>
-                <Text>项目还未完成处理</Text>
-                <br />
-                <Text type="secondary">处理完成后可查看视频片段和AI合集</Text>
-              </div>
-            }
+        <div>
+          {/* 任务管理组件 */}
+          <ProjectTaskManager 
+            projectId={currentProject.id} 
+            projectName={currentProject.name}
           />
-        </Card>
+          
+          {/* 项目状态提示 */}
+          <Card style={{ marginTop: '16px' }}>
+            <Empty 
+              image={<PlayCircleOutlined style={{ fontSize: '64px', color: '#d9d9d9' }} />}
+              description={
+                <div>
+                  <Text>项目还未完成处理</Text>
+                  <br />
+                  <Text type="secondary">处理完成后可查看视频片段和AI合集</Text>
+                </div>
+              }
+            />
+          </Card>
+        </div>
       )}
 
       {/* 创建合集模态框 */}
@@ -520,6 +533,7 @@ const ProjectDetailPage: React.FC = () => {
         onDelete={handleDeleteCollection}
         onAddClip={handleAddClipToCollection}
       />
+
     </Content>
   )
 }

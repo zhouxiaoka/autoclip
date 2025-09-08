@@ -11,6 +11,8 @@ import { TaskProgress } from './TaskProgress';
 import { NotificationList } from './NotificationList';
 import { useWebSocket, WebSocketEventMessage } from '../hooks/useWebSocket';
 import { useNotifications } from '../hooks/useNotifications';
+import { useProjectStore } from '../store/useProjectStore';
+import { projectApi } from '../api/projectApi';
 
 const { Text } = Typography;
 
@@ -20,6 +22,7 @@ interface RealTimeStatusProps {
 
 export const RealTimeStatus: React.FC<RealTimeStatusProps> = ({ userId }) => {
   console.log('🎬 RealTimeStatus组件已加载');
+  const { setProjects } = useProjectStore();
   
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -70,18 +73,40 @@ export const RealTimeStatus: React.FC<RealTimeStatusProps> = ({ userId }) => {
     handleErrorNotification
   } = useNotifications();
 
-  const handleWebSocketMessage = (message: WebSocketEventMessage) => {
+  const handleWebSocketMessage = async (message: WebSocketEventMessage) => {
     console.log('收到WebSocket消息:', message);
     
     switch (message.type) {
       case 'task_update':
-        // 暂时不处理任务更新，避免复杂的状态管理
         console.log('📈 收到任务更新:', message);
+        // 处理任务更新，更新项目状态
+        if (message.task_id && message.status) {
+          console.log('任务状态更新:', message.task_id, message.status);
+          // 刷新项目列表以获取最新状态
+          try {
+            const projects = await projectApi.getProjects();
+            setProjects(projects);
+            console.log('项目列表已刷新');
+          } catch (error) {
+            console.error('刷新项目列表失败:', error);
+          }
+        }
         break;
         
       case 'project_update':
-        // 暂时不处理项目更新，避免复杂的状态管理
         console.log('📊 收到项目更新:', message);
+        // 处理项目更新
+        if (message.project_id && message.status) {
+          console.log('项目状态更新:', message.project_id, message.status);
+          // 刷新项目列表以获取最新状态
+          try {
+            const projects = await projectApi.getProjects();
+            setProjects(projects);
+            console.log('项目列表已刷新');
+          } catch (error) {
+            console.error('刷新项目列表失败:', error);
+          }
+        }
         break;
         
       case 'system_notification':

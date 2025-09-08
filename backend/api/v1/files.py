@@ -12,11 +12,11 @@ from pathlib import Path
 import shutil
 import uuid
 
-from core.database import get_db
-from services.storage_service import StorageService
-from models.project import Project
-from models.clip import Clip
-from models.collection import Collection
+from ...core.database import get_db
+from ...services.storage_service import StorageService
+from ...models.project import Project
+from ...models.clip import Clip
+from ...models.collection import Collection
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,7 @@ async def get_clip_content(
             raise HTTPException(status_code=404, detail="切片不存在")
         
         # 从文件系统获取完整内容
-        from repositories.clip_repository import ClipRepository
+        from ...repositories.clip_repository import ClipRepository
         clip_repo = ClipRepository(db)
         content = clip_repo.get_clip_content(clip_id)
         
@@ -160,7 +160,7 @@ async def get_collection_content(
             raise HTTPException(status_code=404, detail="合集不存在")
         
         # 从文件系统获取完整内容
-        from repositories.collection_repository import CollectionRepository
+        from ...repositories.collection_repository import CollectionRepository
         collection_repo = CollectionRepository(db)
         content = collection_repo.get_collection_content(collection_id)
         
@@ -220,6 +220,57 @@ async def download_clip_file(
         logger.error(f"下载切片文件失败: {e}")
         raise HTTPException(status_code=500, detail=f"下载切片文件失败: {str(e)}")
 
+@router.get("/projects/{project_id}/clips/{clip_id}")
+async def get_project_clip_video(
+    project_id: str,
+    clip_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    获取项目切片视频（支持前端播放）
+    
+    - 支持按项目ID和切片ID获取视频
+    - 返回视频文件流，支持在线播放
+    """
+    try:
+        # 验证项目是否存在
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        
+        # 获取切片记录
+        clip = db.query(Clip).filter(Clip.id == clip_id).first()
+        if not clip:
+            raise HTTPException(status_code=404, detail="切片不存在")
+        
+        # 验证切片是否属于该项目
+        if clip.project_id != project_id:
+            raise HTTPException(status_code=403, detail="切片不属于该项目")
+        
+        if not clip.video_path:
+            raise HTTPException(status_code=404, detail="切片文件不存在")
+        
+        file_path = Path(clip.video_path)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="切片文件不存在")
+        
+        # 返回视频文件，支持在线播放
+        return FileResponse(
+            path=str(file_path),
+            filename=f"clip_{clip_id}.mp4",
+            media_type="video/mp4",
+            headers={
+                "Accept-Ranges": "bytes",  # 支持范围请求，便于视频播放
+                "Cache-Control": "public, max-age=3600"  # 缓存1小时
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取项目切片视频失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取项目切片视频失败: {str(e)}")
+
 @router.get("/collections/{collection_id}/download")
 async def download_collection_file(
     collection_id: str,
@@ -255,6 +306,56 @@ async def download_collection_file(
     except Exception as e:
         logger.error(f"下载合集文件失败: {e}")
         raise HTTPException(status_code=500, detail=f"下载合集文件失败: {str(e)}")
+
+@router.get("/projects/{project_id}/collections/{collection_id}")
+async def get_project_collection_video(
+    project_id: str,
+    collection_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    获取项目合集视频（支持前端播放）
+    
+    - 支持按项目ID和合集ID获取视频
+    - 返回视频文件流，支持在线播放
+    """
+    try:
+        # 验证项目是否存在
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        
+        # 获取合集记录
+        collection = db.query(Collection).filter(Collection.id == collection_id).first()
+        if not collection:
+            raise HTTPException(status_code=404, detail="合集不存在")
+        
+        # 验证合集是否属于该项目（如果有project_id字段的话）
+        # 注意：这里假设Collection模型有project_id字段，如果没有需要调整
+        
+        if not collection.export_path:
+            raise HTTPException(status_code=404, detail="合集文件不存在")
+        
+        file_path = Path(collection.export_path)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="合集文件不存在")
+        
+        # 返回视频文件，支持在线播放
+        return FileResponse(
+            path=str(file_path),
+            filename=f"collection_{collection_id}.mp4",
+            media_type="video/mp4",
+            headers={
+                "Accept-Ranges": "bytes",  # 支持范围请求，便于视频播放
+                "Cache-Control": "public, max-age=3600"  # 缓存1小时
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取项目合集视频失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取项目合集视频失败: {str(e)}")
 
 @router.get("/projects/{project_id}/storage-info")
 async def get_project_storage_info(

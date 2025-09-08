@@ -5,11 +5,11 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from core.database import get_db
-from services.clip_service import ClipService
-from schemas.clip import ClipCreate, ClipUpdate, ClipResponse, ClipListResponse, ClipStatus, ClipFilter
-from schemas.base import PaginationParams
-from models.clip import Clip
+from ...core.database import get_db
+from ...services.clip_service import ClipService
+from ...schemas.clip import ClipCreate, ClipUpdate, ClipResponse, ClipListResponse, ClipStatus, ClipFilter
+from ...schemas.base import PaginationParams
+from ...models.clip import Clip
 import logging
 
 logger = logging.getLogger(__name__)
@@ -137,10 +137,10 @@ async def cleanup_duplicate_clips(
 ):
     """清理项目中的重复切片数据"""
     try:
-        from models.project import Project
+        from ...models.project import Project
         import json
         from pathlib import Path
-        from core.config import get_data_directory
+        from ...core.config import get_data_directory
         
         # 获取项目
         project = db.query(Project).filter(Project.id == project_id).first()
@@ -212,10 +212,10 @@ async def resync_project_clips(
 ):
     """重新同步项目的切片数据"""
     try:
-        from models.project import Project
-        from services.data_sync_service import DataSyncService
+        from ...models.project import Project
+        from ...services.data_sync_service import DataSyncService
         from pathlib import Path
-        from core.config import get_data_directory
+        from ...core.config import get_data_directory
         
         # 获取项目
         project = db.query(Project).filter(Project.id == project_id).first()

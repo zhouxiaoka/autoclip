@@ -9,7 +9,7 @@ from pathlib import Path
 
 # 修复导入问题
 try:
-    from core.shared_config import CHUNK_SIZE
+    from ..core.shared_config import CHUNK_SIZE
 except ImportError:
     # 如果相对导入失败，尝试绝对导入
     import sys

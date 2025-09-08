@@ -7,6 +7,7 @@ from .project import Project
 from .clip import Clip
 from .collection import Collection
 from .task import Task, TaskStatus, TaskType
+from .bilibili import BilibiliAccount, UploadRecord
 
 __all__ = [
     "Base",
@@ -16,5 +17,7 @@ __all__ = [
     "Collection",
     "Task",
     "TaskStatus",
-    "TaskType"
+    "TaskType",
+    "BilibiliAccount",
+    "UploadRecord"
 ]

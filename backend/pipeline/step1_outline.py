@@ -7,21 +7,10 @@ import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
-# 修复导入问题
-try:
-    from utils.llm_client import LLMClient
-    from utils.text_processor import TextProcessor
-    from .config import PROMPT_FILES, METADATA_DIR
-except ImportError:
-    # 如果相对导入失败，尝试绝对导入
-    import sys
-    from pathlib import Path
-    backend_path = Path(__file__).parent.parent
-    if str(backend_path) not in sys.path:
-        sys.path.insert(0, str(backend_path))
-    from utils.llm_client import LLMClient
-    from utils.text_processor import TextProcessor
-    from .config import PROMPT_FILES, METADATA_DIR
+# 导入依赖
+from ..utils.llm_client import LLMClient
+from ..utils.text_processor import TextProcessor
+from ..core.shared_config import PROMPT_FILES, METADATA_DIR
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
 from pathlib import Path
 from .base import BaseRepository
-from models.project import Project, ProjectStatus, ProjectType
+from ..models.project import Project, ProjectStatus, ProjectType
 
 class ProjectRepository(BaseRepository[Project]):
     """项目Repository类"""
@@ -56,7 +56,7 @@ class ProjectRepository(BaseRepository[Project]):
     
     def create_project(self, project_data: Dict[str, Any]) -> Project:
         """创建项目记录（分离存储模式）"""
-        from services.storage_service import StorageService
+        from ..services.storage_service import StorageService
         import uuid
         
         # 生成项目ID（如果没有提供）
@@ -114,7 +114,7 @@ class ProjectRepository(BaseRepository[Project]):
     
     def get_project_storage_info(self, project_id: str) -> Dict[str, Any]:
         """获取项目存储信息"""
-        from services.storage_service import StorageService
+        from ..services.storage_service import StorageService
         
         project = self.get_by_id(project_id)
         if not project:

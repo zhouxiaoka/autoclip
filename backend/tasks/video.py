@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from celery import shared_task
-from core.celery_app import celery_app
+from ..core.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 

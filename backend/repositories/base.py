@@ -6,7 +6,7 @@
 from typing import TypeVar, Generic, Optional, List, Dict, Any, Type
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
-from models.base import BaseModel
+from ..models.base import BaseModel
 
 # 定义泛型类型
 ModelType = TypeVar("ModelType", bound=BaseModel)

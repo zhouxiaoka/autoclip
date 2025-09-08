@@ -5,11 +5,11 @@ Repository工厂
 
 from typing import Dict, Type
 from sqlalchemy.orm import Session
-from repositories.base import BaseRepository
-from repositories.project_repository import ProjectRepository
-from repositories.clip_repository import ClipRepository
-from repositories.collection_repository import CollectionRepository
-from repositories.task_repository import TaskRepository
+from ..repositories.base import BaseRepository
+from ..repositories.project_repository import ProjectRepository
+from ..repositories.clip_repository import ClipRepository
+from ..repositories.collection_repository import CollectionRepository
+from ..repositories.task_repository import TaskRepository
 
 class RepositoryFactory:
     """Repository工厂类"""

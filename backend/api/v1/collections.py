@@ -5,10 +5,10 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from core.database import get_db
-from services.collection_service import CollectionService
-from schemas.collection import CollectionCreate, CollectionUpdate, CollectionResponse, CollectionListResponse
-from schemas.base import PaginationParams
+from ...core.database import get_db
+from ...services.collection_service import CollectionService
+from ...schemas.collection import CollectionCreate, CollectionUpdate, CollectionResponse, CollectionListResponse
+from ...schemas.base import PaginationParams
 
 router = APIRouter()
 
@@ -56,8 +56,8 @@ async def get_collections(
 ):
     """Get paginated collections."""
     try:
-        from schemas.base import PaginationParams
-        from schemas.collection import CollectionFilter
+        from ...schemas.base import PaginationParams
+        from ...schemas.collection import CollectionFilter
         
         pagination = PaginationParams(page=page, size=size)
         
@@ -95,7 +95,7 @@ async def get_collection(
         # 如果需要完整内容，从文件系统获取
         full_content = None
         if include_content:
-            from repositories.collection_repository import CollectionRepository
+            from ...repositories.collection_repository import CollectionRepository
             collection_repo = CollectionRepository(collection_service.db)
             full_content = collection_repo.get_collection_content(collection_id)
         
@@ -204,7 +204,7 @@ async def reorder_collection_clips(
         
         # 直接更新数据库中的collection_metadata字段
         from sqlalchemy import update
-        from models.collection import Collection
+        from ...models.collection import Collection
         
         stmt = update(Collection).where(Collection.id == collection_id).values(
             collection_metadata=metadata

@@ -7,6 +7,7 @@ from .processing import *
 from .video import *
 from .notification import *
 from .maintenance import *
+from .upload import *  # 添加upload任务导入
 
 __all__ = [
     # 处理任务
@@ -27,5 +28,9 @@ __all__ = [
     # 维护任务
     'cleanup_expired_tasks',
     'health_check',
-    'backup_project_data'
+    'backup_project_data',
+    
+    # 投稿任务
+    'upload_clip_task',
+    'batch_upload_task'
 ] 

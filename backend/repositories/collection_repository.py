@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func
 from pathlib import Path
 from .base import BaseRepository
-from models.collection import Collection, CollectionStatus
+from ..models.collection import Collection, CollectionStatus
 
 class CollectionRepository(BaseRepository[Collection]):
     """合集Repository类"""
@@ -114,7 +114,7 @@ class CollectionRepository(BaseRepository[Collection]):
     
     def create_collection(self, collection_data: Dict[str, Any]) -> Collection:
         """创建合集记录（分离存储模式）"""
-        from services.storage_service import StorageService
+        from ..services.storage_service import StorageService
         import uuid
         
         # 生成合集ID（如果没有提供）
@@ -167,7 +167,7 @@ class CollectionRepository(BaseRepository[Collection]):
         
         # 从文件系统获取完整数据
         if collection.collection_metadata and 'metadata_file' in collection.collection_metadata:
-            from services.storage_service import StorageService
+            from ..services.storage_service import StorageService
             storage_service = StorageService(collection.project_id)
             return storage_service.get_file_content(collection.collection_metadata['metadata_file'])
         
