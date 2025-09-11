@@ -1,15 +1,7 @@
 import axios from 'axios'
 import { Project, Clip, Collection } from '../store/useProjectStore'
 
-// 格式化时间函数
-const formatTime = (seconds: number): string => {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = Math.floor(seconds % 60)
-  const milliseconds = Math.floor((seconds % 1) * 1000)
-  
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${milliseconds.toString().padStart(3, '0')}`
-}
+// 格式化时间函数（暂时未使用，保留备用）
 
 const api = axios.create({
   baseURL: 'http://localhost:8000/api/v1', // FastAPI后端服务器地址
@@ -298,7 +290,7 @@ export const projectApi = {
   },
 
   // 更新合集信息
-  updateCollection: (projectId: string, collectionId: string, updates: Partial<Collection>): Promise<Collection> => {
+  updateCollection: (_projectId: string, collectionId: string, updates: Partial<Collection>): Promise<Collection> => {
     return api.put(`/collections/${collectionId}`, updates)
   },
 
@@ -308,13 +300,13 @@ export const projectApi = {
   },
 
   // 删除合集
-  deleteCollection: (projectId: string, collectionId: string): Promise<{message: string, deleted_collection: string}> => {
+  deleteCollection: (_projectId: string, collectionId: string): Promise<{message: string, deleted_collection: string}> => {
     return api.delete(`/collections/${collectionId}`)
   },
 
   // 下载切片视频
-  downloadClip: (projectId: string, clipId: string): Promise<Blob> => {
-    return api.get(`/files/projects/${projectId}/clips/${clipId}`, {
+  downloadClip: (_projectId: string, clipId: string): Promise<Blob> => {
+    return api.get(`/files/projects/${_projectId}/clips/${clipId}`, {
       responseType: 'blob'
     })
   },
@@ -406,15 +398,20 @@ export const projectApi = {
   },
 
   // 获取切片视频URL
-  getClipVideoUrl: (projectId: string, clipId: string, clipTitle?: string): string => {
-    // 使用files路由获取切片视频
-    return `http://localhost:8000/api/v1/files/projects/${projectId}/clips/${clipId}`
+  getClipVideoUrl: (projectId: string, clipId: string, _clipTitle?: string): string => {
+    // 使用projects路由获取切片视频
+    return `http://localhost:8000/api/v1/projects/${projectId}/clips/${clipId}`
   },
 
   // 获取合集视频URL
   getCollectionVideoUrl: (projectId: string, collectionId: string): string => {
     // 使用files路由获取合集视频
     return `http://localhost:8000/api/v1/files/projects/${projectId}/collections/${collectionId}`
+  },
+
+  // 生成项目缩略图
+  generateThumbnail: async (projectId: string): Promise<{success: boolean, thumbnail: string, message: string}> => {
+    return api.post(`/projects/${projectId}/generate-thumbnail`)
   }
 }
 
