@@ -108,214 +108,212 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
           >
             <PlayCircleOutlined style={{ fontSize: '40px', color: 'white' }} />
           </div>
+          {/* 右上角合集类型标签 */}
           <div 
             style={{
               position: 'absolute',
-              top: '8px',
-              right: '8px',
-              background: 'rgba(0,0,0,0.8)',
+              top: '12px',
+              right: '12px',
+              background: collection.collection_type === 'ai_recommended' 
+                ? 'linear-gradient(45deg, #1890ff, #36cfc9)' 
+                : 'linear-gradient(45deg, #722ed1, #eb2f96)',
               color: 'white',
               padding: '4px 8px',
-              borderRadius: '6px',
-              fontSize: '11px',
-              fontWeight: '500'
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            {collection.collection_type === 'ai_recommended' ? 'AI推荐' : '手动创建'}
+          </div>
+          
+          {/* 左下角片段数量 */}
+          <div 
+            style={{
+              position: 'absolute',
+              bottom: '12px',
+              left: '12px',
+              background: 'rgba(0,0,0,0.7)',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
             }}
           >
             {collectionClips.length} 个片段
+          </div>
+          
+          {/* 右下角总时长 */}
+          <div 
+            style={{
+              position: 'absolute',
+              bottom: '12px',
+              right: '12px',
+              background: 'rgba(0,0,0,0.7)',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            {formatDuration(totalDuration)}
           </div>
         </div>
         
         {/* 内容区域 - 固定高度 */}
         <div style={{ 
-          flex: 1,
-          display: 'flex',
+          padding: '16px', 
+          height: '180px', 
+          display: 'flex', 
           flexDirection: 'column',
-          minHeight: 0,
-          padding: '16px'
+          justifyContent: 'space-between'
         }}>
-          {/* 标题和标签区域 - 固定高度 */}
+          {/* 内容区域 - 固定高度 */}
           <div style={{ 
-            height: '56px',
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'flex-start',
-            marginBottom: '12px'
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0 // 允许flex子项收缩
           }}>
+            {/* 标题区域 - 固定高度 */}
             <div style={{ 
-              flex: 1,
-              paddingRight: '8px',
-              height: '100%',
+              height: '44px',
+              marginBottom: '8px',
               display: 'flex',
               alignItems: 'flex-start'
             }}>
-              <Tooltip 
-                title={collection.collection_title} 
-                placement="top" 
-                overlayStyle={{ maxWidth: '200px' }}
-                mouseEnterDelay={0.5}
-              >
-                <EditableCollectionTitle
-                  title={collection.collection_title}
-                  collectionId={collection.id}
-                  onTitleUpdate={(newTitle) => {
-                    // 更新合集标题
-                    if (onUpdate) {
-                      onUpdate(collection.id, { collection_title: newTitle })
-                    }
-                  }}
-                  style={{ 
-                    fontSize: '15px',
-                    fontWeight: 600,
-                    lineHeight: '1.4',
-                    color: '#ffffff',
-                    width: '100%',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}
-                />
-              </Tooltip>
-            </div>
-            <span
-              style={{ 
-                fontSize: '10px', 
-                margin: 0,
-                borderRadius: '6px',
-                border: 'none',
-                background: collection.collection_type === 'ai_recommended' 
-                  ? 'linear-gradient(45deg, #1890ff, #36cfc9)' 
-                  : 'linear-gradient(45deg, #722ed1, #eb2f96)',
-                color: 'white',
-                padding: '2px 6px',
-                fontWeight: 500,
-                whiteSpace: 'nowrap',
-                flexShrink: 0
-              }}
-            >
-              {collection.collection_type === 'ai_recommended' ? 'AI推荐' : '手动创建'}
-            </span>
-          </div>
-          
-          {/* 描述区域 - 固定高度 */}
-          <div style={{ 
-            height: '48px',
-            display: 'flex',
-            alignItems: 'flex-start',
-            marginBottom: '12px'
-          }}>
-            <Tooltip 
-              title={collection.collection_summary || '暂无描述'} 
-              placement="top" 
-              overlayStyle={{ maxWidth: '250px' }}
-              mouseEnterDelay={0.5}
-            >
-              <Text 
-                type="secondary" 
+              <EditableCollectionTitle
+                title={collection.collection_title}
+                collectionId={collection.id}
+                onTitleUpdate={(newTitle) => {
+                  // 更新合集标题
+                  if (onUpdate) {
+                    onUpdate(collection.id, { collection_title: newTitle })
+                  }
+                }}
                 style={{ 
-                  fontSize: '12px',
-                  color: '#b0b0b0',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  lineHeight: '1.4',
+                  color: '#ffffff',
+                  width: '100%',
                   display: '-webkit-box',
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: 'vertical',
                   overflow: 'hidden',
-                  lineHeight: '1.4',
-                  width: '100%',
-                  cursor: 'pointer'
+                  textOverflow: 'ellipsis'
                 }}
+              />
+            </div>
+            
+            {/* 合集描述 - 固定高度 */}
+            <div style={{ 
+              height: '58px',
+              marginBottom: '12px',
+              display: 'flex',
+              alignItems: 'flex-start'
+            }}>
+              <Tooltip 
+                title={collection.collection_summary || '暂无描述'} 
+                placement="top" 
+                overlayStyle={{ maxWidth: '300px' }}
+                mouseEnterDelay={0.5}
               >
-                {collection.collection_summary || '暂无描述'}
-              </Text>
-            </Tooltip>
+                <div 
+                  style={{ 
+                    fontSize: '13px',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    lineHeight: '1.5',
+                    color: '#b0b0b0',
+                    cursor: 'pointer',
+                    wordBreak: 'break-word',
+                    textOverflow: 'ellipsis',
+                    width: '100%'
+                  }}
+                >
+                  {collection.collection_summary || '暂无描述'}
+                </div>
+              </Tooltip>
+            </div>
           </div>
         </div>
         
-        {/* 底部区域 */}
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ 
-              fontSize: '11px', 
-              color: '#888',
-              background: 'rgba(255,255,255,0.1)',
-              padding: '2px 6px',
-              borderRadius: '4px'
-            }}>
-              {collectionClips.length} 个片段
-            </span>
-            <span style={{ 
-              fontSize: '11px', 
-              color: '#888',
-              background: 'rgba(255,255,255,0.1)',
-              padding: '2px 6px',
-              borderRadius: '4px'
-            }}>
-              {formatDuration(totalDuration)}
-            </span>
-          </div>
-          
-          <div style={{ 
-            display: 'flex', 
-            gap: '4px',
-            opacity: isHovered ? 1 : 0,
-            transition: 'opacity 0.2s ease'
+          {/* 操作按钮 - 固定在底部 */}
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            height: '28px',
+            alignItems: 'center',
+            marginTop: 'auto'
           }}>
+            <Button
+              type="text"
+              size="small"
+              icon={<PlayCircleOutlined />}
+              onClick={() => onView(collection)}
+              style={{
+                color: '#4facfe',
+                border: '1px solid rgba(79, 172, 254, 0.3)',
+                borderRadius: '6px',
+                fontSize: '12px',
+                height: '28px',
+                padding: '0 12px',
+                background: 'rgba(79, 172, 254, 0.1)'
+              }}
+            >
+              播放
+            </Button>
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => onView(collection)}
+              style={{
+                color: '#52c41a',
+                border: '1px solid rgba(82, 196, 26, 0.3)',
+                borderRadius: '6px',
+                fontSize: '12px',
+                height: '28px',
+                padding: '0 12px',
+                background: 'rgba(82, 196, 26, 0.1)'
+              }}
+            >
+              片段
+            </Button>
             {onGenerateVideo && (
-              <Button 
-                type="text" 
+              <Button
+                type="text"
                 size="small"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onGenerateVideo(collection.id)
-                }}
+                icon={<DownloadOutlined />}
+                onClick={() => onGenerateVideo(collection.id)}
                 style={{
-                  color: '#1890ff',
-                  fontSize: '10px',
-                  height: '20px',
-                  padding: '0 6px',
-                  background: 'rgba(24, 144, 255, 0.1)',
-                  border: '1px solid rgba(24, 144, 255, 0.3)',
-                  borderRadius: '4px'
+                  color: '#ff7875',
+                  border: '1px solid rgba(255, 120, 117, 0.3)',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  height: '28px',
+                  padding: '0 12px',
+                  background: 'rgba(255, 120, 117, 0.1)'
                 }}
               >
                 下载
               </Button>
             )}
-            
-            {onDelete && (
-              <Popconfirm
-                title="确定要删除这个合集吗？"
-                onConfirm={(e) => {
-                  e?.stopPropagation()
-                  onDelete(collection.id)
-                }}
-                onCancel={(e) => e?.stopPropagation()}
-                okText="确定"
-                cancelText="取消"
-              >
-                <Button 
-                  type="text" 
-                  size="small"
-                  icon={<DeleteOutlined />}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{
-                    color: '#ff4d4f',
-                    fontSize: '10px',
-                    height: '20px',
-                    padding: '0 6px',
-                    background: 'rgba(255, 77, 79, 0.1)',
-                    border: '1px solid rgba(255, 77, 79, 0.3)',
-                    borderRadius: '4px'
-                  }}
-                />
-              </Popconfirm>
-            )}
           </div>
-        </div>
       </div>
     </Card>
   )
