@@ -167,16 +167,16 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
                   onGenerateVideo(collection.id)
                 }}
                 style={{
-                  color: '#52c41a',
+                  color: '#1890ff',
                   fontSize: '10px',
                   height: '20px',
                   padding: '0 6px',
-                  background: 'rgba(82, 196, 26, 0.1)',
-                  border: '1px solid rgba(82, 196, 26, 0.3)',
+                  background: 'rgba(24, 144, 255, 0.1)',
+                  border: '1px solid rgba(24, 144, 255, 0.3)',
                   borderRadius: '4px'
                 }}
               >
-                生成
+                下载
               </Button>
             )}
             
