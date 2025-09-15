@@ -5821,3 +5821,150 @@ bvid
 2025-09-15 10:51:28,045 - backend.main - INFO - API密钥已加载到环境变量
 2025-09-15 10:51:28,045 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
 2025-09-15 10:51:44,642 - backend.services.websocket_notification_service - INFO - 项目更新通知已发送: 22ac1453-4f16-4c04-ad7e-1264e995530a - processing
+2025-09-15 11:54:25,706 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:54:25,706 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:54:26,389 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:54:26,654 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:54:26,719 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:54:26,720 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:54:26,720 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:54:26,720 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:54:29,756 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:54:29,756 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:54:30,319 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:54:30,671 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:54:30,865 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:54:30,938 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:54:30,939 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:54:30,939 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:54:30,939 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:54:45,006 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:54:45,006 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:54:45,498 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:54:45,697 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:54:45,763 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:54:45,764 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:54:45,764 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:54:45,764 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:54:48,999 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:54:48,999 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:54:49,589 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:54:49,952 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:54:50,345 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:54:50,548 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:54:50,621 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:54:50,622 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:54:50,622 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:54:50,622 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:55:27,886 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:55:27,886 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:55:28,425 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:55:28,625 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:55:28,697 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:55:28,698 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:55:28,698 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:55:28,698 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:55:40,316 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:55:40,316 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:55:40,754 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:55:40,951 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:55:41,017 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:55:41,018 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:55:41,018 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:55:41,018 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:55:58,492 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:55:58,493 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:55:58,944 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:55:59,147 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:55:59,214 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:55:59,215 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:55:59,215 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:55:59,215 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:56:06,115 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:56:06,115 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:56:06,577 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:56:06,826 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:56:06,916 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:56:06,917 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:56:06,917 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:56:06,917 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:56:09,765 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:56:09,765 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:56:10,406 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:56:10,683 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:56:10,758 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:56:10,759 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:56:10,759 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:56:10,759 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:57:16,837 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:57:16,838 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:57:17,489 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:57:17,738 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:57:17,826 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:57:17,827 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:57:17,827 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:57:17,827 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:57:52,976 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:57:52,976 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:57:53,599 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:57:53,898 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:57:53,987 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:57:53,988 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:57:53,988 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:57:53,988 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:58:28,734 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:58:28,734 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:58:29,266 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:58:29,490 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:58:29,577 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:58:29,578 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:58:29,578 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:58:29,578 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:59:19,068 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:59:19,068 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:59:19,656 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:59:19,898 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:59:19,990 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:59:19,991 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:59:19,991 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:59:19,991 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:59:25,948 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:59:25,948 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:59:26,489 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:59:26,682 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:59:26,748 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:59:26,749 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:59:26,749 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:59:26,749 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 11:59:39,072 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 11:59:39,072 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 11:59:39,527 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 11:59:39,724 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 11:59:39,792 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 11:59:39,793 - backend.main - INFO - 数据库表创建完成
+2025-09-15 11:59:39,793 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 11:59:39,793 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:02:05,445 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:02:05,446 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:02:05,843 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:02:06,069 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:02:06,155 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:02:06,156 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:02:06,156 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:02:06,156 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:03:20,315 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:03:20,315 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:03:20,715 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:03:20,942 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:03:21,024 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:03:21,025 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:03:21,025 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:03:21,025 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:05:42,055 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:05:42,056 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:05:43,006 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:05:43,322 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:05:43,432 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:05:43,433 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:05:43,433 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:05:43,433 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统

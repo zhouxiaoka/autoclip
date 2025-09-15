@@ -417,12 +417,66 @@ class BilibiliUploadService:
         return record
     
     async def upload_clip(self, record_id: int, video_path: str, max_retries: int = 3) -> bool:
-        """上传单个切片 - 使用新的v6.0实现"""
-        from .bilibili_upload_v6 import BilibiliUploadServiceV6
-        
-        # 使用新的上传服务
-        upload_service_v6 = BilibiliUploadServiceV6(self.db)
-        return await upload_service_v6.upload_clip(record_id, video_path, max_retries)
+        """上传单个切片 - 使用内置上传实现"""
+        try:
+            # 获取投稿记录
+            record = self.db.query(UploadRecord).filter(UploadRecord.id == record_id).first()
+            if not record:
+                logger.error(f"投稿记录不存在: {record_id}")
+                return False
+            
+            # 获取账号信息
+            account = self.db.query(BilibiliAccount).filter(BilibiliAccount.id == record.account_id).first()
+            if not account:
+                logger.error(f"账号不存在: {record.account_id}")
+                return False
+            
+            # 解密Cookie
+            cookies = decrypt_data(account.cookies)
+            if not cookies:
+                logger.error("Cookie解密失败")
+                return False
+            
+            # 使用直接上传器
+            uploader = BilibiliDirectUploader(cookies)
+            success = await uploader.upload_video(
+                video_path=video_path,
+                metadata={
+                    'title': record.title,
+                    'desc': record.description or '',
+                    'tid': record.tid,
+                    'tag': record.tags or '',
+                    'source': record.source or '',
+                    'copyright': record.copyright or 1
+                },
+                max_retries=max_retries
+            )
+            
+            if success:
+                record.status = 'completed'
+                record.bv_id = uploader.bv_id
+                record.completed_at = datetime.utcnow()
+            else:
+                record.status = 'failed'
+                record.error_message = uploader.error_message
+                record.failed_at = datetime.utcnow()
+            
+            self.db.commit()
+            return success
+            
+        except Exception as e:
+            logger.error(f"上传切片失败: {e}")
+            # 更新记录状态
+            try:
+                record = self.db.query(UploadRecord).filter(UploadRecord.id == record_id).first()
+                if record:
+                    record.status = 'failed'
+                    record.error_message = str(e)
+                    record.failed_at = datetime.utcnow()
+                    self.db.commit()
+            except:
+                pass
+            return False
     
     def update_upload_status(self, record_id, status: str, error_message: str = None) -> bool:
         """更新投稿状态"""
@@ -582,11 +636,65 @@ class BilibiliUploadService:
     
     def upload_clip_sync(self, record_id: int, video_path: str, max_retries: int = 3) -> bool:
         """同步版本的上传单个切片"""
-        from .bilibili_upload_v2 import BilibiliUploadServiceV2
-        
-        # 使用新的上传服务
-        upload_service_v2 = BilibiliUploadServiceV2(self.db)
-        return upload_service_v2.upload_clip_sync(record_id, video_path, max_retries)
+        try:
+            # 获取投稿记录
+            record = self.db.query(UploadRecord).filter(UploadRecord.id == record_id).first()
+            if not record:
+                logger.error(f"投稿记录不存在: {record_id}")
+                return False
+            
+            # 获取账号信息
+            account = self.db.query(BilibiliAccount).filter(BilibiliAccount.id == record.account_id).first()
+            if not account:
+                logger.error(f"账号不存在: {record.account_id}")
+                return False
+            
+            # 解密Cookie
+            cookies = decrypt_data(account.cookies)
+            if not cookies:
+                logger.error("Cookie解密失败")
+                return False
+            
+            # 使用直接上传器（同步版本）
+            uploader = BilibiliDirectUploader(cookies)
+            success = uploader.upload_video_sync(
+                video_path=video_path,
+                metadata={
+                    'title': record.title,
+                    'desc': record.description or '',
+                    'tid': record.tid,
+                    'tag': record.tags or '',
+                    'source': record.source or '',
+                    'copyright': record.copyright or 1
+                },
+                max_retries=max_retries
+            )
+            
+            if success:
+                record.status = 'completed'
+                record.bv_id = uploader.bv_id
+                record.completed_at = datetime.utcnow()
+            else:
+                record.status = 'failed'
+                record.error_message = uploader.error_message
+                record.failed_at = datetime.utcnow()
+            
+            self.db.commit()
+            return success
+            
+        except Exception as e:
+            logger.error(f"上传切片失败: {e}")
+            # 更新记录状态
+            try:
+                record = self.db.query(UploadRecord).filter(UploadRecord.id == record_id).first()
+                if record:
+                    record.status = 'failed'
+                    record.error_message = str(e)
+                    record.failed_at = datetime.utcnow()
+                    self.db.commit()
+            except:
+                pass
+            return False
 
 
 class BilibiliDirectUploader:
@@ -600,6 +708,19 @@ class BilibiliDirectUploader:
     
     async def upload_video(self, video_path: str, metadata: dict, max_retries: int = 3) -> bool:
         """上传视频 - 简化版本，暂时返回失败状态"""
+        try:
+            # 暂时返回失败，因为需要重新实现上传逻辑
+            self.error_message = "上传功能正在开发中，请稍后再试"
+            logger.warning("上传功能暂未实现，返回失败状态")
+            return False
+                
+        except Exception as e:
+            self.error_message = str(e)
+            logger.error(f"上传视频失败: {e}")
+            return False
+    
+    def upload_video_sync(self, video_path: str, metadata: dict, max_retries: int = 3) -> bool:
+        """同步版本的上传视频"""
         try:
             # 暂时返回失败，因为需要重新实现上传逻辑
             self.error_message = "上传功能正在开发中，请稍后再试"

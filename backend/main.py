@@ -139,14 +139,11 @@ async def get_video_categories():
         ]
     }
 
-# 全局异常处理
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    logger.error(f"全局异常: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "内部服务器错误"}
-    )
+# 导入统一错误处理中间件
+from .core.error_middleware import global_exception_handler
+
+# 注册全局异常处理器
+app.add_exception_handler(Exception, global_exception_handler)
 
 if __name__ == "__main__":
     import uvicorn
