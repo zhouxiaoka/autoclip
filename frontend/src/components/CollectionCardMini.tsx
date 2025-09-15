@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Card, Typography, Button, Popconfirm, Tooltip } from 'antd'
-import { DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons'
+import { DeleteOutlined, PlayCircleOutlined, EditOutlined, DownloadOutlined } from '@ant-design/icons'
 import { Collection, Clip } from '../store/useProjectStore'
 import EditableCollectionTitle from './EditableCollectionTitle'
 import './CollectionCard.css'
