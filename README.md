@@ -1,10 +1,10 @@
 # AutoClip - AI视频智能切片系统
 
-<div align="center">
-
 ![AutoClip Logo](https://img.shields.io/badge/AutoClip-AI%20Video%20Processing-blue?style=for-the-badge&logo=video)
 
-**基于AI的智能视频切片处理系统，支持YouTube/B站视频下载、自动切片、智能合集生成**
+## 基于AI的智能视频切片处理系统
+
+支持YouTube/B站视频下载、自动切片、智能合集生成
 
 [![Python](https://img.shields.io/badge/Python-3.8+-green?style=flat&logo=python)](https://python.org)
 [![React](https://img.shields.io/badge/React-18+-blue?style=flat&logo=react)](https://reactjs.org)
@@ -59,7 +59,8 @@ graph TB
 
 ### 技术栈
 
-**后端技术**
+#### 后端技术
+
 - **FastAPI**: 现代化Python Web框架，自动API文档生成
 - **Celery**: 分布式任务队列，支持异步处理
 - **Redis**: 消息代理和缓存，任务状态管理
@@ -69,7 +70,8 @@ graph TB
 - **WebSocket**: 实时通信，进度推送
 - **Pydantic**: 数据验证和序列化
 
-**前端技术**
+#### 前端技术
+
 - **React 18**: 用户界面框架，Hooks和函数组件
 - **TypeScript**: 类型安全，更好的开发体验
 - **Ant Design**: 企业级UI组件库
@@ -84,12 +86,14 @@ graph TB
 ### 环境要求
 
 #### Docker部署（推荐）
+
 - **Docker**: 20.10+
 - **Docker Compose**: 2.0+
 - **内存**: 最少 4GB，推荐 8GB+
 - **存储**: 最少 10GB 可用空间
 
 #### 本地部署
+
 - **操作系统**: macOS / Linux / Windows (WSL)
 - **Python**: 3.8+ (推荐 3.9+)
 - **Node.js**: 16+ (推荐 18+)
@@ -222,6 +226,7 @@ cp env.example .env
 ### 1. 视频下载
 
 #### YouTube视频
+
 1. 在首页点击"新建项目"
 2. 选择"YouTube链接"
 3. 粘贴视频URL
@@ -229,6 +234,7 @@ cp env.example .env
 5. 点击"开始下载"
 
 #### B站视频
+
 1. 在首页点击"新建项目"
 2. 选择"B站链接"
 3. 粘贴视频URL
@@ -236,6 +242,7 @@ cp env.example .env
 5. 点击"开始下载"
 
 #### 本地文件
+
 1. 在首页点击"新建项目"
 2. 选择"文件上传"
 3. 拖拽或选择视频文件
@@ -301,7 +308,7 @@ PROJECT_DIR=./data/projects
 
 ## 📁 项目结构
 
-```
+```text
 autoclip/
 ├── backend/                 # 后端代码
 │   ├── api/                # API路由
@@ -383,8 +390,8 @@ autoclip/
 
 启动系统后访问以下地址查看API文档：
 
-- **Swagger UI**: http://localhost:8000/docs (本地开发环境)
-- **ReDoc**: http://localhost:8000/redoc (本地开发环境)
+- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs) (本地开发环境)
+- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc) (本地开发环境)
 
 ### 主要API端点
 
@@ -404,6 +411,7 @@ autoclip/
 ### 常见问题
 
 #### 1. 端口被占用
+
 ```bash
 # 检查端口占用
 lsof -i :8000  # 后端端口
@@ -414,6 +422,7 @@ kill -9 <PID>
 ```
 
 #### 2. Redis连接失败
+
 ```bash
 # 检查Redis状态
 redis-cli ping
@@ -424,12 +433,14 @@ systemctl start redis      # Linux
 ```
 
 #### 3. YouTube下载失败
+
 - 检查网络连接
 - 更新yt-dlp版本：`pip install --upgrade yt-dlp`
 - 尝试使用浏览器Cookie
 - 检查视频是否可用
 
 #### 4. B站下载失败
+
 - 检查账号登录状态
 - 更新账号Cookie
 - 检查视频权限设置
@@ -558,10 +569,10 @@ docker-compose ps
 
 #### 访问服务
 
-- **前端界面**: http://localhost:3000 (本地开发环境)
-- **后端API**: http://localhost:8000 (本地开发环境)
-- **API文档**: http://localhost:8000/docs (本地开发环境)
-- **Flower监控**: http://localhost:5555 (本地开发环境)
+- **前端界面**: [http://localhost:3000](http://localhost:3000) (本地开发环境)
+- **后端API**: [http://localhost:8000](http://localhost:8000) (本地开发环境)
+- **API文档**: [http://localhost:8000/docs](http://localhost:8000/docs) (本地开发环境)
+- **Flower监控**: [http://localhost:5555](http://localhost:5555) (本地开发环境)
 
 #### 开发环境
 
@@ -626,41 +637,52 @@ WantedBy=multi-user.target
 
 1. **Fork** 项目到您的GitHub账户
 2. 克隆您的Fork到本地：
+
    ```bash
    git clone https://github.com/zhouxiaoka/autoclip.git
    cd autoclip
    ```
+
 3. 创建功能分支：
+
    ```bash
    git checkout -b feature/amazing-feature
    ```
+
 4. 进行开发和测试
 5. 提交更改：
+
    ```bash
    git add .
    git commit -m 'feat: add amazing feature'
    ```
+
 6. 推送分支：
+
    ```bash
    git push origin feature/amazing-feature
    ```
+
 7. 在GitHub上创建 **Pull Request**
 
 ### 开发规范
 
-**代码规范**
+#### 代码规范
+
 - 后端：遵循PEP 8 Python代码规范
 - 前端：使用TypeScript，遵循ESLint规则
 - 提交信息：使用约定式提交格式（feat, fix, docs, style, refactor, test, chore）
 
-**开发流程**
+#### 开发流程
+
 1. 确保所有测试通过
 2. 添加必要的测试用例
 3. 更新相关文档
 4. 确保代码质量检查通过
 
-**提交信息格式**
-```
+#### 提交信息格式
+
+```text
 <type>(<scope>): <description>
 
 [optional body]
@@ -669,6 +691,7 @@ WantedBy=multi-user.target
 ```
 
 示例：
+
 - `feat(api): add video download endpoint`
 - `fix(ui): resolve upload modal display issue`
 - `docs(readme): update installation instructions`
@@ -683,6 +706,7 @@ WantedBy=multi-user.target
 
 **Q: 启动时提示端口被占用怎么办？**
 A: 使用以下命令检查并停止占用端口的进程：
+
 ```bash
 # 检查端口占用
 lsof -i :8000  # 后端端口
@@ -694,6 +718,7 @@ kill -9 <PID>
 
 **Q: Redis连接失败怎么办？**
 A: 确保Redis服务正在运行：
+
 ```bash
 # 检查Redis状态
 redis-cli ping
@@ -705,6 +730,7 @@ sudo systemctl start redis-server  # Linux
 
 **Q: 前端依赖安装失败怎么办？**
 A: 尝试清理缓存后重新安装：
+
 ```bash
 cd frontend
 rm -rf node_modules package-lock.json
@@ -715,7 +741,8 @@ npm install
 ### 功能使用问题
 
 **Q: YouTube视频下载失败怎么办？**
-A: 
+A:
+
 1. 检查网络连接
 2. 更新yt-dlp：`pip install --upgrade yt-dlp`
 3. 尝试使用浏览器Cookie
@@ -723,6 +750,7 @@ A:
 
 **Q: B站视频下载失败怎么办？**
 A:
+
 1. 检查账号登录状态
 2. 更新账号Cookie
 3. 检查视频权限设置
@@ -730,6 +758,7 @@ A:
 
 **Q: AI处理速度慢怎么办？**
 A:
+
 1. 检查API密钥配置
 2. 调整处理参数（减少chunk_size）
 3. 检查网络连接
@@ -737,6 +766,7 @@ A:
 
 **Q: B站上传功能什么时候可以使用？**
 A: B站上传功能正在开发中，预计在下一个版本中发布。该功能将支持：
+
 - 自动上传切片视频到B站
 - 多账号管理和切换
 - 批量上传和队列管理
@@ -744,6 +774,7 @@ A: B站上传功能正在开发中，预计在下一个版本中发布。该功�
 
 **Q: 字幕编辑功能什么时候可以使用？**
 A: 字幕编辑功能正在开发中，预计在下一个版本中发布。该功能将支持：
+
 - 可视化字幕编辑器
 - 字幕时间轴同步
 - 多语言字幕支持
@@ -753,6 +784,7 @@ A: 字幕编辑功能正在开发中，预计在下一个版本中发布。该�
 
 **Q: 如何提高处理速度？**
 A:
+
 1. 增加Celery Worker并发数
 2. 使用SSD存储
 3. 增加系统内存
@@ -760,6 +792,7 @@ A:
 
 **Q: 如何减少存储空间占用？**
 A:
+
 1. 定期清理临时文件
 2. 压缩输出视频
 3. 删除不需要的项目
@@ -770,7 +803,8 @@ A:
 ### 获取帮助
 
 - **问题反馈**: [GitHub Issues](https://github.com/zhouxiaoka/autoclip/issues)
-- **功能建议**: [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions) (仓库创建后可用)
+- **功能建议**: [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)
+  (仓库创建后可用)
 - **Bug报告**: 请使用GitHub Issues模板
 - **文档**: [项目文档](docs/)
 
@@ -779,13 +813,12 @@ A:
 - **个人微信**: your_wechat_id
 - **飞书**: your_feishu_id
 
-
-
 ## 🙏 致谢
 
 感谢以下开源项目和服务的支持：
 
 ### 核心技术栈
+
 - [FastAPI](https://fastapi.tiangolo.com/) - 现代化Python Web框架
 - [React](https://reactjs.org/) - 用户界面库
 - [Ant Design](https://ant.design/) - 企业级UI设计语言
@@ -794,33 +827,33 @@ A:
 - [Redis](https://redis.io/) - 内存数据结构存储
 
 ### 视频处理
+
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube视频下载工具
 - [FFmpeg](https://ffmpeg.org/) - 音视频处理框架
 
 ### AI服务
+
 - [通义千问](https://tongyi.aliyun.com/) - 阿里云大语言模型服务
 - [DashScope](https://dashscope.aliyun.com/) - 阿里云AI服务平台
 
 ### 开发工具
+
 - [Vite](https://vitejs.dev/) - 前端构建工具
 - [Zustand](https://github.com/pmndrs/zustand) - 状态管理库
 - [Pydantic](https://pydantic-docs.helpmanual.io/) - 数据验证库
 
 ### 特别感谢
+
 - 所有为开源社区贡献的开发者
 - 提供反馈和建议的用户
 - 参与测试和贡献代码的社区成员
 
 ---
 
-<div align="center">
-
-**如果这个项目对你有帮助，请给我们一个 ⭐ Star！**
+## 如果这个项目对你有帮助，请给我们一个 ⭐ Star
 
 [![Star History Chart](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)
 
 Made with ❤️ by AutoClip Team
 
-**⭐ 如果觉得有用，请给个Star支持一下！**
-
-</div>
+⭐ 如果觉得有用，请给个Star支持一下！
