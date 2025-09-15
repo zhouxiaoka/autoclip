@@ -43,12 +43,14 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
       className="collection-card"
       hoverable
       style={{ 
+        width: '320px',
         height: '380px',
         borderRadius: '16px',
         border: '1px solid #303030',
         background: 'linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)',
         overflow: 'hidden',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        flexShrink: 0
       }}
       styles={{
         body: {
