@@ -109,11 +109,11 @@ cd autoclip
 
 ### 💬 QQ
 
-![QQ二维码](./qq_qr.jpg)
+<img src="./qq_qr.jpg" alt="QQ二维码" width="150">
 
 ### 📱 飞书
 
-![飞书二维码](./feishu_qr.jpg)
+<img src="./feishu_qr.jpg" alt="飞书二维码" width="150">
 
 ### 📧 其他联系方式
 
