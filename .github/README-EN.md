@@ -829,11 +829,11 @@ For questions or suggestions, please contact us through:
 
 #### 💬 QQ
 
-![QQ QR Code](./qq_qr.jpg)
+<img src="./qq_qr.jpg" alt="QQ二维码" width="150">
 
 #### 📱 Feishu
 
-![Feishu QR Code](./feishu_qr.jpg)
+<img src="./feishu_qr.jpg" alt="飞书二维码" width="150">
 
 #### 📧 Other Contact Methods
 
