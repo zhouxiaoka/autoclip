@@ -13,9 +13,9 @@
 [![Celery](https://img.shields.io/badge/Celery-Latest-green?style=flat&logo=celery)](https://celeryproject.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat)](LICENSE)
 
-[![GitHub stars](https://img.shields.io/github/stars/your-username/autoclip?style=social)](https://github.com/your-username/autoclip)
-[![GitHub forks](https://img.shields.io/github/forks/your-username/autoclip?style=social)](https://github.com/your-username/autoclip)
-[![GitHub issues](https://img.shields.io/github/issues/your-username/autoclip)](https://github.com/your-username/autoclip/issues)
+[![GitHub stars](https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=social)](https://github.com/zhouxiaoka/autoclip)
+[![GitHub forks](https://img.shields.io/github/forks/zhouxiaoka/autoclip?style=social)](https://github.com/zhouxiaoka/autoclip)
+[![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip)](https://github.com/zhouxiaoka/autoclip/issues)
 
 **语言**: [English](README-EN.md) | [中文](README.md)
 
@@ -33,8 +33,8 @@ AutoClip是一个基于AI的智能视频切片处理系统，能够自动从YouT
 - 📚 **智能合集**: AI推荐和手动创建视频合集，支持拖拽排序
 - 🚀 **实时处理**: 异步任务队列，实时进度反馈，WebSocket通信
 - 🎨 **现代界面**: React + TypeScript + Ant Design，响应式设计
-- 📱 **移动端支持**: 完美适配桌面和移动端设备
-- 🔐 **账号管理**: 支持B站多账号管理，自动健康检查
+- 📱 **移动端支持**【开发中】: 响应式设计，正在完善移动端体验
+- 🔐 **账号管理**【开发中】: 支持B站多账号管理，自动健康检查
 - 📊 **数据统计**: 完整的项目管理和数据统计功能
 - 🛠️ **易于部署**: 一键启动脚本，Docker支持，详细文档
 - 📤 **B站上传**【开发中】: 自动上传切片视频到B站
@@ -104,7 +104,7 @@ graph TB
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/autoclip.git
+git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
 
 # Docker一键启动
@@ -124,7 +124,7 @@ cd autoclip
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/autoclip.git
+git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
 
 # 一键启动（推荐，包含完整检查和监控）
@@ -542,7 +542,7 @@ celery -A backend.core.celery_app flower --port=5555
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/autoclip.git
+git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
 
 # 配置环境变量
@@ -627,7 +627,7 @@ WantedBy=multi-user.target
 1. **Fork** 项目到您的GitHub账户
 2. 克隆您的Fork到本地：
    ```bash
-   git clone https://github.com/your-username/autoclip.git
+   git clone https://github.com/zhouxiaoka/autoclip.git
    cd autoclip
    ```
 3. 创建功能分支：
@@ -769,8 +769,8 @@ A:
 
 ### 获取帮助
 
-- **问题反馈**: [GitHub Issues](https://github.com/your-username/autoclip/issues)
-- **功能建议**: [GitHub Discussions](https://github.com/your-username/autoclip/discussions)
+- **问题反馈**: [GitHub Issues](https://github.com/zhouxiaoka/autoclip/issues)
+- **功能建议**: [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)
 - **Bug报告**: 请使用GitHub Issues模板
 - **文档**: [项目文档](docs/)
 
@@ -818,7 +818,7 @@ A:
 
 **如果这个项目对你有帮助，请给我们一个 ⭐ Star！**
 
-[![Star History Chart](https://api.star-history.com/svg?repos=your-username/autoclip&type=Date)](https://star-history.com/#your-username/autoclip&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)
 
 Made with ❤️ by AutoClip Team
 
