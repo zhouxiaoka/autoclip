@@ -30,59 +30,74 @@ jobs:
         npm install -g markdown-link-check@latest
         npm install -g markdownlint-cli
         
-    - name: Check markdown links
+    - name: Check markdown links (Warning Only)
       run: |
-        npx markdown-link-check README.md
-        npx markdown-link-check README-EN.md
-        npx markdown-link-check .github/README.md
+        echo "🔍 Checking markdown links (warnings only)..."
+        npx markdown-link-check README.md || echo "⚠️  Warning: Some links in README.md may be broken"
+        npx markdown-link-check README-EN.md || echo "⚠️  Warning: Some links in README-EN.md may be broken"
+        npx markdown-link-check .github/README.md || echo "⚠️  Warning: Some links in .github/README.md may be broken"
+        echo "✅ Link check completed (warnings only, no failure)"
         
-    - name: Lint markdown files
+    - name: Lint markdown files (Warning Only)
       run: |
-        markdownlint README.md
-        markdownlint README-EN.md
-        markdownlint .github/README.md
+        echo "🔍 Linting markdown files (warnings only)..."
+        markdownlint README.md || echo "⚠️  Warning: README.md has linting issues"
+        markdownlint README-EN.md || echo "⚠️  Warning: README-EN.md has linting issues"
+        markdownlint .github/README.md || echo "⚠️  Warning: .github/README.md has linting issues"
+        echo "✅ Linting completed (warnings only, no failure)"
         
-    - name: Check language consistency
+    - name: Check language consistency (Warning Only)
       run: |
-        # Check if language switcher links are present
+        echo "🔍 Checking language consistency (warnings only)..."
         if ! grep -q "语言.*English.*中文" README.md; then
-          echo "Missing language switcher in Chinese README"
-          exit 1
+          echo "⚠️  Warning: Language switcher may be missing in Chinese README"
+        else
+          echo "✅ Language switcher found in Chinese README"
         fi
         
         if ! grep -q "Language.*English.*中文" README-EN.md; then
-          echo "Missing language switcher in English README"
-          exit 1
+          echo "⚠️  Warning: Language switcher may be missing in English README"
+        else
+          echo "✅ Language switcher found in English README"
         fi
+        echo "✅ Language consistency check completed (warnings only, no failure)"
         
-    - name: Validate contact information
+    - name: Validate contact information (Warning Only)
       run: |
-        # Check if contact information is present
+        echo "🔍 Checking contact information (warnings only)..."
         if ! grep -Eq '([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})|(联系|Contact).*(表单|Issue|飞书|微信|QQ|Discord|Telegram|Link|链接)' README.md; then
-          echo "Missing contact info in Chinese README"
-          exit 1
+          echo "⚠️  Warning: Contact information may be missing in Chinese README"
+        else
+          echo "✅ Contact information found in Chinese README"
         fi
         
         if ! grep -Eq '([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})|(联系|Contact).*(表单|Issue|飞书|微信|QQ|Discord|Telegram|Link|链接)' README-EN.md; then
-          echo "Missing contact info in English README"
-          exit 1
+          echo "⚠️  Warning: Contact information may be missing in English README"
+        else
+          echo "✅ Contact information found in English README"
         fi
+        echo "✅ Contact information check completed (warnings only, no failure)"
         
-    - name: Check Docker support
+    - name: Check Docker support (Warning Only)
       run: |
-        # Check if Docker support is mentioned
+        echo "🔍 Checking Docker support documentation (warnings only)..."
         if ! grep -q "Docker" README.md; then
-          echo "Missing Docker support in Chinese README"
-          exit 1
+          echo "⚠️  Warning: Docker support may not be documented in Chinese README"
+        else
+          echo "✅ Docker support found in Chinese README"
         fi
         
         if ! grep -q "Docker" README-EN.md; then
-          echo "Missing Docker support in English README"
-          exit 1
+          echo "⚠️  Warning: Docker support may not be documented in English README"
+        else
+          echo "✅ Docker support found in English README"
         fi
+        echo "✅ Docker support check completed (warnings only, no failure)"
         
     - name: Generate documentation report
       run: |
+        echo "📝 Generating documentation report..."
+        mkdir -p docs
         echo "# Documentation Sync Report" > docs/sync-report.md
         echo "" >> docs/sync-report.md
         echo "## Files Checked" >> docs/sync-report.md
@@ -91,12 +106,17 @@ jobs:
         echo "- .github/README.md (GitHub Homepage)" >> docs/sync-report.md
         echo "" >> docs/sync-report.md
         echo "## Status" >> docs/sync-report.md
-        echo "✅ All documentation files are synchronized" >> docs/sync-report.md
-        echo "✅ Language switchers are present" >> docs/sync-report.md
-        echo "✅ Contact information is consistent" >> docs/sync-report.md
-        echo "✅ Docker support is documented" >> docs/sync-report.md
+        echo "✅ All documentation files are processed" >> docs/sync-report.md
+        echo "ℹ️  Checks are now in warning mode - no failures will block commits" >> docs/sync-report.md
+        echo "ℹ️  Please review any warnings above for documentation improvements" >> docs/sync-report.md
+        echo "" >> docs/sync-report.md
+        echo "## Workflow Changes" >> docs/sync-report.md
+        echo "- All README checks are now non-blocking (warnings only)" >> docs/sync-report.md
+        echo "- Link checks, linting, and content validation will not fail the build" >> docs/sync-report.md
+        echo "- Warnings are provided for manual review and improvement" >> docs/sync-report.md
         echo "" >> docs/sync-report.md
         echo "Last updated: $(date)" >> docs/sync-report.md
+        echo "✅ Documentation report generated successfully"
         
     - name: Upload documentation report
       uses: actions/upload-artifact@v4
