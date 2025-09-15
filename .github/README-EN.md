@@ -1,8 +1,4 @@
-# AutoClip - AI Video Intelligent Clipping System
-
-![AutoClip Logo](https://img.shields.io/badge/AutoClip-AI%20Video%20Processing-blue?style=for-the-badge&logo=video)
-
-## AI-powered intelligent video clipping system
+# AutoClip - AI Agent for Video Highlights
 
 Supporting YouTube/Bilibili video download, automatic clipping, and smart collection
 generation
