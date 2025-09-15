@@ -18,7 +18,6 @@
 [![GitHub issues](https://img.shields.io/badge/Issues-0-blue)](https://github.com/zhouxiaoka/autoclip/issues)
 
 **语言**: [English](README-EN.md) | [中文](README.md)  
-**联系邮箱**: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
 </div>
 
