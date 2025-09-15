@@ -22,6 +22,115 @@ def get_clip_service(db: Session = Depends(get_db)) -> ClipService:
     return ClipService(db)
 
 
+@router.patch("/{clip_id}/title", response_model=ClipResponse)
+async def update_clip_title(
+    clip_id: str,
+    title_data: dict,
+    clip_service: ClipService = Depends(get_clip_service)
+):
+    """Update clip title."""
+    try:
+        new_title = title_data.get("title", "").strip()
+        if not new_title:
+            raise HTTPException(status_code=400, detail="标题不能为空")
+        
+        if len(new_title) > 200:
+            raise HTTPException(status_code=400, detail="标题长度不能超过200个字符")
+        
+        # 更新切片标题
+        clip = clip_service.update_clip(clip_id, ClipUpdate(title=new_title))
+        if not clip:
+            raise HTTPException(status_code=404, detail="切片不存在")
+        
+        # 返回更新后的切片信息
+        return ClipResponse(
+            id=str(clip.id),
+            project_id=str(clip.project_id),
+            title=str(clip.title),
+            description=str(clip.description) if clip.description else None,
+            start_time=getattr(clip, 'start_time', 0),
+            end_time=getattr(clip, 'end_time', 0),
+            duration=int(getattr(clip, 'duration', 0)),
+            score=getattr(clip, 'score', None),
+            status=getattr(clip, 'status', 'pending'),
+            video_path=getattr(clip, 'video_path', None),
+            tags=getattr(clip, 'tags', []) or [],
+            clip_metadata=getattr(clip, 'clip_metadata', {}) or {},
+            created_at=getattr(clip, 'created_at', None),
+            updated_at=getattr(clip, 'updated_at', None),
+            collection_ids=[]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新切片标题失败: {e}")
+        raise HTTPException(status_code=500, detail=f"更新切片标题失败: {str(e)}")
+
+
+@router.post("/{clip_id}/generate-title", response_model=dict)
+async def generate_clip_title(
+    clip_id: str,
+    clip_service: ClipService = Depends(get_clip_service)
+):
+    """Generate a new title for a clip using LLM."""
+    try:
+        # 获取切片信息
+        clip = clip_service.get(clip_id)
+        if not clip:
+            raise HTTPException(status_code=404, detail="切片不存在")
+        
+        # 直接从clip_metadata获取内容，不需要从文件系统获取
+        clip_metadata = getattr(clip, 'clip_metadata', {}) or {}
+        
+        if not clip_metadata:
+            raise HTTPException(status_code=404, detail="切片元数据不存在")
+        
+        # 准备LLM输入数据
+        llm_input = [{
+            "id": clip_id,
+            "title": clip_metadata.get('outline', '') or getattr(clip, 'title', ''),
+            "content": clip_metadata.get('content', []),
+            "recommend_reason": clip_metadata.get('recommend_reason', '')
+        }]
+        
+        # 调用LLM生成标题
+        from ...utils.llm_client import LLMClient
+        from ...core.shared_config import PROMPT_FILES
+        
+        llm_client = LLMClient()
+        
+        # 加载标题生成提示词
+        with open(PROMPT_FILES['title'], 'r', encoding='utf-8') as f:
+            title_prompt = f.read()
+        
+        # 调用LLM
+        raw_response = llm_client.call_with_retry(title_prompt, llm_input)
+        
+        if not raw_response:
+            raise HTTPException(status_code=500, detail="LLM调用失败")
+        
+        # 解析LLM响应
+        titles_map = llm_client.parse_json_response(raw_response)
+        
+        if not isinstance(titles_map, dict) or clip_id not in titles_map:
+            raise HTTPException(status_code=500, detail="LLM返回格式错误")
+        
+        generated_title = titles_map[clip_id]
+        
+        return {
+            "clip_id": clip_id,
+            "generated_title": generated_title,
+            "success": True
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"生成切片标题失败: {e}")
+        raise HTTPException(status_code=500, detail=f"生成切片标题失败: {str(e)}")
+
+
 @router.post("/", response_model=ClipResponse)
 async def create_clip(
     clip_data: ClipCreate,

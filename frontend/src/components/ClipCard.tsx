@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Card, Typography, Button, Tooltip, Modal, message } from 'antd'
+import { Card, Button, Tooltip, Modal, message } from 'antd'
 import { PlayCircleOutlined, DownloadOutlined, ClockCircleOutlined, StarFilled, EditOutlined, UploadOutlined } from '@ant-design/icons'
 import ReactPlayer from 'react-player'
 import { Clip } from '../store/useProjectStore'
@@ -7,22 +7,23 @@ import SubtitleEditor from './SubtitleEditor'
 import { subtitleEditorApi } from '../services/subtitleEditorApi'
 import { SubtitleSegment, VideoEditOperation } from '../types/subtitle'
 import BilibiliManager from './BilibiliManager'
+import EditableTitle from './EditableTitle'
 import './ClipCard.css'
-
-const { Title } = Typography
 
 interface ClipCardProps {
   clip: Clip
   videoUrl?: string
   onDownload: (clipId: string) => void
   projectId?: string
+  onClipUpdate?: (clipId: string, updates: Partial<Clip>) => void
 }
 
 const ClipCard: React.FC<ClipCardProps> = ({ 
   clip, 
   videoUrl, 
   onDownload,
-  projectId
+  projectId,
+  onClipUpdate
 }) => {
   const [showPlayer, setShowPlayer] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
@@ -63,7 +64,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
 
   const handleDownloadWithTitle = async () => {
     try {
-      const fileName = `${clip.generated_title || clip.title || '视频片段'}.mp4`
+      const fileName = `${clip.title || clip.generated_title || '视频片段'}.mp4`
       
       // 使用fetch获取视频文件
       const response = await fetch(videoUrl || '')
@@ -92,7 +93,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
     } catch (error) {
       console.error('下载失败:', error)
       // 如果fetch失败，回退到原来的方法
-      const fileName = `${clip.generated_title || clip.title || '视频片段'}.mp4`
+      const fileName = `${clip.title || clip.generated_title || '视频片段'}.mp4`
       const link = document.createElement('a')
       link.href = videoUrl || ''
       link.download = fileName
@@ -144,6 +145,11 @@ const ClipCard: React.FC<ClipCardProps> = ({
     } catch (error) {
       console.error('视频编辑失败:', error)
     }
+  }
+
+  const handleTitleUpdate = (newTitle: string) => {
+    // 更新本地状态
+    onClipUpdate?.(clip.id, { title: newTitle })
   }
 
 
@@ -351,20 +357,18 @@ const ClipCard: React.FC<ClipCardProps> = ({
           <div style={{ padding: '16px', height: '180px', display: 'flex', flexDirection: 'column' }}>
             {/* 标题区域 */}
             <div style={{ marginBottom: '8px' }}>
-              <Title 
-                level={5} 
-                ellipsis={{ rows: 2 }} 
+              <EditableTitle
+                title={clip.title || clip.generated_title || '未命名片段'}
+                clipId={clip.id}
+                onTitleUpdate={handleTitleUpdate}
                 style={{ 
-                  margin: 0, 
                   fontSize: '16px',
                   fontWeight: 600,
                   lineHeight: '1.4',
                   color: '#ffffff',
                   minHeight: '44px'
                 }}
-              >
-                {clip.generated_title || clip.title || '未命名片段'}
-              </Title>
+              />
             </div>
             
             {/* 内容要点 */}
@@ -454,7 +458,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
 
       {/* 视频播放模态框 */}
       <Modal
-        title={clip.generated_title || clip.title || '视频预览'}
+        title={clip.title || clip.generated_title || '视频预览'}
         open={showPlayer}
         onCancel={handleClosePlayer}
         footer={[
@@ -535,7 +539,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
         onClose={() => setShowBilibiliManager(false)}
         projectId={projectId || ''}
         clipIds={[clip.id]}
-        clipTitles={[clip.generated_title || clip.title || '视频片段']}
+        clipTitles={[clip.title || clip.generated_title || '视频片段']}
         onUploadSuccess={() => {
           // 投稿成功后可以刷新数据或显示提示
           console.log('投稿成功')

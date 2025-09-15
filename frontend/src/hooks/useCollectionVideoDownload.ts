@@ -15,11 +15,13 @@ export const useCollectionVideoDownload = () => {
     setIsGenerating(true)
     
     try {
-      // 第一步：开始生成视频
-      message.info('开始生成合集视频...')
+      // 直接按用户当前调整的顺序生成合集视频
+      message.info('正在按您的顺序生成合集视频...')
+      
+      // 生成合集视频（按用户调整的顺序）
       await projectApi.generateCollectionVideo(projectId, collectionId)
       
-      // 第二步：等待3秒让后端完成文件生成，然后直接下载
+      // 等待1秒让后端完成文件生成，然后下载
       message.success('合集视频生成成功，正在下载...')
       
       setTimeout(async () => {
@@ -30,11 +32,11 @@ export const useCollectionVideoDownload = () => {
           console.error('下载失败:', downloadError)
           message.error('下载失败，请稍后重试')
         }
-      }, 3000) // 等待3秒让后端完成文件生成
+      }, 1000)
       
     } catch (error) {
       console.error('生成合集视频失败:', error)
-      message.error('导出合集视频失败')
+      message.error('生成合集视频失败')
     } finally {
       setIsGenerating(false)
     }
