@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Card, Typography, Button, Tooltip, Modal } from 'antd'
+import { Card, Typography, Button, Tooltip, Modal, message } from 'antd'
 import { PlayCircleOutlined, DownloadOutlined, ClockCircleOutlined, StarFilled, EditOutlined, UploadOutlined } from '@ant-design/icons'
 import ReactPlayer from 'react-player'
 import { Clip } from '../store/useProjectStore'
 import SubtitleEditor from './SubtitleEditor'
 import { subtitleEditorApi } from '../services/subtitleEditorApi'
 import { SubtitleSegment, VideoEditOperation } from '../types/subtitle'
-import UploadModal from './UploadModal'
+import BilibiliManager from './BilibiliManager'
 import './ClipCard.css'
 
 const { Title } = Typography
@@ -28,8 +28,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [showSubtitleEditor, setShowSubtitleEditor] = useState(false)
   const [subtitleData, setSubtitleData] = useState<SubtitleSegment[]>([])
-  const [loadingSubtitles, setLoadingSubtitles] = useState(false)
-  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showBilibiliManager, setShowBilibiliManager] = useState(false)
   const playerRef = useRef<ReactPlayer>(null)
 
   // 生成视频缩略图
@@ -109,25 +108,8 @@ const ClipCard: React.FC<ClipCardProps> = ({
   }
 
   const handleOpenSubtitleEditor = async () => {
-    if (!projectId) {
-      console.error('ProjectId is required for subtitle editor')
-      return
-    }
-    
-    console.log('Opening subtitle editor for clip:', clip.id)
-    setLoadingSubtitles(true)
-    try {
-      // 获取字幕数据
-      const response = await subtitleEditorApi.getClipSubtitles(projectId, clip.id)
-      console.log('Subtitle data received:', response)
-      setSubtitleData(response.segments)
-      setShowSubtitleEditor(true)
-      console.log('Subtitle editor should be visible now')
-    } catch (error) {
-      console.error('获取字幕数据失败:', error)
-    } finally {
-      setLoadingSubtitles(false)
-    }
+    // 显示开发中提示
+    message.info('开发中，敬请期待')
   }
 
   const handleSubtitleEditorClose = () => {
@@ -164,11 +146,6 @@ const ClipCard: React.FC<ClipCardProps> = ({
     }
   }
 
-  const formatTime = (timeStr: string) => {
-    if (!timeStr) return '00:00:00'
-    // 移除小数点后的毫秒部分，只保留时分秒
-    return timeStr.replace(',', '.').substring(0, 8)
-  }
 
   const formatDuration = (seconds: number) => {
     if (!seconds || seconds <= 0) return '00:00'
@@ -220,12 +197,6 @@ const ClipCard: React.FC<ClipCardProps> = ({
     return '#ff4d4f' // 红色 - 差
   }
 
-  const getContentTooltip = () => {
-    if (clip.content && clip.content.length > 0) {
-      return clip.content.join('\n')
-    }
-    return '暂无内容要点'
-  }
 
   // 获取要显示的简介内容
   const getDisplayContent = () => {
@@ -460,6 +431,23 @@ const ClipCard: React.FC<ClipCardProps> = ({
               >
                 下载
               </Button>
+              <Button 
+                type="text" 
+                size="small"
+                icon={<UploadOutlined />}
+                onClick={() => setShowBilibiliManager(true)}
+                style={{
+                  color: '#ff7875',
+                  border: '1px solid rgba(255, 120, 117, 0.3)',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  height: '28px',
+                  padding: '0 12px',
+                  background: 'rgba(255, 120, 117, 0.1)'
+                }}
+              >
+                投稿
+              </Button>
             </div>
           </div>
         </Card>
@@ -476,9 +464,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
           <Button 
             key="subtitle" 
             icon={<EditOutlined />} 
-            loading={loadingSubtitles}
             onClick={handleOpenSubtitleEditor}
-            disabled={!projectId}
           >
             字幕编辑
           </Button>,
@@ -486,7 +472,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
             key="upload" 
             type="default" 
             icon={<UploadOutlined />} 
-            onClick={() => setShowUploadModal(true)}
+            onClick={() => setShowBilibiliManager(true)}
             disabled={!projectId}
           >
             投稿到B站
@@ -543,14 +529,14 @@ const ClipCard: React.FC<ClipCardProps> = ({
         </>
       )}
 
-      {/* 投稿弹窗 */}
-      <UploadModal
-        visible={showUploadModal}
-        onCancel={() => setShowUploadModal(false)}
+      {/* B站管理弹窗 */}
+      <BilibiliManager
+        visible={showBilibiliManager}
+        onClose={() => setShowBilibiliManager(false)}
         projectId={projectId || ''}
         clipIds={[clip.id]}
         clipTitles={[clip.generated_title || clip.title || '视频片段']}
-        onSuccess={() => {
+        onUploadSuccess={() => {
           // 投稿成功后可以刷新数据或显示提示
           console.log('投稿成功')
         }}

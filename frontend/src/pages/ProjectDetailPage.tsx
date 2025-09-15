@@ -25,6 +25,7 @@ import CollectionPreviewModal from '../components/CollectionPreviewModal'
 import CreateCollectionModal from '../components/CreateCollectionModal'
 import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
 import { ProjectTaskManager } from '../components/ProjectTaskManager'
+// import { useWebSocket, WebSocketEventMessage } from '../hooks/useWebSocket'  // 已禁用WebSocket系统
 
 const { Content } = Layout
 const { Title, Text } = Typography
@@ -51,6 +52,52 @@ const ProjectDetailPage: React.FC = () => {
   const [showCollectionDetail, setShowCollectionDetail] = useState(false)
   const [selectedCollection, setSelectedCollection] = useState<any>(null)
   const { generateAndDownloadCollectionVideo } = useCollectionVideoDownload()
+
+  // WebSocket连接已禁用，使用新的简化进度系统
+  // const handleWebSocketMessage = (message: WebSocketEventMessage) => {
+  //   console.log('ProjectDetailPage收到WebSocket消息:', message)
+  //   
+  //   switch (message.type) {
+  //     case 'task_progress_update':
+  //       console.log('📊 收到任务进度更新:', message)
+  //       // 如果消息是针对当前项目的，刷新项目状态
+  //       if (message.project_id === id) {
+  //         loadProject()
+  //         loadProcessingStatus()
+  //       }
+  //       break
+  //       
+  //     case 'project_update':
+  //       console.log('📊 收到项目更新:', message)
+  //       // 如果消息是针对当前项目的，刷新项目状态
+  //       if (message.project_id === id) {
+  //         loadProject()
+  //         loadProcessingStatus()
+  //       }
+  //       break
+  //       
+  //     default:
+  //       console.log('忽略未知类型的WebSocket消息:', (message as any).type)
+  //   }
+  // }
+
+  // const { isConnected, syncSubscriptions } = useWebSocket({
+  //   userId: `project-detail-${id}`,
+  //   onMessage: handleWebSocketMessage
+  // })
+
+  // WebSocket订阅已禁用，使用新的简化进度系统
+  // useEffect(() => {
+  //   if (isConnected && id) {
+  //     const desiredChannels = [`project_${id}`]
+  //     console.log('ProjectDetailPage同步订阅频道:', desiredChannels)
+  //     syncSubscriptions(desiredChannels)
+  //   } else if (isConnected && !id) {
+  //     // 如果没有项目ID，清空订阅
+  //     console.log('ProjectDetailPage清空订阅')
+  //     syncSubscriptions([])
+  //   }
+  // }, [isConnected, id, syncSubscriptions])
 
   useEffect(() => {
     if (id) {
@@ -269,7 +316,7 @@ const ProjectDetailPage: React.FC = () => {
         </div>
         
         <Space>
-          {currentProject.status === 'uploading' && (
+          {currentProject.status === 'pending' && (
             <Button 
               type="primary" 
               onClick={handleStartProcessing}

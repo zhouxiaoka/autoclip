@@ -48,19 +48,20 @@ class ClipResponse(BaseSchema):
     id: str = Field(description="Clip ID")
     project_id: str = Field(description="Project ID")
     title: str = Field(description="Clip title")
-    description: str = Field(description="Clip description")
-    start_time: Optional[float] = Field(description="Start time in seconds")
-    end_time: Optional[float] = Field(description="End time in seconds")
+    description: Optional[str] = Field(description="Clip description")
+    start_time: Optional[int] = Field(description="Start time in seconds")
+    end_time: Optional[int] = Field(description="End time in seconds")
     duration: Optional[int] = Field(description="Clip duration in seconds")
     score: Optional[float] = Field(description="Clip score")
     status: ClipStatus = Field(description="Clip status")
-    tags: List[str] = Field(description="Clip tags")
-    clip_metadata: dict = Field(description="Additional metadata")
+    video_path: Optional[str] = Field(description="Video file path")
+    tags: Optional[List[str]] = Field(description="Clip tags")
+    clip_metadata: Optional[dict] = Field(description="Additional metadata")
     created_at: datetime = Field(description="Creation timestamp")
     updated_at: datetime = Field(description="Last update timestamp")
     
     # Related data
-    collection_ids: List[str] = Field(default_factory=list, description="Collection IDs this clip belongs to")
+    collection_ids: Optional[List[str]] = Field(default_factory=list, description="Collection IDs this clip belongs to")
 
 
 class ClipListResponse(BaseSchema):

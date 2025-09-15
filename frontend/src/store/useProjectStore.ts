@@ -35,6 +35,12 @@ export interface Project {
   source_url?: string
   source_file?: string
   settings?: any
+  processing_config?: {
+    download_status?: string
+    download_progress?: number
+    download_message?: string
+    [key: string]: any
+  }
   created_at: string
   updated_at: string
   completed_at?: string
@@ -44,6 +50,7 @@ export interface Project {
   // 前端特有字段
   video_path?: string
   video_category?: string
+  thumbnail?: string
   clips?: Clip[]
   collections?: Collection[]
   current_step?: number

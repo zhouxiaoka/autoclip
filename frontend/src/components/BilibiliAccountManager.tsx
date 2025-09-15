@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Button, Modal, Form, Input, Table, Tag, Space, message, Popconfirm, Tabs, Alert, Typography, Divider } from 'antd'
-import { PlusOutlined, DeleteOutlined, UserOutlined, CheckCircleOutlined, CloseCircleOutlined, QrcodeOutlined, KeyOutlined, WechatOutlined, QqOutlined, ExclamationCircleOutlined, QuestionCircleOutlined } from '@ant-design/icons'
+import { Card, Button, Modal, Form, Input, Table, Tag, Space, message, Popconfirm, Tabs, Alert, Typography, Divider, Progress, Tooltip, Statistic } from 'antd'
+import { PlusOutlined, DeleteOutlined, UserOutlined, CheckCircleOutlined, CloseCircleOutlined, QrcodeOutlined, KeyOutlined, WechatOutlined, QqOutlined, ExclamationCircleOutlined, QuestionCircleOutlined, HeartOutlined, TrophyOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons'
 import { uploadApi, BilibiliAccount } from '../services/uploadApi'
 import CookieHelper from './CookieHelper'
+import AccountHealthMonitor from './AccountHealthMonitor'
 
 const { TextArea } = Input
 const { Text, Paragraph } = Typography
@@ -17,6 +18,14 @@ interface LoginMethod {
   risk_level: string
 }
 
+interface AccountHealth {
+  score: number
+  status: 'excellent' | 'good' | 'warning' | 'poor'
+  lastActive: string
+  uploadCount: number
+  successRate: number
+}
+
 const BilibiliAccountManager: React.FC = () => {
   const [accounts, setAccounts] = useState<BilibiliAccount[]>([])
   const [loading, setLoading] = useState(false)
@@ -24,6 +33,8 @@ const BilibiliAccountManager: React.FC = () => {
   const [loginMethods, setLoginMethods] = useState<LoginMethod[]>([])
   const [activeTab, setActiveTab] = useState('cookie')
   const [cookieHelperVisible, setCookieHelperVisible] = useState(false)
+  const [accountsHealth, setAccountsHealth] = useState<Record<string, AccountHealth>>({})
+  const [refreshing, setRefreshing] = useState(false)
   
   // 表单相关状态
   const [passwordForm] = Form.useForm()
@@ -31,7 +42,7 @@ const BilibiliAccountManager: React.FC = () => {
   const [qrSessionId, setQrSessionId] = useState<string>('')
   const [qrLoginStatus, setQrLoginStatus] = useState<string>('')
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('')
-  const [statusCheckInterval, setStatusCheckInterval] = useState<NodeJS.Timeout | null>(null)
+  const [statusCheckInterval, setStatusCheckInterval] = useState<number | null>(null)
 
   // 获取账号列表
   const fetchAccounts = async () => {
@@ -39,10 +50,58 @@ const BilibiliAccountManager: React.FC = () => {
       setLoading(true)
       const data = await uploadApi.getAccounts()
       setAccounts(data)
+      // 同时获取账号健康状态
+      await fetchAccountsHealth(data)
     } catch (error: any) {
       message.error('获取账号列表失败: ' + (error.message || '未知错误'))
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 获取账号健康状态
+  const fetchAccountsHealth = async (accountList?: BilibiliAccount[]) => {
+    try {
+      const targetAccounts = accountList || accounts
+      const healthData: Record<string, AccountHealth> = {}
+      
+      for (const account of targetAccounts) {
+        // 模拟健康状态数据，实际应该从API获取
+        const score = Math.floor(Math.random() * 40) + 60 // 60-100分
+        const uploadCount = Math.floor(Math.random() * 50) + 10
+        const successRate = Math.floor(Math.random() * 30) + 70
+        
+        let status: AccountHealth['status'] = 'good'
+        if (score >= 90) status = 'excellent'
+        else if (score >= 75) status = 'good'
+        else if (score >= 60) status = 'warning'
+        else status = 'poor'
+        
+        healthData[account.id] = {
+          score,
+          status,
+          lastActive: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+          uploadCount,
+          successRate
+        }
+      }
+      
+      setAccountsHealth(healthData)
+    } catch (error: any) {
+      console.error('获取账号健康状态失败:', error)
+    }
+  }
+
+  // 刷新账号健康状态
+  const refreshAccountsHealth = async () => {
+    try {
+      setRefreshing(true)
+      await fetchAccountsHealth()
+      message.success('健康状态已刷新')
+    } catch (error: any) {
+      message.error('刷新失败: ' + (error.message || '未知错误'))
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -208,11 +267,51 @@ const BilibiliAccountManager: React.FC = () => {
     return recommended ? <Tag color="blue">推荐</Tag> : null
   }
 
+  // 获取健康状态标签和颜色
+  const getHealthStatusTag = (health?: AccountHealth) => {
+    if (!health) return <Tag>未知</Tag>
+    
+    const statusConfig = {
+      excellent: { color: 'green', text: '优秀', icon: <TrophyOutlined /> },
+      good: { color: 'blue', text: '良好', icon: <CheckCircleOutlined /> },
+      warning: { color: 'orange', text: '警告', icon: <ExclamationCircleOutlined /> },
+      poor: { color: 'red', text: '较差', icon: <CloseCircleOutlined /> }
+    }
+    
+    const config = statusConfig[health.status]
+    return (
+      <Tooltip title={`健康分数: ${health.score}/100`}>
+        <Tag color={config.color} icon={config.icon}>
+          {config.text} ({health.score})
+        </Tag>
+      </Tooltip>
+    )
+  }
+
+  // 格式化最后活跃时间
+  const formatLastActive = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    
+    if (diffDays === 0) return '今天'
+    if (diffDays === 1) return '昨天'
+    if (diffDays < 7) return `${diffDays}天前`
+    return date.toLocaleDateString()
+  }
+
   const columns = [
     {
       title: '用户名',
       dataIndex: 'username',
       key: 'username',
+      render: (username: string, record: BilibiliAccount) => (
+        <Space>
+          <UserOutlined />
+          <span>{username}</span>
+        </Space>
+      ),
     },
     {
       title: '昵称',
@@ -220,27 +319,62 @@ const BilibiliAccountManager: React.FC = () => {
       key: 'nickname',
     },
     {
-      title: '状态',
+      title: '账号状态',
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => (
-        <Tag color={status === 'active' ? 'green' : 'red'}>
+        <Tag color={status === 'active' ? 'green' : 'red'} icon={status === 'active' ? <CheckCircleOutlined /> : <CloseCircleOutlined />}>
           {status === 'active' ? '正常' : '异常'}
         </Tag>
       ),
     },
     {
+      title: '健康状态',
+      key: 'health',
+      render: (_: any, record: BilibiliAccount) => getHealthStatusTag(accountsHealth[record.id]),
+    },
+    {
+      title: '活跃度',
+      key: 'activity',
+      render: (_: any, record: BilibiliAccount) => {
+        const health = accountsHealth[record.id]
+        if (!health) return '-'
+        
+        return (
+          <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <EyeOutlined style={{ color: '#1890ff' }} />
+              <span style={{ fontSize: '12px' }}>上传: {health.uploadCount}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <HeartOutlined style={{ color: '#52c41a' }} />
+              <span style={{ fontSize: '12px' }}>成功率: {health.successRate}%</span>
+            </div>
+            <div style={{ fontSize: '11px', color: '#999' }}>
+              最后活跃: {formatLastActive(health.lastActive)}
+            </div>
+          </Space>
+        )
+      },
+    },
+    {
       title: '操作',
       key: 'action',
-      render: (_, record: BilibiliAccount) => (
+      render: (_: any, record: BilibiliAccount) => (
         <Space size="middle">
+          <Tooltip title="查看详情">
+            <Button type="text" icon={<EyeOutlined />} size="small">
+              详情
+            </Button>
+          </Tooltip>
           <Popconfirm
             title="确定要删除这个账号吗？"
+            description="删除后将无法恢复，请谨慎操作。"
             onConfirm={() => handleDeleteAccount(record.id)}
             okText="确定"
             cancelText="取消"
           >
-            <Button type="text" danger icon={<DeleteOutlined />}>
+            <Button type="text" danger icon={<DeleteOutlined />} size="small">
               删除
             </Button>
           </Popconfirm>
@@ -249,14 +383,120 @@ const BilibiliAccountManager: React.FC = () => {
     },
   ]
 
+  // 计算总体统计数据
+  const getTotalStats = () => {
+    const totalAccounts = accounts.length
+    const activeAccounts = accounts.filter(acc => acc.status === 'active').length
+    const healthScores = Object.values(accountsHealth).map(h => h.score)
+    const avgHealth = healthScores.length > 0 ? Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length) : 0
+    const excellentCount = Object.values(accountsHealth).filter(h => h.status === 'excellent').length
+    
+    return { totalAccounts, activeAccounts, avgHealth, excellentCount }
+  }
+
+  const stats = getTotalStats()
+
   return (
-    <Card title="B站账号管理" extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>添加账号</Button>}>
-      <Table
-        columns={columns}
-        dataSource={accounts}
-        rowKey="id"
-        loading={loading}
-        pagination={false}
+    <div>
+      <Tabs
+        defaultActiveKey="accounts"
+        items={[
+          {
+            key: 'accounts',
+            label: (
+              <span>
+                <UserOutlined />
+                账号管理
+              </span>
+            ),
+            children: (
+              <div>
+                {/* 统计卡片 */}
+                <div style={{ marginBottom: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                  <Card size="small">
+                    <Statistic
+                      title="总账号数"
+                      value={stats.totalAccounts}
+                      prefix={<UserOutlined />}
+                      valueStyle={{ color: '#1890ff' }}
+                    />
+                  </Card>
+                  <Card size="small">
+                    <Statistic
+                      title="活跃账号"
+                      value={stats.activeAccounts}
+                      suffix={`/ ${stats.totalAccounts}`}
+                      prefix={<CheckCircleOutlined />}
+                      valueStyle={{ color: '#52c41a' }}
+                    />
+                  </Card>
+                  <Card size="small">
+                    <Statistic
+                      title="平均健康分"
+                      value={stats.avgHealth}
+                      suffix="分"
+                      prefix={<HeartOutlined />}
+                      valueStyle={{ color: stats.avgHealth >= 80 ? '#52c41a' : stats.avgHealth >= 60 ? '#faad14' : '#ff4d4f' }}
+                    />
+                  </Card>
+                  <Card size="small">
+                    <Statistic
+                      title="优秀账号"
+                      value={stats.excellentCount}
+                      prefix={<TrophyOutlined />}
+                      valueStyle={{ color: '#722ed1' }}
+                    />
+                  </Card>
+                </div>
+
+                <Card 
+                  title="B站账号管理" 
+                  extra={
+                    <Space>
+                      <Tooltip title="刷新健康状态">
+                        <Button 
+                          icon={<ReloadOutlined />} 
+                          onClick={refreshAccountsHealth}
+                          loading={refreshing}
+                          size="small"
+                        >
+                          刷新
+                        </Button>
+                      </Tooltip>
+                      <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>
+                        添加账号
+                      </Button>
+                    </Space>
+                  }
+                >
+                  <Table
+                    columns={columns}
+                    dataSource={accounts}
+                    rowKey="id"
+                    loading={loading}
+                    pagination={{
+                      pageSize: 10,
+                      showSizeChanger: true,
+                      showQuickJumper: true,
+                      showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+                    }}
+                    scroll={{ x: 800 }}
+                  />
+                </Card>
+              </div>
+            ),
+          },
+          {
+            key: 'health',
+            label: (
+              <span>
+                <HeartOutlined />
+                健康监控
+              </span>
+            ),
+            children: <AccountHealthMonitor onRefresh={fetchAccounts} />,
+          },
+        ]}
       />
 
       <Modal
@@ -424,15 +664,15 @@ const BilibiliAccountManager: React.FC = () => {
               showIcon
             />
           </TabPane>
-                 </Tabs>
-       </Modal>
+        </Tabs>
+      </Modal>
 
-       <CookieHelper 
-         visible={cookieHelperVisible}
-         onClose={() => setCookieHelperVisible(false)}
-       />
-     </Card>
-   )
+      <CookieHelper 
+        visible={cookieHelperVisible}
+        onClose={() => setCookieHelperVisible(false)}
+      />
+    </div>
+  )
  }
 
 export default BilibiliAccountManager

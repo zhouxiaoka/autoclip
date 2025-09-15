@@ -44,7 +44,9 @@ def get_subtitle_processor() -> SubtitleProcessor:
     return SubtitleProcessor()
 
 def get_video_editor() -> VideoEditor:
-    return VideoEditor()
+    # 字幕编辑器使用全局路径作为后备（不影响主流水线）
+    from ...core.shared_config import CLIPS_DIR, COLLECTIONS_DIR
+    return VideoEditor(clips_dir=str(CLIPS_DIR), collections_dir=str(COLLECTIONS_DIR))
 
 def get_project_service(db: Session = Depends(get_db)) -> ProjectService:
     """Dependency to get project service."""

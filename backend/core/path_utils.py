@@ -25,7 +25,9 @@ def get_project_root() -> Path:
 
 def get_data_directory() -> Path:
     """获取数据目录"""
-    data_dir = get_project_root() / "data"
+    # 统一使用项目根目录下的data目录，与config.py保持一致
+    project_root = get_project_root()
+    data_dir = project_root / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir
 

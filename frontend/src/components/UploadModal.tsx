@@ -95,6 +95,11 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
   // 提交投稿
   const handleSubmit = async (values: any) => {
+    // 显示开发中提示
+    message.info('B站上传功能正在开发中，敬请期待！', 3)
+    return
+    
+    // 原有代码已禁用
     if (!values.account_id) {
       message.error('请选择B站账号')
       return

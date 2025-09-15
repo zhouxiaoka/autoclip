@@ -106,7 +106,7 @@ MODEL_NAME = "qwen-plus"  # 通义千问模型名称
 SPEECH_RECOGNITION_METHOD = os.getenv("SPEECH_RECOGNITION_METHOD", "whisper_local")
 SPEECH_RECOGNITION_LANGUAGE = os.getenv("SPEECH_RECOGNITION_LANGUAGE", "auto")
 SPEECH_RECOGNITION_MODEL = os.getenv("SPEECH_RECOGNITION_MODEL", "base")
-SPEECH_RECOGNITION_TIMEOUT = int(os.getenv("SPEECH_RECOGNITION_TIMEOUT", "300"))
+SPEECH_RECOGNITION_TIMEOUT = int(os.getenv("SPEECH_RECOGNITION_TIMEOUT", "1000"))
 
 # 处理参数
 CHUNK_SIZE = 5000  # 文本分块大小
@@ -144,7 +144,7 @@ class Settings(BaseModel):
     speech_recognition_method: str = "whisper_local"
     speech_recognition_language: str = "auto"
     speech_recognition_model: str = "base"
-    speech_recognition_timeout: int = 300
+    speech_recognition_timeout: int = 1000
     # B站上传配置 (已移除 bilitool 相关功能)
     # bilibili_auto_upload: bool = False
     # bilibili_default_tid: int = 21  # 默认分区：日常

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class PathManager:
     """路径管理器，负责项目路径的统一管理"""
     
-    def __init__(self, project_id: str, base_dir: str = "backend/data/projects"):
+    def __init__(self, project_id: str, base_dir: str = "data/projects"):
         self.project_id = project_id
         # 使用绝对路径
         project_root = Path(__file__).parent.parent.parent

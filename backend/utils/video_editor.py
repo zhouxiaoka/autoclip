@@ -11,8 +11,15 @@ logger = logging.getLogger(__name__)
 class VideoEditor:
     """视频编辑器 - 支持基于字幕删除的视频重新剪辑"""
     
-    def __init__(self):
-        self.video_processor = VideoProcessor()
+    def __init__(self, clips_dir: Optional[str] = None, collections_dir: Optional[str] = None):
+        # VideoEditor 也需要指定路径参数，防止使用全局路径
+        if clips_dir is None or collections_dir is None:
+            # 如果没有提供路径，使用临时目录（不影响主流水线）
+            from ..core.shared_config import CLIPS_DIR, COLLECTIONS_DIR
+            clips_dir = str(CLIPS_DIR) if clips_dir is None else clips_dir
+            collections_dir = str(COLLECTIONS_DIR) if collections_dir is None else collections_dir
+        
+        self.video_processor = VideoProcessor(clips_dir=clips_dir, collections_dir=collections_dir)
         self.subtitle_processor = SubtitleProcessor()
     
     def edit_video_by_subtitle_deletion(self, 

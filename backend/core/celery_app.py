@@ -44,6 +44,7 @@ class CeleryConfig:
         'backend.tasks.video.*': {'queue': 'video'},
         'backend.tasks.notification.*': {'queue': 'notification'},
         'backend.tasks.upload.*': {'queue': 'upload'},  # 添加upload任务路由
+        'backend.tasks.import_processing.*': {'queue': 'processing'},  # 导入任务路由
     }
     
     # 定时任务配置
@@ -74,7 +75,8 @@ celery_app.autodiscover_tasks([
     'backend.tasks.processing',
     'backend.tasks.video', 
     'backend.tasks.notification',
-    'backend.tasks.maintenance'
+    'backend.tasks.maintenance',
+    'backend.tasks.import_processing'  # 添加导入处理任务
 ])
 
 if __name__ == '__main__':
