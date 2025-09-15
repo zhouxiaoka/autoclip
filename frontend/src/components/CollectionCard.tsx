@@ -121,7 +121,12 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
         )}
         <Card
           hoverable
-          style={{ height: '100%', width: '100%' }}
+          style={{ 
+            height: '360px', 
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
           cover={
@@ -210,7 +215,13 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
             )
           ].filter(Boolean)}
       >
-        <div style={{ padding: '0 8px' }}>
+        <div style={{ 
+          padding: '16px', 
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between'
+        }}>
           {editing ? (
             <Space direction="vertical" style={{ width: '100%' }} size="small">
               <Input
@@ -236,53 +247,126 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
               </Space>
             </Space>
           ) : (
-            <Space direction="vertical" style={{ width: '100%' }} size="small">
-              <div style={{ minHeight: '44px' }}>
-                <EditableCollectionTitle
-                  title={collection.collection_title}
-                  collectionId={collection.id}
-                  onTitleUpdate={(newTitle) => {
-                    // 更新合集标题
-                    onUpdate(collection.id, { collection_title: newTitle })
-                  }}
-                  style={{ 
-                    fontSize: '16px', 
-                    fontWeight: '600',
-                    color: '#ffffff'
-                  }}
-                />
+            <>
+              {/* 内容区域 - 固定高度 */}
+              <div style={{ 
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: 0
+              }}>
+                {/* 标题区域 - 固定高度 */}
+                <div style={{ 
+                  height: '56px',
+                  marginBottom: '12px',
+                  display: 'flex',
+                  alignItems: 'flex-start'
+                }}>
+                  <Tooltip 
+                    title={collection.collection_title} 
+                    placement="top" 
+                    overlayStyle={{ maxWidth: '300px' }}
+                    mouseEnterDelay={0.5}
+                  >
+                    <EditableCollectionTitle
+                      title={collection.collection_title}
+                      collectionId={collection.id}
+                      onTitleUpdate={(newTitle) => {
+                        // 更新合集标题
+                        onUpdate(collection.id, { collection_title: newTitle })
+                      }}
+                      style={{ 
+                        fontSize: '16px', 
+                        fontWeight: '600',
+                        color: '#ffffff',
+                        width: '100%',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    />
+                  </Tooltip>
+                </div>
+                
+                {/* 标签区域 - 固定高度 */}
+                <div style={{ 
+                  height: '28px',
+                  marginBottom: '12px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  {collection.collection_type === 'manual' ? (
+                    <Tag color="green">手动创建</Tag>
+                  ) : (
+                    <Tag color="purple">AI推荐</Tag>
+                  )}
+                </div>
+                
+                {/* 描述区域 - 固定高度 */}
+                <div style={{ 
+                  height: '72px',
+                  marginBottom: '12px',
+                  display: 'flex',
+                  alignItems: 'flex-start'
+                }}>
+                  <Tooltip 
+                    title={collection.collection_summary} 
+                    placement="top" 
+                    overlayStyle={{ maxWidth: '300px' }}
+                    mouseEnterDelay={0.5}
+                  >
+                    <Text 
+                      type="secondary" 
+                      style={{ 
+                        fontSize: '12px',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        lineHeight: '1.5',
+                        color: '#b0b0b0',
+                        cursor: 'pointer',
+                        width: '100%'
+                      }}
+                    >
+                      {collection.collection_summary}
+                    </Text>
+                  </Tooltip>
+                </div>
+                
+                {/* 片段信息区域 - 固定高度 */}
+                <div style={{ 
+                  height: '24px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  <Tooltip 
+                    title={collectionClips.map(clip => clip.title || clip.outline).join('、')} 
+                    placement="top" 
+                    overlayStyle={{ maxWidth: '300px' }}
+                    mouseEnterDelay={0.5}
+                  >
+                    <Text 
+                      type="secondary" 
+                      style={{ 
+                        fontSize: '11px',
+                        color: '#888',
+                        cursor: 'pointer',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        width: '100%'
+                      }}
+                    >
+                      包含片段：{collectionClips.slice(0, 2).map(clip => clip.title || clip.outline).join('、')}
+                      {collectionClips.length > 2 && `等${collectionClips.length}个`}
+                    </Text>
+                  </Tooltip>
+                </div>
               </div>
-              
-              <div>
-                {collection.collection_type === 'manual' ? (
-                  <Tag color="green">手动创建</Tag>
-                ) : (
-                  <Tag color="purple">AI推荐</Tag>
-                )}
-              </div>
-              
-              <div style={{ minHeight: '60px', fontSize: '12px' }}>
-                <Text 
-                  type="secondary" 
-                  ellipsis
-                  style={{ 
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden'
-                  }}
-                >
-                  {collection.collection_summary}
-                </Text>
-              </div>
-              
-              <div style={{ marginTop: '8px' }}>
-                <Text type="secondary" style={{ fontSize: '11px' }}>
-                  包含片段：{collectionClips.slice(0, 2).map(clip => clip.title || clip.outline).join('、')}
-                  {collectionClips.length > 2 && `等${collectionClips.length}个`}
-                </Text>
-              </div>
-            </Space>
+            </>
           )}
         </div>
         </Card>

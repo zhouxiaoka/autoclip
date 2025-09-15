@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Card, Typography, Button, Popconfirm } from 'antd'
+import { Card, Typography, Button, Popconfirm, Tooltip } from 'antd'
 import { DeleteOutlined } from '@ant-design/icons'
 import { Collection, Clip } from '../store/useProjectStore'
 import EditableCollectionTitle from './EditableCollectionTitle'
@@ -46,7 +46,7 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
       hoverable
       style={{ 
         width: '300px',
-        height: '140px',
+        height: '160px',
         flexShrink: 0,
         cursor: 'pointer',
         borderRadius: '12px',
@@ -70,9 +70,16 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
         flexDirection: 'column',
         justifyContent: 'space-between'
       }}>
-        {/* 头部区域 */}
-        <div>
+        {/* 内容区域 - 固定高度 */}
+        <div style={{ 
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0
+        }}>
+          {/* 标题和标签区域 - 固定高度 */}
           <div style={{ 
+            height: '48px',
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'flex-start',
@@ -80,24 +87,40 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
           }}>
             <div style={{ 
               flex: 1,
-              paddingRight: '8px'
+              paddingRight: '8px',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'flex-start'
             }}>
-              <EditableCollectionTitle
-                title={collection.collection_title}
-                collectionId={collection.id}
-                onTitleUpdate={(newTitle) => {
-                  // 更新合集标题
-                  if (onUpdate) {
-                    onUpdate(collection.id, { collection_title: newTitle })
-                  }
-                }}
-                style={{ 
-                  fontSize: '15px',
-                  fontWeight: 600,
-                  lineHeight: '1.4',
-                  color: '#ffffff'
-                }}
-              />
+              <Tooltip 
+                title={collection.collection_title} 
+                placement="top" 
+                overlayStyle={{ maxWidth: '200px' }}
+                mouseEnterDelay={0.5}
+              >
+                <EditableCollectionTitle
+                  title={collection.collection_title}
+                  collectionId={collection.id}
+                  onTitleUpdate={(newTitle) => {
+                    // 更新合集标题
+                    if (onUpdate) {
+                      onUpdate(collection.id, { collection_title: newTitle })
+                    }
+                  }}
+                  style={{ 
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    lineHeight: '1.4',
+                    color: '#ffffff',
+                    width: '100%',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                />
+              </Tooltip>
             </div>
             <span
               style={{ 
@@ -111,27 +134,45 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
                 color: 'white',
                 padding: '2px 6px',
                 fontWeight: 500,
-                whiteSpace: 'nowrap'
+                whiteSpace: 'nowrap',
+                flexShrink: 0
               }}
             >
               {collection.collection_type === 'ai_recommended' ? 'AI推荐' : '手动创建'}
             </span>
           </div>
           
-          <Text 
-            type="secondary" 
-            style={{ 
-              fontSize: '12px',
-              color: '#b0b0b0',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              lineHeight: '1.4'
-            }}
-          >
-            {collection.collection_summary || '暂无描述'}
-          </Text>
+          {/* 描述区域 - 固定高度 */}
+          <div style={{ 
+            height: '40px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            marginBottom: '8px'
+          }}>
+            <Tooltip 
+              title={collection.collection_summary || '暂无描述'} 
+              placement="top" 
+              overlayStyle={{ maxWidth: '250px' }}
+              mouseEnterDelay={0.5}
+            >
+              <Text 
+                type="secondary" 
+                style={{ 
+                  fontSize: '12px',
+                  color: '#b0b0b0',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  lineHeight: '1.4',
+                  width: '100%',
+                  cursor: 'pointer'
+                }}
+              >
+                {collection.collection_summary || '暂无描述'}
+              </Text>
+            </Tooltip>
+          </div>
         </div>
         
         {/* 底部区域 */}
