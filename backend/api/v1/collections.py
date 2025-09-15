@@ -2,6 +2,7 @@
 合集API路由
 """
 
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -9,6 +10,8 @@ from ...core.database import get_db
 from ...services.collection_service import CollectionService
 from ...schemas.collection import CollectionCreate, CollectionUpdate, CollectionResponse, CollectionListResponse
 from ...schemas.base import PaginationParams
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -239,3 +242,122 @@ async def reorder_collection_clips(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{collection_id}/generate-title", response_model=dict)
+async def generate_collection_title(
+    collection_id: str,
+    collection_service: CollectionService = Depends(get_collection_service)
+):
+    """Generate a new title for a collection using LLM."""
+    try:
+        collection = collection_service.get(collection_id)
+        if not collection:
+            raise HTTPException(status_code=404, detail="合集不存在")
+
+        # 获取合集元数据
+        collection_metadata = getattr(collection, 'collection_metadata', {}) or {}
+        
+        if not collection_metadata:
+            raise HTTPException(status_code=404, detail="合集元数据不存在")
+
+        # 获取合集中的切片信息
+        clip_ids = collection_metadata.get('clip_ids', [])
+        if not clip_ids:
+            raise HTTPException(status_code=404, detail="合集中没有切片")
+
+        # 获取切片详细信息
+        from ...repositories.clip_repository import ClipRepository
+        clip_repo = ClipRepository(collection_service.db)
+        
+        clips_data = []
+        for clip_id in clip_ids:
+            clip = clip_repo.get_by_id(clip_id)
+            if clip:
+                clip_metadata = getattr(clip, 'clip_metadata', {}) or {}
+                clips_data.append({
+                    "id": clip_id,
+                    "title": clip_metadata.get('outline', '') or getattr(clip, 'title', ''),
+                    "content": clip_metadata.get('content', []),
+                    "recommend_reason": clip_metadata.get('recommend_reason', '')
+                })
+
+        if not clips_data:
+            raise HTTPException(status_code=404, detail="无法获取切片内容")
+
+        # 构建LLM输入
+        llm_input = {
+            "collection_id": collection_id,
+            "collection_title": collection.name,
+            "collection_description": collection.description or "",
+            "clips": clips_data,
+            "total_duration_minutes": collection_metadata.get('total_duration_minutes', 0),
+            "target_audience": collection_metadata.get('target_audience', ''),
+            "key_themes": collection_metadata.get('key_themes', [])
+        }
+
+        # 调用LLM生成标题
+        from ...utils.llm_client import LLMClient
+        from ...core.shared_config import PROMPT_FILES
+
+        llm_client = LLMClient()
+
+        with open(PROMPT_FILES['collection_title'], 'r', encoding='utf-8') as f:
+            title_prompt = f.read()
+
+        raw_response = llm_client.call_with_retry(title_prompt, llm_input)
+
+        if not raw_response:
+            raise HTTPException(status_code=500, detail="LLM调用失败")
+
+        title_result = llm_client.parse_json_response(raw_response)
+
+        if not isinstance(title_result, dict) or 'generated_title' not in title_result:
+            raise HTTPException(status_code=500, detail="LLM返回格式错误")
+
+        generated_title = title_result['generated_title']
+
+        return {
+            "collection_id": collection_id,
+            "generated_title": generated_title,
+            "success": True
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"生成合集标题失败: {e}")
+        raise HTTPException(status_code=500, detail=f"生成合集标题失败: {str(e)}")
+
+
+@router.put("/{collection_id}/title", response_model=dict)
+async def update_collection_title(
+    collection_id: str,
+    title_data: dict,
+    collection_service: CollectionService = Depends(get_collection_service)
+):
+    """Update collection title."""
+    try:
+        new_title = title_data.get('title')
+        if not new_title:
+            raise HTTPException(status_code=400, detail="标题不能为空")
+
+        collection = collection_service.get(collection_id)
+        if not collection:
+            raise HTTPException(status_code=404, detail="合集不存在")
+
+        # 更新合集标题
+        collection.name = new_title
+        collection_service.db.commit()
+
+        return {
+            "collection_id": collection_id,
+            "title": new_title,
+            "success": True
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新合集标题失败: {e}")
+        raise HTTPException(status_code=500, detail=f"更新合集标题失败: {str(e)}")

@@ -381,6 +381,9 @@ const ProjectDetailPage: React.FC = () => {
                     collection={collection}
                     clips={currentProject.clips || []}
                     onView={handleViewCollection}
+                    onUpdate={(collectionId, updates) => 
+                      updateCollection(currentProject.id, collectionId, updates)
+                    }
                     onGenerateVideo={async (collectionId) => {
                       const collection = currentProject.collections?.find(c => c.id === collectionId)
                       if (collection) {

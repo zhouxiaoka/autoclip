@@ -354,53 +354,84 @@ const ClipCard: React.FC<ClipCardProps> = ({
             </div>
           }
         >
-          <div style={{ padding: '16px', height: '180px', display: 'flex', flexDirection: 'column' }}>
-            {/* 标题区域 */}
-            <div style={{ marginBottom: '8px' }}>
-              <EditableTitle
-                title={clip.title || clip.generated_title || '未命名片段'}
-                clipId={clip.id}
-                onTitleUpdate={handleTitleUpdate}
-                style={{ 
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  lineHeight: '1.4',
-                  color: '#ffffff',
-                  minHeight: '44px'
-                }}
-              />
-            </div>
-            
-            {/* 内容要点 */}
-            <div style={{ flex: 1, marginBottom: '12px', minHeight: '58px' }}>
-              <Tooltip 
-                title={getDisplayContent()} 
-                placement="top" 
-                overlayStyle={{ maxWidth: '300px' }}
-                mouseEnterDelay={0.5}
-              >
-                <div 
-                  ref={textRef}
+          <div style={{ 
+            padding: '16px', 
+            height: '180px', 
+            display: 'flex', 
+            flexDirection: 'column',
+            justifyContent: 'space-between'
+          }}>
+            {/* 内容区域 - 固定高度 */}
+            <div style={{ 
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 0 // 允许flex子项收缩
+            }}>
+              {/* 标题区域 - 固定高度 */}
+              <div style={{ 
+                height: '44px',
+                marginBottom: '8px',
+                display: 'flex',
+                alignItems: 'flex-start'
+              }}>
+                <EditableTitle
+                  title={clip.title || clip.generated_title || '未命名片段'}
+                  clipId={clip.id}
+                  onTitleUpdate={handleTitleUpdate}
                   style={{ 
-                    fontSize: '13px',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    lineHeight: '1.5',
-                    color: '#b0b0b0',
-                    cursor: 'pointer',
-                    wordBreak: 'break-word',
-                    textOverflow: 'ellipsis'
+                    fontSize: '16px',
+                    fontWeight: 600,
+                    lineHeight: '1.4',
+                    color: '#ffffff',
+                    width: '100%'
                   }}
+                />
+              </div>
+              
+              {/* 内容要点 - 固定高度 */}
+              <div style={{ 
+                height: '58px',
+                marginBottom: '12px',
+                display: 'flex',
+                alignItems: 'flex-start'
+              }}>
+                <Tooltip 
+                  title={getDisplayContent()} 
+                  placement="top" 
+                  overlayStyle={{ maxWidth: '300px' }}
+                  mouseEnterDelay={0.5}
                 >
-                  {getDisplayContent()}
-                </div>
-              </Tooltip>
+                  <div 
+                    ref={textRef}
+                    style={{ 
+                      fontSize: '13px',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      lineHeight: '1.5',
+                      color: '#b0b0b0',
+                      cursor: 'pointer',
+                      wordBreak: 'break-word',
+                      textOverflow: 'ellipsis',
+                      width: '100%'
+                    }}
+                  >
+                    {getDisplayContent()}
+                  </div>
+                </Tooltip>
+              </div>
             </div>
             
-            {/* 操作按钮 */}
-            <div style={{ display: 'flex', gap: '8px' }}>
+            {/* 操作按钮 - 固定在底部 */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '8px',
+              height: '28px',
+              alignItems: 'center',
+              marginTop: 'auto'
+            }}>
               <Button 
                 type="text" 
                 size="small"
