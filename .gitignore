@@ -1,8 +1,95 @@
+# 日志文件
 logs/
+*.log
+backend.log
+celery.log
+
+# Python缓存
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# 虚拟环境
+venv/
+env/
+.venv/
+
+# 视频和媒体文件
 *.mp4
 *.mkv
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+*.m4v
+*.3gp
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+*.wma
+
+# 压缩文件
 *.zip
 *.tar.gz
+*.rar
+*.7z
+
+# 模型文件
 *.pt
 *.ckpt
+*.pth
+*.h5
+*.pkl
+*.joblib
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+data/autoclip.db
+
+# 项目数据目录（包含用户上传的视频和生成的文件）
+data/projects/
+data/uploads/
+data/temp/
+data/output/
+data/backups/
+
+# 系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 环境变量文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 进程ID文件
+*.pid
+
+# Redis数据文件
+dump.rdb
+
+# 临时文件
+*.tmp
+*.temp

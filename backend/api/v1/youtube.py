@@ -305,6 +305,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         
         # 使用yt-dlp下载视频
         import yt_dlp
+        import asyncio
         from ...core.config import get_data_directory
         
         data_dir = get_data_directory()
@@ -585,6 +586,7 @@ async def _try_youtube_subtitle_strategies(url: str, download_dir: Path, browser
 
 async def _try_download_with_different_formats(url: str, download_dir: Path, browser: Optional[str] = None) -> str:
     """尝试下载不同格式的字幕"""
+    import asyncio
     logger.info("尝试下载不同格式的YouTube字幕...")
     
     formats = ['srt', 'vtt', 'json3']
@@ -634,6 +636,7 @@ async def _try_download_with_different_formats(url: str, download_dir: Path, bro
 
 async def _try_download_with_different_langs(url: str, download_dir: Path, browser: Optional[str] = None) -> str:
     """尝试下载不同语言的字幕"""
+    import asyncio
     logger.info("尝试下载不同语言的YouTube字幕...")
     
     lang_combinations = [
@@ -681,6 +684,7 @@ async def _try_download_with_different_langs(url: str, download_dir: Path, brows
 
 async def _try_extract_from_metadata(url: str, download_dir: Path, browser: Optional[str] = None) -> str:
     """尝试从视频元数据中提取字幕信息"""
+    import asyncio
     logger.info("尝试从YouTube视频元数据提取字幕信息...")
     
     try:
