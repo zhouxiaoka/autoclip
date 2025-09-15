@@ -277,23 +277,6 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
             >
               播放
             </Button>
-            <Button
-              type="text"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => onView(collection)}
-              style={{
-                color: '#52c41a',
-                border: '1px solid rgba(82, 196, 26, 0.3)',
-                borderRadius: '6px',
-                fontSize: '12px',
-                height: '28px',
-                padding: '0 12px',
-                background: 'rgba(82, 196, 26, 0.1)'
-              }}
-            >
-              片段
-            </Button>
             {onGenerateVideo && (
               <Button
                 type="text"
@@ -301,18 +284,35 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
                 icon={<DownloadOutlined />}
                 onClick={() => onGenerateVideo(collection.id)}
                 style={{
-                  color: '#ff7875',
-                  border: '1px solid rgba(255, 120, 117, 0.3)',
+                  color: '#52c41a',
+                  border: '1px solid rgba(82, 196, 26, 0.3)',
                   borderRadius: '6px',
                   fontSize: '12px',
                   height: '28px',
                   padding: '0 12px',
-                  background: 'rgba(255, 120, 117, 0.1)'
+                  background: 'rgba(82, 196, 26, 0.1)'
                 }}
               >
                 下载
               </Button>
             )}
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => onView(collection)}
+              style={{
+                color: '#ff7875',
+                border: '1px solid rgba(255, 120, 117, 0.3)',
+                borderRadius: '6px',
+                fontSize: '12px',
+                height: '28px',
+                padding: '0 12px',
+                background: 'rgba(255, 120, 117, 0.1)'
+              }}
+            >
+              投稿
+            </Button>
           </div>
       </div>
     </Card>
