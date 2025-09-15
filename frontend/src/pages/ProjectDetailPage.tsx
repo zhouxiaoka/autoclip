@@ -20,7 +20,7 @@ import {
 import { useProjectStore, Project, Clip } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
 import ClipCard from '../components/ClipCard'
-import CollectionCardMini from '../components/CollectionCardMini'
+import CollectionCard from '../components/CollectionCard'
 import CollectionPreviewModal from '../components/CollectionPreviewModal'
 import CreateCollectionModal from '../components/CreateCollectionModal'
 import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
@@ -376,7 +376,7 @@ const ProjectDetailPage: React.FC = () => {
                     return timeB - timeA
                   })
                   .map((collection) => (
-                  <CollectionCardMini
+                  <CollectionCard
                     key={collection.id}
                     collection={collection}
                     clips={currentProject.clips || []}
