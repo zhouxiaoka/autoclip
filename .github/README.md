@@ -1,4 +1,4 @@
-# AutoClip - 视频高光切片 Agent
+# AutoClip - 视频高光切片自动化工具
 
 支持YouTube/B站视频下载、自动切片、智能合集生成
 
