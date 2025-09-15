@@ -1,8 +1,4 @@
-# AutoClip - AI视频智能切片系统
-
-![AutoClip Logo](https://img.shields.io/badge/AutoClip-AI%20Video%20Processing-blue?style=for-the-badge&logo=video)
-
-## 基于AI的智能视频切片处理系统
+# AutoClip - 视频高光切片 Agent
 
 支持YouTube/B站视频下载、自动切片、智能合集生成
 
