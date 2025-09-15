@@ -12,9 +12,13 @@ from pathlib import Path
 from ..services.base import BaseService
 from ..repositories.project_repository import ProjectRepository
 from ..models.project import Project
+from ..models.task import Task
+from ..models.clip import Clip
+from ..models.collection import Collection
 from ..schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse, ProjectFilter
 from ..schemas.base import PaginationParams, PaginationResponse
 from ..schemas.project import ProjectType, ProjectStatus
+from ..schemas.task import TaskStatus
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +216,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
     
     def delete_project_with_files(self, project_id: str) -> bool:
         """
-        删除项目及其所有相关文件
+        删除项目及其所有相关数据
         
         Args:
             project_id: 项目ID
@@ -229,18 +233,59 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             
             logger.info(f"开始删除项目 {project_id}: {project.name}")
             
-            # 1. 删除文件系统中的项目数据
-            self._delete_project_files(project_id)
+            # 检查是否有正在运行的任务
+            running_tasks = self.db.query(Task).filter(
+                Task.project_id == project_id,
+                Task.status == TaskStatus.RUNNING
+            ).count()
             
-            # 2. 删除数据库中的项目记录（级联删除会处理相关的切片、合集、任务）
-            success = self.delete(project_id)
+            if running_tasks > 0:
+                logger.warning(f"项目 {project_id} 有 {running_tasks} 个正在运行的任务，无法删除")
+                return False
             
-            if success:
+            # 开始事务（如果还没有开始的话）
+            if not self.db.in_transaction():
+                self.db.begin()
+            
+            try:
+                # 1. 删除相关任务
+                task_count = self.db.query(Task).filter(Task.project_id == project_id).count()
+                if task_count > 0:
+                    self.db.query(Task).filter(Task.project_id == project_id).delete()
+                    logger.info(f"删除项目 {project_id} 的 {task_count} 个任务")
+                
+                # 2. 删除相关切片
+                clip_count = self.db.query(Clip).filter(Clip.project_id == project_id).count()
+                if clip_count > 0:
+                    self.db.query(Clip).filter(Clip.project_id == project_id).delete()
+                    logger.info(f"删除项目 {project_id} 的 {clip_count} 个切片")
+                
+                # 3. 删除相关合集
+                collection_count = self.db.query(Collection).filter(Collection.project_id == project_id).count()
+                if collection_count > 0:
+                    self.db.query(Collection).filter(Collection.project_id == project_id).delete()
+                    logger.info(f"删除项目 {project_id} 的 {collection_count} 个合集")
+                
+                # 4. 删除项目记录
+                self.db.query(Project).filter(Project.id == project_id).delete()
+                logger.info(f"删除项目 {project_id} 记录")
+                
+                # 5. 提交事务
+                self.db.commit()
+                
+                # 6. 删除项目文件
+                self._delete_project_files(project_id)
+                
+                # 7. 清理进度数据
+                self._cleanup_project_progress(project_id)
+                
                 logger.info(f"项目 {project_id} 删除成功")
-            else:
-                logger.error(f"项目 {project_id} 数据库删除失败")
-            
-            return success
+                return True
+                
+            except Exception as e:
+                self.db.rollback()
+                logger.error(f"删除项目 {project_id} 数据库操作失败: {str(e)}")
+                return False
             
         except Exception as e:
             logger.error(f"删除项目 {project_id} 时发生错误: {str(e)}")
@@ -291,5 +336,33 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         except Exception as e:
             logger.error(f"删除项目文件时发生错误: {str(e)}")
             # 不抛出异常，让数据库删除继续进行
+    
+    def _cleanup_project_progress(self, project_id: str):
+        """
+        清理项目相关的进度数据
+        
+        Args:
+            project_id: 项目ID
+        """
+        try:
+            # 清理Redis中的进度数据
+            try:
+                from ..services.simple_progress import clear_progress
+                clear_progress(project_id)
+                logger.info(f"清理项目 {project_id} 的Redis进度数据")
+            except Exception as e:
+                logger.warning(f"清理Redis进度数据失败: {e}")
+            
+            # 清理增强进度服务中的缓存
+            try:
+                from ..services.enhanced_progress_service import progress_service
+                if project_id in progress_service.progress_cache:
+                    del progress_service.progress_cache[project_id]
+                    logger.info(f"清理项目 {project_id} 的内存进度缓存")
+            except Exception as e:
+                logger.warning(f"清理内存进度缓存失败: {e}")
+            
+        except Exception as e:
+            logger.error(f"清理项目进度数据失败: {str(e)}")
     
  

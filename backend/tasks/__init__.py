@@ -8,6 +8,7 @@ from .video import *
 from .notification import *
 from .maintenance import *
 from .upload import *  # 添加upload任务导入
+from .data_cleanup import *  # 添加数据清理任务导入
 
 __all__ = [
     # 处理任务
@@ -29,6 +30,11 @@ __all__ = [
     'cleanup_expired_tasks',
     'health_check',
     'backup_project_data',
+    
+    # 数据清理任务
+    'cleanup_expired_data',
+    'check_data_consistency',
+    'cleanup_orphaned_data',
     
     # 投稿任务
     'upload_clip_task',

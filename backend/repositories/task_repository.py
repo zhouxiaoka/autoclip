@@ -307,7 +307,7 @@ class TaskRepository(BaseRepository[Task]):
     
     def cleanup_old_tasks(self, days: int = 30) -> int:
         """
-        清理旧任务
+        清理旧任务，包括异常状态的任务
         
         Args:
             days: 保留天数
@@ -317,11 +317,58 @@ class TaskRepository(BaseRepository[Task]):
         """
         from datetime import datetime, timedelta
         cutoff_date = datetime.utcnow() - timedelta(days=days)
+        long_running_cutoff = datetime.utcnow() - timedelta(hours=24)
         
-        deleted_count = self.db.query(self.model).filter(
-            self.model.created_at < cutoff_date,
-            self.model.status.in_([TaskStatus.COMPLETED, TaskStatus.FAILED])
-        ).delete(synchronize_session=False)
+        total_deleted = 0
         
-        self.db.commit()
-        return deleted_count
+        try:
+            # 1. 清理过期的已完成/失败任务
+            completed_tasks = self.db.query(self.model).filter(
+                self.model.created_at < cutoff_date,
+                self.model.status.in_([TaskStatus.COMPLETED, TaskStatus.FAILED])
+            ).delete(synchronize_session=False)
+            
+            total_deleted += completed_tasks
+            logger.info(f"清理了 {completed_tasks} 个过期的已完成/失败任务")
+            
+            # 2. 修复长时间运行的异常任务
+            long_running_tasks = self.db.query(self.model).filter(
+                self.model.status == TaskStatus.RUNNING,
+                self.model.created_at < long_running_cutoff
+            ).all()
+            
+            fixed_count = 0
+            for task in long_running_tasks:
+                task.status = TaskStatus.FAILED
+                task.error_message = "任务超时，已自动标记为失败"
+                task.updated_at = datetime.utcnow()
+                fixed_count += 1
+                logger.info(f"修复长时间运行任务: {task.id}")
+            
+            if fixed_count > 0:
+                self.db.commit()
+                logger.info(f"修复了 {fixed_count} 个长时间运行的任务")
+            
+            # 3. 清理孤立的任务（没有对应项目的任务）
+            from ..models.project import Project
+            all_project_ids = {p.id for p in self.db.query(Project).all()}
+            orphaned_tasks = self.db.query(self.model).filter(
+                ~self.model.project_id.in_(all_project_ids)
+            ).all()
+            
+            orphaned_count = 0
+            for task in orphaned_tasks:
+                self.db.delete(task)
+                orphaned_count += 1
+                logger.info(f"清理孤立任务: {task.id}")
+            
+            if orphaned_count > 0:
+                self.db.commit()
+                logger.info(f"清理了 {orphaned_count} 个孤立任务")
+            
+            return total_deleted + fixed_count + orphaned_count
+            
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"清理任务失败: {e}")
+            raise
