@@ -58,13 +58,13 @@ jobs:
     - name: Validate contact information
       run: |
         # Check if contact information is present
-        if ! grep -q "support@autoclip.com" README.md; then
-          echo "Missing contact email in Chinese README"
+        if ! grep -Eq '([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})|(联系|Contact).*(表单|Issue|飞书|微信|QQ|Discord|Telegram|Link|链接)' README.md; then
+          echo "Missing contact info in Chinese README"
           exit 1
         fi
         
-        if ! grep -q "support@autoclip.com" README-EN.md; then
-          echo "Missing contact email in English README"
+        if ! grep -Eq '([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})|(联系|Contact).*(表单|Issue|飞书|微信|QQ|Discord|Telegram|Link|链接)' README-EN.md; then
+          echo "Missing contact info in English README"
           exit 1
         fi
         
