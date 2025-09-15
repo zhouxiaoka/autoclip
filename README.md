@@ -9,13 +9,13 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-green?style=flat&logo=python)](https://python.org)
 [![React](https://img.shields.io/badge/React-18+-blue?style=flat&logo=react)](https://reactjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Latest-red?style=flat&logo=fastapi)](https://fastapi.tiangolo.com)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?style=flat&logo=typescript)](https://typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?style=flat&logo=typescript)](https://www.typescriptlang.org)
 [![Celery](https://img.shields.io/badge/Celery-Latest-green?style=flat&logo=celery)](https://celeryproject.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat)](LICENSE)
 
-[![GitHub stars](https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=social)](https://github.com/zhouxiaoka/autoclip)
-[![GitHub forks](https://img.shields.io/github/forks/zhouxiaoka/autoclip?style=social)](https://github.com/zhouxiaoka/autoclip)
-[![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip)](https://github.com/zhouxiaoka/autoclip/issues)
+[![GitHub stars](https://img.shields.io/badge/Stars-0-blue?style=social)](https://github.com/zhouxiaoka/autoclip)
+[![GitHub forks](https://img.shields.io/badge/Forks-0-blue?style=social)](https://github.com/zhouxiaoka/autoclip)
+[![GitHub issues](https://img.shields.io/badge/Issues-0-blue)](https://github.com/zhouxiaoka/autoclip/issues)
 
 **语言**: [English](README-EN.md) | [中文](README.md)
 
@@ -383,8 +383,8 @@ autoclip/
 
 启动系统后访问以下地址查看API文档：
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+- **Swagger UI**: http://localhost:8000/docs (本地开发环境)
+- **ReDoc**: http://localhost:8000/redoc (本地开发环境)
 
 ### 主要API端点
 
@@ -558,10 +558,10 @@ docker-compose ps
 
 #### 访问服务
 
-- **前端界面**: http://localhost:3000
-- **后端API**: http://localhost:8000
-- **API文档**: http://localhost:8000/docs
-- **Flower监控**: http://localhost:5555
+- **前端界面**: http://localhost:3000 (本地开发环境)
+- **后端API**: http://localhost:8000 (本地开发环境)
+- **API文档**: http://localhost:8000/docs (本地开发环境)
+- **Flower监控**: http://localhost:5555 (本地开发环境)
 
 #### 开发环境
 
@@ -770,7 +770,7 @@ A:
 ### 获取帮助
 
 - **问题反馈**: [GitHub Issues](https://github.com/zhouxiaoka/autoclip/issues)
-- **功能建议**: [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)
+- **功能建议**: [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions) (仓库创建后可用)
 - **Bug报告**: 请使用GitHub Issues模板
 - **文档**: [项目文档](docs/)
 
@@ -796,7 +796,7 @@ A:
 ### 视频处理
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube视频下载工具
 - [FFmpeg](https://ffmpeg.org/) - 音视频处理框架
-- [bcut-asr](https://github.com/liou666/bcut-asr) - 语音识别服务
+- [bcut-asr](https://github.com/liou666/bcut-asr) - 语音识别服务 (项目已归档)
 
 ### AI服务
 - [通义千问](https://tongyi.aliyun.com/) - 阿里云大语言模型服务

@@ -9,13 +9,13 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-green?style=flat&logo=python)](https://python.org)
 [![React](https://img.shields.io/badge/React-18+-blue?style=flat&logo=react)](https://reactjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Latest-red?style=flat&logo=fastapi)](https://fastapi.tiangolo.com)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?style=flat&logo=typescript)](https://typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?style=flat&logo=typescript)](https://www.typescriptlang.org)
 [![Celery](https://img.shields.io/badge/Celery-Latest-green?style=flat&logo=celery)](https://celeryproject.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat)](LICENSE)
 
-[![GitHub stars](https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=social)](https://github.com/zhouxiaoka/autoclip)
-[![GitHub forks](https://img.shields.io/github/forks/zhouxiaoka/autoclip?style=social)](https://github.com/zhouxiaoka/autoclip)
-[![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip)](https://github.com/zhouxiaoka/autoclip/issues)
+[![GitHub stars](https://img.shields.io/badge/Stars-0-blue?style=social)](https://github.com/zhouxiaoka/autoclip)
+[![GitHub forks](https://img.shields.io/badge/Forks-0-blue?style=social)](https://github.com/zhouxiaoka/autoclip)
+[![GitHub issues](https://img.shields.io/badge/Issues-0-blue)](https://github.com/zhouxiaoka/autoclip/issues)
 
 **Language**: [English](README-EN.md) | [中文](README.md)
 
