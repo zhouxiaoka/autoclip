@@ -17,7 +17,8 @@
 [![GitHub forks](https://img.shields.io/badge/Forks-0-blue?style=social)](https://github.com/zhouxiaoka/autoclip)
 [![GitHub issues](https://img.shields.io/badge/Issues-0-blue)](https://github.com/zhouxiaoka/autoclip/issues)
 
-**语言**: [English](README-EN.md) | [中文](README.md)
+**语言**: [English](README-EN.md) | [中文](README.md)  
+**联系邮箱**: christine_zhouye@163.com
 
 </div>
 
@@ -25,7 +26,7 @@
 
 AutoClip是一个基于AI的智能视频切片处理系统，能够自动从YouTube、B站等平台下载视频，通过AI分析提取精彩片段，并智能生成合集。系统采用现代化的前后端分离架构，提供直观的Web界面和强大的后端处理能力。
 
-**联系方式**: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+**联系方式**: christine_zhouye@163.com | [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
 ### ✨ 核心特性
 
@@ -825,7 +826,7 @@ A:
 ### 📧 其他联系方式
 
 - 提交 [GitHub Issue](https://github.com/zhouxiaoka/autoclip/issues)
-- 发送邮件至：[christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+- 发送邮件至：christine_zhouye@163.com | [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 - 添加上述QQ或飞书联系
 
 ## 🙏 致谢
