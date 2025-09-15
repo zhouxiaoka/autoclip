@@ -984,6 +984,55 @@ async def sync_all_projects_from_filesystem(
         raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
 
 
+@router.patch("/{project_id}/collections/{collection_id}/reorder")
+async def reorder_collection_clips(
+    project_id: str,
+    collection_id: str,
+    clip_ids: List[str],
+    db: Session = Depends(get_db)
+):
+    """重新排序合集中的切片"""
+    try:
+        from backend.services.collection_service import CollectionService
+        
+        # 创建合集服务
+        collection_service = CollectionService(db)
+        
+        # 获取合集
+        collection = collection_service.get(collection_id)
+        if not collection:
+            raise HTTPException(status_code=404, detail="Collection not found")
+        
+        # 验证合集属于指定项目
+        if str(collection.project_id) != project_id:
+            raise HTTPException(status_code=400, detail="Collection does not belong to the specified project")
+        
+        # 更新collection_metadata中的clip_ids
+        metadata = getattr(collection, 'collection_metadata', {}) or {}
+        metadata['clip_ids'] = clip_ids
+        
+        # 直接更新数据库中的collection_metadata字段
+        from sqlalchemy import update
+        from backend.models.collection import Collection
+        
+        stmt = update(Collection).where(Collection.id == collection_id).values(
+            collection_metadata=metadata
+        )
+        collection_service.db.execute(stmt)
+        collection_service.db.commit()
+        
+        return {
+            "message": "Collection clips reordered successfully",
+            "clip_ids": clip_ids
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"重新排序合集 {collection_id} 切片失败: {e}")
+        raise HTTPException(status_code=500, detail=f"重新排序失败: {str(e)}")
+
+
 @router.post("/sync/{project_id}")
 async def sync_project_from_filesystem(
     project_id: str,
@@ -1020,3 +1069,206 @@ async def sync_project_from_filesystem(
     except Exception as e:
         logger.error(f"同步项目 {project_id} 数据失败: {e}")
         raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
+
+
+@router.post("/{project_id}/collections/{collection_id}/generate")
+async def generate_collection_video(
+    project_id: str,
+    collection_id: str,
+    db: Session = Depends(get_db),
+    project_service: ProjectService = Depends(get_project_service)
+):
+    """生成合集视频"""
+    try:
+        from ...models.collection import Collection
+        from ...models.clip import Clip
+        from ...utils.video_processor import VideoProcessor
+        from ...core.path_utils import get_project_directory
+        from pathlib import Path
+        import json
+        
+        # 验证项目是否存在
+        project = project_service.get(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        
+        # 获取合集记录
+        collection = db.query(Collection).filter(Collection.id == collection_id).first()
+        if not collection:
+            raise HTTPException(status_code=404, detail="合集不存在")
+        
+        # 验证合集属于该项目
+        if str(collection.project_id) != project_id:
+            raise HTTPException(status_code=400, detail="合集不属于指定项目")
+        
+        # 获取合集的切片ID列表
+        metadata = getattr(collection, 'collection_metadata', {}) or {}
+        clip_ids = metadata.get('clip_ids', [])
+        
+        if not clip_ids:
+            raise HTTPException(status_code=400, detail="合集没有包含任何切片")
+        
+        # 获取切片信息，并按照clip_ids的顺序排列
+        clips_dict = {clip.id: clip for clip in db.query(Clip).filter(Clip.id.in_(clip_ids)).all()}
+        if len(clips_dict) != len(clip_ids):
+            raise HTTPException(status_code=400, detail="部分切片不存在")
+        
+        # 按照用户调整的顺序获取clips
+        ordered_clips = [clips_dict[clip_id] for clip_id in clip_ids if clip_id in clips_dict]
+        
+        # 获取项目目录
+        project_dir = get_project_directory(project_id)
+        collections_dir = project_dir / "output" / "collections"
+        collections_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 准备切片视频文件路径，按照用户调整的顺序
+        clips_dir = project_dir / "output" / "clips"
+        clip_video_paths = []
+        
+        for clip in ordered_clips:
+            if clip.video_path and Path(clip.video_path).exists():
+                clip_video_paths.append(Path(clip.video_path))
+            else:
+                # 尝试在clips目录中查找
+                possible_paths = [
+                    clips_dir / f"{clip.id}_*.mp4",
+                    clips_dir / f"clip_{clip.id}.mp4",
+                    clips_dir / f"{clip.id}.mp4"
+                ]
+                
+                found = False
+                for pattern in possible_paths:
+                    if pattern.name.endswith('*'):
+                        # 处理通配符
+                        matches = list(clips_dir.glob(pattern.name))
+                        if matches:
+                            clip_video_paths.append(matches[0])
+                            found = True
+                            break
+                    else:
+                        if pattern.exists():
+                            clip_video_paths.append(pattern)
+                            found = True
+                            break
+                
+                if not found:
+                    raise HTTPException(status_code=404, detail=f"切片视频文件不存在: {clip.id}")
+        
+        # 生成合集视频文件名
+        collection_name = collection.name or f"collection_{collection_id}"
+        # 清理文件名中的特殊字符
+        safe_name = "".join(c for c in collection_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        safe_name = safe_name.replace(' ', '_')
+        output_filename = f"{collection_id}_{safe_name}.mp4"
+        output_path = collections_dir / output_filename
+        
+        # 使用VideoProcessor创建合集
+        video_processor = VideoProcessor()
+        success = video_processor.create_collection(clip_video_paths, output_path)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="合集视频生成失败")
+        
+        # 更新合集的export_path
+        collection.export_path = str(output_path)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "合集视频生成成功",
+            "collection_id": collection_id,
+            "output_path": str(output_path),
+            "filename": output_filename
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"生成合集视频失败: {e}")
+        raise HTTPException(status_code=500, detail=f"生成合集视频失败: {str(e)}")
+
+
+@router.get("/{project_id}/download")
+async def download_project_file(
+    project_id: str,
+    clip_id: Optional[str] = Query(None, description="下载指定切片"),
+    collection_id: Optional[str] = Query(None, description="下载指定合集"),
+    db: Session = Depends(get_db),
+    project_service: ProjectService = Depends(get_project_service)
+):
+    """下载项目文件（切片或合集）"""
+    try:
+        from fastapi.responses import FileResponse
+        from pathlib import Path
+        
+        # 验证项目是否存在
+        project = project_service.get(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        
+        if collection_id:
+            # 下载合集视频
+            from ...models.collection import Collection
+            collection = db.query(Collection).filter(Collection.id == collection_id).first()
+            if not collection:
+                raise HTTPException(status_code=404, detail="合集不存在")
+            
+            if not collection.export_path:
+                raise HTTPException(status_code=404, detail="合集视频文件不存在")
+            
+            file_path = Path(collection.export_path)
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail="合集视频文件不存在")
+            
+            # 生成下载文件名
+            collection_name = collection.name or f"collection_{collection_id}"
+            safe_name = "".join(c for c in collection_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_name = safe_name.replace(' ', '_')
+            filename = f"{safe_name}.mp4"
+            
+            return FileResponse(
+                path=str(file_path),
+                filename=filename,
+                media_type="video/mp4",
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{filename}"
+                }
+            )
+        
+        elif clip_id:
+            # 下载切片视频
+            from ...models.clip import Clip
+            clip = db.query(Clip).filter(Clip.id == clip_id).first()
+            if not clip:
+                raise HTTPException(status_code=404, detail="切片不存在")
+            
+            if not clip.video_path:
+                raise HTTPException(status_code=404, detail="切片视频文件不存在")
+            
+            file_path = Path(clip.video_path)
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail="切片视频文件不存在")
+            
+            # 生成下载文件名
+            clip_title = clip.title or f"clip_{clip_id}"
+            safe_name = "".join(c for c in clip_title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_name = safe_name.replace(' ', '_')
+            filename = f"{safe_name}.mp4"
+            
+            return FileResponse(
+                path=str(file_path),
+                filename=filename,
+                media_type="video/mp4",
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{filename}"
+                }
+            )
+        
+        else:
+            raise HTTPException(status_code=400, detail="必须指定clip_id或collection_id")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"下载文件失败: {e}")
+        raise HTTPException(status_code=500, detail=f"下载文件失败: {str(e)}")

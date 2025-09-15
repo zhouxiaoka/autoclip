@@ -17,7 +17,7 @@ import {
   PlayCircleOutlined,
   PlusOutlined
 } from '@ant-design/icons'
-import { useProjectStore } from '../store/useProjectStore'
+import { useProjectStore, Project, Clip } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
 import ClipCard from '../components/ClipCard'
 import CollectionCardMini from '../components/CollectionCardMini'
@@ -507,8 +507,20 @@ const ProjectDetailPage: React.FC = () => {
                     key={clip.id}
                     clip={clip}
                     projectId={currentProject.id}
-                    videoUrl={projectApi.getClipVideoUrl(currentProject.id, clip.id, clip.generated_title || clip.title)}
+                    videoUrl={projectApi.getClipVideoUrl(currentProject.id, clip.id, clip.title || clip.generated_title)}
                     onDownload={(clipId) => projectApi.downloadVideo(currentProject.id, clipId)}
+                    onClipUpdate={(clipId: string, updates: Partial<Clip>) => {
+                      // 更新本地状态
+                      if (currentProject) {
+                        const updatedProject = {
+                          ...currentProject,
+                          clips: currentProject.clips?.map((c: Clip) => 
+                            c.id === clipId ? { ...c, ...updates } : c
+                          ) || []
+                        }
+                        setCurrentProject(updatedProject)
+                      }
+                    }}
                   />
                 ))}
               </div>

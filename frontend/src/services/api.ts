@@ -290,6 +290,16 @@ export const projectApi = {
     return api.patch(`/projects/${projectId}/clips/${clipId}`, updates)
   },
 
+  // 更新切片标题
+  updateClipTitle: async (clipId: string, title: string): Promise<any> => {
+    return api.patch(`/clips/${clipId}/title`, { title })
+  },
+
+  // 生成切片标题
+  generateClipTitle: async (clipId: string): Promise<{clip_id: string, generated_title: string, success: boolean}> => {
+    return api.post(`/clips/${clipId}/generate-title`)
+  },
+
   // 创建合集
   createCollection: (projectId: string, collectionData: { collection_title: string, collection_summary: string, clip_ids: string[] }): Promise<Collection> => {
     return api.post(`/collections/`, {

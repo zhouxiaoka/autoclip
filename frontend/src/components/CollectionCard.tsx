@@ -198,12 +198,12 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
               </Button>
             </Tooltip>,
             onGenerateVideo && (
-              <Tooltip key="generate" title="导出完整视频">
+              <Tooltip key="generate" title="下载合集视频">
                 <Button 
                   type="text"
                   onClick={() => onGenerateVideo(collection.id)}
                 >
-                  导出完整视频
+                  下载合集视频
                 </Button>
               </Tooltip>
             )
