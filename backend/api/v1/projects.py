@@ -1163,11 +1163,30 @@ async def generate_collection_video(
         output_path = collections_dir / output_filename
         
         # 使用VideoProcessor创建合集
-        video_processor = VideoProcessor()
+        video_processor = VideoProcessor(
+            clips_dir=str(clips_dir),
+            collections_dir=str(collections_dir)
+        )
         success = video_processor.create_collection(clip_video_paths, output_path)
         
         if not success:
             raise HTTPException(status_code=500, detail="合集视频生成失败")
+        
+        # 生成合集封面
+        thumbnail_path = None
+        try:
+            thumbnail_filename = f"{collection_id}_{safe_name}_thumbnail.jpg"
+            thumbnail_path = collections_dir / thumbnail_filename
+            
+            # 从视频中提取封面（第5秒的帧）
+            thumbnail_success = video_processor.extract_thumbnail(output_path, thumbnail_path, time_offset=5)
+            if thumbnail_success:
+                collection.thumbnail_path = str(thumbnail_path)
+                logger.info(f"合集封面生成成功: {thumbnail_path}")
+            else:
+                logger.warning(f"合集封面生成失败: {collection_id}")
+        except Exception as e:
+            logger.error(f"生成合集封面时出错: {e}")
         
         # 更新合集的export_path
         collection.export_path = str(output_path)
@@ -1226,12 +1245,16 @@ async def download_project_file(
             safe_name = safe_name.replace(' ', '_')
             filename = f"{safe_name}.mp4"
             
+            # 对文件名进行URL编码
+            import urllib.parse
+            encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
+            
             return FileResponse(
                 path=str(file_path),
                 filename=filename,
                 media_type="video/mp4",
                 headers={
-                    "Content-Disposition": f"attachment; filename*=UTF-8''{filename}"
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
                 }
             )
         
@@ -1272,3 +1295,53 @@ async def download_project_file(
     except Exception as e:
         logger.error(f"下载文件失败: {e}")
         raise HTTPException(status_code=500, detail=f"下载文件失败: {str(e)}")
+
+
+@router.get("/{project_id}/collections/{collection_id}/thumbnail")
+async def get_collection_thumbnail(
+    project_id: str,
+    collection_id: str,
+    db: Session = Depends(get_db),
+    project_service: ProjectService = Depends(get_project_service)
+):
+    """获取合集封面图片"""
+    try:
+        from fastapi.responses import FileResponse
+        from pathlib import Path
+        
+        # 验证项目是否存在
+        project = project_service.get(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        
+        # 获取合集记录
+        from ...models.collection import Collection
+        collection = db.query(Collection).filter(Collection.id == collection_id).first()
+        if not collection:
+            raise HTTPException(status_code=404, detail="合集不存在")
+        
+        # 验证合集属于该项目
+        if str(collection.project_id) != project_id:
+            raise HTTPException(status_code=400, detail="合集不属于指定项目")
+        
+        # 检查是否有封面
+        if not collection.thumbnail_path:
+            raise HTTPException(status_code=404, detail="合集封面不存在")
+        
+        thumbnail_path = Path(collection.thumbnail_path)
+        if not thumbnail_path.exists():
+            raise HTTPException(status_code=404, detail="合集封面文件不存在")
+        
+        return FileResponse(
+            path=str(thumbnail_path),
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "public, max-age=3600"  # 缓存1小时
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取合集封面失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取合集封面失败: {str(e)}")

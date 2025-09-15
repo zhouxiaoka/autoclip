@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Card, Typography, Button, Popconfirm, Tooltip } from 'antd'
-import { DeleteOutlined } from '@ant-design/icons'
+import { DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import { Collection, Clip } from '../store/useProjectStore'
 import EditableCollectionTitle from './EditableCollectionTitle'
 
@@ -45,18 +45,19 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
     <Card
       hoverable
       style={{ 
-        width: '300px',
-        height: '160px',
+        width: '320px',
+        height: '240px',
         flexShrink: 0,
         cursor: 'pointer',
-        borderRadius: '12px',
+        borderRadius: '16px',
         border: '1px solid #303030',
         background: 'linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)',
-        position: 'relative'
+        position: 'relative',
+        overflow: 'hidden'
       }}
       styles={{
         body: {
-          padding: '16px',
+          padding: 0,
           height: '100%'
         }
       }}
@@ -70,16 +71,70 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
         flexDirection: 'column',
         justifyContent: 'space-between'
       }}>
+        {/* 封面区域 */}
+        <div style={{
+          height: '120px',
+          background: collection.thumbnail_path 
+            ? `url(http://localhost:8000/api/v1/projects/${collection.project_id}/collections/${collection.id}/thumbnail)`
+            : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          {!collection.thumbnail_path && (
+            <PlayCircleOutlined style={{ fontSize: '32px', color: 'white', opacity: 0.9 }} />
+          )}
+          {collection.thumbnail_path && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              background: 'rgba(0,0,0,0.7)',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.3s ease',
+              opacity: isHovered ? 1 : 0.8
+            }}>
+              <PlayCircleOutlined style={{ fontSize: '20px', color: 'white' }} />
+            </div>
+          )}
+          <div 
+            style={{
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              background: 'rgba(0,0,0,0.8)',
+              color: 'white',
+              padding: '4px 8px',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: '500'
+            }}
+          >
+            {collectionClips.length} 个片段
+          </div>
+        </div>
+        
         {/* 内容区域 - 固定高度 */}
         <div style={{ 
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          minHeight: 0
+          minHeight: 0,
+          padding: '16px'
         }}>
           {/* 标题和标签区域 - 固定高度 */}
           <div style={{ 
-            height: '48px',
+            height: '56px',
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'flex-start',
@@ -144,10 +199,10 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
           
           {/* 描述区域 - 固定高度 */}
           <div style={{ 
-            height: '40px',
+            height: '48px',
             display: 'flex',
             alignItems: 'flex-start',
-            marginBottom: '8px'
+            marginBottom: '12px'
           }}>
             <Tooltip 
               title={collection.collection_summary || '暂无描述'} 
