@@ -23,18 +23,18 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
         
     - name: Install dependencies
       run: |
-        npm install -g markdown-link-check
+        npm install -g markdown-link-check@latest
         npm install -g markdownlint-cli
         
     - name: Check markdown links
       run: |
-        markdown-link-check README.md
-        markdown-link-check README-EN.md
-        markdown-link-check .github/README.md
+        npx markdown-link-check README.md
+        npx markdown-link-check README-EN.md
+        npx markdown-link-check .github/README.md
         
     - name: Lint markdown files
       run: |

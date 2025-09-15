@@ -13,9 +13,9 @@
 [![Celery](https://img.shields.io/badge/Celery-Latest-green?style=flat&logo=celery)](https://celeryproject.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat)](LICENSE)
 
-[![GitHub stars](https://img.shields.io/github/stars/your-username/autoclip?style=social)](https://github.com/your-username/autoclip)
-[![GitHub forks](https://img.shields.io/github/forks/your-username/autoclip?style=social)](https://github.com/your-username/autoclip)
-[![GitHub issues](https://img.shields.io/github/issues/your-username/autoclip)](https://github.com/your-username/autoclip/issues)
+[![GitHub stars](https://img.shields.io/badge/Stars-0-blue?style=social)](https://github.com/zhouxiaoka/autoclip)
+[![GitHub forks](https://img.shields.io/badge/Forks-0-blue?style=social)](https://github.com/zhouxiaoka/autoclip)
+[![GitHub issues](https://img.shields.io/badge/Issues-0-blue)](https://github.com/zhouxiaoka/autoclip/issues)
 
 **语言**: [English](README-EN.md) | [中文](README.md)
 
@@ -65,7 +65,7 @@ AutoClip是一个基于AI的智能视频切片处理系统，能够自动从YouT
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/autoclip.git
+git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
 
 # Docker一键启动
@@ -85,7 +85,7 @@ cd autoclip
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/autoclip.git
+git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
 
 # 一键启动（推荐，包含完整检查和监控）
@@ -107,9 +107,9 @@ cd autoclip
 - **飞书**: your_feishu_id
 
 ### 开源贡献
-- **问题反馈**: [GitHub Issues](https://github.com/your-username/autoclip/issues)
-- **功能建议**: [GitHub Discussions](https://github.com/your-username/autoclip/discussions)
-- **代码贡献**: [GitHub Pull Requests](https://github.com/your-username/autoclip/pulls)
+- **问题反馈**: [GitHub Issues](https://github.com/zhouxiaoka/autoclip/issues)
+- **功能建议**: [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)
+- **代码贡献**: [GitHub Pull Requests](https://github.com/zhouxiaoka/autoclip/pulls)
 
 ---
 
@@ -117,7 +117,7 @@ cd autoclip
 
 **如果这个项目对你有帮助，请给我们一个 ⭐ Star！**
 
-[![Star History Chart](https://api.star-history.com/svg?repos=your-username/autoclip&type=Date)](https://star-history.com/#your-username/autoclip&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)
 
 Made with ❤️ by AutoClip Team
 
