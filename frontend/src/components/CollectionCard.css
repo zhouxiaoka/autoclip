@@ -1,0 +1,46 @@
+.collection-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.collection-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(24, 144, 255, 0.1);
+}
+
+.collection-card:hover .ant-card-body {
+  background: linear-gradient(135deg, #1f1f1f 0%, #333333 100%);
+}
+
+.video-overlay {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(2px);
+}
+
+.collection-card:hover .video-overlay {
+  opacity: 1 !important;
+  background: rgba(0,0,0,0.6) !important;
+}
+
+.collection-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.collection-card:hover .collection-thumbnail {
+  transform: scale(1.05);
+}
+
+/* 自定义按钮悬停效果 */
+.collection-card .ant-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.3);
+}
+
+/* 类型标签动画 */
+.collection-card:hover [style*="collection_type"] {
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+}

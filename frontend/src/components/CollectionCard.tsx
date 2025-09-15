@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import { Card, Typography, Button, Space, Input, Tag, List, Modal, Tooltip, Popconfirm } from 'antd'
-import { EditOutlined, SaveOutlined, CloseOutlined, PlayCircleOutlined, DragOutlined, DeleteOutlined } from '@ant-design/icons'
+import { EditOutlined, SaveOutlined, CloseOutlined, PlayCircleOutlined, DragOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons'
 import { Collection, Clip } from '../store/useProjectStore'
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd'
 import EditableCollectionTitle from './EditableCollectionTitle'
+import './CollectionCard.css'
 
 const { Text } = Typography
 const { TextArea } = Input
@@ -30,6 +31,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
   const [editTitle, setEditTitle] = useState(collection.collection_title)
   const [editSummary, setEditSummary] = useState(collection.collection_summary)
   const [showClipList, setShowClipList] = useState(false)
+  const [showModal, setShowModal] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
 
   const handleSave = () => {
@@ -73,9 +75,6 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
     return `${mins}:${String(secs).padStart(2, '0')}`
   }
 
-  const averageScore = collectionClips.length > 0 
-    ? collectionClips.reduce((sum, clip) => sum + clip.final_score, 0) / collectionClips.length
-    : 0
 
   return (
     <>
@@ -119,19 +118,28 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
           </div>
         )}
         <Card
+          className="collection-card"
           hoverable
           style={{ 
-            height: '480px', 
+            height: '380px', 
             width: '100%',
-            display: 'flex',
-            flexDirection: 'column'
+            borderRadius: '16px',
+            border: '1px solid #303030',
+            background: 'linear-gradient(135deg, #1f1f1f 0%, #2a2a2a 100%)',
+            overflow: 'hidden',
+            cursor: 'pointer'
+          }}
+          styles={{
+            body: {
+              padding: 0,
+            },
           }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
           cover={
             <div 
               style={{ 
-                height: '220px', 
+                height: '200px', 
                 background: collection.thumbnail_path 
                   ? `url(http://localhost:8000/api/v1/projects/${collection.project_id}/collections/${collection.id}/thumbnail)`
                   : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -142,79 +150,99 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 position: 'relative',
+                cursor: 'pointer',
                 overflow: 'hidden'
               }}
+              onClick={() => setShowModal(true)}
             >
-              {!collection.thumbnail_path && (
-                <PlayCircleOutlined style={{ fontSize: '48px', color: 'white', opacity: 0.9 }} />
-              )}
-              {collection.thumbnail_path && (
-                <div style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  background: 'rgba(0,0,0,0.7)',
-                  borderRadius: '50%',
-                  width: '64px',
-                  height: '64px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.3s ease',
-                  opacity: isHovered ? 1 : 0.8
-                }}>
-                  <PlayCircleOutlined style={{ fontSize: '32px', color: 'white' }} />
-                </div>
-              )}
+              {/* 播放覆盖层 */}
               <div 
                 style={{
                   position: 'absolute',
-                  top: '8px',
-                  right: '8px',
-                  background: 'rgba(0,0,0,0.6)',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'rgba(0,0,0,0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: 0,
+                  transition: 'opacity 0.3s ease'
+                }}
+                className="video-overlay"
+              >
+                <PlayCircleOutlined style={{ fontSize: '40px', color: 'white' }} />
+              </div>
+              
+              {/* 右上角合集类型标签 */}
+              <div 
+                style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  background: collection.collection_type === 'ai_recommended' 
+                    ? 'linear-gradient(45deg, #1890ff, #36cfc9)' 
+                    : 'linear-gradient(45deg, #722ed1, #eb2f96)',
                   color: 'white',
                   padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '12px'
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                {collection.collection_type === 'ai_recommended' ? 'AI推荐' : '手动创建'}
+              </div>
+              
+              {/* 左下角片段数量 */}
+              <div 
+                style={{
+                  position: 'absolute',
+                  bottom: '12px',
+                  left: '12px',
+                  background: 'rgba(0,0,0,0.7)',
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
                 }}
               >
                 {collectionClips.length} 个片段
               </div>
+              
+              {/* 右下角总时长 */}
+              <div 
+                style={{
+                  position: 'absolute',
+                  bottom: '12px',
+                  right: '12px',
+                  background: 'rgba(0,0,0,0.7)',
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                {formatDuration(totalDuration)}
+              </div>
             </div>
           }
-          actions={[
-            <Tooltip key="edit" title="编辑">
-              <Button 
-                type="text" 
-                icon={<EditOutlined />}
-                onClick={() => setEditing(true)}
-              />
-            </Tooltip>,
-            <Tooltip key="clips" title="查看片段">
-              <Button 
-                type="text"
-                onClick={() => setShowClipList(true)}
-              >
-                片段
-              </Button>
-            </Tooltip>,
-            onGenerateVideo && (
-              <Tooltip key="generate" title="下载合集视频">
-                <Button 
-                  type="text"
-                  onClick={() => onGenerateVideo(collection.id)}
-                >
-                  下载合集视频
-                </Button>
-              </Tooltip>
-            )
-          ].filter(Boolean)}
       >
         <div style={{ 
-          padding: '20px', 
-          flex: 1,
-          display: 'flex',
+          padding: '16px', 
+          height: '180px', 
+          display: 'flex', 
           flexDirection: 'column',
           justifyContent: 'space-between'
         }}>
@@ -253,70 +281,49 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
               }}>
                 {/* 标题区域 - 固定高度 */}
                 <div style={{ 
-                  height: '64px',
-                  marginBottom: '16px',
+                  height: '44px',
+                  marginBottom: '8px',
+                  display: 'flex',
+                  alignItems: 'flex-start'
+                }}>
+                  <EditableCollectionTitle
+                    title={collection.collection_title}
+                    collectionId={collection.id}
+                    onTitleUpdate={(newTitle) => {
+                      // 更新合集标题
+                      onUpdate(collection.id, { collection_title: newTitle })
+                    }}
+                    style={{ 
+                      fontSize: '16px',
+                      fontWeight: 600,
+                      lineHeight: '1.4',
+                      color: '#ffffff',
+                      width: '100%',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  />
+                </div>
+                
+                {/* 合集描述 - 固定高度 */}
+                <div style={{ 
+                  height: '58px',
+                  marginBottom: '12px',
                   display: 'flex',
                   alignItems: 'flex-start'
                 }}>
                   <Tooltip 
-                    title={collection.collection_title} 
+                    title={collection.collection_summary || '暂无描述'} 
                     placement="top" 
                     overlayStyle={{ maxWidth: '300px' }}
                     mouseEnterDelay={0.5}
                   >
-                    <EditableCollectionTitle
-                      title={collection.collection_title}
-                      collectionId={collection.id}
-                      onTitleUpdate={(newTitle) => {
-                        // 更新合集标题
-                        onUpdate(collection.id, { collection_title: newTitle })
-                      }}
+                    <div 
                       style={{ 
-                        fontSize: '16px', 
-                        fontWeight: '600',
-                        color: '#ffffff',
-                        width: '100%',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}
-                    />
-                  </Tooltip>
-                </div>
-                
-                {/* 标签区域 - 固定高度 */}
-                <div style={{ 
-                  height: '32px',
-                  marginBottom: '16px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}>
-                  {collection.collection_type === 'manual' ? (
-                    <Tag color="green">手动创建</Tag>
-                  ) : (
-                    <Tag color="purple">AI推荐</Tag>
-                  )}
-                </div>
-                
-                {/* 描述区域 - 固定高度 */}
-                <div style={{ 
-                  height: '80px',
-                  marginBottom: '16px',
-                  display: 'flex',
-                  alignItems: 'flex-start'
-                }}>
-                  <Tooltip 
-                    title={collection.collection_summary} 
-                    placement="top" 
-                    overlayStyle={{ maxWidth: '300px' }}
-                    mouseEnterDelay={0.5}
-                  >
-                    <Text 
-                      type="secondary" 
-                      style={{ 
-                        fontSize: '12px',
+                        fontSize: '13px',
                         display: '-webkit-box',
                         WebkitLineClamp: 3,
                         WebkitBoxOrient: 'vertical',
@@ -324,57 +331,78 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
                         lineHeight: '1.5',
                         color: '#b0b0b0',
                         cursor: 'pointer',
+                        wordBreak: 'break-word',
+                        textOverflow: 'ellipsis',
                         width: '100%'
                       }}
                     >
-                      {collection.collection_summary}
-                    </Text>
+                      {collection.collection_summary || '暂无描述'}
+                    </div>
                   </Tooltip>
                 </div>
-                
-                {/* 统计信息区域 - 固定高度 */}
-                <div style={{ 
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <Text 
-                      type="secondary" 
-                      style={{ 
-                        fontSize: '12px',
-                        color: '#888'
-                      }}
-                    >
-                      {collectionClips.length} 个片段
-                    </Text>
-                    <Text 
-                      type="secondary" 
-                      style={{ 
-                        fontSize: '12px',
-                        color: '#888'
-                      }}
-                    >
-                      总时长: {formatDuration(totalDuration)}
-                    </Text>
-                  </div>
-                  <div 
+              </div>
+              
+              {/* 操作按钮 - 固定在底部 */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '8px',
+                height: '28px',
+                alignItems: 'center',
+                marginTop: 'auto'
+              }}>
+                <Button 
+                  type="text" 
+                  size="small"
+                  icon={<PlayCircleOutlined />}
+                  onClick={() => setShowModal(true)}
+                  style={{
+                    color: '#4facfe',
+                    border: '1px solid rgba(79, 172, 254, 0.3)',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    height: '28px',
+                    padding: '0 12px',
+                    background: 'rgba(79, 172, 254, 0.1)'
+                  }}
+                >
+                  播放
+                </Button>
+                <Button 
+                  type="text" 
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => setShowClipList(true)}
+                  style={{
+                    color: '#52c41a',
+                    border: '1px solid rgba(82, 196, 26, 0.3)',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    height: '28px',
+                    padding: '0 12px',
+                    background: 'rgba(82, 196, 26, 0.1)'
+                  }}
+                >
+                  片段
+                </Button>
+                {onGenerateVideo && (
+                  <Button 
+                    type="text" 
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    onClick={() => onGenerateVideo(collection.id)}
                     style={{
-                      background: averageScore >= 0.9 ? '#52c41a' : 
-                                 averageScore >= 0.8 ? '#1890ff' : 
-                                 averageScore >= 0.7 ? '#faad14' : 
-                                 averageScore >= 0.6 ? '#ff7a45' : '#ff4d4f',
-                      color: 'white',
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      fontSize: '11px',
-                      fontWeight: 'bold'
+                      color: '#ff7875',
+                      border: '1px solid rgba(255, 120, 117, 0.3)',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      height: '28px',
+                      padding: '0 12px',
+                      background: 'rgba(255, 120, 117, 0.1)'
                     }}
                   >
-                    {(averageScore * 100).toFixed(0)}分
-                  </div>
-                </div>
+                    下载
+                  </Button>
+                )}
               </div>
             </>
           )}
