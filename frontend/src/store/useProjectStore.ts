@@ -21,6 +21,8 @@ export interface Collection {
   clip_ids: string[]
   collection_type?: string // "ai_recommended" or "manual"
   created_at?: string
+  project_id?: string
+  thumbnail_path?: string
 }
 
 // 项目状态类型定义，与后端保持一致

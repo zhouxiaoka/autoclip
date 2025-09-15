@@ -1,11 +1,11 @@
 import React, { useState } from 'react'
-import { Card, Typography, Button, Space, Input, Tag, List, Modal, Tooltip, Divider, Popconfirm } from 'antd'
-import { EditOutlined, DownloadOutlined, SaveOutlined, CloseOutlined, PlayCircleOutlined, DragOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Card, Typography, Button, Space, Input, Tag, List, Modal, Tooltip, Popconfirm } from 'antd'
+import { EditOutlined, SaveOutlined, CloseOutlined, PlayCircleOutlined, DragOutlined, DeleteOutlined } from '@ant-design/icons'
 import { Collection, Clip } from '../store/useProjectStore'
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd'
 import EditableCollectionTitle from './EditableCollectionTitle'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 const { TextArea } = Input
 
 interface CollectionCardProps {
@@ -22,7 +22,6 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
   collection, 
   clips,
   onUpdate, 
-  onDownload,
   onDelete,
   onGenerateVideo,
   onReorderClips
@@ -122,7 +121,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
         <Card
           hoverable
           style={{ 
-            height: '360px', 
+            height: '480px', 
             width: '100%',
             display: 'flex',
             flexDirection: 'column'
@@ -132,15 +131,42 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
           cover={
             <div 
               style={{ 
-                height: '120px', 
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                height: '220px', 
+                background: collection.thumbnail_path 
+                  ? `url(http://localhost:8000/api/v1/projects/${collection.project_id}/collections/${collection.id}/thumbnail)`
+                  : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                position: 'relative'
+                position: 'relative',
+                overflow: 'hidden'
               }}
             >
-              <PlayCircleOutlined style={{ fontSize: '36px', color: 'white', opacity: 0.9 }} />
+              {!collection.thumbnail_path && (
+                <PlayCircleOutlined style={{ fontSize: '48px', color: 'white', opacity: 0.9 }} />
+              )}
+              {collection.thumbnail_path && (
+                <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  background: 'rgba(0,0,0,0.7)',
+                  borderRadius: '50%',
+                  width: '64px',
+                  height: '64px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.3s ease',
+                  opacity: isHovered ? 1 : 0.8
+                }}>
+                  <PlayCircleOutlined style={{ fontSize: '32px', color: 'white' }} />
+                </div>
+              )}
               <div 
                 style={{
                   position: 'absolute',
@@ -154,36 +180,6 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
                 }}
               >
                 {collectionClips.length} 个片段
-              </div>
-              <div 
-                style={{
-                  position: 'absolute',
-                  bottom: '8px',
-                  left: '8px',
-                  right: '8px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <Text style={{ color: 'white', fontSize: '12px' }}>
-                  总时长: {formatDuration(totalDuration)}
-                </Text>
-                <div 
-                  style={{
-                    background: averageScore >= 0.9 ? '#52c41a' : 
-                               averageScore >= 0.8 ? '#1890ff' : 
-                               averageScore >= 0.7 ? '#faad14' : 
-                               averageScore >= 0.6 ? '#ff7a45' : '#ff4d4f',
-                    color: 'white',
-                    padding: '2px 6px',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  {(averageScore * 100).toFixed(0)}分
-                </div>
               </div>
             </div>
           }
@@ -216,7 +212,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
           ].filter(Boolean)}
       >
         <div style={{ 
-          padding: '16px', 
+          padding: '20px', 
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
@@ -257,8 +253,8 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
               }}>
                 {/* 标题区域 - 固定高度 */}
                 <div style={{ 
-                  height: '56px',
-                  marginBottom: '12px',
+                  height: '64px',
+                  marginBottom: '16px',
                   display: 'flex',
                   alignItems: 'flex-start'
                 }}>
@@ -292,8 +288,8 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
                 
                 {/* 标签区域 - 固定高度 */}
                 <div style={{ 
-                  height: '28px',
-                  marginBottom: '12px',
+                  height: '32px',
+                  marginBottom: '16px',
                   display: 'flex',
                   alignItems: 'center'
                 }}>
@@ -306,8 +302,8 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
                 
                 {/* 描述区域 - 固定高度 */}
                 <div style={{ 
-                  height: '72px',
-                  marginBottom: '12px',
+                  height: '80px',
+                  marginBottom: '16px',
                   display: 'flex',
                   alignItems: 'flex-start'
                 }}>
@@ -336,34 +332,48 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
                   </Tooltip>
                 </div>
                 
-                {/* 片段信息区域 - 固定高度 */}
+                {/* 统计信息区域 - 固定高度 */}
                 <div style={{ 
-                  height: '24px',
+                  height: '32px',
                   display: 'flex',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
                 }}>
-                  <Tooltip 
-                    title={collectionClips.map(clip => clip.title || clip.outline).join('、')} 
-                    placement="top" 
-                    overlayStyle={{ maxWidth: '300px' }}
-                    mouseEnterDelay={0.5}
-                  >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <Text 
                       type="secondary" 
                       style={{ 
-                        fontSize: '11px',
-                        color: '#888',
-                        cursor: 'pointer',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        width: '100%'
+                        fontSize: '12px',
+                        color: '#888'
                       }}
                     >
-                      包含片段：{collectionClips.slice(0, 2).map(clip => clip.title || clip.outline).join('、')}
-                      {collectionClips.length > 2 && `等${collectionClips.length}个`}
+                      {collectionClips.length} 个片段
                     </Text>
-                  </Tooltip>
+                    <Text 
+                      type="secondary" 
+                      style={{ 
+                        fontSize: '12px',
+                        color: '#888'
+                      }}
+                    >
+                      总时长: {formatDuration(totalDuration)}
+                    </Text>
+                  </div>
+                  <div 
+                    style={{
+                      background: averageScore >= 0.9 ? '#52c41a' : 
+                                 averageScore >= 0.8 ? '#1890ff' : 
+                                 averageScore >= 0.7 ? '#faad14' : 
+                                 averageScore >= 0.6 ? '#ff7a45' : '#ff4d4f',
+                      color: 'white',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontSize: '11px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    {(averageScore * 100).toFixed(0)}分
+                  </div>
                 </div>
               </div>
             </>

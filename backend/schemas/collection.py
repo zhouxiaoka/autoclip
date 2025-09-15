@@ -50,6 +50,7 @@ class CollectionResponse(BaseSchema):
     tags: List[str] = Field(description="Collection tags")
     metadata: dict = Field(description="Additional metadata")
     video_path: Optional[str] = Field(description="Collection video file path")
+    thumbnail_path: Optional[str] = Field(default=None, description="Collection thumbnail file path")
     created_at: datetime = Field(description="Creation timestamp")
     updated_at: datetime = Field(description="Last update timestamp")
     
