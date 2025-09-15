@@ -1,10 +1,10 @@
 # AutoClip - AI视频智能切片系统
 
-<div align="center">
-
 ![AutoClip Logo](https://img.shields.io/badge/AutoClip-AI%20Video%20Processing-blue?style=for-the-badge&logo=video)
 
-**基于AI的智能视频切片处理系统，支持YouTube/B站视频下载、自动切片、智能合集生成**
+## 基于AI的智能视频切片处理系统
+
+支持YouTube/B站视频下载、自动切片、智能合集生成
 
 [![Python](https://img.shields.io/badge/Python-3.8+-green?style=flat&logo=python)](https://python.org)
 [![React](https://img.shields.io/badge/React-18+-blue?style=flat&logo=react)](https://reactjs.org)
@@ -45,12 +45,14 @@ AutoClip是一个基于AI的智能视频切片处理系统，能够自动从YouT
 ### 环境要求
 
 #### Docker部署（推荐）
+
 - **Docker**: 20.10+
 - **Docker Compose**: 2.0+
 - **内存**: 最少 4GB，推荐 8GB+
 - **存储**: 最少 10GB 可用空间
 
 #### 本地部署
+
 - **操作系统**: macOS / Linux / Windows (WSL)
 - **Python**: 3.8+ (推荐 3.9+)
 - **Node.js**: 16+ (推荐 18+)
@@ -103,24 +105,34 @@ cd autoclip
 
 ## 📞 联系方式
 
-- **个人微信**: your_wechat_id
-- **飞书**: your_feishu_id
+如有问题或建议，请通过以下方式联系：
+
+### 💬 QQ
+
+![QQ二维码](./qq_qr.jpg)
+
+### 📱 飞书
+
+![飞书二维码](./feishu_qr.jpg)
+
+### 📧 其他联系方式
+
+- 提交 [GitHub Issue](https://github.com/zhouxiaoka/autoclip/issues)
+- 发送邮件至：[christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+- 添加上述QQ或飞书联系
 
 ### 开源贡献
+
 - **问题反馈**: [GitHub Issues](https://github.com/zhouxiaoka/autoclip/issues)
 - **功能建议**: [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)
 - **代码贡献**: [GitHub Pull Requests](https://github.com/zhouxiaoka/autoclip/pulls)
 
 ---
 
-<div align="center">
-
-**如果这个项目对你有帮助，请给我们一个 ⭐ Star！**
+## 如果这个项目对你有帮助，请给我们一个 ⭐ Star
 
 [![Star History Chart](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)
 
 Made with ❤️ by AutoClip Team
 
-**⭐ 如果觉得有用，请给个Star支持一下！**
-
-</div>
+⭐ 如果觉得有用，请给个Star支持一下！
