@@ -124,3 +124,4 @@ NFO - WebSocket网关服务已禁用
 2025-09-15 19:33:31,936 - backend.main - INFO - API密钥已加载到环境变量
 2025-09-15 19:33:31,936 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
 2025-09-15 19:33:48,972 - backend.core.llm_manager - INFO - 已初始化dashscope提供商，模型: qwen-plus
+2025-09-15 20:19:52,449 - backend.api.v1.projects - ERROR - 生成合集视频失败: clips_dir 参数是必需的，不能使用全局路径

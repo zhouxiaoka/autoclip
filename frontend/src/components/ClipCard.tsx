@@ -458,7 +458,6 @@ const ClipCard: React.FC<ClipCardProps> = ({
 
       {/* 视频播放模态框 */}
       <Modal
-        title={clip.title || clip.generated_title || '视频预览'}
         open={showPlayer}
         onCancel={handleClosePlayer}
         footer={[
@@ -491,6 +490,37 @@ const ClipCard: React.FC<ClipCardProps> = ({
             background: '#1f1f1f'
           }
         }}
+        closeIcon={
+          <span style={{ color: '#ffffff', fontSize: '16px' }}>×</span>
+        }
+        title={
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            width: '100%',
+            paddingRight: '30px' // 为关闭按钮留出空间
+          }}>
+            <EditableTitle
+              title={clip.title || clip.generated_title || '视频预览'}
+              clipId={clip.id}
+              onTitleUpdate={(newTitle) => {
+                // 更新clip的标题
+                console.log('播放器标题已更新:', newTitle)
+                // 这里可以触发父组件的更新回调
+                if (onClipUpdate) {
+                  onClipUpdate(clip.id, { title: newTitle })
+                }
+              }}
+              style={{ 
+                color: '#ffffff', 
+                fontSize: '16px', 
+                fontWeight: '500',
+                flex: 1,
+                maxWidth: 'calc(100% - 40px)' // 确保不会与关闭按钮重叠
+              }}
+            />
+          </div>
+        }
       >
         {videoUrl && (
           <ReactPlayer

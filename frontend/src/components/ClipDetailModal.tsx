@@ -13,6 +13,7 @@ import { Clip } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
 import SubtitleEditor from './SubtitleEditor'
 import { subtitleEditorApi } from '../services/subtitleEditorApi'
+import EditableTitle from './EditableTitle'
 import { SubtitleSegment, VideoEditOperation } from '../types/subtitle'
 
 const { Text, Title } = Typography
@@ -235,9 +236,18 @@ const ClipDetailModal: React.FC<ClipDetailModalProps> = ({
               <div style={{ color: '#ffffff' }}>
                 {/* 标题 */}
                 <div style={{ marginBottom: '16px' }}>
-                  <Title level={5} style={{ color: '#ffffff', marginBottom: '8px' }}>
-                    {clip.generated_title || clip.title || '未命名片段'}
-                  </Title>
+                  <div style={{ marginBottom: '8px' }}>
+                    <EditableTitle
+                      title={clip.generated_title || clip.title || '未命名片段'}
+                      clipId={clip.id}
+                      onTitleUpdate={(newTitle) => {
+                        // 更新clip的标题
+                        console.log('标题已更新:', newTitle)
+                        // 这里可以触发父组件的更新回调
+                      }}
+                      style={{ color: '#ffffff', fontSize: '18px', fontWeight: '600' }}
+                    />
+                  </div>
                   <Text style={{ color: '#cccccc', fontSize: '12px' }}>
                     ID: {clip.id}
                   </Text>
