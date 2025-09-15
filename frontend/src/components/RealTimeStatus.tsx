@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons';
 import { TaskProgress } from './TaskProgress';
 import { NotificationList } from './NotificationList';
-import { useWebSocket, WebSocketEventMessage } from '../hooks/useWebSocket';
+// import { useWebSocket, WebSocketEventMessage } from '../hooks/useWebSocket'  // 已禁用WebSocket系统;
 import { useNotifications } from '../hooks/useNotifications';
 import { useProjectStore } from '../store/useProjectStore';
 import { projectApi } from '../api/projectApi';
@@ -73,71 +73,80 @@ export const RealTimeStatus: React.FC<RealTimeStatusProps> = ({ userId }) => {
     handleErrorNotification
   } = useNotifications();
 
-  const handleWebSocketMessage = async (message: WebSocketEventMessage) => {
-    console.log('收到WebSocket消息:', message);
-    
-    switch (message.type) {
-      case 'task_update':
-        console.log('📈 收到任务更新:', message);
-        // 处理任务更新，更新项目状态
-        if (message.task_id && message.status) {
-          console.log('任务状态更新:', message.task_id, message.status);
-          // 刷新项目列表以获取最新状态
-          try {
-            const projects = await projectApi.getProjects();
-            setProjects(projects);
-            console.log('项目列表已刷新');
-          } catch (error) {
-            console.error('刷新项目列表失败:', error);
-          }
-        }
-        break;
-        
-      case 'project_update':
-        console.log('📊 收到项目更新:', message);
-        // 处理项目更新
-        if (message.project_id && message.status) {
-          console.log('项目状态更新:', message.project_id, message.status);
-          // 刷新项目列表以获取最新状态
-          try {
-            const projects = await projectApi.getProjects();
-            setProjects(projects);
-            console.log('项目列表已刷新');
-          } catch (error) {
-            console.error('刷新项目列表失败:', error);
-          }
-        }
-        break;
-        
-      case 'system_notification':
-        // 只处理重要的系统通知
-        if (message.level === 'success' || message.level === 'error') {
-          handleSystemNotification(message);
-        }
-        break;
-        
-      case 'error_notification':
-        handleErrorNotification(message);
-        break;
-        
-      default:
-        console.log('忽略未知类型的WebSocket消息:', (message as any).type);
-    }
-  };
+  // WebSocket功能已禁用，使用新的简化进度系统
+  // const handleWebSocketMessage = async (message: WebSocketEventMessage) => {
+  //   console.log('收到WebSocket消息:', message);
+  //   
+  //   switch (message.type) {
+  //     case 'task_update':
+  //       console.log('📈 收到任务更新:', message);
+  //       // 处理任务更新，更新项目状态
+  //       if (message.task_id && message.status) {
+  //         console.log('任务状态更新:', message.task_id, message.status);
+  //         // 刷新项目列表以获取最新状态
+  //         try {
+  //           const projects = await projectApi.getProjects();
+  //           setProjects(projects);
+  //           console.log('项目列表已刷新');
+  //         } catch (error) {
+  //           console.error('刷新项目列表失败:', error);
+  //         }
+  //       }
+  //       break;
+  //       
+  //     case 'project_update':
+  //       console.log('📊 收到项目更新:', message);
+  //       // 处理项目更新
+  //       if (message.project_id && message.status) {
+  //         console.log('项目状态更新:', message.project_id, message.status);
+  //         // 刷新项目列表以获取最新状态
+  //         try {
+  //           const projects = await projectApi.getProjects();
+  //           setProjects(projects);
+  //           console.log('项目列表已刷新');
+  //         } catch (error) {
+  //           console.error('刷新项目列表失败:', error);
+  //         }
+  //       }
+  //       break;
+  //       
+  //     case 'system_notification':
+  //       // 只处理重要的系统通知
+  //       if (message.level === 'success' || message.level === 'error') {
+  //         handleSystemNotification(message);
+  //       }
+  //       break;
+  //       
+  //     case 'error_notification':
+  //       handleErrorNotification(message);
+  //       break;
+  //       
+  //     case 'task_progress_update':
+  //       console.log('📊 收到任务进度更新:', message);
+  //       // 处理任务进度更新
+  //       if (message.project_id && message.progress !== undefined) {
+  //         console.log('任务进度更新:', message.project_id, message.progress + '%', message.step_name);
+  //         // 这里可以更新项目状态或触发其他UI更新
+  //       }
+  //       break;
+  //       
+  //     default:
+  //       console.log('忽略未知类型的WebSocket消息:', (message as any).type);
+  //   }
+  // };
 
-  // 启用WebSocket功能
-  const {
-    isConnected,
-    connectionStatus,
-    connect,
-    disconnect,
-    subscribeToTopic,
-    unsubscribeFromTopic,
-    sendMessage
-  } = useWebSocket({
-    userId,
-    onMessage: handleWebSocketMessage
-  });
+  // const {
+  //   isConnected,
+  //   connectionStatus,
+  //   connect,
+  //   disconnect,
+  //   subscribeToTopic,
+  //   unsubscribeFromTopic,
+  //   sendMessage
+  // } = useWebSocket({
+  //   userId,
+  //   onMessage: handleWebSocketMessage
+  // });
 
   // 加载项目任务
   useEffect(() => {
@@ -147,41 +156,42 @@ export const RealTimeStatus: React.FC<RealTimeStatusProps> = ({ userId }) => {
     loadProjectTasks(projectId);
   }, []); // 移除loadProjectTasks依赖，避免无限循环
 
-  const getConnectionStatusColor = () => {
-    switch (connectionStatus) {
-      case 'connected': return 'success';
-      case 'connecting': return 'processing';
-      case 'disconnected': return 'default';
-      case 'error': return 'error';
-      default: return 'default';
-    }
-  };
+  // WebSocket状态相关函数已禁用
+  // const getConnectionStatusColor = () => {
+  //   switch (connectionStatus) {
+  //     case 'connected': return 'success';
+  //     case 'connecting': return 'processing';
+  //     case 'disconnected': return 'default';
+  //     case 'error': return 'error';
+  //     default: return 'default';
+  //   }
+  // };
 
-  const getConnectionStatusText = () => {
-    switch (connectionStatus) {
-      case 'connected': return '已连接';
-      case 'connecting': return '连接中';
-      case 'disconnected': return '未连接';
-      case 'error': return '连接错误';
-      default: return '未知状态';
-    }
-  };
+  // const getConnectionStatusText = () => {
+  //   switch (connectionStatus) {
+  //     case 'connected': return '已连接';
+  //     case 'connecting': return '连接中';
+  //     case 'disconnected': return '未连接';
+  //     case 'error': return '连接错误';
+  //     default: return '未知状态';
+  //   }
+  // };
 
-  const getConnectionIcon = () => {
-    switch (connectionStatus) {
-      case 'connected': return <WifiOutlined />;
-      case 'connecting': return <SyncOutlined spin />;
-      case 'disconnected': return <WifiDisconnectedOutlined />;
-      case 'error': return <ExclamationCircleOutlined />;
-      default: return <WifiDisconnectedOutlined />;
-    }
-  };
+  // const getConnectionIcon = () => {
+  //   switch (connectionStatus) {
+  //     case 'connected': return <WifiOutlined />;
+  //     case 'connecting': return <SyncOutlined spin />;
+  //     case 'disconnected': return <WifiDisconnectedOutlined />;
+  //     case 'error': return <ExclamationCircleOutlined />;
+  //     default: return <WifiDisconnectedOutlined />;
+  //   }
+  // };
 
   return (
     <div style={{ padding: 16 }}>
       <Row gutter={[16, 16]}>
-        {/* 连接状态 */}
-        <Col span={24}>
+        {/* WebSocket连接状态已禁用 */}
+        {/* <Col span={24}>
           <Card size="small">
             <Space>
               {getConnectionIcon()}
@@ -198,7 +208,7 @@ export const RealTimeStatus: React.FC<RealTimeStatusProps> = ({ userId }) => {
               </Button>
             </Space>
           </Card>
-        </Col>
+        </Col> */}
 
         {/* 统计信息 */}
         <Col span={6}>
@@ -219,7 +229,8 @@ export const RealTimeStatus: React.FC<RealTimeStatusProps> = ({ userId }) => {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        {/* WebSocket连接状态已禁用 */}
+        {/* <Col span={6}>
           <Card size="small">
             <Statistic
               title="连接状态"
@@ -227,7 +238,7 @@ export const RealTimeStatus: React.FC<RealTimeStatusProps> = ({ userId }) => {
               valueStyle={{ color: isConnected ? '#722ed1' : '#ff4d4f' }}
             />
           </Card>
-        </Col>
+        </Col> */}
         <Col span={6}>
           <Card size="small">
             <Statistic

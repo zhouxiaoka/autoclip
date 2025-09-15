@@ -130,24 +130,37 @@ class WebSocketNotificationService:
                                      current_step: int = 0, total_steps: int = 6, step_name: str = ""):
         """发送处理进度通知"""
         try:
-            notification = WebSocketMessage.create_task_update(
-                task_id=task_id,
-                status="running",
-                progress=progress,
-                message=message
-            )
+            # 创建增强的进度更新消息
+            notification = {
+                'type': 'task_progress_update',
+                'task_id': task_id,
+                'project_id': project_id,
+                'status': 'running',
+                'progress': progress,
+                'current_step': current_step,
+                'total_steps': total_steps,
+                'step_name': step_name,
+                'message': message,
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            logger.info(f"准备发送进度通知: {notification}")
             
             # 广播给所有连接的用户
             await manager.broadcast(notification)
+            logger.info(f"已广播进度通知给所有用户: {notification}")
             
             # 同时发送给特定项目主题的订阅者
             topic = f"project_{project_id}"
             await manager.broadcast_to_topic(notification, topic)
+            logger.info(f"已发送进度通知给主题 {topic} 的订阅者: {notification}")
             
-            logger.info(f"处理进度通知已发送: {project_id} - {task_id} - {progress}%")
+            logger.info(f"处理进度通知已发送: {project_id} - {task_id} - {progress}% - {step_name}")
             
         except Exception as e:
             logger.error(f"发送处理进度通知失败: {e}")
+            import traceback
+            logger.error(f"错误详情: {traceback.format_exc()}")
     
     @staticmethod
     async def send_processing_complete(project_id: str, task_id: str, result: dict):

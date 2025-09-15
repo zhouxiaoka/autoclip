@@ -29,7 +29,7 @@ import {
   ClockCircleOutlined,
   CloseCircleOutlined
 } from '@ant-design/icons'
-import { uploadApi } from '../services/uploadApi'
+import { uploadApi, BILIBILI_PARTITIONS } from '../services/uploadApi'
 import dayjs from 'dayjs'
 
 const { RangePicker } = DatePicker
@@ -87,6 +87,10 @@ const UploadTaskManager: React.FC<UploadTaskManagerProps> = ({ projectId }) => {
 
   // 重试失败的任务
   const retryTask = async (taskId: string) => {
+    message.info('B站上传功能正在开发中，敬请期待！', 3);
+    return;
+    
+    // 原有代码已禁用
     try {
       // 这里需要调用重试API
       message.success('任务重试已启动')
@@ -98,6 +102,10 @@ const UploadTaskManager: React.FC<UploadTaskManagerProps> = ({ projectId }) => {
 
   // 取消进行中的任务
   const cancelTask = async (taskId: string) => {
+    message.info('B站上传功能正在开发中，敬请期待！', 3);
+    return;
+    
+    // 原有代码已禁用
     try {
       // 这里需要调用取消API
       message.success('任务已取消')
@@ -247,7 +255,7 @@ const UploadTaskManager: React.FC<UploadTaskManagerProps> = ({ projectId }) => {
       title: '分区',
       key: 'partition',
       render: (record: UploadTask) => {
-        const partition = uploadApi.BILIBILI_PARTITIONS.find(p => p.id === record.partition_id)
+        const partition = BILIBILI_PARTITIONS.find(p => p.id === record.partition_id)
         return partition ? partition.name : `分区${record.partition_id}`
       }
     },
@@ -466,7 +474,7 @@ const UploadTaskManager: React.FC<UploadTaskManagerProps> = ({ projectId }) => {
                 </div>
                 <div><strong>分区:</strong> 
                   {(() => {
-                    const partition = uploadApi.BILIBILI_PARTITIONS.find(p => p.id === selectedTask.partition_id)
+                    const partition = BILIBILI_PARTITIONS.find(p => p.id === selectedTask.partition_id)
                     return partition ? partition.name : `分区${selectedTask.partition_id}`
                   })()}
                 </div>

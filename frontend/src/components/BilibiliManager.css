@@ -1,0 +1,276 @@
+/* B站管理弹窗样式 */
+.bilibili-manager-modal .ant-modal-content {
+  background: #1a1a1a !important;
+  border: 1px solid #2d2d2d !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+  overflow: hidden !important;
+}
+
+.bilibili-manager-modal .ant-modal-header {
+  display: none !important;
+}
+
+.bilibili-manager-modal .ant-modal-body {
+  padding: 0 !important;
+  background: #1a1a1a !important;
+}
+
+.bilibili-manager-modal .ant-modal-close {
+  color: #999999 !important;
+  top: 16px !important;
+  right: 16px !important;
+  z-index: 10 !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  transition: all 0.3s ease !important;
+}
+
+.bilibili-manager-modal .ant-modal-close:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 自定义标题栏 */
+.bilibili-manager-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 24px 16px 24px;
+  background: #1a1a1a;
+  border-bottom: 1px solid #2d2d2d;
+}
+
+.bilibili-manager-header-icon {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.bilibili-manager-header-content {
+  flex: 1;
+}
+
+.bilibili-manager-header-title {
+  color: #ffffff !important;
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.bilibili-manager-header-subtitle {
+  color: #cccccc !important;
+  font-size: 14px;
+  margin: 4px 0 0 0;
+  line-height: 1.4;
+}
+
+/* 标签页样式优化 */
+.bilibili-manager-tabs {
+  padding: 0 24px;
+}
+
+.bilibili-manager-tabs .ant-tabs-nav {
+  margin: 0 !important;
+}
+
+.bilibili-manager-tabs .ant-tabs-tab {
+  color: #cccccc !important;
+  font-weight: 500 !important;
+  padding: 12px 16px !important;
+  border-radius: 8px 8px 0 0 !important;
+  transition: all 0.3s ease !important;
+}
+
+.bilibili-manager-tabs .ant-tabs-tab:hover {
+  color: #ffffff !important;
+  background: rgba(79, 172, 254, 0.1) !important;
+}
+
+.bilibili-manager-tabs .ant-tabs-tab-active {
+  color: #4facfe !important;
+  background: rgba(79, 172, 254, 0.15) !important;
+}
+
+.bilibili-manager-tabs .ant-tabs-ink-bar {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
+  height: 3px !important;
+}
+
+.bilibili-manager-tabs .ant-tabs-content-holder {
+  padding: 24px 0;
+}
+
+/* 表单内容区域 */
+.bilibili-manager-content {
+  padding: 0 24px 24px 24px;
+}
+
+/* 投稿信息提示框样式优化 */
+.bilibili-manager-content .ant-alert {
+  background: #262626 !important;
+  border: 1px solid #404040 !important;
+  border-radius: 12px !important;
+  margin-bottom: 20px !important;
+}
+
+.bilibili-manager-content .ant-alert-message {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+.bilibili-manager-content .ant-alert-description {
+  color: #cccccc !important;
+}
+
+.bilibili-manager-content .ant-alert-icon {
+  color: #4facfe !important;
+}
+
+/* 表单样式优化 */
+.bilibili-manager-content .ant-form-item-label > label {
+  color: #ffffff !important;
+  font-weight: 500 !important;
+  font-size: 14px !important;
+}
+
+.bilibili-manager-content .ant-form-item-label > label.ant-form-item-required:not(.ant-form-item-required-mark-optional)::before {
+  color: #ff4d4f !important;
+}
+
+/* 输入框样式优化 */
+.bilibili-manager-content .ant-input,
+.bilibili-manager-content .ant-input-affix-wrapper,
+.bilibili-manager-content .ant-select-selector {
+  background: #262626 !important;
+  border: 1px solid #404040 !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  transition: all 0.3s ease !important;
+}
+
+.bilibili-manager-content .ant-input:hover,
+.bilibili-manager-content .ant-input-affix-wrapper:hover,
+.bilibili-manager-content .ant-select:hover .ant-select-selector {
+  border-color: #4facfe !important;
+}
+
+.bilibili-manager-content .ant-input:focus,
+.bilibili-manager-content .ant-input-affix-wrapper-focused,
+.bilibili-manager-content .ant-select-focused .ant-select-selector {
+  border-color: #4facfe !important;
+  box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.2) !important;
+}
+
+.bilibili-manager-content .ant-input::placeholder {
+  color: #888888 !important;
+}
+
+/* 按钮样式优化 */
+.bilibili-manager-content .ant-btn-primary {
+  background: linear-gradient(135deg, #4facfe 0%, #00a8ff 100%) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+  height: 40px !important;
+  padding: 0 20px !important;
+  transition: all 0.3s ease !important;
+}
+
+.bilibili-manager-content .ant-btn-primary:hover {
+  background: linear-gradient(135deg, #00a8ff 0%, #4facfe 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.3) !important;
+}
+
+.bilibili-manager-content .ant-btn-default {
+  background: #262626 !important;
+  border: 1px solid #404040 !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+  height: 40px !important;
+  padding: 0 20px !important;
+  transition: all 0.3s ease !important;
+}
+
+.bilibili-manager-content .ant-btn-default:hover {
+  background: #404040 !important;
+  border-color: #4facfe !important;
+  color: #ffffff !important;
+}
+
+/* 账号管理表格样式 */
+.bilibili-manager-content .ant-table {
+  background: #1a1a1a !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+.bilibili-manager-content .ant-table-thead > tr > th {
+  background: #262626 !important;
+  border-bottom: 1px solid #404040 !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+.bilibili-manager-content .ant-table-tbody > tr > td {
+  background: #1a1a1a !important;
+  border-bottom: 1px solid #2d2d2d !important;
+  color: #ffffff !important;
+}
+
+.bilibili-manager-content .ant-table-tbody > tr:hover > td {
+  background: #262626 !important;
+}
+
+/* 添加账号按钮样式 */
+.bilibili-manager-content .ant-btn-dashed {
+  background: #262626 !important;
+  border: 1px dashed #404040 !important;
+  color: #4facfe !important;
+  border-radius: 8px !important;
+  height: 40px !important;
+  padding: 0 16px !important;
+  transition: all 0.3s ease !important;
+}
+
+.bilibili-manager-content .ant-btn-dashed:hover {
+  background: #404040 !important;
+  border-color: #4facfe !important;
+  color: #ffffff !important;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .bilibili-manager-header {
+    padding: 20px 20px 12px 20px;
+  }
+  
+  .bilibili-manager-header-title {
+    font-size: 18px;
+  }
+  
+  .bilibili-manager-header-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+  
+  .bilibili-manager-tabs {
+    padding: 0 20px;
+  }
+  
+  .bilibili-manager-content {
+    padding: 0 20px 20px 20px;
+  }
+}

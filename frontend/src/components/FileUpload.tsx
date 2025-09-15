@@ -58,9 +58,8 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
       if (['mp4', 'avi', 'mov', 'mkv', 'webm'].includes(extension || '')) {
         newFiles.video = file
         // 自动设置项目名称为视频文件名（去掉扩展名）
-        if (!projectName) {
-          setProjectName(file.name.replace(/\.[^/.]+$/, ''))
-        }
+        // 每次选择新视频文件时都更新项目名称
+        setProjectName(file.name.replace(/\.[^/.]+$/, ''))
       } else if (extension === 'srt') {
         newFiles.srt = file
       }
@@ -126,13 +125,14 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
       setUploadProgress(100)
       
       addProject(newProject)
-      message.success('文件上传成功，开始处理...')
+      message.success('项目创建成功！正在后台处理中，请稍候...')
       
       // 重置状态
       setFiles({})
       setProjectName('')
       setUploadProgress(0)
-      // 重置为第一个分类
+      setUploading(false)
+      // 重置为默认分类
       if (categories.length > 0) {
         setSelectedCategory(categories[0].value)
       }

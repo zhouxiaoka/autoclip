@@ -58,6 +58,7 @@ class CollectionService(BaseService[Collection, CollectionCreate, CollectionUpda
             clip_ids = []
             metadata = getattr(collection, 'collection_metadata', {}) or {}
             if metadata and 'clip_ids' in metadata:
+                # 直接使用metadata中的clip_ids，它们已经是UUID格式
                 clip_ids = metadata['clip_ids']
             
             collection_responses.append(CollectionResponse(
@@ -69,6 +70,7 @@ class CollectionService(BaseService[Collection, CollectionCreate, CollectionUpda
                 status=getattr(collection, 'status', 'created').value if hasattr(getattr(collection, 'status', 'created'), 'value') else str(getattr(collection, 'status', 'created')),
                 tags=getattr(collection, 'tags', []) or [],
                 metadata=getattr(collection, 'collection_metadata', {}) or {},
+                video_path=getattr(collection, 'video_path', None),
                 created_at=getattr(collection, 'created_at', None),
                 updated_at=getattr(collection, 'updated_at', None),
                 total_clips=getattr(collection, 'clips_count', 0) or 0,

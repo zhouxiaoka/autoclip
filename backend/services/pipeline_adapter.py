@@ -8,6 +8,7 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Callable
+from datetime import datetime
 from sqlalchemy.orm import Session
 
 from ..core.database import SessionLocal
@@ -118,9 +119,9 @@ class PipelineAdapter:
                 try:
                     logger.info(f"执行步骤 {i+1}/{total_steps}: {step_desc}")
                     
-                    # 更新进度
+                    # 更新进度 - 步骤开始
                     progress = int((i / total_steps) * 100)
-                    await self._update_progress(progress, f"正在执行: {step_desc}")
+                    await self._update_progress(progress, f"开始执行: {step_desc}")
                     
                     # 执行步骤
                     result = await step_func()
@@ -133,6 +134,10 @@ class PipelineAdapter:
                     # 保存步骤结果
                     self.step_results[step_name] = result
                     logger.info(f"步骤 {step_name} 执行成功")
+                    
+                    # 更新进度 - 步骤完成
+                    progress = int(((i + 1) / total_steps) * 100)
+                    await self._update_progress(progress, f"完成: {step_desc}")
                     
                 except Exception as e:
                     error_msg = f"步骤 {step_name} 执行异常: {str(e)}"
@@ -377,14 +382,27 @@ class PipelineAdapter:
             if task:
                 task.progress = progress
                 task.current_step = message
+                task.updated_at = datetime.utcnow()
                 self.db.commit()
+                logger.info(f"任务 {self.task_id} 进度已更新: {progress}% - {message}")
             
             # 调用进度回调
             if self.progress_callback:
-                await self.progress_callback(self.project_id, progress, message)
+                try:
+                    # 检查回调函数是否是异步的
+                    import asyncio
+                    if asyncio.iscoroutinefunction(self.progress_callback):
+                        await self.progress_callback(self.project_id, progress, message)
+                    else:
+                        # 同步回调函数 - 注意参数顺序：project_id, progress, message
+                        self.progress_callback(self.project_id, progress, message)
+                except Exception as callback_error:
+                    logger.error(f"进度回调执行失败: {callback_error}")
                 
         except Exception as e:
             logger.error(f"更新进度失败: {e}")
+            import traceback
+            logger.error(f"错误详情: {traceback.format_exc()}")
     
     async def _save_results_to_database(self):
         """保存结果到数据库"""

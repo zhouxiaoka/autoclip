@@ -184,7 +184,7 @@ class OutlineExtractor:
         保存大纲到文件
         """
         if output_path is None:
-            output_path = METADATA_DIR / "step1_outline.json"
+            output_path = self.metadata_dir / "step1_outline.json"
         
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
