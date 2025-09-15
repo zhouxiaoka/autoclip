@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # Redis服务
+  redis:
+    image: redis:7-alpine
+    container_name: autoclip-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    command: redis-server --appendonly yes
+
+  # 主应用服务（开发模式）
+  autoclip-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: autoclip-app-dev
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # 后端API
+      - "3000:3000"  # 前端界面
+    volumes:
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - /app/venv  # 排除虚拟环境
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:///./data/autoclip.db
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    depends_on:
+      - redis
+    command: >
+      sh -c "
+        source venv/bin/activate &&
+        python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload &
+        cd frontend && npm run dev -- --host 0.0.0.0 --port 3000 &
+        wait
+      "
+
+  # Celery Worker服务（开发模式）
+  celery-worker-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: autoclip-celery-worker-dev
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app/backend
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - /app/venv
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:///./data/autoclip.db
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    command: >
+      sh -c "
+        source venv/bin/activate &&
+        celery -A backend.core.celery_app worker --loglevel=debug --reload
+      "
+    depends_on:
+      - redis
+      - autoclip-dev
+
+volumes:
+  redis_dev_data:
+    driver: local
+
+networks:
+  default:
+    name: autoclip-dev-network

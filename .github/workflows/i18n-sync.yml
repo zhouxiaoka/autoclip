@@ -1,0 +1,105 @@
+name: I18n Documentation Sync
+
+on:
+  push:
+    paths:
+      - 'README.md'
+      - 'README-EN.md'
+      - '.github/README.md'
+  pull_request:
+    paths:
+      - 'README.md'
+      - 'README-EN.md'
+      - '.github/README.md'
+
+jobs:
+  sync-docs:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Install dependencies
+      run: |
+        npm install -g markdown-link-check
+        npm install -g markdownlint-cli
+        
+    - name: Check markdown links
+      run: |
+        markdown-link-check README.md
+        markdown-link-check README-EN.md
+        markdown-link-check .github/README.md
+        
+    - name: Lint markdown files
+      run: |
+        markdownlint README.md
+        markdownlint README-EN.md
+        markdownlint .github/README.md
+        
+    - name: Check language consistency
+      run: |
+        # Check if language switcher links are present
+        if ! grep -q "语言.*English.*中文" README.md; then
+          echo "Missing language switcher in Chinese README"
+          exit 1
+        fi
+        
+        if ! grep -q "Language.*English.*中文" README-EN.md; then
+          echo "Missing language switcher in English README"
+          exit 1
+        fi
+        
+    - name: Validate contact information
+      run: |
+        # Check if contact information is present
+        if ! grep -q "support@autoclip.com" README.md; then
+          echo "Missing contact email in Chinese README"
+          exit 1
+        fi
+        
+        if ! grep -q "support@autoclip.com" README-EN.md; then
+          echo "Missing contact email in English README"
+          exit 1
+        fi
+        
+    - name: Check Docker support
+      run: |
+        # Check if Docker support is mentioned
+        if ! grep -q "Docker" README.md; then
+          echo "Missing Docker support in Chinese README"
+          exit 1
+        fi
+        
+        if ! grep -q "Docker" README-EN.md; then
+          echo "Missing Docker support in English README"
+          exit 1
+        fi
+        
+    - name: Generate documentation report
+      run: |
+        echo "# Documentation Sync Report" > docs/sync-report.md
+        echo "" >> docs/sync-report.md
+        echo "## Files Checked" >> docs/sync-report.md
+        echo "- README.md (Chinese)" >> docs/sync-report.md
+        echo "- README-EN.md (English)" >> docs/sync-report.md
+        echo "- .github/README.md (GitHub Homepage)" >> docs/sync-report.md
+        echo "" >> docs/sync-report.md
+        echo "## Status" >> docs/sync-report.md
+        echo "✅ All documentation files are synchronized" >> docs/sync-report.md
+        echo "✅ Language switchers are present" >> docs/sync-report.md
+        echo "✅ Contact information is consistent" >> docs/sync-report.md
+        echo "✅ Docker support is documented" >> docs/sync-report.md
+        echo "" >> docs/sync-report.md
+        echo "Last updated: $(date)" >> docs/sync-report.md
+        
+    - name: Upload documentation report
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation-report
+        path: docs/sync-report.md

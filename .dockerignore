@@ -1,0 +1,105 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Data
+data/
+uploads/
+temp/
+output/
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Scripts
+*.sh
+!start_autoclip.sh
+!stop_autoclip.sh
+!status_autoclip.sh
+
+# Environment
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Backup
+cleanup_backup/
+*.backup
+
+# Test files
+test_*.py
+*_test.py
+tests/
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Redis
+dump.rdb
+
+# PID files
+*.pid

@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  # Redis服务
+  redis:
+    image: redis:7-alpine
+    container_name: autoclip-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 主应用服务
+  autoclip:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autoclip-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # 后端API
+      - "3000:3000"  # 前端界面
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:///./data/autoclip.db
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Celery Worker服务
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autoclip-celery-worker
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:///./data/autoclip.db
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+    command: celery -A backend.core.celery_app worker --loglevel=info --concurrency=2
+    depends_on:
+      redis:
+        condition: service_healthy
+      autoclip:
+        condition: service_healthy
+
+  # Celery Beat调度器
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autoclip-celery-beat
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:///./data/autoclip.db
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+    command: celery -A backend.core.celery_app beat --loglevel=info
+    depends_on:
+      redis:
+        condition: service_healthy
+      autoclip:
+        condition: service_healthy
+
+  # Flower监控服务（可选）
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: autoclip-flower
+    restart: unless-stopped
+    ports:
+      - "5555:5555"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite:///./data/autoclip.db
+      - ENVIRONMENT=production
+    command: celery -A backend.core.celery_app flower --port=5555
+    depends_on:
+      redis:
+        condition: service_healthy
+      celery-worker:
+        condition: service_started
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: autoclip-network

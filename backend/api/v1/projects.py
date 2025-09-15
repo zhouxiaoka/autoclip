@@ -1154,12 +1154,12 @@ async def generate_collection_video(
                 if not found:
                     raise HTTPException(status_code=404, detail=f"切片视频文件不存在: {clip.id}")
         
-        # 生成合集视频文件名
+        # 生成合集视频文件名 - 使用合集标题作为文件名
         collection_name = collection.name or f"collection_{collection_id}"
-        # 清理文件名中的特殊字符
-        safe_name = "".join(c for c in collection_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-        safe_name = safe_name.replace(' ', '_')
-        output_filename = f"{collection_id}_{safe_name}.mp4"
+        # 使用VideoProcessor的sanitize_filename方法清理文件名
+        from ...utils.video_processor import VideoProcessor
+        safe_name = VideoProcessor.sanitize_filename(collection_name)
+        output_filename = f"{safe_name}.mp4"
         output_path = collections_dir / output_filename
         
         # 使用VideoProcessor创建合集
@@ -1241,8 +1241,8 @@ async def download_project_file(
             
             # 生成下载文件名
             collection_name = collection.name or f"collection_{collection_id}"
-            safe_name = "".join(c for c in collection_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            safe_name = safe_name.replace(' ', '_')
+            from ...utils.video_processor import VideoProcessor
+            safe_name = VideoProcessor.sanitize_filename(collection_name)
             filename = f"{safe_name}.mp4"
             
             # 对文件名进行URL编码
@@ -1274,16 +1274,20 @@ async def download_project_file(
             
             # 生成下载文件名
             clip_title = clip.title or f"clip_{clip_id}"
-            safe_name = "".join(c for c in clip_title if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            safe_name = safe_name.replace(' ', '_')
+            from ...utils.video_processor import VideoProcessor
+            safe_name = VideoProcessor.sanitize_filename(clip_title)
             filename = f"{safe_name}.mp4"
+            
+            # 对文件名进行URL编码
+            import urllib.parse
+            encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
             
             return FileResponse(
                 path=str(file_path),
                 filename=filename,
                 media_type="video/mp4",
                 headers={
-                    "Content-Disposition": f"attachment; filename*=UTF-8''{filename}"
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
                 }
             )
         

@@ -193,6 +193,23 @@ class VideoProcessor:
             是否成功
         """
         try:
+            # 验证输入参数
+            if not clips_list:
+                logger.error("clips_list为空，无法创建合集")
+                return False
+            
+            # 验证所有视频文件是否存在
+            valid_clips = []
+            for clip_path in clips_list:
+                if not clip_path.exists():
+                    logger.warning(f"视频文件不存在，跳过: {clip_path}")
+                    continue
+                valid_clips.append(clip_path)
+            
+            if not valid_clips:
+                logger.error("没有有效的视频文件，无法创建合集")
+                return False
+            
             # 确保输出目录存在
             output_path.parent.mkdir(parents=True, exist_ok=True)
             
@@ -200,19 +217,35 @@ class VideoProcessor:
             concat_file = output_path.parent / "concat_list.txt"
             
             with open(concat_file, 'w', encoding='utf-8') as f:
-                for clip_path in clips_list:
-                    f.write(f"file '{clip_path.absolute()}'\n")
+                for clip_path in valid_clips:
+                    # 使用绝对路径并转义单引号
+                    abs_path = clip_path.absolute()
+                    escaped_path = str(abs_path).replace("'", "'\"'\"'")
+                    f.write(f"file '{escaped_path}'\n")
             
-            # 构建FFmpeg命令
+            # 验证concat文件内容
+            if concat_file.stat().st_size == 0:
+                logger.error("concat文件为空，无法创建合集")
+                concat_file.unlink(missing_ok=True)
+                return False
+            
+            # 构建FFmpeg命令 - 使用H.264编码确保兼容性
             cmd = [
                 'ffmpeg',
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', str(concat_file),
-                '-c', 'copy',
+                '-c:v', 'libx264',  # 使用H.264视频编码
+                '-preset', 'ultrafast',  # 使用最快的编码预设
+                '-crf', '28',  # 稍微降低质量以加快编码速度
+                '-c:a', 'aac',  # 使用AAC音频编码
+                '-b:a', '128k',  # 音频比特率
+                '-movflags', '+faststart',  # 优化网络播放
                 '-y',
                 str(output_path)
             ]
+            
+            logger.info(f"执行FFmpeg命令: {' '.join(cmd)}")
             
             # 执行命令
             result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
@@ -225,6 +258,7 @@ class VideoProcessor:
                 return True
             else:
                 logger.error(f"创建合集失败: {result.stderr}")
+                logger.error(f"FFmpeg stdout: {result.stdout}")
                 return False
                 
         except Exception as e:

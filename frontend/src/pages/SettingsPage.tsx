@@ -384,7 +384,7 @@ const SettingsPage: React.FC = () => {
                     type="primary"
                     size="large"
                     icon={<UserOutlined />}
-                    onClick={() => setShowBilibiliManager(true)}
+                    onClick={() => message.info('开发中，敬请期待', 3)}
                     style={{
                       borderRadius: '8px',
                       background: 'linear-gradient(45deg, #1890ff, #36cfc9)',
