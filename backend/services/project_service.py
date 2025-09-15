@@ -233,15 +233,25 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             
             logger.info(f"开始删除项目 {project_id}: {project.name}")
             
-            # 检查是否有正在运行的任务
-            running_tasks = self.db.query(Task).filter(
-                Task.project_id == project_id,
-                Task.status == TaskStatus.RUNNING
-            ).count()
-            
-            if running_tasks > 0:
-                logger.warning(f"项目 {project_id} 有 {running_tasks} 个正在运行的任务，无法删除")
-                return False
+            # 检查是否有正在运行的任务（只对非完成状态的项目进行检查）
+            if project.status not in ["completed", "failed"]:
+                running_tasks = self.db.query(Task).filter(
+                    Task.project_id == project_id,
+                    Task.status == TaskStatus.RUNNING
+                ).count()
+                
+                if running_tasks > 0:
+                    logger.warning(f"项目 {project_id} 有 {running_tasks} 个正在运行的任务，无法删除")
+                    return False
+            else:
+                # 对于已完成或失败的项目，记录任务状态但不阻止删除
+                running_tasks = self.db.query(Task).filter(
+                    Task.project_id == project_id,
+                    Task.status == TaskStatus.RUNNING
+                ).count()
+                
+                if running_tasks > 0:
+                    logger.info(f"项目 {project_id} 已完成，但仍有 {running_tasks} 个标记为运行中的任务，将一并删除")
             
             # 开始事务（如果还没有开始的话）
             if not self.db.in_transaction():
