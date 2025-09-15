@@ -309,3 +309,11 @@ NFO - WebSocket网关服务已禁用
 2025-09-15 23:25:08,823 - backend.main - INFO - 数据库表创建完成
 2025-09-15 23:25:08,823 - backend.main - INFO - API密钥已加载到环境变量
 2025-09-15 23:25:08,823 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 23:59:00,918 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 23:59:00,919 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 23:59:03,087 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 23:59:03,324 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 23:59:03,398 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 23:59:03,399 - backend.main - INFO - 数据库表创建完成
+2025-09-15 23:59:03,399 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 23:59:03,399 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
