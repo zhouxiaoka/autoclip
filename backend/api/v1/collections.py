@@ -184,7 +184,7 @@ async def delete_collection(
 ):
     """Delete a collection."""
     try:
-        success = collection_service.delete(collection_id)
+        success = collection_service.delete_collection_with_filesystem_update(collection_id)
         if not success:
             raise HTTPException(status_code=404, detail="Collection not found")
         return {"message": "Collection deleted successfully"}

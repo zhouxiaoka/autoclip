@@ -1,5 +1,5 @@
 import React from 'react'
-import { Card, Button, Tooltip } from 'antd'
+import { Card, Button, Tooltip, message } from 'antd'
 import { PlayCircleOutlined, EditOutlined, DownloadOutlined } from '@ant-design/icons'
 import { Collection, Clip } from '../store/useProjectStore'
 import EditableCollectionTitle from './EditableCollectionTitle'
@@ -283,7 +283,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
             type="text" 
             size="small"
             icon={<EditOutlined />}
-            onClick={() => onView(collection)}
+            onClick={() => message.info('开发中，敬请期待', 3)}
             style={{
               color: '#ff7875',
               border: '1px solid rgba(255, 120, 117, 0.3)',

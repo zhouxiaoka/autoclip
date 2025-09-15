@@ -396,9 +396,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
               </Button>
               <Button
                 type="primary"
-                htmlType="submit"
+                onClick={() => message.info('开发中，敬请期待', 3)}
                 icon={<UploadOutlined />}
-                loading={uploading}
               >
                 开始投稿
               </Button>

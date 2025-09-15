@@ -9,7 +9,15 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-green?style=flat&logo=python)](https://python.org)
 [![React](https://img.shields.io/badge/React-18+-blue?style=flat&logo=react)](https://reactjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Latest-red?style=flat&logo=fastapi)](https://fastapi.tiangolo.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue?style=flat&logo=typescript)](https://typescriptlang.org)
+[![Celery](https://img.shields.io/badge/Celery-Latest-green?style=flat&logo=celery)](https://celeryproject.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat)](LICENSE)
+
+[![GitHub stars](https://img.shields.io/github/stars/your-username/autoclip?style=social)](https://github.com/your-username/autoclip)
+[![GitHub forks](https://img.shields.io/github/forks/your-username/autoclip?style=social)](https://github.com/your-username/autoclip)
+[![GitHub issues](https://img.shields.io/github/issues/your-username/autoclip)](https://github.com/your-username/autoclip/issues)
+
+**语言**: [English](README-EN.md) | [中文](README.md)
 
 </div>
 
@@ -19,13 +27,18 @@ AutoClip是一个基于AI的智能视频切片处理系统，能够自动从YouT
 
 ### ✨ 核心特性
 
-- 🎬 **多平台支持**: YouTube、B站视频一键下载
-- 🤖 **AI智能分析**: 基于大语言模型的视频内容理解
-- ✂️ **自动切片**: 智能识别精彩片段并自动切割
-- 📚 **智能合集**: AI推荐和手动创建视频合集
-- 🚀 **实时处理**: 异步任务队列，实时进度反馈
-- 🎨 **现代界面**: React + TypeScript + Ant Design
-- 📱 **响应式设计**: 支持桌面和移动端
+- 🎬 **多平台支持**: YouTube、B站视频一键下载，支持本地文件上传
+- 🤖 **AI智能分析**: 基于通义千问大语言模型的视频内容理解
+- ✂️ **自动切片**: 智能识别精彩片段并自动切割，支持多种视频分类
+- 📚 **智能合集**: AI推荐和手动创建视频合集，支持拖拽排序
+- 🚀 **实时处理**: 异步任务队列，实时进度反馈，WebSocket通信
+- 🎨 **现代界面**: React + TypeScript + Ant Design，响应式设计
+- 📱 **移动端支持**: 完美适配桌面和移动端设备
+- 🔐 **账号管理**: 支持B站多账号管理，自动健康检查
+- 📊 **数据统计**: 完整的项目管理和数据统计功能
+- 🛠️ **易于部署**: 一键启动脚本，Docker支持，详细文档
+- 📤 **B站上传**【开发中】: 自动上传切片视频到B站
+- ✏️ **字幕编辑**【开发中】: 可视化字幕编辑和同步功能
 
 ## 🏗️ 系统架构
 
@@ -47,41 +60,84 @@ graph TB
 ### 技术栈
 
 **后端技术**
-- **FastAPI**: 现代化Python Web框架
-- **Celery**: 分布式任务队列
-- **Redis**: 消息代理和缓存
-- **SQLite**: 轻量级数据库
-- **yt-dlp**: YouTube视频下载
-- **通义千问**: AI内容分析
+- **FastAPI**: 现代化Python Web框架，自动API文档生成
+- **Celery**: 分布式任务队列，支持异步处理
+- **Redis**: 消息代理和缓存，任务状态管理
+- **SQLite**: 轻量级数据库，支持升级到PostgreSQL
+- **yt-dlp**: YouTube视频下载，支持多种格式
+- **通义千问**: AI内容分析，支持多种模型
+- **WebSocket**: 实时通信，进度推送
+- **Pydantic**: 数据验证和序列化
 
 **前端技术**
-- **React 18**: 用户界面框架
-- **TypeScript**: 类型安全
-- **Ant Design**: UI组件库
-- **Vite**: 构建工具
-- **Zustand**: 状态管理
+- **React 18**: 用户界面框架，Hooks和函数组件
+- **TypeScript**: 类型安全，更好的开发体验
+- **Ant Design**: 企业级UI组件库
+- **Vite**: 快速构建工具，热重载
+- **Zustand**: 轻量级状态管理
+- **React Router**: 路由管理
+- **Axios**: HTTP客户端
+- **React Player**: 视频播放器
 
 ## 🚀 快速开始
 
 ### 环境要求
 
-- **操作系统**: macOS / Linux
-- **Python**: 3.8+
-- **Node.js**: 16+
-- **Redis**: 6.0+
+#### Docker部署（推荐）
+- **Docker**: 20.10+
+- **Docker Compose**: 2.0+
+- **内存**: 最少 4GB，推荐 8GB+
+- **存储**: 最少 10GB 可用空间
+
+#### 本地部署
+- **操作系统**: macOS / Linux / Windows (WSL)
+- **Python**: 3.8+ (推荐 3.9+)
+- **Node.js**: 16+ (推荐 18+)
+- **Redis**: 6.0+ (推荐 7.0+)
+- **FFmpeg**: 视频处理依赖
+- **内存**: 最少 4GB，推荐 8GB+
+- **存储**: 最少 10GB 可用空间
 
 ### 一键启动
 
+#### 方式一：Docker部署（推荐）
+
 ```bash
 # 克隆项目
-git clone <repository-url>
+git clone https://github.com/your-username/autoclip.git
 cd autoclip
 
-# 一键启动（推荐）
+# Docker一键启动
+./docker-start.sh
+
+# 开发环境启动
+./docker-start.sh dev
+
+# 停止服务
+./docker-stop.sh
+
+# 检查服务状态
+./docker-status.sh
+```
+
+#### 方式二：本地部署
+
+```bash
+# 克隆项目
+git clone https://github.com/your-username/autoclip.git
+cd autoclip
+
+# 一键启动（推荐，包含完整检查和监控）
 ./start_autoclip.sh
 
-# 快速启动（开发环境）
+# 快速启动（开发环境，跳过详细检查）
 ./quick_start.sh
+
+# 检查系统状态
+./status_autoclip.sh
+
+# 停止系统
+./stop_autoclip.sh
 ```
 
 ### 手动安装
@@ -89,7 +145,8 @@ cd autoclip
 ```bash
 # 1. 创建虚拟环境
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # Linux/macOS
+# 或 venv\Scripts\activate  # Windows
 
 # 2. 安装Python依赖
 pip install -r requirements.txt
@@ -98,13 +155,67 @@ pip install -r requirements.txt
 cd frontend && npm install && cd ..
 
 # 4. 安装Redis
-brew install redis  # macOS
+# macOS
+brew install redis
 brew services start redis
 
-# 5. 配置环境变量
+# Ubuntu/Debian
+sudo apt update
+sudo apt install redis-server
+sudo systemctl start redis-server
+
+# CentOS/RHEL
+sudo yum install redis
+sudo systemctl start redis
+
+# 5. 安装FFmpeg
+# macOS
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt install ffmpeg
+
+# CentOS/RHEL
+sudo yum install ffmpeg
+
+# 6. 配置环境变量
 cp env.example .env
 # 编辑 .env 文件，填入API密钥等配置
 ```
+
+## 🎬 功能演示
+
+### 主要功能展示
+
+1. **视频下载与处理**
+   - 支持YouTube、B站视频链接解析
+   - 自动下载视频和字幕文件
+   - 支持本地文件上传
+
+2. **AI智能分析**
+   - 自动提取视频大纲
+   - 智能识别话题时间点
+   - 对片段进行精彩度评分
+
+3. **视频切片与合集**
+   - 自动生成精彩片段
+   - 智能推荐合集组合
+   - 支持手动编辑和排序
+
+4. **实时进度监控**
+   - WebSocket实时进度推送
+   - 详细的任务状态显示
+   - 错误处理和重试机制
+
+5. **B站上传功能**【开发中】
+   - 自动上传切片视频到B站
+   - 支持多账号管理
+   - 批量上传和队列管理
+
+6. **字幕编辑功能**【开发中】
+   - 可视化字幕编辑器
+   - 字幕同步和调整
+   - 多语言字幕支持
 
 ## 📖 使用指南
 
@@ -149,6 +260,8 @@ cp env.example .env
 - **编辑信息**: 修改片段标题、描述等信息
 - **创建合集**: 手动创建或使用AI推荐的合集
 - **下载导出**: 下载单个片段或完整合集
+- **B站上传**【开发中】: 一键上传切片视频到B站
+- **字幕编辑**【开发中】: 可视化编辑和同步字幕文件
 
 ## 🔧 配置说明
 
@@ -177,7 +290,7 @@ UPLOAD_DIR=./data/uploads
 PROJECT_DIR=./data/projects
 ```
 
-### B站账号配置
+### B站账号配置【开发中】
 
 1. 在设置页面点击"B站账号管理"
 2. 选择登录方式：
@@ -195,29 +308,74 @@ autoclip/
 │   │   ├── v1/            # API v1版本
 │   │   │   ├── youtube.py # YouTube下载API
 │   │   │   ├── bilibili.py # B站下载API
-│   │   │   └── projects.py # 项目管理API
+│   │   │   ├── projects.py # 项目管理API
+│   │   │   ├── clips.py   # 视频片段API
+│   │   │   ├── collections.py # 合集管理API
+│   │   │   └── settings.py # 系统设置API
 │   │   └── upload_queue.py # 上传队列管理
 │   ├── core/              # 核心配置
 │   │   ├── database.py    # 数据库配置
 │   │   ├── celery_app.py  # Celery配置
-│   │   └── config.py      # 系统配置
+│   │   ├── config.py      # 系统配置
+│   │   └── llm_manager.py # AI模型管理
 │   ├── models/            # 数据模型
+│   │   ├── project.py     # 项目模型
+│   │   ├── clip.py        # 片段模型
+│   │   ├── collection.py  # 合集模型
+│   │   └── bilibili.py    # B站账号模型
 │   ├── services/          # 业务逻辑
+│   │   ├── video_service.py # 视频处理服务
+│   │   ├── ai_service.py  # AI分析服务
+│   │   └── upload_service.py # 上传服务
 │   ├── tasks/             # Celery任务
-│   └── pipeline/          # 处理流水线
+│   │   ├── processing.py  # 处理任务
+│   │   ├── upload.py      # 上传任务
+│   │   └── maintenance.py # 维护任务
+│   ├── pipeline/          # 处理流水线
+│   │   ├── step1_outline.py # 大纲提取
+│   │   ├── step2_timeline.py # 时间线分析
+│   │   ├── step3_scoring.py # 精彩度评分
+│   │   └── step6_video.py # 视频生成
+│   └── utils/             # 工具函数
 ├── frontend/              # 前端代码
 │   ├── src/
 │   │   ├── components/    # React组件
+│   │   │   ├── UploadModal.tsx # 上传模态框
+│   │   │   ├── ClipCard.tsx # 片段卡片
+│   │   │   ├── CollectionCard.tsx # 合集卡片
+│   │   │   └── BilibiliManager.tsx # B站管理
 │   │   ├── pages/         # 页面组件
+│   │   │   ├── HomePage.tsx # 首页
+│   │   │   ├── ProjectDetailPage.tsx # 项目详情
+│   │   │   └── SettingsPage.tsx # 设置页面
 │   │   ├── services/      # API服务
-│   │   └── store/         # 状态管理
+│   │   │   └── api.ts     # API客户端
+│   │   └── stores/        # 状态管理
 │   └── package.json
 ├── data/                  # 数据存储
 │   ├── projects/          # 项目数据
 │   ├── uploads/           # 上传文件
+│   ├── temp/              # 临时文件
+│   ├── output/            # 输出文件
 │   └── autoclip.db        # 数据库文件
 ├── scripts/               # 工具脚本
+│   ├── start_autoclip.sh  # 启动脚本
+│   ├── stop_autoclip.sh   # 停止脚本
+│   └── status_autoclip.sh # 状态检查
 ├── docs/                  # 文档
+│   ├── README.md          # 文档中心
+│   ├── i18n.md           # 国际化配置
+│   └── *.md              # 其他文档
+├── logs/                  # 日志文件
+├── Dockerfile             # Docker镜像构建文件
+├── Dockerfile.dev         # 开发环境Docker文件
+├── docker-compose.yml     # 生产环境Docker编排
+├── docker-compose.dev.yml # 开发环境Docker编排
+├── docker-start.sh        # Docker启动脚本
+├── docker-stop.sh         # Docker停止脚本
+├── docker-status.sh       # Docker状态检查脚本
+├── .dockerignore          # Docker忽略文件
+├── DOCKER.md              # Docker部署文档
 └── *.sh                   # 启动脚本
 ```
 
@@ -380,28 +538,44 @@ celery -A backend.core.celery_app flower --port=5555
 
 ### Docker部署
 
-```dockerfile
-# Dockerfile示例
-FROM python:3.9-slim
+#### 快速启动
 
-WORKDIR /app
+```bash
+# 克隆项目
+git clone https://github.com/your-username/autoclip.git
+cd autoclip
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    redis-tools \
-    && rm -rf /var/lib/apt/lists/*
+# 配置环境变量
+cp env.example .env
+# 编辑 .env 文件，填入必要的配置
 
-# 安装Python依赖
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# 启动所有服务
+docker-compose up -d
 
-# 复制代码
-COPY . .
-
-# 启动服务
-CMD ["./start_autoclip.sh"]
+# 查看服务状态
+docker-compose ps
 ```
+
+#### 访问服务
+
+- **前端界面**: http://localhost:3000
+- **后端API**: http://localhost:8000
+- **API文档**: http://localhost:8000/docs
+- **Flower监控**: http://localhost:5555
+
+#### 开发环境
+
+```bash
+# 使用开发环境配置
+docker-compose -f docker-compose.dev.yml up -d
+
+# 实时查看日志
+docker-compose -f docker-compose.dev.yml logs -f
+```
+
+#### 详细说明
+
+完整的Docker部署指南请参考 [DOCKER.md](DOCKER.md) 文档。
 
 ### 系统服务
 
@@ -429,6 +603,8 @@ WantedBy=multi-user.target
 
 ### 即将推出
 
+- [ ] **B站上传功能**: 自动上传切片视频到B站，支持多账号管理
+- [ ] **字幕编辑功能**: 可视化字幕编辑器和同步功能
 - [ ] **多语言支持**: 支持更多语言的视频处理
 - [ ] **云端存储**: 集成云存储服务
 - [ ] **批量处理**: 支持批量视频处理
@@ -444,43 +620,197 @@ WantedBy=multi-user.target
 
 ## 🤝 贡献指南
 
-我们欢迎所有形式的贡献！
+我们欢迎所有形式的贡献！无论是代码贡献、文档改进、问题报告还是功能建议。
 
 ### 如何贡献
 
-1. **Fork** 项目
-2. 创建功能分支：`git checkout -b feature/amazing-feature`
-3. 提交更改：`git commit -m 'Add amazing feature'`
-4. 推送分支：`git push origin feature/amazing-feature`
-5. 创建 **Pull Request**
+1. **Fork** 项目到您的GitHub账户
+2. 克隆您的Fork到本地：
+   ```bash
+   git clone https://github.com/your-username/autoclip.git
+   cd autoclip
+   ```
+3. 创建功能分支：
+   ```bash
+   git checkout -b feature/amazing-feature
+   ```
+4. 进行开发和测试
+5. 提交更改：
+   ```bash
+   git add .
+   git commit -m 'feat: add amazing feature'
+   ```
+6. 推送分支：
+   ```bash
+   git push origin feature/amazing-feature
+   ```
+7. 在GitHub上创建 **Pull Request**
 
 ### 开发规范
 
-- 遵循PEP 8 Python代码规范
-- 使用TypeScript进行前端开发
-- 编写清晰的提交信息
-- 添加必要的测试用例
-- 更新相关文档
+**代码规范**
+- 后端：遵循PEP 8 Python代码规范
+- 前端：使用TypeScript，遵循ESLint规则
+- 提交信息：使用约定式提交格式（feat, fix, docs, style, refactor, test, chore）
+
+**开发流程**
+1. 确保所有测试通过
+2. 添加必要的测试用例
+3. 更新相关文档
+4. 确保代码质量检查通过
+
+**提交信息格式**
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+示例：
+- `feat(api): add video download endpoint`
+- `fix(ui): resolve upload modal display issue`
+- `docs(readme): update installation instructions`
 
 ## 📄 许可证
 
 本项目采用 [MIT License](LICENSE) 许可证。
 
+## ❓ 常见问题
+
+### 安装和启动问题
+
+**Q: 启动时提示端口被占用怎么办？**
+A: 使用以下命令检查并停止占用端口的进程：
+```bash
+# 检查端口占用
+lsof -i :8000  # 后端端口
+lsof -i :3000  # 前端端口
+
+# 停止进程
+kill -9 <PID>
+```
+
+**Q: Redis连接失败怎么办？**
+A: 确保Redis服务正在运行：
+```bash
+# 检查Redis状态
+redis-cli ping
+
+# 启动Redis服务
+brew services start redis  # macOS
+sudo systemctl start redis-server  # Linux
+```
+
+**Q: 前端依赖安装失败怎么办？**
+A: 尝试清理缓存后重新安装：
+```bash
+cd frontend
+rm -rf node_modules package-lock.json
+npm cache clean --force
+npm install
+```
+
+### 功能使用问题
+
+**Q: YouTube视频下载失败怎么办？**
+A: 
+1. 检查网络连接
+2. 更新yt-dlp：`pip install --upgrade yt-dlp`
+3. 尝试使用浏览器Cookie
+4. 检查视频是否可用或需要登录
+
+**Q: B站视频下载失败怎么办？**
+A:
+1. 检查账号登录状态
+2. 更新账号Cookie
+3. 检查视频权限设置
+4. 尝试使用其他账号
+
+**Q: AI处理速度慢怎么办？**
+A:
+1. 检查API密钥配置
+2. 调整处理参数（减少chunk_size）
+3. 检查网络连接
+4. 考虑使用更快的AI模型
+
+**Q: B站上传功能什么时候可以使用？**
+A: B站上传功能正在开发中，预计在下一个版本中发布。该功能将支持：
+- 自动上传切片视频到B站
+- 多账号管理和切换
+- 批量上传和队列管理
+- 上传进度监控
+
+**Q: 字幕编辑功能什么时候可以使用？**
+A: 字幕编辑功能正在开发中，预计在下一个版本中发布。该功能将支持：
+- 可视化字幕编辑器
+- 字幕时间轴同步
+- 多语言字幕支持
+- 字幕格式转换
+
+### 性能优化
+
+**Q: 如何提高处理速度？**
+A:
+1. 增加Celery Worker并发数
+2. 使用SSD存储
+3. 增加系统内存
+4. 优化视频质量设置
+
+**Q: 如何减少存储空间占用？**
+A:
+1. 定期清理临时文件
+2. 压缩输出视频
+3. 删除不需要的项目
+4. 使用外部存储
+
 ## 📞 支持与反馈
 
-- **问题反馈**: [GitHub Issues](https://github.com/your-repo/issues)
-- **功能建议**: [GitHub Discussions](https://github.com/your-repo/discussions)
+### 获取帮助
+
+- **问题反馈**: [GitHub Issues](https://github.com/your-username/autoclip/issues)
+- **功能建议**: [GitHub Discussions](https://github.com/your-username/autoclip/discussions)
+- **Bug报告**: 请使用GitHub Issues模板
 - **文档**: [项目文档](docs/)
+
+### 联系方式
+
+- **个人微信**: your_wechat_id
+- **飞书**: your_feishu_id
+
+
 
 ## 🙏 致谢
 
-感谢以下开源项目的支持：
+感谢以下开源项目和服务的支持：
 
+### 核心技术栈
 - [FastAPI](https://fastapi.tiangolo.com/) - 现代化Python Web框架
 - [React](https://reactjs.org/) - 用户界面库
 - [Ant Design](https://ant.design/) - 企业级UI设计语言
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube视频下载工具
+- [TypeScript](https://typescriptlang.org/) - JavaScript的超集
 - [Celery](https://docs.celeryproject.org/) - 分布式任务队列
+- [Redis](https://redis.io/) - 内存数据结构存储
+
+### 视频处理
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube视频下载工具
+- [FFmpeg](https://ffmpeg.org/) - 音视频处理框架
+- [bcut-asr](https://github.com/liou666/bcut-asr) - 语音识别服务
+
+### AI服务
+- [通义千问](https://tongyi.aliyun.com/) - 阿里云大语言模型服务
+- [DashScope](https://dashscope.aliyun.com/) - 阿里云AI服务平台
+
+### 开发工具
+- [Vite](https://vitejs.dev/) - 前端构建工具
+- [Zustand](https://github.com/pmndrs/zustand) - 状态管理库
+- [Pydantic](https://pydantic-docs.helpmanual.io/) - 数据验证库
+
+### 特别感谢
+- 所有为开源社区贡献的开发者
+- 提供反馈和建议的用户
+- 参与测试和贡献代码的社区成员
 
 ---
 
@@ -488,6 +818,10 @@ WantedBy=multi-user.target
 
 **如果这个项目对你有帮助，请给我们一个 ⭐ Star！**
 
+[![Star History Chart](https://api.star-history.com/svg?repos=your-username/autoclip&type=Date)](https://star-history.com/#your-username/autoclip&Date)
+
 Made with ❤️ by AutoClip Team
+
+**⭐ 如果觉得有用，请给个Star支持一下！**
 
 </div>

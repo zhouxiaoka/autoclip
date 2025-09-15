@@ -261,7 +261,7 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
               <Button 
                 type="default" 
                 icon={<UploadOutlined />}
-                onClick={() => setShowUploadModal(true)}
+                onClick={() => message.info('开发中，敬请期待', 3)}
               >
                 投稿到B站
               </Button>
