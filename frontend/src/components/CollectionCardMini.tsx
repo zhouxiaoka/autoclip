@@ -258,7 +258,9 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
             gap: '8px',
             height: '28px',
             alignItems: 'center',
-            marginTop: 'auto'
+            marginTop: 'auto',
+            paddingTop: '12px',
+            paddingBottom: '4px'
           }}>
             <Button
               type="text"
