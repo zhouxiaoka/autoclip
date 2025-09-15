@@ -619,7 +619,11 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
 
               <Form.Item>
                 <Space>
-                  <Button type="primary" htmlType="submit" loading={loading} icon={<UploadOutlined />}>
+                  <Button 
+                    type="primary" 
+                    onClick={() => message.info('开发中，敬请期待', 3)}
+                    icon={<UploadOutlined />}
+                  >
                     开始投稿
                   </Button>
                   <Button onClick={onClose}>

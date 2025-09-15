@@ -64,43 +64,11 @@ const ClipCard: React.FC<ClipCardProps> = ({
 
   const handleDownloadWithTitle = async () => {
     try {
-      const fileName = `${clip.title || clip.generated_title || '视频片段'}.mp4`
-      
-      // 使用fetch获取视频文件
-      const response = await fetch(videoUrl || '')
-      if (!response.ok) {
-        throw new Error('下载失败')
-      }
-      
-      const blob = await response.blob()
-      
-      // 创建下载链接
-      const downloadUrl = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = fileName
-      
-      // 触发下载
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      
-      // 清理URL对象
-      window.URL.revokeObjectURL(downloadUrl)
-      
-      // 同时调用原有的下载方法
-      onDownload(clip.id)
+      // 直接调用API下载方法，它会处理文件名
+      await onDownload(clip.id)
     } catch (error) {
       console.error('下载失败:', error)
-      // 如果fetch失败，回退到原来的方法
-      const fileName = `${clip.title || clip.generated_title || '视频片段'}.mp4`
-      const link = document.createElement('a')
-      link.href = videoUrl || ''
-      link.download = fileName
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      onDownload(clip.id)
+      message.error('下载失败')
     }
   }
 
@@ -470,7 +438,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
                 type="text" 
                 size="small"
                 icon={<UploadOutlined />}
-                onClick={() => setShowBilibiliManager(true)}
+                onClick={() => message.info('开发中，敬请期待', 3)}
                 style={{
                   color: '#ff7875',
                   border: '1px solid rgba(255, 120, 117, 0.3)',
@@ -506,8 +474,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
             key="upload" 
             type="default" 
             icon={<UploadOutlined />} 
-            onClick={() => setShowBilibiliManager(true)}
-            disabled={!projectId}
+            onClick={() => message.info('开发中，敬请期待', 3)}
           >
             投稿到B站
           </Button>

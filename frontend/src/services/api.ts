@@ -272,7 +272,9 @@ export const projectApi = {
         collection_summary: collection.description || collection.collection_summary || '',
         clip_ids: collection.clip_ids || collection.metadata?.clip_ids || [],
         collection_type: collection.collection_type || 'ai_recommended',
-        created_at: collection.created_at
+        created_at: collection.created_at,
+        project_id: collection.project_id,
+        thumbnail_path: collection.thumbnail_path
       }))
     } catch (error) {
       console.error('Failed to get collections:', error)
@@ -315,7 +317,13 @@ export const projectApi = {
 
   // 更新合集信息
   updateCollection: (_projectId: string, collectionId: string, updates: Partial<Collection>): Promise<Collection> => {
-    return api.put(`/collections/${collectionId}`, updates)
+    // 如果updates包含clip_ids，需要将其包装在metadata中
+    const apiUpdates = { ...updates }
+    if ('clip_ids' in updates && updates.clip_ids !== undefined) {
+      apiUpdates.metadata = { clip_ids: updates.clip_ids }
+      delete apiUpdates.clip_ids
+    }
+    return api.put(`/collections/${collectionId}`, apiUpdates)
   },
 
   // 重新排序合集切片
