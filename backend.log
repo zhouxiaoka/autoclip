@@ -5968,3 +5968,575 @@ bvid
 2025-09-15 12:05:43,433 - backend.main - INFO - 数据库表创建完成
 2025-09-15 12:05:43,433 - backend.main - INFO - API密钥已加载到环境变量
 2025-09-15 12:05:43,433 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:15:39,384 - backend.services.project_service - INFO - 开始删除项目 22ac1453-4f16-4c04-ad7e-1264e995530a: 修复测试项目
+2025-09-15 12:15:39,384 - backend.services.project_service - INFO - 删除项目目录: data/projects/22ac1453-4f16-4c04-ad7e-1264e995530a
+2025-09-15 12:15:39,408 - backend.services.project_service - INFO - 项目 22ac1453-4f16-4c04-ad7e-1264e995530a 删除成功
+2025-09-15 12:20:10,179 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:20:10,179 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:20:10,808 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:20:11,055 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:20:11,123 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:20:11,123 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:20:11,123 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:20:11,123 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:22:53,130 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:22:53,130 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:22:53,765 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:22:54,020 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:22:54,099 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:22:54,099 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:22:54,099 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:22:54,100 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:23:08,339 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:23:08,339 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:23:08,865 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:23:09,061 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:23:09,128 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:23:09,129 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:23:09,129 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:23:09,129 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:23:19,534 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:23:19,534 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:23:20,062 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:23:20,253 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:23:20,321 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:23:20,322 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:23:20,322 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:23:20,322 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:24:18,302 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:24:18,302 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:24:18,831 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:24:19,034 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:24:19,108 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:24:19,108 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:24:19,108 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:24:19,108 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:24:25,978 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:24:25,978 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:24:26,498 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:24:26,745 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:24:26,813 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:24:26,814 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:24:26,814 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:24:26,814 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:24:31,764 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:24:31,764 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:24:32,245 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:24:32,444 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:24:32,514 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:24:32,515 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:24:32,515 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:24:32,515 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:25:07,989 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:25:07,989 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:25:08,446 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:25:08,645 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:25:08,713 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:25:08,714 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:25:08,714 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:25:08,714 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:25:52,152 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:25:52,152 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:25:52,533 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:25:52,727 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:25:52,795 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:25:52,796 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:25:52,796 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:25:52,796 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:26:05,052 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:26:05,052 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:26:05,458 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:26:05,647 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:26:05,715 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:26:05,716 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:26:05,716 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:26:05,716 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:26:15,310 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:26:15,310 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:26:15,709 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:26:15,898 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:26:15,963 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:26:15,964 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:26:15,964 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:26:15,964 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 12:27:32,247 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 12:27:32,247 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 12:27:32,622 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 12:27:32,803 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 12:27:32,866 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 12:27:32,867 - backend.main - INFO - 数据库表创建完成
+2025-09-15 12:27:32,867 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 12:27:32,867 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 13:47:14,772 - backend.api.v1.bilibili - INFO - 开始解析B站视频: https://www.bilibili.com/video/BV1dK8BzoEAc/
+2025-09-15 13:47:15,936 - backend.api.v1.bilibili - INFO - 视频信息解析成功: C-131瑞克头发的细节，把最大的平行宇宙吃书设定，给圆上了！（瑞克和莫蒂第八季第十集·彩蛋）#346
+2025-09-15 13:47:20,415 - backend.api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV1dK8BzoEAc/
+2025-09-15 13:47:21,843 - backend.api.v1.bilibili - INFO - B站缩略图获取成功: C-131瑞克头发的细节，把最大的平行宇宙吃书设定，给圆上了！（瑞克和莫蒂第八季第十集·彩蛋）#346
+2025-09-15 13:47:21,858 - backend.api.v1.bilibili - INFO - 项目 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be 缩略图已设置
+2025-09-15 13:47:21,859 - backend.api.v1.bilibili - INFO - 项目已创建: 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be
+2025-09-15 13:47:21,864 - backend.api.v1.async_task_manager - INFO - 开始执行任务: bilibili_download_786b601f-07e3-4819-b533-06cab2024073
+2025-09-15 13:47:21,867 - backend.api.v1.bilibili - INFO - 项目 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be 下载进度更新: 10.0% - 正在获取视频信息...
+2025-09-15 13:47:22,949 - backend.api.v1.bilibili - INFO - 项目 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be 下载进度更新: 30.0% - 正在下载视频...
+2025-09-15 13:47:41,603 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: C-131瑞克头发的细节，把最大的平行宇宙吃书设定，给圆上了！（瑞克和莫蒂第八季第十集·彩蛋）#346
+2025-09-15 13:47:41,605 - backend.utils.bilibili_downloader - INFO - 重命名AI字幕文件: C-131瑞克头发的细节，把最大的平行宇宙吃书设定，给圆上了！（瑞克和莫蒂第八季第十集·彩蛋）#346.ai-zh.srt -> C-131瑞克头发的细节，把最大的平行宇宙吃书设定，给圆上了！（瑞克和莫蒂第八季第十集·彩蛋）#346.srt
+2025-09-15 13:47:41,605 - backend.utils.bilibili_downloader - INFO - 下载完成: C-131瑞克头发的细节，把最大的平行宇宙吃书设定，给圆上了！（瑞克和莫蒂第八季第十集·彩蛋）#346
+2025-09-15 13:47:41,607 - backend.api.v1.bilibili - INFO - 项目 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be 下载进度更新: 60.0% - 视频下载完成，正在处理字幕...
+2025-09-15 13:47:41,608 - backend.api.v1.bilibili - INFO - 视频文件已移动到: /Users/zhoukk/autoclip/data/projects/3a9b34e6-670f-4aeb-bf37-5d02d62eb3be/raw/input.mp4
+2025-09-15 13:47:41,608 - backend.api.v1.bilibili - INFO - 字幕文件已移动到: /Users/zhoukk/autoclip/data/projects/3a9b34e6-670f-4aeb-bf37-5d02d62eb3be/raw/input.srt
+2025-09-15 13:47:41,612 - backend.api.v1.bilibili - INFO - 项目 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be 下载进度更新: 100.0% - 下载完成，准备开始处理
+2025-09-15 13:47:41,613 - backend.api.v1.bilibili - INFO - B站下载任务完成: 786b601f-07e3-4819-b533-06cab2024073, 项目ID: 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be
+2025-09-15 13:47:41,613 - backend.api.v1.bilibili - INFO - B站项目 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be 下载完成，等待自动化流水线启动
+2025-09-15 13:47:41,613 - backend.services.auto_pipeline_service - INFO - 自动启动项目流水线: 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be
+2025-09-15 13:47:41,618 - backend.services.auto_pipeline_service - INFO - 创建处理任务: 5a232f95-5eef-4520-a41b-b5e1ba14f7af
+2025-09-15 13:47:41,619 - backend.services.auto_pipeline_service - INFO - 项目 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be 状态已更新为处理中
+2025-09-15 13:47:41,621 - backend.services.progress_update_service - INFO - 开始监控任务进度: 5a232f95-5eef-4520-a41b-b5e1ba14f7af
+2025-09-15 13:47:41,621 - backend.services.auto_pipeline_service - INFO - 准备提交Celery任务: 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be
+2025-09-15 13:47:41,621 - backend.services.auto_pipeline_service - INFO - 视频文件: /Users/zhoukk/autoclip/data/projects/3a9b34e6-670f-4aeb-bf37-5d02d62eb3be/raw/input.mp4
+2025-09-15 13:47:41,621 - backend.services.auto_pipeline_service - INFO - 字幕文件: /Users/zhoukk/autoclip/data/projects/3a9b34e6-670f-4aeb-bf37-5d02d62eb3be/raw/input.srt
+2025-09-15 13:47:41,621 - backend.utils.task_submission_utils - INFO - 提交视频流水线任务: 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be
+2025-09-15 13:47:41,621 - backend.utils.task_submission_utils - INFO - 准备提交任务到队列...
+2025-09-15 13:47:41,621 - backend.utils.task_submission_utils - INFO - 任务名称: backend.tasks.processing.process_video_pipeline
+2025-09-15 13:47:41,621 - backend.utils.task_submission_utils - INFO - 任务参数: ['3a9b34e6-670f-4aeb-bf37-5d02d62eb3be', '/Users/zhoukk/autoclip/data/projects/3a9b34e6-670f-4aeb-bf37-5d02d62eb3be/raw/input.mp4', '/Users/zhoukk/autoclip/data/projects/3a9b34e6-670f-4aeb-bf37-5d02d62eb3be/raw/input.srt']
+2025-09-15 13:47:41,661 - backend.utils.task_submission_utils - INFO - 视频流水线任务已提交: 8c20958e-fbe8-49f9-8b2f-3f30ef6a096e
+2025-09-15 13:47:41,662 - backend.utils.task_submission_utils - INFO - 任务状态: PENDING
+2025-09-15 13:47:41,662 - backend.utils.task_submission_utils - INFO - Redis队列长度: 0
+2025-09-15 13:47:41,662 - backend.services.auto_pipeline_service - INFO - Celery任务提交结果: {'success': True, 'task_id': '8c20958e-fbe8-49f9-8b2f-3f30ef6a096e', 'status': 'PENDING', 'message': '视频流水线任务已提交'}
+2025-09-15 13:47:41,662 - backend.services.auto_pipeline_service - INFO - Celery任务已提交: 8c20958e-fbe8-49f9-8b2f-3f30ef6a096e
+2025-09-15 13:47:41,663 - backend.api.v1.bilibili - INFO - B站项目 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be 自动化流水线已启动: {'status': 'started', 'message': '流水线处理已启动', 'project_id': '3a9b34e6-670f-4aeb-bf37-5d02d62eb3be', 'task_id': '5a232f95-5eef-4520-a41b-b5e1ba14f7af', 'celery_task_id': '8c20958e-fbe8-49f9-8b2f-3f30ef6a096e'}
+2025-09-15 13:47:41,663 - backend.api.v1.async_task_manager - INFO - 任务完成: bilibili_download_786b601f-07e3-4819-b533-06cab2024073
+2025-09-15 13:47:43,282 - backend.api.v1.bilibili - INFO - 开始解析B站视频: https://www.bilibili.com/video/BV18nYPzcEJ3/
+2025-09-15 13:47:44,315 - backend.api.v1.bilibili - INFO - 视频信息解析成功: 炸裂——主角瑞克和prime维度是朋友！姥爷要消灭所有平行宇宙了（瑞克和莫蒂官方漫画·瑞莫VS宇宙01）
+2025-09-15 13:47:46,095 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:47:46,508 - backend.api.v1.bilibili - INFO - 创建B站下载任务: https://www.bilibili.com/video/BV18nYPzcEJ3/
+2025-09-15 13:47:47,731 - backend.api.v1.bilibili - INFO - B站缩略图获取成功: 炸裂——主角瑞克和prime维度是朋友！姥爷要消灭所有平行宇宙了（瑞克和莫蒂官方漫画·瑞莫VS宇宙01）
+2025-09-15 13:47:47,740 - backend.api.v1.bilibili - INFO - 项目 caf5dd53-d921-4a68-853c-5d45f4a78054 缩略图已设置
+2025-09-15 13:47:47,740 - backend.api.v1.bilibili - INFO - 项目已创建: caf5dd53-d921-4a68-853c-5d45f4a78054
+2025-09-15 13:47:47,742 - backend.api.v1.async_task_manager - INFO - 开始执行任务: bilibili_download_5dd0ecd4-a690-46dc-a101-376cfea2af0a
+2025-09-15 13:47:47,744 - backend.api.v1.bilibili - INFO - 项目 caf5dd53-d921-4a68-853c-5d45f4a78054 下载进度更新: 10.0% - 正在获取视频信息...
+2025-09-15 13:47:47,804 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:47:48,776 - backend.api.v1.bilibili - INFO - 项目 caf5dd53-d921-4a68-853c-5d45f4a78054 下载进度更新: 30.0% - 正在下载视频...
+2025-09-15 13:47:49,806 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:47:51,808 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:47:53,805 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:47:55,807 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:47:57,805 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:47:59,810 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:02,286 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:03,131 - backend.utils.bilibili_downloader - INFO - 正在查找字幕文件，标题: 炸裂——主角瑞克和prime维度是朋友！姥爷要消灭所有平行宇宙了（瑞克和莫蒂官方漫画·瑞莫VS宇宙01）
+2025-09-15 13:48:03,132 - backend.utils.bilibili_downloader - INFO - 重命名AI字幕文件: 炸裂——主角瑞克和prime维度是朋友！姥爷要消灭所有平行宇宙了（瑞克和莫蒂官方漫画·瑞莫VS宇宙01）.ai-zh.srt -> 炸裂——主角瑞克和prime维度是朋友！姥爷要消灭所有平行宇宙了（瑞克和莫蒂官方漫画·瑞莫VS宇宙01）.srt
+2025-09-15 13:48:03,132 - backend.utils.bilibili_downloader - INFO - 下载完成: 炸裂——主角瑞克和prime维度是朋友！姥爷要消灭所有平行宇宙了（瑞克和莫蒂官方漫画·瑞莫VS宇宙01）
+2025-09-15 13:48:03,135 - backend.api.v1.bilibili - INFO - 项目 caf5dd53-d921-4a68-853c-5d45f4a78054 下载进度更新: 60.0% - 视频下载完成，正在处理字幕...
+2025-09-15 13:48:03,136 - backend.api.v1.bilibili - INFO - 视频文件已移动到: /Users/zhoukk/autoclip/data/projects/caf5dd53-d921-4a68-853c-5d45f4a78054/raw/input.mp4
+2025-09-15 13:48:03,136 - backend.api.v1.bilibili - INFO - 字幕文件已移动到: /Users/zhoukk/autoclip/data/projects/caf5dd53-d921-4a68-853c-5d45f4a78054/raw/input.srt
+2025-09-15 13:48:03,137 - backend.api.v1.bilibili - INFO - 项目 caf5dd53-d921-4a68-853c-5d45f4a78054 下载进度更新: 100.0% - 下载完成，准备开始处理
+2025-09-15 13:48:03,138 - backend.api.v1.bilibili - INFO - B站下载任务完成: 5dd0ecd4-a690-46dc-a101-376cfea2af0a, 项目ID: caf5dd53-d921-4a68-853c-5d45f4a78054
+2025-09-15 13:48:03,138 - backend.api.v1.bilibili - INFO - B站项目 caf5dd53-d921-4a68-853c-5d45f4a78054 下载完成，等待自动化流水线启动
+2025-09-15 13:48:03,138 - backend.services.auto_pipeline_service - INFO - 自动启动项目流水线: caf5dd53-d921-4a68-853c-5d45f4a78054
+2025-09-15 13:48:03,141 - backend.services.auto_pipeline_service - INFO - 创建处理任务: ea246770-e5af-4200-bd09-9ed05dab655b
+2025-09-15 13:48:03,142 - backend.services.auto_pipeline_service - INFO - 项目 caf5dd53-d921-4a68-853c-5d45f4a78054 状态已更新为处理中
+2025-09-15 13:48:03,143 - backend.services.progress_update_service - INFO - 开始监控任务进度: ea246770-e5af-4200-bd09-9ed05dab655b
+2025-09-15 13:48:03,143 - backend.services.auto_pipeline_service - INFO - 准备提交Celery任务: caf5dd53-d921-4a68-853c-5d45f4a78054
+2025-09-15 13:48:03,143 - backend.services.auto_pipeline_service - INFO - 视频文件: /Users/zhoukk/autoclip/data/projects/caf5dd53-d921-4a68-853c-5d45f4a78054/raw/input.mp4
+2025-09-15 13:48:03,143 - backend.services.auto_pipeline_service - INFO - 字幕文件: /Users/zhoukk/autoclip/data/projects/caf5dd53-d921-4a68-853c-5d45f4a78054/raw/input.srt
+2025-09-15 13:48:03,143 - backend.utils.task_submission_utils - INFO - 提交视频流水线任务: caf5dd53-d921-4a68-853c-5d45f4a78054
+2025-09-15 13:48:03,143 - backend.utils.task_submission_utils - INFO - 准备提交任务到队列...
+2025-09-15 13:48:03,143 - backend.utils.task_submission_utils - INFO - 任务名称: backend.tasks.processing.process_video_pipeline
+2025-09-15 13:48:03,143 - backend.utils.task_submission_utils - INFO - 任务参数: ['caf5dd53-d921-4a68-853c-5d45f4a78054', '/Users/zhoukk/autoclip/data/projects/caf5dd53-d921-4a68-853c-5d45f4a78054/raw/input.mp4', '/Users/zhoukk/autoclip/data/projects/caf5dd53-d921-4a68-853c-5d45f4a78054/raw/input.srt']
+2025-09-15 13:48:03,144 - backend.utils.task_submission_utils - INFO - 视频流水线任务已提交: 6deb17c0-4c16-45f0-8ddc-a23a2204f467
+2025-09-15 13:48:03,144 - backend.utils.task_submission_utils - INFO - 任务状态: PENDING
+2025-09-15 13:48:03,145 - backend.utils.task_submission_utils - INFO - Redis队列长度: 0
+2025-09-15 13:48:03,145 - backend.services.auto_pipeline_service - INFO - Celery任务提交结果: {'success': True, 'task_id': '6deb17c0-4c16-45f0-8ddc-a23a2204f467', 'status': 'PENDING', 'message': '视频流水线任务已提交'}
+2025-09-15 13:48:03,145 - backend.services.auto_pipeline_service - INFO - Celery任务已提交: 6deb17c0-4c16-45f0-8ddc-a23a2204f467
+2025-09-15 13:48:03,146 - backend.api.v1.bilibili - INFO - B站项目 caf5dd53-d921-4a68-853c-5d45f4a78054 自动化流水线已启动: {'status': 'started', 'message': '流水线处理已启动', 'project_id': 'caf5dd53-d921-4a68-853c-5d45f4a78054', 'task_id': 'ea246770-e5af-4200-bd09-9ed05dab655b', 'celery_task_id': '6deb17c0-4c16-45f0-8ddc-a23a2204f467'}
+2025-09-15 13:48:03,146 - backend.api.v1.async_task_manager - INFO - 任务完成: bilibili_download_5dd0ecd4-a690-46dc-a101-376cfea2af0a
+2025-09-15 13:48:03,807 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:05,806 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:06,094 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:06,405 - backend.api.v1.projects - INFO - 开始为项目 fd353787-858a-4ef5-b518-6d99197f6076 生成缩略图...
+2025-09-15 13:48:06,448 - backend.utils.thumbnail_generator - INFO - 成功提取视频封面: /Users/zhoukk/autoclip/data/projects/fd353787-858a-4ef5-b518-6d99197f6076/raw/input_cover.jpg
+2025-09-15 13:48:06,448 - backend.utils.thumbnail_generator - INFO - 使用视频封面作为缩略图: /Users/zhoukk/autoclip/data/projects/fd353787-858a-4ef5-b518-6d99197f6076/raw/input_cover.jpg
+2025-09-15 13:48:06,448 - backend.utils.thumbnail_generator - INFO - 使用视频封面生成缩略图: /Users/zhoukk/autoclip/data/projects/fd353787-858a-4ef5-b518-6d99197f6076/raw/input_cover.jpg -> /Users/zhoukk/autoclip/data/projects/fd353787-858a-4ef5-b518-6d99197f6076/raw/temp_thumbnail_input.jpg
+2025-09-15 13:48:06,448 - backend.utils.thumbnail_generator - INFO - 生成缩略图: /Users/zhoukk/autoclip/data/projects/fd353787-858a-4ef5-b518-6d99197f6076/raw/input.mp4 -> /Users/zhoukk/autoclip/data/projects/fd353787-858a-4ef5-b518-6d99197f6076/raw/temp_thumbnail_input.jpg
+2025-09-15 13:48:06,500 - backend.utils.thumbnail_generator - INFO - 缩略图生成成功: /Users/zhoukk/autoclip/data/projects/fd353787-858a-4ef5-b518-6d99197f6076/raw/temp_thumbnail_input.jpg
+2025-09-15 13:48:06,503 - backend.api.v1.projects - INFO - 项目 fd353787-858a-4ef5-b518-6d99197f6076 缩略图生成并保存成功
+2025-09-15 13:48:06,505 - backend.api.v1.projects - INFO - 项目 fd353787-858a-4ef5-b518-6d99197f6076 异步处理任务已启动，Celery任务ID: bef61a23-1195-4527-b34f-271c1d781a43
+2025-09-15 13:48:06,535 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:06,536 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:08,539 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:10,538 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:12,542 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:14,538 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:16,539 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:18,543 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:20,539 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:22,537 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:24,540 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:26,538 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:27,504 - backend.api.v1.youtube - INFO - 开始解析YouTube视频: https://www.youtube.com/watch?v=tO37xpGIroc
+2025-09-15 13:48:28,538 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:30,541 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:32,268 - backend.api.v1.youtube - INFO - YouTube视频信息解析成功: 看懂这辈子不吵架（认真）
+2025-09-15 13:48:32,538 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:34,537 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:35,199 - backend.api.v1.youtube - INFO - 创建YouTube下载任务: https://www.youtube.com/watch?v=tO37xpGIroc
+2025-09-15 13:48:36,538 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:38,536 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:40,536 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:42,227 - backend.api.v1.youtube - INFO - YouTube缩略图获取成功: 看懂这辈子不吵架（认真）
+2025-09-15 13:48:42,233 - backend.api.v1.youtube - INFO - 项目 18a91bd5-f826-45b4-8f95-4e811365f471 缩略图已设置
+2025-09-15 13:48:42,234 - backend.api.v1.youtube - INFO - 项目已创建: 18a91bd5-f826-45b4-8f95-4e811365f471
+2025-09-15 13:48:42,235 - backend.api.v1.async_task_manager - INFO - 开始执行任务: youtube_download_88369bfc-086f-4835-bccd-71356917949e
+2025-09-15 13:48:42,236 - backend.api.v1.youtube - INFO - 项目 18a91bd5-f826-45b4-8f95-4e811365f471 下载进度更新: 10.0% - 正在获取视频信息...
+2025-09-15 13:48:42,238 - backend.api.v1.youtube - INFO - 项目 18a91bd5-f826-45b4-8f95-4e811365f471 下载进度更新: 30.0% - 正在下载视频...
+2025-09-15 13:48:42,238 - backend.api.v1.youtube - ERROR - 处理下载任务失败: cannot access local variable 'asyncio' where it is not associated with a value
+2025-09-15 13:48:42,239 - backend.api.v1.async_task_manager - INFO - 任务完成: youtube_download_88369bfc-086f-4835-bccd-71356917949e
+2025-09-15 13:48:42,279 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:42,282 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:44,283 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:46,281 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:48,283 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:50,283 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:52,283 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:54,287 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:56,282 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:48:58,285 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:00,283 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:02,283 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:04,283 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:06,284 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:08,281 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:10,282 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:12,285 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:14,282 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:16,281 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:18,285 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:20,283 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:22,283 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:24,285 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:26,283 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:28,282 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:30,283 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:32,282 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:49:34,282 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:03,557 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:05,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:07,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:09,561 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:11,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:13,559 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:15,559 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:17,560 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:19,557 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:21,555 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:23,561 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:25,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:27,557 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:29,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:31,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:33,568 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:35,557 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:37,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:39,560 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:41,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:43,559 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:45,560 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:47,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:49,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:51,559 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:53,562 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:55,556 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:57,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:55:59,557 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:01,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:03,564 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:05,557 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:07,559 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:09,559 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:11,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:13,571 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:15,561 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:17,560 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:19,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:21,560 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:23,567 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:25,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:27,559 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:29,558 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:56:31,557 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 13:58:35,168 - backend.core.llm_manager - INFO - 已初始化dashscope提供商，模型: qwen-plus
+2025-09-15 13:58:35,168 - backend.core.llm_providers - WARNING - 无法获取openai的模型列表: 请安装openai: pip install openai
+2025-09-15 13:58:35,169 - backend.core.llm_providers - WARNING - 无法获取gemini的模型列表: 请安装google-generativeai: pip install google-generativeai
+2025-09-15 14:26:23,261 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 14:26:23,261 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 14:26:24,036 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 14:26:24,358 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 14:26:24,434 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 14:26:24,435 - backend.main - INFO - 数据库表创建完成
+2025-09-15 14:26:24,435 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 14:26:24,435 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 14:26:47,088 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 14:26:47,088 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 14:26:47,567 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 14:26:47,769 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 14:26:47,838 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 14:26:47,838 - backend.main - INFO - 数据库表创建完成
+2025-09-15 14:26:47,839 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 14:26:47,839 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 14:26:56,530 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 14:26:56,530 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 14:26:57,003 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 14:26:57,202 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 14:26:57,269 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 14:26:57,270 - backend.main - INFO - 数据库表创建完成
+2025-09-15 14:26:57,270 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 14:26:57,270 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 14:27:08,485 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 14:27:08,485 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 14:27:09,010 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 14:27:09,206 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 14:27:09,281 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 14:27:09,282 - backend.main - INFO - 数据库表创建完成
+2025-09-15 14:27:09,282 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 14:27:09,282 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 14:27:17,274 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 14:27:17,274 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 14:27:20,667 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 14:27:20,895 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 14:27:20,980 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 14:27:20,981 - backend.main - INFO - 数据库表创建完成
+2025-09-15 14:27:20,981 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 14:27:20,981 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 14:27:29,551 - backend.api.v1.youtube - INFO - 创建YouTube下载任务: https://www.youtube.com/watch?v=tO37xpGIroc
+2025-09-15 14:27:36,028 - backend.api.v1.youtube - INFO - YouTube缩略图获取成功: 看懂这辈子不吵架（认真）
+2025-09-15 14:27:36,029 - backend.api.v1.youtube - ERROR - 创建YouTube下载任务失败: 'DEFAULT' is not a valid ProjectType
+2025-09-15 14:27:43,596 - backend.api.v1.youtube - INFO - 创建YouTube下载任务: https://www.youtube.com/watch?v=tO37xpGIroc
+2025-09-15 14:27:49,489 - backend.api.v1.youtube - INFO - YouTube缩略图获取成功: 看懂这辈子不吵架（认真）
+2025-09-15 14:27:49,498 - backend.api.v1.youtube - INFO - 项目 4d98329e-3227-475d-8e08-8ef28721542e 缩略图已设置
+2025-09-15 14:27:49,499 - backend.api.v1.youtube - INFO - 项目已创建: 4d98329e-3227-475d-8e08-8ef28721542e
+2025-09-15 14:27:49,500 - backend.api.v1.async_task_manager - INFO - 开始执行任务: youtube_download_61481aab-4ec2-43d5-9d71-74d74ae4687c
+2025-09-15 14:27:49,502 - backend.api.v1.youtube - INFO - 项目 4d98329e-3227-475d-8e08-8ef28721542e 下载进度更新: 10.0% - 正在获取视频信息...
+2025-09-15 14:27:49,503 - backend.api.v1.youtube - INFO - 项目 4d98329e-3227-475d-8e08-8ef28721542e 下载进度更新: 30.0% - 正在下载视频...
+2025-09-15 14:28:24,697 - backend.api.v1.youtube - INFO - 创建YouTube下载任务: https://www.youtube.com/watch?v=tO37xpGIroc
+2025-09-15 14:28:31,450 - backend.api.v1.youtube - INFO - YouTube缩略图获取成功: 看懂这辈子不吵架（认真）
+2025-09-15 14:28:31,455 - backend.api.v1.youtube - INFO - 项目 a487db54-0e95-443b-963e-92282234c1f0 缩略图已设置
+2025-09-15 14:28:31,456 - backend.api.v1.youtube - INFO - 项目已创建: a487db54-0e95-443b-963e-92282234c1f0
+2025-09-15 14:28:31,457 - backend.api.v1.async_task_manager - INFO - 开始执行任务: youtube_download_54a97bdc-011f-4112-8ddf-174dff2cc4db
+2025-09-15 14:28:31,459 - backend.api.v1.youtube - INFO - 项目 a487db54-0e95-443b-963e-92282234c1f0 下载进度更新: 10.0% - 正在获取视频信息...
+2025-09-15 14:28:31,459 - backend.api.v1.youtube - INFO - 项目 a487db54-0e95-443b-963e-92282234c1f0 下载进度更新: 30.0% - 正在下载视频...
+2025-09-15 14:29:00,380 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 14:29:00,380 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 14:30:11,551 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 14:30:11,755 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 14:30:15,612 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 14:30:15,849 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 14:30:15,937 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 14:30:15,938 - backend.main - INFO - 数据库表创建完成
+2025-09-15 14:30:15,938 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 14:30:15,938 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 14:30:30,483 - backend.api.v1.youtube - INFO - 创建YouTube下载任务: https://www.youtube.com/watch?v=tO37xpGIroc
+2025-09-15 14:30:36,948 - backend.api.v1.youtube - INFO - YouTube缩略图获取成功: 看懂这辈子不吵架（认真）
+2025-09-15 14:30:36,958 - backend.api.v1.youtube - INFO - 项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd 缩略图已设置
+2025-09-15 14:30:36,959 - backend.api.v1.youtube - INFO - 项目已创建: 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd
+2025-09-15 14:30:36,961 - backend.api.v1.async_task_manager - INFO - 开始执行任务: youtube_download_bb36e450-6a58-405d-bfd3-f4f8121d7371
+2025-09-15 14:30:36,963 - backend.api.v1.youtube - INFO - 项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd 下载进度更新: 10.0% - 正在获取视频信息...
+2025-09-15 14:30:36,964 - backend.api.v1.youtube - INFO - 项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd 下载进度更新: 30.0% - 正在下载视频...
+2025-09-15 14:30:42,522 - backend.api.v1.youtube - INFO - 项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd 下载进度更新: 60.0% - 视频下载完成，正在处理字幕...
+2025-09-15 14:30:42,522 - backend.api.v1.youtube - INFO - 下载完成 - 视频文件: /Users/zhoukk/autoclip/data/temp/看懂这辈子不吵架（认真）.mp4, 字幕文件: /Users/zhoukk/autoclip/data/temp/The Infinite Hotel Paradox - Jeff Dekofsky.en.srt
+2025-09-15 14:30:42,523 - backend.api.v1.youtube - INFO - 视频文件已移动到: /Users/zhoukk/autoclip/data/projects/7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd/raw/input.mp4
+2025-09-15 14:30:42,523 - backend.api.v1.youtube - INFO - 字幕文件已移动到: /Users/zhoukk/autoclip/data/projects/7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd/raw/input.srt
+2025-09-15 14:30:42,524 - backend.api.v1.youtube - INFO - 项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd 下载进度更新: 100.0% - 下载完成，准备开始处理
+2025-09-15 14:30:42,525 - backend.api.v1.youtube - INFO - YouTube下载任务完成: bb36e450-6a58-405d-bfd3-f4f8121d7371, 项目ID: 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd
+2025-09-15 14:30:42,525 - backend.api.v1.youtube - INFO - YouTube项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd 下载完成，等待自动化流水线启动
+2025-09-15 14:30:42,526 - backend.services.auto_pipeline_service - INFO - 自动启动项目流水线: 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd
+2025-09-15 14:30:42,530 - backend.services.auto_pipeline_service - INFO - 创建处理任务: d72973ee-fd71-46fd-8098-96024e24fba4
+2025-09-15 14:30:42,531 - backend.services.auto_pipeline_service - INFO - 项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd 状态已更新为处理中
+2025-09-15 14:30:42,533 - backend.services.progress_update_service - INFO - 开始监控任务进度: d72973ee-fd71-46fd-8098-96024e24fba4
+2025-09-15 14:30:42,533 - backend.services.auto_pipeline_service - INFO - 准备提交Celery任务: 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd
+2025-09-15 14:30:42,533 - backend.services.auto_pipeline_service - INFO - 视频文件: /Users/zhoukk/autoclip/data/projects/7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd/raw/input.mp4
+2025-09-15 14:30:42,533 - backend.services.auto_pipeline_service - INFO - 字幕文件: /Users/zhoukk/autoclip/data/projects/7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd/raw/input.srt
+2025-09-15 14:30:42,533 - backend.utils.task_submission_utils - INFO - 提交视频流水线任务: 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd
+2025-09-15 14:30:42,533 - backend.utils.task_submission_utils - INFO - 准备提交任务到队列...
+2025-09-15 14:30:42,533 - backend.utils.task_submission_utils - INFO - 任务名称: backend.tasks.processing.process_video_pipeline
+2025-09-15 14:30:42,533 - backend.utils.task_submission_utils - INFO - 任务参数: ['7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd', '/Users/zhoukk/autoclip/data/projects/7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd/raw/input.mp4', '/Users/zhoukk/autoclip/data/projects/7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd/raw/input.srt']
+2025-09-15 14:30:42,561 - backend.utils.task_submission_utils - INFO - 视频流水线任务已提交: 96de25d9-3b64-4ef3-beea-e49c8a16d5dc
+2025-09-15 14:30:42,562 - backend.utils.task_submission_utils - INFO - 任务状态: PENDING
+2025-09-15 14:30:42,562 - backend.utils.task_submission_utils - INFO - Redis队列长度: 0
+2025-09-15 14:30:42,563 - backend.services.auto_pipeline_service - INFO - Celery任务提交结果: {'success': True, 'task_id': '96de25d9-3b64-4ef3-beea-e49c8a16d5dc', 'status': 'PENDING', 'message': '视频流水线任务已提交'}
+2025-09-15 14:30:42,563 - backend.services.auto_pipeline_service - INFO - Celery任务已提交: 96de25d9-3b64-4ef3-beea-e49c8a16d5dc
+2025-09-15 14:30:42,564 - backend.api.v1.youtube - INFO - YouTube项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd 自动化流水线已启动: {'status': 'started', 'message': '流水线处理已启动', 'project_id': '7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd', 'task_id': 'd72973ee-fd71-46fd-8098-96024e24fba4', 'celery_task_id': '96de25d9-3b64-4ef3-beea-e49c8a16d5dc'}
+2025-09-15 14:30:42,564 - backend.api.v1.async_task_manager - INFO - 任务完成: youtube_download_bb36e450-6a58-405d-bfd3-f4f8121d7371
+2025-09-15 14:30:46,564 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:30:48,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:30:50,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:30:52,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:30:54,565 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:30:56,572 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:30:58,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:00,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:02,565 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:04,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:06,573 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:08,568 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:10,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:12,567 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:14,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:16,593 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:18,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:20,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:22,567 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:24,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:26,576 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:28,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:30,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:32,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:34,567 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:36,579 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:38,567 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:40,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:42,567 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:44,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:46,576 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:48,565 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:50,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:52,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:54,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:56,591 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:31:58,568 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:32:00,565 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:32:02,566 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:32:04,567 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:40:43,407 - backend.services.project_service - INFO - 开始删除项目 18a91bd5-f826-45b4-8f95-4e811365f471: 看懂这辈子不吵架（认真）
+2025-09-15 14:40:43,407 - backend.services.project_service - ERROR - 删除项目 18a91bd5-f826-45b4-8f95-4e811365f471 时发生错误: name 'Task' is not defined
+2025-09-15 14:40:45,400 - backend.services.project_service - INFO - 开始删除项目 4d98329e-3227-475d-8e08-8ef28721542e: 测试YouTube下载修复
+2025-09-15 14:40:45,400 - backend.services.project_service - ERROR - 删除项目 4d98329e-3227-475d-8e08-8ef28721542e 时发生错误: name 'Task' is not defined
+2025-09-15 14:40:52,937 - backend.services.project_service - INFO - 开始删除项目 a487db54-0e95-443b-963e-92282234c1f0: 测试YouTube下载修复2
+2025-09-15 14:40:52,937 - backend.services.project_service - ERROR - 删除项目 a487db54-0e95-443b-963e-92282234c1f0 时发生错误: name 'Task' is not defined
+2025-09-15 14:41:46,923 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 14:41:46,923 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 14:41:50,725 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 14:41:50,966 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 14:41:51,056 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 14:41:51,057 - backend.main - INFO - 数据库表创建完成
+2025-09-15 14:41:51,057 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 14:41:51,057 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 14:41:55,527 - backend.services.project_service - INFO - 开始删除项目 18a91bd5-f826-45b4-8f95-4e811365f471: 看懂这辈子不吵架（认真）
+2025-09-15 14:41:55,529 - backend.services.project_service - ERROR - 删除项目 18a91bd5-f826-45b4-8f95-4e811365f471 时发生错误: A transaction is already begun on this Session.
+2025-09-15 14:42:01,131 - backend.services.project_service - INFO - 开始删除项目 18a91bd5-f826-45b4-8f95-4e811365f471: 看懂这辈子不吵架（认真）
+2025-09-15 14:42:01,131 - backend.services.project_service - ERROR - 删除项目 18a91bd5-f826-45b4-8f95-4e811365f471 时发生错误: A transaction is already begun on this Session.
+2025-09-15 14:42:06,631 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 14:42:06,631 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 14:42:07,153 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 14:42:07,354 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 14:42:07,424 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 14:42:07,425 - backend.main - INFO - 数据库表创建完成
+2025-09-15 14:42:07,425 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 14:42:07,425 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 14:42:08,235 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 14:42:08,236 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 14:42:14,073 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 14:42:14,302 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 14:42:14,392 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 14:42:14,393 - backend.main - INFO - 数据库表创建完成
+2025-09-15 14:42:14,393 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 14:42:14,393 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 14:42:23,048 - backend.services.project_service - INFO - 开始删除项目 18a91bd5-f826-45b4-8f95-4e811365f471: 看懂这辈子不吵架（认真）
+2025-09-15 14:42:23,052 - backend.services.project_service - INFO - 删除项目 18a91bd5-f826-45b4-8f95-4e811365f471 记录
+2025-09-15 14:42:23,052 - backend.services.project_service - INFO - 删除项目目录: data/projects/18a91bd5-f826-45b4-8f95-4e811365f471
+2025-09-15 14:42:23,054 - backend.services.simple_progress - INFO - 已清除项目进度数据: 18a91bd5-f826-45b4-8f95-4e811365f471
+2025-09-15 14:42:23,054 - backend.services.project_service - INFO - 清理项目 18a91bd5-f826-45b4-8f95-4e811365f471 的Redis进度数据
+2025-09-15 14:42:23,060 - backend.services.enhanced_progress_service - INFO - Redis连接成功
+2025-09-15 14:42:23,061 - backend.services.project_service - INFO - 项目 18a91bd5-f826-45b4-8f95-4e811365f471 删除成功
+2025-09-15 14:42:25,689 - backend.services.project_service - INFO - 开始删除项目 4d98329e-3227-475d-8e08-8ef28721542e: 测试YouTube下载修复
+2025-09-15 14:42:25,691 - backend.services.project_service - INFO - 删除项目 4d98329e-3227-475d-8e08-8ef28721542e 记录
+2025-09-15 14:42:25,691 - backend.services.project_service - INFO - 删除项目目录: data/projects/4d98329e-3227-475d-8e08-8ef28721542e
+2025-09-15 14:42:25,692 - backend.services.simple_progress - INFO - 已清除项目进度数据: 4d98329e-3227-475d-8e08-8ef28721542e
+2025-09-15 14:42:25,692 - backend.services.project_service - INFO - 清理项目 4d98329e-3227-475d-8e08-8ef28721542e 的Redis进度数据
+2025-09-15 14:42:25,692 - backend.services.project_service - INFO - 项目 4d98329e-3227-475d-8e08-8ef28721542e 删除成功
+2025-09-15 14:42:29,465 - backend.services.project_service - INFO - 开始删除项目 a487db54-0e95-443b-963e-92282234c1f0: 测试YouTube下载修复2
+2025-09-15 14:42:29,466 - backend.services.project_service - INFO - 删除项目 a487db54-0e95-443b-963e-92282234c1f0 记录
+2025-09-15 14:42:29,467 - backend.services.project_service - INFO - 删除项目目录: data/projects/a487db54-0e95-443b-963e-92282234c1f0
+2025-09-15 14:42:29,468 - backend.services.simple_progress - INFO - 已清除项目进度数据: a487db54-0e95-443b-963e-92282234c1f0
+2025-09-15 14:42:29,468 - backend.services.project_service - INFO - 清理项目 a487db54-0e95-443b-963e-92282234c1f0 的Redis进度数据
+2025-09-15 14:42:29,468 - backend.services.project_service - INFO - 项目 a487db54-0e95-443b-963e-92282234c1f0 删除成功
+2025-09-15 14:42:43,479 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 14:42:43,479 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 14:42:43,865 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 14:42:44,054 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 14:42:44,123 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 14:42:44,124 - backend.main - INFO - 数据库表创建完成
+2025-09-15 14:42:44,124 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 14:42:44,124 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 14:43:17,443 - backend.api.v1.youtube - INFO - 开始解析YouTube视频: https://www.youtube.com/watch?v=QI-5-pxw-MY
+2025-09-15 14:43:20,879 - backend.api.v1.youtube - INFO - YouTube视频信息解析成功: 如何用 Claude Code 组建 24 小时在线的 AI Agent 员工团队
+2025-09-15 14:43:24,173 - backend.api.v1.youtube - INFO - 创建YouTube下载任务: https://www.youtube.com/watch?v=QI-5-pxw-MY
+2025-09-15 14:43:30,376 - backend.api.v1.youtube - INFO - YouTube缩略图获取成功: 如何用 Claude Code 组建 24 小时在线的 AI Agent 员工团队
+2025-09-15 14:43:30,391 - backend.api.v1.youtube - INFO - 项目 d1a1c199-7ea4-4909-82b7-27cc118a09de 缩略图已设置
+2025-09-15 14:43:30,392 - backend.api.v1.youtube - INFO - 项目已创建: d1a1c199-7ea4-4909-82b7-27cc118a09de
+2025-09-15 14:43:30,395 - backend.api.v1.async_task_manager - INFO - 开始执行任务: youtube_download_0fd37346-15cc-4166-99e8-707516330b4e
+2025-09-15 14:43:30,399 - backend.api.v1.youtube - INFO - 项目 d1a1c199-7ea4-4909-82b7-27cc118a09de 下载进度更新: 10.0% - 正在获取视频信息...
+2025-09-15 14:43:30,401 - backend.api.v1.youtube - INFO - 项目 d1a1c199-7ea4-4909-82b7-27cc118a09de 下载进度更新: 30.0% - 正在下载视频...
+2025-09-15 14:45:25,303 - backend.api.v1.youtube - INFO - 项目 d1a1c199-7ea4-4909-82b7-27cc118a09de 下载进度更新: 60.0% - 视频下载完成，正在处理字幕...
+2025-09-15 14:45:25,303 - backend.api.v1.youtube - INFO - 下载完成 - 视频文件: /Users/zhoukk/autoclip/data/temp/如何用 Claude Code 组建 24 小时在线的 AI Agent 员工团队.mp4, 字幕文件: /Users/zhoukk/autoclip/data/temp/如何用 Claude Code 组建 24 小时在线的 AI Agent 员工团队.zh-Hans.srt
+2025-09-15 14:45:25,303 - backend.api.v1.youtube - INFO - 视频文件已移动到: /Users/zhoukk/autoclip/data/projects/d1a1c199-7ea4-4909-82b7-27cc118a09de/raw/input.mp4
+2025-09-15 14:45:25,304 - backend.api.v1.youtube - INFO - 字幕文件已移动到: /Users/zhoukk/autoclip/data/projects/d1a1c199-7ea4-4909-82b7-27cc118a09de/raw/input.srt
+2025-09-15 14:45:25,305 - backend.api.v1.youtube - INFO - 项目 d1a1c199-7ea4-4909-82b7-27cc118a09de 下载进度更新: 100.0% - 下载完成，准备开始处理
+2025-09-15 14:45:25,306 - backend.api.v1.youtube - INFO - YouTube下载任务完成: 0fd37346-15cc-4166-99e8-707516330b4e, 项目ID: d1a1c199-7ea4-4909-82b7-27cc118a09de
+2025-09-15 14:45:25,306 - backend.api.v1.youtube - INFO - YouTube项目 d1a1c199-7ea4-4909-82b7-27cc118a09de 下载完成，等待自动化流水线启动
+2025-09-15 14:45:25,306 - backend.services.auto_pipeline_service - INFO - 自动启动项目流水线: d1a1c199-7ea4-4909-82b7-27cc118a09de
+2025-09-15 14:45:25,326 - backend.services.auto_pipeline_service - INFO - 创建处理任务: 56bffa97-1dec-46ff-9eb2-e438d8fed3f5
+2025-09-15 14:45:25,328 - backend.services.auto_pipeline_service - INFO - 项目 d1a1c199-7ea4-4909-82b7-27cc118a09de 状态已更新为处理中
+2025-09-15 14:45:25,329 - backend.services.progress_update_service - INFO - 开始监控任务进度: 56bffa97-1dec-46ff-9eb2-e438d8fed3f5
+2025-09-15 14:45:25,330 - backend.services.auto_pipeline_service - INFO - 准备提交Celery任务: d1a1c199-7ea4-4909-82b7-27cc118a09de
+2025-09-15 14:45:25,330 - backend.services.auto_pipeline_service - INFO - 视频文件: /Users/zhoukk/autoclip/data/projects/d1a1c199-7ea4-4909-82b7-27cc118a09de/raw/input.mp4
+2025-09-15 14:45:25,330 - backend.services.auto_pipeline_service - INFO - 字幕文件: /Users/zhoukk/autoclip/data/projects/d1a1c199-7ea4-4909-82b7-27cc118a09de/raw/input.srt
+2025-09-15 14:45:25,330 - backend.utils.task_submission_utils - INFO - 提交视频流水线任务: d1a1c199-7ea4-4909-82b7-27cc118a09de
+2025-09-15 14:45:25,330 - backend.utils.task_submission_utils - INFO - 准备提交任务到队列...
+2025-09-15 14:45:25,330 - backend.utils.task_submission_utils - INFO - 任务名称: backend.tasks.processing.process_video_pipeline
+2025-09-15 14:45:25,330 - backend.utils.task_submission_utils - INFO - 任务参数: ['d1a1c199-7ea4-4909-82b7-27cc118a09de', '/Users/zhoukk/autoclip/data/projects/d1a1c199-7ea4-4909-82b7-27cc118a09de/raw/input.mp4', '/Users/zhoukk/autoclip/data/projects/d1a1c199-7ea4-4909-82b7-27cc118a09de/raw/input.srt']
+2025-09-15 14:45:25,353 - backend.utils.task_submission_utils - INFO - 视频流水线任务已提交: 7c326110-2f44-4e3d-8bf5-79032069bfe2
+2025-09-15 14:45:25,353 - backend.utils.task_submission_utils - INFO - 任务状态: PENDING
+2025-09-15 14:45:25,354 - backend.utils.task_submission_utils - INFO - Redis队列长度: 0
+2025-09-15 14:45:25,354 - backend.services.auto_pipeline_service - INFO - Celery任务提交结果: {'success': True, 'task_id': '7c326110-2f44-4e3d-8bf5-79032069bfe2', 'status': 'PENDING', 'message': '视频流水线任务已提交'}
+2025-09-15 14:45:25,354 - backend.services.auto_pipeline_service - INFO - Celery任务已提交: 7c326110-2f44-4e3d-8bf5-79032069bfe2
+2025-09-15 14:45:25,356 - backend.api.v1.youtube - INFO - YouTube项目 d1a1c199-7ea4-4909-82b7-27cc118a09de 自动化流水线已启动: {'status': 'started', 'message': '流水线处理已启动', 'project_id': 'd1a1c199-7ea4-4909-82b7-27cc118a09de', 'task_id': '56bffa97-1dec-46ff-9eb2-e438d8fed3f5', 'celery_task_id': '7c326110-2f44-4e3d-8bf5-79032069bfe2'}
+2025-09-15 14:45:25,356 - backend.api.v1.async_task_manager - INFO - 任务完成: youtube_download_0fd37346-15cc-4166-99e8-707516330b4e
+2025-09-15 14:45:29,998 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:31,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:33,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:35,989 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:37,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:39,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:41,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:43,989 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:45,992 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:47,989 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:50,005 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:51,993 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:53,993 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:55,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:45:57,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:00,009 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:01,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:03,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:05,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:07,992 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:10,003 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:11,993 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:13,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:15,989 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:17,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:19,993 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:21,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:23,993 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:25,989 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:27,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:29,997 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:31,991 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:33,990 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:35,993 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 14:46:37,992 - backend.api.v1.simple_progress - INFO - 获取进度快照: 1 个项目
+2025-09-15 15:00:49,836 - backend.services.project_service - INFO - 开始删除项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd: 测试YouTube下载修复3
+2025-09-15 15:00:49,837 - backend.services.project_service - WARNING - 项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd 有 1 个正在运行的任务，无法删除
+2025-09-15 15:00:57,850 - backend.services.project_service - INFO - 开始删除项目 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be: C-131瑞克头发的细节，把最大的平行宇宙吃书设定，给圆上了！（瑞克和莫蒂第八季第十集·彩蛋）#346
+2025-09-15 15:00:57,851 - backend.services.project_service - WARNING - 项目 3a9b34e6-670f-4aeb-bf37-5d02d62eb3be 有 1 个正在运行的任务，无法删除
+2025-09-15 15:01:02,769 - backend.services.project_service - INFO - 开始删除项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd: 测试YouTube下载修复3
+2025-09-15 15:01:02,769 - backend.services.project_service - WARNING - 项目 7e386cc6-0362-4c79-bbd3-4ec2ca1b6efd 有 1 个正在运行的任务，无法删除
