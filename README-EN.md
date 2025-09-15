@@ -791,7 +791,6 @@ Thanks to the following open source projects and services:
 ### Video Processing
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube video download tool
 - [FFmpeg](https://ffmpeg.org/) - Audio and video processing framework
-- [bcut-asr](https://github.com/liou666/bcut-asr) - Speech recognition service
 
 ### AI Services
 - [Qwen](https://tongyi.aliyun.com/) - Alibaba Cloud large language model service
