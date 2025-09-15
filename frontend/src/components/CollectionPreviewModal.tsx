@@ -8,6 +8,7 @@ import { projectApi } from '../services/api'
 import AddClipToCollectionModal from './AddClipToCollectionModal'
 import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
 import UploadModal from './UploadModal'
+import EditableTitle from './EditableTitle'
 import './CollectionPreviewModal.css'
 
 const { Title, Text } = Typography
@@ -324,7 +325,17 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
                     <div className="video-info-content">
                       <div className="video-title-section">
                         <div className="video-title">
-                          {currentClip.title || currentClip.generated_title}
+                          <EditableTitle
+                            title={currentClip.title || currentClip.generated_title || '未命名片段'}
+                            clipId={currentClip.id}
+                            onTitleUpdate={(newTitle) => {
+                              // 更新当前clip的标题
+                              const updatedClip = { ...currentClip, title: newTitle }
+                              // 这里可以触发父组件的更新回调
+                              console.log('标题已更新:', newTitle)
+                            }}
+                            style={{ color: '#ffffff', fontSize: '16px', fontWeight: '500' }}
+                          />
                         </div>
                         <div className="video-meta">
                           <Tag color="blue">{formatDuration(currentClip)}</Tag>
