@@ -1,4 +1,4 @@
-# AutoClip - AI Agent for Video Highlights
+# AutoClip - AutoClip: AI-Powered Video Highlight Tool
 
 Supporting YouTube/Bilibili video download, automatic clipping, and smart collection
 generation
