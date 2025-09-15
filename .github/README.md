@@ -25,8 +25,6 @@
 
 AutoClip是一个基于AI的智能视频切片处理系统，能够自动从YouTube、B站等平台下载视频，通过AI分析提取精彩片段，并智能生成合集。系统采用现代化的前后端分离架构，提供直观的Web界面和强大的后端处理能力。
 
-**联系方式**: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
-
 ### ✨ 核心特性
 
 - 🎬 **多平台支持**: YouTube、B站视频一键下载，支持本地文件上传
