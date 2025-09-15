@@ -3,6 +3,7 @@ import { Card, Typography, Button, Popconfirm, Tooltip } from 'antd'
 import { DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import { Collection, Clip } from '../store/useProjectStore'
 import EditableCollectionTitle from './EditableCollectionTitle'
+import './CollectionCard.css'
 
 const { Text, Title } = Typography
 
@@ -43,10 +44,11 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
 
   return (
     <Card
+      className="collection-card"
       hoverable
       style={{ 
         width: '320px',
-        height: '240px',
+        height: '380px',
         flexShrink: 0,
         cursor: 'pointer',
         borderRadius: '16px',
@@ -73,7 +75,7 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
       }}>
         {/* 封面区域 */}
         <div style={{
-          height: '120px',
+          height: '200px',
           background: collection.thumbnail_path 
             ? `url(http://localhost:8000/api/v1/projects/${collection.project_id}/collections/${collection.id}/thumbnail)`
             : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -83,30 +85,29 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
           position: 'relative',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          cursor: 'pointer',
+          overflow: 'hidden'
         }}>
-          {!collection.thumbnail_path && (
-            <PlayCircleOutlined style={{ fontSize: '32px', color: 'white', opacity: 0.9 }} />
-          )}
-          {collection.thumbnail_path && (
-            <div style={{
+          {/* 播放覆盖层 */}
+          <div 
+            style={{
               position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              background: 'rgba(0,0,0,0.7)',
-              borderRadius: '50%',
-              width: '40px',
-              height: '40px',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.4)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'all 0.3s ease',
-              opacity: isHovered ? 1 : 0.8
-            }}>
-              <PlayCircleOutlined style={{ fontSize: '20px', color: 'white' }} />
-            </div>
-          )}
+              opacity: 0,
+              transition: 'opacity 0.3s ease'
+            }}
+            className="video-overlay"
+          >
+            <PlayCircleOutlined style={{ fontSize: '40px', color: 'white' }} />
+          </div>
           <div 
             style={{
               position: 'absolute',
