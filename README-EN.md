@@ -13,9 +13,9 @@
 [![Celery](https://img.shields.io/badge/Celery-Latest-green?style=flat&logo=celery)](https://celeryproject.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat)](LICENSE)
 
-[![GitHub stars](https://img.shields.io/github/stars/your-username/autoclip?style=social)](https://github.com/your-username/autoclip)
-[![GitHub forks](https://img.shields.io/github/forks/your-username/autoclip?style=social)](https://github.com/your-username/autoclip)
-[![GitHub issues](https://img.shields.io/github/issues/your-username/autoclip)](https://github.com/your-username/autoclip/issues)
+[![GitHub stars](https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=social)](https://github.com/zhouxiaoka/autoclip)
+[![GitHub forks](https://img.shields.io/github/forks/zhouxiaoka/autoclip?style=social)](https://github.com/zhouxiaoka/autoclip)
+[![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip)](https://github.com/zhouxiaoka/autoclip/issues)
 
 **Language**: [English](README-EN.md) | [中文](README.md)
 
@@ -33,8 +33,8 @@ AutoClip is an AI-powered intelligent video clipping system that can automatical
 - 📚 **Smart Collections**: AI-recommended and manually created video collections with drag-and-drop sorting
 - 🚀 **Real-time Processing**: Asynchronous task queue with real-time progress feedback and WebSocket communication
 - 🎨 **Modern Interface**: React + TypeScript + Ant Design with responsive design
-- 📱 **Mobile Support**: Perfect adaptation for desktop and mobile devices
-- 🔐 **Account Management**: Support for multiple Bilibili account management with automatic health checks
+- 📱 **Mobile Support** **[In Development]**: Responsive design, improving mobile experience
+- 🔐 **Account Management** **[In Development]**: Support for multiple Bilibili account management with automatic health checks
 - 📊 **Data Statistics**: Complete project management and data statistics functionality
 - 🛠️ **Easy Deployment**: One-click startup scripts, Docker support, and detailed documentation
 - 📤 **Bilibili Upload** **[In Development]**: Automatic upload of clipped videos to Bilibili
@@ -104,7 +104,7 @@ graph TB
 
 ```bash
 # Clone the project
-git clone https://github.com/your-username/autoclip.git
+git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
 
 # Docker one-click startup
@@ -124,7 +124,7 @@ cd autoclip
 
 ```bash
 # Clone the project
-git clone https://github.com/your-username/autoclip.git
+git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
 
 # One-click startup (recommended, includes complete checks and monitoring)
@@ -539,7 +539,7 @@ celery -A backend.core.celery_app flower --port=5555
 
 ```bash
 # Clone the project
-git clone https://github.com/your-username/autoclip.git
+git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
 
 # Configure environment variables
@@ -624,7 +624,7 @@ We welcome all forms of contributions! Whether it's code contributions, document
 1. **Fork** the project to your GitHub account
 2. Clone your Fork to local:
    ```bash
-   git clone https://github.com/your-username/autoclip.git
+   git clone https://github.com/zhouxiaoka/autoclip.git
    cd autoclip
    ```
 3. Create feature branch:
@@ -762,8 +762,8 @@ A:
 
 ### Get Help
 
-- **Issue Reports**: [GitHub Issues](https://github.com/your-username/autoclip/issues)
-- **Feature Suggestions**: [GitHub Discussions](https://github.com/your-username/autoclip/discussions)
+- **Issue Reports**: [GitHub Issues](https://github.com/zhouxiaoka/autoclip/issues)
+- **Feature Suggestions**: [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)
 - **Bug Reports**: Please use GitHub Issues template
 - **Documentation**: [Project Documentation](docs/)
 
@@ -813,7 +813,7 @@ Thanks to the following open source projects and services:
 
 **If this project helps you, please give us a ⭐ Star!**
 
-[![Star History Chart](https://api.star-history.com/svg?repos=your-username/autoclip&type=Date)](https://star-history.com/#your-username/autoclip&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)
 
 Made with ❤️ by AutoClip Team
 
