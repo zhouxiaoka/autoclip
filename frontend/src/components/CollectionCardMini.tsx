@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Card, Typography, Button, Popconfirm } from 'antd'
 import { DeleteOutlined } from '@ant-design/icons'
 import { Collection, Clip } from '../store/useProjectStore'
+import EditableCollectionTitle from './EditableCollectionTitle'
 
 const { Text, Title } = Typography
 
@@ -11,6 +12,7 @@ interface CollectionCardMiniProps {
   onView: (collection: Collection) => void
   onGenerateVideo?: (collectionId: string) => void
   onDelete?: (collectionId: string) => void
+  onUpdate?: (collectionId: string, updates: Partial<Collection>) => void
 }
 
 const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({ 
@@ -18,7 +20,8 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
   clips,
   onView,
   onGenerateVideo,
-  onDelete
+  onDelete,
+  onUpdate
 }) => {
   const [isHovered, setIsHovered] = useState(false)
   // 按照collection.clip_ids的顺序排列clips
@@ -75,21 +78,27 @@ const CollectionCardMini: React.FC<CollectionCardMiniProps> = ({
             alignItems: 'flex-start',
             marginBottom: '12px'
           }}>
-            <Title 
-              level={5} 
-              ellipsis={{ rows: 2 }} 
-              style={{ 
-                margin: 0, 
-                fontSize: '15px',
-                fontWeight: 600,
-                lineHeight: '1.4',
-                color: '#ffffff',
-                flex: 1,
-                paddingRight: '8px'
-              }}
-            >
-              {collection.collection_title}
-            </Title>
+            <div style={{ 
+              flex: 1,
+              paddingRight: '8px'
+            }}>
+              <EditableCollectionTitle
+                title={collection.collection_title}
+                collectionId={collection.id}
+                onTitleUpdate={(newTitle) => {
+                  // 更新合集标题
+                  if (onUpdate) {
+                    onUpdate(collection.id, { collection_title: newTitle })
+                  }
+                }}
+                style={{ 
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  lineHeight: '1.4',
+                  color: '#ffffff'
+                }}
+              />
+            </div>
             <span
               style={{ 
                 fontSize: '10px', 

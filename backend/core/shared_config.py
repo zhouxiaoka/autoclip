@@ -95,7 +95,8 @@ PROMPT_FILES = {
     "timeline": PROMPT_DIR / "时间点.txt", 
     "recommendation": PROMPT_DIR / "推荐理由.txt",
     "title": PROMPT_DIR / "标题生成.txt",
-    "clustering": PROMPT_DIR / "主题聚类.txt"
+    "clustering": PROMPT_DIR / "主题聚类.txt",
+    "collection_title": PROMPT_DIR / "collection_title.txt"
 }
 
 # API配置

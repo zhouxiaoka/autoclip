@@ -3,6 +3,7 @@ import { Card, Typography, Button, Space, Input, Tag, List, Modal, Tooltip, Divi
 import { EditOutlined, DownloadOutlined, SaveOutlined, CloseOutlined, PlayCircleOutlined, DragOutlined, DeleteOutlined } from '@ant-design/icons'
 import { Collection, Clip } from '../store/useProjectStore'
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd'
+import EditableCollectionTitle from './EditableCollectionTitle'
 
 const { Text, Title } = Typography
 const { TextArea } = Input
@@ -236,9 +237,21 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
             </Space>
           ) : (
             <Space direction="vertical" style={{ width: '100%' }} size="small">
-              <Title level={5} ellipsis={{ rows: 2 }} style={{ margin: 0, minHeight: '44px' }}>
-                {collection.collection_title}
-              </Title>
+              <div style={{ minHeight: '44px' }}>
+                <EditableCollectionTitle
+                  title={collection.collection_title}
+                  collectionId={collection.id}
+                  onTitleUpdate={(newTitle) => {
+                    // 更新合集标题
+                    onUpdate(collection.id, { collection_title: newTitle })
+                  }}
+                  style={{ 
+                    fontSize: '16px', 
+                    fontWeight: '600',
+                    color: '#ffffff'
+                  }}
+                />
+              </div>
               
               <div>
                 {collection.collection_type === 'manual' ? (

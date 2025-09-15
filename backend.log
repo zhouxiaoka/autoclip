@@ -125,3 +125,46 @@ NFO - WebSocket网关服务已禁用
 2025-09-15 19:33:31,936 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
 2025-09-15 19:33:48,972 - backend.core.llm_manager - INFO - 已初始化dashscope提供商，模型: qwen-plus
 2025-09-15 20:19:52,449 - backend.api.v1.projects - ERROR - 生成合集视频失败: clips_dir 参数是必需的，不能使用全局路径
+2025-09-15 20:26:48,205 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 20:26:48,206 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 20:26:48,851 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 20:26:49,103 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 20:26:49,174 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 20:26:49,175 - backend.main - INFO - 数据库表创建完成
+2025-09-15 20:26:49,175 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 20:26:49,175 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 20:26:55,341 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 20:26:55,341 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 20:26:55,844 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 20:26:56,041 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 20:26:56,111 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 20:26:56,112 - backend.main - INFO - 数据库表创建完成
+2025-09-15 20:26:56,112 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 20:26:56,112 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 20:27:05,918 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 20:27:05,918 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 20:27:06,434 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 20:27:06,631 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 20:27:06,700 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 20:27:06,701 - backend.main - INFO - 数据库表创建完成
+2025-09-15 20:27:06,701 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 20:27:06,701 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 20:29:47,869 - backend.api.v1.collections - ERROR - 生成合集标题失败: 'ClipRepository' object has no attribute 'get'
+2025-09-15 20:30:00,211 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 20:30:00,211 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 20:30:00,840 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 20:30:01,091 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 20:30:01,164 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 20:30:01,165 - backend.main - INFO - 数据库表创建完成
+2025-09-15 20:30:01,165 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 20:30:01,166 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 20:30:04,931 - backend.core.llm_manager - INFO - 已初始化dashscope提供商，模型: qwen-plus
+2025-09-15 20:30:30,747 - backend.main - INFO - 正在关闭AutoClip API服务...
+2025-09-15 20:30:30,747 - backend.main - INFO - WebSocket网关服务已禁用
+2025-09-15 20:30:31,383 - backend.services.processing_orchestrator - INFO - 流水线模块导入成功
+2025-09-15 20:30:31,593 - backend.services.simple_progress - INFO - Redis连接成功
+2025-09-15 20:30:31,665 - backend.main - INFO - 启动AutoClip API服务...
+2025-09-15 20:30:31,666 - backend.main - INFO - 数据库表创建完成
+2025-09-15 20:30:31,666 - backend.main - INFO - API密钥已加载到环境变量
+2025-09-15 20:30:31,666 - backend.main - INFO - WebSocket网关服务已禁用，使用新的简化进度系统
+2025-09-15 20:37:07,166 - backend.core.llm_manager - INFO - 已初始化dashscope提供商，模型: qwen-plus

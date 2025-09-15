@@ -328,6 +328,16 @@ export const projectApi = {
     return api.delete(`/collections/${collectionId}`)
   },
 
+  // 生成合集标题
+  generateCollectionTitle: (collectionId: string): Promise<{collection_id: string, generated_title: string, success: boolean}> => {
+    return api.post(`/collections/${collectionId}/generate-title`)
+  },
+
+  // 更新合集标题
+  updateCollectionTitle: (collectionId: string, title: string): Promise<{collection_id: string, title: string, success: boolean}> => {
+    return api.put(`/collections/${collectionId}/title`, { title })
+  },
+
   // 下载切片视频
   downloadClip: (_projectId: string, clipId: string): Promise<Blob> => {
     return api.get(`/files/projects/${_projectId}/clips/${clipId}`, {
