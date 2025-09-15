@@ -232,6 +232,48 @@ class VideoProcessor:
             return False
     
     @staticmethod
+    def extract_thumbnail(video_path: Path, output_path: Path, time_offset: int = 5) -> bool:
+        """
+        从视频中提取缩略图
+        
+        Args:
+            video_path: 视频文件路径
+            output_path: 输出缩略图路径
+            time_offset: 提取时间点（秒）
+            
+        Returns:
+            是否成功
+        """
+        try:
+            # 确保输出目录存在
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # 构建FFmpeg命令
+            cmd = [
+                'ffmpeg',
+                '-i', str(video_path),
+                '-ss', str(time_offset),
+                '-vframes', '1',
+                '-q:v', '2',  # 高质量
+                '-y',  # 覆盖输出文件
+                str(output_path)
+            ]
+            
+            # 执行命令
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+            
+            if result.returncode == 0 and output_path.exists():
+                logger.info(f"成功提取缩略图: {output_path}")
+                return True
+            else:
+                logger.error(f"提取缩略图失败: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"提取缩略图异常: {str(e)}")
+            return False
+    
+    @staticmethod
     def get_video_info(video_path: Path) -> Dict:
         """
         获取视频信息
