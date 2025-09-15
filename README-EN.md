@@ -1,10 +1,11 @@
 # AutoClip - AI Video Intelligent Clipping System
 
-<div align="center">
-
 ![AutoClip Logo](https://img.shields.io/badge/AutoClip-AI%20Video%20Processing-blue?style=for-the-badge&logo=video)
 
-**AI-powered intelligent video clipping system supporting YouTube/Bilibili video download, automatic clipping, and smart collection generation**
+## AI-powered intelligent video clipping system
+
+Supporting YouTube/Bilibili video download, automatic clipping, and smart collection
+generation
 
 [![Python](https://img.shields.io/badge/Python-3.8+-green?style=flat&logo=python)](https://python.org)
 [![React](https://img.shields.io/badge/React-18+-blue?style=flat&logo=react)](https://reactjs.org)
@@ -23,22 +24,36 @@
 
 ## 🎯 Project Overview
 
-AutoClip is an AI-powered intelligent video clipping system that can automatically download videos from YouTube, Bilibili, and other platforms, extract exciting clips through AI analysis, and intelligently generate collections. The system adopts a modern frontend-backend separation architecture, providing an intuitive web interface and powerful backend processing capabilities.
+AutoClip is an AI-powered intelligent video clipping system that can automatically
+download videos from YouTube, Bilibili, and other platforms, extract exciting clips
+through AI analysis, and intelligently generate collections. The system adopts a
+modern frontend-backend separation architecture, providing an intuitive web
+interface and powerful backend processing capabilities.
 
 ### ✨ Core Features
 
-- 🎬 **Multi-platform Support**: One-click download from YouTube, Bilibili, and local file upload
-- 🤖 **AI Intelligent Analysis**: Video content understanding based on Qwen large language model
-- ✂️ **Automatic Clipping**: Intelligent recognition of exciting clips with automatic cutting, supporting multiple video categories
-- 📚 **Smart Collections**: AI-recommended and manually created video collections with drag-and-drop sorting
-- 🚀 **Real-time Processing**: Asynchronous task queue with real-time progress feedback and WebSocket communication
+- 🎬 **Multi-platform Support**: One-click download from YouTube, Bilibili, and local
+  file upload
+- 🤖 **AI Intelligent Analysis**: Video content understanding based on Qwen large
+  language model
+- ✂️ **Automatic Clipping**: Intelligent recognition of exciting clips with automatic
+  cutting, supporting multiple video categories
+- 📚 **Smart Collections**: AI-recommended and manually created video collections
+  with drag-and-drop sorting
+- 🚀 **Real-time Processing**: Asynchronous task queue with real-time progress feedback
+  and WebSocket communication
 - 🎨 **Modern Interface**: React + TypeScript + Ant Design with responsive design
-- 📱 **Mobile Support** **[In Development]**: Responsive design, improving mobile experience
-- 🔐 **Account Management** **[In Development]**: Support for multiple Bilibili account management with automatic health checks
+- 📱 **Mobile Support** **[In Development]**: Responsive design, improving mobile
+  experience
+- 🔐 **Account Management** **[In Development]**: Support for multiple Bilibili account
+  management with automatic health checks
 - 📊 **Data Statistics**: Complete project management and data statistics functionality
-- 🛠️ **Easy Deployment**: One-click startup scripts, Docker support, and detailed documentation
-- 📤 **Bilibili Upload** **[In Development]**: Automatic upload of clipped videos to Bilibili
-- ✏️ **Subtitle Editing** **[In Development]**: Visual subtitle editing and synchronization functionality
+- 🛠️ **Easy Deployment**: One-click startup scripts, Docker support, and detailed
+  documentation
+- 📤 **Bilibili Upload** **[In Development]**: Automatic upload of clipped videos
+  to Bilibili
+- ✏️ **Subtitle Editing** **[In Development]**: Visual subtitle editing and
+  synchronization functionality
 
 ## 🏗️ System Architecture
 
@@ -59,7 +74,8 @@ graph TB
 
 ### Technology Stack
 
-**Backend Technologies**
+#### Backend Technologies
+
 - **FastAPI**: Modern Python web framework with automatic API documentation generation
 - **Celery**: Distributed task queue supporting asynchronous processing
 - **Redis**: Message broker and cache for task status management
@@ -69,7 +85,8 @@ graph TB
 - **WebSocket**: Real-time communication and progress push
 - **Pydantic**: Data validation and serialization
 
-**Frontend Technologies**
+#### Frontend Technologies
+
 - **React 18**: User interface framework with Hooks and functional components
 - **TypeScript**: Type safety for better development experience
 - **Ant Design**: Enterprise-grade UI component library
@@ -84,12 +101,14 @@ graph TB
 ### Environment Requirements
 
 #### Docker Deployment (Recommended)
+
 - **Docker**: 20.10+
 - **Docker Compose**: 2.0+
 - **Memory**: Minimum 4GB, recommended 8GB+
 - **Storage**: Minimum 10GB available space
 
 #### Local Deployment
+
 - **Operating System**: macOS / Linux / Windows (WSL)
 - **Python**: 3.8+ (recommended 3.9+)
 - **Node.js**: 16+ (recommended 18+)
@@ -222,6 +241,7 @@ cp env.example .env
 ### 1. Video Download
 
 #### YouTube Videos
+
 1. Click "New Project" on the homepage
 2. Select "YouTube Link"
 3. Paste the video URL
@@ -229,6 +249,7 @@ cp env.example .env
 5. Click "Start Download"
 
 #### Bilibili Videos
+
 1. Click "New Project" on the homepage
 2. Select "Bilibili Link"
 3. Paste the video URL
@@ -236,6 +257,7 @@ cp env.example .env
 5. Click "Start Download"
 
 #### Local Files
+
 1. Click "New Project" on the homepage
 2. Select "File Upload"
 3. Drag and drop or select video files
@@ -260,8 +282,10 @@ The system will automatically execute the following steps:
 - **Edit Information**: Modify clip titles, descriptions, etc.
 - **Create Collections**: Manually create or use AI-recommended collections
 - **Download Export**: Download individual clips or complete collections
-- **Bilibili Upload** **[In Development]**: One-click upload of clipped videos to Bilibili
-- **Subtitle Editing** **[In Development]**: Visual editing and synchronization of subtitle files
+- **Bilibili Upload** **[In Development]**: One-click upload of clipped videos to
+  Bilibili
+- **Subtitle Editing** **[In Development]**: Visual editing and synchronization of
+  subtitle files
 
 ## 🔧 Configuration
 
@@ -297,11 +321,12 @@ PROJECT_DIR=./data/projects
    - **Cookie Import** (recommended): Export cookies from browser
    - **Account Password**: Directly input account and password
    - **QR Code Login**: Scan QR code to login
-3. After successful addition, the system will automatically manage account health status
+3. After successful addition, the system will automatically manage account health
+  status
 
 ## 📁 Project Structure
 
-```
+```text
 autoclip/
 ├── backend/                 # Backend code
 │   ├── api/                # API routes
@@ -380,8 +405,8 @@ autoclip/
 
 After starting the system, visit the following addresses to view API documentation:
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ### Main API Endpoints
 
@@ -401,6 +426,7 @@ After starting the system, visit the following addresses to view API documentati
 ### Common Issues
 
 #### 1. Port Occupied
+
 ```bash
 # Check port usage
 lsof -i :8000  # Backend port
@@ -411,6 +437,7 @@ kill -9 <PID>
 ```
 
 #### 2. Redis Connection Failed
+
 ```bash
 # Check Redis status
 redis-cli ping
@@ -421,12 +448,14 @@ systemctl start redis-server  # Linux
 ```
 
 #### 3. YouTube Download Failed
+
 - Check network connection
 - Update yt-dlp: `pip install --upgrade yt-dlp`
 - Try using browser cookies
 - Check if video is available
 
 #### 4. Bilibili Download Failed
+
 - Check account login status
 - Update account cookies
 - Check video permission settings
@@ -555,10 +584,10 @@ docker-compose ps
 
 #### Access Services
 
-- **Frontend Interface**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
-- **Flower Monitoring**: http://localhost:5555
+- **Frontend Interface**: [http://localhost:3000](http://localhost:3000)
+- **Backend API**: [http://localhost:8000](http://localhost:8000)
+- **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Flower Monitoring**: [http://localhost:5555](http://localhost:5555)
 
 #### Development Environment
 
@@ -600,7 +629,8 @@ WantedBy=multi-user.target
 
 ### Coming Soon
 
-- [ ] **Bilibili Upload Feature**: Automatic upload of clipped videos to Bilibili with multi-account management
+- [ ] **Bilibili Upload Feature**: Automatic upload of clipped videos to Bilibili
+  with multi-account management
 - [ ] **Subtitle Editing Feature**: Visual subtitle editor and synchronization functionality
 - [ ] **Multi-language Support**: Support for more language video processing
 - [ ] **Cloud Storage**: Integrate cloud storage services
@@ -617,47 +647,60 @@ WantedBy=multi-user.target
 
 ## 🤝 Contributing
 
-We welcome all forms of contributions! Whether it's code contributions, documentation improvements, issue reports, or feature suggestions.
+We welcome all forms of contributions! Whether it's code contributions,
+documentation improvements, issue reports, or feature suggestions.
 
 ### How to Contribute
 
 1. **Fork** the project to your GitHub account
 2. Clone your Fork to local:
+
    ```bash
    git clone https://github.com/zhouxiaoka/autoclip.git
    cd autoclip
    ```
+
 3. Create feature branch:
+
    ```bash
    git checkout -b feature/amazing-feature
    ```
+
 4. Develop and test
 5. Commit changes:
+
    ```bash
    git add .
    git commit -m 'feat: add amazing feature'
    ```
+
 6. Push branch:
+
    ```bash
    git push origin feature/amazing-feature
    ```
+
 7. Create **Pull Request** on GitHub
 
 ### Development Standards
 
-**Code Standards**
+#### Code Standards
+
 - Backend: Follow PEP 8 Python code standards
 - Frontend: Use TypeScript, follow ESLint rules
-- Commit messages: Use conventional commit format (feat, fix, docs, style, refactor, test, chore)
+- Commit messages: Use conventional commit format (feat, fix, docs, style, refactor,
+  test, chore)
 
-**Development Process**
+#### Development Process
+
 1. Ensure all tests pass
 2. Add necessary test cases
 3. Update related documentation
 4. Ensure code quality checks pass
 
-**Commit Message Format**
-```
+#### Commit Message Format
+
+```text
 <type>(<scope>): <description>
 
 [optional body]
@@ -666,6 +709,7 @@ We welcome all forms of contributions! Whether it's code contributions, document
 ```
 
 Examples:
+
 - `feat(api): add video download endpoint`
 - `fix(ui): resolve upload modal display issue`
 - `docs(readme): update installation instructions`
@@ -676,6 +720,7 @@ Examples:
 
 **Q: What to do when ports are occupied during startup?**
 A: Use the following commands to check and stop processes occupying ports:
+
 ```bash
 # Check port usage
 lsof -i :8000  # Backend port
@@ -687,6 +732,7 @@ kill -9 <PID>
 
 **Q: What to do when Redis connection fails?**
 A: Ensure Redis service is running:
+
 ```bash
 # Check Redis status
 redis-cli ping
@@ -698,6 +744,7 @@ sudo systemctl start redis-server  # Linux
 
 **Q: What to do when frontend dependency installation fails?**
 A: Try clearing cache and reinstalling:
+
 ```bash
 cd frontend
 rm -rf node_modules package-lock.json
@@ -708,7 +755,8 @@ npm install
 ### Feature Usage Issues
 
 **Q: What to do when YouTube video download fails?**
-A: 
+A:
+
 1. Check network connection
 2. Update yt-dlp: `pip install --upgrade yt-dlp`
 3. Try using browser cookies
@@ -716,6 +764,7 @@ A:
 
 **Q: What to do when Bilibili video download fails?**
 A:
+
 1. Check account login status
 2. Update account cookies
 3. Check video permission settings
@@ -723,20 +772,25 @@ A:
 
 **Q: What to do when AI processing is slow?**
 A:
+
 1. Check API key configuration
 2. Adjust processing parameters (reduce chunk_size)
 3. Check network connection
 4. Consider using faster AI models
 
 **Q: When will Bilibili upload feature be available?**
-A: Bilibili upload feature is currently in development and is expected to be released in the next version. This feature will support:
+A: Bilibili upload feature is currently in development and is expected to be
+released in the next version. This feature will support:
+
 - Automatic upload of clipped videos to Bilibili
 - Multi-account management and switching
 - Batch upload and queue management
 - Upload progress monitoring
 
 **Q: When will subtitle editing feature be available?**
-A: Subtitle editing feature is currently in development and is expected to be released in the next version. This feature will support:
+A: Subtitle editing feature is currently in development and is expected to be
+released in the next version. This feature will support:
+
 - Visual subtitle editor
 - Subtitle timeline synchronization
 - Multi-language subtitle support
@@ -746,6 +800,7 @@ A: Subtitle editing feature is currently in development and is expected to be re
 
 **Q: How to improve processing speed?**
 A:
+
 1. Increase Celery Worker concurrency
 2. Use SSD storage
 3. Increase system memory
@@ -753,6 +808,7 @@ A:
 
 **Q: How to reduce storage space usage?**
 A:
+
 1. Regularly clean temporary files
 2. Compress output videos
 3. Delete unnecessary projects
@@ -769,8 +825,21 @@ A:
 
 ### Contact
 
-- **Personal WeChat**: your_wechat_id
-- **Feishu**: your_feishu_id
+For questions or suggestions, please contact us through:
+
+#### 💬 QQ
+
+![QQ QR Code](./qq_qr.jpg)
+
+#### 📱 Feishu
+
+![Feishu QR Code](./feishu_qr.jpg)
+
+#### 📧 Other Contact Methods
+
+- Submit a [GitHub Issue](https://github.com/zhouxiaoka/autoclip/issues)
+- Send email to: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+- Add the above QQ or Feishu contact
 
 ## 📄 License
 
@@ -781,6 +850,7 @@ This project is licensed under the [MIT License](LICENSE).
 Thanks to the following open source projects and services:
 
 ### Core Technology Stack
+
 - [FastAPI](https://fastapi.tiangolo.com/) - Modern Python web framework
 - [React](https://reactjs.org/) - User interface library
 - [Ant Design](https://ant.design/) - Enterprise-grade UI design language
@@ -789,33 +859,33 @@ Thanks to the following open source projects and services:
 - [Redis](https://redis.io/) - In-memory data structure store
 
 ### Video Processing
+
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube video download tool
 - [FFmpeg](https://ffmpeg.org/) - Audio and video processing framework
 
 ### AI Services
+
 - [Qwen](https://tongyi.aliyun.com/) - Alibaba Cloud large language model service
 - [DashScope](https://dashscope.aliyun.com/) - Alibaba Cloud AI service platform
 
 ### Development Tools
+
 - [Vite](https://vitejs.dev/) - Frontend build tool
 - [Zustand](https://github.com/pmndrs/zustand) - State management library
 - [Pydantic](https://pydantic-docs.helpmanual.io/) - Data validation library
 
 ### Special Thanks
+
 - All developers contributing to the open source community
 - Users providing feedback and suggestions
 - Community members participating in testing and code contributions
 
 ---
 
-<div align="center">
-
-**If this project helps you, please give us a ⭐ Star!**
+## If this project helps you, please give us a ⭐ Star
 
 [![Star History Chart](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)
 
 Made with ❤️ by AutoClip Team
 
-**⭐ If you find it useful, please give us a Star!**
-
-</div>
+⭐ If you find it useful, please give us a Star!
