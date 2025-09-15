@@ -4,6 +4,7 @@ import { PlayCircleOutlined, DeleteOutlined, EyeOutlined, DownloadOutlined, Relo
 import { useNavigate } from 'react-router-dom'
 import { Project } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
+import { UnifiedStatusBar } from './UnifiedStatusBar'
 // import { 
 //   getProjectStatusConfig, 
 //   calculateProjectProgress, 
@@ -20,6 +21,31 @@ dayjs.extend(relativeTime)
 dayjs.extend(timezone)
 dayjs.extend(utc)
 dayjs.locale('zh-cn')
+
+// 添加CSS动画样式
+const pulseAnimation = `
+  @keyframes pulse {
+    0% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.1);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+`
+
+// 将样式注入到页面
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style')
+  style.textContent = pulseAnimation
+  document.head.appendChild(style)
+}
 
 const { Text, Title } = Typography
 const { Meta } = Card
@@ -67,6 +93,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // 生成项目视频缩略图（带缓存）
   useEffect(() => {
     const generateThumbnail = async () => {
+      // 优先使用后端提供的缩略图
+      if (project.thumbnail) {
+        setVideoThumbnail(project.thumbnail)
+        console.log(`使用后端提供的缩略图: ${project.id}`)
+        return
+      }
+      
       if (!project.video_path) {
         console.log('项目没有视频路径:', project.id)
         return
@@ -246,12 +279,26 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     }
   }
 
-  // 状态标准化处理
-  const normalizedStatus = project.status === 'error' ? 'failed' : project.status
+  // 检查是否是等待处理状态 - pending状态显示为导入中
+  const isImporting = project.status === 'pending'
+  
+  // 状态标准化处理 - pending状态显示为导入中
+  const normalizedStatus = project.status === 'error' ? 'failed' : 
+                          isImporting ? 'importing' : project.status
+  
+  // 调试信息
+  console.log('ProjectCard Debug:', {
+    projectId: project.id,
+    projectStatus: project.status,
+    isImporting,
+    normalizedStatus,
+    processingConfig: project.processing_config
+  })
   
   // 计算进度百分比
   const progressPercent = project.status === 'completed' ? 100 : 
                          project.status === 'failed' ? 0 :
+                         isImporting ? 20 : // 导入中显示20%进度
                          project.current_step && project.total_steps ? 
                          Math.round((project.current_step / project.total_steps) * 100) : 
                          project.status === 'processing' ? 10 : 0
@@ -261,8 +308,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     
     setIsRetrying(true)
     try {
-      await projectApi.retryProcessing(project.id)
-      message.success('已开始重试处理项目')
+      // 对于PENDING状态的项目，使用startProcessing；对于其他状态，使用retryProcessing
+      if (project.status === 'pending') {
+        await projectApi.startProcessing(project.id)
+      } else {
+        await projectApi.retryProcessing(project.id)
+      }
+      // 移除重复的toast显示，让父组件统一处理
       if (onRetry) {
         onRetry(project.id)
       }
@@ -319,6 +371,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             overflow: 'hidden'
           }}
           onClick={() => {
+            // 导入中状态的项目不能点击进入详情页
+            if (project.status === 'pending') {
+              message.warning('项目正在导入中，请稍后再查看详情')
+              return
+            }
+            
             if (onClick) {
               onClick()
             } else {
@@ -484,9 +542,35 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                   </Popconfirm>
                 </>
               ) : (
-                /* 其他状态：显示下载和删除按钮 */
+                /* 其他状态：显示下载、重试和删除按钮 */
                 <>
                   <Space size={4}>
+                    {/* 重试按钮 - 在处理中和等待中状态显示，允许用户重新提交任务 */}
+                    {(normalizedStatus === 'processing' || normalizedStatus === 'importing' || project.status === 'pending') && (
+                      <Tooltip title={project.status === 'pending' ? "开始处理" : "重新提交任务"}>
+                        <Button
+                          type="text"
+                          icon={<ReloadOutlined />}
+                          loading={isRetrying}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRetry()
+                          }}
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '3px',
+                            color: '#1890ff',
+                            border: '1px solid rgba(24, 144, 255, 0.5)',
+                            background: 'rgba(24, 144, 255, 0.1)',
+                            padding: 0,
+                            minWidth: '20px',
+                            fontSize: '10px'
+                          }}
+                        />
+                      </Tooltip>
+                    )}
+                    
                     {/* 下载按钮 - 仅在完成状态显示 */}
                     {normalizedStatus === 'completed' && (
                       <Button
@@ -578,123 +662,89 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             </Tooltip>
           </div>
           
-          {/* 处理状态 - 在标题下方 */}
-          {normalizedStatus === 'processing' && (
-            <div style={{ marginBottom: '12px' }}>
-              <div style={{
-                background: 'rgba(24, 144, 255, 0.15)',
-                border: '1px solid rgba(24, 144, 255, 0.3)',
-                borderRadius: '4px',
-                padding: '8px 12px',
-                textAlign: 'center'
-              }}>
-                <div style={{ 
-                  color: '#1890ff',
-                  fontSize: '12px', 
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px'
-                }}>
-                  <LoadingOutlined style={{ fontSize: '14px' }} />
-                  正在处理中
-                </div>
-                {project.current_step && project.total_steps && (
-                  <div style={{ 
-                    color: '#1890ff',
-                    fontSize: '10px',
-                    marginTop: '4px',
-                    opacity: 0.8
-                  }}>
-                    步骤 {project.current_step}/{project.total_steps}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-          
-          {/* 状态和统计信息 - 处理中时隐藏 */}
-          {normalizedStatus !== 'processing' && (
+          {/* 状态和统计信息 */}
+          {(normalizedStatus === 'importing' || normalizedStatus === 'processing' || normalizedStatus === 'failed') ? (
+            // 导入中、处理中、失败：只显示状态块，居中展示
             <div style={{ 
               display: 'flex', 
-              gap: '6px'
+              justifyContent: 'center',
+              marginBottom: '12px'
             }}>
-            {/* 状态显示 */}
-            <div style={{
-              background: normalizedStatus === 'completed' ? 'rgba(82, 196, 26, 0.15)' :
-                         normalizedStatus === 'processing' ? 'rgba(24, 144, 255, 0.15)' :
-                         normalizedStatus === 'failed' ? 'rgba(255, 77, 79, 0.15)' :
-                         'rgba(217, 217, 217, 0.15)',
-              border: normalizedStatus === 'completed' ? '1px solid rgba(82, 196, 26, 0.3)' :
-                      normalizedStatus === 'processing' ? '1px solid rgba(24, 144, 255, 0.3)' :
-                      normalizedStatus === 'failed' ? '1px solid rgba(255, 77, 79, 0.3)' :
-                      '1px solid rgba(217, 217, 217, 0.3)',
-              borderRadius: '3px',
-              padding: '4px 6px',
-              textAlign: 'center',
-              flex: 1
+              <div style={{ width: '100%', maxWidth: '200px' }}>
+                <UnifiedStatusBar
+                  projectId={project.id}
+                  status={normalizedStatus}
+                  downloadProgress={progressPercent}
+                  onStatusChange={(newStatus) => {
+                    console.log(`项目 ${project.id} 状态变化: ${normalizedStatus} -> ${newStatus}`)
+                  }}
+                  onDownloadProgressUpdate={(progress) => {
+                    console.log(`项目 ${project.id} 下载进度更新: ${progress}%`)
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            // 其他状态：显示状态块 + 切片数 + 合集数
+            <div style={{ 
+              display: 'flex', 
+              gap: '6px',
+              marginBottom: '12px'
             }}>
-              <div style={{ 
-                color: normalizedStatus === 'completed' ? '#52c41a' :
-                       normalizedStatus === 'processing' ? '#1890ff' :
-                       normalizedStatus === 'failed' ? '#ff4d4f' :
-                       '#d9d9d9',
-                fontSize: '12px', 
-                fontWeight: 600, 
-                lineHeight: '14px'
+              {/* 状态显示 - 占据更多空间 */}
+              <div style={{ flex: 2 }}>
+                <UnifiedStatusBar
+                  projectId={project.id}
+                  status={normalizedStatus}
+                  downloadProgress={progressPercent}
+                  onStatusChange={(newStatus) => {
+                    console.log(`项目 ${project.id} 状态变化: ${normalizedStatus} -> ${newStatus}`)
+                  }}
+                  onDownloadProgressUpdate={(progress) => {
+                    console.log(`项目 ${project.id} 下载进度更新: ${progress}%`)
+                  }}
+                />
+              </div>
+              
+              {/* 切片数量 - 减小宽度 */}
+              <div style={{
+                background: 'rgba(102, 126, 234, 0.15)',
+                border: '1px solid rgba(102, 126, 234, 0.3)',
+                borderRadius: '3px',
+                padding: '3px 4px',
+                textAlign: 'center',
+                minWidth: '50px',
+                flex: 0.8
               }}>
-                {normalizedStatus === 'processing' ? (
-                  project.current_step && project.total_steps ? `${progressPercent}%` : '⏳'
-                ) : normalizedStatus === 'completed' ? '✓' :
-                  normalizedStatus === 'failed' ? '✗' : '○'
-                }
+                <div style={{ color: '#667eea', fontSize: '11px', fontWeight: 600, lineHeight: '12px' }}>
+                  {project.total_clips || 0}
+                </div>
+                <div style={{ color: '#999999', fontSize: '8px', lineHeight: '9px' }}>
+                  切片
+                </div>
               </div>
-              <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
-                {normalizedStatus === 'completed' ? '已完成' :
-                 normalizedStatus === 'processing' ? '正在处理中' :
-                 normalizedStatus === 'failed' ? '失败' :
-                 '等待中'
-                }
-              </div>
-            </div>
-            
-            {/* 切片数量 */}
-            <div style={{
-              background: 'rgba(102, 126, 234, 0.15)',
-              border: '1px solid rgba(102, 126, 234, 0.3)',
-              borderRadius: '3px',
-              padding: '4px 6px',
-              textAlign: 'center',
-              flex: 1
-            }}>
-              <div style={{ color: '#667eea', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
-                {project.total_clips || 0}
-              </div>
-              <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
-                切片
+              
+              {/* 合集数量 - 减小宽度 */}
+              <div style={{
+                background: 'rgba(118, 75, 162, 0.15)',
+                border: '1px solid rgba(118, 75, 162, 0.3)',
+                borderRadius: '3px',
+                padding: '3px 4px',
+                textAlign: 'center',
+                minWidth: '50px',
+                flex: 0.8
+              }}>
+                <div style={{ color: '#764ba2', fontSize: '11px', fontWeight: 600, lineHeight: '12px' }}>
+                  {project.total_collections || 0}
+                </div>
+                <div style={{ color: '#999999', fontSize: '8px', lineHeight: '9px' }}>
+                  合集
+                </div>
               </div>
             </div>
-            
-            
-            {/* 合集数量 */}
-            <div style={{
-              background: 'rgba(118, 75, 162, 0.15)',
-              border: '1px solid rgba(118, 75, 162, 0.3)',
-              borderRadius: '3px',
-              padding: '4px 6px',
-              textAlign: 'center',
-              flex: 1
-            }}>
-              <div style={{ color: '#764ba2', fontSize: '12px', fontWeight: 600, lineHeight: '14px' }}>
-                {project.total_collections || 0}
-              </div>
-              <div style={{ color: '#999999', fontSize: '9px', lineHeight: '10px' }}>
-                合集
-              </div>
-            </div>
-          </div>
           )}
+
+          {/* 详细进度显示已隐藏 - 只在状态块中显示百分比 */}
 
         </div>
       </div>

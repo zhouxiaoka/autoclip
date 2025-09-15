@@ -21,14 +21,37 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 def run_async_notification(coro):
-    """运行异步通知的辅助函数"""
+    """运行异步通知的辅助函数 - 修复事件循环冲突"""
     try:
+        # 尝试获取现有的事件循环
         loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # 如果事件循环正在运行，使用线程池执行
+            import concurrent.futures
+            import threading
+            
+            def run_in_thread():
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    return new_loop.run_until_complete(coro)
+                finally:
+                    new_loop.close()
+            
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_in_thread)
+                return future.result(timeout=10)  # 10秒超时
+        else:
+            # 如果事件循环没有运行，直接运行
+            return loop.run_until_complete(coro)
     except RuntimeError:
+        # 没有事件循环，创建新的
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    
-    return loop.run_until_complete(coro)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
 
 @celery_app.task(bind=True, name='backend.tasks.processing.process_video_pipeline')
 def process_video_pipeline(self, project_id: str, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
@@ -71,21 +94,16 @@ def process_video_pipeline(self, project_id: str, input_video_path: str, input_s
                 notification_service.send_processing_start(project_id, task_id)
             )
             
-            # 创建进度回调函数
-            async def progress_callback(proj_id: int, progress: int, message: str):
-                # 更新任务进度
-                task.progress = progress
-                task.current_step = message
-                db.commit()
-                
-                # 发送WebSocket通知
-                await notification_service.send_processing_progress(str(proj_id), task_id, progress, message)
+            # 简化的进度系统不需要复杂的回调函数
+            # 新的进度系统会在流水线内部自动发送进度事件
             
-            # 创建Pipeline适配器
-            pipeline_adapter = create_pipeline_adapter(db, str(task.id), str(project_id), progress_callback)
+            # 使用简化的Pipeline适配器
+            from backend.services.simple_pipeline_adapter import create_simple_pipeline_adapter
+            pipeline_adapter = create_simple_pipeline_adapter(str(project_id), str(task.id))
             
-            # 执行Pipeline处理
-            result = pipeline_adapter.process_project_sync(input_video_path, input_srt_path)
+            # 执行Pipeline处理 - 使用异步包装器
+            import asyncio
+            result = asyncio.run(pipeline_adapter.process_project_sync(input_video_path, input_srt_path))
             
             # 检查处理结果
             if result.get("status") == "failed":
@@ -94,12 +112,22 @@ def process_video_pipeline(self, project_id: str, input_video_path: str, input_s
                 task.status = TaskStatus.FAILED
                 task.error_message = error_msg
                 task.result_data = result
+                
+                # 更新项目状态为失败
+                project = db.query(Project).filter(Project.id == project_id).first()
+                if project:
+                    project.status = ProjectStatus.FAILED
+                    project.updated_at = datetime.utcnow()
+                    logger.info(f"项目状态已更新为失败: {project_id}")
+                
                 db.commit()
                 
-                # 发送错误通知
-                run_async_notification(
-                    notification_service.send_processing_error(project_id, task_id, error_msg)
-                )
+                # 失败状态已由简化进度系统自动处理
+                
+                # 发送错误通知（兼容旧版本） - 已禁用WebSocket通知
+                # run_async_notification(
+                #     notification_service.send_processing_error(project_id, task_id, error_msg)
+                # )
                 
                 return {
                     "success": False,
@@ -125,10 +153,12 @@ def process_video_pipeline(self, project_id: str, input_video_path: str, input_s
                 
                 db.commit()
                 
-                # 发送完成通知
-                run_async_notification(
-                    notification_service.send_processing_complete(project_id, task_id, result)
-                )
+                # 完成状态已由简化进度系统自动处理
+                
+                # 发送完成通知（兼容旧版本） - 已禁用WebSocket通知
+                # run_async_notification(
+                #     notification_service.send_processing_complete(project_id, task_id, result)
+                # )
             
             logger.info(f"视频流水线处理完成: {project_id}")
             return {
@@ -191,9 +221,10 @@ def process_single_step(self, project_id: str, step: str, config: Dict[str, Any]
     
     try:
         # 发送开始通知
-        run_async_notification(
-            notification_service.send_processing_start(project_id, task_id)
-        )
+        # 发送处理开始通知（兼容旧版本） - 已禁用WebSocket通知
+        # run_async_notification(
+        #     notification_service.send_processing_start(project_id, task_id)
+        # )
         
         # 创建数据库会话
         db = SessionLocal()
@@ -281,9 +312,10 @@ def retry_processing_step(self, project_id: str, step: str, config: Dict[str, An
     
     try:
         # 发送开始通知
-        run_async_notification(
-            notification_service.send_processing_start(project_id, task_id)
-        )
+        # 发送处理开始通知（兼容旧版本） - 已禁用WebSocket通知
+        # run_async_notification(
+        #     notification_service.send_processing_start(project_id, task_id)
+        # )
         
         # 发送重试通知
         run_async_notification(

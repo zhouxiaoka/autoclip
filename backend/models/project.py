@@ -74,6 +74,11 @@ class Project(BaseModel):
         nullable=True, 
         comment="视频时长（秒）"
     )
+    thumbnail = Column(
+        Text, 
+        nullable=True, 
+        comment="项目缩略图（base64编码）"
+    )
     
     # 处理配置
     processing_config = Column(

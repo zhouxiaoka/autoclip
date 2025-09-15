@@ -59,6 +59,7 @@ class ProjectResponse(BaseSchema):
     source_url: Optional[str] = Field(description="Source URL")
     source_file: Optional[str] = Field(description="Source file path")
     video_path: Optional[str] = Field(description="Video file path for frontend compatibility")
+    thumbnail: Optional[str] = Field(description="Project thumbnail (base64 encoded)")
     settings: dict = Field(description="Project settings")
     created_at: datetime = Field(description="Creation timestamp")
     updated_at: datetime = Field(description="Last update timestamp")

@@ -13,7 +13,12 @@ router = APIRouter()
 
 class SettingsRequest(BaseModel):
     """设置请求模型"""
+    # 多提供商支持
+    llm_provider: Optional[str] = None
     dashscope_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    siliconflow_api_key: Optional[str] = None
     model_name: Optional[str] = None
     chunk_size: Optional[int] = None
     min_score_threshold: Optional[float] = None
@@ -21,7 +26,9 @@ class SettingsRequest(BaseModel):
 
 class ApiKeyTestRequest(BaseModel):
     """API密钥测试请求"""
+    provider: str
     api_key: str
+    model_name: str
 
 class ApiKeyTestResponse(BaseModel):
     """API密钥测试响应"""
@@ -37,7 +44,11 @@ def load_settings() -> Dict[str, Any]:
     """加载设置"""
     settings_file = get_settings_file_path()
     default_settings = {
+        "llm_provider": "dashscope",
         "dashscope_api_key": "",
+        "openai_api_key": "",
+        "gemini_api_key": "",
+        "siliconflow_api_key": "",
         "model_name": "qwen-plus",
         "chunk_size": 5000,
         "min_score_threshold": 0.7,
@@ -82,11 +93,23 @@ async def update_settings(request: SettingsRequest):
     try:
         settings = load_settings()
         
-        # 更新提供的设置
+        # 更新多提供商设置
+        if request.llm_provider is not None:
+            settings["llm_provider"] = request.llm_provider
+        
         if request.dashscope_api_key is not None:
             settings["dashscope_api_key"] = request.dashscope_api_key
-            # 同时设置环境变量
+            # 同时设置环境变量（保持兼容性）
             os.environ["DASHSCOPE_API_KEY"] = request.dashscope_api_key
+        
+        if request.openai_api_key is not None:
+            settings["openai_api_key"] = request.openai_api_key
+        
+        if request.gemini_api_key is not None:
+            settings["gemini_api_key"] = request.gemini_api_key
+        
+        if request.siliconflow_api_key is not None:
+            settings["siliconflow_api_key"] = request.siliconflow_api_key
         
         if request.model_name is not None:
             settings["model_name"] = request.model_name
@@ -103,6 +126,14 @@ async def update_settings(request: SettingsRequest):
         # 保存设置
         save_settings(settings)
         
+        # 更新LLM管理器
+        try:
+            from ...core.llm_manager import get_llm_manager
+            llm_manager = get_llm_manager()
+            llm_manager.update_settings(settings)
+        except Exception as e:
+            print(f"更新LLM管理器失败: {e}")
+        
         return {"message": "设置更新成功"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新设置失败: {e}")
@@ -111,40 +142,44 @@ async def update_settings(request: SettingsRequest):
 async def test_api_key(request: ApiKeyTestRequest) -> ApiKeyTestResponse:
     """测试API密钥"""
     try:
-        # 临时设置API密钥
-        original_key = os.getenv("DASHSCOPE_API_KEY", "")
-        os.environ["DASHSCOPE_API_KEY"] = request.api_key
+        # 导入LLM管理器
+        from ...core.llm_manager import get_llm_manager
+        from ...core.llm_providers import ProviderType
         
-        # 尝试导入并测试LLM客户端
+        # 验证提供商类型
         try:
-            import sys
-            from pathlib import Path
-            
-            # 添加项目根目录到Python路径
-            project_root = Path(__file__).parent.parent.parent
-            if str(project_root) not in sys.path:
-                sys.path.insert(0, str(project_root))
-            
-            from ...utils.llm_client import LLMClient
-            
-            llm_client = LLMClient()
-            # 发送一个简单的测试请求
-            test_prompt = "请回复'测试成功'"
-            response = llm_client.call(test_prompt)
-            
-            if "测试成功" in response or "success" in response.lower():
-                return ApiKeyTestResponse(success=True)
-            else:
-                return ApiKeyTestResponse(success=False, error="API响应异常")
-                
-        except Exception as e:
-            return ApiKeyTestResponse(success=False, error=str(e))
-        finally:
-            # 恢复原始API密钥
-            if original_key:
-                os.environ["DASHSCOPE_API_KEY"] = original_key
-            else:
-                os.environ.pop("DASHSCOPE_API_KEY", None)
+            provider_type = ProviderType(request.provider)
+        except ValueError:
+            return ApiKeyTestResponse(success=False, error=f"不支持的提供商类型: {request.provider}")
+        
+        # 测试连接
+        llm_manager = get_llm_manager()
+        success = llm_manager.test_provider_connection(provider_type, request.api_key, request.model_name)
+        
+        if success:
+            return ApiKeyTestResponse(success=True)
+        else:
+            return ApiKeyTestResponse(success=False, error="API连接测试失败")
                 
     except Exception as e:
-        return ApiKeyTestResponse(success=False, error=str(e)) 
+        return ApiKeyTestResponse(success=False, error=str(e))
+
+@router.get("/available-models")
+async def get_available_models():
+    """获取所有可用模型"""
+    try:
+        from ...core.llm_manager import get_llm_manager
+        llm_manager = get_llm_manager()
+        return llm_manager.get_all_available_models()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取可用模型失败: {e}")
+
+@router.get("/current-provider")
+async def get_current_provider():
+    """获取当前提供商信息"""
+    try:
+        from ...core.llm_manager import get_llm_manager
+        llm_manager = get_llm_manager()
+        return llm_manager.get_current_provider_info()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取当前提供商信息失败: {e}") 

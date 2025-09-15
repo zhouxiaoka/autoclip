@@ -17,9 +17,21 @@ class VideoGenerator:
     """视频生成器"""
     
     def __init__(self, clips_dir: Optional[str] = None, collections_dir: Optional[str] = None, metadata_dir: Optional[str] = None):
-        self.clips_dir = Path(clips_dir) if clips_dir else CLIPS_DIR
-        self.collections_dir = Path(collections_dir) if collections_dir else COLLECTIONS_DIR
+        # 强制使用项目内专属目录，不使用全局目录作为后备
+        if not clips_dir:
+            raise ValueError("clips_dir 参数是必需的，不能使用全局路径")
+        if not collections_dir:
+            raise ValueError("collections_dir 参数是必需的，不能使用全局路径")
+        
+        self.clips_dir = Path(clips_dir)
+        self.collections_dir = Path(collections_dir)
         self.metadata_dir = Path(metadata_dir) if metadata_dir else METADATA_DIR
+        
+        # 确保目录存在
+        self.clips_dir.mkdir(parents=True, exist_ok=True)
+        self.collections_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 创建VideoProcessor实例，强制使用项目内路径
         self.video_processor = VideoProcessor(clips_dir=str(self.clips_dir), collections_dir=str(self.collections_dir))
     
     def generate_clips(self, clips_with_titles: List[Dict], input_video: Path) -> List[Path]:

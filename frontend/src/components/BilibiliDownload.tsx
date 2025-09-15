@@ -161,7 +161,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
           clearInterval(interval)
           setPollingInterval(null)
           setDownloading(false)
-          message.success('视频下载完成，项目创建成功！')
+          message.success('视频下载完成！')
           
           if (task.project_id && onDownloadSuccess) {
             onDownloadSuccess(task.project_id)
@@ -174,6 +174,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
           setPollingInterval(null)
           setDownloading(false)
           message.error(`下载失败: ${task.error_message || '未知错误'}`)
+          resetForm()
         }
       } catch (error) {
         console.error('轮询任务状态失败:', error)
@@ -214,16 +215,29 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
       let response
       if (videoType === 'bilibili') {
         response = await bilibiliApi.createDownloadTask(requestBody)
-        message.success('B站下载任务创建成功，正在处理...')
       } else {
         response = await bilibiliApi.createYouTubeDownloadTask(requestBody)
-        message.success('YouTube下载任务创建成功，正在处理...')
       }
       
-      setCurrentTask(response)
-      
-      // 开始轮询任务状态
-      startPolling(response.id, videoType)
+      // 检查响应是否包含项目ID（新的优化后的响应格式）
+      if (response.project_id) {
+        // 新格式：项目已创建，立即重置表单
+        setCurrentTask(null)
+        setDownloading(false)
+        resetForm()
+        
+        // 显示统一的成功提示
+        const platformName = videoType === 'bilibili' ? 'B站' : 'YouTube'
+        message.success(`${platformName}项目创建成功，正在后台下载中，您可以继续添加其他项目`)
+        
+        if (onDownloadSuccess) {
+          onDownloadSuccess(response.project_id)
+        }
+      } else {
+        // 旧格式：继续轮询任务状态
+        setCurrentTask(response)
+        startPolling(response.id, videoType)
+      }
       
     } catch (error: any) {
       setDownloading(false)
@@ -237,10 +251,10 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
     setProjectName('')
     setCurrentTask(null)
     setVideoInfo(null)
-    if (categories.length > 0) {
-      setSelectedCategory(categories[0].value)
-    }
-    setSelectedBrowser('')
+    setError('')
+    // 保持分类和浏览器选择，方便用户继续添加项目
+    // setSelectedCategory(categories[0].value)
+    // setSelectedBrowser('')
   }
 
   const stopDownload = () => {

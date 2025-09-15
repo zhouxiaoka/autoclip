@@ -110,7 +110,13 @@ class ClipScorer:
                 else:
                     original_clip['final_score'] = round(float(score), 2)
                     original_clip['recommend_reason'] = reason
-                    logger.info(f"  > 评分成功: {original_clip.get('outline', '')[:20]}... [分数: {score}]")
+                    # 安全地获取outline标题用于日志显示
+                    outline = original_clip.get('outline', {})
+                    if isinstance(outline, dict):
+                        title = outline.get('title', '未知标题')
+                    else:
+                        title = str(outline)
+                    logger.info(f"  > 评分成功: {title[:20]}... [分数: {score}]")
 
             return clips
 

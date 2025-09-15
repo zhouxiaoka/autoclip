@@ -24,19 +24,28 @@ export interface UploadRequest {
 }
 
 export interface UploadRecord {
-  id: string
-  project_id: string
-  account_id: string
+  id: string | number
+  task_id?: string
+  project_id?: string
+  account_id: string | number
   clip_id: string
   title: string
-  description: string
-  tags: string
+  description?: string
+  tags?: string
   partition_id: number
-  bvid?: string
+  video_path?: string
+  bv_id?: string
+  av_id?: string
   status: string
   error_message?: string
+  progress: number
+  file_size?: number
+  upload_duration?: number
   created_at: string
   updated_at: string
+  account_username?: string
+  account_nickname?: string
+  project_name?: string
 }
 
 export interface UploadStatus {
@@ -163,5 +172,18 @@ export const uploadApi = {
 
   getBilibiliAccounts: async (): Promise<BilibiliAccount[]> => {
     return api.get('/upload/accounts')
+  },
+
+  // 投稿任务管理
+  retryUpload: async (recordId: string | number): Promise<{message: string}> => {
+    return api.post(`/upload/records/${recordId}/retry`)
+  },
+
+  cancelUpload: async (recordId: string | number): Promise<{message: string}> => {
+    return api.post(`/upload/records/${recordId}/cancel`)
+  },
+
+  deleteUpload: async (recordId: string | number): Promise<{message: string}> => {
+    return api.delete(`/upload/records/${recordId}`)
   }
 }

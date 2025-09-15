@@ -5,6 +5,9 @@
 
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
+import shutil
+import logging
+from pathlib import Path
 
 from ..services.base import BaseService
 from ..repositories.project_repository import ProjectRepository
@@ -12,6 +15,8 @@ from ..models.project import Project
 from ..schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse, ProjectFilter
 from ..schemas.base import PaginationParams, PaginationResponse
 from ..schemas.project import ProjectType, ProjectStatus
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectResponse]):
@@ -79,10 +84,11 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             name=str(getattr(project, 'name', '')),
             description=str(getattr(project, 'description', '')) if getattr(project, 'description', None) is not None else None,
             project_type=ProjectType(getattr(project, 'project_type').value) if hasattr(project, 'project_type') and getattr(project, 'project_type', None) is not None else ProjectType.DEFAULT,
-            status=ProjectStatus(getattr(project, 'status').value) if hasattr(project, 'status') and getattr(project, 'status', None) is not None else ProjectStatus.PENDING,
+            status=getattr(project, 'status', ProjectStatus.PENDING),
             source_url=project.project_metadata.get("source_url") if getattr(project, 'project_metadata', None) else None,
             source_file=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,
             video_path=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,  # 添加video_path字段供前端使用
+            thumbnail=getattr(project, 'thumbnail', None),  # 从数据库获取缩略图
             settings=getattr(project, 'processing_config', {}) or {},
             created_at=self._convert_utc_to_local(getattr(project, 'created_at', None)),
             updated_at=self._convert_utc_to_local(getattr(project, 'updated_at', None)),
@@ -128,6 +134,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
                 source_url=project.project_metadata.get("source_url") if getattr(project, 'project_metadata', None) else None,
                 source_file=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,
                 video_path=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,  # 添加video_path字段供前端使用
+                thumbnail=getattr(project, 'thumbnail', None),  # 从数据库获取缩略图
                 settings=getattr(project, 'processing_config', {}) or {},
                 created_at=self._convert_utc_to_local(getattr(project, 'created_at', None)),
                 updated_at=self._convert_utc_to_local(getattr(project, 'updated_at', None)),
@@ -202,5 +209,87 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         local_time = utc_time.astimezone(local_tz)
         
         return local_time
+    
+    def delete_project_with_files(self, project_id: str) -> bool:
+        """
+        删除项目及其所有相关文件
+        
+        Args:
+            project_id: 项目ID
+            
+        Returns:
+            是否删除成功
+        """
+        try:
+            # 获取项目信息
+            project = self.get(project_id)
+            if not project:
+                logger.warning(f"项目 {project_id} 不存在")
+                return False
+            
+            logger.info(f"开始删除项目 {project_id}: {project.name}")
+            
+            # 1. 删除文件系统中的项目数据
+            self._delete_project_files(project_id)
+            
+            # 2. 删除数据库中的项目记录（级联删除会处理相关的切片、合集、任务）
+            success = self.delete(project_id)
+            
+            if success:
+                logger.info(f"项目 {project_id} 删除成功")
+            else:
+                logger.error(f"项目 {project_id} 数据库删除失败")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"删除项目 {project_id} 时发生错误: {str(e)}")
+            return False
+    
+    def _delete_project_files(self, project_id: str):
+        """
+        删除项目相关的文件
+        
+        Args:
+            project_id: 项目ID
+        """
+        try:
+            # 项目目录路径
+            project_dir = Path(f"data/projects/{project_id}")
+            
+            if project_dir.exists():
+                logger.info(f"删除项目目录: {project_dir}")
+                shutil.rmtree(project_dir)
+            else:
+                logger.info(f"项目目录不存在: {project_dir}")
+            
+            # 删除全局输出目录中的相关文件（如果存在）
+            # 注意：现在主要使用项目内目录，但保留对全局目录的清理以防遗留文件
+            from ..core.path_utils import get_data_directory
+            data_dir = get_data_directory()
+            global_clips_dir = data_dir / "output" / "clips"
+            global_collections_dir = data_dir / "output" / "collections"
+            
+            # 删除全局输出目录中属于该项目的切片文件
+            if global_clips_dir.exists():
+                for clip_file in global_clips_dir.glob(f"*_{project_id}*"):
+                    try:
+                        clip_file.unlink()
+                        logger.info(f"删除全局切片文件: {clip_file}")
+                    except Exception as e:
+                        logger.warning(f"删除全局切片文件失败 {clip_file}: {e}")
+            
+            # 删除全局输出目录中属于该项目的合集文件
+            if global_collections_dir.exists():
+                for collection_file in global_collections_dir.glob(f"*_{project_id}*"):
+                    try:
+                        collection_file.unlink()
+                        logger.info(f"删除全局合集文件: {collection_file}")
+                    except Exception as e:
+                        logger.warning(f"删除全局合集文件失败 {collection_file}: {e}")
+            
+        except Exception as e:
+            logger.error(f"删除项目文件时发生错误: {str(e)}")
+            # 不抛出异常，让数据库删除继续进行
     
  

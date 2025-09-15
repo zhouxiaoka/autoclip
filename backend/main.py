@@ -52,6 +52,22 @@ async def startup_event():
         logger.info("API密钥已加载到环境变量")
     else:
         logger.warning("未找到API密钥配置")
+    
+    # 启动WebSocket网关服务 - 已禁用，使用新的简化进度系统
+    # from .services.websocket_gateway_service import websocket_gateway_service
+    # await websocket_gateway_service.start()
+    # logger.info("WebSocket网关服务已启动")
+    logger.info("WebSocket网关服务已禁用，使用新的简化进度系统")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭事件"""
+    logger.info("正在关闭AutoClip API服务...")
+    # WebSocket网关服务已禁用
+    # from .services.websocket_gateway_service import websocket_gateway_service
+    # await websocket_gateway_service.stop()
+    # logger.info("WebSocket网关服务已停止")
+    logger.info("WebSocket网关服务已禁用")
 
 # Add CORS middleware
 app.add_middleware(
@@ -134,4 +150,20 @@ async def global_exception_handler(request, exc):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import sys
+    
+    # 默认端口
+    port = 8000
+    
+    # 检查命令行参数
+    if len(sys.argv) > 1:
+        for i, arg in enumerate(sys.argv):
+            if arg == "--port" and i + 1 < len(sys.argv):
+                try:
+                    port = int(sys.argv[i + 1])
+                except ValueError:
+                    logger.error(f"无效的端口号: {sys.argv[i + 1]}")
+                    port = 8000
+    
+    logger.info(f"启动服务器，端口: {port}")
+    uvicorn.run(app, host="0.0.0.0", port=port)

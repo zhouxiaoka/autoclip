@@ -17,7 +17,7 @@ pytest
 pytest-cov
 pytest-mock
 cryptography
-bilitool>=0.1.3
+# bilitool>=0.1.3  # 已移除，改用直接API调用
 qrcode[pil]
 yt-dlp>=2024.12.13
 # bcut-asr 将通过自动安装脚本安装

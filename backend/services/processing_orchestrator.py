@@ -228,8 +228,11 @@ class ProcessingOrchestrator:
         self._update_step_status(step, "running")
         
         try:
+            # 获取步骤编号
+            step_number = self._get_step_number(step)
+            
             # 更新任务状态为运行中
-            self._update_task_status(TaskStatus.RUNNING, progress=self._get_step_progress(step))
+            self._update_task_status(TaskStatus.RUNNING, progress=self._get_step_progress(step), current_step=step_number)
             
             # 获取步骤函数和适配器
             step_func = self.step_functions[step]
@@ -272,7 +275,7 @@ class ProcessingOrchestrator:
             self._update_step_status(step, "completed", execution_time=execution_time)
             
             # 更新任务进度
-            self._update_task_status(TaskStatus.RUNNING, progress=self._get_step_progress(step))
+            self._update_task_status(TaskStatus.RUNNING, progress=self._get_step_progress(step), current_step=step_number)
             
             return {
                 "step": step_name,
@@ -334,6 +337,7 @@ class ProcessingOrchestrator:
         
         try:
             for i, step in enumerate(steps_to_execute):
+                step_number = self._get_step_number(step)
                 logger.info(f"执行步骤 {i+1}/{total_steps}: {step.value}")
                 
                 if step == ProcessingStep.STEP1_OUTLINE:
@@ -345,7 +349,7 @@ class ProcessingOrchestrator:
                 
                 # 更新总体进度
                 progress = ((i + 1) / total_steps) * 100
-                self._update_task_status(TaskStatus.RUNNING, progress=progress)
+                self._update_task_status(TaskStatus.RUNNING, progress=progress, current_step=step_number)
             
             # 流水线执行完成，保存数据到数据库
             self._save_pipeline_results_to_database(results)
@@ -380,7 +384,8 @@ class ProcessingOrchestrator:
         logger.debug(f"步骤 {step_name} 状态更新: {status}")
     
     def _update_task_status(self, status: TaskStatus, progress: Optional[float] = None, 
-                           error_message: Optional[str] = None, result: Optional[Dict] = None):
+                           error_message: Optional[str] = None, result: Optional[Dict] = None,
+                           current_step: Optional[int] = None):
         """更新任务状态"""
         # 使用TaskRepository的专用方法
         if progress is not None:
@@ -394,7 +399,190 @@ class ProcessingOrchestrator:
         
         # 更新状态
         self.task_repo.update_task_status(self.task_id, status)
-        logger.info(f"任务 {self.task_id} 状态更新为: {status.value}")
+        
+        # 更新项目状态
+        if current_step is not None:
+            self._update_project_status(current_step, progress)
+        
+        logger.info(f"任务 {self.task_id} 状态更新为: {status.value}, 进度: {progress}%, 步骤: {current_step}")
+        
+        # 发送WebSocket实时进度更新
+        self._send_realtime_progress_update(status, progress, error_message, current_step)
+    
+    def _update_project_status(self, current_step: int, progress: Optional[float] = None):
+        """更新项目状态"""
+        try:
+            from ..services.project_service import ProjectService
+            from ..core.database import SessionLocal
+            
+            db = SessionLocal()
+            try:
+                project_service = ProjectService(db)
+                project = project_service.get(self.project_id)
+                if project:
+                    # 更新项目状态
+                    update_data = {
+                        "current_step": current_step,
+                        "total_steps": 6,
+                        "status": "processing" if current_step < 6 else "completed"
+                    }
+                    if progress is not None:
+                        update_data["progress"] = progress
+                    
+                    project_service.update(self.project_id, **update_data)
+                    db.commit()
+                    logger.info(f"项目 {self.project_id} 状态已更新: 步骤 {current_step}/6, 进度 {progress}%")
+                else:
+                    logger.warning(f"项目 {self.project_id} 不存在")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"更新项目状态失败: {e}")
+    
+    def _send_realtime_progress_update(self, status: TaskStatus, progress: Optional[float] = None, 
+                                     error_message: Optional[str] = None, current_step: Optional[int] = None):
+        """发送实时进度更新到前端 - 集成快照发布"""
+        try:
+            import asyncio
+            import json
+            from ..services.websocket_notification_service import WebSocketNotificationService
+            from ..services.progress_snapshot_service import snapshot_service
+            
+            # 获取当前步骤信息
+            if current_step is None:
+                current_step = 0
+                step_name = "初始化中..."
+                
+                # 根据进度推断当前步骤
+                if progress is not None:
+                    if progress <= 10:
+                        current_step = 1
+                        step_name = "大纲提取"
+                    elif progress <= 30:
+                        current_step = 2
+                        step_name = "时间定位"
+                    elif progress <= 50:
+                        current_step = 3
+                        step_name = "内容评分"
+                    elif progress <= 70:
+                        current_step = 4
+                        step_name = "标题生成"
+                    elif progress <= 85:
+                        current_step = 5
+                        step_name = "主题聚类"
+                    elif progress <= 95:
+                        current_step = 6
+                        step_name = "视频切割"
+                    else:
+                        current_step = 6
+                        step_name = "处理完成"
+            else:
+                # 根据步骤编号获取步骤名称
+                step_name_map = {
+                    1: "大纲提取",
+                    2: "时间定位", 
+                    3: "内容评分",
+                    4: "标题生成",
+                    5: "主题聚类",
+                    6: "视频切割"
+                }
+                step_name = step_name_map.get(current_step, "处理中...")
+            
+            # 构建进度消息
+            progress_message = f"正在执行{step_name}..."
+            if error_message:
+                progress_message = f"处理失败: {error_message}"
+            elif status == TaskStatus.COMPLETED:
+                progress_message = "处理完成"
+            
+            # 构建富消息载荷
+            payload = {
+                "type": "task_progress_update",
+                "task_id": self.task_id,
+                "project_id": self.project_id,
+                "status": status.value,
+                "progress": progress or 0,
+                "current_step": current_step,
+                "total_steps": 6,
+                "step_name": step_name,
+                "phase": step_name,
+                "message": progress_message,
+                "timestamp": time.time()
+            }
+            
+            # 使用同步方式发送WebSocket通知和快照
+            def send_notification():
+                try:
+                    # 尝试获取现有的事件循环
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # 如果事件循环正在运行，使用线程池
+                        import concurrent.futures
+                        with concurrent.futures.ThreadPoolExecutor() as executor:
+                            future = executor.submit(
+                                asyncio.run,
+                                self._async_send_progress_update(payload)
+                            )
+                            future.result(timeout=5)  # 5秒超时
+                    else:
+                        # 如果事件循环没有运行，直接运行
+                        loop.run_until_complete(
+                            self._async_send_progress_update(payload)
+                        )
+                except Exception as e:
+                    logger.error(f"发送WebSocket通知失败: {e}")
+            
+            # 在后台线程中发送通知
+            import threading
+            thread = threading.Thread(target=send_notification)
+            thread.daemon = True
+            thread.start()
+            
+            logger.debug(f"已发送实时进度更新: {self.project_id} - {progress}% - {step_name}")
+            
+        except Exception as e:
+            logger.error(f"发送实时进度更新失败: {e}")
+    
+    async def _async_send_progress_update(self, payload: dict):
+        """异步发送进度更新和快照"""
+        try:
+            import redis.asyncio as redis
+            import json
+            from ..core.config import get_redis_url
+            from .progress_snapshot_service import snapshot_service
+            
+            # 连接Redis
+            redis_client = redis.from_url(get_redis_url(), decode_responses=True)
+            
+            # 频道名 - 使用规范化函数
+            from .websocket_gateway_service import WebSocketGatewayService
+            channel = WebSocketGatewayService.normalize_channel(self.project_id)
+            
+            # 1) 保存快照
+            await snapshot_service.save_snapshot(channel, payload)
+            
+            # 2) 发布消息到Redis
+            await redis_client.publish(channel, json.dumps(payload, ensure_ascii=False))
+            
+            # 3) 关闭Redis连接
+            await redis_client.aclose()
+            
+            logger.debug(f"进度更新已发布: {channel} - {payload}")
+            
+        except Exception as e:
+            logger.error(f"异步发送进度更新失败: {e}")
+    
+    def _get_step_number(self, step: ProcessingStep) -> int:
+        """获取步骤编号"""
+        step_number_map = {
+            ProcessingStep.STEP1_OUTLINE: 1,
+            ProcessingStep.STEP2_TIMELINE: 2,
+            ProcessingStep.STEP3_SCORING: 3,
+            ProcessingStep.STEP4_TITLE: 4,
+            ProcessingStep.STEP5_CLUSTERING: 5,
+            ProcessingStep.STEP6_VIDEO: 6
+        }
+        return step_number_map.get(step, 0)
     
     def _get_step_progress(self, step: ProcessingStep) -> float:
         """获取步骤对应的进度百分比"""
@@ -422,17 +610,17 @@ class ProcessingOrchestrator:
             # 获取项目目录
             project_dir = self.adapter.data_dir / "projects" / self.project_id
             
-            # 保存切片数据到数据库
-            step4_result = results.get('step4_title', {}).get('result', [])
-            if step4_result:
-                logger.info(f"保存 {len(step4_result)} 个切片到数据库")
-                self.adapter._save_clips_to_database(self.project_id, project_dir / "step4_title" / "step4_title.json")
+            # 使用DataSyncService同步数据到数据库
+            from ..services.data_sync_service import DataSyncService
+            sync_service = DataSyncService(self.db)
             
-            # 保存合集数据到数据库
-            step5_result = results.get('step5_clustering', {}).get('result', [])
-            if step5_result:
-                logger.info(f"保存 {len(step5_result)} 个合集到数据库")
-                self.adapter._save_collections_to_database(self.project_id, project_dir / "step5_clustering" / "step5_clustering.json")
+            # 同步项目数据
+            sync_result = sync_service.sync_project_from_filesystem(self.project_id, project_dir)
+            
+            if sync_result.get("success"):
+                logger.info(f"项目 {self.project_id} 数据同步成功: {sync_result}")
+            else:
+                logger.error(f"项目 {self.project_id} 数据同步失败: {sync_result}")
             
             logger.info(f"项目 {self.project_id} 流水线结果已全部保存到数据库")
             

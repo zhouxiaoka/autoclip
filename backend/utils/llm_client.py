@@ -1,13 +1,11 @@
 """
-大模型客户端 - 封装通义千问API调用
+大模型客户端 - 兼容性包装器，使用新的LLM管理器
 """
 import json
 import logging
 import os
 import re
 from typing import Dict, Any, List
-from dashscope import Generation
-from dashscope.api_entities.dashscope_response import GenerationResponse
 from collections.abc import Generator
 
 # 修复导入问题
@@ -22,17 +20,30 @@ except ImportError:
         sys.path.insert(0, str(backend_path))
     from core.shared_config import MODEL_NAME
 
+# 导入新的LLM管理器
+try:
+    from ..core.llm_manager import get_llm_manager
+except ImportError:
+    # 如果相对导入失败，尝试绝对导入
+    import sys
+    from pathlib import Path
+    backend_path = Path(__file__).parent.parent
+    if str(backend_path) not in sys.path:
+        sys.path.insert(0, str(backend_path))
+    from core.llm_manager import get_llm_manager
+
 logger = logging.getLogger(__name__)
 
 class LLMClient:
-    """通义千问API客户端"""
+    """LLM客户端 - 兼容性包装器"""
     
     def __init__(self):
         self.model = MODEL_NAME
+        self.llm_manager = get_llm_manager()
     
     def call(self, prompt: str, input_data: Any = None) -> str:
         """
-        调用大模型API
+        调用大模型API - 使用新的LLM管理器
         
         Args:
             prompt: 提示词
@@ -41,86 +52,10 @@ class LLMClient:
         Returns:
             模型响应文本
         """
-        # 首先尝试从环境变量获取API Key
-        api_key = os.getenv("DASHSCOPE_API_KEY")
-        
-        # 如果环境变量中没有，尝试从设置文件读取
-        if not api_key:
-            try:
-                from pathlib import Path
-                # 尝试从项目根目录的data/settings.json读取
-                # 修复路径计算：从backend/utils/llm_client.py到项目根目录
-                current_file = Path(__file__)
-                project_root = current_file.parent.parent.parent  # backend/utils -> backend -> project_root
-                settings_file = project_root / "data" / "settings.json"
-                
-                if settings_file.exists():
-                    with open(settings_file, 'r', encoding='utf-8') as f:
-                        settings = json.load(f)
-                        api_key = settings.get("dashscope_api_key", "")
-                        if api_key:
-                            logger.info(f"从设置文件读取到API密钥: {api_key[:10]}...")
-                else:
-                    logger.warning(f"设置文件不存在: {settings_file}")
-            except Exception as e:
-                logger.warning(f"无法从设置文件读取API Key: {e}")
-        
-        if not api_key:
-            raise ValueError("请在Web界面的设置页面输入API密钥，然后重试。")
-
         try:
-            # 构建完整的输入
-            if input_data:
-                if isinstance(input_data, dict):
-                    full_input = f"{prompt}\n\n输入内容：\n{json.dumps(input_data, ensure_ascii=False, indent=2)}"
-                else:
-                    full_input = f"{prompt}\n\n输入内容：\n{input_data}"
-            else:
-                full_input = prompt
-            
-            # 调用API
-            response_or_gen = Generation.call(
-                model=self.model,
-                prompt=full_input,
-                api_key=api_key,
-                stream=False, # 确保使用非流式调用
-            )
-            
-            response: GenerationResponse
-            if isinstance(response_or_gen, Generator):
-                response = next(response_or_gen)
-            else:
-                response = response_or_gen
-
-            # 详细检查API响应
-            if response and response.status_code == 200:
-                if response.output and response.output.text is not None:
-                    return response.output.text
-                else:
-                    # API成功但输出为空，可能是内容安全过滤等原因
-                    finish_reason = response.output.finish_reason if response.output else 'unknown'
-                    error_msg = f"API请求成功，但输出为空。结束原因: {finish_reason}"
-                    logger.warning(error_msg)
-                    return "" # 返回空字符串，让上层处理
-            else:
-                # API调用失败
-                code = response.code if hasattr(response, 'code') else 'N/A'
-                message = response.message if hasattr(response, 'message') else '未知API错误'
-                
-                if "Invalid ApiKey" in str(message):
-                    raise ValueError("API Key无效或不正确，请在设置页面重新输入。")
-
-                error_msg = f"API调用失败 - Status: {response.status_code}, Code: {code}, Message: {message}"
-                logger.error(error_msg)
-                raise Exception(message)
-                
-        except StopIteration:
-            # next(response_gen) 可能会在生成器为空时引发此异常
-            error_msg = "API调用未返回任何响应。"
-            logger.error(error_msg)
-            raise Exception(error_msg)
+            return self.llm_manager.call(prompt, input_data)
         except Exception as e:
-            logger.error(f"LLM调用发生未知异常: {str(e)}")
+            logger.error(f"LLM调用失败: {str(e)}")
             raise
     
     def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3) -> str:
@@ -135,20 +70,11 @@ class LLMClient:
         Returns:
             模型响应文本
         """
-        for attempt in range(max_retries):
-            try:
-                return self.call(prompt, input_data)
-            except ValueError: # 如果是API Key或参数错误，不重试
-                raise
-            except Exception as e:
-                # 对于某些可重试的错误，可以添加特定逻辑，但目前对通用异常进行重试
-                if attempt == max_retries - 1:
-                    logger.error(f"LLM调用在{max_retries}次重试后彻底失败。")
-                    raise
-                logger.warning(f"第{attempt + 1}次调用失败，准备重试: {str(e)}")
-                import time
-                time.sleep(2 ** attempt)  # 指数退避
-        return "" # 确保所有路径都有返回值
+        try:
+            return self.llm_manager.call_with_retry(prompt, input_data, max_retries)
+        except Exception as e:
+            logger.error(f"LLM重试调用失败: {str(e)}")
+            raise
     
     def _preprocess_llm_response(self, response: str) -> str:
         """
@@ -339,3 +265,7 @@ class LLMClient:
             
             # 如果连通用正则都找不到，就彻底失败
             raise ValueError(f"无法从响应中解析出有效的JSON: {response[:200]}...")
+    
+    def get_current_provider_info(self) -> Dict[str, Any]:
+        """获取当前提供商信息"""
+        return self.llm_manager.get_current_provider_info()

@@ -106,7 +106,9 @@ class DataSyncService:
             clips_count = self._sync_clips_from_filesystem(project_id, project_dir)
             
             # 同步合集数据
+            logger.info(f"开始同步项目 {project_id} 的合集数据")
             collections_count = self._sync_collections_from_filesystem(project_id, project_dir)
+            logger.info(f"项目 {project_id} 合集同步完成，同步了 {collections_count} 个合集")
             
             # 检查项目是否已完成处理，更新项目状态
             self._update_project_status_if_completed(project_id, project_dir)
@@ -180,6 +182,7 @@ class DataSyncService:
                 return 0
             
             synced_count = 0
+            updated_count = 0
             for clip_data in clips_data:
                 try:
                     # 检查切片是否已存在
@@ -189,12 +192,85 @@ class DataSyncService:
                     ).first()
                     
                     if existing_clip:
+                        # 更新现有切片的video_path和tags，强制使用项目内输出目录
+                        clip_id = clip_data.get('id', str(synced_count + 1))
+                        safe_title = clip_data.get('generated_title', clip_data.get('title', clip_data.get('outline', '')))
+                        # 清理文件名，移除特殊字符
+                        safe_title = "".join(c for c in safe_title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                        safe_title = safe_title.replace(' ', '_')
+                        
+                        # 强制使用项目内标准路径
+                        from ..core.path_utils import get_project_directory
+                        project_dir = get_project_directory(project_id)
+                        project_clips_dir = project_dir / "output" / "clips"
+                        project_clips_dir.mkdir(parents=True, exist_ok=True)
+                        project_video_path = project_clips_dir / f"{clip_id}_{safe_title}.mp4"
+                        
+                        # 兼容旧的全局输出目录，如果存在则迁移到项目目录
+                        from ..core.path_utils import get_data_directory
+                        legacy_video_path = get_data_directory() / "output" / "clips" / f"{clip_id}_{safe_title}.mp4"
+                        try:
+                            if legacy_video_path.exists() and not project_video_path.exists():
+                                import shutil
+                                shutil.copy2(legacy_video_path, project_video_path)
+                                logger.info(f"迁移旧切片文件到项目目录: {legacy_video_path} -> {project_video_path}")
+                        except Exception as _e:
+                            logger.warning(f"迁移旧切片文件失败: {legacy_video_path} -> {project_video_path}: {_e}")
+                        
+                        # 始终使用项目内路径
+                        video_path = str(project_video_path)
+                        logger.info(f"更新切片 {existing_clip.id} 的video_path: {video_path}")
+                        existing_clip.video_path = video_path
+                        if existing_clip.tags is None:
+                            existing_clip.tags = []  # 确保tags是空列表而不是null
+                        updated_count += 1
                         continue
                     
                     # 转换时间格式
                     start_time = self._convert_time_to_seconds(clip_data.get('start_time', '00:00:00'))
                     end_time = self._convert_time_to_seconds(clip_data.get('end_time', '00:00:00'))
                     duration = end_time - start_time
+                    
+                    # 构建视频文件路径，强制使用项目内目录
+                    clip_id = clip_data.get('id', str(synced_count + 1))
+                    title = clip_data.get('generated_title', clip_data.get('title', clip_data.get('outline', '')))
+                    
+                    # 强制使用项目内路径
+                    from ..core.path_utils import get_project_directory, get_data_directory
+                    project_dir = get_project_directory(project_id)
+                    project_clips_dir = project_dir / "output" / "clips"
+                    project_clips_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # 查找实际的文件名（保留特殊字符）
+                    actual_filename = None
+                    for file_path in project_clips_dir.glob(f"{clip_id}_*.mp4"):
+                        actual_filename = file_path.name
+                        break
+                    
+                    if actual_filename:
+                        project_video_path = project_clips_dir / actual_filename
+                    else:
+                        # 如果找不到实际文件，使用清理后的文件名作为后备
+                        safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                        safe_title = safe_title.replace(' ', '_')
+                        project_video_path = project_clips_dir / f"{clip_id}_{safe_title}.mp4"
+                    
+                    # 兼容旧的全局输出目录，如果存在则迁移到项目目录
+                    global_clips_dir = get_data_directory() / "output" / "clips"
+                    if actual_filename:
+                        global_video_path = global_clips_dir / actual_filename
+                    else:
+                        safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                        safe_title = safe_title.replace(' ', '_')
+                        global_video_path = global_clips_dir / f"{clip_id}_{safe_title}.mp4"
+                    
+                    if global_video_path.exists() and not project_video_path.exists():
+                        import shutil
+                        shutil.copy2(global_video_path, project_video_path)
+                        logger.info(f"将切片文件从全局目录迁移到项目目录: {global_video_path} -> {project_video_path}")
+                    
+                    # 始终使用项目内路径
+                    video_path = str(project_video_path)
                     
                     # 创建切片记录
                     clip = Clip(
@@ -205,6 +281,8 @@ class DataSyncService:
                         end_time=end_time,
                         duration=duration,
                         score=clip_data.get('final_score', 0.0),
+                        video_path=video_path,
+                        tags=[],  # 确保tags是空列表而不是null
                         clip_metadata=clip_data,
                         status=ClipStatus.COMPLETED
                     )
@@ -217,7 +295,7 @@ class DataSyncService:
                     continue
             
             self.db.commit()
-            logger.info(f"项目 {project_id} 同步了 {synced_count} 个切片")
+            logger.info(f"项目 {project_id} 同步了 {synced_count} 个切片，更新了 {updated_count} 个切片")
             return synced_count
             
         except Exception as e:
@@ -231,19 +309,24 @@ class DataSyncService:
             collections_files = [
                 project_dir / "step6_video" / "collections_metadata.json",  # 最完整的数据源
                 project_dir / "step5_clustering" / "step5_clustering.json",
+                project_dir / "metadata" / "step5_collections.json",  # 添加step5_collections.json
                 project_dir / "collections_metadata.json",
                 project_dir / "metadata" / "collections_metadata.json"
             ]
             
             collections_data = None
             for collections_file in collections_files:
+                logger.info(f"检查合集文件: {collections_file}")
                 if collections_file.exists():
                     try:
                         with open(collections_file, 'r', encoding='utf-8') as f:
                             collections_data = json.load(f)
+                        logger.info(f"成功读取合集文件: {collections_file}, 数据长度: {len(collections_data) if isinstance(collections_data, list) else 'not list'}")
                         break
                     except Exception as e:
                         logger.warning(f"读取合集文件失败 {collections_file}: {e}")
+                else:
+                    logger.info(f"合集文件不存在: {collections_file}")
             
             if not collections_data:
                 logger.info(f"项目 {project_id} 没有找到合集数据")
@@ -285,22 +368,136 @@ class DataSyncService:
                     ).first()
                     
                     if existing_collection:
-                        continue
+                        # 合集已存在，检查是否需要建立关联关系
+                        collection = existing_collection
+                        logger.info(f"合集 {collection_title} 已存在，检查关联关系")
+                    else:
+                        # 创建新合集
+                        collection = None
                     
-                    # 创建合集记录
-                    collection = Collection(
-                        project_id=project_id,
-                        name=collection_title,
-                        description=collection_data.get('collection_summary', ''),
-                        collection_metadata={
-                            'clip_ids': collection_data.get('clip_ids', []),
+                    # 构建合集视频文件路径，强制使用项目内目录
+                    # 尝试多种可能的文件名格式
+                    possible_filenames = [
+                        f"{collection_id}_{collection_title}.mp4",
+                        f"{collection_title}.mp4",
+                        f"collection_{collection_id}.mp4"
+                    ]
+                    
+                    from ..core.path_utils import get_project_directory, get_data_directory
+                    project_dir = get_project_directory(project_id)
+                    project_collections_dir = project_dir / "output" / "collections"
+                    project_collections_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    video_path = None
+                    # 首先在项目目录中查找
+                    for filename in possible_filenames:
+                        project_video_path = project_collections_dir / filename
+                        if project_video_path.exists():
+                            video_path = str(project_video_path)
+                            break
+                    
+                    # 如果项目目录中没找到，尝试全局目录并迁移
+                    if not video_path:
+                        for filename in possible_filenames:
+                            legacy_video_path = get_data_directory() / "output" / "collections" / filename
+                            if legacy_video_path.exists():
+                                # 迁移到项目目录
+                                project_video_path = project_collections_dir / filename
+                                import shutil
+                                shutil.copy2(legacy_video_path, project_video_path)
+                                video_path = str(project_video_path)
+                                logger.info(f"将合集文件从全局目录迁移到项目目录: {legacy_video_path} -> {project_video_path}")
+                                break
+                    
+                    # 如果还是没找到，使用项目内路径（文件可能还未生成）
+                    if not video_path:
+                        video_path = str(project_collections_dir / possible_filenames[0])
+                    
+                    # 将数字格式的clip_ids转换为UUID格式
+                    original_clip_ids = collection_data.get('clip_ids', [])
+                    uuid_clip_ids = []
+                    
+                    # 获取项目中所有切片的映射关系（数字ID -> UUID）
+                    clips = self.db.query(Clip).filter(Clip.project_id == project_id).all()
+                    clip_id_mapping = {}
+                    for clip in clips:
+                        # 从clip_metadata中获取原始ID
+                        if clip.clip_metadata and 'id' in clip.clip_metadata:
+                            original_id = str(clip.clip_metadata['id'])
+                            clip_id_mapping[original_id] = clip.id
+                    
+                    # 转换clip_ids
+                    for original_id in original_clip_ids:
+                        if str(original_id) in clip_id_mapping:
+                            uuid_clip_ids.append(clip_id_mapping[str(original_id)])
+                        else:
+                            logger.warning(f"找不到切片ID {original_id} 对应的UUID")
+                    
+                    # 如果合集不存在，创建新合集
+                    if not collection:
+                        collection = Collection(
+                            project_id=project_id,
+                            name=collection_title,
+                            description=collection_data.get('collection_summary', ''),
+                            video_path=video_path,
+                            export_path=video_path,  # 设置export_path
+                            collection_metadata={
+                                'clip_ids': uuid_clip_ids,  # 使用UUID格式的clip_ids
+                                'original_clip_ids': original_clip_ids,  # 保留原始数字ID
+                                'collection_type': 'ai_recommended',
+                                'original_id': collection_id
+                            },
+                            status=CollectionStatus.COMPLETED
+                        )
+                        
+                        self.db.add(collection)
+                        self.db.flush()  # 确保collection有ID
+                        logger.info(f"创建新合集: {collection.id}")
+                    else:
+                        # 更新现有合集的元数据
+                        if not collection.collection_metadata:
+                            collection.collection_metadata = {}
+                        collection.collection_metadata.update({
+                            'clip_ids': uuid_clip_ids,
+                            'original_clip_ids': original_clip_ids,
                             'collection_type': 'ai_recommended',
                             'original_id': collection_id
-                        },
-                        status=CollectionStatus.COMPLETED
-                    )
+                        })
+                        collection.video_path = video_path
+                        collection.export_path = video_path  # 设置export_path
+                        logger.info(f"更新现有合集: {collection.id}")
                     
-                    self.db.add(collection)
+                    # 建立合集和切片的关联关系
+                    for i, clip_id in enumerate(uuid_clip_ids):
+                        try:
+                            # 检查切片是否存在
+                            clip = self.db.query(Clip).filter(Clip.id == clip_id).first()
+                            if clip:
+                                # 检查关联关系是否已存在
+                                from ..models.collection import clip_collection
+                                existing_relation = self.db.execute(
+                                    clip_collection.select().where(
+                                        clip_collection.c.clip_id == clip_id,
+                                        clip_collection.c.collection_id == collection.id
+                                    )
+                                ).first()
+                                
+                                if not existing_relation:
+                                    # 使用关联表插入记录
+                                    stmt = clip_collection.insert().values(
+                                        clip_id=clip_id,
+                                        collection_id=collection.id,
+                                        order_index=i
+                                    )
+                                    self.db.execute(stmt)
+                                    logger.info(f"建立合集 {collection.id} 和切片 {clip_id} 的关联关系")
+                                else:
+                                    logger.info(f"合集 {collection.id} 和切片 {clip_id} 的关联关系已存在")
+                            else:
+                                logger.warning(f"切片 {clip_id} 不存在，跳过关联")
+                        except Exception as e:
+                            logger.error(f"建立合集和切片关联关系失败: {e}")
+                    
                     synced_count += 1
                     
                 except Exception as e:
@@ -508,7 +705,7 @@ class DataSyncService:
         """检查项目是否已完成处理，如果是则更新状态为completed"""
         try:
             # 检查是否有step6_video_output.json文件，这是处理完成的标志
-            step6_output_file = project_dir / "step6_video" / "step6_video_output.json"
+            step6_output_file = project_dir / "output" / "step6_video_output.json"
             
             if step6_output_file.exists():
                 # 获取项目记录

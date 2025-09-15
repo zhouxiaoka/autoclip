@@ -26,8 +26,14 @@ class VideoProcessor:
     """视频处理工具类"""
     
     def __init__(self, clips_dir: Optional[str] = None, collections_dir: Optional[str] = None):
-        self.clips_dir = Path(clips_dir) if clips_dir else CLIPS_DIR
-        self.collections_dir = Path(collections_dir) if collections_dir else COLLECTIONS_DIR
+        # 强制使用传入的项目特定路径，不使用全局路径作为后备
+        if not clips_dir:
+            raise ValueError("clips_dir 参数是必需的，不能使用全局路径")
+        if not collections_dir:
+            raise ValueError("collections_dir 参数是必需的，不能使用全局路径")
+        
+        self.clips_dir = Path(clips_dir)
+        self.collections_dir = Path(collections_dir)
     
     @staticmethod
     def sanitize_filename(filename: str) -> str:

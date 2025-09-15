@@ -36,7 +36,6 @@ const ClipDetailModal: React.FC<ClipDetailModalProps> = ({
   const [downloading, setDownloading] = useState(false)
   const [showSubtitleEditor, setShowSubtitleEditor] = useState(false)
   const [subtitleData, setSubtitleData] = useState<SubtitleSegment[]>([])
-  const [loadingSubtitles, setLoadingSubtitles] = useState(false)
   const playerRef = useRef<ReactPlayer>(null)
 
   const formatTime = (timeStr: string) => {
@@ -77,23 +76,8 @@ const ClipDetailModal: React.FC<ClipDetailModalProps> = ({
   }
 
   const handleOpenSubtitleEditor = async () => {
-    if (!clip) return
-    
-    console.log('Opening subtitle editor for clip:', clip.id)
-    setLoadingSubtitles(true)
-    try {
-      // 获取字幕数据
-      const response = await subtitleEditorApi.getClipSubtitles(projectId, clip.id)
-      console.log('Subtitle data received:', response)
-      setSubtitleData(response.segments)
-      setShowSubtitleEditor(true)
-      console.log('Subtitle editor should be visible now')
-    } catch (error) {
-      console.error('获取字幕数据失败:', error)
-      message.error('获取字幕数据失败')
-    } finally {
-      setLoadingSubtitles(false)
-    }
+    // 显示开发中提示
+    message.info('开发中，敬请期待')
   }
 
   const handleSubtitleEditorClose = () => {
@@ -239,9 +223,7 @@ const ClipDetailModal: React.FC<ClipDetailModalProps> = ({
                 <Button 
                   type="default" 
                   icon={<EditOutlined />}
-                  loading={loadingSubtitles}
                   onClick={handleOpenSubtitleEditor}
-                  style={{ border: '2px solid red' }} // 添加红色边框以便识别
                 >
                   字幕编辑
                 </Button>

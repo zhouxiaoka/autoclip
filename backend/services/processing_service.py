@@ -59,14 +59,27 @@ class ProcessingService:
         
         context.mark_completed()
         
-        # 更新项目状态为已完成
+        # 更新项目状态为已完成并同步数据
         try:
             from ..models.project import Project, ProjectStatus
+            from ..services.data_sync_service import DataSyncService
+            from pathlib import Path
+            
             project = self.db.query(Project).filter(Project.id == project_id).first()
             if project:
                 project.status = ProjectStatus.COMPLETED
                 self.db.commit()
                 logger.info(f"项目状态已更新为已完成: {project_id}")
+                
+                # 同步数据到数据库
+                project_dir = Path(__file__).parent.parent / "data" / "projects" / project_id
+                if project_dir.exists():
+                    sync_service = DataSyncService(self.db)
+                    sync_result = sync_service.sync_project_from_filesystem(project_id, project_dir)
+                    if sync_result.get("success"):
+                        logger.info(f"项目 {project_id} 数据同步成功: {sync_result}")
+                    else:
+                        logger.error(f"项目 {project_id} 数据同步失败: {sync_result}")
         except Exception as e:
             logger.warning(f"更新项目状态失败: {e}")
         
@@ -116,6 +129,23 @@ class ProcessingService:
         result = orchestrator.execute_step(step, **kwargs)
         
         context.mark_completed()
+        
+        # 如果是最后一步（step6_video），自动同步数据到数据库
+        if step == ProcessingStep.STEP6_VIDEO:
+            try:
+                from ..services.data_sync_service import DataSyncService
+                from pathlib import Path
+                
+                project_dir = Path(__file__).parent.parent / "data" / "projects" / project_id
+                if project_dir.exists():
+                    sync_service = DataSyncService(self.db)
+                    sync_result = sync_service.sync_project_from_filesystem(project_id, project_dir)
+                    if sync_result.get("success"):
+                        logger.info(f"项目 {project_id} 数据同步成功: {sync_result}")
+                    else:
+                        logger.error(f"项目 {project_id} 数据同步失败: {sync_result}")
+            except Exception as e:
+                logger.warning(f"数据同步失败: {e}")
         
         return {
             "success": True,
@@ -231,14 +261,27 @@ class ProcessingService:
         
         context.mark_completed()
         
-        # 更新项目状态为已完成
+        # 更新项目状态为已完成并同步数据
         try:
             from ..models.project import Project, ProjectStatus
+            from ..services.data_sync_service import DataSyncService
+            from pathlib import Path
+            
             project = self.db.query(Project).filter(Project.id == project_id).first()
             if project:
                 project.status = ProjectStatus.COMPLETED
                 self.db.commit()
                 logger.info(f"项目状态已更新为已完成: {project_id}")
+                
+                # 同步数据到数据库
+                project_dir = Path(__file__).parent.parent / "data" / "projects" / project_id
+                if project_dir.exists():
+                    sync_service = DataSyncService(self.db)
+                    sync_result = sync_service.sync_project_from_filesystem(project_id, project_dir)
+                    if sync_result.get("success"):
+                        logger.info(f"项目 {project_id} 数据同步成功: {sync_result}")
+                    else:
+                        logger.error(f"项目 {project_id} 数据同步失败: {sync_result}")
         except Exception as e:
             logger.warning(f"更新项目状态失败: {e}")
         

@@ -15,6 +15,7 @@ import BilibiliDownload from '../components/BilibiliDownload'
 import { projectApi } from '../services/api'
 import { Project, useProjectStore } from '../store/useProjectStore'
 import { useProjectPolling } from '../hooks/useProjectPolling'
+// import { useWebSocket, WebSocketEventMessage } from '../hooks/useWebSocket'  // 已禁用WebSocket系统
 
 const { Content } = Layout
 const { Title, Text } = Typography
@@ -25,6 +26,33 @@ const HomePage: React.FC = () => {
   const { projects, setProjects, deleteProject, loading, setLoading } = useProjectStore()
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [activeTab, setActiveTab] = useState<'upload' | 'bilibili'>('upload')
+
+  // WebSocket连接已禁用，使用新的简化进度系统
+  // const handleWebSocketMessage = (message: WebSocketEventMessage) => {
+  //   console.log('HomePage收到WebSocket消息:', message)
+  //   
+  //   switch (message.type) {
+  //     case 'task_progress_update':
+  //       console.log('📊 收到任务进度更新:', message)
+  //       // 刷新项目列表以获取最新状态
+  //       loadProjects()
+  //       break
+  //       
+  //     case 'project_update':
+  //       console.log('📊 收到项目更新:', message)
+  //       // 刷新项目列表以获取最新状态
+  //       loadProjects()
+  //       break
+  //       
+  //     default:
+  //       console.log('忽略未知类型的WebSocket消息:', (message as any).type)
+  //   }
+  // }
+
+  // const { isConnected, syncSubscriptions } = useWebSocket({
+  //   userId: 'homepage-user',
+  //   onMessage: handleWebSocketMessage
+  // })
 
   // 使用项目轮询Hook
   const { refreshNow } = useProjectPolling({
@@ -55,6 +83,20 @@ const HomePage: React.FC = () => {
     }
   }
 
+  // 使用集合差异对齐订阅项目WebSocket主题
+  // WebSocket订阅已禁用，使用新的简化进度系统
+  // useEffect(() => {
+  //   if (isConnected && projects.length > 0) {
+  //     const desiredChannels = projects.map(project => `project_${project.id}`)
+  //     console.log('同步订阅项目频道:', desiredChannels)
+  //     syncSubscriptions(desiredChannels)
+  //   } else if (isConnected && projects.length === 0) {
+  //     // 如果没有项目，清空所有订阅
+  //     console.log('清空所有项目订阅')
+  //     syncSubscriptions([])
+  //   }
+  // }, [isConnected, projects, syncSubscriptions])
+
   const handleDeleteProject = async (id: string) => {
     try {
       await projectApi.deleteProject(id)
@@ -68,11 +110,20 @@ const HomePage: React.FC = () => {
 
   const handleRetryProject = async (projectId: string) => {
     try {
+      // 查找项目状态
+      const project = projects.find(p => p.id === projectId)
+      if (!project) {
+        message.error('项目不存在')
+        return
+      }
+      
+      // 统一使用retryProcessing API，它会自动处理视频文件不存在的情况
       await projectApi.retryProcessing(projectId)
       message.success('已开始重试处理项目')
+      
       await loadProjects()
     } catch (error) {
-      message.error('重试失败')
+      message.error('重试失败，请稍后再试')
       console.error('Retry project error:', error)
     }
   }
@@ -110,7 +161,13 @@ const HomePage: React.FC = () => {
   }
 
   const handleProjectCardClick = (project: Project) => {
-    // 直接导航到项目详情页，无论什么状态
+    // 导入中状态的项目不能点击进入详情页
+    if (project.status === 'pending') {
+      message.warning('项目正在导入中，请稍后再查看详情')
+      return
+    }
+    
+    // 其他状态可以正常进入详情页
     navigate(`/project/${project.id}`)
   }
 
@@ -198,7 +255,7 @@ const HomePage: React.FC = () => {
                   <BilibiliDownload onDownloadSuccess={async (projectId: string) => {
                     // 处理完成后刷新项目列表
                     await loadProjects()
-                    message.success('项目创建成功，正在处理中...')
+                    // 不再显示重复的toast提示，BilibiliDownload组件已经显示了统一的提示
                   }} />
                 )}
                 {activeTab === 'upload' && (

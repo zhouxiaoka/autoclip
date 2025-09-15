@@ -1,0 +1,77 @@
+[
+  {
+    "id": "1",
+    "collection_title": "情感共鸣精选",
+    "collection_summary": "聚焦成长、孤独与情感的深度表达，引发强烈共鸣。",
+    "clip_ids": [
+      "4",
+      "5",
+      "9",
+      "10",
+      "18"
+    ]
+  },
+  {
+    "id": "2",
+    "collection_title": "成长与自我探索",
+    "collection_summary": "探讨成长中的挣扎、梦想与自我坚持，情感真挚动人。",
+    "clip_ids": [
+      "16",
+      "17",
+      "28",
+      "30"
+    ]
+  },
+  {
+    "id": "3",
+    "collection_title": "音乐与情绪表达",
+    "collection_summary": "展现音乐如何表达情绪与思想，极具感染力与传播力。",
+    "clip_ids": [
+      "7",
+      "25",
+      "24",
+      "21"
+    ]
+  },
+  {
+    "id": "4",
+    "collection_title": "现场互动与氛围营造",
+    "collection_summary": "展现主播如何通过互动与节奏调动现场气氛，增强沉浸体验。",
+    "clip_ids": [
+      "6",
+      "12",
+      "14",
+      "27"
+    ]
+  },
+  {
+    "id": "5",
+    "collection_title": "原创与新歌首秀",
+    "collection_summary": "聚焦新歌创作幕后与首演现场，展现音乐人创作过程与情感表达。",
+    "clip_ids": [
+      "8",
+      "19",
+      "31"
+    ]
+  },
+  {
+    "id": "6",
+    "collection_title": "舞台收尾与告别",
+    "collection_summary": "展现精彩收尾设计与告别互动，为演出画上温暖句点。",
+    "clip_ids": [
+      "13",
+      "20",
+      "26"
+    ]
+  },
+  {
+    "id": "7",
+    "collection_title": "说唱与生活故事",
+    "collection_summary": "讲述音乐背后的真实故事，展现说唱与生活的深度连接。",
+    "clip_ids": [
+      "2",
+      "3",
+      "15"
+    ]
+  }
+]

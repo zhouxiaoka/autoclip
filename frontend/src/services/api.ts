@@ -128,8 +128,22 @@ export const settingsApi = {
   },
 
   // 测试API密钥
-  testApiKey: (apiKey: string): Promise<{ success: boolean; error?: string }> => {
-    return api.post('/settings/test-api-key', { api_key: apiKey })
+  testApiKey: (provider: string, apiKey: string, modelName: string): Promise<{ success: boolean; error?: string }> => {
+    return api.post('/settings/test-api-key', { 
+      provider, 
+      api_key: apiKey, 
+      model_name: modelName 
+    })
+  },
+
+  // 获取所有可用模型
+  getAvailableModels: (): Promise<any> => {
+    return api.get('/settings/available-models')
+  },
+
+  // 获取当前提供商信息
+  getCurrentProvider: (): Promise<any> => {
+    return api.get('/settings/current-provider')
   }
 }
 

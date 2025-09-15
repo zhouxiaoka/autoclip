@@ -363,6 +363,12 @@ start_backend() {
         --host 0.0.0.0 \
         --port "$BACKEND_PORT" \
         --reload \
+        --reload-dir backend \
+        --reload-include '*.py' \
+        --reload-exclude 'data/*' \
+        --reload-exclude 'logs/*' \
+        --reload-exclude 'uploads/*' \
+        --reload-exclude '*.log' \
         > "$BACKEND_LOG" 2>&1 &
     
     local backend_pid=$!
@@ -551,14 +557,11 @@ main() {
     if health_check; then
         show_system_info
         
-        # 保持脚本运行
+        # 保持脚本运行（不进行循环检查）
         log_info "系统运行中... 按 Ctrl+C 停止"
+        log_info "如需检查系统状态，请运行: ./status_autoclip.sh"
         while true; do
-            sleep 10
-            # 定期健康检查
-            if ! health_check >/dev/null 2>&1; then
-                log_warning "检测到服务异常，请检查日志"
-            fi
+            sleep 3600  # 每小时检查一次，减少频率
         done
     else
         log_error "系统启动失败，请检查日志"

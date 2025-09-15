@@ -78,6 +78,7 @@ class ClipService(BaseService[Clip, ClipCreate, ClipUpdate, ClipResponse]):
                 duration=int(getattr(clip, 'duration', 0)),
                 score=getattr(clip, 'score', None),
                 status=status_value,
+                video_path=getattr(clip, 'video_path', None),
                 tags=getattr(clip, 'tags', []) or [],
                 clip_metadata=getattr(clip, 'clip_metadata', {}) or {},
                 created_at=getattr(clip, 'created_at', None) if isinstance(getattr(clip, 'created_at', None), (type(None), __import__('datetime').datetime)) else None,
