@@ -796,7 +796,6 @@ A:
 ### 视频处理
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube视频下载工具
 - [FFmpeg](https://ffmpeg.org/) - 音视频处理框架
-- [bcut-asr](https://github.com/liou666/bcut-asr) - 语音识别服务 (项目已归档)
 
 ### AI服务
 - [通义千问](https://tongyi.aliyun.com/) - 阿里云大语言模型服务
