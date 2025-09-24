@@ -32,19 +32,23 @@ RUN . venv/bin/activate && pip install -r requirements.txt
 COPY frontend/package*.json ./frontend/
 
 # 安装前端依赖
-RUN cd frontend && npm install
+RUN cd frontend && npm install && npm run build
 
 # 复制项目文件
 COPY . .
+
+# 复制开发环境启动脚本
+COPY docker-dev-entrypoint.sh ./
 
 # 创建必要的目录
 RUN mkdir -p data/projects data/uploads data/temp data/output logs
 
 # 设置权限
 RUN chmod +x *.sh
+RUN chmod +x docker-dev-entrypoint.sh
 
 # 暴露端口
 EXPOSE 8000 3000
 
 # 启动命令
-CMD ["sh", "-c", "source venv/bin/activate && ./start_autoclip.sh"]
+CMD ["./docker-dev-entrypoint.sh"]
