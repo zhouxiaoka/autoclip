@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Redis服务
   redis:
