@@ -80,7 +80,6 @@ COPY backend/ ./backend/
 COPY scripts/ ./scripts/
 COPY *.sh ./
 COPY env.example .env
-COPY docker-entrypoint.sh ./
 
 # 创建必要的目录
 RUN mkdir -p data/projects data/uploads data/temp data/output logs
