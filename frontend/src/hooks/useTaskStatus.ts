@@ -155,6 +155,7 @@ export const useTaskStatus = () => {
     activeProjects: getActiveProjects(),
     loading,
     getTask,
+    getAllTasks,
     getProject,
     updateTask,
     updateProject,
