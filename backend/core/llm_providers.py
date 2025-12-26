@@ -175,13 +175,18 @@ class DashScopeProvider(LLMProvider):
         ]
 
 class OpenAIProvider(LLMProvider):
-    """OpenAI提供商"""
-    
-    def __init__(self, api_key: str, model_name: str = "gpt-3.5-turbo", **kwargs):
+    """OpenAI提供商 - 支持自定义base_url以使用本地模型"""
+
+    def __init__(self, api_key: str, model_name: str = "gpt-3.5-turbo", base_url: str = None, **kwargs):
         super().__init__(api_key, model_name, **kwargs)
+        self.base_url = base_url
         try:
             import openai
-            self.client = openai.OpenAI(api_key=api_key)
+            # 支持自定义base_url，用于本地模型（如Ollama、vLLM等）
+            if base_url:
+                self.client = openai.OpenAI(api_key=api_key, base_url=base_url)
+            else:
+                self.client = openai.OpenAI(api_key=api_key)
         except ImportError:
             raise ImportError("请安装openai: pip install openai")
     

@@ -25,15 +25,19 @@ const SettingsPage: React.FC = () => {
       color: '#1890ff',
       description: '阿里云通义千问大模型服务',
       apiKeyField: 'dashscope_api_key',
-      placeholder: '请输入通义千问API密钥'
+      placeholder: '请输入通义千问API密钥',
+      supportsCustomUrl: false
     },
     openai: {
       name: 'OpenAI',
       icon: <RobotOutlined />,
       color: '#52c41a',
-      description: 'OpenAI GPT系列模型',
+      description: 'OpenAI GPT系列模型（支持本地模型）',
       apiKeyField: 'openai_api_key',
-      placeholder: '请输入OpenAI API密钥'
+      placeholder: '请输入OpenAI API密钥',
+      supportsCustomUrl: true,
+      baseUrlField: 'openai_base_url',
+      baseUrlPlaceholder: '可选，如 http://localhost:11434/v1'
     },
     gemini: {
       name: 'Google Gemini',
@@ -41,7 +45,8 @@ const SettingsPage: React.FC = () => {
       color: '#faad14',
       description: 'Google Gemini大模型',
       apiKeyField: 'gemini_api_key',
-      placeholder: '请输入Gemini API密钥'
+      placeholder: '请输入Gemini API密钥',
+      supportsCustomUrl: false
     },
     siliconflow: {
       name: '硅基流动',
@@ -49,7 +54,8 @@ const SettingsPage: React.FC = () => {
       color: '#722ed1',
       description: '硅基流动模型服务',
       apiKeyField: 'siliconflow_api_key',
-      placeholder: '请输入硅基流动API密钥'
+      placeholder: '请输入硅基流动API密钥',
+      supportsCustomUrl: false
     }
   }
 
@@ -95,24 +101,28 @@ const SettingsPage: React.FC = () => {
   const handleTestApiKey = async () => {
     const apiKey = form.getFieldValue(providerConfig[selectedProvider as keyof typeof providerConfig].apiKeyField)
     const modelName = form.getFieldValue('model_name')
-    
-    if (!apiKey) {
+    const baseUrl = form.getFieldValue('openai_base_url')
+
+    // OpenAI + 本地模型时，API Key 可以为空
+    if (!apiKey && !(selectedProvider === 'openai' && baseUrl)) {
       message.error('请先输入API密钥')
       return
     }
 
     if (!modelName) {
-      message.error('请先选择模型')
+      message.error('请先输入模型名称')
       return
     }
 
     try {
       setLoading(true)
-      const result = await settingsApi.testApiKey(selectedProvider, apiKey, modelName)
+      // 本地模型使用默认 key
+      const testKey = apiKey || 'local-model'
+      const result = await settingsApi.testApiKey(selectedProvider, testKey, modelName, baseUrl)
       if (result.success) {
-        message.success('API密钥测试成功！')
+        message.success('连接测试成功！')
       } else {
-        message.error('API密钥测试失败: ' + (result.error || '未知错误'))
+        message.error('连接测试失败: ' + (result.error || '未知错误'))
       }
     } catch (error: any) {
       message.error('测试失败: ' + (error.message || '未知错误'))
@@ -198,17 +208,43 @@ const SettingsPage: React.FC = () => {
                   label={`${providerConfig[selectedProvider as keyof typeof providerConfig].name} API Key`}
                   name={providerConfig[selectedProvider as keyof typeof providerConfig].apiKeyField}
                   className="form-item"
-                  rules={[
-                    { required: true, message: '请输入API密钥' },
-                    { min: 10, message: 'API密钥长度不能少于10位' }
-                  ]}
+                  rules={
+                    selectedProvider === 'openai'
+                      ? [] // OpenAI 支持本地模型，API Key 非必填
+                      : [
+                          { required: true, message: '请输入API密钥' },
+                          { min: 10, message: 'API密钥长度不能少于10位' }
+                        ]
+                  }
+                  tooltip={selectedProvider === 'openai' ? '使用本地模型（填写了Base URL）时可留空' : undefined}
                 >
                   <Input.Password
-                    placeholder={providerConfig[selectedProvider as keyof typeof providerConfig].placeholder}
+                    placeholder={
+                      selectedProvider === 'openai'
+                        ? '使用官方API需填写，本地模型可留空'
+                        : providerConfig[selectedProvider as keyof typeof providerConfig].placeholder
+                    }
                     prefix={<KeyOutlined />}
                     className="settings-input"
                   />
                 </Form.Item>
+
+                {/* OpenAI 自定义 Base URL (用于本地模型) */}
+                {selectedProvider === 'openai' && (
+                  <Form.Item
+                    label="API Base URL"
+                    name="openai_base_url"
+                    className="form-item"
+                    extra="留空使用官方地址: https://api.openai.com/v1"
+                  >
+                    <Input
+                      placeholder="https://api.openai.com/v1"
+                      prefix={<ApiOutlined />}
+                      className="settings-input"
+                      allowClear
+                    />
+                  </Form.Item>
+                )}
 
                 {/* 模型选择 */}
                 <Form.Item
@@ -340,6 +376,10 @@ const SettingsPage: React.FC = () => {
                     <br />• <Text strong>OpenAI</Text>：访问 platform.openai.com 获取API密钥
                     <br />• <Text strong>Google Gemini</Text>：访问 ai.google.dev 获取API密钥
                     <br />• <Text strong>硅基流动</Text>：访问 docs.siliconflow.cn 获取API密钥
+                    <br /><br /><Text strong style={{ color: '#52c41a' }}>🔧 本地模型支持</Text>：选择 OpenAI 后，可在 "API Base URL" 中填写本地模型地址：
+                    <br />• <Text code>Ollama</Text>: http://localhost:11434/v1
+                    <br />• <Text code>vLLM</Text>: http://localhost:8000/v1
+                    <br />• <Text code>其他兼容 OpenAI API 的服务</Text>
                   </Paragraph>
                 </div>
                 

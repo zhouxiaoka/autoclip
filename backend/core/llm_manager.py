@@ -35,6 +35,7 @@ class LLMManager:
             "llm_provider": "dashscope",
             "dashscope_api_key": "",
             "openai_api_key": "",
+            "openai_base_url": "",  # 支持自定义URL，用于本地模型
             "gemini_api_key": "",
             "siliconflow_api_key": "",
             "model_name": "qwen-plus",
@@ -68,18 +69,28 @@ class LLMManager:
         try:
             provider_type = ProviderType(self.settings.get("llm_provider", "dashscope"))
             model_name = self.settings.get("model_name", "qwen-plus")
-            
+
             # 获取对应提供商的API密钥
             api_key = self._get_api_key_for_provider(provider_type)
-            
+
+            # OpenAI 支持本地模型，API Key 可以为空
+            extra_kwargs = {}
+            if provider_type == ProviderType.OPENAI:
+                base_url = self.settings.get("openai_base_url", "")
+                if base_url:
+                    extra_kwargs["base_url"] = base_url
+                    # 本地模型不需要真正的 API Key，使用默认值
+                    if not api_key:
+                        api_key = "local-model"
+
             if api_key:
                 self.current_provider = LLMProviderFactory.create_provider(
-                    provider_type, api_key, model_name
+                    provider_type, api_key, model_name, **extra_kwargs
                 )
                 logger.info(f"已初始化{provider_type.value}提供商，模型: {model_name}")
             else:
                 logger.warning(f"未找到{provider_type.value}的API密钥")
-                
+
         except Exception as e:
             logger.error(f"初始化提供商失败: {e}")
             self.current_provider = None
@@ -104,7 +115,7 @@ class LLMManager:
         self._save_settings()
         self._initialize_provider()
     
-    def set_provider(self, provider_type: ProviderType, api_key: str, model_name: str):
+    def set_provider(self, provider_type: ProviderType, api_key: str, model_name: str, base_url: str = None):
         """设置提供商"""
         try:
             # 更新设置
@@ -112,7 +123,7 @@ class LLMManager:
                 "llm_provider": provider_type.value,
                 "model_name": model_name
             }
-            
+
             # 更新对应提供商的API密钥
             key_mapping = {
                 ProviderType.DASHSCOPE: "dashscope_api_key",
@@ -120,20 +131,30 @@ class LLMManager:
                 ProviderType.GEMINI: "gemini_api_key",
                 ProviderType.SILICONFLOW: "siliconflow_api_key",
             }
-            
+
             key_name = key_mapping.get(provider_type)
             if key_name:
-                provider_settings[key_name] = api_key
-            
+                provider_settings[key_name] = api_key or ""
+
+            # OpenAI 支持自定义 base_url
+            extra_kwargs = {}
+            if provider_type == ProviderType.OPENAI:
+                provider_settings["openai_base_url"] = base_url or ""
+                if base_url:
+                    extra_kwargs["base_url"] = base_url
+                    # 本地模型不需要真正的 API Key
+                    if not api_key:
+                        api_key = "local-model"
+
             self.update_settings(provider_settings)
-            
+
             # 创建新的提供商实例
             self.current_provider = LLMProviderFactory.create_provider(
-                provider_type, api_key, model_name
+                provider_type, api_key or "local-model", model_name, **extra_kwargs
             )
-            
+
             logger.info(f"已切换到{provider_type.value}提供商，模型: {model_name}")
-            
+
         except Exception as e:
             logger.error(f"设置提供商失败: {e}")
             raise

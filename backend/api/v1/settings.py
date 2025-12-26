@@ -17,6 +17,7 @@ class SettingsRequest(BaseModel):
     llm_provider: Optional[str] = None
     dashscope_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
+    openai_base_url: Optional[str] = None  # 支持自定义URL，用于本地模型
     gemini_api_key: Optional[str] = None
     siliconflow_api_key: Optional[str] = None
     model_name: Optional[str] = None
@@ -29,11 +30,16 @@ class ApiKeyTestRequest(BaseModel):
     provider: str
     api_key: str
     model_name: str
+    base_url: Optional[str] = None  # 支持自定义URL
 
 class ApiKeyTestResponse(BaseModel):
     """API密钥测试响应"""
     success: bool
     error: Optional[str] = None
+
+class FetchModelsRequest(BaseModel):
+    """获取模型列表请求"""
+    base_url: str
 
 def get_settings_file_path() -> Path:
     """获取设置文件路径"""
@@ -47,6 +53,7 @@ def load_settings() -> Dict[str, Any]:
         "llm_provider": "dashscope",
         "dashscope_api_key": "",
         "openai_api_key": "",
+        "openai_base_url": "",  # 支持自定义URL，用于本地模型
         "gemini_api_key": "",
         "siliconflow_api_key": "",
         "model_name": "qwen-plus",
@@ -104,6 +111,9 @@ async def update_settings(request: SettingsRequest):
         
         if request.openai_api_key is not None:
             settings["openai_api_key"] = request.openai_api_key
+
+        if request.openai_base_url is not None:
+            settings["openai_base_url"] = request.openai_base_url
         
         if request.gemini_api_key is not None:
             settings["gemini_api_key"] = request.gemini_api_key
@@ -143,24 +153,32 @@ async def test_api_key(request: ApiKeyTestRequest) -> ApiKeyTestResponse:
     """测试API密钥"""
     try:
         # 导入LLM管理器
-        from ...core.llm_manager import get_llm_manager
-        from ...core.llm_providers import ProviderType
-        
+        from ...core.llm_providers import ProviderType, LLMProviderFactory
+
         # 验证提供商类型
         try:
             provider_type = ProviderType(request.provider)
         except ValueError:
             return ApiKeyTestResponse(success=False, error=f"不支持的提供商类型: {request.provider}")
-        
-        # 测试连接
-        llm_manager = get_llm_manager()
-        success = llm_manager.test_provider_connection(provider_type, request.api_key, request.model_name)
-        
-        if success:
-            return ApiKeyTestResponse(success=True)
-        else:
-            return ApiKeyTestResponse(success=False, error="API连接测试失败")
-                
+
+        # 构建额外参数
+        extra_kwargs = {}
+        if provider_type == ProviderType.OPENAI and request.base_url:
+            extra_kwargs["base_url"] = request.base_url
+
+        # 创建提供商并测试连接
+        try:
+            provider = LLMProviderFactory.create_provider(
+                provider_type, request.api_key, request.model_name, **extra_kwargs
+            )
+            success = provider.test_connection()
+            if success:
+                return ApiKeyTestResponse(success=True)
+            else:
+                return ApiKeyTestResponse(success=False, error="API连接测试失败")
+        except Exception as e:
+            return ApiKeyTestResponse(success=False, error=str(e))
+
     except Exception as e:
         return ApiKeyTestResponse(success=False, error=str(e))
 

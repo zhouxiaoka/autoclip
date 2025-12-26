@@ -128,11 +128,12 @@ export const settingsApi = {
   },
 
   // 测试API密钥
-  testApiKey: (provider: string, apiKey: string, modelName: string): Promise<{ success: boolean; error?: string }> => {
-    return api.post('/settings/test-api-key', { 
-      provider, 
-      api_key: apiKey, 
-      model_name: modelName 
+  testApiKey: (provider: string, apiKey: string, modelName: string, baseUrl?: string): Promise<{ success: boolean; error?: string }> => {
+    return api.post('/settings/test-api-key', {
+      provider,
+      api_key: apiKey,
+      model_name: modelName,
+      base_url: baseUrl || ''
     })
   },
 
