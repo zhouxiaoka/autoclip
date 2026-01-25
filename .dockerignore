@@ -68,7 +68,7 @@ docs/
 !README.md
 
 # Scripts
-*.sh
+# *.sh
 !start_autoclip.sh
 !stop_autoclip.sh
 !status_autoclip.sh
