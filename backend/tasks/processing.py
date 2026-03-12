@@ -96,10 +96,33 @@ def process_video_pipeline(self, project_id: str, input_video_path: str, input_s
             
             # 简化的进度系统不需要复杂的回调函数
             # 新的进度系统会在流水线内部自动发送进度事件
+            stage_to_step = {
+                "INGEST": "素材准备",
+                "SUBTITLE": "字幕处理",
+                "ANALYZE": "内容分析",
+                "HIGHLIGHT": "片段定位",
+                "EXPORT": "视频导出",
+                "DONE": "处理完成",
+            }
+
+            def on_pipeline_progress(percent: int, stage: str, message: str) -> None:
+                """将简化进度同步到任务表，避免状态接口显示0%卡住"""
+                try:
+                    task.progress = float(percent)
+                    task.current_step = stage_to_step.get(stage, message or "处理中")
+                    if task.status not in (TaskStatus.FAILED, TaskStatus.COMPLETED):
+                        task.status = TaskStatus.RUNNING
+                    db.commit()
+                except Exception as e:
+                    logger.warning(f"同步任务进度失败: {e}")
             
             # 使用简化的Pipeline适配器
             from backend.services.simple_pipeline_adapter import create_simple_pipeline_adapter
-            pipeline_adapter = create_simple_pipeline_adapter(str(project_id), str(task.id))
+            pipeline_adapter = create_simple_pipeline_adapter(
+                str(project_id),
+                str(task.id),
+                progress_callback=on_pipeline_progress,
+            )
             
             # 执行Pipeline处理 - 使用异步包装器
             import asyncio

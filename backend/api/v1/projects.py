@@ -666,16 +666,47 @@ async def resume_processing(
         # 获取SRT文件路径（如果需要）
         srt_path = None
         if start_step == "step1_outline":
+            from backend.core.path_utils import get_project_directory
+            project_root = get_project_directory(project_id)
+            candidate_paths = []
+
             if project.processing_config and "srt_file" in project.processing_config:
-                from pathlib import Path
-                project_root = Path(__file__).parent.parent.parent / "data" / "projects" / project_id
-                srt_path = project_root / "raw" / project.processing_config["srt_file"]
-            
+                candidate_paths.append(project_root / "raw" / project.processing_config["srt_file"])
+
+            # 常规兜底：raw/input.srt
+            candidate_paths.append(project_root / "raw" / "input.srt")
+            # 兼容部分流程将字幕放在 metadata
+            candidate_paths.append(project_root / "metadata" / "input.srt")
+
+            for candidate in candidate_paths:
+                if candidate and candidate.exists():
+                    srt_path = candidate
+                    break
+
             if not srt_path or not srt_path.exists():
                 raise HTTPException(status_code=400, detail=f"SRT file not found: {srt_path}")
         
         # 调用处理服务恢复执行
-        result = processing_service.resume_processing(project_id, start_step, srt_path)
+        try:
+            result = processing_service.resume_processing(project_id, start_step, srt_path)
+        except Exception as e:
+            # 兼容旧编排器未完整实现的场景：Step1 回退为重新提交完整流水线
+            if start_step == "step1_outline" and srt_path and project.video_path:
+                from backend.utils.task_submission_utils import submit_video_pipeline_task
+
+                task_result = submit_video_pipeline_task(
+                    project_id=project_id,
+                    input_video_path=str(project.video_path),
+                    input_srt_path=str(srt_path),
+                )
+                if task_result.get("success"):
+                    return {
+                        "message": "Resume fallback: full pipeline restarted from step1",
+                        "project_id": project_id,
+                        "start_step": start_step,
+                        "result": task_result,
+                    }
+            raise e
         
         return {
             "message": f"Processing resumed from {start_step} successfully",
@@ -704,7 +735,24 @@ async def get_processing_status(
         tasks = project.tasks if hasattr(project, 'tasks') else []
         latest_task = None
         if tasks:
-            latest_task = max(tasks, key=lambda t: t.created_at) if hasattr(tasks[0], 'created_at') else tasks[0]
+            # 优先选择真正执行中的任务（避免“新建但未执行的PENDING任务”覆盖运行态）
+            def _task_score(t):
+                status_obj = getattr(t, "status", None)
+                status = status_obj.value if hasattr(status_obj, "value") else str(status_obj or "")
+                status = status.lower()
+                score = 0
+                if getattr(t, "celery_task_id", None):
+                    score += 100
+                if status == "running":
+                    score += 50
+                elif status in ("completed", "failed"):
+                    score += 40
+                elif status == "pending":
+                    score += 10
+                ts = getattr(t, "updated_at", None) or getattr(t, "created_at", None) or datetime.min
+                return (score, ts)
+
+            latest_task = max(tasks, key=_task_score)
         
         if not latest_task:
             return {

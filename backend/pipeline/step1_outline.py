@@ -4,7 +4,7 @@ Step 1: 大纲提取 - 从转写文本中提取结构性大纲
 import json
 import logging
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from pathlib import Path
 
 # 导入依赖
@@ -41,7 +41,11 @@ class OutlineExtractor:
         self.srt_chunks_dir = self.metadata_dir / "step1_srt_chunks"
         self.srt_chunks_dir.mkdir(parents=True, exist_ok=True)
 
-    def extract_outline(self, srt_path: Path) -> List[Dict]:
+    def extract_outline(
+        self,
+        srt_path: Path,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None
+    ) -> List[Dict]:
         """
         从SRT文件提取视频大纲
         
@@ -74,6 +78,7 @@ class OutlineExtractor:
         all_outlines = []
         
         # 4. 逐一处理每个文本块文件
+        total_chunks = len(chunks)
         for i, chunk_file in enumerate(chunk_files):
             logger.info(f"处理第{i+1}/{len(chunks)}个文本块: {chunk_file.name}")
             try:
@@ -90,10 +95,14 @@ class OutlineExtractor:
                     # 注意：这里的chunk_index直接用i，与文件名和原始chunk对应
                     parsed_outlines = self._parse_outline_response(response, i)
                     all_outlines.extend(parsed_outlines)
+                    if progress_callback:
+                        progress_callback(i + 1, total_chunks, f"大纲提取中（{i + 1}/{total_chunks}）")
                 else:
                     logger.warning(f"处理第{i+1}个文本块时返回空响应")
             except Exception as e:
                 logger.error(f"处理第{i+1}个文本块失败: {e}")
+                if progress_callback:
+                    progress_callback(i + 1, total_chunks, f"大纲提取中（{i + 1}/{total_chunks}，部分失败）")
                 continue
         
         # 5. 合并和去重
@@ -201,7 +210,13 @@ class OutlineExtractor:
         with open(input_path, 'r', encoding='utf-8') as f:
             return json.load(f)
 
-def run_step1_outline(srt_path: Path, metadata_dir: Path = None, output_path: Optional[Path] = None, prompt_files: Dict = None) -> List[Dict]:
+def run_step1_outline(
+    srt_path: Path,
+    metadata_dir: Path = None,
+    output_path: Optional[Path] = None,
+    prompt_files: Dict = None,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None
+) -> List[Dict]:
     """
     运行Step 1: 大纲提取
     """
@@ -209,7 +224,7 @@ def run_step1_outline(srt_path: Path, metadata_dir: Path = None, output_path: Op
         metadata_dir = METADATA_DIR
         
     extractor = OutlineExtractor(metadata_dir, prompt_files)
-    outlines = extractor.extract_outline(srt_path)
+    outlines = extractor.extract_outline(srt_path, progress_callback=progress_callback)
     
     if output_path is None:
         output_path = metadata_dir / "step1_outline.json"

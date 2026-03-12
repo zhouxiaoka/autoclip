@@ -4,7 +4,7 @@ Step 3: 内容评分 - 对每个话题进行质量评分，筛选出高质量内
 import json
 import logging
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from pathlib import Path
 from collections import defaultdict
 
@@ -27,7 +27,11 @@ class ClipScorer:
         with open(prompt_files_to_use['recommendation'], 'r', encoding='utf-8') as f:
             self.recommendation_prompt = f.read()
     
-    def score_clips(self, timeline_data: List[Dict]) -> List[Dict]:
+    def score_clips(
+        self,
+        timeline_data: List[Dict],
+        progress_callback: Optional[Callable[[int, int, str], None]] = None
+    ) -> List[Dict]:
         """
         为切片评分 (新版：按块批量处理，并使用LLM进行综合评估)
         """
@@ -48,6 +52,8 @@ class ClipScorer:
         
         all_scored_clips = []
         # 2. 遍历每个块，批量处理其中的所有话题
+        total_chunks = len(timeline_by_chunk)
+        processed_chunks = 0
         for chunk_index, chunk_items in timeline_by_chunk.items():
             logger.info(f"处理块 {chunk_index}，其中包含 {len(chunk_items)} 个话题...")
             try:
@@ -58,9 +64,15 @@ class ClipScorer:
                     all_scored_clips.extend(scored_chunk_items)
                 else:
                     logger.warning(f"块 {chunk_index} 的LLM评估返回为空，跳过。")
+                processed_chunks += 1
+                if progress_callback:
+                    progress_callback(processed_chunks, total_chunks, f"内容评分中（{processed_chunks}/{total_chunks}）")
 
             except Exception as e:
                 logger.error(f"  > 处理块 {chunk_index} 进行评分时出错: {str(e)}")
+                processed_chunks += 1
+                if progress_callback:
+                    progress_callback(processed_chunks, total_chunks, f"内容评分中（{processed_chunks}/{total_chunks}，部分失败）")
                 continue
 
         # 4. 按最终得分对所有结果进行排序
@@ -134,7 +146,13 @@ class ClipScorer:
             json.dump(scored_clips, f, ensure_ascii=False, indent=2)
         logger.info(f"评分结果已保存到: {output_path}")
 
-def run_step3_scoring(timeline_path: Path, metadata_dir: Path = None, output_path: Optional[Path] = None, prompt_files: Dict = None) -> List[Dict]:
+def run_step3_scoring(
+    timeline_path: Path,
+    metadata_dir: Path = None,
+    output_path: Optional[Path] = None,
+    prompt_files: Dict = None,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None
+) -> List[Dict]:
     """
     运行Step 3: 内容评分与筛选
     
@@ -154,7 +172,7 @@ def run_step3_scoring(timeline_path: Path, metadata_dir: Path = None, output_pat
     scorer = ClipScorer(prompt_files)
     
     # 评分
-    scored_clips = scorer.score_clips(timeline_data)
+    scored_clips = scorer.score_clips(timeline_data, progress_callback=progress_callback)
     
     # 筛选高分切片
     high_score_clips = [clip for clip in scored_clips if clip['final_score'] >= MIN_SCORE_THRESHOLD]

@@ -34,6 +34,7 @@ const ProjectDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { 
+    projects,
     currentProject, 
     loading, 
     error,
@@ -46,6 +47,7 @@ const ProjectDetailPage: React.FC = () => {
     addClipToCollection
   } = useProjectStore()
   
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [statusLoading, setStatusLoading] = useState(false)
   const [showCreateCollection, setShowCreateCollection] = useState(false)
   const [sortBy, setSortBy] = useState<'time' | 'score'>('score')
@@ -101,18 +103,24 @@ const ProjectDetailPage: React.FC = () => {
 
   useEffect(() => {
     if (id) {
+      const cachedProject = projects.find(p => p.id === id)
+      if (cachedProject && (!currentProject || currentProject.id !== id)) {
+        setCurrentProject(cachedProject)
+      }
+
       // 只有当store中没有currentProject或者currentProject的id与当前id不匹配时才重新加载
       if (!currentProject || currentProject.id !== id) {
         loadProject()
       }
       loadProcessingStatus()
     }
-  }, [id, currentProject])
+  }, [id, currentProject, projects, setCurrentProject])
 
   const loadProject = async () => {
     if (!id) return
     try {
       const project = await projectApi.getProject(id)
+      setLoadError(null)
       
       // 如果项目已完成，加载clips和collections
       if (project.status === 'completed') {
@@ -150,7 +158,12 @@ const ProjectDetailPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to load project:', error)
-      message.error('加载项目失败')
+      const err = error as any
+      const detail = err?.response?.data?.detail
+      const userMessage = err?.userMessage
+      const msg = detail || userMessage || '加载项目失败（网络异常或后端未就绪）'
+      setLoadError(msg)
+      message.error(msg)
     }
   }
 
@@ -280,12 +293,12 @@ const ProjectDetailPage: React.FC = () => {
     )
   }
 
-  if (error || !currentProject) {
+  if (error || loadError || !currentProject) {
     return (
       <Content style={{ padding: '24px' }}>
         <Alert
           message="加载失败"
-          description={error || '项目不存在'}
+          description={error || loadError || '项目不存在'}
           type="error"
           action={
             <Button size="small" onClick={() => navigate('/')}>
