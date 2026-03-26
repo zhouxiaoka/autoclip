@@ -19,6 +19,7 @@ class SettingsRequest(BaseModel):
     openai_api_key: Optional[str] = None
     gemini_api_key: Optional[str] = None
     siliconflow_api_key: Optional[str] = None
+    minimax_api_key: Optional[str] = None
     model_name: Optional[str] = None
     chunk_size: Optional[int] = None
     min_score_threshold: Optional[float] = None
@@ -49,6 +50,7 @@ def load_settings() -> Dict[str, Any]:
         "openai_api_key": "",
         "gemini_api_key": "",
         "siliconflow_api_key": "",
+        "minimax_api_key": "",
         "model_name": "qwen-plus",
         "chunk_size": 5000,
         "min_score_threshold": 0.7,
@@ -110,6 +112,9 @@ async def update_settings(request: SettingsRequest):
         
         if request.siliconflow_api_key is not None:
             settings["siliconflow_api_key"] = request.siliconflow_api_key
+
+        if request.minimax_api_key is not None:
+            settings["minimax_api_key"] = request.minimax_api_key
         
         if request.model_name is not None:
             settings["model_name"] = request.model_name

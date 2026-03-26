@@ -19,6 +19,7 @@ class ProviderType(Enum):
     OPENAI = "openai"        # OpenAI
     GEMINI = "gemini"        # Google Gemini
     SILICONFLOW = "siliconflow"  # 硅基流动
+    MINIMAX = "minimax"      # MiniMax
 
 @dataclass
 class ModelInfo:
@@ -405,6 +406,104 @@ class SiliconFlowProvider(LLMProvider):
             )
         ]
 
+class MiniMaxProvider(LLMProvider):
+    """MiniMax提供商 - 通过OpenAI兼容API接入"""
+
+    BASE_URL = "https://api.minimax.io/v1"
+
+    def __init__(self, api_key: str, model_name: str = "MiniMax-M2.7", **kwargs):
+        super().__init__(api_key, model_name, **kwargs)
+        try:
+            import openai
+            self.client = openai.OpenAI(
+                api_key=api_key,
+                base_url=self.BASE_URL,
+            )
+        except ImportError:
+            raise ImportError("请安装openai: pip install openai>=1.0.0")
+
+    def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
+        """调用MiniMax API"""
+        try:
+            full_input = self._build_full_input(prompt, input_data)
+
+            # MiniMax temperature范围为(0.0, 1.0]，不允许0
+            temperature = kwargs.pop("temperature", None)
+            if temperature is not None:
+                temperature = max(0.01, min(float(temperature), 1.0))
+                kwargs["temperature"] = temperature
+
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[{"role": "user", "content": full_input}],
+                **kwargs
+            )
+
+            content = response.choices[0].message.content or ""
+            # 去除可能的思考标签
+            if "<think>" in content and "</think>" in content:
+                content = content.split("</think>")[-1].strip()
+
+            usage = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens
+            } if response.usage else None
+
+            return LLMResponse(
+                content=content,
+                usage=usage,
+                model=self.model_name,
+                finish_reason=response.choices[0].finish_reason
+            )
+
+        except Exception as e:
+            logger.error(f"MiniMax调用失败: {str(e)}")
+            raise
+
+    def test_connection(self) -> bool:
+        """测试MiniMax连接"""
+        try:
+            response = self.call("请回复'测试成功'")
+            return "测试成功" in response.content or "success" in response.content.lower()
+        except Exception as e:
+            logger.error(f"MiniMax连接测试失败: {e}")
+            return False
+
+    def get_available_models(self) -> List[ModelInfo]:
+        """获取MiniMax可用模型"""
+        return [
+            ModelInfo(
+                name="MiniMax-M2.7",
+                display_name="MiniMax M2.7",
+                provider=ProviderType.MINIMAX,
+                max_tokens=1000000,
+                description="MiniMax M2.7旗舰模型，100万token上下文"
+            ),
+            ModelInfo(
+                name="MiniMax-M2.7-highspeed",
+                display_name="MiniMax M2.7 Highspeed",
+                provider=ProviderType.MINIMAX,
+                max_tokens=1000000,
+                description="MiniMax M2.7高速版本"
+            ),
+            ModelInfo(
+                name="MiniMax-M2.5",
+                display_name="MiniMax M2.5",
+                provider=ProviderType.MINIMAX,
+                max_tokens=204800,
+                description="MiniMax M2.5模型，204K上下文"
+            ),
+            ModelInfo(
+                name="MiniMax-M2.5-highspeed",
+                display_name="MiniMax M2.5 Highspeed",
+                provider=ProviderType.MINIMAX,
+                max_tokens=204800,
+                description="MiniMax M2.5高速版本"
+            ),
+        ]
+
+
 class LLMProviderFactory:
     """LLM提供商工厂"""
     
@@ -413,6 +512,7 @@ class LLMProviderFactory:
         ProviderType.OPENAI: OpenAIProvider,
         ProviderType.GEMINI: GeminiProvider,
         ProviderType.SILICONFLOW: SiliconFlowProvider,
+        ProviderType.MINIMAX: MiniMaxProvider,
     }
     
     @classmethod

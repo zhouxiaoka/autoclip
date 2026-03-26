@@ -50,6 +50,14 @@ const SettingsPage: React.FC = () => {
       description: '硅基流动模型服务',
       apiKeyField: 'siliconflow_api_key',
       placeholder: '请输入硅基流动API密钥'
+    },
+    minimax: {
+      name: 'MiniMax',
+      icon: <RobotOutlined />,
+      color: '#eb2f96',
+      description: 'MiniMax大模型，100万token上下文',
+      apiKeyField: 'minimax_api_key',
+      placeholder: '请输入MiniMax API密钥'
     }
   }
 
@@ -340,6 +348,7 @@ const SettingsPage: React.FC = () => {
                     <br />• <Text strong>OpenAI</Text>：访问 platform.openai.com 获取API密钥
                     <br />• <Text strong>Google Gemini</Text>：访问 ai.google.dev 获取API密钥
                     <br />• <Text strong>硅基流动</Text>：访问 docs.siliconflow.cn 获取API密钥
+                    <br />• <Text strong>MiniMax</Text>：访问 platform.minimaxi.com 获取API密钥
                   </Paragraph>
                 </div>
                 

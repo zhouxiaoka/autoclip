@@ -31,7 +31,7 @@ AutoClip是一个基于AI的智能视频切片处理系统，能够自动从YouT
 ### ✨ 核心特性
 
 - 🎬 **多平台支持**: YouTube、B站视频一键下载，支持本地文件上传
-- 🤖 **AI智能分析**: 基于通义千问大语言模型的视频内容理解
+- 🤖 **AI智能分析**: 基于多模型提供商的视频内容理解（通义千问、OpenAI、Gemini、硅基流动、MiniMax）
 - ✂️ **自动切片**: 智能识别精彩片段并自动切割，支持多种视频分类
 - 📚 **智能合集**: AI推荐和手动创建视频合集，支持拖拽排序
 - 🚀 **实时处理**: 异步任务队列，实时进度反馈，WebSocket通信
@@ -70,6 +70,9 @@ graph TB
 - **SQLite**: 轻量级数据库，支持升级到PostgreSQL
 - **yt-dlp**: YouTube视频下载，支持多种格式
 - **通义千问**: AI内容分析，支持多种模型
+- **OpenAI**: GPT系列大语言模型
+- **Google Gemini**: Gemini大语言模型
+- **MiniMax**: MiniMax大语言模型，支持100万token上下文
 - **WebSocket**: 实时通信，进度推送
 - **Pydantic**: 数据验证和序列化
 
@@ -289,6 +292,9 @@ REDIS_URL=redis://localhost:6379/0
 # AI API配置
 API_DASHSCOPE_API_KEY=your_dashscope_api_key
 API_MODEL_NAME=qwen-plus
+# 或使用MiniMax:
+# MINIMAX_API_KEY=your_minimax_api_key
+# API_MODEL_NAME=MiniMax-M2.7
 
 # 日志配置
 LOG_LEVEL=INFO
@@ -851,6 +857,7 @@ A:
 
 - [通义千问](https://tongyi.aliyun.com/) - 阿里云大语言模型服务
 - [DashScope](https://dashscope.aliyun.com/) - 阿里云AI服务平台
+- [MiniMax](https://www.minimaxi.com/) - MiniMax大语言模型，100万token上下文
 
 ### 开发工具
 

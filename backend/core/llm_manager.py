@@ -37,6 +37,7 @@ class LLMManager:
             "openai_api_key": "",
             "gemini_api_key": "",
             "siliconflow_api_key": "",
+            "minimax_api_key": "",
             "model_name": "qwen-plus",
             "chunk_size": 5000,
             "min_score_threshold": 0.7,
@@ -91,19 +92,20 @@ class LLMManager:
             ProviderType.OPENAI: "openai_api_key",
             ProviderType.GEMINI: "gemini_api_key",
             ProviderType.SILICONFLOW: "siliconflow_api_key",
+            ProviderType.MINIMAX: "minimax_api_key",
         }
-        
+
         key_name = key_mapping.get(provider_type)
         if key_name:
             return self.settings.get(key_name, "")
         return None
-    
+
     def update_settings(self, new_settings: Dict[str, Any]):
         """更新设置"""
         self.settings.update(new_settings)
         self._save_settings()
         self._initialize_provider()
-    
+
     def set_provider(self, provider_type: ProviderType, api_key: str, model_name: str):
         """设置提供商"""
         try:
@@ -112,13 +114,14 @@ class LLMManager:
                 "llm_provider": provider_type.value,
                 "model_name": model_name
             }
-            
+
             # 更新对应提供商的API密钥
             key_mapping = {
                 ProviderType.DASHSCOPE: "dashscope_api_key",
                 ProviderType.OPENAI: "openai_api_key",
                 ProviderType.GEMINI: "gemini_api_key",
                 ProviderType.SILICONFLOW: "siliconflow_api_key",
+                ProviderType.MINIMAX: "minimax_api_key",
             }
             
             key_name = key_mapping.get(provider_type)
@@ -196,7 +199,8 @@ class LLMManager:
             ProviderType.DASHSCOPE: "阿里通义千问",
             ProviderType.OPENAI: "OpenAI",
             ProviderType.GEMINI: "Google Gemini",
-            ProviderType.SILICONFLOW: "硅基流动"
+            ProviderType.SILICONFLOW: "硅基流动",
+            ProviderType.MINIMAX: "MiniMax"
         }
         return display_names.get(provider_type, provider_type.value)
     
