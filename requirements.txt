@@ -24,3 +24,5 @@ yt-dlp>=2024.12.13
 # 如果需要手动安装，请运行: python scripts/install_bcut_asr.py
 pysrt
 psutil
+openai
+pytz

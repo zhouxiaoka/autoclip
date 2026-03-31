@@ -72,6 +72,9 @@ docs/
 !start_autoclip.sh
 !stop_autoclip.sh
 !status_autoclip.sh
+!docker-entrypoint.sh
+!docker-dev-entrypoint.sh
+!docker-start.sh
 
 # Environment
 .env

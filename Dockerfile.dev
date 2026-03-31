@@ -32,7 +32,7 @@ RUN . venv/bin/activate && pip install -r requirements.txt
 COPY frontend/package*.json ./frontend/
 
 # 安装前端依赖
-RUN cd frontend && npm install && npm run build
+RUN cd frontend && npm install
 
 # 复制项目文件
 COPY . .

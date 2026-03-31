@@ -37,9 +37,9 @@ services:
       - redis
     command: >
       sh -c "
-        source venv/bin/activate &&
+        . venv/bin/activate &&
         python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload &
-        cd frontend && 
+        cd frontend &&
         if [ ! -d node_modules ]; then npm install; fi &&
         npx vite --host 0.0.0.0 --port 3000 &
         wait
@@ -66,8 +66,8 @@ services:
       - LOG_LEVEL=DEBUG
     command: >
       sh -c "
-        source venv/bin/activate &&
-        celery -A backend.core.celery_app worker --loglevel=debug --reload
+        . venv/bin/activate &&
+        celery -A backend.core.celery_app worker --loglevel=debug -Q celery,processing,video,notification,upload
       "
     depends_on:
       - redis
