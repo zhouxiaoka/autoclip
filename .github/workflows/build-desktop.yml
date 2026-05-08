@@ -82,6 +82,12 @@ jobs:
       with:
         targets: ${{ matrix.target }}
 
+    - name: Install Linux system dependencies
+      if: matrix.platform == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
     - name: Cache Rust dependencies
       uses: actions/cache@v3
       with:
@@ -95,15 +101,12 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-cargo-${{ matrix.target }}-
 
-    - name: Build Tauri app
-      working-directory: src-tauri
-      run: |
-        cargo build --release --target ${{ matrix.target }}
+    - name: Install Tauri CLI
+      run: npm install -g @tauri-apps/cli@latest
 
-    - name: Bundle Tauri app
+    - name: Build and bundle Tauri app
       working-directory: src-tauri
-      run: |
-        cargo tauri build --target ${{ matrix.target }}
+      run: tauri build --target ${{ matrix.target }}
 
     - name: Check bundle size
       run: |
@@ -111,22 +114,14 @@ jobs:
 
     - name: Run API smoke tests
       run: |
-        # 启动后端服务进行测试
-        cd backend
         python -m backend.desktop_main &
         BACKEND_PID=$!
-        
-        # 等待后端启动
         sleep 10
-        
-        # 运行烟雾测试
-        python ../scripts/smoke_api.py http://127.0.0.1:8000 -t 30
-        
-        # 清理
+        python scripts/smoke_api.py http://127.0.0.1:8000 -t 30
         kill $BACKEND_PID || true
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: desktop-app-${{ matrix.target }}
         path: |

@@ -21,12 +21,11 @@ jobs:
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     - name: Setup Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
-        target: aarch64-apple-darwin
+        targets: aarch64-apple-darwin
     - name: Install dependencies and build
       run: |
         python -m pip install --upgrade pip
@@ -55,12 +54,11 @@ jobs:
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     - name: Setup Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
-        target: x86_64-apple-darwin
+        targets: x86_64-apple-darwin
     - name: Install dependencies and build
       run: |
         python -m pip install --upgrade pip
@@ -89,12 +87,11 @@ jobs:
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     - name: Setup Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
-        target: x86_64-pc-windows-msvc
+        targets: x86_64-pc-windows-msvc
     - name: Install dependencies and build
       run: |
         python -m pip install --upgrade pip
@@ -126,16 +123,15 @@ jobs:
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     - name: Setup Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
-        target: x86_64-unknown-linux-gnu
+        targets: x86_64-unknown-linux-gnu
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libwebkit2gtk-4.0-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+        sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
     - name: Install dependencies and build
       run: |
         python -m pip install --upgrade pip
