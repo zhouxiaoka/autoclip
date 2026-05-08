@@ -7,7 +7,13 @@ import time
 import json
 import logging
 from typing import List, Tuple, Optional, Dict, Any
-import redis
+import sqlite3
+import threading
+import os
+try:
+    import redis  # 可选依赖
+except Exception:
+    redis = None
 
 logger = logging.getLogger(__name__)
 
@@ -26,17 +32,158 @@ WEIGHTS = {name: w for name, w in STAGES}
 # 阶段顺序
 ORDER = [name for name, _ in STAGES]
 
-# Redis连接 - 使用项目现有的Redis配置
+class ProgressStore:
+    def save(self, project_id: str, stage: str, percent: int, message: str, ts: int):
+        raise NotImplementedError
+
+    def get(self, project_id: str) -> Optional[Dict[str, Any]]:
+        raise NotImplementedError
+
+    def delete(self, project_id: str):
+        raise NotImplementedError
+
+    def get_many(self, project_ids: List[str]) -> List[Dict[str, Any]]:
+        return [s for pid in project_ids if (s := self.get(pid))]
+
+
+class RedisProgressStore(ProgressStore):
+    def __init__(self, redis_client):
+        self.r = redis_client
+
+    def save(self, project_id: str, stage: str, percent: int, message: str, ts: int):
+        self.r.hset(f"progress:project:{project_id}", mapping={
+            "stage": stage,
+            "percent": str(percent),
+            "message": message,
+            "ts": str(ts)
+        })
+        payload = {"project_id": project_id, "stage": stage, "percent": percent, "message": message, "ts": ts}
+        try:
+            self.r.publish(f"progress:project:{project_id}", json.dumps(payload))
+        except Exception:
+            pass
+
+    def get(self, project_id: str) -> Optional[Dict[str, Any]]:
+        h = self.r.hgetall(f"progress:project:{project_id}")
+        if not h:
+            return None
+        return {
+            "project_id": project_id,
+            "stage": h.get("stage", ""),
+            "percent": int(h.get("percent", 0)),
+            "message": h.get("message", ""),
+            "ts": int(h.get("ts", 0))
+        }
+
+    def delete(self, project_id: str):
+        self.r.delete(f"progress:project:{project_id}")
+
+
+class SqliteProgressStore(ProgressStore):
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+        self._lock = threading.Lock()
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS progress_snapshots (
+                project_id TEXT PRIMARY KEY,
+                stage TEXT,
+                percent INTEGER,
+                message TEXT,
+                ts INTEGER
+            )
+            """
+        )
+        self._conn.commit()
+
+    def save(self, project_id: str, stage: str, percent: int, message: str, ts: int):
+        with self._lock:
+            self._conn.execute(
+                "REPLACE INTO progress_snapshots (project_id, stage, percent, message, ts) VALUES (?, ?, ?, ?, ?)",
+                (project_id, stage, int(percent), message, int(ts))
+            )
+            self._conn.commit()
+
+    def get(self, project_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT stage, percent, message, ts FROM progress_snapshots WHERE project_id = ?",
+                (project_id,)
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        stage, percent, message, ts = row
+        return {
+            "project_id": project_id,
+            "stage": stage or "",
+            "percent": int(percent or 0),
+            "message": message or "",
+            "ts": int(ts or 0)
+        }
+
+    def delete(self, project_id: str):
+        with self._lock:
+            self._conn.execute("DELETE FROM progress_snapshots WHERE project_id = ?", (project_id,))
+            self._conn.commit()
+
+    def get_many(self, project_ids: List[str]) -> List[Dict[str, Any]]:
+        if not project_ids:
+            return []
+        placeholders = ",".join(["?"] * len(project_ids))
+        with self._lock:
+            cur = self._conn.execute(
+                f"SELECT project_id, stage, percent, message, ts FROM progress_snapshots WHERE project_id IN ({placeholders})",
+                project_ids
+            )
+            rows = cur.fetchall()
+        results = []
+        for pid, stage, percent, message, ts in rows:
+            results.append({
+                "project_id": pid,
+                "stage": stage or "",
+                "percent": int(percent or 0),
+                "message": message or "",
+                "ts": int(ts or 0)
+            })
+        return results
+
+
+# 选择存储：Desktop模式强制SQLite；Server模式优先Redis，失败则自动降级到SQLite
+store: ProgressStore
 try:
-    # 从环境变量获取Redis URL，默认为本地地址
-    redis_url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
-    r = redis.Redis.from_url(redis_url, decode_responses=True)
-    # 测试连接
-    r.ping()
-    logger.info("Redis连接成功")
+    from backend.core.desktop_config import is_desktop_mode, get_desktop_paths
+    if is_desktop_mode():
+        paths = get_desktop_paths()
+        db_file = os.path.join(str(paths.data_dir), "progress.db")
+        store = SqliteProgressStore(db_file)
+        logger.info(f"桌面模式使用SQLite进度存储: {db_file}")
+    else:
+        if redis is None:
+            raise RuntimeError("redis 未安装")
+        # 从环境变量获取Redis URL，默认为本地地址
+        redis_url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+        r_client = redis.Redis.from_url(redis_url, decode_responses=True)
+        r_client.ping()
+        store = RedisProgressStore(r_client)
+        logger.info("Server模式使用Redis进度存储")
 except Exception as e:
-    logger.error(f"Redis连接失败: {e}")
-    r = None
+    # 自动降级到SQLite
+    try:
+        # 优先使用桌面数据目录；若不可用则落到项目根 data 目录
+        db_file = None
+        try:
+            from backend.core.desktop_config import get_desktop_paths
+            db_file = os.path.join(str(get_desktop_paths().data_dir), "progress.db")
+        except Exception:
+            from pathlib import Path
+            db_file = str((Path(__file__).parent.parent.parent / 'data' / 'progress.db').resolve())
+        store = SqliteProgressStore(db_file)
+        logger.warning(f"Redis不可用或未安装，自动降级到SQLite进度存储: {db_file}，原因: {e}")
+    except Exception as e2:
+        logger.error(f"初始化进度存储失败: {e2}")
+        store = None
 
 
 def compute_percent(stage: str, subpercent: Optional[float] = None) -> int:
@@ -79,8 +226,8 @@ def emit_progress(project_id: str, stage: str, message: str = "", subpercent: Op
         message: 进度消息
         subpercent: 子进度百分比，可选
     """
-    if not r:
-        logger.warning("Redis未连接，跳过进度发送")
+    if not store:
+        logger.warning("进度存储未初始化，跳过进度发送")
         return
         
     percent = compute_percent(stage, subpercent)
@@ -93,19 +240,8 @@ def emit_progress(project_id: str, stage: str, message: str = "", subpercent: Op
     }
     
     try:
-        # 1) 持久化最新快照（给轮询/刷新用）
-        r.hset(f"progress:project:{project_id}", mapping={
-            "stage": stage, 
-            "percent": str(percent), 
-            "message": message, 
-            "ts": str(payload["ts"])
-        })
-        
-        # 2) 即时广播（可选，用于WebSocket）
-        r.publish(f"progress:project:{project_id}", json.dumps(payload))
-        
+        store.save(project_id, stage, percent, message, payload["ts"])
         logger.info(f"进度事件已发送: {project_id} - {stage} ({percent}%) - {message}")
-        
     except Exception as e:
         logger.error(f"发送进度事件失败: {e}")
 
@@ -120,21 +256,11 @@ def get_progress_snapshot(project_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         进度快照数据，如果不存在返回None
     """
-    if not r:
+    if not store:
         return None
         
     try:
-        h = r.hgetall(f"progress:project:{project_id}")
-        if not h:
-            return None
-            
-        return {
-            "project_id": project_id,
-            "stage": h.get("stage", ""),
-            "percent": int(h.get("percent", 0)),
-            "message": h.get("message", ""),
-            "ts": int(h.get("ts", 0))
-        }
+        return store.get(project_id)
     except Exception as e:
         logger.error(f"获取进度快照失败: {e}")
         return None
@@ -150,16 +276,13 @@ def get_multiple_progress_snapshots(project_ids: List[str]) -> List[Dict[str, An
     Returns:
         进度快照列表
     """
-    if not r:
+    if not store:
         return []
-        
-    results = []
-    for project_id in project_ids:
-        snapshot = get_progress_snapshot(project_id)
-        if snapshot:
-            results.append(snapshot)
-    
-    return results
+    try:
+        return store.get_many(project_ids)
+    except Exception as e:
+        logger.error(f"批量获取进度快照失败: {e}")
+        return []
 
 
 def clear_progress(project_id: str):
@@ -169,11 +292,10 @@ def clear_progress(project_id: str):
     Args:
         project_id: 项目ID
     """
-    if not r:
+    if not store:
         return
-        
     try:
-        r.delete(f"progress:project:{project_id}")
+        store.delete(project_id)
         logger.info(f"已清除项目进度数据: {project_id}")
     except Exception as e:
         logger.error(f"清除进度数据失败: {e}")

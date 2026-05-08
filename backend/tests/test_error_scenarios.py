@@ -159,7 +159,7 @@ class TestConcurrencyErrorScenarios:
     
     def test_resource_already_locked(self, tmp_path):
         """测试资源已被锁定"""
-        from services.concurrency_manager import concurrency_manager
+        from backend.services.concurrency_manager import concurrency_manager
         
         resource_id = "test_resource"
         task_id_1 = "task_001"
@@ -178,7 +178,7 @@ class TestConcurrencyErrorScenarios:
     
     def test_lock_timeout(self, tmp_path):
         """测试锁超时"""
-        from services.concurrency_manager import concurrency_manager
+        from backend.services.concurrency_manager import concurrency_manager
         
         resource_id = "test_resource"
         task_id = "task_001"
@@ -196,7 +196,7 @@ class TestConcurrencyErrorScenarios:
     
     def test_invalid_lock_release(self, tmp_path):
         """测试无效的锁释放"""
-        from services.concurrency_manager import concurrency_manager
+        from backend.services.concurrency_manager import concurrency_manager
         
         resource_id = "test_resource"
         task_id = "task_001"

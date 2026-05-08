@@ -1,0 +1,71 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for AutoClip Desktop",
+  "windows": ["main"],
+  "permissions": [
+    {
+      "identifier": "core:default",
+      "allow": [
+        {
+          "cmd": "default"
+        }
+      ]
+    },
+    {
+      "identifier": "core:app:default",
+      "allow": [
+        {
+          "cmd": "default"
+        }
+      ]
+    },
+    {
+      "identifier": "core:window:default",
+      "allow": [
+        {
+          "cmd": "default"
+        }
+      ]
+    },
+    {
+      "identifier": "core:webview:default",
+      "allow": [
+        {
+          "cmd": "default"
+        }
+      ]
+    },
+    {
+      "identifier": "core:tray:default",
+      "allow": [
+        {
+          "cmd": "default"
+        }
+      ]
+    },
+    {
+      "identifier": "core:path:default",
+      "allow": [
+        {
+          "cmd": "default"
+        }
+      ]
+    },
+    {
+      "identifier": "core:resources:default",
+      "allow": [
+        {
+          "cmd": "default"
+        }
+      ]
+    },
+    {
+      "identifier": "shell:default",
+      "allow": [
+        {
+          "cmd": "open"
+        }
+      ]
+    }
+  ]
+}

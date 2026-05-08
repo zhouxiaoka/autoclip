@@ -34,6 +34,22 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
         db = next(get_db())
         project_service = ProjectService(db)
         
+        # 检查是否已有相同项目正在处理中（防重复处理）
+        from backend.models.task import Task, TaskStatus
+        existing_task = db.query(Task).filter(
+            Task.project_id == project_id,
+            Task.status == TaskStatus.RUNNING,
+            Task.name.like('%导入%')
+        ).first()
+        
+        if existing_task and existing_task.celery_task_id != self.request.id:
+            logger.warning(f"项目 {project_id} 已有处理任务在运行 (任务ID: {existing_task.celery_task_id})，跳过重复处理")
+            return {
+                'success': False,
+                'error': '项目正在处理中，避免重复处理',
+                'existing_task_id': existing_task.celery_task_id
+            }
+        
         # 更新任务进度
         self.update_state(state='PROGRESS', meta={'progress': 10, 'message': '开始处理...'})
         
@@ -68,33 +84,97 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
             
             try:
                 from backend.utils.speech_recognizer import generate_subtitle_for_video
+                from backend.core.desktop_config import get_desktop_config
                 
-                # 根据视频分类选择模型
-                project = project_service.get(project_id)
-                video_category = "knowledge"  # 默认分类
-                if project and project.processing_config:
-                    video_category = project.processing_config.get("video_category", "knowledge")
+                # 获取用户配置的语音转写设置
+                config = get_desktop_config()
+                speech_config = config.speech_recognition
                 
-                model = "base"  # 默认使用平衡模型
-                if video_category in ["business", "knowledge"]:
-                    model = "small"  # 知识类内容使用更准确的模型
-                elif video_category == "speech":
-                    model = "medium"  # 演讲内容使用高精度模型
+                logger.info(f"使用语音转写配置 - 方法: {speech_config.method}")
                 
-                logger.info(f"使用Whisper生成字幕 - 语言: auto, 模型: {model}")
+                # 根据配置选择参数
+                if speech_config.method == "whisper_local":
+                    # 使用用户配置的Whisper参数
+                    model = speech_config.whisper_config.model_name
+                    language = speech_config.whisper_config.language
+                    enable_timestamps = speech_config.whisper_config.enable_timestamps
+                    enable_punctuation = speech_config.whisper_config.enable_punctuation
+                    enable_speaker_diarization = speech_config.whisper_config.enable_speaker_diarization
+                    timeout = speech_config.whisper_config.timeout
+                    
+                    logger.info(f"Whisper配置 - 模型: {model}, 语言: {language}, 时间戳: {enable_timestamps}")
+                    
+                    generated_subtitle = generate_subtitle_for_video(
+                        Path(video_path),
+                        language=language,
+                        model=model,
+                        method=speech_config.method,
+                        enable_timestamps=enable_timestamps,
+                        enable_punctuation=enable_punctuation,
+                        enable_speaker_diarization=enable_speaker_diarization,
+                        timeout=timeout
+                    )
+                else:
+                    # 使用API服务
+                    logger.info(f"使用API服务 - {speech_config.method}")
+                    
+                    # 根据服务类型获取API配置
+                    if speech_config.method == "openai_api":
+                        api_config = speech_config.openai_config
+                    elif speech_config.method == "azure_speech":
+                        api_config = speech_config.azure_config
+                    elif speech_config.method == "google_speech":
+                        api_config = speech_config.google_config
+                    elif speech_config.method == "aliyun_speech":
+                        api_config = speech_config.aliyun_config
+                    elif speech_config.method == "custom_api":
+                        api_config = speech_config.custom_api_config
+                    else:
+                        raise ValueError(f"不支持的语音识别方法: {speech_config.method}")
+                    
+                    generated_subtitle = generate_subtitle_for_video(
+                        Path(video_path),
+                        method=speech_config.method,
+                        language=api_config.language,
+                        api_key=api_config.api_key,
+                        enable_timestamps=api_config.enable_timestamps,
+                        enable_punctuation=api_config.enable_punctuation
+                    )
                 
-                generated_subtitle = generate_subtitle_for_video(
-                    Path(video_path),
-                    language="auto",
-                    model=model
-                )
                 srt_path = str(generated_subtitle)
-                logger.info(f"Whisper字幕生成成功: {srt_path}")
+                logger.info(f"语音转写成功: {srt_path}")
                 
             except Exception as e:
-                logger.error(f"Whisper字幕生成失败: {str(e)}")
-                # 字幕生成失败，使用空字幕文件
-                srt_path = None
+                logger.error(f"语音转写失败: {str(e)}")
+                
+                # 如果启用了回退机制，尝试使用回退方法
+                if speech_config.enable_fallback and speech_config.fallback_method != speech_config.method:
+                    try:
+                        logger.info(f"尝试回退方法: {speech_config.fallback_method}")
+                        
+                        if speech_config.fallback_method == "whisper_local":
+                            fallback_config = speech_config.whisper_config
+                            generated_subtitle = generate_subtitle_for_video(
+                                Path(video_path),
+                                language=fallback_config.language,
+                                model=fallback_config.model_name,
+                                method=speech_config.fallback_method
+                            )
+                        else:
+                            # 其他回退方法
+                            generated_subtitle = generate_subtitle_for_video(
+                                Path(video_path),
+                                method=speech_config.fallback_method
+                            )
+                        
+                        srt_path = str(generated_subtitle)
+                        logger.info(f"回退方法成功: {srt_path}")
+                        
+                    except Exception as fallback_error:
+                        logger.error(f"回退方法也失败: {str(fallback_error)}")
+                        srt_path = None
+                else:
+                    srt_path = None
         
         # 3. 更新项目状态为处理中
         logger.info(f"更新项目 {project_id} 状态为处理中...")

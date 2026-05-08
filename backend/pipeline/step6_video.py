@@ -63,7 +63,7 @@ class VideoGenerator:
         logger.info(f"切片视频生成完成，共{len(successful_clips)}个切片")
         return successful_clips
     
-    def generate_collections(self, collections_data: List[Dict]) -> List[Path]:
+    def generate_collections(self, collections_data: List[Dict]) -> List[Dict]:
         """
         生成合集视频
         
@@ -71,11 +71,11 @@ class VideoGenerator:
             collections_data: 合集数据
             
         Returns:
-            生成的合集视频路径列表
+            生成的合集信息列表，包含视频路径和缩略图路径
         """
         logger.info("开始生成合集视频...")
         
-        # 生成合集视频
+        # 生成合集视频和缩略图
         successful_collections = self.video_processor.create_collections_from_metadata(collections_data)
         
         logger.info(f"合集视频生成完成，共{len(successful_collections)}个合集")
@@ -181,7 +181,9 @@ def run_step6_video(clips_with_titles_path: Path, collections_path: Path,
         'clips_generated': len(successful_clips),
         'collections_generated': len(successful_collections),
         'clip_paths': [str(path) for path in successful_clips],
-        'collection_paths': [str(path) for path in successful_collections]
+        'collection_paths': [collection['video_path'] for collection in successful_collections],
+        'collection_thumbnails': [collection['thumbnail_path'] for collection in successful_collections if collection['thumbnail_path']],
+        'collections_info': successful_collections  # 包含完整的合集信息
     }
     
     logger.info(f"视频生成完成: {result['clips_generated']}个切片, {result['collections_generated']}个合集")

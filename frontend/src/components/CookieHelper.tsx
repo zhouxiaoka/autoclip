@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { Modal, Steps, Card, Typography, Alert, Button, Space, Divider, Image } from 'antd'
+import { Modal, Steps, Card, Typography, Alert, Button, Space, Divider } from 'antd'
 import { QuestionCircleOutlined, CopyOutlined, CheckOutlined } from '@ant-design/icons'
 
-const { Title, Paragraph, Text } = Typography
+const { Paragraph, Text } = Typography
 const { Step } = Steps
 
 interface CookieHelperProps {

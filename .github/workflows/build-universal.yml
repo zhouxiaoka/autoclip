@@ -1,0 +1,173 @@
+name: Build Universal macOS Package
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-arm64:
+    runs-on: macos-14  # Apple Silicon runner
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+        
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: aarch64-apple-darwin
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt pyinstaller
+        
+    - name: Build backend for arm64
+      run: |
+        python scripts/build_backend.py
+        
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm install
+        
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+        
+    - name: Install Tauri CLI
+      run: npm install -g @tauri-apps/cli@latest
+        
+    - name: Build Tauri app for arm64
+      run: |
+        cd src-tauri
+        tauri build --target aarch64-apple-darwin
+        
+    - name: Upload arm64 DMG artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: autoclip-arm64-macos
+        path: src-tauri/target/release/bundle/dmg/*.dmg
+        retention-days: 30
+
+  build-x86_64:
+    runs-on: macos-13  # Intel Mac runner
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+        
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: x86_64-apple-darwin
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt pyinstaller
+        
+    - name: Build backend for x86_64
+      run: |
+        python scripts/build_backend.py
+        
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm install
+        
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+        
+    - name: Install Tauri CLI
+      run: npm install -g @tauri-apps/cli@latest
+        
+    - name: Build Tauri app for x86_64
+      run: |
+        cd src-tauri
+        tauri build --target x86_64-apple-darwin
+        
+    - name: Upload x86_64 DMG artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: autoclip-x86_64-macos
+        path: src-tauri/target/release/bundle/dmg/*.dmg
+        retention-days: 30
+
+  create-release:
+    needs: [build-arm64, build-x86_64]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+    - name: Download arm64 DMG
+      uses: actions/download-artifact@v4
+      with:
+        name: autoclip-arm64-macos
+        path: ./artifacts/arm64
+        
+    - name: Download x86_64 DMG
+      uses: actions/download-artifact@v4
+      with:
+        name: autoclip-x86_64-macos
+        path: ./artifacts/x86_64
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ github.run_number }}
+        name: AutoClip Desktop v${{ github.run_number }}
+        body: |
+          ## AutoClip Desktop v${{ github.run_number }}
+          
+          ### 下载说明
+          - **Apple Silicon (M1/M2/M3)**: 下载 `AutoClip Desktop_*_aarch64.dmg`
+          - **Intel Mac**: 下载 `AutoClip Desktop_*_x86_64.dmg`
+          
+          ### 特性
+          - ✅ 内置 FFmpeg，无需手动安装
+          - ✅ 零依赖，装完即用
+          - ✅ 支持 YouTube/B站 视频下载
+          - ✅ AI 智能切片和合集生成
+          
+          ### 安装说明
+          1. 下载对应架构的 DMG 文件
+          2. 双击安装包，拖拽到 Applications 文件夹
+          3. 首次启动可能需要在"系统偏好设置 > 安全性与隐私"中允许运行
+        files: |
+          ./artifacts/arm64/*.dmg
+          ./artifacts/x86_64/*.dmg
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

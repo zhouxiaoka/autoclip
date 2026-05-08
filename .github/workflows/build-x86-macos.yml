@@ -1,0 +1,74 @@
+name: Build x86_64 macOS Package
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-x86-macos:
+    runs-on: macos-13  # Intel Mac runner
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+        
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: x86_64-apple-darwin
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt pyinstaller
+        
+    - name: Build backend for x86_64
+      run: |
+        python scripts/build_backend.py
+        
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm install
+        
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+        
+    - name: Install Tauri CLI
+      run: npm install -g @tauri-apps/cli@latest
+        
+    - name: Build Tauri app for x86_64
+      run: |
+        cd src-tauri
+        tauri build --target x86_64-apple-darwin
+        
+    - name: Upload x86_64 DMG artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: autoclip-x86_64-macos
+        path: src-tauri/target/release/bundle/dmg/*.dmg
+        retention-days: 30
+        
+    - name: Upload x86_64 APP artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: autoclip-x86_64-app
+        path: src-tauri/target/release/bundle/macos/*.app
+        retention-days: 30

@@ -172,7 +172,7 @@ const UploadStatusPage: React.FC<UploadStatusPageProps> = () => {
       dataIndex: 'title',
       key: 'title',
       ellipsis: true,
-      render: (title: string, record: UploadRecord) => (
+      render: (title: string) => (
         <Tooltip title={title}>
           <Text style={{ color: '#ffffff' }}>{title}</Text>
         </Tooltip>
@@ -243,7 +243,7 @@ const UploadStatusPage: React.FC<UploadStatusPageProps> = () => {
       title: '操作',
       key: 'actions',
       width: 200,
-      render: (_, record: UploadRecord) => (
+      render: (_unused: unknown, record: UploadRecord) => (
         <Space size="small">
           <Button 
             type="link" 
@@ -314,11 +314,12 @@ const UploadStatusPage: React.FC<UploadStatusPageProps> = () => {
 
   // 统计信息
   const getStatistics = () => {
-    const total = records.length;
-    const success = records.filter(r => r.status === 'success' || r.status === 'completed').length;
-    const failed = records.filter(r => r.status === 'failed').length;
-    const processing = records.filter(r => r.status === 'processing').length;
-    const pending = records.filter(r => r.status === 'pending').length;
+    const safeRecords = Array.isArray(records) ? records : [];
+    const total = safeRecords.length;
+    const success = safeRecords.filter(r => r.status === 'success' || r.status === 'completed').length;
+    const failed = safeRecords.filter(r => r.status === 'failed').length;
+    const processing = safeRecords.filter(r => r.status === 'processing').length;
+    const pending = safeRecords.filter(r => r.status === 'pending').length;
     
     return { total, success, failed, processing, pending };
   };

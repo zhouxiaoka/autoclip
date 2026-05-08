@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Progress, Card, Typography, Tag, Space, Button, message } from 'antd';
-import { PlayCircleOutlined, PauseCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { ReloadOutlined } from '@ant-design/icons';
 import { useTaskProgress, TaskProgressState } from '../hooks/useTaskProgress';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 interface TaskProgressDisplayProps {
   userId: string;

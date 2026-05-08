@@ -165,16 +165,29 @@ check_environment() {
         log_warning "未识别的操作系统: $OSTYPE"
     fi
     
-    # 检查必要的命令
-    local required_commands=("python3" "node" "npm" "redis-cli")
-    for cmd in "${required_commands[@]}"; do
-        if command_exists "$cmd"; then
-            log_success "$cmd 已安装"
-        else
-            log_error "$cmd 未安装，请先安装"
-            exit 1
-        fi
-    done
+    # 检查必要的命令（在Docker环境中跳过node检查）
+    if [[ "${ENVIRONMENT:-}" != "production" ]] || [[ ! -f "/.dockerenv" ]]; then
+        local required_commands=("python3" "node" "npm" "redis-cli")
+        for cmd in "${required_commands[@]}"; do
+            if command_exists "$cmd"; then
+                log_success "$cmd 已安装"
+            else
+                log_error "$cmd 未安装，请先安装"
+                exit 1
+            fi
+        done
+    else
+        log_info "Docker环境检测到，跳过node环境检查"
+        local required_commands=("python3" "redis-cli")
+        for cmd in "${required_commands[@]}"; do
+            if command_exists "$cmd"; then
+                log_success "$cmd 已安装"
+            else
+                log_error "$cmd 未安装，请先安装"
+                exit 1
+            fi
+        done
+    fi
     
     # 检查Python版本
     local python_version=$(python3 --version 2>&1 | cut -d' ' -f2)
@@ -326,10 +339,15 @@ start_celery() {
     pkill -f "celery.*worker" 2>/dev/null || true
     sleep 2
     
+    # 清理可能存在的重复Whisper进程
+    log_info "检查并清理重复的Whisper进程..."
+    python scripts/monitor_whisper.py --kill-duplicates 2>/dev/null || true
+    
     log_info "启动 Celery Worker..."
     nohup celery -A backend.core.celery_app worker \
         --loglevel=info \
-        --concurrency=2 \
+        --concurrency=1 \
+        --prefetch-multiplier=1 \
         -Q processing,upload,notification,maintenance \
         --hostname=worker@%h \
         > "$CELERY_LOG" 2>&1 &

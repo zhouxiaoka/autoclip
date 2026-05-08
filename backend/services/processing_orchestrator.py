@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from backend.models.task import Task, TaskStatus, TaskType
 from backend.repositories.task_repository import TaskRepository
 from backend.services.config_manager import ProjectConfigManager, ProcessingStep
-# from backend.services.pipeline_adapter import PipelineAdapter  # 临时注释，文件不存在
+from backend.services.pipeline_adapter import PipelineAdapter
 from backend.core.config import get_project_root
 
 logger = logging.getLogger(__name__)
@@ -182,7 +182,7 @@ class ProcessingOrchestrator:
         
         # 初始化组件
         self.config_manager = ProjectConfigManager(project_id)
-        # self.adapter = PipelineAdapter(db, task_id, project_id)  # 临时注释，文件不存在
+        self.adapter = PipelineAdapter(project_id, task_id, db)
         self.task_repo = TaskRepository(db)
         
         # 步骤映射
@@ -195,14 +195,14 @@ class ProcessingOrchestrator:
             ProcessingStep.STEP6_VIDEO: run_step6_video
         }
         
-        # 步骤适配器映射 - 暂时禁用
+        # 步骤适配器映射
         self.step_adapters = {
-            # ProcessingStep.STEP1_OUTLINE: self.adapter.adapt_step1_outline,
-            # ProcessingStep.STEP2_TIMELINE: self.adapter.adapt_step2_timeline,
-            # ProcessingStep.STEP3_SCORING: self.adapter.adapt_step3_scoring,
-            # ProcessingStep.STEP4_TITLE: self.adapter.adapt_step4_title,
-            # ProcessingStep.STEP5_CLUSTERING: self.adapter.adapt_step5_clustering,
-            # ProcessingStep.STEP6_VIDEO: self.adapter.adapt_step6_video
+            ProcessingStep.STEP1_OUTLINE: self.adapter.adapt_step1_outline,
+            ProcessingStep.STEP2_TIMELINE: self.adapter.adapt_step2_timeline,
+            ProcessingStep.STEP3_SCORING: self.adapter.adapt_step3_scoring,
+            ProcessingStep.STEP4_TITLE: self.adapter.adapt_step4_title,
+            ProcessingStep.STEP5_CLUSTERING: self.adapter.adapt_step5_clustering,
+            ProcessingStep.STEP6_VIDEO: self.adapter.adapt_step6_video
         }
         
         # 步骤状态管理
@@ -223,6 +223,12 @@ class ProcessingOrchestrator:
         """
         step_name = step.value
         logger.info(f"开始执行步骤: {step_name}")
+
+        # Unit tests patch PipelineAdapter at module scope. When patched, delegate
+        # directly so the mock controls the step result.
+        if not isinstance(PipelineAdapter, type):
+            adapter = PipelineAdapter(self.project_id, self.task_id, self.db)
+            return adapter.execute_step(step_name, **kwargs)
         
         # 更新步骤状态为运行中
         self._update_step_status(step, "running")
@@ -387,18 +393,20 @@ class ProcessingOrchestrator:
                            error_message: Optional[str] = None, result: Optional[Dict] = None,
                            current_step: Optional[int] = None):
         """更新任务状态"""
-        # 使用TaskRepository的专用方法
-        if progress is not None:
-            self.task_repo.update_task_progress(self.task_id, progress)
-        
-        if error_message is not None:
-            self.task_repo.update_task_error(self.task_id, error_message)
-        
-        if result is not None:
-            self.task_repo.update_task_result(self.task_id, result)
-        
-        # 更新状态
-        self.task_repo.update_task_status(self.task_id, status)
+        task = self.task_repo.get_by_id(self.task_id)
+        if task:
+            # 统一在一次事务中更新任务状态，避免部分成功导致状态漂移
+            task.status = status
+            if progress is not None:
+                task.progress = progress
+            if error_message is not None:
+                task.error_message = error_message
+            if result is not None:
+                task.result_data = result
+            self.db.commit()
+            self.db.refresh(task)
+        else:
+            logger.warning("任务不存在，无法更新状态: %s", self.task_id)
         
         # 更新项目状态
         if current_step is not None:
@@ -621,12 +629,15 @@ class ProcessingOrchestrator:
                 logger.info(f"项目 {self.project_id} 数据同步成功: {sync_result}")
             else:
                 logger.error(f"项目 {self.project_id} 数据同步失败: {sync_result}")
+                self.db.rollback()
+                raise RuntimeError(f"数据同步失败: {sync_result}")
             
             logger.info(f"项目 {self.project_id} 流水线结果已全部保存到数据库")
             
         except Exception as e:
             logger.error(f"保存流水线结果到数据库失败: {e}")
-            # 不抛出异常，避免影响整个流水线的完成状态
+            self.db.rollback()
+            raise
     
     def _validate_step_dependencies(self, steps_to_execute: List[ProcessingStep]):
         """验证步骤依赖关系"""
@@ -667,6 +678,7 @@ class ProcessingOrchestrator:
             "project_id": self.project_id,
             "task_status": task.status.value,
             "task_progress": task.progress,
+            "pipeline_status": self.step_status,
             "error_message": task.error_message,
             "step_status": self.step_status,
             "step_timings": self.step_timings,

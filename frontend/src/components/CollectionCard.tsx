@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo, useState } from 'react'
 import { Card, Button, Tooltip, message } from 'antd'
 import { PlayCircleOutlined, EditOutlined, DownloadOutlined } from '@ant-design/icons'
 import { Collection, Clip } from '../store/useProjectStore'
@@ -22,7 +22,9 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
   onUpdate
 }) => {
   // 按照collection.clip_ids的顺序排列clips
-  const collectionClips = collection.clip_ids.map(clipId => clips.find(clip => clip.id === clipId)).filter(Boolean) as Clip[]
+  const safeClips = Array.isArray(clips) ? clips : []
+  const safeClipIds = Array.isArray(collection.clip_ids) ? collection.clip_ids : []
+  const collectionClips = safeClipIds.map(clipId => safeClips.find(clip => clip.id === clipId)).filter(Boolean) as Clip[]
   
   const totalDuration = collectionClips.reduce((total, clip) => {
     const start = clip.start_time.split(':')
@@ -37,6 +39,14 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
     const secs = Math.floor(seconds % 60)
     return `${mins}:${String(secs).padStart(2, '0')}`
   }
+
+  const thumbnailUrl = useMemo(() => {
+    if (!collection.project_id) return ''
+    const ts = encodeURIComponent(collection.created_at || '')
+    return `/api/v1/projects/${collection.project_id}/collections/${collection.id}/thumbnail?t=${ts}`
+  }, [collection.project_id, collection.id, collection.created_at])
+
+  const [imgError, setImgError] = useState(false)
 
   return (
     <Card
@@ -61,9 +71,9 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
         <div 
           style={{ 
             height: '200px', 
-            background: collection.thumbnail_path 
-              ? `url(http://localhost:8000/api/v1/projects/${collection.project_id}/collections/${collection.id}/thumbnail) center/cover` 
-              : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            background: imgError || !collection.thumbnail_path
+              ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+              : 'transparent',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -73,6 +83,15 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
           }}
           onClick={() => onView(collection)}
         >
+          {!imgError && collection.thumbnail_path && (
+            <img
+              src={thumbnailUrl}
+              alt={collection.collection_title}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={() => setImgError(true)}
+              draggable={false}
+            />
+          )}
           <div 
             style={{
               position: 'absolute',

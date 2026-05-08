@@ -95,55 +95,121 @@ class DashScopeProvider(LLMProvider):
     
     def __init__(self, api_key: str, model_name: str = "qwen-plus", **kwargs):
         super().__init__(api_key, model_name, **kwargs)
-        try:
-            from dashscope import Generation
-            self.generation = Generation
-        except ImportError:
-            raise ImportError("请安装dashscope: pip install dashscope")
+        # 模式切换: native (SDK Generation.call) | compatible (OpenAI兼容)
+        self.mode = (kwargs.get("mode") or os.getenv("DASHSCOPE_MODE") or "native").lower()
+        # 兼容模式 base_url
+        self.base_url = kwargs.get("base_url", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        # 原生模式 SDK
+        self._ds_generation = None
+        if self.mode == "native":
+            try:
+                from dashscope import Generation
+                self._ds_generation = Generation
+            except ImportError:
+                raise ImportError("请安装dashscope: pip install dashscope")
     
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
-        """调用DashScope API"""
-        try:
-            full_input = self._build_full_input(prompt, input_data)
-            
-            response_or_gen = self.generation.call(
-                model=self.model_name,
-                prompt=full_input,
-                api_key=self.api_key,
-                stream=False,
-                **kwargs
-            )
-            
-            # 处理响应
-            # DashScope的GenerationResponse虽然有__iter__方法，但不是真正的迭代器
-            # 直接使用响应对象本身
-            response = response_or_gen
-            
-            if response and response.status_code == 200:
-                if response.output and response.output.text is not None:
-                    return LLMResponse(
-                        content=response.output.text,
-                        model=self.model_name,
-                        finish_reason=getattr(response.output, 'finish_reason', None)
-                    )
-                else:
-                    finish_reason = getattr(response.output, 'finish_reason', 'unknown') if response.output else 'unknown'
+        """调用DashScope API（mode: native|compatible）"""
+        masked_key = self.api_key[:3] + "***" + self.api_key[-2:] if self.api_key else ""
+        logger.info(f"[DashScope] mode={self.mode} model={self.model_name} base_url={self.base_url if self.mode=='compatible' else 'sdk-generation'} key={masked_key}")
+        logger.info(f"[DashScope] 实际使用的API key: {self.api_key}")
+        logger.info(f"[DashScope] 传入的kwargs: {kwargs}")
+        if self.mode == "native":
+            try:
+                # 确保使用传入的API key，临时设置环境变量
+                old_api_key = os.getenv("DASHSCOPE_API_KEY")
+                os.environ["DASHSCOPE_API_KEY"] = self.api_key
+                
+                full_input = self._build_full_input(prompt, input_data)
+                resp = self._ds_generation.call(
+                    model=self.model_name,
+                    prompt=full_input,
+                    api_key=self.api_key,
+                    stream=False,
+                    **kwargs
+                )
+                
+                # 恢复原来的环境变量
+                if old_api_key is not None:
+                    os.environ["DASHSCOPE_API_KEY"] = old_api_key
+                elif "DASHSCOPE_API_KEY" in os.environ:
+                    del os.environ["DASHSCOPE_API_KEY"]
+                if resp and getattr(resp, 'status_code', 200) == 200:
+                    if getattr(resp, 'output', None) and getattr(resp.output, 'text', None) is not None:
+                        return LLMResponse(
+                            content=resp.output.text,
+                            model=self.model_name,
+                            finish_reason=getattr(resp.output, 'finish_reason', None)
+                        )
+                    finish_reason = getattr(resp.output, 'finish_reason', 'unknown') if getattr(resp, 'output', None) else 'unknown'
                     logger.warning(f"API请求成功，但输出为空。结束原因: {finish_reason}")
                     return LLMResponse(content="")
-            else:
-                code = getattr(response, 'code', 'N/A')
-                message = getattr(response, 'message', '未知API错误')
-                raise Exception(f"API调用失败 - Status: {response.status_code}, Code: {code}, Message: {message}")
-                
-        except Exception as e:
-            logger.error(f"DashScope调用失败: {str(e)}")
-            raise
+                code = getattr(resp, 'code', 'N/A')
+                message = getattr(resp, 'message', '未知API错误')
+                raise Exception(f"API调用失败 - Status: {getattr(resp,'status_code', 'N/A')}, Code: {code}, Message: {message}")
+            except Exception as e:
+                logger.error(f"DashScope(native)调用失败: {str(e)}")
+                raise
+        else:
+            # compatible
+            try:
+                import requests
+                full_input = self._build_full_input(prompt, input_data)
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                }
+                payload = {
+                    "model": self.model_name,
+                    "messages": [{"role": "user", "content": full_input}],
+                    "stream": False,
+                }
+                payload.update({k: v for k, v in kwargs.items() if v is not None})
+                url = f"{self.base_url}/chat/completions"
+                resp = requests.post(url, headers=headers, json=payload, timeout=30)
+                if resp.status_code != 200:
+                    try:
+                        err = resp.json()
+                    except Exception:
+                        err = {"message": resp.text}
+                    raise Exception(f"API调用失败 - Status: {resp.status_code}, Message: {err}")
+                data = resp.json()
+                content = data["choices"][0]["message"]["content"]
+                usage = data.get("usage")
+                finish_reason = data["choices"][0].get("finish_reason")
+                return LLMResponse(content=content, usage=usage, model=self.model_name, finish_reason=finish_reason)
+            except Exception as e:
+                logger.error(f"DashScope(compatible)调用失败: {str(e)}")
+                raise
     
     def test_connection(self) -> bool:
         """测试DashScope连接"""
         try:
-            response = self.call("请回复'测试成功'")
-            return "测试成功" in response.content or "success" in response.content.lower()
+            # 首先验证API Key格式
+            if not self.api_key or len(self.api_key.strip()) < 10:
+                logger.error("API Key为空或过短")
+                return False
+            
+            # 检查API Key格式（DashScope API Key通常是sk-开头）
+            if not self.api_key.startswith("sk-"):
+                logger.warning(f"API Key格式可能不正确，期望以'sk-'开头，实际: {self.api_key[:10]}...")
+                # 不直接返回False，因为有些API Key可能格式不同
+            
+            # 使用简单的测试调用，避免复杂的API验证
+            try:
+                # 直接调用call方法进行测试
+                response = self.call("测试", max_tokens=1)
+                if response and response.content:
+                    logger.info("DashScope API连接测试成功")
+                    return True
+                else:
+                    logger.error("DashScope API测试返回空响应")
+                    return False
+                    
+            except Exception as e:
+                logger.error(f"DashScope API测试失败: {str(e)}")
+                return False
+                
         except Exception as e:
             logger.error(f"DashScope连接测试失败: {e}")
             return False
@@ -217,8 +283,18 @@ class OpenAIProvider(LLMProvider):
     def test_connection(self) -> bool:
         """测试OpenAI连接"""
         try:
-            response = self.call("请回复'测试成功'")
-            return "测试成功" in response.content or "success" in response.content.lower()
+            # 验证API Key格式
+            if not self.api_key or len(self.api_key.strip()) < 10:
+                logger.error("OpenAI API Key为空或过短")
+                return False
+            
+            # 检查API Key格式（OpenAI API Key通常是sk-开头）
+            if not self.api_key.startswith("sk-"):
+                logger.warning(f"OpenAI API Key格式可能不正确，期望以'sk-'开头，实际: {self.api_key[:10]}...")
+            
+            # 使用最简单的测试
+            response = self.call("测试", max_tokens=1)
+            return response and response.content is not None
         except Exception as e:
             logger.error(f"OpenAI连接测试失败: {e}")
             return False
@@ -281,8 +357,12 @@ class GeminiProvider(LLMProvider):
     def test_connection(self) -> bool:
         """测试Gemini连接"""
         try:
-            response = self.call("请回复'测试成功'")
-            return "测试成功" in response.content or "success" in response.content.lower()
+            # 使用简单的测试提示
+            response = self.call("测试", max_tokens=10)
+            # 检查响应是否有效
+            if response and response.content:
+                return True
+            return False
         except Exception as e:
             logger.error(f"Gemini连接测试失败: {e}")
             return False
@@ -366,8 +446,12 @@ class SiliconFlowProvider(LLMProvider):
     def test_connection(self) -> bool:
         """测试硅基流动连接"""
         try:
-            response = self.call("请回复'测试成功'")
-            return "测试成功" in response.content or "success" in response.content.lower()
+            # 使用简单的测试提示
+            response = self.call("测试", max_tokens=10)
+            # 检查响应是否有效
+            if response and response.content:
+                return True
+            return False
         except Exception as e:
             logger.error(f"硅基流动连接测试失败: {e}")
             return False

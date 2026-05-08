@@ -1,5 +1,7 @@
 .collection-preview-modal .ant-modal-content {
-  height: 90vh;
+  /* 使用 dvh 适配桌面客户端与移动端可视高度差异 */
+  max-height: 96dvh;
+  height: auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -13,7 +15,9 @@
 
 .collection-preview-modal .ant-modal-body {
   padding: 0 !important;
-  height: 100%;
+  /* 让主体区域在内容超出时可滚动，避免底部被裁切 */
+  max-height: calc(96dvh - 48px);
+  overflow: hidden;
 }
 
 .collection-preview-container {
@@ -87,6 +91,7 @@
 /* 主体内容 */
 .preview-content {
   flex: 1;
+  min-height: 0; /* 使内部使用 flex 的子项正确收缩 */
   overflow: hidden;
 }
 

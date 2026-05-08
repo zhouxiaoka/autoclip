@@ -1,22 +1,68 @@
 import axios from 'axios'
 import { Project, Clip, Collection } from '../store/useProjectStore'
+import { errorHandler } from '../utils/errorHandler'
+import { apiConfigManager } from '../utils/apiConfig'
+
+// 扩展Axios配置类型
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    metadata?: {
+      startTime: number
+      retryCount?: number
+    }
+  }
+}
 
 // 格式化时间函数（暂时未使用，保留备用）
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1', // FastAPI后端服务器地址
+  baseURL: apiConfigManager.getBaseUrl(),
   timeout: 300000, // 增加到5分钟超时
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
+const RETRYABLE_METHODS = new Set(['get', 'head', 'options'])
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504])
+const MAX_RETRIES = 2
+
+const shouldRetry = (error: any): boolean => {
+  const method = error?.config?.method?.toLowerCase()
+  if (!method || !RETRYABLE_METHODS.has(method)) return false
+
+  const status = error?.response?.status
+  if (status && RETRYABLE_STATUS_CODES.has(status)) return true
+
+  const code = error?.code
+  return code === 'ECONNABORTED' || !error?.response
+}
+
+const getRetryDelay = (retryCount: number): number => 300 * Math.pow(2, retryCount)
+
+apiConfigManager.addListener((config) => {
+  api.defaults.baseURL = config.baseUrl
+})
+
+const isTauriRuntime = () => (
+  typeof window !== 'undefined' &&
+  ((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)
+)
+
 // 请求拦截器
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
+    if (isTauriRuntime() && !apiConfigManager.isReady()) {
+      await apiConfigManager.waitForReady()
+    }
+
+    config.baseURL = apiConfigManager.getBaseUrl()
+    // 添加请求ID用于追踪
+    config.metadata = { startTime: Date.now() }
     return config
   },
   (error) => {
+    errorHandler.handleError(error, 'RequestInterceptor')
     return Promise.reject(error)
   }
 )
@@ -24,25 +70,43 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
+    // 记录请求耗时
+    if (response.config.metadata?.startTime) {
+      const duration = Date.now() - response.config.metadata.startTime
+      if (duration > 5000) { // 超过5秒的请求
+        console.warn(`Slow API request: ${response.config.url} took ${duration}ms`)
+      }
+    }
+    
     return response.data
   },
-  (error) => {
-    console.error('API Error:', error)
+  async (error) => {
+    if (shouldRetry(error)) {
+      const currentRetryCount = error.config?.metadata?.retryCount || 0
+      if (currentRetryCount < MAX_RETRIES) {
+        error.config.metadata = {
+          ...(error.config.metadata || { startTime: Date.now() }),
+          retryCount: currentRetryCount + 1,
+        }
+        await new Promise((resolve) => setTimeout(resolve, getRetryDelay(currentRetryCount)))
+        return api.request(error.config)
+      }
+    }
+
+    // 使用统一的错误处理器
+    errorHandler.handleError(error, 'API')
     
-    // 特殊处理429错误（系统繁忙）
+    // 保持原有的错误对象结构，确保向后兼容
     if (error.response?.status === 429) {
       const message = error.response?.data?.detail || '系统正在处理其他项目，请稍后再试'
       error.userMessage = message
     }
-    // 处理超时错误
     else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
       error.userMessage = '请求超时，项目可能仍在后台处理中，请稍后查看项目状态'
     }
-    // 处理网络错误
     else if (error.code === 'NETWORK_ERROR' || !error.response) {
       error.userMessage = '网络连接失败，请检查网络连接'
     }
-    // 处理服务器错误
     else if (error.response?.status >= 500) {
       error.userMessage = '服务器内部错误，请稍后重试'
     }
@@ -124,15 +188,14 @@ export const settingsApi = {
 
   // 更新系统配置
   updateSettings: (settings: any): Promise<any> => {
-    return api.post('/settings', settings)
+    return api.put('/settings/', settings)
   },
 
   // 测试API密钥
-  testApiKey: (provider: string, apiKey: string, modelName: string): Promise<{ success: boolean; error?: string }> => {
-    return api.post('/settings/test-api-key', { 
+  testApiKey: (provider: string, apiKey: string): Promise<{ success: boolean; error?: string }> => {
+    return api.post('/settings/test-api', { 
       provider, 
-      api_key: apiKey, 
-      model_name: modelName 
+      api_key: apiKey
     })
   },
 
@@ -144,6 +207,11 @@ export const settingsApi = {
   // 获取当前提供商信息
   getCurrentProvider: (): Promise<any> => {
     return api.get('/settings/current-provider')
+  },
+
+  // 检查桌面模式
+  checkDesktopMode: (): Promise<{ is_desktop_mode: boolean; environment: any }> => {
+    return api.get('/settings/desktop-mode')
   }
 }
 
@@ -308,22 +376,14 @@ export const projectApi = {
       project_id: projectId,
       name: collectionData.collection_title,
       description: collectionData.collection_summary,
-      metadata: {
-        clip_ids: collectionData.clip_ids,
-        collection_type: 'manual'
-      }
+      clip_ids: collectionData.clip_ids,
+      collection_type: 'manual'
     })
   },
 
   // 更新合集信息
   updateCollection: (_projectId: string, collectionId: string, updates: Partial<Collection>): Promise<Collection> => {
-    // 如果updates包含clip_ids，需要将其包装在metadata中
-    const apiUpdates = { ...updates }
-    if ('clip_ids' in updates && updates.clip_ids !== undefined) {
-      apiUpdates.metadata = { clip_ids: updates.clip_ids }
-      delete apiUpdates.clip_ids
-    }
-    return api.put(`/collections/${collectionId}`, apiUpdates)
+    return api.put(`/collections/${collectionId}`, updates)
   },
 
   // 重新排序合集切片
@@ -382,7 +442,7 @@ export const projectApi = {
     
     try {
       // 对于blob类型的响应，需要直接使用axios而不是经过拦截器
-      const response = await axios.get(`http://localhost:8000/api/v1${url}`, { 
+      const response = await axios.get(`/api/v1${url}`, { 
         responseType: 'blob',
         headers: {
           'Accept': 'application/octet-stream'
@@ -442,13 +502,13 @@ export const projectApi = {
   // 获取切片视频URL
   getClipVideoUrl: (projectId: string, clipId: string, _clipTitle?: string): string => {
     // 使用projects路由获取切片视频
-    return `http://localhost:8000/api/v1/projects/${projectId}/clips/${clipId}`
+    return `/api/v1/projects/${projectId}/clips/${clipId}`
   },
 
   // 获取合集视频URL
   getCollectionVideoUrl: (projectId: string, collectionId: string): string => {
     // 使用files路由获取合集视频
-    return `http://localhost:8000/api/v1/files/projects/${projectId}/collections/${collectionId}`
+    return `/api/v1/files/projects/${projectId}/collections/${collectionId}`
   },
 
   // 生成项目缩略图

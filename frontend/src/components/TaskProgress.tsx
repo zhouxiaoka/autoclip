@@ -43,7 +43,7 @@ const TaskProgress: React.FC<TaskProgressProps> = ({
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`http://localhost:8000/api/v1/progress/project/${projectId}`);
+      const response = await fetch(`/api/v1/progress/project/${projectId}`);
       if (!response.ok) {
         throw new Error('获取进度失败');
       }

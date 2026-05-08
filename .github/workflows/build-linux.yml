@@ -1,0 +1,79 @@
+name: Build Linux Package
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+        
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: x86_64-unknown-linux-gnu
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.0-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt pyinstaller
+        
+    - name: Build backend for Linux
+      run: |
+        python scripts/build_backend.py
+        
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm install
+        
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+        
+    - name: Install Tauri CLI
+      run: npm install -g @tauri-apps/cli@latest
+        
+    - name: Build Tauri app for Linux
+      run: |
+        cd src-tauri
+        tauri build --target x86_64-unknown-linux-gnu
+        
+    - name: Upload Linux AppImage
+      uses: actions/upload-artifact@v4
+      with:
+        name: autoclip-linux-appimage
+        path: src-tauri/target/release/bundle/appimage/*.AppImage
+        retention-days: 30
+        
+    - name: Upload Linux DEB package
+      uses: actions/upload-artifact@v4
+      with:
+        name: autoclip-linux-deb
+        path: src-tauri/target/release/bundle/deb/*.deb
+        retention-days: 30

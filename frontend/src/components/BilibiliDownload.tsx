@@ -3,6 +3,7 @@ import { Button, message, Progress, Input, Card, Typography, Space, Spin, Select
 import { DownloadOutlined } from '@ant-design/icons'
 import { projectApi, bilibiliApi, VideoCategory, BilibiliDownloadTask } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
+import { validateApiConfigBeforeProjectCreation } from '../utils/apiConfigCheck'
 
 const { Text } = Typography
 
@@ -127,13 +128,13 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
         response = await bilibiliApi.parseYouTubeVideoInfo(url.trim(), selectedBrowser)
       }
       
-      const parsedVideoInfo = response.video_info
+      const parsedVideoInfo = response?.video_info
       
       setVideoInfo(parsedVideoInfo)
       setError('') // 解析成功，清除错误信息
       
       // 自动填充项目名称
-      if (!projectName && parsedVideoInfo.title) {
+      if (parsedVideoInfo && !projectName && parsedVideoInfo.title) {
         setProjectName(parsedVideoInfo.title)
       }
       
@@ -196,6 +197,12 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
       return
     }
 
+    // 检查API配置
+    const hasValidApiConfig = await validateApiConfigBeforeProjectCreation()
+    if (!hasValidApiConfig) {
+      return
+    }
+
     setDownloading(true)
     
     try {
@@ -221,6 +228,13 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
       
       // 检查响应是否包含项目ID（新的优化后的响应格式）
       if (response.project_id) {
+        addProject({
+          id: response.project_id,
+          name: projectName.trim() || (videoInfo?.title ?? '新建项目'),
+          status: 'pending',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
         // 新格式：项目已创建，立即重置表单
         setCurrentTask(null)
         setDownloading(false)
@@ -278,7 +292,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
         <Space direction="vertical" style={{ width: '100%' }} size={16}>
           <div>
             <Input.TextArea
-              placeholder="请粘贴B站或YouTube视频链接，支持：• B站：https://www.bilibili.com/video/BV1xx411c7mu • YouTube：https://www.youtube.com/watch?v=xxxxx"
+              placeholder="请粘贴B站或YouTube视频链接，支持：&#10;• B站：https://www.bilibili.com/video/BV1xx411c7mu&#10;• YouTube：https://www.youtube.com/watch?v=xxxxx"
               value={url}
               onChange={(e) => {
                 setUrl(e.target.value)
@@ -305,7 +319,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
                 fontSize: '14px',
                 resize: 'none'
               }}
-              rows={2}
+              rows={4}
               disabled={downloading || parsing}
             />
             {parsing && (

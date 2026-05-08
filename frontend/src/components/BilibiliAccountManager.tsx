@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Button, Modal, Form, Input, Table, Tag, Space, message, Popconfirm, Tabs, Alert, Typography, Divider, Progress, Tooltip, Statistic } from 'antd'
-import { PlusOutlined, DeleteOutlined, UserOutlined, CheckCircleOutlined, CloseCircleOutlined, QrcodeOutlined, KeyOutlined, WechatOutlined, QqOutlined, ExclamationCircleOutlined, QuestionCircleOutlined, HeartOutlined, TrophyOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons'
+import { Card, Button, Modal, Form, Input, Table, Tag, Space, message, Popconfirm, Tabs, Alert, Typography, Divider, Tooltip, Statistic } from 'antd'
+import { PlusOutlined, DeleteOutlined, UserOutlined, CheckCircleOutlined, CloseCircleOutlined, QrcodeOutlined, ExclamationCircleOutlined, QuestionCircleOutlined, HeartOutlined, TrophyOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons'
 import { uploadApi, BilibiliAccount } from '../services/uploadApi'
 import CookieHelper from './CookieHelper'
 import AccountHealthMonitor from './AccountHealthMonitor'
@@ -8,15 +8,6 @@ import AccountHealthMonitor from './AccountHealthMonitor'
 const { TextArea } = Input
 const { Text, Paragraph } = Typography
 const { TabPane } = Tabs
-
-interface LoginMethod {
-  id: string
-  name: string
-  description: string
-  icon: string
-  recommended: boolean
-  risk_level: string
-}
 
 interface AccountHealth {
   score: number
@@ -30,7 +21,6 @@ const BilibiliAccountManager: React.FC = () => {
   const [accounts, setAccounts] = useState<BilibiliAccount[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
-  const [loginMethods, setLoginMethods] = useState<LoginMethod[]>([])
   const [activeTab, setActiveTab] = useState('cookie')
   const [cookieHelperVisible, setCookieHelperVisible] = useState(false)
   const [accountsHealth, setAccountsHealth] = useState<Record<string, AccountHealth>>({})
@@ -105,19 +95,8 @@ const BilibiliAccountManager: React.FC = () => {
     }
   }
 
-  // 获取登录方式列表
-  const fetchLoginMethods = async () => {
-    try {
-      const response = await uploadApi.getLoginMethods()
-      setLoginMethods(response.methods)
-    } catch (error: any) {
-      console.error('获取登录方式失败:', error)
-    }
-  }
-
   useEffect(() => {
     fetchAccounts()
-    fetchLoginMethods()
     
     // 清理定时器
     return () => {
@@ -131,7 +110,7 @@ const BilibiliAccountManager: React.FC = () => {
   const handlePasswordLogin = async (values: any) => {
     try {
       setLoading(true)
-      const account = await uploadApi.passwordLogin(values.username, values.password, values.nickname)
+      await uploadApi.passwordLogin(values.username, values.password, values.nickname)
       message.success('账号密码登录成功！')
       setModalVisible(false)
       passwordForm.resetFields()
@@ -152,7 +131,7 @@ const BilibiliAccountManager: React.FC = () => {
       const cookieStr = values.cookies.trim()
       const cookies: Record<string, string> = {}
       
-      cookieStr.split(';').forEach(cookie => {
+      cookieStr.split(';').forEach((cookie: string) => {
         const [key, value] = cookie.trim().split('=')
         if (key && value) {
           cookies[key] = value
@@ -164,7 +143,7 @@ const BilibiliAccountManager: React.FC = () => {
         return
       }
       
-      const account = await uploadApi.cookieLogin(cookies, values.nickname)
+      await uploadApi.cookieLogin(cookies, values.nickname)
       message.success('Cookie导入成功！')
       setModalVisible(false)
       cookieForm.resetFields()
@@ -248,25 +227,6 @@ const BilibiliAccountManager: React.FC = () => {
     }
   }
 
-  // 获取风险等级标签
-  const getRiskLevelTag = (riskLevel: string) => {
-    switch (riskLevel) {
-      case 'low':
-        return <Tag color="green">低风险</Tag>
-      case 'medium':
-        return <Tag color="orange">中风险</Tag>
-      case 'high':
-        return <Tag color="red">高风险</Tag>
-      default:
-        return <Tag>未知</Tag>
-    }
-  }
-
-  // 获取推荐标签
-  const getRecommendedTag = (recommended: boolean) => {
-    return recommended ? <Tag color="blue">推荐</Tag> : null
-  }
-
   // 获取健康状态标签和颜色
   const getHealthStatusTag = (health?: AccountHealth) => {
     if (!health) return <Tag>未知</Tag>
@@ -306,7 +266,7 @@ const BilibiliAccountManager: React.FC = () => {
       title: '用户名',
       dataIndex: 'username',
       key: 'username',
-      render: (username: string, record: BilibiliAccount) => (
+      render: (username: string) => (
         <Space>
           <UserOutlined />
           <span>{username}</span>
@@ -385,8 +345,9 @@ const BilibiliAccountManager: React.FC = () => {
 
   // 计算总体统计数据
   const getTotalStats = () => {
-    const totalAccounts = accounts.length
-    const activeAccounts = accounts.filter(acc => acc.status === 'active').length
+    const safeAccounts = Array.isArray(accounts) ? accounts : []
+    const totalAccounts = safeAccounts.length
+    const activeAccounts = safeAccounts.filter(acc => acc.status === 'active').length
     const healthScores = Object.values(accountsHealth).map(h => h.score)
     const avgHealth = healthScores.length > 0 ? Math.round(healthScores.reduce((a, b) => a + b, 0) / healthScores.length) : 0
     const excellentCount = Object.values(accountsHealth).filter(h => h.status === 'excellent').length

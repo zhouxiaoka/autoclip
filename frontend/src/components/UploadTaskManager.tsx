@@ -12,9 +12,7 @@ import {
   DatePicker,
   Input,
   message,
-  Tooltip,
   Popconfirm,
-  Typography,
   Row,
   Col,
   Statistic,
@@ -29,13 +27,11 @@ import {
   ClockCircleOutlined,
   CloseCircleOutlined
 } from '@ant-design/icons'
-import { uploadApi, BILIBILI_PARTITIONS } from '../services/uploadApi'
+import { uploadApi, BILIBILI_PARTITIONS, UploadRecord } from '../services/uploadApi'
 import dayjs from 'dayjs'
 
 const { RangePicker } = DatePicker
 const { Option } = Select
-const { Text } = Typography
-
 interface UploadTask {
   id: string
   project_id: string
@@ -53,6 +49,23 @@ interface UploadTask {
   progress?: number
   current_step?: string
 }
+
+const mapRecordToTask = (record: UploadRecord): UploadTask => ({
+  id: String(record.id),
+  project_id: record.project_id ? String(record.project_id) : '',
+  account_id: String(record.account_id),
+  clip_id: record.clip_id || '',
+  title: record.title || '未命名任务',
+  description: record.description || '',
+  tags: record.tags || '[]',
+  partition_id: record.partition_id,
+  bvid: record.bv_id,
+  status: record.status,
+  error_message: record.error_message,
+  created_at: record.created_at,
+  updated_at: record.updated_at,
+  progress: record.progress,
+})
 
 interface UploadTaskManagerProps {
   projectId?: string
@@ -76,17 +89,20 @@ const UploadTaskManager: React.FC<UploadTaskManagerProps> = ({ projectId }) => {
     try {
       setLoading(true)
       const records = await uploadApi.getUploadRecords(projectId)
-      setTasks(records)
-      setFilteredTasks(records)
+      const safeRecords = Array.isArray(records) ? records.map(mapRecordToTask) : []
+      setTasks(safeRecords)
+      setFilteredTasks(safeRecords)
     } catch (error: any) {
       message.error('获取投稿任务失败: ' + (error.message || '未知错误'))
+      setTasks([])
+      setFilteredTasks([])
     } finally {
       setLoading(false)
     }
   }
 
   // 重试失败的任务
-  const retryTask = async (taskId: string) => {
+  const retryTask = async (_taskId: string) => {
     message.info('B站上传功能正在开发中，敬请期待！', 3);
     return;
     
@@ -101,7 +117,7 @@ const UploadTaskManager: React.FC<UploadTaskManagerProps> = ({ projectId }) => {
   }
 
   // 取消进行中的任务
-  const cancelTask = async (taskId: string) => {
+  const cancelTask = async (_taskId: string) => {
     message.info('B站上传功能正在开发中，敬请期待！', 3);
     return;
     
@@ -123,7 +139,8 @@ const UploadTaskManager: React.FC<UploadTaskManagerProps> = ({ projectId }) => {
 
   // 应用筛选条件
   const applyFilters = () => {
-    let filtered = tasks
+    const safeTasks = Array.isArray(tasks) ? tasks : []
+    let filtered = safeTasks
 
     if (filters.status) {
       filtered = filtered.filter(task => task.status === filters.status)
@@ -160,7 +177,7 @@ const UploadTaskManager: React.FC<UploadTaskManagerProps> = ({ projectId }) => {
       dateRange: null,
       keyword: ''
     })
-    setFilteredTasks(tasks)
+    setFilteredTasks(Array.isArray(tasks) ? tasks : [])
   }
 
   // 获取状态标签颜色
@@ -213,11 +230,12 @@ const UploadTaskManager: React.FC<UploadTaskManagerProps> = ({ projectId }) => {
 
   // 计算统计数据
   const getStatistics = () => {
-    const total = tasks.length
-    const pending = tasks.filter(t => t.status === 'pending').length
-    const processing = tasks.filter(t => t.status === 'processing').length
-    const success = tasks.filter(t => t.status === 'success').length
-    const failed = tasks.filter(t => t.status === 'failed').length
+    const safeTasks = Array.isArray(tasks) ? tasks : []
+    const total = safeTasks.length
+    const pending = safeTasks.filter(t => t.status === 'pending').length
+    const processing = safeTasks.filter(t => t.status === 'processing').length
+    const success = safeTasks.filter(t => t.status === 'success').length
+    const failed = safeTasks.filter(t => t.status === 'failed').length
 
     return { total, pending, processing, success, failed }
   }

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from .video_processor import VideoProcessor
 from .subtitle_processor import SubtitleProcessor
+from .ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +169,9 @@ class VideoEditor:
         try:
             duration = end_time - start_time
             
+            ffmpeg_bin = get_ffmpeg_path()
             cmd = [
-                'ffmpeg',
+                ffmpeg_bin,
                 '-ss', str(start_time),
                 '-i', str(video_path),
                 '-t', str(duration),
@@ -234,8 +236,9 @@ class VideoEditor:
                         f.write(f"file '{segment_file}'\n")
                 
                 # 拼接所有片段
+                ffmpeg_bin = get_ffmpeg_path()
                 cmd = [
-                    'ffmpeg',
+                    ffmpeg_bin,
                     '-f', 'concat',
                     '-safe', '0',
                     '-i', str(file_list_path),
@@ -268,8 +271,9 @@ class VideoEditor:
             视频时长（秒）
         """
         try:
+            ffprobe_bin = get_ffprobe_path()
             cmd = [
-                'ffprobe',
+                ffprobe_bin,
                 '-v', 'quiet',
                 '-show_entries', 'format=duration',
                 '-of', 'csv=p=0',

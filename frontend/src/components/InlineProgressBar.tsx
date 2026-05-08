@@ -34,6 +34,12 @@ export const InlineProgressBar: React.FC<InlineProgressBarProps> = ({
   status = 'processing',
   onProgressUpdate
 }) => {
+  // 根据步骤ID获取步骤名称
+  const getStepName = (stepId: number): string => {
+    const step = PIPELINE_STEPS.find(s => s.id === stepId);
+    return step ? step.name : '处理中...';
+  };
+
   const [progressData, setProgressData] = useState<ProgressData>({
     progress: currentStep > 0 ? Math.round((currentStep / totalSteps) * 100) : 0,
     currentStep: currentStep,
@@ -81,12 +87,6 @@ export const InlineProgressBar: React.FC<InlineProgressBarProps> = ({
     onProgressUpdate?.(newProgress, stepName);
   };
 
-  // 根据步骤ID获取步骤名称
-  const getStepName = (stepId: number): string => {
-    const step = PIPELINE_STEPS.find(s => s.id === stepId);
-    return step ? step.name : '处理中...';
-  };
-
   // 监听props变化，更新进度数据
   useEffect(() => {
     const newProgress = currentStep > 0 ? Math.round((currentStep / totalSteps) * 100) : 0;
@@ -113,15 +113,11 @@ export const InlineProgressBar: React.FC<InlineProgressBarProps> = ({
   // 计算进度条宽度百分比
   const progressPercentage = Math.min(Math.max(progressData.progress, 0), 100);
   
-  // 计算当前步骤在总步骤中的位置
-  const stepProgress = progressData.currentStep > 0 ? 
-    ((progressData.currentStep - 1) / progressData.totalSteps) * 100 : 0;
 
   // 生成进度条背景渐变
   const getProgressGradient = () => {
     const baseColor = '#1890ff';
     const lightColor = '#40a9ff';
-    const darkColor = '#096dd9';
     
     return `linear-gradient(90deg, 
       ${baseColor} 0%, 
@@ -237,7 +233,7 @@ export const InlineProgressBar: React.FC<InlineProgressBarProps> = ({
       </div>
       
       {/* 添加CSS动画 */}
-      <style jsx>{`
+      <style>{`
         @keyframes progressBarPulse {
           0%, 100% {
             opacity: 1;

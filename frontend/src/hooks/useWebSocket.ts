@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 export interface WebSocketMessage {
   type: string;
@@ -154,10 +154,10 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
       const ws = new WebSocket(wsUrl);
       globalWs = ws;
       globalUserId = userId;
-      globalOnMessage = onMessage;
-      globalOnConnect = onConnect;
-      globalOnDisconnect = onDisconnect;
-      globalOnError = onError;
+      globalOnMessage = onMessage || null;
+      globalOnConnect = onConnect || null;
+      globalOnDisconnect = onDisconnect || null;
+      globalOnError = onError || null;
 
       ws.onopen = () => {
         console.log('WebSocket连接已建立');
@@ -186,7 +186,7 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
           console.log('收到WebSocket消息:', data);
           
           // 处理pong响应
-          if (data.type === 'pong') {
+          if ((data as any).type === 'pong') {
             console.log('收到心跳pong响应');
             if (heartbeatTimeout) {
               clearTimeout(heartbeatTimeout);

@@ -27,13 +27,19 @@ class TaskQueueService:
         self.db = db
         self.task_repo = TaskRepository(db)
     
-    def submit_video_processing_task(self, project_id: str, srt_path: str) -> Dict[str, Any]:
+    def submit_video_processing_task(
+        self,
+        project_id: str,
+        input_video_path: str,
+        input_srt_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         提交视频处理任务
         
         Args:
             project_id: 项目ID
-            srt_path: SRT文件路径
+            input_video_path: 输入视频路径
+            input_srt_path: 输入SRT路径
             
         Returns:
             任务提交结果
@@ -52,7 +58,11 @@ class TaskQueueService:
             )
             
             # 提交Celery任务
-            celery_task = process_video_pipeline.delay(project_id, srt_path)
+            celery_task = process_video_pipeline.delay(
+                project_id=project_id,
+                input_video_path=input_video_path,
+                input_srt_path=input_srt_path,
+            )
             
             # 更新任务记录
             task.celery_task_id = celery_task.id
@@ -72,14 +82,19 @@ class TaskQueueService:
             logger.error(f"提交视频处理任务失败: {project_id}, 错误: {e}")
             raise
     
-    def submit_single_step_task(self, project_id: str, step_name: str, srt_path: Optional[str] = None) -> Dict[str, Any]:
+    def submit_single_step_task(
+        self,
+        project_id: str,
+        step_name: str,
+        config: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
         提交单个步骤处理任务
         
         Args:
             project_id: 项目ID
             step_name: 步骤名称
-            srt_path: SRT文件路径（仅Step1需要）
+            config: 步骤配置参数
             
         Returns:
             任务提交结果
@@ -98,7 +113,7 @@ class TaskQueueService:
             )
             
             # 提交Celery任务
-            celery_task = process_single_step.delay(project_id, step_name, srt_path)
+            celery_task = process_single_step.delay(project_id, step_name, config or {})
             
             # 更新任务记录
             task.celery_task_id = celery_task.id
@@ -119,7 +134,13 @@ class TaskQueueService:
             logger.error(f"提交单个步骤任务失败: {project_id}, {step_name}, 错误: {e}")
             raise
     
-    def submit_retry_task(self, project_id: str, task_id: str, step_name: str, srt_path: Optional[str] = None) -> Dict[str, Any]:
+    def submit_retry_task(
+        self,
+        project_id: str,
+        task_id: str,
+        step_name: str,
+        config: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
         提交重试任务
         
@@ -127,7 +148,7 @@ class TaskQueueService:
             project_id: 项目ID
             task_id: 任务ID
             step_name: 步骤名称
-            srt_path: SRT文件路径（仅Step1需要）
+            config: 步骤配置参数
             
         Returns:
             任务提交结果
@@ -146,7 +167,7 @@ class TaskQueueService:
             )
             
             # 提交Celery任务
-            celery_task = retry_processing_step.delay(project_id, task_id, step_name, srt_path)
+            celery_task = retry_processing_step.delay(project_id, step_name, config or {}, task_id)
             
             # 更新任务记录
             task.celery_task_id = celery_task.id

@@ -5,6 +5,7 @@
 import json
 import logging
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Dict, Any, Optional
 from ..core.config import get_data_directory
@@ -37,9 +38,7 @@ class StorageService:
     def save_metadata(self, metadata: Dict[str, Any], step: str) -> str:
         """保存处理元数据到文件系统"""
         metadata_file = self.project_dir / "processing" / f"{step}.json"
-        
-        with open(metadata_file, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, ensure_ascii=False, indent=2)
+        self._atomic_write_json(metadata_file, metadata)
         
         logger.info(f"保存元数据: {metadata_file}")
         return str(metadata_file)
@@ -88,8 +87,8 @@ class StorageService:
         target_path = self.project_dir / "output" / "clips" / clip_file
         target_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # 创建模拟文件（实际应该保存真实的视频文件）
-        target_path.touch()
+        # 创建占位文件（使用原子写避免空壳/半写入）
+        self._atomic_touch_file(target_path)
         logger.info(f"保存切片文件: {target_path}")
         return str(target_path)
     
@@ -101,10 +100,35 @@ class StorageService:
         target_path = self.project_dir / "output" / "collections" / collection_file
         target_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # 创建模拟文件（实际应该保存真实的合集文件）
-        target_path.touch()
+        # 创建占位文件（使用原子写避免空壳/半写入）
+        self._atomic_touch_file(target_path)
         logger.info(f"保存合集文件: {target_path}")
         return str(target_path)
+
+    def _atomic_write_json(self, target_path: Path, payload: Dict[str, Any]) -> None:
+        """原子写入JSON，避免中断导致半文件。"""
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            encoding='utf-8',
+            dir=target_path.parent,
+            delete=False,
+        ) as temp_file:
+            json.dump(payload, temp_file, ensure_ascii=False, indent=2)
+            temp_file.flush()
+            temp_path = Path(temp_file.name)
+        temp_path.replace(target_path)
+
+    def _atomic_touch_file(self, target_path: Path) -> None:
+        """原子创建占位文件。"""
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode='wb',
+            dir=target_path.parent,
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+        temp_path.replace(target_path)
     
     def get_file_content(self, file_path: str) -> Optional[Dict[str, Any]]:
         """获取文件内容"""

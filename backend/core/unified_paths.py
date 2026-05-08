@@ -6,29 +6,22 @@
 from pathlib import Path
 from typing import Dict, Any
 
+from . import path_utils
+
 class UnifiedPathManager:
     """统一的路径管理器"""
     
     def __init__(self):
         self._project_root = self._get_project_root()
-        self._data_dir = self._project_root / "data"
-        self._output_dir = self._data_dir / "output"
+        self._data_dir = path_utils.get_data_directory()
+        self._output_dir = path_utils.get_output_directory()
         
         # 确保关键目录存在
         self._ensure_directories()
     
     def _get_project_root(self) -> Path:
         """获取项目根目录"""
-        current_path = Path(__file__).parent  # backend/core/
-        
-        # 向上查找项目根目录
-        while current_path.parent != current_path:
-            if (current_path.parent / "frontend").exists() and (current_path.parent / "backend").exists():
-                return current_path.parent
-            current_path = current_path.parent
-        
-        # 如果没找到，使用默认路径
-        return Path(__file__).parent.parent.parent
+        return path_utils.get_project_root()
     
     def _ensure_directories(self):
         """确保关键目录存在"""

@@ -4,14 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react'
-import { Progress, Space, Typography, Tag } from 'antd'
-import { 
-  DownloadOutlined, 
-  LoadingOutlined, 
-  CheckCircleOutlined, 
-  ExclamationCircleOutlined,
-  ClockCircleOutlined
-} from '@ant-design/icons'
+import { Progress, Typography } from 'antd'
 import { useSimpleProgressStore, getStageDisplayName, getStageColor, isCompleted, isFailed } from '../stores/useSimpleProgressStore'
 
 const { Text } = Typography
@@ -39,9 +32,19 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
 
   // 根据状态决定是否轮询
   useEffect(() => {
+    // 如果已有进度且已到达终态，则不启动轮询
+    if (progress && (isCompleted(progress.stage) || isFailed(progress.message))) {
+      if (isPolling) {
+        console.log(`进度已终态，停止轮询: ${projectId}`)
+        stopPolling()
+        setIsPolling(false)
+      }
+      return
+    }
+
     if ((status === 'processing' || status === 'pending') && !isPolling) {
       console.log(`开始轮询处理进度: ${projectId}`)
-      startPolling([projectId], 2000)
+      startPolling([projectId], 5000) // 5秒轮询一次，减少频繁请求
       setIsPolling(true)
     } else if (status !== 'processing' && status !== 'pending' && isPolling) {
       console.log(`停止轮询处理进度: ${projectId}`)
@@ -56,7 +59,7 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
         setIsPolling(false)
       }
     }
-  }, [status, projectId, isPolling, startPolling, stopPolling])
+  }, [status, projectId, isPolling, startPolling, stopPolling, progress])
 
   // 下载进度轮询
   useEffect(() => {
@@ -64,7 +67,7 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
       const pollDownloadProgress = async () => {
         try {
           console.log(`轮询下载进度: ${projectId}`)
-          const response = await fetch(`http://localhost:8000/api/v1/projects/${projectId}`)
+          const response = await fetch(`/api/v1/projects/${projectId}`)
           if (response.ok) {
             const projectData = await response.json()
             console.log('项目数据:', projectData)
@@ -91,8 +94,8 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
       // 立即获取一次
       pollDownloadProgress()
       
-      // 每2秒轮询一次
-      const interval = setInterval(pollDownloadProgress, 2000)
+      // 每5秒轮询一次，减少频繁请求
+      const interval = setInterval(pollDownloadProgress, 5000)
       
       return () => clearInterval(interval)
     }
@@ -100,11 +103,17 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
 
   // 处理状态变化
   useEffect(() => {
-    if (progress && onStatusChange) {
-      if (isCompleted(progress.stage)) {
-        onStatusChange('completed')
-      } else if (isFailed(progress.message)) {
-        onStatusChange('failed')
+    if (progress) {
+      // 进度到达终态时，立刻停止轮询并同步状态
+      if (isCompleted(progress.stage) || isFailed(progress.message)) {
+        if (isPolling) {
+          console.log(`进度达到终态，停止轮询: ${projectId}`)
+          stopPolling()
+          setIsPolling(false)
+        }
+        if (onStatusChange) {
+          onStatusChange(isCompleted(progress.stage) ? 'completed' : 'failed')
+        }
       }
     }
   }, [progress, onStatusChange])
@@ -203,7 +212,6 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
 
     const { stage, percent, message } = progress
     const stageDisplayName = getStageDisplayName(stage)
-    const stageColor = getStageColor(stage)
     const failed = isFailed(message)
 
     return (
@@ -350,7 +358,6 @@ export const SimpleProgressDisplay: React.FC<SimpleProgressDisplayProps> = ({
   }
 
   const { stage, percent, message } = progress
-  const stageDisplayName = getStageDisplayName(stage)
   const stageColor = getStageColor(stage)
 
   return (
