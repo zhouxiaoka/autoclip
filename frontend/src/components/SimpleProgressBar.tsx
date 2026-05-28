@@ -33,8 +33,7 @@ export const SimpleProgressBar: React.FC<SimpleProgressBarProps> = ({
   const { 
     getProgress, 
     startPolling, 
-    stopPolling, 
-    isPolling 
+    stopPolling
   } = useSimpleProgressStore()
 
   const progress = getProgress(projectId)
@@ -149,8 +148,7 @@ export const BatchProgressBar: React.FC<BatchProgressBarProps> = ({
   const { 
     getAllProgress, 
     startPolling, 
-    stopPolling, 
-    isPolling 
+    stopPolling
   } = useSimpleProgressStore()
 
   const allProgress = getAllProgress()

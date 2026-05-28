@@ -14,6 +14,8 @@ from ...core.config import get_data_directory
 import uuid
 import asyncio
 from datetime import datetime
+from contextlib import contextmanager
+import os
 import yt_dlp
 
 logger = logging.getLogger(__name__)
@@ -21,6 +23,21 @@ router = APIRouter()
 
 # 存储下载任务的状态
 download_tasks = {}
+
+
+@contextmanager
+def sanitized_yt_env():
+    """临时清理与 yt-dlp 相关的环境变量，避免外部配置影响行为"""
+    original_env = os.environ.copy()
+    try:
+        for key in list(os.environ.keys()):
+            upper_key = key.upper()
+            if upper_key.startswith("YT_DLP") or upper_key.startswith("YTDL") or upper_key.startswith("YOUTUBE_DL") or upper_key.startswith("YOUTUBEDL"):
+                os.environ.pop(key, None)
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
 
 class YouTubeParseRequest(BaseModel):
     url: str
@@ -57,7 +74,8 @@ class YouTubeDownloadTask(BaseModel):
 @router.post("/parse")
 async def parse_youtube_video(
     url: str = Form(...),
-    browser: Optional[str] = Form(None)
+    browser: Optional[str] = Form(None),
+    client: Optional[str] = Form(None)
 ):
     """解析YouTube视频信息"""
     try:
@@ -67,24 +85,78 @@ async def parse_youtube_video(
         if "youtube.com" not in url and "youtu.be" not in url:
             raise HTTPException(status_code=400, detail="无效的YouTube视频链接")
         
-        # 使用yt-dlp获取视频信息
-        import yt_dlp
+        # 记录版本信息，便于排查
+        try:
+            logger.info(f"yt-dlp={yt_dlp.version.__version__}, py={sys.executable}")
+        except Exception:
+            pass
+
+        # 使用 subprocess 直接调用 yt-dlp 命令行工具，避免 Python 环境配置影响
+        import subprocess
+        import json
         import asyncio
         
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-        }
-        
-        if browser:
-            ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
-        
-        def extract_info_sync(url, ydl_opts):
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(url, download=False)
+        def extract_info_sync(url, browser):
+            # 构建 yt-dlp 命令
+            cmd = [
+                '/Users/zhoukk/autoclip/venv/bin/yt-dlp',
+                '--ignore-config',
+                '--no-warnings',
+                '--no-playlist',
+                '--dump-json',
+                '--skip-download',  # 修正参数名
+                '--no-cache-dir'
+            ]
+            
+            if browser:
+                cmd.extend(['--cookies-from-browser', browser.lower()])
+
+            # 可选兜底客户端，规避 SABR
+            yt_client = (client or os.getenv('AUTOCLIP_YT_CLIENT', '')).strip().lower()
+            if yt_client in {"android", "ios", "tv"}:
+                cmd.extend(['--extractor-args', f"youtube:player_client={yt_client}"])
+            
+            cmd.append(url)
+            
+            try:
+                # 执行命令（清理环境变量，避免 YT_* 影响）
+                env = os.environ.copy()
+                for k in list(env.keys()):
+                    uk = k.upper()
+                    if uk.startswith('YT_DLP') or uk.startswith('YTDL') or uk.startswith('YOUTUBE_DL') or uk.startswith('YOUTUBEDL'):
+                        env.pop(k, None)
+
+                logger.info(f"执行命令: {' '.join(cmd)}")
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    cwd='/Users/zhoukk/autoclip',
+                    env=env
+                )
+
+                logger.info(f"命令返回码: {result.returncode}")
+                logger.info(f"命令输出(前200字): {result.stdout[:200]}...")
+                if result.stderr:
+                    logger.info(f"命令错误: {result.stderr}")
+
+                if result.returncode != 0:
+                    raise Exception(f"yt-dlp failed: {result.stderr or result.stdout}")
+
+                # 解析 JSON 输出
+                info_dict = json.loads(result.stdout)
+                return info_dict
+                
+            except subprocess.TimeoutExpired:
+                raise Exception("yt-dlp timeout")
+            except json.JSONDecodeError as e:
+                raise Exception(f"Failed to parse yt-dlp output: {e}")
+            except Exception as e:
+                raise Exception(f"yt-dlp execution failed: {e}")
         
         loop = asyncio.get_event_loop()
-        info_dict = await loop.run_in_executor(None, extract_info_sync, url, ydl_opts)
+        info_dict = await loop.run_in_executor(None, extract_info_sync, url, browser)
         
         logger.info(f"YouTube视频信息解析成功: {info_dict.get('title', 'Unknown')}")
         
@@ -93,7 +165,7 @@ async def parse_youtube_video(
             "video_info": {
                 "title": info_dict.get('title', 'Unknown'),
                 "description": info_dict.get('description', ''),
-                "duration": info_dict.get('duration', 0),
+                "duration": info_dict.get('duration', 0) or 0,
                 "uploader": info_dict.get('uploader', 'Unknown'),
                 "upload_date": info_dict.get('upload_date', ''),
                 "view_count": info_dict.get('view_count', 0),
@@ -119,14 +191,24 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            'ignoreconfig': True,
+            'noplaylist': True,
+            'config_locations': [],
+            'cachedir': False,
         }
         
         if request.browser:
             ydl_opts['cookiesfrombrowser'] = (request.browser.lower(),)
+
+        # 可选兜底客户端
+        yt_client_env = os.getenv('AUTOCLIP_YT_CLIENT', '').strip().lower()
+        if yt_client_env in {"android", "ios", "tv"}:
+            ydl_opts.setdefault('extractor_args', {}).setdefault('youtube', {}).setdefault('player_client', []).append(yt_client_env)
         
         def extract_info_sync(url, ydl_opts):
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(url, download=False)
+            with sanitized_yt_env():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return ydl.extract_info(url, download=False)
         
         loop = asyncio.get_event_loop()
         video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
@@ -326,14 +408,23 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             'noplaylist': True,
             'quiet': True,
             'no_warnings': False,  # 显示警告信息以便调试
+            'ignoreconfig': True,
+            'config_locations': [],
+            'cachedir': False,
         }
         
         if request.browser:
             ydl_opts['cookiesfrombrowser'] = (request.browser.lower(),)
+
+        # 可选兜底客户端
+        yt_client_env = os.getenv('AUTOCLIP_YT_CLIENT', '').strip().lower()
+        if yt_client_env in {"android", "ios", "tv"}:
+            ydl_opts.setdefault('extractor_args', {}).setdefault('youtube', {}).setdefault('player_client', []).append(yt_client_env)
         
         def download_sync(url, ydl_opts):
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.download([url])
+            with sanitized_yt_env():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return ydl.download([url])
         
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, download_sync, request.url, ydl_opts)
@@ -602,14 +693,17 @@ async def _try_download_with_different_formats(url: str, download_dir: Path, bro
                 'outtmpl': str(download_dir / f'subtitle_%(title)s.%(ext)s'),
                 'noplaylist': True,
                 'quiet': True,
+                'ignoreconfig': True,
+                'config_locations': [],
             }
             
             if browser:
                 ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
             
             def download_sync(url, ydl_opts):
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return ydl.download([url])
+                with sanitized_yt_env():
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        return ydl.download([url])
             
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, download_sync, url, ydl_opts)
@@ -658,14 +752,17 @@ async def _try_download_with_different_langs(url: str, download_dir: Path, brows
                 'outtmpl': str(download_dir / f'lang_%(title)s.%(ext)s'),
                 'noplaylist': True,
                 'quiet': True,
+                'ignoreconfig': True,
+                'config_locations': [],
             }
             
             if browser:
                 ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
             
             def download_sync(url, ydl_opts):
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return ydl.download([url])
+                with sanitized_yt_env():
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        return ydl.download([url])
             
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, download_sync, url, ydl_opts)
@@ -691,14 +788,17 @@ async def _try_extract_from_metadata(url: str, download_dir: Path, browser: Opti
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            'ignoreconfig': True,
+            'config_locations': [],
         }
         
         if browser:
             ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
         
         def extract_info_sync(url, ydl_opts):
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(url, download=False)
+            with sanitized_yt_env():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return ydl.extract_info(url, download=False)
         
         loop = asyncio.get_event_loop()
         info_dict = await loop.run_in_executor(None, extract_info_sync, url, ydl_opts)

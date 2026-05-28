@@ -1,0 +1,228 @@
+name: 跨平台构建
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: '构建平台 (用逗号分隔)'
+        required: false
+        default: 'macos-intel,windows,linux'
+        type: string
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - platform: macos-intel
+            os: macos-latest
+            target: x86_64-apple-darwin
+            binary_name: autoclip-backend-macos-x64
+            ffmpeg_name: ffmpeg-macos
+          - platform: windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary_name: autoclip-backend-windows-x64.exe
+            ffmpeg_name: ffmpeg-windows.exe
+          - platform: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_name: autoclip-backend-linux-x64
+            ffmpeg_name: ffmpeg-linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: 设置Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: 设置Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: 安装系统依赖
+      run: |
+        if [ "${{ matrix.platform }}" = "macos-intel" ]; then
+          brew install ffmpeg
+        elif [ "${{ matrix.platform }}" = "windows" ]; then
+          # Windows依赖
+          echo "Windows dependencies"
+        elif [ "${{ matrix.platform }}" = "linux" ]; then
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+        fi
+
+    - name: 安装Python依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: 安装前端依赖
+      run: |
+        cd frontend
+        npm ci
+
+    - name: 构建前端
+      run: |
+        cd frontend
+        npm run build
+
+    - name: 构建后端
+      run: |
+        export AUTOCLIP_DESKTOP_MODE=1
+        export AUTOCLIP_MODE=desktop
+        python -m PyInstaller \
+          --onefile \
+          --name autoclip-backend \
+          --distpath src-tauri/resources \
+          --workpath build/pyinstaller \
+          --specpath build/specs \
+          --clean \
+          --noconfirm \
+          backend/desktop_main.py
+
+    - name: 准备FFmpeg
+      run: |
+        mkdir -p src-tauri/resources/ffmpeg-unified
+        
+        if [ "${{ matrix.platform }}" = "macos-intel" ]; then
+          cp $(which ffmpeg) src-tauri/resources/ffmpeg-unified/ffmpeg-macos
+          chmod +x src-tauri/resources/ffmpeg-unified/ffmpeg-macos
+        elif [ "${{ matrix.platform }}" = "windows" ]; then
+          # 下载Windows FFmpeg
+          curl -L -o ffmpeg.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+          unzip ffmpeg.zip
+          cp ffmpeg-*/bin/ffmpeg.exe src-tauri/resources/ffmpeg-unified/ffmpeg-windows.exe
+        elif [ "${{ matrix.platform }}" = "linux" ]; then
+          cp $(which ffmpeg) src-tauri/resources/ffmpeg-unified/ffmpeg-linux
+          chmod +x src-tauri/resources/ffmpeg-unified/ffmpeg-linux
+        fi
+
+    - name: 重命名后端二进制文件
+      run: |
+        if [ "${{ matrix.platform }}" = "macos-intel" ]; then
+          mv src-tauri/resources/autoclip-backend src-tauri/resources/${{ matrix.binary_name }}
+        elif [ "${{ matrix.platform }}" = "windows" ]; then
+          mv src-tauri/resources/autoclip-backend.exe src-tauri/resources/${{ matrix.binary_name }}
+        elif [ "${{ matrix.platform }}" = "linux" ]; then
+          mv src-tauri/resources/autoclip-backend src-tauri/resources/${{ matrix.binary_name }}
+        fi
+
+    - name: 安装Tauri CLI
+      run: |
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          npm install -g @tauri-apps/cli
+        else
+          cargo install tauri-cli
+        fi
+
+    - name: 构建Tauri应用
+      run: |
+        cd src-tauri
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          npx tauri build
+        else
+          cargo tauri build
+        fi
+
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: autoclip-${{ matrix.platform }}
+        path: |
+          src-tauri/target/release/bundle/
+        retention-days: 30
+
+    - name: 创建发布
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          src-tauri/target/release/bundle/**/*.dmg
+          src-tauri/target/release/bundle/**/*.exe
+          src-tauri/target/release/bundle/**/*.AppImage
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 合并所有平台的构建产物
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: 下载所有构建产物
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: 创建统一发布包
+      run: |
+        mkdir -p release
+        find artifacts -name "*.dmg" -exec cp {} release/ \;
+        find artifacts -name "*.exe" -exec cp {} release/ \;
+        find artifacts -name "*.AppImage" -exec cp {} release/ \;
+        
+        # 创建安装说明
+        cat > release/INSTALL.md << EOF
+        # AutoClip Desktop 安装包
+        
+        ## 下载说明
+        
+        - **macOS (Intel)**: AutoClip Desktop_*.dmg
+        - **Windows**: AutoClip Desktop_*.exe  
+        - **Linux**: AutoClip Desktop_*.AppImage
+        
+        ## 安装步骤
+        
+        ### macOS
+        1. 下载 .dmg 文件
+        2. 双击打开
+        3. 拖拽到 Applications 文件夹
+        
+        ### Windows
+        1. 下载 .exe 文件
+        2. 双击运行安装程序
+        3. 按照提示完成安装
+        
+        ### Linux
+        1. 下载 .AppImage 文件
+        2. 添加执行权限: chmod +x *.AppImage
+        3. 双击运行或命令行执行
+        
+        ## 系统要求
+        
+        - macOS 10.13+
+        - Windows 10+
+        - Linux (Ubuntu 18.04+, CentOS 7+)
+        
+        ## 故障排除
+        
+        如果遇到问题，请查看项目文档或提交Issue。
+        EOF
+
+    - name: 上传统一发布包
+      uses: actions/upload-artifact@v4
+      with:
+        name: autoclip-release-packages
+        path: release/
+        retention-days: 90

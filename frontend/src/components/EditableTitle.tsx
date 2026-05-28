@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Input, Button, Space, message, Tooltip, Modal } from 'antd'
-import { EditOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons'
+import { EditOutlined, CheckOutlined } from '@ant-design/icons'
 import { projectApi } from '../services/api'
 import MagicWandIcon from './icons/MagicWandIcon'
 

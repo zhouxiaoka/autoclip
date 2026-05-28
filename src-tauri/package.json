@@ -1,0 +1,13 @@
+{
+  "name": "src-tauri",
+  "version": "1.0.0",
+  "description": "AutoClip Desktop Application",
+  "scripts": {
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.5.0"
+  }
+}

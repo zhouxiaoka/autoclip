@@ -3,12 +3,7 @@
 包含所有异步任务定义
 """
 
-from .processing import *
-from .video import *
-from .notification import *
-from .maintenance import *
-from .upload import *  # 添加upload任务导入
-from .data_cleanup import *  # 添加数据清理任务导入
+# 移除通配导入，避免过早触发celery_app导入链
 
 __all__ = [
     # 处理任务

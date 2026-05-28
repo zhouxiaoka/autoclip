@@ -47,14 +47,9 @@ const Header: React.FC = () => {
           style={{
             fontSize: '24px',
             fontWeight: '700',
-            background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
+            color: '#ffffff',
             fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-            letterSpacing: '-0.5px',
-            textShadow: '0 0 20px rgba(79, 172, 254, 0.3)',
-            filter: 'drop-shadow(0 2px 4px rgba(79, 172, 254, 0.2))'
+            letterSpacing: '-0.5px'
           }}
         >
           AutoClip
@@ -63,24 +58,25 @@ const Header: React.FC = () => {
       
       {/* Navigation Buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* 导航按钮 */}
         {!isHomePage && (
           <Button 
-            type="primary"
+            type="text"
             icon={<HomeOutlined />}
             onClick={() => navigate('/')}
             style={{
-              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+              background: 'transparent',
               border: 'none',
-              borderRadius: '8px',
               height: '40px',
               padding: '0 20px',
               fontWeight: 500,
-              boxShadow: '0 2px 8px rgba(79, 172, 254, 0.3)'
+              color: '#ffffff'
             }}
           >
             返回首页
           </Button>
         )}
+        
         
         
         <Button 

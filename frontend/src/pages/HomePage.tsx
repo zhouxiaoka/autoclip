@@ -13,9 +13,9 @@ import FileUpload from '../components/FileUpload'
 import BilibiliDownload from '../components/BilibiliDownload'
 
 import { projectApi } from '../services/api'
+import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Project, useProjectStore } from '../store/useProjectStore'
 import { useProjectPolling } from '../hooks/useProjectPolling'
-// import { useWebSocket, WebSocketEventMessage } from '../hooks/useWebSocket'  // 已禁用WebSocket系统
 
 const { Content } = Layout
 const { Title, Text } = Typography
@@ -25,46 +25,39 @@ const HomePage: React.FC = () => {
   const navigate = useNavigate()
   const { projects, setProjects, deleteProject, loading, setLoading } = useProjectStore()
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [activeTab, setActiveTab] = useState<'upload' | 'bilibili'>('upload')
-
-  // WebSocket连接已禁用，使用新的简化进度系统
-  // const handleWebSocketMessage = (message: WebSocketEventMessage) => {
-  //   console.log('HomePage收到WebSocket消息:', message)
-  //   
-  //   switch (message.type) {
-  //     case 'task_progress_update':
-  //       console.log('📊 收到任务进度更新:', message)
-  //       // 刷新项目列表以获取最新状态
-  //       loadProjects()
-  //       break
-  //       
-  //     case 'project_update':
-  //       console.log('📊 收到项目更新:', message)
-  //       // 刷新项目列表以获取最新状态
-  //       loadProjects()
-  //       break
-  //       
-  //     default:
-  //       console.log('忽略未知类型的WebSocket消息:', (message as any).type)
-  //   }
-  // }
-
-  // const { isConnected, syncSubscriptions } = useWebSocket({
-  //   userId: 'homepage-user',
-  //   onMessage: handleWebSocketMessage
-  // })
+  const [activeTab, setActiveTab] = useState<'upload' | 'bilibili'>('bilibili')
 
   // 使用项目轮询Hook
-  const { refreshNow } = useProjectPolling({
+  useProjectPolling({
     onProjectsUpdate: (updatedProjects) => {
       setProjects(updatedProjects || [])
     },
     enabled: true,
-    interval: 10000 // 10秒轮询一次
+    interval: 30000 // 30秒轮询一次，减少频繁请求
   })
 
+  // 全局保险：当没有运行中的项目时，强制停止进度轮询并清空缓存
   useEffect(() => {
-    loadProjects()
+    const hasActive = projects.some(p => p.status === 'processing' || p.status === 'pending')
+    if (!hasActive) {
+      try {
+        const { stopPolling, clearAllProgress } = useSimpleProgressStore.getState()
+        stopPolling()
+        clearAllProgress()
+        console.log('无运行项目，已全局停止进度轮询并清空进度缓存')
+      } catch (e) {
+        console.warn('停止全局进度轮询时出现问题:', e)
+      }
+    }
+  }, [projects])
+
+  useEffect(() => {
+    // 延迟加载项目，避免启动时立即发起大量请求
+    const timer = setTimeout(() => {
+      loadProjects()
+    }, 1000) // 延迟1秒加载
+    
+    return () => clearTimeout(timer)
   }, [])
 
   const loadProjects = async () => {
@@ -72,7 +65,9 @@ const HomePage: React.FC = () => {
     try {
       // 从后端API获取真实项目数据
       const projects = await projectApi.getProjects()
-      setProjects(projects || [])
+      // 确保projects是数组类型
+      const safeProjects = Array.isArray(projects) ? projects : []
+      setProjects(safeProjects)
     } catch (error) {
       message.error('加载项目失败')
       console.error('Load projects error:', error)
@@ -82,20 +77,6 @@ const HomePage: React.FC = () => {
       setLoading(false)
     }
   }
-
-  // 使用集合差异对齐订阅项目WebSocket主题
-  // WebSocket订阅已禁用，使用新的简化进度系统
-  // useEffect(() => {
-  //   if (isConnected && projects.length > 0) {
-  //     const desiredChannels = projects.map(project => `project_${project.id}`)
-  //     console.log('同步订阅项目频道:', desiredChannels)
-  //     syncSubscriptions(desiredChannels)
-  //   } else if (isConnected && projects.length === 0) {
-  //     // 如果没有项目，清空所有订阅
-  //     console.log('清空所有项目订阅')
-  //     syncSubscriptions([])
-  //   }
-  // }, [isConnected, projects, syncSubscriptions])
 
   const handleDeleteProject = async (id: string) => {
     try {
@@ -128,38 +109,6 @@ const HomePage: React.FC = () => {
     }
   }
 
-  const handleStartProcessing = async (projectId: string) => {
-    try {
-      await projectApi.startProcessing(projectId)
-      message.success('项目已开始处理，请稍等片刻查看进度')
-      // 立即刷新项目列表以显示最新状态
-      setTimeout(async () => {
-        try {
-          await refreshNow()
-        } catch (refreshError) {
-          console.error('Failed to refresh after starting processing:', refreshError)
-        }
-      }, 1000)
-    } catch (error: unknown) {
-      const errorMessage = (error as { userMessage?: string })?.userMessage || '启动处理失败'
-      message.error(errorMessage)
-      console.error('Start processing error:', error)
-      
-      // 如果是超时错误，提示用户项目可能仍在处理
-      if ((error as { code?: string; message?: string })?.code === 'ECONNABORTED' || (error as { code?: string; message?: string })?.message?.includes('timeout')) {
-        message.info('请求超时，但项目可能已开始处理，请查看项目状态', 5)
-        // 延迟刷新项目列表
-        setTimeout(async () => {
-          try {
-            await refreshNow()
-          } catch (refreshError) {
-            console.error('Failed to refresh after timeout:', refreshError)
-          }
-        }, 3000)
-      }
-    }
-  }
-
   const handleProjectCardClick = (project: Project) => {
     // 导入中状态的项目不能点击进入详情页
     if (project.status === 'pending') {
@@ -171,7 +120,7 @@ const HomePage: React.FC = () => {
     navigate(`/project/${project.id}`)
   }
 
-  const filteredProjects = projects
+  const filteredProjects = (projects || [])
     .filter(project => {
       const matchesStatus = statusFilter === 'all' || project.status === statusFilter
       return matchesStatus
@@ -187,7 +136,7 @@ const HomePage: React.FC = () => {
       background: '#0f0f0f'
     }}>
       <Content style={{ padding: '40px 24px', position: 'relative' }}>
-        <div style={{ maxWidth: '1600px', margin: '0 auto', position: 'relative', zIndex: 1 }}>
+        <div style={{ maxWidth: '1600px', margin: '0 auto', position: 'relative' }}>
           {/* 文件上传区域 */}
           <div style={{ 
             marginBottom: '48px',
@@ -198,10 +147,10 @@ const HomePage: React.FC = () => {
             <div style={{
               width: '100%',
               maxWidth: '800px',
-              background: 'rgba(26, 26, 46, 0.8)',
+              background: 'rgba(26, 26, 26, 0.8)',
               backdropFilter: 'blur(20px)',
               borderRadius: '16px',
-              border: '1px solid rgba(79, 172, 254, 0.2)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
               padding: '20px',
               boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05)'
             }}>
@@ -218,13 +167,13 @@ const HomePage: React.FC = () => {
                      flex: 1,
                      padding: '12px 24px',
                      borderRadius: '8px',
-                     background: activeTab === 'bilibili' ? 'rgba(79, 172, 254, 0.2)' : 'transparent',
-                     color: activeTab === 'bilibili' ? '#4facfe' : '#cccccc',
+                     background: activeTab === 'bilibili' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                     color: activeTab === 'bilibili' ? '#ffffff' : '#cccccc',
                      cursor: 'pointer',
                      fontSize: '16px',
                      fontWeight: 600,
                      transition: 'all 0.3s ease',
-                     border: activeTab === 'bilibili' ? '1px solid rgba(79, 172, 254, 0.4)' : '1px solid transparent'
+                     border: activeTab === 'bilibili' ? '1px solid rgba(255, 255, 255, 0.2)' : '1px solid transparent'
                    }}
                    onClick={() => setActiveTab('bilibili')}
                  >
@@ -235,13 +184,13 @@ const HomePage: React.FC = () => {
                      flex: 1,
                      padding: '12px 24px',
                      borderRadius: '8px',
-                     background: activeTab === 'upload' ? 'rgba(79, 172, 254, 0.2)' : 'transparent',
-                     color: activeTab === 'upload' ? '#4facfe' : '#cccccc',
+                     background: activeTab === 'upload' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                     color: activeTab === 'upload' ? '#ffffff' : '#cccccc',
                      cursor: 'pointer',
                      fontSize: '16px',
                      fontWeight: 600,
                      transition: 'all 0.3s ease',
-                     border: activeTab === 'upload' ? '1px solid rgba(79, 172, 254, 0.4)' : '1px solid transparent'
+                     border: activeTab === 'upload' ? '1px solid rgba(255, 255, 255, 0.2)' : '1px solid transparent'
                    }}
                    onClick={() => setActiveTab('upload')}
                  >
@@ -252,14 +201,14 @@ const HomePage: React.FC = () => {
               {/* 内容区域 */}
               <div>
                 {activeTab === 'bilibili' && (
-                  <BilibiliDownload onDownloadSuccess={async (projectId: string) => {
+                  <BilibiliDownload onDownloadSuccess={async () => {
                     // 处理完成后刷新项目列表
                     await loadProjects()
                     // 不再显示重复的toast提示，BilibiliDownload组件已经显示了统一的提示
                   }} />
                 )}
                 {activeTab === 'upload' && (
-                  <FileUpload onUploadSuccess={async (projectId: string) => {
+                  <FileUpload onUploadSuccess={async () => {
                     // 处理完成后刷新项目列表
                     await loadProjects()
                     message.success('项目创建成功，正在处理中...')
@@ -271,10 +220,10 @@ const HomePage: React.FC = () => {
 
           {/* 项目管理区域 */}
           <div style={{
-            background: 'rgba(26, 26, 46, 0.7)',
+            background: 'rgba(26, 26, 26, 0.7)',
             backdropFilter: 'blur(20px)',
             borderRadius: '24px',
-            border: '1px solid rgba(79, 172, 254, 0.15)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
             padding: '32px',
             marginBottom: '32px',
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.03)'
@@ -286,7 +235,7 @@ const HomePage: React.FC = () => {
               alignItems: 'center',
               marginBottom: '24px',
               paddingBottom: '16px',
-              borderBottom: '1px solid rgba(79, 172, 254, 0.1)'
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <Title 
@@ -306,12 +255,12 @@ const HomePage: React.FC = () => {
                 </Title>
                 <div style={{
                   padding: '8px 16px',
-                  background: 'rgba(79, 172, 254, 0.1)',
+                  background: 'rgba(255, 255, 255, 0.1)',
                   borderRadius: '20px',
-                  border: '1px solid rgba(79, 172, 254, 0.3)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
                   backdropFilter: 'blur(10px)'
                 }}>
-                  <Text style={{ color: '#4facfe', fontWeight: 600, fontSize: '14px' }}>
+                  <Text style={{ color: '#ffffff', fontWeight: 600, fontSize: '14px' }}>
                     共 {filteredProjects.length} 个项目
                   </Text>
                 </div>
@@ -330,7 +279,7 @@ const HomePage: React.FC = () => {
                     minWidth: '140px',
                     height: '36px',
                     background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(79, 172, 254, 0.2)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
                     borderRadius: '8px',
                     color: '#ffffff',
                     fontSize: '14px'
@@ -338,8 +287,8 @@ const HomePage: React.FC = () => {
                   styles={{
                     popup: {
                       root: {
-                        background: 'rgba(26, 26, 46, 0.95)',
-                        border: '1px solid rgba(79, 172, 254, 0.3)',
+                        background: 'rgba(26, 26, 26, 0.95)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
                         borderRadius: '8px',
                         backdropFilter: 'blur(20px)',
                         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'

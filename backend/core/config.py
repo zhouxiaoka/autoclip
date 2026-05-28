@@ -72,31 +72,23 @@ def get_project_root() -> Path:
 
 def get_data_directory() -> Path:
     """获取数据目录"""
-    project_root = get_project_root()
-    data_dir = project_root / "data"
-    data_dir.mkdir(exist_ok=True)
-    return data_dir
+    from ..core.path_utils import get_data_directory as get_dir
+    return get_dir()
 
 def get_uploads_directory() -> Path:
     """获取上传文件目录"""
-    data_dir = get_data_directory()
-    uploads_dir = data_dir / "uploads"
-    uploads_dir.mkdir(exist_ok=True)
-    return uploads_dir
+    from ..core.path_utils import get_uploads_directory as get_dir
+    return get_dir()
 
 def get_temp_directory() -> Path:
     """获取临时文件目录"""
-    data_dir = get_data_directory()
-    temp_dir = data_dir / "temp"
-    temp_dir.mkdir(exist_ok=True)
-    return temp_dir
+    from ..core.path_utils import get_temp_directory as get_dir
+    return get_dir()
 
 def get_output_directory() -> Path:
     """获取输出文件目录"""
-    data_dir = get_data_directory()
-    output_dir = data_dir / "output"
-    output_dir.mkdir(exist_ok=True)
-    return output_dir
+    from ..core.path_utils import get_output_directory as get_dir
+    return get_dir()
 
 def get_database_url() -> str:
     """获取数据库URL"""
@@ -129,9 +121,12 @@ def get_processing_config() -> Dict[str, Any]:
 
 def get_logging_config() -> Dict[str, Any]:
     """获取日志配置"""
+    log_format = settings.log_format
+    if log_format.lower() == "json":
+        log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     return {
         "level": settings.log_level,
-        "format": settings.log_format,
+        "format": log_format,
         "file": settings.log_file
     }
 

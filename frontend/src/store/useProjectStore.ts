@@ -71,6 +71,7 @@ interface ProjectStore {
   // Actions
   setProjects: (projects: Project[]) => void
   setCurrentProject: (project: Project | null) => void
+  upsertProject: (project: Project) => void
   addProject: (project: Project) => void
   updateProject: (id: string, updates: Partial<Project>) => void
   deleteProject: (id: string) => void
@@ -97,10 +98,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   setProjects: (projects) => {
     const state = get()
     
+    // 确保projects始终是数组
+    const safeProjects = Array.isArray(projects) ? projects : []
+    
     console.log('setProjects called:', {
       isDragging: state.isDragging,
-      projectsCount: projects.length,
-      projects: projects
+      projectsCount: safeProjects.length,
+      projects: safeProjects
     })
     
     // 如果正在拖拽，则跳过更新以避免冲突
@@ -110,10 +114,27 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
     
     console.log('Applying update with new data')
-    set({ projects })
+    set({ projects: safeProjects })
   },
   
   setCurrentProject: (project) => set({ currentProject: project }),
+
+  upsertProject: (project) => set((state) => {
+    const exists = state.projects.some((p) => p.id === project.id)
+    const nextProjects = exists
+      ? state.projects.map((p) => (p.id === project.id ? { ...p, ...project } : p))
+      : [project, ...state.projects]
+
+    const nextCurrentProject =
+      state.currentProject?.id === project.id
+        ? { ...state.currentProject, ...project }
+        : state.currentProject
+
+    return {
+      projects: nextProjects,
+      currentProject: nextCurrentProject,
+    }
+  }),
   
   addProject: (project) => set((state) => ({ 
     projects: [project, ...state.projects] 

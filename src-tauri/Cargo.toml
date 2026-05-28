@@ -1,0 +1,28 @@
+[package]
+name = "autoclip-desktop"
+version = "1.0.0"
+description = "AutoClip Desktop Application"
+authors = ["AutoClip Team"]
+license = "MIT"
+repository = "https://github.com/zhouxiaoka/autoclip"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+tauri-build = { version = "2.0.0-rc", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0-rc", features = ["tray-icon"] }
+tauri-plugin-autostart = "2.0.0-rc"
+tauri-plugin-shell = "2.0.0-rc"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Modal, Row, Col, List, Button, Space, Typography, Tag, Tooltip, message, Popconfirm } from 'antd'
-import { PlayCircleOutlined, PauseCircleOutlined, DownloadOutlined, DeleteOutlined, DragOutlined, CloseOutlined, LeftOutlined, RightOutlined, PlusOutlined } from '@ant-design/icons'
+import { Modal, Row, Col, Button, Space, Typography, Tag, Tooltip, message, Popconfirm } from 'antd'
+import { PlayCircleOutlined, DownloadOutlined, DeleteOutlined, DragOutlined, CloseOutlined, LeftOutlined, RightOutlined, PlusOutlined } from '@ant-design/icons'
 import ReactPlayer from 'react-player'
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd'
 import { Collection, Clip, useProjectStore } from '../store/useProjectStore'
@@ -29,7 +29,6 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
   clips,
   projectId,
   onClose,
-  onUpdateCollection,
   onRemoveClip,
   onReorderClips,
   onAddClip,
@@ -37,7 +36,7 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
 }) => {
   const [currentClipIndex, setCurrentClipIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [autoPlay, setAutoPlay] = useState(true)
+  const autoPlay = true
   const [downloadingClip, setDownloadingClip] = useState<string | null>(null)
   const [downloadingCollection, setDownloadingCollection] = useState(false)
   const [generatingVideo, setGeneratingVideo] = useState(false)
@@ -48,7 +47,9 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
 
   // 按照collection.clip_ids的顺序排列clips
   const collectionClips = collection ? 
-    collection.clip_ids.map(clipId => clips.find(clip => clip.id === clipId)).filter(Boolean) as Clip[] : []
+    (Array.isArray(collection.clip_ids) ? collection.clip_ids : [])
+      .map(clipId => (Array.isArray(clips) ? clips : []).find(clip => clip.id === clipId))
+      .filter(Boolean) as Clip[] : []
   const currentClip = collectionClips[currentClipIndex]
 
   useEffect(() => {
@@ -258,7 +259,7 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
       footer={null}
       width="90vw"
       style={{ top: 20 }}
-      styles={{ body: { padding: 0, height: '90vh' } }}
+      styles={{ body: { padding: 0, height: 'min(90dvh, calc(100dvh - 40px))' } }}
       className="collection-preview-modal"
       closable={false}
       maskClosable={false}

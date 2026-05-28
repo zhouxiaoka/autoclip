@@ -265,11 +265,12 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
 
   // 获取统计信息
   const getStatistics = () => {
-    const total = uploadRecords.length
-    const success = uploadRecords.filter(r => r.status === 'success' || r.status === 'completed').length
-    const failed = uploadRecords.filter(r => r.status === 'failed').length
-    const processing = uploadRecords.filter(r => r.status === 'processing').length
-    const pending = uploadRecords.filter(r => r.status === 'pending').length
+    const safeRecords = Array.isArray(uploadRecords) ? uploadRecords : []
+    const total = safeRecords.length
+    const success = safeRecords.filter(r => r.status === 'success' || r.status === 'completed').length
+    const failed = safeRecords.filter(r => r.status === 'failed').length
+    const processing = safeRecords.filter(r => r.status === 'processing').length
+    const pending = safeRecords.filter(r => r.status === 'pending').length
     
     return { total, success, failed, processing, pending }
   }
@@ -565,7 +566,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
                         </div>
                       }
                     >
-                      {accounts.filter(acc => acc.status === 'active').map(account => (
+                      {(accounts || []).filter(acc => acc.status === 'active').map(account => (
                         <Option key={account.id} value={account.id}>
                           {account.nickname || account.username}
                         </Option>

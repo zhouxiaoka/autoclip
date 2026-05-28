@@ -16,7 +16,7 @@ if project_root not in sys.path:
 import pytest
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from repositories.factory import (
+from backend.repositories.factory import (
     get_project_repository,
     get_clip_repository,
     get_collection_repository,

@@ -2,7 +2,7 @@ import React from 'react'
 import { Card, Tag, Space, Typography } from 'antd'
 import { BILIBILI_PARTITIONS } from '../services/uploadApi'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 interface UploadToBilibiliProps {
   partitionId?: number

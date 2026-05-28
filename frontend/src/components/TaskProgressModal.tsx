@@ -4,13 +4,12 @@ import {
   CheckCircleOutlined, 
   LoadingOutlined, 
   ExclamationCircleOutlined, 
-  ReloadOutlined,
-  CloseOutlined
+  ReloadOutlined
 } from '@ant-design/icons'
 import { projectApi } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 const { Step } = Steps
 
 interface ProcessingStatus {

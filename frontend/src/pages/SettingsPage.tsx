@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Layout, Card, Form, Input, Button, Typography, Space, Alert, Divider, Row, Col, Tabs, message, Select, Tag } from 'antd'
-import { KeyOutlined, SaveOutlined, ApiOutlined, SettingOutlined, InfoCircleOutlined, UserOutlined, RobotOutlined } from '@ant-design/icons'
+import { Layout, Card, Form, Input, Button, Typography, Space, Alert, Divider, Row, Col, Tabs, message, Select, Tag, Switch } from 'antd'
+import { KeyOutlined, SaveOutlined, ApiOutlined, SettingOutlined, InfoCircleOutlined, UserOutlined, RobotOutlined, SoundOutlined, PoweroffOutlined } from '@ant-design/icons'
 import { settingsApi } from '../services/api'
 import BilibiliManager from '../components/BilibiliManager'
+import SpeechRecognitionConfig from '../components/SpeechRecognitionConfig'
+import { isDesktopMode } from '../utils/desktopMode'
 import './SettingsPage.css'
 
 const { Content } = Layout
@@ -13,7 +15,6 @@ const SettingsPage: React.FC = () => {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
   const [showBilibiliManager, setShowBilibiliManager] = useState(false)
-  const [availableModels, setAvailableModels] = useState<any>({})
   const [currentProvider, setCurrentProvider] = useState<any>({})
   const [selectedProvider, setSelectedProvider] = useState('dashscope')
 
@@ -60,18 +61,87 @@ const SettingsPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [settings, models, provider] = await Promise.all([
-        settingsApi.getSettings(),
-        settingsApi.getAvailableModels(),
-        settingsApi.getCurrentProvider()
-      ])
+      // 检查是否在Desktop模式下运行
+      const isDesktop = await isDesktopMode()
       
-      setAvailableModels(models)
-      setCurrentProvider(provider)
-      setSelectedProvider(settings.llm_provider || 'dashscope')
-      
-      // 设置表单初始值
-      form.setFieldsValue(settings)
+      if (isDesktop) {
+        // Desktop模式：调用完整的API
+        const [settings, models, provider] = await Promise.allSettled([
+          settingsApi.getSettings(),
+          settingsApi.getAvailableModels(),
+          settingsApi.getCurrentProvider()
+        ])
+        
+        // 检查是否有失败的请求
+        const failedRequests = [settings, models, provider].filter(result => result.status === 'rejected')
+        if (failedRequests.length > 0) {
+          console.warn('部分API请求失败:', failedRequests.map(r => (r as PromiseRejectedResult).reason))
+        }
+        
+        // 处理设置数据
+        const settingsData = settings.status === 'fulfilled' ? settings.value : {}
+        
+        // 处理模型数据
+        const modelsData = models.status === 'fulfilled' ? models.value.models : {}
+        
+        // 处理提供商数据
+        const providerData = provider.status === 'fulfilled'
+          ? provider.value
+          : { available: false, provider: 'dashscope', display_name: '阿里通义千问', model: 'qwen-plus' }
+        const providerName = providerData.provider || 'dashscope'
+        setCurrentProvider(providerData)
+        
+        // 将嵌套的settings结构转换为扁平结构
+        const flatSettings = {
+          llm_provider: providerName, // 使用实际的提供商
+          dashscope_api_key: settingsData.api?.api_keys?.dashscope || '',
+          openai_api_key: settingsData.api?.api_keys?.openai || '',
+          gemini_api_key: settingsData.api?.api_keys?.gemini || '',
+          siliconflow_api_key: settingsData.api?.api_keys?.siliconflow || '',
+          jimeng_access_key: settingsData.api?.api_keys?.jimeng_access || '',
+          jimeng_secret_key: settingsData.api?.api_keys?.jimeng_secret || '',
+          model_name: settingsData.api?.api_model || 'qwen-plus',
+          chunk_size: settingsData.processing?.processing_chunk_size || 5000,
+          min_score_threshold: settingsData.processing?.processing_min_score || 0.7,
+          max_clips_per_collection: settingsData.processing?.processing_max_clips || 5
+        }
+        
+        setSelectedProvider(providerName)
+        
+        // 设置表单初始值
+        form.setFieldsValue(flatSettings)
+        console.log('Desktop模式 - 设置表单值:', flatSettings)
+        console.log('可用模型:', modelsData)
+        console.log('当前提供商:', providerData)
+      } else {
+        // Web模式：使用默认配置，不调用Desktop API
+        console.log('Web模式 - 使用默认配置')
+        
+        const flatSettings = {
+          llm_provider: 'dashscope',
+          dashscope_api_key: '',
+          openai_api_key: '',
+          gemini_api_key: '',
+          siliconflow_api_key: '',
+          jimeng_access_key: '',
+          jimeng_secret_key: '',
+          model_name: 'qwen-plus',
+          chunk_size: 5000,
+          min_score_threshold: 0.7,
+          max_clips_per_collection: 5
+        }
+        
+        setSelectedProvider('dashscope')
+        form.setFieldsValue(flatSettings)
+        
+        // 设置默认模型数据
+        setCurrentProvider({
+          available: false,
+          provider: 'dashscope',
+          display_name: '阿里通义千问',
+          model: 'qwen-plus'
+        })
+      }
     } catch (error) {
       console.error('加载数据失败:', error)
     }
@@ -81,7 +151,73 @@ const SettingsPage: React.FC = () => {
   const handleSave = async (values: any) => {
     try {
       setLoading(true)
-      await settingsApi.updateSettings(values)
+      
+      // 检查是否在Desktop模式下运行
+      const isDesktop = await isDesktopMode()
+      
+      if (!isDesktop) {
+        // Web模式：只显示提示，不实际保存
+        message.info('Web模式下配置无法保存，请在桌面应用中使用完整功能')
+        setLoading(false)
+        return
+      }
+      
+      // 先获取现有配置，避免清空已有的API key
+      let existingSettings = null
+      try {
+        existingSettings = await settingsApi.getSettings()
+      } catch (error) {
+        console.warn('获取现有配置失败，将使用默认配置:', error)
+      }
+      
+      // 获取现有的API keys，只更新有值的字段
+      const existingApiKeys = existingSettings?.api?.api_keys || {}
+      
+      // 转换扁平数据为后端期望的嵌套结构
+      const backendSettings = {
+        basic: {
+          app_name: "AutoClip Desktop",
+          app_version: "1.0.0",
+          debug_mode: false,
+          auto_start: true
+        },
+        service: {
+          host: "127.0.0.1",
+          port: 8000,
+          max_memory_usage: 2048
+        },
+        api: {
+          api_keys: {
+            // 只更新有值的API key，保持现有的值
+            dashscope: values.dashscope_api_key || existingApiKeys.dashscope || "",
+            openai: values.openai_api_key || existingApiKeys.openai || "",
+            gemini: values.gemini_api_key || existingApiKeys.gemini || "",
+            siliconflow: values.siliconflow_api_key || existingApiKeys.siliconflow || "",
+            jimeng_access: values.jimeng_access_key || existingApiKeys.jimeng_access || "",
+            jimeng_secret: values.jimeng_secret_key || existingApiKeys.jimeng_secret || ""
+          },
+          api_model: values.model_name || "qwen-plus",
+          api_max_tokens: 4096,
+          api_timeout: 30
+        },
+        processing: {
+          processing_chunk_size: values.chunk_size || 5000,
+          processing_min_score: values.min_score_threshold || 0.7,
+          processing_max_clips: values.max_clips_per_collection || 5,
+          processing_max_retries: 3
+        },
+        logs: {
+          log_level: "INFO",
+          log_retention_days: 7
+        },
+        paths: {
+          data_directory: "/Users/zhoukk/Library/Application Support/AutoClip",
+          cache_directory: "/Users/zhoukk/Library/Application Support/AutoClip/cache",
+          temp_directory: "/Users/zhoukk/Library/Application Support/AutoClip/temp"
+        }
+      }
+      
+      await settingsApi.updateSettings(backendSettings)
       message.success('配置保存成功！')
       await loadData() // 重新加载数据
     } catch (error: any) {
@@ -94,21 +230,15 @@ const SettingsPage: React.FC = () => {
   // 测试API密钥
   const handleTestApiKey = async () => {
     const apiKey = form.getFieldValue(providerConfig[selectedProvider as keyof typeof providerConfig].apiKeyField)
-    const modelName = form.getFieldValue('model_name')
     
-    if (!apiKey) {
+    if (!apiKey || apiKey.trim() === '') {
       message.error('请先输入API密钥')
-      return
-    }
-
-    if (!modelName) {
-      message.error('请先选择模型')
       return
     }
 
     try {
       setLoading(true)
-      const result = await settingsApi.testApiKey(selectedProvider, apiKey, modelName)
+      const result = await settingsApi.testApiKey(selectedProvider, apiKey)
       if (result.success) {
         message.success('API密钥测试成功！')
       } else {
@@ -186,7 +316,7 @@ const SettingsPage: React.FC = () => {
                         <Space>
                           <span style={{ color: config.color }}>{config.icon}</span>
                           <span>{config.name}</span>
-                          <Tag color={config.color} size="small">{config.description}</Tag>
+                          <Tag color={config.color}>{config.description}</Tag>
                         </Space>
                       </Select.Option>
                     ))}
@@ -210,29 +340,64 @@ const SettingsPage: React.FC = () => {
                   />
                 </Form.Item>
 
-                {/* 模型选择 */}
+                {/* 模型选择 - 改进版本 */}
                 <Form.Item
                   label="选择模型"
                   name="model_name"
                   className="form-item"
-                  rules={[{ required: true, message: '请选择模型' }]}
+                  rules={[{ required: true, message: '请输入或选择模型名称' }]}
+                  extra="支持手动输入模型名称或从常用模型中选择"
                 >
                   <Select
                     className="settings-input"
-                    placeholder="请选择模型"
+                    placeholder="请输入或选择模型名称"
                     showSearch
-                    filterOption={(input, option) =>
-                      (option?.children as string)?.toLowerCase().includes(input.toLowerCase())
-                    }
+                    allowClear
+                    mode="tags"
+                    dropdownRender={(menu) => (
+                      <div>
+                        {menu}
+                        <Divider style={{ margin: '8px 0' }} />
+                        <div style={{ padding: '0 8px 4px' }}>
+                          <Text type="secondary" style={{ fontSize: '12px' }}>
+                            常用模型列表（按供应商分类）
+                          </Text>
+                        </div>
+                      </div>
+                    )}
                   >
-                    {availableModels[selectedProvider]?.map((model: any) => (
-                      <Select.Option key={model.name} value={model.name}>
-                        <Space>
-                          <span>{model.display_name}</span>
-                          <Tag size="small">最大{model.max_tokens} tokens</Tag>
-                        </Space>
-                      </Select.Option>
-                    ))}
+                    {/* 通义千问模型 */}
+                    <Select.OptGroup label="通义千问 (Dashscope)">
+                      <Select.Option value="qwen-plus">qwen-plus (通义千问增强版)</Select.Option>
+                      <Select.Option value="qwen-turbo">qwen-turbo (通义千问标准版)</Select.Option>
+                      <Select.Option value="qwen-max">qwen-max (通义千问旗舰版)</Select.Option>
+                      <Select.Option value="qwen-long">qwen-long (通义千问长文本版)</Select.Option>
+                    </Select.OptGroup>
+                    
+                    {/* OpenAI模型 */}
+                    <Select.OptGroup label="OpenAI">
+                      <Select.Option value="gpt-4o">gpt-4o (GPT-4 Omni)</Select.Option>
+                      <Select.Option value="gpt-4o-mini">gpt-4o-mini (GPT-4 Omni Mini)</Select.Option>
+                      <Select.Option value="gpt-4-turbo">gpt-4-turbo (GPT-4 Turbo)</Select.Option>
+                      <Select.Option value="gpt-4">gpt-4 (GPT-4)</Select.Option>
+                      <Select.Option value="gpt-3.5-turbo">gpt-3.5-turbo (GPT-3.5 Turbo)</Select.Option>
+                    </Select.OptGroup>
+                    
+                    {/* Google Gemini模型 */}
+                    <Select.OptGroup label="Google Gemini">
+                      <Select.Option value="gemini-1.5-pro">gemini-1.5-pro (Gemini 1.5 Pro)</Select.Option>
+                      <Select.Option value="gemini-1.5-flash">gemini-1.5-flash (Gemini 1.5 Flash)</Select.Option>
+                      <Select.Option value="gemini-pro">gemini-pro (Gemini Pro)</Select.Option>
+                    </Select.OptGroup>
+                    
+                    {/* 硅基流动模型 */}
+                    <Select.OptGroup label="硅基流动 (SiliconFlow)">
+                      <Select.Option value="deepseek-chat">deepseek-chat (DeepSeek Chat)</Select.Option>
+                      <Select.Option value="deepseek-coder">deepseek-coder (DeepSeek Coder)</Select.Option>
+                      <Select.Option value="qwen-plus">qwen-plus (通义千问增强版)</Select.Option>
+                      <Select.Option value="qwen-turbo">qwen-turbo (通义千问标准版)</Select.Option>
+                    </Select.OptGroup>
+                    
                   </Select>
                 </Form.Item>
 
@@ -255,15 +420,6 @@ const SettingsPage: React.FC = () => {
                 <Title level={4} className="section-title">模型配置</Title>
                 
                 <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item
-                      label="模型名称"
-                      name="model_name"
-                      className="form-item"
-                    >
-                      <Input placeholder="qwen-plus" className="settings-input" />
-                    </Form.Item>
-                  </Col>
                   <Col span={12}>
                     <Form.Item
                       label="文本分块大小"
@@ -363,6 +519,55 @@ const SettingsPage: React.FC = () => {
                   </Paragraph>
                 </div>
               </Space>
+            </Card>
+          </TabPane>
+
+          <TabPane 
+            tab={
+              <span>
+                <SoundOutlined />
+                语音转写配置
+              </span>
+            } 
+            key="speech"
+          >
+            <Card title="语音转写配置" className="settings-card">
+              <Alert
+                message="语音识别服务配置"
+                description="配置语音转写服务，用于视频字幕生成和语音识别。支持本地Whisper模型和多种云服务API。"
+                type="info"
+                showIcon
+                className="settings-alert"
+              />
+              
+              <SpeechRecognitionConfig
+                onConfigChange={(config) => {
+                  console.log('语音配置已更新:', config)
+                  // 移除重复的成功提示，SpeechRecognitionConfig内部已经处理
+                }}
+              />
+            </Card>
+          </TabPane>
+
+          <TabPane 
+            tab={
+              <span>
+                <SettingOutlined />
+                应用设置
+              </span>
+            } 
+            key="app"
+          >
+            <Card title="应用设置" className="settings-card">
+              <Alert
+                message="应用行为配置"
+                description="配置应用的启动行为和系统集成选项。"
+                type="info"
+                showIcon
+                className="settings-alert"
+              />
+              
+              <AppSettings />
             </Card>
           </TabPane>
 
@@ -469,6 +674,101 @@ const SettingsPage: React.FC = () => {
         />
       </div>
     </Content>
+  )
+}
+
+// 应用设置组件
+const AppSettings: React.FC = () => {
+  const [autostartEnabled, setAutostartEnabled] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    checkAutostartStatus()
+  }, [])
+
+  const checkAutostartStatus = async () => {
+    try {
+      const isDesktop = await isDesktopMode()
+      if (isDesktop) {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const enabled = await invoke('is_autostart_enabled')
+        setAutostartEnabled(Boolean(enabled))
+      }
+    } catch (error) {
+      console.error('检查自动启动状态失败:', error)
+    }
+  }
+
+  const handleAutostartToggle = async (enabled: boolean) => {
+    const isDesktop = await isDesktopMode()
+    if (!isDesktop) {
+      message.error('此功能仅在桌面应用中可用')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      
+      if (enabled) {
+        await invoke('enable_autostart')
+        message.success('已启用自动启动')
+      } else {
+        await invoke('disable_autostart')
+        message.success('已禁用自动启动')
+      }
+      
+      setAutostartEnabled(enabled)
+    } catch (error) {
+      console.error('切换自动启动状态失败:', error)
+      message.error(`操作失败: ${error}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div>
+      <Row gutter={[16, 16]}>
+        <Col span={24}>
+          <Card 
+            size="small" 
+            style={{ 
+              background: 'rgba(255,255,255,0.05)', 
+              border: '1px solid #404040',
+              marginBottom: '16px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                  <PoweroffOutlined style={{ color: '#1890ff', marginRight: '8px' }} />
+                  <Text strong style={{ color: '#ffffff' }}>开机自动启动</Text>
+                </div>
+                <Text type="secondary" style={{ color: '#b0b0b0' }}>
+                  启用后，应用将在系统启动时自动运行
+                </Text>
+              </div>
+              <Switch
+                checked={autostartEnabled}
+                onChange={handleAutostartToggle}
+                loading={loading}
+                checkedChildren="开启"
+                unCheckedChildren="关闭"
+              />
+            </div>
+          </Card>
+        </Col>
+      </Row>
+      
+      <Alert
+        message="提示"
+        description="自动启动功能仅在桌面应用中可用。启用后，应用将在系统启动时自动运行，您可以通过系统托盘图标访问应用。"
+        type="info"
+        showIcon
+        style={{ marginTop: '16px' }}
+      />
+    </div>
   )
 }
 

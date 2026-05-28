@@ -1,6 +1,7 @@
 """
 任务管理API路由
 """
+import logging
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -11,6 +12,12 @@ from backend.services.task_service import TaskService
 from backend.services.task_queue_service import TaskQueueService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _get_task_config_value(task, key: str, default=None):
+    config = task.task_config or {}
+    return config.get(key, default)
 
 @router.get("/", response_model=List[TaskResponse])
 async def get_tasks(
@@ -31,7 +38,8 @@ async def get_tasks(
         )
         return tasks
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取任务列表失败: {str(e)}")
+        logger.exception("获取任务列表失败")
+        raise HTTPException(status_code=500, detail="获取任务列表失败，请稍后重试")
 
 @router.get("/project/{project_id}", response_model=List[TaskResponse])
 async def get_project_tasks(
@@ -44,7 +52,8 @@ async def get_project_tasks(
         tasks = task_service.get_tasks_by_project_id(project_id)
         return tasks
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取项目任务失败: {str(e)}")
+        logger.exception("获取项目任务失败: %s", project_id)
+        raise HTTPException(status_code=500, detail="获取项目任务失败，请稍后重试")
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
@@ -61,7 +70,8 @@ async def get_task(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取任务详情失败: {str(e)}")
+        logger.exception("获取任务详情失败: %s", task_id)
+        raise HTTPException(status_code=500, detail="获取任务详情失败，请稍后重试")
 
 @router.post("/", response_model=TaskResponse)
 async def create_task(
@@ -74,7 +84,8 @@ async def create_task(
         task = task_service.create_task(task_data)
         return task
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建任务失败: {str(e)}")
+        logger.exception("创建任务失败")
+        raise HTTPException(status_code=500, detail="创建任务失败，请稍后重试")
 
 @router.put("/{task_id}", response_model=TaskResponse)
 async def update_task(
@@ -92,7 +103,8 @@ async def update_task(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新任务失败: {str(e)}")
+        logger.exception("更新任务失败: %s", task_id)
+        raise HTTPException(status_code=500, detail="更新任务失败，请稍后重试")
 
 @router.delete("/{task_id}")
 async def delete_task(
@@ -109,7 +121,8 @@ async def delete_task(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"删除任务失败: {str(e)}")
+        logger.exception("删除任务失败: %s", task_id)
+        raise HTTPException(status_code=500, detail="删除任务失败，请稍后重试")
 
 @router.post("/{task_id}/submit")
 async def submit_task(
@@ -123,15 +136,39 @@ async def submit_task(
         if not task:
             raise HTTPException(status_code=404, detail="任务不存在")
         
-        # 提交到任务队列
-        queue_service = TaskQueueService()
-        result = queue_service.submit_task(task)
+        queue_service = TaskQueueService(db)
+        task_type = str(task.task_type.value if hasattr(task.task_type, "value") else task.task_type)
+
+        if task_type == "video_processing":
+            input_video_path = _get_task_config_value(task, "input_video_path")
+            input_srt_path = _get_task_config_value(task, "input_srt_path")
+            if not input_video_path:
+                raise HTTPException(status_code=400, detail="任务缺少 input_video_path 配置")
+            result = queue_service.submit_video_processing_task(
+                project_id=task.project_id,
+                input_video_path=input_video_path,
+                input_srt_path=input_srt_path,
+            )
+        elif task_type == "clip_generation":
+            clip_data = _get_task_config_value(task, "clip_data", [])
+            result = queue_service.submit_video_clips_task(task.project_id, clip_data)
+        elif task_type == "collection_creation":
+            collection_data = _get_task_config_value(task, "collection_data", [])
+            result = queue_service.submit_collection_generation_task(task.project_id, collection_data)
+        else:
+            raise HTTPException(status_code=400, detail=f"不支持的任务类型: {task_type}")
         
-        return {"message": "任务已提交到队列", "task_id": task_id, "celery_task_id": result.id}
+        return {
+            "message": "任务已提交到队列",
+            "task_id": task_id,
+            "queue_task_id": result.get("task_id"),
+            "celery_task_id": result.get("celery_task_id"),
+        }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"提交任务失败: {str(e)}")
+        logger.exception("提交任务失败: %s", task_id)
+        raise HTTPException(status_code=500, detail="提交任务失败，请稍后重试")
 
 @router.post("/{task_id}/retry")
 async def retry_task(
@@ -148,15 +185,39 @@ async def retry_task(
         # 重置任务状态并重新提交
         task_service.update_task(task_id, TaskUpdate(status="pending", progress=0))
         
-        # 提交到任务队列
-        queue_service = TaskQueueService()
-        result = queue_service.submit_task(task)
+        queue_service = TaskQueueService(db)
+        task_type = str(task.task_type.value if hasattr(task.task_type, "value") else task.task_type)
+
+        if task_type == "video_processing":
+            input_video_path = _get_task_config_value(task, "input_video_path")
+            input_srt_path = _get_task_config_value(task, "input_srt_path")
+            if not input_video_path:
+                raise HTTPException(status_code=400, detail="任务缺少 input_video_path 配置")
+            result = queue_service.submit_video_processing_task(
+                project_id=task.project_id,
+                input_video_path=input_video_path,
+                input_srt_path=input_srt_path,
+            )
+        elif task_type == "clip_generation":
+            clip_data = _get_task_config_value(task, "clip_data", [])
+            result = queue_service.submit_video_clips_task(task.project_id, clip_data)
+        elif task_type == "collection_creation":
+            collection_data = _get_task_config_value(task, "collection_data", [])
+            result = queue_service.submit_collection_generation_task(task.project_id, collection_data)
+        else:
+            raise HTTPException(status_code=400, detail=f"不支持的任务类型: {task_type}")
         
-        return {"message": "任务已重新提交", "task_id": task_id, "celery_task_id": result.id}
+        return {
+            "message": "任务已重新提交",
+            "task_id": task_id,
+            "queue_task_id": result.get("task_id"),
+            "celery_task_id": result.get("celery_task_id"),
+        }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"重试任务失败: {str(e)}")
+        logger.exception("重试任务失败: %s", task_id)
+        raise HTTPException(status_code=500, detail="重试任务失败，请稍后重试")
 
 @router.get("/{task_id}/status")
 async def get_task_status(
@@ -174,12 +235,13 @@ async def get_task_status(
             "task_id": task_id,
             "status": task.status,
             "progress": task.progress,
-            "message": task.message,
-            "error": task.error,
+            "message": task.name,
+            "error": task.error_message,
             "updated_at": task.updated_at
         }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取任务状态失败: {str(e)}")
+        logger.exception("获取任务状态失败: %s", task_id)
+        raise HTTPException(status_code=500, detail="获取任务状态失败，请稍后重试")
 

@@ -1,0 +1,139 @@
+name: Build Desktop Application
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src-tauri/**'
+      - 'frontend/**'
+      - 'backend/**'
+      - 'scripts/**'
+      - '.github/workflows/build-desktop.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src-tauri/**'
+      - 'frontend/**'
+      - 'backend/**'
+      - 'scripts/**'
+      - '.github/workflows/build-desktop.yml'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Desktop App
+    runs-on: ${{ matrix.platform }}
+    
+    strategy:
+      matrix:
+        include:
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            bundle_type: dmg
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            bundle_type: dmg
+          - platform: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bundle_type: deb
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundle_type: msi
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install frontend dependencies
+      working-directory: frontend
+      run: npm ci
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Prepare resources
+      run: |
+        cd scripts
+        python prepare_resources.py
+
+    - name: Build frontend
+      working-directory: frontend
+      run: npm run build
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Install Linux system dependencies
+      if: matrix.platform == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+    - name: Cache Rust dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          src-tauri/target/
+        key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+    - name: Install Tauri CLI
+      run: npm install -g @tauri-apps/cli@latest
+
+    - name: Build and bundle Tauri app
+      working-directory: src-tauri
+      run: tauri build --target ${{ matrix.target }}
+
+    - name: Check bundle size
+      run: |
+        python scripts/check_bundle_size.py --max-size 500 --verbose
+
+    - name: Run API smoke tests
+      run: |
+        python -m backend.desktop_main &
+        BACKEND_PID=$!
+        sleep 10
+        python scripts/smoke_api.py http://127.0.0.1:8000 -t 30
+        kill $BACKEND_PID || true
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: desktop-app-${{ matrix.target }}
+        path: |
+          src-tauri/target/${{ matrix.target }}/release/bundle/
+        retention-days: 30
+
+    - name: Create Release (on main branch)
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          src-tauri/target/${{ matrix.target }}/release/bundle/**/*
+        draft: false
+        prerelease: false
+        generate_release_notes: true

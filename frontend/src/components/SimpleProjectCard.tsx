@@ -16,8 +16,6 @@ import { useNavigate } from 'react-router-dom'
 import { SimpleProgressBar } from './SimpleProgressBar'
 import { 
   useSimpleProgressStore, 
-  getStageDisplayName, 
-  getStageColor, 
   isCompleted, 
   isFailed,
   SimpleProgress 
@@ -138,7 +136,7 @@ export const SimpleProjectCard: React.FC<SimpleProjectCardProps> = ({
     }
   }
 
-  const statusConfig = getStatusConfig(project.status, progress)
+  const statusConfig = getStatusConfig(project.status, progress || undefined)
   const canStart = project.status === 'pending' || project.status === 'failed'
   const canRetry = project.status === 'failed' || (progress && isFailed(progress.message))
 

@@ -71,7 +71,7 @@ interface AccountHealthMonitorProps {
   onRefresh?: () => void;
 }
 
-const AccountHealthMonitor: React.FC<AccountHealthMonitorProps> = ({ onRefresh }) => {
+const AccountHealthMonitor: React.FC<AccountHealthMonitorProps> = () => {
   const [healthData, setHealthData] = useState<HealthSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState<number[]>([]);
@@ -104,7 +104,7 @@ const AccountHealthMonitor: React.FC<AccountHealthMonitorProps> = ({ onRefresh }
   const fetchHealthSummary = async (forceCheck = false) => {
     try {
       setLoading(true);
-      const endpoint = forceCheck ? '/api/v1/health/check' : '/api/v1/health/summary';
+      const endpoint = forceCheck ? '/health/check' : '/health/summary';
       const method = forceCheck ? 'POST' : 'GET';
       const body = forceCheck ? JSON.stringify({ force_check: true }) : undefined;
       
@@ -192,7 +192,7 @@ const AccountHealthMonitor: React.FC<AccountHealthMonitorProps> = ({ onRefresh }
   // 刷新Cookie
   const refreshCookie = async (accountId: number) => {
     try {
-      const response = await fetch('/api/v1/health/refresh-cookie', {
+      const response = await fetch('/health/refresh-cookie', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

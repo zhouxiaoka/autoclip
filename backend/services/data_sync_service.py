@@ -305,6 +305,9 @@ class DataSyncService:
     def _sync_collections_from_filesystem(self, project_id: str, project_dir: Path) -> int:
         """从文件系统同步合集数据"""
         try:
+            # 构建collections目录路径
+            collections_dir = project_dir / "output" / "collections"
+            
             # 查找合集数据文件
             collections_files = [
                 project_dir / "step6_video" / "collections_metadata.json",  # 最完整的数据源
@@ -433,6 +436,10 @@ class DataSyncService:
                         else:
                             logger.warning(f"找不到切片ID {original_id} 对应的UUID")
                     
+                    # 构建缩略图路径
+                    thumbnail_filename = f"{collection_id}_{collection_title}_thumbnail.jpg"
+                    thumbnail_path = collections_dir / thumbnail_filename
+                    
                     # 如果合集不存在，创建新合集
                     if not collection:
                         collection = Collection(
@@ -441,6 +448,7 @@ class DataSyncService:
                             description=collection_data.get('collection_summary', ''),
                             video_path=video_path,
                             export_path=video_path,  # 设置export_path
+                            thumbnail_path=str(thumbnail_path) if thumbnail_path.exists() else None,
                             collection_metadata={
                                 'clip_ids': uuid_clip_ids,  # 使用UUID格式的clip_ids
                                 'original_clip_ids': original_clip_ids,  # 保留原始数字ID
@@ -605,6 +613,9 @@ class DataSyncService:
             return 0
         
         try:
+            # 构建collections目录路径
+            collections_dir = project_dir / "output" / "collections"
+            
             with open(collections_file, 'r', encoding='utf-8') as f:
                 collections_data = json.load(f)
             
@@ -620,6 +631,12 @@ class DataSyncService:
                     logger.info(f"Collection已存在，跳过: {collection_data.get('collection_title')}")
                     continue
                 
+                # 构建缩略图路径
+                collection_id = collection_data.get("id", "")
+                collection_title = collection_data.get("collection_title", "")
+                thumbnail_filename = f"{collection_id}_{collection_title}_thumbnail.jpg"
+                thumbnail_path = collections_dir / thumbnail_filename
+                
                 # 创建新的collection记录
                 collection = Collection(
                     project_id=project_id,
@@ -628,6 +645,7 @@ class DataSyncService:
                     theme="default",
                     status=CollectionStatus.COMPLETED,
                     tags=[],
+                    thumbnail_path=str(thumbnail_path) if thumbnail_path.exists() else None,
                     collection_metadata={
                         "clip_ids": collection_data.get("clip_ids", []),
                         "original_id": collection_data.get("id"),
