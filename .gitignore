@@ -93,6 +93,7 @@ releases/
 backend/autoclip-backend.spec
 src-tauri/resources/backend/
 src-tauri/resources/ffmpeg/
+src-tauri/resources/ffmpeg-unified/
 src-tauri/resources/requirements.txt
 src-tauri/resources/autoclip-backend/
 
