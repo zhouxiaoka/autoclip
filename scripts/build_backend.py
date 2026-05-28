@@ -103,7 +103,6 @@ a = Analysis(
         ('{backend_dir}/tasks', 'backend/tasks'),
         ('{backend_dir}/pipeline', 'backend/pipeline'),
         ('{backend_dir}/prompt', 'backend/prompt'),
-        ('{project_root}/data', 'data'),
     ],
     hiddenimports=[
         'uvicorn',

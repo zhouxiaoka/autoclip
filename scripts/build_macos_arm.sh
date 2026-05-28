@@ -39,14 +39,20 @@ fi
 echo "✅ 环境检查通过"
 
 # 激活虚拟环境
-echo "🐍 激活Python虚拟环境..."
+echo "🐍 检查Python虚拟环境..."
 if [ -f "venv/bin/activate" ]; then
     source venv/bin/activate
     echo "✅ 虚拟环境已激活"
 else
-    echo "❌ 虚拟环境不存在，请先运行: python3 -m venv venv"
+    echo "⚠️  未检测到venv，使用当前Python环境"
+fi
+
+# 检查PyInstaller
+if ! python3 -m PyInstaller --version &> /dev/null; then
+    echo "❌ PyInstaller 未安装，请运行: python3 -m pip install pyinstaller"
     exit 1
 fi
+echo "✅ PyInstaller 可用"
 
 # 构建前端
 echo "🎨 构建前端..."
@@ -61,7 +67,7 @@ echo "⚙️ 构建后端..."
 export AUTOCLIP_DESKTOP_MODE=1
 export AUTOCLIP_MODE=desktop
 
-python -m PyInstaller \
+python3 -m PyInstaller \
     --onefile \
     --name autoclip-backend \
     --distpath src-tauri/resources \
@@ -71,22 +77,21 @@ python -m PyInstaller \
     --noconfirm \
     backend/desktop_main.py
 
-# 重命名后端二进制文件
-mv src-tauri/resources/autoclip-backend src-tauri/resources/autoclip-backend-macos-arm64
-chmod +x src-tauri/resources/autoclip-backend-macos-arm64
+# Keep the binary as autoclip-backend (no platform suffix)
+chmod +x src-tauri/resources/autoclip-backend
 echo "✅ 后端构建完成"
 
 # 准备FFmpeg
 echo "🎬 准备FFmpeg..."
-mkdir -p src-tauri/resources/ffmpeg-unified
+mkdir -p src-tauri/resources/ffmpeg
 
 if command -v ffmpeg &> /dev/null; then
-    cp $(which ffmpeg) src-tauri/resources/ffmpeg-unified/ffmpeg-macos
-    chmod +x src-tauri/resources/ffmpeg-unified/ffmpeg-macos
+    cp $(which ffmpeg) src-tauri/resources/ffmpeg/ffmpeg
+    chmod +x src-tauri/resources/ffmpeg/ffmpeg
     echo "✅ FFmpeg准备完成"
 else
     echo "⚠️ 系统未安装FFmpeg，创建占位符文件"
-    touch src-tauri/resources/ffmpeg-unified/ffmpeg-macos
+    touch src-tauri/resources/ffmpeg/ffmpeg
 fi
 
 # 构建Tauri应用
@@ -97,6 +102,13 @@ cd ..
 
 # 检查构建结果
 echo "📦 检查构建结果..."
+if [ -f "src-tauri/resources/autoclip-backend" ]; then
+    echo "✅ 后端二进制构建成功"
+else
+    echo "❌ 后端二进制构建失败"
+    exit 1
+fi
+
 if [ -f "src-tauri/target/release/bundle/macos/AutoClip Desktop.app/Contents/MacOS/autoclip-desktop" ]; then
     echo "✅ macOS应用包构建成功"
 else

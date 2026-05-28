@@ -5,7 +5,7 @@
   "identifier": "com.autoclip.desktop",
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "cd ../frontend && npm run build && cd ../scripts && python3 prepare_resources.py && python3 build_backend.py",
+    "beforeBuildCommand": "",
     "frontendDist": "../frontend/dist"
   },
   "app": {
@@ -44,9 +44,7 @@
     "copyright": "© 2024 AutoClip Team",
       "resources": [
         "resources/ffmpeg/ffmpeg",
-        "resources/autoclip-backend/**/*",
-        "resources/backend/**/*.py",
-        "resources/requirements.txt"
+        "resources/autoclip-backend"
       ],
     "externalBin": [],
     "macOS": {
