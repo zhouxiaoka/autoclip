@@ -19,16 +19,16 @@ def main():
     )
     args = parser.parse_args()
 
-    print("🔧 开始构建桌面版后端...")
-    
+    print("[BUILD] Starting desktop backend build...")
+
     # 设置路径
     project_root = Path(__file__).parent.parent
     backend_dir = project_root / "backend"
     resources_dir = project_root / "src-tauri" / "resources"
-    
+
     # 确保资源目录存在
     resources_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # 检查虚拟环境（本地开发）或使用当前 Python（CI）
     venv_path = project_root / "venv"
     if venv_path.exists():
@@ -39,7 +39,7 @@ def main():
         pip_path = sys.executable
         python_path = sys.executable
         # 将 pip install 改为 python -m pip
-        print("⚠️  未检测到 venv，使用当前 Python 环境")
+        print("[BUILD] No venv detected, using current Python environment")
 
     if args.install_deps:
         # 安装依赖
