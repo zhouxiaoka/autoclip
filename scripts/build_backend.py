@@ -29,21 +29,29 @@ def main():
     # 确保资源目录存在
     resources_dir.mkdir(parents=True, exist_ok=True)
     
-    # 检查虚拟环境
+    # 检查虚拟环境（本地开发）或使用当前 Python（CI）
     venv_path = project_root / "venv"
-    if not venv_path.exists():
-        print("❌ 虚拟环境不存在，请先创建虚拟环境")
-        return 1
-    
-    pip_path = venv_path / "bin" / "pip"
-    python_path = venv_path / "bin" / "python"
+    if venv_path.exists():
+        pip_path = venv_path / "bin" / "pip"
+        python_path = venv_path / "bin" / "python"
+    else:
+        # CI 或无 venv 环境：使用当前 Python
+        pip_path = sys.executable
+        python_path = sys.executable
+        # 将 pip install 改为 python -m pip
+        print("⚠️  未检测到 venv，使用当前 Python 环境")
 
     if args.install_deps:
         # 安装依赖
         print("📦 安装Python依赖...")
         try:
-            subprocess.run([str(pip_path), "install", "-r", "requirements.txt"],
-                          check=True, cwd=project_root)
+            # 如果 pip_path 就是 sys.executable，用 python -m pip
+            if pip_path == sys.executable:
+                subprocess.run([str(python_path), "-m", "pip", "install", "-r", "requirements.txt"],
+                              check=True, cwd=project_root)
+            else:
+                subprocess.run([str(pip_path), "install", "-r", "requirements.txt"],
+                              check=True, cwd=project_root)
             print("✅ Python依赖安装成功")
         except subprocess.CalledProcessError as e:
             print(f"❌ Python依赖安装失败: {e}")
@@ -52,7 +60,10 @@ def main():
         # 安装PyInstaller
         print("📦 安装PyInstaller...")
         try:
-            subprocess.run([str(pip_path), "install", "pyinstaller"], check=True)
+            if pip_path == sys.executable:
+                subprocess.run([str(python_path), "-m", "pip", "install", "pyinstaller"], check=True)
+            else:
+                subprocess.run([str(pip_path), "install", "pyinstaller"], check=True)
         except subprocess.CalledProcessError as e:
             print(f"❌ PyInstaller安装失败: {e}")
             return 1

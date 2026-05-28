@@ -25,14 +25,17 @@ from backend.services.pipeline_adapter import PipelineAdapter
 class TestConfigurationErrorScenarios:
     """配置错误场景测试"""
     
-    def test_missing_api_key(self, tmp_path):
+    def test_missing_api_key(self, tmp_path, monkeypatch):
         """测试缺少API密钥"""
+        # CI 注入 DASHSCOPE_API_KEY 给其他用例使用，这里要显式清掉以触发抛错路径
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+
         project_dir = tmp_path / "test_project"
         project_dir.mkdir()
-        
+
         # 创建没有API密钥的配置
         config_manager = ProjectConfigManager(str(project_dir))
-        
+
         with pytest.raises(ValueError, match="DASHSCOPE_API_KEY"):
             config_manager.get_llm_config()
     
