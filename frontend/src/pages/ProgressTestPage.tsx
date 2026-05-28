@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react'
 import { Card, Button, Space, Typography, Row, Col, Input, Select, message } from 'antd'
-import { PlayCircleOutlined, StopOutlined, ReloadOutlined } from '@ant-design/icons'
+import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons'
 import { UnifiedStatusBar, SimpleProgressDisplay } from '../components/UnifiedStatusBar'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 

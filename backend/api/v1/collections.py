@@ -29,6 +29,71 @@ async def create_collection(
     """Create a new collection."""
     try:
         collection = collection_service.create_collection(collection_data)
+
+        # 创建成功后，尝试自动生成缩略图（基于首个可用切片抽帧）
+        try:
+            # 获取clip_ids
+            clip_ids = []
+            if hasattr(collection_data, 'clip_ids') and getattr(collection_data, 'clip_ids', None):
+                clip_ids = list(getattr(collection_data, 'clip_ids'))
+            else:
+                metadata = getattr(collection, 'collection_metadata', {}) or {}
+                clip_ids = metadata.get('clip_ids', [])
+
+            # 仅当没有现成缩略图且存在切片时尝试生成
+            if (not getattr(collection, 'thumbnail_path', None)) and clip_ids:
+                from ...models.clip import Clip
+                from ...utils.video_processor import VideoProcessor
+                from ...core.path_utils import get_project_directory
+                from pathlib import Path
+
+                db = collection_service.db
+
+                # 查找首个可用切片的视频路径
+                video_path = None
+                project_dir = get_project_directory(str(getattr(collection, 'project_id', '')))
+                clips_dir = project_dir / "output" / "clips"
+
+                for cid in clip_ids:
+                    clip = db.query(Clip).filter(Clip.id == cid).first()
+                    if clip and getattr(clip, 'video_path', None):
+                        candidate = Path(clip.video_path)
+                        if candidate.exists():
+                            video_path = candidate
+                            break
+
+                    # 备用：按文件名模式在clips目录查找
+                    patterns = [
+                        f"{cid}_*.mp4",
+                        f"clip_{cid}.mp4",
+                        f"{cid}.mp4"
+                    ]
+                    for pattern in patterns:
+                        matches = list(clips_dir.glob(pattern))
+                        if matches:
+                            video_path = matches[0]
+                            break
+                    if video_path:
+                        break
+
+                if video_path and Path(video_path).exists():
+                    # 生成缩略图输出路径
+                    collections_dir = project_dir / "output" / "collections"
+                    collections_dir.mkdir(parents=True, exist_ok=True)
+
+                    safe_name = VideoProcessor.sanitize_filename(getattr(collection, 'name', None) or f"collection_{getattr(collection, 'id', '')}")
+                    thumbnail_filename = f"{getattr(collection, 'id', '')}_{safe_name}_thumbnail.jpg"
+                    thumbnail_path = collections_dir / thumbnail_filename
+
+                    # 抽取缩略图（偏移2秒）
+                    time_offset = 2
+                    success = VideoProcessor.extract_thumbnail(Path(video_path), thumbnail_path, time_offset=time_offset)
+                    if success and thumbnail_path.exists():
+                        collection.thumbnail_path = str(thumbnail_path)
+                        db.commit()
+        except Exception as gen_thumb_err:
+            # 生成缩略图失败不影响创建流程
+            logger.warning(f"创建合集后自动生成缩略图失败: {gen_thumb_err}")
         # Convert to response schema
         status_obj = getattr(collection, 'status', None)
         status_value = status_obj.value if hasattr(status_obj, 'value') else 'created'

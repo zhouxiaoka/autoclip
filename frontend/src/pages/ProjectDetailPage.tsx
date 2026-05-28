@@ -17,7 +17,7 @@ import {
   PlayCircleOutlined,
   PlusOutlined
 } from '@ant-design/icons'
-import { useProjectStore, Project, Clip } from '../store/useProjectStore'
+import { useProjectStore, Clip, Collection } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
 import ClipCard from '../components/ClipCard'
 import CollectionCard from '../components/CollectionCard'
@@ -25,7 +25,6 @@ import CollectionPreviewModal from '../components/CollectionPreviewModal'
 import CreateCollectionModal from '../components/CreateCollectionModal'
 import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
 import { ProjectTaskManager } from '../components/ProjectTaskManager'
-// import { useWebSocket, WebSocketEventMessage } from '../hooks/useWebSocket'  // 已禁用WebSocket系统
 
 const { Content } = Layout
 const { Title, Text } = Typography
@@ -38,6 +37,7 @@ const ProjectDetailPage: React.FC = () => {
     loading, 
     error,
     setCurrentProject,
+    upsertProject,
     updateCollection,
     addCollection,
     deleteCollection,
@@ -50,64 +50,14 @@ const ProjectDetailPage: React.FC = () => {
   const [showCreateCollection, setShowCreateCollection] = useState(false)
   const [sortBy, setSortBy] = useState<'time' | 'score'>('score')
   const [showCollectionDetail, setShowCollectionDetail] = useState(false)
-  const [selectedCollection, setSelectedCollection] = useState<any>(null)
+  const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null)
   const { generateAndDownloadCollectionVideo } = useCollectionVideoDownload()
 
-  // WebSocket连接已禁用，使用新的简化进度系统
-  // const handleWebSocketMessage = (message: WebSocketEventMessage) => {
-  //   console.log('ProjectDetailPage收到WebSocket消息:', message)
-  //   
-  //   switch (message.type) {
-  //     case 'task_progress_update':
-  //       console.log('📊 收到任务进度更新:', message)
-  //       // 如果消息是针对当前项目的，刷新项目状态
-  //       if (message.project_id === id) {
-  //         loadProject()
-  //         loadProcessingStatus()
-  //       }
-  //       break
-  //       
-  //     case 'project_update':
-  //       console.log('📊 收到项目更新:', message)
-  //       // 如果消息是针对当前项目的，刷新项目状态
-  //       if (message.project_id === id) {
-  //         loadProject()
-  //         loadProcessingStatus()
-  //       }
-  //       break
-  //       
-  //     default:
-  //       console.log('忽略未知类型的WebSocket消息:', (message as any).type)
-  //   }
-  // }
-
-  // const { isConnected, syncSubscriptions } = useWebSocket({
-  //   userId: `project-detail-${id}`,
-  //   onMessage: handleWebSocketMessage
-  // })
-
-  // WebSocket订阅已禁用，使用新的简化进度系统
-  // useEffect(() => {
-  //   if (isConnected && id) {
-  //     const desiredChannels = [`project_${id}`]
-  //     console.log('ProjectDetailPage同步订阅频道:', desiredChannels)
-  //     syncSubscriptions(desiredChannels)
-  //   } else if (isConnected && !id) {
-  //     // 如果没有项目ID，清空订阅
-  //     console.log('ProjectDetailPage清空订阅')
-  //     syncSubscriptions([])
-  //   }
-  // }, [isConnected, id, syncSubscriptions])
-
   useEffect(() => {
-    if (id) {
-      // 只有当store中没有currentProject或者currentProject的id与当前id不匹配时才重新加载
-      if (!currentProject || currentProject.id !== id) {
-        loadProject()
-      }
-      loadProcessingStatus()
-    }
-  }, [id, currentProject])
+    if (!id) return
+    loadProject()
+    loadProcessingStatus()
+  }, [id])
 
   const loadProject = async () => {
     if (!id) return
@@ -134,12 +84,8 @@ const ProjectDetailPage: React.FC = () => {
           console.log('🎯 Final project with data:', projectWithData)
           setCurrentProject(projectWithData)
           
-          // 同时更新projects数组，确保Store中的数据同步
-          const { projects } = useProjectStore.getState()
-          const updatedProjects = projects.map(p => 
-            p.id === id ? projectWithData : p
-          )
-          useProjectStore.setState({ projects: updatedProjects })
+          // 同步更新项目列表，避免页面与列表状态漂移
+          upsertProject(projectWithData)
         } catch (error) {
           console.error('Failed to load clips/collections:', error)
           // 即使clips/collections加载失败，也设置项目基本信息
@@ -197,7 +143,7 @@ const ProjectDetailPage: React.FC = () => {
     }
   }
 
-  const handleViewCollection = (collection: any) => {
+  const handleViewCollection = (collection: Collection) => {
     setSelectedCollection(collection)
     setShowCollectionDetail(true)
   }

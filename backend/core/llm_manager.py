@@ -11,6 +11,7 @@ from .llm_providers import (
     LLMProvider, LLMProviderFactory, ProviderType, 
     ModelInfo, LLMResponse
 )
+from ..services.config_sync_service import config_sync_service
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,9 @@ class LLMManager:
     """LLM管理器"""
     
     def __init__(self, settings_file: Optional[Path] = None):
+        # 在初始化前先同步配置
+        self._sync_config_if_needed()
+        
         self.settings_file = settings_file or self._get_default_settings_file()
         self.current_provider: Optional[LLMProvider] = None
         self.settings = self._load_settings()
@@ -25,9 +29,37 @@ class LLMManager:
     
     def _get_default_settings_file(self) -> Path:
         """获取默认设置文件路径"""
-        current_file = Path(__file__)
-        project_root = current_file.parent.parent.parent  # backend/core -> backend -> project_root
-        return project_root / "data" / "settings.json"
+        # 优先使用桌面模式应用目录（与前端保存一致）
+        app_dir = os.getenv("AUTOCLIP_APP_DIR")
+        if app_dir:
+            return Path(app_dir) / "settings.json"
+        
+        # 优先使用默认的用户目录（macOS）- 客户端配置位置
+        default_app_dir = Path.home() / "Library" / "Application Support" / "AutoClip"
+        default_settings = default_app_dir / "settings.json"
+        if default_settings.exists():
+            return default_settings
+            
+        # 最后检查项目data目录下的settings.json（开发环境）
+        project_data_dir = Path(__file__).parent.parent.parent / "data"
+        project_settings = project_data_dir / "settings.json"
+        if project_settings.exists():
+            return project_settings
+            
+        # 如果都不存在，返回默认路径
+        return default_settings
+    
+    def _sync_config_if_needed(self):
+        """检查并同步配置"""
+        try:
+            if config_sync_service.is_sync_needed():
+                logger.info("检测到客户端配置更新，开始同步...")
+                if config_sync_service.sync_from_client():
+                    logger.info("配置同步完成")
+                else:
+                    logger.warning("配置同步失败")
+        except Exception as e:
+            logger.error(f"配置同步检查失败: {e}")
     
     def _load_settings(self) -> Dict[str, Any]:
         """加载设置"""
@@ -47,7 +79,21 @@ class LLMManager:
             try:
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
                     saved_settings = json.load(f)
-                    default_settings.update(saved_settings)
+                    
+                    # 处理新的配置格式（客户端配置）
+                    if "api" in saved_settings and "api_keys" in saved_settings["api"]:
+                        api_keys = saved_settings["api"]["api_keys"]
+                        default_settings.update({
+                            "dashscope_api_key": api_keys.get("dashscope", ""),
+                            "openai_api_key": api_keys.get("openai", ""),
+                            "gemini_api_key": api_keys.get("gemini", ""),
+                            "siliconflow_api_key": api_keys.get("siliconflow", ""),
+                            "model_name": saved_settings["api"].get("api_model", "qwen-plus")
+                        })
+                    else:
+                        # 处理旧的配置格式（直接平铺）
+                        default_settings.update(saved_settings)
+                        
             except Exception as e:
                 logger.warning(f"加载设置文件失败: {e}")
         
@@ -71,6 +117,7 @@ class LLMManager:
             
             # 获取对应提供商的API密钥
             api_key = self._get_api_key_for_provider(provider_type)
+            
             
             if api_key:
                 self.current_provider = LLMProviderFactory.create_provider(

@@ -65,11 +65,12 @@ export const useNotifications = () => {
 
   const removeNotification = useCallback((notificationId: string) => {
     setNotifications(prev => {
-      const notification = prev.find(n => n.id === notificationId);
+      const safePrev = Array.isArray(prev) ? prev : [];
+      const notification = safePrev.find(n => n.id === notificationId);
       if (notification && !notification.read) {
         setUnreadCount(count => Math.max(0, count - 1));
       }
-      return prev.filter(n => n.id !== notificationId);
+      return safePrev.filter(n => n.id !== notificationId);
     });
   }, []);
 
@@ -99,15 +100,15 @@ export const useNotifications = () => {
   }, [addNotification]);
 
   const getNotificationsByLevel = useCallback((level: Notification['level']) => {
-    return notifications.filter(n => n.level === level);
+    return (notifications || []).filter(n => n.level === level);
   }, [notifications]);
 
   const getUnreadNotifications = useCallback(() => {
-    return notifications.filter(n => !n.read);
+    return (notifications || []).filter(n => !n.read);
   }, [notifications]);
 
   const getReadNotifications = useCallback(() => {
-    return notifications.filter(n => n.read);
+    return (notifications || []).filter(n => n.read);
   }, [notifications]);
 
   return {

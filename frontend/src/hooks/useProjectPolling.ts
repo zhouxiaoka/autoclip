@@ -9,14 +9,13 @@ interface UseProjectPollingOptions {
 }
 
 export const useProjectPolling = ({
-  interval = 10000,
+  interval = 30000, // 默认30秒，减少频繁请求
   onProjectsUpdate,
   enabled = true
 }: UseProjectPollingOptions = {}) => {
   const [isPolling, setIsPolling] = useState(false)
   const intervalRef = useRef<number | null>(null)
   const [lastUpdateTime, setLastUpdateTime] = useState<number>(Date.now())
-  const isDragging = useProjectStore(state => state.isDragging)
 
     const startPolling = () => {
     if (!enabled || intervalRef.current) return
@@ -38,18 +37,21 @@ export const useProjectPolling = ({
         const projects = await projectApi.getProjects()
         console.log('Polled projects:', projects)
         
-        const hasProcessingProjects = projects.some(p => p.status === 'processing')
+        // 确保projects是数组类型
+        const safeProjects = Array.isArray(projects) ? projects : []
+        const hasProcessingProjects = safeProjects.some(p => p.status === 'processing')
         
         if (onProjectsUpdate) {
-          console.log('Calling onProjectsUpdate with:', projects)
-          onProjectsUpdate(projects)
+          console.log('Calling onProjectsUpdate with:', safeProjects)
+          onProjectsUpdate(safeProjects)
         }
         
         setLastUpdateTime(Date.now())
         
-        // 如果没有正在处理的项目，可以适当减少轮询频率
+        // 智能轮询：如果没有正在处理的项目，增加轮询间隔
         if (!hasProcessingProjects) {
-          // 可以在这里实现动态调整轮询频率的逻辑
+          // 如果没有活跃项目，可以进一步减少轮询频率
+          console.log('无活跃项目，将减少轮询频率')
         }
       } catch (error) {
         console.error('Polling error:', error)
@@ -74,11 +76,13 @@ export const useProjectPolling = ({
   const refreshNow = async () => {
     try {
       const projects = await projectApi.getProjects()
+      // 确保projects是数组类型
+      const safeProjects = Array.isArray(projects) ? projects : []
       if (onProjectsUpdate) {
-        onProjectsUpdate(projects)
+        onProjectsUpdate(safeProjects)
       }
       setLastUpdateTime(Date.now())
-      return projects
+      return safeProjects
     } catch (error) {
       console.error('Manual refresh error:', error)
       throw error

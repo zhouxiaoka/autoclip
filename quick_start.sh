@@ -86,7 +86,7 @@ main() {
     
     # 启动Celery Worker
     log_info "启动Celery Worker..."
-    nohup celery -A backend.core.celery_app worker --loglevel=info --concurrency=2 -Q processing,upload,notification,maintenance > logs/celery.log 2>&1 &
+    nohup celery -A backend.core.celery_app worker --loglevel=info --concurrency=1 --prefetch-multiplier=1 -Q processing,upload,notification,maintenance > logs/celery.log 2>&1 &
     echo $! > celery.pid
     
     # 启动前端

@@ -264,7 +264,7 @@ async def cleanup_duplicate_clips(
         # 读取文件系统中的原始数据
         data_dir = get_data_directory()
         project_dir = data_dir / "projects" / project_id
-        clips_metadata_file = project_dir / "clips_metadata.json"
+        clips_metadata_file = project_dir / "metadata" / "clips_metadata.json"
         
         if not clips_metadata_file.exists():
             raise HTTPException(status_code=404, detail="切片元数据文件不存在")

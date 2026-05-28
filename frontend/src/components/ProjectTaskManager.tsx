@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Card, Table, Tag, Progress, Space, Typography, Button, Modal, message, Row, Col, Statistic } from 'antd'
 import { ReloadOutlined, EyeOutlined, ExclamationCircleOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from '@ant-design/icons'
 import { useTaskStatus } from '../hooks/useTaskStatus'
 import { TaskStatus as TaskStatusType } from '../hooks/useTaskStatus'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { confirm } = Modal
 
 interface ProjectTaskManagerProps {
@@ -13,23 +13,24 @@ interface ProjectTaskManagerProps {
 }
 
 export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({ 
-  projectId, 
-  projectName 
+  projectId
 }) => {
-  const { getAllTasks, loading } = useTaskStatus()
+  const { tasks, loading, loadProjectTasks } = useTaskStatus()
   const [selectedTask, setSelectedTask] = useState<TaskStatusType | null>(null)
   const [taskDetailVisible, setTaskDetailVisible] = useState(false)
 
   // 获取当前项目的任务
-  const projectTasks = getAllTasks().filter(task => task.project_id === projectId)
-  const activeTasks = projectTasks.filter(task => 
+  const allTasks = tasks || []
+  const projectTasks = allTasks.filter((task: TaskStatusType) => task.project_id === projectId)
+  const activeTasks = projectTasks.filter((task: TaskStatusType) => 
     task.status === 'running' || task.status === 'pending'
   )
-  const completedTasks = projectTasks.filter(task => task.status === 'completed')
-  const failedTasks = projectTasks.filter(task => task.status === 'failed')
+  const completedTasks = projectTasks.filter((task: TaskStatusType) => task.status === 'completed')
+  const failedTasks = projectTasks.filter((task: TaskStatusType) => task.status === 'failed')
 
   // 刷新任务列表
   const handleRefresh = () => {
+    loadProjectTasks(projectId)
     message.success('任务列表已刷新')
   }
 
@@ -49,7 +50,7 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
       okType: 'danger',
       cancelText: '取消',
       onOk() {
-        message.success('任务已删除')
+        message.success(`任务已删除: ${taskId}`)
       }
     })
   }
@@ -67,22 +68,6 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
         return <ClockCircleOutlined style={{ color: '#faad14' }} />
       default:
         return <ClockCircleOutlined style={{ color: '#d9d9d9' }} />
-    }
-  }
-
-  // 获取状态颜色
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'success'
-      case 'running':
-        return 'processing'
-      case 'failed':
-        return 'error'
-      case 'pending':
-        return 'warning'
-      default:
-        return 'default'
     }
   }
 
@@ -104,7 +89,7 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => (
-        <Tag color={getStatusColor(status)}>
+        <Tag color={status === 'completed' ? 'success' : status === 'running' ? 'processing' : status === 'failed' ? 'error' : status === 'pending' ? 'warning' : 'default'}>
           {status === 'completed' ? '已完成' :
            status === 'running' ? '执行中' :
            status === 'failed' ? '失败' :
@@ -237,7 +222,7 @@ export const ProjectTaskManager: React.FC<ProjectTaskManagerProps> = ({
           title={`活跃任务 (${activeTasks.length})`}
         >
           <Space wrap>
-            {activeTasks.map(task => (
+            {activeTasks.map((task: TaskStatusType) => (
               <div key={task.id} style={{ marginBottom: '8px' }}>
                 <Text>{task.message || task.id}</Text>
                 <Progress percent={task.progress} size="small" />

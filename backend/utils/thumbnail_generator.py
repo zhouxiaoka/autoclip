@@ -8,6 +8,7 @@ from typing import Optional
 import base64
 from PIL import Image
 import io
+from .ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,9 @@ class ThumbnailGenerator:
                 cover_path = video_path.parent / f"{video_path.stem}_cover.jpg"
                 if cover_path.exists():
                     # 直接复制封面文件并调整大小
+                    ffmpeg_bin = get_ffmpeg_path()
                     cmd = [
-                        'ffmpeg',
+                        ffmpeg_bin,
                         '-i', str(cover_path),
                         '-vf', f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black',
                         '-q:v', '2',
@@ -85,8 +87,9 @@ class ThumbnailGenerator:
             else:
                 # 使用指定时间点
                 logger.info(f"为视频 {video_path.name} 选择缩略图时间点: {time_offset}秒")
+                ffmpeg_bin = get_ffmpeg_path()
                 cmd = [
-                    'ffmpeg',
+                    ffmpeg_bin,
                     '-ss', str(time_offset),  # 跳转到指定时间
                     '-i', str(video_path),    # 输入视频
                     '-vframes', '1',          # 只提取一帧
@@ -125,8 +128,9 @@ class ThumbnailGenerator:
         """
         try:
             # 检查是否有嵌入的封面图片
+            ffmpeg_bin = get_ffmpeg_path()
             cmd = [
-                'ffmpeg',
+                ffmpeg_bin,
                 '-i', str(video_path),
                 '-an',  # 禁用音频
                 '-vcodec', 'copy',  # 复制视频流
@@ -262,8 +266,9 @@ class ThumbnailGenerator:
             if not video_path.exists():
                 return None
             
+            ffprobe_bin = get_ffprobe_path()
             cmd = [
-                'ffprobe',
+                ffprobe_bin,
                 '-v', 'quiet',
                 '-print_format', 'json',
                 '-show_format',

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AutoClip Desktop",
+  "version": "1.0.0",
+  "identifier": "com.autoclip.desktop",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "cd ../frontend && npm run build && cd ../scripts && python3 prepare_resources.py && python3 build_backend.py",
+    "frontendDist": "../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "AutoClip Desktop",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "AI视频切片工具桌面版",
+    "longDescription": "AutoClip是一款基于AI的智能视频切片工具，支持自动识别精彩片段并生成合集。",
+    "copyright": "© 2024 AutoClip Team",
+      "resources": [
+        "resources/ffmpeg/ffmpeg",
+        "resources/autoclip-backend/**/*",
+        "resources/backend/**/*.py",
+        "resources/requirements.txt"
+      ],
+    "externalBin": [],
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.13",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "entitlements": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
+  },
+  "plugins": {
+    "dialog": {
+      "all": true,
+      "ask": true,
+      "confirm": true,
+      "message": true,
+      "open": true,
+      "save": true
+    },
+    "fs": {
+      "all": true,
+      "readFile": true,
+      "writeFile": true,
+      "readDir": true,
+      "copyFile": true,
+      "createDir": true,
+      "removeDir": true,
+      "removeFile": true,
+      "renameFile": true,
+      "exists": true
+    },
+    "os": {
+      "all": true
+    },
+    "process": {
+      "all": true
+    },
+    "shell": {
+      "open": true
+    }
+  }
+}

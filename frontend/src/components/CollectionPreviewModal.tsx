@@ -32,7 +32,6 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
   clips,
   projectId,
   onClose,
-  onUpdateCollection,
   onRemoveClip,
   onReorderClips,
   onAddClip,
@@ -40,7 +39,7 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
 }) => {
   const [currentClipIndex, setCurrentClipIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [autoPlay] = useState(true)
+  const autoPlay = true
 
   const [showAddClipModal, setShowAddClipModal] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
@@ -58,7 +57,9 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
 
   // 按照latestCollection.clip_ids的顺序排列clips
   const collectionClips = latestCollection ? 
-    latestCollection.clip_ids.map(clipId => clips.find(clip => clip.id === clipId)).filter(Boolean) as Clip[] : []
+    (Array.isArray(latestCollection.clip_ids) ? latestCollection.clip_ids : [])
+      .map(clipId => (Array.isArray(clips) ? clips : []).find(clip => clip.id === clipId))
+      .filter(Boolean) as Clip[] : []
   const currentClip = collectionClips[currentClipIndex]
 
   useEffect(() => {
@@ -231,7 +232,7 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
       footer={null}
       width="90vw"
       style={{ top: 20 }}
-      styles={{ body: { padding: 0, height: '90vh' } }}
+      styles={{ body: { padding: 0, height: 'min(90dvh, calc(100dvh - 40px))' } }}
       className="collection-preview-modal"
       closable={false}
       maskClosable={false}
@@ -329,8 +330,6 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
                             title={currentClip.title || currentClip.generated_title || '未命名片段'}
                             clipId={currentClip.id}
                             onTitleUpdate={(newTitle) => {
-                              // 更新当前clip的标题
-                              const updatedClip = { ...currentClip, title: newTitle }
                               // 这里可以触发父组件的更新回调
                               console.log('标题已更新:', newTitle)
                             }}

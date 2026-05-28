@@ -4,7 +4,7 @@ import { SearchOutlined, PlayCircleOutlined } from '@ant-design/icons'
 import { Clip } from '../store/useProjectStore'
 import './AddClipToCollectionModal.css'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 const { Search } = Input
 
 interface AddClipToCollectionModalProps {
@@ -27,7 +27,9 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
 
   // 过滤出不在当前合集中的切片
   const availableClips = useMemo(() => {
-    return clips.filter(clip => !existingClipIds.includes(clip.id))
+    const safeClips = Array.isArray(clips) ? clips : []
+    const safeExistingIds = Array.isArray(existingClipIds) ? existingClipIds : []
+    return safeClips.filter(clip => !safeExistingIds.includes(clip.id))
   }, [clips, existingClipIds])
 
   // 根据搜索文本过滤切片

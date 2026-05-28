@@ -1,11 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Card, Button, Tooltip, Modal, message } from 'antd'
-import { PlayCircleOutlined, DownloadOutlined, ClockCircleOutlined, StarFilled, EditOutlined, UploadOutlined } from '@ant-design/icons'
+import { PlayCircleOutlined, DownloadOutlined, ClockCircleOutlined, StarFilled, UploadOutlined } from '@ant-design/icons'
 import ReactPlayer from 'react-player'
 import { Clip } from '../store/useProjectStore'
-import SubtitleEditor from './SubtitleEditor'
-import { subtitleEditorApi } from '../services/subtitleEditorApi'
-import { SubtitleSegment, VideoEditOperation } from '../types/subtitle'
 import BilibiliManager from './BilibiliManager'
 import EditableTitle from './EditableTitle'
 import './ClipCard.css'
@@ -27,8 +24,6 @@ const ClipCard: React.FC<ClipCardProps> = ({
 }) => {
   const [showPlayer, setShowPlayer] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
-  const [showSubtitleEditor, setShowSubtitleEditor] = useState(false)
-  const [subtitleData, setSubtitleData] = useState<SubtitleSegment[]>([])
   const [showBilibiliManager, setShowBilibiliManager] = useState(false)
   const playerRef = useRef<ReactPlayer>(null)
 
@@ -74,45 +69,6 @@ const ClipCard: React.FC<ClipCardProps> = ({
 
   const handleClosePlayer = () => {
     setShowPlayer(false)
-  }
-
-  const handleOpenSubtitleEditor = async () => {
-    // 显示开发中提示
-    message.info('开发中，敬请期待')
-  }
-
-  const handleSubtitleEditorClose = () => {
-    setShowSubtitleEditor(false)
-    setSubtitleData([])
-  }
-
-  const handleSubtitleEditorSave = async (operations: VideoEditOperation[]) => {
-    if (!projectId) return
-    
-    try {
-      // 提取要删除的字幕段ID
-      const deletedSegments = operations
-        .filter(op => op.type === 'delete')
-        .flatMap(op => op.segmentIds)
-
-      if (deletedSegments.length === 0) {
-        console.log('没有删除操作')
-        return
-      }
-
-      // 执行视频编辑
-      const result = await subtitleEditorApi.editClipBySubtitles(
-        projectId,
-        clip.id,
-        deletedSegments
-      )
-
-      if (result.success) {
-        console.log('视频编辑成功:', result)
-      }
-    } catch (error) {
-      console.error('视频编辑失败:', error)
-    }
   }
 
   const handleTitleUpdate = (newTitle: string) => {
@@ -180,7 +136,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
     }
     
     // 如果没有推荐理由，尝试从content中获取非转写文本的内容要点
-    if (clip.content && clip.content.length > 0) {
+    if (clip.content && Array.isArray(clip.content) && clip.content.length > 0) {
       // 过滤掉可能是转写文本的内容（通常转写文本很长且包含标点符号）
       const contentPoints = clip.content.filter(item => {
         const text = item.trim()
@@ -464,13 +420,6 @@ const ClipCard: React.FC<ClipCardProps> = ({
             下载视频
           </Button>,
           <Button 
-            key="subtitle" 
-            icon={<EditOutlined />} 
-            onClick={handleOpenSubtitleEditor}
-          >
-            字幕编辑
-          </Button>,
-          <Button 
             key="upload" 
             type="default" 
             icon={<UploadOutlined />} 
@@ -547,19 +496,6 @@ const ClipCard: React.FC<ClipCardProps> = ({
           />
         )}
       </Modal>
-
-      {/* 字幕编辑器 */}
-      {showSubtitleEditor && (
-        <>
-          {console.log('Rendering SubtitleEditor with:', { showSubtitleEditor, subtitleDataLength: subtitleData.length })}
-          <SubtitleEditor
-            videoUrl={videoUrl || ''}
-            subtitles={subtitleData}
-            onSave={handleSubtitleEditorSave}
-            onClose={handleSubtitleEditorClose}
-          />
-        </>
-      )}
 
       {/* B站管理弹窗 */}
       <BilibiliManager

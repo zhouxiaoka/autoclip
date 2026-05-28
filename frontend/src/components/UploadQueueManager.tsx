@@ -10,19 +10,14 @@ import {
   Form,
   Input,
   Select,
-  Upload,
   message,
   Tooltip,
   Statistic,
   Row,
   Col,
-  Divider,
   Badge
 } from 'antd';
 import {
-  PlayCircleOutlined,
-  PauseCircleOutlined,
-  DeleteOutlined,
   ReloadOutlined,
   PlusOutlined,
   UploadOutlined,
@@ -88,7 +83,6 @@ const UploadQueueManager: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [addTaskModalVisible, setAddTaskModalVisible] = useState(false);
   const [batchUploadModalVisible, setBatchUploadModalVisible] = useState(false);
-  const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
   const [form] = Form.useForm();
   const [batchForm] = Form.useForm();
 
@@ -125,7 +119,7 @@ const UploadQueueManager: React.FC = () => {
   // 获取B站账号列表
   const fetchAccounts = async () => {
     try {
-      const response = await fetch('/api/v1/bilibili/accounts');
+      const response = await fetch('/bilibili/accounts');
       if (response.ok) {
         const data = await response.json();
         setAccounts(data.accounts || []);
@@ -432,7 +426,7 @@ const UploadQueueManager: React.FC = () => {
             <Card>
               <Statistic
                 title="可用账号"
-                value={accounts.filter(acc => acc.status === 'active' && acc.can_upload).length}
+                value={(accounts || []).filter(acc => acc.status === 'active' && acc.can_upload).length}
                 prefix={<Badge status="success" />}
               />
             </Card>
@@ -533,7 +527,7 @@ const UploadQueueManager: React.FC = () => {
             label="指定账号"
           >
             <Select placeholder="自动选择最佳账号" allowClear>
-              {accounts.filter(acc => acc.status === 'active' && acc.can_upload).map(account => (
+              {(accounts || []).filter(acc => acc.status === 'active' && acc.can_upload).map(account => (
                 <Option key={account.id} value={account.id}>
                   {account.nickname || account.username} 
                   {account.is_vip && <Tag color="gold">VIP</Tag>}

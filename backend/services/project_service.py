@@ -41,6 +41,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             "name": project_dict["name"],
             "description": project_dict.get("description"),
             "project_type": project_dict.get("project_type", "default").value if hasattr(project_dict.get("project_type", "default"), 'value') else project_dict.get("project_type", "default"),  # Map project_type to project_type
+            "status": "pending",  # 默认状态为 pending
             "video_path": project_dict.get("source_file"),  # Map source_file to video_path
             "processing_config": project_dict.get("settings", {}),  # Map settings to processing_config
             "project_metadata": {"source_url": project_dict.get("source_url")}  # Map source_url to metadata
@@ -133,8 +134,8 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
                 id=str(getattr(project, 'id', '')),
                 name=str(getattr(project, 'name', '')),
                 description=str(getattr(project, 'description', '')) if getattr(project, 'description', None) is not None else None,
-                project_type=ProjectType(getattr(project, 'project_type').value) if hasattr(project, 'project_type') and getattr(project, 'project_type', None) is not None else ProjectType.DEFAULT,
-                status=ProjectStatus(getattr(project, 'status').value) if hasattr(project, 'status') and getattr(project, 'status', None) is not None else ProjectStatus.PENDING,
+                project_type=ProjectType(getattr(project, 'project_type').value) if hasattr(project, 'project_type') and hasattr(getattr(project, 'project_type'), 'value') else ProjectType.DEFAULT,
+                status=ProjectStatus(getattr(project, 'status').value) if hasattr(project, 'status') and hasattr(getattr(project, 'status'), 'value') else ProjectStatus.PENDING,
                 source_url=project.project_metadata.get("source_url") if getattr(project, 'project_metadata', None) else None,
                 source_file=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,
                 video_path=str(getattr(project, 'video_path', '')) if getattr(project, 'video_path', None) is not None else None,  # 添加video_path字段供前端使用

@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useWebSocket, TaskProgressUpdateMessage } from './useWebSocket';
-import { projectApi } from '../services/api';
 
 export interface TaskProgressState {
   task_id: string;
@@ -46,32 +45,31 @@ export const useTaskProgress = (options: UseTaskProgressOptions) => {
       
       // 更新状态
       const newState: TaskProgressState = {
-        task_id: progressMessage.task_id,
+        task_id: progressMessage.task_id || taskId,
         progress: progressMessage.progress,
-        step: progressMessage.step,
-        total: progressMessage.total,
-        phase: progressMessage.phase,
-        message: progressMessage.message,
+        step: 0,
+        total: 0,
+        phase: progressMessage.step_name || 'processing',
+        message: progressMessage.message || '',
         status: progressMessage.status,
-        seq: progressMessage.seq,
-        ts: progressMessage.ts,
-        meta: progressMessage.meta,
+        seq: lastSeq + 1,
+        ts: Math.floor(Date.now() / 1000),
         last_updated: Date.now()
       };
       
       setTaskState(newState);
-      setLastSeq(progressMessage.seq);
-      setLastTs(progressMessage.ts);
+      setLastSeq((prev) => prev + 1);
+      setLastTs(Math.floor(Date.now() / 1000));
       
       // 触发回调
       onProgressUpdate?.(newState);
       
       // 检查终态
-      if (progressMessage.status === 'DONE') {
+      if (progressMessage.status === 'completed') {
         onTaskComplete?.(newState);
         // 延迟进行终态校准
         setTimeout(() => performFinalStateCheck(), 1000);
-      } else if (progressMessage.status === 'FAIL') {
+      } else if (progressMessage.status === 'failed') {
         onTaskFailed?.(newState);
         // 延迟进行终态校准
         setTimeout(() => performFinalStateCheck(), 1000);
@@ -83,9 +81,7 @@ export const useTaskProgress = (options: UseTaskProgressOptions) => {
   const { 
     isConnected, 
     subscribeToTask, 
-    unsubscribeFromTask,
-    connect,
-    disconnect 
+    unsubscribeFromTask
   } = useWebSocket({
     userId,
     onMessage: handleWebSocketMessage
@@ -98,25 +94,26 @@ export const useTaskProgress = (options: UseTaskProgressOptions) => {
     
     try {
       console.log(`执行终态校准: ${taskId}`);
-      const response = await projectApi.getTaskProgress(taskId);
+      // 暂时注释掉API调用，因为getTaskProgress方法不存在
+      // const response = await projectApi.getTaskProgress(taskId);
       
-      if (response.data) {
-        const apiState: TaskProgressState = {
-          task_id: taskId,
-          progress: response.data.progress || 0,
-          step: response.data.current_step || 0,
-          total: 6,
-          phase: 'unknown',
-          message: response.data.current_step || '未知状态',
-          status: response.data.status || 'unknown',
-          seq: lastSeq + 1,
-          ts: Date.now() / 1000,
-          last_updated: Date.now()
-        };
-        
-        setTaskState(apiState);
-        console.log('终态校准完成:', apiState);
-      }
+      // if (response.data) {
+      //   const apiState: TaskProgressState = {
+      //     task_id: taskId,
+      //     progress: response.data.progress || 0,
+      //     step: response.data.current_step || 0,
+      //     total: 6,
+      //     phase: 'unknown',
+      //     message: response.data.current_step || '未知状态',
+      //     status: response.data.status || 'unknown',
+      //     seq: lastSeq + 1,
+      //     ts: Date.now() / 1000,
+      //     last_updated: Date.now()
+      //   };
+      //   
+      //   setTaskState(apiState);
+      //   console.log('终态校准完成:', apiState);
+      // }
     } catch (error) {
       console.error('终态校准失败:', error);
     }

@@ -1,4 +1,3 @@
-import { } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Layout } from 'antd'
 import HomePage from './pages/HomePage'

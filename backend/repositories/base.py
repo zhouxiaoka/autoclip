@@ -29,7 +29,7 @@ class BaseRepository(Generic[ModelType]):
         self.model = model
         self.db = db
     
-    def create(self, **kwargs) -> ModelType:
+    def create(self, auto_commit: bool = True, **kwargs) -> ModelType:
         """
         创建记录
         
@@ -41,7 +41,10 @@ class BaseRepository(Generic[ModelType]):
         """
         instance = self.model(**kwargs)
         self.db.add(instance)
-        self.db.commit()
+        if auto_commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         self.db.refresh(instance)
         return instance
     
@@ -70,7 +73,7 @@ class BaseRepository(Generic[ModelType]):
         """
         return self.db.query(self.model).offset(skip).limit(limit).all()
     
-    def update(self, id: str, **kwargs) -> Optional[ModelType]:
+    def update(self, id: str, auto_commit: bool = True, **kwargs) -> Optional[ModelType]:
         """
         更新记录
         
@@ -86,11 +89,14 @@ class BaseRepository(Generic[ModelType]):
             for field, value in kwargs.items():
                 if hasattr(instance, field):
                     setattr(instance, field, value)
-            self.db.commit()
+            if auto_commit:
+                self.db.commit()
+            else:
+                self.db.flush()
             self.db.refresh(instance)
         return instance
     
-    def delete(self, id: str) -> bool:
+    def delete(self, id: str, auto_commit: bool = True) -> bool:
         """
         删除记录
         
@@ -103,7 +109,10 @@ class BaseRepository(Generic[ModelType]):
         instance = self.get_by_id(id)
         if instance:
             self.db.delete(instance)
-            self.db.commit()
+            if auto_commit:
+                self.db.commit()
+            else:
+                self.db.flush()
             return True
         return False
     
@@ -190,7 +199,7 @@ class BaseRepository(Generic[ModelType]):
         """
         return self.db.query(self.model).filter(condition).first()
     
-    def bulk_create(self, instances: List[Dict[str, Any]]) -> List[ModelType]:
+    def bulk_create(self, instances: List[Dict[str, Any]], auto_commit: bool = True) -> List[ModelType]:
         """
         批量创建记录
         
@@ -206,7 +215,10 @@ class BaseRepository(Generic[ModelType]):
             self.db.add(instance)
             created_instances.append(instance)
         
-        self.db.commit()
+        if auto_commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         
         # 刷新所有实例
         for instance in created_instances:
@@ -214,7 +226,7 @@ class BaseRepository(Generic[ModelType]):
         
         return created_instances
     
-    def bulk_update(self, instances: List[ModelType]) -> List[ModelType]:
+    def bulk_update(self, instances: List[ModelType], auto_commit: bool = True) -> List[ModelType]:
         """
         批量更新记录
         
@@ -227,10 +239,13 @@ class BaseRepository(Generic[ModelType]):
         for instance in instances:
             self.db.merge(instance)
         
-        self.db.commit()
+        if auto_commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         return instances
     
-    def bulk_delete(self, ids: List[str]) -> int:
+    def bulk_delete(self, ids: List[str], auto_commit: bool = True) -> int:
         """
         批量删除记录
         
@@ -244,5 +259,8 @@ class BaseRepository(Generic[ModelType]):
             self.model.id.in_(ids)
         ).delete(synchronize_session=False)
         
-        self.db.commit()
+        if auto_commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         return deleted_count

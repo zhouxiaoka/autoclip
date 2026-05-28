@@ -11,6 +11,8 @@ from typing import Dict, Any, Optional, Union
 from pydantic import BaseModel, Field, validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from . import path_utils
+
 logger = logging.getLogger(__name__)
 
 
@@ -107,11 +109,11 @@ class LoggingConfig(BaseModel):
 
 class PathConfig(BaseModel):
     """路径配置"""
-    project_root: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent)
-    data_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "data")
-    uploads_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "data" / "uploads")
-    output_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "data" / "output")
-    temp_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "data" / "temp")
+    project_root: Path = Field(default_factory=path_utils.get_project_root)
+    data_dir: Path = Field(default_factory=path_utils.get_data_directory)
+    uploads_dir: Path = Field(default_factory=path_utils.get_uploads_directory)
+    output_dir: Path = Field(default_factory=path_utils.get_output_directory)
+    temp_dir: Path = Field(default_factory=path_utils.get_temp_directory)
     prompt_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "prompt")
     
     def __init__(self, **data):

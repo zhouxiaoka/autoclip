@@ -7,6 +7,16 @@ import os
 from pathlib import Path
 from typing import Optional
 
+DESKTOP_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+def is_desktop_mode() -> bool:
+    """判断当前是否为桌面运行模式"""
+    return (
+        os.getenv("AUTOCLIP_DESKTOP_MODE", "").lower() in DESKTOP_TRUE_VALUES
+        or os.getenv("AUTOCLIP_MODE", "").lower() == "desktop"
+    )
+
 def get_project_root() -> Path:
     """
     获取项目根目录
@@ -25,9 +35,15 @@ def get_project_root() -> Path:
 
 def get_data_directory() -> Path:
     """获取数据目录"""
-    # 统一使用项目根目录下的data目录，与config.py保持一致
-    project_root = get_project_root()
-    data_dir = project_root / "data"
+    configured_data_dir = os.getenv("AUTOCLIP_DATA_DIR")
+    if configured_data_dir:
+        data_dir = Path(configured_data_dir).expanduser()
+    elif is_desktop_mode():
+        app_dir = os.getenv("AUTOCLIP_APP_DIR", "~/Library/Application Support/AutoClip")
+        data_dir = Path(app_dir).expanduser()
+    else:
+        # 统一使用项目根目录下的data目录，与config.py保持一致
+        data_dir = get_project_root() / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir
 
@@ -39,7 +55,7 @@ def get_projects_directory() -> Path:
 
 def get_output_directory() -> Path:
     """获取输出目录"""
-    output_dir = get_project_root() / "output"
+    output_dir = get_data_directory() / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
@@ -128,6 +144,15 @@ def get_metadata_file_path(project_id: str) -> Path:
 
 def get_log_file_path() -> Path:
     """获取日志文件路径"""
+    configured_log_file = os.getenv("LOG_FILE")
+    if configured_log_file:
+        log_file = Path(configured_log_file).expanduser()
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        return log_file
+    if is_desktop_mode() or os.getenv("AUTOCLIP_DATA_DIR"):
+        logs_dir = get_data_directory() / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        return logs_dir / "backend.log"
     return get_project_root() / "backend.log"
 
 def get_cache_directory() -> Path:
@@ -171,4 +196,3 @@ def validate_file_path(file_path: Path) -> bool:
         return any(file_path.is_relative_to(allowed_dir) for allowed_dir in allowed_dirs)
     except Exception:
         return False
-

@@ -33,7 +33,7 @@ interface SimpleProgressState {
 }
 
 export const useSimpleProgressStore = create<SimpleProgressState>((set, get) => {
-  let timer: NodeJS.Timeout | null = null
+  let timer: number | null = null
 
   return {
     // 初始状态
@@ -52,7 +52,7 @@ export const useSimpleProgressStore = create<SimpleProgressState>((set, get) => 
     },
 
     // 开始轮询
-    startPolling: (projectIds: string[], intervalMs: number = 2000) => {
+    startPolling: (projectIds: string[], intervalMs: number = 5000) => {
       const { stopPolling, isPolling } = get()
       
       // 如果已经在轮询，先停止
@@ -71,7 +71,7 @@ export const useSimpleProgressStore = create<SimpleProgressState>((set, get) => 
       const fetchSnapshots = async () => {
         try {
           const queryString = projectIds.map(id => `project_ids=${id}`).join('&')
-          const response = await fetch(`http://localhost:8000/api/v1/simple-progress/snapshot?${queryString}`)
+          const response = await fetch(`/api/v1/simple-progress/snapshot?${queryString}`)
           
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`)
@@ -86,6 +86,24 @@ export const useSimpleProgressStore = create<SimpleProgressState>((set, get) => 
           })
           
           console.log(`轮询更新: ${snapshots.length} 个项目`)
+          
+          // 如果没有任何进度，或所有项目均已到达终态，则自动停止轮询
+          try {
+            const allTerminal = snapshots.length > 0 && snapshots.every(s => {
+              return isCompleted(s.stage) || isFailed(s.message)
+            })
+            // 只有当有进度且所有项目都已完成时才停止轮询
+            // 如果snapshots.length === 0，说明项目可能还在pending状态，不应该停止轮询
+            if (snapshots.length > 0 && allTerminal) {
+              console.log('所有项目已完成，自动停止轮询')
+              get().stopPolling()
+            } else if (snapshots.length === 0) {
+              console.log('项目可能还在pending状态，继续轮询等待')
+            }
+          } catch (e) {
+            // 保护性捕获，避免影响后续轮询逻辑
+            console.warn('检测终态时出现问题，但不影响继续运行:', e)
+          }
           
         } catch (error) {
           console.error('轮询进度失败:', error)

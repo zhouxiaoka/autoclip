@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from pydantic import BaseModel, validator
 from enum import Enum
 
+from . import path_utils
+
 # 视频分类枚举
 class VideoCategory(str, Enum):
     DEFAULT = "default"
@@ -74,7 +76,7 @@ VIDEO_CATEGORIES_CONFIG = {
 }
 
 # 项目根目录
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+PROJECT_ROOT = path_utils.get_project_root()
 
 # 输入文件路径
 INPUT_DIR = PROJECT_ROOT / "input"
@@ -83,7 +85,8 @@ INPUT_SRT = INPUT_DIR / "input.srt"
 INPUT_TXT = INPUT_DIR / "input.txt"
 
 # 输出目录
-OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
+DATA_DIR = path_utils.get_data_directory()
+OUTPUT_DIR = path_utils.get_output_directory()
 CLIPS_DIR = OUTPUT_DIR / "clips"
 COLLECTIONS_DIR = OUTPUT_DIR / "collections"
 METADATA_DIR = OUTPUT_DIR / "metadata"
@@ -197,11 +200,11 @@ class ProcessingConfig:
 class PathConfig:
     """路径配置"""
     project_root: Path = field(default_factory=lambda: PROJECT_ROOT)
-    data_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "data")
-    uploads_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "uploads")
-    output_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "output")
+    data_dir: Path = field(default_factory=path_utils.get_data_directory)
+    uploads_dir: Path = field(default_factory=path_utils.get_uploads_directory)
+    output_dir: Path = field(default_factory=path_utils.get_output_directory)
     prompt_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent / "prompt")
-    temp_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "temp")
+    temp_dir: Path = field(default_factory=path_utils.get_temp_directory)
 
 class ConfigManager:
     """配置管理器"""
@@ -218,7 +221,7 @@ class ConfigManager:
             self.settings.dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
         
         # 从配置文件加载
-        config_file = PROJECT_ROOT / "data" / "settings.json"
+        config_file = path_utils.get_settings_file_path()
         if config_file.exists():
             try:
                 with open(config_file, 'r', encoding='utf-8') as f:
@@ -234,7 +237,7 @@ class ConfigManager:
         self.prompt_files = PROMPT_FILES.copy()
         
         # 确保提示词目录存在
-        PROMPT_DIR.mkdir(exist_ok=True)
+        PROMPT_DIR.mkdir(parents=True, exist_ok=True)
         
         # 创建默认提示词文件
         default_prompts = {
@@ -329,8 +332,8 @@ class ConfigManager:
     
     def _save_settings(self):
         """保存设置到文件"""
-        config_file = PROJECT_ROOT / "data" / "settings.json"
-        config_file.parent.mkdir(exist_ok=True)
+        config_file = path_utils.get_settings_file_path()
+        config_file.parent.mkdir(parents=True, exist_ok=True)
         
         try:
             with open(config_file, 'w', encoding='utf-8') as f:

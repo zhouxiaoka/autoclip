@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Tag, Button, Space, Typography, Progress, Popconfirm, message, Tooltip } from 'antd'
-import { PlayCircleOutlined, DeleteOutlined, EyeOutlined, DownloadOutlined, ReloadOutlined, LoadingOutlined } from '@ant-design/icons'
+import { Card, Tag, Button, Space, Typography, Popconfirm, message, Tooltip } from 'antd'
+import { PlayCircleOutlined, DeleteOutlined, DownloadOutlined, ReloadOutlined, LoadingOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { Project } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
@@ -47,8 +47,7 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(style)
 }
 
-const { Text, Title } = Typography
-const { Meta } = Card
+const { Text } = Typography
 
 interface ProjectCardProps {
   project: Project
@@ -57,20 +56,11 @@ interface ProjectCardProps {
   onClick?: () => void
 }
 
-interface LogEntry {
-  timestamp: string
-  module: string
-  level: string
-  message: string
-}
-
 const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick }) => {
   const navigate = useNavigate()
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [thumbnailLoading, setThumbnailLoading] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [currentLogIndex, setCurrentLogIndex] = useState(0)
 
   // 获取分类信息
   const getCategoryInfo = (category?: string) => {
@@ -227,78 +217,40 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     generateThumbnail()
   }, [project.id, project.video_path, thumbnailCacheKey])
 
-  // 获取项目日志（仅在处理中时）
-  useEffect(() => {
-    if (project.status !== 'processing') {
-      setLogs([])
-      return
-    }
-
-    const fetchLogs = async () => {
-      try {
-        const response = await projectApi.getProjectLogs(project.id, 20)
-        setLogs(response.logs.filter(log => 
-          log.message.includes('Step') || 
-          log.message.includes('开始') || 
-          log.message.includes('完成') ||
-          log.message.includes('处理') ||
-          log.level === 'ERROR'
-        ))
-      } catch (error) {
-        console.error('获取日志失败:', error)
-      }
-    }
-
-    // 立即获取一次
-    fetchLogs()
-    
-    // 每3秒更新一次日志
-    const logInterval = setInterval(fetchLogs, 3000)
-    
-    return () => clearInterval(logInterval)
-  }, [project.id, project.status])
-
-  // 日志轮播
-  useEffect(() => {
-    if (logs.length <= 1) return
-    
-    const interval = setInterval(() => {
-      setCurrentLogIndex(prev => (prev + 1) % logs.length)
-    }, 2000) // 每2秒切换一条日志
-    
-    return () => clearInterval(interval)
-  }, [logs.length])
-
-  const getStatusColor = (status: Project['status']) => {
-    switch (status) {
-      case 'completed': return 'success'
-      case 'processing': return 'processing'
-      case 'error': return 'error'
-      case 'uploading': return 'default'
-      default: return 'default'
-    }
-  }
-
-  // 检查是否是等待处理状态 - pending状态显示为导入中
-  const isImporting = project.status === 'pending'
+  // 检查是否是下载状态 - 根据下载进度判断
+  const downloadProgress = project.processing_config?.download_progress || 0
+  const isDownloading = project.status === 'pending' && downloadProgress > 0 && downloadProgress < 100
+  const isImporting = project.status === 'pending' && !isDownloading
   
-  // 状态标准化处理 - pending状态显示为导入中
+  // 状态标准化处理
   const normalizedStatus = project.status === 'error' ? 'failed' : 
+                          isDownloading ? 'downloading' :
                           isImporting ? 'importing' : project.status
   
   // 调试信息
   console.log('ProjectCard Debug:', {
     projectId: project.id,
     projectStatus: project.status,
+    downloadProgress,
+    isDownloading,
     isImporting,
     normalizedStatus,
     processingConfig: project.processing_config
   })
+
+  // 自动启动pending状态的项目（但不包括下载中的项目）
+  useEffect(() => {
+    if (project.status === 'pending' && !isRetrying && !isDownloading) {
+      console.log(`检测到pending状态项目，自动启动处理: ${project.id}`)
+      handleRetry()
+    }
+  }, [project.status, project.id, isRetrying, isDownloading])
   
   // 计算进度百分比
   const progressPercent = project.status === 'completed' ? 100 : 
                          project.status === 'failed' ? 0 :
-                         isImporting ? 20 : // 导入中显示20%进度
+                         isDownloading ? downloadProgress : // 下载中显示实际下载进度
+                         isImporting ? 5 : // pending状态显示5%进度，表示等待处理
                          project.current_step && project.total_steps ? 
                          Math.round((project.current_step / project.total_steps) * 100) : 
                          project.status === 'processing' ? 10 : 0
@@ -374,6 +326,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             // 导入中状态的项目不能点击进入详情页
             if (project.status === 'pending') {
               message.warning('项目正在导入中，请稍后再查看详情')
+              return
+            }
+            
+            // 处理中状态的项目不能点击进入详情页
+            if (project.status === 'processing') {
+              message.warning('项目处理中，请完成后再查看')
               return
             }
             
@@ -663,7 +621,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           </div>
           
           {/* 状态和统计信息 */}
-          {(normalizedStatus === 'importing' || normalizedStatus === 'processing' || normalizedStatus === 'failed') ? (
+          {(normalizedStatus === 'importing' || normalizedStatus === 'downloading' || normalizedStatus === 'processing' || normalizedStatus === 'failed') ? (
             // 导入中、处理中、失败：只显示状态块，居中展示
             <div style={{ 
               display: 'flex', 

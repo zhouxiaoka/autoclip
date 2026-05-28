@@ -32,6 +32,7 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=1000,
     worker_disable_rate_limits=True,
+    worker_concurrency=1,  # 强制设置并发数为1，防止重复处理
     
     # 结果配置
     result_expires=3600,

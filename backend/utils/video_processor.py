@@ -7,6 +7,7 @@ import logging
 import re
 from typing import List, Dict, Optional
 from pathlib import Path
+from .ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
 
 # 修复导入问题
 try:
@@ -154,8 +155,9 @@ class VideoProcessor:
             
             # 构建优化的FFmpeg命令
             # 使用 -ss 在输入前进行精确定位，使用 -t 指定持续时间
+            ffmpeg_bin = get_ffmpeg_path()
             cmd = [
-                'ffmpeg',
+                ffmpeg_bin,
                 '-ss', ffmpeg_start_time,  # 在输入前定位，更精确
                 '-i', str(input_video),
                 '-t', str(duration),  # 使用持续时间而不是绝对结束时间
@@ -230,8 +232,9 @@ class VideoProcessor:
                 return False
             
             # 构建FFmpeg命令 - 使用H.264编码确保兼容性
+            ffmpeg_bin = get_ffmpeg_path()
             cmd = [
-                'ffmpeg',
+                ffmpeg_bin,
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', str(concat_file),
@@ -319,8 +322,9 @@ class VideoProcessor:
             视频信息字典
         """
         try:
+            ffprobe_bin = get_ffprobe_path()
             cmd = [
-                'ffprobe',
+                ffprobe_bin,
                 '-v', 'quiet',
                 '-print_format', 'json',
                 '-show_format',
@@ -386,7 +390,7 @@ class VideoProcessor:
         
         return successful_clips
     
-    def create_collections_from_metadata(self, collections_data: List[Dict]) -> List[Path]:
+    def create_collections_from_metadata(self, collections_data: List[Dict]) -> List[Dict]:
         """
         根据元数据创建合集
         
@@ -394,7 +398,7 @@ class VideoProcessor:
             collections_data: 合集数据列表
             
         Returns:
-            成功创建的合集路径列表
+            成功创建的合集信息列表，包含视频路径和缩略图路径
         """
         successful_collections = []
         
@@ -424,7 +428,31 @@ class VideoProcessor:
                 output_path = self.collections_dir / f"{safe_title}.mp4"
                 
                 if VideoProcessor.create_collection(clips_list, output_path):
-                    successful_collections.append(output_path)
+                    # 生成合集缩略图
+                    thumbnail_path = None
+                    try:
+                        thumbnail_filename = f"{collection_id}_{safe_title}_thumbnail.jpg"
+                        thumbnail_path = self.collections_dir / thumbnail_filename
+                        
+                        # 从视频中提取缩略图（第2秒的帧）
+                        thumbnail_success = VideoProcessor.extract_thumbnail(output_path, thumbnail_path, time_offset=2)
+                        if thumbnail_success:
+                            logger.info(f"合集 {collection_id} 缩略图生成成功: {thumbnail_path}")
+                        else:
+                            logger.warning(f"合集 {collection_id} 缩略图生成失败")
+                            thumbnail_path = None
+                    except Exception as e:
+                        logger.error(f"生成合集 {collection_id} 缩略图时出错: {e}")
+                        thumbnail_path = None
+                    
+                    # 返回包含视频路径和缩略图路径的信息
+                    collection_info = {
+                        'collection_id': collection_id,
+                        'video_path': str(output_path),
+                        'thumbnail_path': str(thumbnail_path) if thumbnail_path else None,
+                        'title': collection_title
+                    }
+                    successful_collections.append(collection_info)
                     logger.info(f"成功创建合集 {collection_id}: {output_path}")
             else:
                 logger.warning(f"合集 {collection_id} 没有找到任何有效的切片文件")

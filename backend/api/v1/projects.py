@@ -11,7 +11,8 @@ from backend.core.database import get_db
 from backend.services.project_service import ProjectService
 from backend.services.processing_service import ProcessingService
 from backend.services.websocket_notification_service import WebSocketNotificationService
-from backend.tasks.processing import process_video_pipeline
+# 延迟导入，避免过早触发celery_app导入链
+# from backend.tasks.processing import process_video_pipeline
 from backend.core.websocket_manager import manager as websocket_manager
 from backend.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse, ProjectListResponse, ProjectFilter,
@@ -120,14 +121,25 @@ async def upload_files(
         try:
             from ...tasks.import_processing import process_import_task
             
-            # 提交异步任务
-            celery_task = process_import_task.delay(
-                project_id=project_id,
-                video_path=str(video_path),
-                srt_file_path=str(srt_path) if srt_path else None
-            )
+            # 检查是否已有相同项目正在处理中
+            from ...models.task import Task, TaskStatus
+            existing_task = db.query(Task).filter(
+                Task.project_id == project_id,
+                Task.status == TaskStatus.RUNNING,
+                Task.name.like('%导入%')
+            ).first()
             
-            logger.info(f"项目 {project_id} 异步处理任务已启动，Celery任务ID: {celery_task.id}")
+            if existing_task:
+                logger.warning(f"项目 {project_id} 已有处理任务在运行，跳过重复启动")
+            else:
+                # 提交异步任务
+                celery_task = process_import_task.delay(
+                    project_id=project_id,
+                    video_path=str(video_path),
+                    srt_file_path=str(srt_path) if srt_path else None
+                )
+                
+                logger.info(f"项目 {project_id} 异步处理任务已启动，Celery任务ID: {celery_task.id}")
             
         except Exception as e:
             logger.error(f"启动项目 {project_id} 异步处理失败: {str(e)}")
@@ -165,7 +177,8 @@ async def upload_files(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("上传文件创建项目失败")
+        raise HTTPException(status_code=500, detail="创建项目失败，请稍后重试")
 
 
 @router.post("/", response_model=ProjectResponse)
@@ -194,7 +207,8 @@ async def create_project(
             total_tasks=0
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("创建项目失败")
+        raise HTTPException(status_code=500, detail="创建项目失败，请稍后重试")
 
 
 @router.get("/", response_model=ProjectListResponse)
@@ -212,15 +226,31 @@ async def get_projects(
         
         filters = None
         if status or project_type or search:
+            # 转换字符串为枚举值
+            status_enum = None
+            if status:
+                try:
+                    status_enum = ProjectStatus(status)
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+            
+            project_type_enum = None
+            if project_type:
+                try:
+                    project_type_enum = ProjectType(project_type)
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid project_type: {project_type}")
+            
             filters = ProjectFilter(
-                status=status,
-                project_type=project_type,
+                status=status_enum,
+                project_type=project_type_enum,
                 search=search
             )
         
         return project_service.get_projects_paginated(pagination, filters)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("获取项目列表失败")
+        raise HTTPException(status_code=500, detail="获取项目列表失败，请稍后重试")
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -272,7 +302,8 @@ async def get_project(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("获取项目详情失败: %s", project_id)
+        raise HTTPException(status_code=500, detail="获取项目详情失败，请稍后重试")
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -307,7 +338,8 @@ async def update_project(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("更新项目失败: %s", project_id)
+        raise HTTPException(status_code=500, detail="更新项目失败，请稍后重试")
 
 
 @router.delete("/{project_id}")
@@ -324,7 +356,8 @@ async def delete_project(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("删除项目失败: %s", project_id)
+        raise HTTPException(status_code=500, detail="删除项目失败，请稍后重试")
 
 
 @router.post("/sync-all-data")
@@ -436,6 +469,9 @@ async def start_processing(
             message="开始视频处理流程"
         )
         
+        # 延迟导入，避免过早触发celery_app导入链
+        from backend.tasks.processing import process_video_pipeline
+        
         # 提交Celery任务
         celery_task = process_video_pipeline.delay(
             project_id=project_id,
@@ -469,7 +505,8 @@ async def start_processing(
             )
         except:
             pass
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("启动项目处理失败: %s", project_id)
+        raise HTTPException(status_code=500, detail="启动处理失败，请稍后重试")
 
 
 @router.post("/{project_id}/retry")
@@ -604,6 +641,9 @@ async def retry_processing(
         # 字幕文件是可选的
         srt_path_str = str(srt_path) if srt_path.exists() else None
         
+        # 延迟导入，避免过早触发celery_app导入链
+        from backend.tasks.processing import process_video_pipeline
+        
         # 提交Celery任务 - 使用字符串类型的project_id
         celery_task = process_video_pipeline.delay(
             project_id=project_id,
@@ -642,7 +682,8 @@ async def retry_processing(
         #     )
         # except:
         #     pass
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("重试项目处理失败: %s", project_id)
+        raise HTTPException(status_code=500, detail="重试处理失败，请稍后重试")
 
 
 @router.post("/{project_id}/resume")
@@ -684,7 +725,8 @@ async def resume_processing(
             "result": result
         }
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("恢复项目处理失败: %s", project_id)
+        raise HTTPException(status_code=500, detail="恢复处理失败，请稍后重试")
 
 
 @router.get("/{project_id}/status")
@@ -721,7 +763,8 @@ async def get_processing_status(
         
         return status
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("获取处理状态失败: %s", project_id)
+        raise HTTPException(status_code=500, detail="获取处理状态失败，请稍后重试")
 
 
 @router.get("/{project_id}/logs")
@@ -762,7 +805,8 @@ async def get_project_logs(
             ]
         }
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) 
+        logger.exception("获取项目日志失败: %s", project_id)
+        raise HTTPException(status_code=500, detail="获取项目日志失败，请稍后重试")
 
 
 @router.get("/{project_id}/import-status")
@@ -778,7 +822,7 @@ async def get_import_status(
             raise HTTPException(status_code=404, detail="Project not found")
         
         # 检查是否有正在进行的导入任务
-        from ...core.celery_app import celery_app
+        from backend.celery_app import celery_app
         
         # 这里可以添加更复杂的任务状态检查逻辑
         # 目前简单返回项目状态
@@ -893,7 +937,8 @@ async def get_project_file(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) 
+        logger.exception("获取项目文件失败: %s/%s", project_id, filename)
+        raise HTTPException(status_code=500, detail="获取项目文件失败，请稍后重试")
 
 
 @router.get("/{project_id}/clips/{clip_id}")
@@ -949,7 +994,8 @@ async def get_project_clip(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.exception("获取项目切片失败: %s/%s", project_id, clip_id)
+        raise HTTPException(status_code=500, detail="获取切片文件失败，请稍后重试")
 
 
 @router.post("/sync-all")

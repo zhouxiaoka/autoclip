@@ -2,7 +2,7 @@
  * 简化进度系统演示页面
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { 
   Card, 
   Typography, 
@@ -13,6 +13,7 @@ import {
   Divider, 
   message,
   Input,
+  Tag,
   Select
 } from 'antd'
 import { 
@@ -21,7 +22,7 @@ import {
   ReloadOutlined,
   PlusOutlined
 } from '@ant-design/icons'
-import { SimpleProgressBar, BatchProgressBar } from '../components/SimpleProgressBar'
+import { BatchProgressBar } from '../components/SimpleProgressBar'
 import { SimpleProjectCard } from '../components/SimpleProjectCard'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 

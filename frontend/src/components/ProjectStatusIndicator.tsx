@@ -31,8 +31,23 @@ const ProjectStatusIndicator: React.FC<ProjectStatusIndicatorProps> = ({
       }
       return stepNames[project.current_step as keyof typeof stepNames] || '处理中'
     }
-    return config.text
+    return '处理中'
   }
+
+  const getStatusConfig = () => {
+    switch (normalizedStatus) {
+      case 'processing':
+        return { text: '处理中', badgeStatus: 'processing' as const, color: '#1890ff' }
+      case 'completed':
+        return { text: '已完成', badgeStatus: 'success' as const, color: '#52c41a' }
+      case 'failed':
+        return { text: '失败', badgeStatus: 'error' as const, color: '#ff4d4f' }
+      default:
+        return { text: '未知', badgeStatus: 'default' as const, color: '#d9d9d9' }
+    }
+  }
+
+  const config = getStatusConfig()
 
   if (size === 'small') {
     return (
