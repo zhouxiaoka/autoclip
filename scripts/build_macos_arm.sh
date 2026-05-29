@@ -112,22 +112,58 @@ rsync -a \
     --exclude='temp/' \
     --exclude='*.log' \
     --exclude='*.pid' \
+    --exclude='*.rdb' \
     backend/ "$BACKEND_DEST/"
 echo "OK"
 
 # ---- ffmpeg ----
-echo "==> Bundling ffmpeg"
+# We bundle STATIC, self-contained ffmpeg + ffprobe (arm64). Do NOT copy the
+# homebrew binary from PATH: it is dynamically linked against ~57 dylibs under
+# /opt/homebrew and is unusable on any machine without homebrew installed.
+echo "==> Bundling static ffmpeg + ffprobe (arm64)"
 mkdir -p "$RESOURCES_DIR/ffmpeg"
-if command -v ffmpeg &> /dev/null; then
-    # Use ditto to avoid copying extended attributes that break Tauri's resource scan
-    ditto --noacl --noextattr "$(which ffmpeg)" "$RESOURCES_DIR/ffmpeg/ffmpeg"
-    chmod 755 "$RESOURCES_DIR/ffmpeg/ffmpeg"
-    echo "OK ($(ls -lh "$RESOURCES_DIR/ffmpeg/ffmpeg" | awk '{print $5}'))"
-else
-    echo "WARN: ffmpeg not on PATH — bundling empty placeholder"
-    : > "$RESOURCES_DIR/ffmpeg/ffmpeg"
-    chmod 755 "$RESOURCES_DIR/ffmpeg/ffmpeg"
-fi
+FFMPEG_CACHE="build/ffmpeg-cache"
+mkdir -p "$FFMPEG_CACHE"
+# Static arm64 builds from osxexperts.net (zero non-system dylib deps).
+FFMPEG_MIN_BYTES=15000000  # static binaries are ~48MB; zips ~20MB
+declare -a FF_NAMES=("ffmpeg" "ffprobe")
+declare -a FF_URLS=(
+    "https://www.osxexperts.net/ffmpeg711arm.zip"
+    "https://www.osxexperts.net/ffprobe711arm.zip"
+)
+for i in 0 1; do
+    name="${FF_NAMES[$i]}"
+    url="${FF_URLS[$i]}"
+    zip_cache="$FFMPEG_CACHE/${name}.zip"
+    if [ -f "$zip_cache" ]; then
+        sz=$(stat -f %z "$zip_cache" 2>/dev/null || stat -c %s "$zip_cache" 2>/dev/null || echo 0)
+        [ "$sz" -lt "$FFMPEG_MIN_BYTES" ] && { echo "  cached $name zip too small, redownloading"; rm -f "$zip_cache"; }
+    fi
+    if [ ! -f "$zip_cache" ]; then
+        echo "  Downloading static $name: $url"
+        if ! curl -L --fail --connect-timeout 15 --max-time 300 -o "$zip_cache.tmp" "$url"; then
+            echo "ERROR: failed to download static $name from $url"; rm -f "$zip_cache.tmp"; exit 1
+        fi
+        mv "$zip_cache.tmp" "$zip_cache"
+    fi
+    # Extract just the binary into the bundle (ditto strips xattrs that trip Tauri's scanner)
+    tmp_extract="$FFMPEG_CACHE/extract-$name"
+    rm -rf "$tmp_extract"; mkdir -p "$tmp_extract"
+    unzip -o -q "$zip_cache" -d "$tmp_extract"
+    src_bin="$(find "$tmp_extract" -type f -name "$name" | head -1)"
+    if [ -z "$src_bin" ]; then echo "ERROR: $name binary not found inside $zip_cache"; exit 1; fi
+    ditto --noacl --noextattr "$src_bin" "$RESOURCES_DIR/ffmpeg/$name"
+    chmod 755 "$RESOURCES_DIR/ffmpeg/$name"
+    rm -rf "$tmp_extract"
+done
+# Sanity: bundled binaries must have no homebrew dylib deps
+for name in ffmpeg ffprobe; do
+    hb=$(otool -L "$RESOURCES_DIR/ffmpeg/$name" 2>/dev/null | grep -c homebrew || true)
+    if [ "$hb" -ne 0 ]; then
+        echo "ERROR: bundled $name still has $hb homebrew dylib deps — not self-contained"; exit 1
+    fi
+done
+echo "OK (ffmpeg $(ls -lh "$RESOURCES_DIR/ffmpeg/ffmpeg" | awk '{print $5}'), ffprobe $(ls -lh "$RESOURCES_DIR/ffmpeg/ffprobe" | awk '{print $5}'))"
 
 # ---- frontend ----
 echo "==> Building frontend"

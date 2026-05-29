@@ -63,6 +63,19 @@ impl BackendManager {
             .env("AUTOCLIP_DESKTOP_MODE", "true")
             .env("AUTOCLIP_MODE", "desktop");
 
+        // Point the backend at the bundled ffmpeg/ffprobe when present.
+        // The backend's ffmpeg_utils reads these env vars before falling back
+        // to PATH, so this is what makes video processing work on machines
+        // without a system ffmpeg installed.
+        let ffmpeg_bin = launch.working_dir.join("ffmpeg").join("ffmpeg");
+        if ffmpeg_bin.is_file() {
+            cmd.env("AUTOCLIP_FFMPEG_PATH", &ffmpeg_bin);
+        }
+        let ffprobe_bin = launch.working_dir.join("ffmpeg").join("ffprobe");
+        if ffprobe_bin.is_file() {
+            cmd.env("AUTOCLIP_FFPROBE_PATH", &ffprobe_bin);
+        }
+
         match cmd.spawn() {
             Ok(child) => {
                 let pid = child.id();
