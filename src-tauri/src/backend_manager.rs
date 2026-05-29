@@ -167,6 +167,15 @@ impl BackendManager {
                     ));
                 }
 
+                // python-build-standalone bundle: resources/python/bin/python3
+                let pbs_python = backend_work_dir.join("python").join("bin").join("python3");
+                if pbs_python.exists() {
+                    return Ok(Self::python_launch(
+                        pbs_python.to_string_lossy().to_string(),
+                        backend_work_dir,
+                    ));
+                }
+
                 if Command::new("python3").arg("--version").output().is_ok() {
                     return Ok(Self::python_launch("python3".to_string(), backend_work_dir));
                 } else if Command::new("python").arg("--version").output().is_ok() {
