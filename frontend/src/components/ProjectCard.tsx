@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, Tag, Button, Space, Typography, Popconfirm, message, Tooltip } from 'antd'
 import { PlayCircleOutlined, DeleteOutlined, DownloadOutlined, ReloadOutlined, LoadingOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
@@ -238,13 +238,29 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     processingConfig: project.processing_config
   })
 
-  // 自动启动pending状态的项目（但不包括下载中的项目）
+  // 自动启动 pending 状态的项目（但不包括下载中的项目）。
+  // 关键：每个项目最多只自动尝试一次，且失败时不弹 toast。
+  // 之前这里把 isRetrying 放进依赖、又在 handleRetry 里翻转 isRetrying，
+  // 导致 effect 反复触发 → 对一个还没下载完的 B站项目疯狂 POST /process（返回
+  // 400 "Video file not found"）→ 满屏「重试失败」。下载完成后后端会自动启动
+  // 流水线，所以这里只需做一次「尽力而为」的启动即可。
+  const autoStartAttempted = useRef(false)
   useEffect(() => {
-    if (project.status === 'pending' && !isRetrying && !isDownloading) {
-      console.log(`检测到pending状态项目，自动启动处理: ${project.id}`)
-      handleRetry()
+    autoStartAttempted.current = false
+  }, [project.id])
+  useEffect(() => {
+    if (
+      project.status === 'pending' &&
+      !isDownloading &&
+      !autoStartAttempted.current
+    ) {
+      autoStartAttempted.current = true
+      // Best-effort, one-shot. Uploads (file already present) start processing;
+      // B站 imports whose download isn't done yet return 400 here — that's fine,
+      // the backend auto-starts the pipeline when the download completes.
+      handleRetry({ silent: true })
     }
-  }, [project.status, project.id, isRetrying, isDownloading])
+  }, [project.status, project.id, isDownloading])
   
   // 计算进度百分比
   const progressPercent = project.status === 'completed' ? 100 : 
@@ -255,9 +271,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                          Math.round((project.current_step / project.total_steps) * 100) : 
                          project.status === 'processing' ? 10 : 0
 
-  const handleRetry = async () => {
+  const handleRetry = async (opts?: { silent?: boolean }) => {
     if (isRetrying) return
-    
+
     setIsRetrying(true)
     try {
       // 对于PENDING状态的项目，使用startProcessing；对于其他状态，使用retryProcessing
@@ -272,7 +288,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       }
     } catch (error) {
       console.error('重试失败:', error)
-      message.error('重试失败，请稍后再试')
+      // 自动启动（silent）失败不打扰用户；只有用户手动点重试才提示。
+      if (!opts?.silent) {
+        message.error('重试失败，请稍后再试')
+      }
     } finally {
       setIsRetrying(false)
     }

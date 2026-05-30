@@ -494,3 +494,25 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
         download_tasks[task_id].status = "failed"
         download_tasks[task_id].error_message = str(e)
         download_tasks[task_id].progress = 0.0
+
+        # 同时把「项目」标记为失败，否则项目会永远停留在 pending，
+        # 前端会一直把它当成「待启动」反复尝试（之前满屏报错的根因之一）。
+        try:
+            from ...core.database import SessionLocal
+            from ...services.project_service import ProjectService
+            from ...schemas.project import ProjectStatus
+            db = SessionLocal()
+            try:
+                project_service = ProjectService(db)
+                project = project_service.get(project_id)
+                if project and project.status == ProjectStatus.PENDING:
+                    project.status = ProjectStatus.FAILED
+                    if not project.processing_config:
+                        project.processing_config = {}
+                    project.processing_config["error_message"] = f"下载失败: {e}"
+                    db.commit()
+                    logger.info(f"项目 {project_id} 已标记为失败")
+            finally:
+                db.close()
+        except Exception as inner:
+            logger.error(f"标记项目 {project_id} 失败状态时出错: {inner}")
