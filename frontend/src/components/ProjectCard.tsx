@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, Tag, Button, Space, Typography, Popconfirm, message, Tooltip } from 'antd'
 import { PlayCircleOutlined, DeleteOutlined, DownloadOutlined, ReloadOutlined, LoadingOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
@@ -48,6 +48,13 @@ if (typeof document !== 'undefined') {
 }
 
 const { Text } = Typography
+
+// Tracks which project ids have already had a best-effort auto-start, surviving
+// component remounts (the list briefly unmounts while HomePage shows its
+// loading spinner). A useRef would reset on every remount and let auto-start
+// fire again, which created an infinite onRetry→loadProjects→remount loop.
+// Project ids are unique per import, so once-per-session is exactly right.
+const autoStartedProjectIds = new Set<string>()
 
 interface ProjectCardProps {
   project: Project
@@ -244,20 +251,18 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // 导致 effect 反复触发 → 对一个还没下载完的 B站项目疯狂 POST /process（返回
   // 400 "Video file not found"）→ 满屏「重试失败」。下载完成后后端会自动启动
   // 流水线，所以这里只需做一次「尽力而为」的启动即可。
-  const autoStartAttempted = useRef(false)
-  useEffect(() => {
-    autoStartAttempted.current = false
-  }, [project.id])
   useEffect(() => {
     if (
       project.status === 'pending' &&
       !isDownloading &&
-      !autoStartAttempted.current
+      !autoStartedProjectIds.has(project.id)
     ) {
-      autoStartAttempted.current = true
-      // Best-effort, one-shot. Uploads (file already present) start processing;
-      // B站 imports whose download isn't done yet return 400 here — that's fine,
-      // the backend auto-starts the pipeline when the download completes.
+      autoStartedProjectIds.add(project.id)
+      // Best-effort, one-shot per project. Uploads (file already present) start
+      // processing; B站 imports whose download isn't done yet return 400 here —
+      // that's fine, the backend auto-starts the pipeline when the download
+      // completes. Silent + no onRetry so this never drives the parent's
+      // toast/reload path.
       handleRetry({ silent: true })
     }
   }, [project.status, project.id, isDownloading])
@@ -282,8 +287,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       } else {
         await projectApi.retryProcessing(project.id)
       }
-      // 移除重复的toast显示，让父组件统一处理
-      if (onRetry) {
+      // 让父组件统一处理 toast / 刷新。但「静默自动启动」绝不能触发父组件，
+      // 否则会走 handleRetryProject → loadProjects → 列表重挂载 → 再次自动启动
+      // 的死循环。只有用户手动点重试才通知父组件。
+      if (onRetry && !opts?.silent) {
         onRetry(project.id)
       }
     } catch (error) {

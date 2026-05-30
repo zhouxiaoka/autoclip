@@ -89,23 +89,16 @@ const HomePage: React.FC = () => {
     }
   }
 
-  const handleRetryProject = async (projectId: string) => {
+  // 由 ProjectCard 在「用户手动点重试」且重试请求已成功后调用。
+  // ProjectCard.handleRetry 已经发过 start/retryProcessing 请求，这里只负责
+  // 提示 + 刷新列表，绝不能再发一次重试请求（会和卡片自身的请求叠加，并制造
+  // loadProjects→重挂载→自动启动 的循环）。
+  const handleRetryProject = async () => {
+    message.success('已开始重试处理项目')
     try {
-      // 查找项目状态
-      const project = projects.find(p => p.id === projectId)
-      if (!project) {
-        message.error('项目不存在')
-        return
-      }
-      
-      // 统一使用retryProcessing API，它会自动处理视频文件不存在的情况
-      await projectApi.retryProcessing(projectId)
-      message.success('已开始重试处理项目')
-      
       await loadProjects()
     } catch (error) {
-      message.error('重试失败，请稍后再试')
-      console.error('Retry project error:', error)
+      console.error('Refresh after retry error:', error)
     }
   }
 
@@ -365,7 +358,7 @@ const HomePage: React.FC = () => {
                        <ProjectCard 
                          project={project} 
                          onDelete={handleDeleteProject}
-                         onRetry={() => handleRetryProject(project.id)}
+                         onRetry={() => handleRetryProject()}
                          onClick={() => handleProjectCardClick(project)}
                        />
                      </div>
