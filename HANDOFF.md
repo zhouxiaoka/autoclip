@@ -1,151 +1,110 @@
-# AutoClip Desktop — macOS 发布交接文档
+# AutoClip — 项目状态 / 进度 / 计划
 
-> 状态：构建链路已跑通，DMG 已产出，待用户安装测试验证
-> 日期：2026-05-29
-> 分支：`main` (有 1 个未推的 commit + 未提交的本地改动)
+> 更新：2026-05-30 · 分支 `main`（领先 origin 若干 commit，未 push）
 
----
-
-## 一、当前进展概览
-
-### 已完成
-- ✅ PR #61 合并到 main（fix/problem-fixes-from-main 那一批改动）
-- ✅ PR #66 合并到 main（仓库清理：删 .trae/、BUILD_SUMMARY.md、ffmpeg-unified 75MB binary 等）
-- ✅ Issue #65 已开（CI desktop builds 全部失败，待后续跟进）
-- ✅ Tauri dev 模式跑通（`cargo tauri dev` → 前端 :3000 + 后端动态端口 + 一切正常）
-- ✅ macOS arm64 release 构建跑通：
-  - **App**: `src-tauri/target/release/bundle/macos/AutoClip Desktop.app` (260MB)
-  - **DMG**: `src-tauri/target/release/bundle/macos/AutoClip Desktop_1.0.0_aarch64.dmg` (140MB)
-
-### 待办
-- ⏳ **用户验证**：双击 DMG → 拖到 Applications → 右键打开（首次需绕过 Gatekeeper）→ 验证后端启动、前端可用
-- ⏳ 写 RELEASE_NOTES、改 README 加安装说明
-- ⏳ 打 git tag、上传 DMG 到 GitHub Release
-
-### 已知问题（不阻塞首次发布）
-- Windows / Linux / Universal macOS 构建工作流全部失败（issue #65）
-- 仅 Apple Silicon (arm64)，未包 Intel mac
-- Ad-hoc 签名，没有 Apple Developer 公证 → 用户首次必须右键打开
+AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地视频，自动识别精彩片段、
+生成切片与合集。本文是项目的当前状态与路线图的单一事实来源。
 
 ---
 
-## 二、为什么之前一直黑屏？踩坑历程
+## 一、架构与交付形态
 
-### 根本原因
-**项目里有两条「打包路线」并存，互相打架**：
-1. **PyInstaller 路线** (`scripts/build_backend.py`)：把后端打包成单二进制
-2. **prepare_resources 路线** (`scripts/prepare_resources.py`)：复制 backend 源码 + 单平台 ffmpeg
+| 层 | 技术 | 目录 |
+|----|------|------|
+| 后端 | FastAPI + Celery（桌面模式用本地队列）+ SQLite | `backend/` |
+| 前端 | React + TypeScript + Ant Design + Vite | `frontend/` |
+| 桌面壳 | Tauri 2 + Rust | `src-tauri/` |
+| LLM | OpenAI / Gemini(google-genai) / 通义千问(dashscope) / 硅基流动 | `backend/core/llm_providers.py` |
 
-而 `tauri.conf.json` 的 `beforeBuildCommand` 同时调了两个，相互覆盖；`build_macos_arm.sh` 又用第三种方式（命令行 `pyinstaller --onefile` 直接打）。**没有一条路线是端到端调通过的**。
+三种交付形态：**Docker 部署**、**本地脚本启动**（`start_autoclip.sh`）、**桌面客户端**（macOS DMG）。
+近期工作集中在桌面客户端。
 
-### 黑屏的真实原因链
-1. 我先尝试 `build_macos_arm.sh` + `pyinstaller --onefile` → 缺 `celery.fixups` hidden import → 后端启动崩溃 → 前端等不到端口 → 黑屏
-2. 然后试 `build_backend.py` 的 spec（带 `collect_submodules('celery')`）→ 输出是目录而不是单文件 → backend_manager.rs 的查找逻辑勉强支持，但加上 Tauri resource 声明的 extended attributes 又触发 `Permission denied (os error 13)`
-3. 删掉 resource 声明手动复制 → app bundle 没签名 → "应用程序已损坏"
-4. ad-hoc 签名后 → 后端依然崩溃（PyInstaller 包还是缺东西）→ 黑屏
+---
 
-每一步都在修上一个症状，没回到根因。**根因是 venv 是 miniconda 链接出来的、不可移植**，而 PyInstaller 路线对依赖的兼容性是个无底洞。
+## 二、当前进度（已完成且验证）
 
-### 最终的解决方案
-切到 **python-build-standalone (PBS)** 路线 —— 用 astral-sh 维护的官方便携 Python 替换 venv：
+桌面客户端打包链路从"打不出能用的包"做到了**端到端可装可用**：
 
+1. **统一打包路线** —— 砍掉历史上互相打架的 PyInstaller / prepare_resources 两条死路线，
+   只保留 python-build-standalone（PBS）：便携 Python + 后端源码 + 静态 ffmpeg/ffprobe 全部打进
+   `.app`，用户机器零依赖。脚本：`scripts/build_macos_arm.sh`。
+
+2. **修好一连串发版阻断 bug**（都已实测验证）：
+   - **ffmpeg 不可用**：原来打包的是 homebrew 动态版（57 个 `/opt/homebrew` 依赖），换成静态
+     arm64 ffmpeg+ffprobe（零非系统依赖），并让 Rust 启动器通过 `AUTOCLIP_FFMPEG_PATH`/
+     `AUTOCLIP_FFPROBE_PATH` 指向内置二进制。
+   - **黑屏**：Vite 把 React/antd 拆成两个 vendor chunk，antd 先于 React 初始化 → `createContext`
+     报错、React 不挂载。去掉手动分包后正常渲染。
+   - **项目列表一直转圈**：`/api/v1/projects/` 因缺 `pytz` 报 500。补齐 `pytz` 及 LLM SDK
+     (`openai`/`google-genai`/`dashscope`) 到 `requirements.txt`。
+   - **依赖漂移护栏**：构建期 AST 扫描后端所有 import，缺任何一个直接 fail，杜绝"开发能跑、打包就 500"。
+
+3. **CI 统一** —— 7 个从未成功的桌面构建工作流 → 1 个 `desktop-build.yml`（跑 PBS 脚本，
+   `v*` tag 自动挂 Release）。保留 `ci.yml`（测试）、`i18n-sync.yml`（文档）、
+   `nightly-desktop-smoke.yml`（后端冒烟）。
+
+4. **仓库清理** —— 删掉约 30 个废弃脚本、嵌套鬼目录、94M 旧 PyInstaller 备份等；
+   `scripts/` 只剩 4 个活脚本；重写 `scripts/README.md` 与 `BUILD_GUIDE.md`。
+
+5. **Gemini SDK 迁移** —— 从已停更的 `google-generativeai` 迁到统一的 `google-genai`。
+
+**产物**：`src-tauri/target/release/bundle/macos/AutoClip Desktop_1.0.0_aarch64.dmg`（~260M）。
+
+---
+
+## 三、遗漏 / 未验证（按优先级）
+
+### 高
+- **完整切片流程未端到端跑通验证**：后端各接口、ffmpeg、前端渲染都单独验证过，但"粘链接 →
+  下载 → AI 切片 → 出片"这条全链路还没在打包后的 app 里实跑一次。**这是首要待办。**
+- **Gemini 迁移未对真实 API 验证**：代码与 SDK 接口已对齐并能 import，但没有 API key 实际调用过。
+
+### 中
+- **签名/公证**：目前 ad-hoc 签名，未做 Apple Developer ID 签名 + 公证，用户首次必须右键打开。
+- **仅 arm64**：没有 Intel mac / Windows / Linux 包。
+- **依赖未锁版本**：`requirements.txt` 约 23 个包没固定版本，跨时间/跨机器构建有漂移风险。
+- **构建慢**：每次构建都重装全部 pip 依赖（PBS python 被 `rm -rf` 重建）。可缓存已装好的运行时。
+
+### 低
+- **前端单 bundle 1.5MB**：去掉分包后是一个大 chunk，桌面端无所谓，若以后也跑 Web 可考虑按路由懒加载。
+- **`backend/utils/subtitle_processor.py:16`** 的 `word_separators` 字符串引号/转义写法可疑
+  （`\s` 触发 SyntaxWarning，且内部混用单引号），能跑但应改成规范的原始字符串。
+- **`install_llm_dependencies.py` 已冗余**：LLM 依赖现已进 `requirements.txt`，这个独立安装脚本可删。
+
+---
+
+## 四、未来计划（路线图）
+
+1. **端到端 QA**：打包后的 app 实跑一次完整切片，确认 yt-dlp 下载、ffmpeg 切片、LLM 调用、
+   合集生成全部 OK。
+2. **正式签名与公证**：申请 Apple Developer ID，签名 + notarize，消除"右键打开"。
+3. **多平台打包**：把 `build_macos_arm.sh` 的 runner / PBS URL / ffmpeg URL / tauri target 参数化，
+   扩到 Intel mac、Windows、Linux（PBS 与静态 ffmpeg 都有对应平台版本）。
+4. **依赖锁定**：固定 `requirements.txt` 版本（或引入 lock 文件），保证可复现构建。
+5. **构建提速**：缓存 PBS python + 已装依赖，避免每次重装。
+6. **自动 UI 冒烟**：在 CI 里加一步，验证打包后的前端能挂载（而不仅是后端接口通）。
+7. 产品向：B站上传、字幕编辑、批量处理、云端同步（见 RELEASE_CHECKLIST.md 后续计划）。
+
+---
+
+## 五、关键文件
+
+- 打包脚本：`scripts/build_macos_arm.sh`（说明见 `scripts/README.md`、`BUILD_GUIDE.md`）
+- 后端启动器（Rust）：`src-tauri/src/backend_manager.rs`
+- 桌面后端入口：`backend/desktop_main.py`
+- ffmpeg 路径解析：`backend/utils/ffmpeg_utils.py`
+- LLM 提供商：`backend/core/llm_providers.py`
+- 前端 API 配置：`frontend/src/utils/apiConfig.ts`
+- CI：`.github/workflows/desktop-build.yml`
+
+## 六、安装（给用户）
+
+1. 双击 DMG → 拖 `AutoClip Desktop` 到 Applications
+2. **首次右键应用 → 打开**（ad-hoc 签名，绕过 Gatekeeper）
+3. 进设置页填 LLM API key 即可使用
+
+命令行排查后端：
+```bash
+'/Applications/AutoClip Desktop.app/Contents/MacOS/autoclip-desktop'
+# 应看到 Backend started on port: XXXXX / Application startup complete
 ```
-src-tauri/resources/
-├── python/        # PBS Python 3.13.13 (含 pip 装好的所有依赖)
-├── backend/       # 后端源码（rsync 复制，排除 cache/test/log）
-└── ffmpeg/ffmpeg  # ffmpeg 二进制（用 ditto 复制避免 xattr）
-```
-
-`backend_manager.rs` 已经支持这个布局：先找 PyInstaller 二进制 → 没有就找 `venv/bin/python` → 没有就找 `python/bin/python3`（新加的 PBS 路径）→ 兜底走系统 python3。
-
----
-
-## 三、关键改动（未提交）
-
-### 1. `src-tauri/src/backend_manager.rs` (+9)
-在 venv 查找之后新增 PBS Python 路径支持：
-```rust
-let pbs_python = backend_work_dir.join("python").join("bin").join("python3");
-if pbs_python.exists() {
-    return Ok(Self::python_launch(
-        pbs_python.to_string_lossy().to_string(),
-        backend_work_dir,
-    ));
-}
-```
-
-### 2. `src-tauri/tauri.conf.json`
-- `devUrl` 改为 `http://localhost:3000`（Vite 默认端口）
-- `beforeDevCommand` 改为 `cd ../frontend && npm run dev`
-- `beforeBuildCommand` 清空（`build_macos_arm.sh` 全包了）
-- `bundle.resources` 改为 `[]`（不通过 Tauri 声明，构建后手动注入避免 macOS 26 上 extended attributes 触发 Permission denied）
-
-### 3. `scripts/build_macos_arm.sh` 全部重写
-新流程：
-1. 检查 node/python3/cargo/tauri
-2. 下载 PBS Python 3.13.13 arm64 到 `build/pbs-cache/`（带文件大小校验，避免半截下载被复用）
-3. 解压到 `src-tauri/resources/python/`
-4. 用 PBS python 跑 `pip install -r requirements.txt`（PIP 镜像默认走清华源）
-5. rsync 复制 `backend/` 到 `src-tauri/resources/backend/`（排除 cache/test/log）
-6. ditto 复制 ffmpeg 到 `src-tauri/resources/ffmpeg/ffmpeg`
-7. 前端 `npm ci && npm run build`
-8. `cargo tauri build --bundles app`（只打 app，不让 Tauri 自己打 DMG，避免 bundle_dmg.sh 在 macOS 26 上挂）
-9. 把 `python/`、`backend/`、`ffmpeg/` 复制进 `App/Contents/Resources/resources/`
-10. `codesign --force --deep --sign -` ad-hoc 签名
-11. `hdiutil create` 手动打 DMG
-
-### 4. 网络问题处理
-GitHub release 直连不稳，脚本里加了 ghproxy.com / mirror.ghproxy.com 镜像兜底。但今天测下来三个都不通，最终是用户开了代理之后直连成功。**未来重跑：要么保持代理开着，要么 PBS tarball 已经在 `build/pbs-cache/` 缓存好了（24MB）会跳过下载。**
-
----
-
-## 四、下一步操作清单
-
-### 立即（用户）
-1. **双击 DMG 测试安装**：
-   ```
-   open 'src-tauri/target/release/bundle/macos/AutoClip Desktop_1.0.0_aarch64.dmg'
-   ```
-   拖 AutoClip Desktop 到 Applications
-2. **右键打开**绕过 Gatekeeper 警告
-3. 验证：窗口出现、显示前端 UI（不是黑屏）、上传视频能跑
-
-### 测试通过后（开发者）
-1. 提交本地改动并推上去：
-   ```bash
-   git add scripts/build_macos_arm.sh src-tauri/src/backend_manager.rs src-tauri/tauri.conf.json
-   git commit -m "feat: portable macOS desktop build via python-build-standalone"
-   git push
-   ```
-2. 写 `RELEASE_NOTES.md` 用户向（提到首次右键打开、仅 arm64 等）
-3. 在 README 加 macOS 安装步骤
-4. 创建 git tag、GitHub Release，上传 DMG
-
-### 测试不通过（黑屏 / 启动失败）
-按这个顺序排查：
-1. **命令行直接跑 app 看输出**：
-   ```bash
-   '/Applications/AutoClip Desktop.app/Contents/MacOS/autoclip-desktop'
-   ```
-   应该看到 "后端服务启动中" → "Backend started on port: XXXXX"
-2. 如果是 `Backend error: ModuleNotFoundError: No module named 'XXX'` → 把模块加到 `requirements.txt`，重跑构建
-3. 如果是 `Backend error: ... Permission denied` → 检查 `App/Contents/Resources/resources/python/bin/python3` 是否可执行
-4. 如果窗口出来但是黑屏 → 右键 inspect element 看 Console，可能是前端 `apiConfig.ts` 没收到后端端口事件
-
----
-
-## 五、相关文件 / 链接
-
-- PR #61: https://github.com/zhouxiaoka/autoclip/pull/61 (已合)
-- PR #66: https://github.com/zhouxiaoka/autoclip/pull/66 (已合，仓库清理)
-- Issue #65: https://github.com/zhouxiaoka/autoclip/issues/65 (CI desktop builds failing)
-- Backup branch: `backup/local-main-2026-05-28` (本地 main 分叉前的 4 个旧 commit 备份)
-- 本次会话之前的 plan: `/Users/zhoukk/.claude/plans/swift-giggling-wilkes.md` (基于 PyInstaller 路线，已被 PBS 路线替代)
-
-## 六、未确定/风险点
-
-1. **DMG 在用户机器上还没真正打开过** — 这是最大的未验证项
-2. PBS Python 在 `App/Contents/Resources/resources/python/` 下，签名后是否还能被 macOS 安全策略接受需要测一下
-3. 后端首次启动会创建 `~/Library/Application Support/AutoClip` 数据目录，权限正常下没问题
-4. 没有 API 密钥时后端会 warn 但不崩溃，UI 会进设置页让用户填 — 是预期行为
-5. CI 上这条路线还跑不通（issue #65），目前只是本地能打包
