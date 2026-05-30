@@ -29,5 +29,5 @@ pytz
 # desktop build shipped without them and any provider call failed. Bundle them
 # so the desktop app works out of the box.
 openai>=1.0.0
-google-generativeai>=0.3.0
+google-genai>=1.0.0
 dashscope>=1.10.0

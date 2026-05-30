@@ -331,25 +331,37 @@ class GeminiProvider(LLMProvider):
     def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash", **kwargs):
         super().__init__(api_key, model_name, **kwargs)
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel(model_name)
+            # New unified Google GenAI SDK (replaces the deprecated
+            # google-generativeai package).
+            from google import genai
+            self.client = genai.Client(api_key=api_key)
         except ImportError:
-            raise ImportError("请安装google-generativeai: pip install google-generativeai")
-    
+            raise ImportError("请安装google-genai: pip install google-genai")
+
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用Gemini API"""
         try:
             full_input = self._build_full_input(prompt, input_data)
-            
-            response = self.model.generate_content(full_input, **kwargs)
-            
+
+            # Map a max-tokens hint onto the new SDK's config object if present.
+            config = None
+            max_tokens = kwargs.get("max_tokens") or kwargs.get("max_output_tokens")
+            if max_tokens:
+                from google.genai import types
+                config = types.GenerateContentConfig(max_output_tokens=max_tokens)
+
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=full_input,
+                config=config,
+            )
+
             return LLMResponse(
                 content=response.text,
                 model=self.model_name,
                 finish_reason=getattr(response, 'finish_reason', None)
             )
-            
+
         except Exception as e:
             logger.error(f"Gemini调用失败: {str(e)}")
             raise

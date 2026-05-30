@@ -23,7 +23,7 @@ def main():
     # 需要安装的包
     packages = [
         "openai>=1.0.0",           # OpenAI
-        "google-generativeai>=0.3.0",  # Google Gemini
+        "google-genai>=1.0.0",     # Google Gemini (统一版 GenAI SDK)
         "requests>=2.25.0",        # 硅基流动 (HTTP请求)
         "dashscope>=1.10.0",       # 阿里通义千问 (如果还没有安装)
     ]
