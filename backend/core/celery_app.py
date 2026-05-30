@@ -71,6 +71,63 @@ class CeleryConfig:
 # 应用配置
 celery_app.config_from_object(CeleryConfig)
 
+
+def _is_desktop_mode() -> bool:
+    return os.getenv("AUTOCLIP_DESKTOP_MODE", "").lower() in {"1", "true", "yes"}
+
+
+class _LocalAsyncResult:
+    """轻量级 AsyncResult 替身，桌面模式本地线程执行时返回。"""
+
+    def __init__(self, task_id: str):
+        self.id = task_id
+        self.task_id = task_id
+        self.state = "PENDING"
+
+    def get(self, *args, **kwargs):
+        return None
+
+    def ready(self) -> bool:
+        return False
+
+
+class DesktopAwareTask(celery_app.Task):
+    """桌面安装包里没有 Redis broker，生产 core.celery_app 又指向 redis://localhost。
+
+    所有端点都用 `task.delay(...)` / `apply_async(...)` 派发任务，默认会把任务塞进
+    Redis 队列 —— 桌面模式下没人消费，于是永远卡在 0%「初始化中」。
+
+    这里在桌面模式下把 apply_async 改成「在后台守护线程里同步执行 apply()」：
+    不依赖任何 broker，立即返回，进度照常写库供前端轮询。生产模式行为不变。
+    """
+
+    def apply_async(self, args=None, kwargs=None, task_id=None, **options):
+        if _is_desktop_mode():
+            import threading
+            import uuid
+
+            tid = task_id or str(uuid.uuid4())
+            call_args = list(args) if args else []
+            call_kwargs = dict(kwargs) if kwargs else {}
+
+            def _run():
+                try:
+                    self.apply(args=call_args, kwargs=call_kwargs, task_id=tid)
+                except Exception as exc:  # noqa: BLE001
+                    import logging
+                    logging.getLogger(__name__).error(
+                        f"桌面模式本地执行任务失败 {self.name} ({tid}): {exc}", exc_info=True
+                    )
+
+            threading.Thread(target=_run, name=f"task-{self.name}", daemon=True).start()
+            return _LocalAsyncResult(tid)
+
+        return super().apply_async(args=args, kwargs=kwargs, task_id=task_id, **options)
+
+
+# 桌面模式下让所有 @celery_app.task 使用上面的本地执行基类
+celery_app.Task = DesktopAwareTask
+
 # 自动发现任务
 celery_app.autodiscover_tasks([
     'backend.tasks.processing',
