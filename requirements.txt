@@ -22,3 +22,12 @@ qrcode[pil]
 yt-dlp>=2024.12.13
 pysrt
 psutil
+pytz
+
+# LLM provider SDKs — required for the AI clipping pipeline. These used to live
+# only in install_llm_dependencies.py (installed separately), so the portable
+# desktop build shipped without them and any provider call failed. Bundle them
+# so the desktop app works out of the box.
+openai>=1.0.0
+google-generativeai>=0.3.0
+dashscope>=1.10.0

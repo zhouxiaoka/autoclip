@@ -116,6 +116,51 @@ rsync -a \
     backend/ "$BACKEND_DEST/"
 echo "OK"
 
+# ---- dependency completeness check ----
+# Guard against the classic "works in dev, broken in the bundle" trap: the dev
+# venv accumulates packages that requirements.txt never listed, so the portable
+# runtime ships without them and the backend 500s at runtime (e.g. pytz, the
+# LLM SDKs). Statically scan the copied backend for third-party imports and
+# assert every one resolves in the portable runtime. Fail the build if not.
+echo "==> Verifying backend dependencies are present in portable runtime"
+"$PORTABLE_PY" - "$BACKEND_DEST" <<'PY'
+import ast, os, sys, importlib.util
+backend_dir = sys.argv[1]
+# Make the bundle's own packages resolvable (both `import backend.x` and `from core import x` styles).
+sys.path.insert(0, os.path.dirname(backend_dir))  # parent → resolves `backend`
+sys.path.insert(0, backend_dir)                   # backend → resolves `core`, `app`, ...
+stdlib = set(sys.stdlib_module_names)
+mods = set()
+for root, _, files in os.walk(backend_dir):
+    if '__pycache__' in root:
+        continue
+    for f in files:
+        if not f.endswith('.py'):
+            continue
+        try:
+            tree = ast.parse(open(os.path.join(root, f), encoding='utf-8').read())
+        except Exception:
+            continue
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Import):
+                for a in n.names:
+                    mods.add(a.name.split('.')[0])
+            elif isinstance(n, ast.ImportFrom) and n.level == 0 and n.module:
+                mods.add(n.module.split('.')[0])
+missing = sorted(
+    m for m in mods
+    if m and not m.startswith('_') and m not in stdlib
+    and importlib.util.find_spec(m) is None
+)
+if missing:
+    print("ERROR: backend imports modules missing from the portable runtime:")
+    for m in missing:
+        print("  -", m)
+    print("Add them to requirements.txt so the bundle installs them.")
+    sys.exit(1)
+print("OK (all backend imports resolve)")
+PY
+
 # ---- ffmpeg ----
 # We bundle STATIC, self-contained ffmpeg + ffprobe (arm64). Do NOT copy the
 # homebrew binary from PATH: it is dynamically linked against ~57 dylibs under
