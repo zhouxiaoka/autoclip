@@ -1,205 +1,71 @@
 # 🚀 AutoClip Desktop 构建指南
 
-## 📋 概述
+桌面客户端只有**一条**打包路线：python-build-standalone（PBS）。它把便携 Python 运行时、
+后端源码、静态 ffmpeg/ffprobe 全部打进 `.app`，用户机器**无需预装 Python 或 ffmpeg**。
 
-AutoClip Desktop支持跨平台构建，包括macOS (Intel/ARM)、Windows和Linux。由于架构限制，我们采用以下策略：
+> 历史上的 PyInstaller / prepare_resources 路线（以及对应的 6+ 个 CI 工作流）从未成功产出可用包，已全部移除。
 
-- **M芯片Mac**: 本地构建M芯片版本
-- **其他平台**: 使用GitHub Actions CI/CD构建
+## 本地构建（macOS Apple Silicon）
 
-## 🛠️ 本地构建 (M芯片Mac)
-
-### 快速构建
 ```bash
-# 使用专用脚本
 ./scripts/build_macos_arm.sh
 ```
 
-### 手动构建
-```bash
-# 1. 激活虚拟环境
-source venv/bin/activate
-
-# 2. 构建前端
-cd frontend
-npm ci
-npm run build
-cd ..
-
-# 3. 构建后端
-export AUTOCLIP_DESKTOP_MODE=1
-export AUTOCLIP_MODE=desktop
-python -m PyInstaller --onefile --name autoclip-backend \
-  --distpath src-tauri/resources \
-  --workpath build/pyinstaller \
-  --specpath build/specs \
-  --clean --noconfirm \
-  backend/desktop_main.py
-
-# 4. 准备FFmpeg
-mkdir -p src-tauri/resources/ffmpeg-unified
-cp $(which ffmpeg) src-tauri/resources/ffmpeg-unified/ffmpeg-macos
-chmod +x src-tauri/resources/ffmpeg-unified/ffmpeg-macos
-
-# 5. 构建Tauri应用
-cd src-tauri
-tauri build
-cd ..
+产物：
+```
+src-tauri/target/release/bundle/macos/
+├── AutoClip Desktop.app                    # 应用包（~550M）
+└── AutoClip Desktop_1.0.0_aarch64.dmg      # DMG 安装包（~260M）
 ```
 
-## 🌐 跨平台构建 (GitHub Actions)
+脚本各步骤说明见 [`scripts/README.md`](scripts/README.md)。
 
-### 触发构建
+### 前置依赖
+
+| 工具 | 版本 | 说明 |
+|------|------|------|
+| Node.js | 18+ | 前端构建 |
+| Rust | stable | 带 `aarch64-apple-darwin` target |
+| cargo-tauri | 2.x | `cargo install tauri-cli` |
+
+系统 **不需要** 预装 Python / ffmpeg —— 脚本自带便携版（首次构建会下载并缓存到 `build/`）。
+
+## CI / 发布（GitHub Actions）
+
+`.github/workflows/desktop-build.yml` 跑同一个 `build_macos_arm.sh`：
+
 ```bash
-# 创建标签触发构建
+# 手动触发：仓库页面 → Actions → "Desktop Build (macOS arm64)" → Run workflow
+
+# 或打 tag 触发，并自动把 DMG 挂到 GitHub Release：
 git tag v1.0.0
 git push origin v1.0.0
-
-# 或手动触发
-# 在GitHub仓库页面 -> Actions -> 跨平台构建 -> Run workflow
 ```
 
-### 构建平台
-- **macOS Intel**: x86_64-apple-darwin
-- **Windows**: x86_64-pc-windows-msvc  
-- **Linux**: x86_64-unknown-linux-gnu
+## 安装与首次运行
 
-## 📦 构建产物
+DMG 是 ad-hoc 签名（未做 Apple 公证），所以：
 
-### 本地构建 (M芯片Mac)
-```
-src-tauri/target/release/bundle/
-├── macos/
-│   └── AutoClip Desktop.app          # macOS应用包
-└── dmg/
-    └── AutoClip Desktop_1.0.0_aarch64.dmg  # DMG安装包
-```
+1. 双击 DMG，把 `AutoClip Desktop` 拖到 Applications
+2. **首次打开右键点应用 → 选「打开」** 以绕过 Gatekeeper
+3. 后端会自动启动并在 `~/Library/Application Support/AutoClip` 建数据目录
 
-### GitHub Actions构建
-```
-artifacts/
-├── autoclip-macos-intel/
-│   └── AutoClip Desktop_1.0.0_x64.dmg
-├── autoclip-windows/
-│   └── AutoClip Desktop_1.0.0_x64.exe
-└── autoclip-linux/
-    └── AutoClip Desktop_1.0.0_x86_64.AppImage
-```
+## 故障排除
 
-## 🔧 依赖要求
-
-### 本地构建
-- **Node.js**: 18+
-- **Python**: 3.11+
-- **Rust**: 1.70+
-- **Tauri CLI**: 2.0+
-- **FFmpeg**: 系统安装
-
-### GitHub Actions
-- 自动安装所有依赖
-- 支持所有目标平台
-- 自动生成发布包
-
-## 🚀 快速开始
-
-### 1. 本地测试 (M芯片Mac)
+命令行直接跑 app 看后端输出：
 ```bash
-# 克隆项目
-git clone <repository-url>
-cd autoclip
-
-# 安装依赖
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# 构建
-./scripts/build_macos_arm.sh
+'/Applications/AutoClip Desktop.app/Contents/MacOS/autoclip-desktop'
 ```
+应看到 `Backend started on port: XXXXX` 和 `Application startup complete`。
 
-### 2. 跨平台发布
-```bash
-# 提交代码
-git add .
-git commit -m "Release v1.0.0"
-git push
+| 现象 | 排查 |
+|------|------|
+| `ModuleNotFoundError: No module named 'X'` | 把 `X` 加进 `requirements.txt` 重新构建（构建期的依赖检查应该已经拦下，正常不会发生）|
+| 窗口黑屏 | 前端没挂载，看 WebView 控制台；通常是打包/资源问题 |
+| 视频处理失败 | 确认 `Contents/Resources/resources/ffmpeg/{ffmpeg,ffprobe}` 存在且可执行 |
+| 构建失败想重来 | `rm -rf src-tauri/target build/pbs-cache build/ffmpeg-cache` 后重跑（会重新下载）|
 
-# 创建标签
-git tag v1.0.0
-git push origin v1.0.0
+## 已知限制
 
-# GitHub Actions会自动构建所有平台
-```
-
-## 📋 构建检查清单
-
-### 构建前检查
-- [ ] 代码已提交
-- [ ] 依赖已安装
-- [ ] 环境变量已设置
-- [ ] FFmpeg已安装
-
-### 构建后验证
-- [ ] 应用包存在
-- [ ] 安装包存在
-- [ ] 文件大小合理
-- [ ] 可以正常安装
-- [ ] 应用可以启动
-
-## 🐛 故障排除
-
-### 常见问题
-
-#### 1. PyInstaller未找到
-```bash
-# 激活虚拟环境
-source venv/bin/activate
-pip install pyinstaller
-```
-
-#### 2. Tauri CLI未找到
-```bash
-# 安装Tauri CLI
-cargo install tauri-cli
-```
-
-#### 3. FFmpeg未找到
-```bash
-# macOS
-brew install ffmpeg
-
-# 或使用conda
-conda install ffmpeg
-```
-
-#### 4. 构建失败
-```bash
-# 清理构建缓存
-rm -rf build/
-rm -rf src-tauri/target/
-
-# 重新构建
-./scripts/build_macos_arm.sh
-```
-
-### 日志查看
-```bash
-# 查看构建日志
-tail -f logs/backend.log
-tail -f logs/frontend.log
-```
-
-## 📞 支持
-
-如果遇到构建问题，请：
-
-1. 查看构建日志
-2. 检查依赖版本
-3. 提交Issue到GitHub
-4. 提供详细的错误信息
-
-## 🔄 更新说明
-
-- **v1.0.0**: 初始版本，支持M芯片Mac
-- **v1.1.0**: 添加跨平台构建支持
-- **v1.2.0**: 优化构建流程和错误处理
+- 仅 Apple Silicon (arm64)，暂无 Intel / Windows / Linux 包
+- ad-hoc 签名、未公证，首次需右键打开

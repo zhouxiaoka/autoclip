@@ -65,11 +65,11 @@
 
 ### 2. 构建阶段
 ```bash
-# 运行发布构建脚本
-python scripts/build_release.py
+# 打桌面客户端（macOS arm64），详见 BUILD_GUIDE.md
+./scripts/build_macos_arm.sh
 
 # 验证构建产物
-ls -la releases/
+ls -la "src-tauri/target/release/bundle/macos/"
 ```
 
 ### 3. 测试阶段
