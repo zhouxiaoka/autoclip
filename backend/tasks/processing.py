@@ -53,6 +53,14 @@ def run_async_notification(coro):
         finally:
             loop.close()
 
+# 同一项目同一时间只允许一条流水线在跑。桌面模式下多个入口（/process、/retry、
+# 前端自动启动、下载后自动启动）可能并发派发同一项目，过去任务都进 Redis 没人跑
+# 所以看不出来；现在任务真的会本地执行，必须防止并发重复执行撞数据库。
+import threading as _threading
+_active_pipeline_projects: set = set()
+_active_pipeline_lock = _threading.Lock()
+
+
 @celery_app.task(bind=True, name='backend.tasks.processing.process_video_pipeline')
 def process_video_pipeline(
     self,
@@ -73,7 +81,20 @@ def process_video_pipeline(
     """
     task_id = self.request.id
     logger.info(f"开始处理视频流水线: {project_id}, 任务ID: {task_id}")
-    
+
+    # 并发去重：同一项目已有流水线在跑就直接跳过本次重复派发
+    with _active_pipeline_lock:
+        if project_id in _active_pipeline_projects:
+            logger.warning(f"项目 {project_id} 已有流水线在运行，跳过重复任务 {task_id}")
+            return {
+                "success": False,
+                "skipped": True,
+                "project_id": project_id,
+                "task_id": task_id,
+                "message": "已有流水线在运行，已跳过重复任务",
+            }
+        _active_pipeline_projects.add(project_id)
+
     try:
         # 创建数据库会话
         db = SessionLocal()
@@ -176,11 +197,18 @@ def process_video_pipeline(
             
         finally:
             db.close()
-            
+            # 释放并发去重锁（无论成功/失败/提前返回都会走到这里）
+            with _active_pipeline_lock:
+                _active_pipeline_projects.discard(project_id)
+
     except Exception as e:
         error_msg = f"视频流水线处理失败: {str(e)}"
         logger.error(error_msg)
-        
+
+        # 兜底释放并发锁（正常路径已在内层 finally 释放，这里防止极早期异常泄漏）
+        with _active_pipeline_lock:
+            _active_pipeline_projects.discard(project_id)
+
         # 更新任务状态为失败
         try:
             db = SessionLocal()
