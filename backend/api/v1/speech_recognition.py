@@ -40,6 +40,36 @@ def get_speech_recognizer() -> SpeechRecognizer:
         _speech_recognizer = SpeechRecognizer()
     return _speech_recognizer
 
+
+# ===== Whisper 运行时（按需安装）=====
+
+@router.get("/whisper/runtime-status")
+async def whisper_runtime_status():
+    """Whisper 运行时安装状态（前端轮询）。"""
+    from backend.services import whisper_runtime
+    return whisper_runtime.get_status()
+
+
+@router.post("/whisper/install")
+async def whisper_install():
+    """开始在后台安装 Whisper 运行时（mlx-whisper）。"""
+    from backend.services import whisper_runtime
+    if sys_is_not_darwin():
+        raise HTTPException(status_code=400, detail="mlx-whisper 仅支持 Apple Silicon (macOS)")
+    return whisper_runtime.start_install()
+
+
+@router.post("/whisper/uninstall")
+async def whisper_uninstall():
+    """卸载 Whisper 运行时（不影响已下载的模型缓存可单独删除）。"""
+    from backend.services import whisper_runtime
+    return whisper_runtime.uninstall()
+
+
+def sys_is_not_darwin() -> bool:
+    import sys
+    return sys.platform != "darwin"
+
 class SpeechConfigRequest(BaseModel):
     """语音识别配置请求"""
     method: str

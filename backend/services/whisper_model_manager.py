@@ -1,34 +1,32 @@
 """
-Whisper模型管理服务
-负责模型的下载、状态检查、存储管理等功能
+Whisper 模型管理服务（mlx-whisper）
+
+负责 mlx-community Whisper 模型的下载、状态检查、删除。模型从 HuggingFace 拉取，
+统一缓存到 `<data_dir>/whisper-models`（由 whisper_runtime 设置 HF_HOME）。
+依赖（huggingface_hub）来自运行时安装目录，所有相关 import 都延迟到函数内。
 """
-import os
-import json
 import logging
-import subprocess
-import asyncio
-from typing import Dict, List, Optional, Tuple
+import threading
+from typing import Dict, List, Optional
 from pathlib import Path
 from dataclasses import dataclass
 from enum import Enum
-import requests
-from concurrent.futures import ThreadPoolExecutor
+
+from . import whisper_runtime
 
 logger = logging.getLogger(__name__)
 
 
 class ModelStatus(str, Enum):
-    """模型状态枚举"""
-    AVAILABLE = "available"  # 可用
+    AVAILABLE = "available"      # 运行时就绪、可下载
     DOWNLOADING = "downloading"  # 下载中
-    DOWNLOADED = "downloaded"  # 已下载
-    ERROR = "error"  # 错误
-    NOT_FOUND = "not_found"  # 未找到
+    DOWNLOADED = "downloaded"    # 已下载
+    ERROR = "error"              # 错误（通常是运行时未安装）
+    NOT_FOUND = "not_found"
 
 
 @dataclass
 class ModelInfo:
-    """模型信息"""
     name: str
     size: str
     size_bytes: int
@@ -36,303 +34,174 @@ class ModelInfo:
     accuracy: str
     speed: str
     status: ModelStatus
+    repo_id: str = ""
     download_progress: Optional[int] = None
     local_path: Optional[str] = None
     error_message: Optional[str] = None
 
 
+# 模型名 -> HuggingFace 仓库 + 展示信息（faster-whisper / CTranslate2 模型）
+_MODELS = {
+    "tiny": {
+        "repo_id": "Systran/faster-whisper-tiny",
+        "size": "~75 MB", "size_bytes": 75 * 1024 * 1024,
+        "description": "最快，准确度较低，适合快速预览", "accuracy": "较低", "speed": "最快",
+    },
+    "base": {
+        "repo_id": "Systran/faster-whisper-base",
+        "size": "~145 MB", "size_bytes": 145 * 1024 * 1024,
+        "description": "平衡之选，推荐日常使用", "accuracy": "中等", "speed": "快",
+    },
+    "small": {
+        "repo_id": "Systran/faster-whisper-small",
+        "size": "~488 MB", "size_bytes": 488 * 1024 * 1024,
+        "description": "较好准确度，适合重要内容", "accuracy": "较好", "speed": "中等",
+    },
+    "medium": {
+        "repo_id": "Systran/faster-whisper-medium",
+        "size": "~1.5 GB", "size_bytes": 1500 * 1024 * 1024,
+        "description": "高准确度，适合专业用途", "accuracy": "高", "speed": "较慢",
+    },
+    "large-v3": {
+        "repo_id": "Systran/faster-whisper-large-v3",
+        "size": "~3 GB", "size_bytes": 3000 * 1024 * 1024,
+        "description": "最高准确度", "accuracy": "最高", "speed": "最慢",
+    },
+}
+
+
+def repo_id_for(model_name: str) -> Optional[str]:
+    cfg = _MODELS.get(model_name)
+    return cfg["repo_id"] if cfg else None
+
+
 class WhisperModelManager:
-    """Whisper模型管理器"""
-    
-    def __init__(self, models_dir: Optional[Path] = None):
-        self.models_dir = models_dir or self._get_default_models_dir()
-        self.models_dir.mkdir(parents=True, exist_ok=True)
-        self.download_tasks: Dict[str, asyncio.Task] = {}
-        
-        # 模型信息配置
-        self.model_configs = {
-            "tiny": {
-                "size": "39 MB",
-                "size_bytes": 39 * 1024 * 1024,
-                "description": "最快速度，适合实时处理",
-                "accuracy": "较低",
-                "speed": "最快"
-            },
-            "base": {
-                "size": "74 MB", 
-                "size_bytes": 74 * 1024 * 1024,
-                "description": "平衡选择，推荐日常使用",
-                "accuracy": "中等",
-                "speed": "快"
-            },
-            "small": {
-                "size": "244 MB",
-                "size_bytes": 244 * 1024 * 1024,
-                "description": "较好准确度，适合重要内容",
-                "accuracy": "较好",
-                "speed": "中等"
-            },
-            "medium": {
-                "size": "769 MB",
-                "size_bytes": 769 * 1024 * 1024,
-                "description": "高准确度，适合专业用途",
-                "accuracy": "高",
-                "speed": "较慢"
-            },
-            "large": {
-                "size": "1550 MB",
-                "size_bytes": 1550 * 1024 * 1024,
-                "description": "最高准确度，适合重要项目",
-                "accuracy": "最高",
-                "speed": "最慢"
-            }
-        }
-    
-    def _get_default_models_dir(self) -> Path:
-        """获取默认模型目录"""
-        from backend.core.desktop_config import get_desktop_data_dir
-        return get_desktop_data_dir() / "whisper_models"
-    
-    def get_all_models_info(self) -> List[ModelInfo]:
-        """获取所有模型信息"""
-        models = []
-        
-        for model_name, config in self.model_configs.items():
-            status = self._check_model_status(model_name)
-            local_path = self._get_model_path(model_name) if status == ModelStatus.DOWNLOADED else None
-            
-            models.append(ModelInfo(
-                name=model_name,
-                size=config["size"],
-                size_bytes=config["size_bytes"],
-                description=config["description"],
-                accuracy=config["accuracy"],
-                speed=config["speed"],
-                status=status,
-                local_path=local_path
-            ))
-        
-        return models
-    
-    def get_model_info(self, model_name: str) -> Optional[ModelInfo]:
-        """获取指定模型信息"""
-        if model_name not in self.model_configs:
-            return None
-        
-        config = self.model_configs[model_name]
+    def __init__(self):
+        self.model_configs = _MODELS
+        # model_name -> {"status","progress","error"}
+        self._download_state: Dict[str, Dict] = {}
+        self._lock = threading.Lock()
+
+    # ---- 路径 / 状态 ----
+    def _model_cache_dir(self, model_name: str) -> Path:
+        repo = self.model_configs[model_name]["repo_id"]
+        # HF 缓存目录命名：models--<org>--<name>
+        return whisper_runtime.get_models_dir() / "hub" / ("models--" + repo.replace("/", "--"))
+
+    def _is_downloaded(self, model_name: str) -> bool:
+        d = self._model_cache_dir(model_name)
+        snaps = d / "snapshots"
+        return snaps.exists() and any(snaps.iterdir())
+
+    def _check_model_status(self, model_name: str) -> ModelStatus:
+        with self._lock:
+            st = self._download_state.get(model_name)
+        if st and st.get("status") == "downloading":
+            return ModelStatus.DOWNLOADING
+        if st and st.get("status") == "error":
+            return ModelStatus.ERROR
+        if self._is_downloaded(model_name):
+            return ModelStatus.DOWNLOADED
+        if not whisper_runtime.is_installed():
+            return ModelStatus.ERROR  # 运行时没装，模型也用不了
+        return ModelStatus.AVAILABLE
+
+    def _info(self, model_name: str) -> ModelInfo:
+        cfg = self.model_configs[model_name]
         status = self._check_model_status(model_name)
-        local_path = self._get_model_path(model_name) if status == ModelStatus.DOWNLOADED else None
-        
+        with self._lock:
+            st = self._download_state.get(model_name, {})
         return ModelInfo(
             name=model_name,
-            size=config["size"],
-            size_bytes=config["size_bytes"],
-            description=config["description"],
-            accuracy=config["accuracy"],
-            speed=config["speed"],
-            status=status,
-            local_path=local_path
+            size=cfg["size"], size_bytes=cfg["size_bytes"],
+            description=cfg["description"], accuracy=cfg["accuracy"], speed=cfg["speed"],
+            status=status, repo_id=cfg["repo_id"],
+            download_progress=st.get("progress"),
+            local_path=str(self._model_cache_dir(model_name)) if status == ModelStatus.DOWNLOADED else None,
+            error_message=st.get("error"),
         )
-    
-    def _check_model_status(self, model_name: str) -> ModelStatus:
-        """检查模型状态"""
-        try:
-            # 检查是否正在下载
-            if model_name in self.download_tasks and not self.download_tasks[model_name].done():
-                return ModelStatus.DOWNLOADING
-            
-            # 检查本地文件是否存在
-            model_path = self._get_model_path(model_name)
-            if model_path.exists():
-                return ModelStatus.DOWNLOADED
-            
-            # 检查whisper是否可用
-            if not self._check_whisper_available():
-                return ModelStatus.ERROR
-            
-            return ModelStatus.AVAILABLE
-            
-        except Exception as e:
-            logger.error(f"检查模型状态失败: {e}")
-            return ModelStatus.ERROR
-    
-    def _get_model_path(self, model_name: str) -> Path:
-        """获取模型文件路径"""
-        # Whisper模型通常存储在 ~/.cache/whisper/ 目录
-        home_dir = Path.home()
-        whisper_cache = home_dir / ".cache" / "whisper"
-        
-        # 检查常见的模型文件扩展名
-        possible_files = [
-            f"{model_name}.pt",
-            f"{model_name}.bin",
-            f"{model_name}.model"
-        ]
-        
-        for filename in possible_files:
-            model_file = whisper_cache / filename
-            if model_file.exists():
-                return model_file
-        
-        # 如果没找到，返回默认路径
-        return whisper_cache / f"{model_name}.pt"
-    
-    def _check_whisper_available(self) -> bool:
-        """检查Whisper是否可用"""
-        try:
-            result = subprocess.run(['whisper', '--help'], 
-                                  capture_output=True, text=True, timeout=5)
-            return result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return False
-    
+
+    def get_all_models_info(self) -> List[ModelInfo]:
+        return [self._info(name) for name in self.model_configs]
+
+    def get_model_info(self, model_name: str) -> Optional[ModelInfo]:
+        if model_name not in self.model_configs:
+            return None
+        return self._info(model_name)
+
+    # ---- 下载（后台线程，非阻塞）----
     async def download_model(self, model_name: str) -> bool:
-        """下载模型"""
         if model_name not in self.model_configs:
             raise ValueError(f"不支持的模型: {model_name}")
-        
-        if model_name in self.download_tasks and not self.download_tasks[model_name].done():
-            raise ValueError(f"模型 {model_name} 正在下载中")
-        
-        if self._check_model_status(model_name) == ModelStatus.DOWNLOADED:
-            logger.info(f"模型 {model_name} 已存在")
+        if not whisper_runtime.is_installed():
+            raise RuntimeError("请先安装 Whisper 运行时")
+        if self._is_downloaded(model_name):
             return True
-        
-        try:
-            # 创建下载任务
-            task = asyncio.create_task(self._download_model_async(model_name))
-            self.download_tasks[model_name] = task
-            
-            result = await task
-            return result
-            
-        except Exception as e:
-            logger.error(f"下载模型 {model_name} 失败: {e}")
-            return False
-        finally:
-            # 清理任务
-            if model_name in self.download_tasks:
-                del self.download_tasks[model_name]
-    
-    async def _download_model_async(self, model_name: str) -> bool:
-        """异步下载模型"""
-        try:
-            logger.info(f"开始下载模型: {model_name}")
-            
-            # 使用whisper命令下载模型
-            cmd = ['whisper', '--model', model_name, '--help']
-            
-            # 在后台线程中执行下载
-            loop = asyncio.get_event_loop()
-            with ThreadPoolExecutor() as executor:
-                result = await loop.run_in_executor(
-                    executor, 
-                    self._run_whisper_download, 
-                    model_name
-                )
-            
-            if result:
-                logger.info(f"模型 {model_name} 下载完成")
+        with self._lock:
+            st = self._download_state.get(model_name)
+            if st and st.get("status") == "downloading":
                 return True
-            else:
-                logger.error(f"模型 {model_name} 下载失败")
-                return False
-                
-        except Exception as e:
-            logger.error(f"下载模型 {model_name} 时发生错误: {e}")
-            return False
-    
-    def _run_whisper_download(self, model_name: str) -> bool:
-        """运行whisper下载命令"""
+            self._download_state[model_name] = {"status": "downloading", "progress": 0, "error": None}
+        threading.Thread(
+            target=self._download_blocking, args=(model_name,),
+            name=f"whisper-dl-{model_name}", daemon=True,
+        ).start()
+        return True
+
+    def _download_blocking(self, model_name: str) -> None:
+        repo_id = self.model_configs[model_name]["repo_id"]
         try:
-            # 使用whisper的模型下载功能
-            # 这里我们通过运行一个简单的命令来触发模型下载
-            cmd = ['python', '-c', f'import whisper; whisper.load_model("{model_name}")']
-            
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=3600  # 1小时超时
+            whisper_runtime.ensure_on_path()
+            from huggingface_hub import snapshot_download
+            logger.info(f"开始下载 Whisper 模型 {model_name} ({repo_id})")
+            snapshot_download(
+                repo_id=repo_id,
+                cache_dir=str(whisper_runtime.get_models_dir() / "hub"),
             )
-            
-            return result.returncode == 0
-            
-        except subprocess.TimeoutExpired:
-            logger.error(f"模型 {model_name} 下载超时")
-            return False
-        except Exception as e:
-            logger.error(f"运行whisper下载命令失败: {e}")
-            return False
-    
+            with self._lock:
+                self._download_state[model_name] = {"status": "downloaded", "progress": 100, "error": None}
+            logger.info(f"Whisper 模型 {model_name} 下载完成")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"下载 Whisper 模型 {model_name} 失败: {e}", exc_info=True)
+            with self._lock:
+                self._download_state[model_name] = {"status": "error", "progress": 0, "error": str(e)}
+
     def get_download_progress(self, model_name: str) -> Optional[int]:
-        """获取下载进度"""
-        if model_name not in self.download_tasks:
-            return None
-        
-        task = self.download_tasks[model_name]
-        if task.done():
-            return 100
-        
-        # 这里可以实现更精确的进度跟踪
-        # 目前返回一个估算值
-        return 50  # 占位符
-    
+        with self._lock:
+            st = self._download_state.get(model_name)
+        if not st:
+            return 100 if self._is_downloaded(model_name) else None
+        return st.get("progress")
+
     def cancel_download(self, model_name: str) -> bool:
-        """取消下载"""
-        if model_name not in self.download_tasks:
-            return False
-        
-        task = self.download_tasks[model_name]
-        if not task.done():
-            task.cancel()
-            del self.download_tasks[model_name]
-            logger.info(f"已取消模型 {model_name} 的下载")
-            return True
-        
-        return False
-    
-    def delete_model(self, model_name: str) -> bool:
-        """删除模型"""
-        try:
-            model_path = self._get_model_path(model_name)
-            
-            if not model_path.exists():
-                logger.warning(f"模型文件不存在: {model_path}")
+        # snapshot_download 不易中断；这里只清状态，已下载分片保留可续传
+        with self._lock:
+            if model_name in self._download_state and self._download_state[model_name].get("status") == "downloading":
+                self._download_state[model_name] = {"status": "available", "progress": 0, "error": None}
                 return True
-            
-            # 删除模型文件
-            model_path.unlink()
-            logger.info(f"模型 {model_name} 已删除")
-            return True
-            
-        except Exception as e:
-            logger.error(f"删除模型 {model_name} 失败: {e}")
+        return False
+
+    def delete_model(self, model_name: str) -> bool:
+        if model_name not in self.model_configs:
             return False
-    
-    def set_models_directory(self, directory: str) -> bool:
-        """设置模型存储目录"""
         try:
-            new_dir = Path(directory)
-            new_dir.mkdir(parents=True, exist_ok=True)
-            
-            # 更新模型目录
-            self.models_dir = new_dir
-            
-            # 这里可以添加将现有模型移动到新目录的逻辑
-            logger.info(f"模型目录已设置为: {new_dir}")
+            import shutil
+            d = self._model_cache_dir(model_name)
+            if d.exists():
+                shutil.rmtree(d, ignore_errors=True)
+            with self._lock:
+                self._download_state.pop(model_name, None)
+            logger.info(f"Whisper 模型 {model_name} 已删除")
             return True
-            
-        except Exception as e:
-            logger.error(f"设置模型目录失败: {e}")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"删除 Whisper 模型 {model_name} 失败: {e}")
             return False
-    
-# 全局模型管理器实例
+
+
 _model_manager: Optional[WhisperModelManager] = None
 
 
 def get_model_manager() -> WhisperModelManager:
-    """获取模型管理器实例"""
     global _model_manager
     if _model_manager is None:
         _model_manager = WhisperModelManager()

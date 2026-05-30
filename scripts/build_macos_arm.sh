@@ -130,6 +130,10 @@ backend_dir = sys.argv[1]
 sys.path.insert(0, os.path.dirname(backend_dir))  # parent → resolves `backend`
 sys.path.insert(0, backend_dir)                   # backend → resolves `core`, `app`, ...
 stdlib = set(sys.stdlib_module_names)
+# Modules that are installed AT RUNTIME by the user (Whisper feature), not
+# bundled. They are imported lazily inside functions and must NOT fail the
+# build. Keep this list tight.
+runtime_optional = {"faster_whisper", "ctranslate2", "huggingface_hub"}
 mods = set()
 for root, _, files in os.walk(backend_dir):
     if '__pycache__' in root:
@@ -150,6 +154,7 @@ for root, _, files in os.walk(backend_dir):
 missing = sorted(
     m for m in mods
     if m and not m.startswith('_') and m not in stdlib
+    and m not in runtime_optional
     and importlib.util.find_spec(m) is None
 )
 if missing:
