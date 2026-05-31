@@ -149,7 +149,6 @@ python scripts/validate_paths.py
 ## 📚 相关文档
 
 - [系统架构说明](SYSTEM_ARCHITECTURE.md)
-- [路径修复总结](PATH_FIX_SUMMARY.md)
 - [快速开始指南](../QUICK_START_GUIDE.md)
 
 ## 🎉 重建完成检查清单

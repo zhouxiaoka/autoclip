@@ -310,8 +310,6 @@ docker run -p 8000:8000 autoclip
 ## 📞 获取帮助
 
 ### 文档资源
-- [重构实施规划](./REFACTOR_IMPLEMENTATION_PLAN.md)
-- [工作项拆解](./WORK_ITEMS_BREAKDOWN.md)
 - [项目管理](./PROJECT_MANAGEMENT.md)
 
 ### 技术栈文档

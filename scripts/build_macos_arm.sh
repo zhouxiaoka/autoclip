@@ -256,7 +256,10 @@ echo "OK"
 
 # ---- create DMG manually ----
 echo "==> Creating DMG"
-DMG_PATH="src-tauri/target/release/bundle/macos/AutoClip Desktop_1.0.0_aarch64.dmg"
+# Read the version from tauri.conf.json so the DMG name never drifts from the app version.
+APP_VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+APP_VERSION="${APP_VERSION:-1.1.0}"
+DMG_PATH="src-tauri/target/release/bundle/macos/AutoClip Desktop_${APP_VERSION}_aarch64.dmg"
 rm -f "$DMG_PATH"
 hdiutil create -volname "AutoClip Desktop" \
     -srcfolder "$APP_PATH" \
