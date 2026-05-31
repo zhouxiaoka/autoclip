@@ -139,3 +139,4 @@ control/
 *.tmp
 *.temp
 *.bak
+.gstack/
