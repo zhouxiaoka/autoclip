@@ -12,8 +12,10 @@ class SubtitleProcessor:
     """字幕处理器 - 支持字粒度的字幕解析和处理"""
     
     def __init__(self):
-        # 修复正则表达式中的无效转义序列，使用原始字符串
-        self.word_separators = r'[，。！？；：""''（）【】、\s]+'
+        # 分词分隔符：中文标点（，。！？；：“”‘’（）【】、）加空白字符。
+        # 使用双引号原始字符串，避免内嵌单引号导致字面量被提前截断/隐式拼接，
+        # 同时让 \s 保持原义、不触发 SyntaxWarning。
+        self.word_separators = r"[，。！？；：“”‘’（）【】、\s]+"
     
     def parse_srt_to_word_level(self, srt_path: Path) -> List[Dict]:
         """
