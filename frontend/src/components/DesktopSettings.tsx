@@ -42,6 +42,7 @@ interface DesktopConfig {
   openai_api_key: string;
   gemini_api_key: string;
   siliconflow_api_key: string;
+  atlascloud_api_key: string;
   default_model: string;
   max_tokens: number;
   timeout: number;
@@ -145,6 +146,7 @@ const DesktopSettings: React.FC = () => {
         openai_api_key: values.openai_api_key || "",
         gemini_api_key: values.gemini_api_key || "",
         siliconflow_api_key: values.siliconflow_api_key || "",
+        atlascloud_api_key: values.atlascloud_api_key || "",
         default_model: values.default_model || "qwen-plus",
         max_tokens: values.max_tokens || 4000,
         timeout: values.timeout || 30,
@@ -328,6 +330,13 @@ const DesktopSettings: React.FC = () => {
                 label="SiliconFlow API Key"
               >
                 <Input.Password placeholder="请输入SiliconFlow API Key" />
+              </Form.Item>
+
+              <Form.Item
+                name="atlascloud_api_key"
+                label="Atlas Cloud API Key"
+              >
+                <Input.Password placeholder="请输入 Atlas Cloud API Key（OpenAI 兼容，默认模型 deepseek-ai/deepseek-v4-pro）" />
               </Form.Item>
 
               <Divider />

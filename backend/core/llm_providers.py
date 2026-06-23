@@ -19,6 +19,7 @@ class ProviderType(Enum):
     OPENAI = "openai"        # OpenAI
     GEMINI = "gemini"        # Google Gemini
     SILICONFLOW = "siliconflow"  # 硅基流动
+    ATLASCLOUD = "atlascloud"  # Atlas Cloud（OpenAI 兼容）
 
 @dataclass
 class ModelInfo:
@@ -501,14 +502,137 @@ class SiliconFlowProvider(LLMProvider):
             )
         ]
 
+class AtlasCloudProvider(LLMProvider):
+    """Atlas Cloud 提供商（OpenAI 兼容）
+
+    Atlas Cloud 是全模态 AI 推理平台，通过单一 OpenAI 兼容接口即可调用
+    DeepSeek、Qwen、GLM、Kimi、MiniMax 等众多模型，无需逐家对接。
+    """
+
+    DEFAULT_BASE_URL = "https://api.atlascloud.ai/v1"
+    DEFAULT_MODEL = "deepseek-ai/deepseek-v4-pro"
+
+    def __init__(self, api_key: str, model_name: str = DEFAULT_MODEL, **kwargs):
+        super().__init__(api_key, model_name, **kwargs)
+        # 允许通过 kwargs / 环境变量覆盖 base_url（默认官方 OpenAI 兼容入口）
+        self.base_url = (
+            kwargs.get("base_url")
+            or os.getenv("ATLASCLOUD_API_BASE")
+            or self.DEFAULT_BASE_URL
+        )
+
+    def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
+        """调用 Atlas Cloud API（OpenAI 兼容 /chat/completions）"""
+        try:
+            import requests
+
+            full_input = self._build_full_input(prompt, input_data)
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+
+            data = {
+                "model": self.model_name,
+                "messages": [{"role": "user", "content": full_input}],
+                "stream": False,
+                **kwargs,
+            }
+
+            # deepseek-v4-pro 等为推理（reasoning）模型，max_tokens 不足时
+            # token 可能先耗在思维链上导致 content 为空，这里兜底到 >= 512。
+            max_tokens = data.get("max_tokens")
+            if not max_tokens or max_tokens < 512:
+                data["max_tokens"] = 512
+
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=data,
+                timeout=60,
+            )
+
+            response.raise_for_status()
+            result = response.json()
+
+            content = result["choices"][0]["message"]["content"]
+            usage = result.get("usage")
+
+            return LLMResponse(
+                content=content,
+                usage=usage,
+                model=self.model_name,
+                finish_reason=result["choices"][0].get("finish_reason"),
+            )
+
+        except Exception as e:
+            logger.error(f"Atlas Cloud调用失败: {str(e)}")
+            raise
+
+    def test_connection(self) -> bool:
+        """测试 Atlas Cloud 连接"""
+        try:
+            if not self.api_key or len(self.api_key.strip()) < 10:
+                logger.error("Atlas Cloud API Key为空或过短")
+                return False
+            response = self.call("测试", max_tokens=512)
+            if response and response.content:
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Atlas Cloud连接测试失败: {e}")
+            return False
+
+    def get_available_models(self) -> List[ModelInfo]:
+        """获取 Atlas Cloud 可用模型（官方精选 LLM 的代表项）"""
+        return [
+            ModelInfo(
+                name="deepseek-ai/deepseek-v4-pro",
+                display_name="DeepSeek V4 Pro",
+                provider=ProviderType.ATLASCLOUD,
+                max_tokens=393216,
+                description="Atlas Cloud 默认模型，推理能力强，长上下文"
+            ),
+            ModelInfo(
+                name="deepseek-ai/deepseek-v4-flash",
+                display_name="DeepSeek V4 Flash",
+                provider=ProviderType.ATLASCLOUD,
+                max_tokens=393216,
+                description="更快更省的 DeepSeek V4 变体"
+            ),
+            ModelInfo(
+                name="Qwen/Qwen3-235B-A22B-Instruct-2507",
+                display_name="Qwen3 235B Instruct",
+                provider=ProviderType.ATLASCLOUD,
+                max_tokens=131072,
+                description="阿里 Qwen3 大参数指令模型"
+            ),
+            ModelInfo(
+                name="zai-org/glm-5",
+                display_name="GLM-5",
+                provider=ProviderType.ATLASCLOUD,
+                max_tokens=202752,
+                description="智谱 GLM-5 推理模型"
+            ),
+            ModelInfo(
+                name="moonshotai/kimi-k2.5",
+                display_name="Kimi K2.5",
+                provider=ProviderType.ATLASCLOUD,
+                max_tokens=262144,
+                description="月之暗面 Kimi K2.5 多模态推理模型"
+            ),
+        ]
+
 class LLMProviderFactory:
     """LLM提供商工厂"""
-    
+
     _providers = {
         ProviderType.DASHSCOPE: DashScopeProvider,
         ProviderType.OPENAI: OpenAIProvider,
         ProviderType.GEMINI: GeminiProvider,
         ProviderType.SILICONFLOW: SiliconFlowProvider,
+        ProviderType.ATLASCLOUD: AtlasCloudProvider,
     }
     
     @classmethod

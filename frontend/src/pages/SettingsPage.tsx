@@ -54,6 +54,14 @@ const SettingsPage: React.FC = () => {
       description: '硅基流动模型服务',
       apiKeyField: 'siliconflow_api_key',
       placeholder: '请输入硅基流动API密钥'
+    },
+    atlascloud: {
+      name: 'Atlas Cloud',
+      icon: <RobotOutlined />,
+      color: '#13c2c2',
+      description: 'Atlas Cloud 全模态推理平台（OpenAI 兼容，一个 API 调用 DeepSeek / Qwen / GLM / Kimi 等）',
+      apiKeyField: 'atlascloud_api_key',
+      placeholder: '请输入 Atlas Cloud API 密钥'
     }
   }
 
@@ -101,6 +109,7 @@ const SettingsPage: React.FC = () => {
           openai_api_key: settingsData.api?.api_keys?.openai || '',
           gemini_api_key: settingsData.api?.api_keys?.gemini || '',
           siliconflow_api_key: settingsData.api?.api_keys?.siliconflow || '',
+          atlascloud_api_key: settingsData.api?.api_keys?.atlascloud || '',
           jimeng_access_key: settingsData.api?.api_keys?.jimeng_access || '',
           jimeng_secret_key: settingsData.api?.api_keys?.jimeng_secret || '',
           model_name: settingsData.api?.api_model || 'qwen-plus',
@@ -126,6 +135,7 @@ const SettingsPage: React.FC = () => {
           openai_api_key: '',
           gemini_api_key: '',
           siliconflow_api_key: '',
+          atlascloud_api_key: '',
           jimeng_access_key: '',
           jimeng_secret_key: '',
           model_name: 'qwen-plus',
@@ -196,6 +206,7 @@ const SettingsPage: React.FC = () => {
             openai: values.openai_api_key || existingApiKeys.openai || "",
             gemini: values.gemini_api_key || existingApiKeys.gemini || "",
             siliconflow: values.siliconflow_api_key || existingApiKeys.siliconflow || "",
+            atlascloud: values.atlascloud_api_key || existingApiKeys.atlascloud || "",
             jimeng_access: values.jimeng_access_key || existingApiKeys.jimeng_access || "",
             jimeng_secret: values.jimeng_secret_key || existingApiKeys.jimeng_secret || ""
           },

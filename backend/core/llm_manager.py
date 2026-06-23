@@ -69,6 +69,7 @@ class LLMManager:
             "openai_api_key": "",
             "gemini_api_key": "",
             "siliconflow_api_key": "",
+            "atlascloud_api_key": "",
             "model_name": "qwen-plus",
             "chunk_size": 5000,
             "min_score_threshold": 0.7,
@@ -88,6 +89,7 @@ class LLMManager:
                             "openai_api_key": api_keys.get("openai", ""),
                             "gemini_api_key": api_keys.get("gemini", ""),
                             "siliconflow_api_key": api_keys.get("siliconflow", ""),
+                            "atlascloud_api_key": api_keys.get("atlascloud", ""),
                             "model_name": saved_settings["api"].get("api_model", "qwen-plus")
                         })
                     else:
@@ -138,8 +140,9 @@ class LLMManager:
             ProviderType.OPENAI: "openai_api_key",
             ProviderType.GEMINI: "gemini_api_key",
             ProviderType.SILICONFLOW: "siliconflow_api_key",
+            ProviderType.ATLASCLOUD: "atlascloud_api_key",
         }
-        
+
         key_name = key_mapping.get(provider_type)
         if key_name:
             return self.settings.get(key_name, "")
@@ -166,8 +169,9 @@ class LLMManager:
                 ProviderType.OPENAI: "openai_api_key",
                 ProviderType.GEMINI: "gemini_api_key",
                 ProviderType.SILICONFLOW: "siliconflow_api_key",
+                ProviderType.ATLASCLOUD: "atlascloud_api_key",
             }
-            
+
             key_name = key_mapping.get(provider_type)
             if key_name:
                 provider_settings[key_name] = api_key
@@ -243,7 +247,8 @@ class LLMManager:
             ProviderType.DASHSCOPE: "阿里通义千问",
             ProviderType.OPENAI: "OpenAI",
             ProviderType.GEMINI: "Google Gemini",
-            ProviderType.SILICONFLOW: "硅基流动"
+            ProviderType.SILICONFLOW: "硅基流动",
+            ProviderType.ATLASCLOUD: "Atlas Cloud"
         }
         return display_names.get(provider_type, provider_type.value)
     

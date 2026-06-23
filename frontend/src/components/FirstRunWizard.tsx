@@ -194,12 +194,14 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
             openai: config.llmProvider === 'openai' ? config.llmApiKey : (existingApiKeys.openai || ''),
             gemini: config.llmProvider === 'gemini' ? config.llmApiKey : (existingApiKeys.gemini || ''),
             siliconflow: config.llmProvider === 'siliconflow' ? config.llmApiKey : (existingApiKeys.siliconflow || ''),
+            atlascloud: config.llmProvider === 'atlascloud' ? config.llmApiKey : (existingApiKeys.atlascloud || ''),
             jimeng_access: existingApiKeys.jimeng_access || '',
             jimeng_secret: existingApiKeys.jimeng_secret || ''
           },
-          api_model: config.llmProvider === 'dashscope' ? 'qwen-plus' : 
+          api_model: config.llmProvider === 'dashscope' ? 'qwen-plus' :
                      config.llmProvider === 'openai' ? 'gpt-3.5-turbo' :
-                     config.llmProvider === 'gemini' ? 'gemini-pro' : 'qwen-plus',
+                     config.llmProvider === 'gemini' ? 'gemini-pro' :
+                     config.llmProvider === 'atlascloud' ? 'deepseek-ai/deepseek-v4-pro' : 'qwen-plus',
           api_max_tokens: 4000,
           api_timeout: 30
         },
@@ -381,6 +383,11 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
         name: 'SiliconFlow',
         url: 'https://cloud.siliconflow.cn',
         description: '注册SiliconFlow账号,在控制台创建API Key'
+      },
+      atlascloud: {
+        name: 'Atlas Cloud',
+        url: 'https://www.atlascloud.ai',
+        description: '注册 Atlas Cloud 账号,在控制台创建 API Key,一个 key 即可调用 DeepSeek / Qwen / GLM / Kimi 等模型'
       }
     }
     return helpMap[provider] || helpMap.dashscope
@@ -471,6 +478,12 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                     <Space>
                       <Text strong>SiliconFlow</Text>
                       <Text type="secondary">(国内替代方案)</Text>
+                    </Space>
+                  </Option>
+                  <Option value="atlascloud">
+                    <Space>
+                      <Text strong>Atlas Cloud</Text>
+                      <Text type="secondary">(OpenAI 兼容,一个 API 调用多家模型)</Text>
                     </Space>
                   </Option>
                 </Select>
