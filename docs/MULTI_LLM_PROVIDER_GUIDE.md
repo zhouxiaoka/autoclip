@@ -14,6 +14,7 @@
 | `openai` | OpenAI | gpt-3.5-turbo, gpt-4, gpt-4-turbo | 全球领先，功能强大 |
 | `gemini` | Google Gemini | gemini-2.5-flash, gemini-1.5-pro | 多模态支持，上下文长 |
 | `siliconflow` | 硅基流动 | Qwen2.5系列, DeepSeek-V2.5 | 性价比高，国产化 |
+| `atlascloud` | Atlas Cloud | deepseek-ai/deepseek-v4-pro, Qwen3, GLM-5, Kimi 等 | OpenAI 兼容，一个 API 调用多家模型；base_url=`https://api.atlascloud.ai/v1` |
 
 ### 系统架构
 

@@ -78,6 +78,7 @@ class DesktopConfig:
         self._openai_api_key = os.getenv("API_OPENAI_API_KEY", "")
         self._gemini_api_key = os.getenv("API_GEMINI_API_KEY", "")
         self._siliconflow_api_key = os.getenv("API_SILICONFLOW_API_KEY", "")
+        self._atlascloud_api_key = os.getenv("API_ATLASCLOUD_API_KEY", "")
         self._jimeng_access_key = os.getenv("API_JIMENG_ACCESS_KEY", "")
         self._jimeng_secret_key = os.getenv("API_JIMENG_SECRET_KEY", "")
         self._max_memory_usage = int(os.getenv("AUTOCLIP_MAX_MEMORY_USAGE", "2048"))
@@ -233,6 +234,14 @@ class DesktopConfig:
     @siliconflow_api_key.setter
     def siliconflow_api_key(self, value: str) -> None:
         self._siliconflow_api_key = value
+
+    @property
+    def atlascloud_api_key(self) -> str:
+        return self._atlascloud_api_key
+
+    @atlascloud_api_key.setter
+    def atlascloud_api_key(self, value: str) -> None:
+        self._atlascloud_api_key = value
 
     @property
     def jimeng_access_key(self) -> str:

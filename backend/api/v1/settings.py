@@ -54,6 +54,7 @@ class ApiKeys(BaseModel):
     openai: str = Field(default="", description="OpenAI API密钥")
     gemini: str = Field(default="", description="Gemini API密钥")
     siliconflow: str = Field(default="", description="SiliconFlow API密钥")
+    atlascloud: str = Field(default="", description="Atlas Cloud API密钥")
     jimeng_access: str = Field(default="", description="即梦AI访问密钥")
     jimeng_secret: str = Field(default="", description="即梦AI秘密密钥")
 
@@ -210,6 +211,7 @@ async def get_settings():
                     openai=config.openai_api_key,
                     gemini=config.gemini_api_key,
                     siliconflow=config.siliconflow_api_key,
+                    atlascloud=config.atlascloud_api_key,
                     jimeng_access="",  # 默认值
                     jimeng_secret=""   # 默认值
                 ),
@@ -288,6 +290,7 @@ async def clear_settings(
         config.openai_api_key = ""
         config.gemini_api_key = ""
         config.siliconflow_api_key = ""
+        config.atlascloud_api_key = ""
         config.jimeng_access_key = ""
         config.jimeng_secret_key = ""
         
@@ -339,6 +342,9 @@ async def test_api_connection(request: TestApiRequest):
         elif request.provider == "siliconflow":
             from backend.core.llm_providers import SiliconFlowProvider
             provider_instance = SiliconFlowProvider(api_key=request.api_key)
+        elif request.provider == "atlascloud":
+            from backend.core.llm_providers import AtlasCloudProvider
+            provider_instance = AtlasCloudProvider(api_key=request.api_key)
         else:
             raise HTTPException(status_code=400, detail="不支持的API提供商")
         
@@ -362,7 +368,9 @@ async def test_api_connection(request: TestApiRequest):
                 error_msg += "。请检查API Key是否正确"
             elif request.provider == "siliconflow":
                 error_msg += "。请检查API Key是否正确"
-            
+            elif request.provider == "atlascloud":
+                error_msg += "。请检查API Key是否正确（Atlas Cloud API Key 通常以'apikey-'开头）"
+
             return {
                 "success": False,
                 "error": error_msg,
@@ -396,6 +404,7 @@ async def update_settings(settings: DesktopSettings):
         config.openai_api_key = settings.api.api_keys.openai
         config.gemini_api_key = settings.api.api_keys.gemini
         config.siliconflow_api_key = settings.api.api_keys.siliconflow
+        config.atlascloud_api_key = settings.api.api_keys.atlascloud
         config.default_model = settings.api.api_model
         config.max_tokens = settings.api.api_max_tokens
         config.timeout = settings.api.api_timeout
@@ -643,6 +652,13 @@ async def get_available_models():
                 {"name": "deepseek-coder", "display_name": "DeepSeek Coder", "max_tokens": 16384, "description": "代码生成专用模型"},
                 {"name": "qwen-plus", "display_name": "通义千问增强版", "max_tokens": 8192, "description": "通过硅基流动访问"},
                 {"name": "qwen-turbo", "display_name": "通义千问标准版", "max_tokens": 8192, "description": "通过硅基流动访问"}
+            ],
+            "atlascloud": [
+                {"name": "deepseek-ai/deepseek-v4-pro", "display_name": "DeepSeek V4 Pro", "max_tokens": 393216, "description": "Atlas Cloud 默认模型，推理能力强，长上下文"},
+                {"name": "deepseek-ai/deepseek-v4-flash", "display_name": "DeepSeek V4 Flash", "max_tokens": 393216, "description": "更快更省的 DeepSeek V4 变体"},
+                {"name": "Qwen/Qwen3-235B-A22B-Instruct-2507", "display_name": "Qwen3 235B Instruct", "max_tokens": 131072, "description": "阿里 Qwen3 大参数指令模型"},
+                {"name": "zai-org/glm-5", "display_name": "GLM-5", "max_tokens": 202752, "description": "智谱 GLM-5 推理模型"},
+                {"name": "moonshotai/kimi-k2.5", "display_name": "Kimi K2.5", "max_tokens": 262144, "description": "月之暗面 Kimi K2.5 多模态推理模型"}
             ],
         }
         
