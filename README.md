@@ -290,6 +290,12 @@ REDIS_URL=redis://localhost:6379/0
 API_DASHSCOPE_API_KEY=your_dashscope_api_key
 API_MODEL_NAME=qwen-plus
 
+# 内容评分后端（可选）：默认 "llm"（基于字幕文本）
+# 设为 "pegasus" 可启用 TwelveLabs Pegasus 视频语义评分，直接“看”视频片段打分
+# 免费额度见 https://twelvelabs.io
+SCORING_BACKEND=llm
+TWELVELABS_API_KEY=
+
 # 日志配置
 LOG_LEVEL=INFO
 ENVIRONMENT=development
@@ -299,6 +305,11 @@ DEBUG=true
 UPLOAD_DIR=./data/uploads
 PROJECT_DIR=./data/projects
 ```
+
+> 💡 **精彩度评分后端**：默认的 Step 3 评分只读取字幕文本。设置
+> `SCORING_BACKEND=pegasus` 并提供 `TWELVELABS_API_KEY` 后，会改用
+> [TwelveLabs Pegasus](https://twelvelabs.io) 视频理解模型直接对视频片段做语义评分，
+> 更贴近真实高光质量。该后端完全可选，不影响默认行为。
 
 ### B站账号配置【开发中】
 

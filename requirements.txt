@@ -31,3 +31,7 @@ pytz
 openai>=1.0.0
 google-genai>=1.0.0
 dashscope>=1.10.0
+
+# 可选：TwelveLabs Pegasus 视频语义评分后端（SCORING_BACKEND=pegasus 时启用）。
+# 默认字幕评分不需要它；免费额度见 https://twelvelabs.io
+twelvelabs>=1.2.8

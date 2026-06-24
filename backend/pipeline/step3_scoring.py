@@ -11,7 +11,7 @@ from collections import defaultdict
 # 导入依赖
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
-from ..core.shared_config import PROMPT_FILES, METADATA_DIR, MIN_SCORE_THRESHOLD
+from ..core.shared_config import PROMPT_FILES, METADATA_DIR, MIN_SCORE_THRESHOLD, SCORING_BACKEND
 
 logger = logging.getLogger(__name__)
 
@@ -134,25 +134,44 @@ class ClipScorer:
             json.dump(scored_clips, f, ensure_ascii=False, indent=2)
         logger.info(f"评分结果已保存到: {output_path}")
 
-def run_step3_scoring(timeline_path: Path, metadata_dir: Path = None, output_path: Optional[Path] = None, prompt_files: Dict = None) -> List[Dict]:
+def _build_scorer(prompt_files: Dict, video_path: Optional[Path]):
+    """根据配置选择评分后端。
+
+    默认使用基于字幕文本的 :class:`ClipScorer`。当 ``SCORING_BACKEND=pegasus``
+    且提供了 ``video_path`` 时，使用 TwelveLabs Pegasus 进行视频语义评分。
+    若 Pegasus 初始化失败（缺少 API key / 视频 / SDK），自动回退到默认评分器，
+    保证流水线不被破坏。
+    """
+    if SCORING_BACKEND == "pegasus" and video_path is not None:
+        try:
+            from .pegasus_scorer import PegasusClipScorer
+            logger.info("使用 TwelveLabs Pegasus 视频语义评分后端")
+            return PegasusClipScorer(video_path)
+        except Exception as e:
+            logger.warning(f"Pegasus 评分后端不可用，回退到默认字幕评分器: {e}")
+    return ClipScorer(prompt_files)
+
+
+def run_step3_scoring(timeline_path: Path, metadata_dir: Path = None, output_path: Optional[Path] = None, prompt_files: Dict = None, video_path: Optional[Path] = None) -> List[Dict]:
     """
     运行Step 3: 内容评分与筛选
-    
+
     Args:
         timeline_path: 时间线文件路径
         output_path: 输出文件路径
         prompt_files: 自定义提示词文件
-        
+        video_path: 视频文件路径（仅 Pegasus 评分后端需要）
+
     Returns:
         高分切片列表
     """
     # 加载时间线数据
     with open(timeline_path, 'r', encoding='utf-8') as f:
         timeline_data = json.load(f)
-    
-    # 创建评分器
-    scorer = ClipScorer(prompt_files)
-    
+
+    # 创建评分器（默认字幕评分，可选 Pegasus 视频语义评分）
+    scorer = _build_scorer(prompt_files, video_path)
+
     # 评分
     scored_clips = scorer.score_clips(timeline_data)
     

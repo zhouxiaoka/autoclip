@@ -106,6 +106,13 @@ PROMPT_FILES = {
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
 MODEL_NAME = "qwen-plus"  # 通义千问模型名称
 
+# Step 3 评分后端：默认 "llm"（基于字幕文本），可选 "pegasus"（TwelveLabs 视频语义评分）
+SCORING_BACKEND = os.getenv("SCORING_BACKEND", "llm").strip().lower()
+# TwelveLabs Pegasus 配置（仅在 SCORING_BACKEND=pegasus 时使用）
+TWELVELABS_API_KEY = os.getenv("TWELVELABS_API_KEY", "")
+PEGASUS_MODEL_NAME = os.getenv("PEGASUS_MODEL_NAME", "pegasus1.5")
+PEGASUS_MAX_TOKENS = int(os.getenv("PEGASUS_MAX_TOKENS", "512"))
+
 # 语音识别配置
 SPEECH_RECOGNITION_METHOD = os.getenv("SPEECH_RECOGNITION_METHOD", "whisper_local")
 SPEECH_RECOGNITION_LANGUAGE = os.getenv("SPEECH_RECOGNITION_LANGUAGE", "auto")

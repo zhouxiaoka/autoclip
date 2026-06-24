@@ -153,7 +153,8 @@ class SimplePipelineAdapter:
                 logger.info("执行Step 3: 内容评分")
                 scored_clips = run_step3_scoring(
                     metadata_dir / "step2_timeline.json",
-                    metadata_dir=metadata_dir
+                    metadata_dir=metadata_dir,
+                    video_path=Path(input_video_path) if input_video_path else None
                 )
                 emit_progress(self.project_id, "ANALYZE", "内容分析完成", subpercent=100)
             else:

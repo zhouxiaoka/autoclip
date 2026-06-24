@@ -411,11 +411,15 @@ class PipelineAdapter:
             # 获取对应的提示词文件
             prompt_files = get_prompt_files(video_category)
             
+            # 视频路径仅供可选的 Pegasus 评分后端使用；默认字幕评分会忽略它
+            video_path = self.project_paths["input_dir"] / "input.mp4"
+
             result = run_step3_scoring(
                 timeline_path=timeline_path,
                 metadata_dir=self.project_paths["metadata_dir"],
                 output_path=output_path,
-                prompt_files=prompt_files
+                prompt_files=prompt_files,
+                video_path=video_path if video_path.exists() else None
             )
             
             return {"status": "success", "result": result, "output_path": str(output_path)}
