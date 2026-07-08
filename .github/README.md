@@ -1,5 +1,7 @@
 # AutoClip - 视频高光切片自动化工具
 
+[![Listed on TakoAPI](https://takoapi.com/api/badge/zhouxiaoka-autoclip)](https://takoapi.com/agents/zhouxiaoka-autoclip)
+
 支持YouTube/B站视频下载、自动切片、智能合集生成
 
 [![Python](https://img.shields.io/badge/Python-3.8+-green?style=flat&logo=python)](https://python.org)
