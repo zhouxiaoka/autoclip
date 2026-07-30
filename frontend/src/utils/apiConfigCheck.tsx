@@ -75,6 +75,7 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
         openai: apiKeys.openai ? '***' + apiKeys.openai.slice(-4) : '未配置',
         gemini: apiKeys.gemini ? '***' + apiKeys.gemini.slice(-4) : '未配置',
         siliconflow: apiKeys.siliconflow ? '***' + apiKeys.siliconflow.slice(-4) : '未配置',
+        atlascloud: apiKeys.atlascloud ? '***' + apiKeys.atlascloud.slice(-4) : '未配置',
         jimeng_access: apiKeys.jimeng_access ? '***' + apiKeys.jimeng_access.slice(-4) : '未配置',
         jimeng_secret: apiKeys.jimeng_secret ? '***' + apiKeys.jimeng_secret.slice(-4) : '未配置'
       }
@@ -104,6 +105,10 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
         currentApiKey = apiKeys.siliconflow || ''
         hasValidKey = !!currentApiKey.trim()
         console.log('SiliconFlow API Key检查:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, isValid: hasValidKey })
+        break
+      case 'atlascloud':
+        currentApiKey = apiKeys.atlascloud || ''
+        hasValidKey = !!currentApiKey.trim()
         break
       case 'jimeng':
         currentApiKey = apiKeys.jimeng_access || ''

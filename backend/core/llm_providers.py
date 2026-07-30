@@ -19,6 +19,7 @@ class ProviderType(Enum):
     OPENAI = "openai"        # OpenAI
     GEMINI = "gemini"        # Google Gemini
     SILICONFLOW = "siliconflow"  # 硅基流动
+    ATLASCLOUD = "atlascloud"  # Atlas Cloud
 
 @dataclass
 class ModelInfo:
@@ -245,9 +246,13 @@ class OpenAIProvider(LLMProvider):
     
     def __init__(self, api_key: str, model_name: str = "gpt-3.5-turbo", **kwargs):
         super().__init__(api_key, model_name, **kwargs)
+        self.base_url = kwargs.get("base_url")
         try:
             import openai
-            self.client = openai.OpenAI(api_key=api_key)
+            client_options = {"api_key": api_key}
+            if self.base_url:
+                client_options["base_url"] = self.base_url
+            self.client = openai.OpenAI(**client_options)
         except ImportError:
             raise ImportError("请安装openai: pip install openai")
     
@@ -322,6 +327,28 @@ class OpenAIProvider(LLMProvider):
                 provider=ProviderType.OPENAI,
                 max_tokens=128000,
                 description="OpenAI GPT-4 Turbo模型"
+            )
+        ]
+
+
+class AtlasCloudProvider(OpenAIProvider):
+    """Atlas Cloud OpenAI-compatible provider."""
+
+    DEFAULT_BASE_URL = "https://api.atlascloud.ai/v1"
+    DEFAULT_MODEL = "deepseek-ai/deepseek-v4-pro"
+
+    def __init__(self, api_key: str, model_name: str = DEFAULT_MODEL, **kwargs):
+        kwargs.setdefault("base_url", self.DEFAULT_BASE_URL)
+        super().__init__(api_key, model_name, **kwargs)
+
+    def get_available_models(self) -> List[ModelInfo]:
+        return [
+            ModelInfo(
+                name=self.DEFAULT_MODEL,
+                display_name="DeepSeek V4 Pro",
+                provider=ProviderType.ATLASCLOUD,
+                max_tokens=128000,
+                description="Atlas Cloud default chat model",
             )
         ]
 
@@ -509,6 +536,7 @@ class LLMProviderFactory:
         ProviderType.OPENAI: OpenAIProvider,
         ProviderType.GEMINI: GeminiProvider,
         ProviderType.SILICONFLOW: SiliconFlowProvider,
+        ProviderType.ATLASCLOUD: AtlasCloudProvider,
     }
     
     @classmethod

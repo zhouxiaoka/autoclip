@@ -63,12 +63,14 @@ class LLMManager:
     
     def _load_settings(self) -> Dict[str, Any]:
         """加载设置"""
+        has_explicit_provider = False
         default_settings = {
             "llm_provider": "dashscope",
             "dashscope_api_key": "",
             "openai_api_key": "",
             "gemini_api_key": "",
             "siliconflow_api_key": "",
+            "atlascloud_api_key": "",
             "model_name": "qwen-plus",
             "chunk_size": 5000,
             "min_score_threshold": 0.7,
@@ -83,20 +85,33 @@ class LLMManager:
                     # 处理新的配置格式（客户端配置）
                     if "api" in saved_settings and "api_keys" in saved_settings["api"]:
                         api_keys = saved_settings["api"]["api_keys"]
+                        has_explicit_provider = "api_provider" in saved_settings["api"]
                         default_settings.update({
                             "dashscope_api_key": api_keys.get("dashscope", ""),
                             "openai_api_key": api_keys.get("openai", ""),
                             "gemini_api_key": api_keys.get("gemini", ""),
                             "siliconflow_api_key": api_keys.get("siliconflow", ""),
+                            "atlascloud_api_key": api_keys.get("atlascloud", ""),
+                            "llm_provider": saved_settings["api"].get("api_provider", "dashscope"),
                             "model_name": saved_settings["api"].get("api_model", "qwen-plus")
                         })
                     else:
                         # 处理旧的配置格式（直接平铺）
                         default_settings.update(saved_settings)
+                        has_explicit_provider = "llm_provider" in saved_settings
                         
             except Exception as e:
                 logger.warning(f"加载设置文件失败: {e}")
         
+        atlascloud_api_key = os.getenv("ATLASCLOUD_API_KEY", "")
+        if atlascloud_api_key:
+            default_settings["atlascloud_api_key"] = atlascloud_api_key
+            if not has_explicit_provider:
+                default_settings.update({
+                    "llm_provider": "atlascloud",
+                    "model_name": "deepseek-ai/deepseek-v4-pro",
+                })
+
         return default_settings
     
     def _save_settings(self):
@@ -138,11 +153,19 @@ class LLMManager:
             ProviderType.OPENAI: "openai_api_key",
             ProviderType.GEMINI: "gemini_api_key",
             ProviderType.SILICONFLOW: "siliconflow_api_key",
+            ProviderType.ATLASCLOUD: "atlascloud_api_key",
         }
         
         key_name = key_mapping.get(provider_type)
         if key_name:
-            return self.settings.get(key_name, "")
+            api_key = self.settings.get(key_name, "")
+            if api_key:
+                return api_key
+            env_mapping = {
+                ProviderType.ATLASCLOUD: "ATLASCLOUD_API_KEY",
+            }
+            env_name = env_mapping.get(provider_type)
+            return os.getenv(env_name, "") if env_name else ""
         return None
     
     def update_settings(self, new_settings: Dict[str, Any]):
@@ -166,6 +189,7 @@ class LLMManager:
                 ProviderType.OPENAI: "openai_api_key",
                 ProviderType.GEMINI: "gemini_api_key",
                 ProviderType.SILICONFLOW: "siliconflow_api_key",
+                ProviderType.ATLASCLOUD: "atlascloud_api_key",
             }
             
             key_name = key_mapping.get(provider_type)
@@ -243,7 +267,8 @@ class LLMManager:
             ProviderType.DASHSCOPE: "阿里通义千问",
             ProviderType.OPENAI: "OpenAI",
             ProviderType.GEMINI: "Google Gemini",
-            ProviderType.SILICONFLOW: "硅基流动"
+            ProviderType.SILICONFLOW: "硅基流动",
+            ProviderType.ATLASCLOUD: "Atlas Cloud",
         }
         return display_names.get(provider_type, provider_type.value)
     

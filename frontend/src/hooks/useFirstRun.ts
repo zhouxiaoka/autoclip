@@ -40,7 +40,8 @@ export const useFirstRun = () => {
           const hasApiKey = settings.api?.api_keys?.dashscope || 
                            settings.api?.api_keys?.openai ||
                            settings.api?.api_keys?.gemini ||
-                           settings.api?.api_keys?.siliconflow
+                           settings.api?.api_keys?.siliconflow ||
+                           settings.api?.api_keys?.atlascloud
           
           console.log('🔑 API Key状态:', hasApiKey)
           

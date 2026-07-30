@@ -54,6 +54,7 @@ class ApiKeys(BaseModel):
     openai: str = Field(default="", description="OpenAI API密钥")
     gemini: str = Field(default="", description="Gemini API密钥")
     siliconflow: str = Field(default="", description="SiliconFlow API密钥")
+    atlascloud: str = Field(default="", description="Atlas Cloud API密钥")
     jimeng_access: str = Field(default="", description="即梦AI访问密钥")
     jimeng_secret: str = Field(default="", description="即梦AI秘密密钥")
 
@@ -61,6 +62,7 @@ class ApiKeys(BaseModel):
 class ApiSettings(BaseModel):
     """API设置"""
     api_keys: ApiKeys = Field(default_factory=ApiKeys, description="API密钥")
+    api_provider: str = Field(default="dashscope", description="当前LLM提供商")
     api_model: str = Field(default="qwen-plus", description="默认模型")
     api_max_tokens: int = Field(default=4096, description="最大Token数")
     api_timeout: int = Field(default=30, description="API超时时间(秒)")
@@ -210,6 +212,7 @@ async def get_settings():
                     openai=config.openai_api_key,
                     gemini=config.gemini_api_key,
                     siliconflow=config.siliconflow_api_key,
+                    atlascloud=config.atlascloud_api_key,
                     jimeng_access="",  # 默认值
                     jimeng_secret=""   # 默认值
                 ),
@@ -339,6 +342,9 @@ async def test_api_connection(request: TestApiRequest):
         elif request.provider == "siliconflow":
             from backend.core.llm_providers import SiliconFlowProvider
             provider_instance = SiliconFlowProvider(api_key=request.api_key)
+        elif request.provider == "atlascloud":
+            from backend.core.llm_providers import AtlasCloudProvider
+            provider_instance = AtlasCloudProvider(api_key=request.api_key)
         else:
             raise HTTPException(status_code=400, detail="不支持的API提供商")
         
@@ -396,6 +402,7 @@ async def update_settings(settings: DesktopSettings):
         config.openai_api_key = settings.api.api_keys.openai
         config.gemini_api_key = settings.api.api_keys.gemini
         config.siliconflow_api_key = settings.api.api_keys.siliconflow
+        config.atlascloud_api_key = settings.api.api_keys.atlascloud
         config.default_model = settings.api.api_model
         config.max_tokens = settings.api.api_max_tokens
         config.timeout = settings.api.api_timeout
@@ -413,6 +420,9 @@ async def update_settings(settings: DesktopSettings):
         settings_file = config.paths.data_dir / "settings.json"
         with open(settings_file, 'w', encoding='utf-8') as f:
             json.dump(settings.dict(), f, indent=2, ensure_ascii=False)
+
+        from backend.core.llm_manager import initialize_llm_manager
+        initialize_llm_manager(settings_file)
         
         # 重要：保存主配置文件，确保API key等关键配置被持久化
         from backend.core.desktop_config import save_desktop_config
@@ -644,6 +654,9 @@ async def get_available_models():
                 {"name": "qwen-plus", "display_name": "通义千问增强版", "max_tokens": 8192, "description": "通过硅基流动访问"},
                 {"name": "qwen-turbo", "display_name": "通义千问标准版", "max_tokens": 8192, "description": "通过硅基流动访问"}
             ],
+            "atlascloud": [
+                {"name": "deepseek-ai/deepseek-v4-pro", "display_name": "DeepSeek V4 Pro", "max_tokens": 128000, "description": "Atlas Cloud 默认对话模型"}
+            ],
         }
         
         return {"models": models}
@@ -660,13 +673,27 @@ async def get_current_provider():
     try:
         config = get_desktop_config()
         
-        # 根据当前配置返回提供商信息
+        settings_file = config.paths.data_dir / "settings.json"
+        saved_settings = {}
+        if settings_file.exists():
+            with open(settings_file, "r", encoding="utf-8") as source:
+                saved_settings = json.load(source)
+        api_settings = saved_settings.get("api", {})
+        provider = api_settings.get("api_provider", "dashscope")
+        display_names = {
+            "dashscope": "阿里通义千问",
+            "openai": "OpenAI",
+            "gemini": "Google Gemini",
+            "siliconflow": "硅基流动",
+            "atlascloud": "Atlas Cloud",
+        }
+        api_keys = api_settings.get("api_keys", {})
         provider_info = {
-            "provider": "dashscope",  # 默认提供商
-            "model": config.default_model or "qwen-plus",
-            "available": True,
-            "display_name": "通义千问",
-            "description": "阿里云通义千问服务"
+            "provider": provider,
+            "model": api_settings.get("api_model", config.default_model or "qwen-plus"),
+            "available": bool(api_keys.get(provider)),
+            "display_name": display_names.get(provider, provider),
+            "description": f"{display_names.get(provider, provider)} 模型服务"
         }
         
         return provider_info
