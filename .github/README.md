@@ -861,7 +861,7 @@ A:
 
 ## 如果这个项目对你有帮助，请给我们一个 ⭐ Star
 
-[![Star History Chart](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.dera.page/#zhouxiaoka/autoclip&Date)
 
 Made with ❤️ by AutoClip Team
 

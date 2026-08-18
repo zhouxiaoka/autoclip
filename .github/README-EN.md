@@ -880,7 +880,7 @@ Thanks to the following open source projects and services:
 
 ## If this project helps you, please give us a ⭐ Star
 
-[![Star History Chart](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.dera.page/#zhouxiaoka/autoclip&Date)
 
 Made with ❤️ by AutoClip Team
 
