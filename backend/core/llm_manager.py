@@ -8,8 +8,8 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 from .llm_providers import (
-    LLMProvider, LLMProviderFactory, ProviderType, 
-    ModelInfo, LLMResponse
+    LLMProvider, LLMProviderFactory, ProviderType,
+    ModelInfo, LLMResponse, normalize_gemini_model
 )
 from ..services.config_sync_service import config_sync_service
 
@@ -25,29 +25,25 @@ class LLMManager:
         self.settings_file = settings_file or self._get_default_settings_file()
         self.current_provider: Optional[LLMProvider] = None
         self.settings = self._load_settings()
+        self._settings_mtime = (
+            self.settings_file.stat().st_mtime if self.settings_file.exists() else None
+        )
         self._initialize_provider()
     
     def _get_default_settings_file(self) -> Path:
         """获取默认设置文件路径"""
-        # 优先使用桌面模式应用目录（与前端保存一致）
+        try:
+            from .path_utils import get_settings_file_path
+            return get_settings_file_path()
+        except Exception:
+            pass
+
         app_dir = os.getenv("AUTOCLIP_APP_DIR")
         if app_dir:
             return Path(app_dir) / "settings.json"
-        
-        # 优先使用默认的用户目录（macOS）- 客户端配置位置
-        default_app_dir = Path.home() / "Library" / "Application Support" / "AutoClip"
-        default_settings = default_app_dir / "settings.json"
-        if default_settings.exists():
-            return default_settings
-            
-        # 最后检查项目data目录下的settings.json（开发环境）
+
         project_data_dir = Path(__file__).parent.parent.parent / "data"
-        project_settings = project_data_dir / "settings.json"
-        if project_settings.exists():
-            return project_settings
-            
-        # 如果都不存在，返回默认路径
-        return default_settings
+        return project_data_dir / "settings.json"
     
     def _sync_config_if_needed(self):
         """检查并同步配置"""
@@ -84,12 +80,17 @@ class LLMManager:
                     if "api" in saved_settings and "api_keys" in saved_settings["api"]:
                         api_keys = saved_settings["api"]["api_keys"]
                         default_settings.update({
+                            "llm_provider": saved_settings["api"].get("api_provider")
+                                or saved_settings.get("llm_provider", "dashscope"),
                             "dashscope_api_key": api_keys.get("dashscope", ""),
                             "openai_api_key": api_keys.get("openai", ""),
                             "gemini_api_key": api_keys.get("gemini", ""),
                             "siliconflow_api_key": api_keys.get("siliconflow", ""),
                             "model_name": saved_settings["api"].get("api_model", "qwen-plus")
                         })
+                        if isinstance(default_settings.get("model_name"), list):
+                            names = default_settings["model_name"]
+                            default_settings["model_name"] = names[0] if names else "qwen-plus"
                     else:
                         # 处理旧的配置格式（直接平铺）
                         default_settings.update(saved_settings)
@@ -114,6 +115,9 @@ class LLMManager:
         try:
             provider_type = ProviderType(self.settings.get("llm_provider", "dashscope"))
             model_name = self.settings.get("model_name", "qwen-plus")
+            if provider_type == ProviderType.GEMINI:
+                model_name = normalize_gemini_model(model_name)
+                self.settings["model_name"] = model_name
             
             # 获取对应提供商的API密钥
             api_key = self._get_api_key_for_provider(provider_type)
@@ -285,6 +289,15 @@ def get_llm_manager() -> LLMManager:
     global _llm_manager
     if _llm_manager is None:
         _llm_manager = LLMManager()
+        return _llm_manager
+    try:
+        settings_file = _llm_manager.settings_file
+        if settings_file.exists():
+            mtime = settings_file.stat().st_mtime
+            if getattr(_llm_manager, "_settings_mtime", None) != mtime:
+                _llm_manager = LLMManager(settings_file)
+    except Exception:
+        pass
     return _llm_manager
 
 def initialize_llm_manager(settings_file: Optional[Path] = None) -> LLMManager:

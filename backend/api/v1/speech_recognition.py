@@ -52,10 +52,8 @@ async def whisper_runtime_status():
 
 @router.post("/whisper/install")
 async def whisper_install():
-    """开始在后台安装 Whisper 运行时（mlx-whisper）。"""
+    """Start installing the faster-whisper runtime in the background."""
     from backend.services import whisper_runtime
-    if sys_is_not_darwin():
-        raise HTTPException(status_code=400, detail="mlx-whisper 仅支持 Apple Silicon (macOS)")
     return whisper_runtime.start_install()
 
 

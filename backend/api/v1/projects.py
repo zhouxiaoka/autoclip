@@ -546,97 +546,143 @@ async def retry_processing(
         if not video_path.exists():
             logger.warning(f"视频文件不存在: {video_path}，尝试重新下载")
             
-            # 检查项目元数据中是否有源URL
-            if hasattr(project, 'project_metadata') and project.project_metadata:
-                source_url = project.project_metadata.get('source_url')
-                if source_url:
-                    logger.info(f"发现源URL: {source_url}，开始重新下载")
-                    
-                    # 根据URL类型选择下载方式
-                    if 'bilibili.com' in source_url:
-                        # B站视频重新下载
-                        from .bilibili import process_download_task, BilibiliDownloadRequest, BilibiliDownloadTask, download_tasks
-                        import uuid
-                        
-                        # 创建下载请求
-                        download_request = BilibiliDownloadRequest(
-                            url=source_url,
-                            project_name=project.name,
-                            video_category=project.project_metadata.get('category', 'general')
-                        )
-                        
-                        # 生成新的任务ID
-                        download_task_id = str(uuid.uuid4())
-                        
-                        # 创建任务记录
-                        task = BilibiliDownloadTask(
-                            id=download_task_id,
-                            url=source_url,
-                            project_name=project.name,
-                            video_category=project.project_metadata.get('category', 'general'),
-                            status="pending",
-                            progress=0.0,
-                            project_id=project_id,
-                            created_at=str(uuid.uuid1().time),
-                            updated_at=str(uuid.uuid1().time)
-                        )
-                        
-                        # 存储任务
-                        download_tasks[download_task_id] = task
-                        
-                        # 异步启动下载任务
-                        from .async_task_manager import task_manager
-                        await task_manager.create_safe_task(
-                            f"bilibili_redownload_{download_task_id}",
-                            process_download_task,
-                            download_task_id,
-                            download_request,
-                            project_id
-                        )
-                        
-                        return {
-                            "message": "视频文件不存在，已开始重新下载B站视频",
-                            "project_id": project_id,
-                            "download_task_id": download_task_id,
-                            "source_url": source_url
-                        }
-                    elif 'youtube.com' in source_url or 'youtu.be' in source_url:
-                        # YouTube视频重新下载
-                        from .youtube import process_youtube_download_task, YouTubeDownloadRequest
-                        import uuid
-                        
-                        # 创建下载请求
-                        download_request = YouTubeDownloadRequest(
-                            url=source_url,
-                            project_name=project.name,
-                            video_category=project.project_metadata.get('category', 'general')
-                        )
-                        
-                        # 生成新的任务ID
-                        download_task_id = str(uuid.uuid4())
-                        
-                        # 异步启动下载任务
-                        from .async_task_manager import task_manager
-                        await task_manager.create_safe_task(
-                            f"youtube_redownload_{download_task_id}",
-                            process_youtube_download_task,
-                            download_task_id,
-                            download_request,
-                            project_id
-                        )
-                        
-                        return {
-                            "message": "视频文件不存在，已开始重新下载YouTube视频",
-                            "project_id": project_id,
-                            "download_task_id": download_task_id,
-                            "source_url": source_url
-                        }
-                    else:
-                        raise HTTPException(status_code=400, detail=f"不支持的视频源: {source_url}")
-                else:
-                    raise HTTPException(status_code=400, detail=f"视频文件不存在且没有源URL: {video_path}")
+            source_url = None
+            metadata = project.project_metadata or {}
+            if metadata:
+                source_url = metadata.get('source_url')
+            if not source_url and project.processing_config:
+                yt_info = (project.processing_config or {}).get('youtube_info') or {}
+                source_url = yt_info.get('url')
+            if not source_url:
+                raise HTTPException(status_code=400, detail=f"视频文件不存在且没有源URL: {video_path}")
+
+            logger.info(f"发现源URL: {source_url}，开始重新下载")
+            category = metadata.get('category', 'default') or 'default'
+
+            if 'bilibili.com' in source_url:
+                from .bilibili import process_download_task, BilibiliDownloadRequest, BilibiliDownloadTask, download_tasks
+                import uuid
+
+                download_request = BilibiliDownloadRequest(
+                    url=source_url,
+                    project_name=project.name,
+                    video_category=category,
+                )
+                download_task_id = str(uuid.uuid4())
+                download_tasks[download_task_id] = BilibiliDownloadTask(
+                    id=download_task_id,
+                    url=source_url,
+                    project_name=project.name,
+                    video_category=category,
+                    status="pending",
+                    progress=0.0,
+                    project_id=project_id,
+                    created_at=str(uuid.uuid1().time),
+                    updated_at=str(uuid.uuid1().time),
+                )
+                from .async_task_manager import task_manager
+                await task_manager.create_safe_task(
+                    f"bilibili_redownload_{download_task_id}",
+                    process_download_task,
+                    download_task_id,
+                    download_request,
+                    project_id,
+                )
+                return {
+                    "message": "视频文件不存在，已开始重新下载B站视频",
+                    "project_id": project_id,
+                    "download_task_id": download_task_id,
+                    "source_url": source_url,
+                }
+            elif 'youtube.com' in source_url or 'youtu.be' in source_url:
+                from .youtube import (
+                    process_youtube_download_task,
+                    YouTubeDownloadRequest,
+                    YouTubeDownloadTask,
+                    download_tasks,
+                )
+                import uuid
+
+                download_request = YouTubeDownloadRequest(
+                    url=source_url,
+                    project_name=project.name,
+                    video_category=category,
+                )
+                download_task_id = str(uuid.uuid4())
+                download_tasks[download_task_id] = YouTubeDownloadTask(
+                    id=download_task_id,
+                    url=source_url,
+                    project_name=project.name,
+                    video_category=category,
+                    status="pending",
+                    progress=0.0,
+                    project_id=project_id,
+                    created_at=str(uuid.uuid1().time),
+                    updated_at=str(uuid.uuid1().time),
+                )
+                from .async_task_manager import task_manager
+                await task_manager.create_safe_task(
+                    f"youtube_redownload_{download_task_id}",
+                    process_youtube_download_task,
+                    download_task_id,
+                    download_request,
+                    project_id,
+                )
+                return {
+                    "message": "视频文件不存在，已开始重新下载YouTube视频",
+                    "project_id": project_id,
+                    "download_task_id": download_task_id,
+                    "source_url": source_url,
+                }
             else:
-                raise HTTPException(status_code=400, detail=f"视频文件不存在且没有项目元数据: {video_path}")
+                raise HTTPException(status_code=400, detail=f"不支持的视频源: {source_url}")
+
+        # Video is on disk but transcript is missing — generate SRT without re-downloading.
+        if video_path.exists() and not srt_path.exists():
+            metadata = project.project_metadata or {}
+            source_url = (metadata.get("source_url") if metadata else None) or ""
+            if not source_url and project.processing_config:
+                yt_info = (project.processing_config or {}).get("youtube_info") or {}
+                source_url = yt_info.get("url") or ""
+            if "youtube.com" in source_url or "youtu.be" in source_url:
+                from .youtube import (
+                    process_youtube_download_task,
+                    YouTubeDownloadRequest,
+                    YouTubeDownloadTask,
+                    download_tasks,
+                )
+                import uuid
+                category = (metadata.get("category") if metadata else None) or "default"
+                download_request = YouTubeDownloadRequest(
+                    url=source_url or "https://youtube.com",
+                    project_name=project.name,
+                    video_category=category,
+                )
+                download_task_id = str(uuid.uuid4())
+                download_tasks[download_task_id] = YouTubeDownloadTask(
+                    id=download_task_id,
+                    url=source_url or "",
+                    project_name=project.name,
+                    video_category=category,
+                    status="pending",
+                    progress=0.0,
+                    project_id=project_id,
+                    created_at=str(uuid.uuid1().time),
+                    updated_at=str(uuid.uuid1().time),
+                )
+                from .async_task_manager import task_manager
+                await task_manager.create_safe_task(
+                    f"youtube_subtitles_{download_task_id}",
+                    process_youtube_download_task,
+                    download_task_id,
+                    download_request,
+                    project_id,
+                )
+                return {
+                    "message": "Video is ready; generating subtitles",
+                    "project_id": project_id,
+                    "download_task_id": download_task_id,
+                }
         
         # 字幕文件是可选的
         srt_path_str = str(srt_path) if srt_path.exists() else None

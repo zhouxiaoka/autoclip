@@ -143,8 +143,8 @@ class ErrorBoundary extends Component<Props, State> {
           >
             <Result
               status="error"
-              title="页面出现错误"
-              subTitle="抱歉，页面遇到了一个意外错误。我们已经记录了这个问题，请尝试以下解决方案："
+              title="Something went wrong"
+              subTitle="The page hit an unexpected error. Try one of these:"
               extra={
                 <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                   <Space>
@@ -153,13 +153,13 @@ class ErrorBoundary extends Component<Props, State> {
                       icon={<ReloadOutlined />} 
                       onClick={this.handleReload}
                     >
-                      刷新页面
+                      Reload
                     </Button>
                     <Button 
                       icon={<HomeOutlined />} 
                       onClick={this.handleGoHome}
                     >
-                      返回首页
+                      Home
                     </Button>
                   </Space>
                   
@@ -168,7 +168,7 @@ class ErrorBoundary extends Component<Props, State> {
                     icon={<BugOutlined />}
                     onClick={this.handleReportError}
                   >
-                    报告此错误
+                    Report this error
                   </Button>
                 </Space>
               }
@@ -177,13 +177,13 @@ class ErrorBoundary extends Component<Props, State> {
             {/* 错误详情 */}
             {this.props.showDetails && error && (
               <div style={{ marginTop: '24px' }}>
-                <Title level={5}>错误详情</Title>
+                <Title level={5}>Error details</Title>
                 <Paragraph>
-                  <Text code>错误 ID: {errorId}</Text>
+                  <Text code>Error ID: {errorId}</Text>
                 </Paragraph>
                 
                 <Collapse size="small">
-                  <Panel header="错误信息" key="1">
+                  <Panel header="Message" key="1">
                     <pre style={{ 
                       background: '#f5f5f5', 
                       padding: '12px', 
@@ -231,13 +231,13 @@ class ErrorBoundary extends Component<Props, State> {
             
             {/* 常见解决方案 */}
             <div style={{ marginTop: '24px' }}>
-              <Title level={5}>常见解决方案</Title>
+              <Title level={5}>Try this</Title>
               <ul style={{ paddingLeft: '20px' }}>
-                <li>刷新页面重试</li>
-                <li>清除浏览器缓存和 Cookie</li>
-                <li>检查网络连接</li>
-                <li>尝试使用其他浏览器</li>
-                <li>如果问题持续存在，请联系技术支持</li>
+                <li>Reload the page</li>
+                <li>Clear browser cache and cookies</li>
+                <li>Check your network connection</li>
+                <li>Try another browser</li>
+                <li>If it keeps happening, contact support</li>
               </ul>
             </div>
           </Card>

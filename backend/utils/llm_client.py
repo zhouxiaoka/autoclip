@@ -41,19 +41,21 @@ class LLMClient:
         self.model = MODEL_NAME
         self.llm_manager = get_llm_manager()
     
+    @staticmethod
+    def _with_english_output(prompt: str) -> str:
+        return (
+            "OUTPUT LANGUAGE: Write every human-readable string in English "
+            "(titles, outlines, summaries, recommend_reason, collection_title, "
+            "collection_summary, content bullets). Keep JSON keys, ids, and timestamps unchanged.\n\n"
+            + prompt
+        )
+
     def call(self, prompt: str, input_data: Any = None) -> str:
         """
         调用大模型API - 使用新的LLM管理器
-        
-        Args:
-            prompt: 提示词
-            input_data: 输入数据
-            
-        Returns:
-            模型响应文本
         """
         try:
-            return self.llm_manager.call(prompt, input_data)
+            return self.llm_manager.call(self._with_english_output(prompt), input_data)
         except Exception as e:
             logger.error(f"LLM调用失败: {str(e)}")
             raise
@@ -71,7 +73,9 @@ class LLMClient:
             模型响应文本
         """
         try:
-            return self.llm_manager.call_with_retry(prompt, input_data, max_retries)
+            return self.llm_manager.call_with_retry(
+                self._with_english_output(prompt), input_data, max_retries
+            )
         except Exception as e:
             logger.error(f"LLM重试调用失败: {str(e)}")
             raise

@@ -188,7 +188,7 @@ export interface BilibiliDownloadTask {
 export const settingsApi = {
   // 获取系统配置
   getSettings: (): Promise<any> => {
-    return api.get('/settings')
+    return api.get('/settings/')
   },
 
   // 更新系统配置
@@ -197,10 +197,11 @@ export const settingsApi = {
   },
 
   // 测试API密钥
-  testApiKey: (provider: string, apiKey: string): Promise<{ success: boolean; error?: string }> => {
+  testApiKey: (provider: string, apiKey: string, modelName?: string): Promise<{ success: boolean; error?: string }> => {
     return api.post('/settings/test-api', { 
       provider, 
-      api_key: apiKey
+      api_key: apiKey,
+      model_name: Array.isArray(modelName) ? modelName[0] : modelName
     })
   },
 
@@ -220,6 +221,14 @@ export const settingsApi = {
   }
 }
 
+function normalizeProject(project: any): Project {
+  if (!project) return project
+  return {
+    ...project,
+    processing_config: project.processing_config || project.settings || {},
+  }
+}
+
 // 项目相关API
 export const projectApi = {
   // 获取视频分类配置
@@ -227,16 +236,16 @@ export const projectApi = {
     return api.get('/video-categories')
   },
 
-  // 获取所有项目
+  // Backend stores download progress in processing_config but serializes it as `settings`.
   getProjects: async (): Promise<Project[]> => {
     const response = await api.get('/projects/')
-    // 处理分页响应结构，返回items数组
-    return (response as any).items || response || []
+    const items = (response as any).items || response || []
+    return (Array.isArray(items) ? items : []).map(normalizeProject)
   },
 
-  // 获取单个项目
   getProject: async (id: string): Promise<Project> => {
-    return api.get(`/projects/${id}`)
+    const project = await api.get(`/projects/${id}`)
+    return normalizeProject(project)
   },
 
   // 上传文件并创建项目

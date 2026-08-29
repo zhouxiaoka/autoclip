@@ -26,50 +26,50 @@ class VideoCategory(str, Enum):
 # 视频分类配置
 VIDEO_CATEGORIES_CONFIG = {
     VideoCategory.DEFAULT: {
-        "name": "默认",
-        "description": "通用视频内容，适用于大部分场景",
+        "name": "General",
+        "description": "General video content for most use cases",
         "icon": "🎬",
         "color": "#4facfe"
     },
     VideoCategory.KNOWLEDGE: {
-        "name": "知识科普",
-        "description": "教育、科普、技术分享等知识性内容",
+        "name": "Knowledge",
+        "description": "Education, explainers, and technical talks",
         "icon": "📚",
         "color": "#52c41a"
     },
     VideoCategory.BUSINESS: {
-        "name": "商业财经",
-        "description": "商业分析、财经资讯、投资理财等",
+        "name": "Business",
+        "description": "Business, finance, and investing",
         "icon": "💼",
         "color": "#faad14"
     },
     VideoCategory.OPINION: {
-        "name": "观点评论",
-        "description": "观点表达、评论分析、思辨讨论等",
+        "name": "Opinion",
+        "description": "Commentary, reviews, and debate",
         "icon": "💭",
         "color": "#722ed1"
     },
     VideoCategory.EXPERIENCE: {
-        "name": "经验分享",
-        "description": "生活经验、技能分享、实用技巧等",
+        "name": "Experience",
+        "description": "Personal stories, skills, and how-tos",
         "icon": "🌟",
         "color": "#13c2c2"
     },
     VideoCategory.SPEECH: {
-        "name": "演讲脱口秀",
-        "description": "演讲、脱口秀、访谈等口语表达内容",
+        "name": "Speech",
+        "description": "Talks, interviews, and stand-up",
         "icon": "🎤",
         "color": "#eb2f96"
     },
     VideoCategory.CONTENT_REVIEW: {
-        "name": "内容解说",
-        "description": "影视解说、游戏解说、作品分析等",
+        "name": "Commentary",
+        "description": "Film, game, and media commentary",
         "icon": "🎭",
         "color": "#f5222d"
     },
     VideoCategory.ENTERTAINMENT: {
-        "name": "娱乐内容",
-        "description": "娱乐节目、综艺、表演等轻松内容",
+        "name": "Entertainment",
+        "description": "Streams, variety, and light entertainment",
         "icon": "🎪",
         "color": "#fa8c16"
     }

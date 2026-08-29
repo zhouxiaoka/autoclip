@@ -24,6 +24,21 @@ router = APIRouter()
 # 存储下载任务的状态
 download_tasks = {}
 
+_CHROMIUM_BROWSERS = frozenset({
+    "chrome", "edge", "chromium", "brave", "opera", "vivaldi", "whale",
+})
+
+# Prefer HLS 1080p60 (m3u8). DASH 299 often has a URL but writes 0 bytes under SABR.
+YOUTUBE_VIDEO_FORMAT = (
+    "bestvideo[height<=1080][fps>=50][protocol^=m3u8]+bestaudio[ext=m4a]/"
+    "bestvideo[height<=1080][protocol^=m3u8]+bestaudio/"
+    "bestvideo[height<=1080][fps>=50][vcodec^=avc1]+bestaudio[ext=m4a]/"
+    "bestvideo[height<=1080]+bestaudio/"
+    "best[height<=1080]/best"
+)
+# android/web currently only return 360p (SABR). tv_embedded still has 1080p60 AVC.
+YOUTUBE_PLAYER_CLIENTS = ["tv_embedded"]
+
 
 @contextmanager
 def sanitized_yt_env():
@@ -38,6 +53,82 @@ def sanitized_yt_env():
     finally:
         os.environ.clear()
         os.environ.update(original_env)
+
+
+def _cookie_browser(browser: Optional[str]) -> Optional[str]:
+    """Return a yt-dlp browser name, or None when cookies cannot be used."""
+    if not browser or not str(browser).strip():
+        return None
+    name = browser.strip().lower()
+    if sys.platform == "win32" and name in _CHROMIUM_BROWSERS:
+        logger.warning(
+            "Skipping %s cookies on Windows (Chrome DPAPI / app-bound encryption)",
+            name,
+        )
+        return None
+    return name
+
+
+def _is_cookie_error(err: Exception) -> bool:
+    text = str(err).lower()
+    return any(token in text for token in ("dpapi", "failed to decrypt", "cookiesfrombrowser", "cookie database"))
+
+
+def _video_meets_1080p60(path: Path) -> bool:
+    try:
+        from ...utils.ffmpeg_utils import get_ffprobe_path
+        import json as _json
+        import subprocess
+        result = subprocess.run(
+            [
+                get_ffprobe_path(),
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height,r_frame_rate",
+                "-of", "json",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+        )
+        if result.returncode != 0:
+            return False
+        streams = (_json.loads(result.stdout or "{}").get("streams") or [{}])[0]
+        height = int(streams.get("height") or 0)
+        rate = str(streams.get("r_frame_rate") or "0/1")
+        num, den = rate.split("/", 1) if "/" in rate else (rate, "1")
+        fps = float(num) / max(float(den), 1.0)
+        return height >= 1080 and fps >= 50
+    except Exception:
+        return False
+
+
+def _yt_dlp_run(url: str, ydl_opts: dict, download: bool = False):
+    with sanitized_yt_env():
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            if download:
+                return ydl.download([url])
+            return ydl.extract_info(url, download=False)
+
+
+def _yt_dlp_with_cookie_fallback(url: str, ydl_opts: dict, browser: Optional[str] = None, download: bool = False):
+    opts = dict(ydl_opts)
+    cookie_browser = _cookie_browser(browser)
+    if cookie_browser:
+        opts["cookiesfrombrowser"] = (cookie_browser,)
+    else:
+        opts.pop("cookiesfrombrowser", None)
+    try:
+        return _yt_dlp_run(url, opts, download=download)
+    except Exception as err:
+        if opts.get("cookiesfrombrowser") and _is_cookie_error(err):
+            logger.warning("Browser cookies failed (%s); retrying without cookies", err)
+            opts = dict(ydl_opts)
+            opts.pop("cookiesfrombrowser", None)
+            return _yt_dlp_run(url, opts, download=download)
+        raise
 
 class YouTubeParseRequest(BaseModel):
     url: str
@@ -83,80 +174,32 @@ async def parse_youtube_video(
         
         # 简单的URL验证
         if "youtube.com" not in url and "youtu.be" not in url:
-            raise HTTPException(status_code=400, detail="无效的YouTube视频链接")
-        
-        # 记录版本信息，便于排查
+            raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+
         try:
             logger.info(f"yt-dlp={yt_dlp.version.__version__}, py={sys.executable}")
         except Exception:
             pass
 
-        # 使用 subprocess 直接调用 yt-dlp 命令行工具，避免 Python 环境配置影响
-        import subprocess
-        import json
-        import asyncio
-        
-        def extract_info_sync(url, browser):
-            # 构建 yt-dlp 命令
-            cmd = [
-                '/Users/zhoukk/autoclip/venv/bin/yt-dlp',
-                '--ignore-config',
-                '--no-warnings',
-                '--no-playlist',
-                '--dump-json',
-                '--skip-download',  # 修正参数名
-                '--no-cache-dir'
-            ]
-            
-            if browser:
-                cmd.extend(['--cookies-from-browser', browser.lower()])
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'ignoreconfig': True,
+            'noplaylist': True,
+            'skip_download': True,
+            'cachedir': False,
+        }
 
-            # 可选兜底客户端，规避 SABR
-            yt_client = (client or os.getenv('AUTOCLIP_YT_CLIENT', '')).strip().lower()
-            if yt_client in {"android", "ios", "tv"}:
-                cmd.extend(['--extractor-args', f"youtube:player_client={yt_client}"])
-            
-            cmd.append(url)
-            
-            try:
-                # 执行命令（清理环境变量，避免 YT_* 影响）
-                env = os.environ.copy()
-                for k in list(env.keys()):
-                    uk = k.upper()
-                    if uk.startswith('YT_DLP') or uk.startswith('YTDL') or uk.startswith('YOUTUBE_DL') or uk.startswith('YOUTUBEDL'):
-                        env.pop(k, None)
+        yt_client = (client or os.getenv('AUTOCLIP_YT_CLIENT', '')).strip().lower()
+        player_clients = list(YOUTUBE_PLAYER_CLIENTS)
+        if yt_client in {"android", "ios", "tv", "tv_embedded"}:
+            player_clients = [yt_client]
+        ydl_opts.setdefault('extractor_args', {}).setdefault('youtube', {})['player_client'] = player_clients
 
-                logger.info(f"执行命令: {' '.join(cmd)}")
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                    cwd='/Users/zhoukk/autoclip',
-                    env=env
-                )
-
-                logger.info(f"命令返回码: {result.returncode}")
-                logger.info(f"命令输出(前200字): {result.stdout[:200]}...")
-                if result.stderr:
-                    logger.info(f"命令错误: {result.stderr}")
-
-                if result.returncode != 0:
-                    raise Exception(f"yt-dlp failed: {result.stderr or result.stdout}")
-
-                # 解析 JSON 输出
-                info_dict = json.loads(result.stdout)
-                return info_dict
-                
-            except subprocess.TimeoutExpired:
-                raise Exception("yt-dlp timeout")
-            except json.JSONDecodeError as e:
-                raise Exception(f"Failed to parse yt-dlp output: {e}")
-            except Exception as e:
-                raise Exception(f"yt-dlp execution failed: {e}")
-        
         loop = asyncio.get_event_loop()
-        info_dict = await loop.run_in_executor(None, extract_info_sync, url, browser)
+        info_dict = await loop.run_in_executor(
+            None, lambda: _yt_dlp_with_cookie_fallback(url, ydl_opts, browser, download=False)
+        )
         
         logger.info(f"YouTube视频信息解析成功: {info_dict.get('title', 'Unknown')}")
         
@@ -197,21 +240,16 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
             'cachedir': False,
         }
         
-        if request.browser:
-            ydl_opts['cookiesfrombrowser'] = (request.browser.lower(),)
-
-        # 可选兜底客户端
         yt_client_env = os.getenv('AUTOCLIP_YT_CLIENT', '').strip().lower()
-        if yt_client_env in {"android", "ios", "tv"}:
-            ydl_opts.setdefault('extractor_args', {}).setdefault('youtube', {}).setdefault('player_client', []).append(yt_client_env)
-        
-        def extract_info_sync(url, ydl_opts):
-            with sanitized_yt_env():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return ydl.extract_info(url, download=False)
+        player_clients = list(YOUTUBE_PLAYER_CLIENTS)
+        if yt_client_env in {"android", "ios", "tv", "tv_embedded"}:
+            player_clients = [yt_client_env]
+        ydl_opts.setdefault('extractor_args', {}).setdefault('youtube', {})['player_client'] = player_clients
         
         loop = asyncio.get_event_loop()
-        video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
+        video_info = await loop.run_in_executor(
+            None, lambda: _yt_dlp_with_cookie_fallback(request.url, ydl_opts, request.browser, download=False)
+        )
         
         # 立即创建项目记录
         from ...core.database import SessionLocal
@@ -325,7 +363,7 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
         
     except Exception as e:
         logger.error(f"创建YouTube下载任务失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"创建任务失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 
 @router.get("/tasks/{task_id}")
 async def get_youtube_task_status(task_id: str):
@@ -342,45 +380,62 @@ async def get_all_youtube_tasks():
 
 async def update_project_download_progress(project_id: str, progress: float, message: str):
     """更新项目下载进度"""
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _sync_update_download_progress, project_id, progress, message)
+
+
+def _sync_update_download_progress(project_id: str, progress: float, message: str) -> None:
     try:
         from ...core.database import SessionLocal
         from ...services.project_service import ProjectService
-        
+        from sqlalchemy.orm.attributes import flag_modified
+
         db = SessionLocal()
         try:
             project_service = ProjectService(db)
             project = project_service.get(project_id)
-            
-            if project:
-                # 更新项目设置中的下载进度
-                if not project.processing_config:
-                    project.processing_config = {}
-                
-                project.processing_config.update({
-                    "download_progress": progress,
-                    "download_message": message
-                })
-                
-                # 如果进度达到100%，更新状态为等待处理
-                if progress >= 100.0:
-                    from ...schemas.project import ProjectStatus
-                    project.status = ProjectStatus.PENDING
-                
-                db.commit()
-                logger.info(f"项目 {project_id} 下载进度更新: {progress}% - {message}")
-                
+            if not project:
+                return
+            config = dict(project.processing_config or {})
+            config.update({
+                "download_progress": progress,
+                "download_message": message,
+            })
+            project.processing_config = config
+            flag_modified(project, "processing_config")
+            db.commit()
+            logger.info(f"项目 {project_id} 下载进度更新: {progress:.1f}% - {message}")
         finally:
             db.close()
-            
     except Exception as e:
         logger.error(f"更新项目下载进度失败: {e}")
+
+
+def _make_download_progress_hook(project_id: str):
+    last = {"pct": -10.0}
+
+    def hook(d):
+        if d.get("status") != "downloading":
+            return
+        total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+        done = d.get("downloaded_bytes") or 0
+        if not total:
+            return
+        mapped = 15.0 + min(50.0, (done / total) * 50.0)
+        if mapped - last["pct"] < 3:
+            return
+        last["pct"] = mapped
+        _sync_update_download_progress(project_id, mapped, "Downloading video…")
+
+    return hook
 
 async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRequest, project_id: str):
     """处理YouTube下载任务"""
     try:
         # 更新任务状态为处理中
-        download_tasks[task_id].status = "processing"
-        download_tasks[task_id].progress = 10.0
+        if task_id in download_tasks:
+            download_tasks[task_id].status = "processing"
+            download_tasks[task_id].progress = 10.0
         
         # 更新项目状态和进度
         await update_project_download_progress(project_id, 10.0, "正在获取视频信息...")
@@ -389,60 +444,71 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         import yt_dlp
         import asyncio
         from ...core.config import get_data_directory
-        
+        from ...core.path_utils import get_project_raw_directory
+
         data_dir = get_data_directory()
         download_dir = data_dir / "temp"
         download_dir.mkdir(exist_ok=True)
-        
-        # 更新项目进度
-        await update_project_download_progress(project_id, 30.0, "正在下载视频...")
-        
-        # 设置下载选项
-        ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            'writesubtitles': True,
-            'writeautomaticsub': True,  # 下载自动生成的字幕
-            'subtitleslangs': ['en', 'zh-Hans', 'zh', 'en-US', 'auto'],  # 英文和中文字幕，包括自动检测
-            'subtitlesformat': 'srt',
-            'outtmpl': str(download_dir / '%(title)s.%(ext)s'),
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': False,  # 显示警告信息以便调试
-            'ignoreconfig': True,
-            'config_locations': [],
-            'cachedir': False,
-        }
-        
-        if request.browser:
-            ydl_opts['cookiesfrombrowser'] = (request.browser.lower(),)
 
-        # 可选兜底客户端
-        yt_client_env = os.getenv('AUTOCLIP_YT_CLIENT', '').strip().lower()
-        if yt_client_env in {"android", "ios", "tv"}:
-            ydl_opts.setdefault('extractor_args', {}).setdefault('youtube', {}).setdefault('player_client', []).append(yt_client_env)
-        
-        def download_sync(url, ydl_opts):
-            with sanitized_yt_env():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return ydl.download([url])
-        
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, download_sync, request.url, ydl_opts)
-        
-        # 查找下载的文件
-        video_files = list(download_dir.glob("*.mp4"))
-        subtitle_files = list(download_dir.glob("*.srt"))
-        
-        if not video_files:
-            raise Exception("未找到下载的视频文件")
-        
-        video_path = str(video_files[0])
-        subtitle_path = str(subtitle_files[0]) if subtitle_files else ""
-        
-        download_tasks[task_id].progress = 80.0
-        
-        # 更新项目进度
-        await update_project_download_progress(project_id, 60.0, "视频下载完成，正在处理字幕...")
+        existing_video = get_project_raw_directory(project_id) / "input.mp4"
+        subtitle_path = ""
+
+        if existing_video.exists() and existing_video.stat().st_size > 1024 * 1024 and _video_meets_1080p60(existing_video):
+            video_path = str(existing_video)
+            logger.info(f"Using already-downloaded 1080p60 video: {video_path}")
+            await update_project_download_progress(project_id, 60.0, "Video already on disk, generating subtitles…")
+        else:
+            data_dir = get_data_directory()
+            download_dir = data_dir / "temp"
+            download_dir.mkdir(exist_ok=True)
+
+            await update_project_download_progress(project_id, 30.0, "正在下载视频...")
+
+            # Download the video only. YouTube auto-captions often 429 and abort the
+            # whole job; Whisper generates the SRT after the file is on disk.
+            ydl_opts = {
+                'format': YOUTUBE_VIDEO_FORMAT,
+                'format_sort': ['res:1080', 'fps', 'codec:h264:vp9', 'size'],
+                'merge_output_format': 'mp4',
+                'writesubtitles': False,
+                'writeautomaticsub': False,
+                'outtmpl': str(download_dir / f'{project_id}_%(id)s.%(ext)s'),
+                'noplaylist': True,
+                'quiet': True,
+                'no_warnings': False,
+                'ignoreconfig': True,
+                'config_locations': [],
+                'cachedir': False,
+                'retries': 10,
+                'fragment_retries': 10,
+                'concurrent_fragment_downloads': 4,
+                'js_runtimes': {'node': {}},
+                'remote_components': ['ejs:github'],
+                'progress_hooks': [_make_download_progress_hook(project_id)],
+            }
+            ydl_opts.setdefault('extractor_args', {}).setdefault('youtube', {})['player_client'] = (
+                YOUTUBE_PLAYER_CLIENTS
+            )
+
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None, lambda: _yt_dlp_with_cookie_fallback(request.url, ydl_opts, request.browser, download=True)
+            )
+
+            video_files = []
+            for pattern in (f"{project_id}_*.mp4", f"{project_id}_*.mkv", f"{project_id}_*.webm"):
+                video_files.extend(p for p in download_dir.glob(pattern) if p.is_file())
+            subtitle_files = list(download_dir.glob(f"{project_id}_*.srt"))
+
+            if not video_files:
+                raise Exception("Video file was not downloaded")
+
+            video_path = str(max(video_files, key=lambda p: p.stat().st_size))
+            subtitle_path = str(subtitle_files[0]) if subtitle_files else ""
+            await update_project_download_progress(project_id, 60.0, "视频下载完成，正在处理字幕...")
+
+        if task_id in download_tasks:
+            download_tasks[task_id].progress = 80.0
         
         # 如果没有字幕文件，优先使用Whisper生成字幕
         if not subtitle_path:
@@ -452,21 +518,22 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             
             try:
                 from ...utils.speech_recognizer import generate_subtitle_for_video, SpeechRecognitionError
+                from ...core.path_utils import get_project_raw_directory as _raw_dir
                 video_file_path = Path(video_path)
-                
-                # 根据视频信息选择合适的模型
-                model = "base"  # 默认使用平衡模型
-                language = "auto"  # 默认自动检测语言
-                
-                # 可以根据视频标题判断内容类型
-                # 这里可以添加更智能的内容类型判断逻辑
-                
+                srt_out = _raw_dir(project_id) / "input.srt"
+                model = "base"
+                language = "en"
+
                 logger.info(f"使用Whisper生成字幕 - 语言: {language}, 模型: {model}")
-                
-                generated_subtitle = generate_subtitle_for_video(
-                    video_file_path,
-                    language=language,
-                    model=model
+                loop = asyncio.get_event_loop()
+                generated_subtitle = await loop.run_in_executor(
+                    None,
+                    lambda: generate_subtitle_for_video(
+                        video_file_path,
+                        output_path=srt_out,
+                        language=language,
+                        model=model,
+                    ),
                 )
                 subtitle_path = str(generated_subtitle)
                 logger.info(f"Whisper字幕生成成功: {subtitle_path}")
@@ -476,21 +543,10 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 
             except SpeechRecognitionError as e:
                 logger.error(f"Whisper字幕生成失败: {e}")
-                # Whisper失败时，尝试多种策略获取平台字幕作为备用
-                logger.info("尝试下载平台字幕作为备用方案")
-                try:
-                    subtitle_path = await _try_youtube_subtitle_strategies(request.url, download_dir, request.browser)
-                    if subtitle_path:
-                        logger.info(f"备用字幕获取成功: {subtitle_path}")
-                    else:
-                        logger.warning("所有字幕获取策略都失败了")
-                        subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
-                except Exception as backup_error:
-                    logger.error(f"备用字幕获取也失败: {backup_error}")
-                    subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
+                subtitle_path = None
             except Exception as e:
                 logger.error(f"生成字幕过程中发生未知错误: {e}")
-                subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
+                subtitle_path = None
         
         logger.info(f"下载完成 - 视频文件: {video_path}, 字幕文件: {subtitle_path}")
         
@@ -534,31 +590,24 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             raw_dir = project_dir / "raw"
             raw_dir.mkdir(parents=True, exist_ok=True)
             
-            # 移动视频文件到项目目录
             import shutil
-            from pathlib import Path
-            
+
             if video_path:
                 video_file_path = Path(video_path)
                 if video_file_path.exists():
-                    # 重命名视频文件为input.mp4
                     new_video_path = raw_dir / "input.mp4"
-                    shutil.move(str(video_file_path), str(new_video_path))
-                    logger.info(f"视频文件已移动到: {new_video_path}")
-                    
-                    # 更新项目中的视频路径
+                    if video_file_path.resolve() != new_video_path.resolve():
+                        shutil.move(str(video_file_path), str(new_video_path))
+                        logger.info(f"视频文件已移动到: {new_video_path}")
                     project.video_path = str(new_video_path)
-            
-            # 移动字幕文件到项目目录
+
             if subtitle_path:
                 subtitle_file_path = Path(subtitle_path)
                 if subtitle_file_path.exists():
-                    # 重命名字幕文件为input.srt
                     new_subtitle_path = raw_dir / "input.srt"
-                    shutil.move(str(subtitle_file_path), str(new_subtitle_path))
-                    logger.info(f"字幕文件已移动到: {new_subtitle_path}")
-                    
-                    # 更新项目处理配置中的字幕路径
+                    if subtitle_file_path.resolve() != new_subtitle_path.resolve():
+                        shutil.move(str(subtitle_file_path), str(new_subtitle_path))
+                        logger.info(f"字幕文件已移动到: {new_subtitle_path}")
                     if not project.processing_config:
                         project.processing_config = {}
                     project.processing_config["subtitle_path"] = str(new_subtitle_path)
@@ -578,11 +627,12 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 db.commit()
                 
                 # 更新任务状态为失败
-                download_tasks[task_id].status = "failed"
-                download_tasks[task_id].error_message = "字幕文件不存在且Whisper生成失败"
-                download_tasks[task_id].progress = 0.0
-                download_tasks[task_id].project_id = str(project.id)
-                download_tasks[task_id].updated_at = datetime.now().isoformat()
+                if task_id in download_tasks:
+                    download_tasks[task_id].status = "failed"
+                    download_tasks[task_id].error_message = "字幕文件不存在且Whisper生成失败"
+                    download_tasks[task_id].progress = 0.0
+                    download_tasks[task_id].project_id = str(project.id)
+                    download_tasks[task_id].updated_at = datetime.now().isoformat()
                 
                 # 更新项目下载进度为失败
                 await update_project_download_progress(project_id, 0.0, "下载失败：字幕文件不存在")
@@ -594,10 +644,11 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             await update_project_download_progress(project_id, 100.0, "下载完成，准备开始处理")
             
             # 更新任务状态
-            download_tasks[task_id].status = "completed"
-            download_tasks[task_id].progress = 100.0
-            download_tasks[task_id].project_id = str(project.id)
-            download_tasks[task_id].updated_at = datetime.now().isoformat()
+            if task_id in download_tasks:
+                download_tasks[task_id].status = "completed"
+                download_tasks[task_id].progress = 100.0
+                download_tasks[task_id].project_id = str(project.id)
+                download_tasks[task_id].updated_at = datetime.now().isoformat()
             
             logger.info(f"YouTube下载任务完成: {task_id}, 项目ID: {project.id}")
             
@@ -647,10 +698,34 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             
     except Exception as e:
         logger.error(f"处理下载任务失败: {str(e)}")
-        download_tasks[task_id].status = "failed"
-        download_tasks[task_id].error_message = str(e)
-        download_tasks[task_id].progress = 0.0
-        download_tasks[task_id].updated_at = datetime.now().isoformat()
+        if task_id in download_tasks:
+            download_tasks[task_id].status = "failed"
+            download_tasks[task_id].error_message = str(e)
+            download_tasks[task_id].progress = 0.0
+            download_tasks[task_id].updated_at = datetime.now().isoformat()
+        try:
+            from ...core.database import SessionLocal
+            from ...schemas.project import ProjectStatus
+            from sqlalchemy.orm.attributes import flag_modified
+            db = SessionLocal()
+            try:
+                from ...services.project_service import ProjectService
+                project = ProjectService(db).get(project_id)
+                if project:
+                    project.status = ProjectStatus.FAILED
+                    config = dict(project.processing_config or {})
+                    config.update({
+                        "download_progress": 0.0,
+                        "download_message": f"Download failed: {e}",
+                        "error_message": str(e),
+                    })
+                    project.processing_config = config
+                    flag_modified(project, "processing_config")
+                    db.commit()
+            finally:
+                db.close()
+        except Exception as mark_err:
+            logger.error(f"Failed to mark project as failed: {mark_err}")
 
 
 async def _try_youtube_subtitle_strategies(url: str, download_dir: Path, browser: Optional[str] = None) -> str:
@@ -685,7 +760,7 @@ async def _try_download_with_different_formats(url: str, download_dir: Path, bro
     for fmt in formats:
         try:
             ydl_opts = {
-                'format': 'best[ext=mp4]/best',
+                'format': YOUTUBE_VIDEO_FORMAT,
                 'writesubtitles': True,
                 'writeautomaticsub': True,
                 'subtitleslangs': ['en', 'zh-Hans', 'zh'],
@@ -697,16 +772,10 @@ async def _try_download_with_different_formats(url: str, download_dir: Path, bro
                 'config_locations': [],
             }
             
-            if browser:
-                ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
-            
-            def download_sync(url, ydl_opts):
-                with sanitized_yt_env():
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        return ydl.download([url])
-            
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, download_sync, url, ydl_opts)
+            await loop.run_in_executor(
+                None, lambda: _yt_dlp_with_cookie_fallback(url, ydl_opts, browser, download=True)
+            )
             
             # 查找下载的字幕文件
             subtitle_files = list(download_dir.glob(f"*.{fmt}"))
@@ -744,7 +813,7 @@ async def _try_download_with_different_langs(url: str, download_dir: Path, brows
     for langs in lang_combinations:
         try:
             ydl_opts = {
-                'format': 'best[ext=mp4]/best',
+                'format': YOUTUBE_VIDEO_FORMAT,
                 'writesubtitles': True,
                 'writeautomaticsub': True,
                 'subtitleslangs': langs,
@@ -756,16 +825,10 @@ async def _try_download_with_different_langs(url: str, download_dir: Path, brows
                 'config_locations': [],
             }
             
-            if browser:
-                ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
-            
-            def download_sync(url, ydl_opts):
-                with sanitized_yt_env():
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        return ydl.download([url])
-            
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, download_sync, url, ydl_opts)
+            await loop.run_in_executor(
+                None, lambda: _yt_dlp_with_cookie_fallback(url, ydl_opts, browser, download=True)
+            )
             
             # 查找下载的字幕文件
             subtitle_files = list(download_dir.glob("*.srt"))
@@ -792,16 +855,10 @@ async def _try_extract_from_metadata(url: str, download_dir: Path, browser: Opti
             'config_locations': [],
         }
         
-        if browser:
-            ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
-        
-        def extract_info_sync(url, ydl_opts):
-            with sanitized_yt_env():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return ydl.extract_info(url, download=False)
-        
         loop = asyncio.get_event_loop()
-        info_dict = await loop.run_in_executor(None, extract_info_sync, url, ydl_opts)
+        info_dict = await loop.run_in_executor(
+            None, lambda: _yt_dlp_with_cookie_fallback(url, ydl_opts, browser, download=False)
+        )
         
         # 检查是否有字幕信息
         subtitles = info_dict.get('subtitles', {})

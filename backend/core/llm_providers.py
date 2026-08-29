@@ -13,6 +13,35 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
+GEMINI_MODEL_ALIASES = {
+    "gemini-pro": DEFAULT_GEMINI_MODEL,
+    "gemini-1.5-flash": DEFAULT_GEMINI_MODEL,
+    "gemini-1.5-pro": "gemini-3.1-pro-preview",
+    "gemini-2.0-flash": DEFAULT_GEMINI_MODEL,
+    "gemini-2.0-flash-exp": DEFAULT_GEMINI_MODEL,
+    "gemini-2.5-flash": DEFAULT_GEMINI_MODEL,
+    "gemini-2.5-pro": "gemini-3.1-pro-preview",
+    "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+}
+
+
+def normalize_gemini_model(model_name: Optional[str]) -> str:
+    """Map retired Gemini IDs to ones still available for new API keys."""
+    name = (model_name or DEFAULT_GEMINI_MODEL).strip()
+    if name.startswith("models/"):
+        name = name[len("models/"):]
+    return GEMINI_MODEL_ALIASES.get(name, name)
+
+
+def _suggested_gemini_model(error_text: str) -> Optional[str]:
+    """Parse Google's 'use models/<id>' hint from a NOT_FOUND error."""
+    import re
+    match = re.search(r"use models/([a-zA-Z0-9._-]+)", error_text or "")
+    if match:
+        return normalize_gemini_model(match.group(1))
+    return None
+
 class ProviderType(Enum):
     """模型提供商类型"""
     DASHSCOPE = "dashscope"  # 阿里通义千问
@@ -325,42 +354,103 @@ class OpenAIProvider(LLMProvider):
             )
         ]
 
+def _is_gemini_auth_key(api_key: str) -> bool:
+    return (api_key or "").strip().startswith("AQ.")
+
+
+def _is_unsupported_auth_error(err: Exception) -> bool:
+    text = str(err).upper()
+    return "ACCESS_TOKEN_TYPE_UNSUPPORTED" in text or "UNAUTHENTICATED" in text
+
+
+def _interaction_text(interaction: Any) -> str:
+    text = getattr(interaction, "output_text", None) or getattr(interaction, "text", None)
+    if text:
+        return str(text)
+    outputs = getattr(interaction, "outputs", None) or []
+    parts = []
+    for item in outputs:
+        part = getattr(item, "text", None) or getattr(item, "output_text", None)
+        if part:
+            parts.append(str(part))
+    return "\n".join(parts)
+
+
 class GeminiProvider(LLMProvider):
     """Google Gemini提供商"""
     
-    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash", **kwargs):
-        super().__init__(api_key, model_name, **kwargs)
+    def __init__(self, api_key: str, model_name: str = DEFAULT_GEMINI_MODEL, **kwargs):
+        super().__init__((api_key or "").strip(), normalize_gemini_model(model_name), **kwargs)
         try:
             # New unified Google GenAI SDK (replaces the deprecated
             # google-generativeai package).
             from google import genai
-            self.client = genai.Client(api_key=api_key)
+            self.client = genai.Client(api_key=self.api_key, vertexai=False)
         except ImportError:
             raise ImportError("请安装google-genai: pip install google-genai")
+
+    def _call_interactions(self, prompt: str, model_name: str) -> LLMResponse:
+        interaction = self.client.interactions.create(
+            model=model_name,
+            input=prompt,
+        )
+        content = _interaction_text(interaction)
+        self.model_name = model_name
+        return LLMResponse(content=content, model=model_name)
+
+    def _call_generate_content(self, prompt: str, model_name: str, **kwargs) -> LLMResponse:
+        from google.genai import types
+        max_tokens = kwargs.get("max_tokens") or kwargs.get("max_output_tokens")
+        config_kwargs: Dict[str, Any] = {}
+        if max_tokens:
+            config_kwargs["max_output_tokens"] = max_tokens
+        try:
+            config_kwargs["automatic_function_calling"] = types.AutomaticFunctionCallingConfig(disable=True)
+        except Exception:
+            pass
+        config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
+        response = self.client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=config,
+        )
+        return LLMResponse(
+            content=response.text,
+            model=model_name,
+            finish_reason=getattr(response, "finish_reason", None),
+        )
 
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用Gemini API"""
         try:
             full_input = self._build_full_input(prompt, input_data)
+            model_name = normalize_gemini_model(kwargs.get("model") or self.model_name)
+            prefer_interactions = _is_gemini_auth_key(self.api_key)
 
-            # Map a max-tokens hint onto the new SDK's config object if present.
-            config = None
-            max_tokens = kwargs.get("max_tokens") or kwargs.get("max_output_tokens")
-            if max_tokens:
-                from google.genai import types
-                config = types.GenerateContentConfig(max_output_tokens=max_tokens)
+            if prefer_interactions:
+                try:
+                    return self._call_interactions(full_input, model_name)
+                except Exception as first_err:
+                    suggested = _suggested_gemini_model(str(first_err))
+                    if suggested and suggested != model_name:
+                        logger.warning("Gemini model %s unavailable; retrying with %s", model_name, suggested)
+                        return self._call_interactions(full_input, suggested)
+                    if not _is_unsupported_auth_error(first_err):
+                        raise
+                    logger.warning("Interactions API rejected auth key; falling back to generateContent")
 
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=full_input,
-                config=config,
-            )
-
-            return LLMResponse(
-                content=response.text,
-                model=self.model_name,
-                finish_reason=getattr(response, 'finish_reason', None)
-            )
+            try:
+                return self._call_generate_content(full_input, model_name, **kwargs)
+            except Exception as first_err:
+                suggested = _suggested_gemini_model(str(first_err))
+                if suggested and suggested != model_name:
+                    logger.warning("Gemini model %s unavailable; retrying with %s", model_name, suggested)
+                    self.model_name = suggested
+                    return self._call_generate_content(full_input, suggested, **kwargs)
+                if _is_unsupported_auth_error(first_err) and not prefer_interactions:
+                    logger.warning("generateContent rejected credentials; retrying Interactions API")
+                    return self._call_interactions(full_input, model_name)
+                raise
 
         except Exception as e:
             logger.error(f"Gemini调用失败: {str(e)}")
@@ -369,40 +459,43 @@ class GeminiProvider(LLMProvider):
     def test_connection(self) -> bool:
         """测试Gemini连接"""
         try:
-            # 使用简单的测试提示
-            response = self.call("测试", max_tokens=10)
-            # 检查响应是否有效
-            if response and response.content:
-                return True
-            return False
+            response = self.call("Reply with OK")
+            return bool(response and (response.content or "").strip())
         except Exception as e:
             logger.error(f"Gemini连接测试失败: {e}")
-            return False
+            raise
     
     def get_available_models(self) -> List[ModelInfo]:
         """获取Gemini可用模型"""
         return [
             ModelInfo(
-                name="gemini-2.5-flash",
-                display_name="Gemini 2.5 Flash",
+                name="gemini-3.6-flash",
+                display_name="Gemini 3.6 Flash",
                 provider=ProviderType.GEMINI,
                 max_tokens=1000000,
-                description="Google Gemini 2.5 Flash模型"
+                description="Best default for long VODs"
             ),
             ModelInfo(
-                name="gemini-1.5-pro",
-                display_name="Gemini 1.5 Pro",
-                provider=ProviderType.GEMINI,
-                max_tokens=2000000,
-                description="Google Gemini 1.5 Pro模型"
-            ),
-            ModelInfo(
-                name="gemini-1.5-flash",
-                display_name="Gemini 1.5 Flash",
+                name="gemini-3.7-flash",
+                display_name="Gemini 3.7 Flash",
                 provider=ProviderType.GEMINI,
                 max_tokens=1000000,
-                description="Google Gemini 1.5 Flash模型"
-            )
+                description="Latest Flash"
+            ),
+            ModelInfo(
+                name="gemini-3.1-pro-preview",
+                display_name="Gemini 3.1 Pro",
+                provider=ProviderType.GEMINI,
+                max_tokens=1000000,
+                description="Higher quality"
+            ),
+            ModelInfo(
+                name="gemini-3.5-flash-lite",
+                display_name="Gemini 3.5 Flash-Lite",
+                provider=ProviderType.GEMINI,
+                max_tokens=1000000,
+                description="Cheaper / faster"
+            ),
         ]
 
 class SiliconFlowProvider(LLMProvider):

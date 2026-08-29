@@ -15,12 +15,12 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import timezone from 'dayjs/plugin/timezone'
 import utc from 'dayjs/plugin/utc'
-import 'dayjs/locale/zh-cn'
+import 'dayjs/locale/en'
 
 dayjs.extend(relativeTime)
 dayjs.extend(timezone)
 dayjs.extend(utc)
-dayjs.locale('zh-cn')
+dayjs.locale('en')
 
 // 添加CSS动画样式
 const pulseAnimation = `
@@ -72,14 +72,14 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // 获取分类信息
   const getCategoryInfo = (category?: string) => {
     const categoryMap: Record<string, { name: string; icon: string; color: string }> = {
-      'default': { name: '默认', icon: '🎬', color: '#4facfe' },
-      'knowledge': { name: '知识科普', icon: '📚', color: '#52c41a' },
-      'business': { name: '商业财经', icon: '💼', color: '#faad14' },
-      'opinion': { name: '观点评论', icon: '💭', color: '#722ed1' },
-      'experience': { name: '经验分享', icon: '🌟', color: '#13c2c2' },
-      'speech': { name: '演讲脱口秀', icon: '🎤', color: '#eb2f96' },
-      'content_review': { name: '内容解说', icon: '🎭', color: '#f5222d' },
-      'entertainment': { name: '娱乐内容', icon: '🎪', color: '#fa8c16' }
+      'default': { name: 'Default', icon: '🎬', color: '#4facfe' },
+      'knowledge': { name: 'Knowledge', icon: '📚', color: '#52c41a' },
+      'business': { name: 'Business', icon: '💼', color: '#faad14' },
+      'opinion': { name: 'Opinion', icon: '💭', color: '#722ed1' },
+      'experience': { name: 'Experience', icon: '🌟', color: '#13c2c2' },
+      'speech': { name: 'Speech', icon: '🎤', color: '#eb2f96' },
+      'content_review': { name: 'Review', icon: '🎭', color: '#f5222d' },
+      'entertainment': { name: 'Entertainment', icon: '🎪', color: '#fa8c16' }
     }
     return categoryMap[category || 'default'] || categoryMap['default']
   }
@@ -225,7 +225,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   }, [project.id, project.video_path, thumbnailCacheKey])
 
   // 检查是否是下载状态 - 根据下载进度判断
-  const downloadProgress = project.processing_config?.download_progress || 0
+  const downloadProgress = project.processing_config?.download_progress || project.settings?.download_progress || 0
   const isDownloading = project.status === 'pending' && downloadProgress > 0 && downloadProgress < 100
   const isImporting = project.status === 'pending' && !isDownloading
   
@@ -297,7 +297,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       console.error('重试失败:', error)
       // 自动启动（silent）失败不打扰用户；只有用户手动点重试才提示。
       if (!opts?.silent) {
-        message.error('重试失败，请稍后再试')
+      message.error('Retry failed. Please try again.')
       }
     } finally {
       setIsRetrying(false)
@@ -349,13 +349,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           onClick={() => {
             // 导入中状态的项目不能点击进入详情页
             if (project.status === 'pending') {
-              message.warning('项目正在导入中，请稍后再查看详情')
+              message.warning('This project is still importing. Try again in a moment.')
               return
             }
             
             // 处理中状态的项目不能点击进入详情页
             if (project.status === 'processing') {
-              message.warning('项目处理中，请完成后再查看')
+              message.warning('This project is still processing.')
               return
             }
             
@@ -370,7 +370,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           {thumbnailLoading && (
             <div style={{ textAlign: 'center', color: 'var(--ac-muted)' }}>
               <LoadingOutlined style={{ fontSize: '22px', marginBottom: '4px' }} />
-              <div style={{ fontSize: '12px' }}>生成封面中…</div>
+              <div style={{ fontSize: '12px' }}>Generating cover…</div>
             </div>
           )}
 
@@ -461,8 +461,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                   />
                   
                   <Popconfirm
-                    title="确定要删除这个项目吗？"
-                    description="删除后无法恢复"
+                    title="Delete this project?"
+                    description="This cannot be undone."
                     onConfirm={(e) => {
                       e?.stopPropagation()
                       onDelete(project.id)
@@ -470,8 +470,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                     onCancel={(e) => {
                       e?.stopPropagation()
                     }}
-                    okText="确定"
-                    cancelText="取消"
+                    okText="Delete"
+                    cancelText="Cancel"
                   >
                     <Button
                       type="text"
@@ -499,7 +499,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                   <Space size={4}>
                     {/* 重试按钮 - 在处理中和等待中状态显示，允许用户重新提交任务 */}
                     {(normalizedStatus === 'processing' || normalizedStatus === 'importing' || project.status === 'pending') && (
-                      <Tooltip title={project.status === 'pending' ? "开始处理" : "重新提交任务"}>
+                      <Tooltip title={project.status === 'pending' ? "Start processing" : "Retry"}>
                         <Button
                           type="text"
                           icon={<ReloadOutlined />}
@@ -531,7 +531,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                         onClick={(e) => {
                           e.stopPropagation()
                           // 实现下载功能
-                          message.info('下载功能开发中...')
+                          message.info('Download is coming soon')
                         }}
                         style={{
                           width: '20px',
@@ -549,8 +549,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                     
                     {/* 删除按钮 */}
                     <Popconfirm
-                      title="确定要删除这个项目吗？"
-                      description="删除后无法恢复"
+                      title="Delete this project?"
+                      description="This cannot be undone."
                       onConfirm={(e) => {
                         e?.stopPropagation()
                         onDelete(project.id)
@@ -558,8 +558,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                       onCancel={(e) => {
                         e?.stopPropagation()
                       }}
-                      okText="确定"
-                      cancelText="取消"
+                      okText="Delete"
+                      cancelText="Cancel"
                     >
                       <Button
                         type="text"
@@ -640,9 +640,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 onStatusChange={() => {}}
               />
               <div style={{ color: 'var(--ac-muted)', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
-                <span className="ac-mono">{project.total_clips || 0}</span> 切片
+                <span className="ac-mono">{project.total_clips || 0}</span> clips
                 <span style={{ margin: '0 6px' }}>·</span>
-                <span className="ac-mono">{project.total_collections || 0}</span> 合集
+                <span className="ac-mono">{project.total_collections || 0}</span> collections
               </div>
             </div>
           )}

@@ -93,14 +93,14 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
 
   return (
     <Modal
-      title="添加切片到合集"
+      title="Add clips to collection"
       open={visible}
       onCancel={handleCancel}
       width={800}
       className="add-clip-modal"
       footer={[
         <Button key="cancel" onClick={handleCancel}>
-          取消
+          Cancel
         </Button>,
         <Button 
           key="confirm" 
@@ -108,7 +108,7 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
           onClick={handleConfirm}
           disabled={selectedClipIds.length === 0}
         >
-          添加 {selectedClipIds.length > 0 && `(${selectedClipIds.length})`}
+          Add {selectedClipIds.length > 0 && `(${selectedClipIds.length})`}
         </Button>
       ]}
     >
@@ -116,7 +116,7 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
         {/* 搜索和操作栏 */}
         <div className="search-section">
           <Search
-            placeholder="搜索切片标题、内容或推荐理由..."
+            placeholder="Search by title, content, or recommendation…"
             prefix={<SearchOutlined />}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
@@ -127,7 +127,7 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
           <div className="action-bar">
             <Space>
               <Text type="secondary">
-                可添加 {filteredClips.length} 个切片
+                {filteredClips.length} clip{filteredClips.length === 1 ? '' : 's'} available
               </Text>
               {filteredClips.length > 0 && (
                 <Button 
@@ -135,7 +135,7 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
                   size="small"
                   onClick={handleSelectAll}
                 >
-                  {selectedClipIds.length === filteredClips.length ? '取消全选' : '全选'}
+                  {selectedClipIds.length === filteredClips.length ? 'Deselect all' : 'Select all'}
                 </Button>
               )}
             </Space>
@@ -180,7 +180,7 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
                                 border: 'none'
                               }}
                             >
-                              分数: {(clip.final_score * 100).toFixed(0)}
+                              Score: {(clip.final_score * 100).toFixed(0)}
                             </Tag>
                           </Space>
                         </div>
@@ -213,8 +213,8 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
                 image={<PlayCircleOutlined style={{ fontSize: '48px', color: '#d9d9d9' }} />}
                 description={
                   availableClips.length === 0 
-                    ? "所有切片都已在合集中" 
-                    : "没有找到匹配的切片"
+                    ? "All clips are already in this collection" 
+                    : "No matching clips found"
                 }
               />
             </div>

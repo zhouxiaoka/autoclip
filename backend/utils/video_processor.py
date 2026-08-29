@@ -35,6 +35,20 @@ class VideoProcessor:
         
         self.clips_dir = Path(clips_dir)
         self.collections_dir = Path(collections_dir)
+
+    @staticmethod
+    def _encode_1080p60_args() -> List[str]:
+        return [
+            '-c:v', 'libx264',
+            '-preset', 'fast',
+            '-crf', '18',
+            '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=60',
+            '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-ar', '48000',
+            '-movflags', '+faststart',
+        ]
     
     @staticmethod
     def sanitize_filename(filename: str) -> str:
@@ -49,8 +63,8 @@ class VideoProcessor:
         """
         # 移除或替换不合法的字符
         # Windows和Unix系统都不允许的字符: < > : " | ? * \ /
-        # 替换为下划线
-        sanitized = re.sub(r'[<>:"|?*\\/]', '_', filename)
+        # Also strip apostrophes — they break FFmpeg concat demuxer quoting.
+        sanitized = re.sub(r'''[<>:"|?*\\/']''', '_', filename)
         
         # 移除前后空格和点
         sanitized = sanitized.strip(' .')
@@ -156,27 +170,38 @@ class VideoProcessor:
             # 构建优化的FFmpeg命令
             # 使用 -ss 在输入前进行精确定位，使用 -t 指定持续时间
             ffmpeg_bin = get_ffmpeg_path()
-            cmd = [
+            copy_cmd = [
                 ffmpeg_bin,
-                '-ss', ffmpeg_start_time,  # 在输入前定位，更精确
+                '-ss', ffmpeg_start_time,
                 '-i', str(input_video),
-                '-t', str(duration),  # 使用持续时间而不是绝对结束时间
-                '-c:v', 'copy',  # 复制视频流
-                '-c:a', 'copy',  # 复制音频流
+                '-t', str(duration),
+                '-c:v', 'copy',
+                '-c:a', 'copy',
                 '-avoid_negative_ts', 'make_zero',
-                '-y',  # 覆盖输出文件
+                '-y',
                 str(output_path)
             ]
-            
-            # 执行命令
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
-            
-            if result.returncode == 0:
+            result = subprocess.run(copy_cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+            if result.returncode == 0 and output_path.exists() and output_path.stat().st_size > 1024:
                 logger.info(f"成功提取视频片段: {output_path} ({ffmpeg_start_time} -> {ffmpeg_end_time}, 时长: {duration:.2f}秒)")
                 return True
-            else:
-                logger.error(f"提取视频片段失败: {result.stderr}")
-                return False
+
+            logger.warning("Stream copy failed, re-encoding clip at 1080p60")
+            encode_cmd = [
+                ffmpeg_bin,
+                '-ss', ffmpeg_start_time,
+                '-i', str(input_video),
+                '-t', str(duration),
+                *VideoProcessor._encode_1080p60_args(),
+                '-y',
+                str(output_path)
+            ]
+            result = subprocess.run(encode_cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+            if result.returncode == 0:
+                logger.info(f"成功重编码视频片段: {output_path} ({ffmpeg_start_time} -> {ffmpeg_end_time})")
+                return True
+            logger.error(f"提取视频片段失败: {result.stderr}")
+            return False
                 
         except Exception as e:
             logger.error(f"视频处理异常: {str(e)}")
@@ -217,13 +242,15 @@ class VideoProcessor:
             
             # 创建concat文件
             concat_file = output_path.parent / "concat_list.txt"
-            
+
+            def _concat_line(path: Path) -> str:
+                # FFmpeg concat demuxer: escape single quotes inside quoted paths.
+                normalized = str(path.resolve()).replace("\\", "/").replace("'", r"'\''")
+                return f"file '{normalized}'\n"
+
             with open(concat_file, 'w', encoding='utf-8') as f:
                 for clip_path in valid_clips:
-                    # 使用绝对路径并转义单引号
-                    abs_path = clip_path.absolute()
-                    escaped_path = str(abs_path).replace("'", "'\"'\"'")
-                    f.write(f"file '{escaped_path}'\n")
+                    f.write(_concat_line(clip_path))
             
             # 验证concat文件内容
             if concat_file.stat().st_size == 0:
@@ -231,27 +258,31 @@ class VideoProcessor:
                 concat_file.unlink(missing_ok=True)
                 return False
             
-            # 构建FFmpeg命令 - 使用H.264编码确保兼容性
             ffmpeg_bin = get_ffmpeg_path()
-            cmd = [
+            copy_cmd = [
                 ffmpeg_bin,
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', str(concat_file),
-                '-c:v', 'libx264',  # 使用H.264视频编码
-                '-preset', 'ultrafast',  # 使用最快的编码预设
-                '-crf', '28',  # 稍微降低质量以加快编码速度
-                '-c:a', 'aac',  # 使用AAC音频编码
-                '-b:a', '128k',  # 音频比特率
-                '-movflags', '+faststart',  # 优化网络播放
+                '-c', 'copy',
+                '-movflags', '+faststart',
                 '-y',
                 str(output_path)
             ]
-            
-            logger.info(f"执行FFmpeg命令: {' '.join(cmd)}")
-            
-            # 执行命令
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+            result = subprocess.run(copy_cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
+            if result.returncode != 0 or not output_path.exists() or output_path.stat().st_size < 1024:
+                logger.warning("Collection stream-copy concat failed, encoding 1080p60 H.264")
+                encode_cmd = [
+                    ffmpeg_bin,
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', str(concat_file),
+                    *VideoProcessor._encode_1080p60_args(),
+                    '-y',
+                    str(output_path)
+                ]
+                logger.info(f"执行FFmpeg命令: {' '.join(encode_cmd)}")
+                result = subprocess.run(encode_cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
             
             # 清理临时文件
             concat_file.unlink(missing_ok=True)

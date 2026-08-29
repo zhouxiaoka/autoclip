@@ -165,12 +165,12 @@ export const useSimpleProgressStore = create<SimpleProgressState>((set, get) => 
 
 // 阶段显示名称映射
 export const STAGE_DISPLAY_NAMES: Record<string, string> = {
-  'INGEST': '素材准备',
-  'SUBTITLE': '字幕处理',
-  'ANALYZE': '内容分析', 
-  'HIGHLIGHT': '片段定位',
-  'EXPORT': '视频导出',
-  'DONE': '处理完成'
+  'INGEST': 'Preparing',
+  'SUBTITLE': 'Subtitles',
+  'ANALYZE': 'Analyzing', 
+  'HIGHLIGHT': 'Finding clips',
+  'EXPORT': 'Exporting',
+  'DONE': 'Done'
 }
 
 // 阶段颜色映射

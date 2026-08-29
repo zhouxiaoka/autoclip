@@ -374,13 +374,14 @@ class SpeechRecognizer:
             whisper_runtime.ensure_on_path()  # 让 faster_whisper 可导入
             from faster_whisper import WhisperModel  # 延迟导入：运行时安装目录里的包
 
-            language = None if config.language == LanguageCode.AUTO else str(config.language).split("-")[0]
+            raw_lang = getattr(config.language, "value", config.language)
+            language = None if str(raw_lang).lower() in {"auto", ""} else str(raw_lang).split("-")[0].lower()
             models_dir = str(whisper_runtime.get_models_dir() / "hub")
             logger.info(f"使用 faster-whisper 生成字幕: model={config.model} lang={language or 'auto'}")
 
-            # device=auto：Mac 上走 CPU（CTranslate2），int8 量化兼顾速度与体积
+            # Force CPU: device=auto picks CUDA on Windows GPUs even when cuBLAS is missing.
             model = WhisperModel(
-                config.model, device="auto", compute_type="int8", download_root=models_dir,
+                config.model, device="cpu", compute_type="int8", download_root=models_dir,
             )
             seg_iter, _info = model.transcribe(str(video_path), language=language, vad_filter=True)
             segments = [{"start": s.start, "end": s.end, "text": s.text} for s in seg_iter]

@@ -61,9 +61,17 @@ class ApiKeys(BaseModel):
 class ApiSettings(BaseModel):
     """API设置"""
     api_keys: ApiKeys = Field(default_factory=ApiKeys, description="API密钥")
+    api_provider: str = Field(default="dashscope", description="当前LLM提供商")
     api_model: str = Field(default="qwen-plus", description="默认模型")
     api_max_tokens: int = Field(default=4096, description="最大Token数")
     api_timeout: int = Field(default=30, description="API超时时间(秒)")
+
+    @validator('api_model', pre=True)
+    def coerce_model_name(cls, v):
+        # Ant Design Select mode="tags" can send an array
+        if isinstance(v, list):
+            return v[0] if v else "qwen-plus"
+        return v
     
     @validator('api_timeout')
     def validate_timeout(cls, v):
@@ -136,11 +144,14 @@ class DesktopSettings(BaseModel):
 def check_desktop_mode(relaxed: bool = False):
     """检查是否在Desktop模式
     relaxed=True 时放宽限制，允许内测安装包/开发环境调用（返回告警但不阻断）。
+    Web 开发模式同样需要读写 API key，所以默认不再阻断。
     """
     if not is_desktop_mode():
         if relaxed:
             return False
-        raise HTTPException(status_code=400, detail="此端点仅在Desktop模式下可用")
+        logger.debug("Not running in desktop mode; allowing settings endpoints for web/dev")
+        return False
+    return True
 
 
 @router.get("/desktop-mode")
@@ -166,22 +177,19 @@ async def get_settings():
         
         # 尝试从保存的设置文件中读取
         settings_file = config.paths.data_dir / "settings.json"
-        print(f"设置文件路径: {settings_file}")
-        print(f"设置文件存在: {settings_file.exists()}")
+        logger.debug("Settings file path: %s exists=%s", settings_file, settings_file.exists())
         
         if settings_file.exists():
             try:
                 with open(settings_file, 'r', encoding='utf-8') as f:
                     saved_settings = json.load(f)
                 
-                print(f"从文件读取的设置: {saved_settings.get('basic', {}).get('app_name', 'unknown')}")
-                
                 # 验证并返回保存的设置
                 settings = DesktopSettings(**saved_settings)
                 return settings
             except Exception as e:
                 # 如果读取失败，回退到默认配置
-                print(f"读取设置文件失败: {e}")
+                logger.warning("Failed to read settings file: %s", e)
                 pass
         
         # 构建路径设置
@@ -302,18 +310,29 @@ async def clear_settings(
 class TestApiRequest(BaseModel):
     provider: str
     api_key: str
+    model_name: Optional[str] = None
+
+    @validator('api_key', pre=True)
+    def strip_api_key(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+    @validator('model_name', pre=True)
+    def coerce_test_model(cls, v):
+        if isinstance(v, list):
+            return v[0] if v else None
+        return v
 
 @router.post("/test-api")
 async def test_api_connection(request: TestApiRequest):
     """测试API连接"""
-    check_desktop_mode()
+    check_desktop_mode(relaxed=True)
     
     try:
         # 首先进行基本的API Key格式验证
         if not request.api_key or len(request.api_key.strip()) < 10:
             return {
                 "success": False,
-                "error": "API Key为空或过短，请检查输入",
+                "error": "API key is empty or too short",
                 "provider": request.provider
             }
         
@@ -322,25 +341,36 @@ async def test_api_connection(request: TestApiRequest):
             if not request.api_key.startswith("sk-"):
                 return {
                     "success": False,
-                    "error": f"{request.provider} API Key格式可能不正确，通常以'sk-'开头",
+                    "error": f"{request.provider} API keys usually start with 'sk-'",
                     "provider": request.provider
                 }
         
+        default_models = {
+            "dashscope": "qwen-plus",
+            "openai": "gpt-4o-mini",
+            "gemini": "gemini-3.6-flash",
+            "siliconflow": "deepseek-chat",
+        }
+        model_name = request.model_name or default_models.get(request.provider, "gemini-3.6-flash")
+        if request.provider == "gemini":
+            from backend.core.llm_providers import normalize_gemini_model
+            model_name = normalize_gemini_model(model_name)
+
         # 根据提供商测试API连接
         if request.provider == "dashscope":
             from backend.core.llm_providers import DashScopeProvider
-            provider_instance = DashScopeProvider(api_key=request.api_key)
+            provider_instance = DashScopeProvider(api_key=request.api_key, model_name=model_name)
         elif request.provider == "openai":
             from backend.core.llm_providers import OpenAIProvider
-            provider_instance = OpenAIProvider(api_key=request.api_key)
+            provider_instance = OpenAIProvider(api_key=request.api_key, model_name=model_name)
         elif request.provider == "gemini":
             from backend.core.llm_providers import GeminiProvider
-            provider_instance = GeminiProvider(api_key=request.api_key)
+            provider_instance = GeminiProvider(api_key=request.api_key, model_name=model_name)
         elif request.provider == "siliconflow":
             from backend.core.llm_providers import SiliconFlowProvider
-            provider_instance = SiliconFlowProvider(api_key=request.api_key)
+            provider_instance = SiliconFlowProvider(api_key=request.api_key, model_name=model_name)
         else:
-            raise HTTPException(status_code=400, detail="不支持的API提供商")
+            raise HTTPException(status_code=400, detail="Unsupported API provider")
         
         # 测试连接
         test_result = provider_instance.test_connection()
@@ -370,10 +400,28 @@ async def test_api_connection(request: TestApiRequest):
             }
             
     except Exception as e:
-        logger.error(f"API连接测试异常: {str(e)}")
+        logger.error(f"API connection test error: {str(e)}")
+        text = str(e)
+        lower = text.lower()
+        if "api_key_invalid" in lower or "api key not valid" in lower:
+            error_msg = "API key is not valid. Create one at https://aistudio.google.com/apikey"
+        elif "access_token_type_unsupported" in lower or "unauthenticated" in lower:
+            error_msg = (
+                "Google rejected this AI Studio auth key. Create a new Gemini API key at "
+                "https://aistudio.google.com/apikey (not a Cloud/OAuth token) and test again."
+            )
+        elif "not_found" in lower or "404" in text:
+            from backend.core.llm_providers import _suggested_gemini_model
+            suggested = _suggested_gemini_model(text)
+            if suggested:
+                error_msg = f"This Gemini model is retired for new keys. Switch to {suggested}."
+            else:
+                error_msg = "Model not found. Try gemini-3.6-flash."
+        else:
+            error_msg = f"Connection test failed: {text}"
         return {
             "success": False,
-            "error": f"API连接测试失败: {str(e)}",
+            "error": error_msg,
             "provider": request.provider
         }
 
@@ -411,15 +459,24 @@ async def update_settings(settings: DesktopSettings):
         
         # 保存设置到文件
         settings_file = config.paths.data_dir / "settings.json"
+        settings_file.parent.mkdir(parents=True, exist_ok=True)
+        payload = settings.dict()
         with open(settings_file, 'w', encoding='utf-8') as f:
-            json.dump(settings.dict(), f, indent=2, ensure_ascii=False)
+            json.dump(payload, f, indent=2, ensure_ascii=False)
         
         # 重要：保存主配置文件，确保API key等关键配置被持久化
         from backend.core.desktop_config import save_desktop_config
         if not save_desktop_config(config):
             raise HTTPException(status_code=500, detail="保存主配置文件失败")
+
+        # Reload the in-memory LLM client so the next clip job uses the new key
+        try:
+            from backend.core.llm_manager import initialize_llm_manager
+            initialize_llm_manager(settings_file)
+        except Exception as reload_err:
+            logger.warning(f"Settings saved but LLM manager reload failed: {reload_err}")
         
-        return {"message": "设置更新成功", "settings_file": str(settings_file)}
+        return {"message": "Settings saved", "settings_file": str(settings_file)}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新设置失败: {str(e)}")
@@ -615,34 +672,35 @@ async def list_backups():
 @router.get("/available-models")
 async def get_available_models():
     """获取可用的模型列表"""
-    check_desktop_mode()
+    check_desktop_mode(relaxed=True)
     
     try:
         # 返回按供应商分类的模型列表
         models = {
             "dashscope": [
-                {"name": "qwen-plus", "display_name": "通义千问增强版", "max_tokens": 8192, "description": "适合复杂推理和创作任务"},
-                {"name": "qwen-turbo", "display_name": "通义千问标准版", "max_tokens": 8192, "description": "平衡性能和成本"},
-                {"name": "qwen-max", "display_name": "通义千问旗舰版", "max_tokens": 8192, "description": "最强性能，适合复杂任务"},
-                {"name": "qwen-long", "display_name": "通义千问长文本版", "max_tokens": 100000, "description": "支持超长文本处理"}
+                {"name": "qwen-plus", "display_name": "Qwen Plus", "max_tokens": 8192, "description": "Good default"},
+                {"name": "qwen-turbo", "display_name": "Qwen Turbo", "max_tokens": 8192, "description": "Faster / cheaper"},
+                {"name": "qwen-max", "display_name": "Qwen Max", "max_tokens": 8192, "description": "Highest quality"},
+                {"name": "qwen-long", "display_name": "Qwen Long", "max_tokens": 100000, "description": "Long context"}
             ],
             "openai": [
-                {"name": "gpt-4o", "display_name": "GPT-4 Omni", "max_tokens": 128000, "description": "最新多模态模型"},
-                {"name": "gpt-4o-mini", "display_name": "GPT-4 Omni Mini", "max_tokens": 128000, "description": "轻量级多模态模型"},
-                {"name": "gpt-4-turbo", "display_name": "GPT-4 Turbo", "max_tokens": 128000, "description": "高性能版本"},
-                {"name": "gpt-4", "display_name": "GPT-4", "max_tokens": 8192, "description": "经典版本"},
-                {"name": "gpt-3.5-turbo", "display_name": "GPT-3.5 Turbo", "max_tokens": 16384, "description": "经济实用版本"}
+                {"name": "gpt-4o", "display_name": "GPT-4o", "max_tokens": 128000, "description": "Multimodal"},
+                {"name": "gpt-4o-mini", "display_name": "GPT-4o mini", "max_tokens": 128000, "description": "Cheap default"},
+                {"name": "gpt-4-turbo", "display_name": "GPT-4 Turbo", "max_tokens": 128000, "description": "High quality"},
+                {"name": "gpt-4", "display_name": "GPT-4", "max_tokens": 8192, "description": "Classic"},
+                {"name": "gpt-3.5-turbo", "display_name": "GPT-3.5 Turbo", "max_tokens": 16384, "description": "Budget"}
             ],
             "gemini": [
-                {"name": "gemini-1.5-pro", "display_name": "Gemini 1.5 Pro", "max_tokens": 2000000, "description": "最新专业版"},
-                {"name": "gemini-1.5-flash", "display_name": "Gemini 1.5 Flash", "max_tokens": 1000000, "description": "快速响应版本"},
-                {"name": "gemini-pro", "display_name": "Gemini Pro", "max_tokens": 30720, "description": "经典专业版"}
+                {"name": "gemini-3.6-flash", "display_name": "Gemini 3.6 Flash", "max_tokens": 1000000, "description": "Best for long VODs"},
+                {"name": "gemini-3.7-flash", "display_name": "Gemini 3.7 Flash", "max_tokens": 1000000, "description": "Latest Flash"},
+                {"name": "gemini-3.1-pro-preview", "display_name": "Gemini 3.1 Pro", "max_tokens": 1000000, "description": "Higher quality"},
+                {"name": "gemini-3.5-flash-lite", "display_name": "Gemini 3.5 Flash-Lite", "max_tokens": 1000000, "description": "Cheaper / faster"}
             ],
             "siliconflow": [
-                {"name": "deepseek-chat", "display_name": "DeepSeek Chat", "max_tokens": 32768, "description": "深度求索对话模型"},
-                {"name": "deepseek-coder", "display_name": "DeepSeek Coder", "max_tokens": 16384, "description": "代码生成专用模型"},
-                {"name": "qwen-plus", "display_name": "通义千问增强版", "max_tokens": 8192, "description": "通过硅基流动访问"},
-                {"name": "qwen-turbo", "display_name": "通义千问标准版", "max_tokens": 8192, "description": "通过硅基流动访问"}
+                {"name": "deepseek-chat", "display_name": "DeepSeek Chat", "max_tokens": 32768, "description": "Chat model"},
+                {"name": "deepseek-coder", "display_name": "DeepSeek Coder", "max_tokens": 16384, "description": "Code model"},
+                {"name": "qwen-plus", "display_name": "Qwen Plus", "max_tokens": 8192, "description": "Via SiliconFlow"},
+                {"name": "qwen-turbo", "display_name": "Qwen Turbo", "max_tokens": 8192, "description": "Via SiliconFlow"}
             ],
         }
         
@@ -655,21 +713,38 @@ async def get_available_models():
 @router.get("/current-provider")
 async def get_current_provider():
     """获取当前提供商信息"""
-    check_desktop_mode()
+    check_desktop_mode(relaxed=True)
     
     try:
         config = get_desktop_config()
-        
-        # 根据当前配置返回提供商信息
-        provider_info = {
-            "provider": "dashscope",  # 默认提供商
-            "model": config.default_model or "qwen-plus",
-            "available": True,
-            "display_name": "通义千问",
-            "description": "阿里云通义千问服务"
+        settings_file = config.paths.data_dir / "settings.json"
+        provider = "dashscope"
+        model = config.default_model or "qwen-plus"
+        if settings_file.exists():
+            try:
+                with open(settings_file, 'r', encoding='utf-8') as f:
+                    saved = json.load(f)
+                api = saved.get("api") or {}
+                provider = api.get("api_provider") or saved.get("llm_provider") or provider
+                model = api.get("api_model") or saved.get("model_name") or model
+                if isinstance(model, list):
+                    model = model[0] if model else "qwen-plus"
+            except Exception:
+                pass
+
+        names = {
+            "dashscope": "Alibaba Qwen",
+            "openai": "OpenAI",
+            "gemini": "Google Gemini",
+            "siliconflow": "SiliconFlow",
         }
-        
-        return provider_info
+        return {
+            "provider": provider,
+            "model": model,
+            "available": True,
+            "display_name": names.get(provider, provider),
+            "description": names.get(provider, provider),
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取当前提供商信息失败: {str(e)}")

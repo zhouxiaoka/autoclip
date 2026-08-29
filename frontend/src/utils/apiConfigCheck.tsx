@@ -148,23 +148,23 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
  */
 export const showApiConfigModal = (missingProviders: string[], onNavigateToSettings?: () => void) => {
   const providerNames = {
-    'LLM API': 'AI模型API',
-    'Speech API': '语音识别API'
+    'LLM API': 'AI model API',
+    'Speech API': 'Speech recognition API'
   }
 
-  const missingNames = missingProviders.map(p => providerNames[p as keyof typeof providerNames] || p).join('、')
+  const missingNames = missingProviders.map(p => providerNames[p as keyof typeof providerNames] || p).join(', ')
 
   Modal.confirm({
-    title: <span style={{ color: '#fff' }}>需要配置API</span>,
+    title: <span style={{ color: '#fff' }}>API key required</span>,
     content: (
       <div style={{ color: '#fff' }}>
-        <p style={{ color: '#fff', marginBottom: '12px', fontSize: '14px' }}>创建项目需要配置以下API:</p>
+        <p style={{ color: '#fff', marginBottom: '12px', fontSize: '14px' }}>To create a project, configure:</p>
         <p style={{ fontWeight: 'bold', color: '#40a9ff', marginBottom: '12px', fontSize: '16px' }}>{missingNames}</p>
-        <p style={{ color: '#f0f0f0', fontSize: '14px' }}>请前往设置页面进行配置.</p>
+        <p style={{ color: '#f0f0f0', fontSize: '14px' }}>Open Settings to add your key.</p>
       </div>
     ),
-    okText: '去配置',
-    cancelText: '取消',
+    okText: 'Open Settings',
+    cancelText: 'Cancel',
     onOk: () => {
       if (onNavigateToSettings) {
         onNavigateToSettings()
@@ -206,8 +206,8 @@ export const validateApiConfigBeforeProjectCreation = async (): Promise<boolean>
  */
 export const getApiConfigDescription = (status: ApiConfigStatus): string => {
   if (status.hasValidConfig) {
-    return `已配置 ${status.currentProvider} API`
+    return `Configured: ${status.currentProvider} API`
   } else {
-    return '未配置API,无法创建项目'
+    return 'No API key configured — cannot create projects'
   }
 }

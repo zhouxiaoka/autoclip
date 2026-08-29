@@ -128,7 +128,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
               gap: '4px'
             }}
           >
-            {collection.collection_type === 'ai_recommended' ? 'AI 推荐' : '手动创建'}
+            {collection.collection_type === 'ai_recommended' ? 'AI pick' : 'Manual'}
           </div>
           
           {/* 左下角片段数量 */}
@@ -148,7 +148,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
               gap: '4px'
             }}
           >
-            {collectionClips.length} 个片段
+            {collectionClips.length} clips
           </div>
           
           {/* 右下角总时长 */}
@@ -226,7 +226,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
             alignItems: 'flex-start'
           }}>
             <Tooltip 
-              title={collection.collection_summary || '暂无描述'} 
+              title={collection.collection_summary || 'No description'} 
               placement="top" 
               overlayStyle={{ maxWidth: '300px' }}
               mouseEnterDelay={0.5}
@@ -246,7 +246,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
                   width: '100%'
                 }}
               >
-                {collection.collection_summary || '暂无描述'}
+                {collection.collection_summary || 'No description'}
               </div>
             </Tooltip>
           </div>
@@ -275,7 +275,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
               background: 'transparent'
             }}
           >
-            播放
+            Play
           </Button>
           {onGenerateVideo && (
             <Button 
@@ -293,14 +293,14 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
                 background: 'transparent'
               }}
             >
-              下载
+              Download
             </Button>
           )}
           <Button 
             type="text" 
             size="small"
             icon={<EditOutlined />}
-            onClick={() => message.info('开发中，敬请期待', 3)}
+            onClick={() => message.info('Coming soon', 3)}
             style={{
               color: 'var(--ac-sub)',
               border: '1px solid var(--ac-line)',
@@ -311,7 +311,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({
               background: 'transparent'
             }}
           >
-            投稿
+            Upload
           </Button>
         </div>
       </div>

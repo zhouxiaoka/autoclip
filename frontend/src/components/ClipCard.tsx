@@ -63,7 +63,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
       await onDownload(clip.id)
     } catch (error) {
       console.error('下载失败:', error)
-      message.error('下载失败')
+      message.error('Download failed')
     }
   }
 
@@ -147,7 +147,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
       return clip.outline
     }
     
-    return '暂无内容要点'
+    return 'No highlights yet'
   }
 
   const textRef = useRef<HTMLDivElement>(null)
@@ -291,7 +291,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
                 alignItems: 'flex-start'
               }}>
                 <EditableTitle
-                  title={clip.title || clip.generated_title || '未命名片段'}
+                  title={clip.title || clip.generated_title || 'Untitled clip'}
                   clipId={clip.id}
                   onTitleUpdate={handleTitleUpdate}
                   style={{ 
@@ -362,7 +362,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
                   background: 'transparent'
                 }}
               >
-                播放
+                Play
               </Button>
               <Button
                 type="text"
@@ -379,13 +379,13 @@ const ClipCard: React.FC<ClipCardProps> = ({
                   background: 'transparent'
                 }}
               >
-                下载
+                Download
               </Button>
               <Button
                 type="text"
                 size="small"
                 icon={<UploadOutlined />}
-                onClick={() => message.info('开发中，敬请期待', 3)}
+                onClick={() => message.info('Coming soon', 3)}
                 style={{
                   color: 'var(--ac-sub)',
                   border: '1px solid var(--ac-line)',
@@ -396,7 +396,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
                   background: 'transparent'
                 }}
               >
-                投稿
+                Upload
               </Button>
             </div>
           </div>
@@ -408,15 +408,15 @@ const ClipCard: React.FC<ClipCardProps> = ({
         onCancel={handleClosePlayer}
         footer={[
           <Button key="download" type="primary" icon={<DownloadOutlined />} onClick={handleDownloadWithTitle}>
-            下载视频
+            Download video
           </Button>,
           <Button 
             key="upload" 
             type="default" 
             icon={<UploadOutlined />} 
-            onClick={() => message.info('开发中，敬请期待', 3)}
+            onClick={() => message.info('Coming soon', 3)}
           >
-            投稿到B站
+            Upload to Bilibili
           </Button>
         ]}
         width={800}
@@ -439,7 +439,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
             paddingRight: '30px' // 为关闭按钮留出空间
           }}>
             <EditableTitle
-              title={clip.title || clip.generated_title || '视频预览'}
+              title={clip.title || clip.generated_title || 'Preview'}
               clipId={clip.id}
               onTitleUpdate={(newTitle) => {
                 // 更新clip的标题
@@ -494,7 +494,7 @@ const ClipCard: React.FC<ClipCardProps> = ({
         onClose={() => setShowBilibiliManager(false)}
         projectId={projectId || ''}
         clipIds={[clip.id]}
-        clipTitles={[clip.title || clip.generated_title || '视频片段']}
+        clipTitles={[clip.title || clip.generated_title || 'Clip']}
         onUploadSuccess={() => {
           // 投稿成功后可以刷新数据或显示提示
           console.log('投稿成功')

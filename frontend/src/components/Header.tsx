@@ -55,15 +55,15 @@ const Header: React.FC = () => {
             onClick={() => navigate('/')}
             style={{ color: 'var(--ac-sub)', height: '36px', borderRadius: '999px' }}
           >
-            返回
+            Back
           </Button>
         )}
         <Button
           type="text"
           icon={theme === 'dark' ? <BulbOutlined /> : <MoonOutlined />}
           onClick={toggleTheme}
-          aria-label={theme === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}
-          title={theme === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           style={{
             color: 'var(--ac-sub)',
             border: '1px solid var(--ac-line)',
@@ -87,7 +87,7 @@ const Header: React.FC = () => {
             background: 'var(--ac-card)',
           }}
         >
-          设置
+          Settings
         </Button>
       </div>
     </AntHeader>

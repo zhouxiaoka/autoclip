@@ -199,7 +199,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
           },
           api_model: config.llmProvider === 'dashscope' ? 'qwen-plus' : 
                      config.llmProvider === 'openai' ? 'gpt-3.5-turbo' :
-                     config.llmProvider === 'gemini' ? 'gemini-pro' : 'qwen-plus',
+                     config.llmProvider === 'gemini' ? 'gemini-3.6-flash' : 'qwen-plus',
           api_max_tokens: 4000,
           api_timeout: 30
         },
