@@ -25,6 +25,17 @@ router = APIRouter()
 download_tasks = {}
 
 
+def _is_cookie_extraction_error(message: str) -> bool:
+    """判断 yt-dlp 失败是否是因为读取不了浏览器 cookie 数据库。
+
+    最常见的场景：选择了 Chrome/Edge 等浏览器作为 cookie 来源，但该浏览器正在运行，
+    独占锁住了 cookie 数据库文件，yt-dlp 复制不出来。这在日常使用中几乎总会发生
+    （浏览器基本总是开着的），不应该让整个解析/下载直接失败。
+    见 https://github.com/yt-dlp/yt-dlp/issues/7271
+    """
+    return "cookie" in (message or "").lower()
+
+
 @contextmanager
 def sanitized_yt_env():
     """临时清理与 yt-dlp 相关的环境变量，避免外部配置影响行为"""
@@ -99,37 +110,40 @@ async def parse_youtube_video(
         def extract_info_sync(url, browser):
             # 构建 yt-dlp 命令：用当前解释器 `-m yt_dlp` 调用，而不是硬编码某个
             # 开发者机器上的绝对路径，这样在任何装了 yt-dlp 包的环境（含 Windows）下都能跑
-            cmd = [
-                sys.executable,
-                '-m', 'yt_dlp',
-                '--ignore-config',
-                '--no-warnings',
-                '--no-playlist',
-                '--dump-json',
-                '--skip-download',  # 修正参数名
-                '--no-cache-dir'
-            ]
-            
-            if browser:
-                cmd.extend(['--cookies-from-browser', browser.lower()])
+            def build_cmd(use_browser: bool):
+                cmd = [
+                    sys.executable,
+                    '-m', 'yt_dlp',
+                    '--ignore-config',
+                    '--no-warnings',
+                    '--no-playlist',
+                    '--dump-json',
+                    '--skip-download',  # 修正参数名
+                    '--no-cache-dir'
+                ]
 
-            # 可选兜底客户端，规避 SABR
-            yt_client = (client or os.getenv('AUTOCLIP_YT_CLIENT', '')).strip().lower()
-            if yt_client in {"android", "ios", "tv"}:
-                cmd.extend(['--extractor-args', f"youtube:player_client={yt_client}"])
-            
-            cmd.append(url)
-            
-            try:
-                # 执行命令（清理环境变量，避免 YT_* 影响）
-                env = os.environ.copy()
-                for k in list(env.keys()):
-                    uk = k.upper()
-                    if uk.startswith('YT_DLP') or uk.startswith('YTDL') or uk.startswith('YOUTUBE_DL') or uk.startswith('YOUTUBEDL'):
-                        env.pop(k, None)
+                if use_browser and browser:
+                    cmd.extend(['--cookies-from-browser', browser.lower()])
 
+                # 可选兜底客户端，规避 SABR
+                yt_client = (client or os.getenv('AUTOCLIP_YT_CLIENT', '')).strip().lower()
+                if yt_client in {"android", "ios", "tv"}:
+                    cmd.extend(['--extractor-args', f"youtube:player_client={yt_client}"])
+
+                cmd.append(url)
+                return cmd
+
+            # 执行命令（清理环境变量，避免 YT_* 影响）
+            env = os.environ.copy()
+            for k in list(env.keys()):
+                uk = k.upper()
+                if uk.startswith('YT_DLP') or uk.startswith('YTDL') or uk.startswith('YOUTUBE_DL') or uk.startswith('YOUTUBEDL'):
+                    env.pop(k, None)
+
+            def run(use_browser: bool):
+                cmd = build_cmd(use_browser)
                 logger.info(f"执行命令: {' '.join(cmd)}")
-                result = subprocess.run(
+                return subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
@@ -137,6 +151,15 @@ async def parse_youtube_video(
                     cwd=str(Path(__file__).resolve().parents[3]),
                     env=env
                 )
+
+            try:
+                result = run(use_browser=True)
+
+                # 浏览器 cookie 数据库读取失败（通常是浏览器正在运行中锁住了文件）时，
+                # 不使用 cookie 重试一次，而不是让整个请求直接失败
+                if result.returncode != 0 and browser and _is_cookie_extraction_error(result.stderr or result.stdout):
+                    logger.warning(f"从 {browser} 读取 cookie 失败（可能该浏览器正在运行），改为不使用 cookie 重试")
+                    result = run(use_browser=False)
 
                 logger.info(f"命令返回码: {result.returncode}")
                 logger.info(f"命令输出(前200字): {result.stdout[:200]}...")
@@ -149,7 +172,7 @@ async def parse_youtube_video(
                 # 解析 JSON 输出
                 info_dict = json.loads(result.stdout)
                 return info_dict
-                
+
             except subprocess.TimeoutExpired:
                 raise Exception("yt-dlp timeout")
             except json.JSONDecodeError as e:
@@ -209,9 +232,19 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
         
         def extract_info_sync(url, ydl_opts):
             with sanitized_yt_env():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return ydl.extract_info(url, download=False)
-        
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        return ydl.extract_info(url, download=False)
+                except Exception as e:
+                    # 浏览器 cookie 数据库读取失败（通常是浏览器正在运行中锁住了文件）时，
+                    # 不使用 cookie 重试一次，而不是让整个请求直接失败
+                    if ydl_opts.get('cookiesfrombrowser') and _is_cookie_extraction_error(str(e)):
+                        logger.warning(f"读取浏览器 cookie 失败（{e}），改为不使用 cookie 重试")
+                        fallback_opts = {k: v for k, v in ydl_opts.items() if k != 'cookiesfrombrowser'}
+                        with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                            return ydl.extract_info(url, download=False)
+                    raise
+
         loop = asyncio.get_event_loop()
         video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
         
@@ -425,9 +458,17 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         
         def download_sync(url, ydl_opts):
             with sanitized_yt_env():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return ydl.download([url])
-        
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        return ydl.download([url])
+                except Exception as e:
+                    if ydl_opts.get('cookiesfrombrowser') and _is_cookie_extraction_error(str(e)):
+                        logger.warning(f"读取浏览器 cookie 失败（{e}），改为不使用 cookie 重试下载")
+                        fallback_opts = {k: v for k, v in ydl_opts.items() if k != 'cookiesfrombrowser'}
+                        with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                            return ydl.download([url])
+                    raise
+
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, download_sync, request.url, ydl_opts)
         
@@ -704,8 +745,15 @@ async def _try_download_with_different_formats(url: str, download_dir: Path, bro
             
             def download_sync(url, ydl_opts):
                 with sanitized_yt_env():
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        return ydl.download([url])
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            return ydl.download([url])
+                    except Exception as e:
+                        if ydl_opts.get('cookiesfrombrowser') and _is_cookie_extraction_error(str(e)):
+                            fallback_opts = {k: v for k, v in ydl_opts.items() if k != 'cookiesfrombrowser'}
+                            with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                                return ydl.download([url])
+                        raise
             
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, download_sync, url, ydl_opts)
@@ -763,8 +811,15 @@ async def _try_download_with_different_langs(url: str, download_dir: Path, brows
             
             def download_sync(url, ydl_opts):
                 with sanitized_yt_env():
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        return ydl.download([url])
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            return ydl.download([url])
+                    except Exception as e:
+                        if ydl_opts.get('cookiesfrombrowser') and _is_cookie_extraction_error(str(e)):
+                            fallback_opts = {k: v for k, v in ydl_opts.items() if k != 'cookiesfrombrowser'}
+                            with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                                return ydl.download([url])
+                        raise
             
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, download_sync, url, ydl_opts)
