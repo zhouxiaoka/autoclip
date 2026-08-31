@@ -34,7 +34,7 @@ def create_app(mode: str = "web") -> FastAPI:
         format=logging_config["format"],
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(logging_config["file"])
+            logging.FileHandler(logging_config["file"], encoding="utf-8")
         ]
     )
     
