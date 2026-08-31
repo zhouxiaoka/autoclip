@@ -97,9 +97,11 @@ async def parse_youtube_video(
         import asyncio
         
         def extract_info_sync(url, browser):
-            # 构建 yt-dlp 命令
+            # 构建 yt-dlp 命令：用当前解释器 `-m yt_dlp` 调用，而不是硬编码某个
+            # 开发者机器上的绝对路径，这样在任何装了 yt-dlp 包的环境（含 Windows）下都能跑
             cmd = [
-                '/Users/zhoukk/autoclip/venv/bin/yt-dlp',
+                sys.executable,
+                '-m', 'yt_dlp',
                 '--ignore-config',
                 '--no-warnings',
                 '--no-playlist',
@@ -132,7 +134,7 @@ async def parse_youtube_video(
                     capture_output=True,
                     text=True,
                     timeout=60,
-                    cwd='/Users/zhoukk/autoclip',
+                    cwd=str(Path(__file__).resolve().parents[3]),
                     env=env
                 )
 
