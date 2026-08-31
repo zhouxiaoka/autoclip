@@ -66,7 +66,10 @@ class YouTubeParseRequest(BaseModel):
 
 class YouTubeDownloadRequest(BaseModel):
     url: str
-    project_name: str
+    # 前端占位符文案承诺"留空将使用视频标题作为项目名称"，所以这里必须是可选的——
+    # 之前是必填 str，留空时前端要么不传该字段（422 "field required"），要么传空
+    # 字符串（下游 ProjectCreate 的 min_length=1 校验直接 500），两条路都是坏的。
+    project_name: Optional[str] = None
     video_category: Optional[str] = "default"
     browser: Optional[str] = None
 
@@ -257,7 +260,10 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
 
         loop = asyncio.get_event_loop()
         video_info = await loop.run_in_executor(None, extract_info_sync, request.url, ydl_opts)
-        
+
+        # project_name 留空时，用解析出来的视频标题兜底
+        project_name = (request.project_name or '').strip() or video_info.get('title') or 'Unknown'
+
         # 立即创建项目记录
         from ...core.database import SessionLocal
         from ...services.project_service import ProjectService
@@ -290,7 +296,7 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
             
             # 创建项目数据
             project_data = ProjectCreate(
-                name=request.project_name,
+                name=project_name,
                 description=f"从YouTube下载: {video_info.get('title', 'Unknown')}",
                 project_type=ProjectType(request.video_category),
                 status=ProjectStatus.PENDING,  # 初始状态为等待中
@@ -335,7 +341,7 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
             task = YouTubeDownloadTask(
                 id=task_id,
                 url=request.url,
-                project_name=request.project_name,
+                project_name=project_name,
                 video_category=request.video_category,
                 status="pending",
                 progress=0.0,
@@ -442,30 +448,16 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         # 更新项目进度
         await update_project_download_progress(project_id, 30.0, "正在下载视频...")
         
-        # 设置下载选项
-        ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            'writesubtitles': True,
-            'writeautomaticsub': True,  # 下载自动生成的字幕
-            'subtitleslangs': get_subtitle_langs(),
-            'subtitlesformat': 'srt',
-            'outtmpl': str(download_dir / '%(title)s.%(ext)s'),
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': False,  # 显示警告信息以便调试
-            'ignoreconfig': True,
-            'config_locations': [],
-            'cachedir': False,
-        }
-        
-        if request.browser:
-            ydl_opts['cookiesfrombrowser'] = (request.browser.lower(),)
-
         # 可选兜底客户端
         yt_client_env = os.getenv('AUTOCLIP_YT_CLIENT', '').strip().lower()
-        if yt_client_env in {"android", "ios", "tv"}:
-            ydl_opts.setdefault('extractor_args', {}).setdefault('youtube', {}).setdefault('player_client', []).append(yt_client_env)
-        
+
+        def apply_common_opts(opts):
+            if request.browser:
+                opts['cookiesfrombrowser'] = (request.browser.lower(),)
+            if yt_client_env in {"android", "ios", "tv"}:
+                opts.setdefault('extractor_args', {}).setdefault('youtube', {}).setdefault('player_client', []).append(yt_client_env)
+            return opts
+
         def download_sync(url, ydl_opts):
             with sanitized_yt_env():
                 try:
@@ -479,19 +471,51 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                             return ydl.download([url])
                     raise
 
+        # 视频和字幕分两次下载：字幕下载常因限流/无字幕等原因失败，之前两者共用
+        # 一次 yd.download() 调用，字幕环节一抛异常就会连累已经下载成功的视频一起
+        # 报失败。拆开后字幕失败不影响视频，走后面已有的 Whisper 兜底逻辑。
+        video_ydl_opts = apply_common_opts({
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'outtmpl': str(download_dir / '%(title)s.%(ext)s'),
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': False,
+            'ignoreconfig': True,
+            'config_locations': [],
+            'cachedir': False,
+        })
+
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, download_sync, request.url, ydl_opts)
-        
-        # 查找下载的文件
+        await loop.run_in_executor(None, download_sync, request.url, video_ydl_opts)
+
         video_files = list(download_dir.glob("*.mp4"))
-        subtitle_files = list(download_dir.glob("*.srt"))
-        
         if not video_files:
             raise Exception("未找到下载的视频文件")
-        
         video_path = str(video_files[0])
-        subtitle_path = str(subtitle_files[0]) if subtitle_files else ""
-        
+
+        subtitle_path = ""
+        try:
+            subtitle_ydl_opts = apply_common_opts({
+                'skip_download': True,
+                'writesubtitles': True,
+                'writeautomaticsub': True,  # 下载自动生成的字幕
+                'subtitleslangs': get_subtitle_langs(),
+                'subtitlesformat': 'srt',
+                'outtmpl': str(download_dir / '%(title)s.%(ext)s'),
+                'noplaylist': True,
+                'quiet': True,
+                'no_warnings': False,
+                'ignoreconfig': True,
+                'config_locations': [],
+                'cachedir': False,
+            })
+            await loop.run_in_executor(None, download_sync, request.url, subtitle_ydl_opts)
+            subtitle_files = list(download_dir.glob("*.srt"))
+            subtitle_path = str(subtitle_files[0]) if subtitle_files else ""
+        except Exception as e:
+            logger.warning(f"平台字幕下载失败（{e}），稍后会尝试用 Whisper 生成字幕")
+            subtitle_path = ""
+
         download_tasks[task_id].progress = 80.0
         
         # 更新项目进度
@@ -561,16 +585,16 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 raise Exception(f"项目 {project_id} 不存在")
             
             # 更新项目信息
-            project.description = f"从YouTube下载: {request.project_name}"
+            project.description = f"从YouTube下载: {project.name}"
             # 注意：不要在这里设置video_path，等文件移动完成后再设置
-            
+
             # 更新项目设置
             if not project.processing_config:
                 project.processing_config = {}
-            
+
             project.processing_config.update({
                 "youtube_info": {
-                    "title": request.project_name,
+                    "title": project.name,
                     "uploader": "YouTube",
                     "duration": 0,
                     "view_count": 0,
@@ -587,10 +611,12 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             raw_dir = project_dir / "raw"
             raw_dir.mkdir(parents=True, exist_ok=True)
             
-            # 移动视频文件到项目目录
+            # 移动视频文件到项目目录（Path 已在模块顶部导入，这里不要重复 import——
+            # 函数体内任何位置对某个名字做局部 import/赋值，都会让该名字在整个函数
+            # 作用域内被视为局部变量，导致本函数更早处的 Path(...) 调用抛
+            # UnboundLocalError）
             import shutil
-            from pathlib import Path
-            
+
             if video_path:
                 video_file_path = Path(video_path)
                 if video_file_path.exists():
