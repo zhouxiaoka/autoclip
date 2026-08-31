@@ -328,7 +328,7 @@ class OpenAIProvider(LLMProvider):
 class GeminiProvider(LLMProvider):
     """Google Gemini提供商"""
     
-    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash", **kwargs):
+    def __init__(self, api_key: str, model_name: str = "gemini-flash-latest", **kwargs):
         super().__init__(api_key, model_name, **kwargs)
         try:
             # New unified Google GenAI SDK (replaces the deprecated
@@ -380,28 +380,34 @@ class GeminiProvider(LLMProvider):
             return False
     
     def get_available_models(self) -> List[ModelInfo]:
-        """获取Gemini可用模型"""
+        """获取Gemini可用模型
+
+        用 Google 官方维护的 "-latest" 别名而不是具体的带日期/版本号的型号名
+        （如 gemini-2.5-flash、gemini-1.5-pro）。这些具体型号会被 Google 下线，
+        下线后调用直接 404（此前就因为 gemini-2.5-flash 被下线而踩过一次），
+        "-latest" 别名会由 Google 一直指向当前可用的模型，不需要再手动跟着改。
+        """
         return [
             ModelInfo(
-                name="gemini-2.5-flash",
-                display_name="Gemini 2.5 Flash",
+                name="gemini-flash-latest",
+                display_name="Gemini Flash (latest)",
                 provider=ProviderType.GEMINI,
                 max_tokens=1000000,
-                description="Google Gemini 2.5 Flash模型"
+                description="Google Gemini 最新 Flash 模型（速度与成本均衡）"
             ),
             ModelInfo(
-                name="gemini-1.5-pro",
-                display_name="Gemini 1.5 Pro",
+                name="gemini-pro-latest",
+                display_name="Gemini Pro (latest)",
                 provider=ProviderType.GEMINI,
                 max_tokens=2000000,
-                description="Google Gemini 1.5 Pro模型"
+                description="Google Gemini 最新 Pro 模型（更强推理能力）"
             ),
             ModelInfo(
-                name="gemini-1.5-flash",
-                display_name="Gemini 1.5 Flash",
+                name="gemini-flash-lite-latest",
+                display_name="Gemini Flash-Lite (latest)",
                 provider=ProviderType.GEMINI,
                 max_tokens=1000000,
-                description="Google Gemini 1.5 Flash模型"
+                description="Google Gemini 最新 Flash-Lite 模型（最快最省）"
             )
         ]
 
