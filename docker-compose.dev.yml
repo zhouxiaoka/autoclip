@@ -67,7 +67,7 @@ services:
     command: >
       sh -c "
         source venv/bin/activate &&
-        celery -A backend.core.celery_app worker --loglevel=debug --reload
+        celery -A backend.core.celery_app worker --loglevel=debug --reload -Q celery,processing,video,notification,upload
       "
     depends_on:
       - redis

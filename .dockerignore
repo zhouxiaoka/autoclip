@@ -72,6 +72,10 @@ docs/
 !start_autoclip.sh
 !stop_autoclip.sh
 !status_autoclip.sh
+# Container entrypoints are COPY'd by Dockerfile / Dockerfile.dev; excluding
+# them makes `docker build` fail with "/docker-entrypoint.sh: not found".
+!docker-entrypoint.sh
+!docker-dev-entrypoint.sh
 
 # Environment
 .env

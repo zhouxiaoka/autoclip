@@ -7,6 +7,29 @@
 
 ## [未发布]
 
+## [1.2.1] - 未发布
+
+> 止血版：让 README 推荐的 `docker compose` 路径和本地脚本路径真正能跑通一次完整处理（issue #88 及其一长串重复 issue）。
+
+### 修复
+- Docker 镜像无法构建：`.dockerignore` 误排除 `docker-entrypoint.sh` / `docker-dev-entrypoint.sh`（#1 #4 #9 #47 #50 #88）
+- Windows 克隆后容器无法启动：新增 `.gitattributes`，shell 脚本强制 LF 行尾（#73 #88）
+- Docker 下任何任务都不执行：compose / dev compose 的 Celery worker 未指定 `-Q`，只监听默认队列；现在消费 `celery,processing,video,notification,upload`。本地脚本 `start_autoclip.sh` 同步补齐 `celery` 与 `video` 队列（#88）
+- Docker 下项目提交后立刻被标记失败：`task_submission_utils` 里一段仅用于诊断的 `redis.Redis(host='localhost')` 位于 `try` 内并向上抛异常；改为走 `REDIS_URL` 且失败仅记 warning（#88）
+- YouTube 解析在作者机器以外 500：`youtube.py` 中硬编码的 `/Users/zhoukk/...` yt-dlp 路径与 `cwd` 改为 `sys.executable -m yt_dlp` + 数据目录；同步清理 `fix_project_thumbnails.py` 与设置页里的硬编码路径（#88）
+- LLM 评分步骤对 list 输入未做 JSON 序列化（`_build_full_input`）（#53）
+- 一次请求 5 种字幕语言触发 YouTube 429：默认改为 `zh-Hans,zh,en`，可用 `AUTOCLIP_YT_SUBTITLE_LANGS` 覆盖（#88）
+
+### 改进
+- Docker 基础镜像 `python:3.9-slim` → `python:3.11-slim`（当前 yt-dlp 已不支持 3.9，且 3.9 下只能拿到 360p）
+- `docker-compose.yml` 四个服务共用 `autoclip:local` 镜像，只需构建一次
+- CI 新增 `docker-smoke` job：构建镜像、拉起 redis + api + worker、校验健康检查、yt-dlp 可用、REDIS_URL 连通、worker 监听了全部路由队列
+- 桌面壳启动后端时注入 `AUTOCLIP_APP_VERSION`，后端 `/settings` 不再固定返回 `1.0.0`
+- `src-tauri/Cargo.toml` 版本与 `tauri.conf.json` 对齐
+
+### 移除
+- 删除无任何引用的 `backend/api/v1/youtube_improved.py`
+
 ## [1.2.0] - 2026-06-03
 
 > 接入产品分析,为后续账号 / 商业化打数据地基。
@@ -15,17 +38,9 @@
 - 接入 PostHog 匿名产品分析：覆盖安装/启动/更新、素材导入、出片导出、流程失败、设置 API key 等关键事件，每条事件自动携带应用版本/系统/架构等全局属性
 - 设置页新增「隐私与数据」开关，可随时关闭匿名使用统计（关闭立即停止上报，重启仍生效）
 - 新增埋点体系文档 `docs/ANALYTICS.md` 与中英文隐私政策 `docs/PRIVACY.md` / `docs/PRIVACY.en.md`
-- 添加视频标题编辑功能
-- 支持B站多账号管理
-- 添加账号健康状态监控
-- 实现拖拽排序功能
-- 添加视频分类支持
-- 完善Docker部署支持
-- 添加Docker管理脚本
 
-### 开发中
-- B站上传功能（预计下个版本发布）
-- 字幕编辑功能（预计下个版本发布）
+### 历史累积（1.0.0 之后陆续加入、此前未单独记录）
+- 视频标题编辑、B站多账号管理与账号健康状态监控、拖拽排序、视频分类、Docker 管理脚本
 
 ## [1.1.0] - 2026-05-31
 
@@ -111,6 +126,7 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/your-username/autoclip/compare/v1.0.0...HEAD
-- [1.0.0]: https://github.com/your-username/autoclip/releases/tag/v1.0.0
-- [0.9.0]: https://github.com/your-username/autoclip/releases/tag/v0.9.0
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.2.0...HEAD
+- [1.2.0]: https://github.com/zhouxiaoka/autoclip/releases/tag/v1.2.0
+- [1.1.0]: https://github.com/zhouxiaoka/autoclip/releases/tag/v1.1.0
+- [1.0.0]: https://github.com/zhouxiaoka/autoclip/releases/tag/v1.0.0

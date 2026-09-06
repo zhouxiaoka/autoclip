@@ -84,8 +84,8 @@ class LLMProvider(ABC):
     def _build_full_input(self, prompt: str, input_data: Any = None) -> str:
         """构建完整的输入"""
         if input_data:
-            if isinstance(input_data, dict):
-                return f"{prompt}\n\n输入内容：\n{json.dumps(input_data, ensure_ascii=False, indent=2)}"
+            if isinstance(input_data, (dict, list, tuple)):
+                return f"{prompt}\n\n输入内容：\n{json.dumps(input_data, ensure_ascii=False, indent=2, default=str)}"
             else:
                 return f"{prompt}\n\n输入内容：\n{input_data}"
         return prompt

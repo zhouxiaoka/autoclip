@@ -66,3 +66,66 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Guards the README's recommended `docker compose` path, which was broken for months
+  # without anything in CI noticing (issue #88): the image failed to build, the worker
+  # consumed the wrong queues, and a hardcoded localhost Redis check failed every project.
+  docker-smoke:
+    name: Docker compose smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker compose build autoclip
+
+      - name: Start redis + api + worker
+        run: |
+          # Bind-mounted dirs are created root-owned by the daemon; the container runs as
+          # a non-root user, so pre-create them writable.
+          mkdir -p data logs uploads && chmod -R 777 data logs uploads
+          docker compose up -d --no-build redis autoclip celery-worker
+
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/api/v1/health/ >/dev/null 2>&1; then
+              echo "API healthy after ${i} tries"; exit 0
+            fi
+            sleep 3
+          done
+          echo "API never became healthy"; exit 1
+
+      - name: yt-dlp is importable on the image's Python
+        run: docker compose exec -T autoclip python -m yt_dlp --version
+
+      - name: Task submission reaches Redis via REDIS_URL
+        run: |
+          docker compose exec -T autoclip python - <<'EOF'
+          from backend.utils.task_submission_utils import _log_queue_depth
+          depth = _log_queue_depth("processing")
+          assert depth is not None, "could not reach Redis through REDIS_URL"
+          print("processing queue depth:", depth)
+          EOF
+
+      - name: Worker consumes the routed queues
+        run: |
+          for i in $(seq 1 20); do
+            out=$(docker compose exec -T celery-worker celery -A backend.core.celery_app inspect --json --timeout 10 active_queues 2>/dev/null || true)
+            if echo "$out" | grep -q '"name": "processing"'; then break; fi
+            sleep 5
+          done
+          echo "$out"
+          for q in celery processing video notification upload; do
+            echo "$out" | grep -q "\"name\": \"$q\"" || { echo "worker is not consuming queue: $q"; exit 1; }
+          done
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v --remove-orphans

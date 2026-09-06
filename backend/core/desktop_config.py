@@ -156,7 +156,8 @@ class DesktopConfig:
 
     @property
     def app_version(self) -> str:
-        return "1.0.0"
+        # 桌面壳（Rust）启动后端时注入 CARGO_PKG_VERSION；直接跑源码时回退到当前版本号
+        return os.getenv("AUTOCLIP_APP_VERSION", "1.2.1")
 
     @property
     def debug_mode(self) -> bool:

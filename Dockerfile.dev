@@ -1,5 +1,5 @@
 # AutoClip 开发环境 Dockerfile
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1

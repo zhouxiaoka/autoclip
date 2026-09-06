@@ -20,6 +20,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # 四个服务共用同一个镜像；统一 image 名后只需 build 一次
+    image: autoclip:local
     container_name: autoclip-app
     restart: unless-stopped
     ports:
@@ -50,6 +52,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: autoclip:local
     container_name: autoclip-celery-worker
     restart: unless-stopped
     volumes:
@@ -62,7 +65,9 @@ services:
       - ENVIRONMENT=production
       - DEBUG=false
       - LOG_LEVEL=INFO
-    command: celery -A backend.core.celery_app worker --loglevel=info --concurrency=2
+    # 任务通过 celery_app.task_routes 被路由到专用队列；不带 -Q 的 worker 只消费默认的
+    # `celery` 队列，流水线任务会一直堆在 `processing` 里没人执行，项目永远卡在处理中。
+    command: celery -A backend.core.celery_app worker --loglevel=info --concurrency=2 -Q celery,processing,video,notification,upload
     depends_on:
       redis:
         condition: service_healthy
@@ -74,6 +79,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: autoclip:local
     container_name: autoclip-celery-beat
     restart: unless-stopped
     volumes:
@@ -97,6 +103,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: autoclip:local
     container_name: autoclip-flower
     restart: unless-stopped
     ports:

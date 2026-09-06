@@ -15,6 +15,21 @@ def _is_desktop_mode() -> bool:
     return os.getenv("AUTOCLIP_DESKTOP_MODE", "").lower() in {"1", "true", "yes"}
 
 
+def _log_queue_depth(queue: str) -> Optional[int]:
+    """记录 Redis 队列深度，仅用于诊断；任何失败都只记 warning，不向上抛。"""
+    try:
+        import redis
+
+        redis_url = os.getenv('REDIS_URL') or str(celery_app.conf.broker_url)
+        client = redis.Redis.from_url(redis_url, socket_connect_timeout=2, socket_timeout=2)
+        depth = client.llen(queue)
+        logger.info(f"Redis 队列 {queue} 深度: {depth}")
+        return depth
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"读取 Redis 队列 {queue} 深度失败（仅诊断，不影响任务）: {e}")
+        return None
+
+
 def _run_pipeline_locally(project_id: str, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
     """桌面模式：不经过 Redis/Celery broker，直接在后台线程内同步执行流水线任务。
 
@@ -74,25 +89,16 @@ def submit_video_pipeline_task(project_id: str, input_video_path: str, input_srt
         logger.info(f"任务名称: backend.tasks.processing.process_video_pipeline")
         logger.info(f"任务参数: {[project_id, input_video_path, input_srt_path]}")
         
-        try:
-            celery_task = celery_app.send_task(
-                'backend.tasks.processing.process_video_pipeline',
-                args=[project_id, input_video_path, input_srt_path]
-            )
-            
-            logger.info(f"视频流水线任务已提交: {celery_task.id}")
-            logger.info(f"任务状态: {celery_task.state}")
-            
-            # 检查任务是否真的提交到队列
-            import redis
-            r = redis.Redis(host='localhost', port=6379, db=0)
-            queue_length = r.llen('processing')
-            logger.info(f"Redis队列长度: {queue_length}")
-            
-        except Exception as e:
-            logger.error(f"任务提交过程中出现异常: {e}")
-            raise
-        
+        celery_task = celery_app.send_task(
+            'backend.tasks.processing.process_video_pipeline',
+            args=[project_id, input_video_path, input_srt_path]
+        )
+        logger.info(f"视频流水线任务已提交: {celery_task.id}")
+
+        # 队列深度只用于诊断。它必须走 REDIS_URL（docker-compose 里 Redis 不在 localhost），
+        # 且不能影响已经提交成功的任务。
+        _log_queue_depth('processing')
+
         return {
             'success': True,
             'task_id': celery_task.id,
