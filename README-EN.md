@@ -512,8 +512,9 @@ npm run dev
 ### Celery Worker
 
 ```bash
-# Start Worker
-celery -A backend.core.celery_app worker --loglevel=info
+# Start Worker (must include -Q: tasks are routed to dedicated queues via celery_app.task_routes;
+# a worker without -Q only consumes the default `celery` queue, so pipeline tasks pile up in `processing` and never run)
+celery -A backend.core.celery_app worker --loglevel=info -Q celery,processing,video,notification,upload
 
 # Start Beat scheduler
 celery -A backend.core.celery_app beat --loglevel=info
