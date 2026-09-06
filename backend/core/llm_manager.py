@@ -24,8 +24,24 @@ class LLMManager:
         
         self.settings_file = settings_file or self._get_default_settings_file()
         self.current_provider: Optional[LLMProvider] = None
+        self._settings_mtime: Optional[float] = None
         self.settings = self._load_settings()
         self._initialize_provider()
+
+    def _current_settings_mtime(self) -> Optional[float]:
+        try:
+            return self.settings_file.stat().st_mtime
+        except OSError:
+            return None
+
+    def _reload_if_settings_changed(self) -> None:
+        """设置页保存后 settings.json 会变；API 进程与 Celery worker 都要在下一次调用时拿到新配置，
+        而不是等重启。"""
+        mtime = self._current_settings_mtime()
+        if mtime != self._settings_mtime:
+            logger.info("检测到 settings.json 变化，重新加载 LLM 配置")
+            self.settings = self._load_settings()
+            self._initialize_provider()
     
     def _get_default_settings_file(self) -> Path:
         """获取默认设置文件路径"""
@@ -33,6 +49,14 @@ class LLMManager:
         app_dir = os.getenv("AUTOCLIP_APP_DIR")
         if app_dir:
             return Path(app_dir) / "settings.json"
+
+        # 与设置 API 写入的位置保持同一来源（path_utils.get_data_directory），
+        # 否则设置页保存到 A、这里读 B，切换 provider 永远不生效
+        try:
+            from .path_utils import get_data_directory
+            return get_data_directory() / "settings.json"
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"无法通过 path_utils 定位 settings.json，回退到旧逻辑: {e}")
         
         # 优先使用默认的用户目录（macOS）- 客户端配置位置
         default_app_dir = Path.home() / "Library" / "Application Support" / "AutoClip"
@@ -67,6 +91,8 @@ class LLMManager:
             "llm_provider": "dashscope",
             "dashscope_api_key": "",
             "openai_api_key": "",
+            # OpenAI 兼容接口地址；空 = 官方。环境变量 OPENAI_BASE_URL 作为兜底
+            "openai_base_url": os.getenv("OPENAI_BASE_URL", ""),
             "gemini_api_key": "",
             "siliconflow_api_key": "",
             "model_name": "qwen-plus",
@@ -75,6 +101,7 @@ class LLMManager:
             "max_clips_per_collection": 5
         }
         
+        self._settings_mtime = self._current_settings_mtime()
         if self.settings_file.exists():
             try:
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
@@ -82,14 +109,20 @@ class LLMManager:
                     
                     # 处理新的配置格式（客户端配置）
                     if "api" in saved_settings and "api_keys" in saved_settings["api"]:
-                        api_keys = saved_settings["api"]["api_keys"]
+                        api = saved_settings["api"]
+                        api_keys = api["api_keys"]
                         default_settings.update({
                             "dashscope_api_key": api_keys.get("dashscope", ""),
                             "openai_api_key": api_keys.get("openai", ""),
                             "gemini_api_key": api_keys.get("gemini", ""),
                             "siliconflow_api_key": api_keys.get("siliconflow", ""),
-                            "model_name": saved_settings["api"].get("api_model", "qwen-plus")
+                            "model_name": api.get("api_model", "qwen-plus")
                         })
+                        # 设置页保存的提供商；旧版 settings.json 没有这个字段，保持 dashscope
+                        if api.get("api_provider"):
+                            default_settings["llm_provider"] = api["api_provider"]
+                        if api.get("api_base_url"):
+                            default_settings["openai_base_url"] = api["api_base_url"]
                     else:
                         # 处理旧的配置格式（直接平铺）
                         default_settings.update(saved_settings)
@@ -97,7 +130,48 @@ class LLMManager:
             except Exception as e:
                 logger.warning(f"加载设置文件失败: {e}")
         
+        self._apply_env_fallbacks(default_settings)
         return default_settings
+
+    # Docker / 本地脚本模式没有设置页可用，只能靠环境变量（env.example 里也是这么写的），
+    # 但此前这里只读 settings.json，导致 API_DASHSCOPE_API_KEY 等变量形同虚设。
+    _ENV_KEY_FALLBACKS = {
+        "dashscope_api_key": ("API_DASHSCOPE_API_KEY", "DASHSCOPE_API_KEY"),
+        "openai_api_key": ("API_OPENAI_API_KEY", "OPENAI_API_KEY"),
+        "gemini_api_key": ("API_GEMINI_API_KEY", "GEMINI_API_KEY"),
+        "siliconflow_api_key": ("API_SILICONFLOW_API_KEY", "SILICONFLOW_API_KEY"),
+    }
+
+    def _apply_env_fallbacks(self, settings: Dict[str, Any]) -> None:
+        for setting_name, env_names in self._ENV_KEY_FALLBACKS.items():
+            if settings.get(setting_name):
+                continue
+            for env_name in env_names:
+                value = os.getenv(env_name, "").strip()
+                if value:
+                    settings[setting_name] = value
+                    break
+
+        # 只有 settings.json 没有明确指定提供商/模型时，才让环境变量决定
+        file_has_provider = self._file_specifies("api_provider", "llm_provider")
+        env_provider = os.getenv("LLM_PROVIDER", "").strip().lower()
+        if env_provider and not file_has_provider:
+            settings["llm_provider"] = env_provider
+        env_model = os.getenv("API_MODEL_NAME", "").strip() or os.getenv("LLM_MODEL", "").strip()
+        if env_model and not self._file_specifies("api_model", "model_name"):
+            settings["model_name"] = env_model
+
+    def _file_specifies(self, *field_names: str) -> bool:
+        """settings.json（客户端嵌套格式或旧平铺格式）里是否显式写了某个字段"""
+        try:
+            if not self.settings_file.exists():
+                return False
+            with open(self.settings_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception:
+            return False
+        api = data.get("api", {}) if isinstance(data, dict) else {}
+        return any(bool(api.get(name)) or bool(data.get(name)) for name in field_names)
     
     def _save_settings(self):
         """保存设置"""
@@ -117,19 +191,30 @@ class LLMManager:
             
             # 获取对应提供商的API密钥
             api_key = self._get_api_key_for_provider(provider_type)
-            
-            
-            if api_key:
+            provider_kwargs = self._get_provider_kwargs(provider_type)
+
+            # 自建 OpenAI 兼容服务（Ollama / vLLM 等）常常不需要 key，有 base_url 就够
+            if api_key or (provider_type == ProviderType.OPENAI and provider_kwargs.get("base_url")):
                 self.current_provider = LLMProviderFactory.create_provider(
-                    provider_type, api_key, model_name
+                    provider_type, api_key or "", model_name, **provider_kwargs
                 )
-                logger.info(f"已初始化{provider_type.value}提供商，模型: {model_name}")
+                logger.info(f"已初始化{provider_type.value}提供商，模型: {model_name}"
+                            + (f", base_url: {provider_kwargs['base_url']}" if provider_kwargs.get("base_url") else ""))
             else:
                 logger.warning(f"未找到{provider_type.value}的API密钥")
+                self.current_provider = None
                 
         except Exception as e:
             logger.error(f"初始化提供商失败: {e}")
             self.current_provider = None
+
+    def _get_provider_kwargs(self, provider_type: ProviderType) -> Dict[str, Any]:
+        """提供商构造参数（目前只有 OpenAI 兼容接口的 base_url）"""
+        if provider_type == ProviderType.OPENAI:
+            base_url = (self.settings.get("openai_base_url") or "").strip()
+            if base_url:
+                return {"base_url": base_url}
+        return {}
     
     def _get_api_key_for_provider(self, provider_type: ProviderType) -> Optional[str]:
         """获取指定提供商的API密钥"""
@@ -151,7 +236,8 @@ class LLMManager:
         self._save_settings()
         self._initialize_provider()
     
-    def set_provider(self, provider_type: ProviderType, api_key: str, model_name: str):
+    def set_provider(self, provider_type: ProviderType, api_key: str, model_name: str,
+                     base_url: Optional[str] = None):
         """设置提供商"""
         try:
             # 更新设置
@@ -171,13 +257,11 @@ class LLMManager:
             key_name = key_mapping.get(provider_type)
             if key_name:
                 provider_settings[key_name] = api_key
-            
+            if provider_type == ProviderType.OPENAI and base_url is not None:
+                provider_settings["openai_base_url"] = base_url
+
+            # update_settings 会保存并重新初始化 current_provider
             self.update_settings(provider_settings)
-            
-            # 创建新的提供商实例
-            self.current_provider = LLMProviderFactory.create_provider(
-                provider_type, api_key, model_name
-            )
             
             logger.info(f"已切换到{provider_type.value}提供商，模型: {model_name}")
             
@@ -187,6 +271,7 @@ class LLMManager:
     
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> str:
         """调用LLM"""
+        self._reload_if_settings_changed()
         if not self.current_provider:
             raise ValueError("未配置LLM提供商，请在设置页面配置API密钥")
         
@@ -213,10 +298,11 @@ class LLMManager:
                 time.sleep(2 ** attempt)  # 指数退避
         return ""
     
-    def test_provider_connection(self, provider_type: ProviderType, api_key: str, model_name: str) -> bool:
+    def test_provider_connection(self, provider_type: ProviderType, api_key: str, model_name: str,
+                                 **provider_kwargs) -> bool:
         """测试提供商连接"""
         try:
-            provider = LLMProviderFactory.create_provider(provider_type, api_key, model_name)
+            provider = LLMProviderFactory.create_provider(provider_type, api_key, model_name, **provider_kwargs)
             return provider.test_connection()
         except Exception as e:
             logger.error(f"测试{provider_type.value}连接失败: {e}")
@@ -224,24 +310,29 @@ class LLMManager:
     
     def get_current_provider_info(self) -> Dict[str, Any]:
         """获取当前提供商信息"""
-        if not self.current_provider:
-            return {"provider": None, "model": None, "available": False}
-        
-        provider_type = ProviderType(self.settings.get("llm_provider", "dashscope"))
+        self._reload_if_settings_changed()
+        provider_value = self.settings.get("llm_provider", "dashscope")
+        try:
+            provider_type = ProviderType(provider_value)
+        except ValueError:
+            return {"provider": provider_value, "model": None, "available": False}
         model_name = self.settings.get("model_name", "qwen-plus")
-        
-        return {
+        info = {
             "provider": provider_type.value,
             "model": model_name,
-            "available": True,
-            "display_name": self._get_provider_display_name(provider_type)
+            "available": self.current_provider is not None,
+            "display_name": self._get_provider_display_name(provider_type),
         }
+        base_url = self._get_provider_kwargs(provider_type).get("base_url")
+        if base_url:
+            info["base_url"] = base_url
+        return info
     
     def _get_provider_display_name(self, provider_type: ProviderType) -> str:
         """获取提供商显示名称"""
         display_names = {
             ProviderType.DASHSCOPE: "阿里通义千问",
-            ProviderType.OPENAI: "OpenAI",
+            ProviderType.OPENAI: "OpenAI / 兼容接口",
             ProviderType.GEMINI: "Google Gemini",
             ProviderType.SILICONFLOW: "硅基流动"
         }

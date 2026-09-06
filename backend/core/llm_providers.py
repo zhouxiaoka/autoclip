@@ -240,14 +240,35 @@ class DashScopeProvider(LLMProvider):
             )
         ]
 
+OPENAI_OFFICIAL_BASE_URL = "https://api.openai.com/v1"
+# 本地/自建 OpenAI 兼容服务（Ollama、vLLM、LM Studio 等）通常不校验 key，但 SDK 要求非空
+OPENAI_COMPATIBLE_PLACEHOLDER_KEY = "EMPTY"
+
+
+def normalize_base_url(base_url: Optional[str]) -> str:
+    """去掉空白与结尾的 `/`，空值返回空串（表示使用官方地址）"""
+    return (base_url or "").strip().rstrip("/")
+
+
 class OpenAIProvider(LLMProvider):
-    """OpenAI提供商"""
+    """OpenAI 及一切 OpenAI 兼容接口（智谱、DeepSeek、OpenRouter、Ollama、vLLM、LM Studio 等）
+
+    通过 `base_url` 指向兼容服务即可复用；为空时走 OpenAI 官方地址。
+    """
     
-    def __init__(self, api_key: str, model_name: str = "gpt-3.5-turbo", **kwargs):
+    def __init__(self, api_key: str, model_name: str = "gpt-4o-mini", **kwargs):
         super().__init__(api_key, model_name, **kwargs)
+        self.base_url = normalize_base_url(kwargs.get("base_url") or os.getenv("OPENAI_BASE_URL"))
+        self.is_custom_endpoint = bool(self.base_url) and self.base_url != OPENAI_OFFICIAL_BASE_URL
+        if not api_key and self.is_custom_endpoint:
+            api_key = OPENAI_COMPATIBLE_PLACEHOLDER_KEY
+            self.api_key = api_key
         try:
             import openai
-            self.client = openai.OpenAI(api_key=api_key)
+            client_kwargs = {"api_key": api_key}
+            if self.base_url:
+                client_kwargs["base_url"] = self.base_url
+            self.client = openai.OpenAI(**client_kwargs)
         except ImportError:
             raise ImportError("请安装openai: pip install openai")
     
@@ -281,40 +302,39 @@ class OpenAIProvider(LLMProvider):
             raise
     
     def test_connection(self) -> bool:
-        """测试OpenAI连接"""
+        """测试OpenAI / 兼容接口连接"""
         try:
-            # 验证API Key格式
-            if not self.api_key or len(self.api_key.strip()) < 10:
-                logger.error("OpenAI API Key为空或过短")
-                return False
-            
-            # 检查API Key格式（OpenAI API Key通常是sk-开头）
-            if not self.api_key.startswith("sk-"):
-                logger.warning(f"OpenAI API Key格式可能不正确，期望以'sk-'开头，实际: {self.api_key[:10]}...")
+            # 官方 OpenAI 才校验 key 格式；兼容服务的 key 五花八门（甚至不需要）
+            if not self.is_custom_endpoint:
+                if not self.api_key or len(self.api_key.strip()) < 10:
+                    logger.error("OpenAI API Key为空或过短")
+                    return False
+                if not self.api_key.startswith("sk-"):
+                    logger.warning(f"OpenAI API Key格式可能不正确，期望以'sk-'开头，实际: {self.api_key[:10]}...")
             
             # 使用最简单的测试
             response = self.call("测试", max_tokens=1)
             return response and response.content is not None
         except Exception as e:
-            logger.error(f"OpenAI连接测试失败: {e}")
+            logger.error(f"OpenAI连接测试失败 (base_url={self.base_url or OPENAI_OFFICIAL_BASE_URL}): {e}")
             return False
     
     def get_available_models(self) -> List[ModelInfo]:
-        """获取OpenAI可用模型"""
+        """获取OpenAI可用模型（兼容接口的模型名由用户自行填写，这里只列官方常用型号）"""
         return [
             ModelInfo(
-                name="gpt-3.5-turbo",
-                display_name="GPT-3.5 Turbo",
+                name="gpt-4o-mini",
+                display_name="GPT-4o mini",
                 provider=ProviderType.OPENAI,
-                max_tokens=4096,
-                description="OpenAI GPT-3.5 Turbo模型"
+                max_tokens=128000,
+                description="OpenAI GPT-4o mini（性价比）"
             ),
             ModelInfo(
-                name="gpt-4",
-                display_name="GPT-4",
+                name="gpt-4o",
+                display_name="GPT-4o",
                 provider=ProviderType.OPENAI,
-                max_tokens=8192,
-                description="OpenAI GPT-4模型"
+                max_tokens=128000,
+                description="OpenAI GPT-4o"
             ),
             ModelInfo(
                 name="gpt-4-turbo",
