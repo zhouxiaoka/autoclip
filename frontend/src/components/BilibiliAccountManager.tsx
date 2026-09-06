@@ -174,7 +174,7 @@ const BilibiliAccountManager: React.FC = () => {
       let pollCount = 0
       const maxPolls = 60
       
-      const interval = setInterval(async () => {
+      const interval = window.setInterval(async () => {
         try {
           pollCount++
           if (pollCount > maxPolls) {
