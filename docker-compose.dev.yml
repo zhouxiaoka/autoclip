@@ -33,6 +33,16 @@ services:
       - ENVIRONMENT=development
       - DEBUG=true
       - LOG_LEVEL=DEBUG
+      # LLM 配置从宿主机 .env / shell 透传（compose 会自动读项目根目录的 .env 做变量替换）。
+      # 没有这一段时 DOCKER.md 里让用户填的 API_DASHSCOPE_API_KEY 根本进不了容器。
+      - LLM_PROVIDER=${LLM_PROVIDER:-dashscope}
+      - API_MODEL_NAME=${API_MODEL_NAME:-qwen-plus}
+      - API_DASHSCOPE_API_KEY=${API_DASHSCOPE_API_KEY:-}
+      - API_OPENAI_API_KEY=${API_OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - API_GEMINI_API_KEY=${API_GEMINI_API_KEY:-}
+      - API_SILICONFLOW_API_KEY=${API_SILICONFLOW_API_KEY:-}
+      - AUTOCLIP_YT_SUBTITLE_LANGS=${AUTOCLIP_YT_SUBTITLE_LANGS:-}
     depends_on:
       - redis
     command: >
@@ -64,6 +74,16 @@ services:
       - ENVIRONMENT=development
       - DEBUG=true
       - LOG_LEVEL=DEBUG
+      # LLM 配置从宿主机 .env / shell 透传（compose 会自动读项目根目录的 .env 做变量替换）。
+      # 没有这一段时 DOCKER.md 里让用户填的 API_DASHSCOPE_API_KEY 根本进不了容器。
+      - LLM_PROVIDER=${LLM_PROVIDER:-dashscope}
+      - API_MODEL_NAME=${API_MODEL_NAME:-qwen-plus}
+      - API_DASHSCOPE_API_KEY=${API_DASHSCOPE_API_KEY:-}
+      - API_OPENAI_API_KEY=${API_OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - API_GEMINI_API_KEY=${API_GEMINI_API_KEY:-}
+      - API_SILICONFLOW_API_KEY=${API_SILICONFLOW_API_KEY:-}
+      - AUTOCLIP_YT_SUBTITLE_LANGS=${AUTOCLIP_YT_SUBTITLE_LANGS:-}
     command: >
       sh -c "
         source venv/bin/activate &&

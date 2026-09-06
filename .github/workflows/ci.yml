@@ -85,6 +85,8 @@ jobs:
           # Bind-mounted dirs are created root-owned by the daemon; the container runs as
           # a non-root user, so pre-create them writable.
           mkdir -p data logs uploads && chmod -R 777 data logs uploads
+          # A throwaway .env, the way DOCKER.md tells users to configure the LLM.
+          printf 'LLM_PROVIDER=openai\nOPENAI_BASE_URL=http://llm.example.test/v1\nAPI_MODEL_NAME=smoke-model\n' > .env
           docker compose up -d --no-build redis autoclip celery-worker
 
       - name: Wait for API health
@@ -99,6 +101,22 @@ jobs:
 
       - name: yt-dlp is importable on the image's Python
         run: docker compose exec -T autoclip python -m yt_dlp --version
+
+      - name: LLM settings from .env reach both api and worker
+        run: |
+          for svc in autoclip celery-worker; do
+            docker compose exec -T "$svc" python - <<'EOF'
+          import os, sys
+          sys.path.insert(0, "/app")
+          from backend.core.llm_manager import LLMManager
+          info = LLMManager().get_current_provider_info()
+          assert info["provider"] == "openai", info
+          assert info["model"] == "smoke-model", info
+          assert info.get("base_url") == "http://llm.example.test/v1", info
+          assert info["available"] is True, info   # keyless custom endpoint is enough
+          print("OK", os.environ.get("HOSTNAME"), info)
+          EOF
+          done
 
       - name: Task submission reaches Redis via REDIS_URL
         run: |

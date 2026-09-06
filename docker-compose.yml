@@ -37,6 +37,16 @@ services:
       - ENVIRONMENT=production
       - DEBUG=false
       - LOG_LEVEL=INFO
+      # LLM 配置从宿主机 .env / shell 透传（compose 会自动读项目根目录的 .env 做变量替换）。
+      # 没有这一段时 DOCKER.md 里让用户填的 API_DASHSCOPE_API_KEY 根本进不了容器。
+      - LLM_PROVIDER=${LLM_PROVIDER:-dashscope}
+      - API_MODEL_NAME=${API_MODEL_NAME:-qwen-plus}
+      - API_DASHSCOPE_API_KEY=${API_DASHSCOPE_API_KEY:-}
+      - API_OPENAI_API_KEY=${API_OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - API_GEMINI_API_KEY=${API_GEMINI_API_KEY:-}
+      - API_SILICONFLOW_API_KEY=${API_SILICONFLOW_API_KEY:-}
+      - AUTOCLIP_YT_SUBTITLE_LANGS=${AUTOCLIP_YT_SUBTITLE_LANGS:-}
     depends_on:
       redis:
         condition: service_healthy
@@ -65,6 +75,16 @@ services:
       - ENVIRONMENT=production
       - DEBUG=false
       - LOG_LEVEL=INFO
+      # LLM 配置从宿主机 .env / shell 透传（compose 会自动读项目根目录的 .env 做变量替换）。
+      # 没有这一段时 DOCKER.md 里让用户填的 API_DASHSCOPE_API_KEY 根本进不了容器。
+      - LLM_PROVIDER=${LLM_PROVIDER:-dashscope}
+      - API_MODEL_NAME=${API_MODEL_NAME:-qwen-plus}
+      - API_DASHSCOPE_API_KEY=${API_DASHSCOPE_API_KEY:-}
+      - API_OPENAI_API_KEY=${API_OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - API_GEMINI_API_KEY=${API_GEMINI_API_KEY:-}
+      - API_SILICONFLOW_API_KEY=${API_SILICONFLOW_API_KEY:-}
+      - AUTOCLIP_YT_SUBTITLE_LANGS=${AUTOCLIP_YT_SUBTITLE_LANGS:-}
     # 任务通过 celery_app.task_routes 被路由到专用队列；不带 -Q 的 worker 只消费默认的
     # `celery` 队列，流水线任务会一直堆在 `processing` 里没人执行，项目永远卡在处理中。
     command: celery -A backend.core.celery_app worker --loglevel=info --concurrency=2 -Q celery,processing,video,notification,upload

@@ -11,7 +11,15 @@
 
 > 止血版：让 README 推荐的 `docker compose` 路径和本地脚本路径真正能跑通一次完整处理（issue #88 及其一长串重复 issue）。
 
+### 新增
+- **OpenAI 兼容接口自定义 `base_url`**：设置页 OpenAI 提供商新增「接口地址」，可接智谱 / DeepSeek / OpenRouter / 本地 Ollama、vLLM、LM Studio 等；自建服务可不填 key（#72 #57，替代 #78）
+- **Windows x64 安装包**（首个版本，NSIS，按用户安装）：`scripts/build_windows_x64.sh` + `desktop-build.yml` Windows job；与 macOS 共用 `scripts/lib/desktop_build_common.sh`（#73）
+- Docker / 脚本模式可用环境变量配置 LLM：`LLM_PROVIDER`、`API_MODEL_NAME`、`OPENAI_BASE_URL`、`API_{DASHSCOPE,OPENAI,GEMINI,SILICONFLOW}_API_KEY`；compose 透传给 api 与 worker，CI docker-smoke 断言其生效
+- `requirements.txt` 直接依赖全部锁定版本（与 CI / Docker 实装一致；3.11 与便携 3.13 均可解析）
+
 ### 修复
+- **设置页选择的 LLM 提供商从未被持久化**：`api_provider` / `api_base_url` 现在真正写入 `settings.json` 并被流水线读取；`/settings/current-provider` 不再固定返回通义千问；设置保存后 API 进程与 Celery worker 按文件 mtime 自动重载，不必重启
+- 模型选择框（`mode="tags"`）手动输入后会把数组发给后端导致保存失败，已归一为字符串
 - Docker 镜像无法构建：`.dockerignore` 误排除 `docker-entrypoint.sh` / `docker-dev-entrypoint.sh`（#1 #4 #9 #47 #50 #88）
 - Windows 克隆后容器无法启动：新增 `.gitattributes`，shell 脚本强制 LF 行尾（#73 #88）
 - Docker 下任何任务都不执行：compose / dev compose 的 Celery worker 未指定 `-Q`，只监听默认队列；现在消费 `celery,processing,video,notification,upload`。本地脚本 `start_autoclip.sh` 同步补齐 `celery` 与 `video` 队列（#88）
@@ -25,7 +33,9 @@
 - `docker-compose.yml` 四个服务共用 `autoclip:local` 镜像，只需构建一次
 - CI 新增 `docker-smoke` job：构建镜像、拉起 redis + api + worker、校验健康检查、yt-dlp 可用、REDIS_URL 连通、worker 监听了全部路由队列
 - 桌面壳启动后端时注入 `AUTOCLIP_APP_VERSION`，后端 `/settings` 不再固定返回 `1.0.0`
+- 桌面壳按平台设置数据目录 `AUTOCLIP_APP_DIR`（macOS 路径不变；Windows 为 `%APPDATA%\AutoClip`），Windows 下强制 `PYTHONUTF8=1` 且不弹控制台窗口
 - `src-tauri/Cargo.toml` 版本与 `tauri.conf.json` 对齐
+- `desktop-build.yml` 改为 macOS + Windows 并行构建，`release` job 汇总产物，单一平台失败不阻塞另一平台上传
 
 ### 移除
 - 删除无任何引用的 `backend/api/v1/youtube_improved.py`
