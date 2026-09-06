@@ -105,7 +105,10 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - 新 label：`needs-triage`（模板自动打）/ `needs-info` / `stale` / `pinned`（#96 已打）。
 - #96 已加「怎么反馈」小节。
 - 飞书 CLI：本机 `lark-cli` profile `personal`（app `cli_aa9ce7782ea39bcf`）；yahaha 账号下误建的同名空表可删。
-- **未做**：应用内反馈入口（PostHog Surveys，设置页 + 失败态）；每周汇总周报自动化（issue + 表单 + survey → 飞书）。
+- **应用内反馈**（2026-09-07 做完）：`frontend/src/analytics/feedback.ts` + `components/FeedbackDialog.tsx`。入口：设置页「反馈」区、项目卡失败态 `重试 · 反馈`、详情页失败态 `反馈问题`、切片为 0 空态。自动附带 版本 / OS / 架构 / provider / model / 失败阶段 / 错误文本；用户只写一句话 + 可选联系方式。
+  - 事件：`feedback_opened` / `feedback_submitted` / `feedback_dismissed`（PostHog）。若 PostHog 项目里存在名为 **「AutoClip 应用内反馈」**（`FEEDBACK_SURVEY_NAME`，或 `VITE_PUBLIC_POSTHOG_FEEDBACK_SURVEY_ID` 指定 id）的 API 型 Survey（无 UI，第一题自由文本、第二题单选分类），会同时按 PostHog 约定发 `survey shown / sent / dismissed`，结果进 Surveys 面板。**Survey 尚未在 PostHog 后台创建**（不创建也不影响事件采集）。
+  - 用户关闭匿名统计时，对话框不发 PostHog，改为引导到飞书表单。
+- **每周反馈周报**：`scripts/weekly_digest.py`（仅标准库）。合并 GitHub 新 issue（`gh`，或 `GH_TOKEN` REST）+ 飞书表单新条目（本机 `lark-cli` user 身份；云端走 `LARK_APP_ID/SECRET` tenant token，**应用需申请 `base:record:read` 并被加为表格协作者**）+ PostHog `feedback_submitted`（`POSTHOG_PERSONAL_API_KEY` + `POSTHOG_PROJECT_ID`，HogQL）→ markdown → 飞书群机器人 webhook（`FEISHU_WEBHOOK_URL`，可选 `FEISHU_WEBHOOK_SECRET`）。`--json` 给 agent 做主题归纳，`--post --message-file` 发归纳后的版本。本机已验证 GitHub + 飞书两路可读。Cursor Automation（每周一 09:00 跑该脚本并归纳主题）的草稿已备好，待在 Automations 编辑器里配 secrets 后保存。
 
 ---
 
@@ -128,7 +131,9 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - [ ] Apple Developer ID 签名 + 公证（去掉"右键打开"）；Windows 代码签名（去掉 SmartScreen 警告）
 - [ ] Tauri updater 自动更新；Sentry 崩溃上报
 - [ ] `ruff` 规则集收敛后改为阻断；`requirements-dev.txt` 拆出 pytest（Dockerfile / 桌面包不再装测试依赖）
-- [ ] 设置页 provider 卡片 / 彩色 Tag 与 `DESIGN.md`（近乎单色、只用一个蓝）不符，改造时一并处理
+- [x] 设置页 provider 卡片 / 彩色 Tag 与 `DESIGN.md` 不符 → 2026-09-07 设置页 / 详情页 / 三种卡片已按 `DESIGN.md`「App Layer」重做（见下）
+- [ ] 首页导入框、`ProjectTaskManager`、`CollectionPreviewModal` / `CreateCollectionModal`、B 站登录弹窗仍是 AntD 默认件，下一轮按 `frontend/src/ui/` 原语重做
+- [ ] `ProjectCard.tsx` 只做了「去色 + 失败态反馈」的局部修补（仍是 AntD Card + 内联样式），应整体重写成 `ac-card`
 - [ ] Docker 模式下开放设置页（目前 `check_desktop_mode` 直接 400，只能靠 .env）
 
 ### v1.4 · 产品质量
@@ -149,6 +154,10 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - YouTube 导入：`backend/api/v1/youtube.py`（`AUTOCLIP_YT_SUBTITLE_LANGS`、`AUTOCLIP_YT_CLIENT`）
 - Whisper 运行时（按需安装）：`backend/services/whisper_runtime.py`、`whisper_model_manager.py`、
   前端 `frontend/src/components/SpeechRecognitionConfig.tsx`
+- 前端 UI 原语（`DESIGN.md` App Layer）：`frontend/src/ui/index.tsx` + `ui/ac.css`；已迁移页面：`pages/ProjectDetailPage.tsx`、`pages/SettingsPage.tsx`、`components/ClipCard.tsx`、`CollectionCard.tsx`、`SpeechRecognitionConfig.tsx`
+- 反馈：`frontend/src/analytics/feedback.ts`、`components/FeedbackDialog.tsx`；运行时信息 `analytics/lifecycle.ts#getRuntimeInfo`
+- 周报：`scripts/weekly_digest.py`
+- 本地联调（后端随机端口时）：`BACKEND_URL=http://127.0.0.1:PORT npm run dev`（`vite.config.ts` 代理可被覆盖）
 - Docker：`Dockerfile`、`docker-compose.yml`（四服务共用 `autoclip:local`）、`docker-entrypoint.sh`
 - CI：`.github/workflows/ci.yml`（backend / frontend / docker-smoke）、`desktop-build.yml`（tag 触发）
 

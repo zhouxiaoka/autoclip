@@ -1,22 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { 
-  Layout, 
-  Card, 
-  Typography, 
-  Button, 
-  Space, 
-  Alert, 
-  Spin, 
-  Empty,
-  message,
-  Radio
-} from 'antd'
-import { 
-  ArrowLeftOutlined, 
-  PlayCircleOutlined,
-  PlusOutlined
-} from '@ant-design/icons'
+import { message } from 'antd'
+import dayjs from 'dayjs'
 import { useProjectStore, Clip, Collection } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
 import ClipCard from '../components/ClipCard'
@@ -25,16 +10,15 @@ import CollectionPreviewModal from '../components/CollectionPreviewModal'
 import CreateCollectionModal from '../components/CreateCollectionModal'
 import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
 import { ProjectTaskManager } from '../components/ProjectTaskManager'
-
-const { Content } = Layout
-const { Title, Text } = Typography
+import FeedbackDialog from '../components/FeedbackDialog'
+import { Btn, Icon, Section, Segmented, parseTimecode, fmtDuration } from '../ui'
 
 const ProjectDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { 
-    currentProject, 
-    loading, 
+  const {
+    currentProject,
+    loading,
     error,
     setCurrentProject,
     upsertProject,
@@ -45,9 +29,10 @@ const ProjectDetailPage: React.FC = () => {
     reorderCollectionClips,
     addClipToCollection
   } = useProjectStore()
-  
+
   const [statusLoading, setStatusLoading] = useState(false)
   const [showCreateCollection, setShowCreateCollection] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [sortBy, setSortBy] = useState<'time' | 'score'>('score')
   const [showCollectionDetail, setShowCollectionDetail] = useState(false)
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null)
@@ -63,39 +48,25 @@ const ProjectDetailPage: React.FC = () => {
     if (!id) return
     try {
       const project = await projectApi.getProject(id)
-      
-      // 如果项目已完成，加载clips和collections
       if (project.status === 'completed') {
         try {
           const [clips, collections] = await Promise.all([
             projectApi.getClips(id),
             projectApi.getCollections(id)
           ])
-          
-          console.log('🎬 Loaded clips in ProjectDetailPage:', clips)
-          console.log('📚 Loaded collections in ProjectDetailPage:', collections)
-          
-          const projectWithData = {
-            ...project,
-            clips: clips || [],
-            collections: collections || []
-          }
-          
-          console.log('🎯 Final project with data:', projectWithData)
+          const projectWithData = { ...project, clips: clips || [], collections: collections || [] }
           setCurrentProject(projectWithData)
-          
           // 同步更新项目列表，避免页面与列表状态漂移
           upsertProject(projectWithData)
-        } catch (error) {
-          console.error('Failed to load clips/collections:', error)
-          // 即使clips/collections加载失败，也设置项目基本信息
+        } catch (err) {
+          console.error('Failed to load clips/collections:', err)
           setCurrentProject(project)
         }
       } else {
         setCurrentProject(project)
       }
-    } catch (error) {
-      console.error('Failed to load project:', error)
+    } catch (err) {
+      console.error('Failed to load project:', err)
       message.error('加载项目失败')
     }
   }
@@ -105,8 +76,8 @@ const ProjectDetailPage: React.FC = () => {
     setStatusLoading(true)
     try {
       await projectApi.getProcessingStatus(id)
-    } catch (error) {
-      console.error('Failed to load processing status:', error)
+    } catch (err) {
+      console.error('Failed to load processing status:', err)
     } finally {
       setStatusLoading(false)
     }
@@ -118,9 +89,25 @@ const ProjectDetailPage: React.FC = () => {
       await projectApi.startProcessing(id)
       message.success('开始处理')
       loadProcessingStatus()
-    } catch (error) {
-      console.error('Failed to start processing:', error)
+    } catch (err) {
+      console.error('Failed to start processing:', err)
       message.error('启动处理失败')
+    }
+  }
+
+  const handleRetryProcessing = async () => {
+    if (!id) return
+    setStatusLoading(true)
+    try {
+      await projectApi.retryProcessing(id)
+      message.success('已重新开始处理')
+      loadProcessingStatus()
+      await loadProject()
+    } catch (err) {
+      console.error('Failed to retry processing:', err)
+      message.error('重试失败，请稍后再试')
+    } finally {
+      setStatusLoading(false)
     }
   }
 
@@ -137,8 +124,8 @@ const ProjectDetailPage: React.FC = () => {
       })
       setShowCreateCollection(false)
       message.success('合集创建成功')
-    } catch (error) {
-      console.error('Failed to create collection:', error)
+    } catch (err) {
+      console.error('Failed to create collection:', err)
       message.error('创建合集失败')
     }
   }
@@ -153,8 +140,8 @@ const ProjectDetailPage: React.FC = () => {
     try {
       await removeClipFromCollection(id, collectionId, clipId)
       message.success('切片已从合集中移除')
-    } catch (error) {
-      console.error('Failed to remove clip from collection:', error)
+    } catch (err) {
+      console.error('Failed to remove clip from collection:', err)
       message.error('移除切片失败')
     }
   }
@@ -166,8 +153,8 @@ const ProjectDetailPage: React.FC = () => {
       setShowCollectionDetail(false)
       setSelectedCollection(null)
       message.success('合集已删除')
-    } catch (error) {
-      console.error('Failed to delete collection:', error)
+    } catch (err) {
+      console.error('Failed to delete collection:', err)
       message.error('删除合集失败')
     }
   }
@@ -177,8 +164,8 @@ const ProjectDetailPage: React.FC = () => {
     try {
       await reorderCollectionClips(id, collectionId, newClipIds)
       message.success('合集顺序已更新')
-    } catch (error) {
-      console.error('Failed to reorder collection clips:', error)
+    } catch (err) {
+      console.error('Failed to reorder collection clips:', err)
       message.error('更新合集顺序失败')
     }
   }
@@ -188,8 +175,8 @@ const ProjectDetailPage: React.FC = () => {
     try {
       await addClipToCollection(id, collectionId, clipIds)
       message.success('切片已添加到合集')
-    } catch (error) {
-      console.error('Failed to add clip to collection:', error)
+    } catch (err) {
+      console.error('Failed to add clip to collection:', err)
       message.error('添加切片失败')
     }
   }
@@ -197,260 +184,148 @@ const ProjectDetailPage: React.FC = () => {
   const getSortedClips = () => {
     if (!currentProject?.clips) return []
     const clips = [...currentProject.clips]
-    
-    if (sortBy === 'score') {
-      return clips.sort((a, b) => b.final_score - a.final_score)
-    } else {
-      // 按时间排序 - 将时间字符串转换为秒数进行比较
-      return clips.sort((a, b) => {
-        const getTimeInSeconds = (timeStr: string) => {
-          const parts = timeStr.split(':')
-          const hours = parseInt(parts[0])
-          const minutes = parseInt(parts[1])
-          const seconds = parseFloat(parts[2].replace(',', '.'))
-          return hours * 3600 + minutes * 60 + seconds
-        }
-        
-        const aTime = getTimeInSeconds(a.start_time)
-        const bTime = getTimeInSeconds(b.start_time)
-        return aTime - bTime
-      })
-    }
+    if (sortBy === 'score') return clips.sort((a, b) => b.final_score - a.final_score)
+    return clips.sort((a, b) => parseTimecode(a.start_time) - parseTimecode(b.start_time))
   }
 
   if (loading) {
     return (
-      <Content style={{ padding: '24px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <Spin size="large" />
-      </Content>
+      <div className="ac-page" style={{ display: 'flex', justifyContent: 'center', paddingTop: 120 }}>
+        <span className="ac-btn ac-btn--text" style={{ color: 'var(--ac-muted)' }}><span className="spin" /> 加载中</span>
+      </div>
     )
   }
 
   if (error || !currentProject) {
     return (
-      <Content style={{ padding: '24px' }}>
-        <Alert
-          message="加载失败"
-          description={error || '项目不存在'}
-          type="error"
-          action={
-            <Button size="small" onClick={() => navigate('/')}>
-              返回首页
-            </Button>
-          }
-        />
-      </Content>
+      <div className="ac-page">
+        <div className="ac-empty">
+          <b>加载失败</b>
+          {error || '项目不存在'}
+          <div style={{ marginTop: 16 }}>
+            <Btn size="sm" onClick={() => navigate('/')}>返回首页</Btn>
+          </div>
+        </div>
+      </div>
     )
   }
 
-  return (
-    <Content style={{ padding: '24px' }}>
-      {/* 简化的项目头部 */}
-      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <Button 
-            type="link" 
-            icon={<ArrowLeftOutlined />} 
-            onClick={() => navigate('/')}
-            style={{ padding: 0, marginBottom: '8px' }}
-          >
-            返回项目列表
-          </Button>
-          <Title level={2} style={{ margin: 0 }}>
-            {currentProject.name}
-          </Title>
-        </div>
-        
-        <Space>
-          {currentProject.status === 'pending' && (
-            <Button 
-              type="primary" 
-              onClick={handleStartProcessing}
-              loading={statusLoading}
-            >
-              开始处理
-            </Button>
-          )}
-        </Space>
-      </div>
+  const clips = currentProject.clips || []
+  const collections = currentProject.collections || []
+  const totalClipSec = clips.reduce((s, c) => s + Math.max(0, parseTimecode(c.end_time) - parseTimecode(c.start_time)), 0)
+  const sortedCollections = [...collections].sort((a, b) => {
+    const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+    const tb = b.created_at ? new Date(b.created_at).getTime() : 0
+    return tb - ta
+  })
+  const isCompleted = currentProject.status === 'completed'
+  const isFailed = currentProject.status === 'failed' || (currentProject.status as string) === 'error'
+  const failureContext = {
+    source: 'failure' as const,
+    project_id: currentProject.id,
+    error_message: currentProject.error_message || undefined,
+  }
 
-      {/* 主要内容 */}
-      {currentProject.status === 'completed' ? (
-        <div>
-          {/* AI合集横向滚动区域 */}
-          {currentProject.collections && currentProject.collections.length > 0 && (
-            <Card style={{ marginBottom: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <div>
-                  <Title level={4} style={{ margin: 0 }}>AI推荐合集</Title>
-                  <Text type="secondary">
-                    AI 已为您推荐了 {currentProject.collections.length} 个主题合集
-                  </Text>
-                </div>
-                <Button 
-                  type="primary" 
-                  icon={<PlusOutlined />}
-                  onClick={() => setShowCreateCollection(true)}
-                  style={{
-                    borderRadius: '8px',
-                    background: 'var(--ac-accent)',
-                    border: 'none',
-                    fontWeight: 500,
-                    height: '40px',
-                    padding: '0 20px',
-                    fontSize: '14px'
-                  }}
-                >
-                  创建合集
-                </Button>
-              </div>
-              
-              <div 
-                className="collections-scroll-container"
-                style={{ 
-                  display: 'flex',
-                  gap: '16px',
-                  overflowX: 'auto',
-                  paddingBottom: '8px'
-                }}
-              >
-                {currentProject.collections
-                  .sort((a, b) => {
-                    // 按创建时间倒序排列，最新的在前面
-                    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0
-                    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0
-                    return timeB - timeA
-                  })
-                  .map((collection) => (
+  return (
+    <div className="ac-page">
+      {/* 页头：返回 · 标题 · mono 元信息 */}
+      <header>
+        <button className="ac-back" onClick={() => navigate('/')}>
+          <Icon.Back /> 项目
+        </button>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
+          <div style={{ minWidth: 0 }}>
+            <h1 className="ac-title">{currentProject.name}</h1>
+            <div className="ac-meta">
+              {isCompleted ? (
+                <>
+                  <span><span className="ac-mono">{clips.length}</span> 切片</span>
+                  <span className="dot" />
+                  <span><span className="ac-mono">{collections.length}</span> 合集</span>
+                  {totalClipSec > 0 && (
+                    <>
+                      <span className="dot" />
+                      <span>共 <span className="ac-mono">{fmtDuration(totalClipSec)}</span></span>
+                    </>
+                  )}
+                </>
+              ) : (
+                <span>{currentProject.status === 'pending' ? '等待处理' : isFailed ? '处理失败' : '处理中'}</span>
+              )}
+              {currentProject.created_at && (
+                <>
+                  <span className="dot" />
+                  <span>{dayjs(currentProject.created_at).fromNow()}</span>
+                </>
+              )}
+            </div>
+          </div>
+          {currentProject.status === 'pending' && (
+            <Btn variant="cta" onClick={handleStartProcessing} loading={statusLoading}>开始处理</Btn>
+          )}
+          {isFailed && (
+            <div style={{ display: 'flex', gap: 8, flex: '0 0 auto' }}>
+              <Btn onClick={() => setFeedbackOpen(true)}>反馈问题</Btn>
+              <Btn variant="cta" onClick={handleRetryProcessing} loading={statusLoading}>重试</Btn>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {isCompleted ? (
+        <>
+          {/* 合集 */}
+          <Section
+            title="合集"
+            count={collections.length}
+            description={collections.length > 0 ? 'AI 按主题把相关切片串成的成片，可编辑顺序与标题。' : '把几条切片串成一个主题成片。'}
+            right={
+              <Btn size="sm" onClick={() => setShowCreateCollection(true)}>
+                <Icon.Plus size={13} /> 新建合集
+              </Btn>
+            }
+          >
+            {collections.length > 0 ? (
+              <div className="ac-hscroll">
+                {sortedCollections.map((collection) => (
                   <CollectionCard
                     key={collection.id}
                     collection={collection}
-                    clips={currentProject.clips || []}
+                    clips={clips}
                     onView={handleViewCollection}
-                    onUpdate={(collectionId, updates) => 
-                      updateCollection(currentProject.id, collectionId, updates)
-                    }
+                    onUpdate={(collectionId, updates) => updateCollection(currentProject.id, collectionId, updates)}
                     onGenerateVideo={async (collectionId) => {
-                      const collection = currentProject.collections?.find(c => c.id === collectionId)
-                      if (collection) {
-                        await generateAndDownloadCollectionVideo(
-                          currentProject.id, 
-                          collectionId, 
-                          collection.collection_title
-                        )
-                      }
+                      const c = collections.find((x) => x.id === collectionId)
+                      if (c) await generateAndDownloadCollectionVideo(currentProject.id, collectionId, c.collection_title)
                     }}
                     onDelete={handleDeleteCollection}
                   />
                 ))}
               </div>
-            </Card>
-          )}
-          
-          {/* 视频片段区域 */}
-          <Card 
-            style={{
-              borderRadius: '16px',
-              border: '1px solid #303030',
-              background: 'var(--ac-card)'
-            }}
+            ) : (
+              <div className="ac-empty">
+                <b>还没有合集</b>
+                从下方切片里挑几条，「新建合集」即可。
+              </div>
+            )}
+          </Section>
+
+          {/* 切片 */}
+          <Section
+            title="切片"
+            count={clips.length}
+            right={
+              <Segmented
+                size="sm"
+                ariaLabel="排序"
+                value={sortBy}
+                onChange={setSortBy}
+                options={[{ value: 'score', label: '按评分' }, { value: 'time', label: '按时间' }]}
+              />
+            }
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-              <div>
-                <Title level={4} style={{ margin: 0, color: '#ffffff', fontWeight: 600 }}>视频片段</Title>
-                <Text type="secondary" style={{ color: 'var(--ac-sub)', fontSize: '14px' }}>
-                  AI 已为您生成了 {currentProject.clips?.length || 0} 个精彩片段
-                </Text>
-              </div>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                {/* 排序控件 - 暗黑主题优化 */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Text style={{ fontSize: '13px', color: 'var(--ac-sub)', fontWeight: 500 }}>排序</Text>
-                  <Radio.Group
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    size="small"
-                    buttonStyle="solid"
-                    style={{
-                      ['--ant-radio-button-bg' as string]: 'transparent',
-                      ['--ant-radio-button-checked-bg' as string]: '#1890ff',
-                      ['--ant-radio-button-color' as string]: 'var(--ac-sub)',
-                      ['--ant-radio-button-checked-color' as string]: '#ffffff'
-                    }}
-                  >
-                    <Radio.Button 
-                       value="time" 
-                       style={{ 
-                         fontSize: '13px',
-                         height: '32px',
-                         lineHeight: '30px',
-                         padding: '0 16px',
-                         background: sortBy === 'time' ? 'var(--ac-cta-bg)' : 'var(--ac-line)',
-                         border: sortBy === 'time' ? '1px solid #1890ff' : '1px solid var(--ac-line)',
-                         color: sortBy === 'time' ? '#ffffff' : 'var(--ac-sub)',
-                         borderRadius: '6px 0 0 6px',
-                         fontWeight: sortBy === 'time' ? 600 : 400,
-                         boxShadow: sortBy === 'time' ? '0 2px 8px rgba(24, 144, 255, 0.3)' : 'none',
-                         transition: 'all 0.2s ease'
-                       }}
-                     >
-                       时间
-                     </Radio.Button>
-                     <Radio.Button 
-                       value="score" 
-                       style={{ 
-                         fontSize: '13px',
-                         height: '32px',
-                         lineHeight: '30px',
-                         padding: '0 16px',
-                         background: sortBy === 'score' ? 'var(--ac-cta-bg)' : 'var(--ac-line)',
-                         border: sortBy === 'score' ? '1px solid #1890ff' : '1px solid var(--ac-line)',
-                         borderLeft: 'none',
-                         color: sortBy === 'score' ? '#ffffff' : 'var(--ac-sub)',
-                         borderRadius: '0 6px 6px 0',
-                         fontWeight: sortBy === 'score' ? 600 : 400,
-                         boxShadow: sortBy === 'score' ? '0 2px 8px rgba(24, 144, 255, 0.3)' : 'none',
-                         transition: 'all 0.2s ease'
-                       }}
-                     >
-                       评分
-                     </Radio.Button>
-                  </Radio.Group>
-                </div>
-                
-                <Space>
-                  {(!currentProject.collections || currentProject.collections.length === 0) && (
-                    <Button 
-                      type="primary" 
-                      icon={<PlusOutlined />}
-                      onClick={() => setShowCreateCollection(true)}
-                      style={{
-                        borderRadius: '8px',
-                        background: 'var(--ac-accent)',
-                        border: 'none',
-                        fontWeight: 500,
-                        height: '40px',
-                        padding: '0 20px',
-                        fontSize: '14px'
-                      }}
-                    >
-                      创建合集
-                    </Button>
-                  )}
-                </Space>
-              </div>
-            </div>
-            
-            {currentProject.clips && currentProject.clips.length > 0 ? (
-              <div 
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                  gap: '20px',
-                  padding: '8px 0'
-                }}
-              >
+            {clips.length > 0 ? (
+              <div className="ac-grid-3">
                 {getSortedClips().map((clip) => (
                   <ClipCard
                     key={clip.id}
@@ -459,90 +334,72 @@ const ProjectDetailPage: React.FC = () => {
                     videoUrl={projectApi.getClipVideoUrl(currentProject.id, clip.id, clip.title || clip.generated_title)}
                     onDownload={(clipId) => projectApi.downloadVideo(currentProject.id, clipId)}
                     onClipUpdate={(clipId: string, updates: Partial<Clip>) => {
-                      // 更新本地状态
-                      if (currentProject) {
-                        const updatedProject = {
-                          ...currentProject,
-                          clips: currentProject.clips?.map((c: Clip) => 
-                            c.id === clipId ? { ...c, ...updates } : c
-                          ) || []
-                        }
-                        setCurrentProject(updatedProject)
+                      const updatedProject = {
+                        ...currentProject,
+                        clips: clips.map((c: Clip) => (c.id === clipId ? { ...c, ...updates } : c))
                       }
+                      setCurrentProject(updatedProject)
                     }}
                   />
                 ))}
               </div>
             ) : (
-              <div style={{ 
-                padding: '60px 0',
-                textAlign: 'center',
-                background: 'var(--ac-line)',
-                borderRadius: '12px',
-                border: '1px dashed var(--ac-line)'
-              }}>
-                <Empty 
-                  description={
-                    <Text style={{ color: '#888', fontSize: '14px' }}>暂无视频片段</Text>
-                  }
-                  image={<PlayCircleOutlined style={{ fontSize: '48px', color: '#555' }} />}
-                />
+              <div className="ac-empty">
+                <b>没有切出片段</b>
+                可以在设置里调低「最低评分阈值」后重试。
+                <div style={{ marginTop: 12 }}>
+                  <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>觉得不该是这样？告诉我们</Btn>
+                </div>
               </div>
             )}
-          </Card>
+          </Section>
+        </>
+      ) : isFailed ? (
+        <div className="ac-empty" style={{ marginTop: 32 }}>
+          <b>这次处理没有成功</b>
+          {currentProject.error_message ? (
+            <span className="ac-mono" style={{ display: 'block', marginTop: 6, color: 'var(--ac-muted)', wordBreak: 'break-all' }}>
+              {currentProject.error_message}
+            </span>
+          ) : (
+            '可以直接重试；如果反复失败，点「反馈问题」，运行环境与错误会自动附上。'
+          )}
         </div>
       ) : (
-        <div>
-          {/* 任务管理组件 */}
-          <ProjectTaskManager 
-            projectId={currentProject.id} 
-            projectName={currentProject.name}
-          />
-          
-          {/* 项目状态提示 */}
-          <Card style={{ marginTop: '16px' }}>
-            <Empty 
-              image={<PlayCircleOutlined style={{ fontSize: '64px', color: '#d9d9d9' }} />}
-              description={
-                <div>
-                  <Text>项目还未完成处理</Text>
-                  <br />
-                  <Text type="secondary">处理完成后可查看视频片段和AI合集</Text>
-                </div>
-              }
-            />
-          </Card>
+        <div style={{ marginTop: 32 }}>
+          <ProjectTaskManager projectId={currentProject.id} projectName={currentProject.name} />
+          <div className="ac-empty" style={{ marginTop: 24 }}>
+            <b>还在处理中</b>
+            完成后这里会出现切片与合集。
+          </div>
         </div>
       )}
 
-      {/* 创建合集模态框 */}
+      <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} context={failureContext} />
+
       <CreateCollectionModal
         visible={showCreateCollection}
-        clips={currentProject.clips || []}
+        clips={clips}
         onCancel={() => setShowCreateCollection(false)}
         onCreate={handleCreateCollection}
       />
-      
-      {/* 合集预览模态框 */}
+
       <CollectionPreviewModal
         visible={showCollectionDetail}
         collection={selectedCollection}
-        clips={currentProject.clips || []}
+        clips={clips}
         projectId={currentProject.id}
         onClose={() => {
           setShowCollectionDetail(false)
           setSelectedCollection(null)
         }}
-        onUpdateCollection={(collectionId, updates) => 
-          updateCollection(currentProject.id, collectionId, updates)
-        }
+        onUpdateCollection={(collectionId, updates) => updateCollection(currentProject.id, collectionId, updates)}
         onRemoveClip={handleRemoveClipFromCollection}
         onReorderClips={handleReorderCollectionClips}
         onDelete={handleDeleteCollection}
         onAddClip={handleAddClipToCollection}
       />
-
-    </Content>
+    </div>
   )
 }
 

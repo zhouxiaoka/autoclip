@@ -57,17 +57,26 @@ function safeSet(key: string, value: string): void {
   }
 }
 
+export interface RuntimeInfo { version: string; os: string; arch: string; locale: string }
+let runtimeInfo: RuntimeInfo = { version: 'unknown', os: detectOS(), arch: detectArch(), locale: typeof navigator !== 'undefined' ? navigator.language : '' }
+
+/** 启动后缓存的运行环境（版本 / 系统 / 架构），供反馈等场景复用；不依赖埋点是否开启。 */
+export function getRuntimeInfo(): RuntimeInfo {
+  return runtimeInfo
+}
+
 /**
  * 注册全局属性并上报启动相关生命周期事件。
- * 在 initAnalytics() 之后调用一次。posthog 未初始化时全部 no-op。
+ * 在 initAnalytics() 之后调用一次。posthog 未初始化时仅缓存运行环境。
  */
 export async function trackLaunch(): Promise<void> {
-  if (typeof posthog?.register !== 'function') return
-
   const version = await getAppVersion()
   const os = detectOS()
   const arch = detectArch()
   const locale = navigator.language
+  runtimeInfo = { version, os, arch, locale }
+
+  if (typeof posthog?.register !== 'function') return
 
   // 全局属性：后续每条事件自动携带
   posthog.register({

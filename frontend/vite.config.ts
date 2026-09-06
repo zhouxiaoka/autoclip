@@ -42,7 +42,8 @@ export default defineConfig(({ mode }) => {
       },
       proxy: {
         '/api': {
-          target: 'http://localhost:8000',
+          // Override when the desktop backend (random port) is running: BACKEND_URL=http://127.0.0.1:PORT npm run dev
+          target: process.env.BACKEND_URL || 'http://localhost:8000',
           changeOrigin: true
         }
       }

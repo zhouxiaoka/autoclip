@@ -187,28 +187,22 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
   return (
     <div
       style={{
-        cursor: 'pointer',
-        padding: '4px 0',
+        cursor: 'text',
         ...style
       }}
-      className={className}
+      className={`ac-editable ${className || ''}`}
       onClick={handleStartEdit}
       title="点击编辑标题"
     >
-      <span style={{ 
-        wordBreak: 'break-word',
-        lineHeight: '1.5',
-        fontSize: '14px',
-        minHeight: '20px',
-        display: 'inline'
-      }}>
+      <span style={{ wordBreak: 'break-word', display: 'inline' }}>
         {title}
-        <EditOutlined 
-          style={{ 
-            color: '#1890ff', 
-            fontSize: '12px',
-            opacity: 0.7,
-            transition: 'opacity 0.2s',
+        <EditOutlined
+          className="ac-editable-pen"
+          style={{
+            color: 'var(--ac-muted)',
+            fontSize: '11px',
+            opacity: 0,
+            transition: 'opacity 0.15s',
             marginLeft: '6px',
             display: 'inline'
           }}

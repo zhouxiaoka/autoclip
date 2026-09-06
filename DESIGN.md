@@ -105,6 +105,26 @@ sans + serif 混排是高级感来源：衬线只用于**拉丁品牌时刻**（
 - **已完成元信息**：纯灰 mono 数字 + 中点分隔，例 `7 切片 · 1 合集 · 8 个月前`，**不用彩色 chip**。
 - **阴影**：极轻。`0 1px 2px rgba(0,0,0,.03), 0 8px 24px rgba(0,0,0,.04)`（深色相应降透明度）。
 
+## App Layer（产品内实现约定，2026-09-07）
+产品内 UI 优先用 `frontend/src/ui/`（`index.tsx` + `ac.css`）里的原生原语，AntD 只保留复杂交互（Select / Form 校验 / message）。新页面、重做页面**不要**再直接用 AntD `Card` / `Tag` / `Tabs` / `Alert` / `Button` 搭版面。
+
+| 原语 | 用途 | 规则 |
+|------|------|------|
+| `ac-page` / `ac-back` / `ac-title` / `ac-meta` | 页面壳与页头 | 标题 22px/600；元信息 12.5px `--muted`，数字 mono，中点 `.dot` 分隔；返回是页内的 `‹ 项目`，不是全局按钮 |
+| `Section` | 区块 | 标题 15px/600 + mono 计数（`--muted`）+ 一行说明；右侧最多一个动作或一个分段切换 |
+| `Row` | 设置行 | 左标签+说明、右控件，发丝线分隔（macOS 系统设置式）；数字输入右侧单位用 `.ac-unit` 定宽 |
+| `Segmented` | 二/四选一 | 胶囊；选中项 `--card` 底 + 极轻阴影；不用 Tabs |
+| `Btn` | 按钮 | `cta`（实心墨）/ 默认（发丝边）/ `text`（安静文字）/ `danger`（仅红字，不用红底）；卡片内动作用 `text` 且 hover 才显 |
+| `StatusDot` | 状态 | 6px 圆点 + 文字：`--accent` 进行中 / `--ok` 完成 / `--error` 失败；**没有彩色 chip** |
+| `ProgressLine` | 进度 | 4px 细线 + 右侧 mono 百分比 |
+| `ac-card` + `ac-card-thumb` + `ac-tag` | 媒体卡（切片 / 合集 / 项目） | 16:9 缩略图；左上 mono 玻璃标签（时长 / 评分 / 数量）；标题 14px 两行截断；元信息 mono |
+| `Dialog` | 轻对话框 | portal 到 body；520px；标题 + 一句说明 + 内容 + 右对齐脚部；Esc / 点背景关闭 |
+| `ac-empty` | 空态 / 失败态 | 虚线发丝框，`b` 一句话 + 一句可做的事；失败态用它承载错误 mono 文本，不用红色 Alert |
+| `Icon.*` | 图标 | 内联 SVG、1.5px 线；不用 emoji、不用 icon 字体 |
+
+- **分类标签**：不用 emoji + 彩色（旧 `getCategoryInfo` 色表已废），只在缩略图上用中性玻璃 chip 写文字。
+- **反馈入口**：设置页「反馈」区 + 所有失败态（项目卡 `重试 · 反馈`、详情页 `反馈问题`、切片为 0 空态）。对话框自动带版本 / OS / 架构 / 模型，用户只写一句话。
+
 ## Motion
 - **方式**：minimal-functional + 个别 intentional。只做有意义的过渡，不炫技。
 - **缓动**：进入 `ease-out`、退出 `ease-in`、位移 `ease-in-out`。
@@ -136,3 +156,4 @@ sans + serif 混排是高级感来源：衬线只用于**拉丁品牌时刻**（
 |------|------|------|
 | 2026-05-31 | 初版设计系统 | /design-consultation 产出。方向几经迭代（暖编辑→玩具风→否决）最终锁定 Dia 式「克制专业」，浅/深双主题，去大标题、低密度、单一克制蓝。 |
 | 2026-09-06 | 官网改版并入同一系统；新增 Web 层规范 | 旧官网为 2025 年 Tailwind 模板风（紫渐变、彩色 icon 网格、旧截图），与产品方向割裂。改版不做第二套视觉，而是把产品 token 原样搬到官网、补 display 字号阶与区块节奏；hero 用代码搭的产品框替代截图，既不会过时，也作为下一轮产品 UI 迭代的对照基准。技术形态保持单文件 `index.html` + `tokens.css`（GitHub Pages 零构建）。 |
+| 2026-09-07 | 产品内高频屏重做（详情 / 设置 / 卡片）；新增 App Layer 原语 | 主产品仍是 AntD 默认件堆出来的「上一代 AI 工具」味：彩色 Tag、卡片套卡片、绿/红实心按钮、emoji 分类。参照 Granola / Raycast / Dia 这类「安静、留白、单强调色、设置页系统化」的桌面工具，把详情页、设置页、切片 / 合集 / 项目卡换成 `frontend/src/ui/` 原生原语；AntD 只留 Select / Form / message。反馈入口按同一规范做进设置页与全部失败态。 |

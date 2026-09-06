@@ -5,6 +5,7 @@ type Theme = 'light' | 'dark'
 interface ThemeContextValue {
   theme: Theme
   toggleTheme: () => void
+  setTheme: (theme: Theme) => void
 }
 
 const THEME_STORAGE_KEY = 'autoclip-theme'
@@ -29,6 +30,7 @@ export const ThemeProvider: React.FC<React.PropsWithChildren> = ({ children }) =
     () => ({
       theme,
       toggleTheme: () => setTheme((currentTheme) => currentTheme === 'light' ? 'dark' : 'light'),
+      setTheme,
     }),
     [theme],
   )

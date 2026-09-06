@@ -1,23 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  Alert, Button, Card, Progress, Tag, Space, Typography, message, List, Popconfirm, Spin, Tooltip,
-} from 'antd'
-import {
-  DownloadOutlined, DeleteOutlined, CheckCircleFilled, ReloadOutlined, ThunderboltOutlined,
-} from '@ant-design/icons'
+import { Popconfirm, message } from 'antd'
 import { speechApi, WhisperRuntimeStatus, WhisperModel } from '../services/api'
-
-const { Text, Paragraph } = Typography
+import { Btn, ProgressLine, Row, StatusDot } from '../ui'
 
 interface SpeechRecognitionConfigProps {
   config?: Record<string, unknown>
   onConfigChange?: (config: Record<string, unknown>) => void
 }
 
-const accuracyColor: Record<string, string> = {
-  最高: 'green', 高: 'green', 较好: 'blue', 中等: 'gold', 较低: 'default',
-}
-
+// Whisper 运行时 + 模型管理 — Calm Premium 行式布局（见 DESIGN.md）
 const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
   const [runtime, setRuntime] = useState<WhisperRuntimeStatus | null>(null)
   const [models, setModels] = useState<WhisperModel[]>([])
@@ -29,7 +20,7 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
       const [rt, ms] = await Promise.all([speechApi.getRuntimeStatus(), speechApi.getModels()])
       setRuntime(rt)
       setModels(Array.isArray(ms) ? ms : [])
-    } catch (e) {
+    } catch {
       // 后端可能尚未就绪，静默重试
     } finally {
       setLoading(false)
@@ -47,8 +38,7 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
 
   useEffect(() => {
     if (timer.current) window.clearInterval(timer.current)
-    const interval = needsFastPoll(runtime, models) ? 2000 : 15000
-    timer.current = window.setInterval(refresh, interval)
+    timer.current = window.setInterval(refresh, needsFastPoll(runtime, models) ? 2000 : 15000)
     return () => { if (timer.current) window.clearInterval(timer.current) }
   }, [runtime, models, refresh])
 
@@ -68,7 +58,7 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
       const r = await speechApi.uninstallRuntime()
       message.success(r.message || '已卸载')
       refresh()
-    } catch (e: any) {
+    } catch {
       message.error('卸载失败')
     }
   }
@@ -76,7 +66,7 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
   const handleDownload = async (model: string) => {
     try {
       await speechApi.downloadModel(model)
-      message.info(`开始下载模型 ${model}`)
+      message.info(`开始下载 ${model}`)
       setModels((prev) => prev.map((m) => (m.name === model ? { ...m, status: 'downloading' } : m)))
       refresh()
     } catch (e: any) {
@@ -87,131 +77,107 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
   const handleDelete = async (model: string) => {
     try {
       await speechApi.deleteModel(model)
-      message.success(`已删除模型 ${model}`)
+      message.success(`已删除 ${model}`)
       refresh()
-    } catch (e) {
+    } catch {
       message.error('删除失败')
     }
   }
 
-  if (loading) return <Spin />
+  if (loading) return <div className="ac-hint">读取 Whisper 状态…</div>
 
   const installed = runtime?.status === 'installed'
   const installing = runtime?.status === 'installing'
   const supported = runtime?.platform_supported !== false
 
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <Alert
-        type="info"
-        showIcon
-        message="什么时候需要 Whisper？"
-        description="当导入的视频自带字幕（例如 B站 的 AI 字幕）时，会直接使用现成字幕，无需 Whisper。只有当视频没有字幕时，才需要本地 Whisper 来自动转写生成字幕。Whisper 为按需安装，装不装、装哪个模型都由你决定。"
-      />
+    <>
+      <div className="ac-rows">
+        <Row
+          top
+          label="Whisper 运行时"
+          hint={
+            !supported ? '当前平台不支持本地转写。'
+              : installed ? `faster-whisper 已安装${runtime?.packages?.length ? `（${runtime.packages.join(', ')}）` : ''}。`
+              : installing ? (runtime?.message || '正在安装…')
+              : runtime?.status === 'error' ? `安装出错：${runtime?.message || ''}`
+              : '按需安装，约 200–400 MB（不含 PyTorch）。装好后再选一个模型下载即可。'
+          }
+        >
+          {installed && (
+            <>
+              <StatusDot tone="ok" label="已安装" />
+              <Popconfirm title="卸载 Whisper 运行时？已下载的模型不会被删除。" onConfirm={handleUninstall} okText="卸载" cancelText="取消">
+                <Btn variant="danger" size="sm">卸载</Btn>
+              </Popconfirm>
+            </>
+          )}
+          {installing && (
+            <div style={{ width: 220 }}>
+              <ProgressLine percent={runtime?.progress ?? 5} />
+              <div className="ac-hint" style={{ textAlign: 'right', fontFamily: 'var(--ac-font-mono)' }}>{Math.round(runtime?.progress ?? 5)}%</div>
+            </div>
+          )}
+          {runtime?.status === 'not_installed' && (
+            <Btn variant="cta" size="sm" style={{ height: 32, fontSize: 13, padding: '0 16px' }} onClick={handleInstall} disabled={!supported}>安装</Btn>
+          )}
+          {runtime?.status === 'error' && (
+            <Btn size="sm" onClick={handleInstall} disabled={!supported}>重试安装</Btn>
+          )}
+        </Row>
+      </div>
 
-      {!supported && (
-        <Alert type="warning" showIcon message="当前平台不支持"
-          description="mlx-whisper 仅支持 Apple Silicon (M 系列) Mac。" />
+      {installing && runtime?.log_tail && (
+        <pre className="ac-input ac-input--mono" style={{ height: 'auto', maxHeight: 120, overflow: 'auto', padding: '8px 12px', margin: '12px 0 0', color: 'var(--ac-sub)', background: 'var(--ac-line-2)', fontSize: 11, whiteSpace: 'pre-wrap' }}>
+          {runtime.log_tail}
+        </pre>
       )}
 
-      {/* 运行时 */}
-      <Card size="small" title={<Space><ThunderboltOutlined />Whisper 运行时</Space>}>
-        {installed && (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Space>
-              <CheckCircleFilled style={{ color: '#52c41a' }} />
-              <Text strong>已安装</Text>
-              <Text type="secondary">（{(runtime?.packages || []).join(', ')}）</Text>
-            </Space>
-            <Popconfirm title="卸载 Whisper 运行时？已下载的模型不会被删除。" onConfirm={handleUninstall} okText="卸载" cancelText="取消">
-              <Button danger size="small" icon={<DeleteOutlined />}>卸载运行时</Button>
-            </Popconfirm>
-          </Space>
-        )}
-
-        {installing && (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Text>正在安装… {runtime?.message}</Text>
-            <Progress percent={runtime?.progress ?? 5} status="active" />
-            {runtime?.log_tail && (
-              <pre style={{ maxHeight: 120, overflow: 'auto', background: '#1a1a1a', color: '#bbb', padding: 8, fontSize: 11, borderRadius: 4, margin: 0 }}>
-                {runtime.log_tail}
-              </pre>
-            )}
-          </Space>
-        )}
-
-        {runtime?.status === 'not_installed' && (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              尚未安装。安装会下载 faster-whisper 运行时（约 200–400MB，不含 PyTorch），完成后再选择并下载一个模型即可使用。
-            </Paragraph>
-            <Button type="primary" icon={<DownloadOutlined />} onClick={handleInstall} disabled={!supported}>
-              安装 Whisper
-            </Button>
-          </Space>
-        )}
-
-        {runtime?.status === 'error' && (
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Alert type="error" showIcon message="安装出错" description={runtime?.message} />
-            <Button icon={<ReloadOutlined />} onClick={handleInstall} disabled={!supported}>重试安装</Button>
-          </Space>
-        )}
-      </Card>
-
-      {/* 模型 */}
-      <Card size="small" title="Whisper 模型">
-        {!installed && (
-          <Text type="secondary">请先安装 Whisper 运行时，然后在这里下载模型。</Text>
-        )}
-        {installed && (
-          <List
-            dataSource={models}
-            renderItem={(m) => {
-              const downloaded = m.status === 'downloaded'
-              const downloading = m.status === 'downloading'
-              return (
-                <List.Item
-                  actions={[
-                    downloaded ? (
-                      <Popconfirm title={`删除模型 ${m.name}？`} onConfirm={() => handleDelete(m.name)} okText="删除" cancelText="取消">
-                        <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
-                      </Popconfirm>
-                    ) : downloading ? (
-                      <Button size="small" loading disabled>下载中</Button>
-                    ) : (
-                      <Button size="small" type="primary" icon={<DownloadOutlined />} onClick={() => handleDownload(m.name)}>
-                        下载
-                      </Button>
-                    ),
-                  ]}
-                >
-                  <List.Item.Meta
-                    title={
-                      <Space>
-                        <Text strong>{m.name}</Text>
-                        <Text type="secondary">{m.size}</Text>
-                        {downloaded && <Tag color="green">已下载</Tag>}
-                        <Tag color={accuracyColor[m.accuracy] || 'default'}>准确度 {m.accuracy}</Tag>
-                        <Tooltip title="速度"><Tag>{m.speed}</Tag></Tooltip>
-                      </Space>
-                    }
-                    description={
-                      <Space direction="vertical" style={{ width: '100%' }}>
-                        <Text type="secondary">{m.description}</Text>
-                        {downloading && <Progress percent={m.downloadProgress ?? undefined} status="active" />}
-                        {m.status === 'error' && m.errorMessage && <Text type="danger">{m.errorMessage}</Text>}
-                      </Space>
-                    }
-                  />
-                </List.Item>
-              )
-            }}
-          />
-        )}
-      </Card>
-    </Space>
+      <div className="ac-eyebrow" style={{ marginTop: 40, marginBottom: 12 }}>模型</div>
+      {!installed ? (
+        <div className="ac-hint">先安装运行时，再在这里下载模型。</div>
+      ) : (
+        <div className="ac-rows">
+          {models.map((m) => {
+            const downloaded = m.status === 'downloaded'
+            const downloading = m.status === 'downloading'
+            return (
+              <Row
+                key={m.name}
+                label={
+                  <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10 }}>
+                    <span className="ac-mono">{m.name}</span>
+                    <span className="ac-mono" style={{ fontSize: 12, color: 'var(--ac-muted)', fontWeight: 400 }}>{m.size}</span>
+                    {downloaded && <StatusDot tone="ok" label="已下载" />}
+                  </span>
+                }
+                hint={
+                  <>
+                    {m.description} · 准确度{m.accuracy} · 速度{m.speed}
+                    {m.status === 'error' && m.errorMessage && <span style={{ color: 'var(--ac-error)' }}> · {m.errorMessage}</span>}
+                  </>
+                }
+              >
+                {downloaded ? (
+                  <Popconfirm title={`删除模型 ${m.name}？`} onConfirm={() => handleDelete(m.name)} okText="删除" cancelText="取消">
+                    <Btn variant="danger" size="sm">删除</Btn>
+                  </Popconfirm>
+                ) : downloading ? (
+                  <div style={{ width: 160 }}>
+                    <ProgressLine percent={m.downloadProgress ?? 0} />
+                    <div className="ac-hint" style={{ textAlign: 'right', fontFamily: 'var(--ac-font-mono)' }}>
+                      {m.downloadProgress != null ? `${Math.round(m.downloadProgress)}%` : '下载中'}
+                    </div>
+                  </div>
+                ) : (
+                  <Btn size="sm" onClick={() => handleDownload(m.name)}>下载</Btn>
+                )}
+              </Row>
+            )
+          })}
+        </div>
+      )}
+    </>
   )
 }
 

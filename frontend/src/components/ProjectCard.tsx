@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Tag, Button, Space, Typography, Popconfirm, message, Tooltip } from 'antd'
+import { Card, Button, Space, Typography, Popconfirm, message, Tooltip } from 'antd'
 import { PlayCircleOutlined, DeleteOutlined, DownloadOutlined, ReloadOutlined, LoadingOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { Project } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
 import { UnifiedStatusBar } from './UnifiedStatusBar'
+import FeedbackDialog from './FeedbackDialog'
+import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
+import { Btn } from '../ui'
 // import { 
 //   getProjectStatusConfig, 
 //   calculateProjectProgress, 
@@ -276,6 +279,15 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                          Math.round((project.current_step / project.total_steps) * 100) : 
                          project.status === 'processing' ? 10 : 0
 
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const failedProgress = useSimpleProgressStore((st) => st.getProgress(project.id))
+  const failureContext = {
+    source: 'failure' as const,
+    project_id: project.id,
+    stage: failedProgress?.stage,
+    error_message: project.error_message || failedProgress?.message || undefined,
+  }
+
   const handleRetry = async (opts?: { silent?: boolean }) => {
     if (isRetrying) return
 
@@ -305,6 +317,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   }
 
   return (
+    <>
     <Card
       hoverable
       className="project-card"
@@ -386,23 +399,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               top: '8px',
               left: '8px'
             }}>
-              <Tag
-                style={{
-                  background: `${getCategoryInfo(project.video_category).color}15`,
-                  border: `1px solid ${getCategoryInfo(project.video_category).color}40`,
-                  borderRadius: '3px',
-                  color: getCategoryInfo(project.video_category).color,
-                  fontSize: '10px',
-                  fontWeight: 500,
-                  padding: '2px 6px',
-                  lineHeight: '14px',
-                  height: '18px',
-                  margin: 0
-                }}
-              >
-                <span style={{ marginRight: '2px' }}>{getCategoryInfo(project.video_category).icon}</span>
+              <span className="ac-tag ac-tag--sans" style={{ position: 'static', fontSize: 11 }}>
                 {getCategoryInfo(project.video_category).name}
-              </Tag>
+              </span>
             </div>
           )}
           
@@ -448,14 +447,14 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                       handleRetry()
                     }}
                     style={{
-                      height: '20px',
-                      width: '20px',
-                      borderRadius: '3px',
-                      color: '#52c41a',
-                      border: '1px solid rgba(82, 196, 26, 0.5)',
-                      background: 'rgba(82, 196, 26, 0.1)',
+                      height: '22px',
+                      width: '22px',
+                      borderRadius: '999px',
+                      color: 'rgba(255,255,255,0.9)',
+                      border: '1px solid rgba(255,255,255,0.25)',
+                      background: 'rgba(20,20,19,0.45)',
                       padding: 0,
-                      minWidth: '20px',
+                      minWidth: '22px',
                       fontSize: '10px'
                     }}
                   />
@@ -480,16 +479,16 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                         e.stopPropagation()
                       }}
                       style={{
-                        height: '20px',
-                        width: '20px',
-                        borderRadius: '3px',
-                        color: '#ff6b6b',
-                        border: '1px solid rgba(255, 107, 107, 0.5)',
-                        background: 'rgba(255, 107, 107, 0.1)',
-                        padding: 0,
-                        minWidth: '20px',
-                        fontSize: '10px'
-                      }}
+                      height: '22px',
+                      width: '22px',
+                      borderRadius: '999px',
+                      color: 'rgba(255,255,255,0.9)',
+                      border: '1px solid rgba(255,255,255,0.25)',
+                      background: 'rgba(20,20,19,0.45)',
+                      padding: 0,
+                      minWidth: '22px',
+                      fontSize: '10px'
+                    }}
                     />
                   </Popconfirm>
                 </>
@@ -509,16 +508,16 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                             handleRetry()
                           }}
                           style={{
-                            width: '20px',
-                            height: '20px',
-                            borderRadius: '3px',
-                            color: '#1890ff',
-                            border: '1px solid rgba(24, 144, 255, 0.5)',
-                            background: 'rgba(24, 144, 255, 0.1)',
-                            padding: 0,
-                            minWidth: '20px',
-                            fontSize: '10px'
-                          }}
+                      height: '22px',
+                      width: '22px',
+                      borderRadius: '999px',
+                      color: 'rgba(255,255,255,0.9)',
+                      border: '1px solid rgba(255,255,255,0.25)',
+                      background: 'rgba(20,20,19,0.45)',
+                      padding: 0,
+                      minWidth: '22px',
+                      fontSize: '10px'
+                    }}
                         />
                       </Tooltip>
                     )}
@@ -534,16 +533,16 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                           message.info('下载功能开发中...')
                         }}
                         style={{
-                          width: '20px',
-                          height: '20px',
-                          borderRadius: '3px',
-                          color: 'rgba(255, 255, 255, 0.8)',
-                          border: '1px solid rgba(255, 255, 255, 0.2)',
-                          background: 'rgba(255, 255, 255, 0.1)',
-                          padding: 0,
-                          minWidth: '20px',
-                          fontSize: '10px'
-                        }}
+                      height: '22px',
+                      width: '22px',
+                      borderRadius: '999px',
+                      color: 'rgba(255,255,255,0.9)',
+                      border: '1px solid rgba(255,255,255,0.25)',
+                      background: 'rgba(20,20,19,0.45)',
+                      padding: 0,
+                      minWidth: '22px',
+                      fontSize: '10px'
+                    }}
                       />
                     )}
                     
@@ -568,16 +567,16 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                           e.stopPropagation()
                         }}
                         style={{
-                          width: '20px',
-                          height: '20px',
-                          borderRadius: '3px',
-                          color: 'rgba(255, 255, 255, 0.8)',
-                          border: '1px solid rgba(255, 255, 255, 0.2)',
-                          background: 'rgba(255, 255, 255, 0.1)',
-                          padding: 0,
-                          minWidth: '20px',
-                          fontSize: '10px'
-                        }}
+                      height: '22px',
+                      width: '22px',
+                      borderRadius: '999px',
+                      color: 'rgba(255,255,255,0.9)',
+                      border: '1px solid rgba(255,255,255,0.25)',
+                      background: 'rgba(20,20,19,0.45)',
+                      padding: 0,
+                      minWidth: '22px',
+                      fontSize: '10px'
+                    }}
                       />
                     </Popconfirm>
                   </Space>
@@ -617,7 +616,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           {/* 状态和统计信息 — Calm Premium，见 DESIGN.md */}
           {(normalizedStatus === 'importing' || normalizedStatus === 'downloading' || normalizedStatus === 'processing' || normalizedStatus === 'failed') ? (
             // 进行中 / 失败：细进度线或终态点，占满宽度
-            <div style={{ marginBottom: '2px' }}>
+            <div style={{ marginBottom: '2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <UnifiedStatusBar
                 projectId={project.id}
                 status={normalizedStatus}
@@ -629,6 +628,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                   console.log(`项目 ${project.id} 下载进度更新: ${progress}%`)
                 }}
               />
+              {normalizedStatus === 'failed' && (
+                // 失败态：重试 + 反馈（反馈自动带上阶段 / 错误 / 版本 / 模型上下文）
+                <div style={{ display: 'flex', gap: 2, flex: '0 0 auto' }} onClick={(e) => e.stopPropagation()}>
+                  <Btn variant="text" size="sm" style={{ height: 26, padding: '0 8px', fontSize: 12.5 }} loading={isRetrying} onClick={() => handleRetry()}>重试</Btn>
+                  <Btn variant="text" size="sm" style={{ height: 26, padding: '0 8px', fontSize: 12.5 }} onClick={() => setFeedbackOpen(true)}>反馈</Btn>
+                </div>
+              )}
             </div>
           ) : (
             // 已完成：● 已完成  +  灰色 mono 元信息（N 切片 · M 合集）
@@ -652,6 +658,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
         </div>
       </div>
     </Card>
+    <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} context={failureContext} />
+    </>
   )
 }
 

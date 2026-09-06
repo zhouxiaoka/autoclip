@@ -10,6 +10,7 @@
   --ac-font-serif:"Instrument Serif",Georgia,serif;
   --ac-font-mono:"Geist Mono",ui-monospace,monospace;
   --ac-shadow:0 1px 2px rgba(26,26,25,.03), 0 8px 24px rgba(26,26,25,.05);
+  --ac-ease-out:cubic-bezier(.2,.7,.2,1); --ac-t-micro:100ms; --ac-t-short:200ms;
 }
 [data-theme="dark"]{
   --ac-bg:#19181A; --ac-card:#211F22; --ac-ink:#ECEAE6; --ac-sub:#A6A29B; --ac-muted:#76726C;

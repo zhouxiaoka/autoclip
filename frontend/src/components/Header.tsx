@@ -1,6 +1,6 @@
 import React from 'react'
 import { Layout, Button } from 'antd'
-import { SettingOutlined, ArrowLeftOutlined, BulbOutlined, MoonOutlined } from '@ant-design/icons'
+import { SettingOutlined, BulbOutlined, MoonOutlined } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
 
@@ -10,7 +10,7 @@ const { Header: AntHeader } = Layout
 const Header: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const isHomePage = location.pathname === '/'
+  const isSettings = location.pathname === '/settings'
   const { theme, toggleTheme } = useTheme()
 
   return (
@@ -48,16 +48,7 @@ const Header: React.FC = () => {
 
       {/* Right side */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {!isHomePage && (
-          <Button
-            type="text"
-            icon={<ArrowLeftOutlined />}
-            onClick={() => navigate('/')}
-            style={{ color: 'var(--ac-sub)', height: '36px', borderRadius: '999px' }}
-          >
-            返回
-          </Button>
-        )}
+        {/* 返回入口由各页面页头承担（见 DESIGN.md App Layer），顶栏只留全局动作 */}
         <Button
           type="text"
           icon={theme === 'dark' ? <BulbOutlined /> : <MoonOutlined />}
@@ -78,13 +69,14 @@ const Header: React.FC = () => {
           type="text"
           icon={<SettingOutlined />}
           onClick={() => navigate('/settings')}
+          aria-current={isSettings ? 'page' : undefined}
           style={{
-            color: 'var(--ac-sub)',
+            color: isSettings ? 'var(--ac-ink)' : 'var(--ac-sub)',
             border: '1px solid var(--ac-line)',
             borderRadius: '999px',
             height: '36px',
             padding: '0 16px',
-            background: 'var(--ac-card)',
+            background: isSettings ? 'var(--ac-line-2)' : 'var(--ac-card)',
           }}
         >
           设置
