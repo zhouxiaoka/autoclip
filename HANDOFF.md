@@ -93,6 +93,20 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - **仍 open · 待复现的产品 bug**（`bug`）：#11 切片为 0、#24 进度错误、#38 缩略图、#20 导入报错、#27 加载失败、#77 API 连接测试失败
 - **仍 open · question**：#10 #14 #18 #36；分享贴 #40 #56 不动
 
+### 反馈收件箱（2026-09-07 搭好，替代 QQ 群 / 个人飞书）
+原则：不再让用户来加维护者，反馈自己流到一个每周看一次的地方。三个入口：
+
+| 入口 | 面向 | 实现 | 自动化 |
+|------|------|------|--------|
+| **飞书表单** | 不用 GitHub 的普通用户 | 多维表格「AutoClip 用户反馈」（个人账号 `my.feishu.cn`，base `EuYLb3lQ2awwDFsTkDXchabsnbd`，表「反馈」）。公开表单 `https://my.feishu.cn/share/base/shrcn8hKUG2icIJLpNry6uWVNJe`，字段：类型 / 反馈内容 / 平台 / 版本 / 截图日志 / 联系方式；内部字段 状态 / 处理备注 / 提交时间 | 自动化 `wkfTMIXp3h6zTWNk`：新记录 → 状态置「新」→ 飞书消息通知（带「打开记录」按钮） |
+| **GitHub Issue Forms** | 开发者 | `.github/ISSUE_TEMPLATE/`：bug（版本 / 平台 / 模型必填）、feature、config.yml 联系链接（#96 / Discussions / 官网表单）。Discussions 已开启 | `.github/workflows/issue-hygiene.yml`：新 issue 自动回复节奏；`needs-info` 14+7 天自动关；60+14 天 stale；`pinned` / `feature` 不自动关 |
+| **官网 `#feedback`** | 所有人 | `autoclip_intro` FAQ 区的「提交反馈」卡，指向飞书表单 + Issues / Discussions；QQ / 飞书二维码已撤 | — |
+
+- 新 label：`needs-triage`（模板自动打）/ `needs-info` / `stale` / `pinned`（#96 已打）。
+- #96 已加「怎么反馈」小节。
+- 飞书 CLI：本机 `lark-cli` profile `personal`（app `cli_aa9ce7782ea39bcf`）；yahaha 账号下误建的同名空表可删。
+- **未做**：应用内反馈入口（PostHog Surveys，设置页 + 失败态）；每周汇总周报自动化（issue + 表单 + survey → 飞书）。
+
 ---
 
 ## 四、迭代计划
