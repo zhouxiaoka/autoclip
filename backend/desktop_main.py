@@ -60,7 +60,7 @@ class DesktopServiceManager:
             level=getattr(logging, self.config.log_level.upper()),
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler(self.config.paths.data_dir / "logs" / "autoclip.log"),
+                logging.FileHandler(self.config.paths.data_dir / "logs" / "autoclip.log", encoding="utf-8"),
                 logging.StreamHandler()
             ]
         )

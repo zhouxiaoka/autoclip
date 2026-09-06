@@ -392,11 +392,12 @@ const SettingsPage: React.FC = () => {
                       <Select.Option value="gpt-3.5-turbo">gpt-3.5-turbo (GPT-3.5 Turbo)</Select.Option>
                     </Select.OptGroup>
                     
-                    {/* Google Gemini模型 */}
+                    {/* Google Gemini模型：用官方维护的 "-latest" 别名而不是具体版本号
+                        （如 gemini-1.5-pro），避免版本被 Google 下线后调用直接 404 */}
                     <Select.OptGroup label="Google Gemini">
-                      <Select.Option value="gemini-1.5-pro">gemini-1.5-pro (Gemini 1.5 Pro)</Select.Option>
-                      <Select.Option value="gemini-1.5-flash">gemini-1.5-flash (Gemini 1.5 Flash)</Select.Option>
-                      <Select.Option value="gemini-pro">gemini-pro (Gemini Pro)</Select.Option>
+                      <Select.Option value="gemini-flash-latest">gemini-flash-latest (Gemini Flash，速度与成本均衡)</Select.Option>
+                      <Select.Option value="gemini-pro-latest">gemini-pro-latest (Gemini Pro，更强推理能力)</Select.Option>
+                      <Select.Option value="gemini-flash-lite-latest">gemini-flash-lite-latest (Gemini Flash-Lite，最快最省)</Select.Option>
                     </Select.OptGroup>
                     
                     {/* 硅基流动模型 */}
