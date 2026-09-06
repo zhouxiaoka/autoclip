@@ -250,6 +250,40 @@ def normalize_base_url(base_url: Optional[str]) -> str:
     return (base_url or "").strip().rstrip("/")
 
 
+def is_local_url(url: Optional[str]) -> bool:
+    """
+    是否指向本机 / 局域网（Ollama、LM Studio、vLLM 常见部署位置）。
+    这类地址绝不该走系统代理：macOS 上 httpx 会读系统代理设置（Clash / Surge 等），
+    把 localhost 请求也送进代理，结果就是 502 / 超时，用户完全摸不着头脑。
+    """
+    if not url:
+        return False
+    try:
+        from urllib.parse import urlparse
+        import ipaddress
+        host = (urlparse(url).hostname or "").lower()
+    except Exception:  # noqa: BLE001
+        return False
+    if host in ("localhost", "0.0.0.0", "host.docker.internal") or host.endswith(".local") or host.endswith(".localhost"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        return ip.is_loopback or ip.is_private or ip.is_link_local
+    except ValueError:
+        return False
+
+
+def make_openai_http_client(base_url: Optional[str]):
+    """本地地址 → 不信任环境 / 系统代理的 httpx.Client；其它返回 None（用 SDK 默认）。"""
+    if not is_local_url(base_url):
+        return None
+    try:
+        import httpx
+        return httpx.Client(trust_env=False)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 class OpenAIProvider(LLMProvider):
     """OpenAI 及一切 OpenAI 兼容接口（智谱、DeepSeek、OpenRouter、Ollama、vLLM、LM Studio 等）
 
@@ -268,6 +302,9 @@ class OpenAIProvider(LLMProvider):
             client_kwargs = {"api_key": api_key}
             if self.base_url:
                 client_kwargs["base_url"] = self.base_url
+                http_client = make_openai_http_client(self.base_url)
+                if http_client is not None:
+                    client_kwargs["http_client"] = http_client
             self.client = openai.OpenAI(**client_kwargs)
         except ImportError:
             raise ImportError("请安装openai: pip install openai")

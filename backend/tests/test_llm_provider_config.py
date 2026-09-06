@@ -49,7 +49,11 @@ def test_openai_provider_uses_custom_base_url_and_placeholder_key(fake_openai):
 
     assert provider.base_url == "http://localhost:11434/v1"
     assert provider.is_custom_endpoint is True
-    assert fake_openai.created[-1] == {
+    created = dict(fake_openai.created[-1])
+    # 本地地址会额外带一个不走系统代理的 httpx.Client（见 is_local_url）
+    http_client = created.pop("http_client")
+    assert http_client.trust_env is False
+    assert created == {
         "api_key": OPENAI_COMPATIBLE_PLACEHOLDER_KEY,
         "base_url": "http://localhost:11434/v1",
     }
@@ -155,6 +159,7 @@ def test_manager_env_fallbacks_for_docker(manager_env, monkeypatch):
     info = manager.get_current_provider_info()
     assert info == {
         "provider": "openai",
+        "backend_provider": "openai",
         "model": "glm-4-flash",
         "available": True,
         "display_name": "OpenAI / 兼容接口",

@@ -220,6 +220,15 @@ export const settingsApi = {
     return api.get('/settings/current-provider')
   },
 
+  // 本地 OpenAI 兼容服务（Ollama / LM Studio / vLLM）实际提供的模型列表
+  listCompatibleModels: (
+    params: { provider?: string; baseUrl?: string; apiKey?: string }
+  ): Promise<{ reachable: boolean; base_url: string; models: string[]; error?: string }> => {
+    return api.get('/settings/compatible-models', {
+      params: { provider: params.provider, base_url: params.baseUrl, api_key: params.apiKey },
+    })
+  },
+
   // 检查桌面模式
   checkDesktopMode: (): Promise<{ is_desktop_mode: boolean; environment: any }> => {
     return api.get('/settings/desktop-mode')

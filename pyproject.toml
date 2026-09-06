@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autoclip"
+version = "1.2.1"
+description = "AutoClip — AI 长视频自动切片：CLI 与 MCP server 入口"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# 运行依赖以 requirements.txt 为准（桌面端 / Docker / CI 都用它）；这里不重复声明，
+# 开发者按 README：pip install -r requirements.txt && pip install -e .
+dependencies = []
+
+[project.scripts]
+autoclip = "backend.cli:main"
+autoclip-mcp = "backend.mcp_server:main"
+
+[project.urls]
+Homepage = "https://github.com/zhouxiaoka/autoclip"
+Issues = "https://github.com/zhouxiaoka/autoclip/issues"
+
+[tool.setuptools.packages.find]
+include = ["backend", "backend.*"]
+
+[tool.setuptools.package-data]
+backend = ["prompt/*.txt", "prompt/**/*.txt"]

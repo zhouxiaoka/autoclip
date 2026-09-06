@@ -216,6 +216,23 @@ def compute_percent(stage: str, subpercent: Optional[float] = None) -> int:
         return min(99, done + int(cur * subpercent / 100))
 
 
+# 进程内监听器（CLI / MCP 用来实时打印进度；API 进程用不到）
+_listeners: List[Any] = []
+
+
+def add_progress_listener(fn) -> None:
+    """注册进程内进度回调：fn(payload: dict)。payload 含 project_id / stage / percent / message / ts。"""
+    if fn not in _listeners:
+        _listeners.append(fn)
+
+
+def remove_progress_listener(fn) -> None:
+    try:
+        _listeners.remove(fn)
+    except ValueError:
+        pass
+
+
 def emit_progress(project_id: str, stage: str, message: str = "", subpercent: Optional[float] = None):
     """
     发送进度事件
@@ -226,10 +243,6 @@ def emit_progress(project_id: str, stage: str, message: str = "", subpercent: Op
         message: 进度消息
         subpercent: 子进度百分比，可选
     """
-    if not store:
-        logger.warning("进度存储未初始化，跳过进度发送")
-        return
-        
     percent = compute_percent(stage, subpercent)
     payload = {
         "project_id": project_id,
@@ -238,6 +251,16 @@ def emit_progress(project_id: str, stage: str, message: str = "", subpercent: Op
         "message": message,
         "ts": int(time.time())
     }
+
+    for fn in list(_listeners):
+        try:
+            fn(payload)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"进度监听器异常: {e}")
+
+    if not store:
+        logger.warning("进度存储未初始化，跳过进度发送")
+        return
     
     try:
         store.save(project_id, stage, percent, message, payload["ts"])

@@ -34,8 +34,11 @@ interface and powerful backend processing capabilities.
 
 - 🎬 **Multi-platform Support**: One-click download from YouTube, Bilibili, and local
   file upload
-- 🤖 **AI Intelligent Analysis**: Video content understanding based on Qwen large
-  language model
+- 🤖 **AI Intelligent Analysis**: Qwen / any OpenAI-compatible API / Gemini / SiliconFlow,
+  or fully local with **Ollama / LM Studio** (no API key, offline)
+- 🧑‍💻 **Developer Mode**: `autoclip run video.mp4 --provider ollama` clips a video in one
+  command; built-in **MCP server** + Agent skill so Cursor / Claude can call AutoClip directly
+  ([docs](docs/CLI_AND_MCP.md))
 - ✂️ **Automatic Clipping**: Intelligent recognition of exciting clips with automatic
   cutting, supporting multiple video categories
 - 📚 **Smart Collections**: AI-recommended and manually created video collections
@@ -158,6 +161,19 @@ cd autoclip
 # Stop system
 ./stop_autoclip.sh
 ```
+
+#### Option 3: CLI / MCP (developers)
+
+```bash
+pip install -r requirements.txt && pip install -e .
+autoclip doctor                                   # check ffmpeg / Whisper / LLM
+autoclip run talk.mp4 --provider ollama           # local Ollama, no API key; output shared with the desktop app
+autoclip run talk.mp4 --srt talk.srt --json       # JSON output for scripts / agents
+autoclip mcp                                      # MCP server (stdio) for Cursor / Claude
+```
+
+Cursor `~/.cursor/mcp.json`: `{"mcpServers": {"autoclip": {"command": "/path/to/venv/bin/autoclip", "args": ["mcp"]}}}`.
+See [docs/CLI_AND_MCP.md](docs/CLI_AND_MCP.md); the Agent skill lives in [skills/autoclip/SKILL.md](skills/autoclip/SKILL.md).
 
 ### Manual Installation
 

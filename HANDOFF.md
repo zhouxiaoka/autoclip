@@ -14,10 +14,11 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 | 后端 | FastAPI + Celery（桌面模式用本地线程）+ SQLite | `backend/` |
 | 前端 | React + TypeScript + Ant Design + Vite | `frontend/` |
 | 桌面壳 | Tauri 2 + Rust | `src-tauri/` |
-| LLM | OpenAI 及一切 OpenAI 兼容接口（自定义 base_url）/ Gemini(google-genai) / 通义千问(dashscope) / 硅基流动 | `backend/core/llm_providers.py`、`llm_manager.py` |
+| LLM | OpenAI 及一切 OpenAI 兼容接口（自定义 base_url）/ Gemini(google-genai) / 通义千问(dashscope) / 硅基流动 / 本地预设 Ollama、LM Studio | `backend/core/llm_providers.py`、`llm_manager.py`、`local_presets.py` |
+| CLI / MCP | `autoclip` 命令行 + MCP server（stdio），不起 FastAPI / Celery 直接跑流水线 | `backend/cli.py`、`mcp_server.py`、`services/local_runner.py` |
 
-三种交付形态：**桌面客户端**（macOS arm64 DMG 主推；Windows x64 安装包 v1.2.1 起提供，尚未在真机验证）、**Docker 部署**（README 推荐路径）、
-**本地脚本启动**（`start_autoclip.sh`）。
+四种交付形态：**桌面客户端**（macOS arm64 DMG 主推；Windows x64 安装包 v1.2.1 起提供，尚未在真机验证）、**Docker 部署**（README 推荐路径）、
+**本地脚本启动**（`start_autoclip.sh`）、**CLI / MCP**（`pip install -e .`，面向开发者与 agent，`docs/CLI_AND_MCP.md`）。
 
 ---
 
@@ -29,6 +30,15 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 - **PostHog 匿名埋点** + 隐私政策 + 设置页开关（`docs/ANALYTICS.md`、`docs/PRIVACY*.md`）。
 - **Calm Premium 视觉系统**落地（`DESIGN.md`）。
 - Nightly 后端冒烟（`nightly-desktop-smoke.yml`）持续全绿。
+- **开发者形态（2026-09-07）**：
+  - `autoclip run video.mp4 --provider ollama` 一条命令出片；`list / show / providers / doctor / mcp` 子命令；`--json` 给脚本 / agent。
+    与桌面应用共用数据目录和 SQLite，CLI 出的项目桌面首页直接可见。
+  - MCP server（`autoclip mcp`）7 个工具：`clip_video`（同步 + 进度通知）、`start_clip_job` / `get_job_status`、`get_project`、`list_projects`、`list_providers`、`check_environment`；
+    已用 `mcp` 2.x stdio 客户端实测。Agent skill 在 `skills/autoclip/SKILL.md`。
+  - 本地模型预设 Ollama / LM Studio：设置页下拉可选、自动列出 `/v1/models`、隐藏 key；后端 `local_presets.py` 把预设解析为 `openai` + `base_url`。
+  - 顺带修复：`httpx` 对 localhost 走系统代理（Clash）导致 502 → `is_local_url()` 对本地地址 `trust_env=False`；
+    `apiConfig.notifyListeners` 遍历时被 listener 自删导致设置页首屏偶发不请求 `getCurrentProvider`。
+  - 单测 `tests/test_local_presets.py`、`tests/test_cli.py`（共 24 条）；**尚未用真实视频端到端跑过 `autoclip run`**（见 v1.3 todo）。
 
 ### v1.2.1（2026-09-06 打 tag）
 问题根源：README 推荐的 `docker compose` 路径从 2025-09 起就没能跑通过一次完整处理
@@ -135,6 +145,9 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - [ ] 首页导入框、`ProjectTaskManager`、`CollectionPreviewModal` / `CreateCollectionModal`、B 站登录弹窗仍是 AntD 默认件，下一轮按 `frontend/src/ui/` 原语重做
 - [ ] `ProjectCard.tsx` 只做了「去色 + 失败态反馈」的局部修补（仍是 AntD Card + 内联样式），应整体重写成 `ac-card`
 - [ ] Docker 模式下开放设置页（目前 `check_desktop_mode` 直接 400，只能靠 .env）
+- [ ] CLI / MCP 端到端：用一条真实视频跑 `autoclip run --provider ollama --json` 和 MCP `start_clip_job` 轮询到 completed；
+      `autoclip` 装进 Homebrew tap / PyPI（现在只有 `pip install -e .`）；README 首屏放一段 CLI 演示
+- [ ] 桌面应用设置页加「Ollama 未运行」的就地提示（现在只在模型下拉里显示"未检测到模型"）；`min_score` 设置页的值接到 step3（CLI 已能覆盖，桌面端仍是常量 0.7）
 
 ### v1.4 · 产品质量
 - [ ] 切片质量回归集（#59 "5 分钟视频切出 3 个 2 分钟"、#11 切片为 0、#24 进度）
@@ -150,7 +163,8 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - 桌面后端入口：`backend/desktop_main.py`
 - 任务提交（桌面本地线程 vs Celery）：`backend/utils/task_submission_utils.py`、`backend/core/celery_app.py`（DesktopAwareTask、task_routes）
 - ffmpeg 路径解析：`backend/utils/ffmpeg_utils.py`
-- LLM 提供商：`backend/core/llm_providers.py`；provider / base_url 选择与热重载：`backend/core/llm_manager.py`；设置 API：`backend/api/v1/settings.py`
+- LLM 提供商：`backend/core/llm_providers.py`（含 `is_local_url` / `make_openai_http_client` 绕过系统代理）；provider / base_url 选择与热重载：`backend/core/llm_manager.py`；本地预设：`backend/core/local_presets.py`；设置 API：`backend/api/v1/settings.py`（`/local-presets`、`/compatible-models`）
+- CLI / MCP：`backend/cli.py`、`backend/mcp_server.py`，共用 `backend/services/local_runner.py`（环境 / LLM 覆盖 / 项目准备 / 跑流水线 / 结果汇总）；进度监听 `services/simple_progress.py#add_progress_listener`；打包 `pyproject.toml`；Agent skill `skills/autoclip/SKILL.md`；文档 `docs/CLI_AND_MCP.md`
 - YouTube 导入：`backend/api/v1/youtube.py`（`AUTOCLIP_YT_SUBTITLE_LANGS`、`AUTOCLIP_YT_CLIENT`）
 - Whisper 运行时（按需安装）：`backend/services/whisper_runtime.py`、`whisper_model_manager.py`、
   前端 `frontend/src/components/SpeechRecognitionConfig.tsx`

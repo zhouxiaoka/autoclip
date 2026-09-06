@@ -31,8 +31,9 @@ AutoClip是一个基于AI的智能视频切片处理系统，能够自动从YouT
 ### ✨ 核心特性
 
 - 🎬 **多平台支持**: YouTube、B站视频一键下载，支持本地文件上传
-- 🤖 **AI智能分析**: 基于通义千问大语言模型的视频内容理解
+- 🤖 **AI智能分析**: 通义千问 / OpenAI 兼容接口 / Gemini / 硅基流动，也可用 **Ollama、LM Studio 本地模型**（免 key、离线）
 - ✂️ **自动切片**: 智能识别精彩片段并自动切割，支持多种视频分类
+- 🧑‍💻 **开发者形态**: `autoclip run video.mp4 --provider ollama` 一条命令出片；内置 **MCP server** 与 Agent skill，Cursor / Claude 可直接调用（[文档](docs/CLI_AND_MCP.md)）
 - 📚 **智能合集**: AI推荐和手动创建视频合集，支持拖拽排序
 - 🚀 **实时处理**: 异步任务队列，实时进度反馈，WebSocket通信
 - 🎨 **现代界面**: React + TypeScript + Ant Design，响应式设计
@@ -146,6 +147,19 @@ cd autoclip
 # 停止系统
 ./stop_autoclip.sh
 ```
+
+#### 方式三：命令行 / MCP（开发者）
+
+```bash
+pip install -r requirements.txt && pip install -e .
+autoclip doctor                                   # 检查 ffmpeg / Whisper / 模型
+autoclip run talk.mp4 --provider ollama           # 本地 Ollama，无需 key；产物与桌面应用共用
+autoclip run talk.mp4 --srt talk.srt --json       # 给脚本 / agent 用的 JSON 输出
+autoclip mcp                                      # MCP server（stdio），配到 Cursor / Claude 即可调用
+```
+
+Cursor `~/.cursor/mcp.json`：`{"mcpServers": {"autoclip": {"command": "/path/to/venv/bin/autoclip", "args": ["mcp"]}}}`。
+详见 [docs/CLI_AND_MCP.md](docs/CLI_AND_MCP.md)，Agent skill 在 [skills/autoclip/SKILL.md](skills/autoclip/SKILL.md)。
 
 ### 手动安装
 

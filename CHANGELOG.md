@@ -7,6 +7,17 @@
 
 ## [未发布]
 
+### 新增
+- **`autoclip` 命令行**：`autoclip run video.mp4 --provider ollama` 一条命令出片，`list / show / providers / doctor` 子命令，`--json` 给脚本与 agent；与桌面应用共用数据目录与 SQLite（`pip install -e .`；`docs/CLI_AND_MCP.md`）
+- **MCP server**（`autoclip mcp`，stdio）：`clip_video`、`start_clip_job` / `get_job_status`、`get_project`、`list_projects`、`list_providers`、`check_environment`，Cursor / Claude 可直接调用；Agent skill `skills/autoclip/SKILL.md`
+- **本地模型预设 Ollama / LM Studio**：设置页提供商下拉直接可选，自动列出服务端模型，无需 API Key；Docker / CLI 可用 `LLM_PROVIDER=ollama`
+- `GET /settings/local-presets`、`GET /settings/compatible-models?base_url=`；`POST /settings/test-api` 接受 `ollama` / `lmstudio`
+
+### 修复
+- macOS 开着系统代理（Clash 等）时本地 Ollama / LM Studio 请求被送进代理导致 502：对 localhost / 内网地址不再读取代理环境变量
+- 设置页首屏偶发不请求当前模型（`apiConfig.notifyListeners` 遍历中被 listener 自删）
+- 从本地预设切回云端提供商时模型名不再残留 `qwen2.5:7b` 之类本地模型名
+
 ## [1.2.1] - 2026-09-06
 
 > 止血版：让 README 推荐的 `docker compose` 路径和本地脚本路径真正能跑通一次完整处理（issue #88 及其一长串重复 issue）。

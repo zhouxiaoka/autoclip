@@ -61,8 +61,8 @@ class ApiKeys(BaseModel):
 class ApiSettings(BaseModel):
     """API设置"""
     api_keys: ApiKeys = Field(default_factory=ApiKeys, description="API密钥")
-    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / siliconflow）")
-    api_base_url: str = Field(default="", description="OpenAI 兼容接口地址；仅 provider=openai 生效，空为官方地址")
+    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / siliconflow，或本地预设 ollama / lmstudio）")
+    api_base_url: str = Field(default="", description="OpenAI 兼容接口地址；provider=openai 时空为官方地址，本地预设为空时用预设默认地址")
     api_model: str = Field(default="qwen-plus", description="默认模型")
     api_max_tokens: int = Field(default=4096, description="最大Token数")
     api_timeout: int = Field(default=30, description="API超时时间(秒)")
@@ -314,7 +314,12 @@ async def test_api_connection(request: TestApiRequest):
     
     try:
         from backend.core.llm_providers import normalize_base_url, OPENAI_OFFICIAL_BASE_URL
-        custom_base_url = normalize_base_url(request.base_url) if request.provider == "openai" else ""
+        from backend.core.local_presets import resolve_provider
+        # ollama / lmstudio 预设 → openai + 默认地址
+        requested_provider = request.provider
+        resolved_provider, resolved_base_url, _preset = resolve_provider(request.provider, request.base_url)
+        request.provider = resolved_provider
+        custom_base_url = normalize_base_url(resolved_base_url) if request.provider == "openai" else ""
         if custom_base_url == OPENAI_OFFICIAL_BASE_URL:
             custom_base_url = ""
 
@@ -358,7 +363,7 @@ async def test_api_connection(request: TestApiRequest):
             return {
                 "success": True,
                 "message": "API连接测试成功",
-                "provider": request.provider
+                "provider": requested_provider
             }
         else:
             # 提供更详细的错误信息
@@ -668,6 +673,42 @@ async def get_available_models():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
+
+
+@router.get("/local-presets")
+async def get_local_presets():
+    """本地模型预设（Ollama / LM Studio）：默认地址、默认模型、提示文案。"""
+    from backend.core.local_presets import presets_as_dicts
+    return {"presets": presets_as_dicts()}
+
+
+@router.get("/compatible-models")
+async def list_compatible_models(base_url: str = "", provider: str = "openai", api_key: str = ""):
+    """
+    列出一个 OpenAI 兼容服务（Ollama / LM Studio / vLLM…）实际提供的模型（GET {base_url}/models）。
+    设置页选本地预设时用它填模型下拉，免得用户手敲 `qwen2.5:7b` 这种名字。
+    """
+    check_desktop_mode()
+    from backend.core.local_presets import resolve_provider
+    from backend.core.llm_providers import normalize_base_url, is_local_url, OPENAI_COMPATIBLE_PLACEHOLDER_KEY
+    _provider, resolved_base_url, _preset = resolve_provider(provider, base_url)
+    url = normalize_base_url(resolved_base_url)
+    if not url:
+        raise HTTPException(status_code=400, detail="缺少 base_url")
+    try:
+        import httpx
+        headers = {"Authorization": f"Bearer {api_key or OPENAI_COMPATIBLE_PLACEHOLDER_KEY}"}
+        # 本地地址不走系统代理（否则 macOS 上开着 Clash 之类会 502）
+        async with httpx.AsyncClient(timeout=5.0, trust_env=not is_local_url(url)) as client:
+            resp = await client.get(f"{url}/models", headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("data", data) if isinstance(data, dict) else data
+        models = sorted({str(m.get("id") or m.get("name")) for m in items if isinstance(m, dict) and (m.get("id") or m.get("name"))})
+        return {"reachable": True, "base_url": url, "models": models}
+    except Exception as e:  # noqa: BLE001
+        # 服务没起 / 地址不对：不算服务端错误，前端据此提示「服务未启动」
+        return {"reachable": False, "base_url": url, "models": [], "error": str(e)[:200]}
 
 
 @router.get("/current-provider")

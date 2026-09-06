@@ -131,7 +131,22 @@ class LLMManager:
                 logger.warning(f"加载设置文件失败: {e}")
         
         self._apply_env_fallbacks(default_settings)
+        self._apply_local_preset(default_settings)
         return default_settings
+
+    def _apply_local_preset(self, settings: Dict[str, Any]) -> None:
+        """`ollama` / `lmstudio` 这类本地预设 → openai + 默认 base_url（见 core/local_presets.py）"""
+        from backend.core.local_presets import resolve_provider, LOCAL_PRESETS
+        provider, base_url, preset = resolve_provider(settings.get("llm_provider"), settings.get("openai_base_url"))
+        settings["llm_provider"] = provider
+        settings["llm_provider_preset"] = preset
+        if preset:
+            settings["openai_base_url"] = base_url
+            if not settings.get("model_name") or settings.get("model_name") == "qwen-plus":
+                # 预设有默认模型时替换掉 dashscope 的默认值，避免拿 qwen-plus 去问 Ollama
+                default_model = LOCAL_PRESETS[preset].default_model
+                if default_model:
+                    settings["model_name"] = default_model
 
     # Docker / 本地脚本模式没有设置页可用，只能靠环境变量（env.example 里也是这么写的），
     # 但此前这里只读 settings.json，导致 API_DASHSCOPE_API_KEY 等变量形同虚设。
@@ -189,8 +204,8 @@ class LLMManager:
             provider_type = ProviderType(self.settings.get("llm_provider", "dashscope"))
             model_name = self.settings.get("model_name", "qwen-plus")
             
-            # 获取对应提供商的API密钥
-            api_key = self._get_api_key_for_provider(provider_type)
+            # 获取对应提供商的API密钥（本地预设不需要 key，也不要把用户的 OpenAI key 发给本地服务）
+            api_key = "" if self.settings.get("llm_provider_preset") else self._get_api_key_for_provider(provider_type)
             provider_kwargs = self._get_provider_kwargs(provider_type)
 
             # 自建 OpenAI 兼容服务（Ollama / vLLM 等）常常不需要 key，有 base_url 就够
@@ -317,12 +332,18 @@ class LLMManager:
         except ValueError:
             return {"provider": provider_value, "model": None, "available": False}
         model_name = self.settings.get("model_name", "qwen-plus")
+        preset = self.settings.get("llm_provider_preset")
         info = {
-            "provider": provider_type.value,
+            # 设置页 / CLI 看到的是用户选的名字（ollama / lmstudio），底层仍是 openai 兼容
+            "provider": preset or provider_type.value,
+            "backend_provider": provider_type.value,
             "model": model_name,
             "available": self.current_provider is not None,
             "display_name": self._get_provider_display_name(provider_type),
         }
+        if preset:
+            from backend.core.local_presets import preset_display_name
+            info["display_name"] = preset_display_name(preset) or info["display_name"]
         base_url = self._get_provider_kwargs(provider_type).get("base_url")
         if base_url:
             info["base_url"] = base_url

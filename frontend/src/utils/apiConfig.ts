@@ -82,7 +82,9 @@ class ApiConfigManager {
   }
 
   private notifyListeners() {
-    this.listeners.forEach(listener => listener(this.config));
+    // waitForReady 的监听器会在回调里把自己移除；直接 forEach 原数组会跳过后一个监听器，
+    // 导致冷启动时排队的第 2、4… 个请求要等 30s 超时才发出（设置页打开慢就是这个原因）
+    [...this.listeners].forEach(listener => listener(this.config));
   }
 
   /**

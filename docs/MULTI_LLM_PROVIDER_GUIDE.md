@@ -141,6 +141,18 @@ cd frontend && npm run dev
 - `Qwen/Qwen2.5-32B-Instruct`: Qwen2.5-32B
 - `deepseek-ai/DeepSeek-V2.5`: DeepSeek-V2.5
 
+### Ollama / LM Studio（本地，无需 API 密钥）
+
+设置页「模型提供商」里直接选「Ollama（本地）」或「LM Studio（本地）」，底层是 OpenAI 兼容接口 + 预设 `base_url`：
+
+| 预设 | 默认地址 | 默认模型 |
+|---|---|---|
+| Ollama | `http://localhost:11434/v1` | `qwen2.5:7b`（`ollama pull qwen2.5:7b`） |
+| LM Studio | `http://localhost:1234/v1` | 以 Local Server 列出的为准 |
+
+选中后会自动列出服务端可用的模型；地址可改成局域网机器。系统代理（Clash 等）不影响本地地址。
+CLI 同样可用：`autoclip run video.mp4 --provider ollama`。详见 `docs/CLI_AND_MCP.md` 第 4 节。
+
 ## 🔧 技术实现
 
 ### 核心组件

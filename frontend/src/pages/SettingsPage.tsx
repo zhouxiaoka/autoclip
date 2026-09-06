@@ -26,13 +26,18 @@ const toNumber = (v: unknown, fallback: number): number => {
   return Number.isFinite(n) ? n : fallback
 }
 
-type ProviderKey = 'dashscope' | 'openai' | 'gemini' | 'siliconflow'
-const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string }> = {
+type ProviderKey = 'dashscope' | 'openai' | 'gemini' | 'siliconflow' | 'ollama' | 'lmstudio'
+type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string }
+const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; local?: LocalPreset }> = {
   dashscope: { name: '阿里通义千问', short: '通义千问', hint: '阿里云 DashScope。国内直连，qwen-plus 性价比高。', apiKeyField: 'dashscope_api_key', placeholder: 'sk-…', keyUrl: 'https://dashscope.console.aliyun.com/apiKey' },
-  openai: { name: 'OpenAI / 兼容接口', short: 'OpenAI 兼容', hint: 'OpenAI，或任何兼容接口：智谱、DeepSeek、OpenRouter、Ollama、vLLM。', apiKeyField: 'openai_api_key', placeholder: 'sk-…（本地模型可留空）', keyUrl: 'https://platform.openai.com/api-keys' },
+  openai: { name: 'OpenAI / 兼容接口', short: 'OpenAI 兼容', hint: 'OpenAI，或任何兼容接口：智谱、DeepSeek、OpenRouter、vLLM。', apiKeyField: 'openai_api_key', placeholder: 'sk-…（自建服务可留空）', keyUrl: 'https://platform.openai.com/api-keys' },
   gemini: { name: 'Google Gemini', short: 'Gemini', hint: 'Google AI Studio 的 Gemini 系列。', apiKeyField: 'gemini_api_key', placeholder: 'AIza…', keyUrl: 'https://aistudio.google.com/apikey' },
   siliconflow: { name: '硅基流动', short: '硅基流动', hint: 'SiliconFlow 聚合平台，DeepSeek / Qwen 等开源模型。', apiKeyField: 'siliconflow_api_key', placeholder: 'sk-…', keyUrl: 'https://cloud.siliconflow.cn/account/ak' },
+  // 本地预设：底层是 openai 兼容 + base_url，后端 core/local_presets.py 负责还原；无需密钥、不花钱、离线可用
+  ollama: { name: 'Ollama', short: 'Ollama', hint: '本机运行的 Ollama，免费、离线。推荐 ollama pull qwen2.5:7b。', apiKeyField: 'openai_api_key', placeholder: '', keyUrl: 'https://ollama.com/download', local: { baseUrl: 'http://localhost:11434/v1', defaultModel: 'qwen2.5:7b', docsUrl: 'https://ollama.com/download', app: 'Ollama' } },
+  lmstudio: { name: 'LM Studio', short: 'LM Studio', hint: '本机 LM Studio 的 Local Server，免费、离线。在 LM Studio 里加载模型并启动服务。', apiKeyField: 'openai_api_key', placeholder: '', keyUrl: 'https://lmstudio.ai', local: { baseUrl: 'http://localhost:1234/v1', defaultModel: '', docsUrl: 'https://lmstudio.ai', app: 'LM Studio' } },
 }
+const isLocalProvider = (p: ProviderKey) => !!PROVIDERS[p]?.local
 
 const MODEL_GROUPS: Array<{ label: string; models: string[] }> = [
   { label: '通义千问', models: ['qwen-plus', 'qwen-turbo', 'qwen-max', 'qwen-long'] },
@@ -40,6 +45,10 @@ const MODEL_GROUPS: Array<{ label: string; models: string[] }> = [
   { label: 'Gemini', models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'] },
   { label: '硅基流动 / 开源', models: ['deepseek-ai/DeepSeek-V3', 'deepseek-chat', 'Qwen/Qwen2.5-72B-Instruct'] },
 ]
+
+const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
+  dashscope: 'qwen-plus', openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash', siliconflow: 'deepseek-ai/DeepSeek-V3',
+}
 
 type SectionKey = 'model' | 'speech' | 'app' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
@@ -62,6 +71,8 @@ const SettingsPage: React.FC = () => {
   const [testing, setTesting] = useState(false)
   const [currentProvider, setCurrentProvider] = useState<any>({})
   const [selectedProvider, setSelectedProvider] = useState<ProviderKey>('dashscope')
+  // 本地预设的模型探测：{ reachable, models } —— 让用户从下拉里选，而不是手敲 qwen2.5:7b
+  const [localModels, setLocalModels] = useState<{ loading: boolean; reachable: boolean | null; models: string[] }>({ loading: false, reachable: null, models: [] })
   const [analyticsOn, setAnalyticsOn] = useState(isAnalyticsEnabled())
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const runtime = getRuntimeInfo()
@@ -84,11 +95,15 @@ const SettingsPage: React.FC = () => {
         // 以 settings.json 里保存的提供商为准；旧配置没有该字段时退回后端上报的当前提供商
         const providerName = (settingsData.api?.api_provider || providerData.provider || 'dashscope') as ProviderKey
         setCurrentProvider(providerData)
+        const savedBaseUrl = settingsData.api?.api_base_url || ''
+        const localPreset = PROVIDERS[providerName]?.local
         form.setFieldsValue({
           llm_provider: providerName,
           dashscope_api_key: settingsData.api?.api_keys?.dashscope || '',
           openai_api_key: settingsData.api?.api_keys?.openai || '',
-          openai_base_url: settingsData.api?.api_base_url || '',
+          openai_base_url: localPreset ? '' : savedBaseUrl,
+          // 本地预设只在改过默认地址时才把地址填进表单
+          local_base_url: localPreset && savedBaseUrl && savedBaseUrl !== localPreset.baseUrl ? savedBaseUrl : '',
           gemini_api_key: settingsData.api?.api_keys?.gemini || '',
           siliconflow_api_key: settingsData.api?.api_keys?.siliconflow || '',
           jimeng_access_key: settingsData.api?.api_keys?.jimeng_access || '',
@@ -137,7 +152,9 @@ const SettingsPage: React.FC = () => {
             jimeng_secret: values.jimeng_secret_key || keys.jimeng_secret || ''
           },
           api_provider: provider,
-          api_base_url: provider === 'openai' ? normalizeBaseUrl(values.openai_base_url) : '',
+          api_base_url: provider === 'openai'
+            ? normalizeBaseUrl(values.openai_base_url)
+            : isLocalProvider(provider) ? normalizeBaseUrl(values.local_base_url) : '',
           api_model: normalizeModelName(values.model_name) || 'qwen-plus',
           api_max_tokens: 4096,
           api_timeout: 30
@@ -152,7 +169,7 @@ const SettingsPage: React.FC = () => {
         // paths 由后端根据实际数据目录决定，前端不下发
       })
       message.success('已保存')
-      trackApiKeyConfigured({ provider, hasKey: !!values[PROVIDERS[provider].apiKeyField] })
+      trackApiKeyConfigured({ provider, hasKey: isLocalProvider(provider) || !!values[PROVIDERS[provider].apiKeyField] })
       await loadData()
     } catch (err: any) {
       message.error('保存失败: ' + (err.message || '未知错误'))
@@ -163,9 +180,16 @@ const SettingsPage: React.FC = () => {
 
   const handleTest = async () => {
     const cfg = PROVIDERS[selectedProvider]
-    const apiKey: string = form.getFieldValue(cfg.apiKeyField) || ''
-    const baseUrl = selectedProvider === 'openai' ? normalizeBaseUrl(form.getFieldValue('openai_base_url')) : ''
+    const local = isLocalProvider(selectedProvider)
+    const apiKey: string = local ? '' : (form.getFieldValue(cfg.apiKeyField) || '')
+    const baseUrl = selectedProvider === 'openai'
+      ? normalizeBaseUrl(form.getFieldValue('openai_base_url'))
+      : local ? (normalizeBaseUrl(form.getFieldValue('local_base_url')) || cfg.local!.baseUrl) : ''
     const modelName = normalizeModelName(form.getFieldValue('model_name'))
+    if (local && !modelName) {
+      message.error('请先选择一个模型')
+      return
+    }
     // 自建兼容服务（Ollama / vLLM 等）通常不需要 key，有地址就能测
     if (!apiKey.trim() && !baseUrl) {
       message.error('请先填写 API Key')
@@ -183,14 +207,51 @@ const SettingsPage: React.FC = () => {
     }
   }
 
+  const detectLocalModels = async (p: ProviderKey, baseUrl?: string) => {
+    const preset = PROVIDERS[p]?.local
+    if (!preset) return
+    setLocalModels((s) => ({ ...s, loading: true }))
+    try {
+      const r = await settingsApi.listCompatibleModels({ provider: p, baseUrl: normalizeBaseUrl(baseUrl) || undefined })
+      setLocalModels({ loading: false, reachable: r.reachable, models: r.models || [] })
+      // 探测到模型且当前没选 / 选的不在列表里 → 帮用户选一个（优先预设默认）
+      const current = normalizeModelName(form.getFieldValue('model_name'))
+      if (r.reachable && r.models.length && (!current || !r.models.includes(current))) {
+        form.setFieldsValue({ model_name: r.models.includes(preset.defaultModel) ? preset.defaultModel : r.models[0] })
+      }
+    } catch {
+      setLocalModels({ loading: false, reachable: false, models: [] })
+    }
+  }
+
   const handleProviderChange = (p: ProviderKey) => {
+    const prev = selectedProvider
     setSelectedProvider(p)
     form.setFieldsValue({ llm_provider: p })
+    const preset = PROVIDERS[p]?.local
+    const current = normalizeModelName(form.getFieldValue('model_name'))
+    if (preset) {
+      // 从云端切到本地时，qwen-plus 这类云端模型名对本地服务没意义
+      if (!current || MODEL_GROUPS.some((g) => g.models.includes(current))) {
+        form.setFieldsValue({ model_name: preset.defaultModel || undefined })
+      }
+      void detectLocalModels(p, form.getFieldValue('local_base_url'))
+    } else if (isLocalProvider(prev) || !current) {
+      // 从本地切回云端：qwen2.5:7b 这类本地模型名对云端没意义，给该提供商一个常用默认
+      form.setFieldsValue({ model_name: CLOUD_DEFAULT_MODEL[p] })
+    }
   }
+
+  // 打开设置页时若已是本地预设，顺手探测一次
+  useEffect(() => {
+    if (isLocalProvider(selectedProvider)) void detectLocalModels(selectedProvider, form.getFieldValue('local_base_url'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProvider])
 
   const openaiBaseUrl = Form.useWatch('openai_base_url', form)
   const usingCustomEndpoint = selectedProvider === 'openai' && !!normalizeBaseUrl(openaiBaseUrl)
   const cfg = PROVIDERS[selectedProvider]
+  const localCfg = cfg.local
 
   return (
     <div className="ac-page">
@@ -229,7 +290,7 @@ const SettingsPage: React.FC = () => {
               >
                 <Form.Item name="llm_provider" hidden><Input /></Form.Item>
                 <div className="ac-rows">
-                  <Row label="提供商" hint={cfg.hint} top>
+                  <Row label="提供商" hint={cfg.hint} stack>
                     <Segmented
                       size="sm"
                       ariaLabel="提供商"
@@ -238,6 +299,33 @@ const SettingsPage: React.FC = () => {
                       options={(Object.keys(PROVIDERS) as ProviderKey[]).map((k) => ({ value: k, label: PROVIDERS[k].short }))}
                     />
                   </Row>
+
+                  {localCfg && (
+                    <Row
+                      wide
+                      label="服务地址"
+                      hint={<>默认 <span className="ac-mono">{localCfg.baseUrl}</span>，改过端口才需要填。没装的话去 <a href={localCfg.docsUrl} onClick={(e) => { e.preventDefault(); openExternalLink(localCfg.docsUrl) }} style={{ color: 'var(--ac-accent)' }}>{localCfg.app} 官网</a> 下载。</>}
+                    >
+                      <Form.Item
+                        name="local_base_url"
+                        style={{ width: '100%' }}
+                        rules={[{
+                          validator: (_, value) => {
+                            const url = normalizeBaseUrl(value)
+                            if (!url || /^https?:\/\/\S+$/.test(url)) return Promise.resolve()
+                            return Promise.reject(new Error('请输入以 http:// 或 https:// 开头的地址'))
+                          },
+                        }]}
+                      >
+                        <Input
+                          placeholder={localCfg.baseUrl}
+                          allowClear
+                          className="ac-mono"
+                          onBlur={(e) => void detectLocalModels(selectedProvider, e.target.value)}
+                        />
+                      </Form.Item>
+                    </Row>
+                  )}
 
                   {selectedProvider === 'openai' && (
                     <Row
@@ -261,7 +349,7 @@ const SettingsPage: React.FC = () => {
                     </Row>
                   )}
 
-                  <Row
+                  {!localCfg && <Row
                     wide
                     label="API Key"
                     hint={usingCustomEndpoint
@@ -278,29 +366,40 @@ const SettingsPage: React.FC = () => {
                     >
                       <Input.Password placeholder={cfg.placeholder} className="ac-mono" />
                     </Form.Item>
-                  </Row>
+                  </Row>}
 
                   <Row
                     wide
                     label="模型"
-                    hint={usingCustomEndpoint
-                      ? '填该服务实际提供的模型名（如 glm-4-flash、deepseek-chat、qwen2.5:7b），回车确认。'
-                      : '可直接输入模型名，回车确认。'}
+                    hint={localCfg
+                      ? (localModels.loading
+                          ? '正在检测本地服务…'
+                          : localModels.reachable
+                            ? <>已连接，检测到 {localModels.models.length} 个模型。<a onClick={() => void detectLocalModels(selectedProvider, form.getFieldValue('local_base_url'))} style={{ color: 'var(--ac-accent)', cursor: 'pointer' }}>刷新</a></>
+                            : localModels.reachable === false
+                              ? <>没连上 {localCfg.app}。先启动它{localCfg.defaultModel ? <>并 <span className="ac-mono">ollama pull {localCfg.defaultModel}</span></> : ''}，再 <a onClick={() => void detectLocalModels(selectedProvider, form.getFieldValue('local_base_url'))} style={{ color: 'var(--ac-accent)', cursor: 'pointer' }}>重新检测</a>。也可以直接输入模型名。</>
+                              : '从本地服务已加载的模型中选择。')
+                      : usingCustomEndpoint
+                        ? '填该服务实际提供的模型名（如 glm-4-flash、deepseek-chat、qwen2.5:7b），回车确认。'
+                        : '可直接输入模型名，回车确认。'}
                   >
                     <Form.Item name="model_name" style={{ width: '100%' }} rules={[{ required: true, message: '请输入或选择模型' }]}>
                       <Select
-                        placeholder="qwen-plus"
+                        placeholder={localCfg ? (localCfg.defaultModel || '选择或输入模型名') : 'qwen-plus'}
                         showSearch
                         allowClear
                         mode="tags"
                         maxCount={1}
+                        loading={localCfg ? localModels.loading : false}
                         className="ac-mono"
-                        options={MODEL_GROUPS.map((g) => ({ label: g.label, options: g.models.map((m) => ({ value: m, label: m })) }))}
+                        options={(localCfg
+                          ? localModels.models.map((m) => ({ value: m, label: m }))
+                          : MODEL_GROUPS.map((g) => ({ label: g.label, options: g.models.map((m) => ({ value: m, label: m })) }))) as any}
                       />
                     </Form.Item>
                   </Row>
 
-                  <Row label="连接测试" hint="保存前先测一下密钥和模型是否可用。">
+                  <Row label="连接测试" hint={localCfg ? '保存前先测一下本地服务和模型是否可用。' : '保存前先测一下密钥和模型是否可用。'}>
                     <Btn size="sm" loading={testing} onClick={handleTest}>测试连接</Btn>
                   </Row>
                 </div>

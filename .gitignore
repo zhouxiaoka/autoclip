@@ -140,3 +140,6 @@ control/
 *.temp
 *.bak
 .gstack/
+
+# Python 打包产物
+*.egg-info/
