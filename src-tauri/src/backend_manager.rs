@@ -61,7 +61,9 @@ impl BackendManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .env("AUTOCLIP_DESKTOP_MODE", "true")
-            .env("AUTOCLIP_MODE", "desktop");
+            .env("AUTOCLIP_MODE", "desktop")
+            // Single source of truth for the version the backend reports in /settings.
+            .env("AUTOCLIP_APP_VERSION", env!("CARGO_PKG_VERSION"));
 
         // Point the backend at the bundled ffmpeg/ffprobe when present.
         // The backend's ffmpeg_utils reads these env vars before falling back
