@@ -110,7 +110,7 @@ graph TB
 #### Local Deployment
 
 - **Operating System**: macOS / Linux / Windows (WSL)
-- **Python**: 3.8+ (recommended 3.9+)
+- **Python**: 3.10+ (3.11 recommended; yt-dlp no longer supports 3.9)
 - **Node.js**: 16+ (recommended 18+)
 - **Redis**: 6.0+ (recommended 7.0+)
 - **FFmpeg**: Video processing dependency

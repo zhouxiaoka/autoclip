@@ -31,6 +31,9 @@ cd autoclip
 cp env.example .env
 # 编辑 .env 文件，填入必要的配置
 
+# Linux 宿主机：容器以非 root 用户运行，bind mount 的目录需要提前建好并可写
+mkdir -p data logs uploads && chmod -R 777 data logs uploads
+
 # 启动所有服务
 docker-compose up -d
 

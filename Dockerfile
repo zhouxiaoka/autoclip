@@ -26,7 +26,8 @@ COPY frontend/ ./
 RUN npm run build
 
 # 第二阶段：构建后端
-FROM python:3.9-slim AS backend-builder
+# yt-dlp 已停止支持 Python 3.9（3.9 下 YouTube 提取只能靠 android client 回退，且仅有 360p）
+FROM python:3.11-slim AS backend-builder
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1
@@ -50,7 +51,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 第三阶段：最终镜像
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1
@@ -71,7 +72,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # 从构建阶段复制文件
-COPY --from=backend-builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+COPY --from=backend-builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=backend-builder /usr/local/bin /usr/local/bin
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 

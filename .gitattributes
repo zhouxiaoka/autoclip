@@ -1,0 +1,24 @@
+# Shell scripts are executed inside Linux containers (docker-entrypoint.sh etc.).
+# A CRLF checkout on Windows turns the shebang into "#!/bin/bash\r" and the
+# container fails with "exec ./docker-entrypoint.sh: no such file or directory".
+*.sh          text eol=lf
+Dockerfile*   text eol=lf
+*.py          text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+
+# Windows-native scripts keep CRLF.
+*.ps1         text eol=crlf
+*.bat         text eol=crlf
+*.cmd         text eol=crlf
+
+# Binary assets
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.ico         binary
+*.icns        binary
+*.mp4         binary
+*.woff        binary
+*.woff2       binary

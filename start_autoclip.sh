@@ -348,7 +348,7 @@ start_celery() {
         --loglevel=info \
         --concurrency=1 \
         --prefetch-multiplier=1 \
-        -Q processing,upload,notification,maintenance \
+        -Q celery,processing,video,notification,upload \
         --hostname=worker@%h \
         > "$CELERY_LOG" 2>&1 &
     

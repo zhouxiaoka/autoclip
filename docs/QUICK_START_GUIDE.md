@@ -30,7 +30,7 @@ autoclip/
 ## 🛠️ 开发环境准备
 
 ### 必需工具
-- Python 3.9+
+- Python 3.10+（推荐 3.11）
 - Node.js 16+
 - Redis
 - Git

@@ -98,7 +98,7 @@ graph TB
 #### 本地部署
 
 - **操作系统**: macOS / Linux / Windows (WSL)
-- **Python**: 3.8+ (推荐 3.9+)
+- **Python**: 3.10+ (推荐 3.11；yt-dlp 已不支持 3.9)
 - **Node.js**: 16+ (推荐 18+)
 - **Redis**: 6.0+ (推荐 7.0+)
 - **FFmpeg**: 视频处理依赖

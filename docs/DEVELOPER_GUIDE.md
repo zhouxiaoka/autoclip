@@ -29,7 +29,7 @@ AutoClip Desktop
 ### 技术栈
 
 - **前端**: React 18, TypeScript, Ant Design, Vite
-- **后端**: Python 3.9+, FastAPI, Celery, SQLAlchemy
+- **后端**: Python 3.10+, FastAPI, Celery, SQLAlchemy
 - **桌面**: Tauri 2.0, Rust
 - **数据库**: SQLite (桌面模式)
 - **任务队列**: Celery with SQLite transport
@@ -41,7 +41,7 @@ AutoClip Desktop
 ### 系统要求
 
 - **Node.js**: 18.0+
-- **Python**: 3.9+
+- **Python**: 3.10+（推荐 3.11）
 - **Rust**: 1.70+
 - **Git**: 2.0+
 
@@ -839,7 +839,7 @@ docker-compose -f docker-compose.test.yml down
 
 #### 后端规范
 
-- 使用Python 3.9+
+- 使用Python 3.10+
 - 遵循PEP 8规范
 - 使用类型注解
 - 编写文档字符串
