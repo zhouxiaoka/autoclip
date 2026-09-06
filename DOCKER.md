@@ -144,9 +144,19 @@ DATABASE_URL=sqlite:///./data/autoclip.db
 # Redis配置
 REDIS_URL=redis://redis:6379/0
 
-# API配置
-API_DASHSCOPE_API_KEY=your_dashscope_api_key
+# LLM 配置（Docker 里没有设置页，只能靠这里；compose 会把这些变量透传给 api 和 worker）
+# LLM_PROVIDER: dashscope | openai | gemini | siliconflow
+LLM_PROVIDER=dashscope
 API_MODEL_NAME=qwen-plus
+API_DASHSCOPE_API_KEY=your_dashscope_api_key
+# API_OPENAI_API_KEY=
+# API_GEMINI_API_KEY=
+# API_SILICONFLOW_API_KEY=
+# OpenAI 兼容接口（LLM_PROVIDER=openai 时生效）：智谱 / DeepSeek / OpenRouter / 本地 Ollama、vLLM 都走这条。
+#   智谱:    OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4   API_MODEL_NAME=glm-4-flash
+#   DeepSeek: OPENAI_BASE_URL=https://api.deepseek.com/v1          API_MODEL_NAME=deepseek-chat
+#   宿主机 Ollama: OPENAI_BASE_URL=http://host.docker.internal:11434/v1  API_MODEL_NAME=qwen2.5:7b（可不填 key）
+# OPENAI_BASE_URL=
 
 # 日志配置
 LOG_LEVEL=INFO
