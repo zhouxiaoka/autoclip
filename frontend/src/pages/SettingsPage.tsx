@@ -212,12 +212,8 @@ const SettingsPage: React.FC = () => {
         logs: {
           log_level: "INFO",
           log_retention_days: 7
-        },
-        paths: {
-          data_directory: "/Users/zhoukk/Library/Application Support/AutoClip",
-          cache_directory: "/Users/zhoukk/Library/Application Support/AutoClip/cache",
-          temp_directory: "/Users/zhoukk/Library/Application Support/AutoClip/temp"
         }
+        // paths 由后端根据实际数据目录决定，前端不下发（避免把开发机路径写进用户的 settings.json）
       }
       
       await settingsApi.updateSettings(backendSettings)

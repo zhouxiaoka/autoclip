@@ -24,6 +24,16 @@ router = APIRouter()
 # 存储下载任务的状态
 download_tasks = {}
 
+# 一次请求过多字幕语言会触发 YouTube 的 HTTP 429 并让整次下载失败；
+# 默认只请求中英文，可用 AUTOCLIP_YT_SUBTITLE_LANGS（逗号分隔）覆盖。
+DEFAULT_SUBTITLE_LANGS = ['zh-Hans', 'zh', 'en']
+
+
+def get_subtitle_langs() -> list:
+    raw = os.getenv('AUTOCLIP_YT_SUBTITLE_LANGS', '')
+    langs = [lang.strip() for lang in raw.split(',') if lang.strip()]
+    return langs or list(DEFAULT_SUBTITLE_LANGS)
+
 
 @contextmanager
 def sanitized_yt_env():
@@ -97,9 +107,9 @@ async def parse_youtube_video(
         import asyncio
         
         def extract_info_sync(url, browser):
-            # 构建 yt-dlp 命令
+            # 用当前解释器的 yt_dlp 模块，保证与后端运行环境（venv / Docker / 桌面便携 Python）一致
             cmd = [
-                '/Users/zhoukk/autoclip/venv/bin/yt-dlp',
+                sys.executable, '-m', 'yt_dlp',
                 '--ignore-config',
                 '--no-warnings',
                 '--no-playlist',
@@ -132,7 +142,7 @@ async def parse_youtube_video(
                     capture_output=True,
                     text=True,
                     timeout=60,
-                    cwd='/Users/zhoukk/autoclip',
+                    cwd=str(get_data_directory()),
                     env=env
                 )
 
@@ -402,7 +412,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'writesubtitles': True,
             'writeautomaticsub': True,  # 下载自动生成的字幕
-            'subtitleslangs': ['en', 'zh-Hans', 'zh', 'en-US', 'auto'],  # 英文和中文字幕，包括自动检测
+            'subtitleslangs': get_subtitle_langs(),
             'subtitlesformat': 'srt',
             'outtmpl': str(download_dir / '%(title)s.%(ext)s'),
             'noplaylist': True,
@@ -688,7 +698,7 @@ async def _try_download_with_different_formats(url: str, download_dir: Path, bro
                 'format': 'best[ext=mp4]/best',
                 'writesubtitles': True,
                 'writeautomaticsub': True,
-                'subtitleslangs': ['en', 'zh-Hans', 'zh'],
+                'subtitleslangs': get_subtitle_langs(),
                 'subtitlesformat': fmt,
                 'outtmpl': str(download_dir / f'subtitle_%(title)s.%(ext)s'),
                 'noplaylist': True,
