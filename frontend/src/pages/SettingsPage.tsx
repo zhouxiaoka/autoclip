@@ -13,6 +13,15 @@ const { Content } = Layout
 const { Title, Text, Paragraph } = Typography
 const { TabPane } = Tabs
 
+const normalizeBaseUrl = (value: unknown): string =>
+  typeof value === 'string' ? value.trim().replace(/\/+$/, '') : ''
+
+// 模型选择框是 mode="tags" 的 Select，用户手动输入后拿到的是数组；后端只接受字符串
+const normalizeModelName = (value: unknown): string => {
+  if (Array.isArray(value)) return String(value[value.length - 1] ?? '').trim()
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 const SettingsPage: React.FC = () => {
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
@@ -32,12 +41,12 @@ const SettingsPage: React.FC = () => {
       placeholder: '请输入通义千问API密钥'
     },
     openai: {
-      name: 'OpenAI',
+      name: 'OpenAI / 兼容接口',
       icon: <RobotOutlined />,
       color: '#52c41a',
-      description: 'OpenAI GPT系列模型',
+      description: 'OpenAI 及智谱、DeepSeek、Ollama 等兼容接口',
       apiKeyField: 'openai_api_key',
-      placeholder: '请输入OpenAI API密钥'
+      placeholder: '请输入 API 密钥（本地模型可留空）'
     },
     gemini: {
       name: 'Google Gemini',
@@ -91,7 +100,8 @@ const SettingsPage: React.FC = () => {
         const providerData = provider.status === 'fulfilled'
           ? provider.value
           : { available: false, provider: 'dashscope', display_name: '阿里通义千问', model: 'qwen-plus' }
-        const providerName = providerData.provider || 'dashscope'
+        // 以 settings.json 里保存的提供商为准；旧配置没有该字段时退回后端上报的当前提供商
+        const providerName = settingsData.api?.api_provider || providerData.provider || 'dashscope'
         setCurrentProvider(providerData)
         
         // 将嵌套的settings结构转换为扁平结构
@@ -99,6 +109,7 @@ const SettingsPage: React.FC = () => {
           llm_provider: providerName, // 使用实际的提供商
           dashscope_api_key: settingsData.api?.api_keys?.dashscope || '',
           openai_api_key: settingsData.api?.api_keys?.openai || '',
+          openai_base_url: settingsData.api?.api_base_url || '',
           gemini_api_key: settingsData.api?.api_keys?.gemini || '',
           siliconflow_api_key: settingsData.api?.api_keys?.siliconflow || '',
           jimeng_access_key: settingsData.api?.api_keys?.jimeng_access || '',
@@ -124,6 +135,7 @@ const SettingsPage: React.FC = () => {
           llm_provider: 'dashscope',
           dashscope_api_key: '',
           openai_api_key: '',
+          openai_base_url: '',
           gemini_api_key: '',
           siliconflow_api_key: '',
           jimeng_access_key: '',
@@ -199,7 +211,9 @@ const SettingsPage: React.FC = () => {
             jimeng_access: values.jimeng_access_key || existingApiKeys.jimeng_access || "",
             jimeng_secret: values.jimeng_secret_key || existingApiKeys.jimeng_secret || ""
           },
-          api_model: values.model_name || "qwen-plus",
+          api_provider: values.llm_provider || selectedProvider,
+          api_base_url: (values.llm_provider || selectedProvider) === 'openai' ? normalizeBaseUrl(values.openai_base_url) : '',
+          api_model: normalizeModelName(values.model_name) || "qwen-plus",
           api_max_tokens: 4096,
           api_timeout: 30
         },
@@ -238,16 +252,22 @@ const SettingsPage: React.FC = () => {
 
   // 测试API密钥
   const handleTestApiKey = async () => {
-    const apiKey = form.getFieldValue(providerConfig[selectedProvider as keyof typeof providerConfig].apiKeyField)
+    const apiKey: string = form.getFieldValue(providerConfig[selectedProvider as keyof typeof providerConfig].apiKeyField) || ''
+    const baseUrl = selectedProvider === 'openai' ? normalizeBaseUrl(form.getFieldValue('openai_base_url')) : ''
+    const modelName = normalizeModelName(form.getFieldValue('model_name'))
     
-    if (!apiKey || apiKey.trim() === '') {
+    // 自建兼容服务（Ollama / vLLM 等）通常不需要 key，有地址就能测
+    if (!apiKey.trim() && !baseUrl) {
       message.error('请先输入API密钥')
       return
     }
 
     try {
       setLoading(true)
-      const result = await settingsApi.testApiKey(selectedProvider, apiKey)
+      const result = await settingsApi.testApiKey(selectedProvider, apiKey, {
+        baseUrl: baseUrl || undefined,
+        model: modelName || undefined,
+      })
       if (result.success) {
         message.success('API密钥测试成功！')
       } else {
@@ -265,6 +285,9 @@ const SettingsPage: React.FC = () => {
     setSelectedProvider(provider)
     form.setFieldsValue({ llm_provider: provider })
   }
+
+  const openaiBaseUrl = Form.useWatch('openai_base_url', form)
+  const usingCustomEndpoint = selectedProvider === 'openai' && !!normalizeBaseUrl(openaiBaseUrl)
 
   return (
     <Content className="settings-page">
@@ -300,7 +323,7 @@ const SettingsPage: React.FC = () => {
                 {/* 当前提供商状态 */}
                 {currentProvider.available && (
                   <Alert
-                    message={`当前使用: ${currentProvider.display_name} - ${currentProvider.model}`}
+                    message={`当前使用: ${currentProvider.display_name} - ${currentProvider.model}${currentProvider.base_url ? `（${currentProvider.base_url}）` : ''}`}
                     type="success"
                     showIcon
                     style={{ marginBottom: 24 }}
@@ -332,12 +355,39 @@ const SettingsPage: React.FC = () => {
                   </Select>
                 </Form.Item>
 
+                {/* OpenAI 兼容接口地址：智谱 / DeepSeek / OpenRouter / Ollama / vLLM 等都走这里 */}
+                {selectedProvider === 'openai' && (
+                  <Form.Item
+                    label="接口地址（Base URL）"
+                    name="openai_base_url"
+                    className="form-item"
+                    extra="留空使用 OpenAI 官方地址。填兼容服务地址即可接入其他模型，例如 https://open.bigmodel.cn/api/paas/v4、https://api.deepseek.com/v1、http://localhost:11434/v1（Ollama）"
+                    rules={[
+                      {
+                        validator: (_, value) => {
+                          const url = normalizeBaseUrl(value)
+                          if (!url || /^https?:\/\/\S+$/.test(url)) return Promise.resolve()
+                          return Promise.reject(new Error('请输入以 http:// 或 https:// 开头的地址'))
+                        },
+                      },
+                    ]}
+                  >
+                    <Input
+                      placeholder="https://api.openai.com/v1"
+                      prefix={<ApiOutlined />}
+                      className="settings-input"
+                      allowClear
+                    />
+                  </Form.Item>
+                )}
+
                 {/* 动态API密钥输入 */}
                 <Form.Item
                   label={`${providerConfig[selectedProvider as keyof typeof providerConfig].name} API Key`}
                   name={providerConfig[selectedProvider as keyof typeof providerConfig].apiKeyField}
                   className="form-item"
-                  rules={[
+                  extra={usingCustomEndpoint ? '自建 / 本地兼容服务不校验密钥时可留空' : undefined}
+                  rules={usingCustomEndpoint ? [] : [
                     { required: true, message: '请输入API密钥' },
                     { min: 10, message: 'API密钥长度不能少于10位' }
                   ]}
@@ -355,7 +405,9 @@ const SettingsPage: React.FC = () => {
                   name="model_name"
                   className="form-item"
                   rules={[{ required: true, message: '请输入或选择模型名称' }]}
-                  extra="支持手动输入模型名称或从常用模型中选择"
+                  extra={usingCustomEndpoint
+                    ? '请填写该服务实际提供的模型名（如 glm-4-flash、deepseek-chat、qwen2.5:7b），输入后回车确认'
+                    : '支持手动输入模型名称或从常用模型中选择'}
                 >
                   <Select
                     className="settings-input"

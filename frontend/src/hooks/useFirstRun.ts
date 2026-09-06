@@ -40,7 +40,9 @@ export const useFirstRun = () => {
           const hasApiKey = settings.api?.api_keys?.dashscope || 
                            settings.api?.api_keys?.openai ||
                            settings.api?.api_keys?.gemini ||
-                           settings.api?.api_keys?.siliconflow
+                           settings.api?.api_keys?.siliconflow ||
+                           // 本地 / 自建 OpenAI 兼容服务可以没有 key，只配接口地址
+                           (settings.api?.api_provider === 'openai' && settings.api?.api_base_url)
           
           console.log('🔑 API Key状态:', hasApiKey)
           

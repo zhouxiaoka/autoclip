@@ -90,11 +90,14 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
         hasValidKey = !!currentApiKey.trim()
         console.log('DashScope API Key检查:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, isValid: hasValidKey })
         break
-      case 'openai':
+      case 'openai': {
         currentApiKey = apiKeys.openai || ''
-        hasValidKey = !!currentApiKey.trim()
-        console.log('OpenAI API Key检查:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, isValid: hasValidKey })
+        // 自建 OpenAI 兼容服务（Ollama / vLLM 等）可以没有 key，只要配了接口地址就算可用
+        const hasCustomBaseUrl = !!(settings.api.api_base_url || '').trim()
+        hasValidKey = !!currentApiKey.trim() || hasCustomBaseUrl
+        console.log('OpenAI API Key检查:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, hasCustomBaseUrl, isValid: hasValidKey })
         break
+      }
       case 'gemini':
         currentApiKey = apiKeys.gemini || ''
         hasValidKey = !!currentApiKey.trim()

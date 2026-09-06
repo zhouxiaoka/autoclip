@@ -197,10 +197,16 @@ export const settingsApi = {
   },
 
   // 测试API密钥
-  testApiKey: (provider: string, apiKey: string): Promise<{ success: boolean; error?: string }> => {
+  testApiKey: (
+    provider: string,
+    apiKey: string,
+    options: { baseUrl?: string; model?: string } = {}
+  ): Promise<{ success: boolean; error?: string }> => {
     return api.post('/settings/test-api', { 
       provider, 
-      api_key: apiKey
+      api_key: apiKey,
+      base_url: options.baseUrl,
+      model: options.model,
     })
   },
 
