@@ -62,7 +62,7 @@ export const useProjectPolling = ({
     poll()
     
     // 设置定时器
-    intervalRef.current = setInterval(poll, interval)
+    intervalRef.current = window.setInterval(poll, interval)
   }
 
   const stopPolling = () => {

@@ -148,7 +148,7 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
   }
 
   const startPolling = (taskId: string, videoType: 'bilibili' | 'youtube') => {
-    const interval = setInterval(async () => {
+    const interval = window.setInterval(async () => {
       try {
         let task
         if (videoType === 'bilibili') {

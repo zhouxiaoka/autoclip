@@ -114,7 +114,7 @@ export const useSimpleProgressStore = create<SimpleProgressState>((set, get) => 
       fetchSnapshots()
 
       // 设置定时器
-      timer = setInterval(fetchSnapshots, intervalMs)
+      timer = window.setInterval(fetchSnapshots, intervalMs)
 
       set({
         isPolling: true,

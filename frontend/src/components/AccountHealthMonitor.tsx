@@ -358,7 +358,7 @@ const AccountHealthMonitor: React.FC<AccountHealthMonitorProps> = () => {
   // 自动刷新
   useEffect(() => {
     if (autoRefresh) {
-      const interval = setInterval(() => {
+      const interval = window.setInterval(() => {
         fetchHealthSummary();
       }, 60000); // 每分钟刷新一次
       setRefreshInterval(interval);
