@@ -1,33 +1,63 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-alembic
-celery[redis]
-redis
-pydantic
-pydantic-settings
-python-multipart
-websockets
-requests
-aiohttp
-aiofiles
-python-jose[cryptography]
-passlib[bcrypt]
-pytest
-pytest-cov
-pytest-mock
-cryptography
-# bilitool>=0.1.3  # 已移除，改用直接API调用
-qrcode[pil]
-yt-dlp>=2024.12.13
-pysrt
-psutil
-pytz
+# Backend runtime dependencies.
+#
+# Direct dependencies are pinned with == so CI, the Docker image and the desktop
+# bundle install the same thing (an unpinned yt-dlp / openai upgrade is exactly
+# how the "works on my machine, breaks in the release" reports happen).
+# Transitive dependencies are left to pip so the same file resolves on
+# Linux (CI / Docker, Python 3.11) and on the macOS / Windows portable
+# runtime (Python 3.13).
+#
+# Versions below are the set that CI's "Backend tests" job and the docker-smoke
+# job both installed on Python 3.11 (2026-09-06). To bump: change a pin, let CI
+# run, done. Run `pip install -r requirements.txt` on Python >= 3.10.
 
-# LLM provider SDKs — required for the AI clipping pipeline. These used to live
-# only in install_llm_dependencies.py (installed separately), so the portable
-# desktop build shipped without them and any provider call failed. Bundle them
-# so the desktop app works out of the box.
-openai>=1.0.0
-google-genai>=1.0.0
-dashscope>=1.10.0
+# --- web framework / server ---
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+starlette==1.6.0
+python-multipart==0.0.32
+websockets==16.1.1
+aiofiles==25.1.0
+
+# --- data / persistence ---
+sqlalchemy==2.0.52
+alembic==1.19.2
+pydantic==2.13.5
+pydantic-settings==2.15.0
+
+# --- task queue ---
+celery[redis]==5.6.3
+redis==6.4.0
+
+# --- http clients ---
+requests==2.34.2
+aiohttp==3.14.3
+
+# --- auth / crypto ---
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+cryptography==50.0.1
+
+# --- media / utilities ---
+# bilitool>=0.1.3  # 已移除，改用直接API调用
+qrcode[pil]==8.2
+yt-dlp==2026.8.19
+pysrt==1.1.2
+psutil==7.2.2
+pytz==2026.3.post1
+
+# --- LLM provider SDKs ---
+# Required for the AI clipping pipeline. These used to live only in
+# install_llm_dependencies.py (installed separately), so the portable desktop
+# build shipped without them and any provider call failed. Bundle them so the
+# desktop app works out of the box.
+openai==3.8.0
+google-genai==2.22.0
+dashscope==1.27.4
+
+# --- test tooling ---
+# Kept here (rather than a separate dev file) because CI, the Dockerfile and the
+# desktop build all install this single file; splitting is a follow-up.
+pytest==9.1.1
+pytest-cov==7.1.0
+pytest-mock==3.15.1
