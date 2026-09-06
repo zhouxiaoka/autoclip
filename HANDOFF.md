@@ -1,6 +1,6 @@
 # AutoClip — 项目状态 / 进度 / 计划
 
-> 更新：2026-09-06 · 基于 `main@992239a`（#89 #90 #91 #92 #93 #94 已全部合入，v1.2.1 待打 tag）
+> 更新：2026-09-06 · 基于 `main@a5c20ae`（**v1.2.1 已发布**：Release 含 macOS arm64 DMG 223 MB + Windows x64 安装包 145 MB）
 
 AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地视频，自动识别精彩片段、
 生成切片与合集。本文是项目当前状态与近期计划的单一事实来源；长期规划见 `ROADMAP.md`。
@@ -16,7 +16,7 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 | 桌面壳 | Tauri 2 + Rust | `src-tauri/` |
 | LLM | OpenAI 及一切 OpenAI 兼容接口（自定义 base_url）/ Gemini(google-genai) / 通义千问(dashscope) / 硅基流动 | `backend/core/llm_providers.py`、`llm_manager.py` |
 
-三种交付形态：**桌面客户端**（macOS arm64 DMG 主推；Windows x64 安装包首版待验证）、**Docker 部署**（README 推荐路径）、
+三种交付形态：**桌面客户端**（macOS arm64 DMG 主推；Windows x64 安装包 v1.2.1 起提供，尚未在真机验证）、**Docker 部署**（README 推荐路径）、
 **本地脚本启动**（`start_autoclip.sh`）。
 
 ---
@@ -30,7 +30,7 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 - **Calm Premium 视觉系统**落地（`DESIGN.md`）。
 - Nightly 后端冒烟（`nightly-desktop-smoke.yml`）持续全绿。
 
-### v1.2.1（已全部合入 main，待打 tag 发版）
+### v1.2.1（2026-09-06 打 tag）
 问题根源：README 推荐的 `docker compose` 路径从 2025-09 起就没能跑通过一次完整处理
 （issue #88 给出 7 条可复现问题，全部核验属实），是 issue 区大量"用不了"的来源。#89 修复：
 1. `.dockerignore` 放行 `docker-entrypoint.sh` / `docker-dev-entrypoint.sh`（镜像此前无法构建）
@@ -50,13 +50,15 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 - **#94** `requirements.txt` 直接依赖全部锁定
 - **#92** OpenAI 兼容 `base_url`（#72 #57，替代 #78）。**顺带发现并修复：设置页选的 provider 从来没被持久化，流水线一直用 dashscope**；
   LLMManager 现按 settings.json mtime 热重载，且支持 Docker 环境变量（`LLM_PROVIDER` / `OPENAI_BASE_URL` / `API_*_API_KEY`）
-- **#93** Windows x64 打包脚本 + workflow（未在真机跑过，见下方 todo）
+- **#93** Windows x64 打包脚本 + workflow。`workflow_dispatch` 只勾 Windows 在 `windows-latest` 上一次通过：
+  安装包 145 MB，全程 ~22 min（`cargo install tauri-cli` 冷编译 8 min + 打包 13 min；rust-cache 首次为空，后续会快）。
+  **尚未装到真机验证**（见下方 todo）
 
 ### 仍未完成（ROADMAP Phase 0）
 | 项 | 状态 |
 |---|---|
 | Apple Developer ID 签名 + 公证 | 未做，`signingIdentity: null`，用户需右键打开 |
-| 多平台包（Windows / Intel mac / Linux） | Windows x64 脚本 + workflow 已合入（#93）但**尚未在 Windows runner 上跑过**；Intel mac / Linux 未做 |
+| 多平台包（Windows / Intel mac / Linux） | Windows x64 已在 runner 出包（#93），随 v1.2.1 Release 发布，**真机未验证**；Intel mac / Linux 未做 |
 | Sentry 崩溃上报 | 未接 |
 | Tauri updater 自动更新 | 未接 |
 | 依赖锁版本 / 构建缓存 | 直接依赖已锁定（#94）；PBS + ffmpeg 下载有 actions/cache，Rust 有 rust-cache |
@@ -66,39 +68,46 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 
 ## 三、GitHub 待办快照（2026-09-06）
 
-### Open PR（外部；本仓库自己的 6 个 PR 已全部合入）
-| PR | 建议 |
-|----|------|
-| #85 #84 #83 | **已通过 #91 合入**（cherry-pick），GitHub 不会自动关闭 → 手动关闭并留言致谢 + 指向 #91 |
-| #78 Atlas Cloud provider | **已被 #92 替代**：设置页 OpenAI 提供商填 base_url 即可接 Atlas Cloud → 留言后关闭 |
-| #79 README star chart | 确认新图表域名可信后合并 |
-| #75 TwelveLabs Pegasus 评分（opt-in） | 先定义"Step 3 评分后端可插拔"接口再接；SDK 放 extra 而非主 requirements |
-| #82 1080p60 + 全英文 prompt/UI + 迁移脚本（49 文件） | 要求拆分，否则关闭 |
-| #86 Windows `.vbs` 开发态启动器 | 关闭或移入 `scripts/`；真正需求是 Windows 安装包 |
-| #76 TakoAPI 徽章 | 关闭 |
+### 外部 PR（2026-09-06 全部处理完，当前 0 个 open）
+原则：**外部 PR 谨慎对待，能不合入就不合入**；采纳的改动以 cherry-pick 进自己的 PR 并保留署名。
 
-### Open issue 分类（55 个，全部无 label）
-- **Docker/部署不可用**（本分支修复后可关闭并引导重试）：#1 #4 #5 #6 #9 #15 #21 #33 #47 #50 #51 #52 #62 #88
-- **Windows 部署**：#2 #19 #35 #73 → 等 Windows 包
-- **"用不了"类**：#7 #26 #30 #31 #32 #39 #42 #43 #59 → 回复 v1.2.1 + 桌面版
-- **功能请求**：#57 智谱、#72 本地模型 URL（同一需求：自定义 base_url）、#67 FunASR/SenseVoice、#45 阿里云国际
-- **已修复可关闭**：#54（pytz/openai 已进 requirements）、#55（桌面版内置 ffmpeg）、#53（本分支）
-- **待复现的产品 bug**：#11 切片为 0、#24 进度错误、#38 缩略图、#20 导入报错、#27 加载失败、#77 API 连接测试失败
-- **噪音**：#3 #13 #23 #25 #34 #41 #58 #60 #80 #87；分享贴：#40 #56
+| PR | 处理 |
+|----|------|
+| #85 #84 #83 | 已 cherry-pick 进 #91 随 v1.2.1 发布，原 PR 留言关闭 |
+| #78 Atlas Cloud provider | 被 #92 自定义 base_url 替代，留言关闭 |
+| #79 README star chart | 关闭：官方 `api.star-history.com` 实测正常，PR 是把图片源换到不明第三方域名 |
+| #76 TakoAPI 徽章 | 关闭 |
+| #86 Windows `.vbs` 开发态启动器 | 关闭：Windows 安装包已随 v1.2.1 提供 |
+| #82 1080p60 + 全英文 UI + 迁移脚本（49 文件） | 关闭：不可 review，且全英文与产品方向不符；欢迎单独提 1080p60 小 PR |
+| #75 TwelveLabs Pegasus 评分 | 关闭：Step 3 评分后端可插拔接口定好之前不接任何具体厂商；v1.4 做接口时回引 |
+
+### Issue 治理（2026-09-06 已执行）
+label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶帖 #96**「当前状态 / 已知问题 / 怎么反馈」，
+"用不了"类 issue 统一回复到它。open 从 55 → 28（不含 #96），除分享贴 #40 #56 外全部有 label。
+
+- **已关闭（v1.2.1 修复）**：#88 #47 #50 #53 #54 #55 #62；#51 #52（dev compose，措辞留了余地）
+- **已关闭（not planned，回复引导到 #96）**："用不了"类 #7 #26 #30 #31 #32 #39 #42 #43 #59；噪音 #3 #13 #23 #25 #34 #41 #58 #60 #80 #87
+- **仍 open · Docker/部署**（`docker,bug`）：#1 #4 #5 #6 #9 #15 #21 #33 → 老帖，可在 v1.2.1 Release 出来后统一引导重试再关
+- **仍 open · Windows**（`windows`）：#2 #19 #35 → 可引导到 v1.2.1 Release 的 Windows 包后关闭（#73 已关）
+- **仍 open · 功能请求**（`feature`）：#67 FunASR/SenseVoice、#45 阿里云国际（#57 #72 已由 #92 关闭）
+- **仍 open · 待复现的产品 bug**（`bug`）：#11 切片为 0、#24 进度错误、#38 缩略图、#20 导入报错、#27 加载失败、#77 API 连接测试失败
+- **仍 open · question**：#10 #14 #18 #36；分享贴 #40 #56 不动
 
 ---
 
 ## 四、迭代计划
 
-### v1.2.1 发版（代码已齐，剩人工动作）
+### v1.2.1 发版
 - [x] 合并 #89 #90 #91 #92 #93 #94
-- [ ] **先在 Actions 手动 `workflow_dispatch` `Desktop Build`，只勾 Windows**，看 NSIS 包能否产出；
-      装到一台干净 Windows 上验证：能启动、设置页保存 provider、跑通一条本地视频
-      （最可能翻车的点：NSIS 打几千个 Python 文件耗时、WebView2 引导、`%APPDATA%\AutoClip` 目录）
-- [ ] 打 `v1.2.1` tag → mac + Windows 并行构建，`release` job 自动挂产物（Windows 失败不影响 DMG）
+- [x] `workflow_dispatch` 只勾 Windows 试构建：通过，安装包 145 MB（run 34040814275）
+- [x] 打 `v1.2.1` tag（`a5c20ae`）→ Desktop Build run 34042037733 全绿（Windows 10 min / mac 14 min），
+      Release 两个文件齐：`AutoClip.Desktop_1.2.1_aarch64.dmg`（223 MB）、`AutoClip.Desktop_1.2.1_x64-setup.exe`（145 MB）；标题已改；#73 已关
+- [ ] 把 Windows 安装包装到一台干净 Windows 上验证：能启动、设置页保存 provider、跑通一条本地视频
+      （最可能翻车的点：NSIS 几千个 Python 文件、WebView2 引导、`%APPDATA%\AutoClip` 目录）
 - [ ] 用真实 key 各测一遍 4 个 provider 的「测试连接」+ 一次完整处理（#92 改动了 provider 选择链路，单测覆盖了逻辑但没打过真接口；尤其 openai SDK 已是 3.x）
-- [ ] 关闭已修复 issue：#88 #47 #50 #51 #52 #53 #54 #55 #62 #73（Windows 包出来后）；关闭外部 PR #83 #84 #85 #78（见上表）
-- [ ] 建 label 体系（bug / docker / windows / feature / question / invalid）并给 issue 打标；置顶一个「已知问题与当前状态」issue，把"用不了"类（#7 #26 #30 #31 #32 #39 #42 #43 #59）统一回复到 v1.2.1
+- [x] 关闭已修复 issue、关闭外部 PR #83 #84 #85 #78
+- [x] label 体系 + 置顶帖 #96 + "用不了"类统一回复关闭
+- [x] 外部 PR 全部留言关闭（见第三节表格）
 
 ### v1.3 · Phase 0 收尾 + 高频需求
 - [ ] Windows 包稳定后：Intel mac（PBS `x86_64-apple-darwin` + osxexperts intel 静态包，脚本只需改两个变量）
