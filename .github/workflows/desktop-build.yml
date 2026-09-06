@@ -1,40 +1,50 @@
-name: Desktop Build (macOS arm64)
+name: Desktop Build
 
 # Single, unified desktop packaging pipeline.
 #
 # This replaces the old PyInstaller / prepare_resources workflows (build-*.yml),
 # none of which ever produced a working installable app (see issue #65). It runs
-# the proven python-build-standalone (PBS) route in scripts/build_macos_arm.sh:
-# portable Python + backend source + static ffmpeg/ffprobe, injected into the
-# .app, ad-hoc signed, packaged as a DMG.
+# the proven python-build-standalone (PBS) route: portable Python + backend
+# source + static ffmpeg/ffprobe, packaged per platform:
+#   - macOS arm64:  scripts/build_macos_arm.sh   -> .app injected + ad-hoc signed + DMG
+#   - Windows x64:  scripts/build_windows_x64.sh -> NSIS installer (resources declared
+#                   in src-tauri/tauri.windows.conf.json)
+# Both share scripts/lib/desktop_build_common.sh.
 #
 # Triggers:
-#   - workflow_dispatch: build on demand
-#   - push tags v*:      build + attach the DMG to a GitHub Release
-#
-# Currently macOS arm64 only (the validated target). PBS and the static ffmpeg
-# source both have x86_64/Windows/Linux equivalents, so the same script can be
-# generalized later by parameterizing the runner + download URLs + tauri target.
+#   - workflow_dispatch: build on demand (pick platforms)
+#   - push tags v*:      build + attach the artifacts to a GitHub Release
 
 on:
   workflow_dispatch:
+    inputs:
+      build_macos:
+        description: "Build macOS arm64 DMG"
+        type: boolean
+        default: true
+      build_windows:
+        description: "Build Windows x64 installer"
+        type: boolean
+        default: true
   push:
     tags:
       - 'v*'
 
 # Needed by softprops/action-gh-release to create the Release and upload the
-# DMG. Without this the default GITHUB_TOKEN is read-only and the release step
-# fails with "Resource not accessible by integration" (403).
+# artifacts. Without this the default GITHUB_TOKEN is read-only and the release
+# step fails with "Resource not accessible by integration" (403).
 permissions:
   contents: write
 
+env:
+  # GitHub runners are in the US; the default tsinghua mirror in the build
+  # script is slow/unreliable from there, so use PyPI directly.
+  PIP_INDEX_URL: https://pypi.org/simple
+
 jobs:
   build-macos-arm64:
+    if: github.event_name == 'push' || inputs.build_macos
     runs-on: macos-14  # Apple Silicon runner
-    env:
-      # GitHub runners are in the US; the default tsinghua mirror in the build
-      # script is slow/unreliable from there, so use PyPI directly.
-      PIP_INDEX_URL: https://pypi.org/simple
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -62,7 +72,7 @@ jobs:
           path: |
             build/pbs-cache
             build/ffmpeg-cache
-          key: desktop-downloads-${{ hashFiles('scripts/build_macos_arm.sh') }}
+          key: desktop-downloads-macos-${{ hashFiles('scripts/build_macos_arm.sh', 'scripts/lib/desktop_build_common.sh') }}
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --locked --version "^2.0"
@@ -85,18 +95,105 @@ jobs:
           path: src-tauri/target/release/bundle/macos/*.dmg
           retention-days: 30
 
-      - name: Attach DMG to release
-        if: startsWith(github.ref, 'refs/tags/v')
+  build-windows-x64:
+    if: github.event_name == 'push' || inputs.build_windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        # Git Bash: the build script is bash and shares its library with macOS.
+        shell: bash
+    steps:
+      # The runner's git defaults to autocrlf=true; CRLF shell scripts fail in
+      # bash with "$'\r': command not found". (.gitattributes enforces LF for
+      # *.sh as well, this is belt and braces for older checkouts.)
+      - name: Force LF line endings
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Cache portable Python + ffmpeg downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/pbs-cache
+            build/ffmpeg-cache
+          key: desktop-downloads-windows-${{ hashFiles('scripts/build_windows_x64.sh', 'scripts/lib/desktop_build_common.sh') }}
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked --version "^2.0"
+
+      - name: Build desktop app (PBS route)
+        env:
+          VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
+          VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com' }}
+        run: bash scripts/build_windows_x64.sh
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoclip-desktop-windows-x64
+          path: src-tauri/target/release/bundle/nsis/*.exe
+          retention-days: 30
+
+  # One release job instead of per-platform upload steps, so two jobs never race
+  # to create the same tag's release. Runs even if one platform failed, so a
+  # broken Windows build doesn't block the macOS DMG (and vice versa).
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') && !cancelled()
+    needs: [build-macos-arm64, build-windows-x64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: autoclip-desktop-*
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la dist
+
+      - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: src-tauri/target/release/bundle/macos/*.dmg
+          files: dist/*
           body: |
-            ## AutoClip Desktop ${{ github.ref_name }} (macOS, Apple Silicon)
+            ## AutoClip Desktop ${{ github.ref_name }}
 
+            ### macOS (Apple Silicon) — `.dmg`
             - Built-in portable Python runtime + static ffmpeg/ffprobe — no
               dependencies to install.
             - Ad-hoc signed (not notarized): on first launch, right-click the
               app and choose **Open** to bypass Gatekeeper.
             - Apple Silicon (arm64) only.
+
+            ### Windows (x64) — `-setup.exe`
+            - Same bundled runtime; installs per-user, no admin rights needed.
+            - Not code-signed: SmartScreen will warn on first run — choose
+              **More info → Run anyway**.
+            - WebView2 is downloaded by the installer if missing.
+
+            If one of the files is missing, that platform's build failed for this
+            tag — check the Desktop Build workflow run.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

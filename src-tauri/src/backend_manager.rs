@@ -69,13 +69,44 @@ impl BackendManager {
         // The backend's ffmpeg_utils reads these env vars before falling back
         // to PATH, so this is what makes video processing work on machines
         // without a system ffmpeg installed.
-        let ffmpeg_bin = launch.working_dir.join("ffmpeg").join("ffmpeg");
+        let ffmpeg_bin = launch
+            .working_dir
+            .join("ffmpeg")
+            .join(Self::exe_name("ffmpeg"));
         if ffmpeg_bin.is_file() {
             cmd.env("AUTOCLIP_FFMPEG_PATH", &ffmpeg_bin);
         }
-        let ffprobe_bin = launch.working_dir.join("ffmpeg").join("ffprobe");
+        let ffprobe_bin = launch
+            .working_dir
+            .join("ffmpeg")
+            .join(Self::exe_name("ffprobe"));
         if ffprobe_bin.is_file() {
             cmd.env("AUTOCLIP_FFPROBE_PATH", &ffprobe_bin);
+        }
+
+        // The backend prints emoji/Chinese to stdout; with a piped stdout on
+        // Windows Python falls back to the ANSI code page and dies with
+        // UnicodeEncodeError before it ever reaches "PORT=". Force UTF-8.
+        cmd.env("PYTHONUTF8", "1");
+        cmd.env("PYTHONIOENCODING", "utf-8");
+
+        // Backend defaults its data dir to ~/Library/Application Support/AutoClip,
+        // which only makes sense on macOS. Resolve the platform data dir here
+        // (%APPDATA%\AutoClip on Windows, ~/.local/share/AutoClip on Linux) —
+        // on macOS this is exactly the old default, so existing installs keep
+        // their data.
+        if std::env::var_os("AUTOCLIP_APP_DIR").is_none() {
+            if let Ok(data_dir) = app_handle.path().data_dir() {
+                cmd.env("AUTOCLIP_APP_DIR", data_dir.join("AutoClip"));
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            // Without this every launch pops a black console window for python.exe.
+            cmd.creation_flags(CREATE_NO_WINDOW);
         }
 
         match cmd.spawn() {
@@ -174,7 +205,7 @@ impl BackendManager {
                     continue;
                 }
 
-                let venv_python = backend_work_dir.join("venv").join("bin").join("python");
+                let venv_python = Self::venv_python(&backend_work_dir);
                 if venv_python.exists() {
                     return Ok(Self::python_launch(
                         venv_python.to_string_lossy().to_string(),
@@ -182,8 +213,10 @@ impl BackendManager {
                     ));
                 }
 
-                // python-build-standalone bundle: resources/python/bin/python3
-                let pbs_python = backend_work_dir.join("python").join("bin").join("python3");
+                // python-build-standalone bundle:
+                //   unix:    resources/python/bin/python3
+                //   windows: resources/python/python.exe
+                let pbs_python = Self::pbs_python(&backend_work_dir);
                 if pbs_python.exists() {
                     return Ok(Self::python_launch(
                         pbs_python.to_string_lossy().to_string(),
@@ -191,10 +224,8 @@ impl BackendManager {
                     ));
                 }
 
-                if Command::new("python3").arg("--version").output().is_ok() {
-                    return Ok(Self::python_launch("python3".to_string(), backend_work_dir));
-                } else if Command::new("python").arg("--version").output().is_ok() {
-                    return Ok(Self::python_launch("python".to_string(), backend_work_dir));
+                if let Some(system_python) = Self::system_python() {
+                    return Ok(Self::python_launch(system_python, backend_work_dir));
                 }
             }
         }
@@ -204,21 +235,16 @@ impl BackendManager {
             if let Some(project_root) = current_dir.parent() {
                 let backend_dir = project_root.join("backend");
                 if backend_dir.exists() {
-                    let venv_python = project_root.join("venv").join("bin").join("python");
+                    let venv_python = Self::venv_python(project_root);
                     if venv_python.exists() {
                         return Ok(Self::python_launch(
                             venv_python.to_string_lossy().to_string(),
                             project_root.to_path_buf(),
                         ));
                     }
-                    if Command::new("python3").arg("--version").output().is_ok() {
+                    if let Some(system_python) = Self::system_python() {
                         return Ok(Self::python_launch(
-                            "python3".to_string(),
-                            project_root.to_path_buf(),
-                        ));
-                    } else if Command::new("python").arg("--version").output().is_ok() {
-                        return Ok(Self::python_launch(
-                            "python".to_string(),
+                            system_python,
                             project_root.to_path_buf(),
                         ));
                     }
@@ -229,22 +255,58 @@ impl BackendManager {
         if let Ok(current_dir) = std::env::current_dir() {
             let backend_dir = current_dir.join("backend");
             if backend_dir.exists() {
-                let venv_python = current_dir.join("venv").join("bin").join("python");
+                let venv_python = Self::venv_python(&current_dir);
                 if venv_python.exists() {
                     return Ok(Self::python_launch(
                         venv_python.to_string_lossy().to_string(),
                         current_dir,
                     ));
                 }
-                if Command::new("python3").arg("--version").output().is_ok() {
-                    return Ok(Self::python_launch("python3".to_string(), current_dir));
-                } else if Command::new("python").arg("--version").output().is_ok() {
-                    return Ok(Self::python_launch("python".to_string(), current_dir));
+                if let Some(system_python) = Self::system_python() {
+                    return Ok(Self::python_launch(system_python, current_dir));
                 }
             }
         }
 
         Err("找不到可用的 Python 环境或后端代码".to_string())
+    }
+
+    fn exe_name(base: &str) -> String {
+        if cfg!(target_os = "windows") {
+            format!("{}.exe", base)
+        } else {
+            base.to_string()
+        }
+    }
+
+    fn venv_python(root: &std::path::Path) -> PathBuf {
+        if cfg!(target_os = "windows") {
+            root.join("venv").join("Scripts").join("python.exe")
+        } else {
+            root.join("venv").join("bin").join("python")
+        }
+    }
+
+    fn pbs_python(root: &std::path::Path) -> PathBuf {
+        if cfg!(target_os = "windows") {
+            root.join("python").join("python.exe")
+        } else {
+            root.join("python").join("bin").join("python3")
+        }
+    }
+
+    /// First interpreter on PATH that answers `--version`. On Windows `python3`
+    /// is usually the Microsoft Store stub, so prefer plain `python` there.
+    fn system_python() -> Option<String> {
+        let candidates: [&str; 2] = if cfg!(target_os = "windows") {
+            ["python", "python3"]
+        } else {
+            ["python3", "python"]
+        };
+        candidates
+            .iter()
+            .find(|name| Command::new(name).arg("--version").output().is_ok())
+            .map(|name| name.to_string())
     }
 
     fn python_launch(program: String, working_dir: PathBuf) -> BackendLaunch {
