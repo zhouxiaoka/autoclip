@@ -1,0 +1,70 @@
+name: 🐛 Bug 报告 / Bug report
+description: 某个功能不工作、报错、崩溃 / Something is broken
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。填完下面的信息，我们才能复现问题；缺少版本 / 平台 / 模型的 issue 会被要求补充后再处理。
+        Thanks for reporting. Version, platform and model are required for us to reproduce.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台 / Platform
+      options:
+        - macOS 桌面版 (Apple Silicon)
+        - Windows 桌面版 (x64)
+        - Docker
+        - 源码运行 / From source
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: AutoClip 版本 / Version
+      description: 设置页底部或「关于」里可见 / Shown in Settings → About
+      placeholder: "v1.2.1"
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: 使用的模型提供商 / LLM provider
+      placeholder: "例如 通义千问 qwen-plus / OpenAI gpt-4o / 硅基流动 / 自定义 OpenAI 兼容"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: source
+    attributes:
+      label: 视频来源 / Video source
+      options:
+        - B站链接 / Bilibili
+        - YouTube
+        - 本地文件 / Local file
+        - 不相关 / N/A
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么 / What happened
+      description: 做了什么操作、期望看到什么、实际看到什么 / Steps, expected, actual
+      placeholder: |
+        1. 粘贴链接 https://…
+        2. 点击「开始」
+        3. 进度停在「分析中 63%」不动 / 报错 xxx
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图 / Logs or screenshots
+      description: |
+        桌面版日志位置：macOS `~/Library/Application Support/AutoClip/logs`，Windows `%APPDATA%\AutoClip\logs`。粘贴最后 50 行即可，注意删掉 API Key。
+      render: text

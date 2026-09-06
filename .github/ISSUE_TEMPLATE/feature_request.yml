@@ -1,0 +1,31 @@
+name: ✨ 功能需求 / Feature request
+description: 希望 AutoClip 多做点什么 / Suggest something new
+labels: ["feature", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你遇到的问题 / The problem
+      description: 先说场景，不说方案：你在做什么、卡在哪 / Describe the situation, not the solution
+      placeholder: "我每周要处理 5 条 2 小时的直播回放，现在每条都要手动……"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你期望的效果 / What you'd like
+      placeholder: "如果能……就好了"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 主要使用的平台 / Platform
+      options:
+        - macOS 桌面版
+        - Windows 桌面版
+        - Docker / 源码
+    validations:
+      required: false

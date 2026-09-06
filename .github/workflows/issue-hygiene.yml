@@ -1,0 +1,78 @@
+# Issue 收件箱自动打理：
+# 1. 新 issue 自动回一条说明（预期节奏 + 去哪看状态），维护者不用手动回。
+# 2. 打了 needs-info 却 14 天没人补信息 → 标 stale，再 7 天关闭。
+# 3. 其他 issue 60 天无活动 → 标 stale，再 14 天关闭。feature / pinned 永不自动关。
+name: Issue hygiene
+
+on:
+  issues:
+    types: [opened]
+  schedule:
+    - cron: "0 2 * * *"   # 每天 10:00 北京时间
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  welcome:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              '收到，感谢反馈。这是一个业余时间维护的开源项目，issue 通常在 **一周内** 统一 triage，不会逐条即时回复。',
+              '',
+              '- 当前状态与已知问题：#96',
+              '- 如果是 bug 且缺少 **版本 / 平台 / 模型** 信息，会被打上 `needs-info`，14 天内没补充会自动关闭（补充后重开即可）。',
+              '- 使用类问题建议移到 [Discussions](https://github.com/zhouxiaoka/autoclip/discussions)。',
+              '',
+              '_This project is maintained in spare time; issues are triaged weekly. Bugs missing version / platform / model get `needs-info` and auto-close after 14 days without a reply._'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+  stale-needs-info:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          only-labels: needs-info
+          days-before-issue-stale: 14
+          days-before-issue-close: 7
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          stale-issue-label: stale
+          stale-issue-message: "还缺少复现所需的信息（版本 / 平台 / 模型 / 日志），7 天内没有补充会自动关闭。补充后会自动重开处理。"
+          close-issue-message: "因长期缺少复现信息已关闭。补充信息后回复即可重开。"
+          remove-stale-when-updated: true
+          operations-per-run: 100
+
+  stale-general:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          exempt-issue-labels: pinned,feature,needs-info
+          exempt-all-milestones: true
+          days-before-issue-stale: 60
+          days-before-issue-close: 14
+          days-before-pr-stale: 45
+          days-before-pr-close: 14
+          stale-issue-label: stale
+          stale-pr-label: stale
+          stale-issue-message: "60 天没有新动态，先标记为 stale；如果问题仍然存在请回复一下，否则 14 天后自动关闭。"
+          stale-pr-message: "45 天没有新动态，先标记为 stale；如仍在推进请回复，否则 14 天后自动关闭。"
+          close-issue-message: "因长期无活动自动关闭。问题仍存在的话欢迎重开或新开 issue。"
+          close-pr-message: "因长期无活动自动关闭。"
+          remove-stale-when-updated: true
+          operations-per-run: 100

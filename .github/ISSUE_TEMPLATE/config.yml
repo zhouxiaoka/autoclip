@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📋 当前状态 / 已知问题 / Status & known issues
+    url: https://github.com/zhouxiaoka/autoclip/issues/96
+    about: 提 issue 前先看这里，你的问题可能已经有答案。Check here first.
+  - name: 💬 使用提问与讨论 / Questions & discussion
+    url: https://github.com/zhouxiaoka/autoclip/discussions
+    about: 怎么用、模型选哪个、切片效果调优，去 Discussions。How-to questions go to Discussions.
+  - name: 📝 不用 GitHub？用表单反馈 / Feedback form (no GitHub account needed)
+    url: https://zhouxiaoka.github.io/autoclip_intro/#feedback
+    about: 官网上的反馈表单，一分钟填完。Quick form on the website.
