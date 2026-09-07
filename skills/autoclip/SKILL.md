@@ -27,6 +27,7 @@ AutoClip 是本地运行的 AI 切片工具：字幕（自带 SRT 或本地 Whis
 | `start_clip_job` + `get_job_status` | 长视频或工具调用有超时限制；每 10–20 秒轮询一次，`status` 为 `completed` 时 `result` 就是结果 |
 | `get_project` / `list_projects` | 回看之前的项目 |
 | `list_providers` | 用户问"能用什么模型 / 能不能不花钱" |
+| `export_clip` | 用户要把切好的片段「直接发抖音 / 小红书 / Shorts」——渲 9:16、烧字幕、加标题卡 |
 
 参数约定（`clip_video` 与 `start_clip_job` 相同）：
 - `video_path`：绝对路径。用户给相对路径先解析成绝对路径。

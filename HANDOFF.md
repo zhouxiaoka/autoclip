@@ -39,6 +39,13 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
   - 顺带修复：`httpx` 对 localhost 走系统代理（Clash）导致 502 → `is_local_url()` 对本地地址 `trust_env=False`；
     `apiConfig.notifyListeners` 遍历时被 listener 自删导致设置页首屏偶发不请求 `getCurrentProvider`。
   - 单测 `tests/test_local_presets.py`、`tests/test_cli.py`（共 24 条）；**尚未用真实视频端到端跑过 `autoclip run`**（见 v1.3 todo）。
+- **出片质量 + 可发布成片（2026-09-07）**：方案 `docs/QUALITY_AND_PUBLISH_PLAN.md`。
+  - 时长画像 `DurationProfile`（短/中/长）注入 step1/2 提示词，短视频不再套「最小 90 秒 / 目标 3–6 分钟」。
+  - `refine_timeline`：对齐字幕 cue、时长上下限、重叠合并；`quality_report.json` 落盘。
+  - 评分兜底：数量不匹配按 outline 对齐；低于阈值时保底 top-K（#11 切片为 0）。
+  - 桌面 adapter 终于传入 `prompt/<category>/`。`AUTOCLIP_LLM_CACHE_DIR` 录制/回放。`python -m backend.eval` 约束回归（`backend/eval/cases/short-synthetic` 已过）。
+  - 发布导出：`publish_export.py`（9:16 blur/crop、烧字幕、标题卡）；API `POST .../clips/{id}/export`；`autoclip export`；MCP `export_clip`；切片卡片「导出」Dialog。默认流水线仍是 16:9 copy。
+  - **尚未用真实 5 分钟视频跑完整流水线对照**；竖屏预设只单测了 `original` 重编码。
 
 ### v1.2.1（2026-09-06 打 tag）
 问题根源：README 推荐的 `docker compose` 路径从 2025-09 起就没能跑通过一次完整处理
@@ -148,6 +155,8 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - [ ] CLI / MCP 端到端：用一条真实视频跑 `autoclip run --provider ollama --json` 和 MCP `start_clip_job` 轮询到 completed；
       `autoclip` 装进 Homebrew tap / PyPI（现在只有 `pip install -e .`）；README 首屏放一段 CLI 演示
 - [ ] 桌面应用设置页加「Ollama 未运行」的就地提示（现在只在模型下拉里显示"未检测到模型"）；`min_score` 设置页的值接到 step3（CLI 已能覆盖，桌面端仍是常量 0.7）
+- [ ] 质量对照：拿一条 5 分钟、一条 60 分钟真视频，对比改前提示词口径 vs 现在的 duration profile；把结果补进 `backend/eval/cases/`
+- [ ] 发布导出：抖音 / Shorts / B 站三预设各导一条人工看字幕与标题卡；说话人居中裁切、封面图仍未做
 
 ### v1.4 · 产品质量
 - [ ] 切片质量回归集（#59 "5 分钟视频切出 3 个 2 分钟"、#11 切片为 0、#24 进度）
@@ -165,6 +174,8 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - ffmpeg 路径解析：`backend/utils/ffmpeg_utils.py`
 - LLM 提供商：`backend/core/llm_providers.py`（含 `is_local_url` / `make_openai_http_client` 绕过系统代理）；provider / base_url 选择与热重载：`backend/core/llm_manager.py`；本地预设：`backend/core/local_presets.py`；设置 API：`backend/api/v1/settings.py`（`/local-presets`、`/compatible-models`）
 - CLI / MCP：`backend/cli.py`、`backend/mcp_server.py`，共用 `backend/services/local_runner.py`（环境 / LLM 覆盖 / 项目准备 / 跑流水线 / 结果汇总）；进度监听 `services/simple_progress.py#add_progress_listener`；打包 `pyproject.toml`；Agent skill `skills/autoclip/SKILL.md`；文档 `docs/CLI_AND_MCP.md`
+- 出片质量：`backend/pipeline/quality.py`（时长画像 / refine / 评分兜底），接入 step1–3；回归 `backend/eval/`；方案 `docs/QUALITY_AND_PUBLISH_PLAN.md`
+- 发布导出：`backend/services/publish_export.py`；API `POST /projects/{id}/clips/{id}/export`；CLI `autoclip export`；MCP `export_clip`；前端 `ClipCard` Dialog
 - YouTube 导入：`backend/api/v1/youtube.py`（`AUTOCLIP_YT_SUBTITLE_LANGS`、`AUTOCLIP_YT_CLIENT`）
 - Whisper 运行时（按需安装）：`backend/services/whisper_runtime.py`、`whisper_model_manager.py`、
   前端 `frontend/src/components/SpeechRecognitionConfig.tsx`

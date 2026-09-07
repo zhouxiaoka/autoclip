@@ -4,7 +4,8 @@ import ReactPlayer from 'react-player'
 import { Clip } from '../store/useProjectStore'
 import BilibiliManager from './BilibiliManager'
 import EditableTitle from './EditableTitle'
-import { Btn, Icon, parseTimecode, fmtDuration, fmtClock } from '../ui'
+import { projectApi } from '../services/api'
+import { Btn, Dialog, Icon, ProgressLine, Row, Segmented, parseTimecode, fmtDuration, fmtClock } from '../ui'
 
 interface ClipCardProps {
   clip: Clip
@@ -19,6 +20,14 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
   const [showPlayer, setShowPlayer] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [showBilibiliManager, setShowBilibiliManager] = useState(false)
+  const [showExport, setShowExport] = useState(false)
+  const [preset, setPreset] = useState<'douyin' | 'xiaohongshu' | 'shorts' | 'bilibili' | 'original'>('douyin')
+  const [burnSub, setBurnSub] = useState(true)
+  const [titleCard, setTitleCard] = useState(true)
+  const [exporting, setExporting] = useState(false)
+  const [exportPercent, setExportPercent] = useState(0)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [exportDone, setExportDone] = useState<{ jobId: string; warnings?: string[] } | null>(null)
   const playerRef = useRef<ReactPlayer>(null)
 
   // 从视频第 1 秒抓一帧当缩略图
@@ -45,6 +54,40 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
     } catch (err) {
       console.error('下载失败:', err)
       message.error('下载失败')
+    }
+  }
+
+  const handleExport = async () => {
+    if (!projectId) return
+    setExporting(true)
+    setExportError(null)
+    setExportDone(null)
+    setExportPercent(5)
+    try {
+      const started = await projectApi.startClipExport(projectId, clip.id, {
+        preset, subtitles: burnSub, title_card: titleCard,
+      })
+      const jobId = started.job_id
+      for (let i = 0; i < 180; i++) {
+        await new Promise((r) => setTimeout(r, 1000))
+        const job = await projectApi.getExportJob(projectId, jobId)
+        setExportPercent(job.percent ?? 10)
+        if (job.status === 'completed') {
+          setExportDone({ jobId, warnings: job.result?.warnings })
+          setExporting(false)
+          return
+        }
+        if (job.status === 'failed') {
+          setExportError(job.error || '导出失败')
+          setExporting(false)
+          return
+        }
+      }
+      setExportError('导出超时，请稍后在输出目录查看')
+    } catch (err: any) {
+      setExportError(err?.response?.data?.detail || err?.message || '导出失败')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -101,7 +144,7 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
             <div className="ac-card-actions">
               <Btn variant="text" onClick={() => setShowPlayer(true)}>播放</Btn>
               <Btn variant="text" onClick={handleDownload}>下载</Btn>
-              <Btn variant="text" onClick={() => message.info('投稿功能开发中', 3)}>投稿</Btn>
+              {projectId && <Btn variant="text" onClick={() => { setShowExport(true); setExportDone(null); setExportError(null) }}>导出</Btn>}
             </div>
           </div>
         </div>
@@ -112,7 +155,7 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
         onCancel={() => setShowPlayer(false)}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <Btn size="sm" onClick={() => message.info('投稿功能开发中', 3)}>投稿到 B 站</Btn>
+            {projectId && <Btn size="sm" onClick={() => { setShowPlayer(false); setShowExport(true) }}>发布导出</Btn>}
             <Btn size="sm" variant="cta" onClick={handleDownload} style={{ height: 30, fontSize: 12.5, padding: '0 14px' }}>
               下载
             </Btn>
@@ -155,6 +198,56 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
           </div>
         )}
       </Modal>
+
+      <Dialog
+        open={showExport}
+        onClose={() => !exporting && setShowExport(false)}
+        title="发布导出"
+        description="渲成可直接上传的成片。默认流水线的切片不受影响。"
+        footer={
+          <div className="right" style={{ marginLeft: 'auto' }}>
+            <Btn size="sm" onClick={() => setShowExport(false)} disabled={exporting}>取消</Btn>
+            {exportDone ? (
+              <Btn size="sm" variant="cta" onClick={() => projectId && projectApi.downloadExport(projectId, exportDone.jobId)}>
+                下载成片
+              </Btn>
+            ) : (
+              <Btn size="sm" variant="cta" loading={exporting} onClick={handleExport}>开始导出</Btn>
+            )}
+          </div>
+        }
+      >
+        <Row label="平台" hint="画幅与时长按平台规格">
+          <Segmented
+            size="sm"
+            ariaLabel="导出预设"
+            value={preset}
+            onChange={setPreset}
+            options={[
+              { value: 'douyin', label: '抖音' },
+              { value: 'xiaohongshu', label: '小红书' },
+              { value: 'shorts', label: 'Shorts' },
+              { value: 'bilibili', label: 'B 站' },
+              { value: 'original', label: '原画' },
+            ]}
+          />
+        </Row>
+        <Row label="字幕" hint="从原字幕切出本段并烧进画面">
+          <Segmented size="sm" value={burnSub ? 'on' : 'off'} onChange={(v) => setBurnSub(v === 'on')}
+            options={[{ value: 'on', label: '烧录' }, { value: 'off', label: '不要' }]} />
+        </Row>
+        <Row label="标题卡" hint="片头约 4 秒显示切片标题">
+          <Segmented size="sm" value={titleCard ? 'on' : 'off'} onChange={(v) => setTitleCard(v === 'on')}
+            options={[{ value: 'on', label: '显示' }, { value: 'off', label: '不要' }]} />
+        </Row>
+        {exporting && <div style={{ marginTop: 16 }}><ProgressLine percent={exportPercent} /></div>}
+        {exportError && <p style={{ marginTop: 12, color: 'var(--ac-error)', fontSize: 13 }}>{exportError}</p>}
+        {exportDone && (
+          <p style={{ marginTop: 12, color: 'var(--ac-sub)', fontSize: 13 }}>
+            已完成{exportDone.warnings?.length ? ` · ${exportDone.warnings.join('；')}` : ''}
+          </p>
+        )}
+      </Dialog>
 
       <BilibiliManager
         visible={showBilibiliManager}

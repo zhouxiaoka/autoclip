@@ -23,6 +23,35 @@ class SimplePipelineAdapter:
     def __init__(self, project_id: str, task_id: str):
         self.project_id = project_id
         self.task_id = task_id
+
+    def _prompt_files(self, project_dir: Path):
+        """按项目类型选 prompt/<category>/，桌面端以前从没传过，类别目录形同虚设。"""
+        from backend.core.shared_config import get_prompt_files
+        import json
+
+        category = "default"
+        meta_path = project_dir / "project.json"
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                category = meta.get("video_category") or "default"
+            except Exception:  # noqa: BLE001
+                pass
+        if category == "default":
+            try:
+                from backend.core.database import SessionLocal
+                from backend.models.project import Project
+                db = SessionLocal()
+                try:
+                    row = db.query(Project).filter(Project.id == self.project_id).first()
+                    if row is not None and row.project_type is not None:
+                        category = row.project_type.value if hasattr(row.project_type, "value") else str(row.project_type)
+                finally:
+                    db.close()
+            except Exception:  # noqa: BLE001
+                pass
+        logger.info(f"使用类别提示词: {category}")
+        return get_prompt_files(category)
         
     async def _generate_subtitle_automatically(self, video_path: str, metadata_dir: Path) -> Path:
         """
@@ -108,6 +137,7 @@ class SimplePipelineAdapter:
             collections_output_dir = output_dir / "collections"
             clips_output_dir.mkdir(parents=True, exist_ok=True)
             collections_output_dir.mkdir(parents=True, exist_ok=True)
+            prompt_files = self._prompt_files(project_dir)
             
             # 阶段1: 素材准备
             emit_progress(self.project_id, "INGEST", "素材准备完成")
@@ -119,14 +149,14 @@ class SimplePipelineAdapter:
             logger.info("执行Step 1: 大纲提取")
             if input_srt_path and Path(input_srt_path).exists():
                 logger.info(f"使用现有SRT文件: {input_srt_path}")
-                outlines = run_step1_outline(Path(input_srt_path), metadata_dir=metadata_dir)
+                outlines = run_step1_outline(Path(input_srt_path), metadata_dir=metadata_dir, prompt_files=prompt_files)
             else:
                 logger.warning("没有SRT文件，尝试自动生成字幕")
                 # 尝试自动生成字幕
                 srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
                 if srt_path and srt_path.exists():
                     logger.info(f"自动生成字幕成功: {srt_path}")
-                    outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir)
+                    outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files)
                 else:
                     logger.warning("自动生成字幕失败，创建空大纲")
                     # 创建一个空的大纲文件
@@ -145,7 +175,8 @@ class SimplePipelineAdapter:
             if outlines:  # 只有当有大纲时才执行后续步骤
                 timeline_data = run_step2_timeline(
                     metadata_dir / "step1_outline.json",
-                    metadata_dir=metadata_dir
+                    metadata_dir=metadata_dir,
+                    prompt_files=prompt_files,
                 )
                 emit_progress(self.project_id, "ANALYZE", "时间线提取完成", subpercent=50)
                 
@@ -153,7 +184,8 @@ class SimplePipelineAdapter:
                 logger.info("执行Step 3: 内容评分")
                 scored_clips = run_step3_scoring(
                     metadata_dir / "step2_timeline.json",
-                    metadata_dir=metadata_dir
+                    metadata_dir=metadata_dir,
+                    prompt_files=prompt_files,
                 )
                 emit_progress(self.project_id, "ANALYZE", "内容分析完成", subpercent=100)
             else:
@@ -179,7 +211,8 @@ class SimplePipelineAdapter:
             if outlines:  # 只有当有大纲时才执行后续步骤
                 titled_clips = run_step4_title(
                     metadata_dir / "step3_high_score_clips.json",
-                    metadata_dir=str(metadata_dir)
+                    metadata_dir=str(metadata_dir),
+                    prompt_files=prompt_files,
                 )
                 emit_progress(self.project_id, "HIGHLIGHT", "标题生成完成", subpercent=40)
                 
@@ -187,7 +220,8 @@ class SimplePipelineAdapter:
                 logger.info("执行Step 5: 主题聚类")
                 collections = run_step5_clustering(
                     metadata_dir / "step4_titles.json",
-                    metadata_dir=str(metadata_dir)
+                    metadata_dir=str(metadata_dir),
+                    prompt_files=prompt_files,
                 )
                 emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
                 

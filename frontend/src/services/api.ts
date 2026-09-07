@@ -559,7 +559,46 @@ export const projectApi = {
   // 生成项目缩略图
   generateThumbnail: async (projectId: string): Promise<{success: boolean, thumbnail: string, message: string}> => {
     return api.post(`/projects/${projectId}/generate-thumbnail`)
-  }
+  },
+
+  startClipExport: async (
+    projectId: string,
+    clipId: string,
+    body: { preset: string; subtitles?: boolean; title_card?: boolean }
+  ): Promise<{ ok: boolean; job_id: string; status: string }> => {
+    return api.post(`/projects/${projectId}/clips/${clipId}/export`, body)
+  },
+
+  getExportJob: async (projectId: string, jobId: string): Promise<{
+    job_id: string
+    status: 'queued' | 'running' | 'completed' | 'failed'
+    percent?: number
+    error?: string
+    result?: { path: string; title?: string; width?: number; height?: number; warnings?: string[] }
+  }> => {
+    return api.get(`/projects/${projectId}/exports/${jobId}`)
+  },
+
+  downloadExport: async (projectId: string, jobId: string) => {
+    const response = await axios.get(`/api/v1/projects/${projectId}/exports/${jobId}/download`, {
+      responseType: 'blob',
+      headers: { Accept: 'application/octet-stream' },
+    })
+    const cd = response.headers['content-disposition'] || ''
+    let filename = `export_${jobId.slice(0, 8)}.mp4`
+    const star = cd.match(/filename\*=UTF-8''([^;]+)/)
+    const plain = cd.match(/filename="([^"]+)"/)
+    if (star) filename = decodeURIComponent(star[1])
+    else if (plain) filename = plain[1]
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'video/mp4' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  },
 }
 
 // 视频下载相关API

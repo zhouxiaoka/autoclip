@@ -51,6 +51,9 @@ def test_parser_run_accepts_provider_presets():
     with pytest.raises(SystemExit):
         build_parser().parse_args(["run", "v.mp4", "--provider", "nope"])
 
+    exp = build_parser().parse_args(["export", "pid", "--preset", "douyin", "--clip", "2", "--no-title"])
+    assert exp.cmd == "export" and exp.preset == "douyin" and exp.clip == ["2"] and exp.no_title is True
+
 
 def test_cli_help_runs_without_backend(data_dir):
     p = subprocess.run([sys.executable, "-m", "backend.cli", "--help"], cwd=ROOT, capture_output=True, text=True, timeout=60)
@@ -186,7 +189,7 @@ def test_mcp_server_registers_tools(data_dir):
 
     tools = asyncio.run(mcp_server.server.list_tools())
     names = {t.name for t in tools}
-    assert {"clip_video", "start_clip_job", "get_job_status", "get_project", "list_projects", "list_providers", "check_environment"} <= names
+    assert {"clip_video", "start_clip_job", "get_job_status", "get_project", "list_projects", "list_providers", "check_environment", "export_clip"} <= names
 
 
 def test_mcp_get_project_falls_back_to_disk(data_dir):

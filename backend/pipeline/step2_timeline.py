@@ -60,6 +60,11 @@ class TimelineExtractor:
         self.timeline_chunks_dir.mkdir(parents=True, exist_ok=True)
         self.llm_raw_output_dir.mkdir(parents=True, exist_ok=True)
 
+        # 时长画像追加到提示词（覆盖提示词里写死的 90 秒 / 3–6 分钟）
+        from .quality import load_profile
+        profile = load_profile(self.metadata_dir)
+        timeline_prompt = self.timeline_prompt + (profile.prompt_hint() if profile else "")
+
         # 2. 按 chunk_index 对所有大纲进行分组
         outlines_by_chunk = defaultdict(list)
         for outline in outlines:
@@ -127,7 +132,7 @@ class TimelineExtractor:
                     
                     for retry_count in range(max_parse_retries + 1):
                         try:
-                            raw_response = self.llm_client.call_with_retry(self.timeline_prompt, input_data)
+                            raw_response = self.llm_client.call_with_retry(timeline_prompt, input_data)
                             
                             if not raw_response:
                                 logger.warning(f"  > 块 {chunk_index} LLM响应为空，跳过")
@@ -205,6 +210,23 @@ class TimelineExtractor:
                 
             except Exception as e:
                 logger.error(f"对最终结果排序时出错: {e}。返回未排序的结果。")
+
+        # 5. 程序化校正：对齐字幕边界 / 时长上下限 / 去重合并（docs/QUALITY_AND_PUBLISH_PLAN.md 线 1-B）
+        if all_timeline_data:
+            try:
+                from .quality import load_srt_chunks, refine_timeline, save_report
+                srt_entries = load_srt_chunks(self.metadata_dir)
+                refined, report = refine_timeline(all_timeline_data, srt_entries, profile)
+                save_report({"step2": report}, self.metadata_dir)
+                logger.info(
+                    f"时间线校正: {report['input']} → {report['output']} 段，"
+                    f"合并 {len(report['merged'])}，丢弃 {len(report['dropped'])}，"
+                    f"延长 {report['extended']}，截断 {report['trimmed']}，"
+                    f"吸附偏移 p90={report.get('snap_offset_p90', 0)}s"
+                )
+                all_timeline_data = refined
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"时间线校正失败，沿用原始结果: {e}")
 
         return all_timeline_data
         

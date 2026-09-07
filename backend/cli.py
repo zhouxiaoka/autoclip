@@ -243,6 +243,52 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if rep["ffmpeg"]["ok"] and llm["ok"] else 1
 
 
+# ---------------------------------------------------------------- export ---
+def cmd_export(args: argparse.Namespace) -> int:
+    from backend.services.publish_export import ExportRequest, export_clip, list_presets, load_clip_meta
+    from backend.services.local_runner import summarize_project
+
+    if args.list_presets:
+        rows = list_presets()
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False, indent=2))
+        else:
+            for p in rows:
+                print(f"{p['key']:<14} {p['label']:<16} {p.get('w') or '-'}x{p.get('h') or '-'}  {p.get('layout')}")
+        return 0
+
+    clip_ids = list(args.clip or [])
+    if not clip_ids:
+        try:
+            summary = summarize_project(args.project_id)
+        except FileNotFoundError as e:
+            _err(str(e))
+            return 2
+        clip_ids = [c["id"] for c in summary["clips"]]
+        if not clip_ids:
+            _err("这个项目没有切片")
+            return 2
+
+    results = []
+    for cid in clip_ids:
+        try:
+            load_clip_meta(args.project_id, cid)
+            r = export_clip(ExportRequest(
+                project_id=args.project_id, clip_id=cid, preset=args.preset,
+                subtitles=not args.no_subtitles, title_card=not args.no_title,
+            ))
+            results.append(r)
+            if not args.json:
+                print(f"{'cached' if r.get('cached') else 'ok':<8} {cid}  {r.get('path')}", file=sys.stderr)
+        except Exception as e:  # noqa: BLE001
+            results.append({"ok": False, "clip_id": cid, "error": str(e)[:400]})
+            _err(f"{cid}: {e}")
+
+    if args.json:
+        print(json.dumps({"ok": all(r.get("ok") for r in results), "exports": results}, ensure_ascii=False, indent=2))
+    return 0 if all(r.get("ok") for r in results) else 1
+
+
 # ---------------------------------------------------------------- mcp ---
 def cmd_mcp(args: argparse.Namespace) -> int:
     from backend.mcp_server import main as mcp_main
@@ -297,6 +343,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     m = sub.add_parser("mcp", help="以 MCP server（stdio）方式运行，供 Cursor / Claude 调用")
     m.set_defaults(func=cmd_mcp)
+
+    e = sub.add_parser("export", help="把切片渲成可发布成片（9:16 / 烧字幕 / 标题卡）")
+    e.add_argument("project_id")
+    e.add_argument("--preset", default="douyin", choices=["douyin", "xiaohongshu", "shorts", "bilibili", "original"])
+    e.add_argument("--clip", action="append", help="切片 id，可重复；不填则导出全部")
+    e.add_argument("--no-subtitles", action="store_true")
+    e.add_argument("--no-title", action="store_true")
+    e.add_argument("--list-presets", action="store_true")
+    e.add_argument("--json", action="store_true")
+    e.set_defaults(func=cmd_export)
     return p
 
 

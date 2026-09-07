@@ -54,6 +54,8 @@ autoclip show <project_id>                             # 切片、合集、文�
 autoclip providers                                     # 提供商与本地预设，标出当前用的
 autoclip doctor --provider ollama                      # 按指定 provider 体检
 autoclip mcp                                           # 以 MCP server 运行（见下）
+autoclip export <project_id> --preset douyin           # 渲成 9:16 + 字幕 + 标题卡
+autoclip export <project_id> --clip 2 --clip 5 --preset shorts --no-title
 ```
 
 约定：
@@ -121,6 +123,7 @@ claude mcp add autoclip -- /path/to/autoclip/venv/bin/autoclip mcp
 | `list_projects(limit=20)` | 最近项目 |
 | `list_providers()` | 云端 provider + 本地预设 + 当前配置 |
 | `check_environment(provider?, …)` | ffmpeg / Whisper / 模型连接体检 |
+| `export_clip(project_id, clip_id, preset?, subtitles?, title_card?)` | 渲可发布成片（douyin / xiaohongshu / shorts / bilibili / original） |
 
 实现要点：
 - 流水线里散落着 `print()`，会污染 stdout 协议通道；server 启动时把 `sys.stdout` 指到 stderr，真正的 stdout 只交给 MCP 传输层。

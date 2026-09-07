@@ -12,6 +12,8 @@
 - **MCP server**（`autoclip mcp`，stdio）：`clip_video`、`start_clip_job` / `get_job_status`、`get_project`、`list_projects`、`list_providers`、`check_environment`，Cursor / Claude 可直接调用；Agent skill `skills/autoclip/SKILL.md`
 - **本地模型预设 Ollama / LM Studio**：设置页提供商下拉直接可选，自动列出服务端模型，无需 API Key；Docker / CLI 可用 `LLM_PROVIDER=ollama`
 - `GET /settings/local-presets`、`GET /settings/compatible-models?base_url=`；`POST /settings/test-api` 接受 `ollama` / `lmstudio`
+- **出片质量工程化**：按时长分档（短/中/长）覆盖提示词里写死的 90 秒规则；时间线对齐字幕边界并去重；评分数量不匹配不再整块丢、低于阈值保底 top-K。回归入口 `python -m backend.eval`
+- **发布导出**：切片可渲成抖音/小红书/Shorts 9:16 或 B 站横屏（烧字幕 + 标题卡）。入口：详情页「导出」、`autoclip export`、MCP `export_clip`
 
 ### 修复
 - macOS 开着系统代理（Clash 等）时本地 Ollama / LM Studio 请求被送进代理导致 502：对 localhost / 内网地址不再读取代理环境变量

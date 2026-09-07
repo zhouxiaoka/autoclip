@@ -285,14 +285,22 @@ class LLMManager:
             raise
     
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> str:
-        """调用LLM"""
+        """调用LLM。设了 AUTOCLIP_LLM_CACHE_DIR 时按 sha1(prompt+input) 录制 / 回放，给回归集用。"""
         self._reload_if_settings_changed()
+        cache_path = _llm_cache_path(prompt, input_data)
+        if cache_path is not None and cache_path.exists():
+            logger.info(f"LLM 缓存命中: {cache_path.name}")
+            return cache_path.read_text(encoding="utf-8")
         if not self.current_provider:
             raise ValueError("未配置LLM提供商，请在设置页面配置API密钥")
         
         try:
             response = self.current_provider.call(prompt, input_data, **kwargs)
-            return response.content
+            content = response.content
+            if cache_path is not None:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text(content, encoding="utf-8")
+            return content
         except Exception as e:
             logger.error(f"LLM调用失败: {e}")
             raise
@@ -388,6 +396,16 @@ class LLMManager:
         from ..utils.llm_client import LLMClient
         temp_client = LLMClient()
         return temp_client.parse_json_response(response)
+
+def _llm_cache_path(prompt: str, input_data: Any) -> Optional[Path]:
+    """AUTOCLIP_LLM_CACHE_DIR 设了才启用；CI / eval 回放用。"""
+    root = os.getenv("AUTOCLIP_LLM_CACHE_DIR")
+    if not root:
+        return None
+    import hashlib
+    payload = json.dumps({"p": prompt, "i": input_data}, ensure_ascii=False, sort_keys=True, default=str)
+    return Path(root) / f"{hashlib.sha1(payload.encode('utf-8')).hexdigest()}.txt"
+
 
 # 全局LLM管理器实例
 _llm_manager: Optional[LLMManager] = None

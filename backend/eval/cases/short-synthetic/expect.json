@@ -1,0 +1,8 @@
+{
+  "clips_min": 3,
+  "clips_max": 6,
+  "duration_min": 20,
+  "duration_max": 150,
+  "must_not_zero": true,
+  "coverage_min": 0.35
+}

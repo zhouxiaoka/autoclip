@@ -221,6 +221,28 @@ def list_providers() -> Dict[str, Any]:
     }
 
 
+@server.tool(
+    name="export_clip",
+    description=(
+        "把一条已切好的片段渲成可直接发布的成片：9:16（抖音/小红书/Shorts）、烧字幕、标题卡。"
+        "preset: douyin / xiaohongshu / shorts / bilibili / original。"
+        "返回成片路径；同参数再导会走缓存。"
+    ),
+)
+def export_clip(
+    project_id: str,
+    clip_id: str,
+    preset: str = "douyin",
+    subtitles: bool = True,
+    title_card: bool = True,
+) -> Dict[str, Any]:
+    from backend.services.publish_export import ExportRequest, export_clip as _export
+    try:
+        return _export(ExportRequest(project_id, clip_id, preset, subtitles, title_card))
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:500]}
+
+
 @server.tool(name="check_environment", description="体检：ffmpeg、Whisper 运行时、模型连接是否就绪。出片前先调一次能少踩坑。")
 def check_environment(
     provider: Optional[str] = None,

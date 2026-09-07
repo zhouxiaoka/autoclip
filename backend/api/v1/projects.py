@@ -1395,3 +1395,57 @@ async def get_collection_thumbnail(
     except Exception as e:
         logger.error(f"获取合集封面失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取合集封面失败: {str(e)}")
+
+
+# ---------------------------------------------------------------- 发布导出 ---
+from pydantic import BaseModel, Field
+
+
+class ClipExportRequest(BaseModel):
+    preset: str = Field("douyin", description="douyin / xiaohongshu / shorts / bilibili / original")
+    subtitles: bool = True
+    title_card: bool = True
+    layout: Optional[str] = Field(None, description="覆盖预设画幅：blur / crop / fit / none")
+
+
+@router.get("/{project_id}/export-presets")
+async def list_export_presets(project_id: str):
+    from backend.services.publish_export import list_presets
+    return {"presets": list_presets()}
+
+
+@router.post("/{project_id}/clips/{clip_id}/export")
+async def start_clip_export(project_id: str, clip_id: str, body: ClipExportRequest = ClipExportRequest()):
+    from backend.services.publish_export import ExportRequest, start_export, load_clip_meta
+    try:
+        load_clip_meta(project_id, clip_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return start_export(ExportRequest(
+        project_id=project_id, clip_id=clip_id, preset=body.preset,
+        subtitles=body.subtitles, title_card=body.title_card, layout=body.layout,
+    ))
+
+
+@router.get("/{project_id}/exports/{job_id}")
+async def get_clip_export_job(project_id: str, job_id: str):
+    from backend.services.publish_export import get_export_job
+    job = get_export_job(job_id)
+    if not job or job.get("project_id") != project_id:
+        raise HTTPException(status_code=404, detail="没有这个导出任务")
+    return job
+
+
+@router.get("/{project_id}/exports/{job_id}/download")
+async def download_clip_export(project_id: str, job_id: str):
+    from fastapi.responses import FileResponse
+    from backend.services.publish_export import get_export_job
+    job = get_export_job(job_id)
+    if not job or job.get("project_id") != project_id:
+        raise HTTPException(status_code=404, detail="没有这个导出任务")
+    if job.get("status") != "completed" or not (job.get("result") or {}).get("path"):
+        raise HTTPException(status_code=409, detail="导出尚未完成")
+    path = Path(job["result"]["path"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="导出文件不存在")
+    return FileResponse(path=str(path), media_type="video/mp4", filename=path.name)

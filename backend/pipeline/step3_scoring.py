@@ -18,14 +18,18 @@ logger = logging.getLogger(__name__)
 class ClipScorer:
     """内容评分器"""
     
-    def __init__(self, prompt_files: Dict = None):
+    def __init__(self, prompt_files: Dict = None, metadata_dir: Path = None):
         self.llm_client = LLMClient()
         self.text_processor = TextProcessor()
+        self.metadata_dir = Path(metadata_dir) if metadata_dir else None
         
         # 加载提示词
         prompt_files_to_use = prompt_files if prompt_files is not None else PROMPT_FILES
         with open(prompt_files_to_use['recommendation'], 'r', encoding='utf-8') as f:
             self.recommendation_prompt = f.read()
+
+        from .quality import load_srt_chunks
+        self._srt_entries = load_srt_chunks(self.metadata_dir) if self.metadata_dir else []
     
     def score_clips(self, timeline_data: List[Dict]) -> List[Dict]:
         """
@@ -76,57 +80,43 @@ class ClipScorer:
         logger.info("所有切片评分完成")
         return all_scored_clips
     
+    def _excerpt(self, clip: Dict) -> str:
+        if not self._srt_entries:
+            return ""
+        from .quality import excerpt_between, to_seconds
+        try:
+            return excerpt_between(self._srt_entries, to_seconds(clip["start_time"]), to_seconds(clip["end_time"]))
+        except (KeyError, ValueError, TypeError):
+            return ""
+
     def _get_llm_evaluation(self, clips: List[Dict]) -> List[Dict]:
         """
-        使用LLM进行批量评估，为每个clip添加 final_score 和 recommend_reason
+        使用LLM进行批量评估，为每个clip添加 final_score 和 recommend_reason。
+        数量对不上时按 outline 对齐，不再整块丢弃（#11）。
         """
+        from .quality import align_scores
+
         try:
-            # 输入给LLM的数据不需要包含所有字段，只给必要的
             input_for_llm = [
                 {
-                    "outline": clip.get('outline'), 
+                    "outline": clip.get('outline'),
                     "content": clip.get('content'),
                     "start_time": clip.get('start_time'),
                     "end_time": clip.get('end_time'),
+                    "transcript": self._excerpt(clip),
                 } for clip in clips
             ]
-            
+
             response = self.llm_client.call_with_retry(self.recommendation_prompt, input_for_llm)
             parsed_list = self.llm_client.parse_json_response(response)
-            
-            if not isinstance(parsed_list, list) or len(parsed_list) != len(clips):
-                logger.error(f"LLM返回的评分结果数量与输入不匹配。输入: {len(clips)}, 输出: {len(parsed_list)}")
-                return []
-                
-            # 将评分结果合并回原始的clips数据
-            for original_clip, llm_result in zip(clips, parsed_list):
-                score = llm_result.get('final_score')
-                reason = llm_result.get('recommend_reason')
-                
-                if score is None or reason is None:
-                    logger.warning(f"LLM返回的某个结果缺少score或reason: {llm_result}")
-                    original_clip['final_score'] = 0.0
-                    original_clip['recommend_reason'] = "评估失败"
-                else:
-                    original_clip['final_score'] = round(float(score), 2)
-                    original_clip['recommend_reason'] = reason
-                    # 安全地获取outline标题用于日志显示
-                    outline = original_clip.get('outline', {})
-                    if isinstance(outline, dict):
-                        title = outline.get('title', '未知标题')
-                    else:
-                        title = str(outline)
-                    logger.info(f"  > 评分成功: {title[:20]}... [分数: {score}]")
-
-            return clips
+            scored, stats = align_scores(clips, parsed_list)
+            logger.info(f"  > 评分对齐: 命中 {stats['matched']}，兜底 {stats['fallback']}")
+            return scored
 
         except Exception as e:
             logger.error(f"LLM批量评估失败: {e}")
-            # 如果批量失败，为所有clips标记为失败
-            for clip in clips:
-                clip['final_score'] = 0.0
-                clip['recommend_reason'] = "批量评估失败"
-            return clips
+            scored, _ = align_scores(clips, [])
+            return scored
 
     def save_scores(self, scored_clips: List[Dict], output_path: Path):
         """保存评分结果"""
@@ -150,27 +140,27 @@ def run_step3_scoring(timeline_path: Path, metadata_dir: Path = None, output_pat
     with open(timeline_path, 'r', encoding='utf-8') as f:
         timeline_data = json.load(f)
     
-    # 创建评分器
-    scorer = ClipScorer(prompt_files)
-    
-    # 评分
-    scored_clips = scorer.score_clips(timeline_data)
-    
-    # 筛选高分切片
-    high_score_clips = [clip for clip in scored_clips if clip['final_score'] >= MIN_SCORE_THRESHOLD]
-    
-    # 保存结果
     if metadata_dir is None:
         metadata_dir = METADATA_DIR
-    
-    # 保存所有评分后的片段（用于调试和分析）
+
+    from .quality import load_profile, select_clips, save_report
+
+    scorer = ClipScorer(prompt_files, metadata_dir=metadata_dir)
+    scored_clips = scorer.score_clips(timeline_data)
+
+    profile = load_profile(metadata_dir)
+    high_score_clips, select_info = select_clips(scored_clips, MIN_SCORE_THRESHOLD, profile)
+    save_report({"step3": select_info}, metadata_dir)
+    logger.info(
+        f"评分筛选: 候选 {select_info['candidates']} → 保留 {select_info['selected']}"
+        f"（阈值 {MIN_SCORE_THRESHOLD}，兜底补齐 {select_info['fallback_selected']}）"
+    )
+
     all_scored_path = metadata_dir / "step3_all_scored.json"
     scorer.save_scores(scored_clips, all_scored_path)
-    
-    # 保存筛选后的高分片段（用于后续步骤）
+
     if output_path is None:
         output_path = metadata_dir / "step3_high_score_clips.json"
-        
     scorer.save_scores(high_score_clips, output_path)
-    
+
     return high_score_clips

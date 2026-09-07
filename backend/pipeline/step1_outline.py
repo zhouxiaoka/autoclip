@@ -63,9 +63,17 @@ class OutlineExtractor:
             logger.error(f"解析SRT文件失败: {e}")
             return []
             
-        # 2. 基于时间智能分块
-        chunks = self.text_processor.chunk_srt_data(srt_data, interval_minutes=30)
-        logger.info(f"文本已按~30分钟/块切分，共{len(chunks)}个块")
+        # 1.5 时长画像：短视频不能套播客参数（#59）。写盘给 step2 / step3 复用
+        from .quality import profile_from_srt, save_profile
+        profile = profile_from_srt(srt_data)
+        save_profile(profile, self.metadata_dir)
+        outline_prompt = self.outline_prompt + profile.prompt_hint()
+        logger.info(f"时长画像: {profile.tier}，总时长 {profile.total_sec:.0f}s，建议话题数 {profile.topics_hint}")
+
+        # 2. 基于时间智能分块（短 / 中视频整条一块，长视频 ~30 分钟一块）
+        interval = 30 if profile.tier == "long" else max(1, int(profile.total_sec // 60) + 1)
+        chunks = self.text_processor.chunk_srt_data(srt_data, interval_minutes=interval)
+        logger.info(f"文本已按~{interval}分钟/块切分，共{len(chunks)}个块")
         
         # 3. 保存文本块和SRT块到中间文件
         chunk_files = self._save_chunks_to_files(chunks)
@@ -83,7 +91,7 @@ class OutlineExtractor:
                 
                 # 为每个块调用LLM
                 input_data = {"text": chunk_text}
-                response = self.llm_client.call_with_retry(self.outline_prompt, input_data)
+                response = self.llm_client.call_with_retry(outline_prompt, input_data)
                 
                 if response:
                     # 解析响应并附加块索引
