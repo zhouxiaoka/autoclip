@@ -245,7 +245,6 @@ const SettingsPage: React.FC = () => {
   // 打开设置页时若已是本地预设，顺手探测一次
   useEffect(() => {
     if (isLocalProvider(selectedProvider)) void detectLocalModels(selectedProvider, form.getFieldValue('local_base_url'))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProvider])
 
   const openaiBaseUrl = Form.useWatch('openai_base_url', form)
