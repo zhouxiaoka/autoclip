@@ -311,10 +311,9 @@ def run_pipeline(req: RunRequest, video_in_raw: Path, on_progress: Optional[Prog
     from backend.services.simple_progress import add_progress_listener, remove_progress_listener
     from backend.services.simple_pipeline_adapter import SimplePipelineAdapter
 
-    if req.min_score is not None:
-        # step3 的阈值是模块常量（设置页的值目前也没接进去），CLI 这里直接覆盖
-        import backend.pipeline.step3_scoring as step3
-        step3.MIN_SCORE_THRESHOLD = float(req.min_score)
+    import backend.pipeline.step3_scoring as step3
+    # CLI 显式给的阈值优先于设置页；没给就让 step3 自己读设置页 / 默认值
+    step3.MIN_SCORE_OVERRIDE = float(req.min_score) if req.min_score is not None else None
 
     srt_in_raw = video_in_raw.parent / "input.srt"
     srt_arg = str(srt_in_raw) if srt_in_raw.exists() else ""

@@ -15,6 +15,27 @@ from ..core.shared_config import PROMPT_FILES, METADATA_DIR, MIN_SCORE_THRESHOLD
 
 logger = logging.getLogger(__name__)
 
+# CLI `--min-score` 之类的显式覆盖：优先级最高。None = 用设置页保存的值，再退到 MIN_SCORE_THRESHOLD
+MIN_SCORE_OVERRIDE: Optional[float] = None
+
+
+def resolve_min_score_threshold() -> float:
+    """显式覆盖 > 设置页「最低评分阈值」（settings.json，热重载）> 代码默认 0.7。
+    设置页那个值以前只改了 API 进程的内存，流水线从来没读过。"""
+    if MIN_SCORE_OVERRIDE is not None:
+        return float(MIN_SCORE_OVERRIDE)
+    try:
+        from ..core.llm_manager import get_llm_manager
+        value = get_llm_manager().get_processing_setting("min_score_threshold")
+        if value is not None:
+            value = float(value)
+            if 0.0 < value <= 1.0:
+                return value
+            logger.warning(f"设置页的最低评分阈值 {value} 不在 (0, 1]，使用默认 {MIN_SCORE_THRESHOLD}")
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"读取设置页评分阈值失败，使用默认值: {e}")
+    return float(MIN_SCORE_THRESHOLD)
+
 class ClipScorer:
     """内容评分器"""
     
@@ -149,11 +170,13 @@ def run_step3_scoring(timeline_path: Path, metadata_dir: Path = None, output_pat
     scored_clips = scorer.score_clips(timeline_data)
 
     profile = load_profile(metadata_dir)
-    high_score_clips, select_info = select_clips(scored_clips, MIN_SCORE_THRESHOLD, profile)
+    threshold = resolve_min_score_threshold()
+    high_score_clips, select_info = select_clips(scored_clips, threshold, profile)
+    select_info["threshold"] = threshold
     save_report({"step3": select_info}, metadata_dir)
     logger.info(
         f"评分筛选: 候选 {select_info['candidates']} → 保留 {select_info['selected']}"
-        f"（阈值 {MIN_SCORE_THRESHOLD}，兜底补齐 {select_info['fallback_selected']}）"
+        f"（阈值 {threshold}，兜底补齐 {select_info['fallback_selected']}）"
     )
 
     all_scored_path = metadata_dir / "step3_all_scored.json"

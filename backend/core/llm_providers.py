@@ -95,10 +95,14 @@ class DashScopeProvider(LLMProvider):
     
     def __init__(self, api_key: str, model_name: str = "qwen-plus", **kwargs):
         super().__init__(api_key, model_name, **kwargs)
+        # 国际站（alibabacloud.com，#45）的 key 只能打 dashscope-intl 域名；native SDK 的地址是进程级全局变量，
+        # 所以有自定义 base_url 时一律走 OpenAI 兼容模式，按实例隔离
+        custom_base_url = normalize_base_url(kwargs.get("base_url") or os.getenv("DASHSCOPE_BASE_URL", ""))
         # 模式切换: native (SDK Generation.call) | compatible (OpenAI兼容)
-        self.mode = (kwargs.get("mode") or os.getenv("DASHSCOPE_MODE") or "native").lower()
+        self.mode = (kwargs.get("mode") or os.getenv("DASHSCOPE_MODE") or ("compatible" if custom_base_url else "native")).lower()
         # 兼容模式 base_url
-        self.base_url = kwargs.get("base_url", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        self.base_url = custom_base_url or DASHSCOPE_CN_COMPATIBLE_BASE_URL
+        self.is_international = self.base_url == DASHSCOPE_INTL_COMPATIBLE_BASE_URL
         # 原生模式 SDK
         self._ds_generation = None
         if self.mode == "native":
@@ -112,8 +116,7 @@ class DashScopeProvider(LLMProvider):
         """调用DashScope API（mode: native|compatible）"""
         masked_key = self.api_key[:3] + "***" + self.api_key[-2:] if self.api_key else ""
         logger.info(f"[DashScope] mode={self.mode} model={self.model_name} base_url={self.base_url if self.mode=='compatible' else 'sdk-generation'} key={masked_key}")
-        logger.info(f"[DashScope] 实际使用的API key: {self.api_key}")
-        logger.info(f"[DashScope] 传入的kwargs: {kwargs}")
+        logger.debug(f"[DashScope] 传入的kwargs: {kwargs}")
         if self.mode == "native":
             try:
                 # 确保使用传入的API key，临时设置环境变量
@@ -243,6 +246,9 @@ class DashScopeProvider(LLMProvider):
 OPENAI_OFFICIAL_BASE_URL = "https://api.openai.com/v1"
 # 本地/自建 OpenAI 兼容服务（Ollama、vLLM、LM Studio 等）通常不校验 key，但 SDK 要求非空
 OPENAI_COMPATIBLE_PLACEHOLDER_KEY = "EMPTY"
+# 通义千问 OpenAI 兼容接口：中国站 / 国际站（alibabacloud.com 开通的 key 只能打国际站，#45）
+DASHSCOPE_CN_COMPATIBLE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+DASHSCOPE_INTL_COMPATIBLE_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 
 
 def normalize_base_url(base_url: Optional[str]) -> str:

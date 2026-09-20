@@ -15,13 +15,16 @@
 - **出片质量工程化**：按时长分档（短/中/长）覆盖提示词里写死的 90 秒规则；时间线对齐字幕边界并去重；评分数量不匹配不再整块丢、低于阈值保底 top-K。回归入口 `python -m backend.eval`
 - **发布导出**：切片可渲成抖音/小红书/Shorts 9:16 或 B 站横屏（烧字幕 + 标题卡）。入口：详情页「导出」、`autoclip export`、MCP `export_clip`
 - **Docker / 本地脚本模式可用设置页**：`GET/PUT /settings`、`/test-api`、`/current-provider`、`/compatible-models` 等配置端点不再要求桌面模式；Web 端设置页可直接保存 LLM 提供商与密钥到数据目录的 `settings.json`，api 与 worker 自动热重载。首屏如实显示 `.env` 里的 `LLM_PROVIDER` / `API_MODEL_NAME`（#100）
-
 - **失败要像失败**：LLM 未配置 / 字幕缺失或为空 / 大纲提取全部失败或不可解析 / 时间线为空 / 没有片段过评分 / ffmpeg 没产出切片——
   流水线一律进 `failed`，带阶段（SUBTITLE / ANALYZE / EXPORT）和一句可执行的提示（去哪个设置项、装什么）。不再出现 `Completed · 0 切片`
   或永远 `processing`。`ProjectResponse` 新增 `error_message`（取最近失败任务，CLI 路径回退 `project_metadata.last_error`），详情页 / 项目卡 / 应用内反馈直接展示（#100 #11 #24）
 - LLM 单个文本块失败仍继续（长视频偶发超时不毁整条），只有全部失败才报错
+- **通义千问国际站**（#45）：设置页通义千问卡片新增「中国站 / 国际站」开关，alibabacloud.com 开通的 Key 可直接用；Docker 用 `DASHSCOPE_BASE_URL`。国际站走 OpenAI 兼容模式，按实例隔离，不改全局 SDK 地址
+- **设置页「最低评分阈值」真正生效**：以前只改了 API 进程内存，流水线（worker / 本地线程）一直用常量 0.7；现在 step3 按 settings.json 热重载读取，CLI `--min-score` 仍优先。`chunk_size` / `max_clips` 同样进入 settings，供后续步骤接入
+- 发版工具：`scripts/bump_version.py`（四处版本号统一 + CHANGELOG 滚动，`--check` 校验一致）、`scripts/release_notes.py`（Release 正文从 CHANGELOG 生成）；`RELEASE_CHECKLIST.md` 改写为周更流程
 
 ### 修复
+- DashScope 提供商不再把完整 API Key 打进 INFO 日志
 - **本地上传的项目从不自动开始处理**：`/projects/upload` 启动导入任务的代码引用了未定义的 `db`，`NameError` 被吞掉，项目一直停在 pending 等用户手点「开始处理」（自 2026-05 `593cc62b` 起）
 - **桌面模式多线程写 SQLite 互相回滚**：文件型 SQLite 之前用 `StaticPool`（全进程一条连接），导入线程结束时的 ROLLBACK 会抹掉流水线线程刚写入的 Task 行（`ObjectDeletedError`、任务凭空消失、进度卡住）。改为默认连接池 + WAL，`StaticPool` 仅保留给 `:memory:`
 - 桌面模式下 Celery 任务内的 `self.update_state()` 不再去连 Redis 结果后端（直接 ConnectionRefused 拖死导入任务）
@@ -160,7 +163,8 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.2.0...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.2.1...HEAD
+- [1.2.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.2.0...v1.2.1
 - [1.2.0]: https://github.com/zhouxiaoka/autoclip/releases/tag/v1.2.0
 - [1.1.0]: https://github.com/zhouxiaoka/autoclip/releases/tag/v1.1.0
 - [1.0.0]: https://github.com/zhouxiaoka/autoclip/releases/tag/v1.0.0
