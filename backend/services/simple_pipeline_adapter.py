@@ -214,10 +214,10 @@ class SimplePipelineAdapter:
                 prompt_files=prompt_files,
             )
             if not scored_clips:
-                from backend.pipeline.step3_scoring import MIN_SCORE_THRESHOLD
+                from backend.pipeline.step3_scoring import resolve_min_score_threshold
                 raise PipelineFailure(
                     "ANALYZE",
-                    f"没有片段通过评分筛选（{len(timeline_data)} 个候选，阈值 {MIN_SCORE_THRESHOLD}）。",
+                    f"没有片段通过评分筛选（{len(timeline_data)} 个候选，阈值 {resolve_min_score_threshold()}）。",
                     HINT_LOWER_THRESHOLD,
                 )
             emit_progress(self.project_id, "ANALYZE", "内容分析完成", subpercent=100)
