@@ -14,8 +14,11 @@
 - `GET /settings/local-presets`、`GET /settings/compatible-models?base_url=`；`POST /settings/test-api` 接受 `ollama` / `lmstudio`
 - **出片质量工程化**：按时长分档（短/中/长）覆盖提示词里写死的 90 秒规则；时间线对齐字幕边界并去重；评分数量不匹配不再整块丢、低于阈值保底 top-K。回归入口 `python -m backend.eval`
 - **发布导出**：切片可渲成抖音/小红书/Shorts 9:16 或 B 站横屏（烧字幕 + 标题卡）。入口：详情页「导出」、`autoclip export`、MCP `export_clip`
+- **Docker / 本地脚本模式可用设置页**：`GET/PUT /settings`、`/test-api`、`/current-provider`、`/compatible-models` 等配置端点不再要求桌面模式；Web 端设置页可直接保存 LLM 提供商与密钥到数据目录的 `settings.json`，api 与 worker 自动热重载。首屏如实显示 `.env` 里的 `LLM_PROVIDER` / `API_MODEL_NAME`（#100）
 
 ### 修复
+- **开着浏览器「翻译此页」时切换提供商 / 输入模型名整页崩溃**（#100）：Chrome / Edge 翻译会把文本节点换成 `<font>`，React 更新时抛 `removeChild NotFoundError`。现在在挂载前对 `removeChild` / `insertBefore` 做守卫，节点已被外部脚本移动时跳过而不是崩；错误边界页识别到该情况会用中英双语提示关闭翻译
+- 错误边界降级页按 `DESIGN.md` 重做（去掉紫色渐变与 AntD `Result`，单色卡片 + `Btn` 原语），「返回首页」在 HashRouter 下真正回到首页
 - macOS 开着系统代理（Clash 等）时本地 Ollama / LM Studio 请求被送进代理导致 502：对 localhost / 内网地址不再读取代理环境变量
 - 设置页首屏偶发不请求当前模型（`apiConfig.notifyListeners` 遍历中被 listener 自删）
 - 从本地预设切回云端提供商时模型名不再残留 `qwen2.5:7b` 之类本地模型名

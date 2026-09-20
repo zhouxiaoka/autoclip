@@ -144,7 +144,9 @@ DATABASE_URL=sqlite:///./data/autoclip.db
 # Redis配置
 REDIS_URL=redis://redis:6379/0
 
-# LLM 配置（Docker 里没有设置页，只能靠这里；compose 会把这些变量透传给 api 和 worker）
+# LLM 配置（可选）：也可以直接在 http://localhost:3000 的「设置 → 模型」里填，保存到 ./data/settings.json，
+# api 和 worker 会自动热重载；这里的环境变量只在 settings.json 还没保存过相应字段时作为默认值。
+# compose 会把这些变量透传给 api 和 worker。
 # LLM_PROVIDER: dashscope | openai | gemini | siliconflow
 LLM_PROVIDER=dashscope
 API_MODEL_NAME=qwen-plus
