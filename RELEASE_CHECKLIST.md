@@ -1,169 +1,55 @@
-# AutoClip 桌面版发布检查清单
+# AutoClip 周更发版清单
 
-## 📋 发布前检查
+> 节奏：**每周一版**，版本号只是周次编号（`1.3.0 → 1.4.0 → …`，周中热修用 `x.y.1`）。
+> 目标不是「这版把什么做完」，而是「把 main 上已验证的改动每周发出去」。`HANDOFF.md` 里的 v1.3 / v1.4 分组只是优先级队列。
+> 一次完整发版（打 tag 到 Release 出包）约 25 分钟，全部由 `desktop-build.yml` 自动完成；人要做的只有下面打勾的事。
 
-### ✅ 代码质量
-- [ ] 所有测试通过
-- [ ] 代码审查完成
-- [ ] 无已知严重bug
-- [ ] 性能测试通过
-- [ ] 内存泄漏检查
+## 周中（周一 – 周五）
 
-### ✅ 文档完整性
-- [ ] README.md 更新
-- [ ] RELEASE_NOTES.md 完成
-- [ ] CHANGELOG.md 更新
-- [ ] 用户指南完整
-- [ ] API文档更新
-- [ ] 安装指南清晰
+- [ ] 只合并 **CI 全绿 + 有验证记录** 的 PR（PR 描述里要有「怎么验的」）。外部 PR 按 `HANDOFF.md` 第三节原则处理。
+- [ ] 每个合入的 PR 都在 `CHANGELOG.md` 的 `## [未发布]` 里留一行（新增 / 修复 / 改进），写给用户看，不写内部实现。
+- [ ] 每版至少带一条 **失败态改善** 或 **安装体验改善**（issue 区最缺的两类）。
+- [ ] 周报（`scripts/weekly_digest.py`）里新出现的高频问题，当周能修就进这版，修不了写进 `HANDOFF.md` 待办。
 
-### ✅ 配置检查
-- [ ] 版本号正确更新
-- [ ] 许可证信息正确
-- [ ] 仓库URL配置正确
-- [ ] 构建配置优化
-- [ ] 环境变量示例完整
+## 切版（周六 / 周日，冻结后 24 小时内）
 
-### ✅ 安全检查
-- [ ] 无硬编码密钥
-- [ ] 敏感信息已清理
-- [ ] 依赖项安全检查
-- [ ] 权限配置合理
-- [ ] 数据保护措施
+- [ ] main CI 绿（`gh run list --branch main --limit 1`）。
+- [ ] `python scripts/bump_version.py --check` 四处版本号一致。
+- [ ] 本地跑一遍 `pytest backend/tests`、`cd frontend && npm run lint && npm run typecheck && npm run build`、`python -m backend.eval`。
+- [ ] 通读 `CHANGELOG.md [未发布]`：措辞面向用户、每条能对应到 issue 或 PR、没有泄露内部路径 / 密钥。
+- [ ] `python scripts/bump_version.py X.Y.0 --commit`
+      → 改 `tauri.conf.json` / `Cargo.toml` / `pyproject.toml` / `desktop_config.py`，把 `[未发布]` 滚成 `[X.Y.0] - 日期`。
+- [ ] `git push origin main && git tag vX.Y.0 && git push origin vX.Y.0`
+      → 触发 `desktop-build.yml`：macOS arm64 DMG + Windows x64 安装包并行构建，`release` job 用 `scripts/release_notes.py`
+      从 CHANGELOG 抽该版本段落 + 平台说明生成 Release 正文并挂产物。
+- [ ] 看 Actions 里 Desktop Build 全绿、Release 页两个文件都在（少一个 = 对应平台构建失败，看 run 日志）。
 
-### ✅ 构建测试
-- [ ] Windows 构建测试
-- [ ] macOS 构建测试
-- [ ] Linux 构建测试
-- [ ] 安装包测试
-- [ ] 卸载测试
-- [ ] 首次运行测试
+## 发版后（当天）
 
-### ✅ 功能测试
-- [ ] 基础功能正常
-- [ ] AI功能正常
-- [ ] 视频下载功能
-- [ ] 文件上传功能
-- [ ] 进度显示正常
-- [ ] 错误处理正常
+- [ ] **真机验证（人做，CI 覆盖不到）**：
+  - Windows：干净机器装 `-setup.exe` → 能启动 → 设置页保存 provider → 跑通一条本地视频。**Windows 下载量是 DMG 的 3 倍，这一步不能省。**
+  - macOS：右键打开 DMG 里的应用 → 同上。
+- [ ] 更新置顶帖 #96 的版本号与「v1.x 修了什么」小节。
+- [ ] 上一版 Release 的 `needs-info` / 已修复 issue：引导升级后关闭（模板回复见 `HANDOFF.md` 第三节）。
+- [ ] `HANDOFF.md` 头部「更新：日期 · main@sha」与第四节勾选状态同步。
 
-### ✅ 兼容性测试
-- [ ] 不同操作系统版本
-- [ ] 不同屏幕分辨率
-- [ ] 不同网络环境
-- [ ] 不同用户权限
-- [ ] 不同语言环境
+## 热修（周中发现影响面大的 bug）
 
-## 🚀 发布流程
+- [ ] 单独分支 → PR → CI 绿 → 合入 → `bump_version.py X.Y.1 --commit` → 打 tag。不攒到周末。
 
-### 1. 准备阶段
-- [ ] 创建发布分支
-- [ ] 更新版本号
-- [ ] 完成所有检查项
-- [ ] 构建发布版本
-- [ ] 本地测试验证
+## 明确不做
 
-### 2. 构建阶段
-```bash
-# 打桌面客户端（macOS arm64），详见 BUILD_GUIDE.md
-./scripts/build_macos_arm.sh
+- 不在切版日合新功能；周六冻结后只合修 CI / 修 CHANGELOG 措辞的改动。
+- 不手工编辑四处版本号（用脚本），不手工写 Release 正文（从 CHANGELOG 生成）。
+- 不为了「凑一版大的」推迟发版。main 上有可发的就发。
 
-# 验证构建产物
-ls -la "src-tauri/target/release/bundle/macos/"
-```
+## 相关文件
 
-### 3. 测试阶段
-- [ ] 安装包完整性检查
-- [ ] 多平台安装测试
-- [ ] 功能回归测试
-- [ ] 性能基准测试
-- [ ] 用户体验测试
-
-### 4. 发布阶段
-- [ ] 创建 GitHub Release
-- [ ] 上传发布包
-- [ ] 编写发布说明
-- [ ] 设置标签和分类
-- [ ] 发布公告
-
-### 5. 推广阶段
-- [ ] 更新项目主页
-- [ ] 社交媒体宣传
-- [ ] 技术博客发布
-- [ ] 社区通知
-- [ ] 用户反馈收集
-
-## 📦 发布包内容
-
-### 必需文件
-- [ ] 安装包 (.msi/.dmg/.AppImage)
-- [ ] README.md
-- [ ] RELEASE_NOTES.md
-- [ ] LICENSE
-- [ ] env.example
-- [ ] checksums.txt
-
-### 可选文件
-- [ ] 用户指南
-- [ ] 开发者文档
-- [ ] 示例配置文件
-- [ ] 故障排除指南
-
-## 🔍 发布后监控
-
-### 用户反馈
-- [ ] 监控 GitHub Issues
-- [ ] 收集用户反馈
-- [ ] 跟踪下载统计
-- [ ] 分析错误报告
-- [ ] 评估用户满意度
-
-### 技术指标
-- [ ] 安装成功率
-- [ ] 崩溃率统计
-- [ ] 性能指标监控
-- [ ] 内存使用情况
-- [ ] 网络请求统计
-
-### 问题处理
-- [ ] 快速响应严重问题
-- [ ] 发布热修复版本
-- [ ] 更新文档
-- [ ] 改进测试覆盖
-- [ ] 优化构建流程
-
-## 📝 发布记录
-
-### 版本信息
-- **版本号**: v1.0.0
-- **发布日期**: 2024-12-XX
-- **构建时间**: YYYY-MM-DD HH:MM:SS
-- **发布者**: AutoClip Team
-
-### 主要变更
-- 首次发布桌面版
-- 支持多平台构建
-- 完整的AI视频处理功能
-- 现代化的用户界面
-
-### 已知问题
-- 无已知严重问题
-
-### 后续计划
-- B站上传功能
-- 字幕编辑功能
-- 批量处理支持
-- 云端同步功能
-
----
-
-## 📞 联系信息
-
-- **项目主页**: https://github.com/zhouxiaoka/autoclip
-- **问题反馈**: https://github.com/zhouxiaoka/autoclip/issues
-- **邮箱**: christine_zhouye@163.com
-
-## 📄 许可证
-
-本项目采用 MIT 许可证，详见 LICENSE 文件。
-
+| 用途 | 位置 |
+|---|---|
+| 版本号统一 + CHANGELOG 滚动 | `scripts/bump_version.py` |
+| Release 正文生成 | `scripts/release_notes.py`（被 `desktop-build.yml` 的 `release` job 调用） |
+| 构建 workflow | `.github/workflows/desktop-build.yml`（tag `v*` 触发；`workflow_dispatch` 可只勾一个平台试构建） |
+| 打包脚本 | `scripts/build_macos_arm.sh`、`scripts/build_windows_x64.sh`（说明见 `BUILD_GUIDE.md`、`scripts/README.md`） |
+| 每周反馈周报 | `scripts/weekly_digest.py` |
+| 当前状态 / 待办 | `HANDOFF.md` |

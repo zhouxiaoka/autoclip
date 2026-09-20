@@ -163,6 +163,8 @@ jobs:
     needs: [build-macos-arm64, build-windows-x64]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -173,27 +175,15 @@ jobs:
       - name: List artifacts
         run: ls -la dist
 
+      # Release 正文 = CHANGELOG.md 里该版本的段落 + 平台安装说明（scripts/release_notes.py，仅标准库）
+      - name: Render release notes from CHANGELOG
+        run: python3 scripts/release_notes.py "${{ github.ref_name }}" -o release_body.md && cat release_body.md
+
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          name: "AutoClip Desktop ${{ github.ref_name }}"
           files: dist/*
-          body: |
-            ## AutoClip Desktop ${{ github.ref_name }}
-
-            ### macOS (Apple Silicon) — `.dmg`
-            - Built-in portable Python runtime + static ffmpeg/ffprobe — no
-              dependencies to install.
-            - Ad-hoc signed (not notarized): on first launch, right-click the
-              app and choose **Open** to bypass Gatekeeper.
-            - Apple Silicon (arm64) only.
-
-            ### Windows (x64) — `-setup.exe`
-            - Same bundled runtime; installs per-user, no admin rights needed.
-            - Not code-signed: SmartScreen will warn on first run — choose
-              **More info → Run anyway**.
-            - WebView2 is downloaded by the installer if missing.
-
-            If one of the files is missing, that platform's build failed for this
-            tag — check the Desktop Build workflow run.
+          body_path: release_body.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
