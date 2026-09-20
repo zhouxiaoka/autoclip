@@ -1,0 +1,49 @@
+# 官网版本号 / 下载链接 / 安装包体积 跟主仓库 Release 自动同步。三个触发源，任一即可：
+#   1. repository_dispatch  —— 主仓库 desktop-build.yml 发版成功后推过来（需在主仓库配 WEBSITE_DISPATCH_TOKEN）
+#   2. schedule             —— 每天兜底一次，即使没配 token 也不会长期落后
+#   3. workflow_dispatch    —— 手动，可指定 tag
+# 有改动就直接提交到 main，GitHub Pages 约一分钟后生效。
+name: Sync release info
+
+on:
+  repository_dispatch:
+    types: [autoclip-release]
+  schedule:
+    - cron: "17 3 * * *"   # 每天 03:17 UTC（11:17 北京时间）
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag（如 v1.3.0）；留空取 latest"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-release
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync index.html to the release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.client_payload.tag || inputs.tag || '' }}
+        run: python3 scripts/sync_release.py $TAG
+
+      - name: Commit and push if changed
+        run: |
+          if git diff --quiet; then
+            echo "官网已是最新"; exit 0
+          fi
+          VER=$(grep -oE 'releases/download/v[0-9]+\.[0-9]+\.[0-9]+/' index.html | head -1 | grep -oE 'v[0-9.]+')
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "chore: sync download links to AutoClip $VER"
+          git push
