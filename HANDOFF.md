@@ -1,6 +1,7 @@
 # AutoClip — 项目状态 / 进度 / 计划
 
-> 更新：2026-09-06 · 基于 `main@a5c20ae`（**v1.2.1 已发布**：Release 含 macOS arm64 DMG 223 MB + Windows x64 安装包 145 MB）
+> 更新：2026-09-20 · 基于 `main@aaf863bb`（**v1.2.1 已发布**：Release 含 macOS arm64 DMG 223 MB + Windows x64 安装包 145 MB；
+> 截至 2026-09-20 下载量 Windows 1136 / DMG 334 —— Windows 已是主力平台）
 
 AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地视频，自动识别精彩片段、
 生成切片与合集。本文是项目当前状态与近期计划的单一事实来源；长期规划见 `ROADMAP.md`。
@@ -46,6 +47,12 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
   - 桌面 adapter 终于传入 `prompt/<category>/`。`AUTOCLIP_LLM_CACHE_DIR` 录制/回放。`python -m backend.eval` 约束回归（`backend/eval/cases/short-synthetic` 已过）。
   - 发布导出：`publish_export.py`（9:16 blur/crop、烧字幕、标题卡）；API `POST .../clips/{id}/export`；`autoclip export`；MCP `export_clip`；切片卡片「导出」Dialog。默认流水线仍是 16:9 copy。
   - **尚未用真实 5 分钟视频跑完整流水线对照**；竖屏预设只单测了 `original` 重编码。
+- **#100 修复（2026-09-20）**：Docker Web 模式设置页崩溃 + 不能保存。复现结论：崩溃是 **Chrome「翻译此页」** 改写 DOM（文本节点 → `<font>`）
+  导致 React `removeChild NotFoundError`，与 Gemini 无关；用户截图 UI 全英文即证据。修法：`utils/domTranslationGuard.ts` 在挂载前守卫
+  `removeChild` / `insertBefore`（facebook/react#11538 建议），`ErrorBoundary` 识别该情况给中英双语提示并按 `DESIGN.md` 重做（去紫色渐变）。
+  第二层：`/settings` 读写、`/test-api`、`/current-provider`、`/compatible-models` 等去掉 `check_desktop_mode()`，Docker / 脚本模式设置页可保存
+  （settings.json 落 `./data`，api / worker 按 mtime 热重载；首屏如实反映 `.env`）。桌面专属端点（数据目录迁移 / 备份恢复 / 导入导出 / 配置同步）仍拦。
+  单测 `tests/test_settings_web_mode.py`（6 条）；Playwright 对照：无守卫构建翻译后第 4 步崩，有守卫全流程通过。
 
 ### v1.2.1（2026-09-06 打 tag）
 问题根源：README 推荐的 `docker compose` 路径从 2025-09 起就没能跑通过一次完整处理
@@ -110,6 +117,23 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - **仍 open · 待复现的产品 bug**（`bug`）：#11 切片为 0、#24 进度错误、#38 缩略图、#20 导入报错、#27 加载失败、#77 API 连接测试失败
 - **仍 open · question**：#10 #14 #18 #36；分享贴 #40 #56 不动
 
+### 2026-09-20 复审结论（open 16 条，含 #96）
+| 处置 | Issue | 依据 |
+|---|---|---|
+| 修复（本轮） | #100 | 见上「#100 修复」；回复用户：关掉浏览器翻译 + 升级后可在设置页直接保存 |
+| 引导升级 v1.2.1 后关闭 | #24 进度卡 20% | 评论里 newengine 的方案就是 worker 缺 `-Q`，#89 已修 |
+| 合并为一条「缩略图链路」bug 或关闭 | #20 #38 #18（第三条） | 同根因：ffmpeg 提的 cover jpg 再喂 ffmpeg 解 mjpeg 失败；近一年无新报告 |
+| 关闭（已修） | #27 缺 pytz（v1.1.0）、#14 前端硬编码 localhost（v1.2.1） | |
+| 保留，v1.3 发版后引导复测 | #11 切片为 0 | 评分兜底 top-K 已在 main 未发版 |
+| `needs-info` 走自动流程 | #77 | 只有一张截图 |
+| 引导到 #96 关闭 | #10 #36 | 无有效信息 |
+| 直接回复可用方案后关闭或转 feature | #45 阿里云国际 | 选「OpenAI 兼容」+ base_url `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` 即可；v1.3 在 dashscope 卡片加「国际站」开关 |
+| 保留，排入 v1.4 | #67 SenseVoice | LauraGPT 已在 123mlly fork 提了修好词级时间戳的 PR（含 5 条回归测试），是 ASR 可插拔接口的第一个候选实现 |
+
+外部 PR（2026-09-20）：#97 `ProjectResponse` 缺默认值（已核实 pydantic v2 下必填，`POST /projects/` 必 500，2 行 + 测试）、#98 文档 worker 补 `-Q`（与 #89 同源）→ **合入**；
+#99 自己的 CI 修复 → 合入（main 自 `9f81b5c` 起 CI 红；本轮 #100 PR 已顺手删掉同一行）；
+#101 i18n 英文本地化（18 文件 +1393，外部首次贡献）→ **不直接合大 PR**：先由维护者定 i18n 骨架（见 v1.3），再请作者按规范分批提。理由见 v1.3「i18n」。
+
 ### 反馈收件箱（2026-09-07 搭好，替代 QQ 群 / 个人飞书）
 原则：不再让用户来加维护者，反馈自己流到一个每周看一次的地方。三个入口：
 
@@ -151,7 +175,16 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - [x] 设置页 provider 卡片 / 彩色 Tag 与 `DESIGN.md` 不符 → 2026-09-07 设置页 / 详情页 / 三种卡片已按 `DESIGN.md`「App Layer」重做（见下）
 - [ ] 首页导入框、`ProjectTaskManager`、`CollectionPreviewModal` / `CreateCollectionModal`、B 站登录弹窗仍是 AntD 默认件，下一轮按 `frontend/src/ui/` 原语重做
 - [ ] `ProjectCard.tsx` 只做了「去色 + 失败态反馈」的局部修补（仍是 AntD Card + 内联样式），应整体重写成 `ac-card`
-- [ ] Docker 模式下开放设置页（目前 `check_desktop_mode` 直接 400，只能靠 .env）
+- [x] Docker 模式下开放设置页（2026-09-20，#100）；浏览器翻译导致的整页崩溃同轮修复
+- [ ] **失败要像失败**：LLM 不可达 / 无 key / 评分全空时项目应进 `failed`（带阶段 + 错误文本，走应用内反馈入口），不能 `Completed · 0 切片`
+      或永久 `processing`（#100 的 0 切片、#11、#24 的共同表象）。这是减少「用不了」类 issue 最直接的一刀
+- [ ] **i18n 骨架**（来源：#101 + #100 根因）：Windows 下载量已是 DMG 的三倍、海外用户在开浏览器翻译。维护者先定基础设施
+      —— `i18next` + `react-i18next`、`locales/{zh,en}.json`、文案 key 命名规范、语言切换放「设置 → 应用」、AntD `ConfigProvider` locale 跟随、
+      `dayjs` locale 跟随；与 `frontend/src/ui/` 原语迁移一起做（先迁的页面先抽文案）。骨架合入后请 #101 作者按页面分批提 PR
+- [ ] **dashscope 国际站**（#45）：`DashScopeProvider` 支持 `base_url`（`dashscope-intl.aliyuncs.com`），设置页 dashscope 卡片加「国际站」开关；
+      Docker 用 `DASHSCOPE_BASE_URL`。过渡方案已在 issue 里回复（OpenAI 兼容 + `compatible-mode/v1`）
+- [ ] `DESIGN.md` 欠账清单（`ErrorBoundary` 本轮已改）：`index.css:704-712`、`assets/background.svg`、`FileUpload.tsx`、`BilibiliDownload.tsx`、
+      `BilibiliManager.css`、`CreateCollectionModal.css`、`CollectionPreviewModal_fixed.tsx` 仍有渐变 / 撞色
 - [ ] CLI / MCP 端到端：用一条真实视频跑 `autoclip run --provider ollama --json` 和 MCP `start_clip_job` 轮询到 completed；
       `autoclip` 装进 Homebrew tap / PyPI（现在只有 `pip install -e .`）；README 首屏放一段 CLI 演示
 - [ ] 桌面应用设置页加「Ollama 未运行」的就地提示（现在只在模型下拉里显示"未检测到模型"）；`min_score` 设置页的值接到 step3（CLI 已能覆盖，桌面端仍是常量 0.7）
@@ -160,8 +193,12 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 
 ### v1.4 · 产品质量
 - [ ] 切片质量回归集（#59 "5 分钟视频切出 3 个 2 分钟"、#11 切片为 0、#24 进度）
-- [ ] Step 3 评分后端可插拔（接纳 #75 思路）；ASR 后端可插拔（#67）
-- [ ] 之后按 `ROADMAP.md` 进入 Phase 1（Supabase 账号骨架）
+- [ ] **ASR 后端可插拔**（#67）：在 `utils/speech_recognizer.py` 抽 `ASRBackend` 协议（`transcribe(audio) -> cues`，cue 必须单调、不重叠、不超时长），
+      faster-whisper 为默认实现；接口定稿后邀请 LauraGPT / 123mlly 把 fork 上的 SenseVoice 实现（词级 CTC 对齐 → cue 聚合 + 回归测试）按协议提 PR。
+      不在接口之前合任何具体 ASR 厂商代码
+- [ ] **Step 3 评分后端可插拔**（接纳 #75 思路）：同样先定协议再接厂商
+- [ ] Sentry 崩溃上报提前到这一版（Phase 0 遗留）：#77 这类只有截图的 issue 目前无法处理
+- [ ] 之后按 `ROADMAP.md` 进入 Phase 1（Supabase 账号骨架）；Phase 0 三项（签名公证 / 自动更新 / Sentry）未完成前不开 Phase 1
 
 ---
 
@@ -181,6 +218,8 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
   前端 `frontend/src/components/SpeechRecognitionConfig.tsx`
 - 前端 UI 原语（`DESIGN.md` App Layer）：`frontend/src/ui/index.tsx` + `ui/ac.css`；已迁移页面：`pages/ProjectDetailPage.tsx`、`pages/SettingsPage.tsx`、`components/ClipCard.tsx`、`CollectionCard.tsx`、`SpeechRecognitionConfig.tsx`
 - 反馈：`frontend/src/analytics/feedback.ts`、`components/FeedbackDialog.tsx`；运行时信息 `analytics/lifecycle.ts#getRuntimeInfo`
+- 浏览器翻译守卫 / 错误边界：`frontend/src/utils/domTranslationGuard.ts`（`main.tsx` 挂载前调用）、`components/ErrorBoundary.tsx`；
+  Web 模式设置端点回归：`backend/tests/test_settings_web_mode.py`
 - 周报：`scripts/weekly_digest.py`
 - 本地联调（后端随机端口时）：`BACKEND_URL=http://127.0.0.1:PORT npm run dev`（`vite.config.ts` 代理可被覆盖）
 - Docker：`Dockerfile`、`docker-compose.yml`（四服务共用 `autoclip:local`）、`docker-entrypoint.sh`
