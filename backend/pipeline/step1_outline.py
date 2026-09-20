@@ -11,6 +11,7 @@ from pathlib import Path
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR
+from .failures import PipelineFailure, HINT_CHECK_LLM, HINT_SUBTITLE
 
 logger = logging.getLogger(__name__)
 
@@ -53,15 +54,15 @@ class OutlineExtractor:
         """
         logger.info("开始提取视频大纲...")
         
-        # 1. 解析SRT文件
+        # 1. 解析SRT文件。空字幕 / 解析失败必须让流水线失败，不能静默返回 [] 让后面跑成 0 切片
         try:
             srt_data = self.text_processor.parse_srt(srt_path)
-            if not srt_data:
-                logger.warning("SRT文件为空或解析失败")
-                return []
         except Exception as e:
             logger.error(f"解析SRT文件失败: {e}")
-            return []
+            raise PipelineFailure("SUBTITLE", f"字幕文件无法解析：{e}", HINT_SUBTITLE) from e
+        if not srt_data:
+            logger.warning("SRT文件为空或解析失败")
+            raise PipelineFailure("SUBTITLE", "字幕文件为空，没有可分析的文本。", HINT_SUBTITLE)
             
         # 1.5 时长画像：短视频不能套播客参数（#59）。写盘给 step2 / step3 复用
         from .quality import profile_from_srt, save_profile
@@ -80,6 +81,8 @@ class OutlineExtractor:
         self._save_srt_chunks(chunks)
         
         all_outlines = []
+        failed_chunks = 0
+        last_error: Optional[BaseException] = None
         
         # 4. 逐一处理每个文本块文件
         for i, chunk_file in enumerate(chunk_files):
@@ -101,11 +104,31 @@ class OutlineExtractor:
                 else:
                     logger.warning(f"处理第{i+1}个文本块时返回空响应")
             except Exception as e:
+                # 单块失败可以继续（长视频某一块偶发超时不该毁掉整条），但要记账：
+                # 全部失败 = 提供商 / key / 模型不对，必须报错而不是交一个空大纲出去
+                failed_chunks += 1
+                last_error = e
                 logger.error(f"处理第{i+1}个文本块失败: {e}")
                 continue
+
+        total_chunks = len(chunk_files)
+        if total_chunks and failed_chunks == total_chunks:
+            raise PipelineFailure(
+                "ANALYZE",
+                f"大纲提取失败：{failed_chunks}/{total_chunks} 个文本块调用模型都失败了。最后一次错误：{last_error}",
+                HINT_CHECK_LLM,
+            ) from last_error
+        if failed_chunks:
+            logger.warning(f"{failed_chunks}/{total_chunks} 个文本块失败，用其余块继续。最后一次错误：{last_error}")
         
         # 5. 合并和去重
         final_outlines = self._merge_outlines(all_outlines)
+        if not final_outlines:
+            raise PipelineFailure(
+                "ANALYZE",
+                f"模型返回的内容无法解析为大纲（{total_chunks} 个文本块均未得到有效话题）。",
+                "换一个更强或更稳定的模型（如 qwen-plus / gpt-4o-mini）后重试；若用本地模型，确认它支持中文长文本。",
+            )
         
         logger.info(f"大纲提取完成，共{len(final_outlines)}个话题")
         return final_outlines

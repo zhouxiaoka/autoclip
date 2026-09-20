@@ -16,7 +16,15 @@
 - **发布导出**：切片可渲成抖音/小红书/Shorts 9:16 或 B 站横屏（烧字幕 + 标题卡）。入口：详情页「导出」、`autoclip export`、MCP `export_clip`
 - **Docker / 本地脚本模式可用设置页**：`GET/PUT /settings`、`/test-api`、`/current-provider`、`/compatible-models` 等配置端点不再要求桌面模式；Web 端设置页可直接保存 LLM 提供商与密钥到数据目录的 `settings.json`，api 与 worker 自动热重载。首屏如实显示 `.env` 里的 `LLM_PROVIDER` / `API_MODEL_NAME`（#100）
 
+- **失败要像失败**：LLM 未配置 / 字幕缺失或为空 / 大纲提取全部失败或不可解析 / 时间线为空 / 没有片段过评分 / ffmpeg 没产出切片——
+  流水线一律进 `failed`，带阶段（SUBTITLE / ANALYZE / EXPORT）和一句可执行的提示（去哪个设置项、装什么）。不再出现 `Completed · 0 切片`
+  或永远 `processing`。`ProjectResponse` 新增 `error_message`（取最近失败任务，CLI 路径回退 `project_metadata.last_error`），详情页 / 项目卡 / 应用内反馈直接展示（#100 #11 #24）
+- LLM 单个文本块失败仍继续（长视频偶发超时不毁整条），只有全部失败才报错
+
 ### 修复
+- **本地上传的项目从不自动开始处理**：`/projects/upload` 启动导入任务的代码引用了未定义的 `db`，`NameError` 被吞掉，项目一直停在 pending 等用户手点「开始处理」（自 2026-05 `593cc62b` 起）
+- **桌面模式多线程写 SQLite 互相回滚**：文件型 SQLite 之前用 `StaticPool`（全进程一条连接），导入线程结束时的 ROLLBACK 会抹掉流水线线程刚写入的 Task 行（`ObjectDeletedError`、任务凭空消失、进度卡住）。改为默认连接池 + WAL，`StaticPool` 仅保留给 `:memory:`
+- 桌面模式下 Celery 任务内的 `self.update_state()` 不再去连 Redis 结果后端（直接 ConnectionRefused 拖死导入任务）
 - **开着浏览器「翻译此页」时切换提供商 / 输入模型名整页崩溃**（#100）：Chrome / Edge 翻译会把文本节点换成 `<font>`，React 更新时抛 `removeChild NotFoundError`。现在在挂载前对 `removeChild` / `insertBefore` 做守卫，节点已被外部脚本移动时跳过而不是崩；错误边界页识别到该情况会用中英双语提示关闭翻译
 - 错误边界降级页按 `DESIGN.md` 重做（去掉紫色渐变与 AntD `Result`，单色卡片 + `Btn` 原语），「返回首页」在 HashRouter 下真正回到首页
 - macOS 开着系统代理（Clash 等）时本地 Ollama / LM Studio 请求被送进代理导致 502：对 localhost / 内网地址不再读取代理环境变量

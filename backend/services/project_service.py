@@ -68,6 +68,26 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         
         return self.update(project_id, **orm_data)
     
+    def latest_error_message(self, project, status=None) -> Optional[str]:
+        """项目失败时的错误文本：最近一条任务的 Task.error_message，其次 project_metadata.last_error（CLI 路径）。
+        Project 表没有 error_message 列。"""
+        status = status if status is not None else getattr(project, 'status', None)
+        status_value = getattr(status, "value", status)
+        if str(status_value).lower() != "failed":
+            return None
+        from ..models.task import Task
+        project_id = str(getattr(project, 'id', ''))
+        task = (
+            self.db.query(Task)
+            .filter(Task.project_id == project_id, Task.error_message.isnot(None))
+            .order_by(Task.created_at.desc())
+            .first()
+        )
+        if task and task.error_message:
+            return task.error_message
+        meta = getattr(project, 'project_metadata', None) or {}
+        return meta.get("last_error") or None
+
     def get_project_with_stats(self, project_id: str) -> Optional[ProjectResponse]:
         """Get project with statistics."""
         project = self.get(project_id)
@@ -85,6 +105,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         
         # Convert to response schema
         return ProjectResponse(
+            error_message=self.latest_error_message(project),
             id=str(getattr(project, 'id', '')),
             name=str(getattr(project, 'name', '')),
             description=str(getattr(project, 'description', '')) if getattr(project, 'description', None) is not None else None,
@@ -131,6 +152,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             total_tasks = self.db.query(Task).filter(Task.project_id == project_id).count()
             
             project_responses.append(ProjectResponse(
+                error_message=self.latest_error_message(project),
                 id=str(getattr(project, 'id', '')),
                 name=str(getattr(project, 'name', '')),
                 description=str(getattr(project, 'description', '')) if getattr(project, 'description', None) is not None else None,

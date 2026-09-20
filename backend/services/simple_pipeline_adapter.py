@@ -3,10 +3,14 @@
 """
 
 import logging
+import os
 from typing import Dict, Any, Optional, Callable
 from pathlib import Path
 
 from backend.services.simple_progress import emit_progress, clear_progress
+from backend.pipeline.failures import (
+    PipelineFailure, HINT_CHECK_LLM, HINT_SUBTITLE, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG,
+)
 from backend.pipeline.step1_outline import run_step1_outline
 from backend.pipeline.step2_timeline import run_step2_timeline
 from backend.pipeline.step3_scoring import run_step3_scoring
@@ -108,6 +112,24 @@ class SimplePipelineAdapter:
             logger.error(f"自动生成字幕过程中发生错误: {e}")
             return None
         
+    @staticmethod
+    def _preflight_llm() -> None:
+        """跑任何 LLM 步骤之前先确认提供商可用；否则 step1 会把每个块都报错然后交一个空大纲出去。
+        AUTOCLIP_LLM_CACHE_DIR 回放模式下不需要真实提供商（backend/eval）。"""
+        if os.getenv("AUTOCLIP_LLM_CACHE_DIR"):
+            return
+        from backend.core.llm_manager import get_llm_manager
+        info = get_llm_manager().get_current_provider_info()
+        if info.get("available"):
+            return
+        name = info.get("display_name") or info.get("provider") or "未选择"
+        model = info.get("model") or "-"
+        raise PipelineFailure(
+            "ANALYZE",
+            f"没有可用的 LLM 提供商（当前选择：{name} · {model}），缺少 API Key 或本地服务地址。",
+            HINT_CHECK_LLM,
+        )
+
     async def process_project_sync(self, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
         """
         同步处理项目 - 使用简化的进度系统
@@ -139,32 +161,31 @@ class SimplePipelineAdapter:
             collections_output_dir.mkdir(parents=True, exist_ok=True)
             prompt_files = self._prompt_files(project_dir)
             
-            # 阶段1: 素材准备
+            # 阶段1: 素材准备。先确认 LLM 可用，否则后面每一步都是白跑
             emit_progress(self.project_id, "INGEST", "素材准备完成")
+            self._preflight_llm()
             
             # 阶段2: 字幕处理
             emit_progress(self.project_id, "SUBTITLE", "开始字幕处理")
             
-            # Step 1: 大纲提取
-            logger.info("执行Step 1: 大纲提取")
             if input_srt_path and Path(input_srt_path).exists():
                 logger.info(f"使用现有SRT文件: {input_srt_path}")
-                outlines = run_step1_outline(Path(input_srt_path), metadata_dir=metadata_dir, prompt_files=prompt_files)
+                srt_path = Path(input_srt_path)
             else:
                 logger.warning("没有SRT文件，尝试自动生成字幕")
-                # 尝试自动生成字幕
                 srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
-                if srt_path and srt_path.exists():
-                    logger.info(f"自动生成字幕成功: {srt_path}")
-                    outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files)
-                else:
-                    logger.warning("自动生成字幕失败，创建空大纲")
-                    # 创建一个空的大纲文件
-                    outlines = []
-                    outline_file = metadata_dir / "step1_outline.json"
-                    import json
-                    with open(outline_file, 'w', encoding='utf-8') as f:
-                        json.dump(outlines, f, ensure_ascii=False, indent=2)
+                if not (srt_path and srt_path.exists()):
+                    # 以前这里写一个空大纲然后一路「成功」到底，用户看到的是 Completed · 0 切片
+                    raise PipelineFailure(
+                        "SUBTITLE",
+                        "没有字幕可分析：视频不带字幕，且本地转写没有生成结果。",
+                        HINT_SUBTITLE,
+                    )
+                logger.info(f"自动生成字幕成功: {srt_path}")
+
+            # Step 1: 大纲提取（字幕为空 / 模型全部失败 / 无法解析时由 step1 自己抛 PipelineFailure）
+            logger.info("执行Step 1: 大纲提取")
+            outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files)
             emit_progress(self.project_id, "SUBTITLE", "字幕处理完成", subpercent=50)
             
             # 阶段3: 内容分析
@@ -172,89 +193,76 @@ class SimplePipelineAdapter:
             
             # Step 2: 时间线提取
             logger.info("执行Step 2: 时间线提取")
-            if outlines:  # 只有当有大纲时才执行后续步骤
-                timeline_data = run_step2_timeline(
-                    metadata_dir / "step1_outline.json",
-                    metadata_dir=metadata_dir,
-                    prompt_files=prompt_files,
+            timeline_data = run_step2_timeline(
+                metadata_dir / "step1_outline.json",
+                metadata_dir=metadata_dir,
+                prompt_files=prompt_files,
+            )
+            if not timeline_data:
+                raise PipelineFailure(
+                    "ANALYZE",
+                    f"时间线提取为空：{len(outlines)} 个话题都没能对齐到字幕时间轴。",
+                    HINT_CHECK_LLM,
                 )
-                emit_progress(self.project_id, "ANALYZE", "时间线提取完成", subpercent=50)
-                
-                # Step 3: 内容评分
-                logger.info("执行Step 3: 内容评分")
-                scored_clips = run_step3_scoring(
-                    metadata_dir / "step2_timeline.json",
-                    metadata_dir=metadata_dir,
-                    prompt_files=prompt_files,
+            emit_progress(self.project_id, "ANALYZE", "时间线提取完成", subpercent=50)
+            
+            # Step 3: 内容评分
+            logger.info("执行Step 3: 内容评分")
+            scored_clips = run_step3_scoring(
+                metadata_dir / "step2_timeline.json",
+                metadata_dir=metadata_dir,
+                prompt_files=prompt_files,
+            )
+            if not scored_clips:
+                from backend.pipeline.step3_scoring import MIN_SCORE_THRESHOLD
+                raise PipelineFailure(
+                    "ANALYZE",
+                    f"没有片段通过评分筛选（{len(timeline_data)} 个候选，阈值 {MIN_SCORE_THRESHOLD}）。",
+                    HINT_LOWER_THRESHOLD,
                 )
-                emit_progress(self.project_id, "ANALYZE", "内容分析完成", subpercent=100)
-            else:
-                logger.warning("没有大纲数据，跳过时间线提取和内容评分")
-                # 创建空的时间线和评分文件
-                timeline_file = metadata_dir / "step2_timeline.json"
-                scored_file = metadata_dir / "step3_high_score_clips.json"
-                import json
-                with open(timeline_file, 'w', encoding='utf-8') as f:
-                    json.dump([], f, ensure_ascii=False, indent=2)
-                with open(scored_file, 'w', encoding='utf-8') as f:
-                    json.dump([], f, ensure_ascii=False, indent=2)
-                # 初始化空变量
-                timeline_data = []
-                scored_clips = []
-                emit_progress(self.project_id, "ANALYZE", "内容分析完成", subpercent=100)
+            emit_progress(self.project_id, "ANALYZE", "内容分析完成", subpercent=100)
             
             # 阶段4: 片段定位
             emit_progress(self.project_id, "HIGHLIGHT", "开始片段定位")
             
             # Step 4: 标题生成
             logger.info("执行Step 4: 标题生成")
-            if outlines:  # 只有当有大纲时才执行后续步骤
-                titled_clips = run_step4_title(
-                    metadata_dir / "step3_high_score_clips.json",
-                    metadata_dir=str(metadata_dir),
-                    prompt_files=prompt_files,
+            titled_clips = run_step4_title(
+                metadata_dir / "step3_high_score_clips.json",
+                metadata_dir=str(metadata_dir),
+                prompt_files=prompt_files,
+            )
+            emit_progress(self.project_id, "HIGHLIGHT", "标题生成完成", subpercent=40)
+            
+            # Step 5: 主题聚类
+            logger.info("执行Step 5: 主题聚类")
+            collections = run_step5_clustering(
+                metadata_dir / "step4_titles.json",
+                metadata_dir=str(metadata_dir),
+                prompt_files=prompt_files,
+            )
+            emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
+            
+            # 阶段5: 视频导出
+            emit_progress(self.project_id, "EXPORT", "开始视频导出")
+            
+            # Step 6: 视频切割
+            logger.info("执行Step 6: 视频切割")
+            video_result = run_step6_video(
+                metadata_dir / "step4_titles.json",
+                metadata_dir / "step5_collections.json",
+                input_video_path,
+                output_dir=output_dir,
+                clips_dir=str(clips_output_dir),
+                collections_dir=str(collections_output_dir),
+                metadata_dir=str(metadata_dir)
+            )
+            if titled_clips and not video_result.get("clips_generated"):
+                raise PipelineFailure(
+                    "EXPORT",
+                    f"视频切割没有产出任何文件（{len(titled_clips)} 个片段待切）。",
+                    HINT_CHECK_FFMPEG,
                 )
-                emit_progress(self.project_id, "HIGHLIGHT", "标题生成完成", subpercent=40)
-                
-                # Step 5: 主题聚类
-                logger.info("执行Step 5: 主题聚类")
-                collections = run_step5_clustering(
-                    metadata_dir / "step4_titles.json",
-                    metadata_dir=str(metadata_dir),
-                    prompt_files=prompt_files,
-                )
-                emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
-                
-                # 阶段5: 视频导出
-                emit_progress(self.project_id, "EXPORT", "开始视频导出")
-                
-                # Step 6: 视频切割
-                logger.info("执行Step 6: 视频切割")
-                video_result = run_step6_video(
-                    metadata_dir / "step4_titles.json",
-                    metadata_dir / "step5_collections.json",
-                    input_video_path,
-                    output_dir=output_dir,
-                    clips_dir=str(clips_output_dir),
-                    collections_dir=str(collections_output_dir),
-                    metadata_dir=str(metadata_dir)
-                )
-            else:
-                logger.warning("没有大纲数据，跳过标题生成、主题聚类和视频切割")
-                # 创建空的标题和合集文件
-                titles_file = metadata_dir / "step4_titles.json"
-                collections_file = metadata_dir / "step5_collections.json"
-                import json
-                with open(titles_file, 'w', encoding='utf-8') as f:
-                    json.dump([], f, ensure_ascii=False, indent=2)
-                with open(collections_file, 'w', encoding='utf-8') as f:
-                    json.dump([], f, ensure_ascii=False, indent=2)
-                # 初始化空变量
-                titled_clips = []
-                collections = []
-                emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
-                emit_progress(self.project_id, "EXPORT", "开始视频导出")
-                video_result = {"status": "skipped", "message": "没有内容可处理"}
             emit_progress(self.project_id, "EXPORT", "视频导出完成", subpercent=100)
             
             # 阶段6: 处理完成
@@ -293,9 +301,22 @@ class SimplePipelineAdapter:
                 }
             }
             
+        except PipelineFailure as e:
+            # 明确失败：带阶段和下一步提示，前端失败态 / 应用内反馈直接展示
+            error_msg = e.user_message()
+            logger.error(f"流水线在 {e.stage} 阶段失败: {error_msg}")
+            emit_progress(self.project_id, e.stage, f"处理失败：{error_msg}")
+            return {
+                "status": "failed",
+                "project_id": self.project_id,
+                "task_id": self.task_id,
+                "stage": e.stage,
+                "error": error_msg,
+                "message": error_msg,
+            }
         except Exception as e:
             error_msg = f"流水线处理失败: {str(e)}"
-            logger.error(error_msg)
+            logger.exception(error_msg)
             
             # 发送失败状态
             emit_progress(self.project_id, "DONE", f"处理失败: {error_msg}")
@@ -304,7 +325,8 @@ class SimplePipelineAdapter:
                 "status": "failed",
                 "project_id": self.project_id,
                 "task_id": self.task_id,
-                "error": error_msg
+                "error": error_msg,
+                "message": error_msg,
             }
 
 
