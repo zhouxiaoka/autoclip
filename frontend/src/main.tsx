@@ -4,11 +4,15 @@ import { HashRouter } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
 import { theme as antdTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
+import enUS from 'antd/locale/en_US'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
+import 'dayjs/locale/en'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import timezone from 'dayjs/plugin/timezone'
 import utc from 'dayjs/plugin/utc'
+import { useTranslation } from 'react-i18next'
+import './i18n'
 import App from './App.tsx'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
@@ -41,11 +45,14 @@ function Root() {
 
 function ThemedApp() {
   const { theme } = useTheme()
+  const { i18n } = useTranslation()
   const isDark = theme === 'dark'
+  const isEn = i18n.language?.startsWith('en')
+  const antdLocale = isEn ? enUS : zhCN
 
   return (
     <ConfigProvider
-      locale={zhCN}
+      locale={antdLocale}
       theme={{
       algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
       token: {

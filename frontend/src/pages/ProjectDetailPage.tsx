@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { message } from 'antd'
+import { useTranslation } from 'react-i18next'
 import dayjs from 'dayjs'
 import { useProjectStore, Clip, Collection } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
@@ -14,6 +15,7 @@ import FeedbackDialog from '../components/FeedbackDialog'
 import { Btn, Icon, Section, Segmented, parseTimecode, fmtDuration } from '../ui'
 
 const ProjectDetailPage: React.FC = () => {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const {
@@ -67,7 +69,7 @@ const ProjectDetailPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to load project:', err)
-      message.error('加载项目失败')
+      message.error(t('projectDetail.loadProjectFailed'))
     }
   }
 
@@ -87,11 +89,11 @@ const ProjectDetailPage: React.FC = () => {
     if (!id) return
     try {
       await projectApi.startProcessing(id)
-      message.success('开始处理')
+      message.success(t('projectDetail.startSuccess'))
       loadProcessingStatus()
     } catch (err) {
       console.error('Failed to start processing:', err)
-      message.error('启动处理失败')
+      message.error(t('projectDetail.startFailed'))
     }
   }
 
@@ -100,12 +102,12 @@ const ProjectDetailPage: React.FC = () => {
     setStatusLoading(true)
     try {
       await projectApi.retryProcessing(id)
-      message.success('已重新开始处理')
+      message.success(t('projectDetail.retrySuccess'))
       loadProcessingStatus()
       await loadProject()
     } catch (err) {
       console.error('Failed to retry processing:', err)
-      message.error('重试失败，请稍后再试')
+      message.error(t('projectDetail.retryFailed'))
     } finally {
       setStatusLoading(false)
     }
@@ -123,10 +125,10 @@ const ProjectDetailPage: React.FC = () => {
         created_at: new Date().toISOString()
       })
       setShowCreateCollection(false)
-      message.success('合集创建成功')
+      message.success(t('projectDetail.collectionCreated'))
     } catch (err) {
       console.error('Failed to create collection:', err)
-      message.error('创建合集失败')
+      message.error(t('projectDetail.createCollectionFailed'))
     }
   }
 
@@ -139,10 +141,10 @@ const ProjectDetailPage: React.FC = () => {
     if (!id) return
     try {
       await removeClipFromCollection(id, collectionId, clipId)
-      message.success('切片已从合集中移除')
+      message.success(t('projectDetail.clipRemoved'))
     } catch (err) {
       console.error('Failed to remove clip from collection:', err)
-      message.error('移除切片失败')
+      message.error(t('projectDetail.removeClipFailed'))
     }
   }
 
@@ -152,10 +154,10 @@ const ProjectDetailPage: React.FC = () => {
       await deleteCollection(id, collectionId)
       setShowCollectionDetail(false)
       setSelectedCollection(null)
-      message.success('合集已删除')
+      message.success(t('projectDetail.collectionDeleted'))
     } catch (err) {
       console.error('Failed to delete collection:', err)
-      message.error('删除合集失败')
+      message.error(t('projectDetail.deleteCollectionFailed'))
     }
   }
 
@@ -163,10 +165,10 @@ const ProjectDetailPage: React.FC = () => {
     if (!id) return
     try {
       await reorderCollectionClips(id, collectionId, newClipIds)
-      message.success('合集顺序已更新')
+      message.success(t('projectDetail.collectionOrderUpdated'))
     } catch (err) {
       console.error('Failed to reorder collection clips:', err)
-      message.error('更新合集顺序失败')
+      message.error(t('projectDetail.reorderFailed'))
     }
   }
 
@@ -174,10 +176,10 @@ const ProjectDetailPage: React.FC = () => {
     if (!id) return
     try {
       await addClipToCollection(id, collectionId, clipIds)
-      message.success('切片已添加到合集')
+      message.success(t('projectDetail.clipAdded'))
     } catch (err) {
       console.error('Failed to add clip to collection:', err)
-      message.error('添加切片失败')
+      message.error(t('projectDetail.addClipFailed'))
     }
   }
 
@@ -191,7 +193,7 @@ const ProjectDetailPage: React.FC = () => {
   if (loading) {
     return (
       <div className="ac-page" style={{ display: 'flex', justifyContent: 'center', paddingTop: 120 }}>
-        <span className="ac-btn ac-btn--text" style={{ color: 'var(--ac-muted)' }}><span className="spin" /> 加载中</span>
+        <span className="ac-btn ac-btn--text" style={{ color: 'var(--ac-muted)' }}><span className="spin" /> {t('common.loading')}</span>
       </div>
     )
   }
@@ -200,10 +202,10 @@ const ProjectDetailPage: React.FC = () => {
     return (
       <div className="ac-page">
         <div className="ac-empty">
-          <b>加载失败</b>
-          {error || '项目不存在'}
+          <b>{t('projectDetail.loadFailed')}</b>
+          {error || t('projectDetail.projectNotFound')}
           <div style={{ marginTop: 16 }}>
-            <Btn size="sm" onClick={() => navigate('/')}>返回首页</Btn>
+            <Btn size="sm" onClick={() => navigate('/')}>{t('projectDetail.backHome')}</Btn>
           </div>
         </div>
       </div>
@@ -231,7 +233,7 @@ const ProjectDetailPage: React.FC = () => {
       {/* 页头：返回 · 标题 · mono 元信息 */}
       <header>
         <button className="ac-back" onClick={() => navigate('/')}>
-          <Icon.Back /> 项目
+          <Icon.Back /> {t('projectDetail.backToProjects')}
         </button>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
           <div style={{ minWidth: 0 }}>
@@ -239,18 +241,18 @@ const ProjectDetailPage: React.FC = () => {
             <div className="ac-meta">
               {isCompleted ? (
                 <>
-                  <span><span className="ac-mono">{clips.length}</span> 切片</span>
+                  <span><span className="ac-mono">{clips.length}</span> {t('projectDetail.clips')}</span>
                   <span className="dot" />
-                  <span><span className="ac-mono">{collections.length}</span> 合集</span>
+                  <span><span className="ac-mono">{collections.length}</span> {t('projectDetail.collections')}</span>
                   {totalClipSec > 0 && (
                     <>
                       <span className="dot" />
-                      <span>共 <span className="ac-mono">{fmtDuration(totalClipSec)}</span></span>
+                      <span>{t('projectDetail.total')} <span className="ac-mono">{fmtDuration(totalClipSec)}</span></span>
                     </>
                   )}
                 </>
               ) : (
-                <span>{currentProject.status === 'pending' ? '等待处理' : isFailed ? '处理失败' : '处理中'}</span>
+                <span>{currentProject.status === 'pending' ? t('projectDetail.pending') : isFailed ? t('projectDetail.failed') : t('projectDetail.processing')}</span>
               )}
               {currentProject.created_at && (
                 <>
@@ -261,12 +263,12 @@ const ProjectDetailPage: React.FC = () => {
             </div>
           </div>
           {currentProject.status === 'pending' && (
-            <Btn variant="cta" onClick={handleStartProcessing} loading={statusLoading}>开始处理</Btn>
+            <Btn variant="cta" onClick={handleStartProcessing} loading={statusLoading}>{t('projectDetail.startProcessing')}</Btn>
           )}
           {isFailed && (
             <div style={{ display: 'flex', gap: 8, flex: '0 0 auto' }}>
-              <Btn onClick={() => setFeedbackOpen(true)}>反馈问题</Btn>
-              <Btn variant="cta" onClick={handleRetryProcessing} loading={statusLoading}>重试</Btn>
+              <Btn onClick={() => setFeedbackOpen(true)}>{t('projectDetail.feedback')}</Btn>
+              <Btn variant="cta" onClick={handleRetryProcessing} loading={statusLoading}>{t('projectDetail.retry')}</Btn>
             </div>
           )}
         </div>
@@ -276,12 +278,12 @@ const ProjectDetailPage: React.FC = () => {
         <>
           {/* 合集 */}
           <Section
-            title="合集"
+            title={t('projectDetail.collectionsSectionTitle')}
             count={collections.length}
-            description={collections.length > 0 ? 'AI 按主题把相关切片串成的成片，可编辑顺序与标题。' : '把几条切片串成一个主题成片。'}
+            description={collections.length > 0 ? t('projectDetail.collectionsSectionDesc') : t('projectDetail.collectionsSectionDescEmpty')}
             right={
               <Btn size="sm" onClick={() => setShowCreateCollection(true)}>
-                <Icon.Plus size={13} /> 新建合集
+                <Icon.Plus size={13} /> {t('projectDetail.newCollection')}
               </Btn>
             }
           >
@@ -304,23 +306,23 @@ const ProjectDetailPage: React.FC = () => {
               </div>
             ) : (
               <div className="ac-empty">
-                <b>还没有合集</b>
-                从下方切片里挑几条，「新建合集」即可。
+                <b>{t('projectDetail.noCollectionsTitle')}</b>
+                {t('projectDetail.noCollectionsDesc')}
               </div>
             )}
           </Section>
 
           {/* 切片 */}
           <Section
-            title="切片"
+            title={t('projectDetail.clipsSectionTitle')}
             count={clips.length}
             right={
               <Segmented
                 size="sm"
-                ariaLabel="排序"
+                ariaLabel={t('projectDetail.sortBy')}
                 value={sortBy}
                 onChange={setSortBy}
-                options={[{ value: 'score', label: '按评分' }, { value: 'time', label: '按时间' }]}
+                options={[{ value: 'score', label: t('projectDetail.sortByScore') }, { value: 'time', label: t('projectDetail.sortByTime') }]}
               />
             }
           >
@@ -345,10 +347,10 @@ const ProjectDetailPage: React.FC = () => {
               </div>
             ) : (
               <div className="ac-empty">
-                <b>没有切出片段</b>
-                可以在设置里调低「最低评分阈值」后重试。
+                <b>{t('projectDetail.noClipsTitle')}</b>
+                {t('projectDetail.noClipsDesc')}
                 <div style={{ marginTop: 12 }}>
-                  <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>觉得不该是这样？告诉我们</Btn>
+                  <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t('projectDetail.tellUsFeedback')}</Btn>
                 </div>
               </div>
             )}
@@ -356,21 +358,21 @@ const ProjectDetailPage: React.FC = () => {
         </>
       ) : isFailed ? (
         <div className="ac-empty" style={{ marginTop: 32 }}>
-          <b>这次处理没有成功</b>
+          <b>{t('projectDetail.processingFailedTitle')}</b>
           {currentProject.error_message ? (
             <span className="ac-mono" style={{ display: 'block', marginTop: 6, color: 'var(--ac-muted)', wordBreak: 'break-all' }}>
               {currentProject.error_message}
             </span>
           ) : (
-            '可以直接重试；如果反复失败，点「反馈问题」，运行环境与错误会自动附上。'
+            t('projectDetail.processingFailedDesc')
           )}
         </div>
       ) : (
         <div style={{ marginTop: 32 }}>
           <ProjectTaskManager projectId={currentProject.id} projectName={currentProject.name} />
           <div className="ac-empty" style={{ marginTop: 24 }}>
-            <b>还在处理中</b>
-            完成后这里会出现切片与合集。
+            <b>{t('projectDetail.stillProcessingTitle')}</b>
+            {t('projectDetail.stillProcessingDesc')}
           </div>
         </div>
       )}

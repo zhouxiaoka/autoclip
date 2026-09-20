@@ -2,12 +2,14 @@ import React from 'react'
 import { Layout, Button } from 'antd'
 import { SettingOutlined, BulbOutlined, MoonOutlined } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../context/ThemeContext'
 
 const { Header: AntHeader } = Layout
 
 // Calm Premium header — see DESIGN.md
 const Header: React.FC = () => {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const isSettings = location.pathname === '/settings'
@@ -53,8 +55,8 @@ const Header: React.FC = () => {
           type="text"
           icon={theme === 'dark' ? <BulbOutlined /> : <MoonOutlined />}
           onClick={toggleTheme}
-          aria-label={theme === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}
-          title={theme === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}
+          aria-label={theme === 'dark' ? t('header.switchToLight') : t('header.switchToDark')}
+          title={theme === 'dark' ? t('header.switchToLight') : t('header.switchToDark')}
           style={{
             color: 'var(--ac-sub)',
             border: '1px solid var(--ac-line)',
@@ -79,7 +81,7 @@ const Header: React.FC = () => {
             background: isSettings ? 'var(--ac-line-2)' : 'var(--ac-card)',
           }}
         >
-          设置
+          {t('header.settings')}
         </Button>
       </div>
     </AntHeader>

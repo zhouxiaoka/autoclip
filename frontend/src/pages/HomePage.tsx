@@ -4,10 +4,11 @@ import {
   Typography, 
   Select, 
   Spin, 
-  Empty,
+  Empty, 
   message 
 } from 'antd'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import ProjectCard from '../components/ProjectCard'
 import FileUpload from '../components/FileUpload'
 import BilibiliDownload from '../components/BilibiliDownload'
@@ -22,6 +23,7 @@ const { Title, Text } = Typography
 const { Option } = Select
 
 const HomePage: React.FC = () => {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { projects, setProjects, deleteProject, loading, setLoading } = useProjectStore()
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -69,7 +71,7 @@ const HomePage: React.FC = () => {
       const safeProjects = Array.isArray(projects) ? projects : []
       setProjects(safeProjects)
     } catch (error) {
-      message.error('加载项目失败')
+      message.error(t('home.loadProjectsError'))
       console.error('Load projects error:', error)
       // 如果API调用失败，设置空数组
       setProjects([])
@@ -82,9 +84,9 @@ const HomePage: React.FC = () => {
     try {
       await projectApi.deleteProject(id)
       deleteProject(id)
-      message.success('项目删除成功')
+      message.success(t('home.deleteSuccess'))
     } catch (error) {
-      message.error('删除项目失败')
+      message.error(t('home.deleteError'))
       console.error('Delete project error:', error)
     }
   }
@@ -94,7 +96,7 @@ const HomePage: React.FC = () => {
   // 提示 + 刷新列表，绝不能再发一次重试请求（会和卡片自身的请求叠加，并制造
   // loadProjects→重挂载→自动启动 的循环）。
   const handleRetryProject = async () => {
-    message.success('已开始重试处理项目')
+    message.success(t('home.retrySuccess'))
     try {
       await loadProjects()
     } catch (error) {
@@ -105,7 +107,7 @@ const HomePage: React.FC = () => {
   const handleProjectCardClick = (project: Project) => {
     // 导入中状态的项目不能点击进入详情页
     if (project.status === 'pending') {
-      message.warning('项目正在导入中，请稍后再查看详情')
+      message.warning(t('home.projectImporting'))
       return
     }
     
@@ -139,7 +141,7 @@ const HomePage: React.FC = () => {
           }}>
             <div style={{ width: '100%', maxWidth: '820px' }}>
               <div style={{ fontSize: '13px', color: 'var(--ac-muted)', margin: '0 4px 14px', letterSpacing: '0.2px' }}>
-                粘贴链接，AI 自动切片
+                {t('home.tagline')}
               </div>
               <div style={{
                 background: 'var(--ac-card)',
@@ -172,7 +174,7 @@ const HomePage: React.FC = () => {
                    }}
                    onClick={() => setActiveTab('bilibili')}
                  >
-                   链接导入
+                   {t('home.linkImport')}
                  </button>
                 <button
                    style={{
@@ -189,7 +191,7 @@ const HomePage: React.FC = () => {
                    }}
                    onClick={() => setActiveTab('upload')}
                  >
-                   文件导入
+                   {t('home.fileImport')}
                  </button>
               </div>
               
@@ -206,7 +208,7 @@ const HomePage: React.FC = () => {
                   <FileUpload onUploadSuccess={async () => {
                     // 处理完成后刷新项目列表
                     await loadProjects()
-                    message.success('项目创建成功，正在处理中...')
+                    message.success(t('home.projectCreatedProcessing'))
                   }} />
                 )}
               </div>
@@ -233,7 +235,7 @@ const HomePage: React.FC = () => {
                   level={2}
                   style={{ margin: 0, color: 'var(--ac-ink)', fontSize: '16px', fontWeight: 600 }}
                 >
-                  我的项目
+                  {t('home.myProjects')}
                 </Title>
                 <Text style={{ color: 'var(--ac-muted)', fontSize: '13px' }}>
                   {filteredProjects.length}
@@ -246,7 +248,7 @@ const HomePage: React.FC = () => {
                 alignItems: 'center'
               }}>
                 <Select
-                  placeholder="全部状态"
+                  placeholder={t('home.statusFilterAll')}
                   value={statusFilter}
                   onChange={setStatusFilter}
                   variant="borderless"
@@ -254,10 +256,10 @@ const HomePage: React.FC = () => {
                   suffixIcon={<span style={{ color: 'var(--ac-muted)', fontSize: '10px' }}>⌄</span>}
                   allowClear
                 >
-                  <Option value="all">全部状态</Option>
-                  <Option value="completed">已完成</Option>
-                  <Option value="processing">处理中</Option>
-                  <Option value="error">处理失败</Option>
+                  <Option value="all">{t('home.statusFilterAll')}</Option>
+                  <Option value="completed">{t('home.statusFilterCompleted')}</Option>
+                  <Option value="processing">{t('home.statusFilterProcessing')}</Option>
+                  <Option value="error">{t('home.statusFilterError')}</Option>
                 </Select>
               </div>
             </div>
@@ -274,7 +276,7 @@ const HomePage: React.FC = () => {
                  }}>
                    <Spin size="large" />
                    <div style={{ marginTop: '18px', color: 'var(--ac-muted)', fontSize: '14px' }}>
-                     正在加载项目列表…
+                     {t('home.loadingProjects')}
                    </div>
                  </div>
                ) : filteredProjects.length === 0 ? (
@@ -290,7 +292,7 @@ const HomePage: React.FC = () => {
                      description={
                        <div>
                          <Text type="secondary">
-                           {projects.length === 0 ? '还没有项目，请使用上方的导入区域创建第一个项目' : '没有找到匹配的项目'}
+                           {projects.length === 0 ? t('home.emptyProjects') : t('home.noMatchingProjects')}
                          </Text>
                        </div>
                      }

@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { Progress, Typography } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { useSimpleProgressStore, getStageDisplayName, getStageColor, isCompleted, isFailed } from '../stores/useSimpleProgressStore'
 
 const { Text } = Typography
@@ -24,6 +25,7 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
   onStatusChange,
   onDownloadProgressUpdate
 }) => {
+  const { t } = useTranslation()
   const { getProgress, startPolling, stopPolling } = useSimpleProgressStore()
   const [isPolling, setIsPolling] = useState(false)
   const [currentDownloadProgress, setCurrentDownloadProgress] = useState(downloadProgress)
@@ -139,21 +141,27 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
     </div>
   )
 
-  if (status === 'importing') return <ProgressRow label="导入中" percent={downloadProgress} />
-  if (status === 'downloading') return <ProgressRow label="下载中" percent={currentDownloadProgress} />
-
-  if (status === 'processing') {
-    if (!progress) return <ProgressRow label="初始化中" percent={0} />
-    const { stage, percent, message } = progress
-    if (isFailed(message)) return <StatusRow label="处理失败" dot="var(--ac-error)" color="var(--ac-error)" />
-    return <ProgressRow label={getStageDisplayName(stage)} percent={percent} />
+  const getLocalizedStage = (stg: string) => {
+    const key = `statusBar.stages.${stg}`
+    const translated = t(key)
+    return translated === key ? getStageDisplayName(stg) : translated
   }
 
-  if (status === 'completed') return <StatusRow label="已完成" dot="var(--ac-ok)" color="var(--ac-sub)" />
-  if (status === 'failed') return <StatusRow label="处理失败" dot="var(--ac-error)" color="var(--ac-error)" />
+  if (status === 'importing') return <ProgressRow label={t('statusBar.importing')} percent={downloadProgress} />
+  if (status === 'downloading') return <ProgressRow label={t('statusBar.downloading')} percent={currentDownloadProgress} />
+
+  if (status === 'processing') {
+    if (!progress) return <ProgressRow label={t('statusBar.initializing')} percent={0} />
+    const { stage, percent, message } = progress
+    if (isFailed(message)) return <StatusRow label={t('statusBar.failed')} dot="var(--ac-error)" color="var(--ac-error)" />
+    return <ProgressRow label={getLocalizedStage(stage)} percent={percent} />
+  }
+
+  if (status === 'completed') return <StatusRow label={t('statusBar.completed')} dot="var(--ac-ok)" color="var(--ac-sub)" />
+  if (status === 'failed') return <StatusRow label={t('statusBar.failed')} dot="var(--ac-error)" color="var(--ac-error)" />
 
   // 等待
-  return <StatusRow label="等待中" dot="var(--ac-muted)" color="var(--ac-muted)" />
+  return <StatusRow label={t('statusBar.pending')} dot="var(--ac-muted)" color="var(--ac-muted)" />
 }
 
 // 简化的进度条组件 - 用于详细进度显示

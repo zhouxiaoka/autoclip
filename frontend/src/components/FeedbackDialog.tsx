@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { message } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { Btn, Dialog, Icon, Segmented } from '../ui'
 import {
   FEEDBACK_FORM_URL,
@@ -27,6 +28,7 @@ interface FeedbackDialogProps {
  * 自动附带版本 / 系统 / 架构 / LLM provider & 模型 / 失败阶段与错误，用户只需写一句话。
  */
 const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context }) => {
+  const { t } = useTranslation()
   const [category, setCategory] = useState<FeedbackCategory>(context.source === 'failure' ? 'bug' : 'idea')
   const [text, setText] = useState('')
   const [contact, setContact] = useState('')
@@ -57,17 +59,17 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
 
   const handleSend = async () => {
     if (text.trim().length < 4) {
-      message.warning('再多写几个字，我们才好定位问题')
+      message.warning(t('feedbackDialog.minCharsNotice'))
       return
     }
     setSending(true)
     try {
       const ok = await submitFeedback({ category, text: text.trim(), contact: contact.trim() || undefined, context: fullContext })
       if (ok) {
-        message.success('已收到，感谢反馈')
+        message.success(t('feedbackDialog.successNotice'))
         onClose()
       } else {
-        message.info('匿名统计已关闭，请改用表单提交')
+        message.info(t('feedbackDialog.analyticsDisabled'))
         void openExternal(FEEDBACK_FORM_URL)
       }
     } finally {
@@ -86,22 +88,22 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
     <Dialog
       open={open}
       onClose={handleClose}
-      title={context.source === 'failure' ? '这次没出片，告诉我们哪里不对' : '反馈'}
+      title={context.source === 'failure' ? t('feedbackDialog.titleFailure') : t('feedbackDialog.titleGeneral')}
       description={
         context.source === 'failure'
-          ? '错误信息和运行环境会自动附上，你只需要补一句发生了什么。'
-          : '一句话就够。运行环境会自动附上，不包含视频内容与 API 密钥。'
+          ? t('feedbackDialog.descFailure')
+          : t('feedbackDialog.descGeneral')
       }
       footer={
         <>
           <div style={{ display: 'flex', gap: 4 }}>
-            <Btn variant="text" size="sm" onClick={() => openExternal(FEEDBACK_FORM_URL)}>表单 <Icon.External size={12} /></Btn>
-            <Btn variant="text" size="sm" onClick={() => openExternal(FEEDBACK_ISSUES_URL)}>GitHub <Icon.External size={12} /></Btn>
+            <Btn variant="text" size="sm" onClick={() => openExternal(FEEDBACK_FORM_URL)}>{t('feedbackDialog.form')} <Icon.External size={12} /></Btn>
+            <Btn variant="text" size="sm" onClick={() => openExternal(FEEDBACK_ISSUES_URL)}>{t('feedbackDialog.github')} <Icon.External size={12} /></Btn>
           </div>
           <div className="right">
-            <Btn size="sm" onClick={handleClose}>取消</Btn>
+            <Btn size="sm" onClick={handleClose}>{t('feedbackDialog.cancel')}</Btn>
             <Btn variant="cta" size="sm" style={{ height: 32, fontSize: 13, padding: '0 16px' }} loading={sending} onClick={handleSend}>
-              发送
+              {t('feedbackDialog.send')}
             </Btn>
           </div>
         </>
@@ -114,9 +116,9 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
           value={category}
           onChange={setCategory}
           options={[
-            { value: 'bug', label: '出问题了' },
-            { value: 'idea', label: '想要功能' },
-            { value: 'other', label: '其他' },
+            { value: 'bug', label: t('feedbackDialog.categoryBug') },
+            { value: 'idea', label: t('feedbackDialog.categoryIdea') },
+            { value: 'other', label: t('feedbackDialog.categoryOther') },
           ]}
         />
         <textarea
@@ -124,10 +126,10 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
           autoFocus
           placeholder={
             category === 'bug'
-              ? '发生了什么？做了哪一步、预期是什么、实际看到什么。'
+              ? t('feedbackDialog.placeholderBug')
               : category === 'idea'
-                ? '你想让 AutoClip 帮你做到什么？'
-                : '想说什么都可以。'
+                ? t('feedbackDialog.placeholderIdea')
+                : t('feedbackDialog.placeholderOther')
           }
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -140,14 +142,14 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
         )}
         <input
           className="ac-input"
-          placeholder="联系方式（可选，邮箱 / 飞书 / 微信）"
+          placeholder={t('feedbackDialog.contactPlaceholder')}
           value={contact}
           onChange={(e) => setContact(e.target.value)}
         />
-        <div className="ac-context" title="将随反馈一起发送的上下文">
+        <div className="ac-context" title={t('feedbackDialog.contextTooltip')}>
           {ctxChips.map((c) => <span key={c}>{c}</span>)}
-          {!analyticsOn && <span style={{ color: 'var(--ac-warn)' }}>匿名统计已关闭 · 将改用表单</span>}
-          {analyticsOn && surveyReady === false && <span>· 直接上报</span>}
+          {!analyticsOn && <span style={{ color: 'var(--ac-warn)' }}>{t('feedbackDialog.analyticsDisabledHint')}</span>}
+          {analyticsOn && surveyReady === false && <span>{t('feedbackDialog.directReport')}</span>}
         </div>
       </div>
     </Dialog>
