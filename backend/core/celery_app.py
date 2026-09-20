@@ -124,6 +124,13 @@ class DesktopAwareTask(celery_app.Task):
 
         return super().apply_async(args=args, kwargs=kwargs, task_id=task_id, **options)
 
+    def update_state(self, task_id=None, state=None, meta=None, **kwargs):
+        # 桌面模式没有 Redis 结果后端；任务里的 self.update_state() 会直接 ConnectionRefused，
+        # 把整条导入任务拖死。用户可见进度走 simple_progress，这里丢弃即可
+        if _is_desktop_mode():
+            return None
+        return super().update_state(task_id=task_id, state=state, meta=meta, **kwargs)
+
 
 # 桌面模式下让所有 @celery_app.task 使用上面的本地执行基类
 celery_app.Task = DesktopAwareTask

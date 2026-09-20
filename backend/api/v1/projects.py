@@ -123,7 +123,9 @@ async def upload_files(
             
             # 检查是否已有相同项目正在处理中
             from ...models.task import Task, TaskStatus
-            existing_task = db.query(Task).filter(
+            # 这里以前写的是裸 `db`（未定义），NameError 被下面的 except 吞掉，
+            # 结果本地上传的项目从来不会自动开始处理，一直停在 pending 等用户手点
+            existing_task = project_service.db.query(Task).filter(
                 Task.project_id == project_id,
                 Task.status == TaskStatus.RUNNING,
                 Task.name.like('%导入%')
