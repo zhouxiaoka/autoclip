@@ -186,8 +186,14 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - [ ] **i18n 骨架**（来源：#101 + #100 根因）：Windows 下载量已是 DMG 的三倍、海外用户在开浏览器翻译。维护者先定基础设施
       —— `i18next` + `react-i18next`、`locales/{zh,en}.json`、文案 key 命名规范、语言切换放「设置 → 应用」、AntD `ConfigProvider` locale 跟随、
       `dayjs` locale 跟随；与 `frontend/src/ui/` 原语迁移一起做（先迁的页面先抽文案）。骨架合入后请 #101 作者按页面分批提 PR
-- [ ] **dashscope 国际站**（#45）：`DashScopeProvider` 支持 `base_url`（`dashscope-intl.aliyuncs.com`），设置页 dashscope 卡片加「国际站」开关；
-      Docker 用 `DASHSCOPE_BASE_URL`。过渡方案已在 issue 里回复（OpenAI 兼容 + `compatible-mode/v1`）
+- [x] **dashscope 国际站**（#45，2026-09-20）：`DashScopeProvider(base_url=…)` 自动切兼容模式（`DASHSCOPE_CN/INTL_COMPATIBLE_BASE_URL` 常量），
+      `LLMManager` 用独立的 `dashscope_base_url`（不与 `OPENAI_BASE_URL` 串），设置页通义千问卡片「中国站 / 国际站」Segmented，`/test-api` 透传；
+      compose / env.example / DOCKER.md 加 `DASHSCOPE_BASE_URL`。浏览器验证：切国际站 → 保存 → 刷新保持，`current-provider` 带 intl base_url。
+      顺带修掉 DashScope 把完整 API Key 打进 INFO 日志。issue 回复后可关
+- [x] **`min_score` 接到 step3**（2026-09-20）：`step3.resolve_min_score_threshold()`：CLI `MIN_SCORE_OVERRIDE` > settings.json `processing.processing_min_score`（`LLMManager.get_processing_setting`，热重载）> 0.7。
+      `chunk_size` / `max_clips_per_collection` 已进 settings 但 step1 / step5 尚未读，下一轮接
+- [x] **周更发版流程**（2026-09-20）：`RELEASE_CHECKLIST.md` 重写；`scripts/bump_version.py`、`scripts/release_notes.py`；`desktop-build.yml` release job 用 `body_path`。
+      流程：周中合绿 PR + 写 CHANGELOG → 周末 `bump_version.py X.Y.0 --commit` → 打 tag → 25 分钟出包 → 真机装 Windows 包跑一条视频（人做）
 - [ ] `DESIGN.md` 欠账清单（`ErrorBoundary` 本轮已改）：`index.css:704-712`、`assets/background.svg`、`FileUpload.tsx`、`BilibiliDownload.tsx`、
       `BilibiliManager.css`、`CreateCollectionModal.css`、`CollectionPreviewModal_fixed.tsx` 仍有渐变 / 撞色
 - [ ] CLI / MCP 端到端：用一条真实视频跑 `autoclip run --provider ollama --json` 和 MCP `start_clip_job` 轮询到 completed；
