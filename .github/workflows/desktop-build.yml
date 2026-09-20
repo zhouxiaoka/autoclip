@@ -162,6 +162,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') && !cancelled()
     needs: [build-macos-arm64, build-windows-x64]
     runs-on: ubuntu-latest
+    env:
+      # 放在 job 级：step 自己的 env 在它的 if 里读不到
+      WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -187,3 +190,16 @@ jobs:
           body_path: release_body.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 通知官网仓库更新版本号 / 下载链接（autoclip_intro/.github/workflows/sync-release.yml）。
+      # 需要 WEBSITE_DISPATCH_TOKEN（fine-grained PAT，仓库 autoclip_intro，Contents: Read and write）；
+      # 没配就跳过——官网那边有每日 cron 兜底。见 scripts/website/README.md。
+      - name: Notify website (repository_dispatch)
+        if: env.WEBSITE_DISPATCH_TOKEN != ''
+        run: |
+          curl -sS -f -X POST \
+            -H "Authorization: Bearer $WEBSITE_DISPATCH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/zhouxiaoka/autoclip_intro/dispatches \
+            -d '{"event_type":"autoclip-release","client_payload":{"tag":"${{ github.ref_name }}"}}'
+          echo "已通知官网同步到 ${{ github.ref_name }}"
