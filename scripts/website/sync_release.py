@@ -39,7 +39,7 @@ def fetch_release(tag: str | None) -> dict:
     token = os.getenv("GITHUB_TOKEN")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+    with urllib.request.urlopen(req, timeout=30) as resp:
         return json.load(resp)
 
 
