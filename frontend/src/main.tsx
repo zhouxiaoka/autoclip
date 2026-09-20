@@ -14,7 +14,11 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { initAnalytics } from './analytics/posthog'
 import { trackLaunch } from './analytics/lifecycle'
+import { installDomTranslationGuard } from './utils/domTranslationGuard'
 import './index.css'
+
+// 必须在 React 挂载前装好：浏览器网页翻译会移动文本节点，否则 React 更新时整页崩（#100）
+installDomTranslationGuard()
 
 // 初始化产品分析 / 埋点（无 key 时自动 no-op，不发任何网络请求）
 initAnalytics()
