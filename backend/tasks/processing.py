@@ -133,10 +133,12 @@ def process_video_pipeline(
             
             # 检查处理结果
             if result.get("status") == "failed":
-                # 处理失败
-                error_msg = result.get("message", "处理失败")
+                # 处理失败。adapter 返回的是 error（以前这里只读 message，用户看到的永远是「处理失败」四个字）
+                error_msg = result.get("error") or result.get("message") or "处理失败"
                 task.status = TaskStatus.FAILED
                 task.error_message = error_msg
+                if result.get("stage"):
+                    task.current_step = f"失败于 {result['stage']}"
                 task.result_data = result
                 
                 # 更新项目状态为失败

@@ -251,8 +251,12 @@ def _set_project_status(project_id: str, status: str, error: Optional[str] = Non
             p.updated_at = datetime.utcnow()
             if status == "completed":
                 p.completed_at = datetime.utcnow()
-            if error is not None and hasattr(p, "error_message"):
-                p.error_message = error[:2000]
+            if error is not None:
+                # Project 表没有 error_message 列；CLI 路径也不建 Task 行，所以记到 metadata，
+                # ProjectService.latest_error_message 会回退读它，桌面首页 / 详情页照样能看到原因
+                meta = dict(p.project_metadata or {})
+                meta["last_error"] = error[:2000]
+                p.project_metadata = meta
             db.commit()
         finally:
             db.close()

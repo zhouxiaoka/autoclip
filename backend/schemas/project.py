@@ -70,6 +70,9 @@ class ProjectResponse(BaseSchema):
             datetime: lambda v: v.isoformat() if v else None
         }
     
+    # 失败态：最近一次失败任务的错误文本（带阶段与下一步提示），详情页 / 项目卡 / 应用内反馈直接展示
+    error_message: Optional[str] = Field(default=None, description="Latest failure message when status is failed")
+
     # Statistics
     total_clips: int = Field(default=0, description="Total number of clips")
     total_collections: int = Field(default=0, description="Total number of collections")
