@@ -159,6 +159,8 @@ API_DASHSCOPE_API_KEY=your_dashscope_api_key
 #   DeepSeek: OPENAI_BASE_URL=https://api.deepseek.com/v1          API_MODEL_NAME=deepseek-chat
 #   宿主机 Ollama: OPENAI_BASE_URL=http://host.docker.internal:11434/v1  API_MODEL_NAME=qwen2.5:7b（可不填 key）
 # OPENAI_BASE_URL=
+# 通义千问国际站（alibabacloud.com 的 Key）：
+# DASHSCOPE_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 
 # 日志配置
 LOG_LEVEL=INFO

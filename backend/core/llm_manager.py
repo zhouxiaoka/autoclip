@@ -93,6 +93,8 @@ class LLMManager:
             "openai_api_key": "",
             # OpenAI 兼容接口地址；空 = 官方。环境变量 OPENAI_BASE_URL 作为兜底
             "openai_base_url": os.getenv("OPENAI_BASE_URL", ""),
+            # 通义千问国际站（dashscope-intl）；空 = 中国站。Docker 用 DASHSCOPE_BASE_URL
+            "dashscope_base_url": os.getenv("DASHSCOPE_BASE_URL", ""),
             "gemini_api_key": "",
             "siliconflow_api_key": "",
             "model_name": "qwen-plus",
@@ -122,7 +124,18 @@ class LLMManager:
                         if api.get("api_provider"):
                             default_settings["llm_provider"] = api["api_provider"]
                         if api.get("api_base_url"):
-                            default_settings["openai_base_url"] = api["api_base_url"]
+                            # 同一个字段：openai 系是兼容接口地址，dashscope 是国际站地址（#45）
+                            if default_settings["llm_provider"] == "dashscope":
+                                default_settings["dashscope_base_url"] = api["api_base_url"]
+                            else:
+                                default_settings["openai_base_url"] = api["api_base_url"]
+                        # 设置页「切片参数」：以前只在 API 进程内存里改一下，流水线（worker / 本地线程）从没读过
+                        processing = saved_settings.get("processing") or {}
+                        for src, dst in (("processing_min_score", "min_score_threshold"),
+                                         ("processing_chunk_size", "chunk_size"),
+                                         ("processing_max_clips", "max_clips_per_collection")):
+                            if processing.get(src) is not None:
+                                default_settings[dst] = processing[src]
                     else:
                         # 处理旧的配置格式（直接平铺）
                         default_settings.update(saved_settings)
@@ -224,12 +237,22 @@ class LLMManager:
             self.current_provider = None
 
     def _get_provider_kwargs(self, provider_type: ProviderType) -> Dict[str, Any]:
-        """提供商构造参数（目前只有 OpenAI 兼容接口的 base_url）"""
+        """提供商构造参数：OpenAI 兼容接口的 base_url；通义千问国际站也复用同一个字段（走兼容模式）"""
         if provider_type == ProviderType.OPENAI:
             base_url = (self.settings.get("openai_base_url") or "").strip()
             if base_url:
                 return {"base_url": base_url}
+        if provider_type == ProviderType.DASHSCOPE:
+            base_url = (self.settings.get("dashscope_base_url") or "").strip()
+            if base_url:
+                return {"base_url": base_url, "mode": "compatible"}
         return {}
+
+    def get_processing_setting(self, name: str, default: Any = None) -> Any:
+        """设置页「切片参数」（min_score_threshold / chunk_size / max_clips_per_collection），随 settings.json 热重载"""
+        self._reload_if_settings_changed()
+        value = self.settings.get(name)
+        return default if value is None else value
     
     def _get_api_key_for_provider(self, provider_type: ProviderType) -> Optional[str]:
         """获取指定提供商的API密钥"""

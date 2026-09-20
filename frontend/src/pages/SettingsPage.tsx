@@ -39,6 +39,10 @@ const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string
 }
 const isLocalProvider = (p: ProviderKey) => !!PROVIDERS[p]?.local
 
+// 通义千问国际站（alibabacloud.com 开通的 key 只能打这个域名，#45）；后端据 base_url 自动走兼容模式
+const DASHSCOPE_INTL_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
+type DashscopeRegion = 'cn' | 'intl'
+
 const MODEL_GROUPS: Array<{ label: string; models: string[] }> = [
   { label: '通义千问', models: ['qwen-plus', 'qwen-turbo', 'qwen-max', 'qwen-long'] },
   { label: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini'] },
@@ -73,6 +77,7 @@ const SettingsPage: React.FC = () => {
   const [selectedProvider, setSelectedProvider] = useState<ProviderKey>('dashscope')
   // 本地预设的模型探测：{ reachable, models } —— 让用户从下拉里选，而不是手敲 qwen2.5:7b
   const [localModels, setLocalModels] = useState<{ loading: boolean; reachable: boolean | null; models: string[] }>({ loading: false, reachable: null, models: [] })
+  const [dashscopeRegion, setDashscopeRegion] = useState<DashscopeRegion>('cn')
   const [analyticsOn, setAnalyticsOn] = useState(isAnalyticsEnabled())
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const runtime = getRuntimeInfo()
@@ -98,11 +103,12 @@ const SettingsPage: React.FC = () => {
       setCurrentProvider(providerData)
       const savedBaseUrl = settingsData.api?.api_base_url || ''
       const localPreset = PROVIDERS[providerName]?.local
+      setDashscopeRegion(providerName === 'dashscope' && normalizeBaseUrl(savedBaseUrl) === DASHSCOPE_INTL_BASE_URL ? 'intl' : 'cn')
       form.setFieldsValue({
         llm_provider: providerName,
         dashscope_api_key: settingsData.api?.api_keys?.dashscope || '',
         openai_api_key: settingsData.api?.api_keys?.openai || '',
-        openai_base_url: localPreset ? '' : savedBaseUrl,
+        openai_base_url: localPreset || providerName === 'dashscope' ? '' : savedBaseUrl,
         // 本地预设只在改过默认地址时才把地址填进表单
         local_base_url: localPreset && savedBaseUrl && savedBaseUrl !== localPreset.baseUrl ? savedBaseUrl : '',
         gemini_api_key: settingsData.api?.api_keys?.gemini || '',
@@ -144,7 +150,8 @@ const SettingsPage: React.FC = () => {
           api_provider: provider,
           api_base_url: provider === 'openai'
             ? normalizeBaseUrl(values.openai_base_url)
-            : isLocalProvider(provider) ? normalizeBaseUrl(values.local_base_url) : '',
+            : isLocalProvider(provider) ? normalizeBaseUrl(values.local_base_url)
+            : provider === 'dashscope' && dashscopeRegion === 'intl' ? DASHSCOPE_INTL_BASE_URL : '',
           api_model: normalizeModelName(values.model_name) || 'qwen-plus',
           api_max_tokens: 4096,
           api_timeout: 30
@@ -174,7 +181,8 @@ const SettingsPage: React.FC = () => {
     const apiKey: string = local ? '' : (form.getFieldValue(cfg.apiKeyField) || '')
     const baseUrl = selectedProvider === 'openai'
       ? normalizeBaseUrl(form.getFieldValue('openai_base_url'))
-      : local ? (normalizeBaseUrl(form.getFieldValue('local_base_url')) || cfg.local!.baseUrl) : ''
+      : local ? (normalizeBaseUrl(form.getFieldValue('local_base_url')) || cfg.local!.baseUrl)
+      : selectedProvider === 'dashscope' && dashscopeRegion === 'intl' ? DASHSCOPE_INTL_BASE_URL : ''
     const modelName = normalizeModelName(form.getFieldValue('model_name'))
     if (local && !modelName) {
       message.error('请先选择一个模型')
@@ -241,6 +249,9 @@ const SettingsPage: React.FC = () => {
   const usingCustomEndpoint = selectedProvider === 'openai' && !!normalizeBaseUrl(openaiBaseUrl)
   const cfg = PROVIDERS[selectedProvider]
   const localCfg = cfg.local
+  const keyUrl = selectedProvider === 'dashscope' && dashscopeRegion === 'intl'
+    ? 'https://bailian.console.alibabacloud.com/?tab=model#/api-key'
+    : cfg.keyUrl
 
   return (
     <div className="ac-page">
@@ -316,6 +327,23 @@ const SettingsPage: React.FC = () => {
                     </Row>
                   )}
 
+                  {selectedProvider === 'dashscope' && (
+                    <Row
+                      label="站点"
+                      hint={dashscopeRegion === 'intl'
+                        ? <>国际站（alibabacloud.com）的 Key，请求发往 <span className="ac-mono">dashscope-intl.aliyuncs.com</span>。</>
+                        : '在阿里云中国站（aliyun.com）开通的 Key 选这个；海外账号选国际站。'}
+                    >
+                      <Segmented
+                        size="sm"
+                        ariaLabel="通义千问站点"
+                        value={dashscopeRegion}
+                        onChange={setDashscopeRegion}
+                        options={[{ value: 'cn', label: '中国站' }, { value: 'intl', label: '国际站' }]}
+                      />
+                    </Row>
+                  )}
+
                   {selectedProvider === 'openai' && (
                     <Row
                       wide
@@ -343,7 +371,7 @@ const SettingsPage: React.FC = () => {
                     label="API Key"
                     hint={usingCustomEndpoint
                       ? '自建 / 本地兼容服务不校验密钥时可留空。'
-                      : <>在 <a href={cfg.keyUrl} onClick={(e) => { e.preventDefault(); openExternalLink(cfg.keyUrl) }} style={{ color: 'var(--ac-accent)' }}>{cfg.name} 控制台</a> 获取。</>}
+                      : <>在 <a href={keyUrl} onClick={(e) => { e.preventDefault(); openExternalLink(keyUrl) }} style={{ color: 'var(--ac-accent)' }}>{cfg.name}{selectedProvider === 'dashscope' && dashscopeRegion === 'intl' ? '国际站' : ''} 控制台</a> 获取。</>}
                   >
                     <Form.Item
                       name={cfg.apiKeyField}

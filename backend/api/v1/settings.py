@@ -355,7 +355,9 @@ async def test_api_connection(request: TestApiRequest):
         # 根据提供商测试API连接
         if request.provider == "dashscope":
             from backend.core.llm_providers import DashScopeProvider
-            provider_instance = DashScopeProvider(api_key=request.api_key, **model_kwargs)
+            # 国际站地址走兼容模式（#45）；空 = 中国站 native SDK
+            dashscope_base_url = normalize_base_url(request.base_url) or None
+            provider_instance = DashScopeProvider(api_key=request.api_key, base_url=dashscope_base_url, **model_kwargs)
         elif request.provider == "openai":
             from backend.core.llm_providers import OpenAIProvider
             provider_instance = OpenAIProvider(api_key=request.api_key, base_url=custom_base_url or None, **model_kwargs)
