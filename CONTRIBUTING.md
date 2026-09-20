@@ -49,8 +49,8 @@ brew services start redis  # macOS
 # 启动后端
 python -m uvicorn backend.main:app --reload --port 8000
 
-# 启动Celery Worker
-celery -A backend.core.celery_app worker --loglevel=info
+# 启动Celery Worker（必须带 -Q，否则只消费默认 `celery` 队列，流水线任务无人执行）
+celery -A backend.core.celery_app worker --loglevel=info -Q celery,processing,video,notification,upload
 
 # 启动前端
 cd frontend && npm run dev

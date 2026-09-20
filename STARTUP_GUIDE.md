@@ -212,8 +212,9 @@ npm run dev
 ### Celery Worker
 
 ```bash
-# 启动Worker
-celery -A backend.core.celery_app worker --loglevel=info
+# 启动Worker（必须带 -Q：任务按 celery_app.task_routes 路由到专用队列，
+# 不带 -Q 的 worker 只消费默认 `celery` 队列，流水线任务会一直堆在 `processing` 里没人执行）
+celery -A backend.core.celery_app worker --loglevel=info -Q celery,processing,video,notification,upload
 
 # 启动Beat调度器
 celery -A backend.core.celery_app beat --loglevel=info
