@@ -138,6 +138,11 @@ class DesktopSettings(BaseModel):
 def check_desktop_mode(relaxed: bool = False):
     """检查是否在Desktop模式
     relaxed=True 时放宽限制，允许内测安装包/开发环境调用（返回告警但不阻断）。
+
+    只有真正依赖桌面壳 / 本机文件系统的端点才需要它（数据目录迁移、备份恢复、导入导出、客户端配置同步）。
+    读写 settings.json、测试连接、查询当前提供商这类配置端点在 Docker / 本地脚本模式下同样有效：
+    settings.json 落在 `get_data_directory()`，API 进程与 Celery worker 都按 mtime 热重载。
+    以前这些端点也被拦成 400，Docker 用户只能改 .env（issue #100）。
     """
     if not is_desktop_mode():
         if relaxed:
@@ -158,33 +163,42 @@ async def check_desktop_mode_endpoint():
     }
 
 
+def _effective_llm_settings() -> Dict[str, Any]:
+    """LLM 管理器实际生效的 provider / model / base_url（settings.json 优先，其次环境变量）。
+    取不到时返回空 dict，调用方回退到默认值。"""
+    try:
+        from backend.core.llm_manager import get_llm_manager
+        return get_llm_manager().get_current_provider_info()
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"读取 LLM 管理器状态失败，设置页使用默认值: {e}")
+        return {}
+
+
 @router.get("/", response_model=DesktopSettings)
 async def get_settings():
     """获取所有设置"""
-    check_desktop_mode()
-    
     try:
         config = get_desktop_config()
         
         # 尝试从保存的设置文件中读取
         settings_file = config.paths.data_dir / "settings.json"
-        print(f"设置文件路径: {settings_file}")
-        print(f"设置文件存在: {settings_file.exists()}")
+        logger.debug(f"设置文件路径: {settings_file} (存在: {settings_file.exists()})")
         
         if settings_file.exists():
             try:
                 with open(settings_file, 'r', encoding='utf-8') as f:
                     saved_settings = json.load(f)
                 
-                print(f"从文件读取的设置: {saved_settings.get('basic', {}).get('app_name', 'unknown')}")
-                
                 # 验证并返回保存的设置
                 settings = DesktopSettings(**saved_settings)
                 return settings
             except Exception as e:
                 # 如果读取失败，回退到默认配置
-                print(f"读取设置文件失败: {e}")
-                pass
+                logger.warning(f"读取设置文件失败，回退到默认配置: {e}")
+
+        # 还没保存过 settings.json：Docker / 脚本模式的提供商、模型、base_url 来自环境变量
+        # （LLM_PROVIDER / API_MODEL_NAME / OPENAI_BASE_URL），设置页首屏应如实反映，而不是固定显示通义千问
+        effective = _effective_llm_settings()
         
         # 构建路径设置
         paths = PathSettings(
@@ -215,7 +229,9 @@ async def get_settings():
                     jimeng_access="",  # 默认值
                     jimeng_secret=""   # 默认值
                 ),
-                api_model=config.default_model,
+                api_provider=effective.get("provider") or "dashscope",
+                api_base_url=effective.get("base_url") or "",
+                api_model=effective.get("model") or config.default_model,
                 api_max_tokens=config.max_tokens,
                 api_timeout=config.timeout
             ),
@@ -282,8 +298,6 @@ async def clear_settings(
     config: DesktopConfig = Depends(get_desktop_config)
 ):
     """清除所有设置"""
-    check_desktop_mode()
-    
     try:
         # 重置配置为默认值
         config.dashscope_api_key = ""
@@ -310,8 +324,6 @@ class TestApiRequest(BaseModel):
 @router.post("/test-api")
 async def test_api_connection(request: TestApiRequest):
     """测试API连接"""
-    check_desktop_mode()
-    
     try:
         from backend.core.llm_providers import normalize_base_url, OPENAI_OFFICIAL_BASE_URL
         from backend.core.local_presets import resolve_provider
@@ -396,8 +408,6 @@ async def test_api_connection(request: TestApiRequest):
 @router.put("/", response_model=Dict[str, Any])
 async def update_settings(settings: DesktopSettings):
     """更新设置"""
-    check_desktop_mode()
-    
     try:
         config = get_desktop_config()
         
@@ -451,8 +461,6 @@ async def update_settings(settings: DesktopSettings):
 @router.post("/reset")
 async def reset_settings():
     """重置设置为默认值"""
-    check_desktop_mode()
-    
     try:
         config = get_desktop_config()
         
@@ -557,8 +565,6 @@ async def import_settings(file: UploadFile = File(...)):
 @router.get("/validation")
 async def validate_settings():
     """验证当前设置"""
-    check_desktop_mode()
-    
     try:
         config = get_desktop_config()
         validation_result = config.validate_config()
@@ -638,8 +644,6 @@ async def list_backups():
 @router.get("/available-models")
 async def get_available_models():
     """获取可用的模型列表"""
-    check_desktop_mode()
-    
     try:
         # 返回按供应商分类的模型列表
         models = {
@@ -688,7 +692,6 @@ async def list_compatible_models(base_url: str = "", provider: str = "openai", a
     列出一个 OpenAI 兼容服务（Ollama / LM Studio / vLLM…）实际提供的模型（GET {base_url}/models）。
     设置页选本地预设时用它填模型下拉，免得用户手敲 `qwen2.5:7b` 这种名字。
     """
-    check_desktop_mode()
     from backend.core.local_presets import resolve_provider
     from backend.core.llm_providers import normalize_base_url, is_local_url, OPENAI_COMPATIBLE_PLACEHOLDER_KEY
     _provider, resolved_base_url, _preset = resolve_provider(provider, base_url)
@@ -714,8 +717,6 @@ async def list_compatible_models(base_url: str = "", provider: str = "openai", a
 @router.get("/current-provider")
 async def get_current_provider():
     """获取当前提供商信息"""
-    check_desktop_mode()
-    
     try:
         # 以 LLM 管理器的实际状态为准（它读的就是设置页保存的 settings.json），
         # 而不是固定返回 dashscope——那会让设置页每次打开都"跳回"通义千问。
