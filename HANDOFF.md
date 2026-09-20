@@ -176,8 +176,13 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - [ ] 首页导入框、`ProjectTaskManager`、`CollectionPreviewModal` / `CreateCollectionModal`、B 站登录弹窗仍是 AntD 默认件，下一轮按 `frontend/src/ui/` 原语重做
 - [ ] `ProjectCard.tsx` 只做了「去色 + 失败态反馈」的局部修补（仍是 AntD Card + 内联样式），应整体重写成 `ac-card`
 - [x] Docker 模式下开放设置页（2026-09-20，#100）；浏览器翻译导致的整页崩溃同轮修复
-- [ ] **失败要像失败**：LLM 不可达 / 无 key / 评分全空时项目应进 `failed`（带阶段 + 错误文本，走应用内反馈入口），不能 `Completed · 0 切片`
-      或永久 `processing`（#100 的 0 切片、#11、#24 的共同表象）。这是减少「用不了」类 issue 最直接的一刀
+- [x] **失败要像失败**（2026-09-20）：`pipeline/failures.py#PipelineFailure(stage, message, hint)`；adapter 先做 LLM 预检（`AUTOCLIP_LLM_CACHE_DIR` 回放跳过），
+      字幕缺失 / step1 全部失败或不可解析 / 时间线空 / 评分空 / ffmpeg 零产出全部抛失败并带阶段与提示；`tasks/processing.py` 改读 `error`（以前读 `message`，
+      用户只看到「处理失败」四个字）；`ProjectResponse.error_message` 取最近失败 Task，CLI 路径回退 `project_metadata.last_error`。
+      真机验证（桌面模式、无 key、上传 8 秒测试视频）：2 秒内 failed，详情 / 列表 / status 三个接口都带文案。回归 `tests/test_pipeline_failures.py`（13 条）。
+      **顺带挖出并修掉三个 main 上的老 bug**：① `/projects/upload` 引用未定义 `db`，本地上传从 5 月起从不自动开始处理；
+      ② `database.py` 对文件型 SQLite 用 `StaticPool`，多线程 Session 共享一条连接互相 ROLLBACK（`ObjectDeletedError`）→ 改默认池 + WAL；
+      ③ 桌面模式下任务内 `update_state()` 去连 Redis 结果后端 → `DesktopAwareTask.update_state` no-op
 - [ ] **i18n 骨架**（来源：#101 + #100 根因）：Windows 下载量已是 DMG 的三倍、海外用户在开浏览器翻译。维护者先定基础设施
       —— `i18next` + `react-i18next`、`locales/{zh,en}.json`、文案 key 命名规范、语言切换放「设置 → 应用」、AntD `ConfigProvider` locale 跟随、
       `dayjs` locale 跟随；与 `frontend/src/ui/` 原语迁移一起做（先迁的页面先抽文案）。骨架合入后请 #101 作者按页面分批提 PR
