@@ -185,7 +185,7 @@ def event_draft(project_id: str, event_id: str, db: Session = Depends(get_db)):
     event = next((e for e in store.read(project_id)['events'] if e['id'] == event_id), None)
     if not event:
         raise HTTPException(404, '片段不存在')
-    draft = Draft(id=uuid.uuid4().hex, title=event['label'], scenes=[Scene.model_validate(event)], aspect=prefs.aspect, language=prefs.language, subtitles=False, origin='visual-highlight')
+    draft = Draft(id=uuid.uuid4().hex, title=event['label'], scenes=[Scene.model_validate(event)], aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', language=prefs.language, subtitles=False, origin='visual-highlight')
     call(validate_draft, project_id, draft)
     return call(store.save_draft, project_id, draft, create=True)
 

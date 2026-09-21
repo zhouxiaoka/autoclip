@@ -34,6 +34,8 @@ class Draft(BaseModel):
     language: Language = 'source'
     aspect: Literal['original', 'portrait', 'landscape'] = 'original'
     layout: Literal['fit', 'crop', 'blur'] = 'fit'
+    crop_x: float = Field(default=.5, ge=0, le=1, allow_inf_nan=False)
+    title_style: Literal['plain', 'impact', 'card'] = 'plain'
     subtitles: bool = True
     original_audio: bool = True
     revision: int = Field(default=1, ge=1)

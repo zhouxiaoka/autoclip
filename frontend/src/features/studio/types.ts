@@ -6,6 +6,7 @@ export interface CandidateList { duration: number; candidates: Candidate[]; warn
 export interface Draft {
   id: string; title: string; hook: string; scenes: Scene[]; language: Language
   aspect: 'original' | 'portrait' | 'landscape'; layout: 'fit' | 'crop' | 'blur'
+  crop_x?: number; title_style?: 'plain' | 'impact' | 'card'
   subtitles: boolean; original_audio: boolean; revision: number; updated_at: string; origin: string
   parent_draft_id?: string | null; parent_revision?: number | null
 }
@@ -46,4 +47,8 @@ export function applyCandidate(draft: Draft, candidate: Candidate, target: numbe
   const invalid = draftError(result)
   if (invalid) throw new Error(invalid)
   return result
+}
+
+export function portraitDesign(draft: Draft): Draft {
+  return {...draft, aspect:'portrait', layout:'crop', crop_x:draft.crop_x ?? .5, title_style:'impact'}
 }

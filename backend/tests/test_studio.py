@@ -318,3 +318,37 @@ def test_vision_timeout_is_actionable_and_hides_credentials(monkeypatch):
     with pytest.raises(RuntimeError,match='提高请求超时') as error:
         intelligence.vision_call([],config={'base_url':'https://example.test/v1','model':'vision','api_key':'private-key','timeout':10})
     assert 'private-key' not in str(error.value)
+
+
+def test_portrait_promo_defaults_and_legacy_compatibility(monkeypatch):
+    monkeypatch.setattr(intelligence, 'vision_call', lambda _: {'hooks':[{'title':'Run','hook':'Can you escape?'}]})
+    result=intelligence.make_drafts([Scene(id='s',start=0,end=1)],Preferences(goal='promo',aspect='portrait'))[0]
+    assert result['layout']=='crop' and result['title_style']=='impact'
+    assert draft().layout=='fit' and draft().title_style=='plain'
+    for x in (-.1,1.1,float('nan')):
+        with pytest.raises(ValidationError): draft(crop_x=x)
+
+
+def test_title_wrapping_bounds_and_literal_text():
+    from backend.services.studio.titles import title_layout, text_width
+    for text in ["They're right behind you!", '追兵就在身后，能逃脱吗？', '100% {test}: escape!', 'W'*30]:
+        lines,size=title_layout(text,'impact',1080,1920)
+        assert 1<=len(lines)<=3
+        assert all(text_width(line)*size <= 1080*.80+.1 for line in lines)
+    with pytest.raises(ValueError,match='太长'): title_layout('非常长的文字'*100,'card',1080,1920)
+
+
+@pytest.mark.parametrize('style,x,expected', [('impact',.5,'blue'),('card',0,'red')])
+def test_portrait_fills_frame_and_applies_focus_and_title(root,style,x,expected):
+    from backend.services.studio.render import render_draft
+    raw=root/'raw';raw.mkdir()
+    video=raw/'input.mp4'
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','color=red:s=320x180:r=30:d=1,drawbox=x=105:y=0:w=110:h=180:color=blue:t=fill','-y',str(video)],check=True)
+    d=Draft(id='portrait',title='Portrait',hook='CAN YOU ESCAPE?',title_style=style,aspect='portrait',layout='crop',crop_x=x,subtitles=False,scenes=[Scene(id='s',start=0,end=.8)])
+    result=render_draft('p1',video,d,style,lambda _:None)
+    assert (result['width'],result['height'])==(1080,1920)
+    out=root/'output/studio'/f'{style}.mp4'
+    pixel=subprocess.check_output(['ffmpeg','-v','error','-ss','0.3','-i',str(out),'-frames:v','1','-vf','crop=20:20:0:1800,scale=1:1','-f','rawvideo','-pix_fmt','rgb24','-'])
+    # Bottom of the portrait must contain the selected footage, never a black bar.
+    assert pixel[2 if expected=='blue' else 0]>200
+    assert max(pixel)-min(pixel)>180
