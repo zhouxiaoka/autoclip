@@ -48,11 +48,14 @@ def clean_database():
         print("\n🎉 数据库清理完成!")
         print("现在数据库是干净的，没有任何项目数据")
         
-    except Exception as e:
+            except Exception as e:
         print(f"❌ 清理数据库时发生错误: {e}")
         db.rollback()
+        sys.exit(1)
     finally:
         db.close()
+
+
 
 if __name__ == "__main__":
     clean_database()
