@@ -54,4 +54,7 @@ api_router.include_router(settings_router, tags=["settings"])
 api_router.include_router(upload_queue_router, tags=["upload-queue"])
 api_router.include_router(account_health_router, tags=["account-health"])
 
+from .studio import router as studio_router
+api_router.include_router(studio_router, prefix="/studio", tags=["studio"])
+
 __all__ = ["api_router"]

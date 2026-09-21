@@ -4,6 +4,7 @@ import { PlayCircleOutlined, DeleteOutlined, DownloadOutlined, ReloadOutlined, L
 import { useNavigate } from 'react-router-dom'
 import { Project } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
+import { studioApi } from '../features/studio/api'
 import { UnifiedStatusBar } from './UnifiedStatusBar'
 import FeedbackDialog from './FeedbackDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
@@ -68,6 +69,8 @@ interface ProjectCardProps {
 
 const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick }) => {
   const navigate = useNavigate()
+  const creative = project.settings?.creative || project.processing_config?.creative
+  const isVisual = ['highlight', 'promo'].includes(creative?.goal)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [thumbnailLoading, setThumbnailLoading] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
@@ -121,12 +124,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
         video.preload = 'metadata'
         
         // 尝试多个可能的视频文件路径
-        const possiblePaths = [
-          'input/input.mp4',
-          'input.mp4',
-          project.video_path,
-          `${project.video_path}/input.mp4`
-        ].filter(Boolean)
+        const possiblePaths = [studioApi.source(project.id)]
         
         let videoLoaded = false
         
@@ -134,7 +132,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           if (videoLoaded) break
           
           try {
-            const videoUrl = projectApi.getProjectFileUrl(project.id, path)
+            const videoUrl = path
             console.log('尝试加载视频:', videoUrl)
             
             await new Promise((resolve, reject) => {
@@ -256,7 +254,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // 流水线，所以这里只需做一次「尽力而为」的启动即可。
   useEffect(() => {
     if (
-      project.status === 'pending' &&
+      !isVisual && project.status === 'pending' &&
       !isDownloading &&
       !autoStartedProjectIds.has(project.id)
     ) {
@@ -268,7 +266,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       // toast/reload path.
       handleRetry({ silent: true })
     }
-  }, [project.status, project.id, isDownloading])
+  }, [project.status, project.id, isDownloading, isVisual])
   
   // 计算进度百分比
   const progressPercent = project.status === 'completed' ? 100 : 
@@ -294,7 +292,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     setIsRetrying(true)
     try {
       // 对于PENDING状态的项目，使用startProcessing；对于其他状态，使用retryProcessing
-      if (project.status === 'pending') {
+      if (isVisual) {
+        await studioApi.analyze(project.id)
+      } else if (project.status === 'pending') {
         await projectApi.startProcessing(project.id)
       } else {
         await projectApi.retryProcessing(project.id)
@@ -361,13 +361,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           }}
           onClick={() => {
             // 导入中状态的项目不能点击进入详情页
-            if (project.status === 'pending') {
+            if (!isVisual && project.status === 'pending') {
               message.warning('项目正在导入中，请稍后再查看详情')
               return
             }
             
             // 处理中状态的项目不能点击进入详情页
-            if (project.status === 'processing') {
+            if (!isVisual && project.status === 'processing') {
               message.warning('项目处理中，请完成后再查看')
               return
             }
@@ -596,7 +596,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 strong 
                 style={{ 
                   fontSize: '13px', 
-                  color: '#ffffff',
+                  color: 'var(--ac-ink)',
                   fontWeight: 600,
                   lineHeight: '16px',
                   display: '-webkit-box',
@@ -646,9 +646,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 onStatusChange={() => {}}
               />
               <div style={{ color: 'var(--ac-muted)', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
-                <span className="ac-mono">{project.total_clips || 0}</span> 切片
+                {isVisual ? <><span className="ac-mono">{project.settings?.studio_draft_count || project.processing_config?.studio_draft_count || 0}</span> 成片草稿</> : <><span className="ac-mono">{project.total_clips || 0}</span> 切片
                 <span style={{ margin: '0 6px' }}>·</span>
-                <span className="ac-mono">{project.total_collections || 0}</span> 合集
+                <span className="ac-mono">{project.total_collections || 0}</span> 合集</>}
               </div>
             </div>
           )}

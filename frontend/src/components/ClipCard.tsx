@@ -7,6 +7,7 @@ import { ClipExportDialog } from '../features/exports/ClipExportDialog'
 import { Btn, Icon, parseTimecode, fmtDuration, fmtClock } from '../ui'
 
 interface ClipCardProps {
+  onEdit?: () => void
   clip: Clip
   videoUrl?: string
   onDownload: (clipId: string) => void
@@ -15,7 +16,7 @@ interface ClipCardProps {
 }
 
 // Calm Premium clip card — see DESIGN.md → App Layer / Media card
-const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, projectId, onClipUpdate }) => {
+const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, projectId, onClipUpdate, onEdit }) => {
   const [showPlayer, setShowPlayer] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [showExport, setShowExport] = useState(false)
@@ -99,7 +100,7 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
           <div className="ac-card-foot">
             <span className="meta">{fmtDuration(durationSec)}</span>
             <div className="ac-card-actions">
-              <Btn variant="text" onClick={() => setShowPlayer(true)}>播放</Btn>
+              <Btn variant="text" onClick={onEdit || (() => setShowPlayer(true))}>{onEdit ? '预览与制作' : '播放'}</Btn>
               <Btn variant="text" onClick={handleDownload}>下载</Btn>
               {projectId && <Btn variant="text" onClick={() => setShowExport(true)}>导出</Btn>}
             </div>

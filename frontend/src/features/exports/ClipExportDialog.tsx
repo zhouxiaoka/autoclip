@@ -22,7 +22,7 @@ export function ClipExportDialog({ open, onClose, projectId, clipId }: Props) {
     <Dialog
       open={open}
       onClose={() => !exporting && onClose()}
-      title="发布导出"
+      title="导出成片"
       description="渲成可直接上传的成片。默认流水线的切片不受影响。"
       footer={
         <div className="right" style={{ marginLeft: 'auto' }}>
