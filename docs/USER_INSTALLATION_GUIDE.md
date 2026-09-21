@@ -46,7 +46,7 @@ AI 分析主要依赖字幕文本。访谈、播客、课程等以语言表达�
 
 ## 更新与备份
 
-关闭正在处理的任务并退出应用，备份数据目录后，从 [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 获取新版安装包。是否提供应用内更新取决于所安装版本，不应把它作为唯一更新方式。
+关闭正在处理的任务并退出应用，备份数据目录后，从 [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 获取新版安装包。v1.3.0 及以前需先手动安装 v1.3.1。自 v1.3.1 起，可在「设置 → 应用 → 检查更新」获取后续版本；确认后下载安装并重启。自动检查最多每天一次，手动下载仍然可用。
 
 默认桌面数据目录：
 
