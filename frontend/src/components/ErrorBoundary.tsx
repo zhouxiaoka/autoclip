@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 /**
  * React 错误边界组件
  * 捕获子组件中的 JavaScript 错误，记录错误信息，并显示降级 UI（样式遵循 DESIGN.md：单色、无渐变）
@@ -139,35 +140,31 @@ class ErrorBoundary extends Component<Props, State> {
             padding: '32px 32px 28px',
           }}
         >
-          <div className="ac-eyebrow">页面出错</div>
+          <div className="ac-eyebrow">{t("页面出错")}</div>
           <h1 style={{ margin: '10px 0 0', fontSize: 20, fontWeight: 600, lineHeight: 1.3, letterSpacing: '-0.01em' }}>
-            {translationSuspected ? '浏览器翻译打断了页面渲染' : '这个页面遇到了意外错误'}
+            {translationSuspected ? t("浏览器翻译打断了页面渲染") : t("这个页面遇到了意外错误")}
           </h1>
           <p style={{ margin: '8px 0 0', fontSize: 13.5, color: 'var(--ac-sub)', lineHeight: 1.6, maxWidth: '60ch' }}>
             {translationSuspected ? (
-              <>
-                检测到网页正在被浏览器翻译（Chrome / Edge「翻译此页」）。翻译会改写页面结构，导致界面在切换选项时崩溃。
-                请在地址栏右侧关闭翻译、恢复原文后再刷新。
-                <span style={{ display: 'block', marginTop: 6 }}>
+              <>{t("检测到网页正在被浏览器翻译（Chrome / Edge「翻译此页」）。翻译会改写页面结构，导致界面在切换选项时崩溃。 请在地址栏右侧关闭翻译、恢复原文后再刷新。")}<span style={{ display: 'block', marginTop: 6 }}>
                   Page translation (Chrome / Edge “Translate this page”) rewrites the DOM and breaks the UI.
                   Please turn translation off, show the original page, then reload.
                 </span>
               </>
             ) : (
-              '问题已记录到本地日志。先试试刷新；仍然出现的话把下面的错误信息带上，到 GitHub 提一个 issue。'
+              t("问题已记录到本地日志。先试试刷新；仍然出现的话把下面的错误信息带上，到 GitHub 提一个 issue。")
             )}
           </p>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 24, flexWrap: 'wrap' }}>
-            <Btn variant="cta" onClick={this.handleReload}>刷新页面</Btn>
-            <Btn onClick={this.handleGoHome}>返回首页</Btn>
-            <Btn variant="text" onClick={this.handleReportError}>报告问题</Btn>
+            <Btn variant="cta" onClick={this.handleReload}>{t("刷新页面")}</Btn>
+            <Btn onClick={this.handleGoHome}>{t("返回首页")}</Btn>
+            <Btn variant="text" onClick={this.handleReportError}>{t("报告问题")}</Btn>
           </div>
 
           {error && (
             <details style={{ marginTop: 24 }} open={!!this.props.showDetails}>
-              <summary style={{ cursor: 'pointer', fontSize: 12.5, color: 'var(--ac-muted)', userSelect: 'none' }}>
-                错误详情 <span className="ac-mono" style={{ fontFamily: 'var(--ac-font-mono)' }}>{errorId}</span>
+              <summary style={{ cursor: 'pointer', fontSize: 12.5, color: 'var(--ac-muted)', userSelect: 'none' }}>{t("错误详情")}<span className="ac-mono" style={{ fontFamily: 'var(--ac-font-mono)' }}>{errorId}</span>
               </summary>
               <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
                 <pre style={preStyle}>{error.message}</pre>

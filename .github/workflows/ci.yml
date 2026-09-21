@@ -69,6 +69,9 @@ jobs:
       - name: Sentry build configuration tests
         run: node --test tests/sentry-build.test.cjs tests/desktop.test.cjs
 
+      - name: Internationalization checks
+        run: node --test tests/i18n.test.cjs
+
       - name: Build
         run: npm run build
 

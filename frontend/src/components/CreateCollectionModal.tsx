@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import React, { useState } from 'react'
 import { Modal, Input, Checkbox, Typography, Button, Divider } from 'antd'
 import { PlusOutlined, TagOutlined, FileTextOutlined, VideoCameraOutlined } from '@ant-design/icons'
@@ -30,6 +32,7 @@ const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
   onCreate,
   loading = false
 }) => {
+  useTranslation()
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
   const [selectedClips, setSelectedClips] = useState<string[]>([])
@@ -81,8 +84,8 @@ const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
             <PlusOutlined />
           </div>
           <div className="header-text">
-            <Title level={3} className="modal-title">创建新合集</Title>
-            <Text className="modal-subtitle">将精选片段组合成一个主题合集</Text>
+            <Title level={3} className="modal-title">{t("创建新合集")}</Title>
+            <Text className="modal-subtitle">{t("将精选片段组合成一个主题合集")}</Text>
           </div>
         </div>
 
@@ -94,11 +97,11 @@ const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
           <div className="form-item">
             <div className="form-label">
               <TagOutlined className="label-icon" />
-              <Text strong>合集标题</Text>
+              <Text strong>{t("合集标题")}</Text>
               <span className="required-mark">*</span>
             </div>
             <Input
-              placeholder="请输入合集标题"
+              placeholder={t("请输入合集标题")}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="form-input"
@@ -111,10 +114,10 @@ const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
           <div className="form-item">
             <div className="form-label">
               <FileTextOutlined className="label-icon" />
-              <Text strong>合集描述</Text>
+              <Text strong>{t("合集描述")}</Text>
             </div>
             <TextArea
-              placeholder="请输入合集描述（可选）"
+              placeholder={t("请输入合集描述（可选）")}
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               className="form-textarea"
@@ -128,32 +131,26 @@ const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
           <div className="form-item">
             <div className="form-label">
               <VideoCameraOutlined className="label-icon" />
-              <Text strong>选择片段</Text>
+              <Text strong>{t("选择片段")}</Text>
               <span className="required-mark">*</span>
             </div>
             
             <div className="clips-selection">
               <div className="selection-header">
-                <Text className="selection-info">
-                  已选择 {selectedClips.length} 个片段
-                </Text>
+                <Text className="selection-info">{t("已选数量", { count: selectedClips.length })}</Text>
                 <div className="selection-actions">
                   <Button 
                     type="link" 
                     size="small" 
                     onClick={selectAllClips}
                     className="action-btn"
-                  >
-                    全选
-                  </Button>
+                  >{t("全选")}</Button>
                   <Button 
                     type="link" 
                     size="small" 
                     onClick={clearAllClips}
                     className="action-btn"
-                  >
-                    清空
-                  </Button>
+                  >{t("清空")}</Button>
                 </div>
               </div>
               
@@ -171,11 +168,11 @@ const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
                     />
                     <div className="clip-content">
                       <div className="clip-title">
-                        {clip.generated_title || clip.title || '未命名片段'}
+                        {clip.generated_title || clip.title || t("未命名片段")}
                       </div>
                       <div className="clip-meta">
                         <Text type="secondary" style={{ fontSize: '12px' }}>
-                          {clip.start_time} - {clip.end_time} • 评分: {(clip.final_score * 100).toFixed(0)}
+                          {clip.start_time} - {clip.end_time}{t("• 评分:")}{(clip.final_score * 100).toFixed(0)}
                         </Text>
                       </div>
                     </div>
@@ -188,18 +185,14 @@ const CreateCollectionModal: React.FC<CreateCollectionModalProps> = ({
 
         {/* 底部操作 */}
         <div className="modal-footer">
-          <Button onClick={handleCancel} className="cancel-btn">
-            取消
-          </Button>
+          <Button onClick={handleCancel} className="cancel-btn">{t("取消")}</Button>
           <Button 
             type="primary" 
             onClick={handleCreate}
             disabled={!title.trim() || selectedClips.length === 0}
             loading={loading}
             className="create-btn"
-          >
-            创建合集
-          </Button>
+          >{t("创建合集")}</Button>
         </div>
       </div>
     </Modal>

@@ -26,7 +26,8 @@ pub fn run() {
             quit_app,
             enable_autostart,
             disable_autostart,
-            is_autostart_enabled
+            is_autostart_enabled,
+            crate::tray::set_tray_language
         ])
         .manage(BackendManager::new())
         .setup(|app| {

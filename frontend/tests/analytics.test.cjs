@@ -146,6 +146,7 @@ test('actual API entrypoints enroll imports/exports and count every media downlo
     async get() { return blob },
   }
   const api = load('../services/api', {
+    '../i18n': { t: key => key },
     axios: { create: () => transport, get: async () => ({ data: blob, headers: {} }) },
     '../utils/errorHandler': { errorHandler: { handleError() {} } },
     '../utils/apiConfig': { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener() {} } },

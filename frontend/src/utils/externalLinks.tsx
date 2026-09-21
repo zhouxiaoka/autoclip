@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import React from 'react'
 
 /**
@@ -34,10 +36,10 @@ export const openExternalLink = async (url: string) => {
       // 最后的降级:复制链接到剪贴板
       try {
         await navigator.clipboard.writeText(url)
-        alert(`链接已复制到剪贴板:${url}`)
+        alert(t("链接已复制到剪贴板:{{value1}}", { value1: url }))
       } catch (clipboardError) {
         console.error('复制到剪贴板失败:', clipboardError)
-        alert(`请手动访问:${url}`)
+        alert(t("请手动访问:{{value1}}", { value1: url }))
       }
     }
   }
@@ -54,6 +56,7 @@ export const ExternalLink: React.FC<{
   text: string
   className?: string
 }> = ({ url, text, className }) => {
+  useTranslation()
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault()
     openExternalLink(url)

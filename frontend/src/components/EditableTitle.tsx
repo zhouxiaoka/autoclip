@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import React, { useState, useRef, useEffect } from 'react'
 import { Input, Button, Space, message, Tooltip, Modal } from 'antd'
 import { EditOutlined, CheckOutlined } from '@ant-design/icons'
@@ -21,6 +23,7 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
   style,
   className
 }) => {
+  useTranslation()
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(title)
   const [loading, setLoading] = useState(false)
@@ -64,12 +67,12 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
     const trimmedValue = editValue.trim()
     
     if (!trimmedValue) {
-      message.error('标题不能为空')
+      message.error(t("标题不能为空"))
       return
     }
     
     if (trimmedValue.length > maxLength) {
-      message.error(`标题长度不能超过${maxLength}个字符`)
+      message.error(t("标题长度不能超过{{value1}}个字符", { value1: maxLength }))
       return
     }
     
@@ -81,13 +84,13 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
     setLoading(true)
     try {
       await projectApi.updateClipTitle(clipId, trimmedValue)
-      message.success('标题更新成功')
+      message.success(t("标题更新成功"))
       setIsEditing(false)
       // 先更新本地状态，再调用回调
       onTitleUpdate?.(trimmedValue)
     } catch (error: any) {
       console.error('更新标题失败:', error)
-      message.error(error.userMessage || error.message || '更新标题失败')
+      message.error(error.userMessage || error.message || t("更新标题失败"))
     } finally {
       setLoading(false)
     }
@@ -101,13 +104,13 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
       console.log('生成标题结果:', result)
       if (result.success && result.generated_title) {
         setEditValue(result.generated_title)
-        message.success('标题生成成功，您可以继续编辑或点击保存')
+        message.success(t("标题生成成功，您可以继续编辑或点击保存"))
       } else {
-        message.error('标题生成失败')
+        message.error(t("标题生成失败"))
       }
     } catch (error: any) {
       console.error('生成标题失败:', error)
-      message.error(error.userMessage || error.message || '生成标题失败')
+      message.error(error.userMessage || error.message || t("生成标题失败"))
     } finally {
       setGenerating(false)
     }
@@ -124,7 +127,7 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
   if (isEditing) {
     return (
       <Modal
-        title="编辑标题"
+        title={t("编辑标题")}
         open={isEditing}
         onCancel={handleCancel}
         footer={null}
@@ -139,7 +142,7 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={handleKeyPress}
             maxLength={maxLength}
-            placeholder="请输入标题"
+            placeholder={t("请输入标题")}
             autoSize={{ minRows: 3, maxRows: 8 }}
             style={{ 
               resize: 'none',
@@ -149,11 +152,10 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
           />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            字符数: {editValue.length}/{maxLength}
+          <div style={{ fontSize: '12px', color: '#666' }}>{t("字符数:")}{editValue.length}/{maxLength}
           </div>
           <Space>
-            <Tooltip title="AI生成标题">
+            <Tooltip title={t("AI生成标题")}>
               <Button
                 icon={<MagicWandIcon />}
                 loading={generating}
@@ -162,22 +164,16 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
                   handleGenerateTitle();
                 }}
                 disabled={loading}
-              >
-                AI生成
-              </Button>
+              >{t("AI生成")}</Button>
             </Tooltip>
-            <Button onClick={handleCancel} disabled={loading || generating}>
-              取消
-            </Button>
+            <Button onClick={handleCancel} disabled={loading || generating}>{t("取消")}</Button>
             <Button
               type="primary"
               icon={<CheckOutlined />}
               loading={loading}
               onClick={handleSave}
               disabled={generating}
-            >
-              保存
-            </Button>
+            >{t("保存")}</Button>
           </Space>
         </div>
       </Modal>
@@ -192,7 +188,7 @@ const EditableTitle: React.FC<EditableTitleProps> = ({
       }}
       className={`ac-editable ${className || ''}`}
       onClick={handleStartEdit}
-      title="点击编辑标题"
+      title={t("点击编辑标题")}
     >
       <span style={{ wordBreak: 'break-word', display: 'inline' }}>
         {title}

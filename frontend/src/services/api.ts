@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import axios from 'axios'
 import { Project, Clip, Collection } from '../store/useProjectStore'
 import { errorHandler } from '../utils/errorHandler'
@@ -106,17 +107,17 @@ api.interceptors.response.use(
     
     // 保持原有的错误对象结构，确保向后兼容
     if (error.response?.status === 429) {
-      const message = error.response?.data?.detail || '系统正在处理其他项目，请稍后再试'
+      const message = error.response?.data?.detail || t("系统正在处理其他项目，请稍后再试")
       error.userMessage = message
     }
     else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-      error.userMessage = '请求超时，项目可能仍在后台处理中，请稍后查看项目状态'
+      error.userMessage = t("请求超时，项目可能仍在后台处理中，请稍后查看项目状态")
     }
     else if (error.code === 'NETWORK_ERROR' || !error.response) {
-      error.userMessage = '网络连接失败，请检查网络连接'
+      error.userMessage = t("网络连接失败，请检查网络连接")
     }
     else if (error.response?.status >= 500) {
-      error.userMessage = '服务器内部错误，请稍后重试'
+      error.userMessage = t("服务器内部错误，请稍后重试")
     }
     
     return Promise.reject(error)

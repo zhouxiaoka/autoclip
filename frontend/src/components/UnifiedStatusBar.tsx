@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+import { useTranslation } from 'react-i18next'
 /**
  * 统一状态栏组件 - 替换旧的复杂进度系统
  * 支持下载中、处理中、完成等状态的统一显示
@@ -24,6 +26,7 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
   onStatusChange,
   onDownloadProgressUpdate
 }) => {
+  useTranslation()
   const { getProgress, startPolling, stopPolling } = useSimpleProgressStore()
   const [isPolling, setIsPolling] = useState(false)
   const [currentDownloadProgress, setCurrentDownloadProgress] = useState(downloadProgress)
@@ -139,21 +142,21 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
     </div>
   )
 
-  if (status === 'importing') return <ProgressRow label="导入中" percent={downloadProgress} />
-  if (status === 'downloading') return <ProgressRow label="下载中" percent={currentDownloadProgress} />
+  if (status === 'importing') return <ProgressRow label={t("导入中")} percent={downloadProgress} />
+  if (status === 'downloading') return <ProgressRow label={t("下载中")} percent={currentDownloadProgress} />
 
   if (status === 'processing') {
-    if (!progress) return <ProgressRow label="初始化中" percent={0} />
+    if (!progress) return <ProgressRow label={t("初始化中")} percent={0} />
     const { stage, percent, message } = progress
-    if (isFailed(message)) return <StatusRow label="处理失败" dot="var(--ac-error)" color="var(--ac-error)" />
+    if (isFailed(message)) return <StatusRow label={t("处理失败")} dot="var(--ac-error)" color="var(--ac-error)" />
     return <ProgressRow label={getStageDisplayName(stage)} percent={percent} />
   }
 
-  if (status === 'completed') return <StatusRow label="已完成" dot="var(--ac-ok)" color="var(--ac-sub)" />
-  if (status === 'failed') return <StatusRow label="处理失败" dot="var(--ac-error)" color="var(--ac-error)" />
+  if (status === 'completed') return <StatusRow label={t("已完成")} dot="var(--ac-ok)" color="var(--ac-sub)" />
+  if (status === 'failed') return <StatusRow label={t("处理失败")} dot="var(--ac-error)" color="var(--ac-error)" />
 
   // 等待
-  return <StatusRow label="等待中" dot="var(--ac-muted)" color="var(--ac-muted)" />
+  return <StatusRow label={t("等待中")} dot="var(--ac-muted)" color="var(--ac-muted)" />
 }
 
 // 简化的进度条组件 - 用于详细进度显示
@@ -168,6 +171,7 @@ export const SimpleProgressDisplay: React.FC<SimpleProgressDisplayProps> = ({
   status,
   showDetails = false
 }) => {
+  useTranslation()
   const { getProgress } = useSimpleProgressStore()
   const progress = getProgress(projectId)
 
