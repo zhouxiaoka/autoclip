@@ -52,7 +52,9 @@ def test_visual_refinement_uses_valid_source_timestamps(root,monkeypatch):
     monkeypatch.setattr(intelligence,'sample',lambda video,times,folder: calls.append(times) or [])
     responses=iter([{'events':[{'id':'e1','label':'避障','start':5,'end':20,'evidence':'障碍密集'}]}, {'events':[{'id':'r','label':'连续避障','start':6,'end':19,'evidence':'复核'}]}])
     monkeypatch.setattr(intelligence,'vision_call',lambda _: next(responses))
-    events, coverage=intelligence.analyze(Path('unused'),Preferences(goal='highlight'))
+    stages=[]
+    events, coverage=intelligence.analyze(Path('unused'),Preferences(goal='highlight'),stages.append)
+    assert stages==['扫描画面，寻找候选高光','复核首选高光的起止边界']
     assert events[0].id=='e1' and events[0].start==6
     assert min(calls[1])==3 and max(calls[1])==22
     assert coverage['sample_interval']==2
@@ -248,3 +250,71 @@ def test_duplicate_rejects_wrong_parent_empty_title_and_invalid_source_ranges(cl
     assert client.post(url, json={**body, 'draft': invalid}).status_code == 422
     assert client.post('/studio/p1/drafts/missing/duplicate', json={**body, 'draft': {**original, 'id': 'missing'}}).status_code == 404
     assert len(store.read('p1')['drafts']) == 1
+
+def test_candidates_are_project_scoped_and_invalid_ranges_are_excluded(client):
+    from backend.core.database import SessionLocal
+    from backend.models import Project, Clip
+    with SessionLocal() as db:
+        db.add(Project(id='other', name='Other project'))
+        db.add(Clip(id='private', project_id='other', title='Other footage', start_time=0, end_time=1, duration=1))
+        db.add(Clip(id='bad', project_id='p1', title='Outside source', start_time=0, end_time=999, duration=999))
+        db.commit()
+    store.change('p1', lambda state: state['events'].extend([
+        {'id':'event-1','label':'Visual event','start':.5,'end':1.5,'evidence':'Visible obstacle'},
+        {'id':'invalid','label':'Bad event','start':2,'end':1},
+    ]))
+    response=client.get('/studio/p1/candidates')
+    assert response.status_code==200,response.text
+    data=response.json()
+    assert abs(data['duration']-3)<.1
+    assert [c['id'] for c in data['candidates']]==['visual-event-1','legacy-c1','legacy-c2']
+    assert data['warnings']==['2 个片段时间无效，已从候选中排除']
+    assert 'Other footage' not in response.text
+    assert client.get('/studio/missing/candidates').status_code==404
+
+def test_candidate_replacement_and_append_save_render_actual_order(client,root,source):
+    import time
+    original=client.post('/studio/p1/drafts',json={'clip_ids':['c1'],'title':'Candidate test'}).json()
+    candidates=client.get('/studio/p1/candidates').json()['candidates']
+    scenes=[{k:v for k,v in c.items() if k!='kind'} for c in reversed(candidates)]
+    updated=client.put('/studio/p1/drafts/'+original['id'],json={**original,'scenes':scenes,'original_audio':False,'subtitles':False})
+    assert updated.status_code==200,updated.text
+    assert [s['start'] for s in updated.json()['scenes']]==[1,0]
+    job=client.post('/studio/p1/drafts/'+original['id']+'/export').json()
+    for _ in range(100):
+        state=client.get('/studio/p1').json()
+        if state['jobs'][0]['status'] in ('completed','failed'):break
+        time.sleep(.05)
+    assert state['jobs'][0]['status']=='completed',state['jobs']
+    assert abs(state['jobs'][0]['result']['duration']-2)<.1
+    output=client.get('/studio/p1/exports/'+job['job_id']+'/video')
+    assert output.status_code==200
+    # Ensure the first decoded output frame is the replacement (late) interval.
+    video=root/'output'/'studio'/(job['job_id']+'.mp4')
+    def pixel(path,start):
+        return subprocess.check_output(['ffmpeg','-v','error','-ss',str(start),'-i',str(path),'-frames:v','1','-vf','scale=1:1','-f','rawvideo','-pix_fmt','rgb24','-'])
+    assert max(abs(a-b) for a,b in zip(pixel(video,0),pixel(source,1)))<10
+
+def test_empty_upload_is_actionable_and_does_not_create_project(client,monkeypatch):
+    from backend.core.database import SessionLocal
+    from backend.models import Project
+    monkeypatch.setattr(intelligence,'ready',lambda:True)
+    response=client.post('/studio/import',data={'goal':'highlight'},files={'video':('empty.mp4',b'','video/mp4')})
+    assert response.status_code==422 and '为空' in response.json()['detail']
+    with SessionLocal() as db: assert db.query(Project).count()==1
+
+def test_export_requires_the_revision_shown_in_editor(client,monkeypatch):
+    from backend.services.studio import jobs
+    monkeypatch.setattr(jobs,'export',lambda pid,draft: {'revision':draft.revision})
+    original=client.post('/studio/p1/drafts',json={'clip_ids':['c1'],'title':'Original'}).json()
+    url='/studio/p1/drafts/'+original['id']
+    assert client.post(url+'/export',json={'revision':1}).json()['revision']==1
+    assert client.put(url,json={**original,'hook':'New text'}).status_code==200
+    assert client.post(url+'/export',json={'revision':1}).status_code==409
+    assert client.post(url+'/export',json={'revision':2}).json()['revision']==2
+
+def test_vision_timeout_is_actionable_and_hides_credentials(monkeypatch):
+    monkeypatch.setattr(intelligence.urllib.request,'urlopen',lambda *a,**k: (_ for _ in ()).throw(TimeoutError('read timed out private-key')))
+    with pytest.raises(RuntimeError,match='提高请求超时') as error:
+        intelligence.vision_call([],config={'base_url':'https://example.test/v1','model':'vision','api_key':'private-key','timeout':10})
+    assert 'private-key' not in str(error.value)

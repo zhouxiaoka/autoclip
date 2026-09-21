@@ -62,3 +62,7 @@ class DuplicateDraft(BaseModel):
         if not self.title:
             raise ValueError('请填写新版本名称')
         return self
+
+
+class ExportDraftRequest(BaseModel):
+    revision: int = Field(ge=1)

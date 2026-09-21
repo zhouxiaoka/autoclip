@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Btn, Dialog, ProgressLine, Row, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
 import { useWorkspace } from './useWorkspace'
-import { Draft, Scene, languages, draftDuration, draftError, moveScene } from './types'
+import { Draft, Scene, languages, draftDuration, draftError, moveScene, applyCandidate } from './types'
+import CandidatePicker from './CandidatePicker'
 import DraftVariantDialog from './DraftVariantDialog'
 import './studio.css'
 
@@ -21,6 +22,8 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const [notice, setNotice] = useState('')
   const [instruction, setInstruction] = useState('')
   const [selected, setSelected] = useState(0)
+  const [picker, setPicker] = useState<number | 'append' | null>(null)
+  const [sourceDuration, setSourceDuration] = useState<number>()
   const [showVariant, setShowVariant] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [showRendered, setShowRendered] = useState(false)
@@ -60,7 +63,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const patch = (changes: Partial<Draft>) => { if (draft) { setDraft({...draft, ...changes}); setShowRendered(false); setError('') } }
   const save = async (): Promise<Draft> => {
     if (!draft) throw new Error('草稿不存在')
-    const invalid = draftError(draft)
+    const invalid = draftError(draft, sourceDuration)
     if (invalid) throw new Error(invalid)
     if (!dirty) return draft
     const result = await studioApi.save(projectId, draft)
@@ -74,7 +77,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const render = async () => {
     await perform('render', async () => {
       const savedDraft = await save()
-      await studioApi.export(projectId, savedDraft.id)
+      await studioApi.export(projectId, savedDraft.id, savedDraft.revision)
       refresh(); setNotice('渲染已开始，可以离开页面，之后在导出记录查看')
     })
   }
@@ -92,7 +95,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     <fieldset disabled={!!busy} className="studio-fieldset">
       <div className="studio-editor-grid"><section><div className={`studio-stage studio-stage--${draft.aspect}`}>
         <div className="studio-video-frame" style={{aspectRatio: draft.aspect==='portrait'?'9/16':draft.aspect==='landscape'?'16/9':undefined}}>
-          <video ref={video} controls preload="metadata" muted={!draft.original_audio} src={showRendered && previewUrl ? previewUrl : studioApi.source(projectId)} style={{objectFit: draft.layout==='crop'?'cover':'contain'}} onLoadedMetadata={() => { if(video.current && scene && !showRendered) video.current.currentTime=scene.start }} onTimeUpdate={() => {const v=video.current; if(v && scene && !showRendered && v.currentTime>=scene.end) {v.pause();v.currentTime=scene.start}}} />
+          <video ref={video} controls preload="metadata" muted={!draft.original_audio} src={showRendered && previewUrl ? previewUrl : studioApi.source(projectId)} style={{objectFit: draft.layout==='crop'?'cover':'contain'}} onLoadedMetadata={() => { if(video.current && scene && !showRendered) { setSourceDuration(video.current.duration); video.current.currentTime=scene.start } }} onTimeUpdate={() => {const v=video.current; if(v && scene && !showRendered && v.currentTime>=scene.end) {v.pause();v.currentTime=scene.start}}} />
           {!showRendered && selected===0 && draft.hook && <div className="studio-hook">{draft.hook}</div>}
         </div>
       </div><div className="studio-row studio-preview-foot"><span className="studio-muted">{showRendered?'实际渲染结果':'原片预览 · 字幕、翻译以渲染结果为准'}</span>{previewUrl ? <Btn size="sm" onClick={() => setShowRendered(!showRendered)}>{showRendered?'查看原片':'播放成片'}</Btn> : <Btn size="sm" disabled={!!active} onClick={render}>{active?'正在渲染':'渲染预览'}</Btn>}</div></section>
@@ -103,15 +106,23 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
         <details className="studio-details"><summary>画面设置</summary><label className="studio-field">画幅<select value={draft.aspect} onChange={e=>patch({aspect:e.target.value as Draft['aspect']})}><option value="original">原画幅</option><option value="portrait">9:16 竖屏</option><option value="landscape">16:9 横屏</option></select></label><label className="studio-field">构图<select value={draft.layout} onChange={e=>patch({layout:e.target.value as Draft['layout']})}><option value="fit">完整画面 · 留边</option><option value="blur">完整画面 · 模糊背景</option><option value="crop">居中裁切</option></select></label><p className="studio-muted">居中裁切可能遮挡障碍或 HUD，请渲染后复核。</p></details>
       </aside></div>
       <div className="studio-prompt"><input aria-label="文案修改要求" placeholder="告诉 AI 怎么改文案，例如：开头改成一个简短的问题" value={instruction} onChange={e=>setInstruction(e.target.value)} /><Btn variant="cta" loading={busy==='rewrite'} disabled={!instruction.trim()} onClick={rewrite}>改一版文案</Btn></div>
-      {undo && <Btn variant="text" onClick={()=>{setDraft(undo);setUndo(null);setShowRendered(false)}}>撤销上次文案修改</Btn>}
+      {undo && <Btn variant="text" onClick={()=>{setDraft({...undo, revision:draft.revision});setUndo(null);setShowRendered(false)}}>撤销上次修改</Btn>}
       <details className="studio-details studio-source-details"><summary>调整镜头 <span className="ac-mono">{draft.scenes.length}</span> · 顺序与起止点</summary>
-        {draft.scenes.map((s,i)=><div className="studio-scene-row" key={s.id}><Btn size="sm" onClick={()=>{setSelected(i);setShowRendered(false)}}>{i+1}. {s.label}</Btn><label>起点（秒）<input type="number" min={0} step={.1} value={s.start} onChange={e=>updateScene(i,{start:Number(e.target.value)})}/></label><label>终点（秒）<input type="number" min={0} step={.1} value={s.end} onChange={e=>updateScene(i,{end:Number(e.target.value)})}/></label><div className="studio-actions"><Btn size="sm" disabled={i===0} onClick={()=>patch({scenes:moveScene(draft,i,-1).scenes})}>上移</Btn><Btn size="sm" disabled={i===draft.scenes.length-1} onClick={()=>patch({scenes:moveScene(draft,i,1).scenes})}>下移</Btn><Btn size="sm" disabled={draft.scenes.length===1} onClick={()=>{patch({scenes:draft.scenes.filter((_,index)=>index!==i)});setSelected(0)}}>移除</Btn></div></div>)}
+        <Btn size="sm" disabled={draft.scenes.length >= 30} onClick={() => setPicker('append')}>追加镜头</Btn>
+        {draft.scenes.map((s,i)=><div className="studio-scene-row" key={s.id}><Btn size="sm" onClick={()=>{setSelected(i);setShowRendered(false)}}>{i+1}. {s.label}</Btn><label>起点（秒）<input type="number" min={0} step={.1} value={s.start} onChange={e=>updateScene(i,{start:Number(e.target.value)})}/></label><label>终点（秒）<input type="number" min={0} step={.1} value={s.end} onChange={e=>updateScene(i,{end:Number(e.target.value)})}/></label><div className="studio-actions"><Btn size="sm" onClick={() => setPicker(i)}>替换</Btn><Btn size="sm" disabled={i===0} onClick={()=>patch({scenes:moveScene(draft,i,-1).scenes})}>上移</Btn><Btn size="sm" disabled={i===draft.scenes.length-1} onClick={()=>patch({scenes:moveScene(draft,i,1).scenes})}>下移</Btn><Btn size="sm" disabled={draft.scenes.length===1} onClick={()=>{patch({scenes:draft.scenes.filter((_,index)=>index!==i)});setSelected(0)}}>移除</Btn></div></div>)}
       </details>
     </fieldset>
     {active && <div className="studio-render-state"><ProgressLine percent={active.percent}/><span className="studio-muted">{active.status==='queued'?'等待渲染':'渲染成片'} · {active.percent}%</span></div>}
     {currentJob?.status==='failed' && <p className="studio-error" role="alert">{currentJob.error}</p>}
     {currentJob?.result?.warnings.map(w=><p className="studio-muted" key={w}>{w}</p>)}
     {error && <p className="studio-error" role="alert">{error}</p>}<p className="studio-muted" role="status">{notice}</p>
+    {picker !== null && <CandidatePicker projectId={projectId} mode={picker === 'append' ? 'append' : 'replace'} onClose={() => setPicker(null)} onChoose={candidate => {
+      try {
+        const next = applyCandidate(draft, candidate, picker, crypto.randomUUID())
+        setUndo(draft); patch({ scenes: next.scenes }); setSelected(picker === 'append' ? draft.scenes.length : picker)
+        setPicker(null); setNotice('镜头已更新，请保存后重新渲染。换镜头后请核对开头文案是否仍符合画面。')
+      } catch(e) { setPicker(null); setError(errorText(e)) }
+    }} />}
     <DraftVariantDialog open={showVariant} projectId={projectId} draft={draft} onClose={() => setShowVariant(false)} onCreated={created => {
       try { localStorage.removeItem(localKey) } catch { /* The new server draft is already durable. */ }
       navigate(`/project/${projectId}/studio/${created.id}`)

@@ -7,3 +7,19 @@ const {draftError,moveScene,draftDuration}=m.exports
 const draft={title:'draft',scenes:[{id:'a',start:0,end:2},{id:'b',start:4,end:7}]}
 test('scene reorder preserves source ranges and does not mutate original',()=>{const next=moveScene(draft,1,-1);assert.deepEqual(next.scenes.map(s=>s.id),['b','a']);assert.equal(draft.scenes[0].id,'a');assert.equal(draftDuration(next),5)})
 test('invalid boundaries and empty title block save/export',()=>{assert.ok(draftError({...draft,title:'  '}));assert.ok(draftError({...draft,scenes:[{start:4,end:2}]}));assert.ok(draftError({...draft,scenes:[{start:NaN,end:3}]}));assert.equal(draftError(draft),null)})
+const {applyCandidate}=m.exports
+const candidate={id:'visual-event',kind:'visual',label:'Obstacle',start:7,end:10,evidence:'Source evidence'}
+test('candidate replacement preserves text and other scenes without leaking candidate-only fields',()=>{
+ const original={...draft,hook:'My hook',language:'en'}
+ const next=applyCandidate(original,candidate,0,'new-scene')
+ assert.equal(next.hook,'My hook');assert.equal(next.language,'en')
+ assert.deepEqual(next.scenes[0],{id:'new-scene',label:'Obstacle',start:7,end:10,evidence:'Source evidence'})
+ assert.equal(next.scenes[1],original.scenes[1]);assert.equal(original.scenes[0].start,0)
+})
+test('appending the same source twice gives independent scene identities and enforces limits',()=>{
+ const next=applyCandidate(applyCandidate(draft,candidate,'append','copy1'),candidate,'append','copy2')
+ assert.deepEqual(next.scenes.slice(-2).map(s=>s.id),['copy1','copy2'])
+ assert.throws(()=>applyCandidate({...draft,scenes:Array(30).fill(draft.scenes[0])},candidate,'append','extra'),/30/)
+ assert.throws(()=>applyCandidate(draft,candidate,99,'bad'),/不存在/)
+ assert.ok(draftError(next,8));assert.equal(draftError(next,10),null)
+})

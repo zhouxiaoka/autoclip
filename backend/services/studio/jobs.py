@@ -73,10 +73,10 @@ def _analyze(project_id, prefs, url, browser):
         if url:
             download(project_id, url, browser)
         video = source(project_id)
-        def thinking(data):
-            data['analysis'].update(message='识别高光与组织成片')
-        store.change(project_id, thinking)
-        events, coverage = analyze(video, prefs)
+        def stage(message):
+            store.change(project_id, lambda data: data['analysis'].update(message=message))
+        events, coverage = analyze(video, prefs, stage)
+        stage('组织推广开头与成片草稿' if prefs.goal == 'promo' else '整理高光成片草稿')
         drafts = make_drafts(events, prefs)
         def complete(data):
             data['events'] = [e.model_dump() for e in events]

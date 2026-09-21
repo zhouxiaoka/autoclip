@@ -46,9 +46,13 @@ def vision_call(content, config=None):
     try:
         with urllib.request.urlopen(req, timeout=config.get('timeout', 180)) as response:
             result = json.load(response)
+    except TimeoutError:
+        raise RuntimeError('视觉模型响应超时，请在「设置 → 视觉理解」中提高请求超时后重试；原素材已保留') from None
     except urllib.error.HTTPError as error:
         # Never include provider response bodies, which may echo credentials or input.
-        raise RuntimeError(f'视觉模型请求失败（HTTP {error.code}）') from None
+        raise RuntimeError(f'视觉模型请求失败（HTTP {error.code}），请检查视觉模型设置后重试') from None
+    except urllib.error.URLError:
+        raise RuntimeError('无法连接视觉模型，请检查接口地址与网络后重试') from None
     return decode_json(result['choices'][0]['message']['content'])
 
 def validate_scenes(scenes, duration):
@@ -68,7 +72,7 @@ def sample(video, times, folder):
         content.extend([{'type': 'text', 'text': f'原片时间 {timestamp:.2f} 秒'}, {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(frame.read_bytes()).decode()}}])
     return content
 
-def analyze(video: Path, prefs: Preferences):
+def analyze(video: Path, prefs: Preferences, on_stage=None):
     duration = _probe(video).get('duration', 0)
     if duration < 1 or duration > 7200:
         raise ValueError('视觉分析目前支持 1 秒至 2 小时的素材')
@@ -80,6 +84,8 @@ def analyze(video: Path, prefs: Preferences):
               f'原片总长 {duration:.2f} 秒，采样间隔 {interval:.2f} 秒，期望成片 {prefs.duration} 秒。'
               '返回 {"events":[{"id":"event-1","label":"描述","start":秒,"end":秒,"evidence":"具体画面依据与不确定性"}]}。'
               '边界必须在原片范围内；每段不超过期望成片时长；无可用证据则返回空列表。')
+    if on_stage:
+        on_stage('扫描画面，寻找候选高光')
     with tempfile.TemporaryDirectory(prefix='ac-vision-') as tmp:
         response = vision_call([{'type': 'text', 'text': prompt}] + sample(video, times, Path(tmp)))
     events = [Scene.model_validate(e) for e in response.get('events', [])[:3]]
@@ -91,6 +97,8 @@ def analyze(video: Path, prefs: Preferences):
     start, end = max(0, best.start - 2), min(duration - .1, best.end + 2)
     dense_interval = max(1, (end - start) / 24)
     dense_times = [start + i * dense_interval for i in range(25) if start + i * dense_interval <= end]
+    if on_stage:
+        on_stage('复核首选高光的起止边界')
     with tempfile.TemporaryDirectory(prefix='ac-vision-refine-') as tmp:
         detail = vision_call([{'type': 'text', 'text': prompt + f' 现在是候选区间 {start:.2f}–{end:.2f} 秒的密集复核，仅返回这一段最合适的完整事件；不得超出此区间。'}] + sample(video, dense_times, Path(tmp)))
     refined = [Scene.model_validate(e) for e in detail.get('events', [])[:1]]

@@ -12,7 +12,7 @@ from backend.models.clip import Clip
 from backend.schemas.project import ProjectCreate, ProjectType
 from backend.services.project_service import ProjectService
 from backend.services.studio import store, jobs, intelligence
-from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, RewriteRequest, Preferences, Language, Scene
+from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene
 
 router = APIRouter()
 
@@ -83,6 +83,10 @@ async def import_visual(
     ext = Path(video.filename or '').suffix.lower() if video else '.mp4'
     if ext not in ('.mp4', '.mov', '.mkv', '.webm', '.avi'):
         raise HTTPException(422, '不支持的视频格式')
+    first_chunk = await video.read(1024 * 1024) if video else None
+    if video and not first_chunk:
+        await video.close()
+        raise HTTPException(422, '视频文件为空，请重新选择')
     prefs = Preferences(goal=goal, language=language, aspect=aspect, duration=duration)
     project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '游戏成片', project_type=ProjectType.ENTERTAINMENT, source_url=url, settings={'creative': prefs.model_dump(), 'creative_browser': browser}))
     pid = str(project.id)
@@ -92,10 +96,9 @@ async def import_visual(
         if video:
             path = raw / ('input' + ext)
             with path.open('wb') as target:
+                target.write(first_chunk)
                 while chunk := await video.read(1024 * 1024):
                     target.write(chunk)
-            if not path.stat().st_size:
-                raise ValueError('视频文件为空')
             project.video_path = str(path)
             db.commit()
         call(jobs.analyze_project, pid, prefs, url, browser)
@@ -119,6 +122,30 @@ def source_video(project_id: str, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
     path = call(jobs.source, project_id)
     return FileResponse(path)
+
+@router.get('/{project_id}/candidates')
+def candidates(project_id: str, db: Session = Depends(get_db)):
+    """Only offer ranges from this project's actual source video."""
+    project_or_404(project_id, db)
+    info = call(intelligence._probe, call(jobs.source, project_id))
+    duration = info.get('duration', 0)
+    rows = []
+    skipped = 0
+    raw_events = call(store.read, project_id)['events']
+    raw_clips = db.query(Clip).filter(Clip.project_id == project_id).order_by(Clip.start_time).all()
+    sources = [('visual', e) for e in raw_events]
+    sources.extend(('legacy', {'id': str(c.id), 'label': c.title[:120], 'start': c.start_time,
+                              'end': c.end_time, 'evidence': (c.recommendation_reason or '')[:1000]}) for c in raw_clips)
+    for kind, raw in sources:
+        try:
+            scene = Scene.model_validate(raw)
+            intelligence.validate_scenes([scene], duration)
+        except ValueError:
+            skipped += 1
+            continue
+        rows.append({**scene.model_dump(), 'id': f'{kind}-{scene.id}', 'kind': kind})
+    return {'duration': duration, 'candidates': rows,
+            'warnings': [f'{skipped} 个片段时间无效，已从候选中排除'] if skipped else []}
 
 @router.post('/{project_id}/analyze')
 def analyze_again(project_id: str, db: Session = Depends(get_db)):
@@ -194,11 +221,13 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
     return candidate
 
 @router.post('/{project_id}/drafts/{draft_id}/export')
-def export(project_id: str, draft_id: str, db: Session = Depends(get_db)):
+def export(project_id: str, draft_id: str, body: ExportDraftRequest | None = None, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
     raw = next((d for d in store.read(project_id)['drafts'] if d['id'] == draft_id), None)
     if not raw:
         raise HTTPException(404, '草稿不存在')
+    if body and body.revision != raw['revision']:
+        raise HTTPException(409, '草稿已在另一窗口更新，请重新加载后再导出')
     draft = Draft.model_validate(raw)
     call(validate_draft, project_id, draft)
     return call(jobs.export, project_id, draft)
