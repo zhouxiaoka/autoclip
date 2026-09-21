@@ -7,6 +7,7 @@ from backend.services.publish_export import ExportRequest, _build_filter, _load_
 from backend.services.studio.intelligence import text_json, validate_scenes
 from backend.services.studio.models import Draft
 from backend.services.studio.titles import template_filters
+from backend.services.studio import title_art
 from backend.services.studio.store import directory
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
@@ -35,7 +36,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
         for e, t in zip(entries, rows):
             e['text'] = t
     font = resolve_cjk_font()
-    if hook and not font:
+    if hook and draft.title_style not in title_art.STYLES and not font:
         raise ValueError('缺少中文字体，无法烧录开头文字，请安装 Noto Sans CJK')
     if draft.subtitles and not entries:
         warnings.append('原素材没有可用字幕，本次未烧录字幕')
@@ -60,13 +61,24 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                 req = ExportRequest(project_id, draft.id, layout=draft.layout)
                 built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font)
                 clip_path = folder / f'{i}.mp4'
-                cmd = [get_ffmpeg_path(), '-v', 'error', '-ss', str(scene.start), '-i', str(video), '-t', str(scene.end - scene.start)]
+                artwork = None
+                if hook and i == 0 and draft.title_style in title_art.STYLES:
+                    artwork = folder / 'title-art.png'
+                    artwork.write_bytes(title_art.png_bytes(hook, draft.title_style, w, h, **title_art.options_for(draft)))
+                cmd = [get_ffmpeg_path(), '-v', 'error', '-ss', str(scene.start), '-i', str(video)]
+                if artwork:
+                    cmd += ['-loop', '1', '-i', str(artwork)]
+                cmd += ['-t', str(scene.end-scene.start)]
                 if built:
                     graph, last = built
                     graph = graph.replace(':reload=0', ':expansion=none:reload=0').replace(':fontsize=42:', f':fontsize={max(18, round(w * .06))}:').replace(f'[fg]scale={w}:-2[fg2]', f'[fg]scale={w}:{h}:force_original_aspect_ratio=decrease[fg2]')
                     if draft.layout == 'crop':
                         graph = graph.replace(f'crop={w}:{h}[base]', f'crop={w}:{h}:x=(iw-ow)*{draft.crop_x}:y=(ih-oh)/2,setsar=1[base]')
-                    if hook and i == 0 and draft.title_style != 'plain':
+                    if artwork:
+                        x, y = title_art.overlay_motion(draft.title_style, draft.title_motion, h)
+                        graph += f";[1:v]format=rgba[titleart];[{last}][titleart]overlay=x='{x}':y='{y}':enable='lt(t,4)':shortest=1[styled]"
+                        last = 'styled'
+                    elif hook and i == 0 and draft.title_style != 'plain':
                         titles, last = template_filters(hook, draft.title_style, w, h, folder, font, last, scene.end-scene.start)
                         graph += ';' + ';'.join(titles)
                     cmd += ['-filter_complex', graph, '-map', f'[{last}]']

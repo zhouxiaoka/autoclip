@@ -323,7 +323,7 @@ def test_vision_timeout_is_actionable_and_hides_credentials(monkeypatch):
 def test_portrait_promo_defaults_and_legacy_compatibility(monkeypatch):
     monkeypatch.setattr(intelligence, 'vision_call', lambda _: {'hooks':[{'title':'Run','hook':'Can you escape?'}]})
     result=intelligence.make_drafts([Scene(id='s',start=0,end=1)],Preferences(goal='promo',aspect='portrait'))[0]
-    assert result['layout']=='crop' and result['title_style']=='impact'
+    assert result['layout']=='crop' and result['title_style']=='comic'
     assert draft().layout=='fit' and draft().title_style=='plain'
     for x in (-.1,1.1,float('nan')):
         with pytest.raises(ValidationError): draft(crop_x=x)
@@ -352,3 +352,61 @@ def test_portrait_fills_frame_and_applies_focus_and_title(root,style,x,expected)
     # Bottom of the portrait must contain the selected footage, never a black bar.
     assert pixel[2 if expected=='blue' else 0]>200
     assert max(pixel)-min(pixel)>180
+
+
+@pytest.mark.parametrize('style',['comic','neon','arena'])
+def test_title_art_preview_matches_export_geometry(root,style):
+    import io
+    from PIL import Image,ImageChops,ImageStat
+    from backend.services.studio import title_art,render
+    raw=root/'raw';raw.mkdir()
+    source=raw/'input.mp4'
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','color=0x404040:s=320x180:r=30:d=1','-y',str(source)],check=True)
+    d=Draft(id=style,title=style,hook='CAN YOU\nESCAPE?',title_style=style,title_motion=False,aspect='portrait',layout='crop',subtitles=False,original_audio=False,scenes=[Scene(id='s',start=0,end=.7)])
+    layer=Image.open(io.BytesIO(title_art.png_bytes(d.hook,style,1080,1920)))
+    box=layer.getbbox()
+    assert box and box[0]>=1080*.04 and box[2]<=1080*.96 and box[3]<1920*.5
+    expected=Image.new('RGBA',(1080,1920),(64,64,64,255));expected.alpha_composite(layer)
+    render.render_draft('p1',source,d,style,lambda _:None)
+    output=root/'output/studio'/f'{style}.mp4'
+    png=subprocess.check_output(['ffmpeg','-v','error','-ss','0.3','-i',str(output),'-frames:v','1','-f','image2pipe','-vcodec','png','-'])
+    actual=Image.open(io.BytesIO(png)).convert('RGB')
+    diff=ImageChops.difference(actual.crop(box),expected.convert('RGB').crop(box))
+    assert max(ImageStat.Stat(diff).mean)<8  # Allows H.264 color conversion, not layout drift.
+
+
+def test_title_preview_api_does_not_mutate_draft_or_call_model(client,monkeypatch):
+    from PIL import Image
+    import io
+    d=client.post('/studio/p1/drafts',json={'clip_ids':['c1'],'title':'Preview'}).json()
+    monkeypatch.setattr(intelligence,'vision_call',lambda *a,**k: pytest.fail('preview must not invoke a model'))
+    body={**d,'hook':'追兵就在身后！','title_style':'comic','aspect':'portrait','title_accent':'#ff6633'}
+    response=client.post('/studio/p1/title-preview',json=body)
+    assert response.status_code==200 and response.headers['content-type']=='image/png'
+    assert Image.open(io.BytesIO(response.content)).size==(1080,1920)
+    assert store.read('p1')['drafts'][0]['hook']==''
+    saved=client.put('/studio/p1/drafts/'+d['id'],json=body).json()
+    assert saved['title_style']=='comic' and saved['title_accent']=='#ff6633'
+    assert client.post('/studio/p1/title-preview',json={**body,'title_accent':'bad'}).status_code==422
+    assert client.post('/studio/missing/title-preview',json=body).status_code==404
+
+
+def test_artwork_cjk_manual_breaks_and_limits():
+    from backend.services.studio import title_art
+    for text in ['追兵就在身後！','逃げ切れる？','100% {escape}: Go!']:
+        assert title_art.artwork(text,'neon',1080,1920).getbbox()
+    font=title_art.font_for('CAN YOU',120)
+    assert title_art.lines_for('CAN YOU\nESCAPE?',font,800)==['CAN YOU','ESCAPE?']
+    with pytest.raises(ValueError,match='太长'):
+        title_art.artwork('a\nb\nc\nd','comic',1080,1920)
+    with pytest.raises(ValueError,match='像素'):
+        title_art.artwork('Hi','comic',20000,20000)
+
+
+def test_title_thumbnail_is_packaged_style_and_rejects_unknown(client):
+    from PIL import Image
+    import io
+    r=client.get('/studio/title-presets/arena/thumbnail')
+    assert r.status_code==200 and Image.open(io.BytesIO(r.content)).size==(324,174)
+    assert 'max-age' in r.headers['cache-control']
+    assert client.get('/studio/title-presets/unknown/thumbnail').status_code==422

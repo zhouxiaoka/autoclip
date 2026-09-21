@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional, Literal
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from backend.core.database import get_db
 from backend.models.project import Project
@@ -37,6 +37,11 @@ def call(fn, *args, **kwargs):
 def validate_draft(project_id, draft):
     duration = intelligence._probe(jobs.source(project_id)).get('duration', 0)
     intelligence.validate_scenes(draft.scenes, duration)
+
+@router.get('/title-presets/{style}/thumbnail')
+def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena']):
+    from backend.services.studio.title_art import thumbnail
+    return Response(thumbnail(style), media_type='image/png', headers={'Cache-Control':'public, max-age=86400'})
 
 @router.get('/capabilities')
 def capabilities():
@@ -122,6 +127,19 @@ def source_video(project_id: str, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
     path = call(jobs.source, project_id)
     return FileResponse(path)
+
+@router.post('/{project_id}/title-preview')
+def title_preview(project_id: str, body: Draft, db: Session = Depends(get_db)):
+    from backend.services.studio import title_art
+    project_or_404(project_id, db)
+    info = call(intelligence._probe, call(jobs.source, project_id))
+    w,h = {'portrait':(1080,1920),'landscape':(1920,1080)}.get(body.aspect, (info.get('width'),info.get('height')))
+    if not w or not h:
+        raise HTTPException(422,'无法读取原视频尺寸')
+    # Use the same output resolution/font metrics as export; no LLM call or draft mutation.
+    w,h = int(w)//2*2, int(h)//2*2
+    data = call(title_art.png_bytes, body.hook, body.title_style, w, h, **title_art.options_for(body))
+    return Response(data, media_type='image/png', headers={'Cache-Control':'no-store'})
 
 @router.get('/{project_id}/candidates')
 def candidates(project_id: str, db: Session = Depends(get_db)):

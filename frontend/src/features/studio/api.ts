@@ -4,6 +4,8 @@ export const studioApi = {
   source: (pid: string) => `${api.defaults.baseURL}/studio/${pid}/source`,
   capabilities: (): Promise<{ visual_analysis: boolean; visual_model: string }> => api.get('/studio/capabilities'),
   get: (pid: string, signal?: AbortSignal): Promise<Workspace> => api.get(`/studio/${pid}`, { signal }),
+  titleThumbnail: (style: string) => `${api.defaults.baseURL}/studio/title-presets/${style}/thumbnail?v=1`,
+  titlePreview: (pid: string, draft: Draft, signal?: AbortSignal): Promise<Blob> => api.post(`/studio/${pid}/title-preview`, draft, {responseType:'blob', signal}),
   candidates: (pid: string, signal?: AbortSignal): Promise<CandidateList> => api.get(`/studio/${pid}/candidates`, { signal }),
   import: (body: FormData): Promise<{ project_id: string }> => api.post('/studio/import', body, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 0 }),
   analyze: (pid: string) => api.post(`/studio/${pid}/analyze`),

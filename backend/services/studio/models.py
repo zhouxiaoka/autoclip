@@ -35,7 +35,12 @@ class Draft(BaseModel):
     aspect: Literal['original', 'portrait', 'landscape'] = 'original'
     layout: Literal['fit', 'crop', 'blur'] = 'fit'
     crop_x: float = Field(default=.5, ge=0, le=1, allow_inf_nan=False)
-    title_style: Literal['plain', 'impact', 'card'] = 'plain'
+    title_style: Literal['plain', 'impact', 'card', 'comic', 'neon', 'arena'] = 'plain'
+    title_template_version: Literal[1] = 1
+    title_motion: bool = True
+    title_scale: float = Field(default=1, ge=.75, le=1.2, allow_inf_nan=False)
+    title_y: float = Field(default=.12, ge=.06, le=.70, allow_inf_nan=False)
+    title_accent: str | None = Field(default=None, pattern=r'^#[0-9a-fA-F]{6}$')
     subtitles: bool = True
     original_audio: bool = True
     revision: int = Field(default=1, ge=1)

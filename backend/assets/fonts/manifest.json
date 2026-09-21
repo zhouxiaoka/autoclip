@@ -1,0 +1,26 @@
+{
+  "repository": "https://github.com/google/fonts",
+  "commit": "e44c4b011a820c2cbe2fd2cfa8052037d7edb571",
+  "files": {
+    "BarlowCondensed-Black.ttf": {
+      "url": "https://raw.githubusercontent.com/google/fonts/e44c4b011a820c2cbe2fd2cfa8052037d7edb571/ofl/barlowcondensed/BarlowCondensed-Black.ttf",
+      "sha256": "e74b750df582c608f35db467b711b2b60d2217618e85e60b72b42dfd00446cab"
+    },
+    "BarlowCondensed-BlackItalic.ttf": {
+      "url": "https://raw.githubusercontent.com/google/fonts/e44c4b011a820c2cbe2fd2cfa8052037d7edb571/ofl/barlowcondensed/BarlowCondensed-BlackItalic.ttf",
+      "sha256": "e1ed5d7e50c6a4498454d40509ce2362384a2c7870df3418fdbd010f81dffad3"
+    },
+    "NotoSansSC.ttf": {
+      "url": "https://raw.githubusercontent.com/google/fonts/e44c4b011a820c2cbe2fd2cfa8052037d7edb571/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf",
+      "sha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da"
+    },
+    "BarlowCondensed-OFL.txt": {
+      "url": "https://raw.githubusercontent.com/google/fonts/e44c4b011a820c2cbe2fd2cfa8052037d7edb571/ofl/barlowcondensed/OFL.txt",
+      "sha256": "186d750eb496a4c17a76385f82be6aea2ac1cf2de074a811d63786cf374ea73f"
+    },
+    "NotoSansSC-OFL.txt": {
+      "url": "https://raw.githubusercontent.com/google/fonts/e44c4b011a820c2cbe2fd2cfa8052037d7edb571/ofl/notosanssc/OFL.txt",
+      "sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9"
+    }
+  }
+}
