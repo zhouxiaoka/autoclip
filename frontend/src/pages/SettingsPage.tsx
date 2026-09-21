@@ -476,9 +476,9 @@ const SettingsPage: React.FC = () => {
 
           {/* ---------------- 反馈 ---------------- */}
           {active === 'feedback' && (
-            <Section title={t("反馈")} description={t("哪里不对、想要什么，直接说。运行环境会自动附上，不含视频内容与 API 密钥。")}>
+            <Section title={t("反馈")} description={t("哪里不对、想要什么，直接说。运行环境会自动附上，不含视频内容与 API 密钥。正文会公开出现在 GitHub。")}>
               <div className="ac-rows">
-                <Row label={t("发送反馈")} hint={t("在应用内写一句话即可，我们每周统一看。")}>
+                <Row label={t("发送反馈")} hint={t("在应用内写一句话即可。故障会进 GitHub Issue，想法会进 Discussions。")}>
                   <Btn variant="cta" size="sm" style={{ height: 32, fontSize: 13, padding: '0 16px' }} onClick={() => setFeedbackOpen(true)}>
                     <Icon.Chat size={13} />{t("写反馈")}</Btn>
                 </Row>
@@ -593,7 +593,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
             <Btn size="sm" loading={checkingUpdate} onClick={() => void handleCheckUpdate()}>{t('检查更新')}</Btn>
           </Row>
         )}
-        <Row label={t("匿名使用统计")} hint={t("只采集功能使用、出片成功 / 失败等匿名事件，不含视频内容、字幕文本或 API 密钥。关闭后请到 GitHub 反馈。")}>
+        <Row label={t("匿名使用统计")} hint={t("只采集功能使用、出片成功 / 失败等匿名事件，不含视频内容、字幕文本或 API 密钥。关闭后仍可在反馈里主动发送。")}>
           <Switch checked={analyticsOn} onChange={onAnalyticsChange} />
         </Row>
         <Row label={t("崩溃报告")} hint={t("把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。")}>

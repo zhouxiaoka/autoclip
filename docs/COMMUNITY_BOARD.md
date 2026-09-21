@@ -21,7 +21,7 @@ Issue 区曾经被「用不了」和「我觉得应该」混在一起。入口�
 | Featurebase / Productlane | 不用 | 免费档没有 Agent 能用的 API，付费从月费开始 |
 | Linear | 不用 | 不适合作为公众提需求的地方 |
 
-不打开 GitHub 的人用应用内反馈。它跟着界面语言走，进周报，不直接变成路线图卡片。关掉匿名统计后，应用内发不出去，改去 GitHub。
+不打开 GitHub 的人用应用内反馈。它跟着界面语言走。点发送不看匿名统计开关：句子先进入 PostHog，每小时由 `.github/workflows/ingest-feedback.yml` 写进 GitHub。故障开 Issue，想法开 Ideas，其他开 Q&A。这些帖子带 `from-app` 或反馈编号，只是收件箱，不直接变成路线图卡片。邮箱不写进公开帖。没有配置或网络失败时，应用会打开预填好的 GitHub 页面。
 
 ## 三条通道
 
@@ -30,7 +30,7 @@ Issue 区曾经被「用不了」和「我觉得应该」混在一起。入口�
   │
   ├─ 想法、用法、模型、提问 → Discussions
   ├─ 能复现的故障 → Issue（bug 模板）
-  └─ 不想用 GitHub → 应用内反馈（关掉匿名统计则改去 GitHub）
+  └─ 不想用 GitHub → 应用内反馈（自动写入 Issue 或 Discussions）
           │
           ▼
      Product Agent 聚类、去重、排序

@@ -32,4 +32,4 @@ description: >-
 - 不要把 Q&A 和能复现的 bug 混进路线图。bug 用现有 bug 模板。
 - 不要为了看板去部署 Quackback、Featurebase 或 Linear。触发条件写在 `docs/COMMUNITY_BOARD.md`。
 - 不要编造票数。没有反应数时就说没有。
-- 应用内反馈可以出现在周报里，不能直接变成路线图卡片。不要把用户指回飞书表格。
+- 应用内反馈会由 `scripts/ingest_app_feedback.py` 写进 Issue（故障）或 Discussions（想法 / 其他）。这些帖子是收件箱，带反馈编号；不要把 `from-app` 推进到 Planned。不要把用户指回飞书表格。

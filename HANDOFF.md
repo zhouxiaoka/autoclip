@@ -1,7 +1,9 @@
 # AutoClip — 项目状态 / 进度 / 计划
 
-> 更新：2026-09-20 · 基于 `main@aaf863bb`（**v1.2.1 已发布**：Release 含 macOS arm64 DMG 223 MB + Windows x64 安装包 145 MB；
-> 截至 2026-09-20 下载量 Windows 1136 / DMG 334 —— Windows 已是主力平台）
+> 更新：2026-09-21 · 基于 `main@de4dee37`（**v1.3.1 已发布**，2026-09-21 15:47 UTC）。
+> Release：macOS arm64 DMG 233 MB、Windows x64 安装包 166 MB，另有应用内更新包、`.sig` 和 `latest.json`。
+> v1.3.0 及更早需要先手动安装 v1.3.1，之后才能在设置里检查更新。
+> 2026-09-20 的下载快照是 v1.2.1（Windows 1136 / DMG 334）。v1.3.1 刚发布，不用刚挂上的下载数做平台对比。
 
 AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地视频，自动识别精彩片段、
 生成切片与合集。本文是项目当前状态与近期计划的单一事实来源；长期规划见 `ROADMAP.md`。
@@ -18,7 +20,7 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 | LLM | OpenAI 及一切 OpenAI 兼容接口（自定义 base_url）/ Gemini(google-genai) / 通义千问(dashscope) / 硅基流动 / 本地预设 Ollama、LM Studio | `backend/core/llm_providers.py`、`llm_manager.py`、`local_presets.py` |
 | CLI / MCP | `autoclip` 命令行 + MCP server（stdio），不起 FastAPI / Celery 直接跑流水线 | `backend/cli.py`、`mcp_server.py`、`services/local_runner.py` |
 
-四种交付形态：**桌面客户端**（macOS arm64 DMG 主推；Windows x64 安装包 v1.2.1 起提供，尚未在真机验证）、**Docker 部署**（README 推荐路径）、
+四种交付形态：**桌面客户端**（当前包是 v1.3.1 的 macOS arm64 DMG 与 Windows x64 安装包；Windows 包从 v1.2.1 起就有，干净机器上的完整出片仍没有记录）、**Docker 部署**（README 推荐路径）、
 **本地脚本启动**（`start_autoclip.sh`）、**CLI / MCP**（`pip install -e .`，面向开发者与 agent，`docs/CLI_AND_MCP.md`）。
 
 ---
@@ -26,6 +28,8 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 ## 二、当前状态
 
 ### 已完成
+- **v1.3.1（2026-09-21）**：八语界面与官网、八语 README、匿名统计 v2、崩溃上报、应用内检查更新。v1.3.0 及更早必须先手动安装这一版。生产构建验收见 `docs/UPDATES_AND_SENTRY.md`：一次前端异常能进 Sentry，且正文被去掉。该记录不代替 Windows 真机和真实视频出片。PostHog 新口径的线上接收也还没单独验收（`docs/ANALYTICS_V2.md`）。
+- **v1.3.0（2026-09-20）**：CLI / MCP、Ollama 与 LM Studio 预设、时长画像与评分兜底、竖屏发布导出、Docker 设置页可保存、失败要写明阶段、通义千问国际站、`min_score` 接到 step3、周更发版脚本。
 - **v1.2.0（2026-06-03）**：桌面端 DMG 端到端可用（内置便携 Python + 静态 ffmpeg + 按需安装 faster-whisper），
   `desktop-build.yml` 在 tag 上跑通并自动挂 Release；v1.2.0 DMG 已有 2000+ 下载。
 - **PostHog 匿名埋点** + 隐私政策 + 设置页开关（`docs/ANALYTICS.md`、`docs/PRIVACY*.md`）。
@@ -81,10 +85,10 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 ### 仍未完成（ROADMAP Phase 0）
 | 项 | 状态 |
 |---|---|
-| Apple Developer ID 签名 + 公证 | 未做，`signingIdentity: null`，用户需右键打开 |
-| 多平台包（Windows / Intel mac / Linux） | Windows x64 已在 runner 出包（#93），随 v1.2.1 Release 发布，**真机未验证**；Intel mac / Linux 未做 |
-| Sentry 崩溃上报 | 未接 |
-| Tauri updater 自动更新 | 未接 |
+| Apple Developer ID 签名 + 公证 | 未做。v1.3.1 的更新包有 minisign `.sig`，安装包仍是 ad-hoc，macOS 首次要右键打开 |
+| 多平台包（Windows / Intel mac / Linux） | Windows x64 已随 v1.3.1 发布，干净机器出片仍未记录；Intel mac / Linux 未做 |
+| Sentry 崩溃上报 | 已接入。v1.3.1 生产构建验收过一次前端异常；安装包真机收数未做 |
+| Tauri updater 自动更新 | v1.3.1 起可在设置里检查更新。v1.3.0 及更早要先手动安装 |
 | 依赖锁版本 / 构建缓存 | 直接依赖已锁定（#94）；PBS + ffmpeg 下载有 actions/cache，Rust 有 rust-cache |
 | `ruff` 在 CI 中仍是 `continue-on-error` | typecheck 已阻断（#90）；ruff 存量 ~130 条多为风格规则，需先收敛规则集再阻断 |
 
@@ -148,7 +152,7 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - 飞书 CLI 不再用于收反馈。旧表可留档，不要再挂到应用或官网上。
 - **应用内反馈**（2026-09-07 做完）：`frontend/src/analytics/feedback.ts` + `components/FeedbackDialog.tsx`。入口：设置页「反馈」区、项目卡失败态 `重试 · 反馈`、详情页失败态 `反馈问题`、切片为 0 空态。自动附带 版本 / OS / 架构 / provider / model / 失败阶段 / 错误文本；用户只写一句话 + 可选联系方式。
   - 事件：`feedback_opened` / `feedback_submitted` / `feedback_dismissed`（PostHog）。若 PostHog 项目里存在名为 **「AutoClip 应用内反馈」**（`FEEDBACK_SURVEY_NAME`，或 `VITE_PUBLIC_POSTHOG_FEEDBACK_SURVEY_ID` 指定 id）的 API 型 Survey（无 UI，第一题自由文本、第二题单选分类），会同时按 PostHog 约定发 `survey shown / sent / dismissed`，结果进 Surveys 面板。**Survey 尚未在 PostHog 后台创建**（不创建也不影响事件采集）。
-  - 用户关闭匿名统计时，对话框不发 PostHog。故障改去 GitHub Issue，想法改去 Discussions。
+  - 点「发送」不看匿名统计开关。句子进入 PostHog 的 `feedback_submitted`（带反馈编号）。每小时 `.github/workflows/ingest-feedback.yml` 把它写进 GitHub：故障开 Issue（`bug` / `needs-triage` / `from-app`），想法开 Ideas，其他开 Q&A。同一编号只写一次。邮箱不进公开帖。没有 PostHog key 或网络失败时，打开预填好的 GitHub 页面。收件需要仓库 secret `POSTHOG_PERSONAL_API_KEY`（`POSTHOG_PROJECT_ID` 可省略，默认 450605）。
 - **每周反馈周报**：`scripts/weekly_digest.py`（仅标准库）。合并 GitHub 新 issue（`gh`，或 `GH_TOKEN` REST）+ Discussions + PostHog `feedback_submitted`（`POSTHOG_PERSONAL_API_KEY` + `POSTHOG_PROJECT_ID`，HogQL）→ markdown。可选发到飞书群机器人 webhook（`FEISHU_WEBHOOK_URL`，可选 `FEISHU_WEBHOOK_SECRET`），这只是把周报推给维护者，不再从飞书表格读反馈。`--json` 给 agent 做主题归纳，`--post --message-file` 发归纳后的版本。Cursor Automation（每周一 09:00 跑该脚本并归纳主题）的草稿已备好，待在 Automations 编辑器里配 secrets 后保存。
 
 ### 社区看板（2026-09-21）
@@ -158,61 +162,48 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - 想法、用法、模型、提问走 Discussions 五个分类；能复现的故障才开 Issue。功能请求模板已去掉。
 - 已决定跟进的需求写成带 `status:*` 的 Issue，放进公开 Project「AutoClip Roadmap」。
 - Agent 读 `scripts/feature_signals.py`，人确认后才能把卡推进到 Planned 及以后。操作说明在 `skills/product-board/SKILL.md`。
-- 应用内反馈进周报，不直接成为路线图卡片。飞书表格不再收反馈。
+- 应用内反馈先到 PostHog，再由收件任务进入 Issue 或 Discussions。这些帖子不是路线图卡片。飞书表格不再收反馈。
 - 装到 GitHub 上：`python3 scripts/setup_community_board.py --apply` 写标签和公开 Project。Discussion 分类没有写入接口，脚本会列出要在网页上新建或修改的分类。种子 Issue 另跑 `--seed-issues`，避免一次开出十几张旧账。
 
 ---
 
 ## 四、迭代计划
 
-社区看板不改变商业化阶段。新的功能呼声默认停在 Exploring。v1.3.0 / v1.3.1 已发布的能力（八语界面、崩溃上报、应用内更新、失败文案、竖屏导出、CLI / MCP）不再当作未做。接下来先做 Windows 真机验证、安装包签名公证、首页和项目卡。账号仍等签名公证完成。排序见 `docs/COMMUNITY_BOARD.md`。交接文档里 v1.3 的勾选框还停在发版前，和更新日志冲突时以更新日志为准。
-
-
+当前发布版本是 **v1.3.1**。社区新想法默认停在 Exploring。接下来先做 Windows 真机验证、安装包公证与代码签名、首页和项目卡。账号仍等公证和代码签名完成。排序见 `docs/COMMUNITY_BOARD.md`。
 
 ### v1.2.1 发版
 - [x] 合并 #89 #90 #91 #92 #93 #94
 - [x] `workflow_dispatch` 只勾 Windows 试构建：通过，安装包 145 MB（run 34040814275）
 - [x] 打 `v1.2.1` tag（`a5c20ae`）→ Desktop Build run 34042037733 全绿（Windows 10 min / mac 14 min），
       Release 两个文件齐：`AutoClip.Desktop_1.2.1_aarch64.dmg`（223 MB）、`AutoClip.Desktop_1.2.1_x64-setup.exe`（145 MB）；标题已改；#73 已关
-- [ ] 把 Windows 安装包装到一台干净 Windows 上验证：能启动、设置页保存 provider、跑通一条本地视频
-      （最可能翻车的点：NSIS 几千个 Python 文件、WebView2 引导、`%APPDATA%\AutoClip` 目录）
-- [ ] 用真实 key 各测一遍 4 个 provider 的「测试连接」+ 一次完整处理（#92 改动了 provider 选择链路，单测覆盖了逻辑但没打过真接口；尤其 openai SDK 已是 3.x）
+- [ ] 把 Windows 安装包装到一台干净 Windows 上验证：能启动、设置页保存 provider、跑通一条本地视频。v1.3.1 发布后这条仍没有记录（最可能翻车的点：NSIS 几千个 Python 文件、WebView2 引导、`%APPDATA%\AutoClip` 目录）
+- [ ] 用真实 key 各测一遍 4 个 provider 的「测试连接」+ 一次完整处理（#92 改动了 provider 选择链路，单测覆盖了逻辑但没打过真接口；尤其 openai SDK 已是 3.x）。v1.3.1 没有补上这条记录
 - [x] 关闭已修复 issue、关闭外部 PR #83 #84 #85 #78
 - [x] label 体系 + 置顶帖 #96 + "用不了"类统一回复关闭
 - [x] 外部 PR 全部留言关闭（见第三节表格）
 
-### v1.3 · Phase 0 收尾 + 高频需求
+### 已随 v1.3.0 / v1.3.1 发布
+- [x] **八语界面与官网**（v1.3.1）：`i18next`，`locales/{zh,en,ja,ko,es,pt,ru,fr}.json`，设置与顶栏可切换或跟随系统。维护方式见 `docs/INTERNATIONALIZATION.md`
+- [x] **应用内检查更新**（v1.3.1）：设置里可手动检查，启动时每天最多自动查一次。v1.3.0 及更早要先手动安装
+- [x] **崩溃上报**（v1.3.1）：前端与 Python 都接了，发送前去掉正文。设置里可关。生产构建验收见 `docs/UPDATES_AND_SENTRY.md`
+- [x] **匿名统计 v2**（v1.3.1）：区分请求和实际结果。线上接收还没单独验收
+- [x] CLI / MCP、本地模型预设、时长画像与评分兜底、竖屏发布导出（v1.3.0）
+- [x] Docker 设置页可保存；浏览器翻译不再把整页打崩（#100，v1.3.0）
+- [x] 失败要写明阶段和原因；本地上传会自动开始；SQLite 不再因 `StaticPool` 互相回滚（v1.3.0）
+- [x] 通义千问国际站（#45）；`min_score` 接到 step3；周更发版脚本（v1.3.0）
+
+### v1.3.1 之后仍未完成
 - [ ] Windows 包稳定后：Intel mac（PBS `x86_64-apple-darwin` + osxexperts intel 静态包，脚本只需改两个变量）
-- [ ] Apple Developer ID 签名 + 公证（去掉"右键打开"）；Windows 代码签名（去掉 SmartScreen 警告）
-- [ ] Tauri updater 自动更新；Sentry 崩溃上报
+- [ ] Apple Developer ID 签名 + 公证（去掉「右键打开」）；Windows 代码签名（去掉 SmartScreen 警告）。更新包签名和安装包公证不是一件事
 - [ ] `ruff` 规则集收敛后改为阻断；`requirements-dev.txt` 拆出 pytest（Dockerfile / 桌面包不再装测试依赖）
-- [x] 设置页 provider 卡片 / 彩色 Tag 与 `DESIGN.md` 不符 → 2026-09-07 设置页 / 详情页 / 三种卡片已按 `DESIGN.md`「App Layer」重做（见下）
 - [ ] 首页导入框、`ProjectTaskManager`、`CollectionPreviewModal` / `CreateCollectionModal`、B 站登录弹窗仍是 AntD 默认件，下一轮按 `frontend/src/ui/` 原语重做
 - [ ] `ProjectCard.tsx` 只做了「去色 + 失败态反馈」的局部修补（仍是 AntD Card + 内联样式），应整体重写成 `ac-card`
-- [x] Docker 模式下开放设置页（2026-09-20，#100）；浏览器翻译导致的整页崩溃同轮修复
-- [x] **失败要像失败**（2026-09-20）：`pipeline/failures.py#PipelineFailure(stage, message, hint)`；adapter 先做 LLM 预检（`AUTOCLIP_LLM_CACHE_DIR` 回放跳过），
-      字幕缺失 / step1 全部失败或不可解析 / 时间线空 / 评分空 / ffmpeg 零产出全部抛失败并带阶段与提示；`tasks/processing.py` 改读 `error`（以前读 `message`，
-      用户只看到「处理失败」四个字）；`ProjectResponse.error_message` 取最近失败 Task，CLI 路径回退 `project_metadata.last_error`。
-      真机验证（桌面模式、无 key、上传 8 秒测试视频）：2 秒内 failed，详情 / 列表 / status 三个接口都带文案。回归 `tests/test_pipeline_failures.py`（13 条）。
-      **顺带挖出并修掉三个 main 上的老 bug**：① `/projects/upload` 引用未定义 `db`，本地上传从 5 月起从不自动开始处理；
-      ② `database.py` 对文件型 SQLite 用 `StaticPool`，多线程 Session 共享一条连接互相 ROLLBACK（`ObjectDeletedError`）→ 改默认池 + WAL；
-      ③ 桌面模式下任务内 `update_state()` 去连 Redis 结果后端 → `DesktopAwareTask.update_state` no-op
-- [ ] **i18n 骨架**（来源：#101 + #100 根因）：Windows 下载量已是 DMG 的三倍、海外用户在开浏览器翻译。维护者先定基础设施
-      —— `i18next` + `react-i18next`、`locales/{zh,en}.json`、文案 key 命名规范、语言切换放「设置 → 应用」、AntD `ConfigProvider` locale 跟随、
-      `dayjs` locale 跟随；与 `frontend/src/ui/` 原语迁移一起做（先迁的页面先抽文案）。骨架合入后请 #101 作者按页面分批提 PR
-- [x] **dashscope 国际站**（#45，2026-09-20）：`DashScopeProvider(base_url=…)` 自动切兼容模式（`DASHSCOPE_CN/INTL_COMPATIBLE_BASE_URL` 常量），
-      `LLMManager` 用独立的 `dashscope_base_url`（不与 `OPENAI_BASE_URL` 串），设置页通义千问卡片「中国站 / 国际站」Segmented，`/test-api` 透传；
-      compose / env.example / DOCKER.md 加 `DASHSCOPE_BASE_URL`。浏览器验证：切国际站 → 保存 → 刷新保持，`current-provider` 带 intl base_url。
-      顺带修掉 DashScope 把完整 API Key 打进 INFO 日志。issue 回复后可关
-- [x] **`min_score` 接到 step3**（2026-09-20）：`step3.resolve_min_score_threshold()`：CLI `MIN_SCORE_OVERRIDE` > settings.json `processing.processing_min_score`（`LLMManager.get_processing_setting`，热重载）> 0.7。
-      `chunk_size` / `max_clips_per_collection` 已进 settings 但 step1 / step5 尚未读，下一轮接
-- [x] **周更发版流程**（2026-09-20）：`RELEASE_CHECKLIST.md` 重写；`scripts/bump_version.py`、`scripts/release_notes.py`；`desktop-build.yml` release job 用 `body_path`。
-      流程：周中合绿 PR + 写 CHANGELOG → 周末 `bump_version.py X.Y.0 --commit` → 打 tag → 25 分钟出包 → 真机装 Windows 包跑一条视频（人做）
-- [ ] `DESIGN.md` 欠账清单（`ErrorBoundary` 本轮已改）：`index.css:704-712`、`assets/background.svg`、`FileUpload.tsx`、`BilibiliDownload.tsx`、
+- [ ] `chunk_size` / `max_clips_per_collection` 已进 settings，step1 / step5 尚未读取
+- [ ] `DESIGN.md` 欠账清单（`ErrorBoundary` 已改）：`index.css:704-712`、`assets/background.svg`、`FileUpload.tsx`、`BilibiliDownload.tsx`、
       `BilibiliManager.css`、`CreateCollectionModal.css`、`CollectionPreviewModal_fixed.tsx` 仍有渐变 / 撞色
 - [ ] CLI / MCP 端到端：用一条真实视频跑 `autoclip run --provider ollama --json` 和 MCP `start_clip_job` 轮询到 completed；
       `autoclip` 装进 Homebrew tap / PyPI（现在只有 `pip install -e .`）；README 首屏放一段 CLI 演示
-- [ ] 桌面应用设置页加「Ollama 未运行」的就地提示（现在只在模型下拉里显示"未检测到模型"）；`min_score` 设置页的值接到 step3（CLI 已能覆盖，桌面端仍是常量 0.7）
+- [ ] 桌面应用设置页加「Ollama 未运行」的就地提示（现在只在模型下拉里显示「未检测到模型」）。`min_score` 已在 v1.3.0 接到 step3
 - [ ] 质量对照：拿一条 5 分钟、一条 60 分钟真视频，对比改前提示词口径 vs 现在的 duration profile；把结果补进 `backend/eval/cases/`
 - [ ] 发布导出：抖音 / Shorts / B 站三预设各导一条人工看字幕与标题卡；说话人居中裁切、封面图仍未做
 
@@ -222,8 +213,8 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
       faster-whisper 为默认实现；接口定稿后邀请 LauraGPT / 123mlly 把 fork 上的 SenseVoice 实现（词级 CTC 对齐 → cue 聚合 + 回归测试）按协议提 PR。
       不在接口之前合任何具体 ASR 厂商代码
 - [ ] **Step 3 评分后端可插拔**（接纳 #75 思路）：同样先定协议再接厂商
-- [ ] Sentry 崩溃上报提前到这一版（Phase 0 遗留）：#77 这类只有截图的 issue 目前无法处理
-- [ ] 之后按 `ROADMAP.md` 进入 Phase 1（Supabase 账号骨架）；Phase 0 三项（签名公证 / 自动更新 / Sentry）未完成前不开 Phase 1
+- [ ] 用 v1.3.1 安装包在真机上看一次崩溃是否进 Sentry。代码和一次生产前端验收已经有了，#77 这类只有截图的 issue 仍要靠安装包上的栈
+- [ ] 之后按 `ROADMAP.md` 进入 Phase 1（Supabase 账号骨架）。应用内更新和崩溃上报已经在 v1.3.1；Apple 公证和 Windows 代码签名完成前不开 Phase 1
 
 ---
 
@@ -242,7 +233,9 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - Whisper 运行时（按需安装）：`backend/services/whisper_runtime.py`、`whisper_model_manager.py`、
   前端 `frontend/src/components/SpeechRecognitionConfig.tsx`
 - 前端 UI 原语（`DESIGN.md` App Layer）：`frontend/src/ui/index.tsx` + `ui/ac.css`；已迁移页面：`pages/ProjectDetailPage.tsx`、`pages/SettingsPage.tsx`、`components/ClipCard.tsx`、`CollectionCard.tsx`、`SpeechRecognitionConfig.tsx`
-- 反馈：`frontend/src/analytics/feedback.ts`、`components/FeedbackDialog.tsx`；运行时信息 `analytics/lifecycle.ts#getRuntimeInfo`
+- 反馈：`frontend/src/analytics/feedback.ts`、`components/FeedbackDialog.tsx`；运行时信息 `analytics/lifecycle.ts#getRuntimeInfo`。不再使用飞书表格。社区看板见 `docs/COMMUNITY_BOARD.md`
+- 界面语言：`frontend/src/i18n/`、`docs/INTERNATIONALIZATION.md`
+- 更新与崩溃上报：`frontend/src/desktop/updater.ts`、`frontend/src/desktop/sentry.ts`、`docs/UPDATES_AND_SENTRY.md`
 - 浏览器翻译守卫 / 错误边界：`frontend/src/utils/domTranslationGuard.ts`（`main.tsx` 挂载前调用）、`components/ErrorBoundary.tsx`；
   Web 模式设置端点回归：`backend/tests/test_settings_web_mode.py`
 - 周报：`scripts/weekly_digest.py`
@@ -252,10 +245,11 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 
 ## 六、安装（给用户）
 
-**桌面版（推荐）**
-1. 从 Releases 下载 DMG → 拖 `AutoClip Desktop` 到 Applications
-2. **首次右键应用 → 打开**（ad-hoc 签名，绕过 Gatekeeper）
-3. 进设置页填 LLM API key 即可使用
+**桌面版（推荐，当前 v1.3.1）**
+1. 从 Releases 下载：macOS 用 DMG，Windows 用 `x64-setup.exe`
+2. macOS **首次右键应用 → 打开**（ad-hoc 签名，绕过 Gatekeeper）。Windows 安装包未做代码签名，可能要在 SmartScreen 里选择仍要运行
+3. 已装 v1.3.0 或更早的，先手动装上 v1.3.1。之后在「设置 → 应用 → 检查更新」
+4. 进设置页填 LLM API key，或选本机 Ollama / LM Studio
 
 **Docker**
 ```bash
