@@ -64,3 +64,6 @@ pytest-mock==3.15.1
 
 # MCP server（backend/mcp_server.py，`autoclip mcp`）
 mcp==2.1.1
+
+# 崩溃上报（DSN 未配置时 no-op）
+sentry-sdk==2.69.2

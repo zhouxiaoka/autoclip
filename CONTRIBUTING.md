@@ -14,12 +14,12 @@
 ### 1. Fork并克隆项目
 
 ```bash
-# Fork项目到您的GitHub账户，然后克隆
+# Fork 项目到您的 GitHub 账户，再将下面的 your-username 替换为您的用户名
 git clone https://github.com/your-username/autoclip.git
 cd autoclip
 
 # 添加上游仓库
-git remote add upstream https://github.com/original-username/autoclip.git
+git remote add upstream https://github.com/zhouxiaoka/autoclip.git
 ```
 
 ### 2. 设置开发环境
@@ -294,9 +294,9 @@ git push origin feature/your-feature-name
 
 ## 联系方式
 
-- **GitHub Issues**: [项目Issues](https://github.com/your-username/autoclip/issues)
-- **GitHub Discussions**: [项目讨论](https://github.com/your-username/autoclip/discussions)
-- **邮箱**: support@autoclip.com
+个人业余维护，回复时间不固定。请先查看 [常见问题](docs/FAQ.md)。
+
+邮箱：[christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
 ## 致谢
 

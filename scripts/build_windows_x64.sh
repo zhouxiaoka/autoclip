@@ -33,6 +33,8 @@ PBS_TRIPLE="x86_64-pc-windows-msvc"
 PORTABLE_PY_REL="python.exe"
 # shellcheck source=lib/desktop_build_common.sh
 source "$PROJECT_ROOT/scripts/lib/desktop_build_common.sh"
+# shellcheck source=lib/sign_updater.sh
+source "$PROJECT_ROOT/scripts/lib/sign_updater.sh"
 
 check_build_tools
 prepare_portable_python
@@ -75,6 +77,8 @@ INSTALLER="$(ls "$NSIS_DIR"/*.exe 2>/dev/null | head -1)"
 if [ -z "$INSTALLER" ]; then
     echo "ERROR: NSIS installer not found under $NSIS_DIR"; exit 1
 fi
+
+sign_updater_artifact "$INSTALLER"
 
 # ---- summary ----
 echo ""

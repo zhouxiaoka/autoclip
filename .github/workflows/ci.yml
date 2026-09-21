@@ -63,6 +63,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Analytics contract tests
+        run: node --test tests/analytics.test.cjs
+
+      - name: Sentry build configuration tests
+        run: node --test tests/sentry-build.test.cjs tests/desktop.test.cjs
+
       - name: Build
         run: npm run build
 

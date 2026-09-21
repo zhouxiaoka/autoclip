@@ -1,174 +1,67 @@
-# 🚀 AutoClip Desktop 用户安装指南
+# 安装与第一次出片
 
-## 📋 系统要求
+[English](USER_INSTALLATION_GUIDE.en.md) · [返回首页](../README.md) · [排错指南](FAQ.md)
 
-### 支持的操作系统
-- **macOS**: 10.13+ (支持Intel和Apple Silicon)
-- **Windows**: Windows 10+ (64位)
-- **Linux**: Ubuntu 18.04+, CentOS 7+, 或其他主流发行版
+## 选择使用方式
 
-### 硬件要求
-- **内存**: 最少4GB，推荐8GB+
-- **存储**: 至少2GB可用空间
-- **网络**: 用于下载AI模型和API调用
+| 环境 | 建议方式 |
+| --- | --- |
+| macOS · Apple Silicon（M 系列） | [下载桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)，选择名称含 `aarch64` 的 `.dmg` |
+| Windows 10 / 11 · x64 | [下载桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)，选择名称含 `x64-setup.exe` 的安装包 |
+| Intel Mac / Linux / 自建服务 | [Docker](../DOCKER.md) 或 [CLI](CLI_AND_MCP.md) |
 
-## 📦 安装步骤
+以 Release 页面实际提供的安装包和系统要求为准。不要把源码压缩包 `Source code` 当作安装包。桌面版内置 Python 和 FFmpeg；本地语言模型、语音转写组件和模型文件需要另外准备。
 
-### 1. 下载安装包
+处理大文件和运行本地模型需要额外内存与磁盘空间。空间预算应包含原视频、转写模型、临时文件、切片与导出结果；不承诺固定处理速度或最低配置下的效果。
 
-从 [Releases页面](https://github.com/autoclip/autoclip/releases) 下载对应平台的安装包：
+## 安装桌面版
 
-- **macOS (Apple Silicon)**: `AutoClip-Desktop-1.0.0-arm64.dmg`
-- **macOS (Intel)**: `AutoClip-Desktop-1.0.0-x64.dmg`
-- **Windows**: `AutoClip-Desktop-1.0.0-x64.exe`
-- **Linux**: `AutoClip-Desktop-1.0.0-x64.AppImage`
+### macOS
 
-### 2. 安装应用
+打开 `.dmg`，将 AutoClip Desktop 拖到“应用程序”，再从“应用程序”打开。若系统阻止未公证版本，先确认安装包来自本仓库的 Releases，再按该 Release 的首次启动说明操作。不要为此关闭系统全局安全检查。
 
-#### macOS
-1. 双击下载的 `.dmg` 文件
-2. 将 `AutoClip Desktop` 拖拽到 `Applications` 文件夹
-3. 首次运行时，系统可能提示"无法验证开发者"，请：
-   - 打开 `系统偏好设置` > `安全性与隐私`
-   - 点击 `仍要打开` 按钮
+### Windows
 
-#### Windows
-1. 双击下载的 `.exe` 文件
-2. 按照安装向导完成安装
-3. 安装完成后，从开始菜单启动应用
+运行 `x64-setup.exe` 并按向导安装。安装包按用户安装，无需常规使用管理员权限；缺少 WebView2 时，安装器可能需要联网下载。若系统拦截未签名版本，先确认下载来源，再参考 Release 中的提示。
 
-#### Linux
-1. 给AppImage文件添加执行权限：
-   ```bash
-   chmod +x AutoClip-Desktop-1.0.0-x64.AppImage
-   ```
-2. 双击运行，或从终端执行：
-   ```bash
-   ./AutoClip-Desktop-1.0.0-x64.AppImage
-   ```
+## 第一次使用
 
-## 🎯 首次使用
+1. **先配置模型。** 打开“设置”，选择通义千问、OpenAI 兼容接口、Gemini、硅基流动或本地模型。云端服务填写自己的 API Key 和模型名，点击测试连接，再保存。本地模型先在 Ollama / LM Studio 启动服务并加载模型。
+2. **准备字幕。** 有时间轴准确的 `.srt` 就与视频一起导入。没有字幕时，在设置中的语音识别区域完成本地 Whisper 组件与模型准备；首次安装和下载需要网络。
+3. **用短样本验证。** 先选一段你有权使用、对白清楚的视频。在首页选择“文件导入”，导入视频及可选 SRT；也可通过“链接导入”使用 YouTube / B 站链接。
+4. **查看处理结果。** 在项目详情检查片段起止时间、标题和评分，预览内容是否完整。若失败，按页面提示定位字幕、分析或导出阶段，参见 [FAQ](FAQ.md)。
+5. **导出成片。** 使用详情页的导出入口，按发布平台选择预设。竖屏导出可加入字幕和标题卡；导出后先播放检查，再自行发布。
 
-### 1. 启动应用
-- **macOS**: 从应用程序文件夹或Launchpad启动
-- **Windows**: 从开始菜单或桌面快捷方式启动
-- **Linux**: 双击AppImage文件或从应用程序菜单启动
+AI 分析主要依赖字幕文本。访谈、播客、课程等以语言表达为主的视频更容易评估；纯视觉动作、音乐或无对白内容不应期待同样的高光识别效果。
 
-### 2. 配置API密钥
-1. 应用启动后，点击 `设置` 按钮
-2. 在 `API配置` 标签页中，输入你的API密钥：
-   - **通义千问**: 在阿里云控制台获取
-   - **OpenAI**: 在OpenAI官网获取
-   - **其他服务**: 根据提示配置
-3. 点击 `测试连接` 验证配置
-4. 点击 `保存配置`
+## 云端与本地模型
 
-### 3. 配置语音转写（可选）
-1. 在设置页面，切换到 `语音转写配置` 标签
-2. 选择语音识别服务：
-   - **本地Whisper**: 免费，需要下载模型
-   - **OpenAI API**: 准确度高，需要付费
-   - **其他服务**: 根据需求选择
-3. 配置相关参数并保存
+| 方式 | 准备事项 |
+| --- | --- |
+| 云端 API | 服务商账号、可用 API Key、对应的模型访问权限与网络；调用费用由服务商收取 |
+| Ollama | 启动 Ollama，运行 `ollama pull qwen2.5:7b`，在 AutoClip 选择 Ollama |
+| LM Studio | 下载并加载模型，启动 Local Server，再在 AutoClip 选择实际可用的模型 |
 
-## 🔧 故障排除
+本地预设不需要云端 API Key；本地硬件仍需承担推理开销。Whisper 负责语音转文字，语言模型负责分析字幕，二者需要分别配置。
 
-### 常见问题
+## 更新与备份
 
-#### 1. 应用无法启动
-**症状**: 双击应用无反应或报错
+关闭正在处理的任务并退出应用，备份数据目录后，从 [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 获取新版安装包。是否提供应用内更新取决于所安装版本，不应把它作为唯一更新方式。
 
-**解决方案**:
-- **macOS**: 检查系统版本是否满足要求，尝试右键点击应用选择"打开"
-- **Windows**: 以管理员身份运行，检查Windows Defender是否阻止
-- **Linux**: 检查是否有执行权限，尝试从终端运行查看错误信息
+默认桌面数据目录：
 
-#### 2. 后端服务启动失败
-**症状**: 应用启动但显示"后端服务未运行"
+| 平台 | 目录 |
+| --- | --- |
+| macOS | `~/Library/Application Support/AutoClip` |
+| Windows | `%APPDATA%\AutoClip` |
+| Linux / CLI | `~/.local/share/AutoClip` |
 
-**解决方案**:
-1. 检查端口8000是否被占用
-2. 重启应用
-3. 检查防火墙设置
-4. 查看应用日志文件
+使用 CLI 自定义 `--data-dir` / `AUTOCLIP_DATA_DIR` 时，以实际配置目录为准。日志通常在数据目录的 `logs` 中。备份应同时包含项目文件、数据库和配置；这些配置可能含 API Key，应妥善保存。不要把卸载、删除数据库或清空数据目录作为常规排错步骤，也不要假设已有自动备份。
 
-#### 3. 视频处理失败
-**症状**: 上传视频后处理失败
+## 获取帮助
 
-**解决方案**:
-1. 检查视频格式是否支持（MP4、AVI、MOV等）
-2. 确认API密钥配置正确
-3. 检查网络连接
-4. 尝试较小的视频文件
+先看 [常见问题](FAQ.md) 和 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)。仍无法解决时，邮件提供系统、应用版本、模型、失败阶段、复现步骤和已脱敏日志。
 
-#### 4. 语音转写失败
-**症状**: 字幕生成失败
+个人业余维护，回复时间不固定，不提供即时客服或一对一部署服务。
 
-**解决方案**:
-1. 检查语音转写配置
-2. 确认选择的模型已下载
-3. 检查音频质量
-4. 尝试不同的语音识别服务
-
-### 日志文件位置
-
-#### macOS
-```
-~/Library/Application Support/AutoClip/logs/
-```
-
-#### Windows
-```
-%APPDATA%/AutoClip/logs/
-```
-
-#### Linux
-```
-~/.local/share/AutoClip/logs/
-```
-
-### 获取帮助
-
-如果遇到问题，请：
-
-1. **查看日志文件**: 检查上述位置的日志文件
-2. **重启应用**: 尝试完全关闭并重新启动
-3. **检查系统要求**: 确认系统版本和硬件满足要求
-4. **联系支持**: 在GitHub Issues中报告问题
-
-## 📚 使用技巧
-
-### 1. 性能优化
-- 使用SSD存储提高处理速度
-- 确保有足够的内存（推荐8GB+）
-- 关闭其他占用资源的应用
-
-### 2. 网络优化
-- 使用稳定的网络连接
-- 配置代理（如需要）
-- 选择就近的API服务
-
-### 3. 存储管理
-- 定期清理临时文件
-- 备份重要的项目数据
-- 监控磁盘空间使用
-
-## 🔄 更新应用
-
-### 自动更新
-应用会检查更新并提示用户下载新版本。
-
-### 手动更新
-1. 访问 [Releases页面](https://github.com/autoclip/autoclip/releases)
-2. 下载最新版本的安装包
-3. 按照安装步骤重新安装
-
-## 📞 技术支持
-
-- **GitHub Issues**: [报告问题](https://github.com/autoclip/autoclip/issues)
-- **文档**: [查看完整文档](https://github.com/autoclip/autoclip/wiki)
-- **社区**: [加入讨论](https://github.com/autoclip/autoclip/discussions)
-
----
-
-**注意**: 本应用需要网络连接来使用AI功能。首次使用可能需要下载模型文件，请确保网络连接稳定。
+邮箱：[christine_zhouye@163.com](mailto:christine_zhouye@163.com)

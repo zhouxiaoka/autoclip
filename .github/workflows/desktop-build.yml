@@ -40,6 +40,8 @@ env:
   # GitHub runners are in the US; the default tsinghua mirror in the build
   # script is slow/unreliable from there, so use PyPI directly.
   PIP_INDEX_URL: https://pypi.org/simple
+  SENTRY_ORG: autoclip-ts
+  SENTRY_PROJECT: autoclip-frontend
 
 jobs:
   build-macos-arm64:
@@ -60,6 +62,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
+
+      - name: Check Sentry upload credentials
+        env:
+          VITE_PUBLIC_SENTRY_DSN: ${{ secrets.VITE_PUBLIC_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: node scripts/check_sentry_build.mjs
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
@@ -86,13 +94,22 @@ jobs:
           # still succeeds and analytics is a no-op at runtime.
           VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
           VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com' }}
+          VITE_PUBLIC_SENTRY_DSN: ${{ secrets.VITE_PUBLIC_SENTRY_DSN }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_UPLOAD_SOURCEMAPS: ${{ secrets.VITE_PUBLIC_SENTRY_DSN != '' && 'true' || 'false' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bash scripts/build_macos_arm.sh
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
           name: autoclip-desktop-macos-arm64
-          path: src-tauri/target/release/bundle/macos/*.dmg
+          path: |
+            src-tauri/target/release/bundle/macos/*.dmg
+            src-tauri/target/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/release/bundle/macos/*.sig
           retention-days: 30
 
   build-windows-x64:
@@ -126,6 +143,12 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Check Sentry upload credentials
+        env:
+          VITE_PUBLIC_SENTRY_DSN: ${{ secrets.VITE_PUBLIC_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: node scripts/check_sentry_build.mjs
+
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
@@ -146,27 +169,34 @@ jobs:
         env:
           VITE_PUBLIC_POSTHOG_KEY: ${{ secrets.VITE_PUBLIC_POSTHOG_KEY }}
           VITE_PUBLIC_POSTHOG_HOST: ${{ vars.VITE_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com' }}
+          VITE_PUBLIC_SENTRY_DSN: ${{ secrets.VITE_PUBLIC_SENTRY_DSN }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_UPLOAD_SOURCEMAPS: ${{ secrets.VITE_PUBLIC_SENTRY_DSN != '' && 'true' || 'false' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bash scripts/build_windows_x64.sh
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: autoclip-desktop-windows-x64
-          path: src-tauri/target/release/bundle/nsis/*.exe
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/*.sig
           retention-days: 30
 
-  # One release job instead of per-platform upload steps, so two jobs never race
-  # to create the same tag's release. Runs even if one platform failed, so a
-  # broken Windows build doesn't block the macOS DMG (and vice versa).
+  # Publish only after both platforms succeed; never advertise a partial release.
   release:
-    if: startsWith(github.ref, 'refs/tags/v') && !cancelled()
+    if: startsWith(github.ref, 'refs/tags/v') && needs.build-macos-arm64.result == 'success' && needs.build-windows-x64.result == 'success'
     needs: [build-macos-arm64, build-windows-x64]
     runs-on: ubuntu-latest
     env:
       # 放在 job 级：step 自己的 env 在它的 if 里读不到
       WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -181,6 +211,22 @@ jobs:
       # Release 正文 = CHANGELOG.md 里该版本的段落 + 平台安装说明（scripts/release_notes.py，仅标准库）
       - name: Render release notes from CHANGELOG
         run: python3 scripts/release_notes.py "${{ github.ref_name }}" -o release_body.md && cat release_body.md
+      - name: Verify updater signatures against the shipped public key
+        run: |
+          python3 -m pip install cryptography==50.0.1
+          python3 scripts/verify_updater_signatures.py dist/*.app.tar.gz dist/*setup.exe
+
+      - name: Write updater latest.json
+        run: |
+          set -e
+          VERSION="${GITHUB_REF_NAME#v}"
+          DARWIN=$(ls dist/*.app.tar.gz 2>/dev/null | head -1 || true)
+          WINDOWS=$(ls dist/*setup.exe dist/*-setup.exe 2>/dev/null | head -1 || true)
+          ARGS=(--version "$VERSION" --tag "$GITHUB_REF_NAME" --out dist/latest.json --notes "AutoClip Desktop $GITHUB_REF_NAME")
+          if [ -n "$DARWIN" ]; then ARGS+=(--darwin-aarch64 "$DARWIN"); fi
+          if [ -n "$WINDOWS" ]; then ARGS+=(--windows-x86_64 "$WINDOWS"); fi
+          python3 scripts/write_updater_manifest.py "${ARGS[@]}"
+          ls -la dist/latest.json 2>/dev/null || echo "NOTE: latest.json not written (no signed artifacts)"
 
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2

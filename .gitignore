@@ -82,6 +82,8 @@ frontend/.vite/
 target/
 src-tauri/target/
 src-tauri/gen/
+src-tauri/.updater-private-key
+src-tauri/.updater-public-key
 
 # Python / 打包产物
 build/
@@ -122,6 +124,7 @@ Thumbs.db
 .env.production.local
 .env.backup
 .env.*.backup
+.env.sentry-build-plugin
 
 # 本地归档与备份（仅本地保留，不入仓）
 cleanup_backup/

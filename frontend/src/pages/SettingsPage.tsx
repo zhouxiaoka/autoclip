@@ -9,6 +9,9 @@ import { openExternalLink } from '../utils/externalLinks'
 import { trackApiKeyConfigured } from '../analytics/events'
 import { isAnalyticsEnabled, setAnalyticsEnabled } from '../analytics/posthog'
 import { getRuntimeInfo } from '../analytics/lifecycle'
+import { isCrashReportsEnabled, setCrashReportsEnabled } from '../desktop/sentry'
+import { getAppVersion, type AppUpdate } from '../desktop/updater'
+import { UpdateDialog, runManualUpdateCheck } from '../desktop/UpdatePrompt'
 import { FEEDBACK_FORM_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented, StatusDot } from '../ui'
@@ -503,15 +506,29 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   const [autostart, setAutostart] = useState(false)
   const [busy, setBusy] = useState(false)
   const [desktop, setDesktop] = useState(false)
+  const [crashOn, setCrashOn] = useState(isCrashReportsEnabled())
+  const [version, setVersion] = useState('')
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const [pendingUpdate, setPendingUpdate] = useState<AppUpdate | null>(null)
 
   useEffect(() => {
     (async () => {
       try {
         const isDesktop = await isDesktopMode()
         setDesktop(isDesktop)
+        setVersion(await getAppVersion())
         if (isDesktop) {
           const { invoke } = await import('@tauri-apps/api/core')
           setAutostart(Boolean(await invoke('is_autostart_enabled')))
+        }
+        try {
+          const privacy = await settingsApi.getPrivacy()
+          if (typeof privacy?.crash_reports === 'boolean') {
+            setCrashReportsEnabled(privacy.crash_reports)
+            setCrashOn(privacy.crash_reports)
+          }
+        } catch {
+          /* 后端未起或非桌面数据目录时用 localStorage */
         }
       } catch (err) {
         console.error('检查自动启动状态失败:', err)
@@ -534,6 +551,31 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
     }
   }
 
+  const toggleCrashReports = async (enabled: boolean) => {
+    setCrashReportsEnabled(enabled)
+    setCrashOn(enabled)
+    try {
+      await settingsApi.updatePrivacy({ crash_reports: enabled })
+    } catch {
+      message.warning("前端开关已生效，但后端隐私设置保存失败，请重试。")
+    }
+  }
+
+  const handleCheckUpdate = async () => {
+    if (!desktop) { message.info('检查更新仅在桌面应用中可用'); return }
+    setCheckingUpdate(true)
+    try {
+      const { update, currentVersion } = await runManualUpdateCheck()
+      if (currentVersion) setVersion(currentVersion)
+      if (update) setPendingUpdate(update)
+      else message.success(currentVersion ? `已是最新版本（${currentVersion}）` : '已是最新版本')
+    } catch (err) {
+      message.error(`检查更新失败: ${err}`)
+    } finally {
+      setCheckingUpdate(false)
+    }
+  }
+
   return (
     <Section title="应用" description="外观、启动与隐私。">
       <div className="ac-rows">
@@ -543,13 +585,29 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         <Row label="开机自动启动" hint="启用后随系统启动，可从托盘打开。仅桌面应用可用。">
           <Switch checked={autostart} onChange={toggleAutostart} loading={busy} disabled={!desktop} />
         </Row>
+        {desktop && (
+          <Row label="版本" hint={version ? `当前 ${version}` : '桌面应用可检查 GitHub Release 上的更新。'}>
+            <Btn size="sm" loading={checkingUpdate} onClick={() => void handleCheckUpdate()}>检查更新</Btn>
+          </Row>
+        )}
         <Row label="匿名使用统计" hint="只采集功能使用、出片成功 / 失败等匿名事件，不含视频内容、字幕文本或 API 密钥。关闭后应用内反馈将改用表单。">
           <Switch checked={analyticsOn} onChange={onAnalyticsChange} />
+        </Row>
+        <Row label="崩溃报告" hint="把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。">
+          <Switch checked={crashOn} onChange={toggleCrashReports} />
         </Row>
         <Row label="B 站账号" hint="多账号管理与一键投稿，开发中。">
           <span className="ac-hint" style={{ margin: 0 }}>即将推出</span>
         </Row>
       </div>
+      {pendingUpdate && (
+        <UpdateDialog
+          update={pendingUpdate}
+          currentVersion={version}
+          open
+          onClose={() => setPendingUpdate(null)}
+        />
+      )}
     </Section>
   )
 }

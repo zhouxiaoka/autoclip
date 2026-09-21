@@ -226,7 +226,9 @@ PY
 
 build_frontend() {
     echo "==> Building frontend"
-    (cd frontend && npm ci --silent && npm run build)
+    local ver
+    ver=$(app_version)
+    (cd frontend && VITE_APP_VERSION="$ver" npm ci --silent && VITE_APP_VERSION="$ver" npm run build)
     echo "OK"
 }
 

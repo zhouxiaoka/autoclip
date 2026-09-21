@@ -10,6 +10,7 @@
  * 因此 dev 环境（无 key）不会污染线上数据。
  */
 import posthog from 'posthog-js'
+import { routeName, type Properties } from './workflow'
 
 const POSTHOG_KEY = import.meta.env.VITE_PUBLIC_POSTHOG_KEY as string | undefined
 const POSTHOG_HOST =
@@ -20,6 +21,26 @@ const POSTHOG_HOST =
 const OPT_OUT_STORAGE_KEY = 'autoclip.analytics.optOut'
 
 let initialized = false
+let preferenceOverride: boolean | undefined
+const preferenceListeners = new Set<() => void>()
+export function onAnalyticsPreferenceChange(listener: () => void): () => void {
+  preferenceListeners.add(listener)
+  return () => { preferenceListeners.delete(listener) }
+}
+
+/** Never let analytics failures change a successful product operation. */
+export function captureBusinessEvent(name: string, properties: Properties = {}): boolean {
+  if (!initialized || !isAnalyticsEnabled()) return false
+  try {
+    return posthog.capture(name, {
+      schema_version: 2,
+      analytics_environment: import.meta.env.DEV ? 'development' : 'production',
+      runtime: '__TAURI_INTERNALS__' in window ? 'desktop' : 'web',
+      entrypoint: 'ui',
+      ...properties,
+    }) !== undefined
+  } catch { return false }
+}
 
 /** 是否启用了埋点（已配置 key 且用户未关闭）。 */
 export function isAnalyticsEnabled(): boolean {
@@ -27,7 +48,7 @@ export function isAnalyticsEnabled(): boolean {
   try {
     return localStorage.getItem(OPT_OUT_STORAGE_KEY) !== 'true'
   } catch {
-    return true
+    return preferenceOverride ?? true
   }
 }
 
@@ -44,47 +65,55 @@ export function initAnalytics(): void {
     return
   }
 
-  posthog.init(POSTHOG_KEY, {
+  try {
+    posthog.init(POSTHOG_KEY, {
     api_host: POSTHOG_HOST,
     // 桌面端从 file:// / 自定义协议加载，cookie 不可靠，统一用 localStorage 持久化匿名 ID
     persistence: 'localStorage',
     // 未登录前不创建 person profile，保持匿名；登录后通过 identify 关联（见 ROADMAP Phase 1）
     person_profiles: 'identified_only',
-    // 自动捕获页面点击/输入，配合手动关键事件构建漏斗
-    autocapture: true,
+    // Business events are explicit; DOM text may contain filenames or subtitles.
+    autocapture: false,
+    capture_performance: false,
     // 隐私优先：默认不录屏（PostHog 端也需另行开启）
     disable_session_recording: true,
     // HashRouter 下手动上报 pageview（见 trackPageview）
     capture_pageview: false,
-    capture_pageleave: true,
+    capture_pageleave: false,
+    property_denylist: ['$current_url', '$referrer', '$initial_current_url', '$initial_referrer'],
     // 尊重用户在本机的关闭偏好
     opt_out_capturing_by_default: !isAnalyticsEnabled(),
     loaded: (ph) => {
       if (import.meta.env.DEV) ph.debug()
     },
-  })
-
-  initialized = true
+    })
+    initialized = true
+  } catch {
+    initialized = false
+  }
 }
 
 /**
  * 打开/关闭埋点采集（用于设置页开关）。会持久化到 localStorage。
  */
 export function setAnalyticsEnabled(enabled: boolean): void {
+  preferenceOverride = enabled
   try {
     localStorage.setItem(OPT_OUT_STORAGE_KEY, enabled ? 'false' : 'true')
   } catch {
     /* localStorage 不可用时忽略 */
   }
+  for (const listener of preferenceListeners) listener()
   if (!initialized) return
-  if (enabled) posthog.opt_in_capturing()
-  else posthog.opt_out_capturing()
+  try {
+    if (enabled) posthog.opt_in_capturing()
+    else posthog.opt_out_capturing()
+  } catch { /* analytics cannot break settings */ }
 }
 
 /** 上报一次 pageview（在路由变化时调用）。 */
 export function trackPageview(path: string): void {
-  if (!initialized) return
-  posthog.capture('$pageview', { $current_url: path })
+  captureBusinessEvent('$pageview', { route: routeName(path) })
 }
 
 /** 登录后关联身份（Phase 1 接入账号时使用）。 */

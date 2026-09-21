@@ -18,6 +18,8 @@ PBS_TRIPLE="aarch64-apple-darwin"
 PORTABLE_PY_REL="bin/python3"
 # shellcheck source=lib/desktop_build_common.sh
 source "$PROJECT_ROOT/scripts/lib/desktop_build_common.sh"
+# shellcheck source=lib/sign_updater.sh
+source "$PROJECT_ROOT/scripts/lib/sign_updater.sh"
 
 check_build_tools
 prepare_portable_python
@@ -106,10 +108,20 @@ hdiutil create -volname "AutoClip Desktop" \
     "$DMG_PATH"
 echo "OK"
 
+# ---- updater tarball（注入资源后再打，用户手装仍用上面的 DMG）----
+echo "==> Creating updater tarball"
+TAR_PATH="src-tauri/target/release/bundle/macos/AutoClip.Desktop_${APP_VERSION}_aarch64.app.tar.gz"
+rm -f "$TAR_PATH" "${TAR_PATH}.sig"
+tar -czf "$TAR_PATH" -C "$(dirname "$APP_PATH")" "$(basename "$APP_PATH")"
+sign_updater_artifact "$TAR_PATH"
+echo "OK ($TAR_PATH)"
+
 # ---- summary ----
 APP_SIZE=$(du -sh "$APP_PATH" | awk '{print $1}')
 DMG_SIZE=$(du -sh "$DMG_PATH" | awk '{print $1}')
+TAR_SIZE=$(du -sh "$TAR_PATH" | awk '{print $1}')
 echo ""
 echo "==> Build complete"
 echo "    App:  $APP_PATH ($APP_SIZE)"
 echo "    DMG:  $DMG_PATH ($DMG_SIZE)"
+echo "    Update tarball: $TAR_PATH ($TAR_SIZE)"

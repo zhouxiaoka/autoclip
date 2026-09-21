@@ -4,12 +4,12 @@
  * 统一在这里定义事件名与载荷类型，避免裸字符串散落各处。
  * 所有 capture 都通过 trackEvent，未初始化 / 已关闭时自动 no-op。
  */
-import { posthog } from './posthog'
+import { captureBusinessEvent } from './posthog'
 
 export const AnalyticsEvent = {
   /** 导入素材（上传/选择视频开始一个项目） */
   VideoImported: 'video_imported',
-  /** 出片：成功生成切片 */
+  /** Legacy: one downloadVideo call received a file and triggered browser download. */
   ClipsExported: 'clips_exported',
   /** 关键流程失败（导入/转写/切片/导出任一环节） */
   ProcessingFailed: 'processing_failed',
@@ -23,11 +23,9 @@ export type AnalyticsEventName =
 /** 通用埋点入口。posthog 未初始化或已 opt-out 时为 no-op（内部已处理）。 */
 function trackEvent(
   name: AnalyticsEventName,
-  properties?: Record<string, unknown>,
+  properties?: Record<string, string | number | boolean | undefined>,
 ): void {
-  // posthog.capture 在未 init 时不会抛错；保险起见仍做判断
-  if (typeof posthog?.capture !== 'function') return
-  posthog.capture(name, properties)
+  captureBusinessEvent(name, properties)
 }
 
 export function trackVideoImported(props?: {
@@ -53,7 +51,8 @@ export function trackProcessingFailed(props: {
   message?: string
   code?: string | number
 }): void {
-  trackEvent(AnalyticsEvent.ProcessingFailed, props)
+  // Never send arbitrary exception text (may contain tokens, URLs or local paths).
+  trackEvent(AnalyticsEvent.ProcessingFailed, { stage: props.stage, code: props.code })
 }
 
 export function trackApiKeyConfigured(props: {

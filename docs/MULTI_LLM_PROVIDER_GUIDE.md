@@ -1,5 +1,7 @@
 # 多模型提供商接入指南
 
+模型列表仅作为配置示例，不代表当前服务商仍提供全部模型。实际可用模型、权限和费用以所选服务商为准；先用短样本测试，再处理长视频。安装步骤见 [安装指南](USER_INSTALLATION_GUIDE.md)，英文用户可参阅 [English installation](USER_INSTALLATION_GUIDE.en.md)。
+
 ## 🎯 功能概述
 
 系统现在支持多个AI模型提供商，用户可以根据需要选择不同的服务商和模型，实现更灵活的AI自动切片功能。
@@ -11,7 +13,7 @@
 | 提供商 | 显示名称 | 主要模型 | 特点 |
 |--------|----------|----------|------|
 | `dashscope` | 阿里通义千问 | qwen-plus, qwen-max, qwen-turbo | 国内访问稳定，中文理解好 |
-| `openai` | OpenAI | gpt-3.5-turbo, gpt-4, gpt-4-turbo | 全球领先，功能强大 |
+| `openai` | OpenAI | gpt-3.5-turbo, gpt-4, gpt-4-turbo | 支持兼容接口与自定义 Base URL |
 | `gemini` | Google Gemini | gemini-2.5-flash, gemini-1.5-pro | 多模态支持，上下文长 |
 | `siliconflow` | 硅基流动 | Qwen2.5系列, DeepSeek-V2.5 | 性价比高，国产化 |
 
@@ -68,14 +70,14 @@
 python install_llm_dependencies.py
 
 # 或手动安装
-pip install openai>=1.0.0 google-generativeai>=0.3.0 requests>=2.25.0 dashscope>=1.10.0
+python -m pip install -r requirements.txt
 ```
 
 ### 2. 启动系统
 
 ```bash
 # 启动后端服务
-python backend/main.py
+python -m uvicorn backend.main:app --port 8000
 
 # 启动前端服务
 cd frontend && npm run dev
@@ -114,7 +116,7 @@ cd frontend && npm run dev
 **支持模型:**
 - `gpt-3.5-turbo`: GPT-3.5 Turbo (性价比高)
 - `gpt-4`: GPT-4 (高质量)
-- `gpt-4-turbo`: GPT-4 Turbo (最新最强)
+- `gpt-4-turbo`: GPT-4 Turbo（历史配置示例）
 
 ### Google Gemini
 
@@ -350,14 +352,9 @@ const providerConfig = {
 }
 ```
 
-## 📊 性能对比
+## 模型选择
 
-| 提供商 | 响应速度 | 中文理解 | 成本 | 稳定性 | 推荐场景 |
-|--------|----------|----------|------|--------|----------|
-| 阿里通义千问 | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 中文内容处理 |
-| OpenAI | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐ | 高质量要求 |
-| Google Gemini | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | 多模态需求 |
-| 硅基流动 | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | 性价比优先 |
+速度、费用和字幕分析效果取决于具体模型、输入长度、服务区域和本地硬件。本项目没有在此提供统一基准测试；请用同一段字幕比较候选模型，确认连接、时间轴和标题输出后再选择。
 
 ## 🎯 最佳实践
 
@@ -373,7 +370,7 @@ const providerConfig = {
 
 1. 查看系统日志文件
 2. 检查API提供商官方文档
-3. 联系技术支持团队
+3. 查看 [常见问题](FAQ.md)，仍需帮助时邮件联系 [christine_zhouye@163.com](mailto:christine_zhouye@163.com)；个人业余维护，回复时间不固定
 
 ---
 

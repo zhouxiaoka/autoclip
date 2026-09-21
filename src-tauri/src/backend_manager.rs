@@ -65,6 +65,11 @@ impl BackendManager {
             // Single source of truth for the version the backend reports in /settings.
             .env("AUTOCLIP_APP_VERSION", env!("CARGO_PKG_VERSION"));
 
+        // 崩溃上报：构建时若注入了 SENTRY_DSN，传给 Python 后端（未配置则为空，sentry_setup no-op）
+        if let Some(dsn) = option_env!("SENTRY_DSN") {
+            cmd.env("SENTRY_DSN", dsn);
+        }
+
         // Point the backend at the bundled ffmpeg/ffprobe when present.
         // The backend's ffmpeg_utils reads these env vars before falling back
         // to PATH, so this is what makes video processing work on machines

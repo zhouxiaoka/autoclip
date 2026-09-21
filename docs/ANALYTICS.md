@@ -1,5 +1,7 @@
 # AutoClip 埋点体系
 
+> **2026-09-21 更新：** 本页下方保留历史埋点说明。新实现、事件准确口径、看板和验收请以 [ANALYTICS_V2.md](ANALYTICS_V2.md) 为准。旧 `clips_exported` 并非完整出片指标；`app_installed` 是匿名存储身份首次启动；网页与桌面不能直接串联归因。V2 本地代码尚待发布与正式包收数验收。
+
 > 工具：**PostHog**（US 区，`https://us.i.posthog.com`）
 > 原则（见 `ROADMAP.md` Phase 0）：**匿名 · 可关 · 本地缓冲**。不采集 PII、视频内容、字幕文本、API key 明文。
 
@@ -47,7 +49,7 @@
 |------|---------|------|
 | `processing_failed` | `api.ts` 导入/导出 catch | `stage(import/export/...), code, message` |
 
-> 崩溃/异常栈交给 **Sentry**（Phase 0 另接），PostHog 只记业务失败。
+> 崩溃/异常栈交给 **Sentry**（`frontend/src/desktop/sentry.ts`、`backend/core/sentry_setup.py`），PostHog 只记业务失败。接入说明见 `docs/UPDATES_AND_SENTRY.md`。
 
 ## 4. 全局属性（Super Properties）
 
@@ -77,6 +79,11 @@ VITE_PUBLIC_POSTHOG_KEY=phc_xxx
 VITE_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
 ```
 缺省时埋点全程 no-op。模板见 `frontend/.env.example`。
+
+Sentry DSN（同样可打进前端的公开值）：
+```
+VITE_PUBLIC_SENTRY_DSN=https://...@....ingest.sentry.io/...
+```
 
 ## 9. 加新事件的步骤
 

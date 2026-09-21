@@ -15,6 +15,8 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             start_backend_service,
             stop_backend_service,

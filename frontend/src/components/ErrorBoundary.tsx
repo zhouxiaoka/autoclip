@@ -7,6 +7,7 @@ import { Component, ErrorInfo, ReactNode } from 'react'
 import { errorHandler } from '../utils/errorHandler'
 import { isDomDisplacementError, isPageTranslated } from '../utils/domTranslationGuard'
 import { Btn } from '../ui'
+import { captureException } from '../desktop/sentry'
 
 interface Props {
   children: ReactNode
@@ -63,6 +64,7 @@ class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo })
     errorHandler.handleError(error, 'ReactErrorBoundary')
+    captureException(error)
     if (this.props.onError) {
       this.props.onError(error, errorInfo)
     }
