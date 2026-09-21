@@ -69,3 +69,22 @@ def save_draft(project_id, draft, *, create=False):
         data['drafts'] = [d for d in data['drafts'] if d['id'] != draft.id] + [value]
         return value
     return change(project_id, mutate)
+
+
+def duplicate_draft(project_id, request):
+    """Fork the submitted editing snapshot without changing its saved parent or jobs."""
+    from backend.services.studio.models import Draft
+    def mutate(data):
+        parent = next((d for d in data['drafts'] if d['id'] == request.draft.id), None)
+        if parent is None:
+            raise FileNotFoundError('来源草稿不存在')
+        if request.draft.revision > parent['revision']:
+            raise ConflictError('来源版本无效，请重新加载后再试')
+        value = request.draft.model_dump()
+        value.update(id=uuid.uuid4().hex, title=request.title, language=request.language,
+                     revision=1, updated_at=now(), origin=parent.get('origin', 'manual'),
+                     parent_draft_id=parent['id'], parent_revision=request.draft.revision)
+        result = Draft.model_validate(value).model_dump()
+        data['drafts'].append(result)
+        return result
+    return change(project_id, mutate)

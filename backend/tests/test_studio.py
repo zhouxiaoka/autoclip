@@ -204,3 +204,47 @@ def test_visual_import_worker_persists_project_status(client,root,source,monkeyp
     state=client.get('/studio/'+pid).json()
     assert state['analysis']['status']=='completed' and len(state['drafts'])==1
     assert client.get('/studio/'+pid+'/source').status_code==200
+
+def test_duplicate_copies_unsaved_edits_preserving_parent_and_exports(client):
+    original = client.post('/studio/p1/drafts', json={'clip_ids': ['c2', 'c1'], 'title': '原版'}).json()
+    store.change('p1', lambda state: state['jobs'].append({'job_id': 'old-export', 'draft_id': original['id'], 'revision': 1, 'status': 'completed', 'snapshot': original}))
+    snapshot = {**original, 'hook': '未保存的新开头', 'scenes': list(reversed(original['scenes']))}
+    response = client.post('/studio/p1/drafts/' + original['id'] + '/duplicate', json={'draft': snapshot, 'title': '  English variant  ', 'language': 'en'})
+    assert response.status_code == 200, response.text
+    copied = response.json()
+    assert copied['id'] != original['id'] and copied['revision'] == 1
+    assert copied['parent_draft_id'] == original['id'] and copied['parent_revision'] == 1
+    assert copied['language'] == 'en' and copied['title'] == 'English variant'
+    assert copied['hook'] == snapshot['hook'] and copied['scenes'] == snapshot['scenes']
+    state = store.read('p1')
+    assert next(d for d in state['drafts'] if d['id'] == original['id']) == original
+    assert state['jobs'][0]['snapshot'] == original
+    from backend.core.database import SessionLocal
+    from backend.models import Project
+    with SessionLocal() as db:
+        assert db.get(Project, 'p1').processing_config['studio_draft_count'] == 2
+    copied['hook'] = 'Changed only in the variant'
+    assert client.put('/studio/p1/drafts/' + copied['id'], json=copied).status_code == 200
+    assert store.read('p1')['drafts'][0] == original
+
+def test_duplicate_old_revision_can_be_recovered_without_overwriting_new_parent(client):
+    original = client.post('/studio/p1/drafts', json={'clip_ids': ['c1'], 'title': 'Original'}).json()
+    saved = client.put('/studio/p1/drafts/' + original['id'], json={**original, 'hook': 'Other window edit'}).json()
+    response = client.post('/studio/p1/drafts/' + original['id'] + '/duplicate', json={'draft': {**original, 'hook': 'My unsaved edit'}, 'title': 'Recovered edit', 'language': 'zh'})
+    assert response.status_code == 200
+    state = store.read('p1')
+    assert state['drafts'][0] == saved
+    assert state['drafts'][1]['parent_revision'] == 1
+    assert state['drafts'][1]['hook'] == 'My unsaved edit'
+
+def test_duplicate_rejects_wrong_parent_empty_title_and_invalid_source_ranges(client):
+    original = client.post('/studio/p1/drafts', json={'clip_ids': ['c1'], 'title': 'Original'}).json()
+    url = '/studio/p1/drafts/' + original['id'] + '/duplicate'
+    body = {'draft': original, 'title': 'Variant', 'language': 'ja'}
+    assert client.post(url, json={**body, 'title': '  '}).status_code == 422
+    assert client.post(url, json={**body, 'draft': {**original, 'id': 'another'}}).status_code == 422
+    assert client.post(url, json={**body, 'draft': {**original, 'revision': 999}}).status_code == 409
+    invalid = {**original, 'scenes': [{**original['scenes'][0], 'end': 999}]}
+    assert client.post(url, json={**body, 'draft': invalid}).status_code == 422
+    assert client.post('/studio/p1/drafts/missing/duplicate', json={**body, 'draft': {**original, 'id': 'missing'}}).status_code == 404
+    assert len(store.read('p1')['drafts']) == 1

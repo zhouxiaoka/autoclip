@@ -3,9 +3,9 @@
 - 功能分支：`codex/visual-game-ads`
 - 基线：`aaf863bb`，创建分支时 main 的已提交版本。
 - 工作目录：`/Users/zhoukk/.codex/worktrees/visual-game-ads/autoclip`
-- 范围：Seed 视觉理解、游戏高光检索、广告创意编排、可配置语言/字幕、应用内编辑预览、HyperFrames 后台渲染。
+- 范围：Seed 视觉理解、游戏高光检索、广告创意编排、可配置语言/字幕、应用内编辑预览、后台渲染（当前确定性 FFmpeg；复杂包装按质量需要再扩展）。
 - 其他功能：未带入原工作区中未提交的 Sentry、国际化、更新器、分析统计或其他改动。
-- 产品接入尚未实施；当前包含规划、Golden 参考登记、样片工程和一次 Seed API 复核脚本/记录。
+- 已完成统一成片工作区和可配置视觉模型首版，详见 [实现说明](UNIFIED_STUDIO_IMPLEMENTATION.md)；1.4 发布进度以 [发布计划](RELEASE_1_4.md) 为准。
 
 后续代码修改、测试与提交只在本 worktree 进行。以 [应用内交互与语言配置](GAME_AD_EDITOR_INTEGRATION.md) 和 [多模态接入计划](MULTIMODAL_HIGHLIGHTS_PLAN.md) 为实施依据。
 

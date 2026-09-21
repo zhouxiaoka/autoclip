@@ -5,6 +5,7 @@ export interface Draft {
   id: string; title: string; hook: string; scenes: Scene[]; language: Language
   aspect: 'original' | 'portrait' | 'landscape'; layout: 'fit' | 'crop' | 'blur'
   subtitles: boolean; original_audio: boolean; revision: number; updated_at: string; origin: string
+  parent_draft_id?: string | null; parent_revision?: number | null
 }
 export interface RenderJob {
   job_id: string; draft_id: string; title: string; revision: number

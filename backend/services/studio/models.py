@@ -39,6 +39,8 @@ class Draft(BaseModel):
     revision: int = Field(default=1, ge=1)
     updated_at: str = ''
     origin: str = 'manual'
+    parent_draft_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
+    parent_revision: int | None = Field(default=None, ge=1)
 
 class CreateDraft(BaseModel):
     clip_ids: list[str] = Field(min_length=1, max_length=30)
@@ -47,3 +49,16 @@ class CreateDraft(BaseModel):
 class RewriteRequest(BaseModel):
     draft: Draft
     instruction: str = Field(min_length=1, max_length=2000)
+
+class DuplicateDraft(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    draft: Draft
+    title: str = Field(min_length=1, max_length=200)
+    language: Language
+
+    @model_validator(mode='after')
+    def valid_title(self):
+        self.title = self.title.strip()
+        if not self.title:
+            raise ValueError('请填写新版本名称')
+        return self

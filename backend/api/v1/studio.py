@@ -12,7 +12,7 @@ from backend.models.clip import Clip
 from backend.schemas.project import ProjectCreate, ProjectType
 from backend.services.project_service import ProjectService
 from backend.services.studio import store, jobs, intelligence
-from backend.services.studio.models import Draft, CreateDraft, RewriteRequest, Preferences, Language, Scene
+from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, RewriteRequest, Preferences, Language, Scene
 
 router = APIRouter()
 
@@ -169,6 +169,17 @@ def save(project_id: str, draft_id: str, body: Draft, db: Session = Depends(get_
         raise HTTPException(422, '草稿 ID 不匹配')
     call(validate_draft, project_id, body)
     return call(store.save_draft, project_id, body)
+
+@router.post('/{project_id}/drafts/{draft_id}/duplicate')
+def duplicate(project_id: str, draft_id: str, body: DuplicateDraft, db: Session = Depends(get_db)):
+    project = project_or_404(project_id, db)
+    if draft_id != body.draft.id:
+        raise HTTPException(422, '来源草稿 ID 不匹配')
+    call(validate_draft, project_id, body.draft)
+    result = call(store.duplicate_draft, project_id, body)
+    project.processing_config = {**(project.processing_config or {}), 'studio_draft_count': len(store.read(project_id)['drafts'])}
+    db.commit()
+    return result
 
 @router.post('/{project_id}/rewrite')
 def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)):

@@ -4,6 +4,7 @@ import { Btn, Dialog, ProgressLine, Row, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
 import { useWorkspace } from './useWorkspace'
 import { Draft, Scene, languages, draftDuration, draftError, moveScene } from './types'
+import DraftVariantDialog from './DraftVariantDialog'
 import './studio.css'
 
 export default function StudioEditor() {
@@ -20,6 +21,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const [notice, setNotice] = useState('')
   const [instruction, setInstruction] = useState('')
   const [selected, setSelected] = useState(0)
+  const [showVariant, setShowVariant] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [showRendered, setShowRendered] = useState(false)
   const [suggestion, setSuggestion] = useState<Draft | null>(null)
@@ -85,7 +87,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const updateScene = (i: number, update: Partial<Scene>) => patch({ scenes: draft.scenes.map((s, index) => index === i ? {...s,...update} : s) })
   return <div className="ac-page studio-editor-page">
     <button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>‹ 返回项目</button>
-    <header className="studio-row studio-editor-head"><div><h1 className="ac-title">{draft.title}</h1><span className="studio-muted">{dirty ? '有修改未保存 · 本机暂存' : '草稿已保存'} · V{draft.revision} · {fmtDuration(draftDuration(draft))}</span></div><div className="studio-actions"><Btn disabled={!!busy || !dirty} loading={busy==='save'} onClick={() => perform('save', async () => {await save()})}>保存草稿</Btn><Btn variant="cta" disabled={!!busy} onClick={() => setShowExport(true)}>导出成片</Btn></div></header>
+    <header className="studio-row studio-editor-head"><div><h1 className="ac-title">{draft.title}</h1><span className="studio-muted">{dirty ? '有修改未保存 · 本机暂存' : '草稿已保存'} · V{draft.revision} · {fmtDuration(draftDuration(draft))}</span></div><div className="studio-actions"><Btn disabled={!!busy} onClick={() => setShowVariant(true)}>另存为新版本</Btn><Btn disabled={!!busy || !dirty} loading={busy==='save'} onClick={() => perform('save', async () => {await save()})}>保存草稿</Btn><Btn variant="cta" disabled={!!busy} onClick={() => setShowExport(true)}>导出成片</Btn></div></header>
     {loadError && <p className="studio-error">任务状态暂时无法更新：{loadError}</p>}
     <fieldset disabled={!!busy} className="studio-fieldset">
       <div className="studio-editor-grid"><section><div className={`studio-stage studio-stage--${draft.aspect}`}>
@@ -110,6 +112,10 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     {currentJob?.status==='failed' && <p className="studio-error" role="alert">{currentJob.error}</p>}
     {currentJob?.result?.warnings.map(w=><p className="studio-muted" key={w}>{w}</p>)}
     {error && <p className="studio-error" role="alert">{error}</p>}<p className="studio-muted" role="status">{notice}</p>
+    <DraftVariantDialog open={showVariant} projectId={projectId} draft={draft} onClose={() => setShowVariant(false)} onCreated={created => {
+      try { localStorage.removeItem(localKey) } catch { /* The new server draft is already durable. */ }
+      navigate(`/project/${projectId}/studio/${created.id}`)
+    }} />
     <Dialog open={!!suggestion} onClose={()=>setSuggestion(null)} title="查看文案修改" description="确认后应用到当前草稿，镜头与声音保持原设置。" footer={<div className="studio-actions"><Btn onClick={()=>setSuggestion(null)}>保留原稿</Btn><Btn variant="cta" onClick={()=>{setUndo(draft);setDraft(suggestion);setSuggestion(null);setShowRendered(false)}}>应用修改</Btn></div>}><p>{suggestion?.title}</p><p>{suggestion?.hook || '无开头文字'}</p></Dialog>
     <Dialog open={showExport} onClose={()=>!busy && setShowExport(false)} title="导出成片" description="保存当前修改并渲染；已有输出会保留在导出记录。" footer={<div className="studio-actions"><Btn disabled={!!busy} onClick={()=>setShowExport(false)}>关闭</Btn>{previewUrl ? <a className="ac-btn ac-btn--cta" href={studioApi.video(projectId,currentJob!.job_id,true)} download>下载成片</a> : <Btn variant="cta" loading={busy==='render'||!!active} disabled={!!active} onClick={render}>确认导出</Btn>}</div>}>
       <Row label="成片">{draft.title}</Row><Row label="格式">MP4 · 30 fps</Row><Row label="画幅">{draft.aspect==='portrait'?'1080 × 1920':draft.aspect==='landscape'?'1920 × 1080':'保持原尺寸'}</Row><Row label="文字语言">{languages.find(l=>l.value===draft.language)?.label}</Row>

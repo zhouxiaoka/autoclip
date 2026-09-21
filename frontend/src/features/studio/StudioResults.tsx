@@ -4,7 +4,7 @@ import { Project, Clip } from '../../store/useProjectStore'
 import { Btn, Section, Dialog, fmtDuration } from '../../ui'
 import { studioApi, errorText } from './api'
 import { useWorkspace } from './useWorkspace'
-import { draftDuration, Scene, Draft } from './types'
+import { draftDuration, Scene, Draft, languages } from './types'
 import ExportHistory from './ExportHistory'
 import './studio.css'
 
@@ -26,7 +26,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
       {workspace.analysis?.status==='running' && <div className="ac-empty studio-processing"><b><span className="spin"/> {workspace.analysis.message||'分析画面中'}</b>完成后成片会出现在这里，可以先处理其他项目。</div>}
       {workspace.analysis?.status==='failed' && <div className="ac-empty"><b>视觉分析未完成</b><span className="studio-error">{workspace.analysis.error}</span><Btn onClick={()=>navigate('/settings?section=vision')}>视觉模型设置</Btn></div>}
       {error && <div className="ac-empty"><b>成片草稿加载失败</b>{error}<Btn onClick={refresh}>重试</Btn></div>}
-      <div className="ac-grid-3 studio-result-grid">{workspace.drafts.map(d=><article className="ac-card" key={d.id}><button className="ac-card-thumb studio-thumb" onClick={()=>navigate(`/project/${project.id}/studio/${d.id}`)} aria-label={`预览 ${d.title}`}><video muted preload="metadata" src={`${studioApi.source(project.id)}#t=${d.scenes[0].start}`} /><span className="play">▷</span><span className="ac-tag ac-tag--tl">{d.origin==='legacy'?'成片草稿':goal==='promo'?'推广成片':'精彩高光'}</span><span className="ac-tag ac-tag--br">{fmtDuration(draftDuration(d))}</span></button><div className="ac-card-body"><h2 className="ac-card-title">{d.title}</h2><div className="ac-card-desc">{d.hook||d.scenes[0].evidence||'保留原声与完整事件'}</div><div className="ac-card-foot"><span className="meta">V{d.revision} · {d.scenes.length} 段</span><div className="ac-card-actions"><Btn variant="text" onClick={()=>navigate(`/project/${project.id}/studio/${d.id}`)}>预览与修改</Btn><Btn variant="text" onClick={()=>setExporting(d)}>导出</Btn></div></div></div></article>)}{children}</div>
+      <div className="ac-grid-3 studio-result-grid">{workspace.drafts.map(d=><article className="ac-card" key={d.id}><button className="ac-card-thumb studio-thumb" onClick={()=>navigate(`/project/${project.id}/studio/${d.id}`)} aria-label={`预览 ${d.title}`}><video muted preload="metadata" src={`${studioApi.source(project.id)}#t=${d.scenes[0].start}`} /><span className="play">▷</span><span className="ac-tag ac-tag--tl">{d.origin==='legacy'?'成片草稿':goal==='promo'?'推广成片':'精彩高光'}</span><span className="ac-tag ac-tag--br">{fmtDuration(draftDuration(d))}</span></button><div className="ac-card-body"><h2 className="ac-card-title">{d.title}</h2><div className="ac-card-desc">{d.hook||d.scenes[0].evidence||'保留原声与完整事件'}</div><div className="ac-card-foot"><span className="meta">{languages.find(l => l.value === d.language)?.label} · V{d.revision} · {d.scenes.length} 段</span><div className="ac-card-actions"><Btn variant="text" onClick={()=>navigate(`/project/${project.id}/studio/${d.id}`)}>预览与修改</Btn><Btn variant="text" onClick={()=>setExporting(d)}>导出</Btn></div></div></div></article>)}{children}</div>
       {!loading&&!error&&!workspace.drafts.length&&!project.clips?.length&&!project.collections?.length&&workspace.analysis?.status!=='running'&&<div className="ac-empty"><b>暂时没有可用成片</b>{visual?'可以重试视觉分析，或检查模型设置。':'可调整最低评分后重试内容处理。'}</div>}
     </Section>
     {actionError&&<p className="studio-error" role="alert">{actionError}</p>}
