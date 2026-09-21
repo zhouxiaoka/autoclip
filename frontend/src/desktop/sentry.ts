@@ -54,6 +54,7 @@ export function initSentry(): void {
         type: event.type, event_id: event.event_id, timestamp: event.timestamp, platform: event.platform,
         level: event.level, release: event.release, environment: event.environment,
         sdk: event.sdk, debug_meta: event.debug_meta,
+        tags: { app_locale: typeof document !== "undefined" ? document.documentElement.lang : "unknown" },
         exception: { values: event.exception?.values?.map(value => ({
           type: value.type, value: '[message omitted for privacy]',
           stacktrace: { frames: value.stacktrace?.frames?.map(frame => ({

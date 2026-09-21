@@ -602,5 +602,19 @@
   "最快": "Fastest",
   "快": "Fast",
   "较慢": "Slow",
-  "最慢": "Slowest"
+  "最慢": "Slowest",
+  "版本": "Version",
+  "当前 {{version}}": "Current: {{version}}",
+  "检查更新": "Check for updates",
+  "桌面应用可检查 GitHub Release 上的更新。": "The desktop app checks GitHub Releases for updates.",
+  "检查更新仅在桌面应用中可用": "Update checks are available in the desktop app only.",
+  "已是最新版本": "You are up to date.",
+  "已是最新版本（{{version}}）": "You are up to date ({{version}}).",
+  "检查更新失败: {{error}}": "Update check failed: {{error}}",
+  "前端开关已生效，但后端隐私设置保存失败，请重试。": "The interface preference was applied, but the backend privacy setting could not be saved. Please retry.",
+  "有新版本": "Update available",
+  "发现 {{version}}，当前是 {{current}}。下载安装后会自动重启。": "Version {{version}} is available; you have {{current}}. The app will restart after installation.",
+  "发现 {{version}}。下载安装后会自动重启。": "Version {{version}} is available. The app will restart after installation.",
+  "稍后": "Later",
+  "下载并安装": "Download and install"
 }

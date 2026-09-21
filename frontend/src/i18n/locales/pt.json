@@ -602,5 +602,19 @@
   "最快": "Máxima",
   "快": "Rápida",
   "较慢": "Lenta",
-  "最慢": "Mínima"
+  "最慢": "Mínima",
+  "版本": "Versão",
+  "当前 {{version}}": "Atual: {{version}}",
+  "检查更新": "Verificar atualizações",
+  "桌面应用可检查 GitHub Release 上的更新。": "O aplicativo consulta atualizações no GitHub Releases.",
+  "检查更新仅在桌面应用中可用": "A verificação de atualizações está disponível apenas no aplicativo de desktop.",
+  "已是最新版本": "Você está usando a versão mais recente.",
+  "已是最新版本（{{version}}）": "Você está usando a versão mais recente ({{version}}).",
+  "检查更新失败: {{error}}": "Falha ao verificar atualizações: {{error}}",
+  "前端开关已生效，但后端隐私设置保存失败，请重试。": "A preferência da interface foi aplicada, mas a configuração de privacidade do backend não foi salva. Tente novamente.",
+  "有新版本": "Atualização disponível",
+  "发现 {{version}}，当前是 {{current}}。下载安装后会自动重启。": "A versão {{version}} está disponível; você usa {{current}}. O aplicativo reiniciará após a instalação.",
+  "发现 {{version}}。下载安装后会自动重启。": "A versão {{version}} está disponível. O aplicativo reiniciará após a instalação.",
+  "稍后": "Mais tarde",
+  "下载并安装": "Baixar e instalar"
 }

@@ -560,20 +560,20 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
     try {
       await settingsApi.updatePrivacy({ crash_reports: enabled })
     } catch {
-      message.warning("前端开关已生效，但后端隐私设置保存失败，请重试。")
+      message.warning(t("前端开关已生效，但后端隐私设置保存失败，请重试。"))
     }
   }
 
   const handleCheckUpdate = async () => {
-    if (!desktop) { message.info('检查更新仅在桌面应用中可用'); return }
+    if (!desktop) { message.info(t('检查更新仅在桌面应用中可用')); return }
     setCheckingUpdate(true)
     try {
       const { update, currentVersion } = await runManualUpdateCheck()
       if (currentVersion) setVersion(currentVersion)
       if (update) setPendingUpdate(update)
-      else message.success(currentVersion ? `已是最新版本（${currentVersion}）` : '已是最新版本')
+      else message.success(currentVersion ? t('已是最新版本（{{version}}）', { version: currentVersion }) : t('已是最新版本'))
     } catch (err) {
-      message.error(`检查更新失败: ${err}`)
+      message.error(t('检查更新失败: {{error}}', { error: String(err) }))
     } finally {
       setCheckingUpdate(false)
     }
@@ -589,8 +589,8 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
           <Switch checked={autostart} onChange={toggleAutostart} loading={busy} disabled={!desktop} />
         </Row>
         {desktop && (
-          <Row label="版本" hint={version ? `当前 ${version}` : '桌面应用可检查 GitHub Release 上的更新。'}>
-            <Btn size="sm" loading={checkingUpdate} onClick={() => void handleCheckUpdate()}>检查更新</Btn>
+          <Row label={t('版本')} hint={version ? t('当前 {{version}}', { version }) : t('桌面应用可检查 GitHub Release 上的更新。')}>
+            <Btn size="sm" loading={checkingUpdate} onClick={() => void handleCheckUpdate()}>{t('检查更新')}</Btn>
           </Row>
         )}
         <Row label={t("匿名使用统计")} hint={t("只采集功能使用、出片成功 / 失败等匿名事件，不含视频内容、字幕文本或 API 密钥。关闭后应用内反馈将改用表单。")}>

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+import { t } from '../i18n'
 import React, { useEffect, useState } from 'react'
 import { Btn, Dialog } from '../ui'
 import {
@@ -14,6 +16,7 @@ export const UpdateDialog: React.FC<{
   open: boolean
   onClose: () => void
 }> = ({ update, currentVersion, open, onClose }) => {
+  useTranslation()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -32,14 +35,14 @@ export const UpdateDialog: React.FC<{
     <Dialog
       open={open}
       onClose={() => { if (!busy) onClose() }}
-      title="有新版本"
+      title={t('有新版本')}
       description={currentVersion
-        ? `发现 ${update.version}，当前是 ${currentVersion}。下载安装后会自动重启。`
-        : `发现 ${update.version}。下载安装后会自动重启。`}
+        ? t('发现 {{version}}，当前是 {{current}}。下载安装后会自动重启。', { version: update.version, current: currentVersion })
+        : t('发现 {{version}}。下载安装后会自动重启。', { version: update.version })}
       footer={(
         <>
-          <Btn size="sm" onClick={onClose} disabled={busy}>稍后</Btn>
-          <Btn size="sm" variant="cta" loading={busy} onClick={() => void install()}>下载并安装</Btn>
+          <Btn size="sm" onClick={onClose} disabled={busy}>{t('稍后')}</Btn>
+          <Btn size="sm" variant="cta" loading={busy} onClick={() => void install()}>{t('下载并安装')}</Btn>
         </>
       )}
     >

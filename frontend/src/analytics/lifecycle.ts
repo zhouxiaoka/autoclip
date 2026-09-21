@@ -64,7 +64,7 @@ let runtimeInfo: RuntimeInfo = { version: 'unknown', os: detectOS(), arch: detec
 
 /** 启动后缓存的运行环境（版本 / 系统 / 架构），供反馈等场景复用；不依赖埋点是否开启。 */
 export function getRuntimeInfo(): RuntimeInfo {
-  return runtimeInfo
+  return { ...runtimeInfo, locale: document.documentElement.lang || runtimeInfo.locale }
 }
 
 /**
@@ -75,7 +75,7 @@ export async function trackLaunch(): Promise<void> {
   const version = await getAppVersion()
   const os = detectOS()
   const arch = detectArch()
-  const locale = navigator.language
+  const locale = document.documentElement.lang || navigator.language
   runtimeInfo = { version, os, arch, locale }
 
   if (!isAnalyticsEnabled() || typeof posthog?.register !== 'function') return

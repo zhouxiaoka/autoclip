@@ -37,6 +37,8 @@ export function captureBusinessEvent(name: string, properties: Properties = {}):
       analytics_environment: import.meta.env.DEV ? 'development' : 'production',
       runtime: '__TAURI_INTERNALS__' in window ? 'desktop' : 'web',
       entrypoint: 'ui',
+      app_locale: typeof document !== 'undefined' ? document.documentElement.lang : 'unknown',
+      system_locale: typeof navigator !== 'undefined' ? navigator.language : 'unknown',
       ...properties,
     }) !== undefined
   } catch { return false }
