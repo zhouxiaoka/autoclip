@@ -218,19 +218,21 @@ def test_get_status_normalizes_results_and_updates_record(data_dir):
 
     up._write_record("p1", {"request_id": "req-1", "clip_id": "2", "status": "submitted", "submitted_at": "2026-09-21T00:00:00+00:00"})
     session = _Session([_Resp(200, {
-        "request_id": "req-1", "status": "completed", "completed": 3, "total": 3,
+        "request_id": "req-1", "status": "completed", "completed": 4, "total": 4,
         "results": [
             {"platform": "tiktok", "success": True, "url": "https://www.tiktok.com/@a/video/1", "fallback_to_inbox": True},
             {"platform": "youtube", "success": False, "error": "quota"},
+            {"platform": "instagram", "success": True, "url": "Post uploaded as Private. No public URL available."},
             {"platform": "linkedin", "success": True, "skipped": True, "skip_reason": "profile_platform_not_configured"},
         ],
     })])
     st = up.get_status("req-1", config=up.UploadPostConfig(api_key="k-1234567890"), session=session, project_id="p1")
-    assert st["final"] is True and st["ok"] is True and st["completed"] == 3
+    assert st["final"] is True and st["ok"] is True and st["completed"] == 4
     by = {r["platform"]: r for r in st["results"]}
     assert by["tiktok"]["url"].startswith("https://www.tiktok.com") and by["tiktok"]["fallback_to_inbox"] is True
     assert by["youtube"]["success"] is False and by["youtube"]["error"] == "quota"
     assert by["linkedin"]["skipped"] is True
+    assert by["instagram"]["url"] is None and by["instagram"]["message"].startswith("Post uploaded as Private")
     assert session.calls[0][2]["params"] == {"request_id": "req-1"}
     assert up.list_records("p1")[0]["status"] == "completed"
 

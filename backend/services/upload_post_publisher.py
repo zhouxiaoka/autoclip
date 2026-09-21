@@ -399,12 +399,16 @@ def get_status(request_id: str | None = None, job_id: str | None = None,
 
     results = []
     for r in data.get("results") or []:
+        # 私密 / 草稿发布时 url 字段是一句说明（"Post uploaded as Private. No public URL available."），不是链接
+        raw_url = r.get("url") or r.get("post_url")
+        url = raw_url if isinstance(raw_url, str) and raw_url.startswith(("http://", "https://")) else None
+        message = r.get("message") or (raw_url if raw_url and not url else None)
         results.append({
             "platform": r.get("platform"),
             "success": bool(r.get("success")),
             "status": r.get("status") or ("completed" if r.get("success") else "failed"),
-            "url": r.get("url") or r.get("post_url"),
-            "message": r.get("message"),
+            "url": url,
+            "message": message,
             "error": r.get("error"),
             "skipped": bool(r.get("skipped")),
             "fallback_to_inbox": bool(r.get("fallback_to_inbox")),
