@@ -149,11 +149,25 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - **应用内反馈**（2026-09-07 做完）：`frontend/src/analytics/feedback.ts` + `components/FeedbackDialog.tsx`。入口：设置页「反馈」区、项目卡失败态 `重试 · 反馈`、详情页失败态 `反馈问题`、切片为 0 空态。自动附带 版本 / OS / 架构 / provider / model / 失败阶段 / 错误文本；用户只写一句话 + 可选联系方式。
   - 事件：`feedback_opened` / `feedback_submitted` / `feedback_dismissed`（PostHog）。若 PostHog 项目里存在名为 **「AutoClip 应用内反馈」**（`FEEDBACK_SURVEY_NAME`，或 `VITE_PUBLIC_POSTHOG_FEEDBACK_SURVEY_ID` 指定 id）的 API 型 Survey（无 UI，第一题自由文本、第二题单选分类），会同时按 PostHog 约定发 `survey shown / sent / dismissed`，结果进 Surveys 面板。**Survey 尚未在 PostHog 后台创建**（不创建也不影响事件采集）。
   - 用户关闭匿名统计时，对话框不发 PostHog，改为引导到飞书表单。
-- **每周反馈周报**：`scripts/weekly_digest.py`（仅标准库）。合并 GitHub 新 issue（`gh`，或 `GH_TOKEN` REST）+ 飞书表单新条目（本机 `lark-cli` user 身份；云端走 `LARK_APP_ID/SECRET` tenant token，**应用需申请 `base:record:read` 并被加为表格协作者**）+ PostHog `feedback_submitted`（`POSTHOG_PERSONAL_API_KEY` + `POSTHOG_PROJECT_ID`，HogQL）→ markdown → 飞书群机器人 webhook（`FEISHU_WEBHOOK_URL`，可选 `FEISHU_WEBHOOK_SECRET`）。`--json` 给 agent 做主题归纳，`--post --message-file` 发归纳后的版本。本机已验证 GitHub + 飞书两路可读。Cursor Automation（每周一 09:00 跑该脚本并归纳主题）的草稿已备好，待在 Automations 编辑器里配 secrets 后保存。
+- **每周反馈周报**：`scripts/weekly_digest.py`（仅标准库）。合并 GitHub 新 issue（`gh`，或 `GH_TOKEN` REST）+ Discussions + 飞书表单新条目（本机 `lark-cli` user 身份；云端走 `LARK_APP_ID/SECRET` tenant token，**应用需申请 `base:record:read` 并被加为表格协作者**）+ PostHog `feedback_submitted`（`POSTHOG_PERSONAL_API_KEY` + `POSTHOG_PROJECT_ID`，HogQL）→ markdown → 飞书群机器人 webhook（`FEISHU_WEBHOOK_URL`，可选 `FEISHU_WEBHOOK_SECRET`）。`--json` 给 agent 做主题归纳，`--post --message-file` 发归纳后的版本。本机已验证 GitHub + 飞书两路可读。Cursor Automation（每周一 09:00 跑该脚本并归纳主题）的草稿已备好，待在 Automations 编辑器里配 secrets 后保存。
+
+### 社区看板（2026-09-21）
+
+公开路线图定为 **GitHub Discussions + GitHub Projects**，费用为零。Quackback 留到非开发者反馈明显多过 GitHub 再装。Featurebase、Linear、Productlane 不采用。规则、六列、初始看板和触发条件见 `docs/COMMUNITY_BOARD.md`。
+
+- 想法、用法、模型、提问走 Discussions 五个分类；能复现的故障才开 Issue。功能请求模板已去掉。
+- 已决定跟进的需求写成带 `status:*` 的 Issue，放进公开 Project「AutoClip Roadmap」。
+- Agent 读 `scripts/feature_signals.py`，人确认后才能把卡推进到 Planned 及以后。操作说明在 `skills/product-board/SKILL.md`。
+- 飞书表单和应用内反馈保留，只进周报，不直接成为路线图卡片。
+- 装到 GitHub 上：`python3 scripts/setup_community_board.py --apply` 写标签和公开 Project。Discussion 分类没有写入接口，脚本会列出要在网页上新建或修改的分类。种子 Issue 另跑 `--seed-issues`，避免一次开出十几张旧账。
 
 ---
 
 ## 四、迭代计划
+
+社区看板不改变商业化阶段。新的功能呼声默认停在 Exploring。v1.3.0 / v1.3.1 已发布的能力（八语界面、崩溃上报、应用内更新、失败文案、竖屏导出、CLI / MCP）不再当作未做。接下来先做 Windows 真机验证、安装包签名公证、首页和项目卡。账号仍等签名公证完成。排序见 `docs/COMMUNITY_BOARD.md`。交接文档里 v1.3 的勾选框还停在发版前，和更新日志冲突时以更新日志为准。
+
+
 
 ### v1.2.1 发版
 - [x] 合并 #89 #90 #91 #92 #93 #94

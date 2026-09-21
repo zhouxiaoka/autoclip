@@ -198,6 +198,8 @@ Contributions, feedback, and translation improvements are welcome. For bug repor
 
 Maintained by an individual in their spare time. Response times vary; live support and one-to-one deployment assistance are not provided. Please check the FAQ and known issues before contacting the maintainer.
 
+Ideas, use cases, and model requests belong in [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions). Reproducible bugs use the [issue form](https://github.com/zhouxiaoka/autoclip/issues/new/choose). Board rules: [community board](docs/COMMUNITY_BOARD.md) (Chinese).
+
 - Email: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
 Thanks to FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper, and all contributors. Licensed under the [MIT License](LICENSE). If AutoClip helps you, consider giving the project a star.

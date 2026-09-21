@@ -92,7 +92,7 @@ See the [installation guide](USER_INSTALLATION_GUIDE.en.md) for desktop defaults
 
 ### Where are known issues? How can I get help?
 
-Check [known issues](https://github.com/zhouxiaoka/autoclip/issues/96) and [release notes](https://github.com/zhouxiaoka/autoclip/releases) first. If needed, send one email to [christine_zhouye@163.com](mailto:christine_zhouye@163.com) with:
+Check [known issues](https://github.com/zhouxiaoka/autoclip/issues/96) and [release notes](https://github.com/zhouxiaoka/autoclip/releases) first. Feature ideas and how you use AutoClip go to [Discussions](https://github.com/zhouxiaoka/autoclip/discussions); reproducible bugs go to Issues. The board rules are in the [community board](COMMUNITY_BOARD.md) (Chinese). If needed, send one email to [christine_zhouye@163.com](mailto:christine_zhouye@163.com) with:
 
 - OS and CPU architecture, AutoClip version, and desktop / Docker / CLI mode.
 - Model provider and name, video source and approximate duration, and whether subtitles were supplied.

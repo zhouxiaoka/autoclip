@@ -14,7 +14,7 @@ import { getRuntimeInfo } from '../analytics/lifecycle'
 import { isCrashReportsEnabled, setCrashReportsEnabled } from '../desktop/sentry'
 import { getAppVersion, type AppUpdate } from '../desktop/updater'
 import { UpdateDialog, runManualUpdateCheck } from '../desktop/UpdatePrompt'
-import { FEEDBACK_FORM_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
+import { FEEDBACK_DISCUSSIONS_URL, FEEDBACK_FORM_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented, StatusDot } from '../ui'
 
@@ -485,8 +485,11 @@ const SettingsPage: React.FC = () => {
                 <Row label={t("反馈表单")} hint={t("不想在应用里写、或想附截图 / 日志时用。")}>
                   <Btn size="sm" onClick={() => openExternalLink(FEEDBACK_FORM_URL)}>{t("打开表单")}<Icon.External size={12} /></Btn>
                 </Row>
-                <Row label="GitHub" hint={t("开发者可直接提 Issue（有模板），或去 Discussions 讨论。")}>
-                  <Btn size="sm" onClick={() => openExternalLink(FEEDBACK_ISSUES_URL)}>{t("新建 Issue")}<Icon.External size={12} /></Btn>
+                <Row label={t("出了问题")} hint={t("版本、平台和模型写在 Issue 里，方便复现。")}>
+                  <Btn size="sm" onClick={() => openExternalLink(FEEDBACK_ISSUES_URL)}>{t("报告问题")}<Icon.External size={12} /></Btn>
+                </Row>
+                <Row label={t("想法与用法")} hint={t("希望支持的能力和你的用法发到 Discussions，不要为此开 Issue。")}>
+                  <Btn size="sm" onClick={() => openExternalLink(FEEDBACK_DISCUSSIONS_URL)}>{t("去讨论")}<Icon.External size={12} /></Btn>
                 </Row>
                 <Row label={t("当前状态与已知问题")} hint={t("发版节奏、已知 bug 与解决办法都在这条置顶 Issue 里。")}>
                   <Btn variant="text" size="sm" onClick={() => openExternalLink('https://github.com/zhouxiaoka/autoclip/issues/96')}>#96 <Icon.External size={12} /></Btn>

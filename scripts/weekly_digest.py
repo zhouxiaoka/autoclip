@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AutoClip 每周反馈周报：GitHub 新 issue + 飞书表单新条目 + PostHog 应用内反馈 → 一条飞书消息。
+AutoClip 每周反馈周报：GitHub 新 issue + Discussions + 飞书表单新条目 + PostHog 应用内反馈 → 一条飞书消息。
 
 设计给 Cursor Automation（云端 cron）跑，也能在本机手动跑。只依赖 Python 3 标准库。
 
@@ -279,19 +279,36 @@ def fetch_posthog(since: dt.datetime, days: int) -> dict[str, Any]:
     return out
 
 
+def fetch_discussions(since: dt.datetime) -> dict[str, Any]:
+    try:
+        from community_board import fetch_discussions as load
+    except ImportError as exc:
+        return {"ok": False, "items": [], "note": f"无法读取讨论：{exc}"}
+    data = load()
+    if not data.get("ok"):
+        return data
+    kept = []
+    for item in data["items"]:
+        stamp = _parse_iso(item.get("updated_at") or item.get("created_at") or "")
+        if stamp is not None and stamp >= since:
+            kept.append(item)
+    return {"ok": True, "items": kept, "note": ""}
+
+
 # ---------------------------------------------------------------- render ---
 def render_markdown(data: dict[str, Any]) -> str:
     since, until = data["window"]["since"], data["window"]["until"]
-    gh, fs, ph = data["github"], data["feishu_form"], data["posthog"]
+    gh, talks, fs, ph = data["github"], data["discussions"], data["feishu_form"], data["posthog"]
     L: list[str] = []
     L.append(f"**AutoClip 反馈周报** · {since[:10]} → {until[:10]}")
     L.append("")
 
     # 概览
     n_gh = len(gh["opened"]) if gh["ok"] else "—"
+    n_talks = len(talks["items"]) if talks["ok"] else "—"
     n_fs = len(fs["items"]) if fs["ok"] else "—"
     n_ph = len(ph["items"]) if ph["ok"] else "—"
-    L.append(f"GitHub 新 issue **{n_gh}**（关闭 {len(gh['closed']) if gh['ok'] else '—'}） · 飞书表单新条目 **{n_fs}** · 应用内反馈 **{n_ph}**")
+    L.append(f"GitHub 新 issue **{n_gh}**（关闭 {len(gh['closed']) if gh['ok'] else '—'}） · Discussions **{n_talks}** · 飞书表单新条目 **{n_fs}** · 应用内反馈 **{n_ph}**")
     L.append("")
 
     # GitHub
@@ -307,6 +324,18 @@ def render_markdown(data: dict[str, Any]) -> str:
             L.append(f"- [#{i['number']}]({i['url']}) {tag}{_trunc(i['title'], 70)}{st}")
         if len(gh["opened"]) > 15:
             L.append(f"- … 另有 {len(gh['opened']) - 15} 条")
+    L.append("")
+
+    L.append(f"**Discussions**（[打开](https://github.com/{REPO}/discussions)）")
+    if not talks["ok"]:
+        L.append(f"- 未读取：{talks['note']}")
+    elif not talks["items"]:
+        L.append("- 本窗口没有讨论。功能想法以这里为准，不要从飞书或应用内反馈直接开路线图卡片。")
+    else:
+        for item in talks["items"][:15]:
+            L.append(f"- [{item.get('category') or '—'}] [{_trunc(item['title'], 70)}]({item['url']}) ↑{item.get('upvotes') or 0}")
+        if len(talks["items"]) > 15:
+            L.append(f"- … 另有 {len(talks['items']) - 15} 条")
     L.append("")
 
     # 飞书表单
@@ -397,6 +426,7 @@ def main() -> int:
     data = {
         "window": {"since": since.isoformat(), "until": until.isoformat(), "days": args.days},
         "github": fetch_github(since),
+        "discussions": fetch_discussions(since),
         "feishu_form": fetch_feishu_form(since),
         "posthog": fetch_posthog(since, args.days),
     }

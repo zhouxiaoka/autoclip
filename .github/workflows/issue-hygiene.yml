@@ -27,10 +27,10 @@ jobs:
               '收到，感谢反馈。这是一个业余时间维护的开源项目，issue 通常在 **一周内** 统一 triage，不会逐条即时回复。',
               '',
               '- 当前状态与已知问题：#96',
-              '- 如果是 bug 且缺少 **版本 / 平台 / 模型** 信息，会被打上 `needs-info`，14 天内没补充会自动关闭（补充后重开即可）。',
-              '- 使用类问题建议移到 [Discussions](https://github.com/zhouxiaoka/autoclip/discussions)。',
+              '- Issue 只收能复现的故障，以及维护者确认后放进路线图的需求。希望支持什么、你的用法、想要哪个模型，请发到 [Discussions](https://github.com/zhouxiaoka/autoclip/discussions)。',
+              '- bug 缺少 **版本 / 平台 / 模型** 时会被打上 `needs-info`，14 天内没补充会自动关闭（补充后重开即可）。',
               '',
-              '_This project is maintained in spare time; issues are triaged weekly. Bugs missing version / platform / model get `needs-info` and auto-close after 14 days without a reply._'
+              '_Issues are for reproducible bugs and accepted roadmap items. Ideas belong in Discussions. Bugs missing version / platform / model get `needs-info` and auto-close after 14 days without a reply._'
             ].join('\n');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
