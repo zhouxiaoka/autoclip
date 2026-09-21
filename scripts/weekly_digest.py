@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
-AutoClip 每周反馈周报：GitHub 新 issue + Discussions + 飞书表单新条目 + PostHog 应用内反馈 → 一条飞书消息。
+AutoClip 每周反馈周报：GitHub 新 issue + Discussions + PostHog 应用内反馈。
 
 设计给 Cursor Automation（云端 cron）跑，也能在本机手动跑。只依赖 Python 3 标准库。
+不再读取飞书多维表格。八语界面之后，表格表单无法跟着界面语言走。
 
 数据源（缺哪个就跳过哪个，并在周报里标注）
-  GitHub   : `gh` CLI（优先）或 GH_TOKEN + REST。
-  飞书表单 : 本机有 `lark-cli`（personal profile，user 身份）时走 CLI；
-             否则用 LARK_APP_ID / LARK_APP_SECRET 换 tenant_access_token 直连
-             多维表格 API（应用需申请 base:record:read / bitable:app:readonly，
-             并把应用机器人加为多维表格协作者）。
+  GitHub   : `gh` CLI（优先）或 GH_TOKEN + REST。含 Discussions。
   PostHog  : POSTHOG_PERSONAL_API_KEY + POSTHOG_PROJECT_ID（HogQL 查询
              `feedback_submitted` / `survey sent` 事件）。
 
@@ -42,11 +39,6 @@ import urllib.request
 from typing import Any
 
 REPO = os.environ.get("AUTOCLIP_REPO", "zhouxiaoka/autoclip")
-FEISHU_BASE_TOKEN = os.environ.get("FEISHU_BASE_TOKEN", "EuYLb3lQ2awwDFsTkDXchabsnbd")
-FEISHU_TABLE_ID = os.environ.get("FEISHU_TABLE_ID", "tbl92rUV2NnRX6GJ")
-FEISHU_FORM_URL = "https://my.feishu.cn/share/base/shrcn8hKUG2icIJLpNry6uWVNJe"
-FEISHU_BASE_URL = f"https://my.feishu.cn/base/{FEISHU_BASE_TOKEN}?table={FEISHU_TABLE_ID}"
-LARK_PROFILE = os.environ.get("LARK_PROFILE", "personal")
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.posthog.com").rstrip("/")
 
 CATEGORY_LABEL = {"bug": "出问题了", "feature": "想要功能", "other": "其他"}
@@ -86,23 +78,6 @@ def _parse_iso(s: str) -> dt.datetime | None:
 def _trunc(s: str, n: int = 120) -> str:
     s = " ".join((s or "").split())
     return s if len(s) <= n else s[: n - 1] + "…"
-
-
-def _first(v: Any) -> str:
-    """飞书 select 字段是 list，文本字段可能是 str / list[{text}]。统一成 str。"""
-    if v is None:
-        return ""
-    if isinstance(v, list):
-        parts = []
-        for x in v:
-            if isinstance(x, dict):
-                parts.append(str(x.get("text") or x.get("name") or ""))
-            else:
-                parts.append(str(x))
-        return " / ".join(p for p in parts if p)
-    if isinstance(v, dict):
-        return str(v.get("text") or v.get("name") or "")
-    return str(v)
 
 
 # ---------------------------------------------------------------- GitHub ---
@@ -163,85 +138,6 @@ def _gh_norm(i: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# ---------------------------------------------------------------- Feishu ---
-def fetch_feishu_form(since: dt.datetime) -> dict[str, Any]:
-    out: dict[str, Any] = {"ok": False, "items": [], "total_all": 0, "note": "", "via": ""}
-    rows: list[dict[str, Any]] = []
-
-    if shutil.which("lark-cli"):
-        cmd = ["lark-cli", "base", "+record-list", "--base-token", FEISHU_BASE_TOKEN, "--table-id", FEISHU_TABLE_ID,
-               "--as", "user", "--limit", "200", "--json"]
-        if LARK_PROFILE:
-            cmd += ["--profile", LARK_PROFILE]
-        try:
-            rc, so, se = _run(cmd)
-            j = json.loads(so) if so.strip().startswith("{") else {}
-            if rc == 0 and j.get("ok"):
-                d = j["data"]
-                names = d.get("fields", [])
-                for matrix_row in d.get("data", []):
-                    rows.append(dict(zip(names, matrix_row)))
-                out["via"] = "lark-cli"
-            else:
-                out["note"] = f"lark-cli 失败：{(j.get('error') or {}).get('message') or se.strip()[:200]}"
-        except Exception as e:  # noqa: BLE001
-            out["note"] = f"lark-cli 异常：{e}"
-
-    if not out["via"]:
-        app_id, app_secret = os.environ.get("LARK_APP_ID"), os.environ.get("LARK_APP_SECRET")
-        if not (app_id and app_secret):
-            out["note"] = out["note"] or "没有 lark-cli，也没有 LARK_APP_ID / LARK_APP_SECRET"
-            return out
-        try:
-            tok = _http_json("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", method="POST",
-                             body={"app_id": app_id, "app_secret": app_secret})
-            if tok.get("code") != 0:
-                raise RuntimeError(tok.get("msg"))
-            hdr = {"Authorization": f"Bearer {tok['tenant_access_token']}"}
-            page_token, items = "", []
-            while True:
-                url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{FEISHU_BASE_TOKEN}/tables/{FEISHU_TABLE_ID}/records/search?page_size=200"
-                if page_token:
-                    url += f"&page_token={page_token}"
-                r = _http_json(url, method="POST", headers=hdr, body={})
-                if r.get("code") != 0:
-                    raise RuntimeError(f"{r.get('code')} {r.get('msg')}")
-                items += r.get("data", {}).get("items", [])
-                if not r.get("data", {}).get("has_more"):
-                    break
-                page_token = r["data"].get("page_token", "")
-            for it in items:
-                f = dict(it.get("fields", {}))
-                # created_at 字段在 API 里是毫秒时间戳
-                ct = f.get("提交时间")
-                if isinstance(ct, (int, float)):
-                    f["提交时间"] = dt.datetime.fromtimestamp(ct / 1000, tz=dt.timezone.utc).isoformat()
-                rows.append(f)
-            out["via"] = "open-api"
-        except Exception as e:  # noqa: BLE001
-            out["note"] = f"飞书 API 失败：{e}"
-            return out
-
-    out["total_all"] = len(rows)
-    for r in rows:
-        t = _parse_iso(_first(r.get("提交时间")))
-        if t and t < since:
-            continue
-        out["items"].append({
-            "time": t.isoformat() if t else "",
-            "type": _first(r.get("类型")),
-            "platform": _first(r.get("平台")),
-            "version": _first(r.get("版本")),
-            "content": _first(r.get("反馈内容")),
-            "contact": _first(r.get("联系方式")),
-            "status": _first(r.get("状态")),
-            "has_attachment": bool(r.get("截图 / 日志")),
-        })
-    out["items"].sort(key=lambda x: x["time"], reverse=True)
-    out["ok"] = True
-    return out
-
-
 # ---------------------------------------------------------------- PostHog ---
 def fetch_posthog(since: dt.datetime, days: int) -> dict[str, Any]:
     out: dict[str, Any] = {"ok": False, "items": [], "survey_responses": 0, "note": ""}
@@ -298,7 +194,7 @@ def fetch_discussions(since: dt.datetime) -> dict[str, Any]:
 # ---------------------------------------------------------------- render ---
 def render_markdown(data: dict[str, Any]) -> str:
     since, until = data["window"]["since"], data["window"]["until"]
-    gh, talks, fs, ph = data["github"], data["discussions"], data["feishu_form"], data["posthog"]
+    gh, talks, ph = data["github"], data["discussions"], data["posthog"]
     L: list[str] = []
     L.append(f"**AutoClip 反馈周报** · {since[:10]} → {until[:10]}")
     L.append("")
@@ -306,9 +202,8 @@ def render_markdown(data: dict[str, Any]) -> str:
     # 概览
     n_gh = len(gh["opened"]) if gh["ok"] else "—"
     n_talks = len(talks["items"]) if talks["ok"] else "—"
-    n_fs = len(fs["items"]) if fs["ok"] else "—"
     n_ph = len(ph["items"]) if ph["ok"] else "—"
-    L.append(f"GitHub 新 issue **{n_gh}**（关闭 {len(gh['closed']) if gh['ok'] else '—'}） · Discussions **{n_talks}** · 飞书表单新条目 **{n_fs}** · 应用内反馈 **{n_ph}**")
+    L.append(f"GitHub 新 issue **{n_gh}**（关闭 {len(gh['closed']) if gh['ok'] else '—'}） · Discussions **{n_talks}** · 应用内反馈 **{n_ph}**")
     L.append("")
 
     # GitHub
@@ -330,28 +225,12 @@ def render_markdown(data: dict[str, Any]) -> str:
     if not talks["ok"]:
         L.append(f"- 未读取：{talks['note']}")
     elif not talks["items"]:
-        L.append("- 本窗口没有讨论。功能想法以这里为准，不要从飞书或应用内反馈直接开路线图卡片。")
+        L.append("- 本窗口没有讨论。功能想法以这里为准，不要从应用内反馈直接开路线图卡片。")
     else:
         for item in talks["items"][:15]:
             L.append(f"- [{item.get('category') or '—'}] [{_trunc(item['title'], 70)}]({item['url']}) ↑{item.get('upvotes') or 0}")
         if len(talks["items"]) > 15:
             L.append(f"- … 另有 {len(talks['items']) - 15} 条")
-    L.append("")
-
-    # 飞书表单
-    L.append(f"**飞书表单**（[打开表格]({FEISHU_BASE_URL})）")
-    if not fs["ok"]:
-        L.append(f"- 未读取：{fs['note']}")
-    elif not fs["items"]:
-        L.append("- 本周没有新条目。")
-    else:
-        for it in fs["items"][:15]:
-            meta = " · ".join(x for x in [it["type"], it["platform"], it["version"]] if x)
-            extra = " 📎" if it["has_attachment"] else ""
-            contact = f" — {it['contact']}" if it["contact"] else ""
-            L.append(f"- {meta and f'[{meta}] '}{_trunc(it['content'], 90)}{extra}{contact}")
-        if len(fs["items"]) > 15:
-            L.append(f"- … 另有 {len(fs['items']) - 15} 条")
     L.append("")
 
     # PostHog
@@ -427,7 +306,6 @@ def main() -> int:
         "window": {"since": since.isoformat(), "until": until.isoformat(), "days": args.days},
         "github": fetch_github(since),
         "discussions": fetch_discussions(since),
-        "feishu_form": fetch_feishu_form(since),
         "posthog": fetch_posthog(since, args.days),
     }
     if args.json:

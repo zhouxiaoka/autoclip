@@ -139,17 +139,17 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 
 | 入口 | 面向 | 实现 | 自动化 |
 |------|------|------|--------|
-| **飞书表单** | 不用 GitHub 的普通用户 | 多维表格「AutoClip 用户反馈」（个人账号 `my.feishu.cn`，base `EuYLb3lQ2awwDFsTkDXchabsnbd`，表「反馈」）。公开表单 `https://my.feishu.cn/share/base/shrcn8hKUG2icIJLpNry6uWVNJe`，字段：类型 / 反馈内容 / 平台 / 版本 / 截图日志 / 联系方式；内部字段 状态 / 处理备注 / 提交时间 | 自动化 `wkfTMIXp3h6zTWNk`：新记录 → 状态置「新」→ 飞书消息通知（带「打开记录」按钮） |
-| **GitHub Issue Forms** | 开发者 | `.github/ISSUE_TEMPLATE/`：bug（版本 / 平台 / 模型必填）、feature、config.yml 联系链接（#96 / Discussions / 官网表单）。Discussions 已开启 | `.github/workflows/issue-hygiene.yml`：新 issue 自动回复节奏；`needs-info` 14+7 天自动关；60+14 天 stale；`pinned` / `feature` 不自动关 |
-| **官网 `#feedback`** | 所有人 | `autoclip_intro` FAQ 区的「提交反馈」卡，指向飞书表单 + Issues / Discussions；QQ / 飞书二维码已撤 | — |
+| **飞书表单** | 已停用（2026-09-21） | 八语界面之后不再用多维表格收反馈。旧表 `EuYLb3lQ2awwDFsTkDXchabsnbd` 留作历史，应用和周报都不再写入或读取 | — |
+| **GitHub Issue Forms** | 开发者 | `.github/ISSUE_TEMPLATE/`：bug（版本 / 平台 / 模型必填）。功能想法走 Discussions。config.yml 联系链接（#96 / Ideas / Q&A） | `.github/workflows/issue-hygiene.yml`：新 issue 自动回复节奏；`needs-info` 14+7 天自动关；60+14 天 stale；`pinned` / `feature` 不自动关 |
+| **官网 `#feedback`** | 待改 | `autoclip_intro` 若仍链到飞书表单，要在那个仓库改掉。本仓库不再把人送去那张表 | — |
 
 - 新 label：`needs-triage`（模板自动打）/ `needs-info` / `stale` / `pinned`（#96 已打）。
 - #96 已加「怎么反馈」小节。
-- 飞书 CLI：本机 `lark-cli` profile `personal`（app `cli_aa9ce7782ea39bcf`）；yahaha 账号下误建的同名空表可删。
+- 飞书 CLI 不再用于收反馈。旧表可留档，不要再挂到应用或官网上。
 - **应用内反馈**（2026-09-07 做完）：`frontend/src/analytics/feedback.ts` + `components/FeedbackDialog.tsx`。入口：设置页「反馈」区、项目卡失败态 `重试 · 反馈`、详情页失败态 `反馈问题`、切片为 0 空态。自动附带 版本 / OS / 架构 / provider / model / 失败阶段 / 错误文本；用户只写一句话 + 可选联系方式。
   - 事件：`feedback_opened` / `feedback_submitted` / `feedback_dismissed`（PostHog）。若 PostHog 项目里存在名为 **「AutoClip 应用内反馈」**（`FEEDBACK_SURVEY_NAME`，或 `VITE_PUBLIC_POSTHOG_FEEDBACK_SURVEY_ID` 指定 id）的 API 型 Survey（无 UI，第一题自由文本、第二题单选分类），会同时按 PostHog 约定发 `survey shown / sent / dismissed`，结果进 Surveys 面板。**Survey 尚未在 PostHog 后台创建**（不创建也不影响事件采集）。
-  - 用户关闭匿名统计时，对话框不发 PostHog，改为引导到飞书表单。
-- **每周反馈周报**：`scripts/weekly_digest.py`（仅标准库）。合并 GitHub 新 issue（`gh`，或 `GH_TOKEN` REST）+ Discussions + 飞书表单新条目（本机 `lark-cli` user 身份；云端走 `LARK_APP_ID/SECRET` tenant token，**应用需申请 `base:record:read` 并被加为表格协作者**）+ PostHog `feedback_submitted`（`POSTHOG_PERSONAL_API_KEY` + `POSTHOG_PROJECT_ID`，HogQL）→ markdown → 飞书群机器人 webhook（`FEISHU_WEBHOOK_URL`，可选 `FEISHU_WEBHOOK_SECRET`）。`--json` 给 agent 做主题归纳，`--post --message-file` 发归纳后的版本。本机已验证 GitHub + 飞书两路可读。Cursor Automation（每周一 09:00 跑该脚本并归纳主题）的草稿已备好，待在 Automations 编辑器里配 secrets 后保存。
+  - 用户关闭匿名统计时，对话框不发 PostHog。故障改去 GitHub Issue，想法改去 Discussions。
+- **每周反馈周报**：`scripts/weekly_digest.py`（仅标准库）。合并 GitHub 新 issue（`gh`，或 `GH_TOKEN` REST）+ Discussions + PostHog `feedback_submitted`（`POSTHOG_PERSONAL_API_KEY` + `POSTHOG_PROJECT_ID`，HogQL）→ markdown。可选发到飞书群机器人 webhook（`FEISHU_WEBHOOK_URL`，可选 `FEISHU_WEBHOOK_SECRET`），这只是把周报推给维护者，不再从飞书表格读反馈。`--json` 给 agent 做主题归纳，`--post --message-file` 发归纳后的版本。Cursor Automation（每周一 09:00 跑该脚本并归纳主题）的草稿已备好，待在 Automations 编辑器里配 secrets 后保存。
 
 ### 社区看板（2026-09-21）
 
@@ -158,7 +158,7 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - 想法、用法、模型、提问走 Discussions 五个分类；能复现的故障才开 Issue。功能请求模板已去掉。
 - 已决定跟进的需求写成带 `status:*` 的 Issue，放进公开 Project「AutoClip Roadmap」。
 - Agent 读 `scripts/feature_signals.py`，人确认后才能把卡推进到 Planned 及以后。操作说明在 `skills/product-board/SKILL.md`。
-- 飞书表单和应用内反馈保留，只进周报，不直接成为路线图卡片。
+- 应用内反馈进周报，不直接成为路线图卡片。飞书表格不再收反馈。
 - 装到 GitHub 上：`python3 scripts/setup_community_board.py --apply` 写标签和公开 Project。Discussion 分类没有写入接口，脚本会列出要在网页上新建或修改的分类。种子 Issue 另跑 `--seed-issues`，避免一次开出十几张旧账。
 
 ---

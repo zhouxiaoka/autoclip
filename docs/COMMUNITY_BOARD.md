@@ -11,7 +11,7 @@
 AutoClip 的用户已经在 GitHub 上。v1.2.1 的下载以 Windows 安装包为主，仓库里同时有桌面、Docker 和 CLI 用户。
 再引入一套账号、投票和看板，等于让同一个人维护两个产品。
 
-现在的反馈是散的：应用内一句、飞书表单一条、GitHub Issue 一堆，Discussions 开着但还是默认分类，没有公开路线图。
+现在的反馈是散的：应用内一句、GitHub Issue 一堆，Discussions 开着但还是默认分类，没有公开路线图。飞书表格不再收反馈：界面有八种语言，一张中文表跟着走不了。
 Issue 区曾经被「用不了」和「我觉得应该」混在一起。入口分开之后，Agent 才有稳定的地方可读。
 
 | 方案 | 现在 | 原因 |
@@ -21,7 +21,7 @@ Issue 区曾经被「用不了」和「我觉得应该」混在一起。入口�
 | Featurebase / Productlane | 不用 | 免费档没有 Agent 能用的 API，付费从月费开始 |
 | Linear | 不用 | 不适合作为公众提需求的地方 |
 
-飞书表单和应用内反馈继续收「不打开 GitHub 的人」。它们进周报，不直接变成路线图卡片。
+不打开 GitHub 的人用应用内反馈。它跟着界面语言走，进周报，不直接变成路线图卡片。关掉匿名统计后，应用内发不出去，改去 GitHub。
 
 ## 三条通道
 
@@ -30,7 +30,7 @@ Issue 区曾经被「用不了」和「我觉得应该」混在一起。入口�
   │
   ├─ 想法、用法、模型、提问 → Discussions
   ├─ 能复现的故障 → Issue（bug 模板）
-  └─ 不想用 GitHub → 应用内反馈 / 官网表单
+  └─ 不想用 GitHub → 应用内反馈（关掉匿名统计则改去 GitHub）
           │
           ▼
      Product Agent 聚类、去重、排序
@@ -153,7 +153,7 @@ Building 和 Testing 现在是空的：更新日志里没有「已写完、还�
 Quackback 同时满足下面三条再立项，缺一条就继续用 GitHub：
 
 - 连续四周，Ideas 和 Use Cases 里来自非贡献者的新帖多到每周 triage 看不过来
-- 应用内和表单反馈里，不用 GitHub 的人成了多数
+- 应用内反馈里，不用 GitHub 的人成了多数，而 PostHog 已经不好把公开路线图做出来
 - 需要一个给非开发者看的独立页面：`/feedback`、`/roadmap`、`/changelog`
 
 到那时的路径是：Quackback 收集和投票，Agent 读它的 API，确认后的需求仍写回 GitHub Issue 和这个 Project，代码继续在仓库里走。
@@ -199,6 +199,6 @@ python3 scripts/setup_community_board.py --apply --seed-issues
 
 - 不让普通用户用 Issue 提「我希望」。故障仍用 bug 模板。
 - 不在应用里做投票墙，也不把 Discussions 同步进数据库。
-- 不把飞书表单撤掉，也不把它当成第二套路线图。
+- 不用飞书表格收反馈。不用 GitHub 的人走应用内反馈。
 - 不重开已经关闭的「用不了」Issue。
 - 不上 Featurebase、Linear、Productlane。

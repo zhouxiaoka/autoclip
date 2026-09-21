@@ -32,4 +32,4 @@ description: >-
 - 不要把 Q&A 和能复现的 bug 混进路线图。bug 用现有 bug 模板。
 - 不要为了看板去部署 Quackback、Featurebase 或 Linear。触发条件写在 `docs/COMMUNITY_BOARD.md`。
 - 不要编造票数。没有反应数时就说没有。
-- 飞书表单和应用内反馈可以出现在周报里，不能直接变成路线图卡片。
+- 应用内反馈可以出现在周报里，不能直接变成路线图卡片。不要把用户指回飞书表格。

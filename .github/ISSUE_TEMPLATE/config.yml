@@ -9,6 +9,3 @@ contact_links:
   - name: 🙋 使用提问 / Q&A
     url: https://github.com/zhouxiaoka/autoclip/discussions/categories/q-a
     about: 怎么用、模型怎么选、切片效果怎么调。能复现的故障仍开 Issue。
-  - name: 📝 不用 GitHub？用表单反馈 / Feedback form (no GitHub account needed)
-    url: https://zhouxiaoka.github.io/autoclip_intro/#feedback
-    about: 官网上的反馈表单，一分钟填完。Quick form on the website.

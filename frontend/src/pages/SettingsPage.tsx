@@ -14,7 +14,7 @@ import { getRuntimeInfo } from '../analytics/lifecycle'
 import { isCrashReportsEnabled, setCrashReportsEnabled } from '../desktop/sentry'
 import { getAppVersion, type AppUpdate } from '../desktop/updater'
 import { UpdateDialog, runManualUpdateCheck } from '../desktop/UpdatePrompt'
-import { FEEDBACK_DISCUSSIONS_URL, FEEDBACK_FORM_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
+import { FEEDBACK_DISCUSSIONS_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented, StatusDot } from '../ui'
 
@@ -482,9 +482,6 @@ const SettingsPage: React.FC = () => {
                   <Btn variant="cta" size="sm" style={{ height: 32, fontSize: 13, padding: '0 16px' }} onClick={() => setFeedbackOpen(true)}>
                     <Icon.Chat size={13} />{t("写反馈")}</Btn>
                 </Row>
-                <Row label={t("反馈表单")} hint={t("不想在应用里写、或想附截图 / 日志时用。")}>
-                  <Btn size="sm" onClick={() => openExternalLink(FEEDBACK_FORM_URL)}>{t("打开表单")}<Icon.External size={12} /></Btn>
-                </Row>
                 <Row label={t("出了问题")} hint={t("版本、平台和模型写在 Issue 里，方便复现。")}>
                   <Btn size="sm" onClick={() => openExternalLink(FEEDBACK_ISSUES_URL)}>{t("报告问题")}<Icon.External size={12} /></Btn>
                 </Row>
@@ -596,7 +593,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
             <Btn size="sm" loading={checkingUpdate} onClick={() => void handleCheckUpdate()}>{t('检查更新')}</Btn>
           </Row>
         )}
-        <Row label={t("匿名使用统计")} hint={t("只采集功能使用、出片成功 / 失败等匿名事件，不含视频内容、字幕文本或 API 密钥。关闭后应用内反馈将改用表单。")}>
+        <Row label={t("匿名使用统计")} hint={t("只采集功能使用、出片成功 / 失败等匿名事件，不含视频内容、字幕文本或 API 密钥。关闭后请到 GitHub 反馈。")}>
           <Switch checked={analyticsOn} onChange={onAnalyticsChange} />
         </Row>
         <Row label={t("崩溃报告")} hint={t("把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。")}>

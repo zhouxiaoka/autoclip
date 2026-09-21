@@ -11,13 +11,12 @@
  *   这样结果会出现在 PostHog → Surveys 的响应面板里，周报也能直接读。
  * - 版本 / 系统 / 架构 由 lifecycle.ts 注册的 super properties 自动携带；这里额外显式写入，
  *   避免 Surveys 面板只看 `$survey_response*` 时丢上下文。
- * - 埋点被用户关闭时，PostHog 侧不会发出；此时回退到官网飞书表单（FEEDBACK_FORM_URL）。
+ * - 埋点被用户关闭时，PostHog 侧不会发出；此时改去 GitHub（故障用 Issue，想法用 Discussions）。
  */
 import { posthog, isAnalyticsEnabled } from './posthog'
 import { settingsApi } from '../services/api'
 
 export const FEEDBACK_SURVEY_NAME = 'AutoClip 应用内反馈'
-export const FEEDBACK_FORM_URL = 'https://my.feishu.cn/share/base/shrcn8hKUG2icIJLpNry6uWVNJe'
 export const FEEDBACK_ISSUES_URL = 'https://github.com/zhouxiaoka/autoclip/issues/new/choose'
 export const FEEDBACK_DISCUSSIONS_URL = 'https://github.com/zhouxiaoka/autoclip/discussions'
 
@@ -107,7 +106,7 @@ export interface FeedbackPayload {
 
 /**
  * 提交反馈。返回 true 表示已通过 PostHog 发出；false 表示埋点关闭 / 未初始化，
- * 调用方应引导用户改用飞书表单。
+ * 调用方应引导用户改去 GitHub。
  */
 export async function submitFeedback(payload: FeedbackPayload): Promise<boolean> {
   if (typeof posthog?.capture !== 'function' || !isAnalyticsEnabled()) return false

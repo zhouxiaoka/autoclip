@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { message } from 'antd'
 import { Btn, Dialog, Icon, Segmented } from '../ui'
 import {
-  FEEDBACK_FORM_URL,
+  FEEDBACK_DISCUSSIONS_URL,
   FEEDBACK_ISSUES_URL,
   FeedbackCategory,
   FeedbackContext,
@@ -70,8 +70,8 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
         message.success(t("已收到，感谢反馈"))
         onClose()
       } else {
-        message.info(t("匿名统计已关闭，请改用表单提交"))
-        void openExternal(FEEDBACK_FORM_URL)
+        message.info(t("匿名统计已关闭，请到 GitHub 提交"))
+        void openExternal(category === 'bug' ? FEEDBACK_ISSUES_URL : FEEDBACK_DISCUSSIONS_URL)
       }
     } finally {
       setSending(false)
@@ -98,8 +98,7 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
       footer={
         <>
           <div style={{ display: 'flex', gap: 4 }}>
-            <Btn variant="text" size="sm" onClick={() => openExternal(FEEDBACK_FORM_URL)}>{t("表单")}<Icon.External size={12} /></Btn>
-            <Btn variant="text" size="sm" onClick={() => openExternal(FEEDBACK_ISSUES_URL)}>GitHub <Icon.External size={12} /></Btn>
+            <Btn variant="text" size="sm" onClick={() => openExternal(category === 'bug' ? FEEDBACK_ISSUES_URL : FEEDBACK_DISCUSSIONS_URL)}>GitHub <Icon.External size={12} /></Btn>
           </div>
           <div className="right">
             <Btn size="sm" onClick={handleClose}>{t("取消")}</Btn>
@@ -141,13 +140,13 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
         )}
         <input
           className="ac-input"
-          placeholder={t("联系方式（可选，邮箱 / 飞书 / 微信）")}
+          placeholder={t("联系方式（可选，邮箱）")}
           value={contact}
           onChange={(e) => setContact(e.target.value)}
         />
         <div className="ac-context" title={t("将随反馈一起发送的上下文")}>
           {ctxChips.map((c) => <span key={c}>{c}</span>)}
-          {!analyticsOn && <span style={{ color: 'var(--ac-warn)' }}>{t("匿名统计已关闭 · 将改用表单")}</span>}
+          {!analyticsOn && <span style={{ color: 'var(--ac-warn)' }}>{t("匿名统计已关闭 · 请用 GitHub")}</span>}
           {analyticsOn && surveyReady === false && <span>{t("· 直接上报")}</span>}
         </div>
       </div>
