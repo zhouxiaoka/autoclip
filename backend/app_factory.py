@@ -26,6 +26,12 @@ def create_app(mode: str = "web") -> FastAPI:
     """
     # 设置模式环境变量
     os.environ["AUTOCLIP_MODE"] = mode
+
+    try:
+        from backend.core.sentry_setup import init_sentry
+        init_sentry(mode)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Sentry 初始化失败（忽略）: {e}")
     
     # 配置日志
     logging_config = get_logging_config()

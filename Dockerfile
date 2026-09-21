@@ -21,6 +21,8 @@ RUN npm ci
 
 # 复制前端源代码
 COPY frontend/ ./
+# Vite reads the shared application version for the web build.
+COPY src-tauri/tauri.conf.json /app/src-tauri/tauri.conf.json
 
 # 构建前端
 RUN npm run build

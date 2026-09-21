@@ -189,3 +189,10 @@
 [data-theme="dark"] .ac-settings-body .ant-switch.ant-switch-checked { background: var(--ac-ink); }
 .ac-settings-body .ant-switch .ant-switch-handle::before { background: var(--ac-card); }
 .ant-modal .ant-modal-content { border-radius: 16px; border: 1px solid var(--ac-line); box-shadow: var(--ac-shadow); }
+
+/* Translated labels can be substantially longer than Chinese. */
+.ac-row-label, .ac-card-foot .meta { min-width: 0; overflow-wrap: anywhere; }
+.ac-row-control, .ac-card-foot, .ac-dialog-foot, .ac-dialog-foot .right { flex-wrap: wrap; }
+.ac-settings-nav button { height: auto; min-height: 34px; padding-top: 7px; padding-bottom: 7px; }
+.ac-segmented { flex-wrap: wrap; max-width: 100%; }
+.ac-btn { white-space: normal; height: auto; min-height: 36px; padding-top: 7px; padding-bottom: 7px; }

@@ -1,7 +1,11 @@
+import { t } from '../i18n'
 import axios from 'axios'
 import { Project, Clip, Collection } from '../store/useProjectStore'
 import { errorHandler } from '../utils/errorHandler'
 import { apiConfigManager } from '../utils/apiConfig'
+import { observeOperation, observeDownload, observeMediaResponse } from '../analytics/operations'
+import { workflow } from '../analytics/observer'
+import { captureBusinessEvent } from '../analytics/posthog'
 import {
   trackVideoImported,
   trackClipsExported,
@@ -103,17 +107,17 @@ api.interceptors.response.use(
     
     // 保持原有的错误对象结构，确保向后兼容
     if (error.response?.status === 429) {
-      const message = error.response?.data?.detail || '系统正在处理其他项目，请稍后再试'
+      const message = error.response?.data?.detail || t("系统正在处理其他项目，请稍后再试")
       error.userMessage = message
     }
     else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-      error.userMessage = '请求超时，项目可能仍在后台处理中，请稍后查看项目状态'
+      error.userMessage = t("请求超时，项目可能仍在后台处理中，请稍后查看项目状态")
     }
     else if (error.code === 'NETWORK_ERROR' || !error.response) {
-      error.userMessage = '网络连接失败，请检查网络连接'
+      error.userMessage = t("网络连接失败，请检查网络连接")
     }
     else if (error.response?.status >= 500) {
-      error.userMessage = '服务器内部错误，请稍后重试'
+      error.userMessage = t("服务器内部错误，请稍后重试")
     }
     
     return Promise.reject(error)
@@ -202,12 +206,12 @@ export const settingsApi = {
     apiKey: string,
     options: { baseUrl?: string; model?: string } = {}
   ): Promise<{ success: boolean; error?: string }> => {
-    return api.post('/settings/test-api', { 
+    return observeOperation('provider_test', { provider }, () => api.post<unknown, { success: boolean; error?: string }>('/settings/test-api', {
       provider, 
       api_key: apiKey,
       base_url: options.baseUrl,
       model: options.model,
-    })
+    }), (result) => { captureBusinessEvent('provider_test_finished', { provider, outcome: result.success ? 'success' : 'failed' }) })
   },
 
   // 获取所有可用模型
@@ -232,7 +236,15 @@ export const settingsApi = {
   // 检查桌面模式
   checkDesktopMode: (): Promise<{ is_desktop_mode: boolean; environment: any }> => {
     return api.get('/settings/desktop-mode')
-  }
+  },
+
+  getPrivacy: (): Promise<{ crash_reports: boolean }> => {
+    return api.get('/settings/privacy')
+  },
+
+  updatePrivacy: (privacy: { crash_reports: boolean }): Promise<{ crash_reports: boolean }> => {
+    return api.put('/settings/privacy', privacy)
+  },
 }
 
 // 项目相关API
@@ -267,10 +279,13 @@ export const projectApi = {
     }
     
     try {
-      const project = await api.post<unknown, Project>('/projects/upload', formData, {
+      const project = await observeOperation('import', { source_type: 'upload' }, () => api.post<unknown, Project>('/projects/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+      }), (created, startedAt, props) => {
+        workflow.watch('project', created.id, undefined, startedAt)
+        captureBusinessEvent('import_finished', { ...props, project_id: created.id, outcome: 'completed', stage: 'upload_received' })
       })
       trackVideoImported({
         source: 'upload',
@@ -295,12 +310,14 @@ export const projectApi = {
 
   // 开始处理项目
   startProcessing: async (id: string): Promise<void> => {
-    await api.post(`/projects/${id}/process`)
+    await observeOperation('processing', { project_id: id, action: 'start' }, () => api.post(`/projects/${id}/process`),
+      (_result, startedAt) => workflow.watch('project', id, undefined, startedAt))
   },
 
   // 重试处理项目
   retryProcessing: async (id: string): Promise<void> => {
-    await api.post(`/projects/${id}/retry`)
+    await observeOperation('processing', { project_id: id, action: 'retry' }, () => api.post(`/projects/${id}/retry`),
+      (_result, startedAt) => workflow.watch('project', id, undefined, startedAt))
   },
 
   // 获取处理状态
@@ -387,7 +404,8 @@ export const projectApi = {
 
   // 重启指定步骤
   restartStep: async (id: string, step: number): Promise<void> => {
-    await api.post(`/projects/${id}/restart-step`, { step })
+    await observeOperation('processing', { project_id: id, action: 'restart_step', step }, () => api.post(`/projects/${id}/restart-step`, { step }),
+      (_result, startedAt) => workflow.watch('project', id, undefined, startedAt))
   },
 
   // 更新切片信息
@@ -443,16 +461,16 @@ export const projectApi = {
 
   // 下载切片视频
   downloadClip: (_projectId: string, clipId: string): Promise<Blob> => {
-    return api.get(`/files/projects/${_projectId}/clips/${clipId}`, {
+    return observeDownload({ project_id: _projectId, artifact_type: 'clip' }, () => api.get<unknown, Blob>(`/files/projects/${_projectId}/clips/${clipId}`, {
       responseType: 'blob'
-    })
+    }))
   },
 
   // 下载合集视频
   downloadCollection: (projectId: string, collectionId: string): Promise<Blob> => {
-    return api.get(`/files/projects/${projectId}/collections/${collectionId}`, {
+    return observeDownload({ project_id: projectId, artifact_type: 'collection' }, () => api.get<unknown, Blob>(`/files/projects/${projectId}/collections/${collectionId}`, {
       responseType: 'blob'
-    })
+    }))
   },
 
   // 导出元数据
@@ -477,12 +495,12 @@ export const projectApi = {
     
     try {
       // 对于blob类型的响应，需要直接使用axios而不是经过拦截器
-      const response = await axios.get(`/api/v1${url}`, { 
+      const response = await observeMediaResponse({ project_id: projectId, artifact_type: clipId ? 'clip' : collectionId ? 'collection' : 'original' }, () => axios.get<Blob>(`/api/v1${url}`, {
         responseType: 'blob',
         headers: {
           'Accept': 'application/octet-stream'
         }
-      })
+      }))
       
       // 从响应头获取文件名，如果没有则使用默认名称
       const contentDisposition = response.headers['content-disposition']
@@ -566,7 +584,9 @@ export const projectApi = {
     clipId: string,
     body: { preset: string; subtitles?: boolean; title_card?: boolean }
   ): Promise<{ ok: boolean; job_id: string; status: string }> => {
-    return api.post(`/projects/${projectId}/clips/${clipId}/export`, body)
+    return observeOperation('publish_export', { project_id: projectId, preset: body.preset, subtitles: body.subtitles, title_card: body.title_card },
+      () => api.post<unknown, { ok: boolean; job_id: string; status: string }>(`/projects/${projectId}/clips/${clipId}/export`, body),
+      (job, startedAt) => { if (job.ok) workflow.watch('export', job.job_id, projectId, startedAt) })
   },
 
   getExportJob: async (projectId: string, jobId: string): Promise<{
@@ -580,10 +600,10 @@ export const projectApi = {
   },
 
   downloadExport: async (projectId: string, jobId: string) => {
-    const response = await axios.get(`/api/v1/projects/${projectId}/exports/${jobId}/download`, {
+    const response = await observeMediaResponse({ project_id: projectId, export_id: jobId, artifact_type: 'publish_clip' }, () => axios.get<Blob>(`/api/v1/projects/${projectId}/exports/${jobId}/download`, {
       responseType: 'blob',
       headers: { Accept: 'application/octet-stream' },
-    })
+    }))
     const cd = response.headers['content-disposition'] || ''
     let filename = `export_${jobId.slice(0, 8)}.mp4`
     const star = cd.match(/filename\*=UTF-8''([^;]+)/)
@@ -633,14 +653,16 @@ export const bilibiliApi = {
 
   // 创建B站下载任务
   createDownloadTask: async (data: BilibiliDownloadRequest): Promise<BilibiliDownloadTask> => {
-    const task = await api.post<unknown, BilibiliDownloadTask>('/bilibili/download', data)
+    const task = await observeOperation('import', { source_type: 'bilibili' }, () => api.post<unknown, BilibiliDownloadTask>('/bilibili/download', data),
+      (created, startedAt) => workflow.watch('bilibili', created.id, undefined, startedAt))
     trackVideoImported({ source: 'url', fileType: 'bilibili' })
     return task
   },
 
   // 创建YouTube下载任务
   createYouTubeDownloadTask: async (data: BilibiliDownloadRequest): Promise<BilibiliDownloadTask> => {
-    const task = await api.post<unknown, BilibiliDownloadTask>('/youtube/download', data)
+    const task = await observeOperation('import', { source_type: 'youtube' }, () => api.post<unknown, BilibiliDownloadTask>('/youtube/download', data),
+      (created, startedAt) => workflow.watch('youtube', created.id, undefined, startedAt))
     trackVideoImported({ source: 'url', fileType: 'youtube' })
     return task
   },

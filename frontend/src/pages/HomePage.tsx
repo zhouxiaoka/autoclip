@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import React, { useState, useEffect } from 'react'
 import { 
   Layout, 
@@ -22,6 +24,7 @@ const { Title, Text } = Typography
 const { Option } = Select
 
 const HomePage: React.FC = () => {
+  useTranslation()
   const navigate = useNavigate()
   const { projects, setProjects, deleteProject, loading, setLoading } = useProjectStore()
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -69,7 +72,7 @@ const HomePage: React.FC = () => {
       const safeProjects = Array.isArray(projects) ? projects : []
       setProjects(safeProjects)
     } catch (error) {
-      message.error('加载项目失败')
+      message.error(t("加载项目失败"))
       console.error('Load projects error:', error)
       // 如果API调用失败，设置空数组
       setProjects([])
@@ -82,9 +85,9 @@ const HomePage: React.FC = () => {
     try {
       await projectApi.deleteProject(id)
       deleteProject(id)
-      message.success('项目删除成功')
+      message.success(t("项目删除成功"))
     } catch (error) {
-      message.error('删除项目失败')
+      message.error(t("删除项目失败"))
       console.error('Delete project error:', error)
     }
   }
@@ -94,7 +97,7 @@ const HomePage: React.FC = () => {
   // 提示 + 刷新列表，绝不能再发一次重试请求（会和卡片自身的请求叠加，并制造
   // loadProjects→重挂载→自动启动 的循环）。
   const handleRetryProject = async () => {
-    message.success('已开始重试处理项目')
+    message.success(t("已开始重试处理项目"))
     try {
       await loadProjects()
     } catch (error) {
@@ -105,7 +108,7 @@ const HomePage: React.FC = () => {
   const handleProjectCardClick = (project: Project) => {
     // 导入中状态的项目不能点击进入详情页
     if (project.status === 'pending') {
-      message.warning('项目正在导入中，请稍后再查看详情')
+      message.warning(t("项目正在导入中，请稍后再查看详情"))
       return
     }
     
@@ -138,9 +141,7 @@ const HomePage: React.FC = () => {
             justifyContent: 'center'
           }}>
             <div style={{ width: '100%', maxWidth: '820px' }}>
-              <div style={{ fontSize: '13px', color: 'var(--ac-muted)', margin: '0 4px 14px', letterSpacing: '0.2px' }}>
-                粘贴链接，AI 自动切片
-              </div>
+              <div style={{ fontSize: '13px', color: 'var(--ac-muted)', margin: '0 4px 14px', letterSpacing: '0.2px' }}>{t("粘贴链接，AI 自动切片")}</div>
               <div style={{
                 background: 'var(--ac-card)',
                 borderRadius: '16px',
@@ -171,9 +172,7 @@ const HomePage: React.FC = () => {
                      boxShadow: activeTab === 'bilibili' ? '0 1px 2px rgba(0,0,0,.08)' : 'none'
                    }}
                    onClick={() => setActiveTab('bilibili')}
-                 >
-                   链接导入
-                 </button>
+                 >{t("链接导入")}</button>
                 <button
                    style={{
                      padding: '8px 18px',
@@ -188,9 +187,7 @@ const HomePage: React.FC = () => {
                      boxShadow: activeTab === 'upload' ? '0 1px 2px rgba(0,0,0,.08)' : 'none'
                    }}
                    onClick={() => setActiveTab('upload')}
-                 >
-                   文件导入
-                 </button>
+                 >{t("文件导入")}</button>
               </div>
               
               {/* 内容区域 */}
@@ -206,7 +203,7 @@ const HomePage: React.FC = () => {
                   <FileUpload onUploadSuccess={async () => {
                     // 处理完成后刷新项目列表
                     await loadProjects()
-                    message.success('项目创建成功，正在处理中...')
+                    message.success(t("项目创建成功，正在处理中..."))
                   }} />
                 )}
               </div>
@@ -232,9 +229,7 @@ const HomePage: React.FC = () => {
                 <Title
                   level={2}
                   style={{ margin: 0, color: 'var(--ac-ink)', fontSize: '16px', fontWeight: 600 }}
-                >
-                  我的项目
-                </Title>
+                >{t("我的项目")}</Title>
                 <Text style={{ color: 'var(--ac-muted)', fontSize: '13px' }}>
                   {filteredProjects.length}
                 </Text>
@@ -246,7 +241,7 @@ const HomePage: React.FC = () => {
                 alignItems: 'center'
               }}>
                 <Select
-                  placeholder="全部状态"
+                  placeholder={t("全部状态")}
                   value={statusFilter}
                   onChange={setStatusFilter}
                   variant="borderless"
@@ -254,10 +249,10 @@ const HomePage: React.FC = () => {
                   suffixIcon={<span style={{ color: 'var(--ac-muted)', fontSize: '10px' }}>⌄</span>}
                   allowClear
                 >
-                  <Option value="all">全部状态</Option>
-                  <Option value="completed">已完成</Option>
-                  <Option value="processing">处理中</Option>
-                  <Option value="error">处理失败</Option>
+                  <Option value="all">{t("全部状态")}</Option>
+                  <Option value="completed">{t("已完成")}</Option>
+                  <Option value="processing">{t("处理中")}</Option>
+                  <Option value="error">{t("处理失败")}</Option>
                 </Select>
               </div>
             </div>
@@ -273,9 +268,7 @@ const HomePage: React.FC = () => {
                    border: '1px solid var(--ac-line)'
                  }}>
                    <Spin size="large" />
-                   <div style={{ marginTop: '18px', color: 'var(--ac-muted)', fontSize: '14px' }}>
-                     正在加载项目列表…
-                   </div>
+                   <div style={{ marginTop: '18px', color: 'var(--ac-muted)', fontSize: '14px' }}>{t("正在加载项目列表…")}</div>
                  </div>
                ) : filteredProjects.length === 0 ? (
                  <div style={{
@@ -290,7 +283,7 @@ const HomePage: React.FC = () => {
                      description={
                        <div>
                          <Text type="secondary">
-                           {projects.length === 0 ? '还没有项目，请使用上方的导入区域创建第一个项目' : '没有找到匹配的项目'}
+                           {projects.length === 0 ? t("还没有项目，请使用上方的导入区域创建第一个项目") : t("没有找到匹配的项目")}
                          </Text>
                        </div>
                      }

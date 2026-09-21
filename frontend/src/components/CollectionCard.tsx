@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import React, { useMemo, useState } from 'react'
 import { message } from 'antd'
 import { Collection, Clip } from '../store/useProjectStore'
@@ -15,6 +17,7 @@ interface CollectionCardProps {
 
 // Calm Premium collection card — same anatomy as ClipCard (see DESIGN.md)
 const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onView, onGenerateVideo, onUpdate }) => {
+  useTranslation()
   const safeClips = Array.isArray(clips) ? clips : []
   const safeClipIds = Array.isArray(collection.clip_ids) ? collection.clip_ids : []
   const collectionClips = safeClipIds
@@ -37,15 +40,15 @@ const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onVi
 
   return (
     <article className="ac-card">
-      <div className="ac-card-thumb" onClick={() => onView(collection)} role="button" aria-label="预览合集">
+      <div className="ac-card-thumb" onClick={() => onView(collection)} role="button" aria-label={t("预览合集")}>
         {hasThumb && (
           <img src={thumbnailUrl} alt="" onError={() => setImgError(true)} draggable={false} />
         )}
         <div className="play"><span><Icon.Play size={18} /></span></div>
         <span className="ac-tag ac-tag--tl ac-tag--sans">
-          {collection.collection_type === 'ai_recommended' ? 'AI 推荐' : '手动'}
+          {collection.collection_type === 'ai_recommended' ? t("AI 推荐") : t("手动")}
         </span>
-        <span className="ac-tag ac-tag--bl">{collectionClips.length} 段</span>
+        <span className="ac-tag ac-tag--bl">{t("切片数量", { count: collectionClips.length })}</span>
         <span className="ac-tag ac-tag--br">{fmtDuration(totalDuration)}</span>
       </div>
 
@@ -62,11 +65,11 @@ const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onVi
           {collection.collection_summary || ''}
         </div>
         <div className="ac-card-foot">
-          <span className="meta">{collectionClips.length} 段 · {fmtDuration(totalDuration)}</span>
+          <span className="meta">{t("切片数量", { count: collectionClips.length })} · {fmtDuration(totalDuration)}</span>
           <div className="ac-card-actions">
-            <Btn variant="text" onClick={() => onView(collection)}>预览</Btn>
-            {onGenerateVideo && <Btn variant="text" onClick={() => onGenerateVideo(collection.id)}>下载</Btn>}
-            <Btn variant="text" onClick={() => message.info('投稿功能开发中', 3)}>投稿</Btn>
+            <Btn variant="text" onClick={() => onView(collection)}>{t("预览")}</Btn>
+            {onGenerateVideo && <Btn variant="text" onClick={() => onGenerateVideo(collection.id)}>{t("下载")}</Btn>}
+            <Btn variant="text" onClick={() => message.info(t("投稿功能开发中"), 3)}>{t("投稿")}</Btn>
           </div>
         </div>
       </div>

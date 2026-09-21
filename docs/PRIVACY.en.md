@@ -3,7 +3,7 @@
 *[中文版 →](./PRIVACY.md)*
 
 **Effective Date: June 3, 2026**
-**Last Updated: June 3, 2026**
+**Last Updated: September 7, 2026**
 
 > ⚠️ This is a draft template. Please have legal counsel review it before publishing (see "Clauses Requiring Legal Review" at the end).
 
@@ -38,11 +38,15 @@ To understand how features are used, find and fix problems, and improve the prod
 - **Recipient**: PostHog Inc., with data stored on its **United States** servers (see Section 6, "International Transfers").
 - **Local buffering**: Events are batched locally before sending; network issues do not affect normal use of the Software.
 
-### 2.2 Information You Provide
+### 2.2 Crash reports (optional, on by default)
+
+To fix crashes, the Software may send stack traces via **Sentry** when a DSN is configured at build time and you have not turned off **Crash reports** in Settings → App. This does **not** include video content, transcripts, or API keys. `send_default_pii` is off.
+
+### 2.3 Information You Provide
 
 - **Third-party platform accounts/cookies**: If you use download or upload features for platforms such as Bilibili or YouTube, the related credentials (cookies, etc.) are **stored only on your device** to perform the actions you initiate. We do not collect or upload them.
 
-### 2.3 Information We Do Not Collect
+### 2.4 Information We Do Not Collect
 
 - Your original video/audio content
 - Subtitle or transcript text

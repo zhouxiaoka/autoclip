@@ -5,7 +5,9 @@ import HomePage from './pages/HomePage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import SettingsPage from './pages/SettingsPage'
 import Header from './components/Header'
+import { UpdatePrompt } from './desktop/UpdatePrompt'
 import { trackPageview } from './analytics/posthog'
+import { startWorkflowObserver } from './analytics/observer'
 
 const { Content } = Layout
 
@@ -20,10 +22,12 @@ function usePageviewTracking() {
 function App() {
   console.log('🎬 App组件已加载');
   usePageviewTracking()
+  useEffect(() => startWorkflowObserver(), [])
 
   return (
     <Layout>
       <Header />
+      <UpdatePrompt />
       <Content>
         <Routes>
           <Route path="/" element={<HomePage />} />

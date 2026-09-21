@@ -150,6 +150,29 @@ def check_desktop_mode(relaxed: bool = False):
         raise HTTPException(status_code=400, detail="此端点仅在Desktop模式下可用")
 
 
+class PrivacySettings(BaseModel):
+    crash_reports: bool = True
+
+
+@router.get("/privacy")
+async def get_privacy():
+    """崩溃报告等隐私开关（桌面数据目录 privacy.json）。"""
+    from backend.core.sentry_setup import crash_reports_enabled
+    return PrivacySettings(crash_reports=crash_reports_enabled())
+
+
+@router.put("/privacy")
+async def put_privacy(body: PrivacySettings):
+    from backend.core.sentry_setup import write_privacy, crash_reports_enabled, init_sentry
+    try:
+        write_privacy(crash_reports=body.crash_reports)
+        if body.crash_reports:
+            init_sentry(os.getenv("AUTOCLIP_MODE", "web"))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PrivacySettings(crash_reports=crash_reports_enabled())
+
+
 @router.get("/desktop-mode")
 async def check_desktop_mode_endpoint():
     """检查是否在桌面模式 - 供前端调用"""

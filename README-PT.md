@@ -1,0 +1,205 @@
+<div align="center">
+
+<img src="src-tauri/icons/128x128.png" alt="AutoClip" width="80" height="80">
+
+# AutoClip
+
+**Transforme vídeos longos em momentos que merecem ser compartilhados.**
+
+[简体中文](README.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · **Português** · [Русский](README-RU.md) · [Français](README-FR.md)
+
+[![GitHub release](https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/releases/latest)
+[![GitHub stars](https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/forks)
+[![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
+[![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
+
+[Site](https://zhouxiaoka.github.io/autoclip_intro/) · [Relatar um problema](https://github.com/zhouxiaoka/autoclip/issues)
+
+**Instaladores desktop: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
+
+[Instalação e primeiros clipes (English)](docs/USER_INSTALLATION_GUIDE.en.md) · [Guia completo de solução de problemas (inglês)](docs/FAQ.en.md)
+
+</div>
+
+A partir da v1.3.1, o aplicativo, o site e o README oferecem chinês, inglês, japonês, coreano, espanhol, português, russo e francês. Escolha o idioma no cabeçalho ou siga o sistema. Seus arquivos e o conteúdo gerado mantêm o idioma original.
+
+O AutoClip usa IA para analisar legendas, encontrar destaques, criar títulos e gerar clipes e coletâneas automaticamente. Ideal para entrevistas, podcasts, cursos e gravações de transmissões ao vivo, oferece um aplicativo desktop, uma interface web via Docker e acesso por CLI / MCP.
+
+## Veja a interface
+
+![AutoClip v1.3.0 — local video import](docs/images/import-local.jpg)
+
+Interface web real da v1.3.0: adicione um vídeo local na área de importação, com legendas SRT opcionais.
+
+## Reconhecimento da comunidade
+
+<p align="center">
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
+</p>
+
+Estes selos são fornecidos pelo Trendshift. Clique para consultar as conquistas registradas do AutoClip. GitHub Trending e Trendshift são rankings diferentes; os selos mostram conquistas registradas, não uma posição em tempo real.
+
+## O que você pode fazer
+
+| Recurso | Descrição |
+| --- | --- |
+| Importar vídeos | Use arquivos locais ou links do YouTube e Bilibili, com legendas SRT opcionais. |
+| Encontrar destaques | Extraia resumos, intervalos por assunto, pontuações e títulos a partir das legendas. |
+| Criar clipes e coletâneas | Gere clipes e coletâneas sugeridas e ajuste a ordem manualmente. |
+| Exportar para publicar | Use predefinições para Douyin, Xiaohongshu, YouTube Shorts e Bilibili, com legendas embutidas e cartões de título. |
+| Escolher modelos | Use Qwen, APIs compatíveis com OpenAI, Gemini, SiliconFlow ou modelos locais com Ollama / LM Studio. |
+| Automatizar tarefas | Organize execuções pela CLI ou acesse o mesmo fluxo de processamento por um cliente MCP. |
+
+> Importar vídeo → Legendas / transcrição → Análise e pontuação por IA → Clipes e coletâneas → Exportação
+
+## Início rápido
+
+### 1. Aplicativo desktop
+
+Baixe o instalador adequado em [GitHub Releases](https://github.com/zhouxiaoka/autoclip/releases/latest):
+
+| Plataforma | Instalação |
+| --- | --- |
+| macOS · Apple Silicon | `.dmg` |
+| Windows 10 / 11 · x64 | `-setup.exe` |
+| Intel Mac / Linux | Use Docker ou a CLI abaixo |
+
+Os instaladores incluem Python e FFmpeg. Consulte cada versão para verificar as plataformas disponíveis e as instruções da primeira execução. Após instalar, escolha o provedor de modelos nas configurações, teste a conexão, salve e importe um vídeo.
+
+### 2. Docker / Web
+
+Requer Docker e Docker Compose v2. Execute os comandos na raiz do repositório:
+
+```bash
+git clone https://github.com/zhouxiaoka/autoclip.git
+cd autoclip
+```
+
+```bash
+cp env.example .env
+```
+
+Antes de iniciar, edite `.env`: selecione `LLM_PROVIDER` e informe a chave de API e o modelo correspondentes. Você também pode configurar o provedor pela interface após iniciar.
+
+```bash
+mkdir -p data logs uploads
+docker compose up -d --build
+```
+
+Abra a [interface web](http://localhost:3000). A [documentação da API](http://localhost:8000/docs) estará disponível após a inicialização do backend. Veja o [guia do Docker](DOCKER.md) (em chinês) para mais detalhes.
+
+No Linux, se os diretórios montados causarem erros de permissão, corrija a propriedade dos diretórios de dados do projeto com este comando e inicie os serviços novamente:
+
+```bash
+docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
+docker compose up -d
+```
+
+### 3. CLI / MCP
+
+Requer Python 3.10 ou superior (3.11 recomendado) e FFmpeg no PATH. O exemplo usa um shell de macOS / Linux; no PowerShell do Windows, ative o ambiente com `venv\Scripts\Activate.ps1`. O processamento local pela CLI não precisa de Redis.
+
+```bash
+git clone https://github.com/zhouxiaoka/autoclip.git
+cd autoclip
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install -e .
+```
+
+Exemplo com modelo local: instale e inicie o Ollama, depois baixe um modelo. Vídeos sem legendas exigem `faster-whisper`; o modelo de voz é baixado no primeiro uso. Para usar legendas existentes, adicione `--srt talk.srt`.
+
+```bash
+ollama pull qwen2.5:7b
+python -m pip install faster-whisper
+autoclip doctor --provider ollama
+autoclip run talk.mp4 --provider ollama --json
+```
+
+Substitua `PROJECT_ID` pelo ID do projeto retornado após o processamento para exportar no formato Shorts. Inicie o servidor MCP via stdio com `autoclip mcp`:
+
+```bash
+autoclip export PROJECT_ID --preset shorts
+autoclip mcp
+```
+
+No cliente MCP, defina `command` como o caminho absoluto de `autoclip` no ambiente virtual e `args` como `["mcp"]`. Veja o [guia de CLI / MCP](docs/CLI_AND_MCP.md) e a [skill para agentes](skills/autoclip/SKILL.md) (ambos em chinês).
+
+## Configuração de modelos
+
+| Opção | Configuração |
+| --- | --- |
+| Modelos na nuvem | Selecione Qwen, uma API compatível com OpenAI, Gemini ou SiliconFlow e informe a chave de API. Serviços compatíveis permitem personalizar a Base URL. |
+| Ollama | Endereço padrão: `http://localhost:11434/v1`; modelo: `qwen2.5:7b`. Não exige chave de API. |
+| LM Studio | Carregue um modelo e inicie o Local Server, por padrão em `http://localhost:1234/v1`. Selecione um modelo disponível no seu servidor. |
+
+Dentro do Docker, `localhost` aponta para o próprio contêiner. Para usar um modelo no host, configure um endereço acessível pelo contêiner; consulte o guia de CLI / MCP. O corte dos vídeos é local; a análise com modelos na nuvem envia o texto das legendas ao provedor escolhido. Downloads de vídeos e modelos ainda precisam de internet.
+
+## Perguntas frequentes
+
+<details>
+<summary>É gratuito? Preciso de uma chave de API?</summary>
+
+O AutoClip é gratuito e de código aberto sob MIT. Provedores de modelos na nuvem cobram pelo uso e exigem sua própria chave de API. Ollama / LM Studio não precisam de chave de nuvem, mas exigem modelos e hardware adequado.
+
+</details>
+
+<details>
+<summary>Meus vídeos são enviados para a nuvem?</summary>
+
+A edição local acontece no seu dispositivo. A análise com modelos na nuvem envia o texto das legendas ao provedor escolhido. Os recursos de publicação enviam o vídeo à plataforma de destino quando usados. Estatísticas e relatórios de erros dependem da versão e das configurações; consulte as notas de privacidade.
+
+</details>
+
+<details>
+<summary>Posso usar vídeos sem legendas?</summary>
+
+Sim, após preparar os componentes locais do Whisper e um modelo de voz. Também é possível importar SRT existente. Legendas precisas podem reduzir o tempo e os erros de transcrição.
+
+</details>
+
+<details>
+<summary>Por que nenhum clipe foi gerado?</summary>
+
+Verifique a etapa que falhou: legendas vazias, conexão com o modelo, pontuação mínima muito alta ou problemas no FFmpeg e no disco. Você pode reduzir o limite de 0.7 para 0.5, mas isso não garante clipes.
+
+</details>
+
+<details>
+<summary>Quais vídeos funcionam melhor e quanto tempo leva?</summary>
+
+A análise usa principalmente as legendas, sendo adequada para entrevistas, podcasts, aulas e comentários falados. Ação visual ou música podem ter resultados limitados. O tempo depende da duração, do hardware, do modelo e da exportação; comece com uma amostra curta.
+
+</details>
+
+[Guia completo de solução de problemas (inglês)](docs/FAQ.en.md) · [Problemas conhecidos](https://github.com/zhouxiaoka/autoclip/issues/96)
+
+## Documentação
+
+O README está disponível em oito idiomas; a maioria dos guias detalhados está em chinês. Os idiomas do README não indicam os idiomas compatíveis com a interface ou com os modelos de transcrição.
+
+- [Instalação e primeiros clipes (English)](docs/USER_INSTALLATION_GUIDE.en.md)
+- [Implantação com Docker (chinês)](DOCKER.md)
+- [CLI, MCP e modelos locais (chinês)](docs/CLI_AND_MCP.md)
+- [Provedores de modelos (chinês)](docs/MULTI_LLM_PROVIDER_GUIDE.md)
+- [Perguntas frequentes (chinês)](docs/FAQ.md)
+- [Guia de contribuição (chinês)](CONTRIBUTING.md)
+- [Histórico de alterações](CHANGELOG.md)
+- [Privacidade (chinês / inglês)](docs/PRIVACY.en.md)
+- [Tradução do README e manutenção dos selos (chinês)](docs/i18n.md)
+
+## Contribua e entre em contato
+
+Correções, comentários e melhorias nas traduções são bem-vindos. Ao relatar um erro, inclua sistema operacional, versão, modelo, passos para reprodução e logs sem informações confidenciais.
+
+Projeto mantido por uma pessoa no tempo livre. O prazo de resposta varia; não há suporte imediato nem assistência individual de implantação. Consulte as perguntas frequentes e os problemas conhecidos antes de entrar em contato.
+
+- E-mail: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+
+Agradecemos ao FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper e a todas as pessoas que contribuem. Distribuído sob a [licença MIT](LICENSE). Se o AutoClip for útil, considere dar uma estrela ao projeto.
+
+[![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)

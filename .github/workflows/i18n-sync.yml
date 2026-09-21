@@ -3,123 +3,41 @@ name: I18n Documentation Sync
 on:
   push:
     paths:
-      - 'README.md'
-      - 'README-EN.md'
-      - '.github/README.md'
+      - 'README*.md'
+      - '.github/README*.md'
+      - 'docs/**'
+      - 'DOCKER.md'
+      - 'CONTRIBUTING.md'
+      - 'CHANGELOG.md'
+      - 'LICENSE'
+      - 'skills/autoclip/SKILL.md'
+      - 'src-tauri/icons/128x128.png'
+      - 'scripts/check_readmes.py'
+      - '.github/workflows/i18n-sync.yml'
   pull_request:
     paths:
-      - 'README.md'
-      - 'README-EN.md'
-      - '.github/README.md'
+      - 'README*.md'
+      - '.github/README*.md'
+      - 'docs/**'
+      - 'DOCKER.md'
+      - 'CONTRIBUTING.md'
+      - 'CHANGELOG.md'
+      - 'LICENSE'
+      - 'skills/autoclip/SKILL.md'
+      - 'src-tauri/icons/128x128.png'
+      - 'scripts/check_readmes.py'
+      - '.github/workflows/i18n-sync.yml'
+
+permissions:
+  contents: read
 
 jobs:
-  sync-docs:
+  check-readmes:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        
-    - name: Install dependencies
-      run: |
-        npm install -g markdown-link-check@latest
-        npm install -g markdownlint-cli
-        
-    - name: Check markdown links (Warning Only)
-      run: |
-        echo "🔍 Checking markdown links (warnings only)..."
-        npx markdown-link-check README.md || echo "⚠️  Warning: Some links in README.md may be broken"
-        npx markdown-link-check README-EN.md || echo "⚠️  Warning: Some links in README-EN.md may be broken"
-        npx markdown-link-check .github/README.md || echo "⚠️  Warning: Some links in .github/README.md may be broken"
-        echo "✅ Link check completed (warnings only, no failure)"
-        
-    - name: Lint markdown files (Warning Only)
-      run: |
-        echo "🔍 Linting markdown files (warnings only)..."
-        markdownlint README.md || echo "⚠️  Warning: README.md has linting issues"
-        markdownlint README-EN.md || echo "⚠️  Warning: README-EN.md has linting issues"
-        markdownlint .github/README.md || echo "⚠️  Warning: .github/README.md has linting issues"
-        echo "✅ Linting completed (warnings only, no failure)"
-        
-    - name: Check language consistency (Warning Only)
-      run: |
-        echo "🔍 Checking language consistency (warnings only)..."
-        if ! grep -q "语言.*English.*中文" README.md; then
-          echo "⚠️  Warning: Language switcher may be missing in Chinese README"
-        else
-          echo "✅ Language switcher found in Chinese README"
-        fi
-        
-        if ! grep -q "Language.*English.*中文" README-EN.md; then
-          echo "⚠️  Warning: Language switcher may be missing in English README"
-        else
-          echo "✅ Language switcher found in English README"
-        fi
-        echo "✅ Language consistency check completed (warnings only, no failure)"
-        
-    - name: Validate contact information (Warning Only)
-      run: |
-        echo "🔍 Checking contact information (warnings only)..."
-        if ! grep -Eq '([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})|(联系|Contact).*(表单|Issue|飞书|微信|QQ|Discord|Telegram|Link|链接)' README.md; then
-          echo "⚠️  Warning: Contact information may be missing in Chinese README"
-        else
-          echo "✅ Contact information found in Chinese README"
-        fi
-        
-        if ! grep -Eq '([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})|(联系|Contact).*(表单|Issue|飞书|微信|QQ|Discord|Telegram|Link|链接)' README-EN.md; then
-          echo "⚠️  Warning: Contact information may be missing in English README"
-        else
-          echo "✅ Contact information found in English README"
-        fi
-        echo "✅ Contact information check completed (warnings only, no failure)"
-        
-    - name: Check Docker support (Warning Only)
-      run: |
-        echo "🔍 Checking Docker support documentation (warnings only)..."
-        if ! grep -q "Docker" README.md; then
-          echo "⚠️  Warning: Docker support may not be documented in Chinese README"
-        else
-          echo "✅ Docker support found in Chinese README"
-        fi
-        
-        if ! grep -q "Docker" README-EN.md; then
-          echo "⚠️  Warning: Docker support may not be documented in English README"
-        else
-          echo "✅ Docker support found in English README"
-        fi
-        echo "✅ Docker support check completed (warnings only, no failure)"
-        
-    - name: Generate documentation report
-      run: |
-        echo "📝 Generating documentation report..."
-        mkdir -p docs
-        echo "# Documentation Sync Report" > docs/sync-report.md
-        echo "" >> docs/sync-report.md
-        echo "## Files Checked" >> docs/sync-report.md
-        echo "- README.md (Chinese)" >> docs/sync-report.md
-        echo "- README-EN.md (English)" >> docs/sync-report.md
-        echo "- .github/README.md (GitHub Homepage)" >> docs/sync-report.md
-        echo "" >> docs/sync-report.md
-        echo "## Status" >> docs/sync-report.md
-        echo "✅ All documentation files are processed" >> docs/sync-report.md
-        echo "ℹ️  Checks are now in warning mode - no failures will block commits" >> docs/sync-report.md
-        echo "ℹ️  Please review any warnings above for documentation improvements" >> docs/sync-report.md
-        echo "" >> docs/sync-report.md
-        echo "## Workflow Changes" >> docs/sync-report.md
-        echo "- All README checks are now non-blocking (warnings only)" >> docs/sync-report.md
-        echo "- Link checks, linting, and content validation will not fail the build" >> docs/sync-report.md
-        echo "- Warnings are provided for manual review and improvement" >> docs/sync-report.md
-        echo "" >> docs/sync-report.md
-        echo "Last updated: $(date)" >> docs/sync-report.md
-        echo "✅ Documentation report generated successfully"
-        
-    - name: Upload documentation report
-      uses: actions/upload-artifact@v4
-      with:
-        name: documentation-report
-        path: docs/sync-report.md
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check all eight README translations
+        run: python scripts/check_readmes.py

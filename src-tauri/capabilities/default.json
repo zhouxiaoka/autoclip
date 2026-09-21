@@ -66,6 +66,8 @@
           "cmd": "open"
         }
       ]
-    }
+    },
+    "updater:default",
+    "process:default"
   ]
 }

@@ -15,6 +15,8 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             start_backend_service,
             stop_backend_service,
@@ -24,7 +26,8 @@ pub fn run() {
             quit_app,
             enable_autostart,
             disable_autostart,
-            is_autostart_enabled
+            is_autostart_enabled,
+            crate::tray::set_tray_language
         ])
         .manage(BackendManager::new())
         .setup(|app| {

@@ -1,3 +1,5 @@
+import { t, getLocale } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import React, { useState, useEffect } from 'react'
 import { Button, Modal, Form, Input, Table, Tag, Space, message, Popconfirm, Tabs, Alert, Typography, Select, Row, Col, Tooltip, Progress, Descriptions, Statistic, Card } from 'antd'
 import { PlusOutlined, DeleteOutlined, UserOutlined, CheckCircleOutlined, CloseCircleOutlined, UploadOutlined, QuestionCircleOutlined, ReloadOutlined, EyeOutlined, RedoOutlined, StopOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlayCircleOutlined } from '@ant-design/icons'
@@ -26,6 +28,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
   clipTitles = [],
   onUploadSuccess
 }) => {
+  useTranslation()
   const [activeTab, setActiveTab] = useState('upload')
   const [accounts, setAccounts] = useState<BilibiliAccount[]>([])
   const [loading, setLoading] = useState(false)
@@ -46,7 +49,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
       const data = await uploadApi.getAccounts()
       setAccounts(data)
     } catch (error: any) {
-      message.error('获取账号列表失败: ' + (error.message || '未知错误'))
+      message.error(t("获取账号列表失败: ") + (error.message || t("未知错误")))
     } finally {
       setLoading(false)
     }
@@ -59,7 +62,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
       const data = await uploadApi.getUploadRecords()
       setUploadRecords(data)
     } catch (error: any) {
-      message.error('获取投稿记录失败: ' + (error.message || '未知错误'))
+      message.error(t("获取投稿记录失败: ") + (error.message || t("未知错误")))
     } finally {
       setRecordsLoading(false)
     }
@@ -69,10 +72,10 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
   const handleRetry = async (recordId: string | number) => {
     try {
       await uploadApi.retryUpload(recordId)
-      message.success('重试任务已提交')
+      message.success(t("重试任务已提交"))
       fetchUploadRecords()
     } catch (error: any) {
-      message.error('重试失败: ' + (error.message || '未知错误'))
+      message.error(t("重试失败: ") + (error.message || t("未知错误")))
     }
   }
 
@@ -80,10 +83,10 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
   const handleCancel = async (recordId: string | number) => {
     try {
       await uploadApi.cancelUpload(recordId)
-      message.success('任务已取消')
+      message.success(t("任务已取消"))
       fetchUploadRecords()
     } catch (error: any) {
-      message.error('取消失败: ' + (error.message || '未知错误'))
+      message.error(t("取消失败: ") + (error.message || t("未知错误")))
     }
   }
 
@@ -91,10 +94,10 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
   const handleDelete = async (recordId: string | number) => {
     try {
       await uploadApi.deleteUpload(recordId)
-      message.success('任务已删除')
+      message.success(t("任务已删除"))
       fetchUploadRecords()
     } catch (error: any) {
-      message.error('删除失败: ' + (error.message || '未知错误'))
+      message.error(t("删除失败: ") + (error.message || t("未知错误")))
     }
   }
 
@@ -139,17 +142,17 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
       })
       
       if (Object.keys(cookies).length === 0) {
-        message.error('Cookie格式不正确，请检查输入')
+        message.error(t("Cookie格式不正确，请检查输入"))
         return
       }
       
       await uploadApi.cookieLogin(cookies, values.nickname)
-      message.success('账号添加成功！')
+      message.success(t("账号添加成功！"))
       setShowAddAccount(false)
       cookieForm.resetFields()
       fetchAccounts()
     } catch (error: any) {
-      message.error('添加账号失败: ' + (error.message || '未知错误'))
+      message.error(t("添加账号失败: ") + (error.message || t("未知错误")))
     } finally {
       setLoading(false)
     }
@@ -159,22 +162,22 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
   const handleDeleteAccount = async (accountId: string) => {
     try {
       await uploadApi.deleteAccount(accountId)
-      message.success('账号删除成功')
+      message.success(t("账号删除成功"))
       fetchAccounts()
     } catch (error: any) {
-      message.error('删除账号失败: ' + (error.message || '未知错误'))
+      message.error(t("删除账号失败: ") + (error.message || t("未知错误")))
     }
   }
 
   // 提交上传
   const handleUpload = async (values: any) => {
     // 显示开发中提示
-    message.info('B站上传功能正在开发中，敬请期待！', 3)
+    message.info(t("B站上传功能正在开发中，敬请期待！"), 3)
     return
     
     // 原有代码已禁用
     if (!projectId || clipIds.length === 0) {
-      message.error('没有选择要上传的切片')
+      message.error(t("没有选择要上传的切片"))
       return
     }
 
@@ -200,15 +203,15 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
       })
 
       if (response.ok) {
-        message.success('投稿任务已创建，正在后台处理中...')
+        message.success(t("投稿任务已创建，正在后台处理中..."))
         onUploadSuccess?.()
         onClose()
       } else {
         const error = await response.json()
-        message.error('投稿失败: ' + (error.detail || '未知错误'))
+        message.error(t("投稿失败: ") + (error.detail || t("未知错误")))
       }
     } catch (error: any) {
-      message.error('投稿失败: ' + (error.message || '未知错误'))
+      message.error(t("投稿失败: ") + (error.message || t("未知错误")))
     } finally {
       setLoading(false)
     }
@@ -217,12 +220,12 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
   // 获取状态标签
   const getStatusTag = (status: string) => {
     const statusConfig = {
-      pending: { color: 'default', icon: <ClockCircleOutlined />, text: '等待中' },
-      processing: { color: 'processing', icon: <PlayCircleOutlined />, text: '处理中' },
-      success: { color: 'success', icon: <CheckCircleOutlined />, text: '成功' },
-      completed: { color: 'success', icon: <CheckCircleOutlined />, text: '完成' },
-      failed: { color: 'error', icon: <ExclamationCircleOutlined />, text: '失败' },
-      cancelled: { color: 'default', icon: <StopOutlined />, text: '已取消' }
+      pending: { color: 'default', icon: <ClockCircleOutlined />, text: t("等待中") },
+      processing: { color: 'processing', icon: <PlayCircleOutlined />, text: t("处理中") },
+      success: { color: 'success', icon: <CheckCircleOutlined />, text: t("成功") },
+      completed: { color: 'success', icon: <CheckCircleOutlined />, text: t("完成") },
+      failed: { color: 'error', icon: <ExclamationCircleOutlined />, text: t("失败") },
+      cancelled: { color: 'default', icon: <StopOutlined />, text: t("已取消") }
     }
     
     const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending
@@ -236,7 +239,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
   // 获取分区名称
   const getPartitionName = (partitionId: number) => {
     const partition = BILIBILI_PARTITIONS.find(p => p.id === partitionId)
-    return partition ? partition.name : `分区${partitionId}`
+    return partition ? partition.name : t("分区{{value1}}", { value1: partitionId })
   }
 
   // 格式化文件大小
@@ -255,11 +258,11 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
     const secs = seconds % 60
     
     if (hours > 0) {
-      return `${hours}小时${minutes}分钟`
+      return t("{{value1}}小时{{value2}}分钟", { value1: hours, value2: minutes })
     } else if (minutes > 0) {
-      return `${minutes}分钟${secs}秒`
+      return t("{{value1}}分钟{{value2}}秒", { value1: minutes, value2: secs })
     } else {
-      return `${secs}秒`
+      return t("{{value1}}秒", { value1: secs })
     }
   }
 
@@ -278,15 +281,15 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
   // Cookie获取指南内容
   const cookieGuideContent = (
     <div style={{ maxWidth: 300 }}>
-      <div style={{ marginBottom: 8, fontWeight: 'bold' }}>Cookie获取步骤：</div>
+      <div style={{ marginBottom: 8, fontWeight: 'bold' }}>{t("Cookie获取步骤：")}</div>
       <ol style={{ margin: 0, paddingLeft: 16 }}>
-        <li>打开B站网站并登录</li>
-        <li>按F12打开开发者工具</li>
-        <li>点击Network标签页</li>
-        <li>刷新页面</li>
-        <li>找到任意请求，点击查看</li>
-        <li>在Request Headers中找到Cookie字段</li>
-        <li>复制Cookie的值（不包含"Cookie: "前缀）</li>
+        <li>{t("打开B站网站并登录")}</li>
+        <li>{t("按F12打开开发者工具")}</li>
+        <li>{t("点击Network标签页")}</li>
+        <li>{t("刷新页面")}</li>
+        <li>{t("找到任意请求，点击查看")}</li>
+        <li>{t("在Request Headers中找到Cookie字段")}</li>
+        <li>{t("复制Cookie的值（不包含\"Cookie: \"前缀）")}</li>
       </ol>
     </div>
   )
@@ -294,7 +297,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
   // 账号管理表格列
   const accountColumns = [
     {
-      title: '昵称',
+      title: t("昵称"),
       dataIndex: 'nickname',
       key: 'nickname',
       render: (nickname: string, record: BilibiliAccount) => (
@@ -305,34 +308,32 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
       ),
     },
     {
-      title: '用户名',
+      title: t("用户名"),
       dataIndex: 'username',
       key: 'username',
     },
     {
-      title: '状态',
+      title: t("状态"),
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => (
         <Tag color={status === 'active' ? 'green' : 'red'} icon={status === 'active' ? <CheckCircleOutlined /> : <CloseCircleOutlined />}>
-          {status === 'active' ? '正常' : '异常'}
+          {status === 'active' ? t("正常") : t("异常")}
         </Tag>
       ),
     },
     {
-      title: '操作',
+      title: t("操作"),
       key: 'action',
       render: (_: any, record: BilibiliAccount) => (
         <Popconfirm
-          title="确定要删除这个账号吗？"
-          description="删除后将无法恢复，请谨慎操作。"
+          title={t("确定要删除这个账号吗？")}
+          description={t("删除后将无法恢复，请谨慎操作。")}
           onConfirm={() => handleDeleteAccount(record.id)}
-          okText="确定"
-          cancelText="取消"
+          okText={t("确定")}
+          cancelText={t("取消")}
         >
-          <Button type="text" danger icon={<DeleteOutlined />} size="small">
-            删除
-          </Button>
+          <Button type="text" danger icon={<DeleteOutlined />} size="small">{t("删除")}</Button>
         </Popconfirm>
       ),
     },
@@ -341,14 +342,14 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
   // 投稿状态表格列
   const uploadStatusColumns = [
     {
-      title: '任务ID',
+      title: t("任务ID"),
       dataIndex: 'id',
       key: 'id',
       width: 80,
       render: (id: string | number) => <Text code>{id}</Text>
     },
     {
-      title: '标题',
+      title: t("标题"),
       dataIndex: 'title',
       key: 'title',
       ellipsis: true,
@@ -359,7 +360,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
       )
     },
     {
-      title: '投稿账号',
+      title: t("投稿账号"),
       dataIndex: 'account_nickname',
       key: 'account_nickname',
       width: 120,
@@ -373,7 +374,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
       )
     },
     {
-      title: '分区',
+      title: t("分区"),
       dataIndex: 'partition_id',
       key: 'partition_id',
       width: 100,
@@ -382,14 +383,14 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
       )
     },
     {
-      title: '状态',
+      title: t("状态"),
       dataIndex: 'status',
       key: 'status',
       width: 100,
       render: (status: string) => getStatusTag(status)
     },
     {
-      title: '进度',
+      title: t("进度"),
       dataIndex: 'progress',
       key: 'progress',
       width: 120,
@@ -406,21 +407,21 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
       }
     },
     {
-      title: '文件大小',
+      title: t("文件大小"),
       dataIndex: 'file_size',
       key: 'file_size',
       width: 100,
       render: (fileSize: number) => <span>{formatFileSize(fileSize)}</span>
     },
     {
-      title: '创建时间',
+      title: t("创建时间"),
       dataIndex: 'created_at',
       key: 'created_at',
       width: 150,
-      render: (date: string) => <span>{new Date(date).toLocaleString()}</span>
+      render: (date: string) => <span>{new Date(date).toLocaleString(getLocale())}</span>
     },
     {
-      title: '操作',
+      title: t("操作"),
       key: 'actions',
       width: 200,
       render: (_: any, record: UploadRecord) => (
@@ -430,57 +431,49 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
             icon={<EyeOutlined />} 
             onClick={() => handleViewDetail(record)}
             size="small"
-          >
-            详情
-          </Button>
+          >{t("详情")}</Button>
           {record.status === 'failed' && (
             <Popconfirm
-              title="确定要重试这个投稿任务吗？"
+              title={t("确定要重试这个投稿任务吗？")}
               onConfirm={() => handleRetry(record.id)}
-              okText="确定"
-              cancelText="取消"
+              okText={t("确定")}
+              cancelText={t("取消")}
             >
               <Button 
                 type="link" 
                 icon={<RedoOutlined />} 
                 size="small"
-              >
-                重试
-              </Button>
+              >{t("重试")}</Button>
             </Popconfirm>
           )}
           {(record.status === 'pending' || record.status === 'processing') && (
             <Popconfirm
-              title="确定要取消这个投稿任务吗？"
+              title={t("确定要取消这个投稿任务吗？")}
               onConfirm={() => handleCancel(record.id)}
-              okText="确定"
-              cancelText="取消"
+              okText={t("确定")}
+              cancelText={t("取消")}
             >
               <Button 
                 type="link" 
                 icon={<StopOutlined />} 
                 danger
                 size="small"
-              >
-                取消
-              </Button>
+              >{t("取消")}</Button>
             </Popconfirm>
           )}
           {(record.status === 'success' || record.status === 'completed' || record.status === 'failed' || record.status === 'cancelled') && (
             <Popconfirm
-              title="确定要删除这个投稿任务吗？删除后无法恢复。"
+              title={t("确定要删除这个投稿任务吗？删除后无法恢复。")}
               onConfirm={() => handleDelete(record.id)}
-              okText="确定"
-              cancelText="取消"
+              okText={t("确定")}
+              cancelText={t("取消")}
             >
               <Button 
                 type="link" 
                 icon={<DeleteOutlined />} 
                 danger
                 size="small"
-              >
-                删除
-              </Button>
+              >{t("删除")}</Button>
             </Popconfirm>
           )}
         </Space>
@@ -503,11 +496,11 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
           <UploadOutlined />
         </div>
         <div className="bilibili-manager-header-content">
-          <h2 className="bilibili-manager-header-title">B站管理</h2>
+          <h2 className="bilibili-manager-header-title">{t("B站管理")}</h2>
           <p className="bilibili-manager-header-subtitle">
             {clipIds.length > 0 
-              ? `准备上传 ${clipIds.length} 个切片到B站` 
-              : '管理您的B站账号和投稿设置'
+              ? t("准备上传 {{value1}} 个切片到B站", { value1: clipIds.length })
+              : t("管理您的B站账号和投稿设置")
             }
           </p>
         </div>
@@ -520,16 +513,14 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
           <TabPane 
             tab={
               <span>
-                <UploadOutlined />
-                投稿上传
-              </span>
+                <UploadOutlined />{t("投稿上传")}</span>
             } 
             key="upload"
           >
             <div className="bilibili-manager-content">
               <Alert
-                message="投稿信息"
-                description={`准备上传 ${clipIds.length} 个切片到B站`}
+                message={t("投稿信息")}
+                description={t("准备上传 {{value1}} 个切片到B站", { value1: clipIds.length })}
                 type="info"
                 showIcon
                 style={{ marginBottom: 16 }}
@@ -540,29 +531,27 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
               onFinish={handleUpload}
               layout="vertical"
               initialValues={{
-                title: clipTitles.length === 1 ? clipTitles[0] : `${clipTitles[0]} 等${clipIds.length}个视频`,
+                title: clipTitles.length === 1 ? clipTitles[0] : t("{{value1}} 等{{value2}}个视频", { value1: clipTitles[0], value2: clipIds.length }),
                 partition_id: 4 // 默认游戏分区
               }}
             >
               <Row gutter={16}>
                 <Col span={12}>
                   <Form.Item
-                    label="选择账号"
+                    label={t("选择账号")}
                     name="account_id"
-                    rules={[{ required: true, message: '请选择B站账号' }]}
+                    rules={[{ required: true, message: t("请选择B站账号") }]}
                   >
                     <Select 
-                      placeholder="选择要使用的B站账号"
+                      placeholder={t("选择要使用的B站账号")}
                       notFoundContent={
                         <div style={{ textAlign: 'center', padding: '20px' }}>
-                          <p>暂无可用账号</p>
+                          <p>{t("暂无可用账号")}</p>
                           <Button 
                             type="link" 
                             icon={<PlusOutlined />}
                             onClick={() => setShowAddAccount(true)}
-                          >
-                            添加账号
-                          </Button>
+                          >{t("添加账号")}</Button>
                         </div>
                       }
                     >
@@ -576,11 +565,11 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
                 </Col>
                 <Col span={12}>
                   <Form.Item
-                    label="视频分区"
+                    label={t("视频分区")}
                     name="partition_id"
-                    rules={[{ required: true, message: '请选择视频分区' }]}
+                    rules={[{ required: true, message: t("请选择视频分区") }]}
                   >
-                    <Select placeholder="选择视频分区" showSearch>
+                    <Select placeholder={t("选择视频分区")} showSearch>
                       {BILIBILI_PARTITIONS.map(partition => (
                         <Option key={partition.id} value={partition.id}>
                           {partition.name}
@@ -592,19 +581,19 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
               </Row>
 
               <Form.Item
-                label="标题"
+                label={t("标题")}
                 name="title"
-                rules={[{ required: true, message: '请输入视频标题' }]}
+                rules={[{ required: true, message: t("请输入视频标题") }]}
               >
-                <Input placeholder="输入视频标题" maxLength={80} showCount />
+                <Input placeholder={t("输入视频标题")} maxLength={80} showCount />
               </Form.Item>
 
               <Form.Item
-                label="描述"
+                label={t("描述")}
                 name="description"
               >
                 <TextArea
-                  placeholder="输入视频描述（可选）"
+                  placeholder={t("输入视频描述（可选）")}
                   rows={3}
                   maxLength={2000}
                   showCount
@@ -612,24 +601,20 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
               </Form.Item>
 
               <Form.Item
-                label="标签"
+                label={t("标签")}
                 name="tags"
               >
-                <Input placeholder="输入标签，用逗号分隔（可选）" />
+                <Input placeholder={t("输入标签，用逗号分隔（可选）")} />
               </Form.Item>
 
               <Form.Item>
                 <Space>
                   <Button 
                     type="primary" 
-                    onClick={() => message.info('开发中，敬请期待', 3)}
+                    onClick={() => message.info(t("开发中，敬请期待"), 3)}
                     icon={<UploadOutlined />}
-                  >
-                    开始投稿
-                  </Button>
-                  <Button onClick={onClose}>
-                    取消
-                  </Button>
+                  >{t("开始投稿")}</Button>
+                  <Button onClick={onClose}>{t("取消")}</Button>
                 </Space>
               </Form.Item>
               </Form>
@@ -641,9 +626,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
         <TabPane 
           tab={
             <span>
-              <UserOutlined />
-              账号管理
-            </span>
+              <UserOutlined />{t("账号管理")}</span>
           } 
           key="accounts"
         >
@@ -653,9 +636,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
                 type="primary" 
                 icon={<PlusOutlined />} 
                 onClick={() => setShowAddAccount(true)}
-              >
-                添加账号
-              </Button>
+              >{t("添加账号")}</Button>
             </div>
 
             <Table
@@ -673,23 +654,19 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
         <TabPane 
           tab={
             <span>
-              <ReloadOutlined />
-              投稿状态
-            </span>
+              <ReloadOutlined />{t("投稿状态")}</span>
           } 
           key="status"
         >
           <div className="bilibili-manager-content">
             <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, color: '#ffffff' }}>投稿任务状态</h3>
+              <h3 style={{ margin: 0, color: '#ffffff' }}>{t("投稿任务状态")}</h3>
               <Button 
                 type="primary" 
                 icon={<ReloadOutlined />} 
                 onClick={fetchUploadRecords}
                 loading={recordsLoading}
-              >
-                刷新
-              </Button>
+              >{t("刷新")}</Button>
             </div>
 
             {/* 统计信息 */}
@@ -700,7 +677,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
                   <Col span={6}>
                     <Card style={{ background: '#262626', border: '1px solid #404040' }}>
                       <Statistic 
-                        title={<span style={{ color: '#ffffff' }}>总任务数</span>} 
+                        title={<span style={{ color: '#ffffff' }}>{t("总任务数")}</span>}
                         value={stats.total} 
                         valueStyle={{ color: '#ffffff' }} 
                       />
@@ -709,7 +686,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
                   <Col span={6}>
                     <Card style={{ background: '#262626', border: '1px solid #404040' }}>
                       <Statistic 
-                        title={<span style={{ color: '#ffffff' }}>成功</span>} 
+                        title={<span style={{ color: '#ffffff' }}>{t("成功")}</span>}
                         value={stats.success} 
                         valueStyle={{ color: '#52c41a' }}
                         prefix={<CheckCircleOutlined />}
@@ -719,7 +696,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
                   <Col span={6}>
                     <Card style={{ background: '#262626', border: '1px solid #404040' }}>
                       <Statistic 
-                        title={<span style={{ color: '#ffffff' }}>失败</span>} 
+                        title={<span style={{ color: '#ffffff' }}>{t("失败")}</span>}
                         value={stats.failed} 
                         valueStyle={{ color: '#ff4d4f' }}
                         prefix={<ExclamationCircleOutlined />}
@@ -729,7 +706,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
                   <Col span={6}>
                     <Card style={{ background: '#262626', border: '1px solid #404040' }}>
                       <Statistic 
-                        title={<span style={{ color: '#ffffff' }}>进行中</span>} 
+                        title={<span style={{ color: '#ffffff' }}>{t("进行中")}</span>}
                         value={stats.processing + stats.pending} 
                         valueStyle={{ color: '#1890ff' }}
                         prefix={<PlayCircleOutlined />}
@@ -750,7 +727,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
                 pageSize: 10,
                 showSizeChanger: true,
                 showQuickJumper: true,
-                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`
+                showTotal: (total, range) => t("第 {{value1}}-{{value2}} 条，共 {{value3}} 条", { value1: range[0], value2: range[1], value3: total })
               }}
               scroll={{ x: 1200 }}
               size="small"
@@ -762,7 +739,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
 
       {/* 添加账号弹窗 */}
       <Modal
-        title="添加B站账号"
+        title={t("添加B站账号")}
         open={showAddAccount}
         onCancel={() => {
           setShowAddAccount(false)
@@ -772,8 +749,8 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
         width={600}
       >
         <Alert
-          message="推荐使用Cookie导入"
-          description="Cookie导入是最安全、最稳定的登录方式，不会触发B站风控。"
+          message={t("推荐使用Cookie导入")}
+          description={t("Cookie导入是最安全、最稳定的登录方式，不会触发B站风控。")}
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
@@ -782,10 +759,10 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
         <Form form={cookieForm} onFinish={handleCookieLogin} layout="vertical">
           <Form.Item
             name="nickname"
-            label="账号昵称"
-            rules={[{ required: true, message: '请输入账号昵称' }]}
+            label={t("账号昵称")}
+            rules={[{ required: true, message: t("请输入账号昵称") }]}
           >
-            <Input placeholder="请输入账号昵称，用于识别" />
+            <Input placeholder={t("请输入账号昵称，用于识别")} />
           </Form.Item>
           
           <Form.Item
@@ -798,31 +775,25 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
                     type="link" 
                     size="small" 
                     icon={<QuestionCircleOutlined />}
-                  >
-                    获取指南
-                  </Button>
+                  >{t("获取指南")}</Button>
                 </Tooltip>
               </Space>
             }
             rules={[
-              { required: true, message: '请输入Cookie' },
-              { min: 10, message: 'Cookie长度不能少于10个字符' }
+              { required: true, message: t("请输入Cookie") },
+              { min: 10, message: t("Cookie长度不能少于10个字符") }
             ]}
           >
             <TextArea
               rows={4}
-              placeholder="请从浏览器开发者工具中复制Cookie，格式如：SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx"
+              placeholder={t("请从浏览器开发者工具中复制Cookie，格式如：SESSDATA=xxx; bili_jct=xxx; DedeUserID=xxx")}
             />
           </Form.Item>
           
           <Form.Item>
             <Space>
-              <Button type="primary" htmlType="submit" loading={loading}>
-                添加账号
-              </Button>
-              <Button onClick={() => setShowAddAccount(false)}>
-                取消
-              </Button>
+              <Button type="primary" htmlType="submit" loading={loading}>{t("添加账号")}</Button>
+              <Button onClick={() => setShowAddAccount(false)}>{t("取消")}</Button>
             </Space>
           </Form.Item>
         </Form>
@@ -830,7 +801,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
 
       {/* 投稿状态详情模态框 */}
       <Modal
-        title="投稿任务详情"
+        title={t("投稿任务详情")}
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
         footer={null}
@@ -858,28 +829,28 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
                 border: '1px solid #303030'
               }}
             >
-              <Descriptions.Item label="任务ID" span={1}>
+              <Descriptions.Item label={t("任务ID")} span={1}>
                 <Text code>{selectedRecord.id}</Text>
               </Descriptions.Item>
-              <Descriptions.Item label="状态" span={1}>
+              <Descriptions.Item label={t("状态")} span={1}>
                 {getStatusTag(selectedRecord.status)}
               </Descriptions.Item>
-              <Descriptions.Item label="标题" span={2}>
+              <Descriptions.Item label={t("标题")} span={2}>
                 <Text>{selectedRecord.title}</Text>
               </Descriptions.Item>
-              <Descriptions.Item label="投稿账号" span={1}>
+              <Descriptions.Item label={t("投稿账号")} span={1}>
                 <Text>{selectedRecord.account_nickname || selectedRecord.account_username}</Text>
               </Descriptions.Item>
-              <Descriptions.Item label="分区" span={1}>
+              <Descriptions.Item label={t("分区")} span={1}>
                 <Tag>{getPartitionName(selectedRecord.partition_id)}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="项目名称" span={1}>
+              <Descriptions.Item label={t("项目名称")} span={1}>
                 <Text>{selectedRecord.project_name || '-'}</Text>
               </Descriptions.Item>
-              <Descriptions.Item label="切片ID" span={1}>
+              <Descriptions.Item label={t("切片ID")} span={1}>
                 <Text code>{selectedRecord.clip_id}</Text>
               </Descriptions.Item>
-              <Descriptions.Item label="进度" span={2}>
+              <Descriptions.Item label={t("进度")} span={2}>
                 <Progress 
                   percent={selectedRecord.progress} 
                   status={
@@ -889,45 +860,45 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
                   }
                 />
               </Descriptions.Item>
-              <Descriptions.Item label="文件大小" span={1}>
+              <Descriptions.Item label={t("文件大小")} span={1}>
                 <Text>{formatFileSize(selectedRecord.file_size)}</Text>
               </Descriptions.Item>
-              <Descriptions.Item label="上传时长" span={1}>
+              <Descriptions.Item label={t("上传时长")} span={1}>
                 <Text>{formatDuration(selectedRecord.upload_duration)}</Text>
               </Descriptions.Item>
-              <Descriptions.Item label="BV号" span={1}>
+              <Descriptions.Item label={t("BV号")} span={1}>
                 {selectedRecord.bv_id ? <Text code>{selectedRecord.bv_id}</Text> : <Text>-</Text>}
               </Descriptions.Item>
-              <Descriptions.Item label="AV号" span={1}>
+              <Descriptions.Item label={t("AV号")} span={1}>
                 {selectedRecord.av_id ? <Text code>{selectedRecord.av_id}</Text> : <Text>-</Text>}
               </Descriptions.Item>
-              <Descriptions.Item label="创建时间" span={1}>
-                <Text>{new Date(selectedRecord.created_at).toLocaleString()}</Text>
+              <Descriptions.Item label={t("创建时间")} span={1}>
+                <Text>{new Date(selectedRecord.created_at).toLocaleString(getLocale())}</Text>
               </Descriptions.Item>
-              <Descriptions.Item label="更新时间" span={1}>
-                <Text>{new Date(selectedRecord.updated_at).toLocaleString()}</Text>
+              <Descriptions.Item label={t("更新时间")} span={1}>
+                <Text>{new Date(selectedRecord.updated_at).toLocaleString(getLocale())}</Text>
               </Descriptions.Item>
             </Descriptions>
 
             {selectedRecord.description && (
               <div style={{ marginTop: '16px' }}>
-                <h4 style={{ color: '#ffffff' }}>描述</h4>
+                <h4 style={{ color: '#ffffff' }}>{t("描述")}</h4>
                 <Text>{selectedRecord.description}</Text>
               </div>
             )}
 
             {selectedRecord.tags && (
               <div style={{ marginTop: '16px' }}>
-                <h4 style={{ color: '#ffffff' }}>标签</h4>
+                <h4 style={{ color: '#ffffff' }}>{t("标签")}</h4>
                 <Text>{selectedRecord.tags}</Text>
               </div>
             )}
 
             {selectedRecord.error_message && (
               <div style={{ marginTop: '16px' }}>
-                <h4 style={{ color: '#ffffff' }}>错误信息</h4>
+                <h4 style={{ color: '#ffffff' }}>{t("错误信息")}</h4>
                 <Alert
-                  message="投稿失败"
+                  message={t("投稿失败")}
                   description={selectedRecord.error_message}
                   type="error"
                   showIcon
@@ -939,22 +910,18 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
               <Space>
                 {selectedRecord.status === 'failed' && (
                   <Popconfirm
-                    title="确定要重试这个投稿任务吗？"
+                    title={t("确定要重试这个投稿任务吗？")}
                     onConfirm={() => {
                       handleRetry(selectedRecord.id)
                       setDetailModalVisible(false)
                     }}
-                    okText="确定"
-                    cancelText="取消"
+                    okText={t("确定")}
+                    cancelText={t("取消")}
                   >
-                    <Button type="primary" icon={<RedoOutlined />}>
-                      重试
-                    </Button>
+                    <Button type="primary" icon={<RedoOutlined />}>{t("重试")}</Button>
                   </Popconfirm>
                 )}
-                <Button onClick={() => setDetailModalVisible(false)}>
-                  关闭
-                </Button>
+                <Button onClick={() => setDetailModalVisible(false)}>{t("关闭")}</Button>
               </Space>
             </div>
           </div>

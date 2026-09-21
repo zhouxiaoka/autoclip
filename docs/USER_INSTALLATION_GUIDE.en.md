@@ -1,0 +1,67 @@
+# Installation and your first clips
+
+[简体中文](USER_INSTALLATION_GUIDE.md) · [README](../README-EN.md) · [Troubleshooting](FAQ.en.md)
+
+## Choose how to run AutoClip
+
+| Environment | Recommended option |
+| --- | --- |
+| macOS · Apple Silicon (M series) | [Desktop download](https://github.com/zhouxiaoka/autoclip/releases/latest): choose the `.dmg` containing `aarch64` |
+| Windows 10 / 11 · x64 | [Desktop download](https://github.com/zhouxiaoka/autoclip/releases/latest): choose the installer containing `x64-setup.exe` |
+| Intel Mac / Linux / self-hosted server | [Docker](DOCKER.en.md) or [CLI](CLI_AND_MCP.md) (CLI reference in Chinese) |
+
+Check the actual assets and requirements on the release page. `Source code` archives are not application installers. Desktop installers include Python and FFmpeg; local language models, speech recognition components, and model files need separate setup.
+
+Large files and local models need additional memory and disk space. Allow space for source videos, speech models, temporary files, clips, and exports. Processing speed depends on your hardware, models, and input.
+
+## Install the desktop app
+
+### macOS
+
+Open the `.dmg`, drag AutoClip Desktop into Applications, and launch it from there. If macOS blocks an unnotarized build, verify that it came from this repository’s Releases, then follow that release’s first-launch instructions. Do not disable system-wide security checks.
+
+### Windows
+
+Run `x64-setup.exe` and follow the installer. Installation is per user; routine use does not require administrator privileges. If WebView2 is missing, the installer may need internet access to download it. If Windows blocks an unsigned build, verify its source and consult the release notes.
+
+## First run
+
+1. **Configure a model.** Open Settings and select Qwen, an OpenAI-compatible API, Gemini, SiliconFlow, or a local model. For cloud services, enter your API key and model name, test the connection, and save. For Ollama / LM Studio, start the model service and load a model first.
+2. **Prepare subtitles.** Import an accurately timed `.srt` alongside your video when available. Otherwise, prepare the local Whisper components and model in the speech recognition settings. Initial installation and downloads require internet access.
+3. **Start with a short sample.** Use a video you are authorized to process, with clear speech. Choose file import on the home screen and select your video plus an optional SRT. Link import supports YouTube and Bilibili.
+4. **Review the results.** Check the clip boundaries, titles, and scores in the project details. Preview each clip for completeness. If processing fails, identify whether subtitles, analysis, or export failed, then follow the [FAQ](FAQ.en.md).
+5. **Export.** Use the export action in the project details and choose a platform preset. Vertical exports can include subtitles and title cards. Play the exported file before publishing it yourself.
+
+Highlight analysis primarily uses transcript text. Interviews, podcasts, and courses are easier to assess this way; do not expect the same results for purely visual action, music, or videos without speech.
+
+## Cloud and local models
+
+| Option | What you need |
+| --- | --- |
+| Cloud API | A provider account, working API key, access to the selected model, and network access; the provider bills API usage |
+| Ollama | Start Ollama, run `ollama pull qwen2.5:7b`, and select Ollama in AutoClip |
+| LM Studio | Download and load a model, start Local Server, and select an available model in AutoClip |
+
+Local presets do not require a cloud API key, but inference uses your hardware. Whisper converts speech to text; the language model analyzes that text. Configure them separately.
+
+## Updates and backups
+
+Finish or stop active jobs and exit the app. Back up your data directory, then download the new installer from [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest). In-app update availability depends on the installed version; manual downloads remain an option.
+
+Default desktop data directories:
+
+| Platform | Directory |
+| --- | --- |
+| macOS | `~/Library/Application Support/AutoClip` |
+| Windows | `%APPDATA%\AutoClip` |
+| Linux / CLI | `~/.local/share/AutoClip` |
+
+If you set `--data-dir` / `AUTOCLIP_DATA_DIR`, use that directory instead. Logs are usually in its `logs` subdirectory. Back up the project files, database, and settings together. Settings may contain API keys, so protect your backups. Do not uninstall, delete the database, or clear your data directory as a routine troubleshooting step. Do not assume an automatic backup exists.
+
+## Help
+
+Check the [FAQ](FAQ.en.md) and [known issues](https://github.com/zhouxiaoka/autoclip/issues/96) first. If the problem remains, email your OS, application version, model, failed stage, reproduction steps, and sanitized logs.
+
+Maintained by an individual in their spare time. Response times vary; live support and one-to-one deployment assistance are not provided.
+
+Email: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)

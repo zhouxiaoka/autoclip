@@ -83,6 +83,9 @@ docs/
 .env.development
 .env.test
 .env.production
+.env.*
+# Never copy updater signing keys into a Docker build context.
+.updater-private-key*
 
 # Backup
 cleanup_backup/

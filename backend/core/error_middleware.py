@@ -78,6 +78,12 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
             "traceback": traceback.format_exc()
         }
     )
+    if not isinstance(exc, (HTTPException, RequestValidationError, StarletteHTTPException)):
+        try:
+            import sentry_sdk
+            sentry_sdk.capture_exception(exc)
+        except Exception:
+            pass
     
     # 根据异常类型返回不同的错误响应
     if isinstance(exc, AutoClipsException):

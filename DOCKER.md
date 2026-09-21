@@ -1,432 +1,125 @@
-# Docker 部署指南
+# Docker 部署与排错
 
-本文档介绍如何使用Docker部署AutoClip系统。
+[English](docs/DOCKER.en.md) · [返回首页](README.md) · [常见问题](docs/FAQ.md)
 
-## 📋 目录
+适合 Linux、Intel Mac、服务器或希望使用 Web 界面的用户。需要 Docker 和 Docker Compose v2；命令使用 `docker compose`。视频、模型、缓存和导出文件会占用额外磁盘，按素材规模预留空间。
 
-- [快速开始](#快速开始)
-- [生产环境部署](#生产环境部署)
-- [开发环境部署](#开发环境部署)
-- [配置说明](#配置说明)
-- [数据管理](#数据管理)
-- [故障排除](#故障排除)
-
-## 🚀 快速开始
-
-### 环境要求
-
-- Docker 20.10+
-- Docker Compose 2.0+
-- 至少 4GB 可用内存
-- 至少 10GB 可用磁盘空间
-
-### 一键启动
+## 首次启动
 
 ```bash
-# 克隆项目
-git clone https://github.com/your-username/autoclip.git
+git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
-
-# 配置环境变量
 cp env.example .env
-# 编辑 .env 文件，填入必要的配置
-
-# Linux 宿主机：容器以非 root 用户运行，bind mount 的目录需要提前建好并可写
-mkdir -p data logs uploads && chmod -R 777 data logs uploads
-
-# 启动所有服务
-docker-compose up -d
-
-# 查看服务状态
-docker-compose ps
-
-# 查看日志
-docker-compose logs -f
 ```
 
-### 访问服务
+编辑 `.env`，设置 `LLM_PROVIDER`、`API_MODEL_NAME` 和对应的 API Key，也可以启动后在 Web 设置页配置。例：
 
-- **前端界面**: http://localhost:3000
-- **后端API**: http://localhost:8000
-- **API文档**: http://localhost:8000/docs
-- **Flower监控**: http://localhost:5555
-
-## 🏭 生产环境部署
-
-### 使用生产配置
-
-```bash
-# 使用生产环境配置
-docker-compose -f docker-compose.yml up -d
-
-# 后台运行
-docker-compose up -d
-
-# 查看服务状态
-docker-compose ps
-
-# 查看日志
-docker-compose logs -f autoclip
-```
-
-### 生产环境优化
-
-1. **资源限制**
-```yaml
-# 在docker-compose.yml中添加资源限制
-services:
-  autoclip:
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '1.0'
-        reservations:
-          memory: 1G
-          cpus: '0.5'
-```
-
-2. **数据持久化**
-```bash
-# 创建数据卷
-docker volume create autoclip_data
-docker volume create autoclip_logs
-
-# 在docker-compose.yml中配置
-volumes:
-  - autoclip_data:/app/data
-  - autoclip_logs:/app/logs
-```
-
-3. **网络配置**
-```yaml
-# 使用自定义网络
-networks:
-  autoclip-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-```
-
-## 🛠️ 开发环境部署
-
-### 使用开发配置
-
-```bash
-# 使用开发环境配置
-docker-compose -f docker-compose.dev.yml up -d
-
-# 实时查看日志
-docker-compose -f docker-compose.dev.yml logs -f
-
-# 进入容器调试
-docker-compose -f docker-compose.dev.yml exec autoclip-dev bash
-```
-
-### 开发环境特性
-
-- 热重载支持
-- 调试模式
-- 详细日志
-- 代码挂载
-
-## ⚙️ 配置说明
-
-### 环境变量
-
-创建 `.env` 文件：
-
-```bash
-# 数据库配置
-DATABASE_URL=sqlite:///./data/autoclip.db
-
-# Redis配置
-REDIS_URL=redis://redis:6379/0
-
-# LLM 配置（可选）：也可以直接在 http://localhost:3000 的「设置 → 模型」里填，保存到 ./data/settings.json，
-# api 和 worker 会自动热重载；这里的环境变量只在 settings.json 还没保存过相应字段时作为默认值。
-# compose 会把这些变量透传给 api 和 worker。
-# LLM_PROVIDER: dashscope | openai | gemini | siliconflow
+```dotenv
 LLM_PROVIDER=dashscope
 API_MODEL_NAME=qwen-plus
-API_DASHSCOPE_API_KEY=your_dashscope_api_key
-# API_OPENAI_API_KEY=
-# API_GEMINI_API_KEY=
-# API_SILICONFLOW_API_KEY=
-# OpenAI 兼容接口（LLM_PROVIDER=openai 时生效）：智谱 / DeepSeek / OpenRouter / 本地 Ollama、vLLM 都走这条。
-#   智谱:    OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4   API_MODEL_NAME=glm-4-flash
-#   DeepSeek: OPENAI_BASE_URL=https://api.deepseek.com/v1          API_MODEL_NAME=deepseek-chat
-#   宿主机 Ollama: OPENAI_BASE_URL=http://host.docker.internal:11434/v1  API_MODEL_NAME=qwen2.5:7b（可不填 key）
-# OPENAI_BASE_URL=
-# 通义千问国际站（alibabacloud.com 的 Key）：
-# DASHSCOPE_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
-
-# 日志配置
-LOG_LEVEL=INFO
-ENVIRONMENT=production
-DEBUG=false
-
-# 文件存储
-UPLOAD_DIR=./data/uploads
-PROJECT_DIR=./data/projects
+API_DASHSCOPE_API_KEY=your_api_key
 ```
 
-### 服务配置
-
-#### 主应用服务
-- **端口**: 8000 (后端), 3000 (前端)
-- **健康检查**: `/api/v1/health/`
-- **重启策略**: `unless-stopped`
-
-#### Redis服务
-- **端口**: 6379
-- **持久化**: AOF模式
-- **内存限制**: 可配置
-
-#### Celery服务
-- **Worker**: 处理异步任务
-- **Beat**: 定时任务调度
-- **并发数**: 可配置
-
-## 💾 数据管理
-
-### 数据持久化
+模型是否可用取决于服务商与账号权限。设置页已保存的模型配置可能优先于环境变量；更换提供商后应测试连接并保存。
 
 ```bash
-# 查看数据卷
-docker volume ls
-
-# 备份数据
-docker run --rm -v autoclip_data:/data -v $(pwd):/backup alpine tar czf /backup/autoclip-backup.tar.gz -C /data .
-
-# 恢复数据
-docker run --rm -v autoclip_data:/data -v $(pwd):/backup alpine tar xzf /backup/autoclip-backup.tar.gz -C /data
+mkdir -p data logs uploads
+docker compose build
+docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
+docker compose up -d
+docker compose ps
 ```
 
-### 数据目录结构
+目录归属命令让镜像中的 `autoclip` 用户能够写入三个项目绑定目录，尤其适用于 Linux。它会修改这些目录及其内容的文件归属；新部署可先在空目录中完成。无需将权限设为 `777`。
 
-```
-data/
-├── autoclip.db          # SQLite数据库
-├── projects/            # 项目数据
-├── uploads/             # 上传文件
-├── temp/                # 临时文件
-└── output/              # 输出文件
-```
+| 入口 | 默认地址 |
+| --- | --- |
+| Web 界面 | [http://localhost:3000](http://localhost:3000) |
+| API 文档 | [http://localhost:8000/docs](http://localhost:8000/docs) |
+| 健康检查 | [http://localhost:8000/api/v1/health/](http://localhost:8000/api/v1/health/) |
+| Flower 任务监控 | [http://localhost:5555](http://localhost:5555) |
 
-### 清理数据
+默认编排同时启动主应用、Redis、Celery Worker、Celery Beat 和 Flower。它面向本地或可信网络使用；若部署到公网，需要另行设置访问控制与网络隔离，尤其不要直接开放 Redis 和 Flower。
 
-```bash
-# 清理临时文件
-docker-compose exec autoclip find /app/data/temp -type f -mtime +7 -delete
+## 模型与字幕
 
-# 清理日志
-docker-compose exec autoclip find /app/logs -name "*.log" -mtime +30 -delete
-```
+支持的提供商与环境变量以 [env.example](env.example) 和 [docker-compose.yml](docker-compose.yml) 为准。Web 设置页可以保存模型配置，不需要仅靠环境变量。
 
-## 🔧 故障排除
+本地模型需要在宿主机启动。Docker Desktop 访问宿主机 Ollama 的示例：
 
-### 常见问题
-
-#### 1. 服务启动失败
-
-```bash
-# 查看服务状态
-docker-compose ps
-
-# 查看详细日志
-docker-compose logs autoclip
-
-# 重启服务
-docker-compose restart autoclip
+```dotenv
+LLM_PROVIDER=ollama
+OPENAI_BASE_URL=http://host.docker.internal:11434/v1
+API_MODEL_NAME=qwen2.5:7b
 ```
 
-#### 2. 端口冲突
-
-```bash
-# 检查端口占用
-netstat -tulpn | grep :8000
-
-# 修改端口映射
-# 在docker-compose.yml中修改ports配置
-ports:
-  - "8001:8000"  # 将本地8001端口映射到容器8000端口
-```
-
-#### 3. 内存不足
-
-```bash
-# 查看容器资源使用
-docker stats
-
-# 限制资源使用
-# 在docker-compose.yml中添加deploy配置
-```
-
-#### 4. 数据丢失
-
-```bash
-# 检查数据卷
-docker volume inspect autoclip_data
-
-# 恢复备份
-# 使用上述备份恢复命令
-```
-
-### 日志查看
-
-```bash
-# 查看所有服务日志
-docker-compose logs
-
-# 查看特定服务日志
-docker-compose logs autoclip
-docker-compose logs celery-worker
-
-# 实时查看日志
-docker-compose logs -f
-
-# 查看最近100行日志
-docker-compose logs --tail=100
-```
-
-### 性能监控
-
-```bash
-# 查看容器资源使用
-docker stats
-
-# 查看服务健康状态
-docker-compose ps
-
-# 进入容器调试
-docker-compose exec autoclip bash
-```
-
-## 🔄 更新和维护
-
-### 更新服务
-
-```bash
-# 拉取最新代码
-git pull
-
-# 重新构建镜像
-docker-compose build
-
-# 重启服务
-docker-compose up -d
-```
-
-### 备份策略
-
-```bash
-#!/bin/bash
-# backup.sh - 自动备份脚本
-
-DATE=$(date +%Y%m%d_%H%M%S)
-BACKUP_DIR="/backup/autoclip"
-
-# 创建备份目录
-mkdir -p $BACKUP_DIR
-
-# 备份数据
-docker run --rm -v autoclip_data:/data -v $BACKUP_DIR:/backup alpine \
-    tar czf /backup/autoclip-data-$DATE.tar.gz -C /data .
-
-# 备份配置
-cp .env $BACKUP_DIR/autoclip-config-$DATE.env
-
-# 清理旧备份（保留7天）
-find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete
-find $BACKUP_DIR -name "*.env" -mtime +7 -delete
-
-echo "备份完成: $DATE"
-```
-
-### 监控脚本
-
-```bash
-#!/bin/bash
-# monitor.sh - 服务监控脚本
-
-# 检查服务状态
-if ! docker-compose ps | grep -q "Up"; then
-    echo "服务异常，尝试重启..."
-    docker-compose restart
-fi
-
-# 检查健康状态
-if ! curl -f http://localhost:8000/api/v1/health/ >/dev/null 2>&1; then
-    echo "健康检查失败，发送告警..."
-    # 这里可以添加告警逻辑
-fi
-```
-
-## 📚 高级配置
-
-### 使用外部数据库
+Linux Docker Engine 可能需要在 `autoclip` 和 `celery-worker` 两个服务下加入：
 
 ```yaml
-# 使用PostgreSQL
-services:
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: autoclip
-      POSTGRES_USER: autoclip
-      POSTGRES_PASSWORD: password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  autoclip:
-    environment:
-      - DATABASE_URL=postgresql://autoclip:password@postgres:5432/autoclip
-    depends_on:
-      - postgres
+extra_hosts:
+  - "host.docker.internal:host-gateway"
 ```
 
-### 使用外部Redis
+该主机名能解析并不保证模型可连接：宿主机模型服务还需要监听容器可访问的接口，防火墙允许相应连接。容器中的 `localhost` 不能访问宿主机的模型服务。环境变量或编排变更后运行 `docker compose up -d` 重建受影响容器；若设置页保存过旧地址，也要同步修改。
 
-```yaml
-# 使用外部Redis集群
-services:
-  autoclip:
-    environment:
-      - REDIS_URL=redis://redis-cluster:6379/0
-    external_links:
-      - redis-cluster:redis
+没有字幕的视频需要准备本地转写组件与模型。首次安装较耗时，建议先使用本地视频加 SRT 验证主流程，详见 [安装指南](docs/USER_INSTALLATION_GUIDE.md)。
+
+## 排错
+
+```bash
+docker compose ps
+docker compose logs --tail=100 autoclip celery-worker
+curl -f http://localhost:8000/api/v1/health/
 ```
 
-### 负载均衡
+| 现象 | 检查项 |
+| --- | --- |
+| 页面打不开 | `autoclip` 是否运行，3000 / 8000 端口是否被其他进程占用 |
+| 项目一直排队 | `celery-worker` 与 Redis 是否健康，是否保留了编排中的专用队列参数 |
+| Permission denied / 数据库只读 | `data/`、`logs/`、`uploads/` 是否对容器用户可写 |
+| 模型测试失败 | 提供商、模型名、API Key 和保存的 Base URL；本地模型是否能从容器访问 |
+| 没有生成片段 | 按字幕、分析、评分、导出阶段排查，见 [FAQ](docs/FAQ.md) |
 
-```yaml
-# 使用Nginx负载均衡
-services:
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-    depends_on:
-      - autoclip
+修改宿主机端口时，只修改映射左侧，例如 `"3001:3000"`，再使用新的宿主机端口访问。不要删除数据库来解决启动问题。
 
-  autoclip:
-    # 可以启动多个实例
-    scale: 3
+## 数据与备份
+
+默认 Compose 使用绑定目录，而不是名为 `autoclip_data` 的视频数据卷：
+
+| 宿主机 | 容器 | 内容 |
+| --- | --- | --- |
+| `./data` | `/app/data` | 数据库、项目、配置等 |
+| `./logs` | `/app/logs` | 日志 |
+| `./uploads` | `/app/uploads` | 上传文件 |
+
+`redis_data` 是 Redis 的命名卷，不能代替项目文件备份。备份前等待任务结束并停止服务，再复制三个目录和 `.env`：
+
+```bash
+docker compose stop
+tar -czf "../autoclip-backup-$(date +%Y%m%d-%H%M%S).tar.gz" data logs uploads .env
+docker compose start
 ```
 
-## 🆘 获取帮助
+备份含本地视频和可能含密钥的配置，请保存在受控位置。恢复前停止服务、保留当前目录副本，然后恢复数据并核对文件归属；不要直接覆盖唯一一份数据。
 
-如果遇到问题，请：
+## 更新与停止
 
-1. 查看本文档的故障排除部分
-2. 检查GitHub Issues
-3. 查看项目文档
-4. 联系技术支持
+备份后更新源码并重建。存在本地改动时先检查 `git status` 并处理改动，不要强制覆盖。
 
----
+```bash
+git pull --ff-only
+docker compose up -d --build
+```
 
-**最后更新**: 2024-01-15
+暂时停止使用 `docker compose stop`；删除容器但保留绑定数据使用 `docker compose down`。不要为了日常重启加 `--volumes`。
+
+## 开发模式
+
+[开发编排](docker-compose.dev.yml) 用于源码开发；它与生产编排可能使用相同端口，不要同时启动：
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --build
+docker compose -f docker-compose.dev.yml logs -f
+```
+
+更多排错见 [FAQ](docs/FAQ.md)，版本变更见 [Releases](https://github.com/zhouxiaoka/autoclip/releases)。

@@ -9,7 +9,7 @@
  *   - app_updated：版本号较上次变化
  */
 import { getVersion } from '@tauri-apps/api/app'
-import { posthog } from './posthog'
+import { posthog, captureBusinessEvent, isAnalyticsEnabled } from './posthog'
 
 const INSTALL_FLAG_KEY = 'autoclip.analytics.installed'
 const LAST_VERSION_KEY = 'autoclip.analytics.lastVersion'
@@ -28,7 +28,9 @@ function detectOS(): string {
 function detectArch(): string {
   const ua = navigator.userAgent
   if (/arm64|aarch64/i.test(ua)) return 'arm64'
-  if (/x86_64|x64|Win64|WOW64|Intel/i.test(ua)) return 'x64'
+  // Apple Silicon webviews may report Intel; UA cannot establish Mac architecture.
+  if (/Mac/i.test(ua)) return 'unknown'
+  if (/x86_64|x64|Win64|WOW64/i.test(ua)) return 'x64'
   return 'unknown'
 }
 
@@ -37,7 +39,7 @@ async function getAppVersion(): Promise<string> {
     return await getVersion()
   } catch {
     // 非 Tauri 环境（如浏览器里跑 vite dev）取不到版本
-    return 'unknown'
+    return import.meta.env.VITE_APP_VERSION || 'unknown'
   }
 }
 
@@ -62,7 +64,7 @@ let runtimeInfo: RuntimeInfo = { version: 'unknown', os: detectOS(), arch: detec
 
 /** 启动后缓存的运行环境（版本 / 系统 / 架构），供反馈等场景复用；不依赖埋点是否开启。 */
 export function getRuntimeInfo(): RuntimeInfo {
-  return runtimeInfo
+  return { ...runtimeInfo, locale: document.documentElement.lang || runtimeInfo.locale }
 }
 
 /**
@@ -73,18 +75,21 @@ export async function trackLaunch(): Promise<void> {
   const version = await getAppVersion()
   const os = detectOS()
   const arch = detectArch()
-  const locale = navigator.language
+  const locale = document.documentElement.lang || navigator.language
   runtimeInfo = { version, os, arch, locale }
 
-  if (typeof posthog?.register !== 'function') return
+  if (!isAnalyticsEnabled() || typeof posthog?.register !== 'function') return
 
   // 全局属性：后续每条事件自动携带
-  posthog.register({
-    app_version: version,
-    os,
-    arch,
-    app_locale: locale,
-  })
+  try {
+    posthog.register({
+      app_version: version,
+      os,
+      arch,
+      app_locale: locale,
+      analytics_environment: import.meta.env.DEV ? 'development' : 'production',
+    })
+  } catch { return }
 
   // 会话计数
   const sessionCount = readInt(SESSION_COUNT_KEY) + 1
@@ -98,8 +103,7 @@ export async function trackLaunch(): Promise<void> {
     /* ignore */
   }
   if (!isInstalled) {
-    posthog.capture('app_installed', { version, os, arch })
-    safeSet(INSTALL_FLAG_KEY, 'true')
+    if (captureBusinessEvent('app_installed', { version, os, arch })) safeSet(INSTALL_FLAG_KEY, 'true')
   }
 
   // 版本更新
@@ -110,10 +114,10 @@ export async function trackLaunch(): Promise<void> {
     /* ignore */
   }
   if (lastVersion && lastVersion !== version) {
-    posthog.capture('app_updated', { from_version: lastVersion, to_version: version })
+    captureBusinessEvent('app_updated', { from_version: lastVersion, to_version: version })
   }
   safeSet(LAST_VERSION_KEY, version)
 
   // 每次启动
-  posthog.capture('app_opened', { version, session_number: sessionCount })
+  captureBusinessEvent('app_opened', { version, session_number: sessionCount })
 }

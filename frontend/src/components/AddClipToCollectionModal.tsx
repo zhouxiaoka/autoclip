@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import React, { useState, useMemo } from 'react'
 import { Modal, List, Button, Typography, Tag, Input, Space, Empty, Checkbox } from 'antd'
 import { SearchOutlined, PlayCircleOutlined } from '@ant-design/icons'
@@ -22,6 +24,7 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
   onCancel,
   onConfirm
 }) => {
+  useTranslation()
   const [selectedClipIds, setSelectedClipIds] = useState<string[]>([])
   const [searchText, setSearchText] = useState('')
 
@@ -93,22 +96,19 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
 
   return (
     <Modal
-      title="添加切片到合集"
+      title={t("添加切片到合集")}
       open={visible}
       onCancel={handleCancel}
       width={800}
       className="add-clip-modal"
       footer={[
-        <Button key="cancel" onClick={handleCancel}>
-          取消
-        </Button>,
+        <Button key="cancel" onClick={handleCancel}>{t("取消")}</Button>,
         <Button 
           key="confirm" 
           type="primary" 
           onClick={handleConfirm}
           disabled={selectedClipIds.length === 0}
-        >
-          添加 {selectedClipIds.length > 0 && `(${selectedClipIds.length})`}
+        >{t("添加")}{selectedClipIds.length > 0 && `(${selectedClipIds.length})`}
         </Button>
       ]}
     >
@@ -116,7 +116,7 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
         {/* 搜索和操作栏 */}
         <div className="search-section">
           <Search
-            placeholder="搜索切片标题、内容或推荐理由..."
+            placeholder={t("搜索切片标题、内容或推荐理由...")}
             prefix={<SearchOutlined />}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
@@ -126,16 +126,14 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
           
           <div className="action-bar">
             <Space>
-              <Text type="secondary">
-                可添加 {filteredClips.length} 个切片
-              </Text>
+              <Text type="secondary">{t("可用数量", { count: filteredClips.length })}</Text>
               {filteredClips.length > 0 && (
                 <Button 
                   type="link" 
                   size="small"
                   onClick={handleSelectAll}
                 >
-                  {selectedClipIds.length === filteredClips.length ? '取消全选' : '全选'}
+                  {selectedClipIds.length === filteredClips.length ? t("取消全选") : t("全选")}
                 </Button>
               )}
             </Space>
@@ -179,8 +177,7 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
                                 color: 'white',
                                 border: 'none'
                               }}
-                            >
-                              分数: {(clip.final_score * 100).toFixed(0)}
+                            >{t("分数:")}{(clip.final_score * 100).toFixed(0)}
                             </Tag>
                           </Space>
                         </div>
@@ -213,8 +210,8 @@ const AddClipToCollectionModal: React.FC<AddClipToCollectionModalProps> = ({
                 image={<PlayCircleOutlined style={{ fontSize: '48px', color: '#d9d9d9' }} />}
                 description={
                   availableClips.length === 0 
-                    ? "所有切片都已在合集中" 
-                    : "没有找到匹配的切片"
+                    ? t("所有切片都已在合集中")
+                    : t("没有找到匹配的切片")
                 }
               />
             </div>

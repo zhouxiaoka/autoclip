@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect, useState, useCallback } from 'react';
 
 export interface WebSocketMessage {
@@ -244,7 +245,7 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     }
     
     if (globalWs) {
-      globalWs.close(1000, '用户主动断开连接');
+      globalWs.close(1000, t("用户主动断开连接"));
       globalWs = null;
     }
     

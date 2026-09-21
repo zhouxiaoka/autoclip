@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 /**
  * 简化的进度状态管理 - 基于固定阶段和轮询
  */
@@ -165,12 +166,12 @@ export const useSimpleProgressStore = create<SimpleProgressState>((set, get) => 
 
 // 阶段显示名称映射
 export const STAGE_DISPLAY_NAMES: Record<string, string> = {
-  'INGEST': '素材准备',
-  'SUBTITLE': '字幕处理',
-  'ANALYZE': '内容分析', 
-  'HIGHLIGHT': '片段定位',
-  'EXPORT': '视频导出',
-  'DONE': '处理完成'
+  get 'INGEST'() { return t("素材准备") },
+  get 'SUBTITLE'() { return t("字幕处理") },
+  get 'ANALYZE'() { return t("内容分析") },
+  get 'HIGHLIGHT'() { return t("片段定位") },
+  get 'EXPORT'() { return t("视频导出") },
+  get 'DONE'() { return t("处理完成") }
 }
 
 // 阶段颜色映射
