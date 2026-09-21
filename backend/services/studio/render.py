@@ -8,6 +8,7 @@ from backend.services.studio.intelligence import text_json, validate_scenes
 from backend.services.studio.models import Draft
 from backend.services.studio.titles import template_filters
 from backend.services.studio import title_art
+from backend.services.studio import audio
 from backend.services.studio.store import directory
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
@@ -20,6 +21,9 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
         raise ValueError('无法读取原视频尺寸')
     w, h = int(w) // 2 * 2, int(h) // 2 * 2
     warnings = []
+    keep_audio = draft.original_audio and audio.has_audio(video)
+    if draft.original_audio and not keep_audio:
+        warnings.append('原素材没有音轨，本次导出无声')
     entries = _load_srt_entries(project_id) if draft.subtitles else []
     # Only transmit the subtitle rows used by this draft, never unrelated transcript text.
     from backend.pipeline.quality import to_seconds
@@ -49,6 +53,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
             folder = Path(temp)
             parts = []
             for i, scene in enumerate(draft.scenes):
+                duration = audio.scene_duration(scene)
                 srt = folder / f'{i}.srt'
                 body = slice_srt(entries, scene.start, scene.end)
                 if body:
@@ -60,7 +65,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                 spec = {'layout': draft.layout, 'w': w, 'h': h}
                 req = ExportRequest(project_id, draft.id, layout=draft.layout)
                 built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font)
-                clip_path = folder / f'{i}.mp4'
+                clip_path = folder / f'{i}.mkv'
                 artwork = None
                 if hook and i == 0 and draft.title_style in title_art.STYLES:
                     artwork = folder / 'title-art.png'
@@ -68,7 +73,11 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                 cmd = [get_ffmpeg_path(), '-v', 'error', '-ss', str(scene.start), '-i', str(video)]
                 if artwork:
                     cmd += ['-loop', '1', '-i', str(artwork)]
-                cmd += ['-t', str(scene.end-scene.start)]
+                silence_input = 2 if artwork else 1
+                if keep_audio:
+                    cmd += ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000']
+                cmd += ['-t', str(duration)]
+                graph = None
                 if built:
                     graph, last = built
                     graph = graph.replace(':reload=0', ':expansion=none:reload=0').replace(':fontsize=42:', f':fontsize={max(18, round(w * .06))}:').replace(f'[fg]scale={w}:-2[fg2]', f'[fg]scale={w}:{h}:force_original_aspect_ratio=decrease[fg2]')
@@ -81,10 +90,16 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                     elif hook and i == 0 and draft.title_style != 'plain':
                         titles, last = template_filters(hook, draft.title_style, w, h, folder, font, last, scene.end-scene.start)
                         graph += ';' + ';'.join(titles)
-                    cmd += ['-filter_complex', graph, '-map', f'[{last}]']
+                    cmd += ['-map', f'[{last}]']
                 else:
                     cmd += ['-map', '0:v:0']
-                cmd += ['-map', '0:a:0?', '-c:a', 'aac', '-b:a', '160k'] if draft.original_audio else ['-an']
+                if keep_audio:
+                    graph = ';'.join(filter(None, [graph, audio.cut_filters(silence_input, duration)]))
+                    cmd += ['-map', '[audioout]', '-c:a', 'pcm_s16le', '-ar', '48000', '-ac', '2']
+                else:
+                    cmd += ['-an']
+                if graph:
+                    cmd += ['-filter_complex', graph]
                 cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', '30', '-threads', '2', '-y', str(clip_path)]
                 proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(180, (scene.end-scene.start)*20))
                 if proc.returncode:
@@ -92,8 +107,17 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                 parts.append(clip_path)
                 progress(round(10 + (i+1) / len(draft.scenes) * 80))
             concat = folder / 'parts.txt'
-            concat.write_text(''.join(f"file '{p}'\n" for p in parts), encoding='utf-8')
-            subprocess.run([get_ffmpeg_path(), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-c', 'copy', '-movflags', '+faststart', '-y', str(partial)], check=True, capture_output=True, timeout=180)
+            durations = [audio.scene_duration(scene) for scene in draft.scenes]
+            concat.write_text(''.join(f"file '{p}'\nduration {duration:.9f}\n" for p, duration in zip(parts, durations)), encoding='utf-8')
+            # Encode AAC only once. Per-cut AAC packets add encoder delay and can
+            # leave mismatched stream layouts when a selected interval is silent.
+            cmd = [get_ffmpeg_path(), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-c:v', 'copy']
+            if keep_audio:
+                cmd += ['-map', '0:a:0', '-af', 'aresample=48000:async=1:first_pts=0', '-c:a', 'aac', '-b:a', '160k']
+            else:
+                cmd += ['-an']
+            cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]
+            subprocess.run(cmd, check=True, capture_output=True, timeout=max(180, sum(durations)*2))
             os.replace(partial, output)
         return {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings}
     finally:

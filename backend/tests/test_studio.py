@@ -410,3 +410,68 @@ def test_title_thumbnail_is_packaged_style_and_rejects_unknown(client):
     assert r.status_code==200 and Image.open(io.BytesIO(r.content)).size==(324,174)
     assert 'max-age' in r.headers['cache-control']
     assert client.get('/studio/title-presets/unknown/thumbnail').status_code==422
+
+
+def decoded_audio(path):
+    from array import array
+    values=array('f')
+    values.frombytes(subprocess.check_output(['ffmpeg','-v','error','-i',str(path),'-vn','-ac','1','-ar','48000','-f','f32le','-']))
+    return values
+
+
+def audio_rms(values,start,end):
+    import math
+    samples=values[round(start*48000):round(end*48000)]
+    return math.sqrt(sum(v*v for v in samples)/max(1,len(samples)))
+
+
+def test_short_audio_reordered_after_silent_interval_is_preserved(root):
+    from backend.services.studio.render import render_draft
+    video=root/'short-audio.mp4'
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=s=320x180:r=30:d=3','-f','lavfi','-i','sine=frequency=431:sample_rate=48000:duration=0.6','-y',str(video)],check=True)
+    d=Draft(id='short-audio',title='Short audio',subtitles=False,scenes=[Scene(id='late',start=2,end=2.5),Scene(id='early',start=.1,end=.6)])
+    render_draft('p1',video,d,'short-audio',lambda _:None)
+    values=decoded_audio(root/'output/studio/short-audio.mp4')
+    assert audio_rms(values,.1,.4)<.001
+    assert audio_rms(values,.6,.9)>.02
+    assert abs(len(values)/48000-1)<.025
+
+
+def test_many_cuts_have_short_fades_and_aligned_audio_video(root,source):
+    from backend.services.studio.render import render_draft
+    d=Draft(id='cuts',title='Cuts',subtitles=False,scenes=[Scene(id=f's{i}',start=.23+(i%2)*.51,end=.73+(i%2)*.51) for i in range(12)])
+    render_draft('p1',source,d,'cuts',lambda _:None)
+    path=root/'output/studio/cuts.mp4'
+    streams=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(path)]))['streams']
+    assert {s['codec_type'] for s in streams}=={'audio','video'}
+    assert all(abs(float(s['start_time']))<.002 for s in streams)
+    assert all(abs(float(s['duration'])-6)<1/30 for s in streams)
+    values=decoded_audio(path)
+    middle=audio_rms(values,.15,.35)
+    assert middle>.02
+    for i in range(1,12):
+        assert audio_rms(values,i*.5-.001,i*.5+.001)<middle*.3
+    assert audio_rms(values,0,.001)<middle*.3
+    assert audio_rms(values,5.999,6)<middle*.3
+
+
+def test_delayed_source_audio_keeps_its_initial_silence(root):
+    from backend.services.studio.render import render_draft
+    video=root/'delayed-audio.mp4'
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=s=320x180:r=30:d=2','-itsoffset','0.5','-f','lavfi','-i','sine=frequency=431:sample_rate=48000:duration=0.7','-y',str(video)],check=True)
+    d=Draft(id='delay',title='Delay',subtitles=False,scenes=[Scene(id='s',start=0,end=1.5)])
+    render_draft('p1',video,d,'delay',lambda _:None)
+    values=decoded_audio(root/'output/studio/delay.mp4')
+    assert audio_rms(values,.05,.35)<.001
+    assert audio_rms(values,.6,1)>.02
+
+
+def test_video_without_audio_stays_silent_and_reports_it(root):
+    from backend.services.studio.render import render_draft
+    video=root/'silent.mp4'
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','color=blue:s=320x180:r=30:d=1','-y',str(video)],check=True)
+    d=Draft(id='silent',title='Silent',subtitles=False,scenes=[Scene(id='s',start=0,end=.5)])
+    result=render_draft('p1',video,d,'silent',lambda _:None)
+    assert result['warnings']==['原素材没有音轨，本次导出无声']
+    streams=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(root/'output/studio/silent.mp4')]))['streams']
+    assert [s['codec_type'] for s in streams]==['video']
