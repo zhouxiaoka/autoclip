@@ -3,7 +3,7 @@
 *[中文版 →](./PRIVACY.md)*
 
 **Effective Date: June 3, 2026**
-**Last Updated: September 7, 2026**
+**Last Updated: September 21, 2026**
 
 > ⚠️ This is a draft template. Please have legal counsel review it before publishing (see "Clauses Requiring Legal Review" at the end).
 
@@ -40,7 +40,7 @@ To understand how features are used, find and fix problems, and improve the prod
 
 ### 2.2 Crash reports (optional, on by default)
 
-To fix crashes, the Software may send stack traces via **Sentry** when a DSN is configured at build time and you have not turned off **Crash reports** in Settings → App. This does **not** include video content, transcripts, or API keys. `send_default_pii` is off.
+To fix crashes, the Software may send stack traces via **Sentry** when a DSN is configured at build time and you have not turned off **Crash reports** in Settings → App. This does **not** include video content, transcripts, or API keys. `send_default_pii` is off. The client does not explicitly set a user identifier or IP field; the recipient can still obtain connection-source information and may infer an approximate region from it.
 
 ### 2.3 Information You Provide
 

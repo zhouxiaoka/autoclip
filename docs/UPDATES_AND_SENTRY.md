@@ -113,3 +113,12 @@ macOS 更新包必须是**注入 python/backend/ffmpeg 之后**的 `.app.tar.gz`
 - 后端逐事件读取隐私开关，设置页保存失败时明确提示。已关闭时不发送新错误；已发出的请求无法撤回。
 - 自动检查更新失败时静默；手动检查失败时明确提示，不显示“已是最新版本”。
 - 本地测试不代替 Windows / macOS 安装、实际视频出片和线上 PostHog 接收验证。
+
+### 生产构建验收记录（2026-09-21）
+
+v1.3.1 的公开源码生产构建已上传 source maps。使用隔离的模拟 API 返回无效项目数据，触发真实 HomePage 异常，未修改发布代码，也未使用用户素材。
+
+- [AUTOCLIP-FRONTEND-2](https://autoclip-ts.sentry.io/issues/AUTOCLIP-FRONTEND-2)，新事件 `49ee6b626ba64b3f8fe224d97234189a`。
+- release：`autoclip-frontend@1.3.1`；界面语言：`zh-CN`。
+- 发送的异常正文为 `[message omitted for privacy]`，映射仍准确还原到 `frontend/src/pages/HomePage.tsx:300:40`。
+- 模拟触发条件已撤掉，页面恢复正常。此记录不替代实际安装包、Windows 真机和真实视频业务流程验收。

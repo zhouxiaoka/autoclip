@@ -46,7 +46,7 @@ Local presets do not require a cloud API key, but inference uses your hardware. 
 
 ## Updates and backups
 
-Finish or stop active jobs and exit the app. Back up your data directory, then download the new installer from [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest). In-app update availability depends on the installed version; manual downloads remain an option.
+Finish or stop active jobs and exit the app. Back up your data directory, then download the new installer from [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest). Users on v1.3.0 or earlier must install v1.3.1 manually. From v1.3.1 onward, use Settings → Application → Check for updates for future releases; installation and restart require your confirmation. Automatic checks run at most once a day. Manual downloads remain available.
 
 Default desktop data directories:
 
