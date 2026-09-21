@@ -7,7 +7,14 @@
 
 ## [未发布]
 
-_（本周尚无改动）_
+### 新增
+- **发布到海外平台（Upload-Post）**：切片可经 [Upload-Post](https://www.upload-post.com) 一次发到 TikTok / Instagram / YouTube Shorts / Facebook / LinkedIn / X / Threads / Pinterest / Bluesky 等，
+  与 B 站投稿并列；先按预设渲成片（竖屏平台默认 `shorts`），再异步提交并轮询各平台结果。视频处理仍全部在本地。
+  入口：`autoclip publish`、MCP `publish_clip` / `get_publish_status` / `list_publish_profiles`、API `/api/v1/publish/upload-post/*`；
+  配置用 `UPLOAD_POST_API_KEY` / `UPLOAD_POST_USER` 或 `autoclip publish --api-key … --user … --save`（`docs/PUBLISH_UPLOAD_POST.md`）。设置页 UI 待做
+
+### 修复
+- 发布导出 ffmpeg 失败时把错误文本切成了单个字符（`[-800]`），空输出直接 `IndexError`；改为切片 `[-800:]`
 
 ## [1.3.1] - 2026-09-21
 

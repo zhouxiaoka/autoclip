@@ -47,6 +47,8 @@ services:
       - DASHSCOPE_BASE_URL=${DASHSCOPE_BASE_URL:-}
       - API_GEMINI_API_KEY=${API_GEMINI_API_KEY:-}
       - API_SILICONFLOW_API_KEY=${API_SILICONFLOW_API_KEY:-}
+      - UPLOAD_POST_API_KEY=${UPLOAD_POST_API_KEY:-}
+      - UPLOAD_POST_USER=${UPLOAD_POST_USER:-}
       - AUTOCLIP_YT_SUBTITLE_LANGS=${AUTOCLIP_YT_SUBTITLE_LANGS:-}
     depends_on:
       redis:
@@ -86,6 +88,8 @@ services:
       - DASHSCOPE_BASE_URL=${DASHSCOPE_BASE_URL:-}
       - API_GEMINI_API_KEY=${API_GEMINI_API_KEY:-}
       - API_SILICONFLOW_API_KEY=${API_SILICONFLOW_API_KEY:-}
+      - UPLOAD_POST_API_KEY=${UPLOAD_POST_API_KEY:-}
+      - UPLOAD_POST_USER=${UPLOAD_POST_USER:-}
       - AUTOCLIP_YT_SUBTITLE_LANGS=${AUTOCLIP_YT_SUBTITLE_LANGS:-}
     # 任务通过 celery_app.task_routes 被路由到专用队列；不带 -Q 的 worker 只消费默认的
     # `celery` 队列，流水线任务会一直堆在 `processing` 里没人执行，项目永远卡在处理中。

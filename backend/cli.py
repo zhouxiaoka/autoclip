@@ -8,6 +8,7 @@ autoclip — 命令行出片。
     autoclip run video.mp4 --provider openai --base-url https://api.deepseek.com/v1 --model deepseek-chat --api-key sk-...
     autoclip run video.mp4 --srt video.srt --min-score 0.6 --json
     autoclip list / show <project_id> / providers / doctor
+    autoclip publish <project_id> --clip 2 --platform tiktok --platform youtube   # 经 Upload-Post 发到海外平台
 
 产物与桌面应用共用同一个数据目录（mac: ~/Library/Application Support/AutoClip），
 跑完在桌面应用首页就能看到。用 --data-dir 或 AUTOCLIP_DATA_DIR 可以换目录。
@@ -289,6 +290,149 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0 if all(r.get("ok") for r in results) else 1
 
 
+# ---------------------------------------------------------------- publish ---
+def _print_publish_status(st: Dict[str, Any]) -> None:
+    print(f"{st.get('status')}  {st.get('completed') or 0}/{st.get('total') or '?'}  {_dim(st.get('request_id') or st.get('job_id') or '')}", file=sys.stderr)
+    for r in st.get("results") or []:
+        if r.get("skipped"):
+            mark, detail = _dim("-"), "profile 没连这个平台，跳过"
+        elif r.get("success"):
+            mark, detail = _c("32", "✓"), r.get("url") or r.get("message") or ""
+            if r.get("fallback_to_inbox"):
+                detail += "  （已进 TikTok 收件箱草稿，需在 App 里发布）"
+        else:
+            mark, detail = _c("31", "✗"), r.get("error") or r.get("message") or r.get("status") or ""
+        print(f"  {mark} {r.get('platform', ''):<12} {detail}", file=sys.stderr)
+
+
+def cmd_publish(args: argparse.Namespace) -> int:
+    from backend.services import upload_post_publisher as up
+
+    # 保存配置
+    if args.save:
+        if not (args.api_key or args.user):
+            _err("--save 需要配合 --api-key 和/或 --user")
+            return 2
+        if args.api_key:
+            try:
+                acct = up.verify_api_key(up.UploadPostConfig(api_key=args.api_key, base_url=up.load_config().base_url))
+            except up.UploadPostError as e:
+                _err(str(e))
+                return 2
+            print(_dim(f"API Key 有效：{acct.get('email')} · {acct.get('plan')}"), file=sys.stderr)
+        cfg = up.save_config(api_key=args.api_key, user=args.user)
+        print(f"已保存到 {up.config_path()}  key={cfg.masked_key()} user={cfg.user or '-'}", file=sys.stderr)
+        if cfg.source == "env":
+            print(_dim("注意：当前环境变量 UPLOAD_POST_API_KEY 优先于文件"), file=sys.stderr)
+        return 0
+
+    cfg = up.load_config()
+    if args.api_key:
+        cfg = up.UploadPostConfig(api_key=args.api_key, user=args.user or cfg.user, base_url=cfg.base_url, source="cli")
+
+    if args.list_profiles:
+        try:
+            profiles = up.list_profiles(cfg)
+        except up.UploadPostError as e:
+            _err(str(e))
+            return 2
+        if args.json:
+            print(json.dumps(profiles, ensure_ascii=False, indent=2))
+            return 0
+        if not profiles:
+            print(_dim("这个 API Key 下还没有 profile。到 https://app.upload-post.com/manage-users 创建并连接账号。"))
+        for pr in profiles:
+            mark = "●" if pr["username"] == cfg.user else " "
+            print(f"{mark} {pr['username']:<24} {_dim(', '.join(pr['connected_platforms']) or '未连接任何平台')}")
+        return 0
+
+    if args.status:
+        try:
+            st = up.wait_for_status(args.status, config=cfg, project_id=args.project_id,
+                                    on_update=None if args.json else _print_publish_status) if args.wait \
+                else up.get_status(args.status, config=cfg, project_id=args.project_id)
+        except up.UploadPostError as e:
+            _err(str(e))
+            return 2
+        if args.json:
+            print(json.dumps(st, ensure_ascii=False, indent=2))
+        elif not args.wait:
+            _print_publish_status(st)
+        return 0 if st.get("status") not in ("failed", "not_found") else 1
+
+    if not args.project_id:
+        _err("需要 project_id（或 --list-profiles / --status）")
+        return 2
+    if not args.platform:
+        _err("至少一个 --platform，如 --platform tiktok --platform youtube")
+        return 2
+    try:
+        platforms = up.normalize_platforms(args.platform)
+    except ValueError as e:
+        _err(str(e))
+        return 2
+
+    clip_ids = list(args.clip or [])
+    if not clip_ids:
+        from backend.services.local_runner import summarize_project
+        try:
+            summary = summarize_project(args.project_id)
+        except FileNotFoundError as e:
+            _err(str(e))
+            return 2
+        clip_ids = [c["id"] for c in summary["clips"]]
+        if not clip_ids:
+            _err("这个项目没有切片")
+            return 2
+        if len(clip_ids) > 1 and not args.yes:
+            _err(f"没指定 --clip，将把 {len(clip_ids)} 条切片全部发到 {', '.join(platforms)}；确认请加 --yes")
+            return 2
+
+    extra: Dict[str, Any] = {}
+    for kv in args.extra or []:
+        if "=" not in kv:
+            _err(f"--extra 格式应为 key=value: {kv}")
+            return 2
+        k, v = kv.split("=", 1)
+        extra[k.strip()] = v.strip()
+
+    results = []
+    for cid in clip_ids:
+        req = up.PublishRequest(
+            project_id=args.project_id, clip_id=cid, platforms=platforms, user=args.user, preset=args.preset,
+            title=args.title, description=args.description, subtitles=not args.no_subtitles,
+            title_card=not args.no_title, scheduled_date=args.schedule, timezone=args.timezone, extra=extra,
+        )
+        try:
+            r = up.publish_clip(req, config=cfg)
+            results.append(r)
+            if not args.json:
+                print(f"{_c('32', 'submitted')} {cid}  {r['title']}  {_dim(r['request_id'])}", file=sys.stderr)
+                for w in r.get("export_warnings") or []:
+                    print(_dim(f"         {w}"), file=sys.stderr)
+        except Exception as e:  # noqa: BLE001
+            results.append({"ok": False, "clip_id": cid, "error": str(e)[:400]})
+            _err(f"{cid}: {e}")
+
+    if args.wait:
+        for r in results:
+            if not r.get("ok"):
+                continue
+            st = up.wait_for_status(r["request_id"], timeout_sec=args.timeout, config=cfg, project_id=args.project_id)
+            r["status"] = st.get("status")
+            r["results"] = st.get("results")
+            r["ok"] = st.get("status") != "failed"
+            if not args.json:
+                print(_bold(f"{r['clip_id']}  {r['title']}"), file=sys.stderr)
+                _print_publish_status(st)
+
+    if args.json:
+        print(json.dumps({"ok": all(r.get("ok") for r in results), "published": results}, ensure_ascii=False, indent=2))
+    elif not args.wait:
+        print(_dim("查看结果：autoclip publish --status <request_id>（加 --wait 可等到终态）"), file=sys.stderr)
+    return 0 if all(r.get("ok") for r in results) else 1
+
+
 # ---------------------------------------------------------------- mcp ---
 def cmd_mcp(args: argparse.Namespace) -> int:
     from backend.mcp_server import main as mcp_main
@@ -353,6 +497,31 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--list-presets", action="store_true")
     e.add_argument("--json", action="store_true")
     e.set_defaults(func=cmd_export)
+
+    pu = sub.add_parser("publish", help="经 Upload-Post 把切片发到 TikTok / Instagram / YouTube Shorts / X 等海外平台")
+    pu.add_argument("project_id", nargs="?")
+    pu.add_argument("--clip", action="append", help="切片 id，可重复；不填则全部（需 --yes）")
+    pu.add_argument("--platform", action="append", help="平台，可重复或逗号分隔：tiktok, instagram, youtube, facebook, linkedin, x, threads, pinterest, bluesky …")
+    pu.add_argument("--user", help="Upload-Post profile（默认用已保存的）")
+    pu.add_argument("--preset", choices=["douyin", "xiaohongshu", "shorts", "bilibili", "original"],
+                    help="发布导出预设；不填按平台自动选（竖屏平台 shorts，否则 original）")
+    pu.add_argument("--title", help="标题（默认切片标题）")
+    pu.add_argument("--description", help="描述（YouTube / LinkedIn / Facebook / Pinterest）")
+    pu.add_argument("--no-subtitles", action="store_true")
+    pu.add_argument("--no-title", action="store_true", help="不加标题卡")
+    pu.add_argument("--schedule", help="定时发布，ISO-8601，如 2026-10-01T09:00:00")
+    pu.add_argument("--timezone", help="IANA 时区，配合 --schedule，如 Asia/Shanghai")
+    pu.add_argument("--extra", action="append", metavar="KEY=VALUE",
+                    help="平台专属字段透传，如 privacy_level=SELF_ONLY、privacyStatus=unlisted、facebook_page_id=…")
+    pu.add_argument("--wait", action="store_true", help="提交后等到各平台出结果")
+    pu.add_argument("--timeout", type=float, default=600, help="--wait 的最长等待秒数")
+    pu.add_argument("--yes", action="store_true", help="不指定 --clip 时确认发全部切片")
+    pu.add_argument("--api-key", help="临时指定 API Key（配合 --save 可保存）")
+    pu.add_argument("--save", action="store_true", help="把 --api-key / --user 保存到数据目录的 upload_post.json")
+    pu.add_argument("--list-profiles", action="store_true", help="列出 API Key 下的 profile 和已连接平台")
+    pu.add_argument("--status", metavar="REQUEST_ID", help="查询一次发布的各平台结果")
+    pu.add_argument("--json", action="store_true")
+    pu.set_defaults(func=cmd_publish)
     return p
 
 

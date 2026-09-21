@@ -56,6 +56,8 @@ autoclip doctor --provider ollama                      # 按指定 provider 体�
 autoclip mcp                                           # 以 MCP server 运行（见下）
 autoclip export <project_id> --preset douyin           # 渲成 9:16 + 字幕 + 标题卡
 autoclip export <project_id> --clip 2 --clip 5 --preset shorts --no-title
+autoclip publish <project_id> --clip 2 --platform tiktok --platform youtube --wait   # 经 Upload-Post 发到海外平台
+autoclip publish --list-profiles                        # 已配置的 Upload-Post profile 与已连接平台
 ```
 
 约定：
@@ -124,6 +126,8 @@ claude mcp add autoclip -- /path/to/autoclip/venv/bin/autoclip mcp
 | `list_providers()` | 云端 provider + 本地预设 + 当前配置 |
 | `check_environment(provider?, …)` | ffmpeg / Whisper / 模型连接体检 |
 | `export_clip(project_id, clip_id, preset?, subtitles?, title_card?)` | 渲可发布成片（douyin / xiaohongshu / shorts / bilibili / original） |
+| `publish_clip(project_id, clip_id, platforms, user?, preset?, title?, description?, scheduled_date?, extra?)` | 经 Upload-Post 发到 TikTok / Instagram / YouTube Shorts / X / LinkedIn 等；返回 `request_id` |
+| `get_publish_status(request_id)` / `list_publish_profiles()` | 各平台发布结果 / 可用 profile。配置与用法见 `docs/PUBLISH_UPLOAD_POST.md` |
 
 实现要点：
 - 流水线里散落着 `print()`，会污染 stdout 协议通道；server 启动时把 `sys.stdout` 指到 stderr，真正的 stdout 只交给 MCP 传输层。
@@ -173,6 +177,7 @@ cd backend && python -m pytest tests/test_local_presets.py tests/test_cli.py -q
 
 - `test_local_presets.py`：预设解析、LLMManager 还原、`test-api` 接受预设、本地地址绕过代理、`is_local_url`
 - `test_cli.py`：参数解析、`--help` 子进程、项目目录准备与 SQLite 注册（隔离引擎）、结果汇总与评分归一、进度监听、MCP 工具注册
+- `test_upload_post_publisher.py`：Upload-Post 配置优先级、multipart 表单、错误映射、状态归一化、CLI / MCP / API 注册（不联网）
 
 真跑一次（需要 Ollama 或云端 key）：
 

@@ -249,7 +249,7 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
         logger.info("发布导出: %s", " ".join(cmd))
         proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
         if proc.returncode != 0 or not out_path.exists() or out_path.stat().st_size == 0:
-            raise RuntimeError((proc.stderr or proc.stdout or "ffmpeg 失败")[-800])
+            raise RuntimeError((proc.stderr or proc.stdout or "ffmpeg 失败")[-800:])
 
         info = _probe(out_path)
         result = {
