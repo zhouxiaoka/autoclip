@@ -569,14 +569,14 @@ export const projectApi = {
     return api.post(`/projects/${projectId}/clips/${clipId}/export`, body)
   },
 
-  getExportJob: async (projectId: string, jobId: string): Promise<{
+  getExportJob: async (projectId: string, jobId: string, signal?: AbortSignal): Promise<{
     job_id: string
     status: 'queued' | 'running' | 'completed' | 'failed'
     percent?: number
     error?: string
     result?: { path: string; title?: string; width?: number; height?: number; warnings?: string[] }
   }> => {
-    return api.get(`/projects/${projectId}/exports/${jobId}`)
+    return api.get(`/projects/${projectId}/exports/${jobId}`, { signal })
   },
 
   downloadExport: async (projectId: string, jobId: string) => {

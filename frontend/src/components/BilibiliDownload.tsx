@@ -3,7 +3,6 @@ import { Button, message, Progress, Input, Card, Typography, Space, Spin, Select
 import { DownloadOutlined } from '@ant-design/icons'
 import { projectApi, bilibiliApi, VideoCategory, BilibiliDownloadTask } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
-import { validateApiConfigBeforeProjectCreation } from '../utils/apiConfigCheck'
 
 const { Text } = Typography
 
@@ -194,12 +193,6 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
     const videoType = getVideoType(url.trim())
     if (!videoType) {
       message.error('请输入有效的B站或YouTube视频链接')
-      return
-    }
-
-    // 检查API配置
-    const hasValidApiConfig = await validateApiConfigBeforeProjectCreation()
-    if (!hasValidApiConfig) {
       return
     }
 

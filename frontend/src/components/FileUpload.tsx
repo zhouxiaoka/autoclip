@@ -4,7 +4,6 @@ import { InboxOutlined, VideoCameraOutlined, FileTextOutlined, SubnodeOutlined }
 import { useDropzone } from 'react-dropzone'
 import { projectApi, VideoCategory } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
-import { validateApiConfigBeforeProjectCreation } from '../utils/apiConfigCheck'
 
 const { Text } = Typography
 
@@ -86,12 +85,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
 
     if (!projectName.trim()) {
       message.error('请输入项目名称')
-      return
-    }
-
-    // 检查API配置
-    const hasValidApiConfig = await validateApiConfigBeforeProjectCreation()
-    if (!hasValidApiConfig) {
       return
     }
 
