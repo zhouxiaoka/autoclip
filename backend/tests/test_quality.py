@@ -101,3 +101,14 @@ def test_excerpt_between_truncates():
     cues = [_cue(0, 2, "一二三四五六七八九十" * 20), _cue(2, 4, "后段")]
     text = excerpt_between(cues, 0, 3, max_chars=20)
     assert len(text) == 20
+
+
+def test_to_srt_time_carries_into_minutes_and_hours():
+    # 75.1 - 15.1 == 59.99999999999999（slice_srt 里平移时间轴就会得到这种值）
+    assert to_srt_time(75.1 - 15.1) == "00:01:00,000"
+    assert to_srt_time(3599.9999) == "01:00:00,000"
+    assert to_srt_time(59.9994) == "00:00:59,999"
+    assert to_srt_time(3723.5) == "01:02:03,500"
+    assert to_srt_time(-1) == "00:00:00,000"
+    for sec in (0.0, 1.25, 59.5, 61.001, 3599.999, 7384.12):
+        assert to_seconds(to_srt_time(sec)) == round(sec, 3)
