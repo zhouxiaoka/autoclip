@@ -6,6 +6,7 @@ import { PlayCircleOutlined, DeleteOutlined, DownloadOutlined, ReloadOutlined, L
 import { useNavigate } from 'react-router-dom'
 import { Project } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
+import { studioApi } from '../features/studio/api'
 import { UnifiedStatusBar } from './UnifiedStatusBar'
 import FeedbackDialog from './FeedbackDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
@@ -71,6 +72,9 @@ interface ProjectCardProps {
 const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, onClick }) => {
   useTranslation()
   const navigate = useNavigate()
+  const creative = project.settings?.creative || project.processing_config?.creative
+  const isVisual = ['highlight', 'promo'].includes(creative?.goal)
+  const isManaged = isVisual || !!project.settings?.smart_import || !!project.processing_config?.smart_import
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [thumbnailLoading, setThumbnailLoading] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
@@ -124,12 +128,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
         video.preload = 'metadata'
         
         // 尝试多个可能的视频文件路径
-        const possiblePaths = [
-          'input/input.mp4',
-          'input.mp4',
-          project.video_path,
-          `${project.video_path}/input.mp4`
-        ].filter(Boolean)
+        const possiblePaths = [studioApi.source(project.id)]
         
         let videoLoaded = false
         
@@ -137,7 +136,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           if (videoLoaded) break
           
           try {
-            const videoUrl = projectApi.getProjectFileUrl(project.id, path)
+            const videoUrl = path
             console.log('尝试加载视频:', videoUrl)
             
             await new Promise((resolve, reject) => {
@@ -233,7 +232,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // 检查是否是下载状态 - 根据下载进度判断
   const downloadProgress = project.processing_config?.download_progress || 0
   const isDownloading = project.status === 'pending' && downloadProgress > 0 && downloadProgress < 100
-  const isImporting = project.status === 'pending' && !isDownloading
+  const awaitingConfirmation = project.status === 'pending' && !!(project.settings?.awaiting_confirmation || project.processing_config?.awaiting_confirmation)
+  const isImporting = project.status === 'pending' && !isDownloading && !awaitingConfirmation
   
   // 状态标准化处理
   const normalizedStatus = project.status === 'error' ? 'failed' : 
@@ -259,7 +259,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   // 流水线，所以这里只需做一次「尽力而为」的启动即可。
   useEffect(() => {
     if (
-      project.status === 'pending' &&
+      !isManaged && project.status === 'pending' &&
       !isDownloading &&
       !autoStartedProjectIds.has(project.id)
     ) {
@@ -271,7 +271,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
       // toast/reload path.
       handleRetry({ silent: true })
     }
-  }, [project.status, project.id, isDownloading])
+  }, [project.status, project.id, isDownloading, isManaged])
   
   // 计算进度百分比
   const progressPercent = project.status === 'completed' ? 100 : 
@@ -297,7 +297,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     setIsRetrying(true)
     try {
       // 对于PENDING状态的项目，使用startProcessing；对于其他状态，使用retryProcessing
-      if (project.status === 'pending') {
+      if (isManaged) {
+        navigate(`/import/${project.id}`)
+        return
+      } else if (project.status === 'pending') {
         await projectApi.startProcessing(project.id)
       } else {
         await projectApi.retryProcessing(project.id)
@@ -364,13 +367,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           }}
           onClick={() => {
             // 导入中状态的项目不能点击进入详情页
-            if (project.status === 'pending') {
+            if (!isManaged && project.status === 'pending') {
               message.warning(t("项目正在导入中，请稍后再查看详情"))
               return
             }
             
             // 处理中状态的项目不能点击进入详情页
-            if (project.status === 'processing') {
+            if (!isManaged && project.status === 'processing') {
               message.warning(t("项目处理中，请完成后再查看"))
               return
             }
@@ -599,7 +602,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 strong 
                 style={{ 
                   fontSize: '13px', 
-                  color: '#ffffff',
+                  color: 'var(--ac-ink)',
                   fontWeight: 600,
                   lineHeight: '16px',
                   display: '-webkit-box',
@@ -617,7 +620,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           </div>
           
           {/* 状态和统计信息 — Calm Premium，见 DESIGN.md */}
-          {(normalizedStatus === 'importing' || normalizedStatus === 'downloading' || normalizedStatus === 'processing' || normalizedStatus === 'failed') ? (
+          {awaitingConfirmation ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><Text type="secondary">待确认制作类型</Text><Btn size="sm" onClick={(e) => {e.stopPropagation();navigate(`/import/${project.id}`)}}>查看建议</Btn></div> : isManaged && project.status === 'processing' ? <Text type="secondary">制作中 · 查看进度</Text> : (normalizedStatus === 'importing' || normalizedStatus === 'downloading' || normalizedStatus === 'processing' || normalizedStatus === 'failed') ? (
             // 进行中 / 失败：细进度线或终态点，占满宽度
             <div style={{ marginBottom: '2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <UnifiedStatusBar
@@ -649,8 +652,8 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 onStatusChange={() => {}}
               />
               <div style={{ color: 'var(--ac-muted)', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
-                {t("切片数量", { count: project.total_clips || 0 })}<span style={{ margin: '0 6px' }}>·</span>
-                {t("合集数量", { count: project.total_collections || 0 })}</div>
+                {isVisual ? <>{project.settings?.studio_draft_count || project.processing_config?.studio_draft_count || 0} 成片草稿</> : <>{t("切片数量", { count: project.total_clips || 0 })}<span style={{ margin: '0 6px' }}>·</span>{t("合集数量", { count: project.total_collections || 0 })}</>}
+              </div>
             </div>
           )}
 

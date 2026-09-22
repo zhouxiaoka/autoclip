@@ -374,7 +374,7 @@ class SpeechRecognizer:
             whisper_runtime.ensure_on_path()  # 让 faster_whisper 可导入
             from faster_whisper import WhisperModel  # 延迟导入：运行时安装目录里的包
 
-            language = None if config.language == LanguageCode.AUTO else str(config.language).split("-")[0]
+            language = None if config.language == LanguageCode.AUTO else config.language.value.split("-")[0]
             models_dir = str(whisper_runtime.get_models_dir() / "hub")
             logger.info(f"使用 faster-whisper 生成字幕: model={config.model} lang={language or 'auto'}")
 
@@ -382,13 +382,22 @@ class SpeechRecognizer:
             model = WhisperModel(
                 config.model, device="auto", compute_type="int8", download_root=models_dir,
             )
-            seg_iter, _info = model.transcribe(str(video_path), language=language, vad_filter=True)
-            segments = [{"start": s.start, "end": s.end, "text": s.text} for s in seg_iter]
+            seg_iter, _info = model.transcribe(str(video_path), language=language, vad_filter=True, word_timestamps=True)
+            segments = [{"start": s.start, "end": s.end, "text": s.text,
+                         "words": [{"text": w.word, "start": w.start, "end": w.end}
+                                   for w in (s.words or [])]} for s in seg_iter]
             if not segments:
                 raise SpeechRecognitionError("Whisper 未识别出任何语音内容")
 
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(self._segments_to_srt(segments), encoding="utf-8")
+            from backend.utils.word_timing import write_word_timing, sidecar_path
+            try:
+                write_word_timing(output_path, segments, getattr(_info, 'language', language))
+            except (ValueError, OSError):
+                # SRT is still useful when alignment is unavailable; never invent word times.
+                sidecar_path(output_path).unlink(missing_ok=True)
+                logger.warning("词级时间不可用，保留普通字幕", exc_info=True)
             logger.info(f"本地 faster-whisper 字幕生成成功: {output_path}")
             return output_path
 

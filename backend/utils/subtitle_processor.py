@@ -34,9 +34,24 @@ class SubtitleProcessor:
         try:
             subs = pysrt.open(str(srt_path), encoding='utf-8')
             word_level_data = []
+            from backend.utils.word_timing import load_word_timing
+            aligned = load_word_timing(srt_path)
+            # Match list position, text AND rounded sentence bounds; SRT indices may skip.
+            if aligned is not None and len(aligned) != len(subs):
+                aligned = None
             
-            for sub in subs:
+            for position, sub in enumerate(subs):
                 segment_data = self._process_subtitle_segment(sub)
+                if aligned:
+                    source = aligned[position]
+                    if (source['text'].strip() == sub.text.strip()
+                            and abs(source['start']-segment_data['startTime']) <= .0011
+                            and abs(source['end']-segment_data['endTime']) <= .0011):
+                        segment_data['words'] = [
+                            {'id': str(uuid.uuid4()), 'text': w['text'],
+                             'startTime': w['start'], 'endTime': w['end']}
+                            for w in source['words']]
+                        segment_data['timingSource'] = 'asr'
                 word_level_data.append(segment_data)
             
             logger.info(f"成功解析SRT文件，共 {len(word_level_data)} 个字幕段")
@@ -69,7 +84,8 @@ class SubtitleProcessor:
             'endTime': end_seconds,
             'text': sub.text.strip(),
             'words': words,
-            'index': sub.index
+            'index': sub.index,
+            'timingSource': 'estimated'
         }
     
     def _split_text_to_words(self, text: str, start_time: float, end_time: float) -> List[Dict]:
