@@ -60,7 +60,7 @@ AI 分析主要依赖字幕文本。访谈、播客、课程等以语言表达�
 
 ## 获取帮助
 
-先看 [常见问题](FAQ.md) 和 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)。仍无法解决时，邮件提供系统、应用版本、模型、失败阶段、复现步骤和已脱敏日志。
+先看 [常见问题](FAQ.md) 和 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)。第一次出片卡住（模型、没有字幕、系统警告）请到 [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128)。欢迎说明和分类见 [欢迎与分类](https://github.com/zhouxiaoka/autoclip/discussions/127)。仍无法解决时，邮件提供系统、应用版本、模型、失败阶段、复现步骤和已脱敏日志。
 
 个人业余维护，回复时间不固定，不提供即时客服或一对一部署服务。
 

@@ -60,7 +60,7 @@ If you set `--data-dir` / `AUTOCLIP_DATA_DIR`, use that directory instead. Logs 
 
 ## Help
 
-Check the [FAQ](FAQ.en.md) and [known issues](https://github.com/zhouxiaoka/autoclip/issues/96) first. If the problem remains, email your OS, application version, model, failed stage, reproduction steps, and sanitized logs.
+Check the [FAQ](FAQ.en.md) and [known issues](https://github.com/zhouxiaoka/autoclip/issues/96) first. If the first clip is stuck (model, no subtitles, or OS warnings), continue in the [first-clip Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128). See [welcome and categories](https://github.com/zhouxiaoka/autoclip/discussions/127). If the problem remains, email your OS, application version, model, failed stage, reproduction steps, and sanitized logs.
 
 Maintained by an individual in their spare time. Response times vary; live support and one-to-one deployment assistance are not provided.
 

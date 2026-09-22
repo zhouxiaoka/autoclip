@@ -14,7 +14,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
-[Site du projet](https://zhouxiaoka.github.io/autoclip_intro/) · [Signaler un problème](https://github.com/zhouxiaoka/autoclip/issues)
+[Site du projet](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Signaler un problème](https://github.com/zhouxiaoka/autoclip/issues)
 
 **Programmes d’installation: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
 
@@ -199,6 +199,10 @@ Les corrections, retours et améliorations des traductions sont les bienvenus. P
 Projet maintenu par une personne sur son temps libre. Les délais de réponse varient ; aucune assistance immédiate ou individuelle au déploiement n’est proposée. Consultez la FAQ et les problèmes connus avant de nous contacter.
 
 Les idées, les usages et les demandes de modèles vont dans les [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions). Les bugs reproductibles passent par le [formulaire d’issue](https://github.com/zhouxiaoka/autoclip/issues/new/choose). Règles du tableau : [community board](docs/COMMUNITY_BOARD.md) (en chinois).
+
+- [Accueil et catégories](https://github.com/zhouxiaoka/autoclip/discussions/127)
+- [Questions sur le premier extrait](https://github.com/zhouxiaoka/autoclip/discussions/128)
+- [Idées](https://github.com/zhouxiaoka/autoclip/discussions/129)
 
 - E-mail: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
