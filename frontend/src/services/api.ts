@@ -214,9 +214,26 @@ export const settingsApi = {
     }), (result) => { captureBusinessEvent('provider_test_finished', { provider, outcome: result.success ? 'success' : 'failed' }) })
   },
 
-  // 获取所有可用模型
-  getAvailableModels: (): Promise<any> => {
-    return api.get('/settings/available-models')
+  // 云端提供商模型名单：内置常用 + 有密钥时实时拉取服务商 /models
+  getAvailableModels: (
+    params: { provider?: string; baseUrl?: string; apiKey?: string; refresh?: boolean } = {}
+  ): Promise<{
+    provider: string
+    source: 'catalog' | 'live'
+    reachable: boolean
+    default_model: string
+    models: string[]
+    catalog: Record<string, string[]>
+    error?: string
+  }> => {
+    return api.get('/settings/available-models', {
+      params: {
+        provider: params.provider,
+        base_url: params.baseUrl,
+        api_key: params.apiKey,
+        refresh: params.refresh ? true : undefined,
+      },
+    })
   },
 
   // 获取当前提供商信息

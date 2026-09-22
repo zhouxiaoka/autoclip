@@ -89,6 +89,9 @@ def resolve_cjk_font() -> Optional[Path]:
         Path("/Library/Fonts/Arial Unicode.ttf"),
         Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
         Path("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc"),
+        Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
+        Path("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc"),
+        Path("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"),
         Path("C:/Windows/Fonts/msyh.ttc"),
         Path("C:/Windows/Fonts/msyh.ttf"),
     ]

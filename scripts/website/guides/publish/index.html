@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发布教程｜AutoClip</title>
+<meta name="description" content="在 AutoClip 里把切片发到 B 站和海外平台：Upload-Post 密钥、B 站三个 Cookie、仅自己试发。步骤写在官网，方便随时更新。">
+<link rel="canonical" href="https://zhouxiaoka.github.io/autoclip_intro/guides/publish/">
+<meta property="og:title" content="发布教程｜AutoClip">
+<meta property="og:description" content="在 AutoClip 里把切片发到 B 站和海外平台：Upload-Post 密钥、B 站三个 Cookie、仅自己试发。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://zhouxiaoka.github.io/autoclip_intro/guides/publish/">
+<meta property="og:image" content="https://zhouxiaoka.github.io/autoclip_intro/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="发布教程｜AutoClip">
+<meta name="twitter:description" content="在 AutoClip 里把切片发到 B 站和海外平台：Upload-Post 密钥、B 站三个 Cookie、仅自己试发。">
+<meta name="twitter:image" content="https://zhouxiaoka.github.io/autoclip_intro/img/og.png">
+<meta name="theme-color" content="#F6F5F3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#19181A" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/svg+xml" href="../../logo.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="../../favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../use-cases/case.css">
+<style>
+.lang select{font:inherit;font-size:.8125rem;color:var(--ac-ink);background:var(--ac-card);border:1px solid var(--ac-line);border-radius:var(--ac-r-pill);padding:7px 10px;max-width:160px;cursor:pointer}
+.lang select:focus-visible{outline:2px solid var(--ac-accent);outline-offset:3px}
+.faq{margin-top:22px}
+.faq details{border-top:1px solid var(--ac-line);padding:16px 0}
+.faq details:last-child{border-bottom:1px solid var(--ac-line)}
+.faq summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:16px;font-size:1.0625rem;font-weight:500}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";font-family:var(--ac-font-mono);color:var(--ac-muted);font-weight:400}
+.faq details[open] summary::after{content:"–"}
+.faq p{margin-top:10px;color:var(--ac-sub);font-size:.9375rem;max-width:62ch}
+code,.k{font-family:var(--ac-font-mono);font-size:.8125rem;background:var(--ac-line-2);padding:1px 6px;border-radius:6px}
+.steps p + p{margin-top:8px}
+@media (max-width:800px){.lang{display:block}}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="container nav-in">
+    <a class="brand serif" href="../../" aria-label="AutoClip"><img src="../../logo.svg" alt="">AutoClip</a>
+    <nav class="nav-links" aria-label="主导航">
+      <a href="../../" data-i18n="nav.home">首页</a>
+      <a href="./" aria-current="page" data-i18n="nav.guide">发布教程</a>
+    </nav>
+    <div class="nav-right">
+      <div class="lang">
+        <select id="language" aria-label="Language / 语言">
+          <option value="zh" lang="zh-CN">简体中文</option>
+          <option value="en" lang="en">English</option>
+          <option value="ja" lang="ja">日本語</option>
+          <option value="ko" lang="ko">한국어</option>
+          <option value="es" lang="es">Español</option>
+          <option value="pt" lang="pt-BR">Português (Brasil)</option>
+          <option value="ru" lang="ru">Русский</option>
+          <option value="fr" lang="fr">Français</option>
+        </select>
+      </div>
+      <a class="btn btn-primary btn-sm" href="https://github.com/zhouxiaoka/autoclip/releases/latest" data-i18n="nav.cta">下载</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="container narrow">
+      <div class="eyebrow" data-i18n="hero.eyebrow">操作教程</div>
+      <h1 data-i18n="hero.h1">第一次把切片发到平台</h1>
+      <p class="lede" data-i18n="hero.lede">账号在设置里配一次。切片页勾选平台即可。默认「仅自己」，方便先试。步骤写在这页，改了不用发客户端。</p>
+    </div>
+  </section>
+
+  <section class="section" id="setup">
+    <div class="container narrow">
+      <h2 data-i18n="s1.h">01 · 打开设置 → 发布</h2>
+      <ol class="steps">
+        <li>
+          <span class="n">01</span>
+          <p data-i18n="s1.1">桌面端右上角打开设置，左侧选「发布」。海外平台和 B 站都在这一页。</p>
+        </li>
+        <li>
+          <span class="n">02</span>
+          <p data-i18n-html="s1.2">视频仍在你电脑上处理。只有最终成片会上传：海外走 <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">Upload-Post</a>，B 站用本机 Cookie 投稿。</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="upload-post">
+    <div class="container narrow">
+      <h2 data-i18n="s2.h">02 · 海外平台：Upload-Post</h2>
+      <ol class="steps">
+        <li>
+          <span class="n">01</span>
+          <p data-i18n-html="s2.1">打开 <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">app.upload-post.com</a> 注册。</p>
+        </li>
+        <li>
+          <span class="n">02</span>
+          <p data-i18n-html="s2.2">在 <a class="link" href="https://app.upload-post.com/manage-users" target="_blank" rel="noopener">Manage Users</a> 建一个 profile，把要发的社交账号连上去。</p>
+        </li>
+        <li>
+          <span class="n">03</span>
+          <p data-i18n-html="s2.3">到 <a class="link" href="https://app.upload-post.com/api-keys" target="_blank" rel="noopener">API Keys</a> 生成密钥，贴回 AutoClip，点「保存并校验」。</p>
+        </li>
+        <li>
+          <span class="n">04</span>
+          <p data-i18n="s2.4">发布页默认「仅自己」：TikTok 为 SELF_ONLY，YouTube 为 private。公开会直接出现在账号上。</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="bilibili">
+    <div class="container narrow">
+      <h2 data-i18n="s3.h">03 · B 站：三个 Cookie</h2>
+      <ol class="steps">
+        <li>
+          <span class="n">01</span>
+          <p data-i18n-html="s3.1">用 Chrome 或 Edge 打开 <a class="link" href="https://www.bilibili.com" target="_blank" rel="noopener">bilibili.com</a> 并登录。</p>
+        </li>
+        <li>
+          <span class="n">02</span>
+          <p data-i18n-html="s3.2">按 <span class="k">F12</span>（Mac 可用 <span class="k">⌥⌘I</span>）打开开发者工具，选 <span class="k">Application</span>（有的浏览器叫「应用」）。</p>
+        </li>
+        <li>
+          <span class="n">03</span>
+          <p data-i18n-html="s3.3">左侧 Cookies → <span class="k">https://www.bilibili.com</span>。复制这三个名字的值：<span class="k">SESSDATA</span>、<span class="k">bili_jct</span>、<span class="k">DedeUserID</span>。</p>
+        </li>
+        <li>
+          <span class="n">04</span>
+          <p data-i18n-html="s3.4">贴成一行 <span class="k">SESSDATA=…; bili_jct=…; DedeUserID=…</span>，回到设置里保存并校验。</p>
+        </li>
+      </ol>
+      <div class="note">
+        <h2 data-i18n="s3.note.h">只留在这台电脑</h2>
+        <p data-i18n="s3.note.p">Cookie 只保存在本机，不会进仓库或官网。过期或换号时，重新登录再复制三个字段即可。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="clip">
+    <div class="container narrow">
+      <h2 data-i18n="s4.h">04 · 在切片上发布</h2>
+      <ol class="steps">
+        <li>
+          <span class="n">01</span>
+          <p data-i18n="s4.1">打开项目，在切片上点「发布」。勾选平台，可见范围先留「仅自己」，再开始发布。</p>
+        </li>
+        <li>
+          <span class="n">02</span>
+          <p data-i18n="s4.2">封面可以一键生成。生图失败或没配模型时，会自动截帧，不会卡住投稿。</p>
+        </li>
+        <li>
+          <span class="n">03</span>
+          <p data-i18n="s4.3">B 站定时要晚于现在两小时。成片画幅跟着账号走：有竖屏账号就渲成 9:16，只发 B 站时按横屏。</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="faq">
+    <div class="container narrow">
+      <h2 data-i18n="faq.h">常见问题</h2>
+      <div class="faq">
+        <details open>
+          <summary data-i18n="faq.1.q">Cookie 提示无效怎么办？</summary>
+          <p data-i18n="faq.1.a">重新登录 B 站，再从 Application → Cookies 复制三个字段。不要从请求头整段乱贴；缺一个字段就会校验失败。</p>
+        </details>
+        <details>
+          <summary data-i18n="faq.2.q">还没有 profile？</summary>
+          <p data-i18n="faq.2.a">先在 Upload-Post 创建一个 profile，并连接要发布的账号，再回 AutoClip 刷新账号。</p>
+        </details>
+        <details>
+          <summary data-i18n="faq.3.q">封面失败会挡住发布吗？</summary>
+          <p data-i18n="faq.3.a">不会。生图失败或还没生成时，投稿会用截帧封面，流程继续走完。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="container footer-in">
+    <a class="brand serif" href="../../">AutoClip</a>
+    <nav class="footer-links" aria-label="页脚">
+      <a href="../../" data-i18n="footer.home">首页</a>
+      <a href="https://github.com/zhouxiaoka/autoclip" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <span data-i18n="footer.copy">© 2025–2026 AutoClip · MIT 许可</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var T = {
+    zh: {
+      'title':'发布教程｜AutoClip',
+      'meta.desc':'在 AutoClip 里把切片发到 B 站和海外平台：Upload-Post 密钥、B 站三个 Cookie、仅自己试发。步骤写在官网，方便随时更新。',
+      'nav.home':'首页','nav.guide':'发布教程','nav.cta':'下载',
+      'hero.eyebrow':'操作教程','hero.h1':'第一次把切片发到平台',
+      'hero.lede':'账号在设置里配一次。切片页勾选平台即可。默认「仅自己」，方便先试。步骤写在这页，改了不用发客户端。',
+      's1.h':'01 · 打开设置 → 发布',
+      's1.1':'桌面端右上角打开设置，左侧选「发布」。海外平台和 B 站都在这一页。',
+      's1.2':'视频仍在你电脑上处理。只有最终成片会上传：海外走 <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">Upload-Post</a>，B 站用本机 Cookie 投稿。',
+      's2.h':'02 · 海外平台：Upload-Post',
+      's2.1':'打开 <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">app.upload-post.com</a> 注册。',
+      's2.2':'在 <a class="link" href="https://app.upload-post.com/manage-users" target="_blank" rel="noopener">Manage Users</a> 建一个 profile，把要发的社交账号连上去。',
+      's2.3':'到 <a class="link" href="https://app.upload-post.com/api-keys" target="_blank" rel="noopener">API Keys</a> 生成密钥，贴回 AutoClip，点「保存并校验」。',
+      's2.4':'发布页默认「仅自己」：TikTok 为 SELF_ONLY，YouTube 为 private。公开会直接出现在账号上。',
+      's3.h':'03 · B 站：三个 Cookie',
+      's3.1':'用 Chrome 或 Edge 打开 <a class="link" href="https://www.bilibili.com" target="_blank" rel="noopener">bilibili.com</a> 并登录。',
+      's3.2':'按 <span class="k">F12</span>（Mac 可用 <span class="k">⌥⌘I</span>）打开开发者工具，选 <span class="k">Application</span>（有的浏览器叫「应用」）。',
+      's3.3':'左侧 Cookies → <span class="k">https://www.bilibili.com</span>。复制这三个名字的值：<span class="k">SESSDATA</span>、<span class="k">bili_jct</span>、<span class="k">DedeUserID</span>。',
+      's3.4':'贴成一行 <span class="k">SESSDATA=…; bili_jct=…; DedeUserID=…</span>，回到设置里保存并校验。',
+      's3.note.h':'只留在这台电脑',
+      's3.note.p':'Cookie 只保存在本机，不会进仓库或官网。过期或换号时，重新登录再复制三个字段即可。',
+      's4.h':'04 · 在切片上发布',
+      's4.1':'打开项目，在切片上点「发布」。勾选平台，可见范围先留「仅自己」，再开始发布。',
+      's4.2':'封面可以一键生成。生图失败或没配模型时，会自动截帧，不会卡住投稿。',
+      's4.3':'B 站定时要晚于现在两小时。成片画幅跟着账号走：有竖屏账号就渲成 9:16，只发 B 站时按横屏。',
+      'faq.h':'常见问题',
+      'faq.1.q':'Cookie 提示无效怎么办？',
+      'faq.1.a':'重新登录 B 站，再从 Application → Cookies 复制三个字段。不要从请求头整段乱贴；缺一个字段就会校验失败。',
+      'faq.2.q':'还没有 profile？',
+      'faq.2.a':'先在 Upload-Post 创建一个 profile，并连接要发布的账号，再回 AutoClip 刷新账号。',
+      'faq.3.q':'封面失败会挡住发布吗？',
+      'faq.3.a':'不会。生图失败或还没生成时，投稿会用截帧封面，流程继续走完。',
+      'footer.home':'首页','footer.copy':'© 2025–2026 AutoClip · MIT 许可'
+    },
+    en: {
+      'title':'Publish guide · AutoClip',
+      'meta.desc':'Publish AutoClip clips to Bilibili and overseas platforms: an Upload-Post key, three Bilibili cookies, and a private first post. The steps live on the site so they can change without a client release.',
+      'nav.home':'Home','nav.guide':'Publish guide','nav.cta':'Download',
+      'hero.eyebrow':'How-to','hero.h1':'Publish a clip for the first time',
+      'hero.lede':'Connect accounts once in Settings. On a clip, pick the platforms. Posts stay private by default so you can try safely. These steps live here and can be updated without shipping a new build.',
+      's1.h':'01 · Open Settings → Publish',
+      's1.1':'Open Settings from the top right and choose Publish. Overseas accounts and Bilibili are on the same page.',
+      's1.2':'Video is still processed on your machine. Only the finished file is uploaded: overseas platforms go through <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">Upload-Post</a>; Bilibili uses a cookie saved on this computer.',
+      's2.h':'02 · Overseas: Upload-Post',
+      's2.1':'Open <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">app.upload-post.com</a> and create an account.',
+      's2.2':'In <a class="link" href="https://app.upload-post.com/manage-users" target="_blank" rel="noopener">Manage Users</a>, create a profile and connect the social accounts you want to post to.',
+      's2.3':'Create a key in <a class="link" href="https://app.upload-post.com/api-keys" target="_blank" rel="noopener">API Keys</a>, paste it into AutoClip, and save to verify.',
+      's2.4':'The publish page defaults to Only me: TikTok uses SELF_ONLY, YouTube uses private. Public posts appear on the account immediately.',
+      's3.h':'03 · Bilibili: three cookies',
+      's3.1':'In Chrome or Edge, open <a class="link" href="https://www.bilibili.com" target="_blank" rel="noopener">bilibili.com</a> and sign in.',
+      's3.2':'Press <span class="k">F12</span> (on a Mac, <span class="k">⌥⌘I</span>) to open Developer Tools, then open <span class="k">Application</span>.',
+      's3.3':'Cookies → <span class="k">https://www.bilibili.com</span>. Copy the values named <span class="k">SESSDATA</span>, <span class="k">bili_jct</span>, and <span class="k">DedeUserID</span>.',
+      's3.4':'Paste them as one line: <span class="k">SESSDATA=…; bili_jct=…; DedeUserID=…</span>, then save and verify in Settings.',
+      's3.note.h':'It stays on this computer',
+      's3.note.p':'The cookie is saved only on this machine. It is not sent to the repo or the website. If it expires or you switch accounts, sign in again and copy the three fields.',
+      's4.h':'04 · Publish from a clip',
+      's4.1':'Open a project, tap Publish on a clip, pick platforms, leave visibility on Only me, then start.',
+      's4.2':'You can generate a cover in one tap. If image generation fails or is not configured, a frame is used and publishing continues.',
+      's4.3':'A Bilibili schedule must be more than two hours from now. The frame follows the accounts: a vertical account is rendered 9:16; Bilibili alone stays landscape.',
+      'faq.h':'FAQ',
+      'faq.1.q':'The cookie is rejected?',
+      'faq.1.a':'Sign in to Bilibili again and copy the three fields from Application → Cookies. Do not paste a whole request header. A missing field fails the check.',
+      'faq.2.q':'No profile yet?',
+      'faq.2.a':'Create a profile in Upload-Post, connect the accounts you want to publish to, then refresh accounts in AutoClip.',
+      'faq.3.q':'Does a failed cover block publishing?',
+      'faq.3.a':'No. If generation fails or has not finished, the post uses a frame capture and the flow continues.',
+      'footer.home':'Home','footer.copy':'© 2025–2026 AutoClip · MIT License'
+    },
+    ja: {
+      'title':'公開ガイド｜AutoClip',
+      'meta.desc':'AutoClip の切片を Bilibili と海外へ送る手順。Upload-Post のキー、Bilibili の Cookie 3 つ、自分のみの試投稿。手順は公式サイトに置き、クライアントを出さずに更新できます。',
+      'nav.home':'ホーム','nav.guide':'公開ガイド','nav.cta':'ダウンロード',
+      'hero.eyebrow':'操作ガイド','hero.h1':'はじめて切片を公開する',
+      'hero.lede':'アカウントは設定で一度だけつなぎます。切片ページで配信先を選ぶだけ。初期値は「自分のみ」です。手順はこのページにあり、アプリを出さずに直せます。',
+      's1.h':'01 · 設定 → 公開',
+      's1.1':'右上の設定を開き、左で「公開」を選びます。海外アカウントと Bilibili は同じページです。',
+      's1.2':'動画はこれまで通りこのパソコンで処理します。アップロードするのは完成ファイルだけです。海外は <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">Upload-Post</a>、Bilibili はこの端末の Cookie です。',
+      's2.h':'02 · 海外：Upload-Post',
+      's2.1':'<a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">app.upload-post.com</a> で登録します。',
+      's2.2':'<a class="link" href="https://app.upload-post.com/manage-users" target="_blank" rel="noopener">Manage Users</a> で profile を作り、投稿したい SNS をつなぎます。',
+      's2.3':'<a class="link" href="https://app.upload-post.com/api-keys" target="_blank" rel="noopener">API Keys</a> でキーを作り、AutoClip に貼って保存・確認します。',
+      's2.4':'公開ページの初期値は「自分のみ」です。TikTok は SELF_ONLY、YouTube は private。公開にするとすぐアカウントに出ます。',
+      's3.h':'03 · Bilibili：Cookie 3 つ',
+      's3.1':'Chrome または Edge で <a class="link" href="https://www.bilibili.com" target="_blank" rel="noopener">bilibili.com</a> にログインします。',
+      's3.2':'<span class="k">F12</span>（Mac は <span class="k">⌥⌘I</span>）で開発者ツールを開き、<span class="k">Application</span> を選びます。',
+      's3.3':'Cookies → <span class="k">https://www.bilibili.com</span>。<span class="k">SESSDATA</span>、<span class="k">bili_jct</span>、<span class="k">DedeUserID</span> の値をコピーします。',
+      's3.4':'1 行で <span class="k">SESSDATA=…; bili_jct=…; DedeUserID=…</span> と貼り、設定で保存して確認します。',
+      's3.note.h':'このパソコンにだけ残ります',
+      's3.note.p':'Cookie はこの端末にだけ保存され、リポジトリや公式サイトには送られません。期限切れやアカウント変更のときは、ログインし直して 3 つの項目をコピーしてください。',
+      's4.h':'04 · 切片から公開',
+      's4.1':'プロジェクトを開き、切片の「公開」を押します。配信先を選び、公開範囲は「自分のみ」のまま開始します。',
+      's4.2':'カバーはワンタップで作れます。生成に失敗しても、または未設定でも、フレーム切り出しで投稿は止まりません。',
+      's4.3':'Bilibili の予約は今から 2 時間より後にしてください。画角はアカウントに従います。縦型があれば 9:16、Bilibili だけのときは横です。',
+      'faq.h':'よくある質問',
+      'faq.1.q':'Cookie が無効と出る',
+      'faq.1.a':'Bilibili に再ログインし、Application → Cookies から 3 項目をコピーしてください。リクエストヘッダーをまるごと貼らないでください。欠けていると確認に失敗します。',
+      'faq.2.q':'profile がまだない',
+      'faq.2.a':'先に Upload-Post で profile を作り、投稿したいアカウントをつないでから、AutoClip でアカウントを更新します。',
+      'faq.3.q':'カバー失敗で公開は止まりますか？',
+      'faq.3.a':'止まりません。生成に失敗した、またはまだできていないときはフレームを使い、流れはそのまま進みます。',
+      'footer.home':'ホーム','footer.copy':'© 2025–2026 AutoClip · MIT ライセンス'
+    },
+    ko: {
+      'title':'게시 가이드｜AutoClip',
+      'meta.desc':'AutoClip 클립을 빌리빌리와 해외 플랫폼에 올리는 방법. Upload-Post 키, 빌리빌리 쿠키 세 개, 나만 보기 시험 게시. 단계는 공식 사이트에 두어 앱을 내지 않고 고칠 수 있습니다.',
+      'nav.home':'홈','nav.guide':'게시 가이드','nav.cta':'다운로드',
+      'hero.eyebrow':'사용 방법','hero.h1':'클립을 처음 게시하기',
+      'hero.lede':'계정은 설정에서 한 번만 연결합니다. 클립 페이지에서 플랫폼을 고르면 됩니다. 기본은 「나만」이라 먼저 시험하기 좋습니다. 단계는 이 페이지에 있으며, 클라이언트를 내지 않고 고칠 수 있습니다.',
+      's1.h':'01 · 설정 → 게시',
+      's1.1':'오른쪽 위 설정을 열고 왼쪽에서 「게시」를 고릅니다. 해외 계정과 빌리빌리가 한 페이지에 있습니다.',
+      's1.2':'영상은 계속 이 컴퓨터에서 처리됩니다. 올리는 것은 완성 파일뿐입니다. 해외는 <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">Upload-Post</a>, 빌리빌리는 이 기기의 Cookie입니다.',
+      's2.h':'02 · 해외: Upload-Post',
+      's2.1':'<a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">app.upload-post.com</a>에서 가입합니다.',
+      's2.2':'<a class="link" href="https://app.upload-post.com/manage-users" target="_blank" rel="noopener">Manage Users</a>에서 profile을 만들고 올릴 SNS를 연결합니다.',
+      's2.3':'<a class="link" href="https://app.upload-post.com/api-keys" target="_blank" rel="noopener">API Keys</a>에서 키를 만들어 AutoClip에 붙인 뒤 저장하고 확인합니다.',
+      's2.4':'게시 페이지 기본값은 「나만」입니다. TikTok은 SELF_ONLY, YouTube는 private. 공개로 바꾸면 계정에 바로 나타납니다.',
+      's3.h':'03 · 빌리빌리: 쿠키 세 개',
+      's3.1':'Chrome 또는 Edge에서 <a class="link" href="https://www.bilibili.com" target="_blank" rel="noopener">bilibili.com</a>에 로그인합니다.',
+      's3.2':'<span class="k">F12</span>(Mac은 <span class="k">⌥⌘I</span>)로 개발자 도구를 열고 <span class="k">Application</span>을 고릅니다.',
+      's3.3':'Cookies → <span class="k">https://www.bilibili.com</span>. <span class="k">SESSDATA</span>, <span class="k">bili_jct</span>, <span class="k">DedeUserID</span> 값을 복사합니다.',
+      's3.4':'한 줄로 <span class="k">SESSDATA=…; bili_jct=…; DedeUserID=…</span>를 붙인 뒤 설정에서 저장하고 확인합니다.',
+      's3.note.h':'이 컴퓨터에만 남습니다',
+      's3.note.p':'Cookie는 이 기기에만 저장되며 저장소나 공식 사이트로 가지 않습니다. 만료되거나 계정을 바꾸면 다시 로그인한 뒤 세 항목을 복사하면 됩니다.',
+      's4.h':'04 · 클립에서 게시',
+      's4.1':'프로젝트를 열고 클립의 「게시」를 누릅니다. 플랫폼을 고르고 공개 범위는 「나만」으로 둔 채 시작합니다.',
+      's4.2':'커버는 한 번에 만들 수 있습니다. 생성에 실패하거나 모델이 없어도 프레임을 쓰므로 게시가 멈추지 않습니다.',
+      's4.3':'빌리빌리 예약은 지금으로부터 두 시간 뒤여야 합니다. 화면비는 계정을 따릅니다. 세로 계정이 있으면 9:16, 빌리빌리만이면 가로입니다.',
+      'faq.h':'자주 묻는 질문',
+      'faq.1.q':'Cookie가 거부됩니다',
+      'faq.1.a':'빌리빌리에 다시 로그인한 뒤 Application → Cookies에서 세 항목을 복사하세요. 요청 헤더 전체를 붙이지 마세요. 하나라도 빠지면 확인에 실패합니다.',
+      'faq.2.q':'아직 profile이 없나요?',
+      'faq.2.a':'먼저 Upload-Post에서 profile을 만들고 게시할 계정을 연결한 다음, AutoClip에서 계정을 새로고침하세요.',
+      'faq.3.q':'커버 실패가 게시를 막나요?',
+      'faq.3.a':'막지 않습니다. 생성이 실패했거나 아직 없으면 프레임을 쓰고 흐름은 계속됩니다.',
+      'footer.home':'홈','footer.copy':'© 2025–2026 AutoClip · MIT 라이선스'
+    },
+    es: {
+      'title':'Guía de publicación · AutoClip',
+      'meta.desc':'Publica clips de AutoClip en Bilibili y plataformas internacionales: una clave de Upload-Post, tres cookies de Bilibili y una prueba solo para ti. Los pasos están en el sitio para poder actualizarlos sin sacar el cliente.',
+      'nav.home':'Inicio','nav.guide':'Guía de publicación','nav.cta':'Descargar',
+      'hero.eyebrow':'Tutorial','hero.h1':'Publicar un clip por primera vez',
+      'hero.lede':'Conecta las cuentas una vez en Ajustes. En el clip, elige las plataformas. Por defecto queda Solo yo, para probar con calma. Estos pasos viven aquí y se pueden cambiar sin una nueva versión.',
+      's1.h':'01 · Abre Ajustes → Publicar',
+      's1.1':'Abre Ajustes arriba a la derecha y elige Publicar. Las cuentas internacionales y Bilibili están en la misma página.',
+      's1.2':'El vídeo se sigue procesando en tu ordenador. Solo se sube el archivo final: fuera de China va por <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">Upload-Post</a>; Bilibili usa una cookie guardada aquí.',
+      's2.h':'02 · Internacional: Upload-Post',
+      's2.1':'Abre <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">app.upload-post.com</a> y crea una cuenta.',
+      's2.2':'En <a class="link" href="https://app.upload-post.com/manage-users" target="_blank" rel="noopener">Manage Users</a>, crea un profile y conecta las redes a las que quieras publicar.',
+      's2.3':'Crea una clave en <a class="link" href="https://app.upload-post.com/api-keys" target="_blank" rel="noopener">API Keys</a>, pégala en AutoClip y guarda para comprobarla.',
+      's2.4':'La página de publicación usa Solo yo por defecto: TikTok es SELF_ONLY, YouTube es private. Público aparece en la cuenta al momento.',
+      's3.h':'03 · Bilibili: tres cookies',
+      's3.1':'En Chrome o Edge, abre <a class="link" href="https://www.bilibili.com" target="_blank" rel="noopener">bilibili.com</a> e inicia sesión.',
+      's3.2':'Pulsa <span class="k">F12</span> (en Mac, <span class="k">⌥⌘I</span>) para abrir las herramientas de desarrollador y entra en <span class="k">Application</span>.',
+      's3.3':'Cookies → <span class="k">https://www.bilibili.com</span>. Copia los valores <span class="k">SESSDATA</span>, <span class="k">bili_jct</span> y <span class="k">DedeUserID</span>.',
+      's3.4':'Pégalos en una línea: <span class="k">SESSDATA=…; bili_jct=…; DedeUserID=…</span> y guarda en Ajustes.',
+      's3.note.h':'Se queda en este ordenador',
+      's3.note.p':'La cookie solo se guarda en esta máquina. No va al repositorio ni a la web. Si caduca o cambias de cuenta, inicia sesión otra vez y copia los tres campos.',
+      's4.h':'04 · Publicar desde un clip',
+      's4.1':'Abre un proyecto, pulsa Publicar en un clip, elige plataformas, deja la visibilidad en Solo yo y empieza.',
+      's4.2':'Puedes generar una portada de un toque. Si falla o no hay modelo, se usa un fotograma y la publicación sigue.',
+      's4.3':'Una programación de Bilibili debe ser más de dos horas después de ahora. El encuadre sigue a las cuentas: una cuenta vertical renderiza 9:16; solo Bilibili queda horizontal.',
+      'faq.h':'Preguntas frecuentes',
+      'faq.1.q':'¿La cookie no es válida?',
+      'faq.1.a':'Vuelve a iniciar sesión en Bilibili y copia los tres campos en Application → Cookies. No pegues toda la cabecera. Si falta un campo, la comprobación falla.',
+      'faq.2.q':'¿Aún no hay profile?',
+      'faq.2.a':'Crea un profile en Upload-Post, conecta las cuentas y luego actualiza las cuentas en AutoClip.',
+      'faq.3.q':'¿Una portada fallida bloquea la publicación?',
+      'faq.3.a':'No. Si la generación falla o no ha terminado, se usa un fotograma y el flujo continúa.',
+      'footer.home':'Inicio','footer.copy':'© 2025–2026 AutoClip · Licencia MIT'
+    },
+    pt: {
+      'title':'Guia de publicação · AutoClip',
+      'meta.desc':'Publique clipes do AutoClip no Bilibili e em plataformas internacionais: chave do Upload-Post, três cookies do Bilibili e um teste só para você. Os passos ficam no site para atualizar sem lançar o cliente.',
+      'nav.home':'Início','nav.guide':'Guia de publicação','nav.cta':'Baixar',
+      'hero.eyebrow':'Como fazer','hero.h1':'Publicar um clipe pela primeira vez',
+      'hero.lede':'Conecte as contas uma vez em Ajustes. Na página do clipe, escolha as plataformas. O padrão é Só eu, para testar com calma. Estes passos ficam aqui e podem mudar sem um novo build.',
+      's1.h':'01 · Abra Ajustes → Publicar',
+      's1.1':'Abra Ajustes no canto superior direito e escolha Publicar. Contas internacionais e Bilibili ficam na mesma página.',
+      's1.2':'O vídeo continua sendo processado neste computador. Só o arquivo final sobe: o exterior passa pelo <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">Upload-Post</a>; o Bilibili usa um cookie salvo aqui.',
+      's2.h':'02 · Exterior: Upload-Post',
+      's2.1':'Abra <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">app.upload-post.com</a> e crie uma conta.',
+      's2.2':'Em <a class="link" href="https://app.upload-post.com/manage-users" target="_blank" rel="noopener">Manage Users</a>, crie um profile e conecte as redes para as quais quer publicar.',
+      's2.3':'Crie uma chave em <a class="link" href="https://app.upload-post.com/api-keys" target="_blank" rel="noopener">API Keys</a>, cole no AutoClip e salve para verificar.',
+      's2.4':'A página de publicação usa Só eu por padrão: TikTok é SELF_ONLY, YouTube é private. Público aparece na conta na hora.',
+      's3.h':'03 · Bilibili: três cookies',
+      's3.1':'No Chrome ou Edge, abra <a class="link" href="https://www.bilibili.com" target="_blank" rel="noopener">bilibili.com</a> e entre.',
+      's3.2':'Pressione <span class="k">F12</span> (no Mac, <span class="k">⌥⌘I</span>) para abrir as ferramentas de desenvolvedor e entre em <span class="k">Application</span>.',
+      's3.3':'Cookies → <span class="k">https://www.bilibili.com</span>. Copie os valores <span class="k">SESSDATA</span>, <span class="k">bili_jct</span> e <span class="k">DedeUserID</span>.',
+      's3.4':'Cole em uma linha: <span class="k">SESSDATA=…; bili_jct=…; DedeUserID=…</span> e salve em Ajustes.',
+      's3.note.h':'Fica só neste computador',
+      's3.note.p':'O cookie é salvo só nesta máquina. Não vai para o repositório nem para o site. Se expirar ou você trocar de conta, entre de novo e copie os três campos.',
+      's4.h':'04 · Publicar a partir de um clipe',
+      's4.1':'Abra um projeto, toque em Publicar no clipe, escolha as plataformas, deixe a visibilidade em Só eu e comece.',
+      's4.2':'Dá para gerar a capa num toque. Se a geração falhar ou não houver modelo, um frame é usado e a publicação segue.',
+      's4.3':'Um agendamento do Bilibili precisa ser mais de duas horas a partir de agora. O enquadramento segue as contas: uma conta vertical renderiza 9:16; só Bilibili fica na horizontal.',
+      'faq.h':'Perguntas frequentes',
+      'faq.1.q':'O cookie foi recusado?',
+      'faq.1.a':'Entre de novo no Bilibili e copie os três campos em Application → Cookies. Não cole o cabeçalho inteiro. Se faltar um campo, a verificação falha.',
+      'faq.2.q':'Ainda não tem profile?',
+      'faq.2.a':'Crie um profile no Upload-Post, conecte as contas e depois atualize as contas no AutoClip.',
+      'faq.3.q':'Uma capa que falhou bloqueia a publicação?',
+      'faq.3.a':'Não. Se a geração falhar ou ainda não tiver terminado, usa-se um frame e o fluxo continua.',
+      'footer.home':'Início','footer.copy':'© 2025–2026 AutoClip · Licença MIT'
+    },
+    ru: {
+      'title':'Как публиковать · AutoClip',
+      'meta.desc':'Как отправить клип AutoClip на Bilibili и зарубежные площадки: ключ Upload-Post, три cookie Bilibili и пробная публикация «только я». Шаги живут на сайте и правятся без выпуска клиента.',
+      'nav.home':'Главная','nav.guide':'Как публиковать','nav.cta':'Скачать',
+      'hero.eyebrow':'Инструкция','hero.h1':'Первая публикация клипа',
+      'hero.lede':'Аккаунты подключаются один раз в настройках. На странице клипа выберите площадки. По умолчанию видно только вам. Шаги на этой странице можно менять без новой сборки.',
+      's1.h':'01 · Настройки → Публикация',
+      's1.1':'Откройте настройки справа сверху и выберите «Публикация». Зарубежные аккаунты и Bilibili на одной странице.',
+      's1.2':'Видео по-прежнему обрабатывается на этом компьютере. Загружается только готовый файл: за рубеж — через <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">Upload-Post</a>, на Bilibili — cookie с этой машины.',
+      's2.h':'02 · За рубеж: Upload-Post',
+      's2.1':'Откройте <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">app.upload-post.com</a> и зарегистрируйтесь.',
+      's2.2':'В <a class="link" href="https://app.upload-post.com/manage-users" target="_blank" rel="noopener">Manage Users</a> создайте profile и подключите нужные соцсети.',
+      's2.3':'Создайте ключ в <a class="link" href="https://app.upload-post.com/api-keys" target="_blank" rel="noopener">API Keys</a>, вставьте в AutoClip и сохраните для проверки.',
+      's2.4':'На странице публикации по умолчанию «Только я»: TikTok — SELF_ONLY, YouTube — private. Публичный пост сразу появится в аккаунте.',
+      's3.h':'03 · Bilibili: три cookie',
+      's3.1':'В Chrome или Edge откройте <a class="link" href="https://www.bilibili.com" target="_blank" rel="noopener">bilibili.com</a> и войдите.',
+      's3.2':'Нажмите <span class="k">F12</span> (на Mac — <span class="k">⌥⌘I</span>), откройте инструменты разработчика и вкладку <span class="k">Application</span>.',
+      's3.3':'Cookies → <span class="k">https://www.bilibili.com</span>. Скопируйте значения <span class="k">SESSDATA</span>, <span class="k">bili_jct</span> и <span class="k">DedeUserID</span>.',
+      's3.4':'Вставьте в одну строку: <span class="k">SESSDATA=…; bili_jct=…; DedeUserID=…</span> и сохраните в настройках.',
+      's3.note.h':'Остаётся на этом компьютере',
+      's3.note.p':'Cookie хранится только здесь. В репозиторий и на сайт он не уходит. Если истёк срок или сменился аккаунт, войдите снова и скопируйте три поля.',
+      's4.h':'04 · Публикация с клипа',
+      's4.1':'Откройте проект, нажмите «Публикация» на клипе, выберите площадки, оставьте видимость «Только я» и отправьте.',
+      's4.2':'Обложку можно сделать одним нажатием. Если генерация не удалась или модели нет, берётся кадр, публикация не останавливается.',
+      's4.3':'Отложенная публикация на Bilibili должна быть позже чем через два часа. Кадр зависит от аккаунтов: вертикальный даёт 9:16, только Bilibili — горизонталь.',
+      'faq.h':'Вопросы',
+      'faq.1.q':'Cookie не принят?',
+      'faq.1.a':'Снова войдите в Bilibili и скопируйте три поля в Application → Cookies. Не вставляйте весь заголовок. Без одного поля проверка не пройдёт.',
+      'faq.2.q':'Ещё нет profile?',
+      'faq.2.a':'Сначала создайте profile в Upload-Post, подключите аккаунты и обновите список в AutoClip.',
+      'faq.3.q':'Сбой обложки останавливает публикацию?',
+      'faq.3.a':'Нет. Если генерация не удалась или ещё не готова, используется кадр, процесс идёт дальше.',
+      'footer.home':'Главная','footer.copy':'© 2025–2026 AutoClip · лицензия MIT'
+    },
+    fr: {
+      'title':'Guide de publication · AutoClip',
+      'meta.desc':'Publier un extrait AutoClip sur Bilibili et à l’étranger : clé Upload-Post, trois cookies Bilibili, essai « moi seul ». Les étapes sont sur le site, pour les mettre à jour sans sortir le client.',
+      'nav.home':'Accueil','nav.guide':'Guide de publication','nav.cta':'Télécharger',
+      'hero.eyebrow':'Tutoriel','hero.h1':'Publier un extrait pour la première fois',
+      'hero.lede':'Connectez les comptes une fois dans Réglages. Sur l’extrait, choisissez les plateformes. Par défaut, c’est « Moi seul ». Ces étapes vivent ici et se mettent à jour sans nouvelle version.',
+      's1.h':'01 · Ouvrir Réglages → Publier',
+      's1.1':'Ouvrez Réglages en haut à droite et choisissez Publier. Les comptes étrangers et Bilibili sont sur la même page.',
+      's1.2':'La vidéo est toujours traitée sur cet ordinateur. Seul le fichier fini est envoyé : l’étranger passe par <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">Upload-Post</a> ; Bilibili utilise un cookie enregistré ici.',
+      's2.h':'02 · À l’étranger : Upload-Post',
+      's2.1':'Ouvrez <a class="link" href="https://app.upload-post.com" target="_blank" rel="noopener">app.upload-post.com</a> et créez un compte.',
+      's2.2':'Dans <a class="link" href="https://app.upload-post.com/manage-users" target="_blank" rel="noopener">Manage Users</a>, créez un profile et reliez les réseaux où publier.',
+      's2.3':'Créez une clé dans <a class="link" href="https://app.upload-post.com/api-keys" target="_blank" rel="noopener">API Keys</a>, collez-la dans AutoClip et enregistrez pour vérifier.',
+      's2.4':'La page de publication utilise « Moi seul » par défaut : TikTok = SELF_ONLY, YouTube = private. Public apparaît tout de suite sur le compte.',
+      's3.h':'03 · Bilibili : trois cookies',
+      's3.1':'Dans Chrome ou Edge, ouvrez <a class="link" href="https://www.bilibili.com" target="_blank" rel="noopener">bilibili.com</a> et connectez-vous.',
+      's3.2':'Appuyez sur <span class="k">F12</span> (sur Mac, <span class="k">⌥⌘I</span>) pour ouvrir les outils de développement, puis <span class="k">Application</span>.',
+      's3.3':'Cookies → <span class="k">https://www.bilibili.com</span>. Copiez <span class="k">SESSDATA</span>, <span class="k">bili_jct</span> et <span class="k">DedeUserID</span>.',
+      's3.4':'Collez-les sur une ligne : <span class="k">SESSDATA=…; bili_jct=…; DedeUserID=…</span>, puis enregistrez dans Réglages.',
+      's3.note.h':'Reste sur cet ordinateur',
+      's3.note.p':'Le cookie n’est enregistré que ici. Il n’est envoyé ni au dépôt ni au site. S’il expire ou si vous changez de compte, reconnectez-vous et copiez les trois champs.',
+      's4.h':'04 · Publier depuis un extrait',
+      's4.1':'Ouvrez un projet, touchez Publier sur un extrait, choisissez les plateformes, laissez la visibilité sur Moi seul, puis lancez.',
+      's4.2':'La couverture se génère d’un geste. Si la génération échoue ou n’est pas configurée, une image extraite est utilisée et la publication continue.',
+      's4.3':'Une programmation Bilibili doit être à plus de deux heures. Le cadre suit les comptes : un compte vertical rend en 9:16 ; Bilibili seul reste en paysage.',
+      'faq.h':'Questions fréquentes',
+      'faq.1.q':'Le cookie est refusé ?',
+      'faq.1.a':'Reconnectez-vous à Bilibili et copiez les trois champs dans Application → Cookies. Ne collez pas tout l’en-tête. Un champ manquant fait échouer la vérification.',
+      'faq.2.q':'Pas encore de profile ?',
+      'faq.2.a':'Créez d’abord un profile dans Upload-Post, reliez les comptes, puis actualisez les comptes dans AutoClip.',
+      'faq.3.q':'Une couverture ratée bloque-t-elle la publication ?',
+      'faq.3.a':'Non. Si la génération échoue ou n’est pas prête, une image extraite est utilisée et le flux continue.',
+      'footer.home':'Accueil','footer.copy':'© 2025–2026 AutoClip · Licence MIT'
+    }
+  };
+  var LANG_ATTR = {zh:'zh-CN', en:'en', ja:'ja', ko:'ko', es:'es', pt:'pt-BR', ru:'ru', fr:'fr'};
+  function apply(lang){
+    if (!Object.prototype.hasOwnProperty.call(T, lang)) lang = 'en';
+    var d = T[lang];
+    document.documentElement.lang = LANG_ATTR[lang] || 'zh-CN';
+    document.title = d.title;
+    document.querySelectorAll('[data-i18n]').forEach(function(el){
+      var k = el.getAttribute('data-i18n'); if (d[k] != null) el.textContent = d[k];
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach(function(el){
+      var k = el.getAttribute('data-i18n-html'); if (d[k] != null) el.innerHTML = d[k];
+    });
+    document.getElementById('language').value = lang;
+    var landmarks = {
+      zh:['主导航','页脚'], en:['Main navigation','Footer'], ja:['メインナビゲーション','フッター'], ko:['주 탐색','바닥글'],
+      es:['Navegación principal','Pie de página'], pt:['Navegação principal','Rodapé'], ru:['Основная навигация','Нижняя часть страницы'], fr:['Navigation principale','Pied de page']
+    };
+    document.querySelector('.nav-links').setAttribute('aria-label', landmarks[lang][0]);
+    document.querySelector('.footer-links').setAttribute('aria-label', landmarks[lang][1]);
+    document.querySelector('meta[name="description"]').content = d['meta.desc'];
+    document.querySelector('meta[property="og:title"]').content = d.title;
+    document.querySelector('meta[property="og:description"]').content = d['meta.desc'];
+    document.querySelector('meta[name="twitter:title"]').content = d.title;
+    document.querySelector('meta[name="twitter:description"]').content = d['meta.desc'];
+    try { localStorage.setItem('autoclip.lang', lang); } catch(e){}
+  }
+  var saved = null; try { saved = localStorage.getItem('autoclip.lang'); } catch(e){}
+  function supported(value) { return Object.prototype.hasOwnProperty.call(T, value); }
+  function detect(languages) {
+    for (var i = 0; i < languages.length; i++) {
+      var base = languages[i].toLowerCase().replace('_', '-').split('-')[0];
+      if (supported(base)) return base;
+    }
+    return 'en';
+  }
+  var requested = new URLSearchParams(location.search).get('lang');
+  apply(supported(requested) ? requested : supported(saved) ? saved : detect(navigator.languages || [navigator.language || 'en']));
+  document.getElementById('language').addEventListener('change', function(event){
+    var lang = event.target.value;
+    apply(lang);
+    var url = new URL(location.href);
+    url.searchParams.set('lang', lang);
+    history.replaceState(null, '', url);
+  });
+})();
+</script>
+</body>
+</html>

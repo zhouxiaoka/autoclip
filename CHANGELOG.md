@@ -7,6 +7,10 @@
 
 ## [未发布]
 
+_（本周尚无改动）_
+
+## [1.3.2] - 2026-09-22
+
 ### 新增
 - **发布到海外平台（Upload-Post）**：切片可经 [Upload-Post](https://www.upload-post.com) 一次发到 TikTok / Instagram / YouTube Shorts / Facebook / LinkedIn / X / Threads / Pinterest / Bluesky 等，
   与 B 站投稿并列；先按预设渲成片（竖屏平台默认 `shorts`），再异步提交并轮询各平台结果。视频处理仍全部在本地。
@@ -16,11 +20,17 @@
   发布客户端按当前 Upload-Post 文档和 OpenAPI 重写：过期账号不拿来发，Reddit 暂不发送，超长 YouTube 标题单独截短，提交后每 10 秒查一次结果。无效 key 打线上接口会得到 401。进程中断后未提交的任务会标成失败，而不是一直停在排队。
   应用里的发布收成一条：切片上打开发布，现在发或定时，成片画幅跟着账号走。项目里看记录并取消还没发出的排期。记录可以换成月历；「排这一周」把还没发的切片按分数填进周一、三、五的 09:00，确认后才提交。
   B 站和海外账号在同一处配置、同一页勾选。设置里粘贴 Cookie 并校验，发布页出现 B 站；只发 B 站时渲成横屏，和竖屏账号一起发时各自渲。定时要晚于现在两小时，还没到点的可以取消。抖音、小红书、快手仍然没有投稿接口。
+- **自动封面**：设置页「封面」可配 OpenAI 兼容、Seedream（火山方舟）或通义万相。发布页可预览、改文案、重新生成。B 站投稿优先用设计封面；生图失败或未生成时截帧兜底，封面失败不挡投稿。Seedream 参考帧走 generations 的 image 字段，校对用豆包视觉。
 
 ### 改进
+- **设置「发布」把 B 站和海外拆开**：B 站 Cookie 输入和保存放在最上面，不再跟在海外密钥后面，避免一进来找不到贴 Cookie 的地方。
+- **设置页模型名单跟得上服务商**：下拉换成当前常用型号，去掉已下架的 gpt-4o、gemini-1.5、qwen-turbo 等。通义领先 `qwen3.8-max` / `qwen3.8-flash`，Gemini 默认 `gemini-3.8-flash`（2.5 仅作旧账号兜底）。填写密钥后向服务商拉取最新 `/models`，与内置名单合并；拉不到时仍显示内置列表，可点刷新。
+- **DeepSeek / Seed / Kimi / GLM / Grok 走官方接口**：设置页可直接选，不再借硅基流动。DeepSeek 默认 `deepseek-flash`（V4.1）；Seed 走火山方舟，默认 `doubao-seed-2-1-lite-260915`。硅基流动不再作为独立提供商出现（旧配置仍能读，打开设置页会切到 DeepSeek 官方）。
+- **发布操作教程入口**：设置「发布」、切片发布页和周排期空态增加「操作教程」，打开官网 `guides/publish/`。具体步骤（Upload-Post 密钥、B 站 Application → Cookies 三个字段、仅自己试发）写在官网，改步骤不用发客户端。
 - **应用内更新提示**：桌面端发现新版本后在后台下载。顶栏箭头放在语言、主题、设置这一组常驻入口的外面，提示从图标下面展开。点「暂不」只关掉这次提示，图标还在。没有新版本时箭头不出现。已经是最新版时一天查一次；发现过新版本或检查失败时，下次打开会再查。提示里的说明来自该版本的更新日志。
 - **不再用飞书表格收集反馈。** 应用内反馈跟随八种界面语言。点发送不看匿名统计开关：故障进入 GitHub Issue，想法和其他进入 Discussions。邮箱不写进公开帖。
 - **应用内反馈自动收件。** 每小时把新的 `feedback_submitted` 写进 GitHub，同一条反馈编号只写一次。
+- **真实私密试发脚本**：`scripts/verify_live_publish.py` 用本机密钥做一次 Upload-Post 私密投稿和 B 站仅自己可见投稿，打小版本前跑。没有密钥时直接说明缺什么，不假装成功。
 
 ### 修复
 - 数据库清理脚本失败时返回退出码 1。之前异常被接住后进程仍以 0 退出，调用方会以为清理已经成功。
@@ -199,7 +209,8 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.1...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.2...HEAD
+- [1.3.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.1...v1.3.2
 - [1.3.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.0...v1.3.1
 - [1.3.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.2.1...v1.3.0
 - [1.2.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.2.0...v1.2.1

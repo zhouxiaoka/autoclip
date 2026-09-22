@@ -136,6 +136,17 @@ test('week plan ranks by score, skips clips already sent, and leaves an occupied
   ])
 })
 
+const { publishGuideHref, PUBLISH_GUIDE_ORIGIN, PUBLISH_GUIDE_PATH } = load('../src/publish/guide.ts')
+
+test('the in-app tutorial opens the official guide with the current language', () => {
+  assert.equal(PUBLISH_GUIDE_ORIGIN, 'https://zhouxiaoka.github.io/autoclip_intro')
+  assert.equal(PUBLISH_GUIDE_PATH, '/guides/publish/')
+  assert.equal(publishGuideHref('zh'), 'https://zhouxiaoka.github.io/autoclip_intro/guides/publish/?lang=zh')
+  assert.equal(publishGuideHref('pt-BR'), 'https://zhouxiaoka.github.io/autoclip_intro/guides/publish/?lang=pt')
+  assert.equal(publishGuideHref('de'), 'https://zhouxiaoka.github.io/autoclip_intro/guides/publish/?lang=en')
+  assert.equal(publishGuideHref(), 'https://zhouxiaoka.github.io/autoclip_intro/guides/publish/?lang=en')
+})
+
 test('calendar opens on the next scheduled month', () => {
   const now = new Date(2026, 8, 22, 8)
   const plain = (value) => JSON.parse(JSON.stringify(value))

@@ -225,13 +225,15 @@ def build_submit(
     filename: str,
     cid: int,
     tid: int = DEFAULT_TID,
+    cover: str = "",
 ) -> dict[str, Any]:
     text = title.strip()[:TITLE_LIMIT].rstrip() or "切片"
+    cover_url = (cover or "").strip()
     body: dict[str, Any] = {
         "copyright": 1,
         "videos": [{"filename": filename, "title": text, "desc": "", "cid": cid}],
-        "cover": "",
-        "cover43": "",
+        "cover": cover_url,
+        "cover43": cover_url,
         "title": text,
         "tid": tid,
         "tag": "日常",
@@ -259,6 +261,46 @@ def build_submit(
     return body
 
 
+def extract_cover_jpeg(video_path: Path, at_sec: float = 0.5) -> bytes:
+    """从成片截一帧 JPEG。投稿要用这张图上传封面，空封面在创作中心会被拦。"""
+    from backend.services.cover import extract_frame_jpeg
+
+    try:
+        return extract_frame_jpeg(Path(video_path), at_sec=at_sec)
+    except Exception as exc:  # noqa: BLE001
+        raise BilibiliError(str(exc) or "从成片截封面失败") from exc
+
+
+def upload_cover(
+    cookie: str,
+    jpeg: bytes,
+    *,
+    session: requests.Session | None = None,
+) -> str:
+    """POST /x/vu/web/cover/up，返回封面 URL。"""
+    if not jpeg:
+        raise BilibiliError("封面是空的")
+    parsed = parse_cookie(cookie)
+    header = cookie_header(parsed)
+    import base64
+    data_uri = "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii")
+    resp = (session or requests.Session()).post(
+        "https://member.bilibili.com/x/vu/web/cover/up",
+        headers=_headers(header, {"Content-Type": "application/x-www-form-urlencoded"}),
+        params={"ts": int(time.time() * 1000)},
+        data={"csrf": parsed["bili_jct"], "cover": data_uri},
+        timeout=60,
+    )
+    result = _json_body(resp, "上传封面")
+    if result.get("code") != 0:
+        raise BilibiliError(str(result.get("message") or "上传封面失败"))
+    info = result.get("data") if isinstance(result.get("data"), dict) else {}
+    url = str(info.get("url") or "").strip()
+    if not url.startswith(("http://", "https://")):
+        raise BilibiliError("上传封面没有返回地址")
+    return url
+
+
 def _upload_url(preupload: dict[str, Any]) -> str:
     endpoint = str(preupload.get("endpoint") or "")
     if endpoint.startswith("//"):
@@ -279,8 +321,15 @@ def upload_video(
     private: bool,
     dtime: int | None,
     session: requests.Session | None = None,
+    cover_jpeg: bytes | None = None,
+    project_id: str | None = None,
+    clip_id: str | None = None,
 ) -> dict[str, Any]:
-    """把一个 mp4 投稿到 B 站，返回 bvid / aid。"""
+    """把一个 mp4 投稿到 B 站，返回 bvid / aid。
+
+    封面：优先调用方传入的设计封面 / 已落盘封面；没有就成片截帧。
+    封面任一环节失败都不挡投稿。
+    """
     parsed = parse_cookie(cookie)
     header = cookie_header(parsed)
     path = Path(video_path)
@@ -374,6 +423,20 @@ def upload_video(
     filename = os.path.splitext(key.removeprefix("upos://").lstrip("/"))[0]
     if not filename:
         raise BilibiliError("合并分片没有返回文件名")
+    cover_url = ""
+    try:
+        jpeg = cover_jpeg
+        if not jpeg and project_id and clip_id:
+            from backend.services.cover import ensure_publish_cover_jpeg
+            jpeg = ensure_publish_cover_jpeg(project_id, clip_id, platform="bilibili", video_path=path)
+        if not jpeg:
+            jpeg = extract_cover_jpeg(path)
+        cover_url = upload_cover(cookie, jpeg, session=http)
+    except BilibiliError as exc:
+        # 封面失败不挡投稿：创作中心多数账号仍接受空封面，由平台自动截帧。
+        logger.warning("B 站封面未上传，继续投稿: %s", exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("B 站封面未上传，继续投稿: %s", exc)
     body = build_submit(
         title=title,
         description=description,
@@ -382,6 +445,7 @@ def upload_video(
         csrf=parsed["bili_jct"],
         filename=filename,
         cid=biz_id,
+        cover=cover_url,
     )
     submitted = http.post(
         "https://member.bilibili.com/x/vu/web/add/v3",
@@ -435,6 +499,8 @@ def publish_clip(req: BilibiliPublishRequest, session: requests.Session | None =
         private=req.visibility != "public",
         dtime=dtime,
         session=session,
+        project_id=req.project_id,
+        clip_id=req.clip_id,
     )
     request_id = str(uuid.uuid4())
     record = {
