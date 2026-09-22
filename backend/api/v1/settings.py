@@ -666,40 +666,53 @@ async def list_backups():
         raise HTTPException(status_code=500, detail=f"获取备份列表失败: {str(e)}")
 
 
+def _saved_provider_api_key(settings: DesktopSettings, provider: str) -> str:
+    keys = settings.api.api_keys
+    return {
+        "dashscope": keys.dashscope,
+        "openai": keys.openai,
+        "gemini": keys.gemini,
+        "siliconflow": keys.siliconflow,
+    }.get((provider or "").strip().lower(), "") or ""
+
+
 @router.get("/available-models")
-async def get_available_models():
-    """获取可用的模型列表"""
+async def get_available_models(
+    provider: str = "",
+    base_url: str = "",
+    api_key: str = "",
+    refresh: bool = False,
+):
+    """
+    云端提供商的模型下拉。
+
+    没密钥时返回内置常用名单；有密钥（请求参数或已保存的 settings）时
+    打服务商 `/models`，把账号此刻能用的型号合并进来。`refresh=1` 跳过缓存。
+    """
     try:
-        # 返回按供应商分类的模型列表
-        models = {
-            "dashscope": [
-                {"name": "qwen-plus", "display_name": "通义千问增强版", "max_tokens": 8192, "description": "适合复杂推理和创作任务"},
-                {"name": "qwen-turbo", "display_name": "通义千问标准版", "max_tokens": 8192, "description": "平衡性能和成本"},
-                {"name": "qwen-max", "display_name": "通义千问旗舰版", "max_tokens": 8192, "description": "最强性能，适合复杂任务"},
-                {"name": "qwen-long", "display_name": "通义千问长文本版", "max_tokens": 100000, "description": "支持超长文本处理"}
-            ],
-            "openai": [
-                {"name": "gpt-4o", "display_name": "GPT-4 Omni", "max_tokens": 128000, "description": "最新多模态模型"},
-                {"name": "gpt-4o-mini", "display_name": "GPT-4 Omni Mini", "max_tokens": 128000, "description": "轻量级多模态模型"},
-                {"name": "gpt-4-turbo", "display_name": "GPT-4 Turbo", "max_tokens": 128000, "description": "高性能版本"},
-                {"name": "gpt-4", "display_name": "GPT-4", "max_tokens": 8192, "description": "经典版本"},
-                {"name": "gpt-3.5-turbo", "display_name": "GPT-3.5 Turbo", "max_tokens": 16384, "description": "经济实用版本"}
-            ],
-            "gemini": [
-                {"name": "gemini-1.5-pro", "display_name": "Gemini 1.5 Pro", "max_tokens": 2000000, "description": "最新专业版"},
-                {"name": "gemini-1.5-flash", "display_name": "Gemini 1.5 Flash", "max_tokens": 1000000, "description": "快速响应版本"},
-                {"name": "gemini-pro", "display_name": "Gemini Pro", "max_tokens": 30720, "description": "经典专业版"}
-            ],
-            "siliconflow": [
-                {"name": "deepseek-chat", "display_name": "DeepSeek Chat", "max_tokens": 32768, "description": "深度求索对话模型"},
-                {"name": "deepseek-coder", "display_name": "DeepSeek Coder", "max_tokens": 16384, "description": "代码生成专用模型"},
-                {"name": "qwen-plus", "display_name": "通义千问增强版", "max_tokens": 8192, "description": "通过硅基流动访问"},
-                {"name": "qwen-turbo", "display_name": "通义千问标准版", "max_tokens": 8192, "description": "通过硅基流动访问"}
-            ],
+        from backend.core.model_catalog import list_available_models
+
+        key = (api_key or "").strip()
+        if not key and provider:
+            try:
+                settings = await get_settings()
+                key = _saved_provider_api_key(settings, provider).strip()
+            except Exception:  # noqa: BLE001
+                key = ""
+        result = await list_available_models(
+            provider=provider,
+            api_key=key,
+            base_url=base_url,
+            refresh=refresh,
+        )
+        # 旧调用方只认 {models: {provider: [{name, ...}]}}；新字段并排返回
+        legacy = {
+            name: [{"name": model, "display_name": model} for model in models]
+            for name, models in result.catalog.items()
         }
-        
-        return {"models": models}
-        
+        payload = result.as_dict()
+        payload["models_by_provider"] = legacy
+        return payload
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
 

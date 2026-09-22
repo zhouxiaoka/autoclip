@@ -50,12 +50,33 @@ const isLocalProvider = (p: ProviderKey) => !!PROVIDERS[p]?.local
 const DASHSCOPE_INTL_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
 type DashscopeRegion = 'cn' | 'intl'
 
-const MODEL_GROUPS: Array<{ label: string; models: string[] }> = [
-  { get label() { return t("通义千问") }, models: ['qwen-plus', 'qwen-turbo', 'qwen-max', 'qwen-long'] },
-  { label: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini'] },
-  { label: 'Gemini', models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'] },
-  { get label() { return t("硅基流动 / 开源") }, models: ['deepseek-ai/DeepSeek-V3', 'deepseek-chat', 'Qwen/Qwen2.5-72B-Instruct'] },
-]
+// 后端 /available-models 失败时的兜底；与 backend/core/model_catalog.py 对齐
+const FALLBACK_CATALOG: Record<string, string[]> = {
+  dashscope: ['qwen-plus', 'qwen-plus-latest', 'qwen-max', 'qwen-max-latest', 'qwen-turbo', 'qwen-flash', 'qwen-long', 'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus', 'qwen3.7-max', 'qwen3.6-plus', 'qwen3.5-plus'],
+  openai: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini'],
+  gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+  siliconflow: ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1', 'Qwen/Qwen3-235B-A22B-Instruct', 'Qwen/Qwen2.5-72B-Instruct'],
+}
+const PROVIDER_GROUP_ORDER: ProviderKey[] = ['dashscope', 'openai', 'gemini', 'siliconflow']
+const providerGroupLabel = (key: string) => ({
+  dashscope: t("通义千问"), openai: 'OpenAI', gemini: 'Gemini', siliconflow: t("硅基流动 / 开源"),
+} as Record<string, string>)[key] || key
+const knownCloudModels = (catalog: Record<string, string[]>, extra: string[] = []) =>
+  new Set([...Object.values(catalog).flat(), ...extra])
+
+const cloudModelOptions = (
+  provider: ProviderKey,
+  state: { source: 'catalog' | 'live'; models: string[]; catalog: Record<string, string[]> },
+) => {
+  const catalog = Object.keys(state.catalog).length ? state.catalog : FALLBACK_CATALOG
+  const current = state.source === 'live' && state.models.length
+    ? state.models
+    : (catalog[provider] || FALLBACK_CATALOG[provider] || [])
+  return PROVIDER_GROUP_ORDER.map((key) => ({
+    label: providerGroupLabel(key),
+    options: (key === provider ? current : (catalog[key] || [])).map((m) => ({ value: m, label: m })),
+  }))
+}
 
 const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
   dashscope: 'qwen-plus', openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash', siliconflow: 'deepseek-ai/DeepSeek-V3',
@@ -87,6 +108,13 @@ const SettingsPage: React.FC = () => {
   const [selectedProvider, setSelectedProvider] = useState<ProviderKey>('dashscope')
   // 本地预设的模型探测：{ reachable, models } —— 让用户从下拉里选，而不是手敲 qwen2.5:7b
   const [localModels, setLocalModels] = useState<{ loading: boolean; reachable: boolean | null; models: string[] }>({ loading: false, reachable: null, models: [] })
+  const [cloudModels, setCloudModels] = useState<{
+    loading: boolean
+    source: 'catalog' | 'live'
+    reachable: boolean
+    models: string[]
+    catalog: Record<string, string[]>
+  }>({ loading: false, source: 'catalog', reachable: false, models: FALLBACK_CATALOG.dashscope, catalog: FALLBACK_CATALOG })
   const [dashscopeRegion, setDashscopeRegion] = useState<DashscopeRegion>('cn')
   const [analyticsOn, setAnalyticsOn] = useState(isAnalyticsEnabled())
   const [feedbackOpen, setFeedbackOpen] = useState(false)
@@ -130,7 +158,9 @@ const SettingsPage: React.FC = () => {
         min_score_threshold: settingsData.processing?.processing_min_score || 0.7,
         max_clips_per_collection: settingsData.processing?.processing_max_clips || 5
       })
-      setSelectedProvider(PROVIDERS[providerName] ? providerName : 'dashscope')
+      const resolved = PROVIDERS[providerName] ? providerName : 'dashscope'
+      setSelectedProvider(resolved)
+      if (!isLocalProvider(resolved)) void loadCloudModels(resolved)
     } catch (err) {
       console.error('加载数据失败:', err)
     }
@@ -215,6 +245,35 @@ const SettingsPage: React.FC = () => {
     }
   }
 
+  const cloudBaseUrl = (p: ProviderKey = selectedProvider) => {
+    if (p === 'openai') return normalizeBaseUrl(form.getFieldValue('openai_base_url'))
+    if (p === 'dashscope' && dashscopeRegion === 'intl') return DASHSCOPE_INTL_BASE_URL
+    return ''
+  }
+
+  const loadCloudModels = async (p?: ProviderKey, opts: { refresh?: boolean } = {}) => {
+    const provider = p || selectedProvider
+    if (isLocalProvider(provider)) return
+    setCloudModels((s) => ({ ...s, loading: true }))
+    try {
+      const r = await settingsApi.getAvailableModels({
+        provider,
+        apiKey: form.getFieldValue(PROVIDERS[provider].apiKeyField) || '',
+        baseUrl: cloudBaseUrl(provider) || undefined,
+        refresh: opts.refresh,
+      })
+      setCloudModels({
+        loading: false,
+        source: r.source === 'live' ? 'live' : 'catalog',
+        reachable: !!r.reachable,
+        models: r.models?.length ? r.models : (r.catalog?.[provider] || FALLBACK_CATALOG[provider] || []),
+        catalog: r.catalog && Object.keys(r.catalog).length ? r.catalog : FALLBACK_CATALOG,
+      })
+    } catch {
+      setCloudModels((s) => ({ ...s, loading: false, source: 'catalog', reachable: false }))
+    }
+  }
+
   const detectLocalModels = async (p: ProviderKey, baseUrl?: string) => {
     const preset = PROVIDERS[p]?.local
     if (!preset) return
@@ -240,20 +299,25 @@ const SettingsPage: React.FC = () => {
     const current = normalizeModelName(form.getFieldValue('model_name'))
     if (preset) {
       // 从云端切到本地时，qwen-plus 这类云端模型名对本地服务没意义
-      if (!current || MODEL_GROUPS.some((g) => g.models.includes(current))) {
+      const known = knownCloudModels(cloudModels.catalog, cloudModels.models)
+      if (!current || known.has(current)) {
         form.setFieldsValue({ model_name: preset.defaultModel || undefined })
       }
       void detectLocalModels(p, form.getFieldValue('local_base_url'))
     } else if (isLocalProvider(prev) || !current) {
       // 从本地切回云端：qwen2.5:7b 这类本地模型名对云端没意义，给该提供商一个常用默认
       form.setFieldsValue({ model_name: CLOUD_DEFAULT_MODEL[p] })
+      void loadCloudModels(p)
+    } else {
+      void loadCloudModels(p)
     }
   }
 
-  // 打开设置页时若已是本地预设，顺手探测一次
+  // 打开设置页 / 切换通义站点时，顺手拉一次模型名单
   useEffect(() => {
     if (isLocalProvider(selectedProvider)) void detectLocalModels(selectedProvider, form.getFieldValue('local_base_url'))
-  }, [selectedProvider])
+    else void loadCloudModels(selectedProvider)
+  }, [selectedProvider, dashscopeRegion])
 
   const openaiBaseUrl = Form.useWatch('openai_base_url', form)
   const usingCustomEndpoint = selectedProvider === 'openai' && !!normalizeBaseUrl(openaiBaseUrl)
@@ -371,7 +435,7 @@ const SettingsPage: React.FC = () => {
                           },
                         }]}
                       >
-                        <Input placeholder="https://api.openai.com/v1" allowClear className="ac-mono" />
+                        <Input placeholder="https://api.openai.com/v1" allowClear className="ac-mono" onBlur={() => void loadCloudModels()} />
                       </Form.Item>
                     </Row>
                   )}
@@ -391,7 +455,7 @@ const SettingsPage: React.FC = () => {
                         { min: 10, message: t("API Key 长度不能少于 10 位") }
                       ]}
                     >
-                      <Input.Password placeholder={cfg.placeholder} className="ac-mono" />
+                      <Input.Password placeholder={cfg.placeholder} className="ac-mono" onBlur={() => void loadCloudModels()} />
                     </Form.Item>
                   </Row>}
 
@@ -406,9 +470,13 @@ const SettingsPage: React.FC = () => {
                             : localModels.reachable === false
                               ? <>{t('服务未连接', { app: localCfg.app })} <a onClick={() => void detectLocalModels(selectedProvider, form.getFieldValue('local_base_url'))} style={{ color: 'var(--ac-accent)', cursor: 'pointer' }}>{t('重新检测')}</a>{localCfg.defaultModel && <div className="ac-mono">ollama pull {localCfg.defaultModel}</div>}</>
                               : t("从本地服务已加载的模型中选择。"))
-                      : usingCustomEndpoint
-                        ? t("填该服务实际提供的模型名（如 glm-4-flash、deepseek-chat、qwen2.5:7b），回车确认。")
-                        : t("可直接输入模型名，回车确认。")}
+                      : cloudModels.loading
+                        ? t("正在拉取最新模型列表…")
+                        : cloudModels.source === 'live'
+                          ? <>{t("已拉取最新模型数量", { count: cloudModels.models.length })} <a onClick={() => void loadCloudModels(selectedProvider, { refresh: true })} style={{ color: 'var(--ac-accent)', cursor: 'pointer' }}>{t("刷新")}</a></>
+                          : usingCustomEndpoint
+                            ? <>{t("填该服务实际提供的模型名（如 glm-4-flash、deepseek-chat、qwen2.5:7b），回车确认。")} <a onClick={() => void loadCloudModels(selectedProvider, { refresh: true })} style={{ color: 'var(--ac-accent)', cursor: 'pointer' }}>{t("刷新")}</a></>
+                            : <>{t("可直接输入模型名，回车确认。")} {t("填写密钥后可拉取该账号可用的最新模型。")} <a onClick={() => void loadCloudModels(selectedProvider, { refresh: true })} style={{ color: 'var(--ac-accent)', cursor: 'pointer' }}>{t("刷新")}</a></>}
                   >
                     <Form.Item name="model_name" style={{ width: '100%' }} rules={[{ required: true, message: t("请输入或选择模型") }]}>
                       <Select
@@ -417,11 +485,11 @@ const SettingsPage: React.FC = () => {
                         allowClear
                         mode="tags"
                         maxCount={1}
-                        loading={localCfg ? localModels.loading : false}
+                        loading={localCfg ? localModels.loading : cloudModels.loading}
                         className="ac-mono"
                         options={(localCfg
                           ? localModels.models.map((m) => ({ value: m, label: m }))
-                          : MODEL_GROUPS.map((g) => ({ label: g.label, options: g.models.map((m) => ({ value: m, label: m })) }))) as any}
+                          : cloudModelOptions(selectedProvider, cloudModels)) as any}
                       />
                     </Form.Item>
                   </Row>
