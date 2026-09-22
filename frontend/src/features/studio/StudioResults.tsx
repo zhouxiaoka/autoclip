@@ -19,12 +19,13 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const [exporting,setExporting] = useState<Draft|null>(null)
   const goal = project.settings?.creative?.goal || project.processing_config?.creative?.goal || 'content'
   const visual = goal !== 'content'
+  const sourceDuration=workspace.plan?.source_duration ?? workspace.analysis?.coverage?.duration
   const managed = visual || !!project.settings?.smart_import || !!project.processing_config?.smart_import
   useEffect(()=>{if(workspace.analysis && workspace.analysis.status!=='running' && project.status!=='completed') onReload()},[workspace.analysis?.status])
   const act = async (key: string, fn:()=>Promise<void>) => {setBusy(key);setActionError('');try{await fn();refresh()}catch(e){setActionError(errorText(e))}finally{setBusy('')}}
   const createLegacy = (clip: Clip) => act(clip.id, async()=>{const draft=await studioApi.create(project.id,[clip.id],clip.generated_title||clip.title||'新成片');navigate(`/project/${project.id}/studio/${draft.id}`)})
   return <>
-    {managed && <div className="studio-row"><span className="studio-muted">{workspace.analysis?.status==='awaiting_confirmation'?'新制作方案待确认，已有结果保留。':'制作结果与编辑'}</span><Btn size="sm" disabled={workspace.analysis?.status==='running'} onClick={()=>navigate(`/import/${project.id}`)}>{workspace.analysis?.status==='awaiting_confirmation'?'继续确认方案':'调整制作方案'}</Btn></div>}
+    {managed && <div className="studio-row"><span className="studio-muted">{sourceDuration!=null?`原素材 ${fmtDuration(sourceDuration)} · `:''}{workspace.analysis?.status==='awaiting_confirmation'?'新制作方案待确认，已有结果保留。':'制作结果与编辑'}</span><Btn size="sm" disabled={workspace.analysis?.status==='running'} onClick={()=>navigate(`/import/${project.id}`)}>{workspace.analysis?.status==='awaiting_confirmation'?'继续确认方案':'调整制作方案'}</Btn></div>}
     {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title="你的成片" count={workspace.drafts.length+(project.clips?.length||0)+(project.collections?.length||0)} description={visual?'从真实画面中寻找精彩，选喜欢的成片继续修改或导出。':'切片与合集都在这里，可以直接下载，也可以另存为成片草稿。'} right={<div className="studio-actions"><Btn size="sm" onClick={()=>setHistory(true)}>导出记录</Btn>{!managed&&<Btn size="sm" onClick={onCreateCollection}>新建合集</Btn>}</div>}>
       {workspace.analysis?.status==='running' && <div className="ac-empty studio-processing"><b><span className="spin"/> {workspace.analysis.message||'分析画面中'}</b>{workspace.analysis.phase==='screening'?'识别完成后，请确认要制作的类型；现在还不会开始剪辑。':'完成后草稿会出现在这里，可以先处理其他项目。'}</div>}
       {workspace.analysis?.status==='failed' && <div className="ac-empty"><b>这次制作未完成</b><span className="studio-error">{workspace.analysis.error}</span><Btn onClick={()=>navigate('/settings')}>模型设置</Btn></div>}

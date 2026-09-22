@@ -19,7 +19,7 @@ export interface RenderJob {
 export interface Workspace {
   plan?: ImportPlan
   drafts: Draft[]; events: Scene[]; jobs: RenderJob[]
-  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production'; message?: string; error?: string; coverage?: { note: string; sample_interval: number } }
+  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production'; message?: string; error?: string; coverage?: { duration?:number; note: string; sample_interval: number } }
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }
@@ -60,7 +60,7 @@ export interface ImportOptions {
   duration: number | null; instruction: string
 }
 export interface ImportPlan {
-  id: string; suggested_goals: Goal[]; selected_goals?: Goal[]
+  id: string; source_duration?:number; suggested_goals: Goal[]; selected_goals?: Goal[]
   mode: 'ai' | 'manual' | 'fallback'; content_type: string; reason: string; confidence: number
   preferences: {goal: Goal; language: Language; aspect: Draft['aspect']; duration: number}
   overrides: ImportOptions

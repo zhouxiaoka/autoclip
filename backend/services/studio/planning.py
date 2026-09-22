@@ -61,5 +61,5 @@ def recommend(video: Path, options: ImportOptions):
     prefs = Preferences(goal=result.goal, language=options.language,
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
-    return {'mode': mode, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
+    return {'mode': mode, 'source_duration': duration, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
             'overrides': options.model_dump(exclude_none=True)}

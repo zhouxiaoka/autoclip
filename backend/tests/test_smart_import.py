@@ -18,6 +18,7 @@ def test_ai_plan_samples_real_source_and_explicit_preferences_win(source,monkeyp
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     monkeypatch.setattr(intelligence,'vision_call',lambda content, **kw: inputs.append(content) or recommendation())
     plan=planning.recommend(source,ImportOptions(language='ja',aspect='portrait',duration=60,instruction='保留完整挑战'))
+    assert plan['source_duration']>0
     assert plan['mode']=='ai' and plan['preferences']=={'goal':'highlight','language':'ja','aspect':'portrait','duration':60}
     assert sum(x['type']=='image_url' for x in inputs[0])==4
     assert all(x['image_url']['url'].startswith('data:image/jpeg;base64,') for x in inputs[0] if x['type']=='image_url')

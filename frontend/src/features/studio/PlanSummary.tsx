@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Btn, Dialog } from '../../ui'
+import { Btn, Dialog, fmtDuration } from '../../ui'
 import { Goal, ImportOptions, ImportPlan, defaultImportOptions, goalLabels, languages } from './types'
 import ImportPreferences from './ImportPreferences'
 import { studioApi, errorText } from './api'
@@ -25,7 +25,7 @@ export default function PlanSummary({projectId, plan, status, onChanged, onStart
   const prefs=plan?.preferences
   return <>
     <div className={`studio-plan-summary ${awaiting?'studio-plan-confirm':''}`}>
-      <div>{prefs?<><b>{awaiting?'这段素材，可以这样做':plan?.mode==='ai'?'AI 建议':plan?.mode==='manual'?'你的方案':'当前方案'}</b><span className="studio-muted">{contentLabels[plan?.content_type || 'other']} · {prefs.goal==='content'?'按完整语义选段':`约 ${prefs.duration} 秒`} · {prefs.aspect==='original'?'保留原画幅':prefs.aspect==='portrait'?'9:16 竖屏':'16:9 横屏'} · {languages.find(l=>l.value===prefs.language)?.label}</span><details><summary>查看判断依据{plan?.mode==='ai' && plan.confidence<.6?' · 识别把握较低':''}</summary><p className="studio-muted">{plan?.reason}</p></details></>:<span className="studio-muted">{running?'快速判断素材适合的制作类型':'可调整制作方案后重新识别'}</span>}</div>
+      <div>{prefs?<><b>{awaiting?'这段素材，可以这样做':plan?.mode==='ai'?'AI 建议':plan?.mode==='manual'?'你的方案':'当前方案'}</b><span className="studio-muted">{contentLabels[plan?.content_type || 'other']}{plan?.source_duration!=null?` · 原素材 ${fmtDuration(plan.source_duration)}`:''} · {prefs.goal==='content'?'按完整语义选段':`每条参考 ${prefs.duration} 秒`} · {prefs.aspect==='original'?'保留原画幅':prefs.aspect==='portrait'?'9:16 竖屏':'16:9 横屏'} · {languages.find(l=>l.value===prefs.language)?.label}</span><details><summary>查看判断依据{plan?.mode==='ai' && plan.confidence<.6?' · 识别把握较低':''}</summary><p className="studio-muted">{plan?.reason}</p></details></>:<span className="studio-muted">{running?'快速判断素材适合的制作类型':'可调整制作方案后重新识别'}</span>}</div>
       {awaiting && plan ? <>
         <p className="studio-muted">{plan.suggested_goals.length?'已勾选建议制作的类型，你可以取消或补选。':'本次未能自动推荐，请按素材内容选择制作类型。'}确认后才开始详细理解与剪辑。</p>
         <div className="studio-output-choices">{choices.map(({goal,description})=><label key={goal} className={`studio-output-choice ${selected.includes(goal)?'is-selected':''}`}><input type="checkbox" checked={selected.includes(goal)} disabled={busy} onChange={e=>setSelected(e.target.checked?[...selected,goal]:selected.filter(g=>g!==goal))}/><b>{goalLabels[goal]}</b>{plan.suggested_goals.includes(goal)&&<small>建议</small>}<span className="studio-muted">{description}</span></label>)}</div>
