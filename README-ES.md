@@ -49,6 +49,7 @@ Estas insignias las proporciona Trendshift. Haz clic para consultar los logros r
 | Importar vídeos | Usa archivos locales o enlaces de YouTube y Bilibili, con subtítulos SRT opcionales. |
 | Encontrar momentos destacados | Extrae resúmenes, intervalos por tema, puntuaciones y títulos a partir de los subtítulos. |
 | Crear clips y recopilaciones | Genera clips y recopilaciones sugeridas, y ajusta su orden manualmente. |
+| Publicar (próximo instalador) | Cuando los clips estén listos, abre Publicar en un clip. Esta página llega en la próxima versión que la incluya; los instaladores publicados de la v1.3.1 no la tienen. En el extranjero se usan las plataformas conectadas en tu propia cuenta de Upload-Post: TikTok, Instagram, YouTube, Facebook, LinkedIn, X, Threads, Pinterest, Bluesky, Discord, Telegram y Google Business, según lo que esa cuenta tenga conectado. Bilibili es una sola cuenta: pega una Cookie una vez en Ajustes. Debe incluir SESSDATA, bili_jct y DedeUserID. Puedes publicar ahora o programar. El título y la descripción son opcionales y, si se dejan vacíos, usan el título del clip. Los subtítulos incrustados vienen activados, igual que la tarjeta de título de unos 4 segundos. La visibilidad predeterminada es solo yo / private donde la plataforma lo admite. AutoClip promete eso solo para TikTok, YouTube y Bilibili. También puedes descargar sin publicar. La página del proyecto muestra el historial y el calendario, y permite cancelar una programación que aún no ha salido. «Planear la semana» solo cubre el extranjero: rellena lunes, miércoles y viernes a las 09:00, sin Bilibili. Las cuentas verticales se renderizan en 9:16 sin corte a 60 segundos. Solo Bilibili usa horizontal. Solo LinkedIn o X conserva el encuadre original. Vertical y Bilibili en el mismo envío se renderizan por separado. |
 | Exportar para publicar | Usa ajustes para Douyin, Xiaohongshu, YouTube Shorts y Bilibili, con subtítulos incrustados y tarjetas de título. |
 | Elegir modelos | Utiliza Qwen, API compatibles con OpenAI, Gemini, SiliconFlow o modelos locales con Ollama / LM Studio. |
 | Automatizar tareas | Organiza ejecuciones con la CLI o llama al mismo flujo de procesamiento desde un cliente MCP. |
@@ -144,14 +145,14 @@ Dentro de Docker, `localhost` apunta al contenedor. Para usar un modelo del equi
 <details>
 <summary>¿Es gratuito? ¿Necesito una clave de API?</summary>
 
-AutoClip es gratuito y de código abierto bajo MIT. Los proveedores de modelos en la nube cobran por el uso y requieren tu propia clave de API. Ollama / LM Studio no necesitan clave de nube, pero sí modelos y hardware adecuado.
+AutoClip sigue siendo gratuito y de código abierto bajo MIT. Los proveedores de modelos en la nube cobran por el uso y requieren tu propia clave de API. Ollama / LM Studio no necesitan clave de nube, pero sí modelos y hardware adecuado. En la próxima versión que incluya la página Publicar, publicar en el extranjero requiere tu propia cuenta de [Upload-Post](https://www.upload-post.com). Los planes gratuitos y de pago, y los cupos diarios de TikTok, YouTube, Instagram y otras plataformas, siguen las páginas de Upload-Post. No son promesas de AutoClip. Los instaladores publicados de la v1.3.1 no incluyen esta página.
 
 </details>
 
 <details>
 <summary>¿Se suben mis vídeos?</summary>
 
-La edición local se realiza en tu dispositivo. El análisis con modelos en la nube envía el texto de los subtítulos al proveedor elegido. Las funciones de publicación suben el vídeo a la plataforma de destino cuando las utilizas. Las estadísticas y los informes de errores dependen de la versión y los ajustes; consulta las notas de privacidad.
+La edición permanece en tu dispositivo. El análisis con modelos en la nube envía el texto de los subtítulos al proveedor elegido. El clip terminado sale del equipo solo después de pulsar Publicar, y solo hacia las plataformas que conectaste. También puedes descargarlo sin publicar. Esa página Publicar está en el próximo instalador que la incluya; los de la v1.3.1 publicados no la tienen. Las estadísticas y los informes de errores dependen de la versión y los ajustes; consulta las notas de privacidad.
 
 </details>
 

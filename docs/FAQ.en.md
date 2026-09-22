@@ -6,11 +6,13 @@
 
 ### Is AutoClip free? Do I need an API key?
 
-AutoClip is free and open source under MIT. Cloud model providers bill their own usage; consult your provider for pricing, quotas, and model availability. Ollama / LM Studio presets need no cloud API key, but require downloaded models and suitable hardware. Local Whisper needs separate speech components and model files.
+AutoClip itself stays free and open source under MIT. Cloud model providers bill their own usage; consult your provider for pricing, quotas, and model availability. Ollama / LM Studio presets need no cloud API key, but require downloaded models and suitable hardware. Local Whisper needs separate speech components and model files.
+
+In the next release that includes the Publish page, overseas publishing needs your own [Upload-Post](https://www.upload-post.com) account. Free and paid tiers, and daily caps for TikTok, YouTube, Instagram, and other platforms, follow Upload-Post’s own pages. They are not AutoClip promises. The published v1.3.1 installers do not include this page.
 
 ### Are videos uploaded? Can I work offline?
 
-The local editing pipeline processes and stores videos on your device. Cloud language models receive transcript text. If you explicitly use a publishing/upload feature, the video is sent to the selected platform. Usage analytics and error reporting depend on the version, build configuration, and settings; see the [privacy notes](PRIVACY.en.md).
+Editing stays on your device, and the video stays there too. Cloud language models receive transcript text. The finished clip leaves the machine only after you click Publish, and only to the platforms you connected. You can also download it without publishing. Usage analytics and error reporting depend on the version, build configuration, and settings; see the [privacy notes](PRIVACY.en.md). The Publish page ships with the next installer that includes it. The published v1.3.1 installers do not have it.
 
 Once you have local footage, a local language model, and any required speech model, core local processing does not need a cloud model service. Video downloads, component installation, model downloads, and updates still need internet access. Local processing does not mean that every feature is offline.
 
@@ -94,6 +96,21 @@ autoclip export PROJECT_ID --preset shorts
 ```
 
 Replace `PROJECT_ID` with the actual project ID. Other presets include `douyin`, `xiaohongshu`, `bilibili`, and `original`; see the [CLI / MCP reference](CLI_AND_MCP.md) (Chinese).
+
+### How does the next release’s Publish page work?
+
+This page ships in the next installer that includes it. The published v1.3.1 installers do not have it.
+
+After clips are ready, open Publish on a clip. Overseas platforms and Bilibili share that page:
+
+- Overseas platforms use your own Upload-Post account and the platforms you connected there: TikTok, Instagram, YouTube, Facebook, LinkedIn, X, Threads, Pinterest, Bluesky, Discord, Telegram, and Google Business, as available on that account.
+- Bilibili is one account. Paste a Cookie once in Settings. It must include `SESSDATA`, `bili_jct`, and `DedeUserID`.
+
+Publish now or on a schedule. A Bilibili schedule must be more than two hours ahead. Title and description are optional and default to the clip title. Burned-in captions default on. The title card, about four seconds at the start, defaults on. Visibility defaults to private / self where the platform supports it. AutoClip promises that only for TikTok, YouTube, and Bilibili. You can download the file without publishing.
+
+The project page shows publish history and a calendar, and can cancel a schedule that has not gone out. “Plan this week” is overseas only: it fills unpublished clips into Monday, Wednesday, and Friday at 09:00. It does not include Bilibili.
+
+Aspect follows the accounts you send to. Vertical accounts render 9:16 without a 60-second cut. Bilibili alone renders landscape. LinkedIn or X alone keeps the original frame. Vertical and Bilibili in the same batch are rendered separately.
 
 ## Updates, backups, and support
 

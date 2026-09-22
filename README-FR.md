@@ -49,6 +49,7 @@ Ces badges sont fournis par Trendshift. Cliquez pour consulter les résultats en
 | Importer des vidéos | Utilisez des fichiers locaux ou des liens YouTube et Bilibili, avec des sous-titres SRT facultatifs. |
 | Repérer les temps forts | Extrayez des plans, des plages temporelles par sujet, des scores et des titres à partir des sous-titres. |
 | Créer des extraits et des compilations | Générez des extraits et des compilations suggérées, puis ajustez leur ordre manuellement. |
+| Publier (prochain installeur) | Quand les extraits sont prêts, ouvrez Publier sur un extrait. Cette page arrive dans la prochaine version qui l’inclut ; les installeurs publiés de la v1.3.1 ne l’ont pas. À l’étranger, ce sont les plateformes reliées à votre propre compte Upload-Post : TikTok, Instagram, YouTube, Facebook, LinkedIn, X, Threads, Pinterest, Bluesky, Discord, Telegram et Google Business, selon ce que ce compte a relié. Bilibili, c’est un seul compte : collez un Cookie une fois dans les réglages. Il doit contenir SESSDATA, bili_jct et DedeUserID. Publiez maintenant ou planifiez. Le titre et la description sont facultatifs et reprennent le titre de l’extrait s’ils sont vides. Les sous-titres incrustés sont activés par défaut, comme le carton de titre d’environ 4 secondes. La visibilité par défaut est moi seul / private là où la plateforme le prend en charge. AutoClip ne le promet que pour TikTok, YouTube et Bilibili. Vous pouvez aussi télécharger sans publier. La page du projet montre l’historique et le calendrier, et permet d’annuler une planification qui n’est pas encore partie. « Planifier la semaine » ne concerne que l’étranger : lundi, mercredi et vendredi à 09:00, sans Bilibili. Les comptes verticaux sont rendus en 9:16, sans coupe à 60 secondes. Bilibili seul utilise le paysage. LinkedIn ou X seul garde le cadrage d’origine. Vertical et Bilibili dans le même envoi sont rendus séparément. |
 | Exporter pour publier | Profils pour Douyin, Xiaohongshu, YouTube Shorts et Bilibili, avec sous-titres incrustés et cartons de titre. |
 | Choisir les modèles | Utilisez Qwen, des API compatibles OpenAI, Gemini, SiliconFlow ou des modèles locaux via Ollama / LM Studio. |
 | Automatiser les tâches | Orchestrez les traitements avec la CLI ou appelez le même pipeline depuis un client MCP. |
@@ -144,14 +145,14 @@ Dans Docker, `localhost` désigne le conteneur lui-même. Pour utiliser un modè
 <details>
 <summary>Est-ce gratuit ? Faut-il une clé API ?</summary>
 
-AutoClip est gratuit et open source sous MIT. Les fournisseurs cloud facturent l’utilisation de leurs modèles et nécessitent votre clé API. Ollama / LM Studio n’exigent pas de clé cloud, mais nécessitent des modèles et un matériel adapté.
+AutoClip lui-même reste gratuit et open source sous MIT. Les fournisseurs cloud facturent l’utilisation de leurs modèles et nécessitent votre clé API. Ollama / LM Studio n’exigent pas de clé cloud, mais nécessitent des modèles et un matériel adapté. Dans la prochaine version qui inclut la page Publier, la publication à l’étranger demande votre propre compte [Upload-Post](https://www.upload-post.com). Les offres gratuites et payantes, ainsi que les plafonds quotidiens de TikTok, YouTube, Instagram et des autres plateformes, suivent les pages d’Upload-Post. Ce ne sont pas des promesses d’AutoClip. Les installeurs publiés de la v1.3.1 n’incluent pas cette page.
 
 </details>
 
 <details>
 <summary>Mes vidéos sont-elles envoyées sur un serveur ?</summary>
 
-Le montage local s’effectue sur votre appareil. Les modèles cloud reçoivent le texte des sous-titres. Les fonctions de publication envoient la vidéo à la plateforme choisie lorsque vous les utilisez. Les statistiques et rapports d’erreurs dépendent de la version et des paramètres ; consultez les notes de confidentialité.
+Le montage reste sur votre appareil. Les modèles cloud reçoivent le texte des sous-titres. L’extrait terminé ne quitte la machine qu’après un clic sur Publier, et seulement vers les plateformes que vous avez reliées. Vous pouvez aussi le télécharger sans publier. Cette page Publier est dans le prochain installeur qui l’inclut ; ceux de la v1.3.1 publiés ne l’ont pas. Les statistiques et rapports d’erreurs dépendent de la version et des paramètres ; consultez les notes de confidentialité.
 
 </details>
 
