@@ -628,5 +628,6 @@
   "更新没有下载完：{{error}}": "Update did not finish: {{error}}",
   "可更新到 {{version}}": "Ready to update to {{version}}",
   "正在准备 {{version}}": "Preparing {{version}}",
-  "查看进度": "View progress"
+  "查看进度": "View progress",
+  "下载更新": "Download update"
 }

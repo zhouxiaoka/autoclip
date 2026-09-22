@@ -628,5 +628,6 @@
   "更新没有下载完：{{error}}": "La actualización no terminó: {{error}}",
   "可更新到 {{version}}": "Listo para actualizar a {{version}}",
   "正在准备 {{version}}": "Preparando {{version}}",
-  "查看进度": "Ver progreso"
+  "查看进度": "Ver progreso",
+  "下载更新": "Descargar actualización"
 }

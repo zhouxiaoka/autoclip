@@ -27,6 +27,7 @@ export type AppUpdateController = {
   checkNow: () => Promise<'current' | 'available'>
   snooze: () => void
   showToast: () => void
+  openUpdate: () => void
   restart: () => Promise<void>
   retry: () => Promise<void>
 }
@@ -171,6 +172,12 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const showToast = useCallback(() => setToastVisible(true), [])
 
+  const openUpdate = useCallback(() => {
+    clearSnooze()
+    setToastVisible(true)
+    if (phase === 'failed') void checkNow()
+  }, [phase, checkNow])
+
   useEffect(() => {
     if (previewKind) return
     let cancelled = false
@@ -191,8 +198,8 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const value = useMemo<AppUpdateController>(() => ({
     phase, desktop, preview: Boolean(previewKind), version, currentVersion, notes, percent, error, toastVisible,
-    checkNow, snooze, showToast, restart, retry,
-  }), [phase, desktop, previewKind, version, currentVersion, notes, percent, error, toastVisible, checkNow, snooze, showToast, restart, retry])
+    checkNow, snooze, showToast, openUpdate, restart, retry,
+  }), [phase, desktop, previewKind, version, currentVersion, notes, percent, error, toastVisible, checkNow, snooze, showToast, openUpdate, restart, retry])
 
   return <UpdateContext.Provider value={value}>{children}</UpdateContext.Provider>
 }

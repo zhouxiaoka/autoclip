@@ -90,7 +90,7 @@ CI 的 macOS / Windows 构建均读取仓库 Secret `SENTRY_AUTH_TOKEN`，组织
 4. Release 里应有：
    - 用户手装：`AutoClip Desktop_<ver>_aarch64.dmg`、`*-setup.exe`
    - 应用内更新：`AutoClip.Desktop_<ver>_aarch64.app.tar.gz`、对应 `.sig`、Windows 安装包的 `.sig`、`latest.json`
-5. 打开已装的旧版本。有新版本时先在后台下载，右下角提示重启后生效；设置 → 应用里也可以重启更新。点「稍后」只隐藏这一次提示。
+5. 打开已装的旧版本。有新版本时先在后台下载，右下角提示重启后生效；顶栏「下载更新」和设置 → 应用都可以再打开这次下载或重启。点「稍后」只隐藏这一次提示。
 
 macOS 更新包必须是**注入 python/backend/ffmpeg 之后**的 `.app.tar.gz`，不能用改过内容的预签名 DMG。
 

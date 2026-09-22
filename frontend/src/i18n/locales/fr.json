@@ -628,5 +628,6 @@
   "更新没有下载完：{{error}}": "La mise à jour ne s’est pas terminée : {{error}}",
   "可更新到 {{version}}": "Prêt à passer à {{version}}",
   "正在准备 {{version}}": "Préparation de {{version}}",
-  "查看进度": "Voir la progression"
+  "查看进度": "Voir la progression",
+  "下载更新": "Télécharger la mise à jour"
 }

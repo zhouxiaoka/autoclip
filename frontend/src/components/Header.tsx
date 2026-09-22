@@ -6,6 +6,7 @@ import { Layout, Button } from 'antd'
 import { SettingOutlined, BulbOutlined, MoonOutlined } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
+import { useAppUpdate } from '../desktop/UpdatePrompt'
 
 const { Header: AntHeader } = Layout
 
@@ -16,6 +17,8 @@ const Header: React.FC = () => {
   const location = useLocation()
   const isSettings = location.pathname === '/settings'
   const { theme, toggleTheme } = useTheme()
+  const appUpdate = useAppUpdate()
+  const updatePending = appUpdate.phase === 'downloading' || appUpdate.phase === 'ready' || appUpdate.phase === 'failed' || appUpdate.phase === 'restarting'
 
   return (
     <AntHeader
@@ -70,6 +73,14 @@ const Header: React.FC = () => {
             background: 'var(--ac-card)',
           }}
         />
+        {updatePending && (
+          <button
+            type="button"
+            className="ac-update-entry"
+            onClick={appUpdate.openUpdate}
+            aria-label={t('下载更新')}
+          >{t('下载更新')}</button>
+        )}
         <Button
           type="text"
           icon={<SettingOutlined />}
