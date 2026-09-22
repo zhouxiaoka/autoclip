@@ -235,12 +235,13 @@ def test_awaiting_confirmation_survives_restart_without_production(client,source
     assert after['plan']['id']==before['plan']['id'] and after['drafts']==[]
 
 
-def test_nearby_events_form_complete_sequence_without_duplicate_overlap():
+def test_nearby_independent_events_remain_multiple_highlights_with_context():
     from backend.services.studio.models import Scene,Preferences
-    events=[Scene(id='a',start=0,end=10),Scene(id='b',start=8,end=14),Scene(id='c',start=16,end=20)]
+    events=[Scene(id='a',label='躲避障碍',start=0,end=10),Scene(id='b',label='追赶避险',start=8,end=14),Scene(id='c',label='磁铁收集',start=16,end=20)]
     drafts=intelligence.make_drafts(events,Preferences(goal='highlight',duration=22),source_duration=22)
-    assert len(drafts)==1
-    assert [(s['start'],s['end']) for s in drafts[0]['scenes']]==[(0,22)]
+    assert len(drafts)==3
+    assert [d['title'] for d in drafts]==['躲避障碍','追赶避险','磁铁收集']
+    assert [(d['scenes'][0]['start'],d['scenes'][0]['end']) for d in drafts]==[(0,12),(6.5,16),(14.5,22)]
     assert [(e.start,e.end) for e in events]==[(0,10),(8,14),(16,20)]
 
 
@@ -250,3 +251,21 @@ def test_separate_events_do_not_fill_unobserved_gaps_or_exceed_duration():
     scenes=intelligence.assemble_sequences(events,Preferences(goal='highlight',duration=10),60)
     assert len(scenes)==2 and scenes[0].end<=10 and scenes[1].start>=48.5
     assert all(0<=s.start<s.end<=60 and s.end-s.start<=10 for s in scenes)
+
+
+def test_single_event_is_not_split_to_manufacture_multiple_highlights():
+    from backend.services.studio.models import Scene,Preferences
+    drafts=intelligence.make_drafts([Scene(id='a',start=0,end=22)],Preferences(goal='highlight'),source_duration=22)
+    assert len(drafts)==1 and drafts[0]['scenes'][0]['end']==22
+
+
+def test_analysis_keeps_more_than_three_independent_events(source,monkeypatch):
+    from backend.services.studio.models import Preferences
+    monkeypatch.setattr(intelligence,'_probe',lambda video:{'duration':120})
+    monkeypatch.setattr(intelligence,'sample',lambda *a,**kw:[])
+    events=[{'id':f'e{i}','start':i*20,'end':i*20+10,'label':f'事件{i}'} for i in range(5)]
+    responses=iter([{'events':events},{'events':[events[0]]}])
+    monkeypatch.setattr(intelligence,'vision_call',lambda *a,**kw:next(responses))
+    found,_=intelligence.analyze(source,Preferences(goal='highlight'))
+    assert len(found)==5
+    assert [e.id for e in found]==[e['id'] for e in events]
