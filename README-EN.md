@@ -172,7 +172,14 @@ Check the failed stage: empty subtitles, model connection failures, an overly hi
 <details>
 <summary>What videos work best? How long does it take?</summary>
 
-Analysis primarily uses transcripts, making interviews, podcasts, lectures, and spoken commentary suitable. Purely visual action or music may work less well. Time depends on duration, hardware, models, and export settings; start with a short sample.
+Analysis primarily uses transcripts, making interviews, podcasts, lectures, and spoken commentary suitable. Purely visual action or music may work less well. Time depends on duration, hardware, models, and export settings; start with a 3–5 minute clip you provide.
+
+For a first clip, try [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I) (Stanford ENERGY). 示例·非托管·自担使用权 (example link, not hosted by AutoClip; you are responsible for usage rights).
+
+Other examples are optional. Dialogue is mostly English; official captions or your own SRT/Whisper are optional.
+
+- [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y) (Y Combinator). 示例·非托管·自担使用权.
+- [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Sources Podcast, not an OpenAI channel. 示例·非托管·自担使用权.
 
 </details>
 
