@@ -33,18 +33,23 @@ const toNumber = (v: unknown, fallback: number): number => {
   return Number.isFinite(n) ? n : fallback
 }
 
-type ProviderKey = 'dashscope' | 'openai' | 'gemini' | 'siliconflow' | 'ollama' | 'lmstudio'
+type ProviderKey = 'dashscope' | 'openai' | 'gemini' | 'deepseek' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string }
-const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; local?: LocalPreset }> = {
+type CloudPreset = { baseUrl: string; defaultModel: string }
+const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; local?: LocalPreset; cloud?: CloudPreset }> = {
   dashscope: { get name() { return t("阿里通义千问") }, get short() { return t("通义千问") }, get hint() { return t("阿里云 DashScope。国内直连，qwen-plus 性价比高。") }, apiKeyField: 'dashscope_api_key', placeholder: 'sk-…', keyUrl: 'https://dashscope.console.aliyun.com/apiKey' },
-  openai: { get name() { return t("OpenAI / 兼容接口") }, get short() { return t("OpenAI 兼容") }, get hint() { return t("OpenAI，或任何兼容接口：智谱、DeepSeek、OpenRouter、vLLM。") }, apiKeyField: 'openai_api_key', get placeholder() { return t("sk-…（自建服务可留空）") }, keyUrl: 'https://platform.openai.com/api-keys' },
+  openai: { get name() { return t("OpenAI / 兼容接口") }, get short() { return t("OpenAI 兼容") }, get hint() { return t("OpenAI，或任何兼容接口：OpenRouter、vLLM。") }, apiKeyField: 'openai_api_key', get placeholder() { return t("sk-…（自建服务可留空）") }, keyUrl: 'https://platform.openai.com/api-keys' },
   gemini: { name: 'Google Gemini', short: 'Gemini', get hint() { return t("Google AI Studio 的 Gemini 系列。") }, apiKeyField: 'gemini_api_key', placeholder: 'AIza…', keyUrl: 'https://aistudio.google.com/apikey' },
-  siliconflow: { get name() { return t("硅基流动") }, get short() { return t("硅基流动") }, get hint() { return t("SiliconFlow 聚合平台，DeepSeek / Qwen 等开源模型。") }, apiKeyField: 'siliconflow_api_key', placeholder: 'sk-…', keyUrl: 'https://cloud.siliconflow.cn/account/ak' },
+  deepseek: { name: 'DeepSeek', short: 'DeepSeek', get hint() { return t("DeepSeek 官方。国内直连，deepseek-flash 是当前 V4.1。") }, apiKeyField: 'deepseek_api_key', placeholder: 'sk-…', keyUrl: 'https://platform.deepseek.com/api_keys', cloud: { baseUrl: 'https://api.deepseek.com', defaultModel: 'deepseek-flash' } },
+  kimi: { name: 'Kimi', short: 'Kimi', get hint() { return t("月之暗面 Kimi。国内直连，适合长字幕分析。") }, apiKeyField: 'kimi_api_key', placeholder: 'sk-…', keyUrl: 'https://platform.moonshot.cn/console/api-keys', cloud: { baseUrl: 'https://api.moonshot.cn/v1', defaultModel: 'kimi-k2.6' } },
+  glm: { get name() { return t("智谱 GLM") }, get short() { return 'GLM' }, get hint() { return t("智谱开放平台。国内直连，glm-5.3 是当前旗舰。") }, apiKeyField: 'glm_api_key', placeholder: '…', keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys', cloud: { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', defaultModel: 'glm-5.3' } },
+  grok: { name: 'Grok', short: 'Grok', get hint() { return t("xAI Grok。需要 xAI 账号。") }, apiKeyField: 'grok_api_key', placeholder: 'xai-…', keyUrl: 'https://console.x.ai', cloud: { baseUrl: 'https://api.x.ai/v1', defaultModel: 'grok-4.6' } },
   // 本地预设：底层是 openai 兼容 + base_url，后端 core/local_presets.py 负责还原；无需密钥、不花钱、离线可用
   ollama: { name: 'Ollama', short: 'Ollama', get hint() { return t("本机运行的 Ollama，免费、离线。推荐 ollama pull qwen2.5:7b。") }, apiKeyField: 'openai_api_key', placeholder: '', keyUrl: 'https://ollama.com/download', local: { baseUrl: 'http://localhost:11434/v1', defaultModel: 'qwen2.5:7b', docsUrl: 'https://ollama.com/download', app: 'Ollama' } },
   lmstudio: { name: 'LM Studio', short: 'LM Studio', get hint() { return t("本机 LM Studio 的 Local Server，免费、离线。在 LM Studio 里加载模型并启动服务。") }, apiKeyField: 'openai_api_key', placeholder: '', keyUrl: 'https://lmstudio.ai', local: { baseUrl: 'http://localhost:1234/v1', defaultModel: '', docsUrl: 'https://lmstudio.ai', app: 'LM Studio' } },
 }
 const isLocalProvider = (p: ProviderKey) => !!PROVIDERS[p]?.local
+const isCloudPreset = (p: ProviderKey) => !!PROVIDERS[p]?.cloud
 
 // 通义千问国际站（alibabacloud.com 开通的 key 只能打这个域名，#45）；后端据 base_url 自动走兼容模式
 const DASHSCOPE_INTL_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
@@ -52,14 +57,18 @@ type DashscopeRegion = 'cn' | 'intl'
 
 // 后端 /available-models 失败时的兜底；与 backend/core/model_catalog.py 对齐
 const FALLBACK_CATALOG: Record<string, string[]> = {
-  dashscope: ['qwen-plus', 'qwen-plus-latest', 'qwen-max', 'qwen-max-latest', 'qwen-turbo', 'qwen-flash', 'qwen-long', 'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus', 'qwen3.7-max', 'qwen3.6-plus', 'qwen3.5-plus'],
-  openai: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini'],
-  gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-pro'],
-  siliconflow: ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1', 'Qwen/Qwen3-235B-A22B-Instruct', 'Qwen/Qwen2.5-72B-Instruct'],
+  dashscope: ['qwen-plus', 'qwen-plus-latest', 'qwen-max', 'qwen-max-latest', 'qwen-flash', 'qwen-long', 'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus', 'qwen3.7-max'],
+  openai: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'],
+  gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+  deepseek: ['deepseek-flash', 'deepseek-v4-pro'],
+  kimi: ['kimi-k3', 'kimi-k2.6', 'kimi-k2.5', 'kimi-k2.7-code'],
+  glm: ['glm-5.3', 'glm-5.2', 'glm-4.7'],
+  grok: ['grok-4.6', 'grok-4.5', 'grok-4.3'],
 }
-const PROVIDER_GROUP_ORDER: ProviderKey[] = ['dashscope', 'openai', 'gemini', 'siliconflow']
+const PROVIDER_GROUP_ORDER: ProviderKey[] = ['dashscope', 'openai', 'gemini', 'deepseek', 'kimi', 'glm', 'grok']
 const providerGroupLabel = (key: string) => ({
-  dashscope: t("通义千问"), openai: 'OpenAI', gemini: 'Gemini', siliconflow: t("硅基流动 / 开源"),
+  dashscope: t("通义千问"), openai: 'OpenAI', gemini: 'Gemini', deepseek: 'DeepSeek',
+  kimi: 'Kimi', glm: 'GLM', grok: 'Grok',
 } as Record<string, string>)[key] || key
 const knownCloudModels = (catalog: Record<string, string[]>, extra: string[] = []) =>
   new Set([...Object.values(catalog).flat(), ...extra])
@@ -79,7 +88,8 @@ const cloudModelOptions = (
 }
 
 const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
-  dashscope: 'qwen-plus', openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash', siliconflow: 'deepseek-ai/DeepSeek-V3',
+  dashscope: 'qwen-plus', openai: 'gpt-5-mini', gemini: 'gemini-2.5-flash', deepseek: 'deepseek-flash',
+  kimi: 'kimi-k2.6', glm: 'glm-5.3', grok: 'grok-4.6',
 }
 
 type SectionKey = 'model' | 'speech' | 'app' | 'publish' | 'cover' | 'feedback'
@@ -137,7 +147,9 @@ const SettingsPage: React.FC = () => {
         ? provider.value
         : { available: false, provider: 'dashscope', display_name: t("阿里通义千问"), model: 'qwen-plus' }
       // 以 settings.json 里保存的提供商为准；旧配置没有该字段时退回后端上报的当前提供商
-      const providerName = (settingsData.api?.api_provider || providerData.provider || 'dashscope') as ProviderKey
+      const rawProvider = (settingsData.api?.api_provider || providerData.provider || 'dashscope') as string
+      // 旧版把 DeepSeek 走硅基流动；现在改官方渠道，打开设置页时切过去
+      const providerName = (rawProvider === 'siliconflow' ? 'deepseek' : rawProvider) as ProviderKey
       setCurrentProvider(providerData)
       const savedBaseUrl = settingsData.api?.api_base_url || ''
       const localPreset = PROVIDERS[providerName]?.local
@@ -151,6 +163,10 @@ const SettingsPage: React.FC = () => {
         local_base_url: localPreset && savedBaseUrl && savedBaseUrl !== localPreset.baseUrl ? savedBaseUrl : '',
         gemini_api_key: settingsData.api?.api_keys?.gemini || '',
         siliconflow_api_key: settingsData.api?.api_keys?.siliconflow || '',
+        deepseek_api_key: settingsData.api?.api_keys?.deepseek || '',
+        kimi_api_key: settingsData.api?.api_keys?.kimi || '',
+        glm_api_key: settingsData.api?.api_keys?.glm || '',
+        grok_api_key: settingsData.api?.api_keys?.grok || '',
         jimeng_access_key: settingsData.api?.api_keys?.jimeng_access || '',
         jimeng_secret_key: settingsData.api?.api_keys?.jimeng_secret || '',
         model_name: settingsData.api?.api_model || 'qwen-plus',
@@ -184,6 +200,10 @@ const SettingsPage: React.FC = () => {
             openai: values.openai_api_key || keys.openai || '',
             gemini: values.gemini_api_key || keys.gemini || '',
             siliconflow: values.siliconflow_api_key || keys.siliconflow || '',
+            deepseek: values.deepseek_api_key || keys.deepseek || '',
+            kimi: values.kimi_api_key || keys.kimi || '',
+            glm: values.glm_api_key || keys.glm || '',
+            grok: values.grok_api_key || keys.grok || '',
             jimeng_access: values.jimeng_access_key || keys.jimeng_access || '',
             jimeng_secret: values.jimeng_secret_key || keys.jimeng_secret || ''
           },
@@ -191,6 +211,7 @@ const SettingsPage: React.FC = () => {
           api_base_url: provider === 'openai'
             ? normalizeBaseUrl(values.openai_base_url)
             : isLocalProvider(provider) ? normalizeBaseUrl(values.local_base_url)
+            : isCloudPreset(provider) ? (PROVIDERS[provider].cloud?.baseUrl || '')
             : provider === 'dashscope' && dashscopeRegion === 'intl' ? DASHSCOPE_INTL_BASE_URL : '',
           api_model: normalizeModelName(values.model_name) || 'qwen-plus',
           api_max_tokens: 4096,
@@ -222,6 +243,7 @@ const SettingsPage: React.FC = () => {
     const baseUrl = selectedProvider === 'openai'
       ? normalizeBaseUrl(form.getFieldValue('openai_base_url'))
       : local ? (normalizeBaseUrl(form.getFieldValue('local_base_url')) || cfg.local!.baseUrl)
+      : cfg.cloud ? cfg.cloud.baseUrl
       : selectedProvider === 'dashscope' && dashscopeRegion === 'intl' ? DASHSCOPE_INTL_BASE_URL : ''
     const modelName = normalizeModelName(form.getFieldValue('model_name'))
     if (local && !modelName) {
@@ -247,6 +269,7 @@ const SettingsPage: React.FC = () => {
 
   const cloudBaseUrl = (p: ProviderKey = selectedProvider) => {
     if (p === 'openai') return normalizeBaseUrl(form.getFieldValue('openai_base_url'))
+    if (PROVIDERS[p]?.cloud) return PROVIDERS[p].cloud!.baseUrl
     if (p === 'dashscope' && dashscopeRegion === 'intl') return DASHSCOPE_INTL_BASE_URL
     return ''
   }
@@ -304,11 +327,13 @@ const SettingsPage: React.FC = () => {
         form.setFieldsValue({ model_name: preset.defaultModel || undefined })
       }
       void detectLocalModels(p, form.getFieldValue('local_base_url'))
-    } else if (isLocalProvider(prev) || !current) {
-      // 从本地切回云端：qwen2.5:7b 这类本地模型名对云端没意义，给该提供商一个常用默认
-      form.setFieldsValue({ model_name: CLOUD_DEFAULT_MODEL[p] })
-      void loadCloudModels(p)
     } else {
+      // 换提供商时，别把 qwen-plus / gpt-5 这类别人的名字带过去
+      const known = knownCloudModels(cloudModels.catalog, cloudModels.models)
+      const own = new Set((cloudModels.catalog[p] || FALLBACK_CATALOG[p] || []))
+      if (isLocalProvider(prev) || !current || (known.has(current) && !own.has(current))) {
+        form.setFieldsValue({ model_name: CLOUD_DEFAULT_MODEL[p] })
+      }
       void loadCloudModels(p)
     }
   }

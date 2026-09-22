@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-PROVIDER_CHOICES = ("dashscope", "openai", "gemini", "siliconflow", "ollama", "lmstudio")
+PROVIDER_CHOICES = ("dashscope", "openai", "gemini", "deepseek", "kimi", "glm", "grok", "ollama", "lmstudio")
 
 
 # ---------------------------------------------------------------- environment ---
@@ -108,6 +108,7 @@ def configure_llm(override: LLMOverride) -> Dict[str, Any]:
     """
     from backend.core.llm_manager import get_llm_manager, initialize_llm_manager
     from backend.core.local_presets import resolve_provider, LOCAL_PRESETS
+    from backend.core.cloud_presets import resolve_cloud_preset
     from backend.core.path_utils import get_data_directory
 
     if override.is_empty():
@@ -116,23 +117,38 @@ def configure_llm(override: LLMOverride) -> Dict[str, Any]:
     base = get_llm_manager()  # 读取用户正式设置作为底稿（key 等）
     settings = dict(base.settings)
     settings.pop("llm_provider_preset", None)
+    settings.pop("cloud_preset", None)
 
     provider_in = (override.provider or settings.get("llm_provider") or "dashscope").lower()
-    provider, base_url, preset = resolve_provider(provider_in, override.base_url or (settings.get("openai_base_url") if provider_in == "openai" else ""))
-    settings["llm_provider"] = provider_in if preset else provider
-    if provider == "openai":
+    cloud = resolve_cloud_preset(provider_in, override.base_url)
+    if cloud:
+        provider, base_url, cloud_preset = cloud
+        settings["llm_provider"] = provider_in
         settings["openai_base_url"] = base_url
-    if override.model:
-        settings["model_name"] = override.model
-    elif preset and LOCAL_PRESETS[preset].default_model and (override.provider or "").lower() in LOCAL_PRESETS:
-        settings["model_name"] = LOCAL_PRESETS[preset].default_model
-    if override.api_key is not None:
-        key_field = {
-            "dashscope": "dashscope_api_key", "openai": "openai_api_key",
-            "gemini": "gemini_api_key", "siliconflow": "siliconflow_api_key",
-        }.get(provider)
-        if key_field:
-            settings[key_field] = override.api_key
+        if override.model:
+            settings["model_name"] = override.model
+        elif (override.provider or "").lower() in (cloud_preset.key,):
+            settings["model_name"] = cloud_preset.default_model
+        if override.api_key is not None:
+            settings[cloud_preset.api_key_setting] = override.api_key
+    else:
+        provider, base_url, preset = resolve_provider(provider_in, override.base_url or (settings.get("openai_base_url") if provider_in == "openai" else ""))
+        settings["llm_provider"] = provider_in if preset else provider
+        if provider == "openai":
+            settings["openai_base_url"] = base_url
+        if override.model:
+            settings["model_name"] = override.model
+        elif preset and LOCAL_PRESETS[preset].default_model and (override.provider or "").lower() in LOCAL_PRESETS:
+            settings["model_name"] = LOCAL_PRESETS[preset].default_model
+        if override.api_key is not None:
+            key_field = {
+                "dashscope": "dashscope_api_key", "openai": "openai_api_key",
+                "gemini": "gemini_api_key", "siliconflow": "siliconflow_api_key",
+                "deepseek": "deepseek_api_key",
+                "kimi": "kimi_api_key", "glm": "glm_api_key", "grok": "grok_api_key",
+            }.get(provider)
+            if key_field:
+                settings[key_field] = override.api_key
 
     cli_settings = get_data_directory() / "cli-settings.json"
     cli_settings.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -121,7 +121,7 @@ def _make_override(provider: Optional[str], model: Optional[str], base_url: Opti
     description=(
         "把一条本地视频切成高光片段（同步，耗时数分钟到数十分钟，期间会发进度）。"
         "返回切片列表（标题 / 起止时间 / 评分 / mp4 路径）与合集。"
-        "provider 可选 dashscope / openai / gemini / siliconflow / ollama / lmstudio；不填用桌面应用里已配置的模型。"
+        "provider 可选 dashscope / openai / gemini / deepseek / kimi / glm / grok / ollama / lmstudio；不填用桌面应用里已配置的模型。"
     ),
 )
 async def clip_video(
@@ -220,7 +220,7 @@ def list_providers() -> Dict[str, Any]:
 
     return {
         "current": get_llm_manager().get_current_provider_info(),
-        "cloud": ["dashscope", "openai", "gemini", "siliconflow"],
+        "cloud": ["dashscope", "openai", "gemini", "deepseek", "kimi", "glm", "grok"],
         "local_presets": presets_as_dicts(),
     }
 

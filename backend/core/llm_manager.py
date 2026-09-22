@@ -97,6 +97,10 @@ class LLMManager:
             "dashscope_base_url": os.getenv("DASHSCOPE_BASE_URL", ""),
             "gemini_api_key": "",
             "siliconflow_api_key": "",
+            "deepseek_api_key": "",
+            "kimi_api_key": "",
+            "glm_api_key": "",
+            "grok_api_key": "",
             "model_name": "qwen-plus",
             "chunk_size": 5000,
             "min_score_threshold": 0.7,
@@ -118,6 +122,10 @@ class LLMManager:
                             "openai_api_key": api_keys.get("openai", ""),
                             "gemini_api_key": api_keys.get("gemini", ""),
                             "siliconflow_api_key": api_keys.get("siliconflow", ""),
+                            "deepseek_api_key": api_keys.get("deepseek", ""),
+                            "kimi_api_key": api_keys.get("kimi", ""),
+                            "glm_api_key": api_keys.get("glm", ""),
+                            "grok_api_key": api_keys.get("grok", ""),
                             "model_name": api.get("api_model", "qwen-plus")
                         })
                         # 设置页保存的提供商；旧版 settings.json 没有这个字段，保持 dashscope
@@ -145,6 +153,7 @@ class LLMManager:
         
         self._apply_env_fallbacks(default_settings)
         self._apply_local_preset(default_settings)
+        self._apply_cloud_preset(default_settings)
         return default_settings
 
     def _apply_local_preset(self, settings: Dict[str, Any]) -> None:
@@ -161,6 +170,24 @@ class LLMManager:
                 if default_model:
                     settings["model_name"] = default_model
 
+    def _apply_cloud_preset(self, settings: Dict[str, Any]) -> None:
+        """deepseek / kimi / glm / grok → openai + 官方地址，用各家自己的 key。"""
+        from backend.core.cloud_presets import resolve_cloud_preset
+        from backend.core.model_catalog import curated_models, default_model_for
+
+        resolved = resolve_cloud_preset(settings.get("llm_provider"), settings.get("openai_base_url"))
+        settings["cloud_preset"] = None
+        if not resolved:
+            return
+        _provider, base_url, preset = resolved
+        settings["llm_provider"] = "openai"
+        settings["cloud_preset"] = preset.key
+        settings["openai_base_url"] = base_url
+        current = (settings.get("model_name") or "").strip()
+        known = set(curated_models())
+        if not current or current == "qwen-plus" or (current in known and current not in curated_models(preset.key)):
+            settings["model_name"] = preset.default_model or default_model_for(preset.key)
+
     # Docker / 本地脚本模式没有设置页可用，只能靠环境变量（env.example 里也是这么写的），
     # 但此前这里只读 settings.json，导致 API_DASHSCOPE_API_KEY 等变量形同虚设。
     _ENV_KEY_FALLBACKS = {
@@ -168,6 +195,10 @@ class LLMManager:
         "openai_api_key": ("API_OPENAI_API_KEY", "OPENAI_API_KEY"),
         "gemini_api_key": ("API_GEMINI_API_KEY", "GEMINI_API_KEY"),
         "siliconflow_api_key": ("API_SILICONFLOW_API_KEY", "SILICONFLOW_API_KEY"),
+        "deepseek_api_key": ("API_DEEPSEEK_API_KEY", "DEEPSEEK_API_KEY"),
+        "kimi_api_key": ("API_KIMI_API_KEY", "MOONSHOT_API_KEY", "KIMI_API_KEY"),
+        "glm_api_key": ("API_GLM_API_KEY", "ZHIPU_API_KEY", "GLM_API_KEY"),
+        "grok_api_key": ("API_GROK_API_KEY", "XAI_API_KEY", "GROK_API_KEY"),
     }
 
     def _apply_env_fallbacks(self, settings: Dict[str, Any]) -> None:
@@ -217,8 +248,16 @@ class LLMManager:
             provider_type = ProviderType(self.settings.get("llm_provider", "dashscope"))
             model_name = self.settings.get("model_name", "qwen-plus")
             
-            # 获取对应提供商的API密钥（本地预设不需要 key，也不要把用户的 OpenAI key 发给本地服务）
-            api_key = "" if self.settings.get("llm_provider_preset") else self._get_api_key_for_provider(provider_type)
+            # 本地预设不需要 key，也不要把用户的 OpenAI key 发给本地服务；
+            # kimi / glm / grok 用各家自己的 key，不要误用 openai_api_key
+            cloud_preset = self.settings.get("cloud_preset")
+            if self.settings.get("llm_provider_preset"):
+                api_key = ""
+            elif cloud_preset:
+                from backend.core.cloud_presets import CLOUD_PRESETS
+                api_key = self.settings.get(CLOUD_PRESETS[cloud_preset].api_key_setting, "")
+            else:
+                api_key = self._get_api_key_for_provider(provider_type)
             provider_kwargs = self._get_provider_kwargs(provider_type)
 
             # 自建 OpenAI 兼容服务（Ollama / vLLM 等）常常不需要 key，有 base_url 就够
@@ -364,9 +403,10 @@ class LLMManager:
             return {"provider": provider_value, "model": None, "available": False}
         model_name = self.settings.get("model_name", "qwen-plus")
         preset = self.settings.get("llm_provider_preset")
+        cloud_preset = self.settings.get("cloud_preset")
         info = {
-            # 设置页 / CLI 看到的是用户选的名字（ollama / lmstudio），底层仍是 openai 兼容
-            "provider": preset or provider_type.value,
+            # 设置页 / CLI 看到的是用户选的名字（ollama / kimi），底层仍是 openai 兼容
+            "provider": preset or cloud_preset or provider_type.value,
             "backend_provider": provider_type.value,
             "model": model_name,
             "available": self.current_provider is not None,
@@ -375,6 +415,9 @@ class LLMManager:
         if preset:
             from backend.core.local_presets import preset_display_name
             info["display_name"] = preset_display_name(preset) or info["display_name"]
+        if cloud_preset:
+            from backend.core.cloud_presets import cloud_preset_display_name
+            info["display_name"] = cloud_preset_display_name(cloud_preset) or info["display_name"]
         base_url = self._get_provider_kwargs(provider_type).get("base_url")
         if base_url:
             info["base_url"] = base_url

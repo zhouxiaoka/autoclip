@@ -193,13 +193,16 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
             dashscope: config.llmProvider === 'dashscope' ? config.llmApiKey : (existingApiKeys.dashscope || ''),
             openai: config.llmProvider === 'openai' ? config.llmApiKey : (existingApiKeys.openai || ''),
             gemini: config.llmProvider === 'gemini' ? config.llmApiKey : (existingApiKeys.gemini || ''),
-            siliconflow: config.llmProvider === 'siliconflow' ? config.llmApiKey : (existingApiKeys.siliconflow || ''),
+            siliconflow: existingApiKeys.siliconflow || '',
+            deepseek: config.llmProvider === 'deepseek' ? config.llmApiKey : (existingApiKeys.deepseek || ''),
             jimeng_access: existingApiKeys.jimeng_access || '',
             jimeng_secret: existingApiKeys.jimeng_secret || ''
           },
+          api_provider: config.llmProvider,
           api_model: config.llmProvider === 'dashscope' ? 'qwen-plus' : 
-                     config.llmProvider === 'openai' ? 'gpt-3.5-turbo' :
-                     config.llmProvider === 'gemini' ? 'gemini-pro' : 'qwen-plus',
+                     config.llmProvider === 'openai' ? 'gpt-5-mini' :
+                     config.llmProvider === 'gemini' ? 'gemini-2.5-flash' :
+                     config.llmProvider === 'deepseek' ? 'deepseek-flash' : 'qwen-plus',
           api_max_tokens: 4000,
           api_timeout: 30
         },
@@ -377,10 +380,10 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
         url: 'https://makersuite.google.com',
         description: '使用Google账号登录,在API Keys页面创建密钥'
       },
-      siliconflow: {
-        name: 'SiliconFlow',
-        url: 'https://cloud.siliconflow.cn',
-        description: '注册SiliconFlow账号,在控制台创建API Key'
+      deepseek: {
+        name: 'DeepSeek',
+        url: 'https://platform.deepseek.com',
+        description: '注册 DeepSeek 账号，在开放平台创建 API Key'
       }
     }
     return helpMap[provider] || helpMap.dashscope
@@ -467,10 +470,10 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                       <Text type="secondary">(需要科学上网)</Text>
                     </Space>
                   </Option>
-                  <Option value="siliconflow">
+                  <Option value="deepseek">
                     <Space>
-                      <Text strong>SiliconFlow</Text>
-                      <Text type="secondary">(国内替代方案)</Text>
+                      <Text strong>DeepSeek</Text>
+                      <Text type="secondary">(官方，国内直连)</Text>
                     </Space>
                   </Option>
                 </Select>

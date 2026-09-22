@@ -41,6 +41,10 @@ export const useFirstRun = () => {
                            settings.api?.api_keys?.openai ||
                            settings.api?.api_keys?.gemini ||
                            settings.api?.api_keys?.siliconflow ||
+                           settings.api?.api_keys?.deepseek ||
+                           settings.api?.api_keys?.kimi ||
+                           settings.api?.api_keys?.glm ||
+                           settings.api?.api_keys?.grok ||
                            // 本地 / 自建 OpenAI 兼容服务可以没有 key，只配接口地址
                            (settings.api?.api_provider === 'openai' && settings.api?.api_base_url)
           

@@ -23,15 +23,12 @@ CURATED_MODELS: Dict[str, List[str]] = {
         "qwen-plus-latest",
         "qwen-max",
         "qwen-max-latest",
-        "qwen-turbo",
         "qwen-flash",
         "qwen-long",
         "qwen3.8-max",
         "qwen3.8-flash",
         "qwen3.7-plus",
         "qwen3.7-max",
-        "qwen3.6-plus",
-        "qwen3.5-plus",
     ],
     "openai": [
         "gpt-5.6-sol",
@@ -42,38 +39,52 @@ CURATED_MODELS: Dict[str, List[str]] = {
         "gpt-5",
         "gpt-5-mini",
         "gpt-5-nano",
-        "gpt-4.1",
-        "gpt-4.1-mini",
-        "gpt-4o",
-        "gpt-4o-mini",
     ],
     "gemini": [
         "gemini-2.5-pro",
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
-        "gemini-1.5-pro",
     ],
-    "siliconflow": [
-        "deepseek-ai/DeepSeek-V3",
-        "deepseek-ai/DeepSeek-R1",
-        "Qwen/Qwen3-235B-A22B-Instruct",
-        "Qwen/Qwen2.5-72B-Instruct",
+    "deepseek": [
+        "deepseek-flash",
+        "deepseek-v4-pro",
+    ],
+    "kimi": [
+        "kimi-k3",
+        "kimi-k2.6",
+        "kimi-k2.5",
+        "kimi-k2.7-code",
+    ],
+    "glm": [
+        "glm-5.3",
+        "glm-5.2",
+        "glm-4.7",
+    ],
+    "grok": [
+        "grok-4.6",
+        "grok-4.5",
+        "grok-4.3",
     ],
 }
 
 DEFAULT_MODELS: Dict[str, str] = {
     "dashscope": "qwen-plus",
-    "openai": "gpt-4o-mini",
+    "openai": "gpt-5-mini",
     "gemini": "gemini-2.5-flash",
-    "siliconflow": "deepseek-ai/DeepSeek-V3",
+    "deepseek": "deepseek-flash",
+    "kimi": "kimi-k2.6",
+    "glm": "glm-5.3",
+    "grok": "grok-4.6",
 }
 
 PROVIDER_LABELS: Dict[str, str] = {
     "dashscope": "通义千问",
     "openai": "OpenAI",
     "gemini": "Gemini",
-    "siliconflow": "硅基流动 / 开源",
+    "deepseek": "DeepSeek",
+    "kimi": "Kimi",
+    "glm": "GLM",
+    "grok": "Grok",
 }
 
 CLOUD_PROVIDERS = frozenset(CURATED_MODELS)
@@ -308,6 +319,9 @@ def _official_base_url(provider: str, base_url: str) -> str:
         return url or OPENAI_OFFICIAL_BASE_URL
     if provider == "siliconflow":
         return url or SILICONFLOW_BASE_URL
+    from backend.core.cloud_presets import CLOUD_PRESETS
+    if provider in CLOUD_PRESETS:
+        return url or CLOUD_PRESETS[provider].base_url
     return url
 
 

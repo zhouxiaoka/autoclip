@@ -53,7 +53,11 @@ class ApiKeys(BaseModel):
     dashscope: str = Field(default="", description="通义千问API密钥")
     openai: str = Field(default="", description="OpenAI API密钥")
     gemini: str = Field(default="", description="Gemini API密钥")
-    siliconflow: str = Field(default="", description="SiliconFlow API密钥")
+    siliconflow: str = Field(default="", description="SiliconFlow API密钥（已不再作为独立提供商，仅兼容旧配置）")
+    deepseek: str = Field(default="", description="DeepSeek 官方 API密钥")
+    kimi: str = Field(default="", description="Kimi / 月之暗面 API密钥")
+    glm: str = Field(default="", description="智谱 GLM API密钥")
+    grok: str = Field(default="", description="xAI Grok API密钥")
     jimeng_access: str = Field(default="", description="即梦AI访问密钥")
     jimeng_secret: str = Field(default="", description="即梦AI秘密密钥")
 
@@ -61,7 +65,7 @@ class ApiKeys(BaseModel):
 class ApiSettings(BaseModel):
     """API设置"""
     api_keys: ApiKeys = Field(default_factory=ApiKeys, description="API密钥")
-    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / siliconflow，或本地预设 ollama / lmstudio）")
+    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / deepseek / kimi / glm / grok，或本地预设 ollama / lmstudio）")
     api_base_url: str = Field(default="", description="OpenAI 兼容接口地址；provider=openai 时空为官方地址，本地预设为空时用预设默认地址")
     api_model: str = Field(default="qwen-plus", description="默认模型")
     api_max_tokens: int = Field(default=4096, description="最大Token数")
@@ -249,6 +253,10 @@ async def get_settings():
                     openai=config.openai_api_key,
                     gemini=config.gemini_api_key,
                     siliconflow=config.siliconflow_api_key,
+                    deepseek="",
+                    kimi="",
+                    glm="",
+                    grok="",
                     jimeng_access="",  # 默认值
                     jimeng_secret=""   # 默认值
                 ),
@@ -350,9 +358,14 @@ async def test_api_connection(request: TestApiRequest):
     try:
         from backend.core.llm_providers import normalize_base_url, OPENAI_OFFICIAL_BASE_URL
         from backend.core.local_presets import resolve_provider
+        from backend.core.cloud_presets import resolve_cloud_preset
         # ollama / lmstudio 预设 → openai + 默认地址
         requested_provider = request.provider
-        resolved_provider, resolved_base_url, _preset = resolve_provider(request.provider, request.base_url)
+        cloud = resolve_cloud_preset(request.provider, request.base_url)
+        if cloud:
+            resolved_provider, resolved_base_url, _preset = cloud
+        else:
+            resolved_provider, resolved_base_url, _preset = resolve_provider(request.provider, request.base_url)
         request.provider = resolved_provider
         custom_base_url = normalize_base_url(resolved_base_url) if request.provider == "openai" else ""
         if custom_base_url == OPENAI_OFFICIAL_BASE_URL:
@@ -673,6 +686,10 @@ def _saved_provider_api_key(settings: DesktopSettings, provider: str) -> str:
         "openai": keys.openai,
         "gemini": keys.gemini,
         "siliconflow": keys.siliconflow,
+        "deepseek": keys.deepseek,
+        "kimi": keys.kimi,
+        "glm": keys.glm,
+        "grok": keys.grok,
     }.get((provider or "").strip().lower(), "") or ""
 
 

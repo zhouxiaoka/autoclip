@@ -17,18 +17,25 @@ def test_curated_catalog_includes_current_flagships():
     dashscope = model_catalog.curated_models("dashscope")
     openai = model_catalog.curated_models("openai")
     gemini = model_catalog.curated_models("gemini")
-    siliconflow = model_catalog.curated_models("siliconflow")
+    deepseek = model_catalog.curated_models("deepseek")
+    kimi = model_catalog.curated_models("kimi")
 
     assert "qwen-plus" in dashscope
     assert "qwen3.8-max" in dashscope
-    assert "qwen3.7-plus" in dashscope
+    assert "qwen-turbo" not in dashscope
     assert "gpt-5" in openai
     assert "gpt-5.6-terra" in openai
-    assert "gpt-4o-mini" in openai
+    assert "gpt-4o" not in openai
+    assert "gpt-4o-mini" not in openai
     assert "gemini-2.5-flash" in gemini
-    assert "gemini-2.5-pro" in gemini
-    assert "deepseek-ai/DeepSeek-V3" in siliconflow
+    assert "gemini-1.5-pro" not in gemini
+    assert "deepseek-flash" in deepseek
+    assert "deepseek-v4-pro" in deepseek
+    assert "deepseek-chat" not in deepseek
+    assert "kimi-k3" in kimi
+    assert "siliconflow" not in model_catalog.CURATED_MODELS
     assert model_catalog.default_model_for("dashscope") == "qwen-plus"
+    assert model_catalog.default_model_for("deepseek") == "deepseek-flash"
 
 
 def test_is_chat_model_drops_embeddings_and_media():
