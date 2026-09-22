@@ -19,7 +19,7 @@ fi
 mkdir -p "$TARGET/scripts" "$TARGET/.github/workflows"
 cp "$HERE/sync_release.py" "$TARGET/scripts/sync_release.py"
 cp "$HERE/sync-release.yml" "$TARGET/.github/workflows/sync-release.yml"
-chmod +x "$TARGET/scripts/sync_release.py"
+chmod +x "$TARGET/scripts/sync_release.py" "$HERE/install_publish_guide.py"
 grep -q '__pycache__' "$TARGET/.gitignore" 2>/dev/null || echo '__pycache__/' >> "$TARGET/.gitignore"
 
 echo "已复制到 $TARGET："
@@ -29,4 +29,7 @@ echo
 echo "现在同步一次到最新 Release："
 (cd "$TARGET" && python3 scripts/sync_release.py)
 echo
-echo "下一步：cd $TARGET && git add -A && git commit -m 'build: sync release info automatically' && git push"
+echo "写入发布教程页，并在首页 FAQ / 页脚留下入口："
+python3 "$HERE/install_publish_guide.py" "$TARGET"
+echo
+echo "下一步：cd $TARGET && git add -A && git commit -m 'docs: add the publish guide page' && git push"
