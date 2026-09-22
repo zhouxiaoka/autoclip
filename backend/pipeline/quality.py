@@ -40,13 +40,11 @@ def to_seconds(t: str) -> float:
 
 
 def to_srt_time(sec: float) -> str:
-    sec = max(0.0, float(sec))
-    h = int(sec // 3600)
-    m = int((sec % 3600) // 60)
-    s = int(sec % 60)
-    ms = int(round((sec - int(sec)) * 1000))
-    if ms == 1000:
-        s, ms = s + 1, 0
+    # 先整体取整到毫秒再拆分，59.9999… 进位成 00:01:00,000 而不是 00:00:60,000
+    total_ms = int(round(max(0.0, float(sec)) * 1000))
+    h, rest = divmod(total_ms, 3600_000)
+    m, rest = divmod(rest, 60_000)
+    s, ms = divmod(rest, 1000)
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
