@@ -1,0 +1,126 @@
+{
+  "version": "0.1",
+  "checked_date": "2026-09-21",
+  "workflow": "../GAMEPLAY_TO_UA_WORKFLOW.md",
+  "inputs": [
+    {
+      "input_id": "INPUT-001",
+      "youtube_id": "mBq90bmSx44",
+      "title": "Tiny Cars Driving Adventure - Mini Toy Vehicles Explore New Roads - Fun Gameplay for Young Kids",
+      "duration_approx_seconds": 456,
+      "genre_observed": "city_driving",
+      "game_identity_confirmed": false,
+      "reviewed_points": [
+        {
+          "time_approx_seconds": 17,
+          "observation": "Motorcycle and costumed character; driving controls"
+        },
+        {
+          "time_approx_seconds": 228,
+          "observation": "Motorcycle in city scene"
+        },
+        {
+          "time_approx_seconds": 365,
+          "observation": "Orange car in city scene"
+        }
+      ],
+      "priority": 3,
+      "url": "https://www.youtube.com/watch?v=mBq90bmSx44",
+      "role": "source_input_not_performance_reference",
+      "review_status": "browser_spot_checks_only",
+      "full_video_reviewed": false,
+      "cut_ranges_verified": false,
+      "ad_performance": null,
+      "local_asset": null,
+      "rendered_creatives": [],
+      "game_identity_evidence": "not_confirmed"
+    },
+    {
+      "input_id": "INPUT-002",
+      "youtube_id": "jzccuci8znM",
+      "title": "Subway Princess Runner - Gameplay Walkthrough Part - 7 Princess Subway Surfers (iOS, Android)",
+      "duration_approx_seconds": 348,
+      "genre_observed": "runner",
+      "game_identity_confirmed": false,
+      "reviewed_points": [
+        {
+          "time_approx_seconds": 104,
+          "observation": "Runner, coins and obstacles on an outdoor track"
+        },
+        {
+          "time_approx_seconds": 244,
+          "observation": "Runner and obstacles in tunnel"
+        }
+      ],
+      "priority": 1,
+      "url": "https://www.youtube.com/watch?v=jzccuci8znM",
+      "role": "source_input_not_performance_reference",
+      "review_status": "source_contact_sheets_and_seed_2_1_pro_ordered_stills_review",
+      "full_video_reviewed": false,
+      "cut_ranges_verified": true,
+      "ad_performance": null,
+      "local_asset": "artifacts/game-ads/run-20260921/assets/runner-source.mp4",
+      "rendered_creatives": [
+        {
+          "variant": "A",
+          "hook": "连续避障",
+          "path": "artifacts/game-ads/run-20260921/output/runner-A-direct.mp4",
+          "duration_seconds": 22,
+          "status": "local_preview_not_performance_validated"
+        },
+        {
+          "variant": "B",
+          "hook": "下一步往哪躲？",
+          "path": "artifacts/game-ads/run-20260921/output/runner-B-question.mp4",
+          "duration_seconds": 22,
+          "status": "local_preview_not_performance_validated"
+        },
+        {
+          "variant": "C",
+          "hook": "换你能躲过去吗？",
+          "path": "artifacts/game-ads/run-20260921/output/runner-C-challenge.mp4",
+          "duration_seconds": 22,
+          "status": "local_preview_not_performance_validated"
+        }
+      ],
+      "game_identity_evidence": "page_title_only",
+      "verified_cut_ranges": [
+        {
+          "start_seconds": 226.5,
+          "end_seconds": 248.5,
+          "verification": "ordered frame inspection; final render spot checks",
+          "full_motion_model_review": false
+        }
+      ],
+      "model_review": "artifacts/game-ads/run-20260921/seed-review.json"
+    },
+    {
+      "input_id": "INPUT-003",
+      "youtube_id": "I1lxqd5HNz8",
+      "title": "Gossip Harbor | Lory's Dough Derby (Last part)",
+      "duration_approx_seconds": 849,
+      "genre_observed": "merge",
+      "game_identity_confirmed": false,
+      "reviewed_points": [
+        {
+          "time_approx_seconds": 0,
+          "observation": "Portrait board inside wider background; goals and items"
+        },
+        {
+          "time_approx_seconds": 270,
+          "observation": "Merge board with item feedback and empty grid cells"
+        }
+      ],
+      "priority": 2,
+      "url": "https://www.youtube.com/watch?v=I1lxqd5HNz8",
+      "role": "source_input_not_performance_reference",
+      "review_status": "browser_spot_checks_only",
+      "full_video_reviewed": false,
+      "cut_ranges_verified": false,
+      "ad_performance": null,
+      "local_asset": null,
+      "rendered_creatives": [],
+      "game_identity_evidence": "page_title_only"
+    }
+  ]
+}

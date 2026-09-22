@@ -2,9 +2,10 @@ import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useState, useEffect, useMemo } from 'react'
 import { Form, Input, Select, Switch, message } from 'antd'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { settingsApi } from '../services/api'
 import SpeechRecognitionConfig from '../components/SpeechRecognitionConfig'
+import VisionSettings from '../features/studio/VisionSettings'
 import FeedbackDialog from '../components/FeedbackDialog'
 import { isDesktopMode } from '../utils/desktopMode'
 import { openExternalLink } from '../utils/externalLinks'
@@ -59,9 +60,10 @@ const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
   dashscope: 'qwen-plus', openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash', siliconflow: 'deepseek-ai/DeepSeek-V3',
 }
 
-type SectionKey = 'model' | 'speech' | 'app' | 'feedback'
+type SectionKey = 'vision' | 'model' | 'speech' | 'app' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
   { key: 'model', get label() { return t("模型") } },
+  { key: 'vision', label: '视觉理解' },
   { key: 'speech', get label() { return t("转写") } },
   { key: 'app', get label() { return t("应用") } },
   { key: 'feedback', get label() { return t("反馈") } },
@@ -72,6 +74,7 @@ const SettingsPage: React.FC = () => {
   useTranslation()
   const [form] = Form.useForm()
   const location = useLocation()
+  const navigate = useNavigate()
   const initialSection = useMemo<SectionKey>(() => {
     const s = new URLSearchParams(location.search).get('section')
     return (NAV.find((n) => n.key === s)?.key as SectionKey) || 'model'
@@ -279,12 +282,13 @@ const SettingsPage: React.FC = () => {
       <div className="ac-settings" style={{ marginTop: 36 }}>
         <nav className="ac-settings-nav" aria-label={t("设置分类")}>
           {NAV.map((n) => (
-            <button key={n.key} aria-current={active === n.key} onClick={() => setActive(n.key)}>{n.label}</button>
+            <button key={n.key} aria-current={active === n.key} onClick={() => navigate(`/settings?section=${n.key}`, { replace: true })}>{n.label}</button>
           ))}
         </nav>
 
         <div className="ac-settings-body">
           {/* ---------------- 模型 ---------------- */}
+          {active === 'vision' && <VisionSettings />}
           {active === 'model' && (
             <Section title={t("模型")} description={t("切片分析用哪个大模型。密钥只保存在运行 AutoClip 的这台机器上，不会上传。")}>
               <Form

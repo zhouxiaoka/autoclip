@@ -3,6 +3,8 @@ import { Routes, Route, useLocation } from 'react-router-dom'
 import { Layout } from 'antd'
 import HomePage from './pages/HomePage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
+import ImportReview from './features/studio/ImportReview'
+import StudioEditor from './features/studio/StudioEditor'
 import SettingsPage from './pages/SettingsPage'
 import Header from './components/Header'
 import { UpdatePrompt } from './desktop/UpdatePrompt'
@@ -31,7 +33,9 @@ function App() {
       <Content>
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/import/:id" element={<ImportReview />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
+          <Route path="/project/:id/studio/:draftId" element={<StudioEditor />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </Content>
