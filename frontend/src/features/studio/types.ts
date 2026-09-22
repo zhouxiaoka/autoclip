@@ -7,7 +7,7 @@ export interface Draft {
   id: string; title: string; hook: string; scenes: Scene[]; language: Language
   aspect: 'original' | 'portrait' | 'landscape'; layout: 'fit' | 'crop' | 'blur'
   crop_x?: number; title_style?: 'plain' | 'impact' | 'card' | 'comic' | 'neon' | 'arena' | 'editorial' | 'pixel' | 'frosted'
-  title_template_version?: 1 | 2 | 3 | 4; title_motion?: boolean; title_scale?: number; title_y?: number; title_accent?: string | null
+  title_template_version?: 1 | 2 | 3 | 4 | 5; title_motion?: boolean; title_scale?: number; title_y?: number; title_accent?: string | null
   subtitles: boolean; original_audio: boolean; revision: number; updated_at: string; origin: string
   parent_draft_id?: string | null; parent_revision?: number | null
 }
