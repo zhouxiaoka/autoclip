@@ -31,3 +31,8 @@
 
 .studio-import-review { max-width: 1100px; margin: 0 auto; }
 .studio-import-resume {display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-top:20px;color:var(--ac-muted)}
+
+.studio-output-state{font-size:12px;font-weight:600;margin:10px 0 4px;color:var(--ac-sub)}
+.studio-output-state--ready{color:var(--ac-accent)}.studio-output-state--failed{color:var(--ac-error)}
+.studio-output-hint{font-size:12px;line-height:1.5;color:var(--ac-muted);margin:4px 0 8px;overflow-wrap:anywhere}
+.studio-output-hint.studio-error{color:var(--ac-error)}
