@@ -2,6 +2,13 @@
 
 欢迎来到AutoClip文档中心！这里包含了项目的完整文档和指南。
 
+## 1.4 成片包装
+
+- [包装使用指南](FINISHING_GUIDE.md)
+- [六款模板实现与验收](TITLE_TEMPLATE_IMPLEMENTATION.md)
+- [1.4 发布计划](RELEASE_1_4.md)
+- [动效字幕后续待办](MOTION_CAPTIONS_BACKLOG.md)
+
 ## 📚 文档目录
 
 ### 🚀 快速开始
