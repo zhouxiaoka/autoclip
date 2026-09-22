@@ -51,6 +51,7 @@ def clean_database():
     except Exception as e:
         print(f"❌ 清理数据库时发生错误: {e}")
         db.rollback()
+        sys.exit(1)
     finally:
         db.close()
 
