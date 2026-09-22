@@ -31,10 +31,14 @@ cd ../autoclip_intro && git add -A && git commit -m "build: sync release info au
 
 ## 文件
 
+发布教程页（`guides/publish/`）也放在这个目录，应用内「操作教程」链到官网。改步骤只改官网这一页，不必发客户端。`install.sh` 会一并拷过去，并在首页 FAQ / 页脚加入口。
+
 | 文件 | 去处 | 作用 |
 |---|---|---|
 | `sync_release.py` | `autoclip_intro/scripts/` | 读 Release → 改 `index.html`（`--check` 只报告） |
 | `sync-release.yml` | `autoclip_intro/.github/workflows/` | 三种触发（dispatch / cron / 手动）→ 跑脚本 → 有改动就提交 |
-| `install.sh` | 留在这里 | 复制上面两个文件并同步一次 |
+| `guides/publish/index.html` | `autoclip_intro/guides/publish/` | 八语发布操作教程（Upload-Post、B 站三个 Cookie、仅自己试发） |
+| `install_publish_guide.py` | 留在这里 | 拷教程页，并补首页 FAQ / 页脚 / sitemap |
+| `install.sh` | 留在这里 | 复制同步脚本、教程页并同步一次 Release |
 
 主仓库端：`.github/workflows/desktop-build.yml` → `release` job → "Notify website" 步骤。

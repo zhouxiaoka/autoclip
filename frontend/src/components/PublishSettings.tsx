@@ -1,12 +1,15 @@
-import { t } from '../i18n'
+import i18n, { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useCallback, useEffect, useState } from 'react'
 import { message } from 'antd'
-import { Btn, Row, Section, Segmented, StatusDot } from '../ui'
+import { Btn, Icon, Row, Section, Segmented, StatusDot } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
+import { publishGuideHref } from '../publish/guide'
 import { platformLabel, readApiDetail } from '../publish/uploadPost'
 import { bilibiliApi } from '../publish/bilibiliApi'
 import { uploadPostApi, type UploadPostConfigView, type UploadPostProfile } from '../publish/uploadPostApi'
+
+const openPublishGuide = () => openExternalLink(publishGuideHref(i18n.language))
 
 const KEY_URL = 'https://app.upload-post.com/api-keys'
 const USERS_URL = 'https://app.upload-post.com/manage-users'
@@ -114,7 +117,7 @@ const PublishSettings: React.FC = () => {
   const saveBili = async () => {
     const value = cookie.trim()
     if (!value) {
-      setError(t("在浏览器登录 B 站，从请求头复制 Cookie。需要 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。"))
+      setError(t("登录 B 站后，打开开发者工具 Application → Cookies，复制 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。"))
       return
     }
     setSavingBili(true)
@@ -154,6 +157,7 @@ const PublishSettings: React.FC = () => {
     <Section
       title={t("发布")}
       description={t("海外账号和 B 站都在这里配。配好后，在切片的发布页直接选。")}
+      right={<Btn size="sm" onClick={() => void openPublishGuide()}>{t("操作教程")}<Icon.External size={12} /></Btn>}
     >
       <div className="ac-rows">
         <Row
@@ -225,7 +229,8 @@ const PublishSettings: React.FC = () => {
           stack
           label={t("B 站 Cookie")}
           hint={<>
-            {t("在浏览器登录 B 站，从请求头复制 Cookie。需要 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。")}
+            {t("登录 B 站后，打开开发者工具 Application → Cookies，复制 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。")}{' '}
+            <a href={publishGuideHref(i18n.language)} onClick={(e) => { e.preventDefault(); void openPublishGuide() }} style={{ color: 'var(--ac-accent)' }}>{t("操作教程")}</a>
             {biliConfigured ? ` ${t("再贴一次会换成这个账号。")}` : ''}
           </>}
         >

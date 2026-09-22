@@ -1,10 +1,11 @@
-import { t } from '../i18n'
+import i18n, { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { projectApi } from '../services/api'
 import { Btn, Icon, ProgressLine, Row, Segmented, StatusDot } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
+import { publishGuideHref } from '../publish/guide'
 import { bilibiliApi, type BilibiliJobView } from '../publish/bilibiliApi'
 import { coverApi, type CoverView } from '../publish/coverApi'
 import {
@@ -369,6 +370,8 @@ const PublishClipPage: React.FC = () => {
         <h1 className="ac-title">{t("发布")}</h1>
         <div className="ac-meta">
           <span>{clipTitle || t("切片")}</span>
+          <span className="dot" />
+          <a href={publishGuideHref(i18n.language)} onClick={(e) => { e.preventDefault(); void openExternalLink(publishGuideHref(i18n.language)) }} style={{ color: 'var(--ac-accent)' }}>{t("操作教程")}</a>
         </div>
       </header>
 
@@ -377,8 +380,9 @@ const PublishClipPage: React.FC = () => {
         {!loading && !ready && !error && (
           <div className="ac-empty" style={{ marginTop: 8 }}>
             <b>{t("还没有配置发布账号。到设置里填一次即可。")}</b>
-            <div style={{ marginTop: 14 }}>
+            <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Btn size="sm" variant="cta" onClick={() => navigate('/settings?section=publish')}>{t("去设置")}</Btn>
+              <Btn size="sm" onClick={() => void openExternalLink(publishGuideHref(i18n.language))}>{t("操作教程")}<Icon.External size={12} /></Btn>
             </div>
           </div>
         )}
