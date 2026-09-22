@@ -17,8 +17,9 @@ export interface RenderJob {
   result?: { width: number; height: number; duration: number; warnings: string[] }
 }
 export interface Workspace {
+  plan?: ImportPlan
   drafts: Draft[]; events: Scene[]; jobs: RenderJob[]
-  analysis: null | { status: 'running' | 'completed' | 'failed'; message?: string; error?: string; coverage?: { note: string; sample_interval: number } }
+  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production'; message?: string; error?: string; coverage?: { note: string; sample_interval: number } }
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }
@@ -53,3 +54,16 @@ export function applyCandidate(draft: Draft, candidate: Candidate, target: numbe
 export function portraitDesign(draft: Draft): Draft {
   return {...draft, aspect:'portrait', layout:'crop', crop_x:draft.crop_x ?? .5, title_style:'comic', title_template_version:6}
 }
+
+export interface ImportOptions {
+  goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
+  duration: number | null; instruction: string
+}
+export interface ImportPlan {
+  id: string; suggested_goals: Goal[]; selected_goals?: Goal[]
+  mode: 'ai' | 'manual' | 'fallback'; content_type: string; reason: string; confidence: number
+  preferences: {goal: Goal; language: Language; aspect: Draft['aspect']; duration: number}
+  overrides: ImportOptions
+}
+export const defaultImportOptions: ImportOptions = {goal:'auto', language:'source', aspect:null, duration:null, instruction:''}
+export const goalLabels = {auto:'AI 自动匹配', content:'内容切片', highlight:'精彩高光', promo:'推广成片'} as const

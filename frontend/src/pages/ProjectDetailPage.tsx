@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import { message } from 'antd'
 import dayjs from 'dayjs'
 import { useProjectStore, Collection } from '../store/useProjectStore'
@@ -227,6 +227,8 @@ const ProjectDetailPage: React.FC = () => {
     )
   }
 
+  if (currentProject.settings?.import_staging || currentProject.processing_config?.import_staging) return <Navigate to={`/import/${id}`} replace />
+
   const clips = currentProject.clips || []
   const collections = currentProject.collections || []
   const totalClipSec = clips.reduce((s, c) => s + Math.max(0, parseTimecode(c.end_time) - parseTimecode(c.start_time)), 0)
@@ -235,7 +237,7 @@ const ProjectDetailPage: React.FC = () => {
     const tb = b.created_at ? new Date(b.created_at).getTime() : 0
     return tb - ta
   })
-  const isVisual = ['highlight', 'promo'].includes(currentProject.settings?.creative?.goal || currentProject.processing_config?.creative?.goal)
+  const isVisual = !!currentProject.settings?.smart_import || !!currentProject.processing_config?.smart_import || ['highlight', 'promo'].includes(currentProject.settings?.creative?.goal || currentProject.processing_config?.creative?.goal)
   const isCompleted = currentProject.status === 'completed'
   const isFailed = currentProject.status === 'failed' || (currentProject.status as string) === 'error'
   const failureContext = {
@@ -255,7 +257,7 @@ const ProjectDetailPage: React.FC = () => {
           <div style={{ minWidth: 0 }}>
             <h1 className="ac-title">{currentProject.name}</h1>
             <div className="ac-meta">
-              {isVisual ? <span>{currentProject.settings?.creative?.goal === 'promo' ? '推广成片' : '精彩高光'}</span> : isCompleted ? (
+              {isVisual ? <span>{'智能制作'}</span> : isCompleted ? (
                 <>
                   <span><span className="ac-mono">{clips.length}</span> 切片</span>
                   <span className="dot" />

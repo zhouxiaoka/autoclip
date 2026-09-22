@@ -85,3 +85,27 @@ class DuplicateDraft(BaseModel):
 
 class ExportDraftRequest(BaseModel):
     revision: int = Field(ge=1)
+
+
+class ImportOptions(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    goal: Literal['auto', 'content', 'highlight', 'promo'] = 'auto'
+    language: Language = 'source'
+    aspect: Literal['original', 'portrait', 'landscape'] | None = None
+    duration: int | None = Field(default=None, ge=10, le=120)
+    instruction: str = Field(default='', max_length=1000)
+
+
+class ConfirmPlan(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    plan_id: str = Field(min_length=1, max_length=100)
+    goals: list[Goal] = Field(min_length=1, max_length=3)
+    language: Language | None = None
+    aspect: Literal['original', 'portrait', 'landscape'] | None = None
+    duration: int | None = Field(default=None, ge=10, le=120)
+
+    @model_validator(mode='after')
+    def unique_goals(self):
+        if len(set(self.goals)) != len(self.goals):
+            raise ValueError('制作类型不能重复')
+        return self

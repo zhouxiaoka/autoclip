@@ -199,6 +199,9 @@ def test_visual_import_worker_persists_project_status(client,root,source,monkeyp
     response=client.post('/studio/import',data={'goal':'highlight','name':'Visual upload'},files={'video':('game.mp4',source.read_bytes(),'video/mp4')})
     assert response.status_code==200,response.text
     pid=response.json()['project_id']
+    state=client.get('/studio/'+pid).json()
+    assert state['analysis']['status']=='awaiting_confirmation' and state['drafts']==[]
+    assert client.post('/studio/'+pid+'/start',json={'plan_id':state['plan']['id'],'goals':['highlight']}).status_code==200
     with SessionLocal() as db:
         p=db.get(Project,pid)
         assert p.status==ProjectStatus.COMPLETED

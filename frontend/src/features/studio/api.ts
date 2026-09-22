@@ -1,5 +1,5 @@
 import api from '../../services/api'
-import { Draft, Workspace, RenderJob, Language, CandidateList } from './types'
+import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal } from './types'
 export const studioApi = {
   source: (pid: string) => `${api.defaults.baseURL}/studio/${pid}/source`,
   capabilities: (): Promise<{ visual_analysis: boolean; visual_model: string }> => api.get('/studio/capabilities'),
@@ -8,6 +8,8 @@ export const studioApi = {
   titlePreview: (pid: string, draft: Draft, signal?: AbortSignal, layer = 'artwork'): Promise<Blob> => api.post(`/studio/${pid}/title-preview?layer=${layer}`, draft, {responseType:'blob', signal}),
   candidates: (pid: string, signal?: AbortSignal): Promise<CandidateList> => api.get(`/studio/${pid}/candidates`, { signal }),
   import: (body: FormData): Promise<{ project_id: string }> => api.post('/studio/import', body, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 0 }),
+  confirmPlan: (pid: string, planId: string, goals: Goal[], options: ImportOptions) => api.post(`/studio/${pid}/start`, {plan_id:planId, goals, language:options.language, aspect:options.aspect, duration:options.duration}),
+  correctPlan: (pid: string, body: ImportOptions) => api.put(`/studio/${pid}/plan`, body),
   analyze: (pid: string) => api.post(`/studio/${pid}/analyze`),
   create: (pid: string, clip_ids: string[], title: string): Promise<Draft> => api.post(`/studio/${pid}/drafts`, { clip_ids, title }),
   eventDraft: (pid: string, id: string): Promise<Draft> => api.post(`/studio/${pid}/events/${id}/draft`),

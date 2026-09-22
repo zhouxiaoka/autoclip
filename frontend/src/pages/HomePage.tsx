@@ -103,7 +103,7 @@ const HomePage: React.FC = () => {
 
   const handleProjectCardClick = (project: Project) => {
     // 导入中状态的项目不能点击进入详情页
-    if (project.status === 'pending') {
+    if (project.status === 'pending' && !project.settings?.smart_import && !project.processing_config?.smart_import) {
       message.warning('项目正在导入中，请稍后再查看详情')
       return
     }
@@ -112,7 +112,9 @@ const HomePage: React.FC = () => {
     navigate(`/project/${project.id}`)
   }
 
+  const pendingImports = projects.filter(p => p.settings?.import_staging || p.processing_config?.import_staging)
   const filteredProjects = (projects || [])
+    .filter(p => !p.settings?.import_staging && !p.processing_config?.import_staging)
     .filter(project => {
       const matchesStatus = !statusFilter || statusFilter === 'all' || project.status === statusFilter || (statusFilter === 'error' && project.status === 'failed')
       return matchesStatus
@@ -130,6 +132,7 @@ const HomePage: React.FC = () => {
       <Content style={{ padding: '40px 56px 56px', position: 'relative' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
           <CreativeImport onImported={loadProjects} />
+          {pendingImports.length>0&&<div className="studio-import-resume"><b>未完成的导入</b>{pendingImports.map(p=><button key={p.id} className="studio-link" onClick={()=>navigate(`/import/${p.id}`)}>{p.name} · 继续导入确认</button>)}</div>}
 
           {/* 项目管理区域 */}
           <div style={{

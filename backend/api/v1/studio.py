@@ -12,7 +12,7 @@ from backend.models.clip import Clip
 from backend.schemas.project import ProjectCreate, ProjectType
 from backend.services.project_service import ProjectService
 from backend.services.studio import store, jobs, intelligence
-from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene
+from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene, ImportOptions, ConfirmPlan
 
 router = APIRouter()
 
@@ -66,18 +66,18 @@ def test_vision_settings(body: vision_settings.VisionSettingsInput):
 
 @router.post('/import')
 async def import_visual(
-    goal: Literal['highlight', 'promo'] = Form(...),
+    goal: Literal['auto', 'content', 'highlight', 'promo'] = Form('auto'),
     language: Language = Form('source'),
-    aspect: Literal['original', 'portrait', 'landscape'] = Form('portrait'),
-    duration: int = Form(30, ge=10, le=120),
-    name: str = Form('游戏成片', max_length=200),
+    aspect: Optional[Literal['original', 'portrait', 'landscape']] = Form(None),
+    duration: Optional[int] = Form(None, ge=10, le=120),
+    instruction: str = Form('', max_length=1000),
+    subtitle: Optional[UploadFile] = File(None),
+    name: str = Form('智能剪辑', max_length=200),
     url: Optional[str] = Form(None),
     browser: Optional[Literal['chrome', 'edge', 'firefox', 'safari']] = Form(None),
     video: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
 ):
-    if not intelligence.ready():
-        raise HTTPException(409, '请先配置视觉模型 API，再使用精彩高光或推广成片')
     if bool(url) == bool(video):
         raise HTTPException(422, '请提供一个视频链接或文件')
     if url:
@@ -92,12 +92,24 @@ async def import_visual(
     if video and not first_chunk:
         await video.close()
         raise HTTPException(422, '视频文件为空，请重新选择')
-    prefs = Preferences(goal=goal, language=language, aspect=aspect, duration=duration)
-    project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '游戏成片', project_type=ProjectType.ENTERTAINMENT, source_url=url, settings={'creative': prefs.model_dump(), 'creative_browser': browser}))
+    subtitle_bytes = None
+    if subtitle:
+        try:
+            if Path(subtitle.filename or '').suffix.lower() != '.srt':
+                raise HTTPException(422, '字幕文件仅支持 SRT')
+            subtitle_bytes = await subtitle.read(2 * 1024 * 1024 + 1)
+            if not subtitle_bytes or len(subtitle_bytes) > 2 * 1024 * 1024:
+                raise HTTPException(422, '字幕文件为空或超过 2 MB')
+        finally:
+            await subtitle.close()
+    prefs = ImportOptions(goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction)
+    project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': True, 'creative_browser': browser}))
     pid = str(project.id)
     raw = store.directory(pid) / 'raw'
     raw.mkdir(parents=True, exist_ok=True)
     try:
+        if subtitle_bytes is not None:
+            (raw / 'input.srt').write_bytes(subtitle_bytes)
         if video:
             path = raw / ('input' + ext)
             with path.open('wb') as target:
@@ -106,7 +118,7 @@ async def import_visual(
                     target.write(chunk)
             project.video_path = str(path)
             db.commit()
-        call(jobs.analyze_project, pid, prefs, url, browser)
+        call(jobs.inspect_project, pid, prefs, url, browser)
     except Exception:
         project.status = 'failed'
         db.commit()
@@ -172,11 +184,10 @@ def candidates(project_id: str, db: Session = Depends(get_db)):
 @router.post('/{project_id}/analyze')
 def analyze_again(project_id: str, db: Session = Depends(get_db)):
     project = project_or_404(project_id, db)
-    prefs = Preferences.model_validate((project.processing_config or {}).get('creative', {}))
-    if prefs.goal == 'content':
+    config = project.processing_config or {}
+    prefs = ImportOptions.model_validate(config['smart_import']) if 'smart_import' in config else Preferences.model_validate(config.get('creative', {}))
+    if prefs.goal == 'content' and 'smart_import' not in config:
         raise HTTPException(422, '内容项目请继续使用原有切片流程')
-    if not intelligence.ready():
-        raise HTTPException(409, '视觉模型尚未配置')
     url = None
     try:
         jobs.source(project_id)
@@ -184,7 +195,33 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
         url = (project.project_metadata or {}).get('source_url')
         if not url:
             raise HTTPException(404, '原素材不存在，请重新导入')
-    call(jobs.analyze_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
+    worker = jobs.inspect_project if isinstance(prefs, ImportOptions) else jobs.analyze_project
+    call(worker, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
+    return {'ok': True}
+
+@router.put('/{project_id}/plan')
+def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get_db)):
+    project = project_or_404(project_id, db)
+    # Keep the check, requested preferences and job reservation atomic with other submissions.
+    with store.lock:
+        if (store.read(project_id).get('analysis') or {}).get('status') == 'running':
+            raise HTTPException(409, '当前分析尚未结束，完成后可修改方案；已有草稿会保留')
+        url = None
+        try:
+            jobs.source(project_id)
+        except FileNotFoundError:
+            url = (project.project_metadata or {}).get('source_url')
+            if not url:
+                raise HTTPException(404, '原素材不存在，请重新导入')
+        project.processing_config = {**(project.processing_config or {}), 'smart_import': body.model_dump()}
+        db.commit()
+        call(jobs.inspect_project, project_id, body, url, (project.processing_config or {}).get('creative_browser'))
+    return {'ok': True}
+
+@router.post('/{project_id}/start')
+def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    call(jobs.confirm_project, project_id, body)
     return {'ok': True}
 
 @router.post('/{project_id}/drafts')
@@ -195,7 +232,9 @@ def create_draft(project_id: str, body: CreateDraft, db: Session = Depends(get_d
     if any(cid not in by_id for cid in body.clip_ids):
         raise HTTPException(404, '所选片段不属于当前项目')
     scenes = [Scene(id=uuid.uuid4().hex, label=by_id[cid].title, start=by_id[cid].start_time, end=by_id[cid].end_time) for cid in body.clip_ids]
-    draft = Draft(id=uuid.uuid4().hex, title=body.title, scenes=scenes, origin='legacy')
+    project = project_or_404(project_id, db)
+    prefs = (project.processing_config or {}).get('creative', {})
+    draft = Draft(id=uuid.uuid4().hex, title=body.title, scenes=scenes, origin='legacy', language=prefs.get('language', 'source'), aspect=prefs.get('aspect') or 'original')
     call(validate_draft, project_id, draft)
     store.directory(project_id).mkdir(parents=True, exist_ok=True)
     return call(store.save_draft, project_id, draft, create=True)
