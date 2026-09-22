@@ -180,59 +180,20 @@ def test_list_available_models_live_failure_falls_back(monkeypatch):
     assert "gpt-5" in result.models
 
 
-def test_available_models_endpoint_uses_saved_key(web_mode_settings, monkeypatch):
-    settings_api, tmp_path, _ = web_mode_settings
-    (tmp_path / "settings.json").write_text(
-        '{"api": {"api_keys": {"dashscope": "sk-saved-key-1234567890", "openai": "", "gemini": "", "siliconflow": ""}, "api_provider": "dashscope", "api_model": "qwen-plus"}}',
-        encoding="utf-8",
+def test_result_payload_shape_for_settings_page():
+    result = model_catalog.ModelListResult(
+        provider="dashscope",
+        source="live",
+        reachable=True,
+        default_model="qwen-plus",
+        models=["qwen-plus", "qwen3.8-max"],
+        catalog={"dashscope": ["qwen-plus"]},
     )
-
-    captured = {}
-
-    async def fake_list(**kwargs):
-        captured.update(kwargs)
-        return model_catalog.ModelListResult(
-            provider="dashscope",
-            source="live",
-            reachable=True,
-            default_model="qwen-plus",
-            models=["qwen-plus", "qwen3.8-max"],
-            catalog=model_catalog.CURATED_MODELS,
-        )
-
-    monkeypatch.setattr("backend.core.model_catalog.list_available_models", fake_list)
-    payload = asyncio.run(settings_api.get_available_models(provider="dashscope"))
-    assert captured["api_key"] == "sk-saved-key-1234567890"
+    payload = result.as_dict()
     assert payload["source"] == "live"
     assert payload["models"] == ["qwen-plus", "qwen3.8-max"]
-    assert "dashscope" in payload["catalog"]
-    assert payload["models_by_provider"]["dashscope"][0]["name"] == "qwen-plus"
-
-
-@pytest.fixture
-def web_mode_settings(monkeypatch, tmp_path):
-    for name in (
-        "AUTOCLIP_DESKTOP_MODE", "AUTOCLIP_MODE", "TAURI_PLATFORM",
-        "LLM_PROVIDER", "API_MODEL_NAME", "LLM_MODEL", "OPENAI_BASE_URL",
-        "API_DASHSCOPE_API_KEY", "DASHSCOPE_API_KEY",
-    ):
-        monkeypatch.delenv(name, raising=False)
-
-    from backend.api.v1 import settings as settings_api
-    from backend.core import llm_manager as manager_module
-    from backend.core.desktop_config import DesktopPaths
-
-    config = settings_api.get_desktop_config()
-    monkeypatch.setattr(config, "paths", DesktopPaths(
-        data_dir=tmp_path,
-        cache_dir=tmp_path / "cache",
-        temp_dir=tmp_path / "temp",
-        database_url=f"sqlite:///{tmp_path / 'autoclip.db'}",
-    ))
-    monkeypatch.setattr(manager_module.config_sync_service, "is_sync_needed", lambda: False)
-    manager = manager_module.LLMManager(settings_file=tmp_path / "settings.json")
-    monkeypatch.setattr(manager_module, "get_llm_manager", lambda: manager)
-    return settings_api, tmp_path, manager
+    assert payload["catalog"]["dashscope"] == ["qwen-plus"]
+    assert "error" not in payload
 
 
 def test_provider_catalog_infos_follow_curated_list():

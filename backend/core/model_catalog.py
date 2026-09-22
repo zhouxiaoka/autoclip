@@ -172,10 +172,12 @@ def is_chat_model(name: str, provider: str = "", official: bool = True) -> bool:
     return True
 
 
-def drop_dated_snapshots(names: Iterable[str]) -> List[str]:
+def drop_dated_snapshots(names: Iterable[str], known: Optional[Iterable[str]] = None) -> List[str]:
     """有 `gpt-5` 时丢掉 `gpt-5-2025-08-07` 这种日期快照，下拉更干净。"""
     items = [n for n in names if n]
     bases = set(items)
+    if known:
+        bases.update(n for n in known if n)
     kept: List[str] = []
     for name in items:
         match = _DATED_SNAPSHOT.match(name)
@@ -193,7 +195,7 @@ def merge_models(curated: Iterable[str], live: Iterable[str]) -> List[str]:
         if name and name not in seen:
             seen.add(name)
             out.append(name)
-    extras = drop_dated_snapshots(name for name in live if name and name not in seen)
+    extras = drop_dated_snapshots((name for name in live if name and name not in seen), known=seen)
     for name in extras:
         if name not in seen:
             seen.add(name)
