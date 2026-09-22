@@ -695,7 +695,7 @@ async def _try_download_with_different_formats(url: str, download_dir: Path, bro
     for fmt in formats:
         try:
             ydl_opts = {
-                'format': 'best[ext=mp4]/best',
+                'skip_download': True,  # 视频已经下载过，这里只取字幕
                 'writesubtitles': True,
                 'writeautomaticsub': True,
                 'subtitleslangs': get_subtitle_langs(),
@@ -754,7 +754,7 @@ async def _try_download_with_different_langs(url: str, download_dir: Path, brows
     for langs in lang_combinations:
         try:
             ydl_opts = {
-                'format': 'best[ext=mp4]/best',
+                'skip_download': True,  # 视频已经下载过，这里只取字幕
                 'writesubtitles': True,
                 'writeautomaticsub': True,
                 'subtitleslangs': langs,
