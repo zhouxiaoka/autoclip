@@ -42,15 +42,14 @@ AutoClip does not host an official sample video. Releases do not include a sampl
 - Prefer an accurately timed `.srt`. Without subtitles, prepare local Whisper in Settings first, or choose a video that already has captions.
 - Sources: a local file, Bilibili, or YouTube. Confirm that you have the right to use the media.
 
-Pick one; you do not need to run all three. The dialogue is mostly English; turn on official captions or bring your own SRT/Whisper（多为英语对白，可开官方字幕或自备 SRT/Whisper）. 示例·非托管·自担使用权 (example link, not hosted by AutoClip; you are responsible for usage rights). AutoClip does not provide a finished-file download.
+For a first clip, try this one: [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I) (Stanford ENERGY). 示例·非托管·自担使用权 (example link, not hosted by AutoClip; you are responsible for usage rights).
 
-For a cold start of 10 minutes or less, import the full Stanford Dowling interview. For the two longer videos, AutoClip does not automatically run only the first N minutes. Trim the file to about 5–8 minutes yourself (or switch to a shorter clip) before import. For a first cold start, use the full Stanford Dowling interview.
+Two other examples are below. You do not need to try both. Dialogue is mostly English; official captions or your own SRT/Whisper are optional. AutoClip does not provide a finished-file download.
 
-- Stanford ENERGY (cold start): [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I). About 3:47; the full length is fine. 示例·非托管·自担使用权.
-- Y Combinator (official podcast, optional): [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y). About 36 minutes (September 2026). AutoClip does not automatically run only the first N minutes. Trim the file to about 5–8 minutes yourself (or switch to a shorter clip) before import. For a first cold start, use the full Stanford Dowling interview. 示例·非托管·自担使用权.
-- Timely interview (optional): [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Third-party interview (Sources Podcast with Alex Heath, September 2026, about 68 minutes; not an OpenAI official channel). AutoClip does not automatically run only the first N minutes. Trim the file to about 5–8 minutes yourself (or switch to a shorter clip) before import. For a first cold start, use the full Stanford Dowling interview. 多为英语对白，可开官方字幕或自备 SRT/Whisper. 示例·非托管·自担使用权.
+- [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y) (Y Combinator). 示例·非托管·自担使用权.
+- [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Sources Podcast, not an OpenAI channel. 示例·非托管·自担使用权.
 
-You can also use your own 3–5 minute clip. If the dialogue is mostly English, turn on official captions or bring your own SRT/Whisper.
+You can also use your own clip.
 
 Common sticking points on a first run are in [Discussion #128](https://github.com/zhouxiaoka/autoclip/discussions/128).
 

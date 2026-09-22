@@ -174,11 +174,12 @@ AutoClip 本身免费、开源（MIT）。云端模型由所选服务商计费�
 
 当前分析主要基于字幕，适合访谈、播客、课程和口播。纯视觉动作或音乐类视频效果可能有限。耗时取决于时长、硬件、模型与导出设置，建议先用自备的 3–5 分钟短样片验证。
 
-也可以任选下面一条，不必三条都跑。多为英语对白，可开官方字幕或自备 SRT/Whisper。示例·非托管·自担使用权。10 分钟以内的冷启动优先整段使用 Stanford 短访谈。
+第一次出片先试这条：[Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)（Stanford ENERGY）。示例·非托管·自担使用权。
 
-- 近期访谈：[Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E)。第三方访谈（Sources Podcast，非 OpenAI 官方频道）；约 68 分钟（2026-09）。AutoClip 不会自动只跑前 N 分钟；请先自行裁到约 5–8 分钟（或换短片）再导入。第一次冷启动优先用 Stanford Dowling 整段。多为英语对白，可开官方字幕或自备 SRT/Whisper。示例·非托管·自担使用权。
-- 冷启动优先：[Stanford ENERGY · Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)（约 3 分 47 秒，可整段导入）
-- 播客：[YC · The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y)（Y Combinator 官方，约 36 分钟，2026-09）。AutoClip 不会自动只跑前 N 分钟；请先自行裁到约 5–8 分钟（或换短片）再导入。第一次冷启动优先用 Stanford Dowling 整段。
+其他示例不必都试。多为英语对白，可开官方字幕或自备 SRT/Whisper。
+
+- [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y)（Y Combinator）。示例·非托管·自担使用权。
+- [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E)。第三方访谈（Sources Podcast，非 OpenAI 官方频道）。示例·非托管·自担使用权。
 
 </details>
 

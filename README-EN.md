@@ -174,11 +174,12 @@ Check the failed stage: empty subtitles, model connection failures, an overly hi
 
 Analysis primarily uses transcripts, making interviews, podcasts, lectures, and spoken commentary suitable. Purely visual action or music may work less well. Time depends on duration, hardware, models, and export settings; start with a 3–5 minute clip you provide.
 
-Or pick one example below. You do not need to run all three. The dialogue is mostly English; turn on official captions or bring your own SRT/Whisper（多为英语对白，可开官方字幕或自备 SRT/Whisper）. 示例·非托管·自担使用权 (example link, not hosted by AutoClip; you are responsible for usage rights). For a cold start of 10 minutes or less, import the full Stanford interview.
+For a first clip, try [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I) (Stanford ENERGY). 示例·非托管·自担使用权 (example link, not hosted by AutoClip; you are responsible for usage rights).
 
-- Timely interview: [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Third-party interview (Sources Podcast with Alex Heath, September 2026, about 68 minutes; not an OpenAI official channel). AutoClip does not automatically run only the first N minutes. Trim the file to about 5–8 minutes yourself (or switch to a shorter clip) before import. For a first cold start, use the full Stanford Dowling interview. 多为英语对白，可开官方字幕或自备 SRT/Whisper. 示例·非托管·自担使用权.
-- Cold start: [Stanford ENERGY · Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I) (about 3:47; the full length is fine)
-- Podcast: [YC · The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y) (Y Combinator official, about 36 minutes, September 2026). AutoClip does not automatically run only the first N minutes. Trim the file to about 5–8 minutes yourself (or switch to a shorter clip) before import. For a first cold start, use the full Stanford Dowling interview.
+Other examples are optional. Dialogue is mostly English; official captions or your own SRT/Whisper are optional.
+
+- [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y) (Y Combinator). 示例·非托管·自担使用权.
+- [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Sources Podcast, not an OpenAI channel. 示例·非托管·自担使用权.
 
 </details>
 

@@ -42,15 +42,14 @@ AutoClip 不托管官方样片。Release 里没有样片压缩包，也不提供
 - 尽量带上时间轴准确的 `.srt`。没有字幕时，先在设置中准备本地 Whisper，或换一条已有字幕的视频。
 - 来源可以是本地文件、B 站或 YouTube。请确认你有权使用该媒体。
 
-下面任选一条即可，不必三条都跑。多为英语对白，可开官方字幕或自备 SRT/Whisper。示例·非托管·自担使用权。我们不提供成片下载。
+第一次出片先试这条：[Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)（Stanford ENERGY）。示例·非托管·自担使用权。
 
-10 分钟以内的冷启动优先整段导入 Stanford Dowling。另外两条较长：AutoClip 不会自动只跑前 N 分钟；请先自行裁到约 5–8 分钟（或换短片）再导入。第一次冷启动优先用 Stanford Dowling 整段。
+下面是另外两条普通示例，不必都试。多为英语对白，可开官方字幕或自备 SRT/Whisper。我们不提供成片下载。
 
-- Stanford ENERGY（冷启动优先）：[Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)。约 3 分 47 秒，可整段导入。示例·非托管·自担使用权。
-- Y Combinator 官方（播客，可选）：[The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y)。约 36 分钟（2026-09）。AutoClip 不会自动只跑前 N 分钟；请先自行裁到约 5–8 分钟（或换短片）再导入。第一次冷启动优先用 Stanford Dowling 整段。示例·非托管·自担使用权。
-- 近期访谈（可选）：[Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E)。第三方访谈（Sources Podcast，非 OpenAI 官方频道）；约 68 分钟（2026-09）。AutoClip 不会自动只跑前 N 分钟；请先自行裁到约 5–8 分钟（或换短片）再导入。第一次冷启动优先用 Stanford Dowling 整段。多为英语对白，可开官方字幕或自备 SRT/Whisper。示例·非托管·自担使用权。
+- [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y)（Y Combinator）。示例·非托管·自担使用权。
+- [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E)。第三方访谈（Sources Podcast，非 OpenAI 官方频道）。示例·非托管·自担使用权。
 
-也可改用你自己的 3–5 分钟短片。多为英语对白时可开官方字幕或自备 SRT/Whisper。
+也可改用你自己的短片。
 
 第一次出片的常见卡点见 [讨论 #128](https://github.com/zhouxiaoka/autoclip/discussions/128)。
 
