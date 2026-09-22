@@ -1,11 +1,13 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
-import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import React, { useState, useEffect, useRef } from 'react'
+import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import { message } from 'antd'
 import dayjs from 'dayjs'
-import { useProjectStore, Clip, Collection } from '../store/useProjectStore'
+import { useProjectStore, Collection } from '../store/useProjectStore'
 import { projectApi, speechApi } from '../services/api'
+import StudioResults from '../features/studio/StudioResults'
+import { studioApi, errorText } from '../features/studio/api'
 import SubtitleFailureEmpty from '../components/SubtitleFailureEmpty'
 import { classifySubtitleFailure, type SubtitleFailureKind } from '../utils/subtitleFailure'
 import ClipCard from '../components/ClipCard'
@@ -15,9 +17,9 @@ import CreateCollectionModal from '../components/CreateCollectionModal'
 import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
 import { ProjectTaskManager } from '../components/ProjectTaskManager'
 import FeedbackDialog from '../components/FeedbackDialog'
-import { Btn, Icon, Section, Segmented, parseTimecode, fmtDuration } from '../ui'
-import LlmKeyFailureEmpty from '../components/LlmKeyFailureEmpty'
-import { classifyLlmKeyFailure } from '../utils/llmFailure'
+import { Btn, Icon, parseTimecode, fmtDuration } from '../ui'
+import SubtitleFailureEmpty from '../components/SubtitleFailureEmpty'
+import { classifySubtitleFailure, type SubtitleFailureKind } from '../utils/subtitleFailure'
 
 const ProjectDetailPage: React.FC = () => {
   useTranslation()
@@ -25,8 +27,6 @@ const ProjectDetailPage: React.FC = () => {
   const navigate = useNavigate()
   const {
     currentProject,
-    loading,
-    error,
     setCurrentProject,
     upsertProject,
     updateCollection,
@@ -37,10 +37,12 @@ const ProjectDetailPage: React.FC = () => {
     addClipToCollection
   } = useProjectStore()
 
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const loadVersion = useRef(0)
   const [statusLoading, setStatusLoading] = useState(false)
   const [showCreateCollection, setShowCreateCollection] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
-  const [sortBy, setSortBy] = useState<'time' | 'score'>('score')
   const [showCollectionDetail, setShowCollectionDetail] = useState(false)
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null)
   const { generateAndDownloadCollectionVideo } = useCollectionVideoDownload()
@@ -49,6 +51,7 @@ const ProjectDetailPage: React.FC = () => {
     if (!id) return
     loadProject()
     loadProcessingStatus()
+    return () => { loadVersion.current += 1 }
   }, [id])
 
   const subtitleKind = classifySubtitleFailure(currentProject?.error_message, currentProject?.error_code)
@@ -80,19 +83,25 @@ const ProjectDetailPage: React.FC = () => {
 
   const loadProject = async () => {
     if (!id) return
+    const version = ++loadVersion.current
+    setError('')
+    if (currentProject?.id !== id) setLoading(true)
     try {
       const project = await projectApi.getProject(id)
+      if (version !== loadVersion.current) return
       if (project.status === 'completed') {
         try {
           const [clips, collections] = await Promise.all([
             projectApi.getClips(id),
             projectApi.getCollections(id)
           ])
+          if (version !== loadVersion.current) return
           const projectWithData = { ...project, clips: clips || [], collections: collections || [] }
           setCurrentProject(projectWithData)
           // 同步更新项目列表，避免页面与列表状态漂移
           upsertProject(projectWithData)
         } catch (err) {
+          if (version !== loadVersion.current) return
           console.error('Failed to load clips/collections:', err)
           setCurrentProject(project)
         }
@@ -100,8 +109,10 @@ const ProjectDetailPage: React.FC = () => {
         setCurrentProject(project)
       }
     } catch (err) {
-      console.error('Failed to load project:', err)
-      message.error(t("加载项目失败"))
+      if (version !== loadVersion.current) return
+      setError(errorText(err))
+    } finally {
+      if (version === loadVersion.current) setLoading(false)
     }
   }
 
@@ -215,11 +226,17 @@ const ProjectDetailPage: React.FC = () => {
     }
   }
 
+  const createDraft = async (clipIds: string[], title: string) => {
+    try {
+      const draft = await studioApi.create(id!, clipIds, title)
+      navigate(`/project/${id}/studio/${draft.id}`)
+    } catch (e) { message.error(errorText(e)) }
+  }
+
   const getSortedClips = () => {
     if (!currentProject?.clips) return []
     const clips = [...currentProject.clips]
-    if (sortBy === 'score') return clips.sort((a, b) => b.final_score - a.final_score)
-    return clips.sort((a, b) => parseTimecode(a.start_time) - parseTimecode(b.start_time))
+    return clips.sort((a, b) => b.final_score - a.final_score)
   }
 
   if (loading) {
@@ -230,7 +247,7 @@ const ProjectDetailPage: React.FC = () => {
     )
   }
 
-  if (error || !currentProject) {
+  if (error || !currentProject || currentProject.id !== id) {
     return (
       <div className="ac-page">
         <div className="ac-empty">
@@ -244,6 +261,8 @@ const ProjectDetailPage: React.FC = () => {
     )
   }
 
+  if (currentProject.settings?.import_staging || currentProject.processing_config?.import_staging) return <Navigate to={`/import/${id}`} replace />
+
   const clips = currentProject.clips || []
   const collections = currentProject.collections || []
   const totalClipSec = clips.reduce((s, c) => s + Math.max(0, parseTimecode(c.end_time) - parseTimecode(c.start_time)), 0)
@@ -252,6 +271,7 @@ const ProjectDetailPage: React.FC = () => {
     const tb = b.created_at ? new Date(b.created_at).getTime() : 0
     return tb - ta
   })
+  const isVisual = !!currentProject.settings?.smart_import || !!currentProject.processing_config?.smart_import || ['highlight', 'promo'].includes(currentProject.settings?.creative?.goal || currentProject.processing_config?.creative?.goal)
   const isCompleted = currentProject.status === 'completed'
   const isFailed = currentProject.status === 'failed' || (currentProject.status as string) === 'error'
   const llmKeyFailure = classifyLlmKeyFailure(currentProject.error_message, currentProject.error_code)
@@ -271,7 +291,7 @@ const ProjectDetailPage: React.FC = () => {
           <div style={{ minWidth: 0 }}>
             <h1 className="ac-title">{currentProject.name}</h1>
             <div className="ac-meta">
-              {isCompleted ? (
+              {isVisual ? <span>{'智能制作'}</span> : isCompleted ? (
                 <>
                   <span>{t("切片数量", { count: clips.length })}</span>
                   <span className="dot" />
@@ -297,10 +317,10 @@ const ProjectDetailPage: React.FC = () => {
           {isCompleted && (
             <Btn onClick={() => navigate(`/project/${currentProject.id}/publish`)}>{t("发布")}</Btn>
           )}
-          {currentProject.status === 'pending' && (
+          {!isVisual && currentProject.status === 'pending' && (
             <Btn variant="cta" onClick={handleStartProcessing} loading={statusLoading}>{t("开始处理")}</Btn>
           )}
-          {isFailed && (
+          {!isVisual && isFailed && (
             <div style={{ display: 'flex', gap: 8, flex: '0 0 auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <Btn onClick={() => setFeedbackOpen(true)}>{t("反馈问题")}</Btn>
               <Btn variant={llmKeyFailure || shownSubtitleKind ? undefined : 'cta'} onClick={handleRetryProcessing} loading={statusLoading}>{t("重试")}</Btn>
@@ -309,83 +329,20 @@ const ProjectDetailPage: React.FC = () => {
         </div>
       </header>
 
-      {isCompleted ? (
-        <>
-          {/* 合集 */}
-          <Section
-            title={t("合集")}
-            count={collections.length}
-            description={collections.length > 0 ? t("AI 按主题把相关切片串成的成片，可编辑顺序与标题。") : t("把几条切片串成一个主题成片。")}
-            right={
-              <Btn size="sm" onClick={() => setShowCreateCollection(true)}>
-                <Icon.Plus size={13} />{t("新建合集")}</Btn>
-            }
-          >
-            {collections.length > 0 ? (
-              <div className="ac-hscroll">
-                {sortedCollections.map((collection) => (
-                  <CollectionCard
-                    key={collection.id}
-                    collection={collection}
-                    clips={clips}
-                    onView={handleViewCollection}
-                    onUpdate={(collectionId, updates) => updateCollection(currentProject.id, collectionId, updates)}
-                    onGenerateVideo={async (collectionId) => {
-                      const c = collections.find((x) => x.id === collectionId)
-                      if (c) await generateAndDownloadCollectionVideo(currentProject.id, collectionId, c.collection_title)
-                    }}
-                    onDelete={handleDeleteCollection}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="ac-empty">
-                <b>{t("还没有合集")}</b>{t("从下方切片里挑几条，「新建合集」即可。")}</div>
-            )}
-          </Section>
-
-          {/* 切片 */}
-          <Section
-            title={t("切片")}
-            count={clips.length}
-            right={
-              <Segmented
-                size="sm"
-                ariaLabel={t("排序")}
-                value={sortBy}
-                onChange={setSortBy}
-                options={[{ value: 'score', label: t("按评分") }, { value: 'time', label: t("按时间") }]}
-              />
-            }
-          >
-            {clips.length > 0 ? (
-              <div className="ac-grid-3">
-                {getSortedClips().map((clip) => (
-                  <ClipCard
-                    key={clip.id}
-                    clip={clip}
-                    projectId={currentProject.id}
-                    videoUrl={projectApi.getClipVideoUrl(currentProject.id, clip.id, clip.title || clip.generated_title)}
-                    onDownload={(clipId) => projectApi.downloadVideo(currentProject.id, clipId)}
-                    onClipUpdate={(clipId: string, updates: Partial<Clip>) => {
-                      const updatedProject = {
-                        ...currentProject,
-                        clips: clips.map((c: Clip) => (c.id === clipId ? { ...c, ...updates } : c))
-                      }
-                      setCurrentProject(updatedProject)
-                    }}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="ac-empty">
-                <b>{t("没有切出片段")}</b>{t("可以在设置里调低「最低评分阈值」后重试。")}<div style={{ marginTop: 12 }}>
-                  <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t("觉得不该是这样？告诉我们")}</Btn>
-                </div>
-              </div>
-            )}
-          </Section>
-        </>
+      {isCompleted || isVisual ? (
+        <StudioResults key={currentProject.id} project={currentProject} onCreateCollection={() => setShowCreateCollection(true)} onReload={loadProject}>
+          {sortedCollections.map(collection => <CollectionCard key={collection.id} collection={collection} clips={clips}
+            onView={handleViewCollection}
+            onEdit={() => createDraft(collection.clip_ids, collection.collection_title)}
+            onUpdate={(collectionId, updates) => updateCollection(currentProject.id, collectionId, updates)}
+            onGenerateVideo={async collectionId => { const c = collections.find(x => x.id === collectionId); if(c) await generateAndDownloadCollectionVideo(currentProject.id, collectionId, c.collection_title) }}
+            onDelete={handleDeleteCollection} />)}
+          {getSortedClips().map(clip => <ClipCard key={clip.id} clip={clip} projectId={currentProject.id}
+            onEdit={() => createDraft([clip.id], clip.generated_title || clip.title || '新成片')}
+            videoUrl={projectApi.getClipVideoUrl(currentProject.id, clip.id, clip.title || clip.generated_title)}
+            onDownload={clipId => projectApi.downloadVideo(currentProject.id, clipId)}
+            onClipUpdate={(clipId, updates) => setCurrentProject({...currentProject, clips: clips.map(c => c.id === clipId ? {...c, ...updates} : c)})} />)}
+        </StudioResults>
       ) : isFailed && shownSubtitleKind ? (
         <SubtitleFailureEmpty
           kind={shownSubtitleKind}

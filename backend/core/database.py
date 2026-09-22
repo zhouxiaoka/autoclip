@@ -5,9 +5,10 @@
 
 import logging
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import StaticPool, NullPool
+from sqlalchemy.engine import make_url
 from typing import Generator
 from backend.models.base import Base
 
@@ -26,45 +27,32 @@ if DATABASE_URL == "sqlite:///autoclip.db":
         # 如果导入失败，保持默认值
         pass
 
-# 创建数据库引擎
-if "sqlite" in DATABASE_URL:
-    # SQLite配置。
-    # StaticPool = 整个进程共享一条连接，只适合 :memory:。文件库上用它，桌面模式里 API 请求线程、
-    # 导入任务线程、流水线线程的 Session 会在同一条连接上交错 BEGIN / COMMIT / ROLLBACK：
-    # 一个线程 close() 触发的 ROLLBACK 会把另一个线程刚 INSERT 还没 COMMIT 的 Task 行抹掉
-    # （表现为 ObjectDeletedError、任务凭空消失、进度卡住）。文件库改用默认连接池，每个 Session 一条连接，
-    # 并开 WAL 让读写不互相阻塞。
-    _is_memory_db = DATABASE_URL.rstrip("/") in ("sqlite://", "sqlite:///:memory:") or ":memory:" in DATABASE_URL
-    _sqlite_kwargs = {"poolclass": StaticPool} if _is_memory_db else {}
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={
-            "check_same_thread": False,
-            "timeout": 30
-        },
+# File-backed databases use separate connections; in-memory databases keep one.
+def create_database_engine(database_url):
+    url = make_url(database_url)
+    if url.get_backend_name() != 'sqlite':
+        return create_engine(database_url, pool_pre_ping=True, pool_recycle=300, echo=False)
+    in_memory = not url.database or url.database == ':memory:' or url.query.get('mode') == 'memory'
+    database_engine = create_engine(
+        database_url,
+        connect_args={'check_same_thread': False, 'timeout': 30},
+        poolclass=StaticPool if in_memory else NullPool,
         pool_pre_ping=True,
-        echo=False,  # 设置为True可以看到SQL语句
-        **_sqlite_kwargs,
+        echo=False,
     )
-    if not _is_memory_db:
-        from sqlalchemy import event
-
-        @event.listens_for(engine, "connect")
-        def _sqlite_pragmas(dbapi_connection, _record):
+    if not in_memory:
+        @event.listens_for(database_engine, 'connect')
+        def sqlite_pragmas(dbapi_connection, _record):
             cursor = dbapi_connection.cursor()
             try:
-                cursor.execute("PRAGMA journal_mode=WAL")
-                cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.execute('PRAGMA journal_mode=WAL')
+                cursor.execute('PRAGMA busy_timeout=30000')
             finally:
                 cursor.close()
-else:
-    # PostgreSQL配置
-    engine = create_engine(
-        DATABASE_URL,
-        pool_pre_ping=True,
-        pool_recycle=300,
-        echo=False
-    )
+    return database_engine
+
+
+engine = create_database_engine(DATABASE_URL)
 
 # 创建会话工厂
 SessionLocal = sessionmaker(

@@ -6,9 +6,11 @@ import { Modal, message } from 'antd'
 import ReactPlayer from 'react-player'
 import { Clip } from '../store/useProjectStore'
 import EditableTitle from './EditableTitle'
+import { ClipExportDialog } from '../features/exports/ClipExportDialog'
 import { Btn, Icon, parseTimecode, fmtDuration, fmtClock } from '../ui'
 
 interface ClipCardProps {
+  onEdit?: () => void
   clip: Clip
   videoUrl?: string
   onDownload: (clipId: string) => void
@@ -17,11 +19,12 @@ interface ClipCardProps {
 }
 
 // Calm Premium clip card — see DESIGN.md → App Layer / Media card
-const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, projectId, onClipUpdate }) => {
+const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, projectId, onClipUpdate, onEdit }) => {
   useTranslation()
   const navigate = useNavigate()
   const [showPlayer, setShowPlayer] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
+  const [showExport, setShowExport] = useState(false)
   const playerRef = useRef<ReactPlayer>(null)
 
   const openPublish = () => {
@@ -108,9 +111,10 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
           <div className="ac-card-foot">
             <span className="meta">{fmtDuration(durationSec)}</span>
             <div className="ac-card-actions">
-              <Btn variant="text" onClick={() => setShowPlayer(true)}>{t("播放")}</Btn>
+              <Btn variant="text" onClick={onEdit || (() => setShowPlayer(true))}>{onEdit ? '预览与制作' : t("播放")}</Btn>
               <Btn variant="text" onClick={handleDownload}>{t("下载")}</Btn>
               {projectId && <Btn variant="text" onClick={openPublish}>{t("发布")}</Btn>}
+              {projectId && <Btn variant="text" onClick={() => setShowExport(true)}>{t("导出")}</Btn>}
             </div>
           </div>
         </div>
@@ -162,6 +166,17 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
           </div>
         )}
       </Modal>
+
+      {projectId && (
+        <ClipExportDialog
+          key={`${projectId}:${clip.id}`}
+          open={showExport}
+          onClose={() => setShowExport(false)}
+          projectId={projectId}
+          clipId={clip.id}
+        />
+      )}
+
     </>
   )
 }

@@ -1,0 +1,170 @@
+{
+  "schema_version": "1.0",
+  "dataset_version": "0.1",
+  "checked_date": "2026-09-21",
+  "scope": "hypercasual/casual vertical game UA creative research",
+  "strict_golden_count": 0,
+  "case_linked_reference_count": 2,
+  "campaign_reference_count": 1,
+  "admission_policy": "../GAME_AD_GOLDEN_CASES.md",
+  "cases": [
+    {
+      "case_id": "REF-001",
+      "game": "Deliver It 3D",
+      "publisher": "Voodoo",
+      "platform": "TikTok",
+      "status": "case_linked_reference",
+      "golden_verified": false,
+      "source_url": "https://ads.tiktok.com/business/creativecenter/quicktok/online/tiktokcasualgamecreativetips/pc/en",
+      "source_type": "platform_case_study",
+      "source_published_date": "2022-09-15",
+      "checked_date": "2026-09-21",
+      "video_id": "7137293574655298818",
+      "video_url": "https://www.tiktok.com/embed/v2/7137293574655298818",
+      "video_association_evidence": "Official article DOM: embedded video under matching game/publisher case heading",
+      "media_review_status": "poster_or_initial_frame_only",
+      "duration_seconds": null,
+      "shot_annotations": [],
+      "metrics": [
+        {
+          "name": "CTR",
+          "relative_change_percent": 49,
+          "scope": "creative_pattern_validation_case",
+          "comparator": "case study control details not disclosed",
+          "absolute_value": null
+        },
+        {
+          "name": "CPI",
+          "relative_change_percent": -52,
+          "scope": "creative_pattern_validation_case",
+          "comparator": "case study control details not disclosed",
+          "absolute_value": null
+        }
+      ],
+      "scale": {
+        "scope": "individual_creative",
+        "spend": null,
+        "impressions": null,
+        "installs": null,
+        "period": null
+      },
+      "geo": null,
+      "os": null,
+      "attribution_window": null,
+      "retention": null,
+      "roas": null,
+      "missing_evidence": [
+        "complete_video_review",
+        "individual_creative_scale",
+        "individual_creative_metric_attribution",
+        "test_period",
+        "control_details",
+        "attribution_window"
+      ],
+      "product_hypothesis": "Retrieve coherent goal-action-feedback footage and test explanatory commentary; not a proven effect for AutoClip."
+    },
+    {
+      "case_id": "REF-002",
+      "game": "Idle Green Button",
+      "publisher": "Mamboo",
+      "platform": "TikTok",
+      "status": "case_linked_reference",
+      "golden_verified": false,
+      "source_url": "https://ads.tiktok.com/business/creativecenter/quicktok/online/tiktokcasualgamecreativetips/pc/en",
+      "source_type": "platform_case_study",
+      "source_published_date": "2022-09-15",
+      "checked_date": "2026-09-21",
+      "video_id": "7123190250054159617",
+      "video_url": "https://www.tiktok.com/embed/v2/7123190250054159617",
+      "video_association_evidence": "Official article DOM: embedded video under matching game/publisher case heading",
+      "media_review_status": "not_watched",
+      "duration_seconds": null,
+      "shot_annotations": [],
+      "metrics": [
+        {
+          "name": "CPI",
+          "relative_change_percent": -18,
+          "scope": "creative_pattern_validation_case",
+          "comparator": "case study control details not disclosed",
+          "absolute_value": null
+        }
+      ],
+      "scale": {
+        "scope": "individual_creative",
+        "spend": null,
+        "impressions": null,
+        "installs": null,
+        "period": null
+      },
+      "geo": null,
+      "os": null,
+      "attribution_window": null,
+      "retention": null,
+      "roas": null,
+      "missing_evidence": [
+        "complete_video_review",
+        "individual_creative_scale",
+        "individual_creative_metric_attribution",
+        "test_period",
+        "control_details",
+        "attribution_window"
+      ],
+      "product_hypothesis": "Retrieve coherent goal-action-feedback footage and test explanatory commentary; not a proven effect for AutoClip."
+    },
+    {
+      "case_id": "REF-003",
+      "game": "Attack Hole",
+      "publisher": "HOMA",
+      "platform": "TikTok",
+      "status": "campaign_reference",
+      "golden_verified": false,
+      "source_url": "https://ads.tiktok.com/business/en-US/inspiration/homa-attack-hole?redirected=1",
+      "source_type": "platform_case_study",
+      "source_published_date": null,
+      "historical_context": "Campaign associated with Q1 2023 success; exact six-month dates undisclosed",
+      "checked_date": "2026-09-21",
+      "video_id": null,
+      "video_url": null,
+      "media_review_status": "no_individual_video_matched",
+      "duration_seconds": null,
+      "shot_annotations": [],
+      "metrics": [
+        {
+          "name": "CPI",
+          "relative_change_percent": -36,
+          "scope": "campaign",
+          "os": "iOS",
+          "geo": "US",
+          "comparator": "platform average for similar titles in US"
+        },
+        {
+          "name": "CPI",
+          "relative_change_percent": -29,
+          "scope": "campaign",
+          "os": "Android",
+          "geo": "US",
+          "comparator": "platform average for similar titles in US"
+        }
+      ],
+      "scale": {
+        "scope": "campaign",
+        "spend": null,
+        "impressions": null,
+        "installs": 6000000,
+        "period": "six months; exact dates undisclosed",
+        "geo": "campaign promoted across 40+ target markets; not US-only"
+      },
+      "attribution_window": null,
+      "retention": null,
+      "roas": null,
+      "missing_evidence": [
+        "specific_video",
+        "individual_creative_metric_attribution",
+        "individual_creative_scale",
+        "exact_period",
+        "attribution_window"
+      ],
+      "product_hypothesis": "Support identifiable creative variants and localization; campaign outcome does not establish any one clip as a winner."
+    }
+  ]
+}
