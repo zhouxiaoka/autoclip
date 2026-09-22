@@ -16,13 +16,17 @@ AutoClip 本身免费、开源（MIT）。云端模型调用由你选择的服�
 
 ### 哪些视频比较适合？
 
-分析主要基于字幕，因此对白清楚的访谈、播客、课程、口播和直播回放比较合适。音乐、体育动作和其他主要依赖画面的内容，单靠字幕可能无法识别精彩点。没有固定出片数量或效果保证，建议先用短样本验证。
+分析主要基于字幕，因此对白清楚的访谈、播客、课程、口播和直播回放比较合适。音乐、体育动作和其他主要依赖画面的内容，单靠字幕可能无法识别精彩点。没有固定出片数量或效果保证。
+
+第一次出片请自备 3–5 分钟、对白清楚的短样片，最好带时间轴准确的 `.srt`。来源可以是本地文件、B 站或 YouTube，请确认你有权使用。AutoClip 不托管官方样片，Release 里也没有样片压缩包或成片下载。
+
+示例链接，非官方托管 / Example link, not hosted by AutoClip：<https://www.youtube.com/watch?v=0YNeyBANrTI>（示例 · 约 3 分钟口播；在 YouTube 打开中文字幕后导入，或先下载字幕为 SRT。非 AutoClip 托管。）也可自选任意带字幕的 3–5 分钟公开访谈或口播。准备步骤见 [安装指南 · 自备短样片](USER_INSTALLATION_GUIDE.md#自备短样片)，卡点见 [讨论 #128](https://github.com/zhouxiaoka/autoclip/discussions/128)。
 
 ## 安装与启动
 
 ### 应该下载哪个文件？
 
-[Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 中，Apple Silicon Mac 选 `aarch64.dmg`，Windows x64 选 `x64-setup.exe`。Intel Mac / Linux 使用 Docker 或 CLI。以每次 Release 的实际资产为准，`Source code` 不是桌面安装包。
+[Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 中，Apple Silicon Mac 选 `aarch64.dmg`，Windows x64 选 `x64-setup.exe`。Intel Mac / Linux 使用 Docker 或 CLI。以每次 Release 的实际资产为准，`Source code` 不是桌面安装包。Release 不提供官方样片或成片下载。
 
 首次启动的系统提示请参考 [安装指南](USER_INSTALLATION_GUIDE.md) 和对应 Release。Windows 日常运行不需要管理员权限。
 
@@ -64,7 +68,7 @@ autoclip doctor --provider ollama
 autoclip run talk.mp4 --provider ollama --srt talk.srt --min-score 0.5 --json
 ```
 
-把示例文件名和模型选项换成实际配置；没有 SRT 时去掉 `--srt talk.srt` 并确保转写已就绪。降低阈值只影响筛选，不保证一定有片段。用法上仍不清楚时，到 [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) 讨论。能复现的故障仍开 Issue。
+把示例文件名和模型选项换成实际配置；没有 SRT 时去掉 `--srt talk.srt` 并确保转写已就绪。降低阈值只影响筛选，不保证一定有片段。第一次验证请使用自备的 3–5 分钟短样片。示例链接，非官方托管 / Example link, not hosted by AutoClip：<https://www.youtube.com/watch?v=0YNeyBANrTI>。用法上仍不清楚时，到 [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) 讨论。能复现的故障仍开 Issue。
 
 ### 处理慢、内存不足怎么办？
 

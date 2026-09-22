@@ -28,11 +28,27 @@ Run `x64-setup.exe` and follow the installer. Installation is per user; routine 
 
 1. **Configure a model.** Open Settings and select Qwen, an OpenAI-compatible API, Gemini, SiliconFlow, or a local model. For cloud services, enter your API key and model name, test the connection, and save. For Ollama / LM Studio, start the model service and load a model first.
 2. **Prepare subtitles.** Import an accurately timed `.srt` alongside your video when available. Otherwise, prepare the local Whisper components and model in the speech recognition settings. Initial installation and downloads require internet access.
-3. **Start with a short sample.** Use a video you are authorized to process, with clear speech. Choose file import on the home screen and select your video plus an optional SRT. Link import supports YouTube and Bilibili.
+3. **Bring your own short clip.** Use a 3–5 minute video you are allowed to use, with clear speech and, preferably, an accurately timed `.srt`. On the home screen, use file import for the video and optional SRT, or link import for a Bilibili or YouTube URL. Requirements and an example are in [Bring your own short clip](#bring-your-own-short-clip) below.
 4. **Review the results.** Check the clip boundaries, titles, and scores in the project details. Preview each clip for completeness. If processing fails, identify whether subtitles, analysis, or export failed, then follow the [FAQ](FAQ.en.md).
 5. **Export.** Use the export action in the project details and choose a platform preset. Vertical exports can include subtitles and title cards. Play the exported file before publishing it yourself.
 
 Highlight analysis primarily uses transcript text. Interviews, podcasts, and courses are easier to assess this way; do not expect the same results for purely visual action, music, or videos without speech.
+
+## Bring your own short clip
+
+AutoClip does not host an official sample video. Releases do not include a sample zip or finished clips for download. Use your own short video, or a public platform link you are allowed to use.
+
+- About 3–5 minutes, with clear speech.
+- Prefer an accurately timed `.srt`. Without subtitles, prepare local Whisper in Settings first, or choose a video that already has captions.
+- Sources: a local file, Bilibili, or YouTube. Confirm that you have the right to use the media.
+
+示例链接，非官方托管 / Example link, not hosted by AutoClip:
+
+- <https://www.youtube.com/watch?v=0YNeyBANrTI> — Example · about 3 minutes of spoken commentary. On YouTube, turn on Chinese captions, then import the link (or download the captions as SRT first). Not hosted by AutoClip.
+
+You can also choose any public 3–5 minute interview or spoken video with captions on Bilibili or YouTube. Confirm that you have the right to use it. We do not provide a finished-file download.
+
+Common sticking points on a first run are in [Discussion #128](https://github.com/zhouxiaoka/autoclip/discussions/128).
 
 ## Cloud and local models
 
