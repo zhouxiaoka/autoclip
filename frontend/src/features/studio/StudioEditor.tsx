@@ -8,6 +8,7 @@ import CandidatePicker from './CandidatePicker'
 import TitleArtwork from './TitleArtwork'
 import DraftVariantDialog from './DraftVariantDialog'
 import { titlePresets, titleVersions, isArtworkStyle, titleDesignThumbnails } from './titlePresets'
+import { draftExportState } from './draftExportState'
 import './studio.css'
 
 export default function StudioEditor() {
@@ -37,7 +38,8 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const artworkStyle = isArtworkStyle(draft?.title_style)
   const scene = draft?.scenes[selected] || draft?.scenes[0]
   const jobs = workspace.jobs.filter(j => j.draft_id === draftId)
-  const currentJob = draft && !dirty ? jobs.find(j => j.revision === draft.revision) : undefined
+  const exportState = draft ? draftExportState(draft, jobs) : undefined
+  const currentJob = !dirty ? exportState?.completed || exportState?.failure : undefined
   const active = jobs.find(j => j.status === 'queued' || j.status === 'running')
 
   useEffect(() => {
