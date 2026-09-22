@@ -756,5 +756,11 @@
   "封面设置": "Cover settings",
   "封面生成失败，发布时会用截帧": "Cover generation failed. Publishing will use a frame.",
   "封面还在生成，发布时会用截帧兜底": "Cover is still generating. Publishing will fall back to a frame.",
-  "当前是截帧封面": "This cover is a video frame"
+  "当前是截帧封面": "This cover is a video frame",
+  "OpenAI 兼容、Seedream（火山方舟）或通义万相。": "OpenAI-compatible, Seedream (Volcengine Ark), or Tongyi Wanxiang.",
+  "Seedream": "Seedream",
+  "可填方舟接入点 ID（ep-…），或 doubao-seedream-5-0-260128。": "Use an Ark endpoint ID (ep-…), or doubao-seedream-5-0-260128.",
+  "通义万相可留空。": "Leave blank for Wanxiang.",
+  "默认火山方舟 api/v3。": "Defaults to Volcengine Ark api/v3.",
+  "用豆包视觉读图核对标题，不要填 Seedream 本号。可留空。": "Use Doubao Vision to proofread the title—not the Seedream model ID. Optional."
 }

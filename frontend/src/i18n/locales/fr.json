@@ -756,5 +756,11 @@
   "封面设置": "Réglages de couverture",
   "封面生成失败，发布时会用截帧": "Échec de génération. La publication utilisera une image extraite.",
   "封面还在生成，发布时会用截帧兜底": "La couverture est encore en cours. La publication utilisera une image extraite.",
-  "当前是截帧封面": "Cette couverture est une image extraite"
+  "当前是截帧封面": "Cette couverture est une image extraite",
+  "OpenAI 兼容、Seedream（火山方舟）或通义万相。": "Compatible OpenAI, Seedream (Volcengine Ark) ou Tongyi Wanxiang.",
+  "Seedream": "Seedream",
+  "可填方舟接入点 ID（ep-…），或 doubao-seedream-5-0-260128。": "Indiquez un ID d’endpoint Ark (ep-…) ou doubao-seedream-5-0-260128.",
+  "通义万相可留空。": "Laissez vide pour Wanxiang.",
+  "默认火山方舟 api/v3。": "Par défaut : Volcengine Ark api/v3.",
+  "用豆包视觉读图核对标题，不要填 Seedream 本号。可留空。": "Utilisez Doubao Vision pour vérifier le titre — pas l’ID Seedream. Optionnel."
 }

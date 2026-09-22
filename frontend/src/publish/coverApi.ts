@@ -1,6 +1,6 @@
 import api from '../services/api'
 
-export type CoverProvider = 'openai' | 'dashscope'
+export type CoverProvider = 'openai' | 'seedream' | 'dashscope'
 
 export interface CoverConfigView {
   enabled: boolean

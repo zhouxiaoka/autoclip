@@ -756,5 +756,11 @@
   "封面设置": "Ajustes de portada",
   "封面生成失败，发布时会用截帧": "Falló la generación. Al publicar se usará un fotograma.",
   "封面还在生成，发布时会用截帧兜底": "La portada sigue generándose. Al publicar se usará un fotograma.",
-  "当前是截帧封面": "Esta portada es un fotograma"
+  "当前是截帧封面": "Esta portada es un fotograma",
+  "OpenAI 兼容、Seedream（火山方舟）或通义万相。": "Compatible con OpenAI, Seedream (Volcengine Ark) o Tongyi Wanxiang.",
+  "Seedream": "Seedream",
+  "可填方舟接入点 ID（ep-…），或 doubao-seedream-5-0-260128。": "Usa un ID de endpoint de Ark (ep-…) o doubao-seedream-5-0-260128.",
+  "通义万相可留空。": "Déjalo vacío para Wanxiang.",
+  "默认火山方舟 api/v3。": "Por defecto Volcengine Ark api/v3.",
+  "用豆包视觉读图核对标题，不要填 Seedream 本号。可留空。": "Usa Doubao Vision para revisar el título, no el ID de Seedream. Opcional."
 }

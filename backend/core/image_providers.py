@@ -1,8 +1,9 @@
 """
 生图提供商。和对话模型分开：封面只走这里。
 
-支持两类接口，都用本地 HTTP 替身测过：
-- OpenAI 兼容：POST {base}/images/generations，有参考帧时再试 {base}/images/edits
+支持：
+- OpenAI 兼容：POST {base}/images/generations；参考帧优先 /images/edits
+- Seedream（火山方舟）：同一 /images/generations，参考帧用 JSON 的 image 字段
 - 通义万相：异步 text2image，再轮询 /tasks/{id}
 
 不能图生图的服务只出背景，调用方改用本地排版写标题。
@@ -23,7 +24,12 @@ logger = logging.getLogger(__name__)
 
 OPENAI_ROOT = "https://api.openai.com/v1"
 DASHSCOPE_ROOT = "https://dashscope.aliyuncs.com/api/v1"
+SEEDREAM_ROOT = "https://ark.cn-beijing.volces.com/api/v3"
+SEEDREAM_DEFAULT_MODEL = "doubao-seedream-5-0-260128"
+SEEDREAM_DEFAULT_OCR = "doubao-1.5-vision-pro-32k"
 OPENAI_PLACEHOLDER_KEY = "EMPTY"
+SEEDREAM_MODEL_MARKERS = ("seedream", "doubao-seedream")
+SEEDREAM_HOST_MARKERS = ("volces.com", "bytepluses.com", "byteplus.com", "volcengine")
 
 
 class ImageError(RuntimeError):
@@ -53,11 +59,30 @@ def dashscope_root(base_url: str) -> str:
     return normalize_base_url(base_url) or DASHSCOPE_ROOT
 
 
+def seedream_root(base_url: str) -> str:
+    return normalize_base_url(base_url) or SEEDREAM_ROOT
+
+
+def is_seedream(*, provider: str = "", model: str = "", base_url: str = "") -> bool:
+    kind = (provider or "").strip().lower()
+    if kind == "seedream":
+        return True
+    blob = f"{model} {base_url}".lower()
+    return any(m in blob for m in SEEDREAM_MODEL_MARKERS) or any(h in blob for h in SEEDREAM_HOST_MARKERS)
+
+
 def openai_size(width: int, height: int) -> str:
     """不要求模型吐出平台像素。横屏 / 竖屏各要一个它认识的比例。"""
     if height > width:
         return "1024x1536"
     return "1536x1024"
+
+
+def seedream_size(width: int, height: int) -> str:
+    """Seedream 5.x 有 2K 像素下限；用接近 16:9 / 9:16 的显式尺寸。"""
+    if height > width:
+        return "1440x2560"
+    return "2560x1440"
 
 
 def dashscope_size(width: int, height: int) -> str:
@@ -86,7 +111,7 @@ def _error_message(resp: Any) -> str:
         err = data.get("error")
         if isinstance(err, dict):
             message = str(err.get("message") or "")
-        message = message or str(data.get("message") or "")
+        message = message or str(data.get("message") or data.get("message_") or "")
     if not message:
         text = getattr(resp, "text", "") or ""
         message = text.strip().splitlines()[0] if text.strip() else f"HTTP {getattr(resp, 'status_code', '')}"
@@ -148,7 +173,14 @@ def _bearer(api_key: str, base_url: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {key}"}
 
 
-def _post_json(session: requests.Session, url: str, headers: dict[str, str], body: dict[str, Any]) -> Any:
+def _post_json(
+    session: requests.Session,
+    url: str,
+    headers: dict[str, str],
+    body: dict[str, Any],
+    *,
+    seedream: bool = False,
+) -> Any:
     resp = session.post(url, headers={**headers, "Content-Type": "application/json"}, json=body, timeout=90)
     if int(getattr(resp, "status_code", 200) or 200) == 400:
         message = _error_message(resp).lower()
@@ -157,12 +189,29 @@ def _post_json(session: requests.Session, url: str, headers: dict[str, str], bod
         if "response_format" in retry and "response_format" in message:
             retry.pop("response_format", None)
             changed = True
-        if "size" in message and retry.get("size") not in (None, "1024x1024"):
-            retry["size"] = "1024x1024"
+        if "n" in retry and ("n" in message or "parameter" in message) and seedream:
+            retry.pop("n", None)
+            changed = True
+        if "size" in message:
+            current = str(retry.get("size") or "")
+            if seedream:
+                fallback = "2K"
+                if current != fallback:
+                    retry["size"] = fallback
+                    changed = True
+            elif current not in (None, "", "1024x1024"):
+                retry["size"] = "1024x1024"
+                changed = True
+        if "watermark" in message and "watermark" in retry:
+            retry.pop("watermark", None)
             changed = True
         if changed:
             resp = session.post(url, headers={**headers, "Content-Type": "application/json"}, json=retry, timeout=90)
     return resp
+
+
+def _reference_data_uri(reference: bytes) -> str:
+    return "data:image/jpeg;base64," + base64.b64encode(reference).decode("ascii")
 
 
 def generate_openai(
@@ -171,12 +220,27 @@ def generate_openai(
     base_url: str,
     request: ImageRequest,
     session: requests.Session | None = None,
+    force_seedream: bool = False,
 ) -> bytes:
-    root = openai_root(base_url)
+    seedream = force_seedream or is_seedream(model=request.model, base_url=base_url)
+    root = seedream_root(base_url) if seedream else openai_root(base_url)
     http = _session_for(root, session)
     headers = _bearer(api_key, base_url)
-    size = openai_size(request.width, request.height)
-    model = request.model.strip() or "gpt-image-1"
+    size = seedream_size(request.width, request.height) if seedream else openai_size(request.width, request.height)
+    model = request.model.strip() or (SEEDREAM_DEFAULT_MODEL if seedream else "gpt-image-1")
+
+    if request.reference and seedream:
+        body: dict[str, Any] = {
+            "model": model,
+            "prompt": request.prompt,
+            "size": size,
+            "image": _reference_data_uri(request.reference),
+            "response_format": "url",
+            "watermark": False,
+        }
+        resp = _post_json(http, f"{root}/images/generations", headers, body, seedream=True)
+        return _openai_image(_raise_for_status(resp, edit=True), http)
+
     if request.reference:
         resp = http.post(
             f"{root}/images/edits",
@@ -185,15 +249,33 @@ def generate_openai(
             files={"image": ("frame.jpg", request.reference, "image/jpeg")},
             timeout=90,
         )
-        data = _raise_for_status(resp, edit=True)
-        return _openai_image(data, http)
-    resp = _post_json(http, f"{root}/images/generations", headers, {
+        try:
+            data = _raise_for_status(resp, edit=True)
+            return _openai_image(data, http)
+        except ImageError as exc:
+            if not exc.unsupported_edit:
+                raise
+            body = {
+                "model": model,
+                "prompt": request.prompt,
+                "size": size,
+                "image": _reference_data_uri(request.reference),
+                "response_format": "b64_json",
+            }
+            retry = _post_json(http, f"{root}/images/generations", headers, body)
+            return _openai_image(_raise_for_status(retry, edit=True), http)
+
+    body = {
         "model": model,
         "prompt": request.prompt,
         "size": size,
-        "n": 1,
-        "response_format": "b64_json",
-    })
+        "response_format": "url" if seedream else "b64_json",
+    }
+    if seedream:
+        body["watermark"] = False
+    else:
+        body["n"] = 1
+    resp = _post_json(http, f"{root}/images/generations", headers, body, seedream=seedream)
     return _openai_image(_raise_for_status(resp), http)
 
 
@@ -233,7 +315,7 @@ def generate_dashscope(
     model = request.model.strip() or "wanx2.1-t2i-turbo"
     image_input: dict[str, Any] = {"prompt": request.prompt}
     if request.reference:
-        image_input["ref_img"] = "data:image/jpeg;base64," + base64.b64encode(request.reference).decode("ascii")
+        image_input["ref_img"] = _reference_data_uri(request.reference)
     resp = http.post(
         f"{root}/services/aigc/text2image/image-synthesis",
         headers={**headers, "Content-Type": "application/json"},
@@ -287,7 +369,22 @@ def generate_image(
             cancel=cancel,
             poll_interval=poll_interval,
         )
-    return generate_openai(api_key=api_key, base_url=base_url, request=request, session=session)
+    return generate_openai(
+        api_key=api_key,
+        base_url=base_url,
+        request=request,
+        session=session,
+        force_seedream=(kind == "seedream"),
+    )
+
+
+def default_ocr_model(provider: str, model: str = "", base_url: str = "") -> str:
+    kind = (provider or "").strip().lower()
+    if kind == "dashscope":
+        return "qwen-vl-plus"
+    if is_seedream(provider=kind, model=model, base_url=base_url):
+        return SEEDREAM_DEFAULT_OCR
+    return "gpt-4o-mini"
 
 
 def read_image_text(
@@ -301,7 +398,7 @@ def read_image_text(
 ) -> str:
     """让多模态模型只读图上的字。失败抛 ImageError，调用方视为跳过校对。"""
     kind = (provider or "openai").strip().lower()
-    data_uri = "data:image/jpeg;base64," + base64.b64encode(image).decode("ascii")
+    data_uri = _reference_data_uri(image)
     instruction = "只输出画面上的文字，保持原有换行。不要解释，不要补充画面里没有的字。"
     if kind == "dashscope":
         root = dashscope_root(base_url)
@@ -336,15 +433,17 @@ def read_image_text(
                 return "\n".join(parts).strip()
         text = str(output.get("text") or "")
         return text.strip()
-    root = openai_root(base_url)
+    seedream = is_seedream(provider=kind, model=model, base_url=base_url)
+    root = seedream_root(base_url) if seedream or kind == "seedream" else openai_root(base_url)
     http = _session_for(root, session)
+    vision = model.strip() or default_ocr_model(kind, model=model, base_url=base_url)
     resp = _post_json(http, f"{root}/chat/completions", _bearer(api_key, base_url), {
-        "model": model.strip() or "gpt-4o-mini",
+        "model": vision,
         "messages": [{"role": "user", "content": [
             {"type": "text", "text": instruction},
             {"type": "image_url", "image_url": {"url": data_uri}},
         ]}],
-    })
+    }, seedream=seedream or kind == "seedream")
     data = _raise_for_status(resp)
     choices = data.get("choices") if isinstance(data.get("choices"), list) else []
     if not choices or not isinstance(choices[0], dict):

@@ -61,7 +61,7 @@ class PublishBody(BaseModel):
 
 class CoverConfigBody(BaseModel):
     enabled: bool | None = None
-    provider: str | None = Field(None, description="openai / dashscope")
+    provider: str | None = Field(None, description="openai / seedream / dashscope")
     model: str | None = None
     api_key: str | None = Field(None, description="不传则保留已有密钥")
     base_url: str | None = None
@@ -279,8 +279,8 @@ async def get_cover_config():
 
 @router.put("/covers/config")
 async def put_cover_config(body: CoverConfigBody):
-    if body.provider is not None and body.provider.strip().lower() not in ("openai", "dashscope"):
-        raise HTTPException(status_code=400, detail="生图提供商只能是 openai 或 dashscope")
+    if body.provider is not None and body.provider.strip().lower() not in ("openai", "seedream", "dashscope"):
+        raise HTTPException(status_code=400, detail="生图提供商只能是 openai、seedream 或 dashscope")
     cfg = cover_svc.save_config(
         enabled=body.enabled,
         provider=body.provider,

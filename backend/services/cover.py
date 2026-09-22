@@ -19,7 +19,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from backend.core.image_providers import ImageError, ImageRequest, generate_image, read_image_text
+from backend.core.image_providers import (
+    ImageError,
+    ImageRequest,
+    default_ocr_model,
+    generate_image,
+    read_image_text,
+)
 from backend.services.publish_export import find_source_video, load_clip_meta, resolve_cjk_font, to_seconds
 
 logger = logging.getLogger(__name__)
@@ -519,7 +525,7 @@ def generate_cover(
                         provider=cfg.provider,
                         api_key=cfg.api_key,
                         base_url=cfg.base_url,
-                        model=cfg.ocr_model or ("qwen-vl-plus" if cfg.provider == "dashscope" else "gpt-4o-mini"),
+                        model=cfg.ocr_model or default_ocr_model(cfg.provider, cfg.model, cfg.base_url),
                         image=fitted,
                         session=session,
                     )
@@ -552,7 +558,7 @@ def generate_cover(
                             provider=cfg.provider,
                             api_key=cfg.api_key,
                             base_url=cfg.base_url,
-                            model=cfg.ocr_model or ("qwen-vl-plus" if cfg.provider == "dashscope" else "gpt-4o-mini"),
+                            model=cfg.ocr_model or default_ocr_model(cfg.provider, cfg.model, cfg.base_url),
                             image=fitted,
                             session=session,
                         )

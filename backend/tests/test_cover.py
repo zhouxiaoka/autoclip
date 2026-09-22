@@ -122,17 +122,77 @@ def test_local_overlay_and_frame_fallback_do_not_need_api(data_dir):
 def test_openai_provider_uses_edits_then_falls_back_on_unsupported(data_dir):
     from backend.core.image_providers import ImageError, ImageRequest, generate_openai
 
-    session = _Session([_Resp(404, {"error": {"message": "Unknown URL"}})])
-    with pytest.raises(ImageError) as exc:
+    session = _Session([_Resp(404, {"error": {"message": "Unknown URL"}}), _Resp(404, {"error": {"message": "Unknown URL"}})])
+    with pytest.raises(ImageError):
         generate_openai(
             api_key="sk",
             base_url="http://127.0.0.1:9/v1",
             request=ImageRequest(prompt="hi", width=1280, height=720, reference=b"jpg", model="gpt-image-1"),
             session=session,
         )
-    assert exc.value.unsupported_edit
     assert session.calls[0][0] == "POST"
     assert session.calls[0][1].endswith("/images/edits")
+
+
+def test_seedream_uses_generations_with_image_field(data_dir):
+    from backend.core.image_providers import ImageRequest, generate_image, is_seedream, seedream_size
+
+    assert is_seedream(provider="seedream")
+    assert is_seedream(model="doubao-seedream-5-0-260128")
+    assert is_seedream(base_url="https://ark.cn-beijing.volces.com/api/v3")
+    assert seedream_size(1280, 720) == "2560x1440"
+    assert seedream_size(720, 1280) == "1440x2560"
+
+    png = Image.new("RGB", (32, 32), (10, 10, 10))
+    buf = io.BytesIO()
+    png.save(buf, format="PNG")
+    import base64
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    session = _Session([_Resp(200, {"data": [{"b64_json": b64}]})])
+    out = generate_image(
+        provider="seedream",
+        api_key="ark-key",
+        base_url="https://ark.cn-beijing.volces.com/api/v3",
+        request=ImageRequest(
+            prompt="封面标题",
+            width=1280,
+            height=720,
+            reference=b"\xff\xd8\xffframe",
+            model="doubao-seedream-5-0-260128",
+        ),
+        session=session,
+    )
+    assert out
+    method, url, snap = session.calls[0]
+    assert method == "POST"
+    assert url.endswith("/images/generations")
+    body = snap["json"]
+    assert body["model"] == "doubao-seedream-5-0-260128"
+    assert body["size"] == "2560x1440"
+    assert str(body["image"]).startswith("data:image/jpeg;base64,")
+    assert body.get("watermark") is False
+    assert "n" not in body
+
+
+def test_seedream_text_to_image_skips_n_and_uses_url(data_dir):
+    from backend.core.image_providers import ImageRequest, generate_openai
+
+    session = _Session([
+        _Resp(200, {"data": [{"url": "http://127.0.0.1:9/out.png"}]}),
+        _Resp(200, content=b"PNGDATA"),
+    ])
+    out = generate_openai(
+        api_key="ark",
+        base_url="https://ark.cn-beijing.volces.com/api/v3",
+        request=ImageRequest(prompt="横屏封面", width=1280, height=720, model="doubao-seedream-4-5-251128"),
+        session=session,
+        force_seedream=True,
+    )
+    assert out == b"PNGDATA"
+    body = session.calls[0][2]["json"]
+    assert body["response_format"] == "url"
+    assert body["size"] == "2560x1440"
+    assert "n" not in body
 
 
 def test_openai_generations_returns_b64(data_dir):
