@@ -7,6 +7,7 @@ import { Clip } from '../store/useProjectStore'
 import BilibiliManager from './BilibiliManager'
 import EditableTitle from './EditableTitle'
 import { projectApi } from '../services/api'
+import PublishAbroadDialog from './PublishAbroadDialog'
 import { Btn, Dialog, Icon, ProgressLine, Row, Segmented, parseTimecode, fmtDuration, fmtClock } from '../ui'
 
 interface ClipCardProps {
@@ -24,6 +25,7 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [showBilibiliManager, setShowBilibiliManager] = useState(false)
   const [showExport, setShowExport] = useState(false)
+  const [showPublish, setShowPublish] = useState(false)
   const [preset, setPreset] = useState<'douyin' | 'xiaohongshu' | 'shorts' | 'bilibili' | 'original'>('douyin')
   const [burnSub, setBurnSub] = useState(true)
   const [titleCard, setTitleCard] = useState(true)
@@ -207,6 +209,9 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
         description={t("渲成可直接上传的成片。默认流水线的切片不受影响。")}
         footer={
           <div className="right" style={{ marginLeft: 'auto' }}>
+            {projectId && !exporting && (
+              <Btn size="sm" onClick={() => { setShowExport(false); setShowPublish(true) }}>{t("发到海外平台")}</Btn>
+            )}
             <Btn size="sm" onClick={() => setShowExport(false)} disabled={exporting}>{t("取消")}</Btn>
             {exportDone ? (
               <Btn size="sm" variant="cta" onClick={() => projectId && projectApi.downloadExport(projectId, exportDone.jobId)}>{t("下载成片")}</Btn>
@@ -246,6 +251,18 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
           </p>
         )}
       </Dialog>
+
+      {projectId && (
+        <PublishAbroadDialog
+          open={showPublish}
+          onClose={() => setShowPublish(false)}
+          projectId={projectId}
+          clipId={clip.id}
+          preset={preset}
+          subtitles={burnSub}
+          titleCard={titleCard}
+        />
+      )}
 
       <BilibiliManager
         visible={showBilibiliManager}

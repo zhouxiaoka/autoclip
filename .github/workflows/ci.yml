@@ -72,6 +72,9 @@ jobs:
       - name: Internationalization checks
         run: node --test tests/i18n.test.cjs
 
+      - name: Publish UI helpers
+        run: node --test tests/upload-post-ui.test.cjs
+
       - name: Build
         run: npm run build
 

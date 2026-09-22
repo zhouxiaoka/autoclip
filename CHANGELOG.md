@@ -11,7 +11,8 @@
 - **发布到海外平台（Upload-Post）**：切片可经 [Upload-Post](https://www.upload-post.com) 一次发到 TikTok / Instagram / YouTube Shorts / Facebook / LinkedIn / X / Threads / Pinterest / Bluesky 等，
   与 B 站投稿并列；先按预设渲成片（竖屏平台默认 `shorts`），再异步提交并轮询各平台结果。视频处理仍全部在本地。
   入口：`autoclip publish`、MCP `publish_clip` / `get_publish_status` / `list_publish_profiles`、API `/api/v1/publish/upload-post/*`；
-  配置用 `UPLOAD_POST_API_KEY` / `UPLOAD_POST_USER` 或 `autoclip publish --api-key … --user … --save`（`docs/PUBLISH_UPLOAD_POST.md`）。设置页 UI 待做
+  配置用 `UPLOAD_POST_API_KEY` / `UPLOAD_POST_USER`、`autoclip publish --api-key … --user … --save`，或设置页「发布」。
+  切片的「发布导出」里可以「发到海外平台」：勾选已连接的平台，默认先私密试发（`docs/PUBLISH_UPLOAD_POST.md`）。
 
 ### 修复
 - 数据库清理脚本失败时返回退出码 1。之前异常被接住后进程仍以 0 退出，调用方会以为清理已经成功。

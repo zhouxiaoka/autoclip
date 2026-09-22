@@ -9,7 +9,7 @@ YouTube Shorts / X / LinkedIn 等没有。这条链路通过 [Upload-Post](https
 - 一次请求发多个平台；每个平台的结果（链接 / 错误）异步返回，AutoClip 负责轮询汇总。
 
 入口：API（`/api/v1/publish/upload-post/...`）、CLI（`autoclip publish`）、MCP（`publish_clip`）。
-桌面 / Docker / 脚本模式都可用。设置页 UI 暂未接入（见文末）。
+桌面 / Docker / 脚本模式都可用。应用里在「设置 → 发布」填写密钥，在切片的「发布导出」里点「发到海外平台」。
 
 ---
 
@@ -157,8 +157,12 @@ autoclip publish <project_id> --clip 2 --platform tiktok --wait --json
 - **成片超过 60 秒被截断**：`shorts` 预设有 60 秒上限，横屏或长内容用 `--preset douyin`（不截断）或 `original`。
 - **导出失败 / 没有中文字体**：与「发布导出」相同，见 `docs/QUALITY_AND_PUBLISH_PLAN.md`；`--no-title` 可跳过标题卡。
 
-## 6. 后续
+## 6. 应用里怎么用
 
-- 设置页「发布」区（填 key / 选默认 profile）与切片卡片「发布导出」对话框里的「发到海外平台」按钮尚未做，
-  后端 / CLI / MCP 先落，UI 按 `DESIGN.md` 另开 PR。
-- 参考：[Upload-Post API 文档](https://docs.upload-post.com/api/upload-video) · [状态查询](https://docs.upload-post.com/api/upload-status) · [profile 管理](https://docs.upload-post.com/api/user-profiles)。
+1. **设置 → 发布**：粘贴 API Key，保存时会先向 Upload-Post 校验。再选默认 profile，并看到这个 profile 已连接的平台。密钥写在本机数据目录的 `upload_post.json`（权限 0600），不会进仓库。环境变量 `UPLOAD_POST_API_KEY` 优先于这里保存的值。
+2. 打开切片的 **发布导出**，选好画幅预设后点 **发到海外平台**。勾选要发的平台（默认勾已连接的竖屏平台），可见范围默认是「仅自己」（TikTok `SELF_ONLY`、YouTube `private`）。确认成片没问题再改成公开。
+3. 对话框会先按当前预设渲成片（和「发布导出」同一份缓存，相同参数不重渲），再轮询各平台的链接或错误。发布进行中不要关窗口：关掉之后后台仍会跑完，但结果不会回到这个对话框。
+
+CLI、MCP、API 仍然可用，见上文。
+
+参考：[Upload-Post API 文档](https://docs.upload-post.com/api/upload-video) · [状态查询](https://docs.upload-post.com/api/upload-status) · [profile 管理](https://docs.upload-post.com/api/user-profiles)。
