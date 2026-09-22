@@ -23,6 +23,7 @@ def recommend(video: Path, options: ImportOptions):
     if duration < 1 or duration > 7200:
         raise ValueError('智能制作目前支持 1 秒至 2 小时的素材')
     mode = 'manual'
+    diagnostics = None
     if options.goal != 'auto':
         result = Recommendation(content_type='other', goal=options.goal,
             reason='按你指定的制作方式处理，其他未指定选项使用推荐设置。', confidence=1,
@@ -54,12 +55,14 @@ def recommend(video: Path, options: ImportOptions):
             with tempfile.TemporaryDirectory(prefix='ac-plan-') as tmp:
                 response = intelligence.vision_call([{'type':'text', 'text':prompt}] + intelligence.sample(video, times, Path(tmp), width=384), config=config)
             result = Recommendation.model_validate(response)
-        except (RuntimeError, ValueError, KeyError, TypeError):
+        except (RuntimeError, ValueError, KeyError, TypeError) as error:
+            if isinstance(error, intelligence.VisionRequestError):
+                diagnostics = {**error.diagnostics(), 'phase':'screening'}
             mode = 'fallback'
             result = Recommendation(content_type='other', goal='highlight', confidence=0, suggested_goals=[],
                 reason='快速判断暂未完成，请按素材内容选择制作类型；尚未启动正式理解与剪辑。')
     prefs = Preferences(goal=result.goal, language=options.language,
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
-    return {'mode': mode, 'source_duration': duration, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
+    return {**({'diagnostics': diagnostics} if diagnostics else {}), 'mode': mode, 'source_duration': duration, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
             'overrides': options.model_dump(exclude_none=True)}

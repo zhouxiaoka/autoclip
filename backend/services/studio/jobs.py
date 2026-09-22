@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from backend.services.studio import store
 from backend.services.studio.models import Draft, Preferences
-from backend.services.studio.intelligence import analyze, make_drafts
+from backend.services.studio.intelligence import analyze, make_drafts, VisionRequestError
 from backend.services.studio.render import render_draft
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,8 @@ def _analyze(project_id, prefs, url, browser):
         logger.warning('Studio analysis failed: %s', type(error).__name__)
         def failed(data):
             data['analysis'] = {'status': 'failed', 'error': str(error)[:700]}
+            if isinstance(error, VisionRequestError):
+                data['analysis']['diagnostics'] = [error.diagnostics()]
         try:
             store.change(project_id, failed)
             mark_project(project_id, 'completed' if store.read(project_id)['drafts'] else 'failed')
@@ -189,6 +191,8 @@ def _produce_selected(project_id, plan):
     from backend.services.studio import intelligence
     labels = {'content':'内容切片','highlight':'精彩高光','promo':'推广成片'}
     errors = []
+    diagnostics = []
+    visual_error = None
     events = coverage = None
     def stage(message):
         store.change(project_id, lambda data:data['analysis'].update(message=message))
@@ -205,8 +209,16 @@ def _produce_selected(project_id, plan):
                     continue
                 if not intelligence.ready():
                     raise ValueError('请先在设置中配置视觉理解模型')
+                if visual_error is not None:
+                    raise visual_error
                 if events is None:
-                    events, coverage = analyze(video, prefs, stage, instruction) if instruction else analyze(video, prefs, stage)
+                    try:
+                        events, coverage = analyze(video, prefs, stage, instruction) if instruction else analyze(video, prefs, stage)
+                    except Exception as error:
+                        # Both visual goals share one attempt, including its failure.
+                        # A second paid scan requires a new explicit user confirmation.
+                        visual_error = error
+                        raise
                     store.change(project_id, lambda data:data.update(events=[e.model_dump() for e in events]))
                 drafts = make_drafts(events, prefs, instruction, source_duration=intelligence._probe(video).get('duration'))
                 if (video.parent / 'input.srt').exists():
@@ -215,9 +227,13 @@ def _produce_selected(project_id, plan):
                 store.change(project_id, lambda data:data['drafts'].extend({**d,'updated_at':store.now()} for d in drafts))
             except Exception as error:
                 errors.append(labels[goal] + '：' + str(error)[:500])
+                if isinstance(error, VisionRequestError):
+                    diagnostics.append({'goal':goal, **error.diagnostics()})
         result = {'status':'failed' if errors else 'completed', 'created_at':store.now()}
         if coverage:
             result['coverage'] = coverage
+        if diagnostics:
+            result['diagnostics'] = diagnostics
         if errors:
             result['error'] = '；'.join(errors)
         store.change(project_id, lambda data:data.update(analysis=result))

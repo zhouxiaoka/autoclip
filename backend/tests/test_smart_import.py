@@ -270,3 +270,56 @@ def test_analysis_keeps_more_than_three_independent_events(source,monkeypatch):
     found,_=intelligence.analyze(source,Preferences(goal='highlight'))
     assert len(found)==5
     assert [e.id for e in found]==[e['id'] for e in events]
+
+
+@pytest.mark.parametrize('goals',[['highlight','promo'],['promo','content','highlight']])
+def test_shared_visual_failure_is_not_retried_for_second_goal(client,source,monkeypatch,goals):
+    monkeypatch.setattr(jobs,'executor',Immediate())
+    monkeypatch.setattr(intelligence,'ready',lambda:True)
+    monkeypatch.setattr(intelligence,'vision_call',lambda *a,**kw:recommendation())
+    calls=[]
+    failure=intelligence.VisionRequestError('rate_limited','请稍后重试',elapsed_seconds=2,http_status=429)
+    failure.phase='scan'
+    def analyze(*args):
+        calls.append('scan')
+        raise failure
+    monkeypatch.setattr(jobs,'analyze',analyze)
+    monkeypatch.setattr(jobs,'make_drafts',lambda *a,**kw:pytest.fail('no drafts without analysis'))
+    monkeypatch.setattr(jobs,'run_content',lambda *a,**kw:calls.append('content'))
+    response=client.post('/studio/import',files={'video':('input.mp4',source.read_bytes(),'video/mp4')})
+    pid=response.json()['project_id'];state=client.get('/studio/'+pid).json()
+    body={'plan_id':state['plan']['id'],'goals':goals}
+    assert client.post('/studio/'+pid+'/start',json=body).status_code==200
+    result=client.get('/studio/'+pid).json()
+    assert calls==(['scan','content'] if 'content' in goals else ['scan'])
+    assert result['drafts']==[] and result['analysis']['status']=='failed'
+    details=result['analysis']['diagnostics']
+    assert [d['goal'] for d in details]==[g for g in goals if g!='content']
+    assert all(d['code']=='rate_limited' and d['http_status']==429 and d['phase']=='scan' for d in details)
+    assert store.read(pid)['analysis']['diagnostics']==details
+    assert client.post('/studio/'+pid+'/start',json=body).status_code==409
+    assert calls.count('scan')==1
+
+
+def test_hook_failure_preserves_other_goal_and_does_not_repeat_analysis(client,source,monkeypatch):
+    from backend.services.studio.models import Scene, Draft
+    monkeypatch.setattr(jobs,'executor',Immediate())
+    monkeypatch.setattr(intelligence,'ready',lambda:True)
+    monkeypatch.setattr(intelligence,'vision_call',lambda *a,**kw:recommendation())
+    calls=[]
+    monkeypatch.setattr(jobs,'analyze',lambda *a:calls.append('scan') or ([Scene(id='e1',start=0,end=1)],{'duration':1}))
+    def drafts(events,prefs,*a,**kw):
+        calls.append(prefs.goal)
+        if prefs.goal=='promo':
+            error=intelligence.VisionRequestError('output_truncated','模型输出不完整',elapsed_seconds=8)
+            error.phase='hooks'
+            raise error
+        return [Draft(id='highlight',title='完整高光',scenes=events).model_dump()]
+    monkeypatch.setattr(jobs,'make_drafts',drafts)
+    response=client.post('/studio/import',files={'video':('input.mp4',source.read_bytes(),'video/mp4')})
+    pid=response.json()['project_id'];plan=client.get('/studio/'+pid).json()['plan']
+    assert client.post('/studio/'+pid+'/start',json={'plan_id':plan['id'],'goals':['promo','highlight']}).status_code==200
+    result=client.get('/studio/'+pid).json()
+    assert calls==['scan','promo','highlight']
+    assert [d['id'] for d in result['drafts']]==['highlight']
+    assert result['analysis']['diagnostics']==[{'goal':'promo','code':'output_truncated','phase':'hooks','elapsed_seconds':8}]
