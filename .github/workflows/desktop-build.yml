@@ -222,7 +222,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           DARWIN=$(ls dist/*.app.tar.gz 2>/dev/null | head -1 || true)
           WINDOWS=$(ls dist/*setup.exe dist/*-setup.exe 2>/dev/null | head -1 || true)
-          ARGS=(--version "$VERSION" --tag "$GITHUB_REF_NAME" --out dist/latest.json --notes "AutoClip Desktop $GITHUB_REF_NAME")
+          ARGS=(--version "$VERSION" --tag "$GITHUB_REF_NAME" --out dist/latest.json --changelog CHANGELOG.md)
           if [ -n "$DARWIN" ]; then ARGS+=(--darwin-aarch64 "$DARWIN"); fi
           if [ -n "$WINDOWS" ]; then ARGS+=(--windows-x86_64 "$WINDOWS"); fi
           python3 scripts/write_updater_manifest.py "${ARGS[@]}"

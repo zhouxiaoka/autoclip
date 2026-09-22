@@ -5,7 +5,7 @@ import HomePage from './pages/HomePage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import SettingsPage from './pages/SettingsPage'
 import Header from './components/Header'
-import { UpdatePrompt } from './desktop/UpdatePrompt'
+import { UpdateProvider, UpdateToast } from './desktop/UpdatePrompt'
 import { trackPageview } from './analytics/posthog'
 import { startWorkflowObserver } from './analytics/observer'
 
@@ -25,17 +25,19 @@ function App() {
   useEffect(() => startWorkflowObserver(), [])
 
   return (
-    <Layout>
-      <Header />
-      <UpdatePrompt />
-      <Content>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/project/:id" element={<ProjectDetailPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
-      </Content>
-    </Layout>
+    <UpdateProvider>
+      <Layout>
+        <Header />
+        <UpdateToast />
+        <Content>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/project/:id" element={<ProjectDetailPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </Content>
+      </Layout>
+    </UpdateProvider>
   )
 }
 

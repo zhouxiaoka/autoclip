@@ -12,8 +12,8 @@ import { trackApiKeyConfigured } from '../analytics/events'
 import { isAnalyticsEnabled, setAnalyticsEnabled } from '../analytics/posthog'
 import { getRuntimeInfo } from '../analytics/lifecycle'
 import { isCrashReportsEnabled, setCrashReportsEnabled } from '../desktop/sentry'
-import { getAppVersion, type AppUpdate } from '../desktop/updater'
-import { UpdateDialog, runManualUpdateCheck } from '../desktop/UpdatePrompt'
+import { getAppVersion } from '../desktop/updater'
+import { useAppUpdate } from '../desktop/UpdatePrompt'
 import { FEEDBACK_DISCUSSIONS_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented, StatusDot } from '../ui'
@@ -511,8 +511,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   const [desktop, setDesktop] = useState(false)
   const [crashOn, setCrashOn] = useState(isCrashReportsEnabled())
   const [version, setVersion] = useState('')
-  const [checkingUpdate, setCheckingUpdate] = useState(false)
-  const [pendingUpdate, setPendingUpdate] = useState<AppUpdate | null>(null)
+  const appUpdate = useAppUpdate()
 
   useEffect(() => {
     (async () => {
@@ -565,19 +564,30 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   }
 
   const handleCheckUpdate = async () => {
-    if (!desktop) { message.info(t('检查更新仅在桌面应用中可用')); return }
-    setCheckingUpdate(true)
+    if (!desktop && !appUpdate.preview) { message.info(t('检查更新仅在桌面应用中可用')); return }
     try {
-      const { update, currentVersion } = await runManualUpdateCheck()
-      if (currentVersion) setVersion(currentVersion)
-      if (update) setPendingUpdate(update)
-      else message.success(currentVersion ? t('已是最新版本（{{version}}）', { version: currentVersion }) : t('已是最新版本'))
+      const result = await appUpdate.checkNow()
+      if (result === 'current') {
+        const current = appUpdate.currentVersion || version
+        message.success(current ? t('已是最新版本（{{version}}）', { version: current }) : t('已是最新版本'))
+      }
     } catch (err) {
-      message.error(t('检查更新失败: {{error}}', { error: String(err) }))
-    } finally {
-      setCheckingUpdate(false)
+      const text = err instanceof Error ? err.message : String(err)
+      if (text === 'desktop-only') message.info(t('检查更新仅在桌面应用中可用'))
+      else message.error(t('检查更新失败: {{error}}', { error: text.split('{{').join('{') }))
     }
   }
+
+  const shownVersion = appUpdate.currentVersion || version
+  const versionHint = appUpdate.phase === 'ready' || appUpdate.phase === 'restarting'
+    ? t('可更新到 {{version}}', { version: appUpdate.version })
+    : appUpdate.phase === 'downloading'
+      ? t('正在准备 {{version}}', { version: appUpdate.version })
+      : appUpdate.phase === 'failed'
+        ? t('更新没有下载完：{{error}}', { error: appUpdate.error })
+        : shownVersion
+          ? t('当前 {{version}}', { version: shownVersion })
+          : t('桌面应用可检查 GitHub Release 上的更新。')
 
   return (
     <Section title={t("应用")} description={t("外观、启动与隐私。")}>
@@ -588,9 +598,17 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         <Row label={t("开机自动启动")} hint={t("启用后随系统启动，可从托盘打开。仅桌面应用可用。")}>
           <Switch checked={autostart} onChange={toggleAutostart} loading={busy} disabled={!desktop} />
         </Row>
-        {desktop && (
-          <Row label={t('版本')} hint={version ? t('当前 {{version}}', { version }) : t('桌面应用可检查 GitHub Release 上的更新。')}>
-            <Btn size="sm" loading={checkingUpdate} onClick={() => void handleCheckUpdate()}>{t('检查更新')}</Btn>
+        {(desktop || appUpdate.preview) && (
+          <Row label={t('版本')} hint={versionHint}>
+            {appUpdate.phase === 'ready' || appUpdate.phase === 'restarting' ? (
+              <Btn size="sm" variant="cta" loading={appUpdate.phase === 'restarting'} onClick={() => void appUpdate.restart()}>{t('立即重启')}</Btn>
+            ) : appUpdate.phase === 'downloading' ? (
+              <Btn size="sm" onClick={appUpdate.showToast}>{t('查看进度')}</Btn>
+            ) : appUpdate.phase === 'failed' ? (
+              <Btn size="sm" onClick={() => void appUpdate.retry()}>{t('重试')}</Btn>
+            ) : (
+              <Btn size="sm" loading={appUpdate.phase === 'checking'} onClick={() => void handleCheckUpdate()}>{t('检查更新')}</Btn>
+            )}
           </Row>
         )}
         <Row label={t("匿名使用统计")} hint={t("只采集功能使用、出片成功 / 失败等匿名事件，不含视频内容、字幕文本或 API 密钥。关闭后仍可在反馈里主动发送。")}>
@@ -603,14 +621,6 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
           <span className="ac-hint" style={{ margin: 0 }}>{t("即将推出")}</span>
         </Row>
       </div>
-      {pendingUpdate && (
-        <UpdateDialog
-          update={pendingUpdate}
-          currentVersion={version}
-          open
-          onClose={() => setPendingUpdate(null)}
-        />
-      )}
     </Section>
   )
 }

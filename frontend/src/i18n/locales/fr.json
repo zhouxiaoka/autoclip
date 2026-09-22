@@ -617,5 +617,16 @@
   "发现 {{version}}，当前是 {{current}}。下载安装后会自动重启。": "La version {{version}} est disponible ; vous utilisez {{current}}. L’application redémarrera après l’installation.",
   "发现 {{version}}。下载安装后会自动重启。": "La version {{version}} est disponible. L’application redémarrera après l’installation.",
   "稍后": "Plus tard",
-  "下载并安装": "Télécharger et installer"
+  "下载并安装": "Télécharger et installer",
+  "新版本已就绪": "Nouvelle version prête",
+  "正在准备更新": "Préparation de la mise à jour",
+  "正在下载 {{version}}": "Téléchargement de {{version}}",
+  "{{version}} 已准备好。重启后换成这一版。": "{{version}} est prête. Redémarrez pour l’utiliser.",
+  "立即重启": "Redémarrer",
+  "正在重启": "Redémarrage",
+  "更新没有下载完": "La mise à jour ne s’est pas terminée",
+  "更新没有下载完：{{error}}": "La mise à jour ne s’est pas terminée : {{error}}",
+  "可更新到 {{version}}": "Prêt à passer à {{version}}",
+  "正在准备 {{version}}": "Préparation de {{version}}",
+  "查看进度": "Voir la progression"
 }

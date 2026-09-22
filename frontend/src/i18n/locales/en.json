@@ -617,5 +617,16 @@
   "发现 {{version}}，当前是 {{current}}。下载安装后会自动重启。": "Version {{version}} is available; you have {{current}}. The app will restart after installation.",
   "发现 {{version}}。下载安装后会自动重启。": "Version {{version}} is available. The app will restart after installation.",
   "稍后": "Later",
-  "下载并安装": "Download and install"
+  "下载并安装": "Download and install",
+  "新版本已就绪": "Update ready",
+  "正在准备更新": "Preparing update",
+  "正在下载 {{version}}": "Downloading {{version}}",
+  "{{version}} 已准备好。重启后换成这一版。": "{{version}} is ready. Restart to switch to it.",
+  "立即重启": "Restart now",
+  "正在重启": "Restarting",
+  "更新没有下载完": "Update did not finish",
+  "更新没有下载完：{{error}}": "Update did not finish: {{error}}",
+  "可更新到 {{version}}": "Ready to update to {{version}}",
+  "正在准备 {{version}}": "Preparing {{version}}",
+  "查看进度": "View progress"
 }

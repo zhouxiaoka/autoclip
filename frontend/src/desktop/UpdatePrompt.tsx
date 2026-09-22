@@ -1,87 +1,258 @@
 import { useTranslation } from 'react-i18next'
 import { t } from '../i18n'
-import React, { useEffect, useState } from 'react'
-import { Btn, Dialog } from '../ui'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { Btn, ProgressLine } from '../ui'
+import { isDesktopMode } from '../utils/desktopMode'
 import {
   type AppUpdate,
   checkForUpdate,
+  emptyProgress,
   getAppVersion,
-  installUpdateAndRelaunch,
   maybeCheckForUpdate,
 } from './updater'
+import { applyDownloadEvent, displayError, previewNotes, SNOOZE_KEY } from './updateSchedule'
 
-export const UpdateDialog: React.FC<{
-  update: AppUpdate
-  currentVersion?: string
-  open: boolean
-  onClose: () => void
-}> = ({ update, currentVersion, open, onClose }) => {
-  useTranslation()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+export type UpdatePhase = 'idle' | 'checking' | 'downloading' | 'ready' | 'failed' | 'restarting'
 
-  const install = async () => {
-    setBusy(true)
-    setError('')
-    try {
-      await installUpdateAndRelaunch(update)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onClose={() => { if (!busy) onClose() }}
-      title={t('有新版本')}
-      description={currentVersion
-        ? t('发现 {{version}}，当前是 {{current}}。下载安装后会自动重启。', { version: update.version, current: currentVersion })
-        : t('发现 {{version}}。下载安装后会自动重启。', { version: update.version })}
-      footer={(
-        <>
-          <Btn size="sm" onClick={onClose} disabled={busy}>{t('稍后')}</Btn>
-          <Btn size="sm" variant="cta" loading={busy} onClick={() => void install()}>{t('下载并安装')}</Btn>
-        </>
-      )}
-    >
-      {update.body && (
-        <p className="ac-sub" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{update.body}</p>
-      )}
-      {error && <p className="ac-sub" style={{ margin: '10px 0 0', color: 'var(--ac-error)' }}>{error}</p>}
-    </Dialog>
-  )
+export type AppUpdateController = {
+  phase: UpdatePhase
+  desktop: boolean
+  preview: boolean
+  version: string
+  currentVersion: string
+  notes: string
+  percent: number | null
+  error: string
+  toastVisible: boolean
+  checkNow: () => Promise<'current' | 'available'>
+  snooze: () => void
+  showToast: () => void
+  restart: () => Promise<void>
+  retry: () => Promise<void>
 }
 
-/** 启动时静默检查；有更新再弹出，不自动安装。 */
-export const UpdatePrompt: React.FC = () => {
-  const [update, setUpdate] = useState<AppUpdate | null>(null)
-  const [current, setCurrent] = useState('')
+const UpdateContext = createContext<AppUpdateController | null>(null)
 
-  useEffect(() => {
-    void (async () => {
-      const [found, version] = await Promise.all([maybeCheckForUpdate(), getAppVersion()])
-      setCurrent(version)
-      setUpdate(found)
-    })()
+type PreviewKind = 'downloading' | 'ready' | 'failed'
+
+function readPreview(): PreviewKind | null {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return null
+  const query = window.location.hash.split('?')[1] || ''
+  const value = new URLSearchParams(query).get('previewUpdate')
+  if (value === 'downloading' || value === 'ready' || value === 'failed') return value
+  return null
+}
+
+function readSnooze(): string {
+  try { return sessionStorage.getItem(SNOOZE_KEY) || '' } catch { return '' }
+}
+
+function writeSnooze(version: string) {
+  try {
+    if (version) sessionStorage.setItem(SNOOZE_KEY, version)
+  } catch { /* 隐私模式 */ }
+}
+
+function clearSnooze() {
+  try { sessionStorage.removeItem(SNOOZE_KEY) } catch { /* 隐私模式 */ }
+}
+
+export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const previewKind = useMemo(readPreview, [])
+  const [phase, setPhase] = useState<UpdatePhase>(
+    previewKind === 'downloading' ? 'downloading' : previewKind === 'ready' ? 'ready' : previewKind === 'failed' ? 'failed' : 'idle',
+  )
+  const [desktop, setDesktop] = useState(Boolean(previewKind))
+  const [version, setVersion] = useState(previewKind ? '1.4.0' : '')
+  const [currentVersion, setCurrentVersion] = useState(previewKind ? '1.3.1' : '')
+  const [notes, setNotes] = useState(previewKind && previewKind !== 'failed' ? '后台下载新版本，准备好后提示重启。' : '')
+  const [percent, setPercent] = useState<number | null>(previewKind === 'downloading' ? 42 : previewKind === 'ready' ? 100 : null)
+  const [error, setError] = useState(previewKind === 'failed' ? 'offline' : '')
+  const [toastVisible, setToastVisible] = useState(Boolean(previewKind))
+  const live = useRef<AppUpdate | null>(null)
+  const generation = useRef(0)
+
+  const beginDownload = useCallback(async (found: AppUpdate) => {
+    const token = ++generation.current
+    const previous = live.current
+    live.current = found
+    if (previous && previous !== found) void previous.close().catch(() => undefined)
+    setVersion(found.version)
+    setNotes(previewNotes(found.body))
+    setError('')
+    setPercent(null)
+    setPhase('downloading')
+    setToastVisible(readSnooze() !== found.version)
+    const snap = emptyProgress()
+    let latest = snap
+    let lastPaint = 0
+    try {
+      await found.download((event) => {
+        if (token !== generation.current) return
+        latest = applyDownloadEvent(latest, event)
+        const now = Date.now()
+        if (event.event === 'Finished' || now - lastPaint > 150) {
+          lastPaint = now
+          setPercent(latest.percent)
+        }
+      })
+      if (token !== generation.current) return
+      setPercent(100)
+      setPhase('ready')
+      if (readSnooze() !== found.version) setToastVisible(true)
+    } catch (err) {
+      if (token !== generation.current) return
+      setError(displayError(err))
+      setPhase('failed')
+      setToastVisible(true)
+    }
   }, [])
 
-  if (!update) return null
-  return (
-    <UpdateDialog
-      update={update}
-      currentVersion={current}
-      open
-      onClose={() => setUpdate(null)}
-    />
-  )
+  const checkNow = useCallback(async (): Promise<'current' | 'available'> => {
+    if (previewKind) {
+      setToastVisible(true)
+      return phase === 'idle' ? 'current' : 'available'
+    }
+    if (!(await isDesktopMode())) throw new Error('desktop-only')
+    setPhase('checking')
+    setError('')
+    try {
+      const found = await checkForUpdate()
+      const current = await getAppVersion()
+      setCurrentVersion(current)
+      setDesktop(true)
+      if (!found) {
+        setPhase('idle')
+        setVersion('')
+        setNotes('')
+        setToastVisible(false)
+        const previous = live.current
+        live.current = null
+        if (previous) void previous.close().catch(() => undefined)
+        return 'current'
+      }
+      clearSnooze()
+      await beginDownload(found)
+      return 'available'
+    } catch (err) {
+      setPhase('idle')
+      throw err
+    }
+  }, [beginDownload, phase, previewKind])
+
+  const restart = useCallback(async () => {
+    if (previewKind) {
+      setPhase('restarting')
+      setToastVisible(true)
+      return
+    }
+    const found = live.current
+    if (!found) return
+    setPhase('restarting')
+    setToastVisible(true)
+    try {
+      await found.installAndRelaunch()
+    } catch (err) {
+      setError(displayError(err))
+      setPhase('ready')
+      setToastVisible(true)
+    }
+  }, [previewKind])
+
+  const retry = useCallback(async () => {
+    clearSnooze()
+    await checkNow()
+  }, [checkNow])
+
+  const snooze = useCallback(() => {
+    writeSnooze(version)
+    setToastVisible(false)
+  }, [version])
+
+  const showToast = useCallback(() => setToastVisible(true), [])
+
+  useEffect(() => {
+    if (previewKind) return
+    let cancelled = false
+    void (async () => {
+      const isDesktop = await isDesktopMode()
+      if (cancelled) return
+      setDesktop(isDesktop)
+      const current = await getAppVersion()
+      if (cancelled) return
+      setCurrentVersion(current)
+      if (!isDesktop) return
+      const found = await maybeCheckForUpdate()
+      if (cancelled || !found) return
+      await beginDownload(found)
+    })()
+    return () => { cancelled = true }
+  }, [beginDownload, previewKind])
+
+  const value = useMemo<AppUpdateController>(() => ({
+    phase, desktop, preview: Boolean(previewKind), version, currentVersion, notes, percent, error, toastVisible,
+    checkNow, snooze, showToast, restart, retry,
+  }), [phase, desktop, previewKind, version, currentVersion, notes, percent, error, toastVisible, checkNow, snooze, showToast, restart, retry])
+
+  return <UpdateContext.Provider value={value}>{children}</UpdateContext.Provider>
 }
 
-export async function runManualUpdateCheck(): Promise<{
-  update: AppUpdate | null
-  currentVersion: string
-}> {
-  const [update, currentVersion] = await Promise.all([checkForUpdate(), getAppVersion()])
-  return { update, currentVersion }
+export function useAppUpdate(): AppUpdateController {
+  const value = useContext(UpdateContext)
+  if (!value) throw new Error('useAppUpdate must be used within UpdateProvider')
+  return value
+}
+
+export const UpdateToast: React.FC = () => {
+  useTranslation()
+  const update = useAppUpdate()
+  const { toastVisible, phase, snooze } = update
+  useEffect(() => {
+    if (!toastVisible) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && phase !== 'restarting') snooze()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toastVisible, phase, snooze])
+
+  if (!update.toastVisible) return null
+  const title = update.phase === 'ready' || update.phase === 'restarting'
+    ? t('新版本已就绪')
+    : update.phase === 'failed'
+      ? t('更新没有下载完')
+      : t('正在准备更新')
+  const description = update.phase === 'failed'
+    ? update.error
+    : update.phase === 'downloading'
+      ? t('正在下载 {{version}}', { version: update.version })
+      : t('{{version}} 已准备好。重启后换成这一版。', { version: update.version })
+
+  return (
+    <div className="ac-update-toast" role="status" aria-live="polite" data-phase={update.phase}>
+      <h3>{title}</h3>
+      <p>{description}</p>
+      {update.notes && update.phase !== 'failed' && <p className="ac-update-notes">{update.notes}</p>}
+      {update.phase === 'downloading' && (
+        <div className="ac-update-progress">
+          <ProgressLine percent={update.percent ?? 0} />
+          {update.percent != null && <span className="ac-update-percent">{update.percent}%</span>}
+        </div>
+      )}
+      <div className="ac-update-actions">
+        {update.phase !== 'restarting' && (
+          <Btn size="sm" onClick={update.snooze}>{t('稍后')}</Btn>
+        )}
+        {update.phase === 'ready' && (
+          <Btn size="sm" variant="cta" onClick={() => void update.restart()}>{t('立即重启')}</Btn>
+        )}
+        {update.phase === 'failed' && (
+          <Btn size="sm" variant="cta" onClick={() => void update.retry()}>{t('重试')}</Btn>
+        )}
+        {update.phase === 'restarting' && (
+          <Btn size="sm" variant="cta" loading>{t('正在重启')}</Btn>
+        )}
+      </div>
+    </div>
+  )
 }
