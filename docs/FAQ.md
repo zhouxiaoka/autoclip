@@ -20,7 +20,13 @@ AutoClip 本身免费、开源（MIT）。云端模型调用由你选择的服�
 
 第一次出片请自备 3–5 分钟、对白清楚的短样片，最好带时间轴准确的 `.srt`。来源可以是本地文件、B 站或 YouTube，请确认你有权使用。AutoClip 不托管官方样片，Release 里也没有样片压缩包或成片下载。
 
-示例链接，非官方托管 / Example link, not hosted by AutoClip：<https://www.youtube.com/watch?v=0YNeyBANrTI>（示例 · 约 3 分钟口播；在 YouTube 打开中文字幕后导入，或先下载字幕为 SRT。非 AutoClip 托管。）也可自选任意带字幕的 3–5 分钟公开访谈或口播。准备步骤见 [安装指南 · 自备短样片](USER_INSTALLATION_GUIDE.md#自备短样片)，卡点见 [讨论 #128](https://github.com/zhouxiaoka/autoclip/discussions/128)。
+官方频道示例（不是搬运或第三方切片频道）：
+
+- OpenAI 官方：[Say hello to GPT-4o](https://www.youtube.com/watch?v=vgYi3Wr7v_g)。对谈/演示口播，可开字幕；若偏长可只导入前几分钟。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Y Combinator 官方：[Kevin Hale - How to Pitch Your Startup](https://www.youtube.com/watch?v=17XZGUX_9iM)。第一次试用建议只取前 5–8 分钟。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Stanford 官方：[Meet Our Faculty: Anna Lembke](https://www.youtube.com/watch?v=ABfY8FUyvSI)。约 2.5 分钟短访谈，适合冷启动。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+
+准备步骤见 [安装指南 · 自备短样片](USER_INSTALLATION_GUIDE.md#自备短样片)，卡点见 [讨论 #128](https://github.com/zhouxiaoka/autoclip/discussions/128)。
 
 ## 安装与启动
 
@@ -68,7 +74,7 @@ autoclip doctor --provider ollama
 autoclip run talk.mp4 --provider ollama --srt talk.srt --min-score 0.5 --json
 ```
 
-把示例文件名和模型选项换成实际配置；没有 SRT 时去掉 `--srt talk.srt` 并确保转写已就绪。降低阈值只影响筛选，不保证一定有片段。第一次验证请使用自备的 3–5 分钟短样片。示例链接，非官方托管 / Example link, not hosted by AutoClip：<https://www.youtube.com/watch?v=0YNeyBANrTI>。用法上仍不清楚时，到 [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) 讨论。能复现的故障仍开 Issue。
+把示例文件名和模型选项换成实际配置；没有 SRT 时去掉 `--srt talk.srt` 并确保转写已就绪。降低阈值只影响筛选，不保证一定有片段。第一次验证请使用自备的 3–5 分钟短样片。官方频道示例见上文「哪些视频比较适合」。用法上仍不清楚时，到 [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) 讨论。能复现的故障仍开 Issue。
 
 ### 处理慢、内存不足怎么办？
 

@@ -42,11 +42,13 @@ AutoClip does not host an official sample video. Releases do not include a sampl
 - Prefer an accurately timed `.srt`. Without subtitles, prepare local Whisper in Settings first, or choose a video that already has captions.
 - Sources: a local file, Bilibili, or YouTube. Confirm that you have the right to use the media.
 
-示例链接，非官方托管 / Example link, not hosted by AutoClip:
+These three links are from official institution YouTube channels, not reuploads or third-party clip channels. AutoClip does not provide a finished-file download. Each item is marked 示例链接 · 非 AutoClip 托管 · 请自行确认使用权 (example link, not hosted by AutoClip; confirm you have the right to use it).
 
-- <https://www.youtube.com/watch?v=0YNeyBANrTI> — Example · about 3 minutes of spoken commentary. On YouTube, turn on Chinese captions, then import the link (or download the captions as SRT first). Not hosted by AutoClip.
+- OpenAI (official): [Say hello to GPT-4o](https://www.youtube.com/watch?v=vgYi3Wr7v_g). Conversation and demo; captions can be turned on. If it is long, import only the first few minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Y Combinator (official): [Kevin Hale - How to Pitch Your Startup](https://www.youtube.com/watch?v=17XZGUX_9iM). Startup School talk. For a first try, use only the first 5–8 minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Stanford (official): [Meet Our Faculty: Anna Lembke](https://www.youtube.com/watch?v=ABfY8FUyvSI). About 2.5 minutes; a short interview suited to a first run. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
 
-You can also choose any public 3–5 minute interview or spoken video with captions on Bilibili or YouTube. Confirm that you have the right to use it. We do not provide a finished-file download.
+You can also use your own 3–5 minute clip.
 
 Common sticking points on a first run are in [Discussion #128](https://github.com/zhouxiaoka/autoclip/discussions/128).
 
