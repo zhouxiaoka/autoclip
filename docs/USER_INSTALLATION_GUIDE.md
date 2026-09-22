@@ -42,13 +42,15 @@ AutoClip 不托管官方样片。Release 里没有样片压缩包，也不提供
 - 尽量带上时间轴准确的 `.srt`。没有字幕时，先在设置中准备本地 Whisper，或换一条已有字幕的视频。
 - 来源可以是本地文件、B 站或 YouTube。请确认你有权使用该媒体。
 
-下面三条都来自机构官方 YouTube 频道，不是搬运，也不是第三方切片频道。我们不提供成片下载。
+下面是机构官方 YouTube 频道的示例，任选一条即可，不必三条都跑。口播以英语为主。导入前打开官方字幕或自备 SRT；也可以用 Whisper 生成字幕。我们不提供成片下载。
 
-- OpenAI 官方：[Say hello to GPT-4o](https://www.youtube.com/watch?v=vgYi3Wr7v_g)。对谈/演示口播，可开字幕；若偏长可只导入前几分钟。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- Y Combinator 官方：[Kevin Hale - How to Pitch Your Startup](https://www.youtube.com/watch?v=17XZGUX_9iM)。Startup School 口播；第一次试用建议只取前 5–8 分钟。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- Stanford 官方：[Meet Our Faculty: Anna Lembke](https://www.youtube.com/watch?v=ABfY8FUyvSI)。约 2.5 分钟短访谈，适合冷启动。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+第一次验证优先用较短的 Stanford 访谈。需要更长的口播时，再选 YC 或 OpenAI。
 
-也可改用你自己的 3–5 分钟短片。
+- Stanford 官方（优先）：[Meet Our Faculty: Anna Lembke](https://www.youtube.com/watch?v=ABfY8FUyvSI)。约 2.5 分钟短访谈。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Y Combinator 官方（可选）：[Kevin Hale - How to Pitch Your Startup](https://www.youtube.com/watch?v=17XZGUX_9iM)。Startup School 口播；建议只取前 5–8 分钟。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- OpenAI 官方（可选）：[Say hello to GPT-4o](https://www.youtube.com/watch?v=vgYi3Wr7v_g)。对谈/演示口播；若偏长可只导入前几分钟。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+
+也可改用你自己的 3–5 分钟短片。导入前打开官方字幕或自备 SRT。
 
 第一次出片的常见卡点见 [讨论 #128](https://github.com/zhouxiaoka/autoclip/discussions/128)。
 

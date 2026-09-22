@@ -174,6 +174,12 @@ Check the failed stage: empty subtitles, model connection failures, an overly hi
 
 Analysis primarily uses transcripts, making interviews, podcasts, lectures, and spoken commentary suitable. Purely visual action or music may work less well. Time depends on duration, hardware, models, and export settings; start with a 3–5 minute clip you provide.
 
+Or pick one official-channel example below. You do not need to run all three. The dialogue is mostly English. Before import, turn on the official captions, use Whisper, or bring your own SRT（导入前打开官方字幕或自备 SRT）. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权 (example link, not hosted by AutoClip; confirm you have the right to use it).
+
+- Start here: [Stanford · Meet Our Faculty: Anna Lembke](https://www.youtube.com/watch?v=ABfY8FUyvSI) (about 2.5 minutes)
+- Optional: [YC · Kevin Hale - How to Pitch Your Startup](https://www.youtube.com/watch?v=17XZGUX_9iM) (first 5–8 minutes)
+- Optional: [OpenAI · Say hello to GPT-4o](https://www.youtube.com/watch?v=vgYi3Wr7v_g)
+
 </details>
 
 [Full troubleshooting guide](docs/FAQ.en.md) · [Known issues](https://github.com/zhouxiaoka/autoclip/issues/96)

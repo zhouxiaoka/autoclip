@@ -42,13 +42,15 @@ AutoClip does not host an official sample video. Releases do not include a sampl
 - Prefer an accurately timed `.srt`. Without subtitles, prepare local Whisper in Settings first, or choose a video that already has captions.
 - Sources: a local file, Bilibili, or YouTube. Confirm that you have the right to use the media.
 
-These three links are from official institution YouTube channels, not reuploads or third-party clip channels. AutoClip does not provide a finished-file download. Each item is marked 示例链接 · 非 AutoClip 托管 · 请自行确认使用权 (example link, not hosted by AutoClip; confirm you have the right to use it).
+These are official-channel examples. Pick one; you do not need to run all three. The dialogue is mostly English. Before import, turn on the official captions, use Whisper, or bring your own SRT（导入前打开官方字幕或自备 SRT）. AutoClip does not provide a finished-file download. Each item is marked 示例链接 · 非 AutoClip 托管 · 请自行确认使用权 (example link, not hosted by AutoClip; confirm you have the right to use it).
 
-- OpenAI (official): [Say hello to GPT-4o](https://www.youtube.com/watch?v=vgYi3Wr7v_g). Conversation and demo; captions can be turned on. If it is long, import only the first few minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- Y Combinator (official): [Kevin Hale - How to Pitch Your Startup](https://www.youtube.com/watch?v=17XZGUX_9iM). Startup School talk. For a first try, use only the first 5–8 minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- Stanford (official): [Meet Our Faculty: Anna Lembke](https://www.youtube.com/watch?v=ABfY8FUyvSI). About 2.5 minutes; a short interview suited to a first run. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+For a first run, start with the short Stanford interview. YC and OpenAI are optional if you want a longer talk.
 
-You can also use your own 3–5 minute clip.
+- Stanford (official, start here): [Meet Our Faculty: Anna Lembke](https://www.youtube.com/watch?v=ABfY8FUyvSI). About 2.5 minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Y Combinator (official, optional): [Kevin Hale - How to Pitch Your Startup](https://www.youtube.com/watch?v=17XZGUX_9iM). Startup School talk; use the first 5–8 minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- OpenAI (official, optional): [Say hello to GPT-4o](https://www.youtube.com/watch?v=vgYi3Wr7v_g). Conversation and demo; if it is long, import only the first few minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+
+You can also use your own 3–5 minute clip. Before import, turn on the official captions or bring your own SRT.
 
 Common sticking points on a first run are in [Discussion #128](https://github.com/zhouxiaoka/autoclip/discussions/128).
 
