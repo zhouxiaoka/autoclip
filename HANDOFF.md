@@ -169,7 +169,7 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 
 ## 四、迭代计划
 
-当前发布版本是 **v1.3.1**。社区新想法默认停在 Exploring。接下来先做 Windows 真机验证、安装包公证与代码签名、首页和项目卡。账号仍等公证和代码签名完成。排序见 `docs/COMMUNITY_BOARD.md`。
+当前发布版本是 **v1.3.1**。合进 main 的改动先停在路线图的 Building，攒一批再打一个 tag，不为单个 PR 发版。社区新想法默认停在 Exploring。接下来先做 Windows 真机验证、安装包公证与代码签名、首页和项目卡。账号仍等公证和代码签名完成。排序见 `docs/COMMUNITY_BOARD.md`。
 
 ### v1.2.1 发版
 - [x] 合并 #89 #90 #91 #92 #93 #94

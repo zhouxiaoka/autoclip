@@ -100,6 +100,8 @@ def project_readme(seed: dict) -> str:
         "",
         "Exploring → Researching → Planned → Building → Testing → Shipped",
         "",
+        "合入 main 不等于发版。代码进了 main、还没有 Release 的卡片停在 Building。攒一批再打一个 tag，不为单个 PR 发版。",
+        "",
         "规则见仓库 `docs/COMMUNITY_BOARD.md`。",
         "",
         "## 已经发过版",
