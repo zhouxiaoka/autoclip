@@ -176,9 +176,9 @@ Analysis primarily uses transcripts, making interviews, podcasts, lectures, and 
 
 Or pick one example below. You do not need to run all three. The dialogue is mostly English; turn on official captions or bring your own SRT/Whisper（多为英语对白，可开官方字幕或自备 SRT/Whisper）. 示例·非托管·自担使用权 (example link, not hosted by AutoClip; you are responsible for usage rights). For a cold start of 10 minutes or less, import the full Stanford interview.
 
-- Timely interview: [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Third-party interview (Sources Podcast with Alex Heath, September 2026, about 68 minutes; not an OpenAI official channel). 第一次只导前 5–8 分钟. 多为英语对白，可开官方字幕或自备 SRT/Whisper. 示例·非托管·自担使用权.
+- Timely interview: [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Third-party interview (Sources Podcast with Alex Heath, September 2026, about 68 minutes; not an OpenAI official channel). AutoClip does not automatically run only the first N minutes. Trim the file to about 5–8 minutes yourself (or switch to a shorter clip) before import. For a first cold start, use the full Stanford Dowling interview. 多为英语对白，可开官方字幕或自备 SRT/Whisper. 示例·非托管·自担使用权.
 - Cold start: [Stanford ENERGY · Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I) (about 3:47; the full length is fine)
-- Podcast: [YC · The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y) (Y Combinator official, about 36 minutes, September 2026). 第一次只导前 5–8 分钟.
+- Podcast: [YC · The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y) (Y Combinator official, about 36 minutes, September 2026). AutoClip does not automatically run only the first N minutes. Trim the file to about 5–8 minutes yourself (or switch to a shorter clip) before import. For a first cold start, use the full Stanford Dowling interview.
 
 </details>
 

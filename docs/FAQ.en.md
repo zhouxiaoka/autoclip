@@ -22,9 +22,9 @@ For a first run, bring your own 3–5 minute clip with clear speech, preferably 
 
 Pick one. You do not need to run all three. The dialogue is mostly English; turn on official captions or bring your own SRT/Whisper（多为英语对白，可开官方字幕或自备 SRT/Whisper）. 示例·非托管·自担使用权 (example link, not hosted by AutoClip; you are responsible for usage rights). For a cold start of 10 minutes or less, import the full Stanford interview.
 
-- Timely interview: [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Third-party interview (Sources Podcast with Alex Heath, September 2026, about 68 minutes; not an OpenAI official channel). 第一次只导前 5–8 分钟. 多为英语对白，可开官方字幕或自备 SRT/Whisper. 示例·非托管·自担使用权.
+- Timely interview: [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Third-party interview (Sources Podcast with Alex Heath, September 2026, about 68 minutes; not an OpenAI official channel). AutoClip does not automatically run only the first N minutes. Trim the file to about 5–8 minutes yourself (or switch to a shorter clip) before import. For a first cold start, use the full Stanford Dowling interview. 多为英语对白，可开官方字幕或自备 SRT/Whisper. 示例·非托管·自担使用权.
 - Stanford ENERGY (cold start): [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I). About 3:47; the full length is fine. 示例·非托管·自担使用权.
-- Y Combinator (official podcast): [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y). About 36 minutes (September 2026). 第一次只导前 5–8 分钟. 示例·非托管·自担使用权.
+- Y Combinator (official podcast): [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y). About 36 minutes (September 2026). AutoClip does not automatically run only the first N minutes. Trim the file to about 5–8 minutes yourself (or switch to a shorter clip) before import. For a first cold start, use the full Stanford Dowling interview. 示例·非托管·自担使用权.
 
 Setup steps are in the [installation guide](USER_INSTALLATION_GUIDE.en.md#bring-your-own-short-clip); sticking points are in [Discussion #128](https://github.com/zhouxiaoka/autoclip/discussions/128).
 
@@ -74,7 +74,7 @@ autoclip doctor --provider ollama
 autoclip run talk.mp4 --provider ollama --srt talk.srt --min-score 0.5 --json
 ```
 
-Replace the filenames and provider with your actual setup. Without SRT, remove `--srt talk.srt` and prepare transcription first. Lowering the threshold changes selection; it does not guarantee clips. For a first check, use a clip you provide, or only the full Stanford ENERGY interview above. You do not need to run all three examples. The dialogue is mostly English; turn on official captions or bring your own SRT/Whisper（多为英语对白，可开官方字幕或自备 SRT/Whisper）. If you use the Sources interview or the YC podcast instead, 第一次只导前 5–8 分钟. 示例·非托管·自担使用权. If usage is still unclear, continue in the [first-clip Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128). Reproducible bugs still belong in Issues.
+Replace the filenames and provider with your actual setup. Without SRT, remove `--srt talk.srt` and prepare transcription first. Lowering the threshold changes selection; it does not guarantee clips. For a first check, use a clip you provide, or only the full Stanford ENERGY interview above. You do not need to run all three examples. The dialogue is mostly English; turn on official captions or bring your own SRT/Whisper（多为英语对白，可开官方字幕或自备 SRT/Whisper）. If you use the Sources interview or the YC podcast instead, AutoClip does not automatically run only the first N minutes. Trim the file to about 5–8 minutes yourself (or switch to a shorter clip) before import. For a first cold start, use the full Stanford Dowling interview. 示例·非托管·自担使用权. If usage is still unclear, continue in the [first-clip Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128). Reproducible bugs still belong in Issues.
 
 ### Why is processing slow or using too much memory?
 
