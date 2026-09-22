@@ -39,7 +39,7 @@ def validate_draft(project_id, draft):
     intelligence.validate_scenes(draft.scenes, duration)
 
 @router.get('/title-presets/{style}/thumbnail')
-def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'], v: int = Query(1, ge=1, le=3)):
+def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'], v: int = Query(1, ge=1, le=4)):
     from backend.services.studio.title_art import thumbnail
     return Response(call(thumbnail, style, v), media_type='image/png', headers={'Cache-Control':'public, max-age=86400'})
 

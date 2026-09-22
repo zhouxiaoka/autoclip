@@ -354,7 +354,7 @@ def test_portrait_fills_frame_and_applies_focus_and_title(root,style,x,expected)
     assert max(pixel)-min(pixel)>180
 
 
-@pytest.mark.parametrize('style,version', [('comic',1),('neon',1),('arena',1),('comic',2),('neon',2),('arena',2),('editorial',2),('comic',3),('neon',3),('arena',3),('editorial',3),('pixel',3),('frosted',3)])
+@pytest.mark.parametrize('style,version', [('comic',1),('neon',1),('arena',1),('comic',2),('neon',2),('arena',2),('editorial',2),('comic',3),('neon',3),('arena',3),('editorial',3),('pixel',3),('frosted',3),('comic',4)])
 def test_title_art_preview_matches_export_geometry(root,style,version):
     import io
     from PIL import Image,ImageChops,ImageStat
@@ -497,16 +497,16 @@ def test_title_versions_persist_and_have_distinct_previews(client):
     old=client.post('/studio/p1/title-preview',json=body)
     new=client.post('/studio/p1/title-preview',json={**body,'title_template_version':2})
     assert old.status_code==new.status_code==200 and old.content!=new.content
-    for version in (3,2,1):
+    for version in (4,3,2,1):
         body={**body,'title_template_version':version}
         saved=client.put('/studio/p1/drafts/'+d['id'],json=body).json()
         assert saved['title_template_version']==version
         body=saved
     assert client.post('/studio/p1/title-preview',json={**body,'title_style':'editorial'}).status_code==422
-    assert client.post('/studio/p1/title-preview',json={**body,'title_template_version':4}).status_code==422
+    assert client.post('/studio/p1/title-preview',json={**body,'title_template_version':5}).status_code==422
     for style in ['comic','neon','arena','editorial']:
         assert client.get('/studio/title-presets/'+style+'/thumbnail?v=2').status_code==200
-    assert client.get('/studio/title-presets/comic/thumbnail?v=4').status_code==422
+    assert client.get('/studio/title-presets/comic/thumbnail?v=4').status_code==200
 
 
 @pytest.mark.parametrize('style', ['comic','neon','arena','editorial','pixel','frosted'])
@@ -587,3 +587,17 @@ def test_frosted_keeps_moving_source_frames_in_sync(root,source):
         return Image.open(io.BytesIO(png)).convert('RGB').crop((0,90,320,180))
     for t in (.5,1,2):
         assert max(ImageStat.Stat(ImageChops.difference(frame('control',t),frame('glass-sync',t))).mean)<8
+
+
+def test_comic_v4_bounds_and_version_isolation():
+    from backend.services.studio.title_art import artwork
+    for text in ['CAN YOU\nESCAPE?', '你能逃出\n这里吗？', '逃げ切れる？', 'A']:
+        for w,h in [(1080,1920),(1920,1080),(320,180)]:
+            for scale,y in [(.75,.06),(1.2,.70)]:
+                box=artwork(text,'comic',w,h,scale=scale,y=y,version=4).getbbox()
+                assert box and box[0]>=w*.04 and box[2]<=w*.96
+                assert box[1]>=h*.035 and box[3]<=h*.91
+    for style in ['neon','arena','editorial','pixel','frosted','plain']:
+        with pytest.raises(ValidationError):draft(title_style=style,title_template_version=4)
+    with pytest.raises(ValueError,match='太长'):
+        artwork('a\nb\nc\nd','comic',1080,1920,version=4)

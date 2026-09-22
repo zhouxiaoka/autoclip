@@ -93,6 +93,9 @@ def artwork(text, style, w, h, scale=1, y=.12, accent=None, version=1):
     if version == 2 and style in ('comic', 'neon', 'arena', 'editorial'):
         from backend.services.studio.title_art_v2 import artwork as artwork_v2
         return artwork_v2(text, style, w, h, scale, y, accent)
+    if version == 4 and style == "comic":
+        from backend.services.studio.comic_art import artwork as comic_artwork
+        return comic_artwork(text, w, h, scale, y, accent)
     if version == 3:
         from backend.services.studio.title_art_v3 import artwork as artwork_v3
         return artwork_v3(text, style, w, h, scale, y, accent)

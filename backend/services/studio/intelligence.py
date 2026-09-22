@@ -117,5 +117,5 @@ def make_drafts(events, prefs):
         hooks = plans.get('hooks', [])[:3]
         if not hooks:
             raise ValueError('模型未返回成片方案')
-        return [Draft(id=uuid.uuid4().hex, title=h['title'], hook=h['hook'], scenes=[scene], language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', title_style='comic', title_template_version=3, subtitles=False, origin='visual-promo').model_dump() for h in hooks]
+        return [Draft(id=uuid.uuid4().hex, title=h['title'], hook=h['hook'], scenes=[scene], language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', title_style='comic', title_template_version=4, subtitles=False, origin='visual-promo').model_dump() for h in hooks]
     return [Draft(id=uuid.uuid4().hex, title=e.label, scenes=[e], language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit', subtitles=False, origin='visual-highlight').model_dump() for e in events]

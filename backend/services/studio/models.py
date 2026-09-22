@@ -36,7 +36,7 @@ class Draft(BaseModel):
     layout: Literal['fit', 'crop', 'blur'] = 'fit'
     crop_x: float = Field(default=.5, ge=0, le=1, allow_inf_nan=False)
     title_style: Literal['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'] = 'plain'
-    title_template_version: Literal[1, 2, 3] = 1
+    title_template_version: Literal[1, 2, 3, 4] = 1
     title_motion: bool = True
     title_scale: float = Field(default=1, ge=.75, le=1.2, allow_inf_nan=False)
     title_y: float = Field(default=.12, ge=.06, le=.70, allow_inf_nan=False)
@@ -51,6 +51,8 @@ class Draft(BaseModel):
 
     @model_validator(mode='after')
     def title_version(self):
+        if self.title_template_version == 4 and self.title_style != 'comic':
+            raise ValueError('文字模板版本 4 仅支持漫画冲击')
         if self.title_style == 'editorial' and self.title_template_version < 2:
             raise ValueError('极简大字需要文字模板版本 2 或更新')
         if self.title_style in ('pixel', 'frosted') and self.title_template_version != 3:

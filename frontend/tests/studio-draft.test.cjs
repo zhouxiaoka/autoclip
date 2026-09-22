@@ -27,7 +27,7 @@ test('appending the same source twice gives independent scene identities and enf
 test('portrait recommendation updates composition and title without modifying source or language',()=>{
  const original={...draft,language:'en',aspect:'landscape',layout:'fit'}
  const next=m.exports.portraitDesign(original)
- assert.equal(next.aspect,'portrait');assert.equal(next.layout,'crop');assert.equal(next.title_style,'comic');assert.equal(next.title_template_version,3)
+ assert.equal(next.aspect,'portrait');assert.equal(next.layout,'crop');assert.equal(next.title_style,'comic');assert.equal(next.title_template_version,4)
  assert.equal(next.crop_x,.5);assert.equal(next.language,'en');assert.equal(next.scenes,original.scenes)
  assert.equal(original.layout,'fit')
 })
