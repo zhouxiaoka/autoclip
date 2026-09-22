@@ -18,7 +18,7 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
   const thumbnail = completed ? studioApi.video(projectId, completed.job_id)
     : `${studioApi.source(projectId)}#t=${draft.scenes[0].start}`
   return <article className="ac-card">
-    <button className="ac-card-thumb studio-thumb" onClick={onEdit} aria-label={`预览 ${draft.title}`}>
+    <button className={`ac-card-thumb studio-thumb${completed ? " studio-thumb--exported" : ""}`} onClick={onEdit} aria-label={`预览 ${draft.title}`}>
       <video muted preload="metadata" src={thumbnail} />
       <span className="play">▷</span>
       <span className="ac-tag ac-tag--tl">{draft.origin==='visual-promo'?'推广成片':draft.origin==='visual-highlight'?'精彩高光':'成片草稿'}</span>
