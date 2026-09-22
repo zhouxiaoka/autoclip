@@ -36,3 +36,5 @@
 .studio-output-state--ready{color:var(--ac-accent)}.studio-output-state--failed{color:var(--ac-error)}
 .studio-output-hint{font-size:12px;line-height:1.5;color:var(--ac-muted);margin:4px 0 8px;overflow-wrap:anywhere}
 .studio-output-hint.studio-error{color:var(--ac-error)}
+
+.studio-thumb--exported{background:#19181a}.studio-thumb--exported video{object-fit:contain}
