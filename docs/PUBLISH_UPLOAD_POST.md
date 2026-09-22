@@ -159,8 +159,20 @@ autoclip publish <project_id> --clip 2 --platform tiktok --wait --json
 ## 6. 应用里怎么用
 
 1. **设置 → 发布**：海外账号和 B 站在同一页。粘贴 API Key，保存时会先向 Upload-Post 校验，再选默认 profile。B 站粘贴浏览器请求头里的 Cookie（需要 `SESSDATA`、`bili_jct`、`DedeUserID`），保存时向 B 站校验登录态。密钥写在本机数据目录的 `upload_post.json`，Cookie 写在 `bilibili.json`，权限都是 0600，不会进仓库。环境变量 `UPLOAD_POST_API_KEY`、`BILIBILI_COOKIE` 优先于文件。
-2. 切片上点 **发布**。这一页只做几件事：现在发或选一个时间、勾选已连接的账号（含 B 站）、可见范围默认「仅自己」。有竖屏账号就渲成 9:16，只发 B 站时按横屏，只有横屏海外账号时按原画。同一次可以一起发，画幅按目的地分开渲。标题不填就用切片标题。同一页也可以只下载成片。B 站定时要晚于现在两小时。
+2. 切片上点 **发布**。这一页只做几件事：现在发或选一个时间、勾选已连接的账号（含 B 站）、可见范围默认「仅自己」。有竖屏账号就渲成 9:16，只发 B 站时按横屏，只有横屏海外账号时按原画。同一次可以一起发，画幅按目的地分开渲。标题不填就用切片标题。同一页也可以只下载成片。B 站定时要晚于现在两小时。B 站优先用设计封面，失败截帧，封面失败不挡投稿。
 3. 现在发会先渲成片再等各平台结果。定时会在成片上传之后交给 Upload-Post，到点才发出，这时可以关掉应用。项目页的 **发布** 能看到这些记录，也可以换成月历；还没发出的排期可以取消。**排这一周** 把还没发的切片按分数填进周一、周三、周五的 09:00，确认后才提交。渲成片的过程中不要关窗口。
+
+打小版本前，用本机密钥做一次真实私密试发：
+
+```bash
+export UPLOAD_POST_API_KEY=…
+export UPLOAD_POST_USER=main          # 可选
+export UPLOAD_POST_PLATFORM=youtube   # 或 tiktok
+export BILIBILI_COOKIE='SESSDATA=…; bili_jct=…; DedeUserID=…'
+python3 scripts/verify_live_publish.py
+```
+
+脚本会生成一段 3 秒试片：YouTube 用 `privacyStatus=private`，TikTok 用 `SELF_ONLY`，B 站用 `is_only_self`。不打印密钥。
 
 CLI、MCP、API 仍然可用，见上文。
 
