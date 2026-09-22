@@ -165,7 +165,7 @@
 /* ---- dialog ---- */
 .ac-dialog-backdrop { position: fixed; inset: 0; background: rgba(26,26,25,.32); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 1200; animation: ac-fade var(--ac-t-short, 200ms) ease-out; }
 [data-theme="dark"] .ac-dialog-backdrop { background: rgba(0,0,0,.5); }
-.ac-dialog { width: min(520px, calc(100vw - 48px)); background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: 16px; box-shadow: var(--ac-shadow); padding: 24px 24px 20px; animation: ac-rise var(--ac-t-short, 200ms) ease-out; }
+.ac-dialog { width: min(520px, calc(100vw - 48px)); max-height: calc(100vh - 48px); overflow: auto; background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: 16px; box-shadow: var(--ac-shadow); padding: 24px 24px 20px; animation: ac-rise var(--ac-t-short, 200ms) ease-out; }
 .ac-dialog h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--ac-ink); }
 .ac-dialog p { margin: 6px 0 0; font-size: 13px; color: var(--ac-sub); line-height: 1.5; }
 .ac-dialog-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 20px; }
