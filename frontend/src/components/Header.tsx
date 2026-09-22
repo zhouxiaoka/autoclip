@@ -57,6 +57,24 @@ const Header: React.FC = () => {
 
       {/* Right side */}
       <div className="ac-header-actions">
+        {updatePending && (
+          <div className="ac-update-anchor">
+            <button
+              type="button"
+              className="ac-update-icon"
+              aria-expanded={appUpdate.toastVisible}
+              aria-label={t('有新版本可用')}
+              onClick={() => appUpdate.toastVisible ? appUpdate.snooze() : appUpdate.openUpdate()}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="12" cy="12" r="8.25" />
+                <path d="M12 16V8M9.5 10.5 12 8l2.5 2.5" />
+              </svg>
+            </button>
+            <UpdateToast />
+          </div>
+        )}
+        <div className="ac-header-permanent">
         <LanguageSelect />
         {/* 返回入口由各页面页头承担（见 DESIGN.md App Layer），顶栏只留全局动作 */}
         <Button
@@ -75,23 +93,6 @@ const Header: React.FC = () => {
             background: 'var(--ac-card)',
           }}
         />
-        {updatePending && (
-          <div className="ac-update-anchor">
-            <button
-              type="button"
-              className="ac-update-icon"
-              aria-expanded={appUpdate.toastVisible}
-              aria-label={t('有新版本可用')}
-              onClick={() => appUpdate.toastVisible ? appUpdate.snooze() : appUpdate.openUpdate()}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <circle cx="12" cy="12" r="8.25" />
-                <path d="M12 16V8M9.5 10.5 12 8l2.5 2.5" />
-              </svg>
-            </button>
-            <UpdateToast />
-          </div>
-        )}
         <Button
           type="text"
           icon={<SettingOutlined />}
@@ -106,6 +107,7 @@ const Header: React.FC = () => {
             background: isSettings ? 'var(--ac-line-2)' : 'var(--ac-card)',
           }}
         >{t("设置")}</Button>
+        </div>
       </div>
     </AntHeader>
   )

@@ -175,7 +175,8 @@
 @keyframes ac-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ---- in-app update: icon in the header, card drops under it ---- */
-.ac-header-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.ac-header-actions { display: flex; align-items: center; gap: 16px; flex: 0 0 auto; }
+.ac-header-permanent { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .ac-update-anchor { position: relative; display: flex; align-items: center; flex: 0 0 auto; }
 .ac-update-icon {
   width: 36px; height: 36px; padding: 0; border-radius: 999px; border: 1px solid var(--ac-line);
