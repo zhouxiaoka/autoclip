@@ -6,6 +6,8 @@ import ProjectDetailPage from './pages/ProjectDetailPage'
 import PublishClipPage from './pages/PublishClipPage'
 import PublishListPage from './pages/PublishListPage'
 import PublishWeekPage from './pages/PublishWeekPage'
+import ImportReview from './features/studio/ImportReview'
+import StudioEditor from './features/studio/StudioEditor'
 import SettingsPage from './pages/SettingsPage'
 import Header from './components/Header'
 import { UpdateProvider } from './desktop/UpdatePrompt'
@@ -34,6 +36,8 @@ function App() {
         <Content>
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/import/:id" element={<ImportReview />} />
+            <Route path="/project/:id/studio/:draftId" element={<StudioEditor />} />
             <Route path="/project/:id/publish/week" element={<PublishWeekPage />} />
             <Route path="/project/:id/publish/:clipId" element={<PublishClipPage />} />
             <Route path="/project/:id/publish" element={<PublishListPage />} />

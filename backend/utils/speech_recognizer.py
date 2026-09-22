@@ -426,7 +426,7 @@ class SpeechRecognizer:
             whisper_runtime.ensure_on_path()  # 让 faster_whisper 可导入
             from faster_whisper import WhisperModel  # 延迟导入：运行时安装目录里的包
 
-            language = None if config.language == LanguageCode.AUTO else str(config.language).split("-")[0]
+            language = None if config.language == LanguageCode.AUTO else config.language.value.split("-")[0]
             models_dir = str(whisper_runtime.get_models_dir() / "hub")
             device, compute_type = resolve_local_whisper_backend()
             logger.info(
@@ -444,9 +444,11 @@ class SpeechRecognizer:
 
             def transcribe(model, *, vad_filter: bool):
                 seg_iter, _info = model.transcribe(
-                    str(video_path), language=language, vad_filter=vad_filter,
+                    str(video_path), language=language, vad_filter=vad_filter, word_timestamps=True,
                 )
-                return [{"start": s.start, "end": s.end, "text": s.text} for s in seg_iter]
+                return ([{"start": s.start, "end": s.end, "text": s.text,
+                         "words": [{"text": w.word, "start": w.start, "end": w.end}
+                                   for w in (getattr(s, "words", None) or [])]} for s in seg_iter], _info)
 
             def transcribe_with_vad_fallback(model):
                 try:
@@ -470,7 +472,7 @@ class SpeechRecognizer:
                 model = load_model("cpu", "int8")
 
             try:
-                segments = transcribe_with_vad_fallback(model)
+                segments, _info = transcribe_with_vad_fallback(model)
             except RuntimeError as exc:
                 if device == "cpu":
                     raise
@@ -478,13 +480,19 @@ class SpeechRecognizer:
                     "Whisper 在 %s 上转写失败（%s），改用 CPU 重试",
                     device, type(exc).__name__,
                 )
-                segments = transcribe_with_vad_fallback(load_model("cpu", "int8"))
+                segments, _info = transcribe_with_vad_fallback(load_model("cpu", "int8"))
 
             if not segments:
                 raise SpeechRecognitionError("Whisper 未识别出任何语音内容")
 
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(self._segments_to_srt(segments), encoding="utf-8")
+            from backend.utils.word_timing import write_word_timing, sidecar_path
+            try:
+                write_word_timing(output_path, segments, getattr(_info, 'language', language))
+            except (ValueError, OSError):
+                sidecar_path(output_path).unlink(missing_ok=True)
+                logger.warning("词级时间不可用，保留普通字幕")
             logger.info(f"本地 faster-whisper 字幕生成成功: {output_path}")
             return output_path
 
