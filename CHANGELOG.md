@@ -19,6 +19,7 @@
 - **自动封面**：设置页「封面」可配 OpenAI 兼容、Seedream（火山方舟）或通义万相。发布页可预览、改文案、重新生成。B 站投稿优先用设计封面；生图失败或未生成时截帧兜底，封面失败不挡投稿。Seedream 参考帧走 generations 的 image 字段，校对用豆包视觉。
 
 ### 改进
+- **设置「发布」把 B 站和海外拆开**：B 站 Cookie 输入和保存放在最上面，不再跟在海外密钥后面，避免一进来找不到贴 Cookie 的地方。
 - **设置页模型名单跟得上服务商**：下拉换成当前常用型号，去掉已下架的 gpt-4o、gemini-1.5、qwen-turbo 等。通义领先 `qwen3.8-max` / `qwen3.8-flash`，Gemini 默认 `gemini-3.8-flash`（2.5 仅作旧账号兜底）。填写密钥后向服务商拉取最新 `/models`，与内置名单合并；拉不到时仍显示内置列表，可点刷新。
 - **DeepSeek / Seed / Kimi / GLM / Grok 走官方接口**：设置页可直接选，不再借硅基流动。DeepSeek 默认 `deepseek-flash`（V4.1）；Seed 走火山方舟，默认 `doubao-seed-2-1-lite-260915`。硅基流动不再作为独立提供商出现（旧配置仍能读，打开设置页会切到 DeepSeek 官方）。
 - **发布操作教程入口**：设置「发布」、切片发布页和周排期空态增加「操作教程」，打开官网 `guides/publish/`。具体步骤（Upload-Post 密钥、B 站 Application → Cookies 三个字段、仅自己试发）写在官网，改步骤不用发客户端。
