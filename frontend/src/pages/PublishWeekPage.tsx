@@ -1,9 +1,11 @@
-import { getLocale, t } from '../i18n'
+import i18n, { getLocale, t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { projectApi } from '../services/api'
 import { Btn, Icon, ProgressLine, Row, StatusDot } from '../ui'
+import { openExternalLink } from '../utils/externalLinks'
+import { publishGuideHref } from '../publish/guide'
 import {
   defaultPlatforms, planWeek, privateExtra, readApiDetail, remainingClips, renderPreset,
   type WeekClip, type WeekRecord,
@@ -159,8 +161,9 @@ const PublishWeekPage: React.FC = () => {
       {!loading && !configured && !error && (
         <div className="ac-empty" style={{ marginTop: 28 }}>
           <b>{t("还没有配置发布密钥。到设置里填一次即可。")}</b>
-          <div style={{ marginTop: 14 }}>
+          <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Btn size="sm" variant="cta" onClick={() => navigate('/settings?section=publish')}>{t("去设置")}</Btn>
+            <Btn size="sm" onClick={() => void openExternalLink(publishGuideHref(i18n.language))}>{t("操作教程")}<Icon.External size={12} /></Btn>
           </div>
         </div>
       )}

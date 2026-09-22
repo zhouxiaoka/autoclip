@@ -721,7 +721,7 @@
   "从切片上打开发布。": "切片を開いて、そこから投稿します。",
   "海外账号和 B 站都在这里配。配好后，在切片的发布页直接选。": "海外アカウントと Bilibili はここで設定します。切片の投稿ページでそのまま選べます。",
   "B 站 Cookie": "Bilibili Cookie",
-  "在浏览器登录 B 站，从请求头复制 Cookie。需要 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。": "ブラウザで Bilibili にログインし、リクエストヘッダーの Cookie をコピーします。SESSDATA、bili_jct、DedeUserID が必要です。このマシンにだけ保存します。",
+  "登录 B 站后，打开开发者工具 Application → Cookies，复制 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。": "Bilibili にログインしたあと、開発者ツールの Application → Cookies から SESSDATA、bili_jct、DedeUserID をコピーします。このマシンにだけ保存します。",
   "已连接 {{name}}": "接続済み · {{name}}",
   "Cookie 已校验并保存": "Cookie を確認して保存しました",
   "已清除本机保存的 B 站账号": "このマシンに保存した Bilibili アカウントを削除しました",
@@ -772,5 +772,6 @@
   "可填方舟接入点 ID（ep-…），或 doubao-seedream-5-0-260128。": "方舟のエンドポイント ID（ep-…）、または doubao-seedream-5-0-260128。",
   "通义万相可留空。": "通義万相は空で可。",
   "默认火山方舟 api/v3。": "既定は火山方舟 api/v3。",
-  "用豆包视觉读图核对标题，不要填 Seedream 本号。可留空。": "豆包ビジョンで見出しを確認。Seedream 本体は入れない。任意。"
+  "用豆包视觉读图核对标题，不要填 Seedream 本号。可留空。": "豆包ビジョンで見出しを確認。Seedream 本体は入れない。任意。",
+  "操作教程": "操作ガイド"
 }

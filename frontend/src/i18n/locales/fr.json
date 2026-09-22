@@ -721,7 +721,7 @@
   "从切片上打开发布。": "Ouvrez un extrait et publiez-le depuis là.",
   "海外账号和 B 站都在这里配。配好后，在切片的发布页直接选。": "Les comptes étrangers et Bilibili se règlent ici. Sur la page de publication du clip, on les choisit directement.",
   "B 站 Cookie": "Cookie Bilibili",
-  "在浏览器登录 B 站，从请求头复制 Cookie。需要 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。": "Connectez-vous à Bilibili dans le navigateur et copiez l’en-tête Cookie. Il faut SESSDATA, bili_jct et DedeUserID. Il reste sur cette machine.",
+  "登录 B 站后，打开开发者工具 Application → Cookies，复制 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。": "Après connexion à Bilibili, ouvrez les outils de développement → Application → Cookies et copiez SESSDATA, bili_jct et DedeUserID. Il reste sur cette machine.",
   "已连接 {{name}}": "Connecté · {{name}}",
   "Cookie 已校验并保存": "Cookie vérifié et enregistré",
   "已清除本机保存的 B 站账号": "Le compte Bilibili enregistré sur cette machine a été retiré",
@@ -772,5 +772,6 @@
   "可填方舟接入点 ID（ep-…），或 doubao-seedream-5-0-260128。": "Indiquez un ID d’endpoint Ark (ep-…) ou doubao-seedream-5-0-260128.",
   "通义万相可留空。": "Laissez vide pour Wanxiang.",
   "默认火山方舟 api/v3。": "Par défaut : Volcengine Ark api/v3.",
-  "用豆包视觉读图核对标题，不要填 Seedream 本号。可留空。": "Utilisez Doubao Vision pour vérifier le titre — pas l’ID Seedream. Optionnel."
+  "用豆包视觉读图核对标题，不要填 Seedream 本号。可留空。": "Utilisez Doubao Vision pour vérifier le titre — pas l’ID Seedream. Optionnel.",
+  "操作教程": "Tutoriel"
 }
