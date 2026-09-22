@@ -675,5 +675,18 @@
   "已排期": "Scheduled",
   "已发出": "Sent",
   "取消排期": "Cancel",
-  "YouTube 标题超过 100 字时会自动缩短。": "YouTube titles over 100 characters are shortened on their own."
+  "YouTube 标题超过 100 字时会自动缩短。": "YouTube titles over 100 characters are shortened on their own.",
+  "列表": "List",
+  "月历": "Month",
+  "排这一周": "Plan this week",
+  "上个月": "Previous month",
+  "下个月": "Next month",
+  "按分数把还没发的切片填进每周一、三、五的 09:00。确认之后才会提交，默认仅自己可见。": "Unsent clips fill Monday, Wednesday, and Friday at 09:00, highest score first. Nothing is submitted until you confirm. Posts stay private.",
+  "这一档还空着": "This slot is open",
+  "这一档已经有安排": "This slot is already taken",
+  "确认排期": "Confirm schedule",
+  "TikTok 每天最多 15 条，YouTube 每天最多 10 条。这一周每天只排一条。": "TikTok allows 15 a day and YouTube 10. This week places one a day.",
+  "正在排第 {{done}} 条，共 {{total}} 条": "Scheduling {{done}} of {{total}}",
+  "这一周没有还没发过的切片。": "No unsent clips left for this week.",
+  "分数 {{score}}": "Score {{score}}"
 }

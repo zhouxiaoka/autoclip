@@ -14,7 +14,10 @@ function load(rel) {
   return module.exports
 }
 
-const { pickPreset, defaultPlatforms, privateExtra, readApiDetail, buildSchedule, recordStatusKey, recordTone } = load('../src/publish/uploadPost.ts')
+const {
+  pickPreset, defaultPlatforms, privateExtra, readApiDetail, buildSchedule, recordStatusKey, recordTone,
+  monthCells, upcomingWeekSlots, planWeek, dayKey, localStamp, focusMonth,
+} = load('../src/publish/uploadPost.ts')
 
 test('vertical platforms pick the shorts preset and others stay original', () => {
   assert.equal(pickPreset([]), 'original')
@@ -70,4 +73,59 @@ test('record status stays a short label', () => {
   assert.equal(recordTone('failed'), 'error')
   assert.equal(recordTone('cancelled'), 'muted')
   assert.equal(recordTone('scheduled'), 'accent')
+})
+
+test('september 2026 opens on the monday before the first', () => {
+  const cells = monthCells(2026, 8)
+  assert.equal(cells.length, 42)
+  assert.equal(dayKey(cells[0].date), '2026-08-31')
+  assert.equal(cells[0].inMonth, false)
+  assert.equal(dayKey(cells[1].date), '2026-09-01')
+  assert.equal(cells[1].inMonth, true)
+})
+
+test('week slots keep the rest of this week, then next monday wednesday friday', () => {
+  const plain = (value) => JSON.parse(JSON.stringify(value))
+  const tuesdayMorning = upcomingWeekSlots(new Date(2026, 8, 22, 8)).map(localStamp)
+  assert.deepEqual(plain(tuesdayMorning), ['2026-09-23T09:00:00', '2026-09-25T09:00:00'])
+  const wednesdayAtNine = upcomingWeekSlots(new Date(2026, 8, 23, 9)).map(localStamp)
+  assert.deepEqual(plain(wednesdayAtNine), ['2026-09-25T09:00:00'])
+  const fridayEvening = upcomingWeekSlots(new Date(2026, 8, 25, 10)).map(localStamp)
+  assert.deepEqual(plain(fridayEvening), ['2026-09-28T09:00:00', '2026-09-30T09:00:00', '2026-10-02T09:00:00'])
+})
+
+test('week plan ranks by score, skips clips already sent, and leaves an occupied minute', () => {
+  const now = new Date(2026, 8, 21, 8)
+  const plain = (value) => JSON.parse(JSON.stringify(value))
+  const plan = planWeek(
+    [
+      { id: 'low', title: '低分', score: 0.4 },
+      { id: 'high', title: '高分', score: 0.9 },
+      { id: 'busy', title: '已发', score: 1 },
+      { id: 'mid', title: '中分', score: 0.7 },
+      { id: 'again', title: '再发', score: 0.95 },
+    ],
+    [
+      { clip_id: 'busy', status: 'completed', title: '已发' },
+      { clip_id: 'again', status: 'cancelled', title: '再发' },
+      { clip_id: 'wed', status: 'scheduled', title: '周三已排', scheduled_date: '2026-09-23T09:00:00' },
+    ],
+    now,
+  ).map((slot) => ({ stamp: slot.stamp, state: slot.state, clipId: slot.clipId, title: slot.title }))
+  assert.deepEqual(plain(plan), [
+    { stamp: '2026-09-21T09:00:00', state: 'new', clipId: 'again', title: '再发' },
+    { stamp: '2026-09-23T09:00:00', state: 'taken', clipId: 'wed', title: '周三已排' },
+    { stamp: '2026-09-25T09:00:00', state: 'new', clipId: 'high', title: '高分' },
+  ])
+})
+
+test('calendar opens on the next scheduled month', () => {
+  const now = new Date(2026, 8, 22, 8)
+  const plain = (value) => JSON.parse(JSON.stringify(value))
+  assert.deepEqual(plain(focusMonth([
+    { status: 'completed', submitted_at: '2026-09-01T09:00:00' },
+    { status: 'scheduled', scheduled_date: '2026-10-01T09:00:00' },
+    { status: 'cancelled', scheduled_date: '2026-11-01T09:00:00' },
+  ], now)), { year: 2026, month: 9 })
+  assert.deepEqual(plain(focusMonth([], now)), { year: 2026, month: 8 })
 })

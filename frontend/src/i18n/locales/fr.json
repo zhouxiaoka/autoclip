@@ -675,5 +675,18 @@
   "已排期": "Planifié",
   "已发出": "Envoyé",
   "取消排期": "Annuler",
-  "YouTube 标题超过 100 字时会自动缩短。": "Au-delà de 100 caractères, le titre YouTube est raccourci tout seul."
+  "YouTube 标题超过 100 字时会自动缩短。": "Au-delà de 100 caractères, le titre YouTube est raccourci tout seul.",
+  "列表": "Liste",
+  "月历": "Mois",
+  "排这一周": "Planifier la semaine",
+  "上个月": "Mois précédent",
+  "下个月": "Mois suivant",
+  "按分数把还没发的切片填进每周一、三、五的 09:00。确认之后才会提交，默认仅自己可见。": "Les extraits pas encore envoyés remplissent le lundi, le mercredi et le vendredi à 09:00, du meilleur score au plus faible. Rien n’est envoyé avant confirmation. Par défaut, vous seul pouvez les voir.",
+  "这一档还空着": "Ce créneau est libre",
+  "这一档已经有安排": "Ce créneau est déjà pris",
+  "确认排期": "Confirmer le planning",
+  "TikTok 每天最多 15 条，YouTube 每天最多 10 条。这一周每天只排一条。": "TikTok autorise 15 par jour, YouTube 10. Cette semaine n’en place qu’un par jour.",
+  "正在排第 {{done}} 条，共 {{total}} 条": "Planification {{done}} sur {{total}}",
+  "这一周没有还没发过的切片。": "Aucun extrait non envoyé pour cette semaine.",
+  "分数 {{score}}": "Score {{score}}"
 }
