@@ -6,6 +6,8 @@ import { Layout, Button } from 'antd'
 import { SettingOutlined, BulbOutlined, MoonOutlined } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
+import { UpdateToast, useAppUpdate } from '../desktop/UpdatePrompt'
+import { Icon } from '../ui'
 
 const { Header: AntHeader } = Layout
 
@@ -16,6 +18,8 @@ const Header: React.FC = () => {
   const location = useLocation()
   const isSettings = location.pathname === '/settings'
   const { theme, toggleTheme } = useTheme()
+  const appUpdate = useAppUpdate()
+  const updatePending = appUpdate.phase === 'downloading' || appUpdate.phase === 'ready' || appUpdate.phase === 'failed' || appUpdate.phase === 'restarting'
 
   return (
     <AntHeader
@@ -25,6 +29,8 @@ const Header: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'space-between',
         height: '64px',
+        lineHeight: 'normal',
+        overflow: 'visible',
         position: 'sticky',
         top: 0,
         zIndex: 1000,
@@ -51,7 +57,22 @@ const Header: React.FC = () => {
       </div>
 
       {/* Right side */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="ac-header-actions">
+        {updatePending && (
+          <div className="ac-update-anchor">
+            <button
+              type="button"
+              className="ac-update-icon"
+              aria-expanded={appUpdate.toastVisible}
+              aria-label={t('有新版本可用')}
+              onClick={() => appUpdate.toastVisible ? appUpdate.snooze() : appUpdate.openUpdate()}
+            >
+              <Icon.Up size={16} />
+            </button>
+            <UpdateToast />
+          </div>
+        )}
+        <div className="ac-header-permanent">
         <LanguageSelect />
         {/* 返回入口由各页面页头承担（见 DESIGN.md App Layer），顶栏只留全局动作 */}
         <Button
@@ -84,6 +105,7 @@ const Header: React.FC = () => {
             background: isSettings ? 'var(--ac-line-2)' : 'var(--ac-card)',
           }}
         >{t("设置")}</Button>
+        </div>
       </div>
     </AntHeader>
   )

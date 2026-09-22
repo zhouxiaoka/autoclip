@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -51,6 +52,25 @@ def collect_platforms(
     return platforms
 
 
+def changelog_notes(version: str, changelog: Path, limit: int = 1200) -> str:
+    """CHANGELOG 里 `## [version]` 到下一节之间的正文。没有则空字符串。"""
+    if not changelog.is_file():
+        return ""
+    text = changelog.read_text(encoding="utf-8")
+    ver = version.lstrip("v")
+    match = re.search(
+        rf"^## \[{re.escape(ver)}\][^\n]*\n(.*?)(?=^## \[|\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        return ""
+    body = match.group(1).strip()
+    if len(body) <= limit:
+        return body
+    return body[:limit].rstrip() + "…"
+
+
 def build_manifest(
     *,
     version: str,
@@ -70,7 +90,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Write Tauri updater latest.json")
     parser.add_argument("--version", required=True, help="应用版本，例如 1.2.2 或 v1.2.2")
     parser.add_argument("--tag", help="GitHub Release tag，默认 v{version}")
-    parser.add_argument("--notes", default="", help="更新说明")
+    parser.add_argument("--notes", default="", help="更新说明；--changelog 有对应段落时以更新日志为准")
+    parser.add_argument("--changelog", type=Path, help="CHANGELOG.md，抽出该版本段落写入 notes")
     parser.add_argument("--repo", default=REPO_DEFAULT)
     parser.add_argument("--out", required=True, help="latest.json 输出路径")
     parser.add_argument("--pub-date", help="ISO-8601，默认当前 UTC")
@@ -82,6 +103,13 @@ def main() -> int:
 
     version = args.version.lstrip("v")
     tag = args.tag or f"v{version}"
+    notes = args.notes
+    if args.changelog:
+        from_log = changelog_notes(version, args.changelog)
+        if from_log:
+            notes = from_log
+    if not notes:
+        notes = f"AutoClip Desktop v{version}"
     pub_date = args.pub_date or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
         "+00:00", "Z"
     )
@@ -98,7 +126,7 @@ def main() -> int:
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    payload = build_manifest(version=version, notes=args.notes, pub_date=pub_date, platforms=platforms)
+    payload = build_manifest(version=version, notes=notes, pub_date=pub_date, platforms=platforms)
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"OK wrote {out} ({', '.join(platforms)})")
     return 0

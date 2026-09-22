@@ -8,7 +8,7 @@ import PublishListPage from './pages/PublishListPage'
 import PublishWeekPage from './pages/PublishWeekPage'
 import SettingsPage from './pages/SettingsPage'
 import Header from './components/Header'
-import { UpdatePrompt } from './desktop/UpdatePrompt'
+import { UpdateProvider } from './desktop/UpdatePrompt'
 import { trackPageview } from './analytics/posthog'
 import { startWorkflowObserver } from './analytics/observer'
 
@@ -28,20 +28,21 @@ function App() {
   useEffect(() => startWorkflowObserver(), [])
 
   return (
-    <Layout>
-      <Header />
-      <UpdatePrompt />
-      <Content>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/project/:id/publish/week" element={<PublishWeekPage />} />
-          <Route path="/project/:id/publish/:clipId" element={<PublishClipPage />} />
-          <Route path="/project/:id/publish" element={<PublishListPage />} />
-          <Route path="/project/:id" element={<ProjectDetailPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
-      </Content>
-    </Layout>
+    <UpdateProvider>
+      <Layout>
+        <Header />
+        <Content>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/project/:id/publish/week" element={<PublishWeekPage />} />
+            <Route path="/project/:id/publish/:clipId" element={<PublishClipPage />} />
+            <Route path="/project/:id/publish" element={<PublishListPage />} />
+            <Route path="/project/:id" element={<ProjectDetailPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </Content>
+      </Layout>
+    </UpdateProvider>
   )
 }
 

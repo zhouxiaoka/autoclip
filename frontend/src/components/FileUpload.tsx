@@ -31,10 +31,12 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
 
   // 加载视频分类配置
   useEffect(() => {
+    let active = true
     const loadCategories = async () => {
       setLoadingCategories(true)
       try {
         const response = await projectApi.getVideoCategories()
+        if (!active) return
         setCategories(response.categories)
         // 设置默认选中【默认】选项
         if (response.default_category) {
@@ -43,14 +45,16 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
           setSelectedCategory(response.categories[0].value)
         }
       } catch (error) {
+        if (!active) return
         console.error('Failed to load video categories:', error)
-        message.error(t("加载视频分类失败"))
+        message.error({ content: t("加载视频分类失败"), key: 'video-categories' })
       } finally {
-        setLoadingCategories(false)
+        if (active) setLoadingCategories(false)
       }
     }
 
-    loadCategories()
+    void loadCategories()
+    return () => { active = false }
   }, [])
 
   const onDrop = (acceptedFiles: File[]) => {

@@ -130,8 +130,8 @@ export const Dialog: React.FC<{
 }
 
 /* ---------- Icons (inline, 1.5px stroke — no icon font) ---------- */
-const I: React.FC<{ d: string; size?: number }> = ({ d, size = 14 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+const I: React.FC<{ d: string; size?: number; stroke?: number }> = ({ d, size = 14, stroke = 1.6 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d={d} />
   </svg>
 )
@@ -140,6 +140,7 @@ export const Icon = {
   Play: (p?: { size?: number }) => <I size={p?.size} d="M7 5v14l11-7z" />,
   Plus: (p?: { size?: number }) => <I size={p?.size} d="M12 5v14M5 12h14" />,
   Down: (p?: { size?: number }) => <I size={p?.size} d="M12 4v12m0 0l-5-5m5 5l5-5M4 20h16" />,
+  Up: (p?: { size?: number }) => <I size={p?.size} stroke={2} d="M12 19V5m0 0l-6 6m6-6l6 6" />,
   Trash: (p?: { size?: number }) => <I size={p?.size} d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />,
   Refresh: (p?: { size?: number }) => <I size={p?.size} d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5" />,
   Chat: (p?: { size?: number }) => <I size={p?.size} d="M21 12a8 8 0 0 1-8 8H6l-3 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z" />,

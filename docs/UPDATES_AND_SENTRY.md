@@ -90,13 +90,13 @@ CI 的 macOS / Windows 构建均读取仓库 Secret `SENTRY_AUTH_TOKEN`，组织
 4. Release 里应有：
    - 用户手装：`AutoClip Desktop_<ver>_aarch64.dmg`、`*-setup.exe`
    - 应用内更新：`AutoClip.Desktop_<ver>_aarch64.app.tar.gz`、对应 `.sig`、Windows 安装包的 `.sig`、`latest.json`
-5. 打开已装的旧版本，设置页点「检查更新」，应弹出新版本并在确认后重启。
+5. 打开已装的旧版本。有新版本时先在后台下载，右下角提示重启后生效；顶栏「下载更新」和设置 → 应用都可以再打开这次下载或重启。点「稍后」只隐藏这一次提示。
 
 macOS 更新包必须是**注入 python/backend/ffmpeg 之后**的 `.app.tar.gz`，不能用改过内容的预签名 DMG。
 
 ## 本地不签名
 
-不设 `TAURI_SIGNING_PRIVATE_KEY` 时构建照常成功，只是没有 `.sig` / `latest.json`。检查更新失败会记一条 info，不弹窗。
+不设 `TAURI_SIGNING_PRIVATE_KEY` 时构建照常成功，只是没有 `.sig` / `latest.json`。自动检查失败不弹窗，下次打开会再查。下载失败会在右下角提示重试。手动检查失败会明确提示，不显示「已是最新版本」。
 
 ## 相关文件
 

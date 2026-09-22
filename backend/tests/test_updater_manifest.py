@@ -42,6 +42,18 @@ def test_collect_platforms_includes_signed(tmp_path: Path):
     )
 
 
+def test_changelog_notes_uses_only_that_version(tmp_path: Path):
+    log = tmp_path / "CHANGELOG.md"
+    log.write_text(
+        "## [1.4.0] - 2026-09-22\n\n- 应用内更新提示\n\n## [1.3.1] - 2026-09-21\n\n- 旧版本\n",
+        encoding="utf-8",
+    )
+    notes = _mod.changelog_notes("v1.4.0", log)
+    assert "应用内更新提示" in notes
+    assert "旧版本" not in notes
+    assert _mod.changelog_notes("9.9.9", log) == ""
+
+
 def test_build_manifest_strips_v_prefix():
     payload = _mod.build_manifest(
         version="v1.2.2",
