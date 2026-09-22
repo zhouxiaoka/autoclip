@@ -14,7 +14,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
-[Sitio web](https://zhouxiaoka.github.io/autoclip_intro/) · [Informar de un problema](https://github.com/zhouxiaoka/autoclip/issues)
+[Sitio web](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Informar de un problema](https://github.com/zhouxiaoka/autoclip/issues)
 
 **Instaladores de escritorio: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
 
@@ -197,6 +197,12 @@ El README está disponible en ocho idiomas; la mayoría de las guías detalladas
 Agradecemos las correcciones, los comentarios y las mejoras de traducción. Al informar de un fallo, incluye el sistema operativo, la versión, el modelo, los pasos para reproducirlo y los registros de error sin información confidencial.
 
 Proyecto mantenido por una persona en su tiempo libre. Los tiempos de respuesta varían; no se ofrece asistencia inmediata ni ayuda individual de despliegue. Consulta las preguntas frecuentes y los problemas conocidos antes de escribir.
+
+Las ideas, los usos y las peticiones de modelos van a [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions). Los fallos reproducibles usan la [plantilla de issue](https://github.com/zhouxiaoka/autoclip/issues/new/choose). Reglas del tablero: [community board](docs/COMMUNITY_BOARD.md) (chino).
+
+- [Bienvenida y categorías](https://github.com/zhouxiaoka/autoclip/discussions/127)
+- [Preguntas sobre el primer clip](https://github.com/zhouxiaoka/autoclip/discussions/128)
+- [Ideas](https://github.com/zhouxiaoka/autoclip/discussions/129)
 
 - Correo electrónico: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 

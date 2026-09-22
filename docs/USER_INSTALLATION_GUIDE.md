@@ -28,11 +28,30 @@
 
 1. **先配置模型。** 打开“设置”，选择通义千问、OpenAI 兼容接口、Gemini、硅基流动或本地模型。云端服务填写自己的 API Key 和模型名，点击测试连接，再保存。本地模型先在 Ollama / LM Studio 启动服务并加载模型。
 2. **准备字幕。** 有时间轴准确的 `.srt` 就与视频一起导入。没有字幕时，在设置中的语音识别区域完成本地 Whisper 组件与模型准备；首次安装和下载需要网络。
-3. **用短样本验证。** 先选一段你有权使用、对白清楚的视频。在首页选择“文件导入”，导入视频及可选 SRT；也可通过“链接导入”使用 YouTube / B 站链接。
+3. **自备短样片。** 准备一段你有权使用、对白清楚的 3–5 分钟视频，最好同时带上时间轴准确的 `.srt`。在首页用「文件导入」导入视频及可选 SRT，或用「链接导入」粘贴 B 站 / YouTube 链接。素材要求与示例见下方「自备短样片」。
 4. **查看处理结果。** 在项目详情检查片段起止时间、标题和评分，预览内容是否完整。若失败，按页面提示定位字幕、分析或导出阶段，参见 [FAQ](FAQ.md)。
 5. **导出成片。** 使用详情页的导出入口，按发布平台选择预设。竖屏导出可加入字幕和标题卡；导出后先播放检查，再自行发布。
 
 AI 分析主要依赖字幕文本。访谈、播客、课程等以语言表达为主的视频更容易评估；纯视觉动作、音乐或无对白内容不应期待同样的高光识别效果。
+
+## 自备短样片
+
+AutoClip 不托管官方样片。Release 里没有样片压缩包，也不提供成片下载。请使用自己的短视频，或你有权使用的公开平台链接。
+
+- 时长约 3–5 分钟，对白清楚。
+- 尽量带上时间轴准确的 `.srt`。没有字幕时，先在设置中准备本地 Whisper，或换一条已有字幕的视频。
+- 来源可以是本地文件、B 站或 YouTube。请确认你有权使用该媒体。
+
+第一次出片先试这条：[Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)（Stanford ENERGY）。示例·非托管·自担使用权。
+
+下面是另外两条普通示例，不必都试。多为英语对白，可开官方字幕或自备 SRT/Whisper。我们不提供成片下载。
+
+- [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y)（Y Combinator）。示例·非托管·自担使用权。
+- [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E)。第三方访谈（Sources Podcast，非 OpenAI 官方频道）。示例·非托管·自担使用权。
+
+也可改用你自己的短片。
+
+第一次出片的常见卡点见 [讨论 #128](https://github.com/zhouxiaoka/autoclip/discussions/128)。
 
 ## 云端与本地模型
 
@@ -60,7 +79,7 @@ AI 分析主要依赖字幕文本。访谈、播客、课程等以语言表达�
 
 ## 获取帮助
 
-先看 [常见问题](FAQ.md) 和 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)。仍无法解决时，邮件提供系统、应用版本、模型、失败阶段、复现步骤和已脱敏日志。
+先看 [常见问题](FAQ.md) 和 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)。第一次出片卡住（模型、没有字幕、系统警告）请到 [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128)。欢迎说明和分类见 [欢迎与分类](https://github.com/zhouxiaoka/autoclip/discussions/127)。仍无法解决时，邮件提供系统、应用版本、模型、失败阶段、复现步骤和已脱敏日志。
 
 个人业余维护，回复时间不固定，不提供即时客服或一对一部署服务。
 

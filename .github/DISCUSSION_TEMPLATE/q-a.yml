@@ -1,0 +1,26 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        使用问题放这里。应用打不开、进度卡住、切片为空，并且你能提供版本和平台的，请改开 [Bug 报告](https://github.com/zhouxiaoka/autoclip/issues/new/choose)。
+        发帖前可以先看 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)。
+  - type: textarea
+    id: question
+    attributes:
+      label: 你的问题
+      placeholder: "本地 Ollama 已经在跑，设置里仍显示没有模型。"
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: 你已经试过什么
+    validations:
+      required: false
+  - type: input
+    id: env
+    attributes:
+      label: 版本 / 平台 / 模型
+      placeholder: "v1.2.1 · Windows · 通义千问 qwen-plus"
+    validations:
+      required: false

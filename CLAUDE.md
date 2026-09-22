@@ -7,4 +7,4 @@
 方向一句话：**克制专业 / Calm Premium（参考 Dia Browser）**——安静、留白多、近乎全单色、只用一个克制的蓝做强调。不要玩具撞色、彩色 chip、紫色渐变、霓虹、死黑。
 
 ## Roadmap
-产品长期规划见 `ROADMAP.md`（账号 / 埋点 / 商业化分阶段）。当前阶段与现状见 `HANDOFF.md`。
+产品长期规划见 `ROADMAP.md`（账号 / 埋点 / 商业化分阶段）。当前阶段与现状见 `HANDOFF.md`。公开社区看板见 `docs/COMMUNITY_BOARD.md`（Discussions 收想法，Issue 只收已确认需求）。

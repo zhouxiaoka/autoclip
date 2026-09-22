@@ -17,7 +17,7 @@ This policy is drafted with reference to China's Personal Information Protection
 
 - **Your videos, audio, subtitles, and transcripts are processed and stored entirely on your own device** and are never uploaded to our servers.
 - **Third-party API keys you configure** (e.g., Tongyi Qianwen, OpenAI, Gemini) **are stored only on your device**, never uploaded, and never appear in any analytics data.
-- We **do not collect** your name, phone number, email, ID documents, or any other directly identifying personal information.
+- We **do not collect** your name, phone number, or ID documents. An email address is received only if you type one into feedback, and it is not published on the public GitHub post.
 
 ---
 
@@ -44,6 +44,7 @@ To fix crashes, the Software may send stack traces via **Sentry** when a DSN is 
 
 ### 2.3 Information You Provide
 
+- **In-app feedback**: When you press Send, we receive the note, its category, and the app version, operating system, architecture, model name, failure stage, and a short error summary. That note is published on GitHub: problems become Issues, and ideas or other notes become Discussions. An optional email stays in the maintainer inbox and is not placed on the public post. Sending feedback does not depend on the anonymous analytics switch. Video content, subtitles, and API keys are not included; key-like text in an error summary is redacted before sending.
 - **Third-party platform accounts/cookies**: If you use download or upload features for platforms such as Bilibili or YouTube, the related credentials (cookies, etc.) are **stored only on your device** to perform the actions you initiate. We do not collect or upload them.
 
 ### 2.4 Information We Do Not Collect
@@ -51,7 +52,7 @@ To fix crashes, the Software may send stack traces via **Sentry** when a DSN is 
 - Your original video/audio content
 - Subtitle or transcript text
 - Plaintext third-party API keys
-- Name, phone number, email, geolocation, ID documents, or other personally identifying information
+- Name, phone number, geolocation, ID documents, or other personally identifying information. An email is collected only if you type it into feedback, and it is not published on GitHub
 
 ---
 
@@ -71,7 +72,7 @@ We **do not** use this data for advertising, and we **do not** sell any of your 
 
 ### 4.1 Turn Off Usage Analytics
 
-You can disable "Anonymous Usage Analytics" at any time under **Settings → App Settings → Privacy & Data**. Once disabled, the Software **immediately stops sending any usage data**, and this setting persists across restarts.
+You can disable "Anonymous Usage Analytics" at any time under **Settings → App**. Once disabled, the Software **immediately stops sending usage analytics**, and this setting persists across restarts. Turning analytics off does not block an explicit feedback submission.
 
 ### 4.2 Your Legal Rights
 

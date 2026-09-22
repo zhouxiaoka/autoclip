@@ -1,0 +1,100 @@
+{
+  "project": "AutoClip Roadmap",
+  "note": "按 CHANGELOG 里已经发布的 v1.3.1 / v1.3.0 校正。已发版的事只写在 Project 简介，不 retroactive 开 Issue。HANDOFF.md 里未勾掉的 v1.3 条目若已出现在更新日志，以更新日志为准。",
+  "columns": {
+    "exploring": [
+      {
+        "track": "new-issue",
+        "title": "[Feature] 1080p60 导出",
+        "body": "外部 PR #82 把 1080p60、全英文界面和迁移脚本捆在一起，没有合入。若以后要做，只评估单独的导出规格，不重开那个 PR。",
+        "acceptance": ["有一条明确的导出规格，而不是顺手改界面语言"]
+      },
+      {
+        "track": "new-issue",
+        "title": "[Feature] 说话人居中裁切与封面图",
+        "body": "竖屏发布导出已经能做模糊背景、裁切、烧字幕和标题卡。说话人居中和封面图还没做，也还没有社区讨论把它抬进承诺范围。",
+        "acceptance": ["先有使用场景，再决定是否离开 Exploring"]
+      }
+    ],
+    "researching": [
+      {
+        "track": "existing-issue",
+        "issue": 67,
+        "title": "[Feature] ASR 后端可插拔",
+        "body": "Issue #67。先定 ASRBackend 协议，faster-whisper 为默认实现。SenseVoice 等具体厂商等协议写完再接，不在接口之前合厂商代码。"
+      },
+      {
+        "track": "new-issue",
+        "title": "[Feature] 切片质量对照",
+        "body": "时长画像和评分兜底已经在 main。还缺一条 5 分钟和一条 60 分钟真视频的对照，并把结果放进 backend/eval/cases。",
+        "acceptance": ["两条真视频的对照结果写入 eval cases"]
+      },
+      {
+        "track": "new-issue",
+        "title": "[Feature] Step 3 评分后端可插拔",
+        "body": "接纳 #75 的方向：先定协议，再谈具体厂商。接口定稿前不接 TwelveLabs 或其他评分服务。",
+        "acceptance": ["协议写在代码里，默认实现仍是现在的评分"]
+      }
+    ],
+    "planned": [
+      {
+        "track": "new-issue",
+        "title": "[Feature] Windows 安装包真机验证",
+        "body": "Windows 安装包从 v1.2.1 起就在 Release 上，v1.3.1 仍没有「干净 Windows 上跑通一条视频」的记录。",
+        "acceptance": ["干净 Windows 上完成启动、保存 provider、跑通一条本地视频"]
+      },
+      {
+        "track": "new-issue",
+        "title": "[Feature] Apple 公证与 Windows 代码签名",
+        "body": "v1.3.1 已经能在应用内检查并安装更新，但安装包仍是 ad-hoc 签名。Apple Developer ID 公证和 Windows 代码签名还没做，所以 macOS 仍要右键打开，Windows 仍可能被 SmartScreen 拦住。更新包的签名密钥也还没作为发布前提。",
+        "acceptance": ["macOS 不再要求右键打开", "Windows 安装不再提示未知发布者"]
+      },
+      {
+        "track": "new-issue",
+        "title": "[Feature] 首页与项目卡按设计系统重做",
+        "body": "设置页和详情页已经按 DESIGN.md 迁过，八语界面也在 v1.3.1 发布。首页导入框、项目卡、合集弹窗和 B 站登录弹窗仍是 Ant Design 默认件。",
+        "acceptance": ["首页导入和项目卡使用 frontend/src/ui 的原语", "不再使用 DESIGN.md 禁止的渐变和撞色"]
+      },
+      {
+        "track": "new-issue",
+        "title": "[Feature] CLI / MCP 真视频端到端",
+        "body": "命令和 MCP 工具已经有单测，还没用一条真实视频跑到完成。通过后再考虑 Homebrew tap 和 PyPI。",
+        "acceptance": ["autoclip run 对一条真实视频输出 completed", "MCP start_clip_job 能轮询到同一结果"]
+      },
+      {
+        "track": "new-issue",
+        "title": "[Feature] Intel mac 安装包",
+        "body": "Windows x64 已随 v1.2.1 发布。Intel mac 还没有包。Linux 桌面包不在这张卡里。",
+        "acceptance": ["Release 上有 Intel mac 安装包"]
+      },
+      {
+        "track": "new-issue",
+        "title": "[Feature] 分块大小与合集条数接到流水线",
+        "body": "设置里已经能保存 chunk_size 和 max_clips_per_collection。min_score 已接到 step3，这两个还没有被 step1 / step5 读取。",
+        "acceptance": ["改设置后，下一次处理使用新的分块大小和合集条数"]
+      },
+      {
+        "track": "new-issue",
+        "title": "[Feature] 竖屏三条预设人工看片",
+        "body": "抖音、Shorts、B 站的 9:16 导出已在 v1.3.0 发布。这张卡只追三条预设各看一条成片，不重复做导出功能。",
+        "acceptance": ["三条预设各有一条由人看过字幕和标题卡的成片"]
+      }
+    ],
+    "building": [],
+    "testing": [],
+    "shipped": [
+      {
+        "track": "readme",
+        "title": "v1.3.1：八语界面、崩溃上报、应用内检查更新"
+      },
+      {
+        "track": "readme",
+        "title": "v1.3.0：失败阶段文案、通义千问国际站、Docker 设置页、竖屏导出、CLI / MCP"
+      },
+      {
+        "track": "readme",
+        "title": "v1.2.1：Docker 能构建、worker 消费处理队列、Windows 安装包"
+      }
+    ]
+  }
+}

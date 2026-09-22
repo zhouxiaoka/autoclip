@@ -1,0 +1,58 @@
+# 把应用内反馈从 PostHog 写进 GitHub。
+# 故障 → Issue（bug, needs-triage, from-app）
+# 想法 → Discussions / Ideas
+# 其他 → Discussions / Q&A
+# 不在 pull request 上跑，避免预览把测试句子写进仓库。
+name: Ingest app feedback
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 只打印将要创建的帖子
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+  discussions: write
+
+concurrency:
+  group: ingest-app-feedback
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Require PostHog read access
+        env:
+          POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+        run: |
+          if [ -z "$POSTHOG_PERSONAL_API_KEY" ]; then
+            echo "缺少 secret POSTHOG_PERSONAL_API_KEY。应用内反馈到不了 GitHub。"
+            exit 1
+          fi
+
+      - name: Ingest
+        env:
+          POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ secrets.POSTHOG_PROJECT_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          args=()
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          python3 scripts/ingest_app_feedback.py "${args[@]}"

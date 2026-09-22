@@ -14,7 +14,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
-[公式サイト](https://zhouxiaoka.github.io/autoclip_intro/) · [問題を報告](https://github.com/zhouxiaoka/autoclip/issues)
+[公式サイト](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [問題を報告](https://github.com/zhouxiaoka/autoclip/issues)
 
 **デスクトップ版: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
 
@@ -197,6 +197,12 @@ README は 8 言語で提供しています。以下の詳細ガイドは主に�
 コードの修正、フィードバック、翻訳の改善を歓迎します。不具合の報告には、OS、バージョン、モデル、再現手順、機密情報を取り除いたエラーログを添えてください。
 
 個人が余暇に保守しています。返信時期は一定ではなく、即時サポートや個別の導入支援は提供していません。お問い合わせの前によくある質問と既知の問題をご確認ください。
+
+機能のアイデア、使い方、モデルの要望は [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions) へ。再現できる不具合は [Issue テンプレート](https://github.com/zhouxiaoka/autoclip/issues/new/choose) を使ってください。ルールは [コミュニティボード](docs/COMMUNITY_BOARD.md)（中国語）にあります。
+
+- [案内とカテゴリ](https://github.com/zhouxiaoka/autoclip/discussions/127)
+- [最初のクリップ Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128)
+- [アイデア](https://github.com/zhouxiaoka/autoclip/discussions/129)
 
 - メール: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 

@@ -14,7 +14,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
-[웹사이트](https://zhouxiaoka.github.io/autoclip_intro/) · [문제 신고](https://github.com/zhouxiaoka/autoclip/issues)
+[웹사이트](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [문제 신고](https://github.com/zhouxiaoka/autoclip/issues)
 
 **데스크톱 설치 파일: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
 
@@ -197,6 +197,12 @@ README는 8개 언어로 제공되며 아래 상세 문서는 대부분 중국�
 코드 수정, 피드백, 번역 개선을 환영합니다. 버그를 신고할 때 OS, 버전, 모델, 재현 단계, 민감한 정보를 제거한 오류 로그를 함께 보내 주세요.
 
 개인이 여가 시간에 유지 관리합니다. 답변 시점은 일정하지 않으며 실시간 지원이나 일대일 설치 지원은 제공하지 않습니다. 연락 전에 FAQ와 알려진 문제를 확인해 주세요.
+
+기능 아이디어, 사용 사례, 모델 요청은 [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)에 올려 주세요. 재현 가능한 버그는 [Issue 템플릿](https://github.com/zhouxiaoka/autoclip/issues/new/choose)을 사용합니다. 규칙은 [커뮤니티 보드](docs/COMMUNITY_BOARD.md)(중국어)에 있습니다.
+
+- [안내와 분류](https://github.com/zhouxiaoka/autoclip/discussions/127)
+- [첫 클립 Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128)
+- [아이디어](https://github.com/zhouxiaoka/autoclip/discussions/129)
 
 - 이메일: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
