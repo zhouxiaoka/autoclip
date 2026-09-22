@@ -18,6 +18,7 @@ export const PLATFORM_LABEL: Record<string, string> = {
   google_business: 'Google Business',
   mastodon: 'Mastodon',
   wordpress: 'WordPress',
+  bilibili: 'B站',
 }
 
 export type PublishVisibility = 'private' | 'public'
@@ -33,11 +34,20 @@ export function pickPreset(platforms: string[]): 'shorts' | 'original' {
 
 /**
  * 发布页的成片规格跟着要发的账号。
- * 竖屏用 9:16 且不截断（douyin）；只有横屏账号时按原画。不在这里做 60 秒的 shorts 截断。
+ * 竖屏用 9:16 且不截断（douyin）；只发 B 站时用横屏；只有横屏海外账号时按原画。
  */
-export function renderPreset(platforms: string[]): 'douyin' | 'original' {
+export function renderPreset(platforms: string[]): 'douyin' | 'bilibili' | 'original' {
   if (!platforms.length) return 'douyin'
-  return platforms.some((p) => (VERTICAL_PLATFORMS as readonly string[]).includes(p)) ? 'douyin' : 'original'
+  if (platforms.some((p) => (VERTICAL_PLATFORMS as readonly string[]).includes(p))) return 'douyin'
+  if (platforms.includes('bilibili')) return 'bilibili'
+  return 'original'
+}
+
+/** 发布页上能勾的目的地：Upload-Post 已连接的，再加上已配置的 B 站。 */
+export function publishDestinations(connected: string[], bilibili: boolean): string[] {
+  const list = connected.filter((p) => p !== 'bilibili')
+  if (bilibili) list.push('bilibili')
+  return list
 }
 
 /** 默认勾选已连接的竖屏平台；一个都没有时勾选全部已连接平台。 */

@@ -690,5 +690,18 @@
   "这一周没有还没发过的切片。": "No quedan clips sin enviar para esta semana.",
   "分数 {{score}}": "Puntuación {{score}}",
   "成片跟着账号走：有竖屏账号就渲成 9:16，只有横屏账号时按原画。": "El video sigue a las cuentas: con una cuenta vertical queda en 9:16, y si solo hay horizontales se mantiene el encuadre original.",
-  "从切片上打开发布。": "Abre un clip y publícalo desde ahí."
+  "从切片上打开发布。": "Abre un clip y publícalo desde ahí.",
+  "海外账号和 B 站都在这里配。配好后，在切片的发布页直接选。": "Las cuentas de fuera y Bilibili se configuran aquí. En la página de publicación del clip se eligen directamente.",
+  "B 站 Cookie": "Cookie de Bilibili",
+  "在浏览器登录 B 站，从请求头复制 Cookie。需要 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。": "Inicia sesión en Bilibili en el navegador y copia la cabecera Cookie. Hacen falta SESSDATA, bili_jct y DedeUserID. Solo se guarda en este equipo.",
+  "已连接 {{name}}": "Conectada · {{name}}",
+  "Cookie 已校验并保存": "Cookie comprobada y guardada",
+  "已清除本机保存的 B 站账号": "Se eliminó la cuenta de Bilibili guardada en este equipo",
+  "清除本机保存的账号": "Quitar la cuenta guardada",
+  "再贴一次会换成这个账号。": "Si la pegas otra vez, sustituye a esta cuenta.",
+  "Cookie 来自环境变量，这里的修改不会覆盖它。": "La cookie viene de una variable de entorno. Un cambio aquí no la sustituye.",
+  "B 站定时要晚于现在两小时。": "La programación de Bilibili tiene que ser más de dos horas después de ahora.",
+  "成片跟着账号走：有竖屏账号就渲成 9:16，只发 B 站时按横屏，只有横屏海外账号时按原画。": "El archivo sigue a la cuenta: las verticales se renderizan a 9:16, solo Bilibili en horizontal, y las cuentas horizontales de fuera conservan el original.",
+  "还没有配置发布账号。到设置里填一次即可。": "Todavía no hay una cuenta de publicación. Añádela en Ajustes.",
+  "YouTube、LinkedIn、Facebook、Pinterest 和 B 站会用到。": "Lo usan YouTube, LinkedIn, Facebook, Pinterest y Bilibili."
 }

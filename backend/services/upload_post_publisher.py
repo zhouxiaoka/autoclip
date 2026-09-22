@@ -318,6 +318,9 @@ def cancel_record(project_id: str, request_id: str, config: UploadPostConfig | N
         raise UploadPostError(f"读不到这条发布记录: {e}") from e
     if not isinstance(record, dict):
         raise UploadPostError("发布记录损坏了")
+    if record.get("provider") == "bilibili":
+        from backend.services.bilibili_publisher import cancel_record as cancel_bilibili
+        return cancel_bilibili(project_id, request_id, session=session)
     if record.get("status") != "scheduled":
         raise UploadPostError("只有还没发出的排期可以取消")
     job_id = str(record.get("job_id") or "").strip()

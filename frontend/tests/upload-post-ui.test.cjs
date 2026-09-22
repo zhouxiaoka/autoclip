@@ -15,7 +15,7 @@ function load(rel) {
 }
 
 const {
-  pickPreset, renderPreset, defaultPlatforms, privateExtra, readApiDetail, buildSchedule, recordStatusKey, recordTone,
+  pickPreset, renderPreset, defaultPlatforms, publishDestinations, platformLabel, privateExtra, readApiDetail, buildSchedule, recordStatusKey, recordTone,
   monthCells, upcomingWeekSlots, planWeek, dayKey, localStamp, focusMonth,
 } = load('../src/publish/uploadPost.ts')
 
@@ -30,6 +30,17 @@ test('the publish page renders vertical accounts as 9:16 and horizontal-only acc
   assert.equal(renderPreset([]), 'douyin')
   assert.equal(renderPreset(['tiktok', 'youtube', 'linkedin']), 'douyin')
   assert.equal(renderPreset(['linkedin', 'x']), 'original')
+  assert.equal(renderPreset(['bilibili']), 'bilibili')
+  assert.equal(renderPreset(['tiktok', 'bilibili']), 'douyin')
+  assert.equal(renderPreset(['bilibili', 'linkedin']), 'bilibili')
+})
+
+test('Bilibili sits with the connected accounts and keeps its own label', () => {
+  assert.deepEqual(publishDestinations(['tiktok', 'youtube'], true), ['tiktok', 'youtube', 'bilibili'])
+  assert.deepEqual(publishDestinations(['tiktok'], false), ['tiktok'])
+  assert.deepEqual(defaultPlatforms(publishDestinations(['tiktok', 'youtube'], true)), ['tiktok', 'youtube'])
+  assert.deepEqual(defaultPlatforms(publishDestinations([], true)), ['bilibili'])
+  assert.equal(platformLabel('bilibili'), 'B站')
 })
 
 test('connected vertical platforms are preselected, otherwise every connected platform', () => {

@@ -690,5 +690,18 @@
   "这一周没有还没发过的切片。": "No unsent clips left for this week.",
   "分数 {{score}}": "Score {{score}}",
   "成片跟着账号走：有竖屏账号就渲成 9:16，只有横屏账号时按原画。": "The file follows the accounts: a vertical account is rendered 9:16, and horizontal-only accounts keep the original frame.",
-  "从切片上打开发布。": "Open a clip and publish it from there."
+  "从切片上打开发布。": "Open a clip and publish it from there.",
+  "海外账号和 B 站都在这里配。配好后，在切片的发布页直接选。": "Connect overseas accounts and Bilibili here. On the clip’s publish page, pick them directly.",
+  "B 站 Cookie": "Bilibili cookie",
+  "在浏览器登录 B 站，从请求头复制 Cookie。需要 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。": "Log in to Bilibili in the browser and copy the Cookie header. It needs SESSDATA, bili_jct, and DedeUserID. It stays on this machine.",
+  "已连接 {{name}}": "Connected · {{name}}",
+  "Cookie 已校验并保存": "Cookie checked and saved",
+  "已清除本机保存的 B 站账号": "Removed the Bilibili account saved on this machine",
+  "清除本机保存的账号": "Remove the saved account",
+  "再贴一次会换成这个账号。": "Pasting again replaces this account.",
+  "Cookie 来自环境变量，这里的修改不会覆盖它。": "The cookie comes from an environment variable. A change here will not override it.",
+  "B 站定时要晚于现在两小时。": "A Bilibili schedule has to be more than two hours from now.",
+  "成片跟着账号走：有竖屏账号就渲成 9:16，只发 B 站时按横屏，只有横屏海外账号时按原画。": "The file follows the accounts: a vertical account is rendered 9:16, Bilibili alone renders landscape, and horizontal overseas accounts keep the original frame.",
+  "还没有配置发布账号。到设置里填一次即可。": "No publish account yet. Add one in Settings.",
+  "YouTube、LinkedIn、Facebook、Pinterest 和 B 站会用到。": "Used by YouTube, LinkedIn, Facebook, Pinterest, and Bilibili."
 }

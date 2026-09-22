@@ -533,3 +533,6 @@ def test_api_router_is_mounted():
     assert "/publish/upload-post/config" in paths
     assert "/publish/upload-post/{project_id}/clips/{clip_id}" in paths
     assert "/publish/upload-post/jobs/{job_id}" in paths
+    assert "/publish/bilibili/config" in paths
+    assert "/publish/bilibili/{project_id}/clips/{clip_id}" in paths
+    assert "/publish/bilibili/jobs/{job_id}" in paths

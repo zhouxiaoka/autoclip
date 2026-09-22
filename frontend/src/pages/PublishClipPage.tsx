@@ -5,13 +5,48 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { projectApi } from '../services/api'
 import { Btn, Icon, ProgressLine, Row, Segmented, StatusDot } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
+import { bilibiliApi, type BilibiliJobView } from '../publish/bilibiliApi'
 import {
-  buildSchedule, defaultPlatforms, platformLabel, privateExtra, readApiDetail, renderPreset,
+  buildSchedule, defaultPlatforms, platformLabel, privateExtra, publishDestinations, readApiDetail, renderPreset,
   type PublishVisibility,
 } from '../publish/uploadPost'
-import { uploadPostApi, type PlatformResult, type UploadPostProfile } from '../publish/uploadPostApi'
+import { uploadPostApi, type PlatformResult, type PublishJobView, type UploadPostProfile } from '../publish/uploadPostApi'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+type Track = { kind: 'upload-post' | 'bilibili'; jobId: string }
+
+function settleJob(job: PublishJobView | BilibiliJobView, later: boolean): {
+  pending: boolean
+  failed: boolean
+  scheduled: boolean
+  results: PlatformResult[]
+  error?: string
+} {
+  if (job.status === 'failed') {
+    return { pending: false, failed: true, scheduled: false, results: [], error: job.error }
+  }
+  if (job.status === 'queued' || job.status === 'running') {
+    return { pending: true, failed: false, scheduled: false, results: [] }
+  }
+  const direct = 'results' in job && job.results ? job.results : []
+  if (job.status === 'completed' || job.status === 'scheduled') {
+    return { pending: false, failed: false, scheduled: job.status === 'scheduled' || later, results: direct }
+  }
+  if (job.status === 'submitted') {
+    const remote = 'remote' in job ? job.remote : undefined
+    const results = remote?.results || direct
+    if (later) return { pending: false, failed: false, scheduled: true, results }
+    if (!remote?.final) return { pending: true, failed: false, scheduled: false, results }
+    return {
+      pending: false,
+      failed: results.some((item) => !item.success && !item.skipped),
+      scheduled: false,
+      results,
+    }
+  }
+  return { pending: true, failed: false, scheduled: false, results: [] }
+}
 
 function defaultWhen(): string {
   const date = new Date()
@@ -30,6 +65,7 @@ const PublishClipPage: React.FC = () => {
   const [clipTitle, setClipTitle] = useState('')
   const [loading, setLoading] = useState(true)
   const [configured, setConfigured] = useState(false)
+  const [biliConfigured, setBiliConfigured] = useState(false)
   const [profiles, setProfiles] = useState<UploadPostProfile[]>([])
   const [user, setUser] = useState('')
   const [selected, setSelected] = useState<string[]>([])
@@ -52,9 +88,10 @@ const PublishClipPage: React.FC = () => {
     const load = async () => {
       setLoading(true)
       try {
-        const [project, cfg] = await Promise.all([
+        const [project, cfg, bili] = await Promise.all([
           projectApi.getProject(projectId),
           uploadPostApi.getConfig(),
+          bilibiliApi.getConfig(),
         ])
         if (cancelled || runId.current !== session) return
         let clips = project.clips || []
@@ -64,15 +101,19 @@ const PublishClipPage: React.FC = () => {
         const clip = clips.find((item) => item.id === clipId)
         setClipTitle(clip?.generated_title || clip?.title || '')
         setConfigured(cfg.configured)
-        if (!cfg.configured) return
-        const res = await uploadPostApi.profiles()
-        if (cancelled || runId.current !== session) return
-        const list = res.profiles || []
+        setBiliConfigured(bili.configured)
+        let list: UploadPostProfile[] = []
+        let next = ''
+        if (cfg.configured) {
+          const res = await uploadPostApi.profiles()
+          if (cancelled || runId.current !== session) return
+          list = res.profiles || []
+          next = list.some((p) => p.username === cfg.user) ? cfg.user : (list[0]?.username || cfg.user || '')
+        }
         setProfiles(list)
-        const next = list.some((p) => p.username === cfg.user) ? cfg.user : (list[0]?.username || cfg.user || '')
         setUser(next)
         const connected = list.find((p) => p.username === next)?.connected_platforms || []
-        setSelected(defaultPlatforms(connected))
+        setSelected(defaultPlatforms(publishDestinations(connected, bili.configured)))
       } catch (err) {
         if (!cancelled && runId.current === session) setError(readApiDetail(err, t("发布失败")))
       } finally {
@@ -86,7 +127,7 @@ const PublishClipPage: React.FC = () => {
   const chooseUser = (next: string) => {
     setUser(next)
     const connected = profiles.find((p) => p.username === next)?.connected_platforms || []
-    setSelected(defaultPlatforms(connected))
+    setSelected(defaultPlatforms(publishDestinations(connected, biliConfigured)))
   }
 
   const toggle = (platform: string) => {
@@ -95,17 +136,21 @@ const PublishClipPage: React.FC = () => {
 
   const profile = profiles.find((p) => p.username === user)
   const connected = profile?.connected_platforms || []
+  const destinations = publishDestinations(connected, biliConfigured)
   const reconnect = (profile?.reconnect_platforms || []).map(platformLabel).join(' · ')
+  const ready = configured || biliConfigured
   const busy = phase === 'running' || phase === 'waiting' || savingFile
   const preset = renderPreset(selected)
   const longYoutube = selected.includes('youtube') && title.trim().length > 100
 
   const publish = async () => {
-    if (!selected.length) {
+    const overseas = selected.filter((item) => item !== 'bilibili')
+    const sendBili = selected.includes('bilibili')
+    if (!overseas.length && !sendBili) {
       setError(t("至少选一个平台"))
       return
     }
-    if (!user) {
+    if (overseas.length && !user) {
       setError(t("还没有 profile。到 Upload-Post 创建一个，并连接要发布的账号。"))
       return
     }
@@ -120,65 +165,86 @@ const PublishClipPage: React.FC = () => {
     setResults([])
     setPhase('running')
     setPercent(12)
+    const tracks: Track[] = []
     try {
-      const started = await uploadPostApi.start(projectId, clipId, {
-        platforms: selected,
-        user,
-        preset,
-        title: title.trim() || undefined,
-        description: description.trim() || undefined,
-        subtitles,
-        title_card: titleCard,
-        scheduled_date: schedule.scheduled_date,
-        timezone: schedule.timezone,
-        extra: privateExtra(selected, visibility),
-      })
-      if (runId.current !== session) return
-      const deadline = Date.now() + 30 * 60 * 1000
-      let waitMs = 2000
-      let submitted = false
-      while (Date.now() < deadline) {
-        if (runId.current !== session) return
-        await sleep(waitMs)
-        if (runId.current !== session) return
-        const job = await uploadPostApi.job(started.job_id)
-        if (runId.current !== session) return
-        if (job.status === 'failed') {
-          setError(job.error || t("发布失败"))
-          setPhase('failed')
-          setPercent(100)
-          return
-        }
-        if (job.status === 'submitted') {
-          submitted = true
-          if (later) {
-            setPhase('scheduled')
-            setPercent(100)
-            return
-          }
-          waitMs = 10000
-          setPhase('waiting')
-          setPercent(72)
-          const remote = job.remote
-          if (remote?.results) setResults(remote.results)
-          if (remote?.final) {
-            const bad = (remote.results || []).some((r) => !r.success && !r.skipped)
-            setPhase(bad ? 'partial' : 'done')
-            setPercent(100)
-            return
-          }
-        } else {
-          waitMs = 2000
-          setPhase('running')
-          setPercent(36)
-        }
+      if (overseas.length) {
+        const started = await uploadPostApi.start(projectId, clipId, {
+          platforms: overseas,
+          user,
+          preset: renderPreset(overseas),
+          title: title.trim() || undefined,
+          description: description.trim() || undefined,
+          subtitles,
+          title_card: titleCard,
+          scheduled_date: schedule.scheduled_date,
+          timezone: schedule.timezone,
+          extra: privateExtra(overseas, visibility),
+        })
+        tracks.push({ kind: 'upload-post', jobId: started.job_id })
       }
-      setPhase(submitted ? 'waiting' : 'running')
-      setError(submitted ? t("已提交，正在等各平台结果") : t("正在渲成片并提交"))
+      if (sendBili) {
+        const started = await bilibiliApi.start(projectId, clipId, {
+          title: title.trim() || undefined,
+          description: description.trim() || undefined,
+          subtitles,
+          title_card: titleCard,
+          scheduled_date: schedule.scheduled_date,
+          timezone: schedule.timezone,
+          visibility,
+        })
+        tracks.push({ kind: 'bilibili', jobId: started.job_id })
+      }
     } catch (err) {
+      if (!tracks.length) {
+        setError(readApiDetail(err, t("发布失败")))
+        setPhase('failed')
+        return
+      }
       setError(readApiDetail(err, t("发布失败")))
-      setPhase('failed')
     }
+    if (runId.current !== session) return
+    const deadline = Date.now() + 30 * 60 * 1000
+    let waitMs = 2000
+    let sawPending = false
+    while (Date.now() < deadline) {
+      if (runId.current !== session) return
+      await sleep(waitMs)
+      if (runId.current !== session) return
+      let pending = false
+      let failed = false
+      let scheduled = false
+      let message = ''
+      const merged: PlatformResult[] = []
+      for (const track of tracks) {
+        const job = track.kind === 'upload-post'
+          ? await uploadPostApi.job(track.jobId)
+          : await bilibiliApi.job(track.jobId)
+        if (runId.current !== session) return
+        const settled = settleJob(job, later)
+        if (settled.pending) pending = true
+        if (settled.failed) failed = true
+        if (settled.scheduled) scheduled = true
+        if (settled.error) message = settled.error
+        merged.push(...settled.results)
+      }
+      setResults(merged)
+      if (pending) {
+        sawPending = true
+        setPhase(merged.length ? 'waiting' : 'running')
+        setPercent(merged.length ? 72 : 36)
+        waitMs = merged.length ? 10000 : 2000
+        continue
+      }
+      setPercent(100)
+      if (message) setError(message)
+      if (failed && !merged.length) setPhase('failed')
+      else if (failed) setPhase('partial')
+      else if (scheduled) setPhase('scheduled')
+      else setPhase('done')
+      return
+    }
+    setPhase(sawPending ? 'waiting' : 'running')
+    setError(sawPending ? t("已提交，正在等各平台结果") : t("正在渲成片并提交"))
   }
 
   const downloadFile = async () => {
@@ -240,15 +306,15 @@ const PublishClipPage: React.FC = () => {
 
       <div className="ac-rows" style={{ marginTop: 28 }}>
         {loading && <div style={{ padding: '28px 0' }}><StatusDot tone="accent" label={t("还在处理中")} /></div>}
-        {!loading && !configured && !error && (
+        {!loading && !ready && !error && (
           <div className="ac-empty" style={{ marginTop: 8 }}>
-            <b>{t("还没有配置发布密钥。到设置里填一次即可。")}</b>
+            <b>{t("还没有配置发布账号。到设置里填一次即可。")}</b>
             <div style={{ marginTop: 14 }}>
               <Btn size="sm" variant="cta" onClick={() => navigate('/settings?section=publish')}>{t("去设置")}</Btn>
             </div>
           </div>
         )}
-        {!loading && configured && (
+        {!loading && ready && (
           <>
             {profiles.length > 1 && (
               <Row label={t("默认账号")}>
@@ -261,20 +327,20 @@ const PublishClipPage: React.FC = () => {
                 options={[{ value: 'now', label: t("现在发") }, { value: 'later', label: t("定时") }]} />
             </Row>
             {when === 'later' && (
-              <Row label={t("选择发出的时间")}>
+              <Row label={t("选择发出的时间")} hint={selected.includes('bilibili') ? t("B 站定时要晚于现在两小时。") : undefined}>
                 <input className="ac-input" style={{ width: 220 }} type="datetime-local" aria-label={t("选择发出的时间")} value={whenValue} onChange={(e) => setWhenValue(e.target.value)} />
               </Row>
             )}
-            {connected.length > 0 && (
+            {destinations.length > 0 && (
               <Row label={t("选择要发布的平台")} stack>
                 <div className="ac-seg ac-seg--sm" role="group" aria-label={t("选择要发布的平台")}>
-                  {connected.map((p) => (
+                  {destinations.map((p) => (
                     <button key={p} type="button" aria-pressed={selected.includes(p)} onClick={() => toggle(p)} disabled={busy}>{platformLabel(p)}</button>
                   ))}
                 </div>
               </Row>
             )}
-            {profiles.length > 0 && !connected.length && !reconnect && (
+            {configured && profiles.length > 0 && !connected.length && !biliConfigured && !reconnect && (
               <p style={{ color: 'var(--ac-sub)', fontSize: 13 }}>{t("这个账号还没有连接平台。")}</p>
             )}
             {reconnect && (
@@ -287,7 +353,7 @@ const PublishClipPage: React.FC = () => {
             <Row wide label={t("标题")} hint={longYoutube ? t("YouTube 标题超过 100 字时会自动缩短。") : t("不填就用切片标题。")}>
               <input className="ac-input" aria-label={t("标题")} value={title} onChange={(e) => setTitle(e.target.value)} />
             </Row>
-            <Row wide label={t("描述")} hint={t("只有 YouTube、LinkedIn、Facebook、Pinterest 会用到。")}>
+            <Row wide label={t("描述")} hint={t("YouTube、LinkedIn、Facebook、Pinterest 和 B 站会用到。")}>
               <textarea className="ac-input ac-textarea" style={{ minHeight: 88 }} aria-label={t("描述")} value={description} onChange={(e) => setDescription(e.target.value)} />
             </Row>
           </>
@@ -308,7 +374,7 @@ const PublishClipPage: React.FC = () => {
 
       {!loading && (
         <p className="ac-sub" style={{ marginTop: 16 }}>
-          {t("成片跟着账号走：有竖屏账号就渲成 9:16，只有横屏账号时按原画。")}
+          {t("成片跟着账号走：有竖屏账号就渲成 9:16，只发 B 站时按横屏，只有横屏海外账号时按原画。")}
         </p>
       )}
       {busy && <div style={{ marginTop: 16 }}><ProgressLine percent={percent} /></div>}
@@ -338,7 +404,7 @@ const PublishClipPage: React.FC = () => {
       {!loading && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 28 }}>
           <Btn loading={savingFile} disabled={phase === 'running' || phase === 'waiting'} onClick={() => void downloadFile()}>{t("下载成片")}</Btn>
-          {configured && phase !== 'done' && phase !== 'partial' && phase !== 'scheduled' && (
+          {ready && phase !== 'done' && phase !== 'partial' && phase !== 'scheduled' && (
             <Btn variant="cta" loading={phase === 'running' || phase === 'waiting'} disabled={!selected.length || savingFile} onClick={() => void publish()}>
               {when === 'later' ? t("排期发布") : t("开始发布")}
             </Btn>
