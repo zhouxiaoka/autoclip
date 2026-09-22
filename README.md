@@ -49,8 +49,8 @@ v1.3.0 真实 Web 界面：在文件导入区添加本地视频，可同时提�
 | 导入素材 | 支持本地视频、YouTube 与 B 站链接，可附带 SRT 字幕。 |
 | 发现高光 | 从字幕提取大纲、话题时间线、精彩度评分和片段标题。 |
 | 剪辑与合集 | 自动生成视频切片，组合推荐合集，也可手动调整顺序。 |
-| 发布（下一版安装包） | 切片就绪后，在同一页打开发布。这一页随包含发布页的下一版安装包提供，已发布的 v1.3.1 还没有。海外走你自己的 Upload-Post 账号里已连接的平台：TikTok、Instagram、YouTube、Facebook、LinkedIn、X、Threads、Pinterest、Bluesky、Discord、Telegram、Google Business，以该账号实际连接的为准。B 站在设置里粘贴一次 Cookie（须含 SESSDATA、bili_jct、DedeUserID），一个账号。可现在发或定时；标题和描述可不填，默认用切片标题；字幕烧录默认打开，片头约 4 秒标题卡默认打开。可见范围在平台支持时默认「仅自己」，对外只对 TikTok、YouTube、B 站承诺仅自己 / private。也可以只下载、不发布。项目页有发布记录和月历，可取消尚未发出的排期。「排这一周」只排海外，填周一、周三、周五 09:00，不含 B 站。竖屏账号渲成 9:16，不按 60 秒截断；只发 B 站用横屏；只有 LinkedIn、X 这类横屏账号时用原画；竖屏和 B 站同一次各渲各的。 |
-| 自动封面（同一版） | 发布时可自动生成封面，避免 B 站空封面被拒。默认封面和标题卡的细节随本版安装包说明。已发布的 v1.3.1 还没有。 |
+| 发布（v1.3.2） | 切片就绪后，在同一页打开发布。自 **v1.3.2** 起可用。海外走你自己的 Upload-Post 账号里已连接的平台：TikTok、Instagram、YouTube、Facebook、LinkedIn、X、Threads、Pinterest、Bluesky、Discord、Telegram、Google Business，以该账号实际连接的为准。B 站在设置里粘贴一次 Cookie（须含 SESSDATA、bili_jct、DedeUserID），一个账号。可现在发或定时；标题和描述可不填，默认用切片标题；字幕烧录默认打开，片头约 4 秒标题卡默认打开。可见范围在平台支持时默认「仅自己」，对外只对 TikTok、YouTube、B 站承诺仅自己 / private。也可以只下载、不发布。项目页有发布记录和月历，可取消尚未发出的排期。「排这一周」只排海外，填周一、周三、周五 09:00，不含 B 站。竖屏账号渲成 9:16，不按 60 秒截断；只发 B 站用横屏；只有 LinkedIn、X 这类横屏账号时用原画；竖屏和 B 站同一次各渲各的。 |
+| 自动封面（v1.3.2） | 发布时可自动生成封面，避免 B 站空封面被拒。默认封面和标题卡的细节随本版安装包说明。自 **v1.3.2** 起可用。 |
 | 发布导出 | 提供抖音、小红书、YouTube Shorts 和 B 站导出预设，支持烧录字幕与标题卡。 |
 | 自由选择模型 | 支持通义千问、OpenAI 兼容接口、Gemini、硅基流动，以及 Ollama / LM Studio 本地模型。 |
 | 接入自动化 | 通过 CLI 批量编排，或让支持 MCP 的客户端调用同一条处理流水线。 |
@@ -146,14 +146,14 @@ Docker 访问宿主机模型服务时，`localhost` 指向容器自身；需配�
 <details>
 <summary>需要付费或 API Key 吗？</summary>
 
-AutoClip 本身仍然免费、开源（MIT）。云端模型由所选服务商计费，需要自己的 API Key；Ollama / LM Studio 本地预设无需云端 Key，但需要模型和相应硬件。含发布页的下一版里，海外发布需要你自己的 [Upload-Post](https://www.upload-post.com) 账号。免费档、付费档，以及 TikTok、YouTube、Instagram 等的每日额度，以 Upload-Post 自己的页面为准，不是 AutoClip 的承诺。已发布的 v1.3.1 安装包还没有这一页。
+AutoClip 本身仍然免费、开源（MIT）。云端模型由所选服务商计费，需要自己的 API Key；Ollama / LM Studio 本地预设无需云端 Key，但需要模型和相应硬件。自 **v1.3.2** 起，海外发布需要你自己的 [Upload-Post](https://www.upload-post.com) 账号。免费档、付费档，以及 TikTok、YouTube、Instagram 等的每日额度，以 Upload-Post 自己的页面为准，不是 AutoClip 的承诺。
 
 </details>
 
 <details>
 <summary>我的视频会上传吗？</summary>
 
-剪辑留在你的设备上。使用云端模型时，字幕文本会发送给该服务商。成片只有在你点「发布」之后才会离开这台机器，发到你已连接的平台；也可以只下载、不发布。这一发布页在包含它的下一版安装包里，已发布的 v1.3.1 还没有。统计与错误报告取决于版本和设置，详见隐私说明。
+剪辑留在你的设备上。使用云端模型时，字幕文本会发送给该服务商。成片只有在你点「发布」之后才会离开这台机器，发到你已连接的平台；也可以只下载、不发布。这一发布页自 **v1.3.2** 起可用。统计与错误报告取决于版本和设置，详见隐私说明。
 
 </details>
 
