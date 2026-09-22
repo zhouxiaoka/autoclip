@@ -1,15 +1,14 @@
 # 发布到海外平台（Upload-Post）
 
-「发布导出」把切片渲成 9:16 成片之后，原来只能下载再手动上传；B 站有一键投稿，TikTok / Instagram /
-YouTube Shorts / X / LinkedIn 等没有。这条链路通过 [Upload-Post](https://www.upload-post.com) 的 API
-把成片一次发到多个海外平台，与 B 站投稿并列，互不影响。
+「发布导出」把切片渲成成片之后，原来只能下载再手动上传。应用里现在是同一页：海外平台走
+[Upload-Post](https://www.upload-post.com)，B 站用本机保存的 Cookie 投稿。抖音、小红书、快手没有投稿接口，不会出现在选择里。
 
 - **视频处理仍然全部在本地**：字幕、分析、剪辑、渲成片都不变，只有最终的 mp4 会上传到 Upload-Post。
 - Upload-Post 是第三方托管服务（免费档每月有额度，更多用量按套餐付费），需要自己注册、连接社交账号、生成 API Key。
 - 一次请求发多个平台；每个平台的结果（链接 / 错误）异步返回，AutoClip 负责轮询汇总。
 
-入口：API（`/api/v1/publish/upload-post/...`）、CLI（`autoclip publish`）、MCP（`publish_clip`）。
-桌面 / Docker / 脚本模式都可用。应用里在「设置 → 发布」填写密钥，在切片的「发布导出」里点「发到海外平台」。
+入口：API（`/api/v1/publish/upload-post/...` 与 `/api/v1/publish/bilibili/...`）、CLI（`autoclip publish`，目前只发海外平台）、MCP（`publish_clip`）。
+桌面 / Docker / 脚本模式都可用。应用里在「设置 → 发布」填写 Upload-Post 密钥和 B 站 Cookie，在切片上点「发布」后直接勾选。
 
 ---
 
@@ -159,9 +158,9 @@ autoclip publish <project_id> --clip 2 --platform tiktok --wait --json
 
 ## 6. 应用里怎么用
 
-1. **设置 → 发布**：粘贴 API Key，保存时会先向 Upload-Post 校验。再选默认 profile，并看到这个 profile 已连接的平台。密钥写在本机数据目录的 `upload_post.json`（权限 0600），不会进仓库。环境变量 `UPLOAD_POST_API_KEY` 优先于这里保存的值。
-2. 打开切片的 **发布导出**，选好画幅预设后点 **发到海外平台**。勾选要发的平台（默认勾已连接的竖屏平台），可见范围默认是「仅自己」（TikTok `SELF_ONLY`、YouTube `private`）。确认成片没问题再改成公开。
-3. 对话框会先按当前预设渲成片（和「发布导出」同一份缓存，相同参数不重渲），再轮询各平台的链接或错误。发布进行中不要关窗口：关掉之后后台仍会跑完，但结果不会回到这个对话框。
+1. **设置 → 发布**：海外账号和 B 站在同一页。粘贴 API Key，保存时会先向 Upload-Post 校验，再选默认 profile。B 站粘贴浏览器请求头里的 Cookie（需要 `SESSDATA`、`bili_jct`、`DedeUserID`），保存时向 B 站校验登录态。密钥写在本机数据目录的 `upload_post.json`，Cookie 写在 `bilibili.json`，权限都是 0600，不会进仓库。环境变量 `UPLOAD_POST_API_KEY`、`BILIBILI_COOKIE` 优先于文件。
+2. 切片上点 **发布**。这一页只做几件事：现在发或选一个时间、勾选已连接的账号（含 B 站）、可见范围默认「仅自己」。有竖屏账号就渲成 9:16，只发 B 站时按横屏，只有横屏海外账号时按原画。同一次可以一起发，画幅按目的地分开渲。标题不填就用切片标题。同一页也可以只下载成片。B 站定时要晚于现在两小时。
+3. 现在发会先渲成片再等各平台结果。定时会在成片上传之后交给 Upload-Post，到点才发出，这时可以关掉应用。项目页的 **发布** 能看到这些记录，也可以换成月历；还没发出的排期可以取消。**排这一周** 把还没发的切片按分数填进周一、周三、周五的 09:00，确认后才提交。渲成片的过程中不要关窗口。
 
 CLI、MCP、API 仍然可用，见上文。
 

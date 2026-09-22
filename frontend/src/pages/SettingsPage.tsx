@@ -603,9 +603,6 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         <Row label={t("崩溃报告")} hint={t("把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。")}>
           <Switch checked={crashOn} onChange={toggleCrashReports} />
         </Row>
-        <Row label={t("B 站账号")} hint={t("多账号管理与一键投稿，开发中。")}>
-          <span className="ac-hint" style={{ margin: 0 }}>{t("即将推出")}</span>
-        </Row>
       </div>
       {pendingUpdate && (
         <UpdateDialog

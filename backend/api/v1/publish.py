@@ -19,6 +19,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.services import bilibili_publisher as bili
 from backend.services import upload_post_publisher as up
 
 router = APIRouter(prefix="/publish", tags=["publish"])
@@ -27,6 +28,20 @@ router = APIRouter(prefix="/publish", tags=["publish"])
 class UploadPostConfigBody(BaseModel):
     api_key: str | None = Field(None, description="Upload-Post API Key；不传则保留已有的")
     user: str | None = Field(None, description="默认 profile（Upload-Post 里的 user）")
+
+
+class BilibiliConfigBody(BaseModel):
+    cookie: str = Field(..., description="浏览器请求头里的 Cookie，需含 SESSDATA、bili_jct、DedeUserID")
+
+
+class BilibiliPublishBody(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    subtitles: bool = True
+    title_card: bool = True
+    scheduled_date: str | None = None
+    timezone: str | None = None
+    visibility: str = Field("private", description="private 仅自己 / public 公开")
 
 
 class PublishBody(BaseModel):
@@ -40,6 +55,15 @@ class PublishBody(BaseModel):
     scheduled_date: str | None = Field(None, description="ISO-8601 定时发布")
     timezone: str | None = Field(None, description="IANA 时区，配合 scheduled_date")
     extra: dict[str, Any] = Field(default_factory=dict, description="平台专属字段透传，如 privacy_level、privacyStatus、facebook_page_id、pinterest_board_id")
+
+
+def _bili_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, bili.BilibiliError):
+        code = exc.status_code if exc.status_code in (400, 401, 404) else 400
+        return HTTPException(status_code=code, detail=str(exc))
+    if isinstance(exc, FileNotFoundError):
+        return HTTPException(status_code=404, detail=str(exc))
+    return HTTPException(status_code=500, detail=str(exc))
 
 
 def _http_error(e: Exception) -> HTTPException:
@@ -146,3 +170,72 @@ async def get_upload_post_request(request_id: str, project_id: str | None = None
 @router.get("/upload-post/{project_id}/records")
 async def list_upload_post_records(project_id: str):
     return {"records": up.list_records(project_id)}
+
+
+@router.delete("/upload-post/{project_id}/records/{request_id}")
+async def cancel_upload_post_record(project_id: str, request_id: str):
+    try:
+        return up.cancel_record(project_id, request_id)
+    except bili.BilibiliError as e:
+        raise _bili_error(e)
+    except Exception as e:  # noqa: BLE001
+        raise _http_error(e)
+
+
+@router.get("/bilibili/config")
+async def get_bilibili_config():
+    return bili.load_config().public()
+
+
+@router.put("/bilibili/config")
+async def put_bilibili_config(body: BilibiliConfigBody):
+    cookie = body.cookie.strip()
+    if not cookie:
+        raise HTTPException(status_code=400, detail="Cookie 不能为空")
+    try:
+        account = bili.verify_cookie(cookie)
+    except bili.BilibiliError as e:
+        raise _bili_error(e)
+    cfg = bili.save_config(account["cookie"], account["nickname"], account["uid"])
+    payload = {"ok": True, **cfg.public()}
+    if cfg.source == "env":
+        payload["note"] = "已保存到文件，但当前进程用的是环境变量 BILIBILI_COOKIE"
+    return payload
+
+
+@router.delete("/bilibili/config")
+async def delete_bilibili_config():
+    bili.clear_config()
+    return {"ok": True, **bili.load_config().public()}
+
+
+@router.post("/bilibili/{project_id}/clips/{clip_id}")
+async def start_bilibili_publish(project_id: str, clip_id: str, body: BilibiliPublishBody):
+    from backend.services.publish_export import load_clip_meta
+    try:
+        load_clip_meta(project_id, clip_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    if body.visibility not in ("private", "public"):
+        raise HTTPException(status_code=400, detail="可见范围只能是 private 或 public")
+    if not bili.load_config().configured:
+        raise HTTPException(status_code=400, detail="还没有配置 B 站账号")
+    return bili.start_publish(bili.BilibiliPublishRequest(
+        project_id=project_id,
+        clip_id=clip_id,
+        title=body.title,
+        description=body.description,
+        subtitles=body.subtitles,
+        title_card=body.title_card,
+        scheduled_date=body.scheduled_date,
+        timezone=body.timezone,
+        visibility=body.visibility,
+    ))
+
+
+@router.get("/bilibili/jobs/{job_id}")
+async def get_bilibili_job(job_id: str):
+    job = bili.get_publish_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="没有这个发布任务")
+    return job

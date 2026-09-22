@@ -5,6 +5,7 @@ import { message } from 'antd'
 import { Btn, Row, Section, Segmented, StatusDot } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
 import { platformLabel, readApiDetail } from '../publish/uploadPost'
+import { bilibiliApi } from '../publish/bilibiliApi'
 import { uploadPostApi, type UploadPostConfigView, type UploadPostProfile } from '../publish/uploadPostApi'
 
 const KEY_URL = 'https://app.upload-post.com/api-keys'
@@ -23,6 +24,12 @@ const PublishSettings: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [biliConfigured, setBiliConfigured] = useState(false)
+  const [biliName, setBiliName] = useState('')
+  const [biliSource, setBiliSource] = useState('none')
+  const [cookie, setCookie] = useState('')
+  const [savingBili, setSavingBili] = useState(false)
+  const [clearingBili, setClearingBili] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const loadProfiles = useCallback(async (preferred: string) => {
@@ -38,9 +45,12 @@ const PublishSettings: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
-      const cfg = await uploadPostApi.getConfig()
+      const [cfg, bili] = await Promise.all([uploadPostApi.getConfig(), bilibiliApi.getConfig()])
       setConfig(cfg)
       setUser(cfg.user || '')
+      setBiliConfigured(bili.configured)
+      setBiliName(bili.nickname || '')
+      setBiliSource(bili.source || 'none')
       if (cfg.configured) await loadProfiles(cfg.user || '')
       else setProfiles([])
     } catch (err) {
@@ -101,10 +111,49 @@ const PublishSettings: React.FC = () => {
     }
   }
 
+  const saveBili = async () => {
+    const value = cookie.trim()
+    if (!value) {
+      setError(t("在浏览器登录 B 站，从请求头复制 Cookie。需要 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。"))
+      return
+    }
+    setSavingBili(true)
+    setError(null)
+    try {
+      const saved = await bilibiliApi.saveConfig({ cookie: value })
+      setCookie('')
+      setBiliConfigured(saved.configured)
+      setBiliName(saved.nickname || '')
+      setBiliSource(saved.source || 'file')
+      message.success(saved.nickname ? `${t("Cookie 已校验并保存")} · ${saved.nickname}` : t("Cookie 已校验并保存"))
+    } catch (err) {
+      setError(readApiDetail(err, t("发布失败")))
+    } finally {
+      setSavingBili(false)
+    }
+  }
+
+  const clearBili = async () => {
+    setClearingBili(true)
+    setError(null)
+    try {
+      const cleared = await bilibiliApi.clearConfig()
+      setCookie('')
+      setBiliConfigured(cleared.configured)
+      setBiliName(cleared.nickname || '')
+      setBiliSource(cleared.source || 'none')
+      message.success(t("已清除本机保存的 B 站账号"))
+    } catch (err) {
+      setError(readApiDetail(err, t("发布失败")))
+    } finally {
+      setClearingBili(false)
+    }
+  }
+
   return (
     <Section
       title={t("发布")}
-      description={t("把成片一次发到 TikTok、Instagram、YouTube 等。剪辑仍在这台机器上完成，只有成片会上传到 Upload-Post。")}
+      description={t("海外账号和 B 站都在这里配。配好后，在切片的发布页直接选。")}
     >
       <div className="ac-rows">
         <Row
@@ -169,6 +218,41 @@ const PublishSettings: React.FC = () => {
           <Btn size="sm" variant="cta" loading={saving} onClick={() => void save()}>{t("保存并校验")}</Btn>
           {config.source === 'file' && (
             <Btn size="sm" variant="danger" loading={clearing} onClick={() => void clear()}>{t("清除本机保存的密钥")}</Btn>
+          )}
+        </Row>
+        <Row
+          wide
+          stack
+          label={t("B 站 Cookie")}
+          hint={<>
+            {t("在浏览器登录 B 站，从请求头复制 Cookie。需要 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。")}
+            {biliConfigured ? ` ${t("再贴一次会换成这个账号。")}` : ''}
+          </>}
+        >
+          <textarea
+            className="ac-input ac-textarea"
+            style={{ minHeight: 72 }}
+            name="bilibili-cookie"
+            autoComplete="off"
+            spellCheck={false}
+            aria-label={t("B 站 Cookie")}
+            value={cookie}
+            onChange={(e) => setCookie(e.target.value)}
+          />
+        </Row>
+        <Row label={t("状态")} hint={biliSource === 'env' ? t("Cookie 来自环境变量，这里的修改不会覆盖它。") : undefined}>
+          {loading ? (
+            <StatusDot tone="muted" label={t("还在处理中")} />
+          ) : biliConfigured ? (
+            <StatusDot tone="ok" label={t("已连接 {{name}}", { name: biliName || t("B站") })} />
+          ) : (
+            <StatusDot tone="muted" label={t("未配置")} />
+          )}
+        </Row>
+        <Row label={t("保存")}>
+          <Btn size="sm" variant="cta" loading={savingBili} onClick={() => void saveBili()}>{t("保存并校验")}</Btn>
+          {biliSource === 'file' && (
+            <Btn size="sm" variant="danger" loading={clearingBili} onClick={() => void clearBili()}>{t("清除本机保存的账号")}</Btn>
           )}
         </Row>
       </div>
