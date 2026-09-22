@@ -6,6 +6,7 @@ import { projectApi } from '../services/api'
 import { Btn, Icon, ProgressLine, Row, Segmented, StatusDot } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
 import { bilibiliApi, type BilibiliJobView } from '../publish/bilibiliApi'
+import { coverApi, type CoverView } from '../publish/coverApi'
 import {
   buildSchedule, defaultPlatforms, platformLabel, privateExtra, publishDestinations, readApiDetail, renderPreset,
   type PublishVisibility,
@@ -15,6 +16,14 @@ import { uploadPostApi, type PlatformResult, type PublishJobView, type UploadPos
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 type Track = { kind: 'upload-post' | 'bilibili'; jobId: string }
+
+function coverPlatform(platforms: string[]): 'bilibili' | 'douyin' {
+  if (platforms.includes('bilibili') && platforms.every((p) => p === 'bilibili')) return 'bilibili'
+  if (platforms.some((p) => ['tiktok', 'instagram', 'youtube', 'facebook', 'threads', 'pinterest'].includes(p))) {
+    return 'douyin'
+  }
+  return 'bilibili'
+}
 
 function settleJob(job: PublishJobView | BilibiliJobView, later: boolean): {
   pending: boolean
@@ -81,6 +90,13 @@ const PublishClipPage: React.FC = () => {
   const [percent, setPercent] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [results, setResults] = useState<PlatformResult[]>([])
+  const [cover, setCover] = useState<CoverView | null>(null)
+  const [coverTitle, setCoverTitle] = useState('')
+  const [coverSubtitle, setCoverSubtitle] = useState('')
+  const [coverBadge, setCoverBadge] = useState('')
+  const [coverBusy, setCoverBusy] = useState(false)
+  const [coverHint, setCoverHint] = useState<string | null>(null)
+  const coverJob = useRef(0)
 
   useEffect(() => {
     const session = ++runId.current
@@ -99,9 +115,20 @@ const PublishClipPage: React.FC = () => {
           try { clips = await projectApi.getClips(projectId) } catch { clips = [] }
         }
         const clip = clips.find((item) => item.id === clipId)
-        setClipTitle(clip?.generated_title || clip?.title || '')
+        const nextTitle = clip?.generated_title || clip?.title || ''
+        setClipTitle(nextTitle)
+        setCoverTitle(nextTitle)
         setConfigured(cfg.configured)
         setBiliConfigured(bili.configured)
+        try {
+          const existing = await coverApi.get(projectId, clipId, 'bilibili')
+          if (!cancelled && runId.current === session && existing.ok && existing.url) {
+            setCover(existing)
+            if (existing.title) setCoverTitle(existing.title)
+            if (existing.subtitle) setCoverSubtitle(existing.subtitle)
+            if (existing.badge) setCoverBadge(existing.badge)
+          }
+        } catch { /* 没有封面时忽略 */ }
         let list: UploadPostProfile[] = []
         let next = ''
         if (cfg.configured) {
@@ -132,6 +159,47 @@ const PublishClipPage: React.FC = () => {
 
   const toggle = (platform: string) => {
     setSelected((cur) => cur.includes(platform) ? cur.filter((p) => p !== platform) : [...cur, platform])
+  }
+
+  const generateCover = async () => {
+    if (!projectId || !clipId || coverBusy) return
+    const session = ++coverJob.current
+    setCoverBusy(true)
+    setCoverHint(null)
+    try {
+      const started = await coverApi.start(projectId, clipId, {
+        platform: coverPlatform(selected),
+        title: (coverTitle || title).trim() || undefined,
+        subtitle: coverSubtitle.trim() || undefined,
+        badge: coverBadge.trim() || undefined,
+      })
+      if (coverJob.current !== session) return
+      if ('url' in started && started.url) {
+        setCover(started as CoverView)
+        if (started.warning) setCoverHint(String(started.warning))
+        return
+      }
+      const jobId = (started as { job_id: string }).job_id
+      for (let i = 0; i < 90; i++) {
+        await sleep(1000)
+        if (coverJob.current !== session) return
+        const job = await coverApi.job(jobId)
+        if (job.status === 'completed' && job.result) {
+          setCover(job.result)
+          if (job.result.warning) setCoverHint(job.result.warning)
+          return
+        }
+        if (job.status === 'failed' || job.status === 'cancelled') {
+          setCoverHint(job.error || t("封面生成失败，发布时会用截帧"))
+          return
+        }
+      }
+      setCoverHint(t("封面还在生成，发布时会用截帧兜底"))
+    } catch (err) {
+      setCoverHint(readApiDetail(err, t("封面生成失败，发布时会用截帧")))
+    } finally {
+      if (coverJob.current === session) setCoverBusy(false)
+    }
   }
 
   const profile = profiles.find((p) => p.username === user)
@@ -355,6 +423,40 @@ const PublishClipPage: React.FC = () => {
             </Row>
             <Row wide label={t("描述")} hint={t("YouTube、LinkedIn、Facebook、Pinterest 和 B 站会用到。")}>
               <textarea className="ac-input ac-textarea" style={{ minHeight: 88 }} aria-label={t("描述")} value={description} onChange={(e) => setDescription(e.target.value)} />
+            </Row>
+            <Row stack label={t("封面")} hint={t("生图失败或未生成时，投稿会自动截帧，不会卡住发布。")}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
+                <div style={{
+                  width: '100%',
+                  maxWidth: 360,
+                  aspectRatio: coverPlatform(selected) === 'douyin' ? '9 / 16' : '16 / 9',
+                  background: 'var(--ac-thumb)',
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  border: '1px solid var(--ac-line)',
+                }}>
+                  {cover?.url ? (
+                    <img src={cover.url} alt={t("封面")} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  ) : (
+                    <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: 'var(--ac-muted)', fontSize: 13 }}>
+                      {coverBusy ? t("正在生成封面") : t("还没有封面")}
+                    </div>
+                  )}
+                </div>
+                <input className="ac-input" aria-label={t("封面标题")} placeholder={t("封面标题")} value={coverTitle} onChange={(e) => setCoverTitle(e.target.value)} />
+                <input className="ac-input" aria-label={t("封面副标题")} placeholder={t("封面副标题")} value={coverSubtitle} onChange={(e) => setCoverSubtitle(e.target.value)} />
+                <input className="ac-input" aria-label={t("封面角标")} placeholder={t("封面角标")} value={coverBadge} onChange={(e) => setCoverBadge(e.target.value)} />
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <Btn size="sm" loading={coverBusy} disabled={busy} onClick={() => void generateCover()}>
+                    {cover?.url ? t("重新生成封面") : t("生成封面")}
+                  </Btn>
+                  <Btn size="sm" onClick={() => navigate('/settings?section=cover')}>{t("封面设置")}</Btn>
+                </div>
+                {coverHint && <p style={{ margin: 0, color: 'var(--ac-sub)', fontSize: 12.5 }}>{coverHint}</p>}
+                {cover?.method === 'frame' && !coverHint && (
+                  <p style={{ margin: 0, color: 'var(--ac-sub)', fontSize: 12.5 }}>{t("当前是截帧封面")}</p>
+                )}
+              </div>
             </Row>
           </>
         )}

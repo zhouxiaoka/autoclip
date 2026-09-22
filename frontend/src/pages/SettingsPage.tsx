@@ -7,6 +7,7 @@ import { settingsApi } from '../services/api'
 import SpeechRecognitionConfig from '../components/SpeechRecognitionConfig'
 import FeedbackDialog from '../components/FeedbackDialog'
 import PublishSettings from '../components/PublishSettings'
+import CoverSettings from '../components/CoverSettings'
 import { isDesktopMode } from '../utils/desktopMode'
 import { openExternalLink } from '../utils/externalLinks'
 import { trackApiKeyConfigured } from '../analytics/events'
@@ -60,12 +61,13 @@ const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
   dashscope: 'qwen-plus', openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash', siliconflow: 'deepseek-ai/DeepSeek-V3',
 }
 
-type SectionKey = 'model' | 'speech' | 'app' | 'publish' | 'feedback'
+type SectionKey = 'model' | 'speech' | 'app' | 'publish' | 'cover' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
   { key: 'model', get label() { return t("模型") } },
   { key: 'speech', get label() { return t("转写") } },
   { key: 'app', get label() { return t("应用") } },
   { key: 'publish', get label() { return t("发布") } },
+  { key: 'cover', get label() { return t("封面") } },
   { key: 'feedback', get label() { return t("反馈") } },
 ]
 
@@ -477,6 +479,8 @@ const SettingsPage: React.FC = () => {
           )}
 
           {active === 'publish' && <PublishSettings />}
+
+          {active === 'cover' && <CoverSettings />}
 
           {/* ---------------- 反馈 ---------------- */}
           {active === 'feedback' && (

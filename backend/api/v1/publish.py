@@ -17,9 +17,11 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from backend.services import bilibili_publisher as bili
+from backend.services import cover as cover_svc
 from backend.services import upload_post_publisher as up
 
 router = APIRouter(prefix="/publish", tags=["publish"])
@@ -55,6 +57,26 @@ class PublishBody(BaseModel):
     scheduled_date: str | None = Field(None, description="ISO-8601 定时发布")
     timezone: str | None = Field(None, description="IANA 时区，配合 scheduled_date")
     extra: dict[str, Any] = Field(default_factory=dict, description="平台专属字段透传，如 privacy_level、privacyStatus、facebook_page_id、pinterest_board_id")
+
+
+class CoverConfigBody(BaseModel):
+    enabled: bool | None = None
+    provider: str | None = Field(None, description="openai / seedream / dashscope")
+    model: str | None = None
+    api_key: str | None = Field(None, description="不传则保留已有密钥")
+    base_url: str | None = None
+    ocr_model: str | None = None
+    allow_send_frame: bool | None = Field(None, description="是否允许把视频帧发给第三方生图服务，默认关")
+
+
+class CoverGenerateBody(BaseModel):
+    platform: str = Field("bilibili", description="bilibili 横屏 / douyin 竖屏")
+    title: str | None = None
+    subtitle: str | None = None
+    badge: str | None = None
+    content_type: str | None = Field(None, description="knowledge / interview / game / vlog / general")
+    force_local: bool = False
+    sync: bool = Field(False, description="True 时同步生成（测试用）；默认后台任务")
 
 
 def _bili_error(exc: Exception) -> HTTPException:
@@ -239,3 +261,110 @@ async def get_bilibili_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="没有这个发布任务")
     return job
+
+
+def _cover_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, cover_svc.CoverError):
+        code = exc.status_code if exc.status_code in (400, 401, 404) else 400
+        return HTTPException(status_code=code, detail=str(exc))
+    if isinstance(exc, FileNotFoundError):
+        return HTTPException(status_code=404, detail=str(exc))
+    return HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/covers/config")
+async def get_cover_config():
+    return cover_svc.load_config().public()
+
+
+@router.put("/covers/config")
+async def put_cover_config(body: CoverConfigBody):
+    if body.provider is not None and body.provider.strip().lower() not in ("openai", "seedream", "dashscope"):
+        raise HTTPException(status_code=400, detail="生图提供商只能是 openai、seedream 或 dashscope")
+    cfg = cover_svc.save_config(
+        enabled=body.enabled,
+        provider=body.provider,
+        model=body.model,
+        api_key=body.api_key,
+        base_url=body.base_url,
+        ocr_model=body.ocr_model,
+        allow_send_frame=body.allow_send_frame,
+    )
+    payload = {"ok": True, **cfg.public()}
+    if cfg.source == "env":
+        payload["note"] = "密钥来自环境变量 IMAGE_API_KEY，这里的修改不会覆盖它。"
+    return payload
+
+
+@router.delete("/covers/config")
+async def delete_cover_config():
+    return {"ok": True, **cover_svc.clear_config().public()}
+
+
+@router.get("/covers/{project_id}/clips/{clip_id}")
+async def get_clip_cover(project_id: str, clip_id: str, platform: str = "bilibili"):
+    from backend.services.publish_export import load_clip_meta
+    try:
+        load_clip_meta(project_id, clip_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    found = cover_svc.get_cover(project_id, clip_id, platform)
+    if not found:
+        return {"ok": False, "platform": cover_svc.normalize_platform(platform), "url": None}
+    return found
+
+
+@router.get("/covers/{project_id}/clips/{clip_id}/file")
+async def get_clip_cover_file(project_id: str, clip_id: str, platform: str = "bilibili"):
+    platform = cover_svc.normalize_platform(platform)
+    path = cover_svc.cover_path(project_id, clip_id, platform)
+    if not path.exists() or path.stat().st_size <= 0:
+        raise HTTPException(status_code=404, detail="还没有这张封面")
+    return FileResponse(path, media_type="image/jpeg", filename=f"{clip_id}_{platform}.jpg")
+
+
+@router.post("/covers/{project_id}/clips/{clip_id}")
+async def start_cover_generate(project_id: str, clip_id: str, body: CoverGenerateBody):
+    from backend.services.publish_export import load_clip_meta
+    try:
+        load_clip_meta(project_id, clip_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    platform = cover_svc.normalize_platform(body.platform)
+    if body.sync:
+        try:
+            return cover_svc.generate_cover(
+                project_id=project_id,
+                clip_id=clip_id,
+                platform=platform,
+                title=body.title,
+                subtitle=body.subtitle,
+                badge=body.badge,
+                content_type=body.content_type,
+                force_local=body.force_local,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise _cover_error(e)
+    return cover_svc.start_generate(
+        project_id=project_id,
+        clip_id=clip_id,
+        platform=platform,
+        title=body.title,
+        subtitle=body.subtitle,
+        badge=body.badge,
+        content_type=body.content_type,
+        force_local=body.force_local,
+    )
+
+
+@router.get("/covers/jobs/{job_id}")
+async def get_cover_job(job_id: str):
+    job = cover_svc.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="没有这个封面任务")
+    return job
+
+
+@router.post("/covers/jobs/{job_id}/cancel")
+async def cancel_cover_job(job_id: str):
+    return cover_svc.cancel_job(job_id)
