@@ -688,5 +688,7 @@
   "TikTok 每天最多 15 条，YouTube 每天最多 10 条。这一周每天只排一条。": "TikTok allows 15 a day and YouTube 10. This week places one a day.",
   "正在排第 {{done}} 条，共 {{total}} 条": "Scheduling {{done}} of {{total}}",
   "这一周没有还没发过的切片。": "No unsent clips left for this week.",
-  "分数 {{score}}": "Score {{score}}"
+  "分数 {{score}}": "Score {{score}}",
+  "成片跟着账号走：有竖屏账号就渲成 9:16，只有横屏账号时按原画。": "The file follows the accounts: a vertical account is rendered 9:16, and horizontal-only accounts keep the original frame.",
+  "从切片上打开发布。": "Open a clip and publish it from there."
 }

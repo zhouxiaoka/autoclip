@@ -1,24 +1,15 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { projectApi } from '../services/api'
 import { Btn, Icon, ProgressLine, Row, Segmented, StatusDot } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
 import {
-  buildSchedule, defaultPlatforms, platformLabel, privateExtra, readApiDetail,
+  buildSchedule, defaultPlatforms, platformLabel, privateExtra, readApiDetail, renderPreset,
   type PublishVisibility,
 } from '../publish/uploadPost'
 import { uploadPostApi, type PlatformResult, type UploadPostProfile } from '../publish/uploadPostApi'
-
-const PRESETS = ['douyin', 'xiaohongshu', 'shorts', 'bilibili', 'original'] as const
-const PRESET_LABEL: Record<string, string> = {
-  douyin: '抖音',
-  xiaohongshu: '小红书',
-  shorts: 'Shorts',
-  bilibili: 'B 站',
-  original: '原画',
-}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -33,12 +24,8 @@ function defaultWhen(): string {
 const PublishClipPage: React.FC = () => {
   useTranslation()
   const { id: projectId = '', clipId = '' } = useParams()
-  const [params] = useSearchParams()
   const navigate = useNavigate()
   const runId = useRef(0)
-  const preset = PRESETS.includes(params.get('preset') as typeof PRESETS[number]) ? params.get('preset')! : 'douyin'
-  const subtitles = params.get('subtitles') !== '0'
-  const titleCard = params.get('titleCard') !== '0'
 
   const [clipTitle, setClipTitle] = useState('')
   const [loading, setLoading] = useState(true)
@@ -51,6 +38,9 @@ const PublishClipPage: React.FC = () => {
   const [whenValue, setWhenValue] = useState(defaultWhen)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [subtitles, setSubtitles] = useState(true)
+  const [titleCard, setTitleCard] = useState(true)
+  const [savingFile, setSavingFile] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'running' | 'waiting' | 'done' | 'partial' | 'failed' | 'scheduled'>('idle')
   const [percent, setPercent] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -106,8 +96,8 @@ const PublishClipPage: React.FC = () => {
   const profile = profiles.find((p) => p.username === user)
   const connected = profile?.connected_platforms || []
   const reconnect = (profile?.reconnect_platforms || []).map(platformLabel).join(' · ')
-  const busy = phase === 'running' || phase === 'waiting'
-  const presetName = PRESET_LABEL[preset] ? t(PRESET_LABEL[preset]) : preset
+  const busy = phase === 'running' || phase === 'waiting' || savingFile
+  const preset = renderPreset(selected)
   const longYoutube = selected.includes('youtube') && title.trim().length > 100
 
   const publish = async () => {
@@ -191,6 +181,39 @@ const PublishClipPage: React.FC = () => {
     }
   }
 
+  const downloadFile = async () => {
+    if (savingFile || phase === 'running' || phase === 'waiting') return
+    setSavingFile(true)
+    setError(null)
+    setPercent(8)
+    try {
+      const started = await projectApi.startClipExport(projectId, clipId, {
+        preset,
+        subtitles,
+        title_card: titleCard,
+      })
+      for (let i = 0; i < 180; i++) {
+        await sleep(1000)
+        const job = await projectApi.getExportJob(projectId, started.job_id)
+        setPercent(job.percent ?? 20)
+        if (job.status === 'completed') {
+          await projectApi.downloadExport(projectId, started.job_id)
+          setPercent(100)
+          return
+        }
+        if (job.status === 'failed') {
+          setError(job.error || t("导出失败"))
+          return
+        }
+      }
+      setError(t("导出超时，请稍后在输出目录查看"))
+    } catch (err) {
+      setError(readApiDetail(err, t("导出失败")))
+    } finally {
+      setSavingFile(false)
+    }
+  }
+
   const summary = phase === 'done'
     ? t("各平台都已完成")
     : phase === 'partial'
@@ -209,11 +232,9 @@ const PublishClipPage: React.FC = () => {
         <button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>
           <Icon.Back />{t("项目")}
         </button>
-        <h1 className="ac-title">{t("发到海外平台")}</h1>
+        <h1 className="ac-title">{t("发布")}</h1>
         <div className="ac-meta">
           <span>{clipTitle || t("切片")}</span>
-          <span className="dot" />
-          <span>{presetName}</span>
         </div>
       </header>
 
@@ -271,11 +292,23 @@ const PublishClipPage: React.FC = () => {
             </Row>
           </>
         )}
+        {!loading && (
+          <>
+            <Row label={t("字幕")} hint={t("从原字幕切出本段并烧进画面")}>
+              <Segmented size="sm" ariaLabel={t("字幕")} value={subtitles ? 'on' : 'off'} onChange={(v) => setSubtitles(v === 'on')}
+                options={[{ value: 'on', label: t("烧录") }, { value: 'off', label: t("不要") }]} />
+            </Row>
+            <Row label={t("标题卡")} hint={t("片头约 4 秒显示切片标题")}>
+              <Segmented size="sm" ariaLabel={t("标题卡")} value={titleCard ? 'on' : 'off'} onChange={(v) => setTitleCard(v === 'on')}
+                options={[{ value: 'on', label: t("显示") }, { value: 'off', label: t("不要") }]} />
+            </Row>
+          </>
+        )}
       </div>
 
-      {!loading && configured && (
-        <p style={{ marginTop: 16, color: 'var(--ac-sub)', fontSize: 13 }}>
-          {t("按「{{preset}}」预设渲成片。相同参数会复用已经导出的文件。", { preset: presetName })}
+      {!loading && (
+        <p className="ac-sub" style={{ marginTop: 16 }}>
+          {t("成片跟着账号走：有竖屏账号就渲成 9:16，只有横屏账号时按原画。")}
         </p>
       )}
       {busy && <div style={{ marginTop: 16 }}><ProgressLine percent={percent} /></div>}
@@ -302,16 +335,17 @@ const PublishClipPage: React.FC = () => {
       )}
       {error && <p style={{ marginTop: 12, color: 'var(--ac-error)', fontSize: 13 }}>{error}</p>}
 
-      {!loading && configured && phase !== 'done' && phase !== 'partial' && phase !== 'scheduled' && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 28 }}>
-          <Btn variant="cta" loading={busy} disabled={!selected.length} onClick={() => void publish()}>
-            {when === 'later' ? t("排期发布") : t("开始发布")}
-          </Btn>
-        </div>
-      )}
-      {(phase === 'done' || phase === 'partial' || phase === 'scheduled') && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 28 }}>
-          <Btn onClick={() => navigate(`/project/${projectId}/publish`)}>{t("查看发布记录")}</Btn>
+      {!loading && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 28 }}>
+          <Btn loading={savingFile} disabled={phase === 'running' || phase === 'waiting'} onClick={() => void downloadFile()}>{t("下载成片")}</Btn>
+          {configured && phase !== 'done' && phase !== 'partial' && phase !== 'scheduled' && (
+            <Btn variant="cta" loading={phase === 'running' || phase === 'waiting'} disabled={!selected.length || savingFile} onClick={() => void publish()}>
+              {when === 'later' ? t("排期发布") : t("开始发布")}
+            </Btn>
+          )}
+          {(phase === 'done' || phase === 'partial' || phase === 'scheduled') && (
+            <Btn onClick={() => navigate(`/project/${projectId}/publish`)}>{t("查看发布记录")}</Btn>
+          )}
         </div>
       )}
     </div>

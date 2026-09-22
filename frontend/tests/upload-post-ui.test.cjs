@@ -15,7 +15,7 @@ function load(rel) {
 }
 
 const {
-  pickPreset, defaultPlatforms, privateExtra, readApiDetail, buildSchedule, recordStatusKey, recordTone,
+  pickPreset, renderPreset, defaultPlatforms, privateExtra, readApiDetail, buildSchedule, recordStatusKey, recordTone,
   monthCells, upcomingWeekSlots, planWeek, dayKey, localStamp, focusMonth,
 } = load('../src/publish/uploadPost.ts')
 
@@ -24,6 +24,12 @@ test('vertical platforms pick the shorts preset and others stay original', () =>
   assert.equal(pickPreset(['linkedin', 'x']), 'original')
   assert.equal(pickPreset(['linkedin', 'tiktok']), 'shorts')
   assert.equal(pickPreset(['youtube']), 'shorts')
+})
+
+test('the publish page renders vertical accounts as 9:16 and horizontal-only accounts as original', () => {
+  assert.equal(renderPreset([]), 'douyin')
+  assert.equal(renderPreset(['tiktok', 'youtube', 'linkedin']), 'douyin')
+  assert.equal(renderPreset(['linkedin', 'x']), 'original')
 })
 
 test('connected vertical platforms are preselected, otherwise every connected platform', () => {

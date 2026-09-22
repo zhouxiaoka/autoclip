@@ -126,7 +126,7 @@ const PublishListPage: React.FC = () => {
       {!loading && view === 'list' && !records.length && !error && (
         <div className="ac-empty" style={{ marginTop: 28 }}>
           <b>{t("还没有发布记录。")}</b>
-          <span>{t("从切片的导出里选择发到海外平台。")}</span>
+          <span>{t("从切片上打开发布。")}</span>
         </div>
       )}
       {!loading && view === 'list' && records.length > 0 && (

@@ -26,9 +26,18 @@ export function platformLabel(platform: string): string {
   return PLATFORM_LABEL[platform] || platform
 }
 
-/** 没指定预设时的规则：有竖屏平台就用 9:16 shorts，否则原画。界面若已选预设，以用户选择为准。 */
+/** 没指定预设时的规则：有竖屏平台就用 9:16 shorts，否则原画。命令行未写 --preset 时用这个。 */
 export function pickPreset(platforms: string[]): 'shorts' | 'original' {
   return platforms.some((p) => (VERTICAL_PLATFORMS as readonly string[]).includes(p)) ? 'shorts' : 'original'
+}
+
+/**
+ * 发布页的成片规格跟着要发的账号。
+ * 竖屏用 9:16 且不截断（douyin）；只有横屏账号时按原画。不在这里做 60 秒的 shorts 截断。
+ */
+export function renderPreset(platforms: string[]): 'douyin' | 'original' {
+  if (!platforms.length) return 'douyin'
+  return platforms.some((p) => (VERTICAL_PLATFORMS as readonly string[]).includes(p)) ? 'douyin' : 'original'
 }
 
 /** 默认勾选已连接的竖屏平台；一个都没有时勾选全部已连接平台。 */

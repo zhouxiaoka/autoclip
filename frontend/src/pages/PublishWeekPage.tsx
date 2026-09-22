@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { projectApi } from '../services/api'
 import { Btn, Icon, ProgressLine, Row, StatusDot } from '../ui'
 import {
-  defaultPlatforms, planWeek, privateExtra, readApiDetail, remainingClips,
+  defaultPlatforms, planWeek, privateExtra, readApiDetail, remainingClips, renderPreset,
   type WeekClip, type WeekRecord,
 } from '../publish/uploadPost'
 import { uploadPostApi } from '../publish/uploadPostApi'
@@ -105,7 +105,7 @@ const PublishWeekPage: React.FC = () => {
         const started = await uploadPostApi.start(projectId, slot.clipId!, {
           platforms,
           user,
-          preset: 'douyin',
+          preset: renderPreset(platforms),
           subtitles: true,
           title_card: true,
           scheduled_date: slot.stamp,
