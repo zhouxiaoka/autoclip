@@ -8,11 +8,11 @@
 
 AutoClip itself stays free and open source under MIT. Cloud model providers bill their own usage; consult your provider for pricing, quotas, and model availability. Ollama / LM Studio presets need no cloud API key, but require downloaded models and suitable hardware. Local Whisper needs separate speech components and model files.
 
-Overseas publishing needs your own [Upload-Post](https://www.upload-post.com) account. Free and paid tiers, and daily caps for TikTok, YouTube, Instagram, and other platforms, follow Upload-Post’s own pages. They are not AutoClip promises.
+As of **v1.3.2**, overseas publishing needs your own [Upload-Post](https://www.upload-post.com) account. Free and paid tiers, and daily caps for TikTok, YouTube, Instagram, and other platforms, follow Upload-Post’s own pages. They are not AutoClip promises.
 
 ### Are videos uploaded? Can I work offline?
 
-Editing stays on your device, and the video stays there too. Cloud language models receive transcript text. The finished clip leaves the machine only after you click Publish, and only to the platforms you connected. You can also download it without publishing. Usage analytics and error reporting depend on the version, build configuration, and settings; see the [privacy notes](PRIVACY.en.md). 
+Editing stays on your device, and the video stays there too. Cloud language models receive transcript text. The finished clip leaves the machine only after you click Publish, and only to the platforms you connected. You can also download it without publishing. Usage analytics and error reporting depend on the version, build configuration, and settings; see the [privacy notes](PRIVACY.en.md). The Publish page is available in **v1.3.2**.
 
 Once you have local footage, a local language model, and any required speech model, core local processing does not need a cloud model service. Video downloads, component installation, model downloads, and updates still need internet access. Local processing does not mean that every feature is offline.
 
@@ -97,7 +97,9 @@ autoclip export PROJECT_ID --preset shorts
 
 Replace `PROJECT_ID` with the actual project ID. Other presets include `douyin`, `xiaohongshu`, `bilibili`, and `original`; see the [CLI / MCP reference](CLI_AND_MCP.md) (Chinese).
 
-### How does the Publish page work?
+### How does the v1.3.2 Publish page work?
+
+Available in **v1.3.2**.
 
 After clips are ready, open Publish on a clip. Overseas platforms and Bilibili share that page:
 
@@ -110,7 +112,7 @@ The project page shows publish history and a calendar, and can cancel a schedule
 
 Aspect follows the accounts you send to. Vertical accounts render 9:16 without a 60-second cut. Bilibili alone renders landscape. LinkedIn or X alone keeps the original frame. Vertical and Bilibili in the same batch are rendered separately.
 
-When you publish, a cover can be generated automatically so Bilibili does not reject an empty cover. Default cover and title-card details follow this release’s installer notes.
+When you publish, a cover can be generated automatically so Bilibili does not reject an empty cover. Default cover and title-card details follow that release’s installer notes. Available in **v1.3.2**.
 
 ## Updates, backups, and support
 

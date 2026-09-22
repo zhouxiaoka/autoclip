@@ -49,8 +49,8 @@ These badges are provided by Trendshift. Click to view AutoClip’s recorded ach
 | Import footage | Use local videos, YouTube or Bilibili links, with optional SRT subtitles. |
 | Find highlights | Extract outlines, topic timelines, highlight scores, and clip titles from transcripts. |
 | Create clips and collections | Generate clips and suggested collections, then adjust their order manually. |
-| Publish | After clips are ready, open Publish on a clip. Overseas publishing uses platforms connected on your own Upload-Post account: TikTok, Instagram, YouTube, Facebook, LinkedIn, X, Threads, Pinterest, Bluesky, Discord, Telegram, and Google Business, as available on that account. Bilibili is one account: paste a Cookie once in Settings. It must include SESSDATA, bili_jct, and DedeUserID. Publish now or on a schedule. Title and description are optional and default to the clip title. Burned-in captions default on, and the ~4s title card defaults on. Visibility defaults to private / self where the platform supports it. AutoClip promises that only for TikTok, YouTube, and Bilibili. You can download without publishing. The project page shows publish history and a calendar, and can cancel a schedule that has not gone out. “Plan this week” fills Monday, Wednesday, and Friday at 09:00 for overseas platforms only, not Bilibili. Vertical accounts render 9:16 without a 60-second cut. Bilibili alone renders landscape. LinkedIn or X alone keeps the original frame. Vertical and Bilibili in the same batch are rendered separately. |
-| Auto cover | When publishing, a cover can be generated automatically so Bilibili does not reject an empty cover. Default cover and title-card details follow this release’s installer notes. |
+| Publish (v1.3.2) | After clips are ready, open Publish on a clip. Available in **v1.3.2**. Overseas publishing uses platforms connected on your own Upload-Post account: TikTok, Instagram, YouTube, Facebook, LinkedIn, X, Threads, Pinterest, Bluesky, Discord, Telegram, and Google Business, as available on that account. Bilibili is one account: paste a Cookie once in Settings. It must include SESSDATA, bili_jct, and DedeUserID. Publish now or on a schedule. Title and description are optional and default to the clip title. Burned-in captions default on, and the ~4s title card defaults on. Visibility defaults to private / self where the platform supports it. AutoClip promises that only for TikTok, YouTube, and Bilibili. You can download without publishing. The project page shows publish history and a calendar, and can cancel a schedule that has not gone out. “Plan this week” fills Monday, Wednesday, and Friday at 09:00 for overseas platforms only, not Bilibili. Vertical accounts render 9:16 without a 60-second cut. Bilibili alone renders landscape. LinkedIn or X alone keeps the original frame. Vertical and Bilibili in the same batch are rendered separately. |
+| Auto cover (v1.3.2) | When publishing, a cover can be generated automatically so Bilibili does not reject an empty cover. Default cover and title-card details follow that release’s installer notes. Available in **v1.3.2**. |
 | Export for publishing | Use presets for Douyin, Xiaohongshu, YouTube Shorts, and Bilibili, with burned-in subtitles and title cards. |
 | Choose your models | Use Qwen, OpenAI-compatible APIs, Gemini, SiliconFlow, or local models through Ollama / LM Studio. |
 | Automate your workflow | Orchestrate runs with the CLI or call the same processing pipeline from an MCP client. |
@@ -146,14 +146,14 @@ Inside Docker, `localhost` refers to the container. To use a model on the host, 
 <details>
 <summary>Is it free? Do I need an API key?</summary>
 
-AutoClip itself stays free and open source under MIT. Cloud providers bill their own model usage and require your API key. Ollama / LM Studio presets need no cloud key, but require model files and suitable hardware. Overseas publishing needs your own [Upload-Post](https://www.upload-post.com) account. Free and paid tiers, and daily caps for TikTok, YouTube, Instagram, and other platforms, follow Upload-Post’s own pages. They are not AutoClip promises.
+AutoClip itself stays free and open source under MIT. Cloud providers bill their own model usage and require your API key. Ollama / LM Studio presets need no cloud key, but require model files and suitable hardware. As of **v1.3.2**, overseas publishing needs your own [Upload-Post](https://www.upload-post.com) account. Free and paid tiers, and daily caps for TikTok, YouTube, Instagram, and other platforms, follow Upload-Post’s own pages. They are not AutoClip promises.
 
 </details>
 
 <details>
 <summary>Are my videos uploaded?</summary>
 
-Editing stays on your device. Cloud model analysis sends transcript text to your selected provider. The finished clip leaves the machine only after you click Publish, and only to the platforms you connected. You can also download it without publishing. Analytics and error reporting depend on your version and settings; see the privacy notes.
+Editing stays on your device. Cloud model analysis sends transcript text to your selected provider. The finished clip leaves the machine only after you click Publish, and only to the platforms you connected. You can also download it without publishing. That Publish page is available in **v1.3.2**. Analytics and error reporting depend on your version and settings; see the privacy notes.
 
 </details>
 
