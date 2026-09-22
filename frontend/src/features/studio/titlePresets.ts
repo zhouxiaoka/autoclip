@@ -1,4 +1,10 @@
 import type { Draft } from './types'
+import comicThumbnail from '../../assets/title-presets/comic.webp'
+import neonThumbnail from '../../assets/title-presets/neon.webp'
+import arenaThumbnail from '../../assets/title-presets/arena.webp'
+import pixelThumbnail from '../../assets/title-presets/pixel.webp'
+import editorialThumbnail from '../../assets/title-presets/editorial.webp'
+import frostedThumbnail from '../../assets/title-presets/frosted.webp'
 
 export const titlePresets = [
   {value:'comic',label:'漫画冲击'}, {value:'neon',label:'荧光挑战'},
@@ -18,4 +24,14 @@ export function titleVersions(style: Draft['title_style']) {
     : style==='pixel'||style==='frosted' ? [6,3]
     : style==='editorial' ? [6,3,2] : [6,3,2,1]
   return versions.map(value=>({value,label:labels[value]}))
+}
+
+// Design references help users identify the look; TitleArtwork renders their actual text.
+export const titleDesignThumbnails: Partial<Record<NonNullable<Draft['title_style']>, string>> = {
+  comic: comicThumbnail,
+  neon: neonThumbnail,
+  arena: arenaThumbnail,
+  pixel: pixelThumbnail,
+  editorial: editorialThumbnail,
+  frosted: frostedThumbnail,
 }

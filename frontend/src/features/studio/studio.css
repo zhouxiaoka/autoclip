@@ -8,6 +8,6 @@
 
 .studio-title-art{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.studio-title-status{position:absolute;bottom:18%;left:5%;right:5%;background:#152030e8;color:#fff;padding:8px;font-size:12px;text-align:center}.studio-title-status button{margin-left:6px}.studio-template--comic{background:#161a24;color:#ffe52d;font-weight:900;font-style:italic}.studio-template--neon{background:#ccff00;color:#10151d;font-weight:900}.studio-template--arena{background:#121d30;color:#dfff00;font-weight:900;font-style:italic;border-left:4px solid #25baff}
 
-.studio-template--art{flex:1 1 27%;min-width:78px;max-width:130px;padding:6px 5px;background:#121b28;color:#fff;font-style:normal;border-left:2px solid transparent}.studio-template--art img{display:block;width:100%;height:auto}.studio-template--art span{display:block;padding:5px 0;font-size:11px;font-weight:500}
+.studio-template--art{flex:1 1 27%;min-width:78px;max-width:130px;padding:6px 5px;background:#121b28;color:#fff;font-style:normal;border-left:2px solid transparent}.studio-template--art img{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:cover;border-radius:4px}.studio-template--art span{display:block;padding:5px 0;font-size:11px;font-weight:500}
 
 .studio-title-backdrop{position:absolute;inset:0;pointer-events:none;backdrop-filter:blur(1.6cqw);-webkit-backdrop-filter:blur(1.6cqw);mask-size:100% 100%;-webkit-mask-size:100% 100%;mask-repeat:no-repeat;-webkit-mask-repeat:no-repeat}
