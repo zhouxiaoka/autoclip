@@ -773,5 +773,8 @@
   "通义万相可留空。": "Leave blank for Wanxiang.",
   "默认火山方舟 api/v3。": "Defaults to Volcengine Ark api/v3.",
   "用豆包视觉读图核对标题，不要填 Seedream 本号。可留空。": "Use Doubao Vision to proofread the title—not the Seedream model ID. Optional.",
-  "操作教程": "How-to"
+  "操作教程": "How-to",
+  "海外": "Overseas",
+  "贴三个 Cookie 后保存。配好后，发布页会出现 B 站。": "Paste the three cookies and save. Bilibili then appears on the publish page.",
+  "在 Upload-Post 填密钥。配好后，在切片的发布页直接选。": "Add the Upload-Post key here. After that, pick it on the clip’s publish page."
 }
