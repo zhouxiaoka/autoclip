@@ -142,9 +142,13 @@ def frosted_layers(text,w,h,scale=1,y=.12,accent=None):
 
 
 def backdrop_png(text,style,w,h,scale=1,y=.12,accent=None,version=3):
-    if style!='frosted' or version!=3:raise ValueError('仅磨砂字幕卡支持背景遮罩')
+    if style!='frosted' or version not in (3,6):raise ValueError('仅磨砂字幕卡支持背景遮罩')
     if w<16 or h<16 or w*h>16777216:raise ValueError('文字模板支持最大 1600 万像素画布')
-    mask=frosted_layers(text,w,h,scale,y,accent)[1]
+    if version == 6:
+        from .title_art_v6 import frosted_layers as layers
+    else:
+        layers = frosted_layers
+    mask=layers(text,w,h,scale,y,accent)[1]
     # RGBA with alpha supports CSS mask-image as well as FFmpeg alphaextract.
     image=Image.new('RGBA',(w,h),'white');image.putalpha(mask)
     stream=io.BytesIO();image.save(stream,format='PNG');return stream.getvalue()

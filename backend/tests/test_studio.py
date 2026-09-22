@@ -354,7 +354,7 @@ def test_portrait_fills_frame_and_applies_focus_and_title(root,style,x,expected)
     assert max(pixel)-min(pixel)>180
 
 
-@pytest.mark.parametrize('style,version', [('comic',1),('neon',1),('arena',1),('comic',2),('neon',2),('arena',2),('editorial',2),('comic',3),('neon',3),('arena',3),('editorial',3),('pixel',3),('frosted',3),('comic',4),('comic',5)])
+@pytest.mark.parametrize('style,version', [('comic',1),('neon',1),('arena',1),('comic',2),('neon',2),('arena',2),('editorial',2),('comic',3),('neon',3),('arena',3),('editorial',3),('pixel',3),('frosted',3),('comic',4),('comic',5),('comic',6),('neon',6),('arena',6),('pixel',6),('editorial',6),('frosted',6)])
 def test_title_art_preview_matches_export_geometry(root,style,version):
     import io
     from PIL import Image,ImageChops,ImageStat
@@ -497,13 +497,13 @@ def test_title_versions_persist_and_have_distinct_previews(client):
     old=client.post('/studio/p1/title-preview',json=body)
     new=client.post('/studio/p1/title-preview',json={**body,'title_template_version':2})
     assert old.status_code==new.status_code==200 and old.content!=new.content
-    for version in (5,4,3,2,1):
+    for version in (6,5,4,3,2,1):
         body={**body,'title_template_version':version}
         saved=client.put('/studio/p1/drafts/'+d['id'],json=body).json()
         assert saved['title_template_version']==version
         body=saved
     assert client.post('/studio/p1/title-preview',json={**body,'title_style':'editorial'}).status_code==422
-    assert client.post('/studio/p1/title-preview',json={**body,'title_template_version':6}).status_code==422
+    assert client.post('/studio/p1/title-preview',json={**body,'title_template_version':7}).status_code==422
     for style in ['comic','neon','arena','editorial']:
         assert client.get('/studio/title-presets/'+style+'/thumbnail?v=2').status_code==200
     assert client.get('/studio/title-presets/comic/thumbnail?v=4').status_code==200
@@ -522,12 +522,13 @@ def test_v3_multilingual_bounds_and_thumbnails(client,style):
         with pytest.raises(ValidationError):draft(title_style=style,title_template_version=2)
 
 
-def test_frosted_preview_mask_matches_art_and_does_not_call_model(client,monkeypatch):
+@pytest.mark.parametrize('version', [3,6])
+def test_frosted_preview_mask_matches_art_and_does_not_call_model(client,monkeypatch,version):
     import io
     from PIL import Image
     d=client.post('/studio/p1/drafts',json={'clip_ids':['c1'],'title':'Glass'}).json()
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**k:pytest.fail('No provider calls'))
-    body={**d,'hook':'CAN YOU\nESCAPE?','title_style':'frosted','title_template_version':3,'aspect':'portrait'}
+    body={**d,'hook':'CAN YOU\nESCAPE?','title_style':'frosted','title_template_version':version,'aspect':'portrait'}
     responses=[client.post('/studio/p1/title-preview?layer='+layer,json=body) for layer in ('artwork','backdrop')]
     assert all(r.status_code==200 for r in responses)
     images=[Image.open(io.BytesIO(r.content)) for r in responses]
@@ -548,14 +549,15 @@ def test_pixel_uses_exact_grid_and_gloss_changes_face():
     assert ImageChops.difference(old.convert('RGB'),new.convert('RGB')).getbbox()
 
 
-def test_frosted_blurs_moving_background_only_inside_card_and_expires(root):
+@pytest.mark.parametrize('version', [3,6])
+def test_frosted_blurs_moving_background_only_inside_card_and_expires(root,version):
     import io
     from PIL import Image,ImageChops,ImageStat
     from backend.services.studio.render import render_draft
     source=root/'checker.mp4'
     filters="color=white:s=320x180:r=30:d=5,drawgrid=width=8:height=8:thickness=4:color=black,drawbox=color=red@0.4:t=fill:enable='lt(t,2)',drawbox=color=blue@0.4:t=fill:enable='gte(t,2)'"
     subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i',filters,'-c:v','libx264','-y',str(source)],check=True)
-    d=Draft(id='glass',title='Glass',hook='HI',title_style='frosted',title_template_version=3,subtitles=False,original_audio=False,title_motion=False,scenes=[Scene(id='s',start=0,end=5)])
+    d=Draft(id='glass',title='Glass',hook='HI',title_style='frosted',title_template_version=version,subtitles=False,original_audio=False,title_motion=False,scenes=[Scene(id='s',start=0,end=5)])
     render_draft('p1',source,d,'glass',lambda _:None)
     def frame(path,t):
         data=subprocess.check_output(['ffmpeg','-v','error','-ss',str(t),'-i',str(path),'-frames:v','1','-f','image2pipe','-vcodec','png','-'])
@@ -573,13 +575,14 @@ def test_frosted_blurs_moving_background_only_inside_card_and_expires(root):
     assert max(ImageStat.Stat(ImageChops.difference(frame(out,4.5),frame(source,4.5))).mean)<8
 
 
-def test_frosted_keeps_moving_source_frames_in_sync(root,source):
+@pytest.mark.parametrize('version', [3,6])
+def test_frosted_keeps_moving_source_frames_in_sync(root,source,version):
     import io
     from PIL import Image,ImageChops,ImageStat
     from backend.services.studio.render import render_draft
     base=Draft(id='sync',title='Sync',subtitles=False,original_audio=False,scenes=[Scene(id='s',start=.2,end=2.7)])
     render_draft('p1',source,base,'control',lambda _:None)
-    glass=base.model_copy(update={'hook':'HI','title_style':'frosted','title_template_version':3})
+    glass=base.model_copy(update={'hook':'HI','title_style':'frosted','title_template_version':version})
     render_draft('p1',source,glass,'glass-sync',lambda _:None)
     def frame(name,t):
         path=root/'output/studio'/f'{name}.mp4'
@@ -602,3 +605,31 @@ def test_comic_v4_bounds_and_version_isolation(version):
         with pytest.raises(ValidationError):draft(title_style=style,title_template_version=version)
     with pytest.raises(ValueError,match='太长'):
         artwork('a\nb\nc\nd','comic',1080,1920,version=version)
+
+
+@pytest.mark.parametrize('style',['comic','neon','arena','pixel','editorial','frosted'])
+def test_v6_multilingual_layout_and_saved_preview(client,style):
+    from backend.services.studio.title_art import artwork
+    for text in ['CAN YOU\nESCAPE?','你能逃出\n这里吗？','逃げ切れる？']:
+        for w,h in [(720,1280),(1280,720)]:
+            image=artwork(text,style,w,h,version=6,scale=1.2,y=.7)
+            x0,y0,x1,y1=image.getbbox()
+            assert 0<=x0<x1<=w and h*.035<=y0<y1<=h*.91
+    d=client.post('/studio/p1/drafts',json={'clip_ids':['c1'],'title':'Typography'}).json()
+    body={**d,'hook':'CAN YOU\nESCAPE?','title_style':style,'title_template_version':6,'aspect':'portrait'}
+    saved=client.put('/studio/p1/drafts/'+d['id'],json=body)
+    assert saved.status_code==200 and saved.json()['title_template_version']==6
+    assert client.post('/studio/p1/title-preview',json=saved.json()).status_code==200
+    assert client.get('/studio/title-presets/'+style+'/thumbnail?v=6').status_code==200
+    with pytest.raises(ValueError,match='太长'):
+        artwork('a\nb\nc\nd',style,1080,1920,version=6)
+
+
+def test_v6_preserves_accepted_comic_and_pixel_palette():
+    from backend.services.studio.title_art import artwork
+    for text in ['CAN YOU\nESCAPE?','你能逃出\n这里吗？']:
+        assert artwork(text,'comic',720,1280,version=6).tobytes()==artwork(text,'comic',720,1280,version=5).tobytes()
+    pixel=artwork('CAN YOU\nESCAPE?','pixel',1080,1920,version=6)
+    assert len(pixel.getcolors(10000))<30
+    for style in ['plain','impact','card']:
+        with pytest.raises(ValidationError):draft(title_style=style,title_template_version=6)

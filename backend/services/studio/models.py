@@ -36,7 +36,7 @@ class Draft(BaseModel):
     layout: Literal['fit', 'crop', 'blur'] = 'fit'
     crop_x: float = Field(default=.5, ge=0, le=1, allow_inf_nan=False)
     title_style: Literal['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'] = 'plain'
-    title_template_version: Literal[1, 2, 3, 4, 5] = 1
+    title_template_version: Literal[1, 2, 3, 4, 5, 6] = 1
     title_motion: bool = True
     title_scale: float = Field(default=1, ge=.75, le=1.2, allow_inf_nan=False)
     title_y: float = Field(default=.12, ge=.06, le=.70, allow_inf_nan=False)
@@ -51,12 +51,14 @@ class Draft(BaseModel):
 
     @model_validator(mode='after')
     def title_version(self):
+        if self.title_template_version == 6 and self.title_style in ('plain', 'impact', 'card'):
+            raise ValueError('文字模板版本 6 仅支持六款设计预设')
         if self.title_template_version in (4, 5) and self.title_style != 'comic':
             raise ValueError('文字模板版本 4/5 仅支持漫画冲击')
         if self.title_style == 'editorial' and self.title_template_version < 2:
             raise ValueError('极简大字需要文字模板版本 2 或更新')
-        if self.title_style in ('pixel', 'frosted') and self.title_template_version != 3:
-            raise ValueError('像素与磨砂模板需要文字模板版本 3')
+        if self.title_style in ('pixel', 'frosted') and self.title_template_version not in (3, 6):
+            raise ValueError('像素与磨砂模板需要文字模板版本 3 或 6')
         return self
 
 class CreateDraft(BaseModel):
