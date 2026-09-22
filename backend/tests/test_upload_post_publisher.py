@@ -53,6 +53,10 @@ class _Session:
         self.calls.append(("POST", url, {k: v for k, v in kw.items() if k != "files"} | {"files": list(kw.get("files", {}).keys())}))
         return self._take()
 
+    def delete(self, url, **kw):
+        self.calls.append(("DELETE", url, kw))
+        return self._take()
+
 
 def _fake_clip(data_dir: Path, project_id="p1", clip_id="2", title="高分片段") -> Path:
     from backend.core.path_utils import get_project_directory
@@ -283,6 +287,27 @@ def test_interrupted_job_fails_when_worker_is_gone(data_dir):
     assert job["status"] == "failed" and "中断" in job["error"]
     again = up.get_publish_job("job-dead", refresh_remote=False)
     assert again["status"] == "failed"
+
+
+def test_cancel_scheduled_record(data_dir):
+    from backend.services import upload_post_publisher as up
+
+    up._write_record("p1", {
+        "request_id": "req-sched",
+        "job_id": "job-9",
+        "status": "scheduled",
+        "title": "明天发",
+        "platforms": ["tiktok"],
+    })
+    session = _Session([_Resp(200, {"success": True})])
+    out = up.cancel_record("p1", "req-sched", config=up.UploadPostConfig(api_key="k-1234567890"), session=session)
+    assert out["status"] == "cancelled"
+    assert session.calls[0][0] == "DELETE"
+    assert session.calls[0][1].endswith("/api/uploadposts/schedule/job-9")
+    again = up.list_records("p1")[0]
+    assert again["status"] == "cancelled"
+    with pytest.raises(up.UploadPostError, match="还没发出"):
+        up.cancel_record("p1", "req-sched", config=up.UploadPostConfig(api_key="k-1234567890"), session=session)
 
 
 def test_reddit_is_refused_and_long_youtube_titles_are_capped():

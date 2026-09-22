@@ -3,6 +3,8 @@ import { Routes, Route, useLocation } from 'react-router-dom'
 import { Layout } from 'antd'
 import HomePage from './pages/HomePage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
+import PublishClipPage from './pages/PublishClipPage'
+import PublishListPage from './pages/PublishListPage'
 import SettingsPage from './pages/SettingsPage'
 import Header from './components/Header'
 import { UpdatePrompt } from './desktop/UpdatePrompt'
@@ -31,6 +33,8 @@ function App() {
       <Content>
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/project/:id/publish/:clipId" element={<PublishClipPage />} />
+          <Route path="/project/:id/publish" element={<PublishListPage />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

@@ -661,5 +661,19 @@
   "这次按原画重编码，不裁切。": "Desta vez o quadro original é recodificado, sem corte.",
   "按「{{preset}}」预设渲成片。相同参数会复用已经导出的文件。": "Renderiza com o preset {{preset}}. Os mesmos parâmetros reutilizam um arquivo já exportado.",
   "打开链接": "Abrir link",
-  "需要重新连接：{{platforms}}": "É preciso reconectar: {{platforms}}"
+  "需要重新连接：{{platforms}}": "É preciso reconectar: {{platforms}}",
+  "何时": "Quando",
+  "现在发": "Agora",
+  "定时": "Agendar",
+  "排期发布": "Agendar",
+  "选择发出的时间": "Escolha um horário",
+  "时间要晚于现在": "Escolha um horário mais tarde",
+  "已排期。到点会自动发出，可以关掉应用。": "Agendado. Sai sozinho e você pode fechar o aplicativo.",
+  "查看发布记录": "Ver publicações",
+  "还没有发布记录。": "Ainda não há publicações.",
+  "从切片的导出里选择发到海外平台。": "No exportar de um clipe, envie para plataformas no exterior.",
+  "已排期": "Agendado",
+  "已发出": "Enviado",
+  "取消排期": "Cancelar",
+  "YouTube 标题超过 100 字时会自动缩短。": "Títulos do YouTube com mais de 100 caracteres são encurtados sozinhos."
 }

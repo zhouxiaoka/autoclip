@@ -146,3 +146,11 @@ async def get_upload_post_request(request_id: str, project_id: str | None = None
 @router.get("/upload-post/{project_id}/records")
 async def list_upload_post_records(project_id: str):
     return {"records": up.list_records(project_id)}
+
+
+@router.delete("/upload-post/{project_id}/records/{request_id}")
+async def cancel_upload_post_record(project_id: str, request_id: str):
+    try:
+        return up.cancel_record(project_id, request_id)
+    except Exception as e:  # noqa: BLE001
+        raise _http_error(e)

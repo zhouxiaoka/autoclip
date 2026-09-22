@@ -44,7 +44,20 @@ export interface PublishClipBody {
   description?: string
   subtitles: boolean
   title_card: boolean
+  scheduled_date?: string
+  timezone?: string
   extra?: Record<string, string>
+}
+
+export interface PublishRecord {
+  request_id: string
+  job_id?: string | null
+  clip_id?: string
+  title?: string
+  platforms?: string[]
+  status?: string
+  scheduled_date?: string | null
+  submitted_at?: string
 }
 
 export const uploadPostApi = {
@@ -56,4 +69,7 @@ export const uploadPostApi = {
   start: (projectId: string, clipId: string, body: PublishClipBody): Promise<{ ok: boolean; job_id: string; status: string }> =>
     api.post(`/publish/upload-post/${projectId}/clips/${clipId}`, body),
   job: (jobId: string): Promise<PublishJobView> => api.get(`/publish/upload-post/jobs/${jobId}`),
+  records: (projectId: string): Promise<{ records: PublishRecord[] }> => api.get(`/publish/upload-post/${projectId}/records`),
+  cancel: (projectId: string, requestId: string): Promise<{ ok: boolean; status: string }> =>
+    api.delete(`/publish/upload-post/${projectId}/records/${requestId}`),
 }

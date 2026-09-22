@@ -49,6 +49,39 @@ export function privateExtra(platforms: string[], visibility: PublishVisibility)
   return extra
 }
 
+export type ScheduleResult =
+  | { ok: true; scheduled_date?: string; timezone?: string }
+  | { ok: false; reason: 'empty' | 'past' }
+
+/** 现在发不带时间。定时要求本地时间晚于现在，秒数补成 ISO，时区交给调用方。 */
+export function buildSchedule(when: 'now' | 'later', localValue: string, timeZone: string, nowMs: number): ScheduleResult {
+  if (when === 'now') return { ok: true }
+  const value = localValue.trim()
+  if (!value) return { ok: false, reason: 'empty' }
+  const parsed = Date.parse(value)
+  if (Number.isNaN(parsed) || parsed <= nowMs) return { ok: false, reason: 'past' }
+  return {
+    ok: true,
+    scheduled_date: value.length === 16 ? `${value}:00` : value,
+    timezone: timeZone || 'UTC',
+  }
+}
+
+export function recordStatusKey(status: string | undefined): string {
+  if (status === 'scheduled') return '已排期'
+  if (status === 'cancelled') return '已取消'
+  if (status === 'failed' || status === 'not_found') return '发布失败'
+  if (status === 'completed') return '已发出'
+  return '处理中'
+}
+
+export function recordTone(status: string | undefined): 'ok' | 'error' | 'accent' | 'muted' {
+  if (status === 'completed') return 'ok'
+  if (status === 'failed' || status === 'not_found') return 'error'
+  if (status === 'cancelled') return 'muted'
+  return 'accent'
+}
+
 export function readApiDetail(err: unknown, fallback: string): string {
   if (!err || typeof err !== 'object') return fallback
   const detail = (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail

@@ -294,6 +294,42 @@ def _write_record(project_id: str, record: dict[str, Any]) -> Path:
     return path
 
 
+def cancel_scheduled(job_id: str, config: UploadPostConfig | None = None,
+                     session: requests.Session | None = None) -> dict[str, Any]:
+    """DELETE /api/uploadposts/schedule/{job_id}。只取消还没发出去的排期。"""
+    cfg = _require(config)
+    resp = (session or requests.Session()).delete(
+        f"{cfg.base_url}/api/uploadposts/schedule/{job_id}",
+        headers=_headers(cfg),
+        timeout=30,
+    )
+    _raise_for_response(resp, "取消排期")
+    return {"ok": True, "job_id": job_id}
+
+
+def cancel_record(project_id: str, request_id: str, config: UploadPostConfig | None = None,
+                  session: requests.Session | None = None) -> dict[str, Any]:
+    path = records_dir(project_id) / f"{request_id}.json"
+    if not path.exists():
+        raise UploadPostError("没有这条发布记录", 404)
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise UploadPostError(f"读不到这条发布记录: {e}") from e
+    if not isinstance(record, dict):
+        raise UploadPostError("发布记录损坏了")
+    if record.get("status") != "scheduled":
+        raise UploadPostError("只有还没发出的排期可以取消")
+    job_id = str(record.get("job_id") or "").strip()
+    if not job_id:
+        raise UploadPostError("这条排期没有远端编号，不能取消")
+    cancel_scheduled(job_id, config=config, session=session)
+    record["status"] = "cancelled"
+    record["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+    path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True, "request_id": request_id, "status": "cancelled"}
+
+
 def list_records(project_id: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for path in records_dir(project_id).glob("*.json"):
