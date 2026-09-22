@@ -660,5 +660,6 @@
   "竖屏平台会渲成 9:16，最长约 60 秒。": "Ce préréglage est en 9:16, environ 60 secondes au plus.",
   "这次按原画重编码，不裁切。": "Ce rendu garde le cadre d’origine, sans recadrage.",
   "按「{{preset}}」预设渲成片。相同参数会复用已经导出的文件。": "Rendu avec le préréglage {{preset}}. Les mêmes réglages réutilisent un fichier déjà exporté.",
-  "打开链接": "Ouvrir le lien"
+  "打开链接": "Ouvrir le lien",
+  "需要重新连接：{{platforms}}": "À reconnecter : {{platforms}}"
 }

@@ -247,11 +247,156 @@ def test_list_profiles_marks_connected_platforms(data_dir):
     session = _Session([_Resp(200, {"success": True, "profiles": [
         {"username": "brand", "social_accounts": {"tiktok": {"display_name": "Brand"}, "youtube": ""}},
         {"username": "empty", "social_accounts": {}},
+        {"username": "stale", "social_accounts": {
+            "instagram": {"display_name": "Old", "reauth_required": True},
+            "linkedin": {},
+        }},
     ]})])
     profiles = up.list_profiles(up.UploadPostConfig(api_key="k-1234567890"), session=session)
     assert profiles[0]["username"] == "brand" and profiles[0]["connected_platforms"] == ["tiktok"]
+    assert profiles[0]["reconnect_platforms"] == []
     assert profiles[1]["connected_platforms"] == []
+    assert profiles[2]["connected_platforms"] == [] and profiles[2]["reconnect_platforms"] == ["instagram"]
     assert session.calls[0][1].endswith("/api/uploadposts/users")
+
+
+def test_platforms_follow_video_enum():
+    from backend.services import upload_post_publisher as up
+
+    assert up.PLATFORMS == [
+        "tiktok", "instagram", "youtube", "facebook", "linkedin", "x", "threads",
+        "pinterest", "bluesky", "discord", "telegram", "google_business",
+    ]
+    assert up.normalize_platforms(["twitter"]) == ["x"]
+    with pytest.raises(ValueError, match="不支持的平台"):
+        up.normalize_platforms(["mastodon"])
+    with pytest.raises(ValueError, match="不支持的平台"):
+        up.normalize_platforms(["wordpress"])
+
+
+def test_interrupted_job_fails_when_worker_is_gone(data_dir):
+    from backend.services import upload_post_publisher as up
+
+    up._remember_job({"job_id": "job-dead", "status": "running", "project_id": "p1", "clip_id": "2"})
+    up._jobs.clear()
+    job = up.get_publish_job("job-dead", refresh_remote=False)
+    assert job["status"] == "failed" and "中断" in job["error"]
+    again = up.get_publish_job("job-dead", refresh_remote=False)
+    assert again["status"] == "failed"
+
+
+def test_reddit_is_refused_and_long_youtube_titles_are_capped():
+    from backend.services import upload_post_publisher as up
+
+    with pytest.raises(ValueError, match="reddit_unavailable"):
+        up.normalize_platforms(["reddit"])
+    long_title = "标" * 120
+    form = up.build_form(
+        up.PublishRequest("p", "1", ["youtube"], title="t"),
+        ["youtube"], "main", long_title, "req-1",
+    )
+    assert form["title"] == long_title
+    assert len(form["youtube_title"]) == up.YOUTUBE_TITLE_LIMIT
+    short = up.build_form(up.PublishRequest("p", "1", ["tiktok"]), ["tiktok"], "main", "短标题", "req-2")
+    assert "youtube_title" not in short
+
+
+def test_publish_job_is_reloaded_from_disk(data_dir, monkeypatch):
+    import time
+    from backend.services import upload_post_publisher as up
+
+    monkeypatch.setattr(up, "publish_clip", lambda req: {"ok": True, "request_id": "disk-req", "preset": "shorts"})
+    started = up.start_publish(up.PublishRequest("p1", "2", ["tiktok"], user="main"))
+    job = None
+    for _ in range(50):
+        job = up.get_publish_job(started["job_id"], refresh_remote=False)
+        if job and job.get("status") == "submitted":
+            break
+        time.sleep(0.02)
+    assert job and job["request_id"] == "disk-req"
+    up._jobs.clear()
+    again = up.get_publish_job(started["job_id"], refresh_remote=False)
+    assert again["status"] == "submitted" and again["request_id"] == "disk-req"
+
+
+def test_real_http_client_against_local_upload_post(data_dir, monkeypatch):
+    """用真实 requests 打一个按文档回包的本地服务，确认 multipart、鉴权头和状态解析。"""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from backend.services import upload_post_publisher as up
+
+    exported = _fake_clip(data_dir)
+    monkeypatch.setattr("backend.services.publish_export.export_clip", lambda req: {"ok": True, "path": str(exported), "warnings": []})
+
+    class Handler(BaseHTTPRequestHandler):
+        def _json(self, code, payload):
+            raw = json.dumps(payload).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            if self.path.startswith("/api/uploadposts/me"):
+                return self._json(200, {"success": True, "email": "a@b.c", "plan": "Basic"})
+            if self.path.startswith("/api/uploadposts/users"):
+                return self._json(200, {"success": True, "profiles": [
+                    {"username": "main", "social_accounts": {"tiktok": {"display_name": "Brand"}, "youtube": ""}},
+                ]})
+            if self.path.startswith("/api/uploadposts/status"):
+                return self._json(200, {
+                    "request_id": "server-req", "status": "completed", "completed": 1, "total": 1,
+                    "results": [{"platform": "tiktok", "success": True, "post_url": "https://www.tiktok.com/@a/video/1"}],
+                })
+            return self._json(404, {"message": self.path})
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length)
+            Handler.body = body
+            Handler.auth = self.headers.get("Authorization")
+            Handler.idem = self.headers.get("Idempotency-Key")
+            self._json(200, {"success": True, "request_id": "server-req"})
+
+        def log_message(self, fmt, *args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    cfg = up.UploadPostConfig(api_key="k-1234567890", user="main", base_url=base)
+    try:
+        assert up.verify_api_key(cfg)["email"] == "a@b.c"
+        assert up.list_profiles(cfg)[0]["connected_platforms"] == ["tiktok"]
+        published = up.publish_clip(up.PublishRequest("p1", "2", ["tiktok", "youtube"]), config=cfg)
+        assert published["request_id"] == "server-req"
+        assert Handler.auth == "Apikey k-1234567890"
+        assert Handler.idem
+        assert Handler.body.count(b'name="platform[]"') == 2
+        assert b"tiktok" in Handler.body and b"youtube" in Handler.body
+        status = up.get_status("server-req", config=cfg, project_id="p1")
+        assert status["final"] is True
+        assert status["results"][0]["url"] == "https://www.tiktok.com/@a/video/1"
+    finally:
+        server.shutdown()
+
+
+def test_live_upload_post_rejects_unknown_key():
+    import requests
+    from backend.services import upload_post_publisher as up
+
+    try:
+        up.verify_api_key(up.UploadPostConfig(api_key="invalid-key-for-probe", base_url="https://api.upload-post.com"))
+    except up.UploadPostError as exc:
+        assert exc.status_code == 401
+        assert "Invalid API key" in str(exc)
+        return
+    except requests.RequestException as exc:
+        pytest.skip(f"Upload-Post 连不上: {exc}")
+    raise AssertionError("线上接口接受了无效 key")
 
 
 def test_verify_api_key(data_dir):

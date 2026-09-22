@@ -13,6 +13,7 @@
   入口：`autoclip publish`、MCP `publish_clip` / `get_publish_status` / `list_publish_profiles`、API `/api/v1/publish/upload-post/*`；
   配置用 `UPLOAD_POST_API_KEY` / `UPLOAD_POST_USER`、`autoclip publish --api-key … --user … --save`，或设置页「发布」。
   切片的「发布导出」里可以「发到海外平台」：勾选已连接的平台，默认先私密试发（`docs/PUBLISH_UPLOAD_POST.md`）。
+  发布客户端按当前 Upload-Post 文档和 OpenAPI 重写：过期账号不拿来发，Reddit 暂不发送，超长 YouTube 标题单独截短，提交后每 10 秒查一次结果。无效 key 打线上接口会得到 401。进程中断后未提交的任务会标成失败，而不是一直停在排队。
 
 ### 修复
 - 数据库清理脚本失败时返回退出码 1。之前异常被接住后进程仍以 0 退出，调用方会以为清理已经成功。

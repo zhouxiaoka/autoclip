@@ -101,7 +101,9 @@ const PublishAbroadDialog: React.FC<Props> = ({
     setSelected((cur) => cur.includes(platform) ? cur.filter((p) => p !== platform) : [...cur, platform])
   }
 
-  const connected = profiles.find((p) => p.username === user)?.connected_platforms || []
+  const profile = profiles.find((p) => p.username === user)
+  const connected = profile?.connected_platforms || []
+  const reconnect = (profile?.reconnect_platforms || []).map(platformLabel).join(' · ')
   const busy = phase === 'running' || phase === 'waiting'
   const presetName = PRESET_LABEL[preset] ? t(PRESET_LABEL[preset]) : preset
 
@@ -131,9 +133,12 @@ const PublishAbroadDialog: React.FC<Props> = ({
         extra: privateExtra(selected, visibility),
       })
       if (runId.current !== session) return
-      for (let i = 0; i < 150; i++) {
+      const deadline = Date.now() + 30 * 60 * 1000
+      let waitMs = 2000
+      let submitted = false
+      while (Date.now() < deadline) {
         if (runId.current !== session) return
-        await sleep(i < 8 ? 1000 : 4000)
+        await sleep(waitMs)
         if (runId.current !== session) return
         const job = await uploadPostApi.job(started.job_id)
         if (runId.current !== session) return
@@ -144,6 +149,8 @@ const PublishAbroadDialog: React.FC<Props> = ({
           return
         }
         if (job.status === 'submitted') {
+          submitted = true
+          waitMs = 10000
           setPhase('waiting')
           setPercent(72)
           const remote = job.remote
@@ -155,12 +162,13 @@ const PublishAbroadDialog: React.FC<Props> = ({
             return
           }
         } else {
+          waitMs = 2000
           setPhase('running')
           setPercent(36)
         }
       }
-      setPhase('waiting')
-      setError(t("已提交，正在等各平台结果"))
+      setPhase(submitted ? 'waiting' : 'running')
+      setError(submitted ? t("已提交，正在等各平台结果") : t("正在渲成片并提交"))
     } catch (err) {
       setError(readApiDetail(err, t("发布失败")))
       setPhase('failed')
@@ -229,8 +237,11 @@ const PublishAbroadDialog: React.FC<Props> = ({
               </div>
             </Row>
           )}
-          {profiles.length > 0 && !connected.length && (
+          {profiles.length > 0 && !connected.length && !reconnect && (
             <p style={{ color: 'var(--ac-sub)', fontSize: 13 }}>{t("这个账号还没有连接平台。")}</p>
+          )}
+          {reconnect && (
+            <p style={{ color: 'var(--ac-sub)', fontSize: 13 }}>{t("需要重新连接：{{platforms}}", { platforms: reconnect })}</p>
           )}
           <Row label={t("可见范围")} hint={t("默认先发到自己看得到的地方。公开会直接出现在账号上。")}>
             <Segmented size="sm" ariaLabel={t("可见范围")} value={visibility} onChange={setVisibility}

@@ -1,16 +1,20 @@
 """
-发布到海外平台：把「发布导出」渲好的成片通过 Upload-Post 一次发到 TikTok / Instagram / YouTube Shorts 等。
+把本机渲好的成片交给 Upload-Post，发到 TikTok / Instagram / YouTube 等。
 
-流程：export_clip（已有，走缓存）→ POST https://api.upload-post.com/api/upload（multipart，async）
-     → 拿 request_id → GET /api/uploadposts/status 轮询每个平台的结果。
+这条客户端是按 2026-09 的公开文档重写的，不沿用外部 PR 里的解析细节：
+https://docs.upload-post.com/api/upload-video
+https://docs.upload-post.com/api/upload-status
+https://docs.upload-post.com/api/user-profiles
 
-视频处理仍全部在本地；只有成片文件本身发给 Upload-Post。B 站投稿沿用原来的 bilibili_service，这里不碰。
+线上核对（无效 key）：下面四个地址都返回 HTTP 401、正文 {"success": false, "message": "Invalid API key"}，
+鉴权头是 `Authorization: Apikey <key>`。
 
-配置（优先级从高到低）：
-    1. 环境变量 UPLOAD_POST_API_KEY / UPLOAD_POST_USER（Docker / CLI）
-    2. <数据目录>/upload_post.json（PUT /publish/upload-post/config 或 `autoclip publish --api-key … --save` 写入）
+    POST https://api.upload-post.com/api/upload
+    GET  https://api.upload-post.com/api/uploadposts/me
+    GET  https://api.upload-post.com/api/uploadposts/users
+    GET  https://api.upload-post.com/api/uploadposts/status
 
-API 文档：https://docs.upload-post.com/api/upload-video
+视频处理仍在本地。只有成片 mp4 会上传。B 站投稿不经过这里。
 """
 from __future__ import annotations
 
@@ -32,35 +36,34 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_API_BASE = "https://api.upload-post.com"
 CONFIG_FILENAME = "upload_post.json"
+YOUTUBE_TITLE_LIMIT = 100
 
-# Upload-Post 支持的视频平台（platform[] 的取值）
+# OpenAPI VideoPlatformEnum（docs.upload-post.com/openapi.json）。
+# reddit 在枚举里，但上传页写明 platform[]=reddit 固定 503 reddit_unavailable，不放进可选列表。
+# 上传页示例仍写 twitter / mastodon / wordpress；模式里 X 的值是 x，后两个不在视频枚举中，不发送。
 PLATFORMS: list[str] = [
     "tiktok", "instagram", "youtube", "facebook", "linkedin", "x", "threads",
-    "pinterest", "bluesky", "reddit", "discord", "telegram", "google_business", "mastodon", "wordpress",
+    "pinterest", "bluesky", "discord", "telegram", "google_business",
 ]
-# 竖屏短视频平台默认用 9:16 crop 预设；其他平台保留原画
 VERTICAL_PLATFORMS = {"tiktok", "instagram", "youtube", "facebook", "threads", "pinterest"}
-
-# 不允许透传的多余字段（避免覆盖我们自己填的必填项）
 _RESERVED_FORM_FIELDS = {"user", "platform[]", "platform", "video", "async_upload", "request_id", "external_id"}
+FINAL_STATUSES = {"completed", "failed", "not_found"}
+_ACCOUNT_NAME_FIELDS = ("display_name", "username", "handle")
 
 
 class UploadPostError(RuntimeError):
-    """Upload-Post 返回了错误（HTTP 4xx/5xx 或 success=false）"""
-
     def __init__(self, message: str, status_code: int | None = None, payload: Any = None):
         super().__init__(message)
         self.status_code = status_code
         self.payload = payload
 
 
-# ---------------------------------------------------------------- config ---
 @dataclass
 class UploadPostConfig:
     api_key: str = ""
-    user: str = ""          # Upload-Post 里的 profile 名；不填时请求里必须显式给 user
+    user: str = ""
     base_url: str = DEFAULT_API_BASE
-    source: str = "none"    # env / file / none
+    source: str = "none"  # env / file / none / cli
 
     @property
     def configured(self) -> bool:
@@ -84,7 +87,7 @@ def config_path() -> Path:
 
 
 def load_config() -> UploadPostConfig:
-    """环境变量优先，其次数据目录里的 upload_post.json。"""
+    """环境变量优先于数据目录里的 upload_post.json。user 也是环境变量优先。"""
     base_url = (os.getenv("UPLOAD_POST_API_BASE") or DEFAULT_API_BASE).rstrip("/")
     env_key = (os.getenv("UPLOAD_POST_API_KEY") or "").strip()
     env_user = (os.getenv("UPLOAD_POST_USER") or "").strip()
@@ -98,9 +101,9 @@ def load_config() -> UploadPostConfig:
             if data.get("base_url") and not os.getenv("UPLOAD_POST_API_BASE"):
                 base_url = str(data["base_url"]).rstrip("/")
         except (OSError, ValueError) as e:
-            logger.warning(f"读取 {path} 失败: {e}")
+            logger.warning("读取 %s 失败: %s", path, e)
 
-    user = env_user or file_user  # user 单独取优先级：环境变量 > 文件
+    user = env_user or file_user
     if env_key:
         return UploadPostConfig(api_key=env_key, user=user, base_url=base_url, source="env")
     if file_key:
@@ -109,7 +112,7 @@ def load_config() -> UploadPostConfig:
 
 
 def save_config(api_key: str | None = None, user: str | None = None) -> UploadPostConfig:
-    """写 <数据目录>/upload_post.json；传 None 的字段保留原值。文件权限 0600。"""
+    """写入 upload_post.json。传 None 的字段保留原值。权限 0600。"""
     path = config_path()
     current: dict[str, Any] = {}
     if path.exists():
@@ -121,10 +124,11 @@ def save_config(api_key: str | None = None, user: str | None = None) -> UploadPo
         current["api_key"] = api_key.strip()
     if user is not None:
         current["user"] = user.strip()
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
         os.chmod(path, 0o600)
-    except OSError:  # Windows 上可能不支持
+    except OSError:
         pass
     return load_config()
 
@@ -135,7 +139,6 @@ def clear_config() -> None:
         path.unlink()
 
 
-# ---------------------------------------------------------------- http ---
 def _headers(config: UploadPostConfig) -> dict[str, str]:
     version = os.getenv("AUTOCLIP_APP_VERSION", "dev")
     return {
@@ -155,101 +158,134 @@ def _require(config: UploadPostConfig | None) -> UploadPostConfig:
     return cfg
 
 
+def _payload_message(payload: Any) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    msg = payload.get("message") or payload.get("error") or payload.get("detail")
+    if isinstance(msg, dict):
+        msg = msg.get("message") or json.dumps(msg, ensure_ascii=False)
+    return str(msg) if msg else None
+
+
 def _raise_for_response(resp: requests.Response, what: str) -> dict[str, Any]:
     try:
         payload = resp.json()
     except ValueError:
         payload = {"raw": (resp.text or "")[:500]}
     if resp.status_code >= 400:
-        msg = None
-        if isinstance(payload, dict):
-            msg = payload.get("message") or payload.get("error") or payload.get("detail")
-            if isinstance(msg, dict):
-                msg = msg.get("message") or json.dumps(msg, ensure_ascii=False)
+        msg = _payload_message(payload)
         if resp.status_code == 401:
             msg = msg or "API Key 无效或已过期"
         raise UploadPostError(f"{what}失败（HTTP {resp.status_code}）: {msg or payload}", resp.status_code, payload)
     if isinstance(payload, dict) and payload.get("success") is False:
-        raise UploadPostError(f"{what}失败: {payload.get('message') or payload.get('error') or payload}", resp.status_code, payload)
+        raise UploadPostError(
+            f"{what}失败: {_payload_message(payload) or payload}",
+            resp.status_code,
+            payload,
+        )
     return payload if isinstance(payload, dict) else {"data": payload}
 
 
 def verify_api_key(config: UploadPostConfig | None = None, session: requests.Session | None = None) -> dict[str, Any]:
-    """GET /api/uploadposts/me：校验 key，返回账号邮箱与套餐。"""
+    """GET /api/uploadposts/me。无效 key 时线上返回 401 和 message=Invalid API key。"""
     cfg = _require(config)
-    s = session or requests.Session()
-    resp = s.get(f"{cfg.base_url}/api/uploadposts/me", headers=_headers(cfg), timeout=30)
+    resp = (session or requests.Session()).get(
+        f"{cfg.base_url}/api/uploadposts/me", headers=_headers(cfg), timeout=30,
+    )
     data = _raise_for_response(resp, "校验 API Key")
     return {"ok": True, "email": data.get("email"), "plan": data.get("plan")}
 
 
+def split_social_accounts(accounts: Any) -> tuple[list[str], list[str]]:
+    """已连接的平台，和令牌过期、必须重连的平台。
+
+    文档：social_accounts 的值是带 display_name / username / handle 的对象才算连上；
+    空字符串、null、空对象只是占位。reauth_required=true 时发不出去。
+    """
+    connected: list[str] = []
+    reconnect: list[str] = []
+    if not isinstance(accounts, dict):
+        return connected, reconnect
+    for platform, info in accounts.items():
+        if not isinstance(info, dict):
+            continue
+        named = any(isinstance(info.get(key), str) and str(info.get(key)).strip() for key in _ACCOUNT_NAME_FIELDS)
+        if not named:
+            continue
+        if info.get("reauth_required") is True:
+            reconnect.append(str(platform))
+        else:
+            connected.append(str(platform))
+    return sorted(connected), sorted(reconnect)
+
+
 def list_profiles(config: UploadPostConfig | None = None, session: requests.Session | None = None) -> list[dict[str, Any]]:
-    """GET /api/uploadposts/users：API Key 下的 profile 及各自已连接的平台。"""
+    """GET /api/uploadposts/users。"""
     cfg = _require(config)
-    s = session or requests.Session()
-    resp = s.get(f"{cfg.base_url}/api/uploadposts/users", headers=_headers(cfg), timeout=30)
+    resp = (session or requests.Session()).get(
+        f"{cfg.base_url}/api/uploadposts/users", headers=_headers(cfg), timeout=30,
+    )
     data = _raise_for_response(resp, "读取 profile 列表")
     out: list[dict[str, Any]] = []
-    for p in data.get("profiles") or []:
-        accounts = p.get("social_accounts") or {}
-        connected = []
-        for platform, info in accounts.items():
-            # 已连接的平台是一个 dict（display_name 等）；只是占位的是空字符串
-            if isinstance(info, dict) and (info.get("display_name") or info.get("username") or info):
-                connected.append(platform)
+    for profile in data.get("profiles") or []:
+        if not isinstance(profile, dict):
+            continue
+        connected, reconnect = split_social_accounts(profile.get("social_accounts"))
         out.append({
-            "username": p.get("username"),
-            "connected_platforms": sorted(connected),
-            "created_at": p.get("created_at"),
+            "username": profile.get("username"),
+            "connected_platforms": connected,
+            "reconnect_platforms": reconnect,
+            "created_at": profile.get("created_at"),
         })
     return out
 
 
-# ---------------------------------------------------------------- publish ---
 @dataclass
 class PublishRequest:
     project_id: str
     clip_id: str
     platforms: Sequence[str]
-    user: str | None = None            # 不填用配置里的默认 profile
-    preset: str | None = None          # 发布导出预设；不填按平台自动选（竖屏平台 shorts，其余 original）
-    title: str | None = None           # 不填用切片标题
-    description: str | None = None     # YouTube / LinkedIn / Facebook / Pinterest 用
+    user: str | None = None
+    preset: str | None = None
+    title: str | None = None
+    description: str | None = None
     subtitles: bool = True
     title_card: bool = True
-    scheduled_date: str | None = None  # ISO-8601，定时发布
+    scheduled_date: str | None = None
     timezone: str | None = None
-    extra: dict[str, Any] = field(default_factory=dict)  # 平台专属字段透传：privacy_level / privacyStatus / facebook_page_id / pinterest_board_id …
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 def normalize_platforms(platforms: Sequence[str]) -> list[str]:
     seen: list[str] = []
     for raw in platforms:
-        for p in str(raw).replace(";", ",").split(","):
-            p = p.strip().lower()
-            if not p:
+        for part in str(raw).replace(";", ",").split(","):
+            name = part.strip().lower()
+            if not name:
                 continue
-            if p == "twitter":
-                p = "x"
-            if p not in PLATFORMS:
-                raise ValueError(f"不支持的平台: {p}（可选 {', '.join(PLATFORMS)}）")
-            if p not in seen:
-                seen.append(p)
+            if name == "twitter":
+                name = "x"
+            if name == "reddit":
+                raise ValueError("Reddit 目前不能发视频：Upload-Post 会返回 reddit_unavailable")
+            if name not in PLATFORMS:
+                raise ValueError(f"不支持的平台: {name}（可选 {', '.join(PLATFORMS)}）")
+            if name not in seen:
+                seen.append(name)
     if not seen:
         raise ValueError("至少要指定一个平台")
     return seen
 
 
 def pick_preset(platforms: Sequence[str]) -> str:
-    """没指定预设时：只要有一个竖屏短视频平台就渲 9:16（shorts 预设，≤60s crop），否则原画重编码。"""
+    """没指定预设时：有竖屏平台就用 9:16 的 shorts（最长约 60 秒），否则原画。"""
     return "shorts" if any(p in VERTICAL_PLATFORMS for p in platforms) else "original"
 
 
 def records_dir(project_id: str) -> Path:
     from backend.core.path_utils import get_project_directory
-    d = get_project_directory(project_id) / "output" / "publish"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    directory = get_project_directory(project_id) / "output" / "publish"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
 
 
 def _write_record(project_id: str, record: dict[str, Any]) -> Path:
@@ -260,17 +296,25 @@ def _write_record(project_id: str, record: dict[str, Any]) -> Path:
 
 def list_records(project_id: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
-    for p in records_dir(project_id).glob("*.json"):
+    for path in records_dir(project_id).glob("*.json"):
         try:
-            out.append(json.loads(p.read_text(encoding="utf-8")))
+            out.append(json.loads(path.read_text(encoding="utf-8")))
         except (OSError, ValueError):
             continue
-    out.sort(key=lambda r: r.get("submitted_at") or "", reverse=True)
+    out.sort(key=lambda record: record.get("submitted_at") or "", reverse=True)
     return out
 
 
+def _form_value(value: Any) -> Any:
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    return value
+
+
 def build_form(req: PublishRequest, platforms: list[str], user: str, title: str, request_id: str) -> dict[str, Any]:
-    """multipart 表单（不含 video 文件）。platform[] 是重复字段，requests 会按 list 逐个编码。"""
+    """multipart 字段（不含视频文件）。platform[] 用 list，requests 会编成重复字段。"""
     form: dict[str, Any] = {
         "user": user,
         "platform[]": list(platforms),
@@ -285,25 +329,20 @@ def build_form(req: PublishRequest, platforms: list[str], user: str, title: str,
         form["scheduled_date"] = req.scheduled_date
         if req.timezone:
             form["timezone"] = req.timezone
-    for k, v in (req.extra or {}).items():
-        if k in _RESERVED_FORM_FIELDS or v is None:
+    # YouTube 标题上限 100。超长时只缩短 youtube_title，其它平台仍用完整标题。
+    if "youtube" in platforms and len(title) > YOUTUBE_TITLE_LIMIT and "youtube_title" not in (req.extra or {}):
+        form["youtube_title"] = title[:YOUTUBE_TITLE_LIMIT].rstrip()
+    for key, value in (req.extra or {}).items():
+        if key in _RESERVED_FORM_FIELDS or value is None or key in form:
             continue
-        form[k] = "true" if v is True else "false" if v is False else v
+        form[key] = _form_value(value)
     return form
 
 
 def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
                  session: requests.Session | None = None) -> dict[str, Any]:
-    """
-    同步：导出成片（走缓存）→ 提交 Upload-Post（async_upload=true）→ 返回 request_id。
-    返回 {ok, request_id, platforms, user, title, path, preset, status_hint}。
-    真正的发布结果用 get_status(request_id) 查。
-    """
-    from backend.services.publish_export import (
-        ExportRequest,
-        export_clip,
-        load_clip_meta,
-    )
+    """导出成片（命中缓存则不重渲）→ POST /api/upload（async_upload=true）→ 返回 request_id。"""
+    from backend.services.publish_export import ExportRequest, export_clip, load_clip_meta
 
     cfg = _require(config)
     platforms = normalize_platforms(req.platforms)
@@ -314,9 +353,10 @@ def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
             "profile 在 https://app.upload-post.com/manage-users 创建并连接社交账号。"
         )
     preset = req.preset or pick_preset(platforms)
-
     clip = load_clip_meta(req.project_id, req.clip_id)
     title = (req.title or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
+    if not title:
+        title = f"切片 {req.clip_id}"
 
     export = export_clip(ExportRequest(
         project_id=req.project_id, clip_id=req.clip_id, preset=preset,
@@ -329,21 +369,19 @@ def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
     request_id = str(uuid.uuid4())
     form = build_form(req, platforms, user, title, request_id)
     headers = _headers(cfg)
-    headers["Idempotency-Key"] = request_id  # 超时重试也不会发两遍
+    headers["Idempotency-Key"] = request_id
 
-    s = session or requests.Session()
     logger.info("Upload-Post 提交: clip=%s platforms=%s user=%s preset=%s file=%s",
                 req.clip_id, platforms, user, preset, video_path.name)
-    with video_path.open("rb") as fh:
-        resp = s.post(
+    with video_path.open("rb") as handle:
+        resp = (session or requests.Session()).post(
             f"{cfg.base_url}/api/upload",
             headers=headers,
             data=form,
-            files={"video": (video_path.name, fh, "video/mp4")},
+            files={"video": (video_path.name, handle, "video/mp4")},
             timeout=(30, 900),
         )
     data = _raise_for_response(resp, "提交发布")
-
     record = {
         "request_id": data.get("request_id") or request_id,
         "job_id": data.get("job_id"),
@@ -374,45 +412,55 @@ def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
         "path": str(video_path),
         "export_warnings": export.get("warnings") or [],
         "status": record["status"],
-        "hint": "用 get_status(request_id) / `autoclip publish --status <request_id>` 查看各平台结果，一般 10 秒查一次。",
+        "hint": "用 get_status(request_id) 查看各平台结果。处理中大约每 10 秒查一次。",
     }
 
 
-# ---------------------------------------------------------------- status ---
-FINAL_STATUSES = {"completed", "failed", "not_found"}
+def _http_url(value: Any) -> str | None:
+    if isinstance(value, str) and value.startswith(("http://", "https://")):
+        return value
+    return None
+
+
+def _parse_results(rows: Any) -> list[dict[str, Any]]:
+    results = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        raw_url = row.get("url") or row.get("post_url")
+        url = _http_url(raw_url)
+        message = row.get("message") or (raw_url if raw_url and not url else None)
+        results.append({
+            "platform": row.get("platform"),
+            "success": bool(row.get("success")),
+            "status": row.get("status") or ("completed" if row.get("success") else "failed"),
+            "url": url,
+            "message": message,
+            "error": row.get("error"),
+            "skipped": bool(row.get("skipped")) or row.get("status") == "skipped",
+            "fallback_to_inbox": bool(row.get("fallback_to_inbox")),
+        })
+    return results
 
 
 def get_status(request_id: str | None = None, job_id: str | None = None,
                config: UploadPostConfig | None = None, session: requests.Session | None = None,
                project_id: str | None = None) -> dict[str, Any]:
-    """GET /api/uploadposts/status：汇总各平台结果。有 project_id 时顺带更新本地记录。"""
+    """GET /api/uploadposts/status。终态是 completed / failed / not_found。"""
     if not request_id and not job_id:
         raise ValueError("request_id 或 job_id 必填一个")
     cfg = _require(config)
-    s = session or requests.Session()
     params = {"request_id": request_id} if request_id else {"job_id": job_id}
-    resp = s.get(f"{cfg.base_url}/api/uploadposts/status", params=params, headers=_headers(cfg), timeout=30)
+    resp = (session or requests.Session()).get(
+        f"{cfg.base_url}/api/uploadposts/status", params=params, headers=_headers(cfg), timeout=30,
+    )
     if resp.status_code == 404:
-        return {"ok": False, "request_id": request_id, "job_id": job_id, "status": "not_found", "final": True,
-                "results": [], "message": "Upload-Post 没有这个请求（id 写错，或不是这个 API Key 提交的）"}
+        return {
+            "ok": False, "request_id": request_id, "job_id": job_id, "status": "not_found", "final": True,
+            "results": [], "message": "Upload-Post 没有这个请求（id 写错，或不是这个 API Key 提交的）",
+        }
     data = _raise_for_response(resp, "查询发布状态")
-
-    results = []
-    for r in data.get("results") or []:
-        # 私密 / 草稿发布时 url 字段是一句说明（"Post uploaded as Private. No public URL available."），不是链接
-        raw_url = r.get("url") or r.get("post_url")
-        url = raw_url if isinstance(raw_url, str) and raw_url.startswith(("http://", "https://")) else None
-        message = r.get("message") or (raw_url if raw_url and not url else None)
-        results.append({
-            "platform": r.get("platform"),
-            "success": bool(r.get("success")),
-            "status": r.get("status") or ("completed" if r.get("success") else "failed"),
-            "url": url,
-            "message": message,
-            "error": r.get("error"),
-            "skipped": bool(r.get("skipped")),
-            "fallback_to_inbox": bool(r.get("fallback_to_inbox")),
-        })
+    results = _parse_results(data.get("results"))
     status = data.get("status") or "pending"
     out = {
         "ok": status != "failed",
@@ -441,7 +489,7 @@ def get_status(request_id: str | None = None, job_id: str | None = None,
 def wait_for_status(request_id: str, timeout_sec: float = 600, poll_sec: float = 10,
                     config: UploadPostConfig | None = None, project_id: str | None = None,
                     on_update=None) -> dict[str, Any]:
-    """轮询到终态或超时（文档建议 processing 阶段 10 秒一次）。"""
+    """文档建议 processing 阶段大约 10 秒查一次，终态就停。"""
     deadline = time.monotonic() + timeout_sec
     last: dict[str, Any] = {}
     while True:
@@ -453,44 +501,78 @@ def wait_for_status(request_id: str, timeout_sec: float = 600, poll_sec: float =
         time.sleep(poll_sec)
 
 
-# ---------------------------------------------------------------- jobs (API 用) ---
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
 
 
-def start_publish(req: PublishRequest) -> dict[str, Any]:
-    """后台线程跑 publish_clip（导出可能要几十秒）；API 用 get_publish_job 轮询。"""
-    job_id = str(uuid.uuid4())
+def _jobs_dir() -> Path:
+    from backend.core.path_utils import get_data_directory
+    directory = get_data_directory() / "publish_jobs"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def _remember_job(job: dict[str, Any]) -> None:
+    """内存给当前进程用，文件让进程重启后仍能查到已提交的任务。"""
+    stored = dict(job)
     with _jobs_lock:
-        _jobs[job_id] = {"job_id": job_id, "status": "queued", "project_id": req.project_id, "clip_id": req.clip_id}
-    t = threading.Thread(target=_run_job, args=(job_id, req), daemon=True, name=f"publish-{job_id[:8]}")
-    t.start()
+        _jobs[stored["job_id"]] = stored
+        path = _jobs_dir() / f"{stored['job_id']}.json"
+        path.write_text(json.dumps(stored, ensure_ascii=False), encoding="utf-8")
+
+
+def _read_job(job_id: str) -> dict[str, Any] | None:
+    with _jobs_lock:
+        cached = _jobs.get(job_id)
+        if cached is not None:
+            return dict(cached)
+    path = _jobs_dir() / f"{job_id}.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def start_publish(req: PublishRequest) -> dict[str, Any]:
+    job_id = str(uuid.uuid4())
+    _remember_job({
+        "job_id": job_id, "status": "queued", "project_id": req.project_id, "clip_id": req.clip_id,
+    })
+    threading.Thread(target=_run_job, args=(job_id, req), daemon=True, name=f"publish-{job_id[:8]}").start()
     return {"ok": True, "job_id": job_id, "status": "queued"}
 
 
 def _run_job(job_id: str, req: PublishRequest) -> None:
-    with _jobs_lock:
-        _jobs[job_id].update(status="running", stage="export")
+    job = _read_job(job_id) or {"job_id": job_id, "project_id": req.project_id, "clip_id": req.clip_id}
+    job.update(status="running", stage="export")
+    _remember_job(job)
     try:
         result = publish_clip(req)
-        with _jobs_lock:
-            _jobs[job_id].update(status="submitted", stage="submitted", request_id=result["request_id"], result=result)
-    except Exception as e:
+        job.update(status="submitted", stage="submitted", request_id=result["request_id"], result=result)
+    except Exception as exc:
         logger.exception("Upload-Post 发布失败")
-        with _jobs_lock:
-            _jobs[job_id].update(status="failed", error=str(e)[:500])
+        job.update(status="failed", error=str(exc)[:500])
+    _remember_job(job)
 
 
 def get_publish_job(job_id: str, refresh_remote: bool = True) -> dict[str, Any] | None:
-    """本地任务状态；已提交的顺带查一次 Upload-Post 的平台结果（remote）。"""
-    with _jobs_lock:
-        job = _jobs.get(job_id)
-        job = dict(job) if job else None
+    job = _read_job(job_id)
     if not job:
         return None
+    # 导出线程只活在当前进程。重启后磁盘上仍是 queued/running 的任务不会再往下走。
+    with _jobs_lock:
+        alive = job_id in _jobs
+    if not alive and job.get("status") in {"queued", "running"}:
+        job["status"] = "failed"
+        job["error"] = "发布进程已中断，请再发一次。"
+        _remember_job(job)
+        return job
     if refresh_remote and job.get("status") == "submitted" and job.get("request_id"):
         try:
             job["remote"] = get_status(job["request_id"], project_id=job.get("project_id"))
-        except Exception as e:  # noqa: BLE001
-            job["remote"] = {"ok": False, "status": "unknown", "message": str(e)[:300]}
+        except Exception as exc:  # noqa: BLE001
+            job["remote"] = {"ok": False, "status": "unknown", "message": str(exc)[:300]}
     return job

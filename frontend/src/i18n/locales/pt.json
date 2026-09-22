@@ -660,5 +660,6 @@
   "竖屏平台会渲成 9:16，最长约 60 秒。": "Este preset é 9:16 e dura cerca de 60 segundos no máximo.",
   "这次按原画重编码，不裁切。": "Desta vez o quadro original é recodificado, sem corte.",
   "按「{{preset}}」预设渲成片。相同参数会复用已经导出的文件。": "Renderiza com o preset {{preset}}. Os mesmos parâmetros reutilizam um arquivo já exportado.",
-  "打开链接": "Abrir link"
+  "打开链接": "Abrir link",
+  "需要重新连接：{{platforms}}": "É preciso reconectar: {{platforms}}"
 }

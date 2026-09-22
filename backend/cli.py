@@ -343,7 +343,10 @@ def cmd_publish(args: argparse.Namespace) -> int:
             print(_dim("这个 API Key 下还没有 profile。到 https://app.upload-post.com/manage-users 创建并连接账号。"))
         for pr in profiles:
             mark = "●" if pr["username"] == cfg.user else " "
-            print(f"{mark} {pr['username']:<24} {_dim(', '.join(pr['connected_platforms']) or '未连接任何平台')}")
+            connected = ", ".join(pr["connected_platforms"]) or "未连接任何平台"
+            reconnect = ", ".join(pr.get("reconnect_platforms") or [])
+            extra = f"  （需重连: {reconnect}）" if reconnect else ""
+            print(f"{mark} {pr['username']:<24} {_dim(connected + extra)}")
         return 0
 
     if args.status:

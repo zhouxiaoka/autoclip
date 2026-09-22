@@ -165,4 +165,16 @@ autoclip publish <project_id> --clip 2 --platform tiktok --wait --json
 
 CLI、MCP、API 仍然可用，见上文。
 
-参考：[Upload-Post API 文档](https://docs.upload-post.com/api/upload-video) · [状态查询](https://docs.upload-post.com/api/upload-status) · [profile 管理](https://docs.upload-post.com/api/user-profiles)。
+## 7. 客户端核对
+
+发布客户端按 2026-09 的公开文档重写，并用无效 key 打过线上四个地址（上传、校验 key、profile 列表、状态查询）。它们都返回 HTTP 401，正文是 `Invalid API key`，鉴权头为 `Authorization: Apikey <key>`。
+
+和初版实现不同的地方：
+
+- 只有带 `display_name` / `username` / `handle` 的账号算已连接。`reauth_required` 的账号不拿来发，界面提示去 Upload-Post 重连。
+- Reddit 当前会返回 `reddit_unavailable`，直接拒绝，不发出去。
+- YouTube 标题超过 100 字时只缩短 `youtube_title`，其它平台仍用完整标题。
+- 界面在成片提交之后每 10 秒查一次状态（文档对 `processing` 的建议）。本地任务写在数据目录的 `publish_jobs/`，进程重启后仍能接着查。
+- 可发平台以 OpenAPI 的 `VideoPlatformEnum` 为准：`x`，不是示例里的 `twitter`。`mastodon` / `wordpress` 出现在上传页示例里，但不在视频枚举中，不发送。输入 `twitter` 会改成 `x`。
+
+参考：[上传视频](https://docs.upload-post.com/api/upload-video) · [状态查询](https://docs.upload-post.com/api/upload-status) · [profile](https://docs.upload-post.com/api/user-profiles)。

@@ -11,6 +11,7 @@ export interface UploadPostConfigView {
 export interface UploadPostProfile {
   username: string
   connected_platforms: string[]
+  reconnect_platforms?: string[]
 }
 
 export interface PlatformResult {

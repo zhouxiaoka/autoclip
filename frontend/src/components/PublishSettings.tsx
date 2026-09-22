@@ -54,6 +54,7 @@ const PublishSettings: React.FC = () => {
 
   const selected = profiles.find((p) => p.username === user)
   const connected = (selected?.connected_platforms || []).map(platformLabel).join(' · ')
+  const reconnect = (selected?.reconnect_platforms || []).map(platformLabel).join(' · ')
 
   const save = async () => {
     const key = apiKey.trim()
@@ -157,7 +158,10 @@ const PublishSettings: React.FC = () => {
           )}
         </Row>
         {selected && (
-          <Row label={t("已连接的平台")} hint={connected || t("这个账号还没有连接平台。")}>
+          <Row label={t("已连接的平台")} hint={<>
+            {connected || t("这个账号还没有连接平台。")}
+            {reconnect ? ` ${t("需要重新连接：{{platforms}}", { platforms: reconnect })}` : null}
+          </>}>
             <Btn size="sm" onClick={() => void loadProfiles(user).catch((err) => setError(readApiDetail(err, t("发布失败"))))}>{t("刷新账号")}</Btn>
           </Row>
         )}
