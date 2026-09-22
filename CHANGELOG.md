@@ -14,6 +14,7 @@
   配置用 `UPLOAD_POST_API_KEY` / `UPLOAD_POST_USER` 或 `autoclip publish --api-key … --user … --save`（`docs/PUBLISH_UPLOAD_POST.md`）。设置页 UI 待做
 
 ### 修复
+- 数据库清理脚本失败时返回退出码 1。之前异常被接住后进程仍以 0 退出，调用方会以为清理已经成功。
 - 发布导出 ffmpeg 失败时把错误文本切成了单个字符（`[-800]`），空输出直接 `IndexError`；改为切片 `[-800:]`
 
 ## [1.3.1] - 2026-09-21
