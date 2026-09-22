@@ -7,6 +7,10 @@
 
 ## [未发布]
 
+_（本周尚无改动）_
+
+## [1.3.2] - 2026-09-22
+
 ### 新增
 - **发布到海外平台（Upload-Post）**：切片可经 [Upload-Post](https://www.upload-post.com) 一次发到 TikTok / Instagram / YouTube Shorts / Facebook / LinkedIn / X / Threads / Pinterest / Bluesky 等，
   与 B 站投稿并列；先按预设渲成片（竖屏平台默认 `shorts`），再异步提交并轮询各平台结果。视频处理仍全部在本地。
@@ -205,7 +209,8 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.1...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.2...HEAD
+- [1.3.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.1...v1.3.2
 - [1.3.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.0...v1.3.1
 - [1.3.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.2.1...v1.3.0
 - [1.2.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.2.0...v1.2.1

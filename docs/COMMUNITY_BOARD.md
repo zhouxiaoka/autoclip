@@ -113,7 +113,7 @@ Testing 是空的：还没有一个「有包、正在给人验」的条目。已
 
 完整字段在 [roadmap-seed.json](community/roadmap-seed.json)。
 
-v1.3.0 和 v1.3.1 已经发布。八语界面、崩溃上报、应用内更新、失败文案、通义国际站、Docker 设置页、竖屏导出和 CLI / MCP 算 Shipped，写在 Project 简介里，不再开卡。
+v1.3.0、v1.3.1 和 v1.3.2 已经发布。八语界面、崩溃上报、应用内更新、发布页、自动封面、失败文案、通义国际站、Docker 设置页、竖屏导出和 CLI / MCP 算 Shipped，写在 Project 简介里，不再开卡。
 Building 和 Testing 现在是空的：更新日志里没有「已写完、还没发版」或「有包正在给人验」的条目。
 
 **Researching**
@@ -139,7 +139,7 @@ Building 和 Testing 现在是空的：更新日志里没有「已写完、还�
 
 ## 排期
 
-合进 main 和发版是两件事。当前版本停在 **v1.3.1**。之后先把改动合进 main，卡片放到 Building，攒一批再打一个 tag。不为应用内反馈单独发 v1.3.2。
+合进 main 和发版是两件事。当前版本停在 **v1.3.2**。之后先把改动合进 main，卡片放到 Building，攒一批再打一个 tag。不为单个反馈单独热修。
 
 下一次发行看 Building 里已经攒了什么，不按单个 PR 决定。社区新想法默认停在 Exploring，不插进已经排好的顺序，除非它就是其中一件的复现。
 
