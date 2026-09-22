@@ -5,7 +5,7 @@ import HomePage from './pages/HomePage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
 import SettingsPage from './pages/SettingsPage'
 import Header from './components/Header'
-import { UpdateProvider, UpdateToast } from './desktop/UpdatePrompt'
+import { UpdateProvider } from './desktop/UpdatePrompt'
 import { trackPageview } from './analytics/posthog'
 import { startWorkflowObserver } from './analytics/observer'
 
@@ -28,7 +28,6 @@ function App() {
     <UpdateProvider>
       <Layout>
         <Header />
-        <UpdateToast />
         <Content>
           <Routes>
             <Route path="/" element={<HomePage />} />

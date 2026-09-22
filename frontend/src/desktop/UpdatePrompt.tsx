@@ -69,7 +69,7 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [notes, setNotes] = useState(previewKind && previewKind !== 'failed' ? '后台下载新版本，准备好后提示重启。' : '')
   const [percent, setPercent] = useState<number | null>(previewKind === 'downloading' ? 42 : previewKind === 'ready' ? 100 : null)
   const [error, setError] = useState(previewKind === 'failed' ? 'offline' : '')
-  const [toastVisible, setToastVisible] = useState(Boolean(previewKind))
+  const [toastVisible, setToastVisible] = useState(previewKind === 'ready' || previewKind === 'failed')
   const live = useRef<AppUpdate | null>(null)
   const generation = useRef(0)
 
@@ -83,7 +83,7 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setError('')
     setPercent(null)
     setPhase('downloading')
-    setToastVisible(readSnooze() !== found.version)
+    setToastVisible(false)
     const snap = emptyProgress()
     let latest = snap
     let lastPaint = 0
@@ -225,7 +225,7 @@ export const UpdateToast: React.FC = () => {
 
   if (!update.toastVisible) return null
   const title = update.phase === 'ready' || update.phase === 'restarting'
-    ? t('新版本已就绪')
+    ? t('更新已就绪')
     : update.phase === 'failed'
       ? t('更新没有下载完')
       : t('正在准备更新')
@@ -233,7 +233,7 @@ export const UpdateToast: React.FC = () => {
     ? update.error
     : update.phase === 'downloading'
       ? t('正在下载 {{version}}', { version: update.version })
-      : t('{{version}} 已准备好。重启后换成这一版。', { version: update.version })
+      : t('重启以完成 AutoClip {{version}} 的安装。正在做的项目会保留。', { version: update.version })
 
   return (
     <div className="ac-update-toast" role="status" aria-live="polite" data-phase={update.phase}>
@@ -248,10 +248,10 @@ export const UpdateToast: React.FC = () => {
       )}
       <div className="ac-update-actions">
         {update.phase !== 'restarting' && (
-          <Btn size="sm" onClick={update.snooze}>{t('稍后')}</Btn>
+          <Btn size="sm" onClick={update.snooze}>{t('暂不')}</Btn>
         )}
         {update.phase === 'ready' && (
-          <Btn size="sm" variant="cta" onClick={() => void update.restart()}>{t('立即重启')}</Btn>
+          <Btn size="sm" variant="cta" onClick={() => void update.restart()}>{t('更新并重启')}</Btn>
         )}
         {update.phase === 'failed' && (
           <Btn size="sm" variant="cta" onClick={() => void update.retry()}>{t('重试')}</Btn>

@@ -601,7 +601,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         {(desktop || appUpdate.preview) && (
           <Row label={t('版本')} hint={versionHint}>
             {appUpdate.phase === 'ready' || appUpdate.phase === 'restarting' ? (
-              <Btn size="sm" variant="cta" loading={appUpdate.phase === 'restarting'} onClick={() => void appUpdate.restart()}>{t('立即重启')}</Btn>
+              <Btn size="sm" variant="cta" loading={appUpdate.phase === 'restarting'} onClick={() => void appUpdate.restart()}>{t('更新并重启')}</Btn>
             ) : appUpdate.phase === 'downloading' ? (
               <Btn size="sm" onClick={appUpdate.showToast}>{t('查看进度')}</Btn>
             ) : appUpdate.phase === 'failed' ? (

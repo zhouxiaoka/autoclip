@@ -6,7 +6,7 @@ import { Layout, Button } from 'antd'
 import { SettingOutlined, BulbOutlined, MoonOutlined } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
-import { useAppUpdate } from '../desktop/UpdatePrompt'
+import { UpdateToast, useAppUpdate } from '../desktop/UpdatePrompt'
 
 const { Header: AntHeader } = Layout
 
@@ -28,6 +28,8 @@ const Header: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'space-between',
         height: '64px',
+        lineHeight: 'normal',
+        overflow: 'visible',
         position: 'sticky',
         top: 0,
         zIndex: 1000,
@@ -54,7 +56,7 @@ const Header: React.FC = () => {
       </div>
 
       {/* Right side */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="ac-header-actions">
         <LanguageSelect />
         {/* 返回入口由各页面页头承担（见 DESIGN.md App Layer），顶栏只留全局动作 */}
         <Button
@@ -74,12 +76,21 @@ const Header: React.FC = () => {
           }}
         />
         {updatePending && (
-          <button
-            type="button"
-            className="ac-update-entry"
-            onClick={appUpdate.openUpdate}
-            aria-label={t('下载更新')}
-          >{t('下载更新')}</button>
+          <div className="ac-update-anchor">
+            <button
+              type="button"
+              className="ac-update-icon"
+              aria-expanded={appUpdate.toastVisible}
+              aria-label={t('有新版本可用')}
+              onClick={() => appUpdate.toastVisible ? appUpdate.snooze() : appUpdate.openUpdate()}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="12" cy="12" r="8.25" />
+                <path d="M12 16V8M9.5 10.5 12 8l2.5 2.5" />
+              </svg>
+            </button>
+            <UpdateToast />
+          </div>
         )}
         <Button
           type="text"

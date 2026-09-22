@@ -629,5 +629,10 @@
   "可更新到 {{version}}": "Prêt à passer à {{version}}",
   "正在准备 {{version}}": "Préparation de {{version}}",
   "查看进度": "Voir la progression",
-  "下载更新": "Télécharger la mise à jour"
+  "下载更新": "Télécharger la mise à jour",
+  "有新版本可用": "Nouvelle version disponible",
+  "暂不": "Pas maintenant",
+  "更新并重启": "Mettre à jour et redémarrer",
+  "更新已就绪": "Mise à jour prête",
+  "重启以完成 AutoClip {{version}} 的安装。正在做的项目会保留。": "Redémarrez pour terminer l’installation d’AutoClip {{version}}. Le travail en cours est conservé."
 }

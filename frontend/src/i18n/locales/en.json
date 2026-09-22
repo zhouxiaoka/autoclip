@@ -629,5 +629,10 @@
   "可更新到 {{version}}": "Ready to update to {{version}}",
   "正在准备 {{version}}": "Preparing {{version}}",
   "查看进度": "View progress",
-  "下载更新": "Download update"
+  "下载更新": "Download update",
+  "有新版本可用": "Update available",
+  "暂不": "Not now",
+  "更新并重启": "Update and restart",
+  "更新已就绪": "Update ready",
+  "重启以完成 AutoClip {{version}} 的安装。正在做的项目会保留。": "Restart to finish installing AutoClip {{version}}. Work in progress stays as it is."
 }
