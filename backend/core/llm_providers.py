@@ -38,6 +38,15 @@ class LLMResponse:
     model: Optional[str] = None
     finish_reason: Optional[str] = None
 
+def _catalog_model_infos(provider_type: "ProviderType") -> List[ModelInfo]:
+    """从 model_catalog 的内置名单生成 ModelInfo，避免各 provider 再手写一份过期列表。"""
+    from backend.core.model_catalog import curated_models
+    return [
+        ModelInfo(name=name, display_name=name, provider=provider_type, max_tokens=128000)
+        for name in curated_models(provider_type.value)
+    ]
+
+
 class LLMProvider(ABC):
     """LLM提供商抽象基类"""
     
@@ -218,30 +227,8 @@ class DashScopeProvider(LLMProvider):
             return False
     
     def get_available_models(self) -> List[ModelInfo]:
-        """获取DashScope可用模型"""
-        return [
-            ModelInfo(
-                name="qwen-plus",
-                display_name="通义千问Plus",
-                provider=ProviderType.DASHSCOPE,
-                max_tokens=8192,
-                description="阿里云通义千问Plus模型"
-            ),
-            ModelInfo(
-                name="qwen-max",
-                display_name="通义千问Max",
-                provider=ProviderType.DASHSCOPE,
-                max_tokens=8192,
-                description="阿里云通义千问Max模型"
-            ),
-            ModelInfo(
-                name="qwen-turbo",
-                display_name="通义千问Turbo",
-                provider=ProviderType.DASHSCOPE,
-                max_tokens=8192,
-                description="阿里云通义千问Turbo模型"
-            )
-        ]
+        """获取DashScope可用模型（内置常用名单；设置页会再按账号实时拉取）"""
+        return _catalog_model_infos(ProviderType.DASHSCOPE)
 
 OPENAI_OFFICIAL_BASE_URL = "https://api.openai.com/v1"
 # 本地/自建 OpenAI 兼容服务（Ollama、vLLM、LM Studio 等）通常不校验 key，但 SDK 要求非空
@@ -363,35 +350,13 @@ class OpenAIProvider(LLMProvider):
             return False
     
     def get_available_models(self) -> List[ModelInfo]:
-        """获取OpenAI可用模型（兼容接口的模型名由用户自行填写，这里只列官方常用型号）"""
-        return [
-            ModelInfo(
-                name="gpt-4o-mini",
-                display_name="GPT-4o mini",
-                provider=ProviderType.OPENAI,
-                max_tokens=128000,
-                description="OpenAI GPT-4o mini（性价比）"
-            ),
-            ModelInfo(
-                name="gpt-4o",
-                display_name="GPT-4o",
-                provider=ProviderType.OPENAI,
-                max_tokens=128000,
-                description="OpenAI GPT-4o"
-            ),
-            ModelInfo(
-                name="gpt-4-turbo",
-                display_name="GPT-4 Turbo",
-                provider=ProviderType.OPENAI,
-                max_tokens=128000,
-                description="OpenAI GPT-4 Turbo模型"
-            )
-        ]
+        """获取OpenAI可用模型（内置常用名单；兼容接口的型号以服务端 `/models` 为准）"""
+        return _catalog_model_infos(ProviderType.OPENAI)
 
 class GeminiProvider(LLMProvider):
     """Google Gemini提供商"""
     
-    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash", **kwargs):
+    def __init__(self, api_key: str, model_name: str = "gemini-3.8-flash", **kwargs):
         super().__init__(api_key, model_name, **kwargs)
         try:
             # New unified Google GenAI SDK (replaces the deprecated
@@ -443,30 +408,8 @@ class GeminiProvider(LLMProvider):
             return False
     
     def get_available_models(self) -> List[ModelInfo]:
-        """获取Gemini可用模型"""
-        return [
-            ModelInfo(
-                name="gemini-2.5-flash",
-                display_name="Gemini 2.5 Flash",
-                provider=ProviderType.GEMINI,
-                max_tokens=1000000,
-                description="Google Gemini 2.5 Flash模型"
-            ),
-            ModelInfo(
-                name="gemini-1.5-pro",
-                display_name="Gemini 1.5 Pro",
-                provider=ProviderType.GEMINI,
-                max_tokens=2000000,
-                description="Google Gemini 1.5 Pro模型"
-            ),
-            ModelInfo(
-                name="gemini-1.5-flash",
-                display_name="Gemini 1.5 Flash",
-                provider=ProviderType.GEMINI,
-                max_tokens=1000000,
-                description="Google Gemini 1.5 Flash模型"
-            )
-        ]
+        """获取Gemini可用模型（内置常用名单；设置页会再按账号实时拉取）"""
+        return _catalog_model_infos(ProviderType.GEMINI)
 
 class SiliconFlowProvider(LLMProvider):
     """硅基流动提供商"""
@@ -532,37 +475,8 @@ class SiliconFlowProvider(LLMProvider):
             return False
     
     def get_available_models(self) -> List[ModelInfo]:
-        """获取硅基流动可用模型"""
-        return [
-            ModelInfo(
-                name="Qwen/Qwen2.5-7B-Instruct",
-                display_name="Qwen2.5-7B",
-                provider=ProviderType.SILICONFLOW,
-                max_tokens=32768,
-                description="硅基流动Qwen2.5-7B模型"
-            ),
-            ModelInfo(
-                name="Qwen/Qwen2.5-14B-Instruct",
-                display_name="Qwen2.5-14B",
-                provider=ProviderType.SILICONFLOW,
-                max_tokens=32768,
-                description="硅基流动Qwen2.5-14B模型"
-            ),
-            ModelInfo(
-                name="Qwen/Qwen2.5-32B-Instruct",
-                display_name="Qwen2.5-32B",
-                provider=ProviderType.SILICONFLOW,
-                max_tokens=32768,
-                description="硅基流动Qwen2.5-32B模型"
-            ),
-            ModelInfo(
-                name="deepseek-ai/DeepSeek-V2.5",
-                display_name="DeepSeek-V2.5",
-                provider=ProviderType.SILICONFLOW,
-                max_tokens=65536,
-                description="硅基流动DeepSeek-V2.5模型"
-            )
-        ]
+        """获取硅基流动可用模型（内置常用名单；设置页会再按账号实时拉取）"""
+        return _catalog_model_infos(ProviderType.SILICONFLOW)
 
 class LLMProviderFactory:
     """LLM提供商工厂"""
