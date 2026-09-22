@@ -19,16 +19,14 @@ logger = logging.getLogger(__name__)
 # 日期以 2026-09 公开文档为准；具体可用性以账号权限为准。
 CURATED_MODELS: Dict[str, List[str]] = {
     "dashscope": [
+        "qwen3.8-max",
+        "qwen3.8-flash",
+        "qwen3.7-plus",
         "qwen-plus",
         "qwen-plus-latest",
         "qwen-max",
         "qwen-max-latest",
         "qwen-flash",
-        "qwen-long",
-        "qwen3.8-max",
-        "qwen3.8-flash",
-        "qwen3.7-plus",
-        "qwen3.7-max",
     ],
     "openai": [
         "gpt-5.6-sol",
@@ -41,13 +39,24 @@ CURATED_MODELS: Dict[str, List[str]] = {
         "gpt-5-nano",
     ],
     "gemini": [
-        "gemini-2.5-pro",
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-pro-preview",
+        "gemini-3-flash-preview",
         "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
     ],
     "deepseek": [
         "deepseek-flash",
         "deepseek-v4-pro",
+    ],
+    "seed": [
+        "doubao-seed-2-1-lite-260915",
+        "doubao-seed-2-1-pro-260915",
+        "doubao-seed-2-1-turbo-260628",
+        "doubao-seed-evolving",
     ],
     "kimi": [
         "kimi-k3",
@@ -70,8 +79,9 @@ CURATED_MODELS: Dict[str, List[str]] = {
 DEFAULT_MODELS: Dict[str, str] = {
     "dashscope": "qwen-plus",
     "openai": "gpt-5-mini",
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-3.8-flash",
     "deepseek": "deepseek-flash",
+    "seed": "doubao-seed-2-1-lite-260915",
     "kimi": "kimi-k2.6",
     "glm": "glm-5.3",
     "grok": "grok-4.6",
@@ -82,6 +92,7 @@ PROVIDER_LABELS: Dict[str, str] = {
     "openai": "OpenAI",
     "gemini": "Gemini",
     "deepseek": "DeepSeek",
+    "seed": "Seed",
     "kimi": "Kimi",
     "glm": "GLM",
     "grok": "Grok",
@@ -115,6 +126,10 @@ _SKIP_SUBSTR = (
     "live-audio",
     "audio-preview",
     "search-preview",
+    "seedream",
+    "seedance",
+    "-image",
+    "-live",
 )
 
 _OPENAI_CHAT_PREFIXES = (

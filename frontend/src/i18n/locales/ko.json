@@ -453,6 +453,7 @@
   "智谱开放平台。国内直连，glm-5.3 是当前旗舰。": "Zhipu API. 중국 내 직접 연결. 현재 플래그십은 glm-5.3.",
   "xAI Grok。需要 xAI 账号。": "xAI Grok. xAI 계정이 필요합니다.",
   "DeepSeek 官方。国内直连，deepseek-flash 是当前 V4.1。": "DeepSeek 공식 API. 중국 내 직접 연결. 현재 모델은 deepseek-flash(V4.1).",
+  "火山方舟 Seed。国内直连，豆包 Seed 2.1 系列。": "Volcengine Ark Seed. 중국 내 직접 연결. Doubao Seed 2.1 시리즈.",
   "sk-…（自建服务可留空）": "sk-… (자체 호스팅은 선택)",
   "Google AI Studio 的 Gemini 系列。": "Google AI Studio의 Gemini 모델.",
   "硅基流动": "SiliconFlow",

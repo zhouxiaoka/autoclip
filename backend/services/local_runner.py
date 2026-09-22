@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-PROVIDER_CHOICES = ("dashscope", "openai", "gemini", "deepseek", "kimi", "glm", "grok", "ollama", "lmstudio")
+PROVIDER_CHOICES = ("dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok", "ollama", "lmstudio")
 
 
 # ---------------------------------------------------------------- environment ---
@@ -146,6 +146,7 @@ def configure_llm(override: LLMOverride) -> Dict[str, Any]:
                 "gemini": "gemini_api_key", "siliconflow": "siliconflow_api_key",
                 "deepseek": "deepseek_api_key",
                 "kimi": "kimi_api_key", "glm": "glm_api_key", "grok": "grok_api_key",
+                "seed": "seed_api_key",
             }.get(provider)
             if key_field:
                 settings[key_field] = override.api_key

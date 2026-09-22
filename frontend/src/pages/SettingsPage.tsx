@@ -33,7 +33,7 @@ const toNumber = (v: unknown, fallback: number): number => {
   return Number.isFinite(n) ? n : fallback
 }
 
-type ProviderKey = 'dashscope' | 'openai' | 'gemini' | 'deepseek' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
+type ProviderKey = 'dashscope' | 'openai' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string }
 type CloudPreset = { baseUrl: string; defaultModel: string }
 const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; local?: LocalPreset; cloud?: CloudPreset }> = {
@@ -41,6 +41,7 @@ const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string
   openai: { get name() { return t("OpenAI / 兼容接口") }, get short() { return t("OpenAI 兼容") }, get hint() { return t("OpenAI，或任何兼容接口：OpenRouter、vLLM。") }, apiKeyField: 'openai_api_key', get placeholder() { return t("sk-…（自建服务可留空）") }, keyUrl: 'https://platform.openai.com/api-keys' },
   gemini: { name: 'Google Gemini', short: 'Gemini', get hint() { return t("Google AI Studio 的 Gemini 系列。") }, apiKeyField: 'gemini_api_key', placeholder: 'AIza…', keyUrl: 'https://aistudio.google.com/apikey' },
   deepseek: { name: 'DeepSeek', short: 'DeepSeek', get hint() { return t("DeepSeek 官方。国内直连，deepseek-flash 是当前 V4.1。") }, apiKeyField: 'deepseek_api_key', placeholder: 'sk-…', keyUrl: 'https://platform.deepseek.com/api_keys', cloud: { baseUrl: 'https://api.deepseek.com', defaultModel: 'deepseek-flash' } },
+  seed: { name: 'Seed', short: 'Seed', get hint() { return t("火山方舟 Seed。国内直连，豆包 Seed 2.1 系列。") }, apiKeyField: 'seed_api_key', placeholder: '…', keyUrl: 'https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey', cloud: { baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-seed-2-1-lite-260915' } },
   kimi: { name: 'Kimi', short: 'Kimi', get hint() { return t("月之暗面 Kimi。国内直连，适合长字幕分析。") }, apiKeyField: 'kimi_api_key', placeholder: 'sk-…', keyUrl: 'https://platform.moonshot.cn/console/api-keys', cloud: { baseUrl: 'https://api.moonshot.cn/v1', defaultModel: 'kimi-k2.6' } },
   glm: { get name() { return t("智谱 GLM") }, get short() { return 'GLM' }, get hint() { return t("智谱开放平台。国内直连，glm-5.3 是当前旗舰。") }, apiKeyField: 'glm_api_key', placeholder: '…', keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys', cloud: { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', defaultModel: 'glm-5.3' } },
   grok: { name: 'Grok', short: 'Grok', get hint() { return t("xAI Grok。需要 xAI 账号。") }, apiKeyField: 'grok_api_key', placeholder: 'xai-…', keyUrl: 'https://console.x.ai', cloud: { baseUrl: 'https://api.x.ai/v1', defaultModel: 'grok-4.6' } },
@@ -57,18 +58,19 @@ type DashscopeRegion = 'cn' | 'intl'
 
 // 后端 /available-models 失败时的兜底；与 backend/core/model_catalog.py 对齐
 const FALLBACK_CATALOG: Record<string, string[]> = {
-  dashscope: ['qwen-plus', 'qwen-plus-latest', 'qwen-max', 'qwen-max-latest', 'qwen-flash', 'qwen-long', 'qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus', 'qwen3.7-max'],
+  dashscope: ['qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus', 'qwen-plus', 'qwen-plus-latest', 'qwen-max', 'qwen-max-latest', 'qwen-flash'],
   openai: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'],
-  gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+  gemini: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash'],
   deepseek: ['deepseek-flash', 'deepseek-v4-pro'],
+  seed: ['doubao-seed-2-1-lite-260915', 'doubao-seed-2-1-pro-260915', 'doubao-seed-2-1-turbo-260628', 'doubao-seed-evolving'],
   kimi: ['kimi-k3', 'kimi-k2.6', 'kimi-k2.5', 'kimi-k2.7-code'],
   glm: ['glm-5.3', 'glm-5.2', 'glm-4.7'],
   grok: ['grok-4.6', 'grok-4.5', 'grok-4.3'],
 }
-const PROVIDER_GROUP_ORDER: ProviderKey[] = ['dashscope', 'openai', 'gemini', 'deepseek', 'kimi', 'glm', 'grok']
+const PROVIDER_GROUP_ORDER: ProviderKey[] = ['dashscope', 'openai', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok']
 const providerGroupLabel = (key: string) => ({
   dashscope: t("通义千问"), openai: 'OpenAI', gemini: 'Gemini', deepseek: 'DeepSeek',
-  kimi: 'Kimi', glm: 'GLM', grok: 'Grok',
+  seed: 'Seed', kimi: 'Kimi', glm: 'GLM', grok: 'Grok',
 } as Record<string, string>)[key] || key
 const knownCloudModels = (catalog: Record<string, string[]>, extra: string[] = []) =>
   new Set([...Object.values(catalog).flat(), ...extra])
@@ -88,8 +90,8 @@ const cloudModelOptions = (
 }
 
 const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
-  dashscope: 'qwen-plus', openai: 'gpt-5-mini', gemini: 'gemini-2.5-flash', deepseek: 'deepseek-flash',
-  kimi: 'kimi-k2.6', glm: 'glm-5.3', grok: 'grok-4.6',
+  dashscope: 'qwen-plus', openai: 'gpt-5-mini', gemini: 'gemini-3.8-flash', deepseek: 'deepseek-flash',
+  seed: 'doubao-seed-2-1-lite-260915', kimi: 'kimi-k2.6', glm: 'glm-5.3', grok: 'grok-4.6',
 }
 
 type SectionKey = 'model' | 'speech' | 'app' | 'publish' | 'cover' | 'feedback'
@@ -167,6 +169,7 @@ const SettingsPage: React.FC = () => {
         kimi_api_key: settingsData.api?.api_keys?.kimi || '',
         glm_api_key: settingsData.api?.api_keys?.glm || '',
         grok_api_key: settingsData.api?.api_keys?.grok || '',
+        seed_api_key: settingsData.api?.api_keys?.seed || '',
         jimeng_access_key: settingsData.api?.api_keys?.jimeng_access || '',
         jimeng_secret_key: settingsData.api?.api_keys?.jimeng_secret || '',
         model_name: settingsData.api?.api_model || 'qwen-plus',
@@ -204,6 +207,7 @@ const SettingsPage: React.FC = () => {
             kimi: values.kimi_api_key || keys.kimi || '',
             glm: values.glm_api_key || keys.glm || '',
             grok: values.grok_api_key || keys.grok || '',
+            seed: values.seed_api_key || keys.seed || '',
             jimeng_access: values.jimeng_access_key || keys.jimeng_access || '',
             jimeng_secret: values.jimeng_secret_key || keys.jimeng_secret || ''
           },

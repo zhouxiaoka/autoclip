@@ -101,6 +101,7 @@ class LLMManager:
             "kimi_api_key": "",
             "glm_api_key": "",
             "grok_api_key": "",
+            "seed_api_key": "",
             "model_name": "qwen-plus",
             "chunk_size": 5000,
             "min_score_threshold": 0.7,
@@ -126,6 +127,7 @@ class LLMManager:
                             "kimi_api_key": api_keys.get("kimi", ""),
                             "glm_api_key": api_keys.get("glm", ""),
                             "grok_api_key": api_keys.get("grok", ""),
+                            "seed_api_key": api_keys.get("seed", ""),
                             "model_name": api.get("api_model", "qwen-plus")
                         })
                         # 设置页保存的提供商；旧版 settings.json 没有这个字段，保持 dashscope
@@ -171,7 +173,7 @@ class LLMManager:
                     settings["model_name"] = default_model
 
     def _apply_cloud_preset(self, settings: Dict[str, Any]) -> None:
-        """deepseek / kimi / glm / grok → openai + 官方地址，用各家自己的 key。"""
+        """deepseek / seed / kimi / glm / grok → openai + 官方地址，用各家自己的 key。"""
         from backend.core.cloud_presets import resolve_cloud_preset
         from backend.core.model_catalog import curated_models, default_model_for
 
@@ -199,6 +201,7 @@ class LLMManager:
         "kimi_api_key": ("API_KIMI_API_KEY", "MOONSHOT_API_KEY", "KIMI_API_KEY"),
         "glm_api_key": ("API_GLM_API_KEY", "ZHIPU_API_KEY", "GLM_API_KEY"),
         "grok_api_key": ("API_GROK_API_KEY", "XAI_API_KEY", "GROK_API_KEY"),
+        "seed_api_key": ("API_SEED_API_KEY", "ARK_API_KEY", "VOLCENGINE_API_KEY", "DOUBAO_API_KEY"),
     }
 
     def _apply_env_fallbacks(self, settings: Dict[str, Any]) -> None:
@@ -249,7 +252,7 @@ class LLMManager:
             model_name = self.settings.get("model_name", "qwen-plus")
             
             # 本地预设不需要 key，也不要把用户的 OpenAI key 发给本地服务；
-            # kimi / glm / grok 用各家自己的 key，不要误用 openai_api_key
+            # seed / kimi / glm / grok 用各家自己的 key，不要误用 openai_api_key
             cloud_preset = self.settings.get("cloud_preset")
             if self.settings.get("llm_provider_preset"):
                 api_key = ""

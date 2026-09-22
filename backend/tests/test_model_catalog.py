@@ -18,24 +18,32 @@ def test_curated_catalog_includes_current_flagships():
     openai = model_catalog.curated_models("openai")
     gemini = model_catalog.curated_models("gemini")
     deepseek = model_catalog.curated_models("deepseek")
+    seed = model_catalog.curated_models("seed")
     kimi = model_catalog.curated_models("kimi")
 
+    assert dashscope[0] == "qwen3.8-max"
     assert "qwen-plus" in dashscope
-    assert "qwen3.8-max" in dashscope
+    assert "qwen3.8-flash" in dashscope
     assert "qwen-turbo" not in dashscope
+    assert "qwen-long" not in dashscope
     assert "gpt-5" in openai
     assert "gpt-5.6-terra" in openai
     assert "gpt-4o" not in openai
     assert "gpt-4o-mini" not in openai
+    assert "gemini-3.8-flash" in gemini
     assert "gemini-2.5-flash" in gemini
     assert "gemini-1.5-pro" not in gemini
     assert "deepseek-flash" in deepseek
     assert "deepseek-v4-pro" in deepseek
     assert "deepseek-chat" not in deepseek
+    assert "doubao-seed-2-1-lite-260915" in seed
+    assert "doubao-seed-2-1-pro-260915" in seed
     assert "kimi-k3" in kimi
     assert "siliconflow" not in model_catalog.CURATED_MODELS
     assert model_catalog.default_model_for("dashscope") == "qwen-plus"
+    assert model_catalog.default_model_for("gemini") == "gemini-3.8-flash"
     assert model_catalog.default_model_for("deepseek") == "deepseek-flash"
+    assert model_catalog.default_model_for("seed") == "doubao-seed-2-1-lite-260915"
 
 
 def test_is_chat_model_drops_embeddings_and_media():
@@ -48,8 +56,14 @@ def test_is_chat_model_drops_embeddings_and_media():
     # 自建兼容接口：自定义名字要留下来
     assert model_catalog.is_chat_model("glm-4-flash", "openai", official=False)
     assert not model_catalog.is_chat_model("bge-m3-embedding", "openai", official=False)
+    assert model_catalog.is_chat_model("gemini-3.8-flash", "gemini")
     assert model_catalog.is_chat_model("gemini-2.5-flash", "gemini")
     assert not model_catalog.is_chat_model("imagen-4.0-generate", "gemini")
+    assert not model_catalog.is_chat_model("gemini-3.8-live", "gemini")
+    assert not model_catalog.is_chat_model("gemini-3.1-flash-image", "gemini")
+    assert model_catalog.is_chat_model("doubao-seed-2-1-lite-260915", "seed")
+    assert not model_catalog.is_chat_model("doubao-seedream-5-0-260128", "seed")
+    assert not model_catalog.is_chat_model("doubao-seedance-2-0", "seed")
 
 
 def test_merge_keeps_curated_first_and_drops_dated_snapshots():
@@ -132,7 +146,8 @@ def test_list_available_models_merges_live_dashscope(monkeypatch):
     result = asyncio.run(model_catalog.list_available_models("dashscope", api_key="sk-test-key-123456"))
     assert result.source == "live"
     assert result.reachable is True
-    assert result.models[0] == "qwen-plus"
+    assert result.models[0] == "qwen3.8-max"
+    assert "qwen-plus" in result.models
     assert "qwen3.9-preview" in result.models
     assert "text-embedding-v4" not in result.models
     assert "qwen-plus-2026-01-01" not in result.models

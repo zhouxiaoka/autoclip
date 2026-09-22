@@ -47,6 +47,8 @@ def test_resolve_cloud_presets_use_official_endpoints():
     assert resolve_cloud_preset("kimi")[1] == "https://api.moonshot.cn/v1"
     assert resolve_cloud_preset("glm")[2].default_model == "glm-5.3"
     assert resolve_cloud_preset("xai")[2].key == "grok"
+    assert resolve_cloud_preset("doubao")[1] == "https://ark.cn-beijing.volces.com/api/v3"
+    assert resolve_cloud_preset("ark")[2].default_model == "doubao-seed-2-1-lite-260915"
     assert resolve_cloud_preset("dashscope") is None
     assert resolve_cloud_preset("openai") is None
 
@@ -68,6 +70,23 @@ def test_manager_uses_deepseek_official_key_not_openai(fake_openai, tmp_path):
     assert fake_openai.created[-1]["base_url"] == "https://api.deepseek.com"
 
 
+def test_manager_uses_seed_ark_key_not_openai(fake_openai, tmp_path):
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        '{"api": {"api_keys": {"openai": "sk-openai-should-not-be-used", "seed": "ark-seed-official-key"}, '
+        '"api_provider": "seed", "api_model": "doubao-seed-2-1-lite-260915"}}',
+        encoding="utf-8",
+    )
+    info = LLMManager(settings_file=settings).get_current_provider_info()
+    assert info["provider"] == "seed"
+    assert info["backend_provider"] == "openai"
+    assert info["base_url"] == "https://ark.cn-beijing.volces.com/api/v3"
+    assert info["model"] == "doubao-seed-2-1-lite-260915"
+    assert info["available"] is True
+    assert fake_openai.created[-1]["api_key"] == "ark-seed-official-key"
+    assert fake_openai.created[-1]["base_url"] == "https://ark.cn-beijing.volces.com/api/v3"
+
+
 def test_curated_lists_drop_retired_aliases():
     assert "gpt-4o" not in CLOUD_PRESETS
-    assert set(CLOUD_PRESETS) == {"deepseek", "kimi", "glm", "grok"}
+    assert set(CLOUD_PRESETS) == {"deepseek", "seed", "kimi", "glm", "grok"}

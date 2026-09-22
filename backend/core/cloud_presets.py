@@ -1,5 +1,5 @@
 """
-云端 OpenAI 兼容预设：DeepSeek / Kimi / GLM / Grok。
+云端 OpenAI 兼容预设：DeepSeek / Seed / Kimi / GLM / Grok。
 
 底层仍是 openai + 官方 base_url，和 Ollama 预设同一套路，但必须带各家自己的 key，
 不能复用用户的 OpenAI key。设置页、CLI、MCP 都用 `--provider deepseek` 这种名字。
@@ -30,6 +30,15 @@ CLOUD_PRESETS: Dict[str, CloudPreset] = {
         api_key_setting="deepseek_api_key",
         docs_url="https://platform.deepseek.com/api_keys",
         hint="DeepSeek 官方。国内直连，deepseek-flash 是当前 V4.1。",
+    ),
+    "seed": CloudPreset(
+        key="seed",
+        display_name="Seed（火山方舟）",
+        base_url="https://ark.cn-beijing.volces.com/api/v3",
+        default_model="doubao-seed-2-1-lite-260915",
+        api_key_setting="seed_api_key",
+        docs_url="https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
+        hint="火山方舟 Seed。国内直连，豆包 Seed 2.1 系列。",
     ),
     "kimi": CloudPreset(
         key="kimi",
@@ -70,6 +79,11 @@ _ALIASES = {
     "bigmodel": "glm",
     "xai": "grok",
     "x-ai": "grok",
+    "doubao": "seed",
+    "volcengine": "seed",
+    "ark": "seed",
+    "bytedance": "seed",
+    "volces": "seed",
 }
 
 
@@ -83,7 +97,7 @@ def normalize_cloud_preset_key(name: Optional[str]) -> Optional[str]:
 
 def resolve_cloud_preset(provider: Optional[str], base_url: Optional[str] = None) -> Optional[Tuple[str, str, CloudPreset]]:
     """
-    若 provider 是 deepseek / kimi / glm / grok（或别名），返回 (openai, base_url, preset)。
+    若 provider 是 deepseek / seed / kimi / glm / grok（或别名），返回 (openai, base_url, preset)。
     不是云端预设则返回 None。
     """
     key = normalize_cloud_preset_key(provider)

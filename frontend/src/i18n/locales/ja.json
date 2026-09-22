@@ -453,6 +453,7 @@
   "智谱开放平台。国内直连，glm-5.3 是当前旗舰。": "智譜 API。中国国内から接続可能。現行旗艦は glm-5.3。",
   "xAI Grok。需要 xAI 账号。": "xAI Grok。xAI アカウントが必要。",
   "DeepSeek 官方。国内直连，deepseek-flash 是当前 V4.1。": "DeepSeek 公式。中国国内から接続可能。現行は deepseek-flash（V4.1）。",
+  "火山方舟 Seed。国内直连，豆包 Seed 2.1 系列。": "火山引擎 Ark の Seed。中国国内から接続可能。豆包 Seed 2.1 シリーズ。",
   "sk-…（自建服务可留空）": "sk-…（自前のサービスは省略可）",
   "Google AI Studio 的 Gemini 系列。": "Google AI Studio の Gemini モデル。",
   "硅基流动": "SiliconFlow",

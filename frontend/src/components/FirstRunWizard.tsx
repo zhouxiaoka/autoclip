@@ -195,14 +195,19 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
             gemini: config.llmProvider === 'gemini' ? config.llmApiKey : (existingApiKeys.gemini || ''),
             siliconflow: existingApiKeys.siliconflow || '',
             deepseek: config.llmProvider === 'deepseek' ? config.llmApiKey : (existingApiKeys.deepseek || ''),
+            seed: config.llmProvider === 'seed' ? config.llmApiKey : (existingApiKeys.seed || ''),
+            kimi: existingApiKeys.kimi || '',
+            glm: existingApiKeys.glm || '',
+            grok: existingApiKeys.grok || '',
             jimeng_access: existingApiKeys.jimeng_access || '',
             jimeng_secret: existingApiKeys.jimeng_secret || ''
           },
           api_provider: config.llmProvider,
           api_model: config.llmProvider === 'dashscope' ? 'qwen-plus' : 
                      config.llmProvider === 'openai' ? 'gpt-5-mini' :
-                     config.llmProvider === 'gemini' ? 'gemini-2.5-flash' :
-                     config.llmProvider === 'deepseek' ? 'deepseek-flash' : 'qwen-plus',
+                     config.llmProvider === 'gemini' ? 'gemini-3.8-flash' :
+                     config.llmProvider === 'deepseek' ? 'deepseek-flash' :
+                     config.llmProvider === 'seed' ? 'doubao-seed-2-1-lite-260915' : 'qwen-plus',
           api_max_tokens: 4000,
           api_timeout: 30
         },
@@ -384,6 +389,11 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
         name: 'DeepSeek',
         url: 'https://platform.deepseek.com',
         description: '注册 DeepSeek 账号，在开放平台创建 API Key'
+      },
+      seed: {
+        name: 'Seed（火山方舟）',
+        url: 'https://console.volcengine.com/ark',
+        description: '注册火山引擎账号，开通方舟并创建 API Key'
       }
     }
     return helpMap[provider] || helpMap.dashscope
@@ -474,6 +484,12 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
                     <Space>
                       <Text strong>DeepSeek</Text>
                       <Text type="secondary">(官方，国内直连)</Text>
+                    </Space>
+                  </Option>
+                  <Option value="seed">
+                    <Space>
+                      <Text strong>Seed（火山方舟）</Text>
+                      <Text type="secondary">(豆包 Seed 2.1，国内直连)</Text>
                     </Space>
                   </Option>
                 </Select>

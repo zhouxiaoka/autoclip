@@ -80,6 +80,7 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
         kimi: apiKeys.kimi ? '***' + apiKeys.kimi.slice(-4) : '未配置',
         glm: apiKeys.glm ? '***' + apiKeys.glm.slice(-4) : '未配置',
         grok: apiKeys.grok ? '***' + apiKeys.grok.slice(-4) : '未配置',
+        seed: apiKeys.seed ? '***' + apiKeys.seed.slice(-4) : '未配置',
         jimeng_access: apiKeys.jimeng_access ? '***' + apiKeys.jimeng_access.slice(-4) : '未配置',
         jimeng_secret: apiKeys.jimeng_secret ? '***' + apiKeys.jimeng_secret.slice(-4) : '未配置'
       }
@@ -114,6 +115,7 @@ export const checkApiConfig = async (): Promise<ApiConfigStatus> => {
         console.log('SiliconFlow API Key检查:', { hasKey: !!currentApiKey, keyLength: currentApiKey.length, isValid: hasValidKey })
         break
       case 'deepseek':
+      case 'seed':
       case 'kimi':
       case 'glm':
       case 'grok':

@@ -59,7 +59,7 @@ def _err(msg: str) -> None:
 
 def _add_llm_args(p: argparse.ArgumentParser) -> None:
     g = p.add_argument_group("模型（不填则用桌面应用设置页里的配置）")
-    g.add_argument("--provider", choices=PROVIDER_CHOICES, help="dashscope / openai / gemini / deepseek / kimi / glm / grok，或本地预设 ollama / lmstudio")
+    g.add_argument("--provider", choices=PROVIDER_CHOICES, help="dashscope / openai / gemini / deepseek / seed / kimi / glm / grok，或本地预设 ollama / lmstudio")
     g.add_argument("--model", help="模型名，如 qwen-plus、gpt-4o-mini、qwen2.5:7b")
     g.add_argument("--base-url", help="OpenAI 兼容接口地址（provider=openai 时用；ollama/lmstudio 有默认值）")
     g.add_argument("--api-key", help="API Key（本地模型可不填）。也可用环境变量 AUTOCLIP_API_KEY")
@@ -202,6 +202,7 @@ def cmd_providers(args: argparse.Namespace) -> int:
         ("openai", "OpenAI / 兼容接口", "需要 key；--base-url 可指向 DeepSeek / 智谱 / OpenRouter / vLLM"),
         ("gemini", "Google Gemini", "需要 key"),
         ("deepseek", "DeepSeek", "需要 key；官方接口，deepseek-flash"),
+        ("seed", "Seed（火山方舟）", "需要 key；国内直连，豆包 Seed 2.1"),
         ("kimi", "Kimi（月之暗面）", "需要 key；国内直连"),
         ("glm", "智谱 GLM", "需要 key；国内直连"),
         ("grok", "Grok（xAI）", "需要 key"),
