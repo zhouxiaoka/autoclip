@@ -6,7 +6,8 @@
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import StaticPool, NullPool
+from sqlalchemy.engine import make_url
 from typing import Generator
 from backend.models.base import Base
 
@@ -25,27 +26,18 @@ if DATABASE_URL == "sqlite:///autoclip.db":
         # 如果导入失败，保持默认值
         pass
 
-# 创建数据库引擎
-if "sqlite" in DATABASE_URL:
-    # SQLite配置
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={
-            "check_same_thread": False,
-            "timeout": 30
-        },
-        poolclass=StaticPool,
-        pool_pre_ping=True,
-        echo=False  # 设置为True可以看到SQL语句
-    )
-else:
-    # PostgreSQL配置
-    engine = create_engine(
-        DATABASE_URL,
-        pool_pre_ping=True,
-        pool_recycle=300,
-        echo=False
-    )
+# File-backed SQLite must not share a connection between concurrent requests/workers.
+# Only in-memory databases require StaticPool to keep the same database alive.
+def create_database_engine(database_url):
+    url = make_url(database_url)
+    if url.get_backend_name() == 'sqlite':
+        in_memory = not url.database or url.database == ':memory:' or url.query.get('mode') == 'memory'
+        return create_engine(database_url, connect_args={'check_same_thread': False, 'timeout': 30},
+                             poolclass=StaticPool if in_memory else NullPool, pool_pre_ping=True, echo=False)
+    return create_engine(database_url, pool_pre_ping=True, pool_recycle=300, echo=False)
+
+
+engine = create_database_engine(DATABASE_URL)
 
 # 创建会话工厂
 SessionLocal = sessionmaker(
