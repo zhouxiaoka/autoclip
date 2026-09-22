@@ -162,8 +162,8 @@ const PublishSettings: React.FC = () => {
       >
         <div className="ac-rows">
           <Row
-            wide
             stack
+            top
             label={t("B 站 Cookie")}
             hint={<>
               {t("登录 B 站后，打开开发者工具 Application → Cookies，复制 SESSDATA、bili_jct、DedeUserID。只保存在这台机器上。")}
@@ -172,7 +172,7 @@ const PublishSettings: React.FC = () => {
           >
             <textarea
               className="ac-input ac-textarea"
-              style={{ minHeight: 72 }}
+              style={{ minHeight: 72, width: '100%' }}
               name="bilibili-cookie"
               autoComplete="off"
               spellCheck={false}
