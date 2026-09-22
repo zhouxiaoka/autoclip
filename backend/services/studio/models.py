@@ -35,8 +35,8 @@ class Draft(BaseModel):
     aspect: Literal['original', 'portrait', 'landscape'] = 'original'
     layout: Literal['fit', 'crop', 'blur'] = 'fit'
     crop_x: float = Field(default=.5, ge=0, le=1, allow_inf_nan=False)
-    title_style: Literal['plain', 'impact', 'card', 'comic', 'neon', 'arena'] = 'plain'
-    title_template_version: Literal[1] = 1
+    title_style: Literal['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial'] = 'plain'
+    title_template_version: Literal[1, 2] = 1
     title_motion: bool = True
     title_scale: float = Field(default=1, ge=.75, le=1.2, allow_inf_nan=False)
     title_y: float = Field(default=.12, ge=.06, le=.70, allow_inf_nan=False)
@@ -48,6 +48,12 @@ class Draft(BaseModel):
     origin: str = 'manual'
     parent_draft_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     parent_revision: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode='after')
+    def title_version(self):
+        if self.title_style == 'editorial' and self.title_template_version != 2:
+            raise ValueError('极简大字需要文字模板版本 2')
+        return self
 
 class CreateDraft(BaseModel):
     clip_ids: list[str] = Field(min_length=1, max_length=30)

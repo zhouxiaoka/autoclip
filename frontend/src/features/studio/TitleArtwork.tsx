@@ -6,7 +6,7 @@ export default function TitleArtwork({projectId, draft}: {projectId:string; draf
   const [image,setImage]=useState('')
   const [error,setError]=useState('')
   const [retry,setRetry]=useState(0)
-  const signature=JSON.stringify([draft.hook,draft.title_style,draft.aspect,draft.title_scale,draft.title_y,draft.title_accent])
+  const signature=JSON.stringify([draft.hook,draft.title_style,draft.title_template_version,draft.aspect,draft.title_scale,draft.title_y,draft.title_accent])
   useEffect(()=>{
     const controller=new AbortController()
     let url=''

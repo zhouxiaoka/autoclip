@@ -354,16 +354,16 @@ def test_portrait_fills_frame_and_applies_focus_and_title(root,style,x,expected)
     assert max(pixel)-min(pixel)>180
 
 
-@pytest.mark.parametrize('style',['comic','neon','arena'])
-def test_title_art_preview_matches_export_geometry(root,style):
+@pytest.mark.parametrize('style,version', [('comic',1),('neon',1),('arena',1),('comic',2),('neon',2),('arena',2),('editorial',2)])
+def test_title_art_preview_matches_export_geometry(root,style,version):
     import io
     from PIL import Image,ImageChops,ImageStat
     from backend.services.studio import title_art,render
     raw=root/'raw';raw.mkdir()
     source=raw/'input.mp4'
     subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','color=0x404040:s=320x180:r=30:d=1','-y',str(source)],check=True)
-    d=Draft(id=style,title=style,hook='CAN YOU\nESCAPE?',title_style=style,title_motion=False,aspect='portrait',layout='crop',subtitles=False,original_audio=False,scenes=[Scene(id='s',start=0,end=.7)])
-    layer=Image.open(io.BytesIO(title_art.png_bytes(d.hook,style,1080,1920)))
+    d=Draft(id=style,title=style,hook='CAN YOU\nESCAPE?',title_style=style,title_template_version=version,title_motion=False,aspect='portrait',layout='crop',subtitles=False,original_audio=False,scenes=[Scene(id='s',start=0,end=.7)])
+    layer=Image.open(io.BytesIO(title_art.png_bytes(d.hook,style,1080,1920,version=version)))
     box=layer.getbbox()
     assert box and box[0]>=1080*.04 and box[2]<=1080*.96 and box[3]<1920*.5
     expected=Image.new('RGBA',(1080,1920),(64,64,64,255));expected.alpha_composite(layer)
@@ -475,3 +475,35 @@ def test_video_without_audio_stays_silent_and_reports_it(root):
     assert result['warnings']==['原素材没有音轨，本次导出无声']
     streams=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(root/'output/studio/silent.mp4')]))['streams']
     assert [s['codec_type'] for s in streams]==['video']
+
+
+@pytest.mark.parametrize('style', ['comic','neon','arena','editorial'])
+def test_v2_title_languages_and_safety_bounds(style):
+    from backend.services.studio import title_art
+    for text in ['CAN YOU\nESCAPE?', '你能逃出\n这里吗？', '逃げ切れる？', 'A longer challenge with several words!', '100% {escape}: Go!']:
+        for w,h in [(1080,1920),(1920,1080)]:
+            art=title_art.artwork(text,style,w,h,version=2)
+            x0,y0,x1,y1=art.getbbox()
+            assert x0>=w*.04 and x1<=w*.98
+            assert y0>=h*.035 and y1<h*.4
+    with pytest.raises(ValueError,match='太长'):
+        title_art.artwork('a\nb\nc\nd',style,1080,1920,version=2)
+
+
+def test_title_versions_persist_and_have_distinct_previews(client):
+    d=client.post('/studio/p1/drafts',json={'clip_ids':['c1'],'title':'Version'}).json()
+    assert d['title_template_version']==1
+    body={**d,'hook':'CAN YOU\nESCAPE?','title_style':'comic','aspect':'portrait'}
+    old=client.post('/studio/p1/title-preview',json=body)
+    new=client.post('/studio/p1/title-preview',json={**body,'title_template_version':2})
+    assert old.status_code==new.status_code==200 and old.content!=new.content
+    for version in (2,1):
+        body={**body,'title_template_version':version}
+        saved=client.put('/studio/p1/drafts/'+d['id'],json=body).json()
+        assert saved['title_template_version']==version
+        body=saved
+    assert client.post('/studio/p1/title-preview',json={**body,'title_style':'editorial'}).status_code==422
+    assert client.post('/studio/p1/title-preview',json={**body,'title_template_version':3}).status_code==422
+    for style in ['comic','neon','arena','editorial']:
+        assert client.get('/studio/title-presets/'+style+'/thumbnail?v=2').status_code==200
+    assert client.get('/studio/title-presets/comic/thumbnail?v=3').status_code==422

@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 from typing import Optional, Literal
 from urllib.parse import urlparse
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from backend.core.database import get_db
@@ -39,9 +39,9 @@ def validate_draft(project_id, draft):
     intelligence.validate_scenes(draft.scenes, duration)
 
 @router.get('/title-presets/{style}/thumbnail')
-def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena']):
+def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial'], v: int = Query(1, ge=1, le=2)):
     from backend.services.studio.title_art import thumbnail
-    return Response(thumbnail(style), media_type='image/png', headers={'Cache-Control':'public, max-age=86400'})
+    return Response(call(thumbnail, style, v), media_type='image/png', headers={'Cache-Control':'public, max-age=86400'})
 
 @router.get('/capabilities')
 def capabilities():

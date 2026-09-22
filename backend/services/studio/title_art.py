@@ -1,12 +1,12 @@
-"""Version 1 deterministic title artwork shared by preview and FFmpeg export."""
+"""Versioned deterministic title artwork shared by preview and FFmpeg export."""
 import io
 from functools import lru_cache
 import re
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-STYLES = {'comic', 'neon', 'arena'}
-ACCENTS = {'comic':'#ffe52d', 'neon':'#ccff00', 'arena':'#dfff00'}
+STYLES = {'comic', 'neon', 'arena', 'editorial'}
+ACCENTS = {'comic':'#ffe52d', 'neon':'#ccff00', 'arena':'#dfff00', 'editorial':'#ff4826'}
 FONTS = Path(__file__).resolve().parents[2] / 'assets' / 'fonts'
 
 
@@ -34,7 +34,7 @@ def lines_for(text, font, max_width):
     return [line for line in lines if line]
 
 
-def artwork(text, style, w, h, scale=1, y=.12, accent=None):
+def _artwork_v1(text, style, w, h, scale=1, y=.12, accent=None):
     if w<16 or h<16 or w*h>16777216:
         raise ValueError('文字模板支持最大 1600 万像素画布，请使用 1080p 画幅')
     if style not in STYLES: raise ValueError('未知文字模板')
@@ -87,13 +87,22 @@ def artwork(text, style, w, h, scale=1, y=.12, accent=None):
     return canvas
 
 
+def artwork(text, style, w, h, scale=1, y=.12, accent=None, version=1):
+    if version == 1 and style != 'editorial':
+        return _artwork_v1(text, style, w, h, scale, y, accent)
+    if version == 2:
+        from backend.services.studio.title_art_v2 import artwork as artwork_v2
+        return artwork_v2(text, style, w, h, scale, y, accent)
+    raise ValueError('不支持的文字模板版本')
+
+
 def png_bytes(text, style, w, h, **options):
     image=artwork(text,style,w,h,**options)
     stream=io.BytesIO();image.save(stream,format='PNG');return stream.getvalue()
 
 
 def options_for(draft):
-    return {'scale':draft.title_scale,'y':draft.title_y,'accent':draft.title_accent}
+    return {'scale':draft.title_scale,'y':draft.title_y,'accent':draft.title_accent,'version':draft.title_template_version}
 
 
 def overlay_motion(style, enabled, height):
@@ -104,9 +113,9 @@ def overlay_motion(style, enabled, height):
     return '0',f"{distance}*max(0,1-t/0.18)"
 
 
-@lru_cache(maxsize=3)
-def thumbnail(style):
-    image=artwork('CAN YOU\nESCAPE?',style,1080,1920)
+@lru_cache(maxsize=8)
+def thumbnail(style, version=1):
+    image=artwork('CAN YOU\nESCAPE?',style,1080,1920,version=version)
     image=image.crop(image.getbbox())
     image.thumbnail((300,150),Image.Resampling.LANCZOS)
     canvas=Image.new('RGBA',(324,174))
