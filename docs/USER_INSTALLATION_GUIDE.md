@@ -44,11 +44,11 @@ AutoClip 不托管官方样片。Release 里没有样片压缩包，也不提供
 
 下面是机构官方 YouTube 频道的示例，任选一条即可，不必三条都跑。口播以英语为主。导入前打开官方字幕或自备 SRT；也可以用 Whisper 生成字幕。我们不提供成片下载。
 
-第一次验证优先用较短的 Stanford 访谈。需要更长的口播时，再选 YC 或 OpenAI。
+第一次验证优先用 Stanford ENERGY 的短访谈。OpenAI 那条是产品演示（画面加旁白），不要把它当成访谈类切片的默认效果。YC 是较长播客，第一次只导前 5–8 分钟。
 
-- Stanford 官方（优先）：[Meet Our Faculty: Anna Lembke](https://www.youtube.com/watch?v=ABfY8FUyvSI)。约 2.5 分钟短访谈。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- Y Combinator 官方（可选）：[Kevin Hale - How to Pitch Your Startup](https://www.youtube.com/watch?v=17XZGUX_9iM)。Startup School 口播；建议只取前 5–8 分钟。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- OpenAI 官方（可选）：[Say hello to GPT-4o](https://www.youtube.com/watch?v=vgYi3Wr7v_g)。对谈/演示口播；若偏长可只导入前几分钟。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Stanford ENERGY（冷启动优先）：[Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)。约 3 分 47 秒（2025-10）。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Y Combinator 官方（可选，播客）：[How to Build a Self-Improving Company with AI](https://www.youtube.com/watch?v=X_JsIHUfUjc)。第一次只导前 5–8 分钟。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- OpenAI 官方（产品演示）：[OpenAI Codex CLI](https://www.youtube.com/watch?v=FUq9qRwrDrI)。约 6 分钟（2025），画面加旁白，不是访谈类切片的默认效果。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
 
 也可改用你自己的 3–5 分钟短片。导入前打开官方字幕或自备 SRT。
 

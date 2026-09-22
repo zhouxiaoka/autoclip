@@ -174,11 +174,11 @@ AutoClip 本身免费、开源（MIT）。云端模型由所选服务商计费�
 
 当前分析主要基于字幕，适合访谈、播客、课程和口播。纯视觉动作或音乐类视频效果可能有限。耗时取决于时长、硬件、模型与导出设置，建议先用自备的 3–5 分钟短样片验证。
 
-也可以任选下面一条机构官方示例，不必三条都跑。口播以英语为主。导入前打开官方字幕或自备 SRT，也可以用 Whisper。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+也可以任选下面一条机构官方示例，不必三条都跑。口播以英语为主。导入前打开官方字幕或自备 SRT，也可以用 Whisper。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。冷启动优先用 Stanford 短访谈。OpenAI 这条是产品演示（画面加旁白），不是访谈类切片的默认效果。
 
-- 优先：[Stanford · Meet Our Faculty: Anna Lembke](https://www.youtube.com/watch?v=ABfY8FUyvSI)（约 2.5 分钟）
-- 可选：[YC · Kevin Hale - How to Pitch Your Startup](https://www.youtube.com/watch?v=17XZGUX_9iM)（建议前 5–8 分钟）
-- 可选：[OpenAI · Say hello to GPT-4o](https://www.youtube.com/watch?v=vgYi3Wr7v_g)
+- 产品演示：[OpenAI · OpenAI Codex CLI](https://www.youtube.com/watch?v=FUq9qRwrDrI)（约 6 分钟，2025；画面加旁白）
+- 冷启动优先：[Stanford ENERGY · Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)（约 3 分 47 秒，2025-10）
+- 播客：[YC · How to Build a Self-Improving Company with AI](https://www.youtube.com/watch?v=X_JsIHUfUjc)。第一次只导前 5–8 分钟。
 
 </details>
 

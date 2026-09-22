@@ -20,11 +20,11 @@ Analysis primarily uses transcripts, so interviews, podcasts, lectures, spoken c
 
 For a first run, bring your own 3–5 minute clip with clear speech, preferably with an accurately timed `.srt`. Use a local file, Bilibili, or YouTube, and confirm that you have the right to use it. AutoClip does not host an official sample, and Releases do not include a sample zip or finished clips.
 
-Official-channel examples. Pick one. The dialogue is mostly English. Before import, turn on the official captions, use Whisper, or bring your own SRT（导入前打开官方字幕或自备 SRT）. Each is marked 示例链接 · 非 AutoClip 托管 · 请自行确认使用权 (example link, not hosted by AutoClip; confirm you have the right to use it):
+Official-channel examples. Pick one. The dialogue is mostly English. Before import, turn on the official captions, use Whisper, or bring your own SRT（导入前打开官方字幕或自备 SRT）. For a cold start, use the Stanford interview. The OpenAI link is the product-demo example (screen plus narration), not the default expectation for interview-style clips. Each is marked 示例链接 · 非 AutoClip 托管 · 请自行确认使用权 (example link, not hosted by AutoClip; confirm you have the right to use it):
 
-- Stanford (official, start here): [Meet Our Faculty: Anna Lembke](https://www.youtube.com/watch?v=ABfY8FUyvSI). About 2.5 minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- Y Combinator (official, optional): [Kevin Hale - How to Pitch Your Startup](https://www.youtube.com/watch?v=17XZGUX_9iM). Use the first 5–8 minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- OpenAI (official, optional): [Say hello to GPT-4o](https://www.youtube.com/watch?v=vgYi3Wr7v_g). If it is long, import only the first few minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- OpenAI (product demo): [OpenAI Codex CLI](https://www.youtube.com/watch?v=FUq9qRwrDrI). About 6 minutes (2025), screen plus narration. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Stanford ENERGY (cold start): [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I). About 3:47 (October 2025). 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Y Combinator (podcast): [How to Build a Self-Improving Company with AI](https://www.youtube.com/watch?v=X_JsIHUfUjc). 第一次只导前 5–8 分钟. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
 
 Setup steps are in the [installation guide](USER_INSTALLATION_GUIDE.en.md#bring-your-own-short-clip); sticking points are in [Discussion #128](https://github.com/zhouxiaoka/autoclip/discussions/128).
 
@@ -74,7 +74,7 @@ autoclip doctor --provider ollama
 autoclip run talk.mp4 --provider ollama --srt talk.srt --min-score 0.5 --json
 ```
 
-Replace the filenames and provider with your actual setup. Without SRT, remove `--srt talk.srt` and prepare transcription first. Lowering the threshold changes selection; it does not guarantee clips. For a first check, use a clip you provide, or only the short Stanford interview above. You do not need to run all three examples. The dialogue is mostly English. Before import, turn on the official captions or bring your own SRT（导入前打开官方字幕或自备 SRT）. If usage is still unclear, continue in the [first-clip Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128). Reproducible bugs still belong in Issues.
+Replace the filenames and provider with your actual setup. Without SRT, remove `--srt talk.srt` and prepare transcription first. Lowering the threshold changes selection; it does not guarantee clips. For a first check, use a clip you provide, or only the short Stanford ENERGY interview above. You do not need to run all three examples. The dialogue is mostly English. Before import, turn on the official captions or bring your own SRT（导入前打开官方字幕或自备 SRT）. If you use the YC podcast instead, 第一次只导前 5–8 分钟. If usage is still unclear, continue in the [first-clip Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128). Reproducible bugs still belong in Issues.
 
 ### Why is processing slow or using too much memory?
 

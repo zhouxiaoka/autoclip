@@ -44,11 +44,11 @@ AutoClip does not host an official sample video. Releases do not include a sampl
 
 These are official-channel examples. Pick one; you do not need to run all three. The dialogue is mostly English. Before import, turn on the official captions, use Whisper, or bring your own SRT（导入前打开官方字幕或自备 SRT）. AutoClip does not provide a finished-file download. Each item is marked 示例链接 · 非 AutoClip 托管 · 请自行确认使用权 (example link, not hosted by AutoClip; confirm you have the right to use it).
 
-For a first run, start with the short Stanford interview. YC and OpenAI are optional if you want a longer talk.
+For a first run, start with the short Stanford ENERGY interview. The OpenAI link is a product demo (screen plus narration), not the default expectation for interview-style clips. The YC link is a longer podcast: 第一次只导前 5–8 分钟 (import only the first 5–8 minutes).
 
-- Stanford (official, start here): [Meet Our Faculty: Anna Lembke](https://www.youtube.com/watch?v=ABfY8FUyvSI). About 2.5 minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- Y Combinator (official, optional): [Kevin Hale - How to Pitch Your Startup](https://www.youtube.com/watch?v=17XZGUX_9iM). Startup School talk; use the first 5–8 minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- OpenAI (official, optional): [Say hello to GPT-4o](https://www.youtube.com/watch?v=vgYi3Wr7v_g). Conversation and demo; if it is long, import only the first few minutes. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Stanford ENERGY (cold start): [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I). About 3:47 (October 2025). 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Y Combinator (official, optional podcast): [How to Build a Self-Improving Company with AI](https://www.youtube.com/watch?v=X_JsIHUfUjc). 第一次只导前 5–8 分钟. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- OpenAI (product demo): [OpenAI Codex CLI](https://www.youtube.com/watch?v=FUq9qRwrDrI). About 6 minutes (2025), screen plus narration; not the default expectation for interview-style clips. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
 
 You can also use your own 3–5 minute clip. Before import, turn on the official captions or bring your own SRT.
 
