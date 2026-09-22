@@ -28,6 +28,7 @@ AutoClip 是本地运行的 AI 切片工具：字幕（自带 SRT 或本地 Whis
 | `get_project` / `list_projects` | 回看之前的项目 |
 | `list_providers` | 用户问"能用什么模型 / 能不能不花钱" |
 | `export_clip` | 用户要把切好的片段「直接发抖音 / 小红书 / Shorts」——渲 9:16、烧字幕、加标题卡 |
+| `publish_clip` + `get_publish_status` | 用户要「发到 TikTok / Instagram / YouTube Shorts / X / LinkedIn」——经 Upload-Post 一次发多个平台；先 `list_publish_profiles` 确认 key 和 profile |
 
 参数约定（`clip_video` 与 `start_clip_job` 相同）：
 - `video_path`：绝对路径。用户给相对路径先解析成绝对路径。
@@ -36,6 +37,17 @@ AutoClip 是本地运行的 AI 切片工具：字幕（自带 SRT 或本地 Whis
 - `min_score`：0–1，默认 0.7。**切片为 0 时用 0.5 重试**，不要直接说"没有精彩片段"。
 - `provider`：不传就用桌面应用里配好的模型。要免费 / 离线时传 `ollama`（本机需装 Ollama，默认模型 `qwen2.5:7b`）或 `lmstudio`（要同时传 `model`）。
 - `model` / `base_url` / `api_key`：只在用户明确指定时传。
+
+## 发到海外平台（Upload-Post）
+
+1. 先 `list_publish_profiles`：`configured=false` → 让用户去 https://app.upload-post.com/api-keys 拿 key，
+   `autoclip publish --api-key <key> --user <profile> --save`（或环境变量 `UPLOAD_POST_API_KEY` / `UPLOAD_POST_USER`）。
+   profile 没连平台 → 让用户在 https://app.upload-post.com/manage-users 连接。
+2. `publish_clip(project_id, clip_id, platforms=["tiktok","youtube"], user=…)`，不传 `preset` 会自动渲 9:16（`shorts`，≤ 60 s）。
+   想先私密试发：`extra={"privacy_level": "SELF_ONLY"}`（TikTok）、`extra={"privacyStatus": "unlisted"}`（YouTube）。
+3. 拿到 `request_id` 后 `get_publish_status` 每 10 秒查一次，`final=true` 时把每个平台的 `url` / `error` 报给用户。
+   `skipped=true` 表示该 profile 没连这个平台，不是失败。
+4. 不要一次把整个项目的切片全发出去，除非用户明确要求；默认只发用户点名的那一条。
 
 ## CLI 用法
 
@@ -46,6 +58,8 @@ autoclip run talk.mp4 --provider ollama --json        # 本地 Ollama，无需 k
 autoclip run talk.mp4 --provider openai --base-url https://api.deepseek.com/v1 --model deepseek-chat --api-key sk-...
 autoclip doctor --json                                # 体检
 autoclip list --json / autoclip show <project_id> --json
+autoclip publish <project_id> --clip 2 --platform tiktok --platform youtube --wait --json   # 经 Upload-Post 发布
+autoclip publish --list-profiles / autoclip publish --status <request_id>
 ```
 
 `--json` 时 stdout 只有一个 JSON 对象；进度走 stderr。不加 `--json` 时 stdout 只打印 `project_id`。

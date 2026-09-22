@@ -6,6 +6,7 @@ import { useLocation } from 'react-router-dom'
 import { settingsApi } from '../services/api'
 import SpeechRecognitionConfig from '../components/SpeechRecognitionConfig'
 import FeedbackDialog from '../components/FeedbackDialog'
+import PublishSettings from '../components/PublishSettings'
 import { isDesktopMode } from '../utils/desktopMode'
 import { openExternalLink } from '../utils/externalLinks'
 import { trackApiKeyConfigured } from '../analytics/events'
@@ -59,11 +60,12 @@ const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
   dashscope: 'qwen-plus', openai: 'gpt-4o-mini', gemini: 'gemini-2.5-flash', siliconflow: 'deepseek-ai/DeepSeek-V3',
 }
 
-type SectionKey = 'model' | 'speech' | 'app' | 'feedback'
+type SectionKey = 'model' | 'speech' | 'app' | 'publish' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
   { key: 'model', get label() { return t("模型") } },
   { key: 'speech', get label() { return t("转写") } },
   { key: 'app', get label() { return t("应用") } },
+  { key: 'publish', get label() { return t("发布") } },
   { key: 'feedback', get label() { return t("反馈") } },
 ]
 
@@ -474,6 +476,8 @@ const SettingsPage: React.FC = () => {
             <AppSection analyticsOn={analyticsOn} onAnalyticsChange={(on) => { setAnalyticsEnabled(on); setAnalyticsOn(on) }} />
           )}
 
+          {active === 'publish' && <PublishSettings />}
+
           {/* ---------------- 反馈 ---------------- */}
           {active === 'feedback' && (
             <Section title={t("反馈")} description={t("哪里不对、想要什么，直接说。运行环境会自动附上，不含视频内容与 API 密钥。正文会公开出现在 GitHub。")}>
@@ -598,9 +602,6 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         </Row>
         <Row label={t("崩溃报告")} hint={t("把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。")}>
           <Switch checked={crashOn} onChange={toggleCrashReports} />
-        </Row>
-        <Row label={t("B 站账号")} hint={t("多账号管理与一键投稿，开发中。")}>
-          <span className="ac-hint" style={{ margin: 0 }}>{t("即将推出")}</span>
         </Row>
       </div>
       {pendingUpdate && (

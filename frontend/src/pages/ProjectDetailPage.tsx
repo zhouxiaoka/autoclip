@@ -262,6 +262,9 @@ const ProjectDetailPage: React.FC = () => {
               )}
             </div>
           </div>
+          {isCompleted && (
+            <Btn onClick={() => navigate(`/project/${currentProject.id}/publish`)}>{t("发布")}</Btn>
+          )}
           {currentProject.status === 'pending' && (
             <Btn variant="cta" onClick={handleStartProcessing} loading={statusLoading}>{t("开始处理")}</Btn>
           )}

@@ -28,6 +28,7 @@ from .debug import router as debug_router
 from .simple_progress import router as simple_progress_router
 # from .environment import router as environment_router  # 文件不存在，暂时注释
 from .settings import router as settings_router
+from .publish import router as publish_router
 from ..upload_queue import router as upload_queue_router
 from ..account_health import router as account_health_router
 
@@ -51,6 +52,7 @@ api_router.include_router(debug_router, tags=["debug"])
 api_router.include_router(simple_progress_router, tags=["simple-progress"])
 # api_router.include_router(environment_router, tags=["environment"])  # 文件不存在，暂时注释
 api_router.include_router(settings_router, tags=["settings"])
+api_router.include_router(publish_router, tags=["publish"])
 api_router.include_router(upload_queue_router, tags=["upload-queue"])
 api_router.include_router(account_health_router, tags=["account-health"])
 
