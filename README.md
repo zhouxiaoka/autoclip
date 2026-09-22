@@ -198,6 +198,8 @@ README 提供八种语言；以下深入文档目前以中文为主。README 翻
 
 个人业余维护，回复时间不固定，不提供即时客服或一对一部署服务。联系前请先查看常见问题与已知问题。
 
+想法、用法和模型讨论走 [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)，不要为此开 Issue。能复现的故障用 [Issue 模板](https://github.com/zhouxiaoka/autoclip/issues/new/choose)。看板规则见 [社区看板](docs/COMMUNITY_BOARD.md)。
+
 - 邮箱: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
 感谢 FastAPI、React、Tauri、FFmpeg、yt-dlp、Whisper，以及所有贡献者。项目采用 [MIT License](LICENSE)。如果 AutoClip 帮到了你，欢迎给项目一个 Star。

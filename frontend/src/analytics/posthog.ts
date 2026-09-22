@@ -12,8 +12,8 @@
 import posthog from 'posthog-js'
 import { routeName, type Properties } from './workflow'
 
-const POSTHOG_KEY = import.meta.env.VITE_PUBLIC_POSTHOG_KEY as string | undefined
-const POSTHOG_HOST =
+export const POSTHOG_KEY = import.meta.env.VITE_PUBLIC_POSTHOG_KEY as string | undefined
+export const POSTHOG_HOST =
   (import.meta.env.VITE_PUBLIC_POSTHOG_HOST as string | undefined) ??
   'https://us.i.posthog.com'
 

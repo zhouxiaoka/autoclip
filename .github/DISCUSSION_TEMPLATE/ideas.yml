@@ -1,0 +1,27 @@
+title: "希望支持："
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这里收集还没决定要做的想法。确定要做之后，会另开 Issue 放进公开路线图。
+        已经能复现的故障请开 [Bug 报告](https://github.com/zhouxiaoka/autoclip/issues/new/choose)，不要写在这里。
+        Ideas are not commitments. Reproducible bugs belong in an issue.
+  - type: textarea
+    id: wish
+    attributes:
+      label: 你希望 AutoClip 多做什么
+      description: 先写你在做什么、卡在哪，再写期望。不需要设计方案。
+      placeholder: "我每周要处理 5 条 2 小时的直播回放，现在每条都要……"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 你主要在哪里用
+      options:
+        - macOS 桌面版
+        - Windows 桌面版
+        - Docker / 源码
+        - 还没开始用
+    validations:
+      required: false

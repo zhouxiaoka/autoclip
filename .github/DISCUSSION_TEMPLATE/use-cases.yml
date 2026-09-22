@@ -1,0 +1,21 @@
+title: "我用 AutoClip 做："
+body:
+  - type: markdown
+    attributes:
+      value: |
+        写你的内容类型和实际流程。成片展示可以发到 Show and tell，功能缺口请另外发到 Ideas。
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 你在做什么
+      description: 内容类型、一条多长、你最后要发到哪里。
+      placeholder: "游戏实况 / 播客 / 课程 / 短剧……一条大概 40 分钟，最后发到 B 站和抖音。"
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: 现在哪一步还是手工的
+      placeholder: "高光我自己看时间轴标，字幕样式每次重做。"
+    validations:
+      required: false

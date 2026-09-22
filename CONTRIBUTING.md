@@ -273,6 +273,12 @@ git push origin feature/your-feature-name
 - 保持内容更新
 - 使用清晰的标题层级
 
+## 想法放哪里
+
+希望 AutoClip 支持什么、你的用法、想要哪个模型，发到 [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)。
+能复现的故障用 Issue 里的 bug 模板。已经决定要做的需求才会出现在公开路线图上。
+分类、六列和 Agent 的操作见 [社区看板](docs/COMMUNITY_BOARD.md)。
+
 ## 社区行为准则
 
 ### 我们的承诺

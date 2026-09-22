@@ -90,6 +90,10 @@ Tauri 合并，不影响 macOS。
 - `workflow_dispatch`：可勾选只构建 macOS 或只构建 Windows
 - `v*` tag：两个平台并行构建，`release` job 汇总产物挂到 GitHub Release（任一平台失败不阻塞另一平台上传）
 
+## 社区看板
+
+`community_board.py`、`feature_signals.py`、`setup_community_board.py` 服务于公开路线图，不参与打包。`ingest_app_feedback.py` 把应用内反馈写进 Issue 和 Discussions。用法见 `docs/COMMUNITY_BOARD.md`。
+
 ## 开发模式（不打包）
 
 直接用 Tauri 开发模式，热重载：

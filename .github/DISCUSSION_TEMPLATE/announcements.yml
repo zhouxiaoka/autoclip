@@ -1,0 +1,25 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这个分类给维护者发布版本、已知问题和方向变化。
+        个人想法请改发 Ideas，使用问题请改发 Q&A。
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      placeholder: "v1.3.0"
+    validations:
+      required: true
+  - type: textarea
+    id: shipped
+    attributes:
+      label: 这次用户能感知到什么
+    validations:
+      required: true
+  - type: textarea
+    id: known
+    attributes:
+      label: 已知问题
+    validations:
+      required: false

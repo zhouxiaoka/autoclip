@@ -34,7 +34,7 @@ Built-in portable Python + static ffmpeg, nothing to install. macOS build is ad-
 Windows build is unsigned (SmartScreen → More info → Run anyway). If a file is missing, that platform's build failed for this tag — see the Desktop Build workflow run.
 
 ### 反馈 / Feedback
-- 已知问题与当前状态：#96 · Bug / 需求走 [Issue 模板](https://github.com/zhouxiaoka/autoclip/issues/new/choose) · 不用 GitHub 可填[官网表单](https://my.feishu.cn/share/base/shrcn8hKUG2icIJLpNry6uWVNJe)
+- 已知问题与当前状态：#96 · 能复现的故障走 [Issue 模板](https://github.com/zhouxiaoka/autoclip/issues/new/choose) · 想法与用法走 [Discussions](https://github.com/zhouxiaoka/autoclip/discussions)
 """
 
 

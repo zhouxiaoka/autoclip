@@ -92,7 +92,7 @@ autoclip export PROJECT_ID --preset shorts
 
 ### 哪里看已知问题？怎样联系？
 
-先查 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96) 和 [版本记录](https://github.com/zhouxiaoka/autoclip/releases)。仍需联系时，将以下信息一次性发到 [christine_zhouye@163.com](mailto:christine_zhouye@163.com)：
+先查 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96) 和 [版本记录](https://github.com/zhouxiaoka/autoclip/releases)。希望增加的能力、用法和模型发到 [Discussions](https://github.com/zhouxiaoka/autoclip/discussions)；能复现的故障开 Issue。规则见 [社区看板](COMMUNITY_BOARD.md)。仍需联系时，将以下信息一次性发到 [christine_zhouye@163.com](mailto:christine_zhouye@163.com)：
 
 - 系统和 CPU 架构、AutoClip 版本、桌面 / Docker / CLI 使用方式。
 - 模型提供商、模型名、视频来源与大致时长、是否提供字幕。

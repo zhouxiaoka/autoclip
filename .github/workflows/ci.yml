@@ -37,6 +37,11 @@ jobs:
           LOG_FORMAT: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         run: python -m pytest backend/tests -q
 
+      - name: Community board and feedback ingest checks
+        run: |
+          python3 scripts/test_community_board.py
+          python3 scripts/test_ingest_feedback.py
+
   frontend:
     name: Frontend checks
     runs-on: ubuntu-latest
@@ -71,6 +76,9 @@ jobs:
 
       - name: Internationalization checks
         run: node --test tests/i18n.test.cjs
+
+      - name: Feedback draft checks
+        run: node --test tests/feedback-draft.test.cjs
 
       - name: Build
         run: npm run build
