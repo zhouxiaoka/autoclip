@@ -5,8 +5,8 @@ import re
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-STYLES = {'comic', 'neon', 'arena', 'editorial'}
-ACCENTS = {'comic':'#ffe52d', 'neon':'#ccff00', 'arena':'#dfff00', 'editorial':'#ff4826'}
+STYLES = {'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'}
+ACCENTS = {'comic':'#ffe52d', 'neon':'#ccff00', 'arena':'#dfff00', 'editorial':'#ff4826', 'pixel':'#ed327c', 'frosted':'#00e6dc'}
 FONTS = Path(__file__).resolve().parents[2] / 'assets' / 'fonts'
 
 
@@ -88,11 +88,14 @@ def _artwork_v1(text, style, w, h, scale=1, y=.12, accent=None):
 
 
 def artwork(text, style, w, h, scale=1, y=.12, accent=None, version=1):
-    if version == 1 and style != 'editorial':
+    if version == 1 and style in ('comic', 'neon', 'arena'):
         return _artwork_v1(text, style, w, h, scale, y, accent)
-    if version == 2:
+    if version == 2 and style in ('comic', 'neon', 'arena', 'editorial'):
         from backend.services.studio.title_art_v2 import artwork as artwork_v2
         return artwork_v2(text, style, w, h, scale, y, accent)
+    if version == 3:
+        from backend.services.studio.title_art_v3 import artwork as artwork_v3
+        return artwork_v3(text, style, w, h, scale, y, accent)
     raise ValueError('不支持的文字模板版本')
 
 
@@ -106,14 +109,14 @@ def options_for(draft):
 
 
 def overlay_motion(style, enabled, height):
-    if not enabled: return '0','0'
+    if not enabled or style in ('pixel', 'frosted'): return '0','0'
     # A bounded short entrance. Artwork remains visible from the very first frame.
     if style=='arena': return "-36*max(0,1-t/0.18)",'0'
     distance=round(height*.016)
     return '0',f"{distance}*max(0,1-t/0.18)"
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=16)
 def thumbnail(style, version=1):
     image=artwork('CAN YOU\nESCAPE?',style,1080,1920,version=version)
     image=image.crop(image.getbbox())

@@ -354,7 +354,7 @@ def test_portrait_fills_frame_and_applies_focus_and_title(root,style,x,expected)
     assert max(pixel)-min(pixel)>180
 
 
-@pytest.mark.parametrize('style,version', [('comic',1),('neon',1),('arena',1),('comic',2),('neon',2),('arena',2),('editorial',2)])
+@pytest.mark.parametrize('style,version', [('comic',1),('neon',1),('arena',1),('comic',2),('neon',2),('arena',2),('editorial',2),('comic',3),('neon',3),('arena',3),('editorial',3),('pixel',3),('frosted',3)])
 def test_title_art_preview_matches_export_geometry(root,style,version):
     import io
     from PIL import Image,ImageChops,ImageStat
@@ -497,13 +497,93 @@ def test_title_versions_persist_and_have_distinct_previews(client):
     old=client.post('/studio/p1/title-preview',json=body)
     new=client.post('/studio/p1/title-preview',json={**body,'title_template_version':2})
     assert old.status_code==new.status_code==200 and old.content!=new.content
-    for version in (2,1):
+    for version in (3,2,1):
         body={**body,'title_template_version':version}
         saved=client.put('/studio/p1/drafts/'+d['id'],json=body).json()
         assert saved['title_template_version']==version
         body=saved
     assert client.post('/studio/p1/title-preview',json={**body,'title_style':'editorial'}).status_code==422
-    assert client.post('/studio/p1/title-preview',json={**body,'title_template_version':3}).status_code==422
+    assert client.post('/studio/p1/title-preview',json={**body,'title_template_version':4}).status_code==422
     for style in ['comic','neon','arena','editorial']:
         assert client.get('/studio/title-presets/'+style+'/thumbnail?v=2').status_code==200
-    assert client.get('/studio/title-presets/comic/thumbnail?v=3').status_code==422
+    assert client.get('/studio/title-presets/comic/thumbnail?v=4').status_code==422
+
+
+@pytest.mark.parametrize('style', ['comic','neon','arena','editorial','pixel','frosted'])
+def test_v3_multilingual_bounds_and_thumbnails(client,style):
+    from backend.services.studio import title_art
+    for text in ['CAN YOU\nESCAPE?', '你能逃出\n这里吗？', '逃げ切れる？']:
+        for w,h in [(1080,1920),(1920,1080)]:
+            layer=title_art.artwork(text,style,w,h,version=3)
+            box=layer.getbbox()
+            assert box and box[0]>=0 and box[2]<=w and box[3]<h*.5
+    assert client.get('/studio/title-presets/'+style+'/thumbnail?v=3').status_code==200
+    if style in ('pixel','frosted'):
+        with pytest.raises(ValidationError):draft(title_style=style,title_template_version=2)
+
+
+def test_frosted_preview_mask_matches_art_and_does_not_call_model(client,monkeypatch):
+    import io
+    from PIL import Image
+    d=client.post('/studio/p1/drafts',json={'clip_ids':['c1'],'title':'Glass'}).json()
+    monkeypatch.setattr(intelligence,'vision_call',lambda *a,**k:pytest.fail('No provider calls'))
+    body={**d,'hook':'CAN YOU\nESCAPE?','title_style':'frosted','title_template_version':3,'aspect':'portrait'}
+    responses=[client.post('/studio/p1/title-preview?layer='+layer,json=body) for layer in ('artwork','backdrop')]
+    assert all(r.status_code==200 for r in responses)
+    images=[Image.open(io.BytesIO(r.content)) for r in responses]
+    assert images[0].getbbox()==images[1].getbbox()
+    assert client.post('/studio/p1/title-preview?layer=backdrop',json={**body,'title_style':'comic'}).status_code==422
+    assert store.read('p1')['drafts'][0]['title_style']=='plain'
+
+
+def test_pixel_uses_exact_grid_and_gloss_changes_face():
+    from backend.services.studio import title_art
+    from PIL import ImageChops
+    pixel=title_art.artwork('CAN YOU\nESCAPE?','pixel',1080,1920,version=3)
+    # Nearest-neighbor typography keeps a small discrete palette, no smoothed edges.
+    assert len(pixel.getcolors(10000))<200
+    old=title_art.artwork('CAN YOU\nESCAPE?','comic',1080,1920,version=2)
+    new=title_art.artwork('CAN YOU\nESCAPE?','comic',1080,1920,version=3)
+    assert old.getbbox()==new.getbbox()
+    assert ImageChops.difference(old.convert('RGB'),new.convert('RGB')).getbbox()
+
+
+def test_frosted_blurs_moving_background_only_inside_card_and_expires(root):
+    import io
+    from PIL import Image,ImageChops,ImageStat
+    from backend.services.studio.render import render_draft
+    source=root/'checker.mp4'
+    filters="color=white:s=320x180:r=30:d=5,drawgrid=width=8:height=8:thickness=4:color=black,drawbox=color=red@0.4:t=fill:enable='lt(t,2)',drawbox=color=blue@0.4:t=fill:enable='gte(t,2)'"
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i',filters,'-c:v','libx264','-y',str(source)],check=True)
+    d=Draft(id='glass',title='Glass',hook='HI',title_style='frosted',title_template_version=3,subtitles=False,original_audio=False,title_motion=False,scenes=[Scene(id='s',start=0,end=5)])
+    render_draft('p1',source,d,'glass',lambda _:None)
+    def frame(path,t):
+        data=subprocess.check_output(['ffmpeg','-v','error','-ss',str(t),'-i',str(path),'-frames:v','1','-f','image2pipe','-vcodec','png','-'])
+        return Image.open(io.BytesIO(data)).convert('RGB')
+    out=root/'output/studio/glass.mp4'
+    means=[]
+    for t in (.5,2.5):
+        original=frame(source,t);actual=frame(out,t)
+        box=(195,22,230,38)  # Empty card area, away from label and border.
+        assert max(ImageStat.Stat(actual.crop(box)).stddev)<max(ImageStat.Stat(original.crop(box)).stddev)*.3
+        assert max(ImageStat.Stat(ImageChops.difference(actual.crop((0,90,320,180)),original.crop((0,90,320,180)))).mean)<8
+        means.append(ImageStat.Stat(actual.crop(box)).mean)
+    assert means[0][0]>means[1][0]+10 and means[1][2]>means[0][2]+10
+    # Title and blur both disappear at the same 4-second boundary.
+    assert max(ImageStat.Stat(ImageChops.difference(frame(out,4.5),frame(source,4.5))).mean)<8
+
+
+def test_frosted_keeps_moving_source_frames_in_sync(root,source):
+    import io
+    from PIL import Image,ImageChops,ImageStat
+    from backend.services.studio.render import render_draft
+    base=Draft(id='sync',title='Sync',subtitles=False,original_audio=False,scenes=[Scene(id='s',start=.2,end=2.7)])
+    render_draft('p1',source,base,'control',lambda _:None)
+    glass=base.model_copy(update={'hook':'HI','title_style':'frosted','title_template_version':3})
+    render_draft('p1',source,glass,'glass-sync',lambda _:None)
+    def frame(name,t):
+        path=root/'output/studio'/f'{name}.mp4'
+        png=subprocess.check_output(['ffmpeg','-v','error','-ss',str(t),'-i',str(path),'-frames:v','1','-f','image2pipe','-vcodec','png','-'])
+        return Image.open(io.BytesIO(png)).convert('RGB').crop((0,90,320,180))
+    for t in (.5,1,2):
+        assert max(ImageStat.Stat(ImageChops.difference(frame('control',t),frame('glass-sync',t))).mean)<8

@@ -39,7 +39,7 @@ def validate_draft(project_id, draft):
     intelligence.validate_scenes(draft.scenes, duration)
 
 @router.get('/title-presets/{style}/thumbnail')
-def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial'], v: int = Query(1, ge=1, le=2)):
+def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'], v: int = Query(1, ge=1, le=3)):
     from backend.services.studio.title_art import thumbnail
     return Response(call(thumbnail, style, v), media_type='image/png', headers={'Cache-Control':'public, max-age=86400'})
 
@@ -129,7 +129,7 @@ def source_video(project_id: str, db: Session = Depends(get_db)):
     return FileResponse(path)
 
 @router.post('/{project_id}/title-preview')
-def title_preview(project_id: str, body: Draft, db: Session = Depends(get_db)):
+def title_preview(project_id: str, body: Draft, db: Session = Depends(get_db), layer: Literal['artwork', 'backdrop'] = 'artwork'):
     from backend.services.studio import title_art
     project_or_404(project_id, db)
     info = call(intelligence._probe, call(jobs.source, project_id))
@@ -138,7 +138,11 @@ def title_preview(project_id: str, body: Draft, db: Session = Depends(get_db)):
         raise HTTPException(422,'无法读取原视频尺寸')
     # Use the same output resolution/font metrics as export; no LLM call or draft mutation.
     w,h = int(w)//2*2, int(h)//2*2
-    data = call(title_art.png_bytes, body.hook, body.title_style, w, h, **title_art.options_for(body))
+    if layer == 'backdrop':
+        from backend.services.studio.title_materials import backdrop_png
+        data = call(backdrop_png, body.hook, body.title_style, w, h, **title_art.options_for(body))
+    else:
+        data = call(title_art.png_bytes, body.hook, body.title_style, w, h, **title_art.options_for(body))
     return Response(data, media_type='image/png', headers={'Cache-Control':'no-store'})
 
 @router.get('/{project_id}/candidates')

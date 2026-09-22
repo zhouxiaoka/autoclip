@@ -67,13 +67,20 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                 built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font)
                 clip_path = folder / f'{i}.mkv'
                 artwork = None
+                backdrop = None
                 if hook and i == 0 and draft.title_style in title_art.STYLES:
                     artwork = folder / 'title-art.png'
                     artwork.write_bytes(title_art.png_bytes(hook, draft.title_style, w, h, **title_art.options_for(draft)))
+                    if draft.title_style == 'frosted':
+                        from backend.services.studio.title_materials import backdrop_png
+                        backdrop = folder / 'backdrop.png'
+                        backdrop.write_bytes(backdrop_png(hook, draft.title_style, w, h, **title_art.options_for(draft)))
                 cmd = [get_ffmpeg_path(), '-v', 'error', '-ss', str(scene.start), '-i', str(video)]
                 if artwork:
                     cmd += ['-loop', '1', '-i', str(artwork)]
-                silence_input = 2 if artwork else 1
+                if backdrop:
+                    cmd += ['-loop', '1', '-framerate', '30', '-i', str(backdrop)]
+                silence_input = 1 + int(artwork is not None) + int(backdrop is not None)
                 if keep_audio:
                     cmd += ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000']
                 cmd += ['-t', str(duration)]
@@ -83,6 +90,13 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                     graph = graph.replace(':reload=0', ':expansion=none:reload=0').replace(':fontsize=42:', f':fontsize={max(18, round(w * .06))}:').replace(f'[fg]scale={w}:-2[fg2]', f'[fg]scale={w}:{h}:force_original_aspect_ratio=decrease[fg2]')
                     if draft.layout == 'crop':
                         graph = graph.replace(f'crop={w}:{h}[base]', f'crop={w}:{h}:x=(iw-ow)*{draft.crop_x}:y=(ih-oh)/2,setsar=1[base]')
+                    if backdrop:
+                        # Keep all three inputs on one clock and use RGB masks:
+                        # a gray mask converted to YUV has neutral chroma (128),
+                        # which otherwise blends colors outside the card.
+                        from backend.services.studio.title_materials import blur_sigma
+                        graph += f";[{last}]fps=30,settb=AVTB,setpts=PTS-STARTPTS,format=gbrp,split[sharp][glasssource];[glasssource]gblur=sigma={blur_sigma(w)}[blurred];[2:v]fps=30,settb=AVTB,setpts=PTS-STARTPTS,alphaextract,format=gbrp[glassmask];[sharp][blurred][glassmask]maskedmerge=enable='lt(t,4)'[glassbase]"
+                        last = 'glassbase'
                     if artwork:
                         x, y = title_art.overlay_motion(draft.title_style, draft.title_motion, h)
                         graph += f";[1:v]format=rgba[titleart];[{last}][titleart]overlay=x='{x}':y='{y}':enable='lt(t,4)':shortest=1[styled]"

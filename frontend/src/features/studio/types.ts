@@ -6,8 +6,8 @@ export interface CandidateList { duration: number; candidates: Candidate[]; warn
 export interface Draft {
   id: string; title: string; hook: string; scenes: Scene[]; language: Language
   aspect: 'original' | 'portrait' | 'landscape'; layout: 'fit' | 'crop' | 'blur'
-  crop_x?: number; title_style?: 'plain' | 'impact' | 'card' | 'comic' | 'neon' | 'arena' | 'editorial'
-  title_template_version?: 1 | 2; title_motion?: boolean; title_scale?: number; title_y?: number; title_accent?: string | null
+  crop_x?: number; title_style?: 'plain' | 'impact' | 'card' | 'comic' | 'neon' | 'arena' | 'editorial' | 'pixel' | 'frosted'
+  title_template_version?: 1 | 2 | 3; title_motion?: boolean; title_scale?: number; title_y?: number; title_accent?: string | null
   subtitles: boolean; original_audio: boolean; revision: number; updated_at: string; origin: string
   parent_draft_id?: string | null; parent_revision?: number | null
 }
@@ -51,5 +51,5 @@ export function applyCandidate(draft: Draft, candidate: Candidate, target: numbe
 }
 
 export function portraitDesign(draft: Draft): Draft {
-  return {...draft, aspect:'portrait', layout:'crop', crop_x:draft.crop_x ?? .5, title_style:'comic', title_template_version:2}
+  return {...draft, aspect:'portrait', layout:'crop', crop_x:draft.crop_x ?? .5, title_style:'comic', title_template_version:3}
 }
