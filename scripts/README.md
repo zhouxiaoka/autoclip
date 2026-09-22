@@ -13,6 +13,7 @@
 | `build_windows_x64.sh` | 桌面打包（Windows x64）。在 Git Bash 里跑，产出 NSIS 安装包 `*-setup.exe`。 |
 | `lib/desktop_build_common.sh` | 上面两个脚本共用的平台无关步骤（便携 Python 下载、pip、后端拷贝、依赖检查、前端构建）。不直接执行。 |
 | `verify_desktop.sh` | 后端冒烟测试：`cargo check` + 起后端，校验 `/health` 与 `/api/v1/video-categories`。被 `nightly-desktop-smoke.yml` 调用。 |
+| `verify_live_publish.py` | 用本机 `UPLOAD_POST_API_KEY` 与 `BILIBILI_COOKIE` 做一次真实私密试发。打小版本前跑。 |
 | `monitor_whisper.py` | 运行期 Whisper 任务监控，被根目录 `start_autoclip.sh` / `check_whisper_status.sh` 调用。 |
 
 ## 打包桌面客户端
