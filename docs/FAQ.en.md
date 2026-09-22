@@ -112,6 +112,8 @@ The project page shows publish history and a calendar, and can cancel a schedule
 
 Aspect follows the accounts you send to. Vertical accounts render 9:16 without a 60-second cut. Bilibili alone renders landscape. LinkedIn or X alone keeps the original frame. Vertical and Bilibili in the same batch are rendered separately.
 
+When you publish, a cover can be generated automatically so Bilibili does not reject an empty cover. Default cover and title-card details follow that release’s installer notes. This ships with the same release as the Publish page. The published v1.3.1 installers do not include it.
+
 ## Updates, backups, and support
 
 ### Where is my data? How do I back it up?
