@@ -25,6 +25,12 @@ def data_dir(tmp_path, monkeypatch):
     return d
 
 
+def _jpeg(color=(80, 80, 78), size=(640, 360)) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", size, color).save(buf, format="JPEG", quality=85)
+    return buf.getvalue()
+
+
 def _project(data_dir: Path, project_id: str = "p1", clip_id: str = "1") -> Path:
     root = data_dir / "projects" / project_id
     (root / "raw").mkdir(parents=True)
@@ -35,14 +41,16 @@ def _project(data_dir: Path, project_id: str = "p1", clip_id: str = "1") -> Path
         "start_time": "00:00:01,000",
         "end_time": "00:00:20,000",
     }]), encoding="utf-8")
-    # 合成一段短视频给 ffmpeg 截帧
-    video = root / "raw" / "input.mp4"
-    import subprocess
-    subprocess.run([
-        "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=gray:s=640x360:d=2",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", str(video),
-    ], check=True, capture_output=True)
+    # CI 没有 ffmpeg；测试用假成片 + 假截帧，不连真编码器。
+    (root / "raw" / "input.mp4").write_bytes(b"mp4")
     return root
+
+
+@pytest.fixture
+def fake_frame(monkeypatch):
+    jpeg = _jpeg()
+    monkeypatch.setattr("backend.services.cover.extract_frame_jpeg", lambda *_a, **_k: jpeg)
+    return jpeg
 
 
 class _Resp:
@@ -103,7 +111,7 @@ def test_config_file_is_private(data_dir):
     assert mode == 0o600
 
 
-def test_local_overlay_and_frame_fallback_do_not_need_api(data_dir):
+def test_local_overlay_and_frame_fallback_do_not_need_api(data_dir, fake_frame):
     from backend.services import cover as cover_svc
 
     _project(data_dir)
@@ -213,7 +221,7 @@ def test_openai_generations_returns_b64(data_dir):
     assert out.startswith(b"\x89PNG") or len(out) > 10
 
 
-def test_ensure_publish_cover_prefers_designed_then_frame(data_dir):
+def test_ensure_publish_cover_prefers_designed_then_frame(data_dir, fake_frame):
     from backend.services import cover as cover_svc
 
     _project(data_dir)
@@ -228,7 +236,7 @@ def test_ensure_publish_cover_prefers_designed_then_frame(data_dir):
     assert jpeg2 and len(jpeg2) > 100
 
 
-def test_model_failure_falls_back_to_local_or_frame(data_dir, monkeypatch):
+def test_model_failure_falls_back_to_local_or_frame(data_dir, fake_frame, monkeypatch):
     from backend.core.image_providers import ImageError
     from backend.services import cover as cover_svc
 
