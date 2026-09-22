@@ -64,7 +64,7 @@ autoclip doctor --provider ollama
 autoclip run talk.mp4 --provider ollama --srt talk.srt --min-score 0.5 --json
 ```
 
-把示例文件名和模型选项换成实际配置；没有 SRT 时去掉 `--srt talk.srt` 并确保转写已就绪。降低阈值只影响筛选，不保证一定有片段。
+把示例文件名和模型选项换成实际配置；没有 SRT 时去掉 `--srt talk.srt` 并确保转写已就绪。降低阈值只影响筛选，不保证一定有片段。用法上仍不清楚时，到 [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) 讨论。能复现的故障仍开 Issue。
 
 ### 处理慢、内存不足怎么办？
 
@@ -92,7 +92,7 @@ autoclip export PROJECT_ID --preset shorts
 
 ### 哪里看已知问题？怎样联系？
 
-先查 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96) 和 [版本记录](https://github.com/zhouxiaoka/autoclip/releases)。希望增加的能力、用法和模型发到 [Discussions](https://github.com/zhouxiaoka/autoclip/discussions)；能复现的故障开 Issue。规则见 [社区看板](COMMUNITY_BOARD.md)。仍需联系时，将以下信息一次性发到 [christine_zhouye@163.com](mailto:christine_zhouye@163.com)：
+先查 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96) 和 [版本记录](https://github.com/zhouxiaoka/autoclip/releases)。希望增加的能力、用法和模型发到 [Discussions](https://github.com/zhouxiaoka/autoclip/discussions)：[欢迎与分类](https://github.com/zhouxiaoka/autoclip/discussions/127)、[第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128)、[想法](https://github.com/zhouxiaoka/autoclip/discussions/129)。能复现的故障开 Issue。规则见 [社区看板](COMMUNITY_BOARD.md)。仍需联系时，将以下信息一次性发到 [christine_zhouye@163.com](mailto:christine_zhouye@163.com)：
 
 - 系统和 CPU 架构、AutoClip 版本、桌面 / Docker / CLI 使用方式。
 - 模型提供商、模型名、视频来源与大致时长、是否提供字幕。

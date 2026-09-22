@@ -64,7 +64,7 @@ autoclip doctor --provider ollama
 autoclip run talk.mp4 --provider ollama --srt talk.srt --min-score 0.5 --json
 ```
 
-Replace the filenames and provider with your actual setup. Without SRT, remove `--srt talk.srt` and prepare transcription first. Lowering the threshold changes selection; it does not guarantee clips.
+Replace the filenames and provider with your actual setup. Without SRT, remove `--srt talk.srt` and prepare transcription first. Lowering the threshold changes selection; it does not guarantee clips. If usage is still unclear, continue in the [first-clip Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128). Reproducible bugs still belong in Issues.
 
 ### Why is processing slow or using too much memory?
 
@@ -92,7 +92,7 @@ See the [installation guide](USER_INSTALLATION_GUIDE.en.md) for desktop defaults
 
 ### Where are known issues? How can I get help?
 
-Check [known issues](https://github.com/zhouxiaoka/autoclip/issues/96) and [release notes](https://github.com/zhouxiaoka/autoclip/releases) first. Feature ideas and how you use AutoClip go to [Discussions](https://github.com/zhouxiaoka/autoclip/discussions); reproducible bugs go to Issues. The board rules are in the [community board](COMMUNITY_BOARD.md) (Chinese). If needed, send one email to [christine_zhouye@163.com](mailto:christine_zhouye@163.com) with:
+Check [known issues](https://github.com/zhouxiaoka/autoclip/issues/96) and [release notes](https://github.com/zhouxiaoka/autoclip/releases) first. Feature ideas and how you use AutoClip go to [Discussions](https://github.com/zhouxiaoka/autoclip/discussions): [welcome and categories](https://github.com/zhouxiaoka/autoclip/discussions/127), [first-clip Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128), and [ideas](https://github.com/zhouxiaoka/autoclip/discussions/129). Reproducible bugs go to Issues. The board rules are in the [community board](COMMUNITY_BOARD.md) (Chinese). If needed, send one email to [christine_zhouye@163.com](mailto:christine_zhouye@163.com) with:
 
 - OS and CPU architecture, AutoClip version, and desktop / Docker / CLI mode.
 - Model provider and name, video source and approximate duration, and whether subtitles were supplied.
