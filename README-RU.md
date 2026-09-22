@@ -14,7 +14,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
-[Сайт проекта](https://zhouxiaoka.github.io/autoclip_intro/) · [Сообщить о проблеме](https://github.com/zhouxiaoka/autoclip/issues)
+[Сайт проекта](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Сообщить о проблеме](https://github.com/zhouxiaoka/autoclip/issues)
 
 **Установщики приложения: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
 
@@ -199,6 +199,10 @@ README доступен на восьми языках; подробные ру�
 Проект поддерживает один человек в свободное время. Срок ответа не фиксирован; мгновенная поддержка и индивидуальная помощь с развёртыванием не предоставляются. Перед обращением прочитайте FAQ и список известных проблем.
 
 Идеи, сценарии и запросы моделей публикуйте в [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions). Воспроизводимые ошибки оформляйте через [шаблон issue](https://github.com/zhouxiaoka/autoclip/issues/new/choose). Правила доски: [community board](docs/COMMUNITY_BOARD.md) (на китайском).
+
+- [Приветствие и категории](https://github.com/zhouxiaoka/autoclip/discussions/127)
+- [Вопросы о первом клипе](https://github.com/zhouxiaoka/autoclip/discussions/128)
+- [Идеи](https://github.com/zhouxiaoka/autoclip/discussions/129)
 
 - Электронная почта: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 

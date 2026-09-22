@@ -165,7 +165,7 @@
 /* ---- dialog ---- */
 .ac-dialog-backdrop { position: fixed; inset: 0; background: rgba(26,26,25,.32); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 1200; animation: ac-fade var(--ac-t-short, 200ms) ease-out; }
 [data-theme="dark"] .ac-dialog-backdrop { background: rgba(0,0,0,.5); }
-.ac-dialog { width: min(520px, calc(100vw - 48px)); background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: 16px; box-shadow: var(--ac-shadow); padding: 24px 24px 20px; animation: ac-rise var(--ac-t-short, 200ms) ease-out; }
+.ac-dialog { width: min(520px, calc(100vw - 48px)); max-height: calc(100vh - 48px); overflow: auto; background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: 16px; box-shadow: var(--ac-shadow); padding: 24px 24px 20px; animation: ac-rise var(--ac-t-short, 200ms) ease-out; }
 .ac-dialog h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--ac-ink); }
 .ac-dialog p { margin: 6px 0 0; font-size: 13px; color: var(--ac-sub); line-height: 1.5; }
 .ac-dialog-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 20px; }
@@ -224,3 +224,19 @@
 .ac-settings-nav button { height: auto; min-height: 34px; padding-top: 7px; padding-bottom: 7px; }
 .ac-segmented { flex-wrap: wrap; max-width: 100%; }
 .ac-btn { white-space: normal; height: auto; min-height: 36px; padding-top: 7px; padding-bottom: 7px; }
+
+/* ---- publish calendar: hairline month, one line per post ---- */
+.ac-cal { margin-top: 8px; }
+.ac-cal-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0 12px; }
+.ac-cal-title { font-size: 15px; font-weight: 600; color: var(--ac-ink); }
+.ac-cal-dow, .ac-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.ac-cal-dow { color: var(--ac-muted); font-size: 12px; padding-bottom: 8px; }
+.ac-cal-dow span, .ac-cal-num { font-family: var(--ac-font-mono); }
+.ac-cal-grid { border-top: 1px solid var(--ac-line); border-left: 1px solid var(--ac-line); }
+.ac-cal-day { min-height: 84px; padding: 8px; border-right: 1px solid var(--ac-line); border-bottom: 1px solid var(--ac-line); }
+.ac-cal-day--out .ac-cal-num { color: var(--ac-muted); }
+.ac-cal-day--today { background: var(--ac-line-2); }
+.ac-cal-day--today .ac-cal-num { color: var(--ac-ink); font-weight: 600; }
+.ac-cal-num { font-size: 12px; color: var(--ac-sub); }
+.ac-cal-item { display: flex; align-items: center; gap: 6px; margin-top: 6px; min-width: 0; font-size: 12px; color: var(--ac-ink); line-height: 1.3; }
+.ac-cal-item b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

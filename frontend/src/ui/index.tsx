@@ -9,10 +9,10 @@ import './ac.css'
 /* ---------- Segmented ---------- */
 export interface SegmentedOption<T extends string> { value: T; label: React.ReactNode }
 export function Segmented<T extends string>({
-  value, onChange, options, size, ariaLabel,
-}: { value: T; onChange: (v: T) => void; options: SegmentedOption<T>[]; size?: 'sm'; ariaLabel?: string }) {
+  value, onChange, options, size, ariaLabel, className,
+}: { value: T; onChange: (v: T) => void; options: SegmentedOption<T>[]; size?: 'sm'; ariaLabel?: string; className?: string }) {
   return (
-    <div className={`ac-seg${size === 'sm' ? ' ac-seg--sm' : ''}`} role="group" aria-label={ariaLabel}>
+    <div className={`ac-seg${size === 'sm' ? ' ac-seg--sm' : ''}${className ? ` ${className}` : ''}`} role="group" aria-label={ariaLabel}>
       {options.map((o) => (
         <button key={o.value} type="button" aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
           {o.label}

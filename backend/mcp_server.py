@@ -18,6 +18,10 @@ AutoClip MCP server（stdio）——让 Cursor / Claude Code / 任何 MCP 客户
     list_projects       最近项目
     list_providers      可用模型提供商与本地预设（ollama / lmstudio）
     check_environment   ffmpeg / Whisper / 模型连接体检
+    export_clip         渲可发布成片（9:16 / 字幕 / 标题卡）
+    publish_clip        经 Upload-Post 发到 TikTok / Instagram / YouTube Shorts 等海外平台
+    get_publish_status  查各平台发布结果
+    list_publish_profiles  Upload-Post 里可用的 profile 与已连接平台
 
 依赖 `mcp` Python SDK（requirements.txt 已含；兼容 1.x FastMCP 与 2.x MCPServer）。
 """
@@ -241,6 +245,77 @@ def export_clip(
         return _export(ExportRequest(project_id, clip_id, preset, subtitles, title_card))
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)[:500]}
+
+
+@server.tool(
+    name="publish_clip",
+    description=(
+        "把一条切片经 Upload-Post 发到海外平台（tiktok / instagram / youtube / facebook / linkedin / x / threads / "
+        "pinterest / bluesky …），一次可发多个平台。内部先按预设渲成片（竖屏平台默认 shorts 9:16），再异步提交；"
+        "返回 request_id，用 get_publish_status 查各平台结果。需要先配置 Upload-Post API Key"
+        "（环境变量 UPLOAD_POST_API_KEY，或 autoclip publish --api-key … --save）和 profile（user）。"
+        "extra 可透传平台字段，如 {\"privacy_level\": \"SELF_ONLY\", \"privacyStatus\": \"unlisted\"}；"
+        "scheduled_date（ISO-8601）定时发布。"
+    ),
+)
+def publish_clip(
+    project_id: str,
+    clip_id: str,
+    platforms: List[str],
+    user: Optional[str] = None,
+    preset: Optional[str] = None,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    subtitles: bool = True,
+    title_card: bool = True,
+    scheduled_date: Optional[str] = None,
+    timezone: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    from backend.services import upload_post_publisher as up
+
+    try:
+        return up.publish_clip(up.PublishRequest(
+            project_id=project_id, clip_id=clip_id, platforms=platforms, user=user, preset=preset,
+            title=title, description=description, subtitles=subtitles, title_card=title_card,
+            scheduled_date=scheduled_date, timezone=timezone, extra=extra or {},
+        ))
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:500]}
+
+
+@server.tool(
+    name="get_publish_status",
+    description="查询 publish_clip 的结果：status（pending / processing / completed / failed）与每个平台的 success / url / error。processing 时每 10 秒查一次即可。",
+)
+def get_publish_status(request_id: str, project_id: Optional[str] = None) -> Dict[str, Any]:
+    from backend.services import upload_post_publisher as up
+
+    try:
+        return up.get_status(request_id, project_id=project_id)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "request_id": request_id, "error": str(e)[:500]}
+
+
+@server.tool(
+    name="list_publish_profiles",
+    description="Upload-Post API Key 下的 profile（user）列表及各自已连接的平台；用户不知道该填哪个 user 时先调这个。同时返回当前配置是否就绪。",
+)
+def list_publish_profiles() -> Dict[str, Any]:
+    from backend.services import upload_post_publisher as up
+
+    cfg = up.load_config()
+    out: Dict[str, Any] = {"configured": cfg.configured, "source": cfg.source, "default_user": cfg.user, "platforms": up.PLATFORMS}
+    if not cfg.configured:
+        out["hint"] = "先设置 UPLOAD_POST_API_KEY 或 `autoclip publish --api-key … --user … --save`（https://app.upload-post.com/api-keys）"
+        return out
+    try:
+        out["profiles"] = up.list_profiles(cfg)
+        out["ok"] = True
+    except Exception as e:  # noqa: BLE001
+        out["ok"] = False
+        out["error"] = str(e)[:500]
+    return out
 
 
 @server.tool(name="check_environment", description="体检：ffmpeg、Whisper 运行时、模型连接是否就绪。出片前先调一次能少踩坑。")

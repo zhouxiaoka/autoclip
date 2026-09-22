@@ -14,7 +14,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
-[项目网站](https://zhouxiaoka.github.io/autoclip_intro/) · [反馈问题](https://github.com/zhouxiaoka/autoclip/issues)
+[项目网站](https://zhouxiaoka.github.io/autoclip_intro/) · [讨论](https://github.com/zhouxiaoka/autoclip/discussions) · [反馈问题](https://github.com/zhouxiaoka/autoclip/issues)
 
 **桌面安装包: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
 
@@ -172,7 +172,14 @@ AutoClip 本身免费、开源（MIT）。云端模型由所选服务商计费�
 <details>
 <summary>什么视频更适合？处理要多久？</summary>
 
-当前分析主要基于字幕，适合访谈、播客、课程和口播。纯视觉动作或音乐类视频效果可能有限。耗时取决于时长、硬件、模型与导出设置，建议先用短样本验证。
+当前分析主要基于字幕，适合访谈、播客、课程和口播。纯视觉动作或音乐类视频效果可能有限。耗时取决于时长、硬件、模型与导出设置，建议先用自备的 3–5 分钟短样片验证。
+
+第一次出片先试这条：[Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)（Stanford ENERGY）。示例·非托管·自担使用权。
+
+其他示例不必都试。多为英语对白，可开官方字幕或自备 SRT/Whisper。
+
+- [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y)（Y Combinator）。示例·非托管·自担使用权。
+- [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E)。第三方访谈（Sources Podcast，非 OpenAI 官方频道）。示例·非托管·自担使用权。
 
 </details>
 
@@ -199,6 +206,10 @@ README 提供八种语言；以下深入文档目前以中文为主。README 翻
 个人业余维护，回复时间不固定，不提供即时客服或一对一部署服务。联系前请先查看常见问题与已知问题。
 
 想法、用法和模型讨论走 [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)，不要为此开 Issue。能复现的故障用 [Issue 模板](https://github.com/zhouxiaoka/autoclip/issues/new/choose)。看板规则见 [社区看板](docs/COMMUNITY_BOARD.md)。
+
+- [欢迎与分类](https://github.com/zhouxiaoka/autoclip/discussions/127)
+- [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128)
+- [想法](https://github.com/zhouxiaoka/autoclip/discussions/129)
 
 - 邮箱: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 

@@ -14,7 +14,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
-[Website](https://zhouxiaoka.github.io/autoclip_intro/) · [Report an issue](https://github.com/zhouxiaoka/autoclip/issues)
+[Website](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Report an issue](https://github.com/zhouxiaoka/autoclip/issues)
 
 **Desktop installers: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
 
@@ -172,7 +172,14 @@ Check the failed stage: empty subtitles, model connection failures, an overly hi
 <details>
 <summary>What videos work best? How long does it take?</summary>
 
-Analysis primarily uses transcripts, making interviews, podcasts, lectures, and spoken commentary suitable. Purely visual action or music may work less well. Time depends on duration, hardware, models, and export settings; start with a short sample.
+Analysis primarily uses transcripts, making interviews, podcasts, lectures, and spoken commentary suitable. Purely visual action or music may work less well. Time depends on duration, hardware, models, and export settings; start with a 3–5 minute clip you provide.
+
+For a first clip, try [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I) (Stanford ENERGY). 示例·非托管·自担使用权 (example link, not hosted by AutoClip; you are responsible for usage rights).
+
+Other examples are optional. Dialogue is mostly English; official captions or your own SRT/Whisper are optional.
+
+- [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y) (Y Combinator). 示例·非托管·自担使用权.
+- [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Sources Podcast, not an OpenAI channel. 示例·非托管·自担使用权.
 
 </details>
 
@@ -199,6 +206,10 @@ Contributions, feedback, and translation improvements are welcome. For bug repor
 Maintained by an individual in their spare time. Response times vary; live support and one-to-one deployment assistance are not provided. Please check the FAQ and known issues before contacting the maintainer.
 
 Ideas, use cases, and model requests belong in [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions). Reproducible bugs use the [issue form](https://github.com/zhouxiaoka/autoclip/issues/new/choose). Board rules: [community board](docs/COMMUNITY_BOARD.md) (Chinese).
+
+- [Welcome and categories](https://github.com/zhouxiaoka/autoclip/discussions/127)
+- [First-clip Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128)
+- [Ideas](https://github.com/zhouxiaoka/autoclip/discussions/129)
 
 - Email: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
