@@ -180,10 +180,11 @@
 .ac-update-anchor { position: relative; display: flex; align-items: center; flex: 0 0 auto; }
 .ac-update-icon {
   width: 36px; height: 36px; padding: 0; border-radius: 999px; border: 1px solid var(--ac-line);
-  background: var(--ac-card); color: var(--ac-ink); display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ac-card); color: var(--ac-sub); display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
 }
-.ac-update-icon[aria-expanded="true"] { background: var(--ac-ink); color: var(--ac-bg); border-color: var(--ac-ink); }
+.ac-update-icon:hover { color: var(--ac-ink); }
+.ac-update-icon[aria-expanded="true"] { background: var(--ac-line-2); color: var(--ac-ink); }
 .ac-update-toast {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 30;
   width: min(320px, calc(100vw - 32px));

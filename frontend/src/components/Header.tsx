@@ -7,6 +7,7 @@ import { SettingOutlined, BulbOutlined, MoonOutlined } from '@ant-design/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
 import { UpdateToast, useAppUpdate } from '../desktop/UpdatePrompt'
+import { Icon } from '../ui'
 
 const { Header: AntHeader } = Layout
 
@@ -66,10 +67,7 @@ const Header: React.FC = () => {
               aria-label={t('有新版本可用')}
               onClick={() => appUpdate.toastVisible ? appUpdate.snooze() : appUpdate.openUpdate()}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <circle cx="12" cy="12" r="8.25" />
-                <path d="M12 16V8M9.5 10.5 12 8l2.5 2.5" />
-              </svg>
+              <Icon.Up size={16} />
             </button>
             <UpdateToast />
           </div>
