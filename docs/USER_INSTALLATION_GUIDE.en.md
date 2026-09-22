@@ -42,15 +42,15 @@ AutoClip does not host an official sample video. Releases do not include a sampl
 - Prefer an accurately timed `.srt`. Without subtitles, prepare local Whisper in Settings first, or choose a video that already has captions.
 - Sources: a local file, Bilibili, or YouTube. Confirm that you have the right to use the media.
 
-These are official-channel examples. Pick one; you do not need to run all three. The dialogue is mostly English. Before import, turn on the official captions, use Whisper, or bring your own SRT（导入前打开官方字幕或自备 SRT）. AutoClip does not provide a finished-file download. Each item is marked 示例链接 · 非 AutoClip 托管 · 请自行确认使用权 (example link, not hosted by AutoClip; confirm you have the right to use it).
+Pick one; you do not need to run all three. The dialogue is mostly English; turn on official captions or bring your own SRT/Whisper（多为英语对白，可开官方字幕或自备 SRT/Whisper）. 示例·非托管·自担使用权 (example link, not hosted by AutoClip; you are responsible for usage rights). AutoClip does not provide a finished-file download.
 
-For a first run, start with the short Stanford ENERGY interview. The OpenAI link is a product demo (screen plus narration), not the default expectation for interview-style clips. The YC link is a longer podcast: 第一次只导前 5–8 分钟 (import only the first 5–8 minutes).
+For a cold start of 10 minutes or less, import the full Stanford ENERGY interview. For the two longer videos, 第一次只导前 5–8 分钟 (import only the first 5–8 minutes).
 
-- Stanford ENERGY (cold start): [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I). About 3:47 (October 2025). 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- Y Combinator (official, optional podcast): [How to Build a Self-Improving Company with AI](https://www.youtube.com/watch?v=X_JsIHUfUjc). 第一次只导前 5–8 分钟. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- OpenAI (product demo): [OpenAI Codex CLI](https://www.youtube.com/watch?v=FUq9qRwrDrI). About 6 minutes (2025), screen plus narration; not the default expectation for interview-style clips. 示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- Stanford ENERGY (cold start): [Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I). About 3:47; the full length is fine. 示例·非托管·自担使用权.
+- Y Combinator (official podcast, optional): [The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y). About 36 minutes (September 2026). 第一次只导前 5–8 分钟. 示例·非托管·自担使用权.
+- Timely interview (optional): [Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E). Third-party interview (Sources Podcast with Alex Heath, September 2026, about 68 minutes; not an OpenAI official channel). 第一次只导前 5–8 分钟. 多为英语对白，可开官方字幕或自备 SRT/Whisper. 示例·非托管·自担使用权.
 
-You can also use your own 3–5 minute clip. Before import, turn on the official captions or bring your own SRT.
+You can also use your own 3–5 minute clip. If the dialogue is mostly English, turn on official captions or bring your own SRT/Whisper.
 
 Common sticking points on a first run are in [Discussion #128](https://github.com/zhouxiaoka/autoclip/discussions/128).
 

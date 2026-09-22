@@ -20,11 +20,11 @@ AutoClip 本身免费、开源（MIT）。云端模型调用由你选择的服�
 
 第一次出片请自备 3–5 分钟、对白清楚的短样片，最好带时间轴准确的 `.srt`。来源可以是本地文件、B 站或 YouTube，请确认你有权使用。AutoClip 不托管官方样片，Release 里也没有样片压缩包或成片下载。
 
-官方频道示例，任选一条即可。口播以英语为主。导入前打开官方字幕或自备 SRT；也可以用 Whisper。冷启动优先用 Stanford 短访谈。OpenAI 这条是产品演示（画面加旁白），不是访谈类切片的默认效果。
+任选一条即可，不必三条都跑。多为英语对白，可开官方字幕或自备 SRT/Whisper。示例·非托管·自担使用权。10 分钟以内的冷启动优先整段使用 Stanford 短访谈。
 
-- OpenAI 官方（产品演示）：[OpenAI Codex CLI](https://www.youtube.com/watch?v=FUq9qRwrDrI)。约 6 分钟（2025），画面加旁白。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- Stanford ENERGY（冷启动优先）：[Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)。约 3 分 47 秒（2025-10）。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
-- Y Combinator 官方（播客）：[How to Build a Self-Improving Company with AI](https://www.youtube.com/watch?v=X_JsIHUfUjc)。第一次只导前 5–8 分钟。示例链接 · 非 AutoClip 托管 · 请自行确认使用权。
+- 近期访谈：[Sam Altman on Astra, AGI, and the future of OpenAI](https://www.youtube.com/watch?v=VeizK1M7V7E)。第三方访谈（Sources Podcast，非 OpenAI 官方频道）；约 68 分钟（2026-09）。第一次只导前 5–8 分钟。多为英语对白，可开官方字幕或自备 SRT/Whisper。示例·非托管·自担使用权。
+- Stanford ENERGY（冷启动优先）：[Jackie Dowling | Stanford Energy Fellow](https://www.youtube.com/watch?v=dtmjLzOtx8I)。约 3 分 47 秒，可整段导入。示例·非托管·自担使用权。
+- Y Combinator 官方（播客）：[The State of Startups in 2026](https://www.youtube.com/watch?v=yslXlV2BP_Y)。约 36 分钟（2026-09）。第一次只导前 5–8 分钟。示例·非托管·自担使用权。
 
 准备步骤见 [安装指南 · 自备短样片](USER_INSTALLATION_GUIDE.md#自备短样片)，卡点见 [讨论 #128](https://github.com/zhouxiaoka/autoclip/discussions/128)。
 
@@ -74,7 +74,7 @@ autoclip doctor --provider ollama
 autoclip run talk.mp4 --provider ollama --srt talk.srt --min-score 0.5 --json
 ```
 
-把示例文件名和模型选项换成实际配置；没有 SRT 时去掉 `--srt talk.srt` 并确保转写已就绪。降低阈值只影响筛选，不保证一定有片段。第一次验证用自备短样片，或只用上文的 Stanford ENERGY 短访谈即可，不必把三条示例都跑一遍。口播以英语为主。导入前打开官方字幕或自备 SRT。若改用 YC 播客，第一次只导前 5–8 分钟。用法上仍不清楚时，到 [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) 讨论。能复现的故障仍开 Issue。
+把示例文件名和模型选项换成实际配置；没有 SRT 时去掉 `--srt talk.srt` 并确保转写已就绪。降低阈值只影响筛选，不保证一定有片段。第一次验证用自备短样片，或只用上文的 Stanford ENERGY 短访谈整段即可，不必把三条示例都跑一遍。多为英语对白，可开官方字幕或自备 SRT/Whisper。若改用 Sources 访谈或 YC 播客，第一次只导前 5–8 分钟。示例·非托管·自担使用权。用法上仍不清楚时，到 [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) 讨论。能复现的故障仍开 Issue。
 
 ### 处理慢、内存不足怎么办？
 
