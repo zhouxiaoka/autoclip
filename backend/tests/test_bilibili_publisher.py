@@ -110,27 +110,55 @@ def test_submit_body_is_private_by_default_and_truncates_title():
     assert schedule_unix("2026-09-22T06:00:00", "UTC", now=target.timestamp() - 3 * 3600) == int(target.timestamp())
 
 
-def test_upload_walks_preupload_chunks_and_submit(data_dir, tmp_path):
+def test_upload_walks_preupload_chunks_and_submit(data_dir, tmp_path, monkeypatch):
     from backend.services.bilibili_publisher import upload_video
 
     video = tmp_path / "clip.mp4"
     video.write_bytes(b"x" * 8)
+    monkeypatch.setattr(
+        "backend.services.bilibili_publisher.extract_cover_jpeg",
+        lambda *_a, **_k: b"\xff\xd8\xffjpeg",
+    )
     session = _Session([
         _Resp(200, {"OK": 1, "auth": "ak", "biz_id": 99, "chunk_size": 8, "endpoint": "//up.example", "upos_uri": "upos://ugc/abc.mp4"}),
         _Resp(200, {"OK": 1, "upload_id": "up-1"}),
         _Resp(200, None, text="MULTIPART_PUT_SUCCESS"),
         _Resp(200, {"OK": 1, "key": "/abc.mp4"}),
+        _Resp(200, {"code": 0, "data": {"url": "https://i0.hdslb.com/cover.jpg"}}),
         _Resp(200, {"code": 0, "data": {"bvid": "BV1test", "aid": 555}}),
     ])
     uploaded = upload_video(COOKIE, video, title="把一句讲透", description="说明", private=True, dtime=None, session=session)
     assert uploaded["bvid"] == "BV1test" and uploaded["aid"] == 555
     methods = [call[0] for call in session.calls]
-    assert methods == ["GET", "POST", "PUT", "POST", "POST"]
+    assert methods == ["GET", "POST", "PUT", "POST", "POST", "POST"]
     submit = session.calls[-1][2]["json"]
     assert submit["is_only_self"] == 1
+    assert submit["cover"] == "https://i0.hdslb.com/cover.jpg"
     assert submit["videos"][0]["filename"] == "abc"
     assert submit["csrf"] == "jct"
     assert "SESSDATA" not in json.dumps({k: v for k, v in session.calls[-1][2].items() if k != "headers"})
+
+
+def test_upload_continues_when_cover_fails(data_dir, tmp_path, monkeypatch):
+    from backend.services.bilibili_publisher import upload_video
+
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x" * 8)
+    monkeypatch.setattr(
+        "backend.services.bilibili_publisher.extract_cover_jpeg",
+        lambda *_a, **_k: (_ for _ in ()).throw(Exception("截帧失败")),
+    )
+    session = _Session([
+        _Resp(200, {"OK": 1, "auth": "ak", "biz_id": 99, "chunk_size": 8, "endpoint": "//up.example", "upos_uri": "upos://ugc/abc.mp4"}),
+        _Resp(200, {"OK": 1, "upload_id": "up-1"}),
+        _Resp(200, None, text="MULTIPART_PUT_SUCCESS"),
+        _Resp(200, {"OK": 1, "key": "/abc.mp4"}),
+        _Resp(200, {"code": 0, "data": {"bvid": "BV1ok", "aid": 7}}),
+    ])
+    uploaded = upload_video(COOKIE, video, title="无封面", description="", private=True, dtime=None, session=session)
+    assert uploaded["bvid"] == "BV1ok"
+    submit = session.calls[-1][2]["json"]
+    assert submit["cover"] == ""
 
 
 def test_publish_records_a_completed_bilibili_post(data_dir, monkeypatch, tmp_path):
@@ -146,11 +174,16 @@ def test_publish_records_a_completed_bilibili_post(data_dir, monkeypatch, tmp_pa
 
     monkeypatch.setattr("backend.services.publish_export.export_clip", fake_export)
     monkeypatch.setattr("backend.services.publish_export.load_clip_meta", lambda _p, _c: {"generated_title": "把一句讲透"})
+    monkeypatch.setattr(
+        "backend.services.bilibili_publisher.extract_cover_jpeg",
+        lambda *_a, **_k: b"\xff\xd8\xffjpeg",
+    )
     session = _Session([
         _Resp(200, {"OK": 1, "auth": "ak", "biz_id": 3, "chunk_size": 10485760, "endpoint": "https://up.example", "upos_uri": "upos://ugc/file.mp4"}),
         _Resp(200, {"OK": 1, "upload_id": "up-2"}),
         _Resp(200, None, text=""),
         _Resp(200, {"OK": 1, "key": "/file.mp4"}),
+        _Resp(200, {"code": 0, "data": {"url": "https://i0.hdslb.com/c.jpg"}}),
         _Resp(200, {"code": 0, "data": {"bvid": "BV1ok", "aid": 9}}),
     ])
     record = bili.publish_clip(bili.BilibiliPublishRequest(project_id="p1", clip_id="2", visibility="private"), session=session)
@@ -160,6 +193,7 @@ def test_publish_records_a_completed_bilibili_post(data_dir, monkeypatch, tmp_pa
     stored = json.loads((data_dir / "projects" / "p1" / "output" / "publish" / f"{record['request_id']}.json").read_text())
     assert stored["url"].endswith("BV1ok")
     assert "cookie" not in stored
+    assert session.calls[-1][2]["json"]["cover"] == "https://i0.hdslb.com/c.jpg"
 
 
 def test_cancel_scheduled_deletes_the_manuscript(data_dir):
