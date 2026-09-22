@@ -11,10 +11,21 @@
  *   这样结果会出现在 PostHog → Surveys 的响应面板里，周报也能直接读。
  * - 版本 / 系统 / 架构 由 lifecycle.ts 注册的 super properties 自动携带；这里额外显式写入，
  *   避免 Surveys 面板只看 `$survey_response*` 时丢上下文。
- * - 埋点被用户关闭时，PostHog 侧不会发出；此时改去 GitHub（故障用 Issue，想法用 Discussions）。
+ * - 点「发送」不看匿名统计开关。事件进入 PostHog 后，收件任务写进 GitHub。
+ *   故障开 Issue，想法开 Ideas，其他开 Q&A。邮箱不进公开帖。
+ * - 没有配置或网络失败时，打开预填好的 GitHub 页面，由用户再提交一次。
  */
-import { posthog, isAnalyticsEnabled } from './posthog'
+import { posthog, isAnalyticsEnabled, POSTHOG_HOST, POSTHOG_KEY } from './posthog'
 import { settingsApi } from '../services/api'
+import { getRuntimeInfo } from './lifecycle'
+import {
+  buildFeedbackDraft,
+  captureProperties,
+  githubFallbackUrl,
+  newFeedbackId,
+  type FeedbackCategory,
+  type FeedbackDraft,
+} from './feedbackDraft'
 
 export const FEEDBACK_SURVEY_NAME = 'AutoClip 应用内反馈'
 export const FEEDBACK_ISSUES_URL = 'https://github.com/zhouxiaoka/autoclip/issues/new/choose'
@@ -22,7 +33,7 @@ export const FEEDBACK_DISCUSSIONS_URL = 'https://github.com/zhouxiaoka/autoclip/
 
 const SURVEY_ID_ENV = import.meta.env.VITE_PUBLIC_POSTHOG_FEEDBACK_SURVEY_ID as string | undefined
 
-export type FeedbackCategory = 'bug' | 'idea' | 'other'
+export type { FeedbackCategory }
 export type FeedbackSource = 'settings' | 'failure' | 'detail'
 
 export interface FeedbackContext {
@@ -104,40 +115,59 @@ export interface FeedbackPayload {
   context: FeedbackContext
 }
 
-/**
- * 提交反馈。返回 true 表示已通过 PostHog 发出；false 表示埋点关闭 / 未初始化，
- * 调用方应引导用户改去 GitHub。
- */
-export async function submitFeedback(payload: FeedbackPayload): Promise<boolean> {
-  if (typeof posthog?.capture !== 'function' || !isAnalyticsEnabled()) return false
+export interface FeedbackDelivery {
+  ok: boolean
+  fallbackUrl: string
+}
 
-  const survey = await resolveFeedbackSurvey()
-  const props: Record<string, unknown> = {
+function feedbackDistinctId(draft: FeedbackDraft): string {
+  if (isAnalyticsEnabled()) {
+    try {
+      const current = posthog.get_distinct_id?.()
+      if (current) return current
+    } catch { /* 显式反馈仍要发出 */ }
+  }
+  return `feedback:${draft.feedbackId}`
+}
+
+/**
+ * 主动发送不看匿名统计开关。成功时事件进入 PostHog，随后由收件任务写进 GitHub。
+ * 没有配置或网络失败时，返回预填好的 GitHub 链接，由调用方打开。
+ */
+export async function submitFeedback(payload: FeedbackPayload): Promise<FeedbackDelivery> {
+  const runtime = getRuntimeInfo()
+  const draft = buildFeedbackDraft({
+    feedbackId: newFeedbackId(),
     category: payload.category,
     text: payload.text,
-    contact: payload.contact || undefined,
-    ...payload.context,
-  }
-  posthog.capture('feedback_submitted', props)
-
-  if (survey) {
-    const qs = survey.questions || []
-    const responses: Record<string, unknown> = {
-      $survey_id: survey.id,
-      $survey_name: survey.name,
-      $survey_questions: qs.map((q) => ({ id: q.id, question: q.question })),
-      // 第一题：自由文本
-      $survey_response: payload.text,
-      ...props,
-    }
-    // 兼容 question-id 键：第一题 = 文本，后续 single_choice 题 = 分类
-    qs.forEach((q, i) => {
-      const key = q.id ? `$survey_response_${q.id}` : `$survey_response_${i}`
-      if (i === 0) responses[key] = payload.text
-      else if (q.type === 'single_choice' || q.type === 'multiple_choice') responses[key] = payload.category
-      else if (/联系|contact|email/i.test(q.question || '')) responses[key] = payload.contact || ''
+    contact: payload.contact,
+    source: payload.context.source,
+    stage: payload.context.stage,
+    errorMessage: payload.context.error_message,
+    version: runtime.version,
+    os: runtime.os,
+    arch: runtime.arch,
+    llmProvider: payload.context.llm_provider,
+    llmModel: payload.context.llm_model,
+  })
+  const fallbackUrl = githubFallbackUrl(draft)
+  if (!POSTHOG_KEY) return { ok: false, fallbackUrl }
+  try {
+    const response = await fetch(`${POSTHOG_HOST.replace(/\/$/, '')}/capture/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'omit',
+      body: JSON.stringify({
+        api_key: POSTHOG_KEY,
+        event: 'feedback_submitted',
+        distinct_id: feedbackDistinctId(draft),
+        timestamp: new Date().toISOString(),
+        properties: captureProperties(draft),
+      }),
+      signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(8000) : undefined,
     })
-    posthog.capture('survey sent', responses)
+    return { ok: response.ok, fallbackUrl }
+  } catch {
+    return { ok: false, fallbackUrl }
   }
-  return true
 }

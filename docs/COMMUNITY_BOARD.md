@@ -21,7 +21,7 @@ Issue 区曾经被「用不了」和「我觉得应该」混在一起。入口�
 | Featurebase / Productlane | 不用 | 免费档没有 Agent 能用的 API，付费从月费开始 |
 | Linear | 不用 | 不适合作为公众提需求的地方 |
 
-不打开 GitHub 的人用应用内反馈。它跟着界面语言走，进周报，不直接变成路线图卡片。关掉匿名统计后，应用内发不出去，改去 GitHub。
+不打开 GitHub 的人用应用内反馈。它跟着界面语言走。点发送不看匿名统计开关：句子先进入 PostHog，每小时由 `.github/workflows/ingest-feedback.yml` 写进 GitHub。故障开 Issue，想法开 Ideas，其他开 Q&A。这些帖子带 `from-app` 或反馈编号，只是收件箱，不直接变成路线图卡片。邮箱不写进公开帖。没有配置或网络失败时，应用会打开预填好的 GitHub 页面。
 
 ## 三条通道
 
@@ -30,7 +30,7 @@ Issue 区曾经被「用不了」和「我觉得应该」混在一起。入口�
   │
   ├─ 想法、用法、模型、提问 → Discussions
   ├─ 能复现的故障 → Issue（bug 模板）
-  └─ 不想用 GitHub → 应用内反馈（关掉匿名统计则改去 GitHub）
+  └─ 不想用 GitHub → 应用内反馈（自动写入 Issue 或 Discussions）
           │
           ▼
      Product Agent 聚类、去重、排序
@@ -139,9 +139,11 @@ Building 和 Testing 现在是空的：更新日志里没有「已写完、还�
 
 ## 排期
 
-这条工作是运营规则，不改切片流水线，也不占 v1.3 的工程顺序。
+合进 main 和发版是两件事。当前版本停在 **v1.3.1**。之后先把改动合进 main，卡片放到 Building，攒一批再打一个 tag。不为应用内反馈单独发 v1.3.2。
 
-1. **先把看板装上。** 跑一次安装脚本，把五个表单挂到分类上。种子 Issue 单独决定要不要开，避免一次出现十几张旧账。
+下一次发行看 Building 里已经攒了什么，不按单个 PR 决定。社区新想法默认停在 Exploring，不插进已经排好的顺序，除非它就是其中一件的复现。
+
+1. **看板是排期本身。** 六列装在公开 Project「AutoClip Roadmap」上。种子 Issue 按 `docs/community/roadmap-seed.json` 放进对应列。
 2. **v1.3.1 之后按这个顺序做产品，社区新想法默认停在 Exploring：**
    - Windows 真机验证。安装包已经是下载主力，交接记录里仍没有干净机器跑通的结论。
    - Apple 公证和 Windows 代码签名。应用内更新和崩溃上报已经在 v1.3.1，未签名仍会拦住安装。

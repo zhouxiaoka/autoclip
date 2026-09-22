@@ -92,7 +92,7 @@ Tauri 合并，不影响 macOS。
 
 ## 社区看板
 
-`community_board.py`、`feature_signals.py`、`setup_community_board.py` 服务于公开路线图，不参与打包。用法见 `docs/COMMUNITY_BOARD.md`。
+`community_board.py`、`feature_signals.py`、`setup_community_board.py` 服务于公开路线图，不参与打包。`ingest_app_feedback.py` 把应用内反馈写进 Issue 和 Discussions。用法见 `docs/COMMUNITY_BOARD.md`。
 
 ## 开发模式（不打包）
 

@@ -14,7 +14,6 @@ import {
   trackFeedbackDismissed,
   trackFeedbackOpened,
 } from '../analytics/feedback'
-import { isAnalyticsEnabled } from '../analytics/posthog'
 import { getRuntimeInfo } from '../analytics/lifecycle'
 import { openExternalLink as openExternal } from '../utils/externalLinks'
 
@@ -35,9 +34,7 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
   const [contact, setContact] = useState('')
   const [sending, setSending] = useState(false)
   const [llm, setLlm] = useState<Pick<FeedbackContext, 'llm_provider' | 'llm_model' | 'llm_base_url'>>({})
-  const [surveyReady, setSurveyReady] = useState<boolean | null>(null)
   const runtime = useMemo(() => getRuntimeInfo(), [])
-  const analyticsOn = isAnalyticsEnabled()
 
   const fullContext: FeedbackContext = useMemo(() => ({ ...llm, ...context }), [llm, context])
 
@@ -47,10 +44,7 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
     setContact('')
     setCategory(context.source === 'failure' ? 'bug' : 'idea')
     collectLlmContext().then(setLlm)
-    resolveFeedbackSurvey().then((s) => {
-      setSurveyReady(!!s)
-      trackFeedbackOpened(context, s)
-    })
+    resolveFeedbackSurvey().then((s) => trackFeedbackOpened(context, s))
   }, [open, context])
 
   const handleClose = () => {
@@ -65,13 +59,13 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
     }
     setSending(true)
     try {
-      const ok = await submitFeedback({ category, text: text.trim(), contact: contact.trim() || undefined, context: fullContext })
-      if (ok) {
-        message.success(t("已收到，感谢反馈"))
+      const result = await submitFeedback({ category, text: text.trim(), contact: contact.trim() || undefined, context: fullContext })
+      if (result.ok) {
+        message.success(t("已收到。这句话会公开出现在 GitHub。"))
         onClose()
       } else {
-        message.info(t("匿名统计已关闭，请到 GitHub 提交"))
-        void openExternal(category === 'bug' ? FEEDBACK_ISSUES_URL : FEEDBACK_DISCUSSIONS_URL)
+        message.info(t("没有直接送达，请在打开的 GitHub 页面再提交一次。"))
+        void openExternal(result.fallbackUrl)
       }
     } finally {
       setSending(false)
@@ -92,8 +86,8 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
       title={context.source === 'failure' ? t("这次没出片，告诉我们哪里不对") : t("反馈")}
       description={
         context.source === 'failure'
-          ? t("错误信息和运行环境会自动附上，你只需要补一句发生了什么。")
-          : t("一句话就够。运行环境会自动附上，不包含视频内容与 API 密钥。")
+          ? t("错误信息和运行环境会自动附上，你只需要补一句发生了什么。正文会公开出现在 GitHub，不含邮箱。")
+          : t("一句话就够。运行环境会自动附上，不包含视频内容与 API 密钥。正文会公开出现在 GitHub。")
       }
       footer={
         <>
@@ -140,14 +134,13 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
         )}
         <input
           className="ac-input"
-          placeholder={t("联系方式（可选，邮箱）")}
+          placeholder={t("联系方式（可选，邮箱，不会公开）")}
           value={contact}
           onChange={(e) => setContact(e.target.value)}
         />
         <div className="ac-context" title={t("将随反馈一起发送的上下文")}>
           {ctxChips.map((c) => <span key={c}>{c}</span>)}
-          {!analyticsOn && <span style={{ color: 'var(--ac-warn)' }}>{t("匿名统计已关闭 · 请用 GitHub")}</span>}
-          {analyticsOn && surveyReady === false && <span>{t("· 直接上报")}</span>}
+          <span>{t("这句话会公开出现在 GitHub，不含邮箱。")}</span>
         </div>
       </div>
     </Dialog>
