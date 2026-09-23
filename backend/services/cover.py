@@ -375,7 +375,7 @@ def title_matches(ocr_text: str, title_lines: list[str]) -> bool:
 
 def resolve_clip_frame(project_id: str, clip_id: str) -> tuple[Path, float]:
     clip = load_clip_meta(project_id, clip_id)
-    video = find_source_video(project_id)
+    video = Path(clip['video_path']) if clip.get('source_type') == 'studio' else find_source_video(project_id)
     start = to_seconds(clip.get("start_time") or "0")
     end = to_seconds(clip.get("end_time") or clip.get("start_time") or "0")
     at = start + max(0.3, min(2.0, (end - start) * 0.2 if end > start else 0.5))
