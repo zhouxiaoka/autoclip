@@ -259,7 +259,7 @@ const ProjectDetailPage: React.FC = () => {
           <div style={{ minWidth: 0 }}>
             <h1 className="ac-title">{currentProject.name}</h1>
             <div className="ac-meta">
-              {isVisual ? <span>{'智能制作'}</span> : isCompleted ? (
+              {isVisual ? <span>{t('智能制作')}</span> : isCompleted ? (
                 <>
                   <span>{t("切片数量", { count: clips.length })}</span>
                   <span className="dot" />
@@ -306,7 +306,7 @@ const ProjectDetailPage: React.FC = () => {
             onGenerateVideo={async collectionId => { const c = collections.find(x => x.id === collectionId); if(c) await generateAndDownloadCollectionVideo(currentProject.id, collectionId, c.collection_title) }}
             onDelete={handleDeleteCollection} />)}
           {getSortedClips().map(clip => <ClipCard key={clip.id} clip={clip} projectId={currentProject.id}
-            onEdit={() => createDraft([clip.id], clip.generated_title || clip.title || '新成片')}
+            onEdit={() => createDraft([clip.id], clip.generated_title || clip.title || t('新成片'))}
             videoUrl={projectApi.getClipVideoUrl(currentProject.id, clip.id, clip.title || clip.generated_title)}
             onDownload={clipId => projectApi.downloadVideo(currentProject.id, clipId)}
             onClipUpdate={(clipId, updates) => setCurrentProject({...currentProject, clips: clips.map(c => c.id === clipId ? {...c, ...updates} : c)})} />)}

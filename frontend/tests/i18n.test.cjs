@@ -83,3 +83,33 @@ test('Studio result states translate on language changes while retaining titles 
     assert.ok(instance.t('{{count}} 段',{count:3}).includes('3'))
   }
 })
+
+test('Studio UI has no untranslated static Chinese JSX or template strings', () => {
+  const studio=path.join(__dirname,'../src/features/studio')
+  for(const name of fs.readdirSync(studio).filter(n=>n.endsWith('.tsx'))) {
+    const file=path.join(studio,name), source=ts.createSourceFile(file,fs.readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX)
+    function visit(node) {
+      if(ts.isJsxText(node)) assert.ok(!/[\u4e00-\u9fff]/.test(node.text),`${name}: untranslated JSX ${node.text}`)
+      if(ts.isJsxAttribute(node)&&node.initializer&&ts.isStringLiteral(node.initializer)) assert.ok(!/[\u4e00-\u9fff]/.test(node.initializer.text),`${name}: untranslated attribute ${node.initializer.text}`)
+      if(ts.isTemplateExpression(node)) assert.ok(!/[\u4e00-\u9fff]/.test(node.head.text+node.templateSpans.map(s=>s.literal.text).join('')),`${name}: use interpolation for translated templates`)
+      ts.forEachChild(node,visit)
+    }
+    visit(source)
+  }
+})
+
+test('Studio dynamic label maps and validation messages have translations in all eight catalogs', () => {
+  for(const name of ['types.ts','titlePresets.ts','PlanSummary.tsx']) {
+    const file=path.join(__dirname,'../src/features/studio',name),source=ts.createSourceFile(file,fs.readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true)
+    function visit(node) {
+      if(ts.isStringLiteral(node)&&/[\u4e00-\u9fff]/.test(node.text)&&!['简体中文','日本語'].includes(node.text)) {
+        for(const lang of langs) {
+          assert.ok(Object.hasOwn(catalogs[lang],node.text),`${name}: ${lang}: ${node.text}`)
+          if(lang!=='zh') assert.notEqual(catalogs[lang][node.text],node.text,`${lang}: ${node.text}`)
+        }
+      }
+      ts.forEachChild(node,visit)
+    }
+    visit(source)
+  }
+})

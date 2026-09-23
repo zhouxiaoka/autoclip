@@ -98,7 +98,7 @@ const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
 type SectionKey = 'vision' | 'model' | 'speech' | 'app' | 'publish' | 'cover' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
   { key: 'model', get label() { return t("模型") } },
-  { key: 'vision', label: '视觉理解' },
+  { key: 'vision', get label() { return t('视觉理解') } },
   { key: 'speech', get label() { return t("转写") } },
   { key: 'app', get label() { return t("应用") } },
   { key: 'publish', get label() { return t("发布") } },
