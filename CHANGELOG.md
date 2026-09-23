@@ -9,6 +9,16 @@
 
 _（本周尚无改动）_
 
+## [1.3.3] - 2026-09-23
+
+### 修复
+- 非 Mac 安装 Whisper 时，不再误报「仅支持 Apple Silicon」并拦住安装（#145）
+- 处理完成后进度弹窗不再空转；项目目录找不到时，状态查询不再整页失败（#152）
+- 分类列表还没加载完时，导入入口不再崩溃（#153）
+- 本地 Whisper 转写失败时给出可读提示，应用继续运行（#154）
+- 升级后若项目里还有旧的状态或类型值，启动时自动改写，项目列表能打开（#155）
+- 桌面端下载 Whisper 模型时，不再因进度条写控制台而失败（#157）
+
 ## [1.3.2] - 2026-09-22
 
 ### 新增
@@ -209,7 +219,8 @@ _（本周尚无改动）_
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.2...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.3...HEAD
+- [1.3.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.2...v1.3.3
 - [1.3.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.1...v1.3.2
 - [1.3.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.0...v1.3.1
 - [1.3.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.2.1...v1.3.0

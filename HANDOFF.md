@@ -1,6 +1,6 @@
 # AutoClip — 项目状态 / 进度 / 计划
 
-> 更新：2026-09-22 · **v1.3.2** 发版（发布页、自动封面、应用内更新提示）。
+> 更新：2026-09-23 · **v1.3.3** 发版（项目列表旧枚举、进度轮询、导入崩溃、Whisper 安装/转写/下载）。
 > v1.3.0 及更早需要先手动安装 v1.3.1，之后才能在设置里检查更新。
 > 2026-09-20 的下载快照是 v1.2.1（Windows 1136 / DMG 334）。不要用刚挂上的下载数做平台对比。
 
@@ -19,7 +19,7 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 | LLM | OpenAI 及一切 OpenAI 兼容接口（自定义 base_url）/ Gemini(google-genai) / 通义千问(dashscope) / 硅基流动 / 本地预设 Ollama、LM Studio | `backend/core/llm_providers.py`、`llm_manager.py`、`local_presets.py` |
 | CLI / MCP | `autoclip` 命令行 + MCP server（stdio），不起 FastAPI / Celery 直接跑流水线 | `backend/cli.py`、`mcp_server.py`、`services/local_runner.py` |
 
-四种交付形态：**桌面客户端**（当前包是 v1.3.1 的 macOS arm64 DMG 与 Windows x64 安装包；Windows 包从 v1.2.1 起就有，干净机器上的完整出片仍没有记录）、**Docker 部署**（README 推荐路径）、
+四种交付形态：**桌面客户端**（当前包是 v1.3.3 的 macOS arm64 DMG 与 Windows x64 安装包；Windows 包从 v1.2.1 起就有，干净机器上的完整出片仍没有记录）、**Docker 部署**（README 推荐路径）、
 **本地脚本启动**（`start_autoclip.sh`）、**CLI / MCP**（`pip install -e .`，面向开发者与 agent，`docs/CLI_AND_MCP.md`）。
 
 ---
@@ -27,6 +27,7 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 ## 二、当前状态
 
 ### 已完成
+- **v1.3.3（2026-09-23）**：热修稳定性。升级后旧项目状态不再让列表整页打不开；处理进度在终态和 4xx/5xx 后停止轮询；分类列表缺失时导入入口不崩溃；非 Mac 能装 Whisper；本地转写失败给出可读错误；桌面端下载模型不再被进度条写控制台打断。
 - **v1.3.2（2026-09-22）**：同一页发布到 B 站和海外平台、自动封面（失败截帧、不挡投稿）、设置里 B 站 Cookie 提前、应用内更新提示、模型名单可拉取。真实 Upload-Post / B 站试发脚本已进仓库，这台机器上还没有密钥，没跑过真投稿。
 - **v1.3.1（2026-09-21）**：八语界面与官网、八语 README、匿名统计 v2、崩溃上报、应用内检查更新。v1.3.0 及更早必须先手动安装这一版。生产构建验收见 `docs/UPDATES_AND_SENTRY.md`：一次前端异常能进 Sentry，且正文被去掉。该记录不代替 Windows 真机和真实视频出片。PostHog 新口径的线上接收也还没单独验收（`docs/ANALYTICS_V2.md`）。
 - **v1.3.0（2026-09-20）**：CLI / MCP、Ollama 与 LM Studio 预设、时长画像与评分兜底、竖屏发布导出、Docker 设置页可保存、失败要写明阶段、通义千问国际站、`min_score` 接到 step3、周更发版脚本。
@@ -169,7 +170,7 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 
 ## 四、迭代计划
 
-当前发布版本是 **v1.3.2**。合进 main 的改动先停在路线图的 Building，攒一批再打一个 tag，不为单个 PR 发版。社区新想法默认停在 Exploring。接下来先做 Windows 真机验证、安装包公证与代码签名、首页和项目卡。账号仍等公证和代码签名完成。排序见 `docs/COMMUNITY_BOARD.md`。
+当前发布版本是 **v1.3.3**。合进 main 的改动先停在路线图的 Building，攒一批再打一个 tag，不为单个 PR 发版。社区新想法默认停在 Exploring。接下来先做 Windows 真机验证、安装包公证与代码签名、首页和项目卡。账号仍等公证和代码签名完成。排序见 `docs/COMMUNITY_BOARD.md`。
 
 ### v1.2.1 发版
 - [x] 合并 #89 #90 #91 #92 #93 #94
@@ -245,7 +246,7 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 
 ## 六、安装（给用户）
 
-**桌面版（推荐，当前 v1.3.2）**
+**桌面版（推荐，当前 v1.3.3）**
 1. 从 Releases 下载：macOS 用 DMG，Windows 用 `x64-setup.exe`
 2. macOS **首次右键应用 → 打开**（ad-hoc 签名，绕过 Gatekeeper）。Windows 安装包未做代码签名，可能要在 SmartScreen 里选择仍要运行
 3. 已装 v1.3.0 或更早的，先手动装上 v1.3.1。之后在「设置 → 应用 → 检查更新」

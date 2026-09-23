@@ -61,7 +61,7 @@ Local file import accepts an optional `.srt`. Without usable subtitles, you need
 
 ### What if installing Whisper on Windows still says mlx-whisper only supports Apple Silicon?
 
-If Settings → Transcription → Install still shows the red error 「mlx-whisper 仅支持 Apple Silicon (macOS)」 on Windows or any other non-Mac system, update to the next installer that includes the [#145](https://github.com/zhouxiaoka/autoclip/pull/145) fix (newer than the released v1.3.2). On desktop, use Settings → Application → Check for updates, or download it from [Releases](https://github.com/zhouxiaoka/autoclip/releases). Older builds showed that message and blocked the install by mistake. After you update, use the same Install button. See [#141](https://github.com/zhouxiaoka/autoclip/issues/141).
+If Settings → Transcription → Install still shows the red error 「mlx-whisper 仅支持 Apple Silicon (macOS)」 on Windows or any other non-Mac system, update to **v1.3.3** or later (includes [#145](https://github.com/zhouxiaoka/autoclip/pull/145)). On desktop, use Settings → Application → Check for updates, or download it from [Releases](https://github.com/zhouxiaoka/autoclip/releases). Older builds showed that message and blocked the install by mistake. After you update, use the same Install button. See [#141](https://github.com/zhouxiaoka/autoclip/issues/141).
 
 ### Why were no clips generated?
 

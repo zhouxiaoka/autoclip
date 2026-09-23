@@ -61,7 +61,7 @@ Docker 中的 `localhost` 是容器自己。宿主机模型服务的访问方式
 
 ### 在 Windows 上安装 Whisper 仍提示 mlx-whisper 仅支持 Apple Silicon？
 
-「设置 → 转写」里安装 Whisper 时，若 Windows 或其他非 Mac 仍出现红色错误「mlx-whisper 仅支持 Apple Silicon (macOS)」，请更新到包含 [#145](https://github.com/zhouxiaoka/autoclip/pull/145) 的下一版安装包（晚于已发布的 v1.3.2）。桌面版用「设置 → 应用 → 检查更新」，或到 [Releases](https://github.com/zhouxiaoka/autoclip/releases) 下载。旧版会误报并拦住安装；更新后点原来的「安装」即可。见 [#141](https://github.com/zhouxiaoka/autoclip/issues/141)。
+「设置 → 转写」里安装 Whisper 时，若 Windows 或其他非 Mac 仍出现红色错误「mlx-whisper 仅支持 Apple Silicon (macOS)」，请更新到 **v1.3.3** 或更新（含 [#145](https://github.com/zhouxiaoka/autoclip/pull/145)）。桌面版用「设置 → 应用 → 检查更新」，或到 [Releases](https://github.com/zhouxiaoka/autoclip/releases) 下载。旧版会误报并拦住安装；更新后点原来的「安装」即可。见 [#141](https://github.com/zhouxiaoka/autoclip/issues/141)。
 
 ### 为什么没有生成片段？
 

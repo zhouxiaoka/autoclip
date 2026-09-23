@@ -1,6 +1,6 @@
 [package]
 name = "autoclip-desktop"
-version = "1.3.2"
+version = "1.3.3"
 description = "AutoClip Desktop Application"
 authors = ["AutoClip Team"]
 license = "MIT"
