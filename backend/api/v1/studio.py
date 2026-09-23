@@ -246,7 +246,10 @@ def create_draft(project_id: str, body: CreateDraft, db: Session = Depends(get_d
     draft = Draft(id=uuid.uuid4().hex, title=body.title, scenes=scenes, origin='legacy', language=prefs.get('language', 'source'), aspect=prefs.get('aspect') or 'original')
     call(validate_draft, project_id, draft)
     store.directory(project_id).mkdir(parents=True, exist_ok=True)
-    return call(store.save_draft, project_id, draft, create=True)
+    import hashlib
+    import json
+    source_key = hashlib.sha256(json.dumps(body.clip_ids).encode()).hexdigest()
+    return call(store.open_legacy_editor, project_id, draft, source_key, reuse_existing=body.reuse_existing)
 
 @router.post('/{project_id}/events/{event_id}/draft')
 def event_draft(project_id: str, event_id: str, db: Session = Depends(get_db)):

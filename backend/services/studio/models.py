@@ -62,6 +62,7 @@ class Draft(BaseModel):
         return self
 
 class CreateDraft(BaseModel):
+    reuse_existing: bool = False
     clip_ids: list[str] = Field(min_length=1, max_length=30)
     title: str = Field(min_length=1, max_length=200)
 

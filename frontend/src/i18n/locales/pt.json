@@ -1080,5 +1080,6 @@
   "成片尚未完成或不存在，请返回项目重新导出": "O vídeo está incompleto ou ausente. Volte ao projeto para exportar novamente.",
   "发布已导出的 V{{revision}} 成片，保留画幅、文字和声音。需要修改时，请返回编辑器另行导出。": "Publique o vídeo V{{revision}} preservando enquadramento, texto e áudio. Para alterar, volte ao editor e exporte novamente.",
   "已关闭": "Desativado",
-  "缩略图暂不可用 · 点击查看": "Prévia indisponível · Clique para ver"
+  "缩略图暂不可用 · 点击查看": "Prévia indisponível · Clique para ver",
+  "管理合集": "Gerenciar coleção"
 }
