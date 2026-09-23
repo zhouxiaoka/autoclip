@@ -9,6 +9,18 @@
 
 _（本周尚无改动）_
 
+## [1.3.3] - 2026-09-23
+
+### 修复
+- Windows / 非 Mac 安装 Whisper 不再被误拦成「仅支持 Apple Silicon」（#145，社区 #141）
+- 处理页不再因相对 `data` 目录失败；终态与 4xx/5xx 后停止轮询，减少假失败 toast（#152 / #151）
+- 分类列表缺失时导入入口不再崩溃（#153 / #148）
+- 本地 Whisper 转写失败给出可读错误，不再拖垮整条出片（#154 / #149）
+- 项目列表不再因旧枚举值整页 500（#155 / #150）
+
+### 文档
+- FAQ：旧版非 Mac 安装 Whisper 若仍见 mlx 红条，请更新到含 #145 的安装包（#146）
+
 ## [1.3.2] - 2026-09-22
 
 ### 新增
@@ -209,7 +221,8 @@ _（本周尚无改动）_
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.2...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.3...HEAD
+- [1.3.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.2...v1.3.3
 - [1.3.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.1...v1.3.2
 - [1.3.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.0...v1.3.1
 - [1.3.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.2.1...v1.3.0
