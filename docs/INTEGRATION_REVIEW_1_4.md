@@ -131,3 +131,11 @@ Studio完成文件作为不可变发布来源接入现有B站/海外发布与封
 基于a311ce23重新构建macOS ARM64包成功（含共享编辑恢复和有限轮询；生产代码对应d962beed，a311ce23新增验收脚本）。本次SDKROOT仍仅指定本机26.5，版本仍1.3.2，ad-hoc签名；447MB app、236MB DMG、160MB tar均仅本地。验收使用包内Python3.13.13/FFmpeg通过，证据/private/tmp/autoclip-bundle-smoke-x3k5kzed/report.json；之后codesign --verify --deep --strict通过。合成测试片仅验证运行时和渲染，不作为真实游戏或买量效果证据。尚未覆盖原生窗口、升级和Windows。
 
 **当前合入阻塞：**远程main已更新到26b92494，含v1.3.3、旧枚举兼容、macOS播放/下载、导入Celery错误、字幕/模型缺失提示等61个文件变更。本次只fetch核对，未合并或rebase，避免改变构建中的基线。PR147再次显示CONFLICTING，仅文档检查通过，不能沿用7b6da8cb旧CI绿色宣称最新候选通过。下一轮优先备份候选并集成这些主线修复，重跑完整回归；本包不是最新main的RC，不用于发布。
+
+## 2026-09-24：同步v1.3.3及后续主线修复
+
+已远程备份codex/backup-1.4-before-main-26b92494@3387285c，并保留合并拓扑rebase到main@26b92494。纳入旧枚举迁移与兼容读取、Whisper下载控制台修复、原生播放/下载支持、Celery异常元数据、片源真实进度、字幕与模型缺失设置引导。冲突组合保留待确认导入门槛、统一Studio结果、已验证编辑恢复、文件数据库事务隔离和八语增量。候选版本随主线保留1.3.3，尚未改为1.4.0。
+
+本地完整后端465项、前端89项、类型/Lint/生产构建、8份README与11份指南检查通过，无付费模型请求。Rust检查发现主线save_local_download返回SavedDownload私有类型导致Tauri宏编译失败，修正为crate可见后cargo check --locked通过（SDKROOT仅本次26.5）。本轮没有重建app或验证原生窗口；此前1.3.2包不是本次候选证据。
+
+新主线旧切片系统下载路径已纳入兼容回归；Studio成片下载仍使用链接，需继续接入并实测macOS系统保存路径，不能据旧切片测试宣布两条下载体验全部收口。长视频模型超时、多游戏/L2质量、最新原生包升级与Windows仍待验。main未合并、未发布；推送后的远程CI以新head为准。
