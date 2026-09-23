@@ -5,6 +5,9 @@ Produces isolated evidence in a new temporary directory. Does not install the
 app, test native UI/updater/signatures, or evaluate creative/ad quality.
 """
 import os,sys,json,subprocess,time,select
+
+sys.dont_write_bytecode = True
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 from pathlib import Path
 from urllib.request import urlopen
 import argparse
@@ -60,7 +63,7 @@ try:
   if proc.poll() is not None:break
  assert port,'bundled backend failed to start'
  with urlopen(f'http://127.0.0.1:{port}/health',timeout=5) as r:assert r.status==200
- report={'source':'synthetic offline fixture','backend_sha256':hashlib.sha256((resources/'backend/services/studio/render.py').read_bytes()).hexdigest(),'python':sys.version.split()[0],'six_templates':'passed','portrait_render':info,'desktop_health':'passed','output':str(out)}
+ report={'source':'synthetic offline fixture','backend_sha256':hashlib.sha256((resources/'backend/services/studio/render.py').read_bytes()).hexdigest(),'python':sys.version.split()[0],'six_templates':'passed','original_audio':'passed','portrait_render':info,'desktop_health':'passed','output':str(out)}
  (root/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print(json.dumps(report,ensure_ascii=False))
 finally:
  proc.terminate()

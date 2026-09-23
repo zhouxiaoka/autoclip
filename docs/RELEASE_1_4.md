@@ -290,3 +290,15 @@ macOS ARM64本地安装包构建成功（构建代码2719c217，尚不含随后9
 共享项目状态观察器仅在正式分析或导出排队/运行时每3秒继续读取；完成、失败、待确认与空旧项目读取一次后停止。HTTP错误立即停止，网络中断最多再尝试2次并保留最后成功快照；切页中止请求和等待，回到可见页面或显式操作后重新读取。所有刷新只调用GET，不启动模型或导出，确认门槛不变。
 
 新增6项离线时序回归覆盖终态、混合分析/导出、HTTP错误、有限断网重试与恢复、请求中/等待中取消。功能分支22项前端、类型/Lint通过；本轮不调用模型，不声称长视频timeout或真实创意质量已解决。
+
+## 2026-09-23 晚：可重复包内验收与主线更新阻塞
+
+新增scripts/verify_macos_bundle.py：强制使用app内Python并核对backend来源；每次创建独立临时数据/数据库，离线生成测试画面与声音，验证六款v6中英文字图层、1080×1920一秒渲染、原声音轨和桌面后端health。禁止写入包内pyc，退出时终止测试后端；不安装应用、不调用模型。调用示例（在仓库根目录，resources指app的Contents/Resources/resources）：
+
+```sh
+"$resources/python/bin/python3" -B scripts/verify_macos_bundle.py --resources "$resources"
+```
+
+基于a311ce23重新构建macOS ARM64包成功（含共享编辑恢复和有限轮询；生产代码对应d962beed，a311ce23新增验收脚本）。本次SDKROOT仍仅指定本机26.5，版本仍1.3.2，ad-hoc签名；447MB app、236MB DMG、160MB tar均仅本地。验收使用包内Python3.13.13/FFmpeg通过，证据/private/tmp/autoclip-bundle-smoke-x3k5kzed/report.json；之后codesign --verify --deep --strict通过。合成测试片仅验证运行时和渲染，不作为真实游戏或买量效果证据。尚未覆盖原生窗口、升级和Windows。
+
+**当前合入阻塞：**远程main已更新到26b92494，含v1.3.3、旧枚举兼容、macOS播放/下载、导入Celery错误、字幕/模型缺失提示等61个文件变更。本次只fetch核对，未合并或rebase，避免改变构建中的基线。PR147再次显示CONFLICTING，仅文档检查通过，不能沿用7b6da8cb旧CI绿色宣称最新候选通过。下一轮优先备份候选并集成这些主线修复，重跑完整回归；本包不是最新main的RC，不用于发布。
