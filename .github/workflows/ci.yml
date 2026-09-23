@@ -68,29 +68,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Analytics contract tests
-        run: node --test tests/analytics.test.cjs
+      - name: Frontend tests (analytics, desktop, i18n, publish and Studio)
+        run: npm test
 
-      - name: Sentry build configuration tests
-        run: node --test tests/sentry-build.test.cjs tests/desktop.test.cjs tests/clip-media-url.test.cjs
-
-      - name: Internationalization checks
-        run: node --test tests/i18n.test.cjs
-
-      - name: LLM key failure guidance
-        run: node --test tests/llm-failure.test.cjs
-
-      - name: Subtitle failure guidance
-        run: node --test tests/subtitle-failure.test.cjs
-
-      - name: Publish UI helpers
-        run: node --test tests/upload-post-ui.test.cjs
-
-      - name: Feedback draft checks
-        run: node --test tests/feedback-draft.test.cjs
-
-      - name: Source download progress
-        run: node --test tests/download-progress.test.cjs
 
       - name: Build
         run: npm run build

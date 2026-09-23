@@ -314,7 +314,7 @@ const ProjectDetailPage: React.FC = () => {
               )}
             </div>
           </div>
-          {isCompleted && (
+          {isCompleted && clips.length > 0 && (
             <Btn onClick={() => navigate(`/project/${currentProject.id}/publish`)}>{t("发布")}</Btn>
           )}
           {!isVisual && currentProject.status === 'pending' && (
