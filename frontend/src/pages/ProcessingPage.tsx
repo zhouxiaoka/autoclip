@@ -5,11 +5,11 @@ import { CheckCircleOutlined, LoadingOutlined, ExclamationCircleOutlined, ArrowL
 import { projectApi } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
 import {
-  httpStatusOf,
+  classifyStatusPollError,
   shouldStopProcessingPoll,
   toProcessingView,
   type ProcessingStatusView,
-} from './processingStatusPoll'
+} from '../utils/processingStatusPoll'
 
 const { Content } = Layout
 const { Title, Text } = Typography
@@ -70,11 +70,11 @@ const ProcessingPage: React.FC = () => {
       } catch (error: any) {
         if (stopped) return
         console.error('Check status error:', error)
-        const httpStatus = httpStatusOf(error)
+        const kind = classifyStatusPollError(error)
 
-        if (shouldStopProcessingPoll({ httpStatus })) {
+        if (shouldStopProcessingPoll({ error })) {
           stop()
-          if (httpStatus === 404) {
+          if (kind === 'not_found') {
             message.error('项目不存在或已被删除')
             window.setTimeout(() => navigate('/'), 2000)
           } else {
@@ -85,7 +85,7 @@ const ProcessingPage: React.FC = () => {
 
         if (notifiedRetry) return
         notifiedRetry = true
-        if (error.code === 'ECONNABORTED') {
+        if (kind === 'timeout') {
           message.warning('网络连接超时，正在重试...')
         } else {
           message.error('获取处理状态失败，请刷新页面重试')

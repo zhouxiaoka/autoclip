@@ -20,6 +20,8 @@ export interface ProcessingStatusView {
   error_message?: string
 }
 
+export type StatusPollErrorKind = 'not_found' | 'server' | 'timeout' | 'transient'
+
 const COMPLETED = new Set(['completed', 'success'])
 const FAILED = new Set(['error', 'failed', 'cancelled', 'canceled'])
 
@@ -55,12 +57,26 @@ export function httpStatusOf(error: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined
 }
 
-/** Stop the processing-page poll on a terminal pipeline state or a terminal HTTP failure. */
+export function classifyStatusPollError(error: unknown): StatusPollErrorKind {
+  const http = httpStatusOf(error)
+  if (http === 404) return 'not_found'
+  if (typeof http === 'number' && http >= 500 && http < 600) return 'server'
+  const code = error && typeof error === 'object' ? (error as { code?: unknown }).code : undefined
+  if (code === 'ECONNABORTED') return 'timeout'
+  return 'transient'
+}
+
+/** Terminal pipeline state or HTTP failure. Timeouts stay in the retry bucket. */
 export function shouldStopProcessingPoll(input: {
   phase?: ProcessingPhase | 'unknown'
   httpStatus?: number
+  error?: unknown
 }): boolean {
   if (input.phase === 'completed' || input.phase === 'error') return true
+  if (input.error !== undefined) {
+    const kind = classifyStatusPollError(input.error)
+    return kind === 'not_found' || kind === 'server'
+  }
   if (input.httpStatus === 404) return true
   return typeof input.httpStatus === 'number' && input.httpStatus >= 500 && input.httpStatus < 600
 }
