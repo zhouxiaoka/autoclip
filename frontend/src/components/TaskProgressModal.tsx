@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { Modal, Steps, Progress, Typography, Button, Alert, Space, Spin } from 'antd'
+import React, { useState, useEffect, useRef } from 'react'
+import { Modal, Steps, Progress, Typography, Button, Alert, Space, Spin, message } from 'antd'
 import { 
   CheckCircleOutlined, 
   LoadingOutlined, 
@@ -8,18 +8,15 @@ import {
 } from '@ant-design/icons'
 import { projectApi } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
+import {
+  classifyStatusPollError,
+  shouldStopProcessingPoll,
+  toProcessingView,
+  type ProcessingStatusView,
+} from '../utils/processingStatusPoll'
 
 const { Text } = Typography
 const { Step } = Steps
-
-interface ProcessingStatus {
-  status: 'processing' | 'completed' | 'error'
-  current_step: number
-  total_steps: number
-  step_name: string
-  progress: number
-  error_message?: string
-}
 
 interface TaskProgressModalProps {
   visible: boolean
@@ -34,9 +31,15 @@ const TaskProgressModal: React.FC<TaskProgressModalProps> = ({
   onClose,
   onComplete
 }) => {
-  const [status, setStatus] = useState<ProcessingStatus | null>(null)
+  const [status, setStatus] = useState<ProcessingStatusView | null>(null)
   const [loading, setLoading] = useState(false)
+  const [pollEpoch, setPollEpoch] = useState(0)
   const { updateProject } = useProjectStore()
+  const updateProjectRef = useRef(updateProject)
+  const onCompleteRef = useRef(onComplete)
+  const reportedStepRef = useRef<number | undefined>(undefined)
+  updateProjectRef.current = updateProject
+  onCompleteRef.current = onComplete
 
   const steps = [
     { title: '大纲提取', description: '从视频转写文本中提取结构性大纲' },
@@ -53,51 +56,83 @@ const TaskProgressModal: React.FC<TaskProgressModalProps> = ({
       return
     }
 
+    let stopped = false
+    let notifiedRetry = false
+    let notifiedTerminal = false
+    let timer = 0
+    reportedStepRef.current = undefined
+
+    const stop = () => {
+      stopped = true
+      if (timer) window.clearInterval(timer)
+    }
+
     const checkStatus = async () => {
+      if (stopped) return
+
       try {
         const statusData = await projectApi.getProcessingStatus(projectId)
-        setStatus(statusData)
-        
-        // 更新项目状态
-        updateProject(projectId, {
-          status: statusData.status,
-          current_step: statusData.current_step,
-          total_steps: statusData.total_steps,
-          error_message: statusData.error_message
+        if (stopped) return
+        const view = toProcessingView(statusData)
+        reportedStepRef.current = typeof statusData.current_step === 'number' ? statusData.current_step : undefined
+        setStatus(view)
+
+        updateProjectRef.current(projectId, {
+          status: view.status,
+          current_step: view.current_step,
+          total_steps: view.total_steps,
+          error_message: view.error_message
         })
-        
-        // 如果处理完成，通知父组件
-        if (statusData.status === 'completed') {
-          onComplete?.(projectId)
+
+        if (shouldStopProcessingPoll({ phase: view.status })) {
+          stop()
+          if (view.status === 'completed') onCompleteRef.current?.(projectId)
+          if (view.status === 'error' && !notifiedTerminal) {
+            notifiedTerminal = true
+            message.error(`处理失败: ${view.error_message || '处理过程中发生未知错误'}`)
+          }
         }
       } catch (error) {
+        if (stopped) return
         console.error('Check status error:', error)
+        const kind = classifyStatusPollError(error)
+
+        if (shouldStopProcessingPoll({ error })) {
+          stop()
+          if (!notifiedTerminal) {
+            notifiedTerminal = true
+            message.error(kind === 'not_found' ? '项目不存在或已被删除' : '获取处理状态失败，请刷新页面重试')
+          }
+          return
+        }
+
+        if (notifiedRetry) return
+        notifiedRetry = true
+        if (kind === 'timeout') {
+          message.warning('网络连接超时，正在重试...')
+        }
       }
     }
 
-    // 立即检查一次状态
-    checkStatus()
-    
-    // 如果任务还在进行中，定期检查状态
-    const interval = setInterval(checkStatus, 2000)
-    
-    return () => clearInterval(interval)
-  }, [visible, projectId, updateProject, onComplete])
+    void checkStatus()
+    timer = window.setInterval(() => { void checkStatus() }, 2000)
+
+    return () => stop()
+  }, [visible, projectId, pollEpoch])
 
   const handleRetry = async () => {
     if (!projectId) return
     
     setLoading(true)
     try {
-      if (status?.current_step !== undefined) {
-        // 从当前步骤重试
-        await projectApi.restartStep(projectId, status.current_step)
+      if (reportedStepRef.current !== undefined) {
+        await projectApi.restartStep(projectId, reportedStepRef.current)
       } else {
         // 完全重试
         await projectApi.retryProcessing(projectId)
       }
-      // 重新开始状态检查
       setStatus(null)
+      setPollEpoch((epoch) => epoch + 1)
     } catch (error) {
       console.error('Retry error:', error)
     } finally {
