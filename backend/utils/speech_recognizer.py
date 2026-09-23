@@ -7,7 +7,8 @@ import subprocess
 import json
 import os
 import asyncio
-from typing import Optional, List, Dict, Any, Union
+import traceback
+from typing import Optional, List, Dict, Any, Union, Tuple
 from pathlib import Path
 from enum import Enum
 import requests
@@ -117,6 +118,57 @@ class SpeechRecognitionConfig:
 class SpeechRecognitionError(Exception):
     """语音识别错误"""
     pass
+
+
+def resolve_local_whisper_backend(device: Optional[str] = None) -> Tuple[str, str]:
+    """返回 (device, compute_type)。
+
+    默认 CPU + int8。``device="auto"`` 会在探测到 GPU 时改走 CUDA，再叠加
+    ``compute_type="int8"`` 时，faster-whisper 1.2.1 的第一次 ``encode`` /
+    ``generate`` 会抛 RuntimeError。CTranslate2 把特征形状错误报成
+    ValueError，所以这条 RuntimeError 是执行后端，不是坏的 mel。
+    桌面安装不依赖本机 CUDA，因此默认不走这条路径。
+
+    ``AUTOCLIP_WHISPER_DEVICE=cuda`` 用 float16（近期显卡上能跑通的类型）。
+    ``auto`` 交给 CTranslate2 自己的 default，不再强制 int8。
+    """
+    if device is None:
+        device = os.getenv("AUTOCLIP_WHISPER_DEVICE", "cpu")
+    device = (device or "cpu").strip().lower()
+    if device == "cuda":
+        return "cuda", "float16"
+    if device == "auto":
+        return "auto", "default"
+    return "cpu", "int8"
+
+
+def vad_backend_failed(exc: BaseException) -> bool:
+    """Silero VAD / onnxruntime 在转写前失败。encode 路径的 RuntimeError 不算。"""
+    if type(exc).__name__ in {"Fail", "InvalidArgument", "NoSuchFile"}:
+        return True
+    blob = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    return "vad.py" in blob or "onnxruntime" in blob
+
+
+def describe_whisper_failure(exc: BaseException) -> str:
+    """给客户端的一句说明，不带本地路径。"""
+    low = f"{type(exc).__name__} {exc}".lower()
+    if type(exc).__name__ in {"Fail", "InvalidArgument", "NoSuchFile"} or "onnxruntime" in low:
+        return (
+            "本地语音活动检测没有跑起来，字幕转写已中断。"
+            "请确认视频里有人声；若刚安装过 Whisper，到「设置 → 转写」重新安装后再试。"
+        )
+    if any(token in low for token in ("cuda", "cublas", "cudnn")):
+        return (
+            "本地 Whisper 在显卡上转写失败。"
+            "请重试；若仍失败，去掉 AUTOCLIP_WHISPER_DEVICE 让它走 CPU 后再试。"
+        )
+    if "n_fft" in low or "no speech" in low or ("audio" in low and "empty" in low):
+        return "没有从这段视频里识别到可用语音。请确认视频包含清晰人声，或直接导入 SRT 字幕。"
+    return (
+        "本地 Whisper 生成字幕失败。"
+        "请到「设置 → 转写」确认模型已下载，并检查视频有可播放的音轨。"
+    )
 
 
 class SpeechRecognizer:
@@ -376,14 +428,58 @@ class SpeechRecognizer:
 
             language = None if config.language == LanguageCode.AUTO else str(config.language).split("-")[0]
             models_dir = str(whisper_runtime.get_models_dir() / "hub")
-            logger.info(f"使用 faster-whisper 生成字幕: model={config.model} lang={language or 'auto'}")
-
-            # device=auto：Mac 上走 CPU（CTranslate2），int8 量化兼顾速度与体积
-            model = WhisperModel(
-                config.model, device="auto", compute_type="int8", download_root=models_dir,
+            device, compute_type = resolve_local_whisper_backend()
+            logger.info(
+                "使用 faster-whisper 生成字幕: model=%s lang=%s device=%s compute=%s",
+                config.model, language or "auto", device, compute_type,
             )
-            seg_iter, _info = model.transcribe(str(video_path), language=language, vad_filter=True)
-            segments = [{"start": s.start, "end": s.end, "text": s.text} for s in seg_iter]
+
+            def load_model(use_device: str, use_compute: str):
+                return WhisperModel(
+                    config.model,
+                    device=use_device,
+                    compute_type=use_compute,
+                    download_root=models_dir,
+                )
+
+            def transcribe(model, *, vad_filter: bool):
+                seg_iter, _info = model.transcribe(
+                    str(video_path), language=language, vad_filter=vad_filter,
+                )
+                return [{"start": s.start, "end": s.end, "text": s.text} for s in seg_iter]
+
+            def transcribe_with_vad_fallback(model):
+                try:
+                    return transcribe(model, vad_filter=True)
+                except Exception as exc:  # noqa: BLE001
+                    if not vad_backend_failed(exc):
+                        raise
+                    logger.warning(
+                        "语音活动检测失败（%s），改为不过滤静音后再转写",
+                        type(exc).__name__,
+                    )
+                    return transcribe(model, vad_filter=False)
+
+            try:
+                model = load_model(device, compute_type)
+            except Exception as exc:  # noqa: BLE001
+                if device == "cpu":
+                    raise
+                logger.warning("Whisper 无法在 %s 上加载（%s），改用 CPU", device, type(exc).__name__)
+                device = "cpu"
+                model = load_model("cpu", "int8")
+
+            try:
+                segments = transcribe_with_vad_fallback(model)
+            except RuntimeError as exc:
+                if device == "cpu":
+                    raise
+                logger.warning(
+                    "Whisper 在 %s 上转写失败（%s），改用 CPU 重试",
+                    device, type(exc).__name__,
+                )
+                segments = transcribe_with_vad_fallback(load_model("cpu", "int8"))
+
             if not segments:
                 raise SpeechRecognitionError("Whisper 未识别出任何语音内容")
 
@@ -399,8 +495,10 @@ class SpeechRecognizer:
                 f"Whisper 运行时缺少依赖（{e}）。请到「设置 → 语音识别」重新安装 Whisper。"
             )
         except Exception as e:  # noqa: BLE001
-            logger.error(f"本地 faster-whisper 生成字幕失败: {e}", exc_info=True)
-            raise SpeechRecognitionError(f"本地 Whisper 生成字幕失败: {e}")
+            # 不带 exc_info：LoggingIntegration 会把带堆栈的 error 记成 Sentry 异常。
+            # 这里已经变成给客户端的 SpeechRecognitionError，进程继续跑。
+            logger.warning("本地 faster-whisper 生成字幕失败: %s: %s", type(e).__name__, e)
+            raise SpeechRecognitionError(describe_whisper_failure(e)) from e
     
     def _generate_subtitle_openai_api(self, video_path: Path, output_path: Path, 
                                     config: SpeechRecognitionConfig) -> Path:

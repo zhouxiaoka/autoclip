@@ -68,6 +68,10 @@ class SimplePipelineAdapter:
         Returns:
             生成的SRT文件路径，如果失败返回None
         """
+        from backend.utils.speech_recognizer import (
+            SpeechRecognitionError,
+            generate_subtitle_for_video,
+        )
         try:
             logger.info(f"开始为视频 {video_path} 自动生成字幕")
             
@@ -77,7 +81,6 @@ class SimplePipelineAdapter:
             
             # 使用Whisper本地模型生成字幕
             try:
-                from backend.utils.speech_recognizer import generate_subtitle_for_video
                 from pathlib import Path
                 
                 video_file_path = Path(video_path)
@@ -99,15 +102,18 @@ class SimplePipelineAdapter:
                     logger.info(f"Whisper生成字幕成功: {srt_path}")
                     emit_progress(self.project_id, "SUBTITLE", "AI字幕生成完成", subpercent=40)
                     return srt_path
-                else:
-                    logger.warning("Whisper生成字幕失败")
+                logger.warning("Whisper生成字幕失败")
                     
+            except SpeechRecognitionError:
+                raise
             except Exception as e:
                 logger.warning(f"Whisper生成字幕失败: {e}")
             
             logger.error("Whisper字幕生成失败")
             return None
             
+        except SpeechRecognitionError:
+            raise
         except Exception as e:
             logger.error(f"自动生成字幕过程中发生错误: {e}")
             return None
@@ -172,8 +178,12 @@ class SimplePipelineAdapter:
                 logger.info(f"使用现有SRT文件: {input_srt_path}")
                 srt_path = Path(input_srt_path)
             else:
+                from backend.utils.speech_recognizer import SpeechRecognitionError
                 logger.warning("没有SRT文件，尝试自动生成字幕")
-                srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
+                try:
+                    srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
+                except SpeechRecognitionError as e:
+                    raise PipelineFailure("SUBTITLE", str(e), HINT_SUBTITLE) from e
                 if not (srt_path and srt_path.exists()):
                     # 以前这里写一个空大纲然后一路「成功」到底，用户看到的是 Completed · 0 切片
                     raise PipelineFailure(

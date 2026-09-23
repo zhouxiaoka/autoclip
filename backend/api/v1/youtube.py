@@ -448,6 +448,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         
         video_path = str(video_files[0])
         subtitle_path = str(subtitle_files[0]) if subtitle_files else ""
+        subtitle_error = None
         
         download_tasks[task_id].progress = 80.0
         
@@ -485,7 +486,8 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 await update_project_download_progress(project_id, 90.0, "字幕生成完成，正在准备处理...")
                 
             except SpeechRecognitionError as e:
-                logger.error(f"Whisper字幕生成失败: {e}")
+                logger.warning("Whisper字幕生成失败: %s", e)
+                whisper_error = str(e)
                 # Whisper失败时，尝试多种策略获取平台字幕作为备用
                 logger.info("尝试下载平台字幕作为备用方案")
                 try:
@@ -494,13 +496,16 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                         logger.info(f"备用字幕获取成功: {subtitle_path}")
                     else:
                         logger.warning("所有字幕获取策略都失败了")
-                        subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
+                        subtitle_path = None
+                        subtitle_error = whisper_error
                 except Exception as backup_error:
-                    logger.error(f"备用字幕获取也失败: {backup_error}")
-                    subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
+                    logger.warning("备用字幕获取也失败: %s", type(backup_error).__name__)
+                    subtitle_path = None
+                    subtitle_error = whisper_error
             except Exception as e:
-                logger.error(f"生成字幕过程中发生未知错误: {e}")
-                subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
+                logger.warning("生成字幕过程中发生未知错误: %s", type(e).__name__)
+                subtitle_path = None
+                subtitle_error = "本地 Whisper 生成字幕失败。请到「设置 → 转写」确认模型已下载，并检查视频有可播放的音轨。"
         
         logger.info(f"下载完成 - 视频文件: {video_path}, 字幕文件: {subtitle_path}")
         
@@ -584,12 +589,12 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 project.status = ProjectStatus.FAILED
                 if not project.processing_config:
                     project.processing_config = {}
-                project.processing_config["error_message"] = "字幕文件不存在且Whisper生成失败"
+                project.processing_config["error_message"] = subtitle_error or "字幕文件不存在且Whisper生成失败"
                 db.commit()
                 
                 # 更新任务状态为失败
                 download_tasks[task_id].status = "failed"
-                download_tasks[task_id].error_message = "字幕文件不存在且Whisper生成失败"
+                download_tasks[task_id].error_message = subtitle_error or "字幕文件不存在且Whisper生成失败"
                 download_tasks[task_id].progress = 0.0
                 download_tasks[task_id].project_id = str(project.id)
                 download_tasks[task_id].updated_at = datetime.now().isoformat()
