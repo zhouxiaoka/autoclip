@@ -5,9 +5,10 @@
 
 import enum
 from typing import Optional
-from sqlalchemy import Column, String, Text, JSON, Enum, Integer, DateTime
+from sqlalchemy import Column, String, Text, JSON, Integer, DateTime
 from sqlalchemy.orm import relationship
 from .base import BaseModel
+from .lenient_enum import LenientEnum
 
 class ProjectStatus(str, enum.Enum):
     """项目状态枚举"""
@@ -44,9 +45,9 @@ class Project(BaseModel):
         comment="项目描述"
     )
     
-    # 状态信息
+    # 状态信息。LenientEnum：库里的旧值（如已删除的 cancelled）不能让整页列表失败。
     status = Column(
-        Enum(ProjectStatus), 
+        LenientEnum(ProjectStatus, fallback=ProjectStatus.FAILED),
         default=ProjectStatus.PENDING,
         nullable=False,
         comment="项目状态"
@@ -54,7 +55,7 @@ class Project(BaseModel):
     
     # 项目类型
     project_type = Column(
-        Enum(ProjectType), 
+        LenientEnum(ProjectType, fallback=ProjectType.DEFAULT),
         default=ProjectType.DEFAULT,
         nullable=False,
         comment="项目类型"
