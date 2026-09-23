@@ -422,14 +422,14 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-end',
-            background: 'linear-gradient(to top, rgba(0,0,0,0.42), rgba(0,0,0,0))',
+            background: 'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.48) 48%, rgba(0,0,0,0) 100%)',
             borderRadius: '0',
             padding: '10px 12px',
-            height: '52px'
+            height: '64px'
           }}>
-            <Text style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.92)' }}>
+            <span style={{ fontSize: '12px', fontWeight: 500, lineHeight: '20px', color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
               {dayjs(project.created_at).tz('Asia/Shanghai').fromNow()}
-            </Text>
+            </span>
             
             {/* 操作按钮 */}
             <div 
