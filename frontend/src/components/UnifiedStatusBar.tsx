@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import React, { useEffect, useState } from 'react'
 import { Progress, Typography } from 'antd'
 import { useSimpleProgressStore, getStageDisplayName, getStageColor, isCompleted, isFailed } from '../stores/useSimpleProgressStore'
+import { readDownloadProgress } from '../utils/downloadProgress'
 
 const { Text } = Typography
 
@@ -74,7 +75,7 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
           if (response.ok) {
             const projectData = await response.json()
             console.log('项目数据:', projectData)
-            const newProgress = projectData.processing_config?.download_progress || 0
+            const newProgress = readDownloadProgress(projectData)
             console.log(`下载进度更新: ${newProgress}%`)
             setCurrentDownloadProgress(newProgress)
             onDownloadProgressUpdate?.(newProgress)

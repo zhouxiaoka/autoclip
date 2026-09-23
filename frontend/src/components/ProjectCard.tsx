@@ -10,6 +10,7 @@ import { UnifiedStatusBar } from './UnifiedStatusBar'
 import FeedbackDialog from './FeedbackDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn } from '../ui'
+import { isSourceDownloading, readDownloadProgress } from '../utils/downloadProgress'
 // import { 
 //   getProjectStatusConfig, 
 //   calculateProjectProgress, 
@@ -230,9 +231,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     generateThumbnail()
   }, [project.id, project.video_path, thumbnailCacheKey])
 
-  // 检查是否是下载状态 - 根据下载进度判断
-  const downloadProgress = project.processing_config?.download_progress || 0
-  const isDownloading = project.status === 'pending' && downloadProgress > 0 && downloadProgress < 100
+  // 片源进度在接口的 settings 上（后端字段名 processing_config）。
+  // 读错字段时进度恒为 0，下面会把所有 pending 画成 5%。
+  const downloadProgress = readDownloadProgress(project)
+  const isDownloading = isSourceDownloading(project)
   const isImporting = project.status === 'pending' && !isDownloading
   
   // 状态标准化处理
