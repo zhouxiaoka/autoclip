@@ -124,7 +124,7 @@ const PublishClipPage: React.FC = () => {
           const workspace = await studioApi.get(projectId)
           if (cancelled || runId.current !== session) return
           const exported = workspace.jobs.find(job => job.job_id === studioJobId && job.status === 'completed')
-          if (!exported) throw new Error('成片尚未完成或不存在，请返回项目重新导出')
+          if (!exported) throw new Error(t('成片尚未完成或不存在，请返回项目重新导出'))
           nextTitle = exported.title
           setStudioRevision(exported.revision)
         }
@@ -491,7 +491,7 @@ const PublishClipPage: React.FC = () => {
 
       {!loading && (
         <p className="ac-sub" style={{ marginTop: 16 }}>
-          {studioJobId ? `发布已导出的 V${studioRevision ?? '—'} 成片，保留画幅、文字和声音。需要修改时，请返回编辑器另行导出。` : t("成片跟着账号走：有竖屏账号就渲成 9:16，只发 B 站时按横屏，只有横屏海外账号时按原画。")}
+          {studioJobId ? t('发布已导出的 V{{revision}} 成片，保留画幅、文字和声音。需要修改时，请返回编辑器另行导出。', { revision: studioRevision ?? '—' }) : t("成片跟着账号走：有竖屏账号就渲成 9:16，只发 B 站时按横屏，只有横屏海外账号时按原画。")}
         </p>
       )}
       {busy && <div style={{ marginTop: 16 }}><ProgressLine percent={percent} /></div>}
