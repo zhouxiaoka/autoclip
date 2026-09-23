@@ -37,7 +37,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onVi
 
   return (
     <article className="ac-card">
-      <div className="ac-card-thumb" onClick={() => onView(collection)} role="button" aria-label="预览合集">
+      <div className="ac-card-thumb" onClick={onEdit || (() => onView(collection))} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (onEdit || (() => onView(collection)))() } }} role="button" aria-label={onEdit ? '预览与修改' : '预览合集'}>
         {hasThumb && (
           <img src={thumbnailUrl} alt="" onError={() => setImgError(true)} draggable={false} />
         )}
@@ -64,7 +64,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onVi
         <div className="ac-card-foot">
           <span className="meta">{collectionClips.length} 段 · {fmtDuration(totalDuration)}</span>
           <div className="ac-card-actions">
-            <Btn variant="text" onClick={onEdit || (() => onView(collection))}>{onEdit ? '预览与制作' : '预览'}</Btn>
+            <Btn variant="text" onClick={onEdit || (() => onView(collection))}>{onEdit ? '预览与修改' : '预览'}</Btn>
             {onGenerateVideo && <Btn variant="text" onClick={() => onGenerateVideo(collection.id)}>下载</Btn>}
             <Btn variant="text" onClick={() => onView(collection)}>管理合集</Btn>
           </div>

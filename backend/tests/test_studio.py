@@ -703,3 +703,28 @@ def test_thumbnail_failure_does_not_cache_empty_frame(monkeypatch):
     with pytest.raises(ValueError, match='缩略图'):
         thumbnails._frame('/unused', 1, 1, 0)
     assert thumbnails._frame.cache_info().currsize == 0
+
+
+def test_legacy_editor_resumes_saved_edits_without_creating_duplicates(client, root):
+    request = {'clip_ids':['c1','c2'], 'title':'Original', 'reuse_existing':True}
+    first = client.post('/studio/p1/drafts',json=request).json()
+    edited = client.put('/studio/p1/drafts/'+first['id'],json={**first,'hook':'Saved opening','scenes':first['scenes'][:1]}).json()
+    again = client.post('/studio/p1/drafts',json=request).json()
+    assert again['id'] == edited['id'] and again['revision'] == 2
+    assert again['hook'] == 'Saved opening' and len(again['scenes']) == 1
+    assert len(store.read('p1')['drafts']) == 1
+    separate = client.post('/studio/p1/drafts',json={**request,'reuse_existing':False}).json()
+    assert separate['id'] != first['id']
+    assert client.post('/studio/p1/drafts',json=request).json()['id'] == first['id']
+    reordered = client.post('/studio/p1/drafts',json={**request,'clip_ids':['c2','c1']}).json()
+    assert reordered['id'] not in (first['id'],separate['id'])
+    assert client.post('/studio/p1/drafts',json={**request,'clip_ids':['other-project-clip']}).status_code == 404
+
+
+def test_concurrent_legacy_editor_open_creates_one_draft(root):
+    from concurrent.futures import ThreadPoolExecutor
+    import uuid
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(lambda _:store.open_legacy_editor('p1',draft().model_copy(update={'id':uuid.uuid4().hex}),'same-source',reuse_existing=True),range(6)))
+    assert len({d['id'] for d in results}) == 1
+    assert len(store.read('p1')['drafts']) == 1

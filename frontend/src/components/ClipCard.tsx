@@ -78,9 +78,11 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
         <div
           className="ac-card-thumb"
           style={videoThumbnail ? { backgroundImage: `url(${videoThumbnail})` } : undefined}
-          onClick={() => setShowPlayer(true)}
+          onClick={onEdit || (() => setShowPlayer(true))}
+          tabIndex={0}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (onEdit || (() => setShowPlayer(true)))() } }}
           role="button"
-          aria-label="播放"
+          aria-label={onEdit ? '预览与修改' : '播放'}
         >
           <div className="play"><span><Icon.Play size={18} /></span></div>
           <span className="ac-tag ac-tag--tr" title="推荐分">{score}</span>
@@ -100,7 +102,7 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
           <div className="ac-card-foot">
             <span className="meta">{fmtDuration(durationSec)}</span>
             <div className="ac-card-actions">
-              <Btn variant="text" onClick={onEdit || (() => setShowPlayer(true))}>{onEdit ? '预览与制作' : '播放'}</Btn>
+              <Btn variant="text" onClick={onEdit || (() => setShowPlayer(true))}>{onEdit ? '预览与修改' : '播放'}</Btn>
               <Btn variant="text" onClick={handleDownload}>下载</Btn>
               {projectId && <Btn variant="text" onClick={() => setShowExport(true)}>导出</Btn>}
             </div>

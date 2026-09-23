@@ -11,7 +11,7 @@ export const studioApi = {
   confirmPlan: (pid: string, planId: string, goals: Goal[], options: ImportOptions) => api.post(`/studio/${pid}/start`, {plan_id:planId, goals, language:options.language, aspect:options.aspect, duration:options.duration}),
   correctPlan: (pid: string, body: ImportOptions) => api.put(`/studio/${pid}/plan`, body),
   analyze: (pid: string) => api.post(`/studio/${pid}/analyze`),
-  create: (pid: string, clip_ids: string[], title: string): Promise<Draft> => api.post(`/studio/${pid}/drafts`, { clip_ids, title }),
+  create: (pid: string, clip_ids: string[], title: string, reuse_existing = false): Promise<Draft> => api.post(`/studio/${pid}/drafts`, { clip_ids, title, reuse_existing }),
   eventDraft: (pid: string, id: string): Promise<Draft> => api.post(`/studio/${pid}/events/${id}/draft`),
   save: (pid: string, draft: Draft): Promise<Draft> => api.put(`/studio/${pid}/drafts/${draft.id}`, draft),
   duplicate: (pid: string, draft: Draft, title: string, language: Language): Promise<Draft> => api.post(`/studio/${pid}/drafts/${draft.id}/duplicate`, { draft, title, language }),

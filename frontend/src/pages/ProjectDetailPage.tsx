@@ -194,7 +194,7 @@ const ProjectDetailPage: React.FC = () => {
 
   const createDraft = async (clipIds: string[], title: string) => {
     try {
-      const draft = await studioApi.create(id!, clipIds, title)
+      const draft = await studioApi.create(id!, clipIds, title, true)
       navigate(`/project/${id}/studio/${draft.id}`)
     } catch (e) { message.error(errorText(e)) }
   }
