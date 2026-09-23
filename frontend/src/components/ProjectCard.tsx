@@ -670,7 +670,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 onStatusChange={() => {}}
               />
               <div style={{ color: 'var(--ac-muted)', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
-                {isVisual ? <>{project.settings?.studio_draft_count || project.processing_config?.studio_draft_count || 0} 成片草稿</> : <>{t("切片数量", { count: project.total_clips || 0 })}<span style={{ margin: '0 6px' }}>·</span>{t("合集数量", { count: project.total_collections || 0 })}</>}
+                {isVisual ? <>{t('成片草稿数量', { count: project.settings?.studio_draft_count || project.processing_config?.studio_draft_count || 0 })}</> : <>{t("切片数量", { count: project.total_clips || 0 })}<span style={{ margin: '0 6px' }}>·</span>{t("合集数量", { count: project.total_collections || 0 })}</>}
               </div>
             </div>
           )}
