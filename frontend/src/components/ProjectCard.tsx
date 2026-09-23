@@ -10,6 +10,7 @@ import { UnifiedStatusBar } from './UnifiedStatusBar'
 import FeedbackDialog from './FeedbackDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn } from '../ui'
+import { classifyLlmKeyFailure } from '../utils/llmFailure'
 // import { 
 //   getProjectStatusConfig, 
 //   calculateProjectProgress, 
@@ -290,6 +291,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     stage: failedProgress?.stage,
     error_message: project.error_message || failedProgress?.message || undefined,
   }
+  const llmKeyFailure = classifyLlmKeyFailure(
+    project.error_message || failedProgress?.message,
+    project.error_code,
+  )
 
   const handleRetry = async (opts?: { silent?: boolean }) => {
     if (isRetrying) return
@@ -634,6 +639,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               {normalizedStatus === 'failed' && (
                 // 失败态：重试 + 反馈（反馈自动带上阶段 / 错误 / 版本 / 模型上下文）
                 <div style={{ display: 'flex', gap: 2, flex: '0 0 auto' }} onClick={(e) => e.stopPropagation()}>
+                  {llmKeyFailure && (
+                    <Btn variant="text" size="sm" style={{ height: 26, padding: '0 8px', fontSize: 12.5 }} onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>
+                  )}
                   <Btn variant="text" size="sm" style={{ height: 26, padding: '0 8px', fontSize: 12.5 }} loading={isRetrying} onClick={() => handleRetry()}>{t("重试")}</Btn>
                   <Btn variant="text" size="sm" style={{ height: 26, padding: '0 8px', fontSize: 12.5 }} onClick={() => setFeedbackOpen(true)}>{t("反馈")}</Btn>
                 </div>

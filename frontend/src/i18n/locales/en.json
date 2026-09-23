@@ -777,5 +777,9 @@
   "操作教程": "How-to",
   "海外": "Overseas",
   "贴三个 Cookie 后保存。配好后，发布页会出现 B 站。": "Paste the three cookies and save. Bilibili then appears on the publish page.",
-  "在 Upload-Post 填密钥。配好后，在切片的发布页直接选。": "Add the Upload-Post key here. After that, pick it on the clip’s publish page."
+  "在 Upload-Post 填密钥。配好后，在切片的发布页直接选。": "Add the Upload-Post key here. After that, pick it on the clip’s publish page.",
+  "还没有可用的模型": "No model is ready yet",
+  "切片分析需要你自己的 API Key。打开「设置 → 模型」，填上提供商、密钥和模型名，再点「测试连接」。密钥在该提供商的控制台申请，只保存在这台机器上。": "Bring your own API key from that provider's console, then open Settings → Model, enter the provider, key, and model, and run Test connection.",
+  "打开模型设置": "Open model settings",
+  "模型设置": "Model settings"
 }

@@ -70,6 +70,9 @@ def test_step1_all_chunks_failing_surfaces_llm_error(tmp_path, prompt_files, mon
     assert exc.value.stage == "ANALYZE"
     assert "1/1" in exc.value.message
     assert "未配置LLM提供商" in exc.value.message
+    assert exc.value.code == "llm_not_configured"
+    assert "自备" in exc.value.hint
+    assert "设置 → 模型" in exc.value.hint
     assert "测试连接" in exc.value.hint
 
 
@@ -140,8 +143,11 @@ def test_adapter_fails_fast_when_llm_not_configured(adapter, monkeypatch, tmp_pa
 
     assert result["status"] == "failed"
     assert result["stage"] == "ANALYZE"
+    assert result["error_code"] == "llm_not_configured"
     assert "Google Gemini · gemini-2.5-flash" in result["error"]
     assert "设置 → 模型" in result["error"]
+    assert "自备 API Key" in result["error"]
+    assert "控制台" in result["error"]
     assert result["message"] == result["error"]
     # 进度事件带着失败阶段，前端失败态 / 反馈对话框能拿到
     assert adapter._events[-1][0] == "ANALYZE"
@@ -288,7 +294,15 @@ def test_project_response_exposes_latest_task_error(monkeypatch):
     project = SimpleNamespace(id="p1", status="failed", project_metadata={})
 
     assert svc.latest_error_message(project) == task.error_message
+    assert svc.latest_error_code(project) is None
     assert svc.latest_error_message(SimpleNamespace(id="p1", status="completed", project_metadata={})) is None
+
+    keyed = SimpleNamespace(
+        error_message="没有可用的 LLM 提供商，缺少 API Key。",
+        result_data={"error_code": "llm_not_configured"},
+    )
+    svc.db = SimpleNamespace(query=lambda model: Q([keyed]))
+    assert svc.latest_error_code(project) == "llm_not_configured"
 
 
 def test_project_response_falls_back_to_metadata_for_cli_runs():
@@ -302,9 +316,10 @@ def test_project_response_falls_back_to_metadata_for_cli_runs():
     svc = ProjectService.__new__(ProjectService)
     svc.db = SimpleNamespace(query=lambda model: Q())
     project = SimpleNamespace(id="p1", status=SimpleNamespace(value="failed"),
-                              project_metadata={"last_error": "没有可用的 LLM 提供商"})
+                              project_metadata={"last_error": "没有可用的 LLM 提供商", "last_error_code": "llm_not_configured"})
 
     assert svc.latest_error_message(project) == "没有可用的 LLM 提供商"
+    assert svc.latest_error_code(project) == "llm_not_configured"
 
 
 def test_processing_task_reads_error_field_from_adapter_result():
