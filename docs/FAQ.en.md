@@ -59,6 +59,10 @@ Inside Docker, `localhost` refers to the container. See the [Docker guide](DOCKE
 
 Local file import accepts an optional `.srt`. Without usable subtitles, you need speech transcription: install the Whisper components and model in Settings first. CLI users can install `faster-whisper`. Convert other subtitle formats to accurately timed SRT rather than assuming every format is accepted.
 
+### What if installing Whisper on Windows still says mlx-whisper only supports Apple Silicon?
+
+If Settings → Transcription → Install still shows the red error 「mlx-whisper 仅支持 Apple Silicon (macOS)」 on Windows or any other non-Mac system, update to the next installer that includes the [#145](https://github.com/zhouxiaoka/autoclip/pull/145) fix (newer than the released v1.3.2). On desktop, use Settings → Application → Check for updates, or download it from [Releases](https://github.com/zhouxiaoka/autoclip/releases). Older builds showed that message and blocked the install by mistake. After you update, use the same Install button. See [#141](https://github.com/zhouxiaoka/autoclip/issues/141).
+
 ### Why were no clips generated?
 
 Read the project error first, then check the failed stage:
