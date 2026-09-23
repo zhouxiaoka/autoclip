@@ -764,7 +764,11 @@ async def get_processing_status(
         status = processing_service.get_processing_status(project_id, str(latest_task.id))
         
         return status
-    except Exception as e:
+    except HTTPException:
+        # 404 等预期响应原样返回。记成 exception 会被 Sentry 当成故障，
+        # 外层再包一层 500 会让处理页把「项目不存在」当成服务器错误一直重试。
+        raise
+    except Exception:
         logger.exception("获取处理状态失败: %s", project_id)
         raise HTTPException(status_code=500, detail="获取处理状态失败，请稍后重试")
 

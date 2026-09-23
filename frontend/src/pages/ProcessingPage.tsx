@@ -4,25 +4,22 @@ import { Layout, Card, Progress, Steps, Typography, Button, Alert, Space, Spin, 
 import { CheckCircleOutlined, LoadingOutlined, ExclamationCircleOutlined, ArrowLeftOutlined } from '@ant-design/icons'
 import { projectApi } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
+import {
+  httpStatusOf,
+  shouldStopProcessingPoll,
+  toProcessingView,
+  type ProcessingStatusView,
+} from './processingStatusPoll'
 
 const { Content } = Layout
 const { Title, Text } = Typography
 const { Step } = Steps
 
-interface ProcessingStatus {
-  status: 'processing' | 'completed' | 'error'
-  current_step: number
-  total_steps: number
-  step_name: string
-  progress: number
-  error_message?: string
-}
-
 const ProcessingPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { currentProject, setCurrentProject } = useProjectStore()
-  const [status, setStatus] = useState<ProcessingStatus | null>(null)
+  const [status, setStatus] = useState<ProcessingStatusView | null>(null)
   const [loading, setLoading] = useState(true)
 
   const steps = [
@@ -36,12 +33,71 @@ const ProcessingPage: React.FC = () => {
 
   useEffect(() => {
     if (!id) return
-    
+
+    let stopped = false
+    let notifiedRetry = false
+    let timer = 0
+
+    const stop = () => {
+      stopped = true
+      if (timer) window.clearInterval(timer)
+    }
+
+    const checkStatus = async () => {
+      if (stopped) return
+
+      try {
+        const statusData = await projectApi.getProcessingStatus(id)
+        if (stopped) return
+        const view = toProcessingView(statusData)
+        setStatus(view)
+
+        if (shouldStopProcessingPoll({ phase: view.status })) {
+          stop()
+        }
+
+        if (view.status === 'completed') {
+          message.success('🎉 视频处理完成！正在跳转到结果页面...')
+          window.setTimeout(() => navigate(`/project/${id}`), 2000)
+          return
+        }
+
+        if (view.status === 'error') {
+          const errorMsg = view.error_message || '处理过程中发生未知错误'
+          message.error(`处理失败: ${errorMsg}`)
+          message.info('您可以返回首页重新上传文件或联系技术支持', 5)
+        }
+      } catch (error: any) {
+        if (stopped) return
+        console.error('Check status error:', error)
+        const httpStatus = httpStatusOf(error)
+
+        if (shouldStopProcessingPoll({ httpStatus })) {
+          stop()
+          if (httpStatus === 404) {
+            message.error('项目不存在或已被删除')
+            window.setTimeout(() => navigate('/'), 2000)
+          } else {
+            message.error('获取处理状态失败，请刷新页面重试')
+          }
+          return
+        }
+
+        if (notifiedRetry) return
+        notifiedRetry = true
+        if (error.code === 'ECONNABORTED') {
+          message.warning('网络连接超时，正在重试...')
+        } else {
+          message.error('获取处理状态失败，请刷新页面重试')
+        }
+      }
+    }
+
     loadProject()
-    const interval = setInterval(checkStatus, 2000) // 每2秒检查一次状态
-    
-    return () => clearInterval(interval)
-  }, [id])
+    timer = window.setInterval(() => { void checkStatus() }, 2000)
+
+    return () => stop()
+  }, [id, navigate])
 
   const loadProject = async () => {
     if (!id) return
@@ -77,45 +133,6 @@ const ProcessingPage: React.FC = () => {
     } catch (error) {
       message.error('启动处理失败')
       console.error('Start processing error:', error)
-    }
-  }
-
-  const checkStatus = async () => {
-    if (!id) return
-    
-    try {
-      const statusData = await projectApi.getProcessingStatus(id)
-      setStatus(statusData)
-      
-      // 如果处理完成，跳转到项目详情页
-      if (statusData.status === 'completed') {
-        message.success('🎉 视频处理完成！正在跳转到结果页面...')
-        setTimeout(() => {
-          navigate(`/project/${id}`)
-        }, 2000)
-      }
-      
-      // 如果处理失败，显示详细错误信息
-      if (statusData.status === 'error') {
-        const errorMsg = statusData.error_message || '处理过程中发生未知错误'
-        message.error(`处理失败: ${errorMsg}`)
-        
-        // 提供重试选项
-        message.info('您可以返回首页重新上传文件或联系技术支持', 5)
-      }
-      
-    } catch (error: any) {
-      console.error('Check status error:', error)
-      
-      // 根据错误类型提供不同的处理建议
-      if (error.response?.status === 404) {
-        message.error('项目不存在或已被删除')
-        setTimeout(() => navigate('/'), 2000)
-      } else if (error.code === 'ECONNABORTED') {
-        message.warning('网络连接超时，正在重试...')
-      } else {
-        message.error('获取处理状态失败，请刷新页面重试')
-      }
     }
   }
 

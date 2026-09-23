@@ -14,6 +14,7 @@ from enum import Enum
 
 from ..models.project import ProjectType
 from ..core.database import get_db
+from ..core.path_utils import get_projects_directory
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +51,29 @@ class ProcessingParams:
     max_topics_per_chunk: int = 8
 
 
+def resolve_project_directory(project_id: str) -> Path:
+    """Resolve a project directory independent of the process cwd.
+
+    Desktop launches set AUTOCLIP_DATA_DIR / AUTOCLIP_APP_DIR and often have a
+    cwd where a relative ``data/projects`` mkdir fails. Web and Docker keep
+    using the shared data directory (project root ``data/`` unless overridden).
+    An absolute path is used as-is so callers can pass an explicit directory.
+    """
+    candidate = Path(project_id)
+    if candidate.is_absolute():
+        project_dir = candidate
+    else:
+        project_dir = get_projects_directory() / project_id
+    project_dir.mkdir(parents=True, exist_ok=True)
+    return project_dir
+
+
 class ProjectConfigManager:
     """项目配置管理器"""
     
     def __init__(self, project_id: str):
         self.project_id = project_id
-        self.project_dir = Path(f"data/projects/{project_id}")
+        self.project_dir = resolve_project_directory(project_id)
         self.config_path = self.project_dir / "config.yaml"
         # 使用绝对路径指向项目根目录的prompt文件夹
         project_root = Path(__file__).parent.parent.parent
