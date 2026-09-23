@@ -295,6 +295,7 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
         
         video_path = download_result.get('video_path', '')
         subtitle_path = download_result.get('subtitle_path', '')
+        subtitle_error = None
         
         # 更新项目进度
         await update_project_download_progress(project_id, 60.0, "视频下载完成，正在处理字幕...")
@@ -334,13 +335,13 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
                 await update_project_download_progress(project_id, 90.0, "字幕生成完成，正在准备处理...")
                 
             except SpeechRecognitionError as e:
-                logger.error(f"Whisper字幕生成失败: {e}")
-                # Whisper失败时，标记项目为失败状态
-                logger.error("字幕文件不存在且Whisper生成失败，项目将标记为失败状态")
-                subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
+                logger.warning("Whisper字幕生成失败: %s", e)
+                subtitle_path = None
+                subtitle_error = str(e)
             except Exception as e:
-                logger.error(f"生成字幕过程中发生未知错误: {e}")
-                subtitle_path = None  # 确保字幕路径为空，后续会标记项目失败
+                logger.warning("生成字幕过程中发生未知错误: %s", type(e).__name__)
+                subtitle_path = None
+                subtitle_error = "本地 Whisper 生成字幕失败。请到「设置 → 转写」确认模型已下载，并检查视频有可播放的音轨。"
         
         download_tasks[task_id].progress = 80.0
         
@@ -423,12 +424,12 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
                 project.status = ProjectStatus.FAILED
                 if not project.processing_config:
                     project.processing_config = {}
-                project.processing_config["error_message"] = "字幕文件不存在且Whisper生成失败"
+                project.processing_config["error_message"] = subtitle_error or "字幕文件不存在且Whisper生成失败"
                 db.commit()
                 
                 # 更新任务状态为失败
                 download_tasks[task_id].status = "failed"
-                download_tasks[task_id].error_message = "字幕文件不存在且Whisper生成失败"
+                download_tasks[task_id].error_message = subtitle_error or "字幕文件不存在且Whisper生成失败"
                 download_tasks[task_id].progress = 0.0
                 download_tasks[task_id].project_id = str(project.id)
                 download_tasks[task_id].updated_at = datetime.now().isoformat()

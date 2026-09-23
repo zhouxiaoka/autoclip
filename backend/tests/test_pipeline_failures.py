@@ -166,6 +166,28 @@ def test_adapter_fails_when_no_subtitle_and_auto_transcribe_yields_nothing(adapt
     assert not (tmp_path / "projects" / "proj-1" / "metadata" / "step1_outline.json").exists()
 
 
+def test_adapter_surfaces_whisper_error_on_the_subtitle_stage(adapter, monkeypatch, tmp_path):
+    """转写失败要把可读原因带回失败态，而不是只留「没有字幕」。"""
+    from backend.utils.speech_recognizer import SpeechRecognitionError
+
+    _fake_manager(monkeypatch, available=True)
+    video = tmp_path / "in.mp4"
+    video.write_bytes(b"x")
+
+    def fail(*_args, **_kwargs):
+        raise SpeechRecognitionError("本地 Whisper 在显卡上转写失败。请重试。")
+
+    monkeypatch.setattr("backend.utils.speech_recognizer.generate_subtitle_for_video", fail)
+
+    result = asyncio.run(adapter.process_project_sync(str(video), ""))
+
+    assert result["status"] == "failed"
+    assert result["stage"] == "SUBTITLE"
+    assert "显卡" in result["error"]
+    assert "设置 → 转写" in result["error"]
+    assert result["message"] == result["error"]
+
+
 def test_adapter_fails_when_scoring_keeps_nothing(adapter, monkeypatch, tmp_path):
     from backend.services import simple_pipeline_adapter as mod
 
