@@ -88,3 +88,20 @@ def duplicate_draft(project_id, request):
         data['drafts'].append(result)
         return result
     return change(project_id, mutate)
+
+
+def open_legacy_editor(project_id, draft, source_key, *, reuse_existing):
+    """Resume the linked edit atomically; explicit new drafts never replace that link."""
+    def mutate(data):
+        links = data.get('legacy_editors', {})
+        if reuse_existing:
+            linked = next((d for d in data['drafts'] if d['id'] == links.get(source_key)), None)
+            if linked is not None:
+                return linked
+        result = draft.model_dump()
+        result.update(revision=1, updated_at=now())
+        data['drafts'].append(result)
+        if reuse_existing:
+            data.setdefault('legacy_editors', {})[source_key] = result['id']
+        return result
+    return change(project_id, mutate)
