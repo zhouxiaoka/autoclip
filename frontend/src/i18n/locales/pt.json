@@ -781,5 +781,16 @@
   "还没有可用的模型": "Ainda não há um modelo pronto",
   "切片分析需要你自己的 API Key。打开「设置 → 模型」，填上提供商、密钥和模型名，再点「测试连接」。密钥在该提供商的控制台申请，只保存在这台机器上。": "Traga sua própria chave de API do console desse provedor, abra Configurações → Modelo, preencha o provedor, a chave e o modelo, e execute Testar conexão.",
   "打开模型设置": "Abrir configurações do modelo",
-  "模型设置": "Configurações do modelo"
+  "模型设置": "Configurações do modelo",
+  "还没有安装本地转写": "A transcrição local não está instalada",
+  "这条视频没有自带字幕。到「设置 → 转写」安装 Whisper 并下载一个模型，或重新导入时带上 .srt。": "Este vídeo não tem legendas. Instale o Whisper e baixe um modelo em Configurações → Transcrição, ou importe de novo com um arquivo .srt.",
+  "Whisper 上次没有装上": "O Whisper não terminou de instalar",
+  "这条视频没有自带字幕，而且上次安装 Whisper 没有成功。到「设置 → 转写」重试安装，或重新导入时带上 .srt。": "Este vídeo não tem legendas, e a última instalação do Whisper não deu certo. Tente de novo em Configurações → Transcrição, ou importe de novo com um arquivo .srt.",
+  "转写没有得到字幕": "A transcrição não gerou legendas",
+  "Whisper 已经装好，但这条视频没有识别出可用语音。确认有清晰人声后重试，或重新导入时带上 .srt。": "O Whisper está instalado, mas este vídeo não produziu fala utilizável. Confirme que há fala clara e tente de novo, ou importe de novo com um arquivo .srt.",
+  "没有字幕可分析": "Não há legendas para analisar",
+  "这条视频没有自带字幕，本地转写也没有结果。可以到「设置 → 转写」安装或重试 Whisper，也可以重新导入时带上 .srt。": "Este vídeo não tem legendas, e a transcrição local não produziu resultado. Instale ou tente o Whisper de novo em Configurações → Transcrição, ou importe de novo com um arquivo .srt.",
+  "到「设置 → 转写」检查 Whisper 是否安装、模型是否已下载，或重新导入时带上 .srt。": "Em Configurações → Transcrição, confira se o Whisper está instalado e se há um modelo baixado, ou importe de novo com um arquivo .srt.",
+  "打开转写设置": "Abrir configurações de transcrição",
+  "转写设置": "Transcrição"
 }

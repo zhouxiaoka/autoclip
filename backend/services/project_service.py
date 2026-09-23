@@ -92,7 +92,7 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         return meta.get("last_error") or None, meta.get("last_error_code") or None
 
     def latest_error_message(self, project, status=None) -> Optional[str]:
-        """项目失败时的错误文本。"""
+        """项目失败时的错误文本。Project 表没有 error_message 列。"""
         message, _code = self.latest_failure(project, status)
         return message
 

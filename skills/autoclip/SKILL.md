@@ -77,7 +77,7 @@ autoclip publish --list-profiles / autoclip publish --status <request_id>
 
 ## 常见问题
 
-- **没有字幕、首次运行很慢**：Whisper 模型首次下载；提前告知用户。Whisper 未安装时 `check_environment.whisper.ok=false`，让用户在桌面应用「设置 → 语音识别」一键安装，或传 `srt_path`。
+- **没有字幕、首次运行很慢**：Whisper 模型首次下载；提前告知用户。Whisper 未安装时 `check_environment.whisper.ok=false`，让用户在桌面应用「设置 → 转写」一键安装，或传 `srt_path`。
 - **模型连接失败**：`check_environment.llm.error` 给出了原因。`ollama` 不可达 → 提示 `ollama serve` 并 `ollama pull qwen2.5:7b`；云端 provider → 缺 key，让用户在桌面应用设置页填，或传 `api_key`。
 - **切片为 0**：降低 `min_score` 到 0.5；仍为 0 说明内容本身不适合切高光（如纯音乐 / 无对话）。
 - **系统代理导致本地地址 502**：AutoClip 对 localhost / 内网地址自动绕过代理，不需要用户改 Clash 规则。

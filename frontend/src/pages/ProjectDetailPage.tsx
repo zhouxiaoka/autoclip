@@ -5,7 +5,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { message } from 'antd'
 import dayjs from 'dayjs'
 import { useProjectStore, Clip, Collection } from '../store/useProjectStore'
-import { projectApi } from '../services/api'
+import { projectApi, speechApi } from '../services/api'
+import SubtitleFailureEmpty from '../components/SubtitleFailureEmpty'
+import { classifySubtitleFailure, type SubtitleFailureKind } from '../utils/subtitleFailure'
 import ClipCard from '../components/ClipCard'
 import CollectionCard from '../components/CollectionCard'
 import CollectionPreviewModal from '../components/CollectionPreviewModal'
@@ -48,6 +50,33 @@ const ProjectDetailPage: React.FC = () => {
     loadProject()
     loadProcessingStatus()
   }, [id])
+
+  const subtitleKind = classifySubtitleFailure(currentProject?.error_message, currentProject?.error_code)
+  const [refinedSubtitle, setRefinedSubtitle] = useState<{ id?: string; kind: SubtitleFailureKind } | null>(null)
+  useEffect(() => {
+    // 1.3.2 只留下一句「本地转写没有生成结果」。升级后按这台机器现在的 Whisper 状态说清楚下一步。
+    if (subtitleKind !== 'subtitle_unknown' || !currentProject?.id) return
+    const projectId = currentProject.id
+    let cancelled = false
+    speechApi.getRuntimeStatus()
+      .then((rt) => {
+        if (cancelled) return
+        const kind: SubtitleFailureKind | null = rt.status === 'error'
+          ? 'whisper_install_failed'
+          : rt.status === 'installed'
+            ? 'transcription_empty'
+            : rt.status === 'not_installed'
+              ? 'whisper_not_installed'
+              : null
+        if (kind) setRefinedSubtitle({ id: projectId, kind })
+      })
+      .catch(() => { /* 问不到状态时保留通用说明 */ })
+    return () => { cancelled = true }
+  }, [subtitleKind, currentProject?.id])
+  const refinedKind = refinedSubtitle && refinedSubtitle.id === currentProject?.id ? refinedSubtitle.kind : null
+  const shownSubtitleKind = subtitleKind === 'subtitle_unknown'
+    ? (refinedKind || subtitleKind)
+    : subtitleKind
 
   const loadProject = async () => {
     if (!id) return
@@ -274,7 +303,7 @@ const ProjectDetailPage: React.FC = () => {
           {isFailed && (
             <div style={{ display: 'flex', gap: 8, flex: '0 0 auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <Btn onClick={() => setFeedbackOpen(true)}>{t("反馈问题")}</Btn>
-              <Btn variant={llmKeyFailure ? undefined : 'cta'} onClick={handleRetryProcessing} loading={statusLoading}>{t("重试")}</Btn>
+              <Btn variant={llmKeyFailure || shownSubtitleKind ? undefined : 'cta'} onClick={handleRetryProcessing} loading={statusLoading}>{t("重试")}</Btn>
             </div>
           )}
         </div>
@@ -357,6 +386,12 @@ const ProjectDetailPage: React.FC = () => {
             )}
           </Section>
         </>
+      ) : isFailed && shownSubtitleKind ? (
+        <SubtitleFailureEmpty
+          kind={shownSubtitleKind}
+          errorMessage={currentProject.error_message}
+          onOpenSettings={() => navigate('/settings?section=speech')}
+        />
       ) : isFailed && llmKeyFailure ? (
         <LlmKeyFailureEmpty
           errorMessage={currentProject.error_message}
@@ -366,7 +401,7 @@ const ProjectDetailPage: React.FC = () => {
         <div className="ac-empty" style={{ marginTop: 32 }}>
           <b>{t("这次处理没有成功")}</b>
           {currentProject.error_message ? (
-            <span className="ac-mono" style={{ display: 'block', marginTop: 6, color: 'var(--ac-muted)', wordBreak: 'break-all' }}>
+            <span className="ac-mono" style={{ display: 'block', marginTop: 6, color: 'var(--ac-muted)', wordBreak: 'break-word' }}>
               {currentProject.error_message}
             </span>
           ) : (

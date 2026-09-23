@@ -410,8 +410,8 @@ class SpeechRecognizer:
 
         if not whisper_runtime.is_installed():
             raise SpeechRecognitionError(
-                "本地 Whisper 运行时未安装。请到「设置 → 语音识别」里点击安装 Whisper，"
-                "并下载一个模型后再试。"
+                "本地 Whisper 运行时未安装。请到「设置 → 转写」安装 Whisper，"
+                "并下载一个模型后再试。也可以重新导入时带上 .srt 字幕。"
             )
 
         if not video_path.exists():
@@ -492,7 +492,7 @@ class SpeechRecognizer:
             raise
         except ModuleNotFoundError as e:
             raise SpeechRecognitionError(
-                f"Whisper 运行时缺少依赖（{e}）。请到「设置 → 语音识别」重新安装 Whisper。"
+                f"Whisper 运行时缺少依赖（{e}）。请到「设置 → 转写」重新安装 Whisper。"
             )
         except Exception as e:  # noqa: BLE001
             # 不带 exc_info：LoggingIntegration 会把带堆栈的 error 记成 Sentry 异常。

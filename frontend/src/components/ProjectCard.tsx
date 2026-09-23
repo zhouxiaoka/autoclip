@@ -11,6 +11,7 @@ import FeedbackDialog from './FeedbackDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn } from '../ui'
 import { classifyLlmKeyFailure } from '../utils/llmFailure'
+import { classifySubtitleFailure } from '../utils/subtitleFailure'
 import { isSourceDownloading, readDownloadProgress } from '../utils/downloadProgress'
 // import { 
 //   getProjectStatusConfig, 
@@ -294,6 +295,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     error_message: project.error_message || failedProgress?.message || undefined,
   }
   const llmKeyFailure = classifyLlmKeyFailure(
+    project.error_message || failedProgress?.message,
+    project.error_code,
+  )
+  const subtitleFailure = classifySubtitleFailure(
     project.error_message || failedProgress?.message,
     project.error_code,
   )
@@ -626,7 +631,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           {/* 状态和统计信息 — Calm Premium，见 DESIGN.md */}
           {(normalizedStatus === 'importing' || normalizedStatus === 'downloading' || normalizedStatus === 'processing' || normalizedStatus === 'failed') ? (
             // 进行中 / 失败：细进度线或终态点，占满宽度
-            <div style={{ marginBottom: '2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ marginBottom: '2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
               <UnifiedStatusBar
                 projectId={project.id}
                 status={normalizedStatus}
@@ -640,7 +645,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
               />
               {normalizedStatus === 'failed' && (
                 // 失败态：重试 + 反馈（反馈自动带上阶段 / 错误 / 版本 / 模型上下文）
-                <div style={{ display: 'flex', gap: 2, flex: '0 0 auto' }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ display: 'flex', gap: 2, flex: '0 0 auto', marginLeft: 'auto' }} onClick={(e) => e.stopPropagation()}>
+                  {subtitleFailure && (
+                    <Btn variant="text" size="sm" style={{ height: 26, padding: '0 8px', fontSize: 12.5 }} onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>
+                  )}
                   {llmKeyFailure && (
                     <Btn variant="text" size="sm" style={{ height: 26, padding: '0 8px', fontSize: 12.5 }} onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>
                   )}

@@ -9,8 +9,8 @@ from pathlib import Path
 
 from backend.services.simple_progress import emit_progress, clear_progress
 from backend.pipeline.failures import (
-    PipelineFailure, HINT_CHECK_LLM, HINT_SUBTITLE, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG,
-    llm_key_failure,
+    PipelineFailure, HINT_CHECK_LLM, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG,
+    llm_key_failure, failure_from_speech_error, missing_subtitle_failure,
 )
 from backend.pipeline.step1_outline import run_step1_outline
 from backend.pipeline.step2_timeline import run_step2_timeline
@@ -183,14 +183,10 @@ class SimplePipelineAdapter:
                 try:
                     srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
                 except SpeechRecognitionError as e:
-                    raise PipelineFailure("SUBTITLE", str(e), HINT_SUBTITLE) from e
+                    raise failure_from_speech_error(str(e)) from e
                 if not (srt_path and srt_path.exists()):
                     # 以前这里写一个空大纲然后一路「成功」到底，用户看到的是 Completed · 0 切片
-                    raise PipelineFailure(
-                        "SUBTITLE",
-                        "没有字幕可分析：视频不带字幕，且本地转写没有生成结果。",
-                        HINT_SUBTITLE,
-                    )
+                    raise missing_subtitle_failure()
                 logger.info(f"自动生成字幕成功: {srt_path}")
 
             # Step 1: 大纲提取（字幕为空 / 模型全部失败 / 无法解析时由 step1 自己抛 PipelineFailure）
