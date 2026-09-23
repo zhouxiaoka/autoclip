@@ -1063,5 +1063,6 @@
   "成片草稿数量": "Brouillons vidéo : {{count}}",
   "成片尚未完成或不存在，请返回项目重新导出": "Vidéo incomplète ou absente. Retournez au projet pour exporter à nouveau.",
   "发布已导出的 V{{revision}} 成片，保留画幅、文字和声音。需要修改时，请返回编辑器另行导出。": "Publiez la vidéo V{{revision}} en conservant cadrage, texte et son. Pour la modifier, retournez dans l’éditeur et exportez à nouveau.",
-  "已关闭": "Désactivé"
+  "已关闭": "Désactivé",
+  "缩略图暂不可用 · 点击查看": "Aperçu indisponible · Cliquez pour voir"
 }
