@@ -8,6 +8,8 @@ import { useProjectStore, Collection } from '../store/useProjectStore'
 import { projectApi, speechApi } from '../services/api'
 import StudioResults from '../features/studio/StudioResults'
 import { studioApi, errorText } from '../features/studio/api'
+import LlmKeyFailureEmpty from '../components/LlmKeyFailureEmpty'
+import { classifyLlmKeyFailure } from '../utils/llmFailure'
 import SubtitleFailureEmpty from '../components/SubtitleFailureEmpty'
 import { classifySubtitleFailure, type SubtitleFailureKind } from '../utils/subtitleFailure'
 import ClipCard from '../components/ClipCard'
@@ -18,8 +20,6 @@ import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
 import { ProjectTaskManager } from '../components/ProjectTaskManager'
 import FeedbackDialog from '../components/FeedbackDialog'
 import { Btn, Icon, parseTimecode, fmtDuration } from '../ui'
-import SubtitleFailureEmpty from '../components/SubtitleFailureEmpty'
-import { classifySubtitleFailure, type SubtitleFailureKind } from '../utils/subtitleFailure'
 
 const ProjectDetailPage: React.FC = () => {
   useTranslation()
