@@ -254,14 +254,15 @@ async def get_project_clip_video(
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="切片文件不存在")
         
-        # 返回视频文件，支持在线播放
+        # 内联播放。默认 attachment 时，macOS WKWebView 的 <video> 不会播放。
         return FileResponse(
             path=str(file_path),
             filename=f"clip_{clip_id}.mp4",
             media_type="video/mp4",
+            content_disposition_type="inline",
             headers={
-                "Accept-Ranges": "bytes",  # 支持范围请求，便于视频播放
-                "Cache-Control": "public, max-age=3600"  # 缓存1小时
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "no-cache",
             }
         )
         
@@ -340,14 +341,15 @@ async def get_project_collection_video(
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="合集文件不存在")
         
-        # 返回视频文件，支持在线播放
+        # 内联播放。默认 attachment 时，macOS WKWebView 的 <video> 不会播放。
         return FileResponse(
             path=str(file_path),
             filename=f"collection_{collection_id}.mp4",
             media_type="video/mp4",
+            content_disposition_type="inline",
             headers={
-                "Accept-Ranges": "bytes",  # 支持范围请求，便于视频播放
-                "Cache-Control": "public, max-age=3600"  # 缓存1小时
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "no-cache",
             }
         )
         

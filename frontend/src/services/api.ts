@@ -58,6 +58,57 @@ const isTauriRuntime = () => (
   ((window as any).__TAURI__ || (window as any).__TAURI_INTERNALS__)
 )
 
+// 打包后的桌面页在 tauri://localhost（macOS）或 http://tauri.localhost。
+// 根路径 /api/v1 会打到壳页面，打不到本机后端。开发时 base 仍是 /api/v1，走 Vite 代理。
+const mediaUrl = (path: string): string => {
+  const base = apiConfigManager.getBaseUrl().replace(/\/$/, '')
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`
+}
+
+const resolveMediaUrl = async (path: string): Promise<string> => {
+  if (isTauriRuntime() && !apiConfigManager.isReady()) {
+    await apiConfigManager.waitForReady()
+  }
+  return mediaUrl(path)
+}
+
+const saveWithSystemDownload = async (
+  url: string,
+  properties: { project_id: string; artifact_type: string; export_id?: string },
+) => {
+  const saved = await observeOperation('media_download', properties, async () => {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const result = await invoke<{ path: string; sizeBytes?: number; size_bytes?: number }>('save_local_download', { url })
+    const size = result?.sizeBytes ?? result?.size_bytes ?? 0
+    if (!size) throw new Error('Empty media response')
+    return { ...result, size }
+  }, (result, _startedAt, props) => {
+    captureBusinessEvent('media_download_received', { ...props, size_bytes: result.size })
+  })
+  const { message } = await import('antd')
+  message.success(t('已保存到下载文件夹'))
+  return saved
+}
+
+const saveBlobDownload = (data: Blob, filename: string) => {
+  const downloadUrl = window.URL.createObjectURL(new Blob([data], { type: 'video/mp4' }))
+  const link = document.createElement('a')
+  link.href = downloadUrl
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(downloadUrl)
+}
+
+const filenameFromDisposition = (contentDisposition: string | undefined, fallback: string): string => {
+  if (!contentDisposition) return fallback
+  const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/)
+  if (filenameStarMatch) return decodeURIComponent(filenameStarMatch[1])
+  const filenameMatch = contentDisposition.match(/filename="([^"]+)"/)
+  return filenameMatch ? filenameMatch[1] : fallback
+}
+
 // 请求拦截器
 api.interceptors.request.use(
   async (config) => {
@@ -503,58 +554,44 @@ export const projectApi = {
   },
 
   downloadVideo: async (projectId: string, clipId?: string, collectionId?: string) => {
-    let url = `/projects/${projectId}/download`
+    let path = `/projects/${projectId}/download`
     if (clipId) {
-      url += `?clip_id=${clipId}`
+      path += `?clip_id=${encodeURIComponent(clipId)}`
     } else if (collectionId) {
-      url += `?collection_id=${collectionId}`
+      path += `?collection_id=${encodeURIComponent(collectionId)}`
     }
-    
+
     try {
-      // 对于blob类型的响应，需要直接使用axios而不是经过拦截器
-      const response = await observeMediaResponse({ project_id: projectId, artifact_type: clipId ? 'clip' : collectionId ? 'collection' : 'original' }, () => axios.get<Blob>(`/api/v1${url}`, {
+      const url = await resolveMediaUrl(path)
+      // 桌面端 <a download> 在 macOS WKWebView 里会被取消，改由壳写入「下载」文件夹。
+      if (isTauriRuntime()) {
+        const saved = await saveWithSystemDownload(url, {
+          project_id: projectId,
+          artifact_type: clipId ? 'clip' : collectionId ? 'collection' : 'original',
+        })
+        trackClipsExported({
+          clipCount: 1,
+          exportType: clipId ? 'clip' : collectionId ? 'collection' : 'project',
+        })
+        return saved
+      }
+
+      // blob 响应不走 api 拦截器，否则拿不到 Content-Disposition。
+      const response = await observeMediaResponse({ project_id: projectId, artifact_type: clipId ? 'clip' : collectionId ? 'collection' : 'original' }, () => axios.get<Blob>(url, {
         responseType: 'blob',
         headers: {
           'Accept': 'application/octet-stream'
         }
       }))
-      
-      // 从响应头获取文件名，如果没有则使用默认名称
-      const contentDisposition = response.headers['content-disposition']
-      let filename = clipId ? `clip_${clipId}.mp4` : 
-                     collectionId ? `collection_${collectionId}.mp4` : 
-                     `project_${projectId}.mp4`
-      
-      if (contentDisposition) {
-        // 优先尝试解析 RFC 6266 格式的 filename* 参数
-        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/)
-        if (filenameStarMatch) {
-          filename = decodeURIComponent(filenameStarMatch[1])
-        } else {
-          // 回退到传统的 filename 参数
-          const filenameMatch = contentDisposition.match(/filename="([^"]+)"/)
-          if (filenameMatch) {
-            filename = filenameMatch[1]
-          }
-        }
-      }
-      
-      // 创建下载链接
-      const blob = new Blob([response.data], { type: 'video/mp4' })
-      const downloadUrl = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = filename
-      
-      // 触发下载
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(downloadUrl)
+
+      const filename = filenameFromDisposition(
+        response.headers['content-disposition'],
+        clipId ? `clip_${clipId}.mp4` : collectionId ? `collection_${collectionId}.mp4` : `project_${projectId}.mp4`,
+      )
+      saveBlobDownload(response.data, filename)
 
       trackClipsExported({
         clipCount: 1,
-        // 区分导出粒度：单切片 / 合集 / 整片
         exportType: clipId ? 'clip' : collectionId ? 'collection' : 'project',
       })
       return response.data
@@ -579,16 +616,14 @@ export const projectApi = {
     return `${api.defaults.baseURL}/projects/${projectId}/video`
   },
 
-  // 获取切片视频URL
+  // 获取切片视频URL。必须带上桌面端已经解析出的后端地址，不能用根路径。
   getClipVideoUrl: (projectId: string, clipId: string, _clipTitle?: string): string => {
-    // 使用projects路由获取切片视频
-    return `/api/v1/projects/${projectId}/clips/${clipId}`
+    return mediaUrl(`/projects/${projectId}/clips/${encodeURIComponent(clipId)}`)
   },
 
   // 获取合集视频URL
   getCollectionVideoUrl: (projectId: string, collectionId: string): string => {
-    // 使用files路由获取合集视频
-    return `/api/v1/files/projects/${projectId}/collections/${collectionId}`
+    return mediaUrl(`/files/projects/${projectId}/collections/${encodeURIComponent(collectionId)}`)
   },
 
   // 生成项目缩略图
@@ -617,24 +652,17 @@ export const projectApi = {
   },
 
   downloadExport: async (projectId: string, jobId: string) => {
-    const response = await observeMediaResponse({ project_id: projectId, export_id: jobId, artifact_type: 'publish_clip' }, () => axios.get<Blob>(`/api/v1/projects/${projectId}/exports/${jobId}/download`, {
+    const url = await resolveMediaUrl(`/projects/${projectId}/exports/${encodeURIComponent(jobId)}/download`)
+    if (isTauriRuntime()) {
+      await saveWithSystemDownload(url, { project_id: projectId, export_id: jobId, artifact_type: 'publish_clip' })
+      return
+    }
+    const response = await observeMediaResponse({ project_id: projectId, export_id: jobId, artifact_type: 'publish_clip' }, () => axios.get<Blob>(url, {
       responseType: 'blob',
       headers: { Accept: 'application/octet-stream' },
     }))
-    const cd = response.headers['content-disposition'] || ''
-    let filename = `export_${jobId.slice(0, 8)}.mp4`
-    const star = cd.match(/filename\*=UTF-8''([^;]+)/)
-    const plain = cd.match(/filename="([^"]+)"/)
-    if (star) filename = decodeURIComponent(star[1])
-    else if (plain) filename = plain[1]
-    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'video/mp4' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
+    const filename = filenameFromDisposition(response.headers['content-disposition'], `export_${jobId.slice(0, 8)}.mp4`)
+    saveBlobDownload(response.data, filename)
   },
 }
 
