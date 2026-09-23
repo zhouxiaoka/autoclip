@@ -124,6 +124,23 @@ autoclip export PROJECT_ID --preset shorts
 
 桌面默认目录见 [安装指南](USER_INSTALLATION_GUIDE.md)。Docker 使用仓库下的 `data/`、`logs/`、`uploads/` 绑定目录。退出应用或停止服务后，备份数据库、项目文件与配置，避免运行中只复制 SQLite 主文件。不要依赖未经确认的自动备份，也不要为了排错删除原始数据。
 
+### 升级后项目列表打不开
+
+桌面端和 Docker 的项目状态、类型存在 SQLite 的文本列里。服务按枚举**名字**读取（`PENDING`、`KNOWLEDGE`）。库里若还有当前版本对不上的值，整页列表会加载失败。已知的一类旧值是已经从代码移除的 `cancelled` / `CANCELLED`；写成小写 value（`pending`）时也会对不上。
+
+自 **v1.3.3** 起，服务启动时自动改写这两个字段。项目记录保留：
+
+- 能对上的 value 改成枚举名，例如 `pending` → `PENDING`
+- 无法识别的状态（含 `cancelled`）改为 `FAILED`
+- 无法识别的项目类型改为 `DEFAULT`
+
+升级后重新打开应用，项目列表应能打开。被改写的项目会显示为失败或默认类型。升级前若要自己看一眼：
+
+```sql
+SELECT status, COUNT(*) FROM projects GROUP BY status;
+SELECT project_type, COUNT(*) FROM projects GROUP BY project_type;
+```
+
 ### 哪里看已知问题？怎样联系？
 
 先查 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96) 和 [版本记录](https://github.com/zhouxiaoka/autoclip/releases)。希望增加的能力、用法和模型发到 [Discussions](https://github.com/zhouxiaoka/autoclip/discussions)：[欢迎与分类](https://github.com/zhouxiaoka/autoclip/discussions/127)、[第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128)、[想法](https://github.com/zhouxiaoka/autoclip/discussions/129)。能复现的故障开 Issue。规则见 [社区看板](COMMUNITY_BOARD.md)。仍需联系时，将以下信息一次性发到 [christine_zhouye@163.com](mailto:christine_zhouye@163.com)：

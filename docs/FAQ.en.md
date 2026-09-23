@@ -124,6 +124,23 @@ When you publish, a cover can be generated automatically so Bilibili does not re
 
 See the [installation guide](USER_INSTALLATION_GUIDE.en.md) for desktop defaults. Docker uses the repository’s `data/`, `logs/`, and `uploads/` bind mounts. Exit the app or stop services before backing up the database, project files, and settings; do not copy only the main SQLite file while jobs are running. Do not assume automatic backups exist, or delete source data to troubleshoot.
 
+### Project list fails after an upgrade
+
+Desktop and Docker store project status and type in SQLite text columns. The service reads enum **names** (`PENDING`, `KNOWLEDGE`). A value the current version does not know fails the entire list. One known leftover is `cancelled` / `CANCELLED`, removed from the code earlier. Lowercase values such as `pending` also fail that lookup.
+
+Starting with **v1.3.3**, startup rewrites those two columns. Project rows stay in place:
+
+- A matching value becomes the enum name, for example `pending` → `PENDING`
+- An unrecognized status, including `cancelled`, becomes `FAILED`
+- An unrecognized project type becomes `DEFAULT`
+
+Reopen the app after upgrading and the project list should load. Rewritten projects show as failed or as the default type. To inspect before upgrading:
+
+```sql
+SELECT status, COUNT(*) FROM projects GROUP BY status;
+SELECT project_type, COUNT(*) FROM projects GROUP BY project_type;
+```
+
 ### Where are known issues? How can I get help?
 
 Check [known issues](https://github.com/zhouxiaoka/autoclip/issues/96) and [release notes](https://github.com/zhouxiaoka/autoclip/releases) first. Feature ideas and how you use AutoClip go to [Discussions](https://github.com/zhouxiaoka/autoclip/discussions): [welcome and categories](https://github.com/zhouxiaoka/autoclip/discussions/127), [first-clip Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128), and [ideas](https://github.com/zhouxiaoka/autoclip/discussions/129). Reproducible bugs go to Issues. The board rules are in the [community board](COMMUNITY_BOARD.md) (Chinese). If needed, send one email to [christine_zhouye@163.com](mailto:christine_zhouye@163.com) with:

@@ -3,6 +3,7 @@
 包含数据库连接、会话管理和依赖注入
 """
 
+import logging
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
@@ -84,8 +85,18 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 def create_tables():
-    """创建所有数据库表"""
+    """创建所有数据库表，并清洗项目表里当前代码无法识别的枚举值。"""
     Base.metadata.create_all(bind=engine)
+    _normalize_project_enums()
+
+
+def _normalize_project_enums():
+    try:
+        from backend.core.project_enum_migration import normalize_legacy_project_enums
+        normalize_legacy_project_enums(engine)
+    except Exception:
+        logging.getLogger(__name__).exception("清洗项目枚举旧值失败")
+
 
 def drop_tables():
     """删除所有数据库表"""

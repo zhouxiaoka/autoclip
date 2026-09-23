@@ -77,6 +77,13 @@ def create_app(mode: str = "web") -> FastAPI:
         from backend.models.bilibili import BilibiliAccount, UploadRecord
         Base.metadata.create_all(bind=engine)
         logger.info("数据库表创建完成")
+        try:
+            from backend.core.project_enum_migration import normalize_legacy_project_enums
+            changed = normalize_legacy_project_enums(engine)
+            if changed:
+                logger.info("已将 %s 条项目记录中的旧枚举值改写为当前版本可识别的值", changed)
+        except Exception:
+            logger.exception("清洗项目枚举旧值失败，列表读取会使用降级值")
         
         # 加载 API 密钥到环境变量
         api_key = get_api_key()
