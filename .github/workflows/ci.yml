@@ -86,6 +86,9 @@ jobs:
       - name: Feedback draft checks
         run: node --test tests/feedback-draft.test.cjs
 
+      - name: Source download progress
+        run: node --test tests/download-progress.test.cjs
+
       - name: Build
         run: npm run build
 
