@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Btn, fmtDuration } from '../../ui'
 import { studioApi } from './api'
 import { Draft, RenderJob, draftDuration, languages } from './types'
@@ -15,11 +16,11 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
   const state = draftExportState(draft, jobs)
   const label = statusLabels[state.status]
   const completed = state.completed
-  const thumbnail = completed ? studioApi.video(projectId, completed.job_id)
-    : `${studioApi.source(projectId)}#t=${draft.scenes[0].start}`
+  const thumbnail = studioApi.thumbnail(projectId, draft.id, draft.revision, completed?.job_id)
+  const [failedThumbnail, setFailedThumbnail] = useState('')
   return <article className="ac-card">
     <button className={`ac-card-thumb studio-thumb${completed ? " studio-thumb--exported" : ""}`} onClick={onEdit} aria-label={`预览 ${draft.title}`}>
-      <video muted preload="metadata" src={thumbnail} />
+      {failedThumbnail === thumbnail ? <span className="studio-thumbnail-fallback">缩略图暂不可用 · 点击查看</span> : <img key={thumbnail} src={thumbnail} alt="" loading="lazy" onError={() => setFailedThumbnail(thumbnail)} />}
       <span className="play">▷</span>
       <span className="ac-tag ac-tag--tl">{draft.origin==='visual-promo'?'推广成片':draft.origin==='visual-highlight'?'精彩高光':'成片草稿'}</span>
       <span className="ac-tag ac-tag--br">{fmtDuration(draftDuration(draft))}</span>

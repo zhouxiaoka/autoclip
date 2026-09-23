@@ -17,6 +17,7 @@ export const studioApi = {
   duplicate: (pid: string, draft: Draft, title: string, language: Language): Promise<Draft> => api.post(`/studio/${pid}/drafts/${draft.id}/duplicate`, { draft, title, language }),
   rewrite: (pid: string, draft: Draft, instruction: string): Promise<Draft> => api.post(`/studio/${pid}/rewrite`, { draft, instruction }, { timeout: 310000 }),
   export: (pid: string, draft: string, revision: number): Promise<RenderJob> => api.post(`/studio/${pid}/drafts/${draft}/export`, { revision }),
+  thumbnail: (pid: string, draft: string, revision: number, job?: string) => `${api.defaults.baseURL}/studio/${pid}/drafts/${draft}/thumbnail?revision=${revision}${job ? `&job_id=${job}` : ''}`,
   video: (pid: string, jid: string, download = false) => `${api.defaults.baseURL}/studio/${pid}/exports/${jid}/video${download ? '?download=true' : ''}`,
 }
 export function errorText(error: unknown) {
