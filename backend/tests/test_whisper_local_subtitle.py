@@ -51,6 +51,53 @@ def test_vad_failure_is_classified_without_treating_encode_as_vad():
     assert vad_backend_failed(exc.value)
 
 
+def test_install_error_is_not_reported_as_not_installed(monkeypatch):
+    """设置页靠 status=error 显示「重试安装」。轮询不能把它盖成 not_installed。"""
+    monkeypatch.setattr(whisper_runtime, "is_installed", lambda: False)
+    whisper_runtime._set_state(status="error", progress=12, message="安装失败（pip 退出码 1）", log_tail="boom")
+    try:
+        status = whisper_runtime.get_status()
+        assert status["status"] == "error"
+        assert "退出码" in status["message"]
+    finally:
+        whisper_runtime._set_state(status="unknown", progress=0, message="", log_tail="")
+
+
+def test_installed_runtime_still_reports_installed_after_a_previous_error(monkeypatch):
+    monkeypatch.setattr(whisper_runtime, "is_installed", lambda: True)
+    whisper_runtime._set_state(status="error", progress=12, message="安装失败", log_tail="")
+    try:
+        assert whisper_runtime.get_status()["status"] == "installed"
+    finally:
+        whisper_runtime._set_state(status="unknown", progress=0, message="", log_tail="")
+
+
+def test_install_error_is_remembered_after_the_process_forgets(tmp_path, monkeypatch):
+    monkeypatch.setattr(whisper_runtime, "_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(whisper_runtime, "is_installed", lambda: False)
+    whisper_runtime._set_state(status="unknown", progress=0, message="", log_tail="")
+    whisper_runtime._write_install_error("安装失败（pip 退出码 1）")
+    try:
+        status = whisper_runtime.get_status()
+        assert status["status"] == "error"
+        assert "退出码" in status["message"]
+    finally:
+        whisper_runtime._clear_install_error()
+        whisper_runtime._set_state(status="unknown", progress=0, message="", log_tail="")
+
+
+def test_missing_runtime_points_at_transcription_settings(tmp_path, monkeypatch):
+    monkeypatch.setattr(whisper_runtime, "is_installed", lambda: False)
+    recognizer = _recognizer()
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x")
+    with pytest.raises(SpeechRecognitionError) as exc:
+        recognizer._generate_subtitle_whisper_local(video, tmp_path / "clip.srt", SpeechRecognitionConfig())
+    assert "设置 → 转写" in str(exc.value)
+    assert "语音识别" not in str(exc.value)
+    assert ".srt" in str(exc.value)
+
+
 def test_failure_text_has_no_local_path():
     message = describe_whisper_failure(RuntimeError(r"failed to open C:\Users\secret\clip.mp4"))
     assert "secret" not in message

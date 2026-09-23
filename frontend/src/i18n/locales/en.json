@@ -776,5 +776,16 @@
   "操作教程": "How-to",
   "海外": "Overseas",
   "贴三个 Cookie 后保存。配好后，发布页会出现 B 站。": "Paste the three cookies and save. Bilibili then appears on the publish page.",
-  "在 Upload-Post 填密钥。配好后，在切片的发布页直接选。": "Add the Upload-Post key here. After that, pick it on the clip’s publish page."
+  "在 Upload-Post 填密钥。配好后，在切片的发布页直接选。": "Add the Upload-Post key here. After that, pick it on the clip’s publish page.",
+  "还没有安装本地转写": "Local transcription isn’t installed",
+  "这条视频没有自带字幕。到「设置 → 转写」安装 Whisper 并下载一个模型，或重新导入时带上 .srt。": "This video has no captions. Install Whisper and download a model in Settings → Transcription, or import it again with an .srt file.",
+  "Whisper 上次没有装上": "Whisper didn’t finish installing",
+  "这条视频没有自带字幕，而且上次安装 Whisper 没有成功。到「设置 → 转写」重试安装，或重新导入时带上 .srt。": "This video has no captions, and the last Whisper install didn’t succeed. Retry the install in Settings → Transcription, or import it again with an .srt file.",
+  "转写没有得到字幕": "Transcription produced no captions",
+  "Whisper 已经装好，但这条视频没有识别出可用语音。确认有清晰人声后重试，或重新导入时带上 .srt。": "Whisper is installed, but this video produced no usable speech. Check that it has clear speech and retry, or import it again with an .srt file.",
+  "没有字幕可分析": "No captions to analyze",
+  "这条视频没有自带字幕，本地转写也没有结果。可以到「设置 → 转写」安装或重试 Whisper，也可以重新导入时带上 .srt。": "This video has no captions, and local transcription produced nothing. Install or retry Whisper in Settings → Transcription, or import it again with an .srt file.",
+  "到「设置 → 转写」检查 Whisper 是否安装、模型是否已下载，或重新导入时带上 .srt。": "In Settings → Transcription, check that Whisper is installed and a model is downloaded, or import it again with an .srt file.",
+  "打开转写设置": "Open transcription settings",
+  "转写设置": "Transcription"
 }

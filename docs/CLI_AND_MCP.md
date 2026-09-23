@@ -25,7 +25,7 @@ pip install -e .            # 得到 autoclip / autoclip-mcp 两个命令
 不装包也能用：`python -m backend.cli ...`（在仓库根目录）。
 
 需要 ffmpeg 在 PATH（`brew install ffmpeg`）。没有字幕的视频要本地 Whisper：`pip install faster-whisper`，
-或在桌面应用「设置 → 语音识别」一键安装（两者共用模型目录）。
+或在桌面应用「设置 → 转写」一键安装（两者共用模型目录）。
 
 先体检：
 
