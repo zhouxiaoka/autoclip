@@ -38,3 +38,5 @@
 .studio-output-hint.studio-error{color:var(--ac-error)}
 
 .studio-thumb--exported{background:#19181a}.studio-thumb--exported video{object-fit:contain}
+
+.studio-thumb img{display:block;width:100%;height:100%;object-fit:cover}.studio-thumb--exported img{object-fit:contain}.studio-thumbnail-fallback{display:flex;height:100%;align-items:center;justify-content:center;padding:36px;color:#fff;background:#29272b;font-size:12px}

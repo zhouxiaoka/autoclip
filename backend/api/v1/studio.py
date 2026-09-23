@@ -140,6 +140,15 @@ def source_video(project_id: str, db: Session = Depends(get_db)):
     path = call(jobs.source, project_id)
     return FileResponse(path)
 
+@router.get('/{project_id}/drafts/{draft_id}/thumbnail')
+def draft_thumbnail(project_id: str, draft_id: str, revision: int = Query(..., ge=1),
+                    job_id: Optional[str] = Query(None, pattern=r'^[a-f0-9]{32}$'), db: Session = Depends(get_db)):
+    from backend.services.studio.thumbnails import draft_frame
+    project_or_404(project_id, db)
+    data = call(draft_frame, project_id, draft_id, revision, job_id)
+    # Server memory cache is keyed by actual source stats. Revalidate on navigation.
+    return Response(data, media_type='image/jpeg', headers={'Cache-Control': 'private, no-cache'})
+
 @router.post('/{project_id}/title-preview')
 def title_preview(project_id: str, body: Draft, db: Session = Depends(get_db), layer: Literal['artwork', 'backdrop'] = 'artwork'):
     from backend.services.studio import title_art
