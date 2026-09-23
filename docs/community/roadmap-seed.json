@@ -1,6 +1,6 @@
 {
   "project": "AutoClip Roadmap",
-  "note": "按 CHANGELOG 里已经发布的 v1.3.1 / v1.3.0 校正。已发版的事只写在 Project 简介，不 retroactive 开 Issue。HANDOFF.md 里未勾掉的 v1.3 条目若已出现在更新日志，以更新日志为准。",
+  "note": "按 CHANGELOG 里已经发布的 v1.3.3 / v1.3.2 / v1.3.1 / v1.3.0 校正。已发版的事只写在 Project 简介，不 retroactive 开 Issue。HANDOFF.md 里未勾掉的 v1.3 条目若已出现在更新日志，以更新日志为准。",
   "columns": {
     "exploring": [
       {
@@ -12,7 +12,7 @@
       {
         "track": "new-issue",
         "title": "[Feature] 说话人居中裁切与封面图",
-        "body": "竖屏发布导出已经能做模糊背景、裁切、烧字幕和标题卡。说话人居中和封面图还没做，也还没有社区讨论把它抬进承诺范围。",
+        "body": "竖屏发布导出已经能做模糊背景、裁切、烧字幕和标题卡。自动封面已随 v1.3.2 发布。这张卡只剩说话人居中裁切，还没有社区讨论把它抬进承诺范围。",
         "acceptance": ["先有使用场景，再决定是否离开 Exploring"]
       }
     ],
@@ -40,7 +40,7 @@
       {
         "track": "new-issue",
         "title": "[Feature] Windows 安装包真机验证",
-        "body": "Windows 安装包从 v1.2.1 起就在 Release 上，v1.3.1 仍没有「干净 Windows 上跑通一条视频」的记录。",
+        "body": "Windows 安装包从 v1.2.1 起就在 Release 上，v1.3.3 仍没有「干净 Windows 上跑通一条视频」的记录。",
         "acceptance": ["干净 Windows 上完成启动、保存 provider、跑通一条本地视频"]
       },
       {
@@ -83,6 +83,14 @@
     "building": [],
     "testing": [],
     "shipped": [
+      {
+        "track": "readme",
+        "title": "v1.3.3：项目列表旧枚举、进度轮询、导入崩溃、Whisper 安装/转写/下载"
+      },
+      {
+        "track": "readme",
+        "title": "v1.3.2：发布页、自动封面、应用内更新提示、应用内反馈汇入 GitHub"
+      },
       {
         "track": "readme",
         "title": "v1.3.1：八语界面、崩溃上报、应用内检查更新"
