@@ -16,6 +16,8 @@ import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
 import { ProjectTaskManager } from '../components/ProjectTaskManager'
 import FeedbackDialog from '../components/FeedbackDialog'
 import { Btn, Icon, Section, Segmented, parseTimecode, fmtDuration } from '../ui'
+import LlmKeyFailureEmpty from '../components/LlmKeyFailureEmpty'
+import { classifyLlmKeyFailure } from '../utils/llmFailure'
 
 const ProjectDetailPage: React.FC = () => {
   useTranslation()
@@ -252,6 +254,7 @@ const ProjectDetailPage: React.FC = () => {
   })
   const isCompleted = currentProject.status === 'completed'
   const isFailed = currentProject.status === 'failed' || (currentProject.status as string) === 'error'
+  const llmKeyFailure = classifyLlmKeyFailure(currentProject.error_message, currentProject.error_code)
   const failureContext = {
     source: 'failure' as const,
     project_id: currentProject.id,
@@ -300,7 +303,7 @@ const ProjectDetailPage: React.FC = () => {
           {isFailed && (
             <div style={{ display: 'flex', gap: 8, flex: '0 0 auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <Btn onClick={() => setFeedbackOpen(true)}>{t("反馈问题")}</Btn>
-              <Btn variant={shownSubtitleKind ? undefined : 'cta'} onClick={handleRetryProcessing} loading={statusLoading}>{t("重试")}</Btn>
+              <Btn variant={llmKeyFailure || shownSubtitleKind ? undefined : 'cta'} onClick={handleRetryProcessing} loading={statusLoading}>{t("重试")}</Btn>
             </div>
           )}
         </div>
@@ -388,6 +391,11 @@ const ProjectDetailPage: React.FC = () => {
           kind={shownSubtitleKind}
           errorMessage={currentProject.error_message}
           onOpenSettings={() => navigate('/settings?section=speech')}
+        />
+      ) : isFailed && llmKeyFailure ? (
+        <LlmKeyFailureEmpty
+          errorMessage={currentProject.error_message}
+          onOpenSettings={() => navigate('/settings?section=model')}
         />
       ) : isFailed ? (
         <div className="ac-empty" style={{ marginTop: 32 }}>

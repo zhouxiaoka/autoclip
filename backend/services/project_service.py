@@ -70,7 +70,8 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
     
     def latest_failure(self, project, status=None):
         """失败文本和稳定错误码。文本来自最近一条任务，其次 project_metadata.last_error（CLI 路径）。
-        错误码来自任务 result_data.error_code，其次 metadata.last_error_code。"""
+        错误码来自任务 result_data.error_code，其次 metadata.last_error_code。
+        Project 表没有 error_message 列。"""
         status = status if status is not None else getattr(project, 'status', None)
         status_value = getattr(status, "value", status)
         if str(status_value).lower() != "failed":

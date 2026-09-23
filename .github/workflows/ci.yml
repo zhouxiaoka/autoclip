@@ -77,6 +77,9 @@ jobs:
       - name: Internationalization checks
         run: node --test tests/i18n.test.cjs
 
+      - name: LLM key failure guidance
+        run: node --test tests/llm-failure.test.cjs
+
       - name: Subtitle failure guidance
         run: node --test tests/subtitle-failure.test.cjs
 

@@ -11,7 +11,9 @@ from pathlib import Path
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR
-from .failures import PipelineFailure, HINT_CHECK_LLM, HINT_SUBTITLE
+from .failures import (
+    PipelineFailure, HINT_CHECK_LLM, HINT_SUBTITLE, looks_like_llm_setup_error, llm_key_failure,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,11 +115,13 @@ class OutlineExtractor:
 
         total_chunks = len(chunk_files)
         if total_chunks and failed_chunks == total_chunks:
-            raise PipelineFailure(
-                "ANALYZE",
-                f"大纲提取失败：{failed_chunks}/{total_chunks} 个文本块调用模型都失败了。最后一次错误：{last_error}",
-                HINT_CHECK_LLM,
-            ) from last_error
+            detail = (
+                f"大纲提取失败：{failed_chunks}/{total_chunks} 个文本块调用模型都失败了。"
+                f"最后一次错误：{last_error}"
+            )
+            if looks_like_llm_setup_error(str(last_error)):
+                raise llm_key_failure("ANALYZE", detail) from last_error
+            raise PipelineFailure("ANALYZE", detail, HINT_CHECK_LLM) from last_error
         if failed_chunks:
             logger.warning(f"{failed_chunks}/{total_chunks} 个文本块失败，用其余块继续。最后一次错误：{last_error}")
         

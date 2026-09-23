@@ -10,7 +10,7 @@ from pathlib import Path
 from backend.services.simple_progress import emit_progress, clear_progress
 from backend.pipeline.failures import (
     PipelineFailure, HINT_CHECK_LLM, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG,
-    failure_from_speech_error, missing_subtitle_failure,
+    llm_key_failure, failure_from_speech_error, missing_subtitle_failure,
 )
 from backend.pipeline.step1_outline import run_step1_outline
 from backend.pipeline.step2_timeline import run_step2_timeline
@@ -131,10 +131,9 @@ class SimplePipelineAdapter:
             return
         name = info.get("display_name") or info.get("provider") or "未选择"
         model = info.get("model") or "-"
-        raise PipelineFailure(
+        raise llm_key_failure(
             "ANALYZE",
             f"没有可用的 LLM 提供商（当前选择：{name} · {model}），缺少 API Key 或本地服务地址。",
-            HINT_CHECK_LLM,
         )
 
     async def process_project_sync(self, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:

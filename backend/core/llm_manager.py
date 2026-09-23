@@ -357,7 +357,7 @@ class LLMManager:
             logger.info(f"LLM 缓存命中: {cache_path.name}")
             return cache_path.read_text(encoding="utf-8")
         if not self.current_provider:
-            raise ValueError("未配置LLM提供商，请在设置页面配置API密钥")
+            raise ValueError("未配置LLM提供商，请自备 API Key 并到「设置 → 模型」填写")
         
         try:
             response = self.current_provider.call(prompt, input_data, **kwargs)

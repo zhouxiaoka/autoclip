@@ -10,6 +10,7 @@ import { UnifiedStatusBar } from './UnifiedStatusBar'
 import FeedbackDialog from './FeedbackDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn } from '../ui'
+import { classifyLlmKeyFailure } from '../utils/llmFailure'
 import { classifySubtitleFailure } from '../utils/subtitleFailure'
 import { isSourceDownloading, readDownloadProgress } from '../utils/downloadProgress'
 // import { 
@@ -293,6 +294,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     stage: failedProgress?.stage,
     error_message: project.error_message || failedProgress?.message || undefined,
   }
+  const llmKeyFailure = classifyLlmKeyFailure(
+    project.error_message || failedProgress?.message,
+    project.error_code,
+  )
   const subtitleFailure = classifySubtitleFailure(
     project.error_message || failedProgress?.message,
     project.error_code,
@@ -643,6 +648,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
                 <div style={{ display: 'flex', gap: 2, flex: '0 0 auto', marginLeft: 'auto' }} onClick={(e) => e.stopPropagation()}>
                   {subtitleFailure && (
                     <Btn variant="text" size="sm" style={{ height: 26, padding: '0 8px', fontSize: 12.5 }} onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>
+                  )}
+                  {llmKeyFailure && (
+                    <Btn variant="text" size="sm" style={{ height: 26, padding: '0 8px', fontSize: 12.5 }} onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>
                   )}
                   <Btn variant="text" size="sm" style={{ height: 26, padding: '0 8px', fontSize: 12.5 }} loading={isRetrying} onClick={() => handleRetry()}>{t("重试")}</Btn>
                   <Btn variant="text" size="sm" style={{ height: 26, padding: '0 8px', fontSize: 12.5 }} onClick={() => setFeedbackOpen(true)}>{t("反馈")}</Btn>
