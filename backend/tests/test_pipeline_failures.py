@@ -148,8 +148,16 @@ def test_adapter_fails_fast_when_llm_not_configured(adapter, monkeypatch, tmp_pa
     assert adapter._events[-1][1].startswith("处理失败：")
 
 
+def _whisper_status(monkeypatch, status: str, message: str = ""):
+    monkeypatch.setattr(
+        "backend.services.whisper_runtime.get_status",
+        lambda: {"status": status, "message": message},
+    )
+
+
 def test_adapter_fails_when_no_subtitle_and_auto_transcribe_yields_nothing(adapter, monkeypatch, tmp_path):
     _fake_manager(monkeypatch, available=True)
+    _whisper_status(monkeypatch, "not_installed")
 
     async def no_srt(self, video, metadata_dir):
         return None
@@ -160,10 +168,33 @@ def test_adapter_fails_when_no_subtitle_and_auto_transcribe_yields_nothing(adapt
 
     assert result["status"] == "failed"
     assert result["stage"] == "SUBTITLE"
-    assert "没有字幕" in result["error"]
-    assert "Whisper" in result["error"]
+    assert result["error_code"] == "whisper_not_installed"
+    assert "还没安装" in result["error"]
+    assert "设置 → 转写" in result["error"]
+    assert ".srt" in result["error"]
     # 以前会写一个空大纲然后「成功」；现在不该再产出 step1_outline.json
     assert not (tmp_path / "projects" / "proj-1" / "metadata" / "step1_outline.json").exists()
+
+
+def test_adapter_distinguishes_install_failure_from_empty_transcript(adapter, monkeypatch, tmp_path):
+    _fake_manager(monkeypatch, available=True)
+
+    async def no_srt(self, video, metadata_dir):
+        return None
+
+    monkeypatch.setattr(type(adapter), "_generate_subtitle_automatically", no_srt)
+
+    _whisper_status(monkeypatch, "error", "安装失败（pip 退出码 1）")
+    failed = asyncio.run(adapter.process_project_sync(str(tmp_path / "in.mp4"), ""))
+    assert failed["error_code"] == "whisper_install_failed"
+    assert "上次安装没有成功" in failed["error"]
+    assert ".srt" in failed["error"]
+
+    _whisper_status(monkeypatch, "installed")
+    empty = asyncio.run(adapter.process_project_sync(str(tmp_path / "in.mp4"), ""))
+    assert empty["error_code"] == "transcription_empty"
+    assert "已安装" in empty["error"]
+    assert ".srt" in empty["error"]
 
 
 def test_adapter_surfaces_whisper_error_on_the_subtitle_stage(adapter, monkeypatch, tmp_path):
@@ -183,6 +214,7 @@ def test_adapter_surfaces_whisper_error_on_the_subtitle_stage(adapter, monkeypat
 
     assert result["status"] == "failed"
     assert result["stage"] == "SUBTITLE"
+    assert result["error_code"] == "subtitle_setup"
     assert "显卡" in result["error"]
     assert "设置 → 转写" in result["error"]
     assert result["message"] == result["error"]
@@ -305,6 +337,35 @@ def test_project_response_falls_back_to_metadata_for_cli_runs():
                               project_metadata={"last_error": "没有可用的 LLM 提供商"})
 
     assert svc.latest_error_message(project) == "没有可用的 LLM 提供商"
+    assert svc.latest_error_code(project) is None
+
+
+def test_project_response_exposes_subtitle_error_code():
+    from backend.services.project_service import ProjectService
+
+    class Q:
+        def __init__(self, row): self.row = row
+        def filter(self, *a, **k): return self
+        def order_by(self, *a, **k): return self
+        def first(self): return self.row
+
+    task = SimpleNamespace(
+        error_message="没有字幕可分析",
+        result_data={"error_code": "whisper_not_installed"},
+    )
+    svc = ProjectService.__new__(ProjectService)
+    svc.db = SimpleNamespace(query=lambda model: Q(task))
+    project = SimpleNamespace(id="p1", status="failed", project_metadata={})
+
+    assert svc.latest_error_code(project) == "whisper_not_installed"
+
+    svc.db = SimpleNamespace(query=lambda model: Q(None))
+    cli_project = SimpleNamespace(
+        id="p1",
+        status="failed",
+        project_metadata={"last_error": "没有字幕", "last_error_code": "transcription_empty"},
+    )
+    assert svc.latest_error_code(cli_project) == "transcription_empty"
 
 
 def test_processing_task_reads_error_field_from_adapter_result():

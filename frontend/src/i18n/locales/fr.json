@@ -777,5 +777,16 @@
   "操作教程": "Tutoriel",
   "海外": "À l’étranger",
   "贴三个 Cookie 后保存。配好后，发布页会出现 B 站。": "Collez les trois cookies et enregistrez. Bilibili apparaît alors sur la page de publication.",
-  "在 Upload-Post 填密钥。配好后，在切片的发布页直接选。": "Indiquez la clé Upload-Post ici. Ensuite, choisissez-la sur la page de publication de l’extrait."
+  "在 Upload-Post 填密钥。配好后，在切片的发布页直接选。": "Indiquez la clé Upload-Post ici. Ensuite, choisissez-la sur la page de publication de l’extrait.",
+  "还没有安装本地转写": "La transcription locale n’est pas installée",
+  "这条视频没有自带字幕。到「设置 → 转写」安装 Whisper 并下载一个模型，或重新导入时带上 .srt。": "Cette vidéo n’a pas de sous-titres. Installez Whisper et téléchargez un modèle dans Réglages → Transcription, ou importez-la à nouveau avec un fichier .srt.",
+  "Whisper 上次没有装上": "L’installation de Whisper n’a pas abouti",
+  "这条视频没有自带字幕，而且上次安装 Whisper 没有成功。到「设置 → 转写」重试安装，或重新导入时带上 .srt。": "Cette vidéo n’a pas de sous-titres, et la dernière installation de Whisper a échoué. Réessayez dans Réglages → Transcription, ou importez-la à nouveau avec un fichier .srt.",
+  "转写没有得到字幕": "La transcription n’a pas produit de sous-titres",
+  "Whisper 已经装好，但这条视频没有识别出可用语音。确认有清晰人声后重试，或重新导入时带上 .srt。": "Whisper est installé, mais cette vidéo n’a pas produit de voix exploitable. Vérifiez qu’il y a une voix claire, puis réessayez, ou importez-la à nouveau avec un fichier .srt.",
+  "没有字幕可分析": "Aucun sous-titre à analyser",
+  "这条视频没有自带字幕，本地转写也没有结果。可以到「设置 → 转写」安装或重试 Whisper，也可以重新导入时带上 .srt。": "Cette vidéo n’a pas de sous-titres, et la transcription locale n’a rien produit. Installez ou réessayez Whisper dans Réglages → Transcription, ou importez-la à nouveau avec un fichier .srt.",
+  "到「设置 → 转写」检查 Whisper 是否安装、模型是否已下载，或重新导入时带上 .srt。": "Dans Réglages → Transcription, vérifiez que Whisper est installé et qu’un modèle est téléchargé, ou importez la vidéo à nouveau avec un fichier .srt.",
+  "打开转写设置": "Ouvrir les réglages de transcription",
+  "转写设置": "Transcription"
 }

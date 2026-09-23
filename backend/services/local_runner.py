@@ -254,7 +254,7 @@ def _register_project(req: RunRequest, video_path: Path) -> None:
         db.close()
 
 
-def _set_project_status(project_id: str, status: str, error: Optional[str] = None) -> None:
+def _set_project_status(project_id: str, status: str, error: Optional[str] = None, error_code: Optional[str] = None) -> None:
     try:
         from backend.core.database import SessionLocal
         from backend.models.project import Project, ProjectStatus
@@ -273,6 +273,8 @@ def _set_project_status(project_id: str, status: str, error: Optional[str] = Non
                 # ProjectService.latest_error_message 会回退读它，桌面首页 / 详情页照样能看到原因
                 meta = dict(p.project_metadata or {})
                 meta["last_error"] = error[:2000]
+                if error_code:
+                    meta["last_error_code"] = error_code
                 p.project_metadata = meta
             db.commit()
         finally:
@@ -352,7 +354,7 @@ def run_pipeline(req: RunRequest, video_in_raw: Path, on_progress: Optional[Prog
         if result.get("status") == "succeeded":
             _set_project_status(req.project_id, "completed")
         else:
-            _set_project_status(req.project_id, "failed", result.get("error"))
+            _set_project_status(req.project_id, "failed", result.get("error"), result.get("error_code"))
     return result
 
 
