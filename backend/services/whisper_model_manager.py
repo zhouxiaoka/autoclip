@@ -6,6 +6,7 @@ Whisper 模型管理服务（faster-whisper）
 依赖（huggingface_hub）来自运行时安装目录，所有相关 import 都延迟到函数内。
 """
 import logging
+import os
 import threading
 from typing import Dict, List, Optional
 from pathlib import Path
@@ -15,6 +16,21 @@ from enum import Enum
 from . import whisper_runtime
 
 logger = logging.getLogger(__name__)
+
+
+def _silence_download_progress() -> None:
+    """关掉 HuggingFace / tqdm 进度条。
+
+    PYTHON-FASTAPI-H / A：桌面端 stdout 不是控制台时，tqdm.status_printer
+    写 ``\\r`` 会抛 OSError / BrokenPipeError，下载被中断。
+    """
+    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+    os.environ.setdefault("TQDM_DISABLE", "1")
+    try:
+        from huggingface_hub.utils import disable_progress_bars
+        disable_progress_bars()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 class ModelStatus(str, Enum):
@@ -153,6 +169,7 @@ class WhisperModelManager:
         try:
             whisper_runtime.ensure_on_path()
             from huggingface_hub import snapshot_download
+            _silence_download_progress()
             logger.info(f"开始下载 Whisper 模型 {model_name} ({repo_id})")
             snapshot_download(
                 repo_id=repo_id,
@@ -162,7 +179,12 @@ class WhisperModelManager:
                 self._download_state[model_name] = {"status": "downloaded", "progress": 100, "error": None}
             logger.info(f"Whisper 模型 {model_name} 下载完成")
         except Exception as e:  # noqa: BLE001
-            logger.error(f"下载 Whisper 模型 {model_name} 失败: {e}", exc_info=True)
+            # 已处理失败只记 warning：LoggingIntegration(event_level=ERROR) + exc_info
+            # 会把 tqdm 写控制台这类可恢复错误打进 Sentry。
+            logger.warning(
+                "下载 Whisper 模型 %s 失败: %s: %s",
+                model_name, type(e).__name__, e,
+            )
             with self._lock:
                 self._download_state[model_name] = {"status": "error", "progress": 0, "error": str(e)}
 

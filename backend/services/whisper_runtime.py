@@ -59,6 +59,9 @@ def ensure_on_path() -> None:
         sys.path.insert(0, install_dir)
     # 模型统一缓存到数据目录，便于管理/卸载
     os.environ.setdefault("HF_HOME", str(get_models_dir()))
+    # 桌面端 stdout 往往不是控制台；tqdm 写 \r 进度条会 OSError / BrokenPipe
+    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+    os.environ.setdefault("TQDM_DISABLE", "1")
     # faster-whisper 解码音频要用 ffmpeg：把内置 ffmpeg 所在目录并入 PATH
     ffmpeg_path = os.getenv("AUTOCLIP_FFMPEG_PATH")
     if ffmpeg_path:
