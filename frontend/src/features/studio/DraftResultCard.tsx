@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { studioDownloadRequested } from '../../analytics/studio'
 import { useNavigate } from 'react-router-dom'
 import { Btn, fmtDuration } from '../../ui'
@@ -14,17 +15,18 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
   projectId: string; draft: Draft; jobs: RenderJob[]
   onEdit: () => void; onExport: () => void; onHistory: () => void
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const state = draftExportState(draft, jobs)
-  const label = statusLabels[state.status]
+  const label = t(statusLabels[state.status])
   const completed = state.completed
   const thumbnail = completed ? studioApi.video(projectId, completed.job_id)
     : `${studioApi.source(projectId)}#t=${draft.scenes[0].start}`
   return <article className="ac-card">
-    <button className={`ac-card-thumb studio-thumb${completed ? " studio-thumb--exported" : ""}`} onClick={onEdit} aria-label={`预览 ${draft.title}`}>
+    <button className={`ac-card-thumb studio-thumb${completed ? " studio-thumb--exported" : ""}`} onClick={onEdit} aria-label={t('预览 {{title}}', { title: draft.title })}>
       <video muted preload="metadata" src={thumbnail} />
       <span className="play">▷</span>
-      <span className="ac-tag ac-tag--tl">{draft.origin==='visual-promo'?'推广成片':draft.origin==='visual-highlight'?'精彩高光':'成片草稿'}</span>
+      <span className="ac-tag ac-tag--tl">{t(draft.origin==='visual-promo'?'推广成片':draft.origin==='visual-highlight'?'精彩高光':'成片草稿')}</span>
       <span className="ac-tag ac-tag--br">{fmtDuration(draftDuration(draft))}</span>
     </button>
     <div className="ac-card-body">
@@ -32,19 +34,19 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
       <div className={`studio-output-state studio-output-state--${state.status}`} role="status">
         {label}{state.active ? ` · ${state.active.percent ?? 0}%` : ''}
       </div>
-      <p className="studio-output-hint">{completed ? `当前 V${draft.revision} 成片画面` : '原片缩略图 · 包装效果以导出为准'}</p>
-      <div className="ac-card-desc">{draft.hook||draft.scenes[0].evidence||'保留原声与完整事件'}</div>
-      {state.status==='failed' && <p className="studio-output-hint studio-error">{state.failure?.error || '请重试导出，原草稿已保留'}</p>}
-      {state.status==='ready' && state.failure && <p className="studio-output-hint">本版曾有导出失败，已完成文件仍可下载。</p>}
-      {state.previous && !completed && <button className="studio-link studio-output-hint" onClick={onHistory}>查看已导出的 V{state.previous.revision} 旧版</button>}
+      <p className="studio-output-hint">{completed ? t('当前 V{{revision}} 成片画面', { revision: draft.revision }) : t('原片缩略图 · 包装效果以导出为准')}</p>
+      <div className="ac-card-desc">{draft.hook||draft.scenes[0].evidence||t('保留原声与完整事件')}</div>
+      {state.status==='failed' && <p className="studio-output-hint studio-error">{state.failure?.error || t('请重试导出，原草稿已保留')}</p>}
+      {state.status==='ready' && state.failure && <p className="studio-output-hint">{t('本版曾有导出失败，已完成文件仍可下载。')}</p>}
+      {state.previous && !completed && <button className="studio-link studio-output-hint" onClick={onHistory}>{t('查看已导出的 V{{revision}} 旧版', { revision: state.previous.revision })}</button>}
       <div className="ac-card-foot">
-        <span className="meta">{languages.find(l=>l.value===draft.language)?.label} · V{draft.revision} · {draft.scenes.length} 段</span>
+        <span className="meta">{draft.language === 'source' ? t('原语言') : languages.find(l=>l.value===draft.language)?.label ?? draft.language} · V{draft.revision} · {t('{{count}} 段', { count: draft.scenes.length })}</span>
         <div className="ac-card-actions">
-          <Btn variant="text" onClick={onEdit}>预览与修改</Btn>
-          {completed && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/publish/studio-${completed.job_id}`)}>发布</Btn>}
-          {completed ? <a className="studio-link" href={studioApi.video(projectId, completed.job_id, true)} download onClick={studioDownloadRequested}>下载成片</a>
-            : state.active ? <Btn variant="text" onClick={onHistory}>查看进度</Btn>
-            : <Btn variant="text" onClick={onExport}>{state.status==='failed'?'重试导出':'导出成片'}</Btn>}
+          <Btn variant="text" onClick={onEdit}>{t('预览与修改')}</Btn>
+          {completed && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/publish/studio-${completed.job_id}`)}>{t('发布')}</Btn>}
+          {completed ? <a className="studio-link" href={studioApi.video(projectId, completed.job_id, true)} download onClick={studioDownloadRequested}>{t('下载成片')}</a>
+            : state.active ? <Btn variant="text" onClick={onHistory}>{t('查看进度')}</Btn>
+            : <Btn variant="text" onClick={onExport}>{t(state.status==='failed'?'重试导出':'导出成片')}</Btn>}
         </div>
       </div>
     </div>
