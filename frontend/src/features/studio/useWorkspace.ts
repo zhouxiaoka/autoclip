@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { studioApi, errorText } from './api'
 import { Workspace, emptyWorkspace } from './types'
+import { pollWorkspace } from './pollWorkspace'
 
 export function useWorkspace(projectId: string | undefined) {
   const [state, setState] = useState<Workspace>(emptyWorkspace)
@@ -11,20 +12,23 @@ export function useWorkspace(projectId: string | undefined) {
   useEffect(() => {
     if (!projectId) return
     const controller = new AbortController()
-    let timer: ReturnType<typeof setTimeout>
     setLoading(true)
-    const read = async () => {
-      try {
-        const data = await studioApi.get(projectId, controller.signal)
-        if (!controller.signal.aborted) { setState(data); setError('') }
-      } catch (e) {
-        if (!controller.signal.aborted) setError(errorText(e))
-      } finally {
-        if (!controller.signal.aborted) { setLoading(false); timer = setTimeout(read, 3000) }
-      }
-    }
-    void read()
-    return () => { controller.abort(); clearTimeout(timer) }
+    void pollWorkspace(signal => studioApi.get(projectId, signal), {
+      signal: controller.signal,
+      onData: data => { setState(data); setError('') },
+      onError: error => setError(errorText(error)),
+      onSettled: () => setLoading(false),
+    })
+    return () => controller.abort()
   }, [projectId, version])
+  useEffect(() => {
+    const resume = () => { if (document.visibilityState === 'visible') refresh() }
+    window.addEventListener('focus', resume)
+    document.addEventListener('visibilitychange', resume)
+    return () => {
+      window.removeEventListener('focus', resume)
+      document.removeEventListener('visibilitychange', resume)
+    }
+  }, [refresh])
   return { workspace: state, error, loading, refresh }
 }
