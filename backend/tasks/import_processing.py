@@ -5,7 +5,7 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import NoReturn, Optional
 from celery import Celery
 from backend.core.database import get_db
 from backend.services.project_service import ProjectService
@@ -16,6 +16,36 @@ logger = logging.getLogger(__name__)
 
 # 获取Celery应用实例
 from backend.core.celery_app import celery_app
+
+
+class ImportProcessingError(Exception):
+    """导入任务失败。交给 Celery 记成带 exc_type 的 FAILURE，不要自己 update_state(FAILURE)。"""
+
+
+def _record_import_failure(project_service, project_id: str, error: str) -> None:
+    """项目标失败，并把原因写进 project_metadata.last_error（详情页从这里读）。"""
+    message = (error or "导入失败")[:2000]
+    project_service.update_project_status(project_id, "failed")
+    try:
+        project = project_service.get(project_id)
+        if project is None:
+            return
+        meta = dict(getattr(project, "project_metadata", None) or {})
+        meta["last_error"] = message
+        project_service.update(project_id, project_metadata=meta)
+    except Exception:
+        logger.warning("写入导入失败原因失败: %s", project_id, exc_info=True)
+
+
+def _fail_import(project_service, project_id: str, error: str) -> NoReturn:
+    """记录用户可见的失败原因，再抛出异常让结果后端保存 exc_type。
+
+    手动把状态写成 FAILURE、meta 里只放 error 然后 return，结果后端没有 exc_type。
+    worker 随后 mark_as_done / mark_as_failure 解码时会抛
+    ValueError: Exception information must include the exception type。
+    """
+    _record_import_failure(project_service, project_id, error)
+    raise ImportProcessingError(error)
 
 @celery_app.task(bind=True)
 def process_import_task(self, project_id: str, video_path: str, srt_file_path: Optional[str] = None):
@@ -190,26 +220,19 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
                     input_video_path=video_path,
                     input_srt_path=srt_path
                 )
-                
+            except Exception as e:
+                logger.error(f"启动项目 {project_id} 处理失败: {str(e)}")
+                _fail_import(project_service, project_id, str(e))
+            else:
                 if task_result['success']:
                     logger.info(f"项目 {project_id} 处理任务已启动，Celery任务ID: {task_result['task_id']}")
                     self.update_state(state='PROGRESS', meta={'progress': 100, 'message': '处理流程已启动'})
                 else:
                     logger.error(f"Celery任务提交失败: {task_result['error']}")
-                    project_service.update_project_status(project_id, "failed")
-                    self.update_state(state='FAILURE', meta={'error': task_result['error']})
-                    return
-                    
-            except Exception as e:
-                logger.error(f"启动项目 {project_id} 处理失败: {str(e)}")
-                project_service.update_project_status(project_id, "failed")
-                self.update_state(state='FAILURE', meta={'error': str(e)})
-                return
+                    _fail_import(project_service, project_id, task_result['error'])
         else:
             logger.error(f"字幕文件不存在: {srt_path}")
-            project_service.update_project_status(project_id, "failed")
-            self.update_state(state='FAILURE', meta={'error': '字幕文件不存在'})
-            return
+            _fail_import(project_service, project_id, "字幕文件不存在")
         
         logger.info(f"导入任务完成: {project_id}")
         return {
@@ -218,18 +241,25 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
             'message': '导入处理完成'
         }
         
+    except ImportProcessingError:
+        raise
     except Exception as e:
         logger.error(f"导入任务失败: {project_id}, 错误: {e}")
-        
-        # 更新项目状态为失败
+
+        # 预期失败已经记过原因。这里只兜底未预料的异常，仍然不要手动写 FAILURE。
+        failure_db = None
         try:
-            db = next(get_db())
-            project_service = ProjectService(db)
-            project_service.update_project_status(project_id, "failed")
-        except:
-            pass
-        
-        self.update_state(state='FAILURE', meta={'error': str(e)})
+            failure_db = next(get_db())
+            project_service = ProjectService(failure_db)
+            _record_import_failure(project_service, project_id, str(e))
+        except Exception:
+            logger.warning("导入任务失败后更新项目状态失败: %s", project_id, exc_info=True)
+        finally:
+            if failure_db is not None:
+                try:
+                    failure_db.close()
+                except Exception:
+                    pass
         raise
     finally:
         try:
