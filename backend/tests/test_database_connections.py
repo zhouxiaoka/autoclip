@@ -33,3 +33,23 @@ def test_memory_sqlite_preserves_database_across_connections():
             assert connection.execute(text('SELECT count(*) FROM items')).scalar() == 1
     finally:
         engine.dispose()
+
+
+def test_file_sqlite_wal_allows_commit_while_reader_holds_snapshot(tmp_path):
+    engine = create_database_engine('sqlite:///' + str(tmp_path / 'wal.sqlite'))
+    try:
+        with engine.begin() as connection:
+            connection.execute(text('CREATE TABLE items (value INTEGER)'))
+            connection.execute(text('INSERT INTO items VALUES (1)'))
+        with engine.connect() as reader, engine.connect() as writer:
+            assert reader.exec_driver_sql('PRAGMA journal_mode').scalar() == 'wal'
+            assert writer.exec_driver_sql('PRAGMA busy_timeout').scalar() == 30000
+            reader.exec_driver_sql('BEGIN')
+            assert reader.execute(text('SELECT value FROM items')).scalar() == 1
+            writer.execute(text('UPDATE items SET value=2'))
+            writer.commit()
+            assert reader.execute(text('SELECT value FROM items')).scalar() == 1
+            reader.rollback()
+            assert reader.execute(text('SELECT value FROM items')).scalar() == 2
+    finally:
+        engine.dispose()
