@@ -65,3 +65,21 @@ test('every static translation call has a catalog entry', () => {
     visit(source)
   }
 })
+
+test('Studio result states translate on language changes while retaining titles and version numbers', async () => {
+  const instance=createInstance()
+  await instance.init({resources:Object.fromEntries(langs.map(l=>[l,{translation:catalogs[l]}])),lng:'en',fallbackLng:'en',keySeparator:false,nsSeparator:false,interpolation:{escapeValue:false}})
+  const sourceTitle='贴壁过弯 <V2> & café'
+  const states=['草稿 · 待导出','排队中','正在导出','已导出 · 可下载','导出失败','已修改 · 需重新导出','导出记录','发布这版成片']
+  for(const lang of langs) {
+    await instance.changeLanguage(lang)
+    for(const state of states) {
+      assert.ok(Object.hasOwn(catalogs[lang],state), `${lang}: ${state}`)
+      assert.equal(instance.t(state),catalogs[lang][state])
+      if(lang!=='zh') assert.notEqual(instance.t(state),state)
+    }
+    assert.ok(instance.t('预览 {{title}}',{title:sourceTitle}).includes(sourceTitle))
+    assert.ok(instance.t('当前 V{{revision}} 成片画面',{revision:12}).includes('V12'))
+    assert.ok(instance.t('{{count}} 段',{count:3}).includes('3'))
+  }
+})
