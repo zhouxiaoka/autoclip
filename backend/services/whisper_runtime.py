@@ -10,7 +10,7 @@ PyTorch，运行时 ~200-400MB，比官方 whisper 快数倍，跨平台）。
   （/Applications 通常只读，且写入会破坏代码签名）。
 - 用「当前正在跑后端的便携 Python」(sys.executable) 的 pip 安装，保证解释器一致。
 - 模型缓存放 `<data_dir>/whisper-models`（通过 HF_HOME 收口）。
-- 所有对 mlx_whisper / huggingface_hub 的 import 都延迟到函数内部，避免构建期
+- 所有对 faster_whisper / huggingface_hub 的 import 都延迟到函数内部，避免构建期
   依赖扫描把它们当成缺失依赖而让打包失败。
 """
 
@@ -59,7 +59,7 @@ def ensure_on_path() -> None:
         sys.path.insert(0, install_dir)
     # 模型统一缓存到数据目录，便于管理/卸载
     os.environ.setdefault("HF_HOME", str(get_models_dir()))
-    # mlx-whisper 解码音频要用 ffmpeg：把内置 ffmpeg 所在目录并入 PATH
+    # faster-whisper 解码音频要用 ffmpeg：把内置 ffmpeg 所在目录并入 PATH
     ffmpeg_path = os.getenv("AUTOCLIP_FFMPEG_PATH")
     if ffmpeg_path:
         ffmpeg_dir = str(Path(ffmpeg_path).parent)
@@ -68,7 +68,7 @@ def ensure_on_path() -> None:
 
 
 def is_installed() -> bool:
-    """运行时是否已就绪（mlx_whisper 可被导入）。"""
+    """运行时是否已就绪（faster_whisper 可被导入）。"""
     ensure_on_path()
     try:
         import importlib.util

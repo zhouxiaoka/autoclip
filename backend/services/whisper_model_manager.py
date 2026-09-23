@@ -1,7 +1,7 @@
 """
-Whisper 模型管理服务（mlx-whisper）
+Whisper 模型管理服务（faster-whisper）
 
-负责 mlx-community Whisper 模型的下载、状态检查、删除。模型从 HuggingFace 拉取，
+负责 Systran/faster-whisper 模型的下载、状态检查、删除。模型从 HuggingFace 拉取，
 统一缓存到 `<data_dir>/whisper-models`（由 whisper_runtime 设置 HF_HOME）。
 依赖（huggingface_hub）来自运行时安装目录，所有相关 import 都延迟到函数内。
 """
