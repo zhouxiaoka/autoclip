@@ -636,3 +636,70 @@ def test_v6_preserves_accepted_comic_and_pixel_palette():
     assert len(pixel.getcolors(10000))<30
     for style in ['plain','impact','card']:
         with pytest.raises(ValidationError):draft(title_style=style,title_template_version=6)
+
+
+def test_thumbnail_is_real_jpeg_and_preserves_draft(client, root):
+    import io
+    from PIL import Image
+    from backend.services.studio import thumbnails
+    d = store.save_draft('p1', draft(), create=True)
+    before = store.read('p1')
+    response = client.get(f"/studio/p1/drafts/{d['id']}/thumbnail", params={'revision': 1})
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'image/jpeg'
+    with Image.open(io.BytesIO(response.content)) as frame:
+        assert max(frame.size) <= 640
+    hits = thumbnails._frame.cache_info().hits
+    assert client.get(f"/studio/p1/drafts/{d['id']}/thumbnail?revision=1").content == response.content
+    assert thumbnails._frame.cache_info().hits == hits + 1
+    assert store.read('p1') == before
+    from backend.services.studio import jobs
+    import os
+    video = jobs.source('p1')
+    stat = video.stat()
+    os.utime(video, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    misses = thumbnails._frame.cache_info().misses
+    assert client.get(f"/studio/p1/drafts/{d['id']}/thumbnail?revision=1").status_code == 200
+    assert thumbnails._frame.cache_info().misses == misses + 1
+    assert client.get(f"/studio/p1/drafts/{d['id']}/thumbnail?revision=2").status_code == 409
+    assert client.get(f"/studio/missing/drafts/{d['id']}/thumbnail?revision=1").status_code == 404
+    assert client.get('/studio/p1/drafts/missing/thumbnail?revision=1').status_code == 404
+    assert client.get(f"/studio/p1/drafts/{d['id']}/thumbnail?revision=1&job_id=../outside").status_code == 422
+
+
+def test_thumbnail_rejects_unfinished_or_wrong_revision_export(client, root):
+    d = store.save_draft('p1', draft(), create=True)
+    jid = 'a' * 32
+    state = store.read('p1')
+    state['jobs'] = [{'job_id':jid,'draft_id':d['id'],'revision':1,'status':'failed'}]
+    store.write('p1', state)
+    assert client.get(f"/studio/p1/drafts/{d['id']}/thumbnail?revision=1&job_id={jid}").status_code == 404
+    state['jobs'][0].update(status='completed', revision=2)
+    store.write('p1', state)
+    assert client.get(f"/studio/p1/drafts/{d['id']}/thumbnail?revision=1&job_id={jid}").status_code == 404
+
+
+def test_thumbnail_output_uses_scoped_file_not_result_path(client, root, source):
+    import io
+    from PIL import Image
+    d = store.save_draft('p1', draft(), create=True)
+    jid = 'b' * 32
+    output = root / 'output' / 'studio' / f'{jid}.mp4'
+    output.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, output)
+    state = store.read('p1')
+    state['jobs'] = [{'job_id':jid,'draft_id':d['id'],'revision':1,'status':'completed','result':{'path':'/outside/private.mp4'}}]
+    store.write('p1', state)
+    response = client.get(f"/studio/p1/drafts/{d['id']}/thumbnail?revision=1&job_id={jid}")
+    assert response.status_code == 200
+    with Image.open(io.BytesIO(response.content)) as frame:
+        assert max(frame.size) <= 640
+
+
+def test_thumbnail_failure_does_not_cache_empty_frame(monkeypatch):
+    from backend.services.studio import thumbnails
+    thumbnails._frame.cache_clear()
+    monkeypatch.setattr(thumbnails.subprocess, 'run', lambda *a, **k: subprocess.CompletedProcess([], 0, b'', b''))
+    with pytest.raises(ValueError, match='缩略图'):
+        thumbnails._frame('/unused', 1, 1, 0)
+    assert thumbnails._frame.cache_info().currsize == 0
