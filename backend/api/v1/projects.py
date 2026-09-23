@@ -990,12 +990,17 @@ async def get_project_clip(
         if not video_file.exists():
             raise HTTPException(status_code=404, detail="Clip video file not found")
         
-        # 返回文件流
+        # 内联播放。默认 attachment 时，macOS WKWebView 的 <video> 不会播放。
         from fastapi.responses import FileResponse
         return FileResponse(
             path=str(video_file),
             media_type="video/mp4",
-            filename=video_file.name
+            filename=video_file.name,
+            content_disposition_type="inline",
+            headers={
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "no-cache",
+            },
         )
     except HTTPException:
         raise

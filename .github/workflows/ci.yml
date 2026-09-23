@@ -72,7 +72,7 @@ jobs:
         run: node --test tests/analytics.test.cjs
 
       - name: Sentry build configuration tests
-        run: node --test tests/sentry-build.test.cjs tests/desktop.test.cjs
+        run: node --test tests/sentry-build.test.cjs tests/desktop.test.cjs tests/clip-media-url.test.cjs
 
       - name: Internationalization checks
         run: node --test tests/i18n.test.cjs
