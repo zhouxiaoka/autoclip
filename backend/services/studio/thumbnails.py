@@ -84,5 +84,6 @@ def draft_frame(project_id: str, draft_id: str, revision: int, job_id: str | Non
     else:
         intelligence.validate_scenes(draft.scenes, duration)
         scene = draft.scenes[0]
-        timestamp = scene.start + min(.1, (scene.end - scene.start) / 2)
+        # Sample inside the scene, avoiding transition flashes at the cut boundary.
+        timestamp = scene.start + min(3, (scene.end - scene.start) * .2)
     return _frame(str(video.resolve()), stat.st_mtime_ns, stat.st_size, round(timestamp, 3))
