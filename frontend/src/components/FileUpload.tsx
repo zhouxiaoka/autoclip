@@ -7,6 +7,8 @@ import { useDropzone } from 'react-dropzone'
 import { projectApi, VideoCategory } from '../services/api'
 import { useProjectStore } from '../store/useProjectStore'
 import { validateApiConfigBeforeProjectCreation } from '../utils/apiConfigCheck'
+import { applyCategoryResponse, categoryOptions } from '../utils/videoCategories'
+import VideoCategoryPicker from './VideoCategoryPicker'
 
 const { Text } = Typography
 
@@ -37,17 +39,20 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
       try {
         const response = await projectApi.getVideoCategories()
         if (!active) return
-        setCategories(response.categories)
-        // 设置默认选中【默认】选项
-        if (response.default_category) {
-          setSelectedCategory(response.default_category)
-        } else if (response.categories.length > 0) {
-          setSelectedCategory(response.categories[0].value)
+        const resolved = applyCategoryResponse(response)
+        setCategories(resolved.categories)
+        if (resolved.selectedCategory) {
+          setSelectedCategory(resolved.selectedCategory)
         }
       } catch (error) {
         if (!active) return
         console.error('Failed to load video categories:', error)
         message.error({ content: t("加载视频分类失败"), key: 'video-categories' })
+        const fallback = applyCategoryResponse(undefined)
+        setCategories(fallback.categories)
+        if (fallback.selectedCategory) {
+          setSelectedCategory(fallback.selectedCategory)
+        }
       } finally {
         if (active) setLoadingCategories(false)
       }
@@ -147,8 +152,9 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
       setUploadProgress(0)
       setUploading(false)
       // 重置为默认分类
-      if (categories.length > 0) {
-        setSelectedCategory(categories[0].value)
+      const options = categoryOptions(categories)
+      if (options.length > 0) {
+        setSelectedCategory(options[0].value)
       }
       
       if (onUploadSuccess) {
@@ -306,58 +312,11 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadSuccess }) => {
       {files.video && (
         <div style={{ marginBottom: '16px' }}>
           <Text strong style={{ color: '#ffffff', fontSize: '14px', marginBottom: '8px', display: 'block' }}>{t("视频分类")}</Text>
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '8px'
-          }}>
-            {categories.map(category => {
-              const isSelected = selectedCategory === category.value
-              return (
-                <div
-                  key={category.value}
-                  onClick={() => setSelectedCategory(category.value)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: isSelected 
-                      ? `2px solid ${category.color}` 
-                      : '2px solid var(--ac-line)',
-                    background: isSelected 
-                      ? `${category.color}25` 
-                      : 'var(--ac-line)',
-                    color: isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.8)',
-                    boxShadow: isSelected 
-                      ? `0 0 12px ${category.color}40` 
-                      : 'none',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    fontSize: '13px',
-                    fontWeight: isSelected ? 600 : 400,
-                    userSelect: 'none'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.background = 'var(--ac-line)'
-                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.background = 'var(--ac-line)'
-                      e.currentTarget.style.borderColor = 'var(--ac-line)'
-                    }
-                  }}
-                >
-                  <span style={{ fontSize: '14px' }}>{category.icon}</span>
-                  <span>{t(category.name)}</span>
-                </div>
-              )
-            })}
-          </div>
+          <VideoCategoryPicker
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onSelect={setSelectedCategory}
+          />
         </div>
       )}
 
