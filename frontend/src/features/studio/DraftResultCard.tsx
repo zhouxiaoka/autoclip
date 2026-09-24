@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { studioDownloadRequested } from '../../analytics/studio'
+import StudioDownloadLink from './StudioDownloadLink'
 import { useNavigate } from 'react-router-dom'
 import { Btn, fmtDuration } from '../../ui'
 import { studioApi } from './api'
@@ -45,7 +45,7 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
         <div className="ac-card-actions">
           <Btn variant="text" onClick={onEdit}>{t('预览与修改')}</Btn>
           {completed && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/publish/studio-${completed.job_id}`)}>{t('发布')}</Btn>}
-          {completed ? <a className="studio-link" href={studioApi.video(projectId, completed.job_id, true)} download onClick={studioDownloadRequested}>{t('下载成片')}</a>
+          {completed ? <StudioDownloadLink className="studio-link" projectId={projectId} jobId={completed.job_id}/>
             : state.active ? <Btn variant="text" onClick={onHistory}>{t('查看进度')}</Btn>
             : <Btn variant="text" onClick={onExport}>{t(state.status==='failed'?'重试导出':'导出成片')}</Btn>}
         </div>
