@@ -7,8 +7,16 @@
 
 ## [未发布]
 
+_（本周尚无改动）_
+
+## [1.3.4] - 2026-09-24
+
 ### 修复
-- macOS 桌面端切片生成后可以预览，下载会保存到「下载」文件夹（#166）
+- macOS 桌面端切片生成后可以预览，下载会保存到「下载」文件夹（#166 / #168）
+- 片源处理进度显示更准：不再因读错字段停在约 5%；真下载失败仍需看日志（Related #163 / #169）
+- 导入任务失败时，Celery 结果可正确记为 FAILURE（#20 / #170）
+- 无字幕或未安装 Whisper 时，失败提示指到「设置 → 转写」（#165 族 / #171）
+- 没有可用模型或连接测试失败时，提示需自备 API Key，并指到「设置 → 模型」（Related #161/#162 / #174）
 
 ## [1.3.3] - 2026-09-23
 
@@ -220,7 +228,8 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.3...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.4...HEAD
+- [1.3.4]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.3...v1.3.4
 - [1.3.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.2...v1.3.3
 - [1.3.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.1...v1.3.2
 - [1.3.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.0...v1.3.1
