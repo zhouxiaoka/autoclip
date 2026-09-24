@@ -1,11 +1,10 @@
 """
 文本处理工具
 """
-import json
 import logging
 import re
-from typing import List, Dict, Any, Optional
 from pathlib import Path
+from typing import Dict, List, Optional
 
 # 修复导入问题
 try:
@@ -78,7 +77,13 @@ class TextProcessor:
         
         return chunks
     
-    def chunk_srt_data(self, srt_data: List[Dict], interval_minutes: int = 30, pause_threshold_ms: int = 1000) -> List[Dict]:
+    def chunk_srt_data(
+        self,
+        srt_data: List[Dict],
+        interval_minutes: int = 30,
+        pause_threshold_ms: int = 1000,
+        max_chars: Optional[int] = None,
+    ) -> List[Dict]:
         """
         根据停顿时间，将SRT数据切分为大约相等时间长度的块。
         这可以避免在对话中间断开。
@@ -87,6 +92,7 @@ class TextProcessor:
             srt_data: SRT数据列表
             interval_minutes: 每个块的目标时间长度（分钟）
             pause_threshold_ms: 识别为停顿的最小毫秒数
+            max_chars: 每个块的字符数上限
 
         Returns:
             结构化的块列表，其中的 srt_entries 不包含临时处理字段。
@@ -142,6 +148,19 @@ class TextProcessor:
                 while i < len(srt_data_with_seconds) and srt_data_with_seconds[i]['start_seconds'] < target_cut_time:
                     i += 1
                 best_cut_index = i if i < len(srt_data_with_seconds) else len(srt_data_with_seconds)
+
+            if max_chars is not None and max_chars > 0:
+                character_count = 0
+                character_cut_index = current_chunk_start_index
+                for index in range(current_chunk_start_index, len(srt_data_with_seconds)):
+                    entry = srt_data_with_seconds[index]
+                    separator_length = 1 if character_count else 0
+                    next_character_count = character_count + separator_length + len(entry['text'])
+                    if character_count and next_character_count > max_chars:
+                        break
+                    character_count = next_character_count
+                    character_cut_index += 1
+                best_cut_index = min(best_cut_index, character_cut_index)
 
             # 如果切分点无效或过小，则将所有剩余部分作为一个块
             if best_cut_index <= current_chunk_start_index:

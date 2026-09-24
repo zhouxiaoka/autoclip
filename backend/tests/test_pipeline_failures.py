@@ -98,7 +98,7 @@ def test_step1_partial_chunk_failure_still_returns_outline(tmp_path, prompt_file
                            [TimeoutError("read timeout"), "1. **产品定位**\n- 面向创作者"])
     # 强制切成两块
     monkeypatch.setattr(extractor.text_processor, "chunk_srt_data",
-                        lambda data, interval_minutes: [
+                        lambda data, interval_minutes, max_chars=None: [
                             {"chunk_index": 0, "text": "块0", "srt_entries": data[:1]},
                             {"chunk_index": 1, "text": "块1", "srt_entries": data[1:]},
                         ])

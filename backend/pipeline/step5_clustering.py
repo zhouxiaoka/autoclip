@@ -3,21 +3,38 @@ Step 5: 主题聚类 - 将相似内容聚类成合集
 """
 import json
 import logging
-import re
-from typing import List, Dict, Any, Optional
 from pathlib import Path
+from typing import Dict, List, Optional
 
 # 导入依赖
+from ..core.shared_config import MAX_CLIPS_PER_COLLECTION, METADATA_DIR, PROMPT_FILES
 from ..utils.llm_client import LLMClient
-from ..core.shared_config import PROMPT_FILES, METADATA_DIR, MAX_CLIPS_PER_COLLECTION
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_max_clips_per_collection() -> int:
+    """读取设置页保存的合集上限，失败时回退代码默认值。"""
+    try:
+        from ..core.llm_manager import get_llm_manager
+        value = get_llm_manager().get_processing_setting("max_clips_per_collection")
+        if value is not None:
+            value = int(value)
+            if value > 0:
+                return value
+            logger.warning(f"设置页的合集切片上限 {value} 必须大于 0，使用默认 {MAX_CLIPS_PER_COLLECTION}")
+    except (AttributeError, ImportError, OSError, TypeError, ValueError) as e:
+        logger.debug(f"读取设置页合集切片上限失败，使用默认值: {e}")
+    return int(MAX_CLIPS_PER_COLLECTION)
+
 
 class ClusteringEngine:
     """主题聚类引擎"""
     
     def __init__(self, metadata_dir: Optional[Path] = None, prompt_files: Dict = None):
         self.llm_client = LLMClient()
+        self.max_clips_per_collection = resolve_max_clips_per_collection()
+        self.min_clips_per_collection = min(2, self.max_clips_per_collection)
         
         # 加载提示词
         prompt_files_to_use = prompt_files if prompt_files is not None else PROMPT_FILES
@@ -55,7 +72,13 @@ class ClusteringEngine:
         pre_clusters = self._pre_cluster_by_keywords(clips_for_clustering)
         
         # 构建完整的提示词
-        full_prompt = self.clustering_prompt + "\n\n以下是视频切片列表：\n"
+        full_prompt = (
+            self.clustering_prompt
+            + "\n\n---\n## 本次任务参数（优先级高于上文）\n"
+            + f"- 每个合集至少包含{self.min_clips_per_collection}条切片，"
+            + f"最多包含{self.max_clips_per_collection}条切片。\n\n"
+            + "以下是视频切片列表：\n"
+        )
         for i, clip in enumerate(clips_for_clustering, 1):
             full_prompt += f"{i}. 标题：{clip['title']}\n   摘要：{clip['summary']}\n   评分：{clip['score']:.2f}\n\n"
         
@@ -133,7 +156,11 @@ class ClusteringEngine:
                 pre_clusters[best_theme].append(clip['id'])
         
         # 过滤掉空的主题
-        return {theme: clip_ids for theme, clip_ids in pre_clusters.items() if len(clip_ids) >= 2}
+        return {
+            theme: clip_ids
+            for theme, clip_ids in pre_clusters.items()
+            if len(clip_ids) >= self.min_clips_per_collection
+        }
     
     def _create_collections_from_pre_clusters(self, pre_clusters: Dict[str, List[str]], clips_with_titles: List[Dict]) -> List[Dict]:
         """
@@ -175,8 +202,8 @@ class ClusteringEngine:
         
         for theme, clip_ids in pre_clusters.items():
             # 限制每个合集的片段数量
-            if len(clip_ids) > MAX_CLIPS_PER_COLLECTION:
-                clip_ids = clip_ids[:MAX_CLIPS_PER_COLLECTION]
+            if len(clip_ids) > self.max_clips_per_collection:
+                clip_ids = clip_ids[:self.max_clips_per_collection]
             
             collections.append({
                 'id': str(collection_id),
@@ -220,13 +247,15 @@ class ClusteringEngine:
                             valid_clip_ids.append(clip['id'])
                             break
                 
-                if len(valid_clip_ids) < 2:
-                    logger.warning(f"合集 {i} 有效片段少于2个，跳过")
+                if len(valid_clip_ids) < self.min_clips_per_collection:
+                    logger.warning(
+                        f"合集 {i} 有效片段少于{self.min_clips_per_collection}个，跳过"
+                    )
                     continue
                 
                 # 限制每个合集的片段数量
-                if len(valid_clip_ids) > MAX_CLIPS_PER_COLLECTION:
-                    valid_clip_ids = valid_clip_ids[:MAX_CLIPS_PER_COLLECTION]
+                if len(valid_clip_ids) > self.max_clips_per_collection:
+                    valid_clip_ids = valid_clip_ids[:self.max_clips_per_collection]
                 
                 validated_collection = {
                     'id': str(i + 1),
@@ -269,21 +298,21 @@ class ClusteringEngine:
         collections = []
         
         # 创建高分合集
-        if len(high_score) >= 2:
+        if len(high_score) >= self.min_clips_per_collection:
             collections.append({
                 'id': '1',
                 'collection_title': '精选高分片段',
                 'collection_summary': '评分最高的精彩片段合集',
-                'clip_ids': [clip['id'] for clip in high_score[:MAX_CLIPS_PER_COLLECTION]]
+                'clip_ids': [clip['id'] for clip in high_score[:self.max_clips_per_collection]]
             })
         
         # 创建中等分合集
-        if len(medium_score) >= 2:
+        if len(medium_score) >= self.min_clips_per_collection:
             collections.append({
                 'id': '2',
                 'collection_title': '优质内容推荐',
                 'collection_summary': '精选优质内容片段',
-                'clip_ids': [clip['id'] for clip in medium_score[:MAX_CLIPS_PER_COLLECTION]]
+                'clip_ids': [clip['id'] for clip in medium_score[:self.max_clips_per_collection]]
             })
         
         return collections
