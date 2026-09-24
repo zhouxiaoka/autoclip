@@ -85,7 +85,7 @@ pub async fn is_autostart_enabled(manager: State<'_, AutoLaunchManager>) -> Resu
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SavedDownload {
+pub struct SavedDownload {
     path: String,
     size_bytes: u64,
 }
