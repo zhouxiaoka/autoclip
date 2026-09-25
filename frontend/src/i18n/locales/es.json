@@ -793,5 +793,6 @@
   "到「设置 → 转写」检查 Whisper 是否安装、模型是否已下载，或重新导入时带上 .srt。": "En Ajustes → Transcripción, comprueba que Whisper esté instalado y que haya un modelo descargado, o vuelve a importarlo con un archivo .srt.",
   "打开转写设置": "Abrir ajustes de transcripción",
   "转写设置": "Transcripción",
-  "这个切片当前播放器无法解码，请下载后用系统播放器打开。": "Este clip no se puede decodificar en el reproductor. Descárgalo y ábrelo con el reproductor del sistema."
+  "这个切片当前播放器无法解码，请下载后用系统播放器打开。": "Este clip no se puede decodificar en el reproductor. Descárgalo y ábrelo con el reproductor del sistema.",
+  "切片分析会关闭 DeepSeek 的思考模式，避免按长段推理输出计费。长视频仍会按大约 30 分钟一块、分几步调用；刷新页面不会重新计费，重新开始处理才会。": "El análisis de clips desactiva el modo de razonamiento de DeepSeek para no facturar trazas largas como salida. Un vídeo largo sigue siendo varias llamadas, unas por cada 30 minutos de subtítulos y una por paso. Actualizar la página no lo vuelve a ejecutar; volver a iniciar el procesamiento sí."
 }

@@ -523,6 +523,14 @@ const SettingsPage: React.FC = () => {
                     </Form.Item>
                   </Row>
 
+                  {selectedProvider === 'deepseek' && (
+                    <Row
+                      wide
+                      label="DeepSeek"
+                      hint={t("切片分析会关闭 DeepSeek 的思考模式，避免按长段推理输出计费。长视频仍会按大约 30 分钟一块、分几步调用；刷新页面不会重新计费，重新开始处理才会。")}
+                    />
+                  )}
+
                   <Row label={t("连接测试")} hint={localCfg ? t("保存前先测一下本地服务和模型是否可用。") : t("保存前先测一下密钥和模型是否可用。")}>
                     <Btn size="sm" loading={testing} onClick={handleTest}>{t("测试连接")}</Btn>
                   </Row>
