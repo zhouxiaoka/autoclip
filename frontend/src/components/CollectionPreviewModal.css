@@ -98,7 +98,7 @@
 /* 视频区域 */
 .video-section {
   height: 100%;
-  background: #000;
+  background: var(--ac-thumb);
   position: relative;
 }
 
@@ -111,10 +111,17 @@
 .video-container {
   flex: 1;
   position: relative;
-  background: #000;
+  background: var(--ac-thumb);
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 0;
+}
+
+.video-container > * {
+  align-self: stretch;
+  width: 100%;
+  height: 100%;
 }
 
 .video-info-bar {

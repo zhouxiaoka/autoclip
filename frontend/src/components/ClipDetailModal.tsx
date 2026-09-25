@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState } from 'react'
 import { Modal, Typography, Button, Tag, Space, Row, Col, Divider } from 'antd'
 import { 
   PlayCircleOutlined, 
@@ -7,10 +7,10 @@ import {
   StarFilled,
   CloseOutlined
 } from '@ant-design/icons'
-import ReactPlayer from 'react-player'
 import { Clip } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
 import EditableTitle from './EditableTitle'
+import ClipVideo from './ClipVideo'
 
 const { Text, Title } = Typography
 
@@ -31,7 +31,6 @@ const ClipDetailModal: React.FC<ClipDetailModalProps> = ({
 }) => {
   const [playing, setPlaying] = useState(false)
   const [downloading, setDownloading] = useState(false)
-  const playerRef = useRef<ReactPlayer>(null)
 
   const formatTime = (timeStr: string) => {
     if (!timeStr) return '00:00:00'
@@ -113,21 +112,17 @@ const ClipDetailModal: React.FC<ClipDetailModalProps> = ({
             {/* 左侧视频播放器 */}
             <Col span={14}>
               <div style={{ 
-                background: '#000', 
+                background: 'var(--ac-thumb)', 
                 borderRadius: '8px', 
                 overflow: 'hidden',
-                marginBottom: '16px'
+                marginBottom: '16px',
+                height: 300,
               }}>
-                <ReactPlayer
-                  ref={playerRef}
+                <ClipVideo
                   url={projectApi.getClipVideoUrl(projectId, clip.id, clip.title || clip.generated_title)}
-                  width="100%"
-                  height="300px"
                   playing={playing}
-                  controls
                   onPlay={() => setPlaying(true)}
                   onPause={() => setPlaying(false)}
-                  style={{ borderRadius: '8px' }}
                 />
               </div>
 
