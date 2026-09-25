@@ -25,6 +25,8 @@ function mentionsSubtitle(text: string): boolean {
 export function classifySubtitleFailure(error?: string | null, code?: string | null): SubtitleFailureKind | null {
   if (code && CODES.has(code as SubtitleFailureKind)) return code as SubtitleFailureKind
   const text = error || ''
+  // 时间线为空会提到字幕轴，但下一步不是去装 Whisper（#182）。
+  if (code === 'timeline_empty' || text.includes('时间线提取为空') || text.includes('时间线为空')) return null
   if (!text || !mentionsSubtitle(text)) return null
   if (text.includes('上次安装没有成功') || text.includes('安装没有成功')) return 'whisper_install_failed'
   if (text.includes('还没安装') || text.includes('运行时未安装') || text.includes('没有可用的语音识别')) {
