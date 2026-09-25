@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from ..core.database import get_db
+from ..core.database import session_scope
 from ..models.bilibili import BilibiliAccount
 from ..utils.crypto import decrypt_data, encrypt_data
 from ..core.celery_app import celery_app
@@ -20,6 +20,16 @@ class AccountHealthStatus:
     EXPIRED = "expired"
     UNKNOWN = "unknown"
 
+class _AccountSnapshot:
+    """健康检查期间不握着 Session。网络请求只读这几个字段。"""
+
+    def __init__(self, account: BilibiliAccount):
+        self.id = account.id
+        self.username = account.username
+        self.cookies = account.cookies
+        self.cookie_expires_at = account.cookie_expires_at
+
+
 class AccountHealthService:
     """账号健康检查服务"""
     
@@ -31,46 +41,44 @@ class AccountHealthService:
     async def check_account_health(self, account_id: int) -> Dict:
         """检查单个账号健康状态"""
         try:
-            db = next(get_db())
-            account = db.query(BilibiliAccount).filter(BilibiliAccount.id == account_id).first()
-            
-            if not account:
-                return {
-                    "account_id": account_id,
-                    "status": AccountHealthStatus.UNKNOWN,
-                    "message": "账号不存在",
-                    "last_check": datetime.now()
-                }
-            
-            # 检查Cookie有效性
-            cookie_status = await self._check_cookie_validity(account)
-            
-            # 检查登录状态
-            login_status = await self._check_login_status(account)
-            
-            # 检查上传权限
-            upload_status = await self._check_upload_permission(account)
-            
-            # 综合评估健康状态
+            with session_scope() as db:
+                account = db.query(BilibiliAccount).filter(BilibiliAccount.id == account_id).first()
+                if not account:
+                    return {
+                        "account_id": account_id,
+                        "status": AccountHealthStatus.UNKNOWN,
+                        "message": "账号不存在",
+                        "last_check": datetime.now()
+                    }
+                view = _AccountSnapshot(account)
+
+            # 网络检查不占着数据库连接
+            cookie_status = await self._check_cookie_validity(view)
+            login_status = await self._check_login_status(view)
+            upload_status = await self._check_upload_permission(view)
+
             overall_status = self._evaluate_overall_status(
                 cookie_status, login_status, upload_status
             )
-            
-            # 更新账号状态
-            account.health_status = overall_status["status"]
-            account.last_health_check = datetime.now()
-            account.health_details = {
-                "cookie": cookie_status,
-                "login": login_status,
-                "upload": upload_status,
-                "last_check": datetime.now().isoformat()
-            }
-            
-            db.commit()
-            
+
+            with session_scope() as db:
+                account = db.query(BilibiliAccount).filter(BilibiliAccount.id == account_id).first()
+                username = view.username
+                if account:
+                    account.health_status = overall_status["status"]
+                    account.last_health_check = datetime.now()
+                    account.health_details = {
+                        "cookie": cookie_status,
+                        "login": login_status,
+                        "upload": upload_status,
+                        "last_check": datetime.now().isoformat()
+                    }
+                    username = account.username
+                    db.commit()
+
             return {
                 "account_id": account_id,
-                "username": account.username,
+                "username": username,
                 "status": overall_status["status"],
                 "message": overall_status["message"],
                 "details": {
@@ -318,31 +326,34 @@ class AccountHealthService:
     async def check_all_accounts(self) -> List[Dict]:
         """检查所有账号健康状态"""
         try:
-            db = next(get_db())
-            accounts = db.query(BilibiliAccount).filter(BilibiliAccount.is_active == True).all()
-            
+            with session_scope() as db:
+                account_ids = [
+                    row.id
+                    for row in db.query(BilibiliAccount).filter(BilibiliAccount.is_active == True).all()
+                ]
+
             results = []
-            for account in accounts:
-                result = await self.check_account_health(account.id)
+            for account_id in account_ids:
+                result = await self.check_account_health(account_id)
                 results.append(result)
-            
+
             return results
-            
+
         except Exception as e:
             logger.error(f"批量检查账号健康状态失败: {str(e)}")
             return []
-    
+
     async def auto_refresh_cookies(self, account_id: int) -> Dict:
         """自动刷新Cookie"""
         try:
-            db = next(get_db())
-            account = db.query(BilibiliAccount).filter(BilibiliAccount.id == account_id).first()
-            
-            if not account:
-                return {
-                    "success": False,
-                    "message": "账号不存在"
-                }
+            with session_scope() as db:
+                account = db.query(BilibiliAccount).filter(BilibiliAccount.id == account_id).first()
+                if not account:
+                    return {
+                        "success": False,
+                        "message": "账号不存在"
+                    }
+                username = account.username
             
             # 这里可以实现自动刷新Cookie的逻辑
             # 例如通过二维码登录、短信验证等方式
@@ -352,7 +363,7 @@ class AccountHealthService:
                 "success": False,
                 "message": "自动刷新Cookie功能待实现，请手动更新Cookie",
                 "account_id": account_id,
-                "username": account.username
+                "username": username
             }
             
         except Exception as e:

@@ -37,6 +37,7 @@ test('classifies structured codes and the four user-facing cases', () => {
     classifySubtitleFailure('没有字幕可分析：Whisper 已安装，但这次转写没有生成可用字幕。'),
     'transcription_empty',
   )
+  assert.equal(classifySubtitleFailure('字幕文件不存在'), 'subtitle_unknown')
 })
 
 test('does not treat unrelated failures as a transcription settings problem', () => {

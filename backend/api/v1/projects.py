@@ -275,11 +275,10 @@ async def get_project(
         if include_clips or include_collections:
             from ...services.clip_service import ClipService
             from ...services.collection_service import CollectionService
-            from ...core.database import get_db
-            
-            # 获取数据库会话
-            db = next(get_db())
-            
+
+            # 复用本次请求的会话。单独取生成器会丢掉 finally，连接不归还（#175）。
+            db = project_service.db
+
             if include_clips:
                 clip_service = ClipService(db)
                 clips = clip_service.get_multi(filters={"project_id": project_id})

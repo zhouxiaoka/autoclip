@@ -5,9 +5,10 @@
 
 import logging
 import os
+from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool, StaticPool
 from typing import Generator
 from backend.models.base import Base
 
@@ -26,16 +27,34 @@ if DATABASE_URL == "sqlite:///autoclip.db":
         # 如果导入失败，保持默认值
         pass
 
+def is_memory_sqlite(url: str) -> bool:
+    """:memory: 必须整进程共用一条连接，否则每个连接都是空库。
+
+    ``sqlite://`` 也是内存库。rstrip(\"/\") 会把它收成 ``sqlite:``，不能拿收完的字符串
+    去比 ``sqlite://``。
+    """
+    normalized = (url or "").strip()
+    if ":memory:" in normalized:
+        return True
+    return normalized.rstrip("/") in ("sqlite:", "sqlite")
+
+
+def sqlite_engine_kwargs(url: str) -> dict:
+    """文件 SQLite 用 NullPool，不在进程里囤连接。
+
+    StaticPool 只适合 :memory:。文件库上用它，桌面模式里 API 请求线程、导入任务线程、
+    流水线线程会在同一条连接上交错 BEGIN / COMMIT / ROLLBACK。
+    默认 QueuePool（size 5 + overflow 10）会在会话没归还时打满，项目列表 / 详情 / 下载
+    一起超时报 QueuePool limit reached（#175）。NullPool 每次取用都新建连接，用完即关，
+    不设池上限；会话仍必须 close()，否则会泄漏文件句柄。
+    """
+    if is_memory_sqlite(url):
+        return {"poolclass": StaticPool}
+    return {"poolclass": NullPool}
+
+
 # 创建数据库引擎
 if "sqlite" in DATABASE_URL:
-    # SQLite配置。
-    # StaticPool = 整个进程共享一条连接，只适合 :memory:。文件库上用它，桌面模式里 API 请求线程、
-    # 导入任务线程、流水线线程的 Session 会在同一条连接上交错 BEGIN / COMMIT / ROLLBACK：
-    # 一个线程 close() 触发的 ROLLBACK 会把另一个线程刚 INSERT 还没 COMMIT 的 Task 行抹掉
-    # （表现为 ObjectDeletedError、任务凭空消失、进度卡住）。文件库改用默认连接池，每个 Session 一条连接，
-    # 并开 WAL 让读写不互相阻塞。
-    _is_memory_db = DATABASE_URL.rstrip("/") in ("sqlite://", "sqlite:///:memory:") or ":memory:" in DATABASE_URL
-    _sqlite_kwargs = {"poolclass": StaticPool} if _is_memory_db else {}
     engine = create_engine(
         DATABASE_URL,
         connect_args={
@@ -44,9 +63,9 @@ if "sqlite" in DATABASE_URL:
         },
         pool_pre_ping=True,
         echo=False,  # 设置为True可以看到SQL语句
-        **_sqlite_kwargs,
+        **sqlite_engine_kwargs(DATABASE_URL),
     )
-    if not _is_memory_db:
+    if not is_memory_sqlite(DATABASE_URL):
         from sqlalchemy import event
 
         @event.listens_for(engine, "connect")
@@ -81,6 +100,22 @@ def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+    finally:
+        db.close()
+
+
+@contextmanager
+def session_scope() -> Generator[Session, None, None]:
+    """短生命周期会话。不要用 next(get_db())：生成器被丢掉时 finally 不会马上执行，连接不归还。"""
+    db = SessionLocal()
+    try:
+        yield db
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         db.close()
 

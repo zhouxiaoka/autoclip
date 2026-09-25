@@ -6,6 +6,7 @@
 """
 
 import traceback
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -87,9 +88,25 @@ def memory_backend():
 @pytest.fixture
 def project_service(monkeypatch):
     service = _ProjectService()
-    monkeypatch.setattr(mod, "get_db", lambda: iter([_DB()]))
+
+    @contextmanager
+    def _scope():
+        db = _DB()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    monkeypatch.setattr(mod, "session_scope", _scope)
     monkeypatch.setattr(mod, "ProjectService", lambda db: service)
     return service
+
+
+def _whisper_not_installed(monkeypatch):
+    monkeypatch.setattr(
+        "backend.services.whisper_runtime.get_status",
+        lambda: {"status": "not_installed"},
+    )
 
 
 def _finish_like_worker(backend, task_id, call):
@@ -126,7 +143,8 @@ def test_incomplete_failure_meta_is_what_celery_rejects(memory_backend):
         memory_backend.mark_as_done("bad-meta", {"status": "completed"})
 
 
-def test_missing_subtitle_failure_roundtrips_with_exc_type(memory_backend, project_service, tmp_path):
+def test_missing_subtitle_failure_roundtrips_with_exc_type(memory_backend, project_service, tmp_path, monkeypatch):
+    _whisper_not_installed(monkeypatch)
     video = tmp_path / "input.mp4"
     video.write_bytes(b"not-a-real-video")
 
@@ -139,17 +157,48 @@ def test_missing_subtitle_failure_roundtrips_with_exc_type(memory_backend, proje
     )
 
     assert isinstance(raised, ImportProcessingError)
-    assert str(raised) == "字幕文件不存在"
+    message = str(raised)
+    assert "没有字幕可分析" in message
+    assert "设置 → 转写" in message
     assert meta["status"] == "FAILURE"
     assert isinstance(meta["result"], BaseException)
-    assert str(meta["result"]) == "字幕文件不存在"
+    assert "没有字幕可分析" in str(meta["result"])
     # 再读一次：worker 写结果时会解码当前 meta，这里不能再抛 ValueError
     again = memory_backend._get_task_meta_for("task-missing-srt")
     assert again["status"] == "FAILURE"
-    assert str(again["result"]) == "字幕文件不存在"
+    assert "设置 → 转写" in str(again["result"])
 
     assert project_service.project.status == "failed"
-    assert project_service.project.project_metadata["last_error"] == "字幕文件不存在"
+    assert project_service.project.project_metadata["last_error_code"] == "whisper_not_installed"
+    assert "设置 → 转写" in project_service.project.project_metadata["last_error"]
+
+
+def test_speech_error_roundtrips_as_structured_subtitle_failure(memory_backend, project_service, tmp_path, monkeypatch):
+    """转写失败时不要再收成一句「字幕文件不存在」。"""
+    _whisper_not_installed(monkeypatch)
+    video = tmp_path / "input.mp4"
+    video.write_bytes(b"not-a-real-video")
+    monkeypatch.setattr(
+        mod,
+        "_generate_import_subtitle",
+        lambda task, project_id, video_path: (None, "没有可用的语音识别"),
+    )
+
+    raised, meta = _run_import(
+        memory_backend,
+        "task-speech-failed",
+        "proj-speech",
+        str(video),
+        None,
+    )
+
+    assert isinstance(raised, ImportProcessingError)
+    assert "还没安装" in str(raised)
+    assert "设置 → 转写" in str(raised)
+    assert meta["status"] == "FAILURE"
+    assert project_service.project.status == "failed"
+    assert project_service.project.project_metadata["last_error_code"] == "whisper_not_installed"
+    assert "设置 → 转写" in project_service.project.project_metadata["last_error"]
 
 
 def test_pipeline_submit_error_is_kept_on_the_project(memory_backend, project_service, tmp_path, monkeypatch):
