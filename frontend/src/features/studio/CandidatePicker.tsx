@@ -41,7 +41,7 @@ export default function CandidatePicker({ projectId, mode, onClose, onChoose }: 
         onLoadedMetadata={() => { if (video.current) video.current.currentTime = selected.start }}
         onTimeUpdate={() => { const v = video.current; if (v && v.currentTime >= selected.end) { v.pause(); v.currentTime = selected.start } }} />
         <p className="studio-muted">{t("原片")}{' '}{t('{{start}}–{{end}} 秒', { start: selected.start.toFixed(1), end: selected.end.toFixed(1) })} · {selected.evidence || t("请核对镜头起止和玩法完整性。")}</p></>}
-      {data?.warnings.map(w => <p className="studio-muted" key={w}>{w}</p>)}
+      {data?.warnings.map(w => <p className="studio-muted" key={w}>{t(w)}</p>)}
       {!data?.candidates.length && <p className="studio-muted">{t("当前没有可用候选。可返回项目重新分析，或调整已有镜头的起止时间。")}</p>}
       <div className="studio-candidate-list" role="radiogroup" aria-label={t("候选片段")}>{data?.candidates.map(c => <label className="studio-candidate-option" key={c.id}>
         <input type="radio" name="candidate" checked={selected?.id === c.id} onChange={() => setSelected(c)} />

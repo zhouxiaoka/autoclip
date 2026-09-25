@@ -1081,5 +1081,21 @@
   "发布已导出的 V{{revision}} 成片，保留画幅、文字和声音。需要修改时，请返回编辑器另行导出。": "Publique o vídeo V{{revision}} preservando enquadramento, texto e áudio. Para alterar, volte ao editor e exporte novamente.",
   "已关闭": "Desativado",
   "缩略图暂不可用 · 点击查看": "Prévia indisponível · Clique para ver",
-  "管理合集": "Gerenciar coleção"
+  "管理合集": "Gerenciar coleção",
+  "下载素材": "Baixando mídia",
+  "理解画面": "Analisando imagens",
+  "准备素材": "Preparando mídia",
+  "快速判断适合的制作类型": "Verificando tipos de conteúdo adequados",
+  "开始制作所选内容": "Iniciando o conteúdo selecionado",
+  "制作内容切片": "Criando clipes de conteúdo",
+  "制作精彩高光": "Criando destaques",
+  "制作推广成片": "Criando rascunhos promocionais",
+  "扫描画面，寻找候选高光": "Buscando destaques nas imagens",
+  "复核首选高光的起止边界": "Revisando os limites dos destaques selecionados",
+  "组织推广开头与成片草稿": "Preparando aberturas e rascunhos promocionais",
+  "整理高光成片草稿": "Preparando rascunhos de destaques",
+  "原素材没有音轨，本次导出无声": "O original não tem faixa de áudio. Esta exportação está sem som.",
+  "原素材没有可用字幕，本次未烧录字幕": "Não há legendas utilizáveis no original. Nenhuma legenda foi incorporada.",
+  "服务已重启，请重新导出": "O serviço reiniciou. Exporte novamente.",
+  "服务已重启，请重试分析": "O serviço reiniciou. Tente a análise novamente."
 }
