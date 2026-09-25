@@ -793,5 +793,6 @@
   "到「设置 → 转写」检查 Whisper 是否安装、模型是否已下载，或重新导入时带上 .srt。": "In Settings → Transcription, check that Whisper is installed and a model is downloaded, or import it again with an .srt file.",
   "打开转写设置": "Open transcription settings",
   "转写设置": "Transcription",
-  "这个切片当前播放器无法解码，请下载后用系统播放器打开。": "This clip can't be decoded in the player. Download it and open it in a system player."
+  "这个切片当前播放器无法解码，请下载后用系统播放器打开。": "This clip can't be decoded in the player. Download it and open it in a system player.",
+  "切片分析会关闭 DeepSeek 的思考模式，避免按长段推理输出计费。长视频仍会按大约 30 分钟一块、分几步调用；刷新页面不会重新计费，重新开始处理才会。": "Clip analysis turns off DeepSeek thinking mode so long reasoning traces are not billed as output. A long video is still several calls, about one per 30 minutes of subtitles and one per step. Refreshing the page does not run it again; starting processing again does."
 }
