@@ -18,6 +18,7 @@ import FeedbackDialog from '../components/FeedbackDialog'
 import { Btn, Icon, Section, Segmented, parseTimecode, fmtDuration } from '../ui'
 import LlmKeyFailureEmpty from '../components/LlmKeyFailureEmpty'
 import { classifyLlmKeyFailure } from '../utils/llmFailure'
+import { classifyTimelineEmpty } from '../utils/timelineFailure'
 
 const ProjectDetailPage: React.FC = () => {
   useTranslation()
@@ -51,7 +52,10 @@ const ProjectDetailPage: React.FC = () => {
     loadProcessingStatus()
   }, [id])
 
-  const subtitleKind = classifySubtitleFailure(currentProject?.error_message, currentProject?.error_code)
+  const timelineEmpty = classifyTimelineEmpty(currentProject?.error_message, currentProject?.error_code)
+  const subtitleKind = timelineEmpty
+    ? null
+    : classifySubtitleFailure(currentProject?.error_message, currentProject?.error_code)
   const [refinedSubtitle, setRefinedSubtitle] = useState<{ id?: string; kind: SubtitleFailureKind } | null>(null)
   useEffect(() => {
     // 1.3.2 只留下一句「本地转写没有生成结果」。升级后按这台机器现在的 Whisper 状态说清楚下一步。
@@ -254,7 +258,7 @@ const ProjectDetailPage: React.FC = () => {
   })
   const isCompleted = currentProject.status === 'completed'
   const isFailed = currentProject.status === 'failed' || (currentProject.status as string) === 'error'
-  const llmKeyFailure = classifyLlmKeyFailure(currentProject.error_message, currentProject.error_code)
+  const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(currentProject.error_message, currentProject.error_code)
   const failureContext = {
     source: 'failure' as const,
     project_id: currentProject.id,

@@ -27,11 +27,16 @@ test('classifies a missing key, a failed provider test, and the stable code', ()
   assert.equal(classifyLlmKeyFailure('API连接测试失败。请检查API Key是否正确'), true)
 })
 
-test('does not treat scoring or subtitle failures as a missing model key', () => {
+test('does not treat scoring, subtitle, or empty-timeline failures as a missing model key', () => {
   assert.equal(classifyLlmKeyFailure('没有片段通过评分筛选。到「设置 → 模型 → 最低评分阈值」调低后重试。'), false)
   assert.equal(classifyLlmKeyFailure('没有字幕可分析：视频不带字幕，且本地 Whisper 还没安装。到「设置 → 转写」安装。'), false)
+  const timeline = '时间线提取为空：4 个话题在对齐并按时长筛选后没有留下可用片段。 短视频里的片段常被最短时长滤掉（短片约 20 秒起），或模型给出的时间戳对不上字幕。换一条更长、口播更完整的素材后再试。'
+  assert.equal(classifyLlmKeyFailure(timeline), false)
+  assert.equal(classifyLlmKeyFailure(timeline, 'timeline_empty'), false)
+  assert.equal(classifyLlmKeyFailure('处理失败：' + timeline), false)
   assert.equal(classifyLlmKeyFailure(''), false)
   assert.equal(classifyLlmKeyFailure(null, 'whisper_not_installed'), false)
+  assert.equal(classifyLlmKeyFailure(null, 'timeline_empty'), false)
 })
 
 test('failure screens deep-link to Settings → Model', () => {

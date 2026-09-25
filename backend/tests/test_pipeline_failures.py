@@ -226,6 +226,59 @@ def test_adapter_surfaces_whisper_error_on_the_subtitle_stage(adapter, monkeypat
     assert result["message"] == result["error"]
 
 
+def test_adapter_empty_timeline_does_not_send_user_to_model_settings(adapter, monkeypatch, tmp_path):
+    """连接已成功时，时间线为空不要再提示去改模型 / API Key（#182）。"""
+    from backend.services import simple_pipeline_adapter as mod
+
+    _fake_manager(monkeypatch, available=True, display_name="阿里通义千问", model="qwen-plus")
+    srt = tmp_path / "in.srt"
+    srt.write_text(SRT, encoding="utf-8")
+    monkeypatch.setattr(mod, "run_step1_outline", lambda *a, **k: [{"title": f"t{i}"} for i in range(4)])
+    monkeypatch.setattr(mod, "run_step2_timeline", lambda *a, **k: [])
+
+    result = asyncio.run(adapter.process_project_sync(str(tmp_path / "in.mp4"), str(srt)))
+
+    assert result["status"] == "failed"
+    assert result["stage"] == "ANALYZE"
+    assert result["error_code"] == "timeline_empty"
+    assert "4 个话题" in result["error"]
+    assert "20" in result["error"]
+    assert "时间戳" in result["error"]
+    assert "最短时长" in result["error"]
+    assert "设置 → 模型" not in result["error"]
+    assert "API Key" not in result["error"]
+    assert "测试连接" not in result["error"]
+    assert result["message"] == result["error"]
+    assert adapter._events[-1][0] == "ANALYZE"
+    assert "时间线提取为空" in adapter._events[-1][1]
+
+
+def test_empty_timeline_hint_survives_last_error_metadata():
+    """CLI 只把正文写进 last_error 时，错误码和提示仍能回到详情页。"""
+    from backend.pipeline.failures import empty_timeline_failure
+    from backend.services.project_service import ProjectService
+
+    class Q:
+        def filter(self, *a, **k): return self
+        def order_by(self, *a, **k): return self
+        def first(self): return None
+
+    failure = empty_timeline_failure(4)
+    svc = ProjectService.__new__(ProjectService)
+    svc.db = SimpleNamespace(query=lambda model: Q())
+    project = SimpleNamespace(
+        id="p1",
+        status="failed",
+        project_metadata={"last_error": failure.user_message(), "last_error_code": failure.code},
+    )
+
+    message = svc.latest_error_message(project)
+    assert message == failure.user_message()
+    assert svc.latest_error_code(project) == "timeline_empty"
+    assert "设置 → 模型" not in message
+    assert "API Key" not in message
+
+
 def test_adapter_fails_when_scoring_keeps_nothing(adapter, monkeypatch, tmp_path):
     from backend.services import simple_pipeline_adapter as mod
 
