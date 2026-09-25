@@ -25,10 +25,21 @@ def export(project_id, draft):
             raise ValueError('已有 3 个导出任务，请等待完成后再提交')
         data['jobs'].insert(0, job)
         return job
-    added = store.change(project_id, add)
-    if added['job_id'] == job['job_id']:
-        executor.submit(_render, project_id, draft, job['job_id'])
-    return {k: v for k, v in added.items() if k not in ('instance', 'snapshot')}
+    # Keep deduplication and dispatch atomic: another request must not receive
+    # a queued job before we know the executor accepted it.
+    with store.lock:
+        added = store.change(project_id, add)
+        if added['job_id'] == job['job_id']:
+            try:
+                executor.submit(_render, project_id, draft, job['job_id'])
+            except Exception as error:
+                logger.warning('Studio export dispatch failed: %s', type(error).__name__)
+                message = '导出任务未能启动，请重试；已有成片已保留'
+                def failed(data):
+                    next(j for j in data['jobs'] if j['job_id'] == job['job_id']).update(status='failed', error=message)
+                store.change(project_id, failed)
+                raise ValueError(message) from None
+        return {k: v for k, v in added.items() if k not in ('instance', 'snapshot')}
 
 def _render(project_id, draft, job_id):
     def update(**values):
