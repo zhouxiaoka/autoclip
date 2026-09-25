@@ -73,14 +73,16 @@ class PipelineAdapter:
     def __init__(self, project_id: str, task_id: Optional[str] = None, db: Optional[Session] = None, progress_callback: Optional[Callable] = None):
         self.project_id = project_id
         self.task_id = task_id or "compat_task"
-        self.db = db or SessionLocal()
+        # 调用方传入的会话由调用方关闭。自己创建的必须在结束时 close，否则文件库连接不归还。
+        self._owns_db = db is None
+        self.db = db if db is not None else SessionLocal()
         self.progress_callback = progress_callback
         self.compat_mode = task_id is None or db is None
-        
+
         # 获取项目配置
         self.config = config_manager.get_processing_config()
         self.path_config = config_manager.get_path_config()
-        
+
         # 项目路径
         if self.compat_mode and Path(project_id).exists():
             self.path_manager = PipelinePathManager(Path(project_id))
@@ -97,13 +99,55 @@ class PipelineAdapter:
             self.project_paths = config_manager.get_project_paths(project_id)
             self.path_manager = PipelinePathManager(self.project_paths["project_base"])
             config_manager.ensure_project_directories(project_id)
-        
+
         # 确保项目目录存在
         self.path_manager.ensure_directories()
-        
+
         # 步骤执行结果
         self.step_results = {}
-        
+
+    def close(self) -> None:
+        """关闭本适配器自己创建的会话。重复调用无效果。"""
+        if not self._owns_db:
+            return
+        db = self.db
+        self._owns_db = False
+        if db is None:
+            return
+        try:
+            db.close()
+        except Exception:
+            logger.warning("关闭流水线数据库会话失败", exc_info=True)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def _video_category(self) -> str:
+        """读项目分类。自有会话读完就结束事务，避免后面的长步骤占着连接。"""
+        category = "default"
+        try:
+            project = self.db.query(Project).filter(Project.id == self.project_id).first()
+            if project and project.project_metadata:
+                category = project.project_metadata.get("video_category", "default") or "default"
+        except Exception:
+            logger.warning("读取项目分类失败: %s", self.project_id, exc_info=True)
+        if self._owns_db and self.db is not None:
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
+        return category
+
     def validate_pipeline_prerequisites(self) -> List[str]:
         """
         验证流水线前置条件
@@ -304,6 +348,8 @@ class PipelineAdapter:
             error_msg = f"项目处理失败: {str(e)}"
             logger.error(error_msg)
             return {"status": "failed", "message": error_msg}
+        finally:
+            self.close()
     
     def process_project_sync(self, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
         """
@@ -340,13 +386,7 @@ class PipelineAdapter:
             input_srt_path = self.project_paths["input_dir"] / "input.srt"
             output_path = self.project_paths["metadata_dir"] / "step1_outlines.json"
             
-            # 获取项目信息以确定视频分类
-            project = self.db.query(Project).filter(Project.id == self.project_id).first()
-            video_category = "default"
-            if project and project.project_metadata:
-                video_category = project.project_metadata.get("video_category", "default")
-            
-            # 获取对应的提示词文件
+            video_category = self._video_category()
             prompt_files = get_prompt_files(video_category)
             
             result = run_step1_outline(
@@ -371,13 +411,7 @@ class PipelineAdapter:
             if not outline_path.exists():
                 return {"status": "failed", "message": "步骤1结果文件不存在"}
             
-            # 获取项目信息以确定视频分类
-            project = self.db.query(Project).filter(Project.id == self.project_id).first()
-            video_category = "default"
-            if project and project.project_metadata:
-                video_category = project.project_metadata.get("video_category", "default")
-            
-            # 获取对应的提示词文件
+            video_category = self._video_category()
             prompt_files = get_prompt_files(video_category)
             
             result = run_step2_timeline(
@@ -402,13 +436,7 @@ class PipelineAdapter:
             if not timeline_path.exists():
                 return {"status": "failed", "message": "步骤2结果文件不存在"}
             
-            # 获取项目信息以确定视频分类
-            project = self.db.query(Project).filter(Project.id == self.project_id).first()
-            video_category = "default"
-            if project and project.project_metadata:
-                video_category = project.project_metadata.get("video_category", "default")
-            
-            # 获取对应的提示词文件
+            video_category = self._video_category()
             prompt_files = get_prompt_files(video_category)
             
             result = run_step3_scoring(
@@ -433,13 +461,7 @@ class PipelineAdapter:
             if not scoring_path.exists():
                 return {"status": "failed", "message": "步骤3结果文件不存在"}
             
-            # 获取项目信息以确定视频分类
-            project = self.db.query(Project).filter(Project.id == self.project_id).first()
-            video_category = "default"
-            if project and project.project_metadata:
-                video_category = project.project_metadata.get("video_category", "default")
-            
-            # 获取对应的提示词文件
+            video_category = self._video_category()
             prompt_files = get_prompt_files(video_category)
             
             result = run_step4_title(
@@ -464,13 +486,7 @@ class PipelineAdapter:
             if not titles_path.exists():
                 return {"status": "failed", "message": "步骤4结果文件不存在"}
             
-            # 获取项目信息以确定视频分类
-            project = self.db.query(Project).filter(Project.id == self.project_id).first()
-            video_category = "default"
-            if project and project.project_metadata:
-                video_category = project.project_metadata.get("video_category", "default")
-            
-            # 获取对应的提示词文件
+            video_category = self._video_category()
             prompt_files = get_prompt_files(video_category)
             
             result = run_step5_clustering(

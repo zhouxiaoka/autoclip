@@ -41,5 +41,7 @@ export function classifySubtitleFailure(error?: string | null, code?: string | n
   if (text.includes('没有字幕可分析') || text.includes('设置 → 语音识别') || text.includes('设置 → 转写')) {
     return 'subtitle_setup'
   }
+  // 导入关卡旧文案只有「字幕文件不存在」（#186）。没有 Whisper 状态，详情页再问一次当前安装情况。
+  if (text.includes('字幕文件不存在')) return 'subtitle_unknown'
   return null
 }
