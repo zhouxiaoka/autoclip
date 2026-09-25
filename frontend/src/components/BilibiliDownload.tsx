@@ -245,6 +245,12 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
           id: response.project_id,
           name: projectName.trim() || (videoInfo?.title ?? t("新建项目")),
           status: 'pending',
+          // 后端创建时就是 downloading / 0。缺了这两个字段，卡片会先画成 5%「导入中」，
+          // 进度条再把这个初值留住。
+          settings: {
+            download_status: 'downloading',
+            download_progress: 0,
+          },
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })

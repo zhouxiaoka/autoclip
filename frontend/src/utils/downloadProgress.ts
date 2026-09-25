@@ -33,6 +33,18 @@ export function readDownloadProgress(project: DownloadProjectLike): number {
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0
 }
 
+/**
+ * 下载条上该画的百分比。
+ *
+ * 链接导入会先塞进一张没有下载字段的 pending 卡片，进度被画成 5%。
+ * 列表随后带回 0、30 这类真实进度时，必须跟着 props 走。
+ * 轮询还没成功（桌面端打到壳页面、请求失败）时不能停在第一次的 5。
+ */
+export function displayedDownloadPercent(propPercent: number, polledPercent: number | null): number {
+  if (typeof polledPercent === 'number' && Number.isFinite(polledPercent)) return polledPercent
+  return typeof propPercent === 'number' && Number.isFinite(propPercent) ? propPercent : 0
+}
+
 export function isSourceDownloading(project: DownloadProjectLike): boolean {
   const status = project.status
   if (status !== 'pending' && status !== 'downloading') return false
