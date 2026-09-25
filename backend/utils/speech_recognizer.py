@@ -3,6 +3,7 @@
 支持本地Whisper、OpenAI API、Azure Speech Services等多种语音识别服务
 """
 import logging
+import re
 import subprocess
 import json
 import os
@@ -148,6 +149,29 @@ def vad_backend_failed(exc: BaseException) -> bool:
         return True
     blob = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
     return "vad.py" in blob or "onnxruntime" in blob
+
+
+_SRT_TIMESTAMP = re.compile(
+    r"^\d{2}:\d{2}:\d{2}[,.]\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}[,.]\d{3}"
+)
+
+
+def srt_body_has_cue_text(raw: str) -> bool:
+    """至少有一条字幕正文。序号行和时间轴行不算。"""
+    for line in (raw or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.isdigit() or _SRT_TIMESTAMP.match(stripped):
+            continue
+        return True
+    return False
+
+
+def srt_has_cue_text(path: Path) -> bool:
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return srt_body_has_cue_text(raw)
 
 
 def describe_whisper_failure(exc: BaseException) -> str:
@@ -418,9 +442,15 @@ class SpeechRecognizer:
             raise SpeechRecognitionError(f"视频文件不存在: {video_path}")
         if video_path.stat().st_size == 0:
             raise SpeechRecognitionError(f"视频文件为空: {video_path}")
-        if output_path.exists():
+        if output_path.exists() and srt_has_cue_text(output_path):
             logger.info(f"字幕文件已存在，跳过Whisper处理: {output_path}")
             return output_path
+        if output_path.exists():
+            # 上次只写出空白文件时不能当成已经转写成功，否则重试会一直跳过 Whisper。
+            try:
+                output_path.unlink()
+            except OSError:
+                logger.warning("无法删除空白字幕文件，将尝试覆盖: %s", output_path)
 
         try:
             whisper_runtime.ensure_on_path()  # 让 faster_whisper 可导入
@@ -480,11 +510,16 @@ class SpeechRecognizer:
                 )
                 segments = transcribe_with_vad_fallback(load_model("cpu", "int8"))
 
-            if not segments:
+            cues = [seg for seg in segments if (seg.get("text") or "").strip()]
+            if not cues:
+                raise SpeechRecognitionError("Whisper 未识别出任何语音内容")
+
+            body = self._segments_to_srt(cues)
+            if not srt_body_has_cue_text(body):
                 raise SpeechRecognitionError("Whisper 未识别出任何语音内容")
 
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(self._segments_to_srt(segments), encoding="utf-8")
+            output_path.write_text(body, encoding="utf-8")
             logger.info(f"本地 faster-whisper 字幕生成成功: {output_path}")
             return output_path
 
@@ -693,9 +728,27 @@ class SpeechRecognizer:
         return ["tiny", "base", "small", "medium", "large"]
 
 
+def _stash_speech_api_key(config: SpeechRecognitionConfig, api_key: str) -> None:
+    """导入任务会把设置里的密钥一并传进来。接住它，避免在进到 Whisper 之前就 TypeError。"""
+    method = config.method
+    if method == SpeechRecognitionMethod.OPENAI_API:
+        config.openai_api_key = api_key
+    elif method == SpeechRecognitionMethod.AZURE_SPEECH:
+        config.azure_speech_key = api_key
+    elif method == SpeechRecognitionMethod.ALIYUN_SPEECH:
+        config.aliyun_access_key = api_key
+    elif method == SpeechRecognitionMethod.CUSTOM_API:
+        config.custom_api_key = api_key
+
+
 def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = None, 
                                method: str = "auto", language: str = "auto", 
-                               model: str = "base", enable_fallback: bool = True) -> Path:
+                               model: str = "base", enable_fallback: bool = True,
+                               enable_timestamps: bool = True,
+                               enable_punctuation: bool = True,
+                               enable_speaker_diarization: bool = False,
+                               timeout: int = 0,
+                               api_key: Optional[str] = None) -> Path:
     """
     为视频生成字幕文件的便捷函数
     
@@ -706,6 +759,11 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
         language: 语言代码
         model: Whisper模型大小（仅对whisper_local有效）
         enable_fallback: 是否启用回退机制
+        enable_timestamps: 是否保留时间戳（导入任务会传入）
+        enable_punctuation: 是否保留标点（导入任务会传入）
+        enable_speaker_diarization: 是否做说话人分离（导入任务会传入）
+        timeout: 超时秒数，0 表示不额外限制
+        api_key: 云端转写密钥（导入任务会传入）
         
     Returns:
         生成的字幕文件路径
@@ -713,13 +771,19 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
     Raises:
         SpeechRecognitionError: 语音识别失败
     """
-    # 创建配置
+    # 创建配置。本地导入会带上设置里的时间戳 / 超时 / 密钥；缺了这些参数会在进 Whisper 之前 TypeError。
     config = SpeechRecognitionConfig(
         method=SpeechRecognitionMethod(method) if method != "auto" else SpeechRecognitionMethod.WHISPER_LOCAL,
         language=LanguageCode(language),
         model=model,
-        enable_fallback=enable_fallback
+        enable_fallback=enable_fallback,
+        enable_timestamps=enable_timestamps,
+        enable_punctuation=enable_punctuation,
+        enable_speaker_diarization=enable_speaker_diarization,
+        timeout=timeout,
     )
+    if api_key:
+        _stash_speech_api_key(config, api_key)
     
     recognizer = SpeechRecognizer()
     
