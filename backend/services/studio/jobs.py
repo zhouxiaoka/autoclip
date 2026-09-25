@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -188,14 +189,21 @@ def confirm_project(project_id, body):
         plan = state.get('plan') or {}
         if plan.get('id') != body.plan_id or (state.get('analysis') or {}).get('status') != 'awaiting_confirmation':
             raise store.ConflictError('方案已变化或任务已开始，请刷新后确认')
+        previous = deepcopy(state)
         plan['selected_goals'] = body.goals
         plan['confirmed_at'] = store.now()
         # A confirmation override is persisted separately from the AI recommendation.
         plan['confirmed_preferences'] = {**plan['preferences'], 'goal':body.goals[0], **body.model_dump(exclude={'plan_id','goals'}, exclude_none=True)}
         state['analysis'] = {'status':'running', 'phase':'production', 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
-        mark_project(project_id, 'processing', awaiting_confirmation=False, import_staging=False, creative=plan['confirmed_preferences'])
-        executor.submit(_produce_selected, project_id, plan)
+        try:
+            executor.submit(_produce_selected, project_id, plan)
+        except Exception as error:
+            logger.warning('Studio production dispatch failed: %s', type(error).__name__)
+            # No worker accepted this confirmation. Preserve the exact plan and
+            # staging state so an explicit retry can use the same plan ID.
+            store.write(project_id, previous)
+            raise ValueError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
 
 
 def _produce_selected(project_id, plan):
@@ -208,6 +216,7 @@ def _produce_selected(project_id, plan):
     def stage(message):
         store.change(project_id, lambda data:data['analysis'].update(message=message))
     try:
+        mark_project(project_id, 'processing', awaiting_confirmation=False, import_staging=False, creative=plan['confirmed_preferences'])
         video = source(project_id)
         instruction = plan.get('overrides', {}).get('instruction', '')
         for goal in plan['selected_goals']:

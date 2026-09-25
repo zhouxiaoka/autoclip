@@ -323,3 +323,49 @@ def test_hook_failure_preserves_other_goal_and_does_not_repeat_analysis(client,s
     assert calls==['scan','promo','highlight']
     assert [d['id'] for d in result['drafts']]==['highlight']
     assert result['analysis']['diagnostics']==[{'goal':'promo','code':'output_truncated','phase':'hooks','elapsed_seconds':8}]
+
+
+def test_confirmation_dispatch_failure_preserves_staging_and_allows_explicit_retry(client, source, monkeypatch):
+    from backend.core.database import SessionLocal
+    from backend.models import Project
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    response = client.post('/studio/import', files={'video':('input.mp4', source.read_bytes(), 'video/mp4')})
+    pid = response.json()['project_id']
+    from backend.tests.test_studio import draft
+    saved = store.save_draft(pid, draft(), create=True)
+    store.change(pid, lambda state: state['jobs'].append({'job_id':'existing', 'status':'completed', 'draft_id':saved['id'], 'revision':saved['revision']}))
+    output = store.directory(pid) / 'previous.mp4'
+    output.write_bytes(b'previous export')
+    before = store.read(pid)
+    with SessionLocal() as db:
+        p = db.get(Project, pid)
+        original_config, original_status = dict(p.processing_config), p.status
+    calls = []
+    class Reject:
+        def submit(self, *args):
+            calls.append(args)
+            raise RuntimeError('private executor failure')
+    monkeypatch.setattr(jobs, 'executor', Reject())
+    payload = {'plan_id':before['plan']['id'], 'goals':['content']}
+    failed = client.post('/studio/'+pid+'/start', json=payload)
+    assert failed.status_code == 422
+    assert '重试确认' in failed.json()['detail']
+    assert 'private executor' not in failed.text
+    assert store.read(pid) == before
+    assert output.read_bytes() == b'previous export'
+    assert (store.directory(pid)/'raw/input.mp4').read_bytes() == source.read_bytes()
+    with SessionLocal() as db:
+        p = db.get(Project, pid)
+        assert p.processing_config == original_config and p.status == original_status
+    assert client.get('/studio/'+pid).json()['analysis']['status'] == 'awaiting_confirmation'
+    assert len(calls) == 1  # Reading the state never submits work.
+    produced = []
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(jobs, 'run_content', lambda *args: produced.append(args))
+    assert client.post('/studio/'+pid+'/start', json=payload).status_code == 200
+    assert len(produced) == 1
+    with SessionLocal() as db:
+        assert db.get(Project, pid).processing_config['import_staging'] is False
+    assert client.post('/studio/'+pid+'/start', json=payload).status_code == 409
+    assert len(produced) == 1
