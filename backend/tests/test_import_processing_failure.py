@@ -323,6 +323,68 @@ def test_unhandled_exception_is_stored_as_a_real_failure(memory_backend, project
     assert project_service.project.status == "failed"
 
 
+def test_import_whisper_options_reach_the_recognizer(tmp_path, monkeypatch):
+    """默认本地导入会把设置里的时间戳和超时传给转写。不能在进 Whisper 之前 TypeError。"""
+    _whisper_not_installed(monkeypatch)
+    monkeypatch.setattr("backend.services.whisper_runtime.is_installed", lambda: False)
+    video = tmp_path / "input.mp4"
+    video.write_bytes(b"not-a-real-video")
+
+    class _Task:
+        def update_state(self, **kwargs):
+            return None
+
+    srt_path, speech_error = mod._generate_import_subtitle(_Task(), "proj-whisper", str(video))
+
+    assert srt_path is None
+    assert speech_error is not None
+    assert "unexpected keyword" not in speech_error
+    assert "未安装" in speech_error
+    assert "设置 → 转写" in speech_error
+    failure = mod.import_subtitle_failure(speech_error)
+    assert failure.code == "whisper_not_installed"
+
+
+def test_import_blank_whisper_result_is_transcription_empty(tmp_path, monkeypatch):
+    """Whisper 声称跑完但只有空白片段时，导入关卡记 transcription_empty，而不是当成有字幕。"""
+    import sys
+    import types
+    from types import SimpleNamespace
+
+    from backend.services import whisper_runtime
+
+    module = types.ModuleType("faster_whisper")
+
+    class FakeModel:
+        def __init__(self, model, device="auto", compute_type="int8", download_root=None):
+            pass
+
+        def transcribe(self, path, language=None, vad_filter=False):
+            return [SimpleNamespace(start=0.0, end=1.0, text="   ")], None
+
+    module.WhisperModel = FakeModel
+    monkeypatch.setitem(sys.modules, "faster_whisper", module)
+    monkeypatch.setattr(whisper_runtime, "is_installed", lambda: True)
+    monkeypatch.setattr(whisper_runtime, "ensure_on_path", lambda: None)
+    monkeypatch.setattr(whisper_runtime, "get_models_dir", lambda: tmp_path / "models")
+    monkeypatch.delenv("AUTOCLIP_WHISPER_DEVICE", raising=False)
+
+    video = tmp_path / "input.mp4"
+    video.write_bytes(b"not-a-real-video")
+
+    class _Task:
+        def update_state(self, **kwargs):
+            return None
+
+    srt_path, speech_error = mod._generate_import_subtitle(_Task(), "proj-blank", str(video))
+
+    assert srt_path is None
+    assert "未识别出任何语音" in speech_error
+    assert not list(tmp_path.glob("*.srt"))
+    failure = mod.import_subtitle_failure(speech_error)
+    assert failure.code == "transcription_empty"
+
+
 def test_import_task_source_does_not_set_failure_state_by_hand():
     src = Path(mod.__file__).read_text(encoding="utf-8")
     assert "state='FAILURE'" not in src
