@@ -241,11 +241,9 @@ async def update_project_download_progress(project_id: str, progress: float, mes
             project = project_service.get(project_id)
             
             if project:
-                # 更新项目设置中的下载进度
-                if not project.processing_config:
-                    project.processing_config = {}
-                
-                project.processing_config.update({
+                # 必须换成新 dict。原地 update JSON 列不会落库，进度会停在创建时的 0%。
+                from ...services.download_progress import save_processing_config
+                save_processing_config(project, {
                     "download_progress": progress,
                     "download_message": message
                 })
@@ -363,11 +361,9 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
             project.description = f"从B站下载: {video_info.title}"
             # 注意：不要在这里设置video_path，等文件移动完成后再设置
             
-            # 更新项目设置
-            if not project.processing_config:
-                project.processing_config = {}
-            
-            project.processing_config.update({
+            # 更新项目设置。赋新 dict，避免 JSON 原地修改在提交时丢失。
+            from ...services.download_progress import save_processing_config
+            save_processing_config(project, {
                 "bilibili_info": {
                     "title": video_info.title,
                     "uploader": video_info.uploader,
@@ -410,9 +406,8 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
                     logger.info(f"字幕文件已移动到: {new_subtitle_path}")
                     
                     # 更新项目处理配置中的字幕路径
-                    if not project.processing_config:
-                        project.processing_config = {}
-                    project.processing_config["subtitle_path"] = str(new_subtitle_path)
+                    from ...services.download_progress import save_processing_config
+                    save_processing_config(project, {"subtitle_path": str(new_subtitle_path)})
             
             # 保存项目更新
             db.commit()
@@ -423,9 +418,11 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
                 logger.error(f"字幕文件不存在: {srt_file_path}，项目将标记为失败状态")
                 from ...schemas.project import ProjectStatus
                 project.status = ProjectStatus.FAILED
-                if not project.processing_config:
-                    project.processing_config = {}
-                project.processing_config["error_message"] = subtitle_error or "字幕文件不存在且Whisper生成失败"
+                from ...services.download_progress import save_processing_config
+                save_processing_config(
+                    project,
+                    {"error_message": subtitle_error or "字幕文件不存在且Whisper生成失败"},
+                )
                 db.commit()
                 
                 # 更新任务状态为失败
@@ -494,9 +491,8 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
                 project = project_service.get(project_id)
                 if project and project.status == ProjectStatus.PENDING:
                     project.status = ProjectStatus.FAILED
-                    if not project.processing_config:
-                        project.processing_config = {}
-                    project.processing_config["error_message"] = f"下载失败: {e}"
+                    from ...services.download_progress import save_processing_config
+                    save_processing_config(project, {"error_message": f"下载失败: {e}"})
                     db.commit()
                     logger.info(f"项目 {project_id} 已标记为失败")
             finally:

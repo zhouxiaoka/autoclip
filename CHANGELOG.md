@@ -11,6 +11,7 @@
 - 导入失败的监控分类：缺字幕、缺少 API Key，以及未预期的导入故障，会以不同异常类型分开上报。Sentry 里对应 fingerprint 为 `import-processing` / `missing-subtitle`、`import-processing` / `missing-key`；未预期故障仍是 `ImportProcessingError`，沿用默认栈归组。日志里带 `kind=missing-subtitle`、`kind=missing-key` 或 `kind=unexpected`。这只改善监控分类，不改变导入是否成功，也不改变字幕质量。
 
 ### 修复
+- YouTube / 链接导入时，项目卡不再停在约 5%：下载进度会写入数据库，进度条会跟上列表里的真实百分比。这不表示所有 YouTube 下载或 Whisper 转写都会成功（Related #163 / #183）
 - 时间线为空时不再误导去改模型设置（Related #182）
 - 本地导入没有可用字幕时，失败说明会指到「设置 → 转写」，也可以在重新导入时附上 .srt。已经失败、只记下「字幕文件不存在」的项目，打开后同样能看到这条去向（#186）
 - 桌面端连续查看项目、下载或生成合集时，不再因为数据库连接占满而打不开列表和详情（#175）
