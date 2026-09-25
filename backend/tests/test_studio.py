@@ -728,3 +728,34 @@ def test_concurrent_legacy_editor_open_creates_one_draft(root):
         results = list(pool.map(lambda _:store.open_legacy_editor('p1',draft().model_copy(update={'id':uuid.uuid4().hex}),'same-source',reuse_existing=True),range(6)))
     assert len({d['id'] for d in results}) == 1
     assert len(store.read('p1')['drafts']) == 1
+
+
+def test_export_dispatch_failure_is_retryable_and_preserves_success(root, monkeypatch):
+    from backend.services.studio import jobs
+    saved = store.save_draft('p1', draft(), create=True)
+    output = root / 'prior.mp4'
+    output.write_bytes(b'previous export')
+    previous = {'job_id':'success', 'status':'completed', 'draft_id':'d1', 'revision':1, 'result':{'path':str(output)}}
+    store.change('p1', lambda data: data['jobs'].append(previous))
+    calls = []
+    class Executor:
+        def submit(self, *args):
+            calls.append(args)
+            if len(calls) == 1:
+                raise RuntimeError('executor unavailable: private runtime details')
+    monkeypatch.setattr(jobs, 'executor', Executor())
+    with pytest.raises(ValueError, match='导出任务未能启动'):
+        jobs.export('p1', Draft.model_validate(saved))
+    state = store.read('p1')
+    failed = state['jobs'][0]
+    assert failed['status'] == 'failed'
+    assert 'private runtime' not in failed['error']
+    assert state['jobs'][1] == previous
+    assert state['drafts'][0] == saved
+    assert output.read_bytes() == b'previous export'
+    retry = jobs.export('p1', Draft.model_validate(saved))
+    assert retry['status'] == 'queued'
+    assert retry['job_id'] != failed['job_id']
+    assert jobs.export('p1', Draft.model_validate(saved))['job_id'] == retry['job_id']
+    assert len(calls) == 2  # retry accepted once; duplicate does not dispatch again
+    assert len(store.read('p1')['jobs']) == 3
