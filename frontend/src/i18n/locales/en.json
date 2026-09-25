@@ -792,5 +792,6 @@
   "这条视频没有自带字幕，本地转写也没有结果。可以到「设置 → 转写」安装或重试 Whisper，也可以重新导入时带上 .srt。": "This video has no captions, and local transcription produced nothing. Install or retry Whisper in Settings → Transcription, or import it again with an .srt file.",
   "到「设置 → 转写」检查 Whisper 是否安装、模型是否已下载，或重新导入时带上 .srt。": "In Settings → Transcription, check that Whisper is installed and a model is downloaded, or import it again with an .srt file.",
   "打开转写设置": "Open transcription settings",
-  "转写设置": "Transcription"
+  "转写设置": "Transcription",
+  "这个切片当前播放器无法解码，请下载后用系统播放器打开。": "This clip can't be decoded in the player. Download it and open it in a system player."
 }
