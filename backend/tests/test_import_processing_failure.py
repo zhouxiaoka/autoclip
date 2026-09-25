@@ -13,7 +13,13 @@ import pytest
 from celery import Celery
 
 from backend.tasks import import_processing as mod
-from backend.tasks.import_processing import ImportProcessingError, process_import_task
+from backend.tasks.import_processing import (
+    ImportMissingCredential,
+    ImportProcessingError,
+    ImportSubtitleUnavailable,
+    classify_import_failure,
+    process_import_task,
+)
 
 
 class _Query:
@@ -143,20 +149,23 @@ def test_incomplete_failure_meta_is_what_celery_rejects(memory_backend):
         memory_backend.mark_as_done("bad-meta", {"status": "completed"})
 
 
-def test_missing_subtitle_failure_roundtrips_with_exc_type(memory_backend, project_service, tmp_path, monkeypatch):
+def test_missing_subtitle_failure_roundtrips_with_exc_type(memory_backend, project_service, tmp_path, monkeypatch, caplog):
     _whisper_not_installed(monkeypatch)
     video = tmp_path / "input.mp4"
     video.write_bytes(b"not-a-real-video")
 
-    raised, meta = _run_import(
-        memory_backend,
-        "task-missing-srt",
-        "proj-1",
-        str(video),
-        str(tmp_path / "missing.srt"),
-    )
+    with caplog.at_level("ERROR"):
+        raised, meta = _run_import(
+            memory_backend,
+            "task-missing-srt",
+            "proj-1",
+            str(video),
+            str(tmp_path / "missing.srt"),
+        )
 
-    assert isinstance(raised, ImportProcessingError)
+    assert type(raised) is ImportSubtitleUnavailable
+    assert "kind=missing-subtitle" in caplog.text
+    assert type(meta["result"]) is ImportSubtitleUnavailable
     message = str(raised)
     assert "没有字幕可分析" in message
     assert "设置 → 转写" in message
@@ -192,7 +201,8 @@ def test_speech_error_roundtrips_as_structured_subtitle_failure(memory_backend, 
         None,
     )
 
-    assert isinstance(raised, ImportProcessingError)
+    assert type(raised) is ImportSubtitleUnavailable
+    assert type(meta["result"]) is ImportSubtitleUnavailable
     assert "还没安装" in str(raised)
     assert "设置 → 转写" in str(raised)
     assert meta["status"] == "FAILURE"
@@ -220,7 +230,8 @@ def test_pipeline_submit_error_is_kept_on_the_project(memory_backend, project_se
         str(srt),
     )
 
-    assert isinstance(raised, ImportProcessingError)
+    assert type(raised) is ImportProcessingError
+    assert not isinstance(raised, (ImportSubtitleUnavailable, ImportMissingCredential))
     assert str(raised) == "队列已满"
     assert meta["status"] == "FAILURE"
     assert str(meta["result"]) == "队列已满"
@@ -228,7 +239,7 @@ def test_pipeline_submit_error_is_kept_on_the_project(memory_backend, project_se
     assert project_service.project.project_metadata["last_error"] == "队列已满"
 
 
-def test_unexpected_import_error_does_not_store_bare_failure_meta(memory_backend, project_service, tmp_path, monkeypatch):
+def test_unexpected_import_error_does_not_store_bare_failure_meta(memory_backend, project_service, tmp_path, monkeypatch, caplog):
     video = tmp_path / "input.mp4"
     video.write_bytes(b"not-a-real-video")
     srt = tmp_path / "input.srt"
@@ -239,16 +250,20 @@ def test_unexpected_import_error_does_not_store_bare_failure_meta(memory_backend
 
     monkeypatch.setattr(mod, "submit_video_pipeline_task", boom)
 
-    raised, meta = _run_import(
-        memory_backend,
-        "task-unexpected",
-        "proj-3",
-        str(video),
-        str(srt),
-    )
+    with caplog.at_level("ERROR"):
+        raised, meta = _run_import(
+            memory_backend,
+            "task-unexpected",
+            "proj-3",
+            str(video),
+            str(srt),
+        )
 
-    assert isinstance(raised, ImportProcessingError)
+    assert type(raised) is ImportProcessingError
+    assert not isinstance(raised, (ImportSubtitleUnavailable, ImportMissingCredential))
     assert "broker down" in str(raised)
+    assert "kind=unexpected" in caplog.text
+    assert "exc=ImportProcessingError" in caplog.text
     assert meta["status"] == "FAILURE"
     assert "broker down" in str(meta["result"])
     assert project_service.project.status == "failed"
@@ -312,3 +327,81 @@ def test_import_task_source_does_not_set_failure_state_by_hand():
     src = Path(mod.__file__).read_text(encoding="utf-8")
     assert "state='FAILURE'" not in src
     assert 'state="FAILURE"' not in src
+
+
+def test_speech_api_key_is_missing_credential_without_changing_guidance(
+    memory_backend, project_service, tmp_path, monkeypatch, caplog
+):
+    """转写密钥没配时，Sentry 类型分开，但失败码和「设置 → 转写」提示保持原样。"""
+    video = tmp_path / "input.mp4"
+    video.write_bytes(b"not-a-real-video")
+    monkeypatch.setattr(
+        mod,
+        "_generate_import_subtitle",
+        lambda task, project_id, video_path: (None, "阿里云语音识别不可用，请配置API Key"),
+    )
+
+    with caplog.at_level("ERROR"):
+        raised, meta = _run_import(
+            memory_backend,
+            "task-missing-key",
+            "proj-key",
+            str(video),
+            None,
+        )
+
+    assert type(raised) is ImportMissingCredential
+    assert type(meta["result"]) is ImportMissingCredential
+    assert "请配置API Key" in str(raised)
+    assert "设置 → 转写" in str(raised)
+    assert project_service.project.project_metadata["last_error_code"] == "subtitle_setup"
+    assert "设置 → 转写" in project_service.project.project_metadata["last_error"]
+    assert "kind=missing-key" in caplog.text
+    assert "exc=ImportMissingCredential" in caplog.text
+
+
+def test_llm_not_configured_keeps_message_and_code(project_service, caplog):
+    message = "没有可用的 LLM 提供商（当前选择：通义千问 · qwen），缺少 API Key 或本地服务地址。"
+    with caplog.at_level("ERROR"):
+        with pytest.raises(ImportMissingCredential) as caught:
+            mod._fail_import(
+                project_service,
+                "proj-llm",
+                message,
+                error_code="llm_not_configured",
+            )
+
+    assert str(caught.value) == message
+    assert project_service.project.status == "failed"
+    assert project_service.project.project_metadata["last_error"] == message
+    assert project_service.project.project_metadata["last_error_code"] == "llm_not_configured"
+    assert "kind=missing-key" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "code",
+    ["whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup"],
+)
+def test_subtitle_codes_classify_as_subtitle(code):
+    exc_cls = classify_import_failure("没有字幕可分析。到「设置 → 转写」重试。", code)
+    assert exc_cls is ImportSubtitleUnavailable
+    assert exc_cls.kind == "missing-subtitle"
+
+
+def test_whisper_state_stays_subtitle_even_if_text_mentions_a_key():
+    exc_cls = classify_import_failure("请配置API Key", "whisper_not_installed")
+    assert exc_cls is ImportSubtitleUnavailable
+
+
+def test_timeline_empty_stays_unexpected_import_failure():
+    message = "时间线提取为空：2 个话题在对齐并按时长筛选后没有留下可用片段。"
+    assert classify_import_failure(message, "timeline_empty") is ImportProcessingError
+
+
+def test_unexpected_and_key_messages_do_not_share_a_type():
+    assert classify_import_failure("队列已满") is ImportProcessingError
+    assert classify_import_failure("broker down") is ImportProcessingError
+    assert classify_import_failure("401 Unauthorized") is ImportProcessingError
+    key = classify_import_failure("OpenAI API不可用，请设置OPENAI_API_KEY环境变量", "subtitle_setup")
+    assert key is ImportMissingCredential
+    assert key.kind == "missing-key"

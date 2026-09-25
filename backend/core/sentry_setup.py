@@ -55,7 +55,39 @@ def write_privacy(*, crash_reports: Optional[bool] = None) -> Path:
     return path
 
 
-def before_send(event: dict, _hint: dict) -> Optional[dict]:
+def _import_monitoring_fields(event: dict, hint: Optional[dict]) -> tuple[Optional[str], Optional[list[str]]]:
+    """缺字幕 / 缺密钥要单独归组。
+
+    before_send 会丢掉事件上原有的 tags 和 fingerprint，只留下异常类型。
+    配置类失败如果仍都叫 ImportProcessingError，就会和未预期故障合成一条 issue。
+    这里按异常类型写回稳定 tag；只有配置类失败覆盖 fingerprint。
+    指纹里只有 kind，没有错误正文。
+    """
+    try:
+        from backend.tasks.import_processing import (
+            fingerprint_for_import_kind,
+            import_failure_kind_for_type,
+            kind_of_exception,
+        )
+    except Exception:
+        logger.debug("导入失败分类不可用", exc_info=True)
+        return None, None
+
+    kind = None
+    if hint:
+        exc_info = hint.get("exc_info")
+        if isinstance(exc_info, tuple) and len(exc_info) >= 2 and isinstance(exc_info[1], BaseException):
+            kind = kind_of_exception(exc_info[1])
+    if not kind:
+        values = (event.get("exception") or {}).get("values") or []
+        if values and isinstance(values[-1], dict):
+            kind = import_failure_kind_for_type(str(values[-1].get("type") or ""))
+    if not kind:
+        return None, None
+    return kind, fingerprint_for_import_kind(kind)
+
+
+def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     """Recheck consent for every event, including long-running worker processes.
 
     Keep code locations, never arbitrary exception messages, request bodies,
@@ -79,6 +111,11 @@ def before_send(event: dict, _hint: dict) -> Optional[dict]:
     if not values:
         return None  # Logging-only payloads can contain video text; do not send them.
     clean["exception"] = {"values": values}
+    kind, fingerprint = _import_monitoring_fields(event, hint)
+    if kind:
+        clean["tags"] = {"import_failure": kind}
+    if fingerprint:
+        clean["fingerprint"] = fingerprint
     return clean
 
 

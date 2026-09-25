@@ -19,7 +19,104 @@ from backend.core.celery_app import celery_app
 
 
 class ImportProcessingError(Exception):
-    """导入任务失败。交给 Celery 记成带 exc_type 的 FAILURE，不要自己 update_state(FAILURE)。"""
+    """未预期的导入故障。
+
+    交给 Celery 记成带 exc_type 的 FAILURE，不要自己 update_state(FAILURE)。
+    缺字幕、缺密钥用下面的子类抛出：Sentry 只保留异常类型、不保留正文，
+    子类才能和这条未预期故障分开归组。
+    """
+
+    kind = "unexpected"
+
+
+class ImportSubtitleUnavailable(ImportProcessingError):
+    """预期内的字幕/转写配置问题。用户看到的文案和 last_error_code 不变。"""
+
+    kind = "missing-subtitle"
+
+
+class ImportMissingCredential(ImportProcessingError):
+    """预期内的密钥或提供商配置问题。用户看到的文案和 last_error_code 不变。"""
+
+    kind = "missing-key"
+
+
+# 这些码已经带了「设置 → 转写」去向，归到缺字幕，即使用户原文里提过密钥。
+_WHISPER_STATE_CODES = frozenset({
+    "whisper_not_installed",
+    "whisper_install_failed",
+    "transcription_empty",
+})
+_SUBTITLE_FAILURE_CODES = _WHISPER_STATE_CODES | {"subtitle_setup"}
+
+# 只匹配明确的配置说明。不要用 unauthorized / authentication，
+# 否则连接被拒绝一类故障会从「未预期」桶里被抽走。
+_MISSING_KEY_NEEDLES = (
+    "没有可用的 llm",
+    "缺少 api key",
+    "缺少api key",
+    "未配置llm",
+    "未配置 api",
+    "api key为空",
+    "api key 为空",
+    "invalid api key",
+    "incorrect api key",
+    "missing api key",
+    "no api key",
+    "api连接测试失败",
+    "连接测试失败",
+    "openai_api_key",
+    "azure_speech_key",
+    "google_speech_api_key",
+    "google_application_credentials",
+    "custom_api_key",
+    "请配置api key",
+    "请配置 api key",
+    "配置api密钥",
+    "配置 api 密钥",
+    "api密钥",
+    "api key",
+    "api_key",
+)
+
+
+def classify_import_failure(error: str, error_code: Optional[str] = None) -> type[ImportProcessingError]:
+    """选出 Sentry / 日志用的异常类型。不改写用户可见文案。"""
+    from backend.pipeline.failures import CODE_LLM_NOT_CONFIGURED
+
+    code = (error_code or "").strip()
+    if code == CODE_LLM_NOT_CONFIGURED or _message_is_missing_credential(error, code):
+        return ImportMissingCredential
+    if code in _SUBTITLE_FAILURE_CODES:
+        return ImportSubtitleUnavailable
+    return ImportProcessingError
+
+
+def _message_is_missing_credential(error: str, error_code: str) -> bool:
+    if error_code in _WHISPER_STATE_CODES:
+        return False
+    text = (error or "").lower()
+    return any(needle in text for needle in _MISSING_KEY_NEEDLES)
+
+
+def import_failure_kind_for_type(type_name: str) -> Optional[str]:
+    for cls in (ImportSubtitleUnavailable, ImportMissingCredential, ImportProcessingError):
+        if cls.__name__ == type_name:
+            return cls.kind
+    return None
+
+
+def kind_of_exception(exc: BaseException) -> Optional[str]:
+    if isinstance(exc, ImportProcessingError):
+        return exc.kind
+    return None
+
+
+def fingerprint_for_import_kind(kind: str) -> Optional[list[str]]:
+    """配置类失败使用固定 fingerprint。未预期故障保留 Sentry 默认栈归组。"""
+    if kind in {"missing-subtitle", "missing-key"}:
+        return ["import-processing", kind]
+    return None
 
 
 def _record_import_failure(
@@ -57,7 +154,15 @@ def _fail_import(
     ValueError: Exception information must include the exception type。
     """
     _record_import_failure(project_service, project_id, error, error_code=error_code)
-    raise ImportProcessingError(error)
+    exc_cls = classify_import_failure(error, error_code)
+    logger.error(
+        "导入失败分类: kind=%s exc=%s code=%s project=%s",
+        exc_cls.kind,
+        exc_cls.__name__,
+        error_code or "-",
+        project_id,
+    )
+    raise exc_cls(error)
 
 
 def import_subtitle_failure(speech_error: Optional[str] = None):
