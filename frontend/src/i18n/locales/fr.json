@@ -1098,5 +1098,6 @@
   "原素材没有可用字幕，本次未烧录字幕": "Aucun sous-titre exploitable dans la source. Aucun sous-titre n’a été incrusté.",
   "服务已重启，请重新导出": "Le service a redémarré. Veuillez relancer l’export.",
   "服务已重启，请重试分析": "Le service a redémarré. Veuillez relancer l’analyse.",
-  "导出任务未能启动，请重试；已有成片已保留": "L’export n’a pas pu démarrer. Réessayez ; les exports existants ont été conservés."
+  "导出任务未能启动，请重试；已有成片已保留": "L’export n’a pas pu démarrer. Réessayez ; les exports existants ont été conservés.",
+  "制作任务未能启动，请重试确认；原素材与已有成片已保留": "La création n’a pas pu démarrer. Confirmez à nouveau ; la source et les exports existants ont été conservés."
 }

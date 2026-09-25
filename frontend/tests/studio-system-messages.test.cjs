@@ -33,6 +33,6 @@ test('export history renders localized server warnings/restart errors in all eig
  }
 })
 test('all backend processing stages have translations in eight catalogs',()=>{
- const stages=['导出任务未能启动，请重试；已有成片已保留','下载素材','理解画面','准备素材','快速判断适合的制作类型','开始制作所选内容','制作内容切片','制作精彩高光','制作推广成片','扫描画面，寻找候选高光','复核首选高光的起止边界','组织推广开头与成片草稿','整理高光成片草稿']
+ const stages=["制作任务未能启动，请重试确认；原素材与已有成片已保留",'导出任务未能启动，请重试；已有成片已保留','下载素材','理解画面','准备素材','快速判断适合的制作类型','开始制作所选内容','制作内容切片','制作精彩高光','制作推广成片','扫描画面，寻找候选高光','复核首选高光的起止边界','组织推广开头与成片草稿','整理高光成片草稿']
  for(const lang of langs)for(const stage of stages){assert.ok(catalogs[lang][stage],lang+stage);if(lang!=='zh')assert.notEqual(catalogs[lang][stage],stage)}
 })
