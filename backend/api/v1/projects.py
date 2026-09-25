@@ -990,15 +990,19 @@ async def get_project_clip(
             raise HTTPException(status_code=404, detail="Clip video file not found")
         
         # 内联播放。默认 attachment 时，macOS WKWebView 的 <video> 不会播放。
+        # 不把磁盘上的原始文件名交给 FileResponse：响应头按 latin-1 编码，
+        # 中文等非 ASCII 文件名会 UnicodeEncodeError，预览直接 500。
+        # 与下载接口一致，只用 RFC 5987 filename*。
         from fastapi.responses import FileResponse
+        from ...utils.content_disposition import content_disposition_header
         return FileResponse(
             path=str(video_file),
             media_type="video/mp4",
-            filename=video_file.name,
             content_disposition_type="inline",
             headers={
                 "Accept-Ranges": "bytes",
                 "Cache-Control": "no-cache",
+                "Content-Disposition": content_disposition_header(video_file.name, "inline"),
             },
         )
     except HTTPException:
@@ -1298,19 +1302,15 @@ async def download_project_file(
             # 生成下载文件名
             collection_name = collection.name or f"collection_{collection_id}"
             from ...utils.video_processor import VideoProcessor
+            from ...utils.content_disposition import content_disposition_header
             safe_name = VideoProcessor.sanitize_filename(collection_name)
             filename = f"{safe_name}.mp4"
-            
-            # 对文件名进行URL编码
-            import urllib.parse
-            encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
-            
+
             return FileResponse(
                 path=str(file_path),
-                filename=filename,
                 media_type="video/mp4",
                 headers={
-                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+                    "Content-Disposition": content_disposition_header(filename, "attachment")
                 }
             )
         
@@ -1331,19 +1331,15 @@ async def download_project_file(
             # 生成下载文件名
             clip_title = clip.title or f"clip_{clip_id}"
             from ...utils.video_processor import VideoProcessor
+            from ...utils.content_disposition import content_disposition_header
             safe_name = VideoProcessor.sanitize_filename(clip_title)
             filename = f"{safe_name}.mp4"
-            
-            # 对文件名进行URL编码
-            import urllib.parse
-            encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
-            
+
             return FileResponse(
                 path=str(file_path),
-                filename=filename,
                 media_type="video/mp4",
                 headers={
-                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+                    "Content-Disposition": content_disposition_header(filename, "attachment")
                 }
             )
         
