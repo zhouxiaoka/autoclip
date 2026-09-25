@@ -7,6 +7,10 @@
 
 ## [未发布]
 
+_（本周尚无改动）_
+
+## [1.3.5] - 2026-09-26
+
 ### 改进
 - 导入失败的监控分类：缺字幕、缺少 API Key，以及未预期的导入故障，会以不同异常类型分开上报。Sentry 里对应 fingerprint 为 `import-processing` / `missing-subtitle`、`import-processing` / `missing-key`；未预期故障仍是 `ImportProcessingError`，沿用默认栈归组。日志里带 `kind=missing-subtitle`、`kind=missing-key` 或 `kind=unexpected`。这只改善监控分类，不改变导入是否成功，也不改变字幕质量。
 
@@ -240,7 +244,8 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.4...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.5...HEAD
+- [1.3.5]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.4...v1.3.5
 - [1.3.4]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.3...v1.3.4
 - [1.3.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.2...v1.3.3
 - [1.3.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.1...v1.3.2
