@@ -25,11 +25,23 @@ class Scene(BaseModel):
             raise ValueError('片段至少需要 0.1 秒')
         return self
 
+class CTA(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    template: Literal['off', 'auto', 'continue', 'challenge', 'brand'] = 'off'
+    version: Literal[1] = 1
+    brand: str = Field(default='', max_length=40)
+    text: str = Field(default='', max_length=80)
+    language: Literal['zh', 'en', 'ja'] = 'zh'
+    position: float = Field(default=.65, ge=.2, le=.7)
+    confirmed_scene: str = Field(default='', max_length=200)
+
+
 class Draft(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str = Field(pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     title: str = Field(min_length=1, max_length=200)
     hook: str = Field(default='', max_length=120)
+    cta: CTA = Field(default_factory=CTA)
     scenes: list[Scene] = Field(min_length=1, max_length=30)
     language: Language = 'source'
     aspect: Literal['original', 'portrait', 'landscape'] = 'original'

@@ -1,7 +1,7 @@
 import { observeStudioOperation } from '../../analytics/studio'
 import { workflow } from '../../analytics/observer'
 import api from '../../services/api'
-import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences } from './types'
+import { Draft, CTAPlan, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences } from './types'
 export const studioApi = {
   analysisPreferences: (): Promise<AnalysisPreferences> => api.get('/studio/analysis-preferences'),
   saveAnalysisPreferences: (body: AnalysisPreferences): Promise<AnalysisPreferences> => api.put('/studio/analysis-preferences', body),
@@ -9,6 +9,7 @@ export const studioApi = {
   capabilities: (): Promise<{ visual_analysis: boolean; visual_model: string }> => api.get('/studio/capabilities'),
   get: (pid: string, signal?: AbortSignal): Promise<Workspace> => api.get(`/studio/${pid}`, { signal }),
   titleThumbnail: (style: string, version = 6) => `${api.defaults.baseURL}/studio/title-presets/${style}/thumbnail?v=${version}`,
+  ctaPreview: (pid: string, draft: Draft, signal?: AbortSignal): Promise<CTAPlan> => api.post(`/studio/${pid}/cta-preview`, draft, {signal}),
   titlePreview: (pid: string, draft: Draft, signal?: AbortSignal, layer = 'artwork'): Promise<Blob> => api.post(`/studio/${pid}/title-preview?layer=${layer}`, draft, {responseType:'blob', signal}),
   candidates: (pid: string, signal?: AbortSignal): Promise<CandidateList> => api.get(`/studio/${pid}/candidates`, { signal }),
   import: (body: FormData): Promise<{ project_id: string }> => observeStudioOperation('studio_import', () => api.post('/studio/import', body, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 0 }), (result: { project_id: string }) => workflow.watch('studio-screen', result.project_id)),

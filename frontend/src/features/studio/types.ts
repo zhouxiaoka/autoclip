@@ -3,7 +3,10 @@ export type Language = 'source' | 'zh' | 'en' | 'ja'
 export interface Scene { id: string; label: string; start: number; end: number; evidence: string }
 export interface Candidate extends Scene { kind: 'visual' | 'legacy' }
 export interface CandidateList { duration: number; candidates: Candidate[]; warnings: string[] }
+export interface CTA { template: 'off' | 'auto' | 'continue' | 'challenge' | 'brand'; version: 1; brand: string; text: string; language: 'zh' | 'en' | 'ja'; position: number; confirmed_scene: string }
+export interface CTAPlan { template: CTA['template']; reason: string; start: number; duration: number; extra_duration: number; scene_key: string; text: string; image: string }
 export interface Draft {
+  cta?: CTA
   id: string; title: string; hook: string; scenes: Scene[]; language: Language
   aspect: 'original' | 'portrait' | 'landscape'; layout: 'fit' | 'crop' | 'blur'
   crop_x?: number; title_style?: 'plain' | 'impact' | 'card' | 'comic' | 'neon' | 'arena' | 'editorial' | 'pixel' | 'frosted'
@@ -23,7 +26,15 @@ export interface Workspace {
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }
-export function draftDuration(draft: Draft) { return draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) }
+export function ctaExtraDuration(draft: Draft) {
+  const c = draft.cta
+  if (!c || c.template === 'off') return 0
+  const last = draft.scenes[draft.scenes.length-1]
+  const total = draft.scenes.reduce((sum, s) => sum + Math.max(1, Math.round((s.end-s.start)*30))/30, 0)
+  const continuation = total >= 8 && !!last && Math.max(1, Math.round((last.end-last.start)*30))/30 >= 4
+  return (c.template === 'auto' || c.template === 'continue') && continuation ? 0 : 2.5
+}
+export function draftDuration(draft: Draft) { return draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) + ctaExtraDuration(draft) }
 export function draftError(draft: Draft, sourceDuration?: number): string | null {
   if (!draft.title.trim()) return '请填写成片标题'
   if (!draft.scenes.length) return '至少保留一个镜头'

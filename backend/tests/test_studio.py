@@ -759,3 +759,20 @@ def test_export_dispatch_failure_is_retryable_and_preserves_success(root, monkey
     assert jobs.export('p1', Draft.model_validate(saved))['job_id'] == retry['job_id']
     assert len(calls) == 2  # retry accepted once; duplicate does not dispatch again
     assert len(store.read('p1')['jobs']) == 3
+
+
+def test_cta_preview_api_uses_shared_plan_without_mutating_or_calling_models(client,monkeypatch):
+    from backend.services.studio import cta
+    d=client.post('/studio/p1/drafts',json={'clip_ids':['c1'],'title':'CTA preview'}).json()
+    monkeypatch.setattr(intelligence,'vision_call',lambda *a,**k: pytest.fail('CTA must not invoke a model'))
+    monkeypatch.setattr(intelligence,'text_json',lambda *a,**k: pytest.fail('CTA must not invoke a model'))
+    body={**d,'cta':{'template':'auto','language':'en'},'aspect':'portrait'}
+    response=client.post('/studio/p1/cta-preview',json=body)
+    assert response.status_code==200
+    expected=cta.plan(Draft.model_validate(body))
+    assert response.json()['template']==expected['template']
+    assert response.json()['duration']==expected['duration']
+    assert response.json()['image'].startswith('data:image/png;base64,')
+    assert store.read('p1')['drafts'][0]['cta']['template']=='off'
+    assert client.post('/studio/missing/cta-preview',json=body).status_code==404
+    assert client.post('/studio/p1/cta-preview',json={**body,'cta':{'template':'unknown'}}).status_code==422

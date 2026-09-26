@@ -158,6 +158,21 @@ def draft_thumbnail(project_id: str, draft_id: str, revision: int = Query(..., g
     # Server memory cache is keyed by actual source stats. Revalidate on navigation.
     return Response(data, media_type='image/jpeg', headers={'Cache-Control': 'private, no-cache'})
 
+@router.post('/{project_id}/cta-preview')
+def cta_preview(project_id: str, body: Draft, db: Session = Depends(get_db)):
+    import base64
+    from backend.services.studio import cta
+    project_or_404(project_id, db)
+    info = call(intelligence._probe, call(jobs.source, project_id))
+    call(intelligence.validate_scenes, body.scenes, info.get('duration', 0))
+    w, h = {'portrait': (1080,1920), 'landscape': (1920,1080)}.get(body.aspect, (info.get('width'),info.get('height')))
+    if not w or not h:
+        raise HTTPException(422, '无法读取原视频尺寸')
+    spec = cta.plan(body)
+    data = call(cta.png_bytes, spec, int(w)//2*2, int(h)//2*2)
+    return {**spec, 'image': 'data:image/png;base64,' + base64.b64encode(data).decode('ascii')}
+
+
 @router.post('/{project_id}/title-preview')
 def title_preview(project_id: str, body: Draft, db: Session = Depends(get_db), layer: Literal['artwork', 'backdrop'] = 'artwork'):
     from backend.services.studio import title_art

@@ -8,7 +8,7 @@ from backend.services.studio.intelligence import text_json, validate_scenes
 from backend.services.studio.models import Draft
 from backend.services.studio.titles import template_filters
 from backend.services.studio import title_art
-from backend.services.studio import audio
+from backend.services.studio import audio, cta
 from backend.services.studio.store import directory
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
@@ -132,7 +132,16 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                 cmd += ['-an']
             cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]
             subprocess.run(cmd, check=True, capture_output=True, timeout=max(180, sum(durations)*2))
+            cta_plan = cta.plan(draft)
+            if cta_plan['template'] != 'off':
+                packaged = folder / 'packaged.mp4'
+                cta.apply(partial, packaged, cta_plan, w, h, keep_audio, folder)
+                import shutil
+                shutil.copyfile(packaged, partial)
+                warnings.append('CTA 为视频内文字，实际点击入口需在投放平台配置')
+                if cta_plan['template'] != draft.cta.template and draft.cta.template != 'auto':
+                    warnings.append(cta_plan['reason'])
             os.replace(partial, output)
-        return {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings}
+        return {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings, 'cta': cta_plan}
     finally:
         partial.unlink(missing_ok=True)
