@@ -1,0 +1,233 @@
+{
+  "source": "runner-source.mp4",
+  "request_budget": 2,
+  "timeout_seconds": 180,
+  "requests": [
+    {
+      "images": 60,
+      "outcome": "success",
+      "elapsed_seconds": 52.8
+    },
+    {
+      "images": 25,
+      "outcome": "success",
+      "elapsed_seconds": 26.07
+    }
+  ],
+  "stages": [
+    "扫描画面，寻找候选高光",
+    "复核首选高光的起止边界"
+  ],
+  "scope": "Fixed production analyze; Seed bounded observation and overlong candidate filtering; no retry",
+  "outcome": "success",
+  "events": [
+    {
+      "id": "event-10",
+      "label": "矿洞连续避险集币并完成金币计量",
+      "start": 294.6,
+      "end": 311.8,
+      "evidence": "294.6秒角色已乘坐蓝色矿车在矿洞三轨上前进，前方有大型吊落障碍；295.0–301.8秒连续贴近大型矿车、炸药车等障碍并沿轨道吃金币；303.1秒轨道上出现红色钱袋，304.5秒角色车斗内出现金币堆，随后继续沿中路金币前进；307.2秒屏幕明确弹出“Coin meter Completed!”；提示持续到309.9秒左右，随后又出现“Daily High Score Completed!”。该帧段可见连续变线避险和金币收集，但钱袋是否被实际吃到、计量是否由钱袋触发不能完全确认。"
+    },
+    {
+      "id": "event-8",
+      "label": "管道工厂里追逐与金币弧线",
+      "start": 226.2,
+      "end": 255.1,
+      "evidence": "226.2秒角色踩着滑板在绿色管道上滑行，前方有橙色X封死的管道；232.0秒角色左移，右侧出现发光x2星；237.8秒警察和绿色警犬在身后紧追；243.5秒角色在右侧窄道继续滑板；249.3秒前方有左右两道金币拱门和鳄鱼标志。"
+    },
+    {
+      "id": "event-6",
+      "label": "矿车隧道连续避险",
+      "start": 150.8,
+      "end": 174.0,
+      "evidence": "150.8秒角色坐进蓝色矿车，隧道顶部悬挂矿斗，前方有障碍和金币；156.6秒轨道上有绿色道具与红色袋状障碍；162.4秒角色站在矿车中，前方轨道分叉；168.2秒右前方大型矿车逼近，角色在中间偏左轨道；174.0秒大型橙色矿车从左侧擦过，前方有金币。"
+    },
+    {
+      "id": "event-7",
+      "label": "乡野公路滑板躲车",
+      "start": 179.8,
+      "end": 208.8,
+      "evidence": "179.8秒角色在公路中央持磁铁类道具，前方有公交车和金币；185.6秒踩圆形滑板，路中有红白皇冠路障；191.4秒近景越过道路车辆，旁边有黄色加速光效；197.2秒前方出现x2星星；202.9秒角色在左侧弹跳井盖上方，右侧是公交车和施工标志；208.8秒角色下板奔跑，前方有下落障碍和“x3”道具提示。"
+    },
+    {
+      "id": "event-9",
+      "label": "任务完成后回到铁轨冲刺",
+      "start": 260.9,
+      "end": 289.9,
+      "evidence": "260.9秒城市公路上方弹出“Mission Completed”，角色继续沿金币线奔跑；266.7秒已回到铁轨，前方两列粉色车厢形成窄口；272.5秒红色隧道中央有胡萝卜障碍和金币线；278.3秒角色腾空越过黄色列车顶；284.1秒在两列粉色列车中间窄道奔跑；289.9秒前方轨道有多组高低障碍。"
+    },
+    {
+      "id": "event-3",
+      "label": "车顶与临水轨道连跑",
+      "start": 46.4,
+      "end": 70.0,
+      "evidence": "46.4秒角色跑上绿色车厢顶，旁边是粉紫列车；52.2秒沿临水蓝色斜面/墙边跑并接近一串金币；57.9秒前方有迎面列车和坡道；63.8-69.6秒在跨海桥轨道上越过矮障、穿过多列车间。"
+    }
+  ],
+  "coverage": {
+    "duration": 347.92,
+    "sample_interval": 5.798666666666667,
+    "refine_interval": 1.3458333333333339,
+    "selection": [
+      {
+        "id": "event-1",
+        "label": "抽奖获得77张券",
+        "start": 5.8,
+        "end": 20.0,
+        "event_type": "reward_screen",
+        "watch_score": 56,
+        "selection_reason": "有明确抽奖入口、消耗票和77奖励结果，但属于菜单抽奖展示，不是实际操作挑战；缺少完整旋转过程。",
+        "disposition": "filtered"
+      },
+      {
+        "id": "event-2",
+        "label": "开局铁轨追捕启动",
+        "start": 34.8,
+        "end": 43.0,
+        "event_type": "gameplay",
+        "watch_score": 62,
+        "selection_reason": "具备追捕开场和任务目标铺垫，但关键起步动作帧间隔较大，未见具体跳跃或碰撞结果。",
+        "disposition": "limit"
+      },
+      {
+        "id": "event-3",
+        "label": "车顶与临水轨道连跑",
+        "start": 46.4,
+        "end": 70.0,
+        "event_type": "gameplay",
+        "watch_score": 78,
+        "selection_reason": "连续出现车顶、临水窄路、迎面列车和桥轨多类障碍，动作场面丰富；静帧不能确认每次是否成功收集金币或完全无碰撞。",
+        "disposition": "selected"
+      },
+      {
+        "id": "event-4",
+        "label": "列车夹缝后进入喷射加速",
+        "start": 75.4,
+        "end": 88.0,
+        "event_type": "gameplay",
+        "watch_score": 72,
+        "selection_reason": "列车夹缝和喷射器形成速度变化，有明确危险铺垫；但进入喷射器后的落点和收益在静帧中不完整。",
+        "disposition": "limit"
+      },
+      {
+        "id": "event-5",
+        "label": "森林滑板连续穿障并捡到宝箱",
+        "start": 92.8,
+        "end": 139.2,
+        "event_type": "gameplay",
+        "watch_score": 82,
+        "selection_reason": "后半段森林段落包含滑板、石柱闪避、跳跃和宝箱获得，内容完整度较高；但133.4秒只显示宝箱获得提示，未看到开启奖励。",
+        "disposition": "duration_filtered"
+      },
+      {
+        "id": "event-6",
+        "label": "矿车隧道连续避险",
+        "start": 150.8,
+        "end": 174.0,
+        "event_type": "gameplay",
+        "watch_score": 84,
+        "selection_reason": "矿车模式独立、速度感强，连续可见悬挂矿斗、迎面矿车和变轨避险；缺少明确分数或撞击后的结果画面。",
+        "disposition": "selected"
+      },
+      {
+        "id": "event-7",
+        "label": "乡野公路滑板躲车",
+        "start": 179.8,
+        "end": 208.8,
+        "event_type": "gameplay",
+        "watch_score": 80,
+        "selection_reason": "公路车辆、井盖、路障和x2/x3道具构成独立高速段落；由于帧间隔较大，具体起跳、擦车和道具生效结果只能部分确认。",
+        "disposition": "selected"
+      },
+      {
+        "id": "event-8",
+        "label": "管道工厂里追逐与金币弧线",
+        "start": 226.2,
+        "end": 255.1,
+        "event_type": "gameplay",
+        "watch_score": 86,
+        "selection_reason": "场景转换鲜明，警察与狗追近、封死管道、变道和金币拱门都有可见紧张感；是证据较充分的高光段。",
+        "disposition": "selected"
+      },
+      {
+        "id": "event-9",
+        "label": "任务完成后回到铁轨冲刺",
+        "start": 260.9,
+        "end": 289.9,
+        "event_type": "gameplay",
+        "watch_score": 79,
+        "selection_reason": "有明确任务完成反馈，同时衔接跳跃列车和窄道冲刺；任务完成文字是玩法内提示，不是独立领奖界面。",
+        "disposition": "selected"
+      },
+      {
+        "id": "event-10",
+        "label": "二次矿车收集并完成金币计量",
+        "start": 295.7,
+        "end": 324.0,
+        "event_type": "gameplay",
+        "watch_score": 87,
+        "selection_reason": "有独立矿车玩法、明确“Coin meter Completed”反馈以及断裂轨道和双车夹缝，结果清晰，是最值得复看的段落之一。",
+        "disposition": "selected"
+      },
+      {
+        "id": "event-11",
+        "label": "末段公路贴车惊险闪避",
+        "start": 324.7,
+        "end": 342.1,
+        "event_type": "gameplay",
+        "watch_score": 76,
+        "selection_reason": "末段连续车辆和施工障碍有惊险感，但采样帧缺少碰撞解除后的稳定落点，结果不完全可见。",
+        "disposition": "limit"
+      }
+    ],
+    "refined_event_id": "event-10",
+    "note": "基于有序静帧筛选并按观看价值排序，已排除模型明确标记的纯菜单、领奖和加载画面；分类与排序仍需人工核对，不代表投放效果。未标记类型的旧接口结果会保留。"
+  },
+  "elapsed_seconds": 90.05,
+  "draft_durations_seconds": [
+    20.7,
+    32.4,
+    26.7,
+    32.5,
+    32.5,
+    27.1
+  ],
+  "promotion_hooks": [
+    "矿车遇障碍，你能连续避险吃金币吗？",
+    "挑战：三轨连续变线，贴着障碍吃金币",
+    "一路避险集币后，金币计量竟然满了"
+  ],
+  "exports": [
+    {
+      "kind": "highlight",
+      "path": "/tmp/autoclip-rc-20260927/data/projects/real-sample/output/studio/highlight.mp4",
+      "media": {
+        "width": 1080,
+        "height": 1920,
+        "duration": 20.7
+      },
+      "audio": true,
+      "bytes": 22772041,
+      "sha256": "a8ec69c6f0729f89d285f47b8cb48896a80804b4c42da3a2c74250d29e410d13"
+    },
+    {
+      "kind": "promo",
+      "path": "/tmp/autoclip-rc-20260927/data/projects/real-sample/output/studio/promo.mp4",
+      "media": {
+        "width": 1080,
+        "height": 1920,
+        "duration": 20.7
+      },
+      "audio": true,
+      "bytes": 22514145,
+      "sha256": "e8c1dd594dfa392e0b518aa8eb223d346ace0d66ec8a5c76b8d8960d1d0fcd77"
+    }
+  ],
+  "limitations": [
+    "One gameplay source only; no ad delivery or ROI evidence",
+    "Production functions invoked in isolated script; not native UI acceptance",
+    "Only top highlight and first promo rendered; all six highlights are draft selections",
+    "Review screenshot verifies title presence and portrait composition at one timestamp, not complete video quality",
+    "Usage/billing metadata not exposed by client; no invented cost estimate"
+  ]
+}
