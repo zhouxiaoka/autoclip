@@ -1149,5 +1149,13 @@
   "CTA 视觉风格": "CTA visual style",
   "CTA 强调色": "CTA accent color",
   "恢复风格默认色": "Reset style color",
-  "按素材画风选择；当前不会自动识别风格。": "Choose a style to suit your footage. Automatic style recognition is not available yet."
+  "按素材画风选择；当前不会自动识别风格。": "Choose a style to suit your footage. Automatic style recognition is not available yet.",
+  "品牌素材与完整尾卡": "Brand assets and endcard",
+  "完整品牌尾卡": "Full brand endcard",
+  "品牌标语": "Brand slogan",
+  "移除品牌图片": "Remove brand image",
+  "用于品牌落版：Logo 优先；未提供时使用游戏名称设计字。": "For brand endings: use the logo, or styled game-name lettering when no logo is provided.",
+  "品牌图片随草稿保存；复制版本时可复用。仅使用你确认的品牌素材。": "Images are saved with the draft and reused in copies. Use verified brand assets.",
+  "品牌图片需为 PNG、JPEG 或 WebP，且不超过 512 KB": "Use PNG, JPEG or WebP images up to 512 KB.",
+  "读取品牌图片失败": "Could not read brand image"
 }

@@ -134,6 +134,9 @@ def artwork(spec,w,h,source=None):
     edge=accent or {'glossy':'#f6df77','soft':'#b7edbc','tactical':'#f1df50','type':'#ffffff'}[style]
     canvas=Image.new('RGBA',(w,h))
     if kind=='off':return canvas
+    if kind=='brand' and spec.get('brand_layout')=='poster':
+        from backend.services.studio.cta_brand import poster
+        return poster(spec,w,h,source)
     portrait=h>w
     if kind=='brand' and source is not None:
         canvas=ImageOps.fit(source,(w,h)).filter(ImageFilter.GaussianBlur(max(4,w*.02))).convert('RGBA')

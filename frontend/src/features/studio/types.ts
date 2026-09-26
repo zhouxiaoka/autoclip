@@ -3,7 +3,7 @@ export type Language = 'source' | 'zh' | 'en' | 'ja'
 export interface Scene { id: string; label: string; start: number; end: number; evidence: string }
 export interface Candidate extends Scene { kind: 'visual' | 'legacy' }
 export interface CandidateList { duration: number; candidates: Candidate[]; warnings: string[] }
-export interface CTA { template: 'off' | 'auto' | 'continue' | 'challenge' | 'brand'; version: 1; style?: 'glossy' | 'soft' | 'tactical' | 'type'; accent?: string | null; brand: string; text: string; language: 'zh' | 'en' | 'ja'; position: number; confirmed_scene: string }
+export interface CTA { template: 'off' | 'auto' | 'continue' | 'challenge' | 'brand'; version: 1; brand_layout?: 'classic' | 'poster'; slogan?: string; logo?: string | null; icon?: string | null; style?: 'glossy' | 'soft' | 'tactical' | 'type'; accent?: string | null; brand: string; text: string; language: 'zh' | 'en' | 'ja'; position: number; confirmed_scene: string }
 export interface CTAPlan { template: CTA['template']; reason: string; start: number; duration: number; extra_duration: number; scene_key: string; text: string; image: string }
 export interface Draft {
   cta?: CTA

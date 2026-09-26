@@ -1149,5 +1149,13 @@
   "CTA 视觉风格": "Estilo visual del CTA",
   "CTA 强调色": "Color de acento del CTA",
   "恢复风格默认色": "Restablecer color",
-  "按素材画风选择；当前不会自动识别风格。": "Elige un estilo acorde con el vídeo. El reconocimiento automático aún no está disponible."
+  "按素材画风选择；当前不会自动识别风格。": "Elige un estilo acorde con el vídeo. El reconocimiento automático aún no está disponible.",
+  "品牌素材与完整尾卡": "Recursos de marca y cierre",
+  "完整品牌尾卡": "Cierre de marca completo",
+  "品牌标语": "Eslogan",
+  "移除品牌图片": "Quitar imagen de marca",
+  "用于品牌落版：Logo 优先；未提供时使用游戏名称设计字。": "Para el cierre: se usa el logo o, si falta, el nombre del juego con letras decorativas.",
+  "品牌图片随草稿保存；复制版本时可复用。仅使用你确认的品牌素材。": "Las imágenes se guardan con el borrador y se reutilizan en copias. Usa recursos de marca verificados.",
+  "品牌图片需为 PNG、JPEG 或 WebP，且不超过 512 KB": "Usa PNG, JPEG o WebP de hasta 512 KB.",
+  "读取品牌图片失败": "No se pudo leer la imagen"
 }

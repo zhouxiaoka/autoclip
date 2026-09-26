@@ -144,6 +144,6 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                 if cta_plan['template'] != draft.cta.template and draft.cta.template != 'auto':
                     warnings.append(cta_plan['reason'])
             os.replace(partial, output)
-        return {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings, 'cta': cta_plan}
+        return {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings, 'cta': {k:v for k,v in cta_plan.items() if k not in ('logo','icon')}}
     finally:
         partial.unlink(missing_ok=True)

@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
 Goal = Literal['content', 'highlight', 'promo']
 Language = Literal['source', 'zh', 'en', 'ja']
@@ -36,6 +36,18 @@ class CTA(BaseModel):
     language: Literal['zh', 'en', 'ja'] = 'zh'
     position: float = Field(default=.65, ge=.2, le=.7)
     confirmed_scene: str = Field(default='', max_length=200)
+    brand_layout: Literal['classic', 'poster'] = 'classic'
+    slogan: str = Field(default='', max_length=60)
+    logo: str | None = Field(default=None, max_length=700000)
+    icon: str | None = Field(default=None, max_length=700000)
+
+    @field_validator('logo', 'icon')
+    @classmethod
+    def valid_brand_image(cls, value):
+        if value is not None:
+            from backend.services.studio.cta_brand import decode_asset
+            decode_asset(value)
+        return value
 
 
 class Draft(BaseModel):

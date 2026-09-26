@@ -114,3 +114,33 @@ def test_type_style_has_no_button_plate():
     image=styled_button('PLAY',320,90,'type')
     assert image.getpixel((20,45))[3]==0
     assert styled_button('PLAY',320,90,'soft').getpixel((20,45))[3]>0
+
+
+def test_brand_assets_are_bounded_and_persisted(tmp_path,monkeypatch):
+    import base64,io
+    from PIL import Image
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR',str(tmp_path))
+    store.directory('brand-assets').mkdir(parents=True)
+    stream=io.BytesIO();Image.new('RGBA',(32,32),(255,0,0,255)).save(stream,format='PNG')
+    icon='data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()
+    d=draft(cta=CTA(template='brand',brand_layout='poster',brand='MY GAME',slogan='Your next challenge',icon=icon))
+    saved=store.save_draft('brand-assets',d,create=True)
+    assert saved['cta']['icon']==icon
+    spec=cta.plan(Draft.model_validate(saved))
+    for width,height in [(180,320),(320,180)]:
+        art=cta.artwork(spec,width,height,Image.new('RGB',(180,320),'blue'))
+        assert art.size==(width,height)
+    for value in ['https://example.com/icon.png','data:image/svg+xml;base64,AA==','data:image/png;base64,bad','x'*700001]:
+        with pytest.raises(ValidationError): CTA(icon=value)
+    stream=io.BytesIO();Image.new('RGB',(2100,2100)).save(stream,format='PNG')
+    with pytest.raises(ValidationError): CTA(icon='data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode())
+
+
+def test_brand_logo_takes_precedence_over_designed_name():
+    import base64,io
+    from PIL import Image
+    stream=io.BytesIO();Image.new('RGBA',(80,20),'red').save(stream,format='PNG')
+    d=draft(cta=CTA(template='brand',brand_layout='poster',logo='data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode(),brand='NAME A'))
+    first=cta.png_bytes(cta.plan(d),180,320)
+    d.cta.brand='NAME B'
+    assert cta.png_bytes(cta.plan(d),180,320)==first
