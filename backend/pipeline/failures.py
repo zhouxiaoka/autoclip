@@ -20,9 +20,10 @@ class PipelineFailure(RuntimeError):
         super().__init__(message)
         self.stage = stage
         self.hint = hint
-        # 稳定机器码。前端用来打开对应设置页。
+        # 稳定机器码。前端用来打开对应设置页，或避免打开错误的设置页。
         # llm_not_configured：没有可用提供商 / 缺少 API Key / 连接测试没通过
         # whisper_not_installed | whisper_install_failed | transcription_empty | subtitle_setup
+        # timeline_empty：时间线为空，但模型连接已经成功（不要再指到「设置 → 模型」）
         self.code = code
 
     @property
@@ -72,6 +73,22 @@ def llm_key_failure(stage: str, message: str) -> PipelineFailure:
 HINT_SUBTITLE = "到「设置 → 转写」安装 Whisper 模型让 AutoClip 自动转写，或导入 .srt 字幕后重试。"
 HINT_LOWER_THRESHOLD = "到「设置 → 模型 → 最低评分阈值」调低后重试，或换一个更强的模型。"
 HINT_CHECK_FFMPEG = "确认 ffmpeg 可用（桌面版内置；Docker / 脚本模式请检查 PATH），以及原视频文件完整可播放。"
+# 预检已通过：空时间线更常是短片被时长下限滤掉，或时间戳对不上字幕。不要再提 API Key。
+CODE_TIMELINE_EMPTY = "timeline_empty"
+HINT_EMPTY_TIMELINE = (
+    "短视频里的片段常被最短时长滤掉（短片约 20 秒起），或模型给出的时间戳对不上字幕。"
+    "换一条更长、口播更完整的素材后再试。"
+)
+
+
+def empty_timeline_failure(topic_count: int) -> PipelineFailure:
+    """Step 2 没有留下可用片段。调用方应已确认模型连接成功。"""
+    return PipelineFailure(
+        "ANALYZE",
+        f"时间线提取为空：{topic_count} 个话题在对齐并按时长筛选后没有留下可用片段。",
+        HINT_EMPTY_TIMELINE,
+        code=CODE_TIMELINE_EMPTY,
+    )
 
 
 def missing_subtitle_failure() -> PipelineFailure:

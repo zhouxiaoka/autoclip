@@ -1,11 +1,11 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Modal, message } from 'antd'
-import ReactPlayer from 'react-player'
 import { Clip } from '../store/useProjectStore'
 import EditableTitle from './EditableTitle'
+import ClipVideo from './ClipVideo'
 import { ClipExportDialog } from '../features/exports/ClipExportDialog'
 import { Btn, Icon, parseTimecode, fmtDuration, fmtClock } from '../ui'
 
@@ -25,7 +25,6 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
   const [showPlayer, setShowPlayer] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [showExport, setShowExport] = useState(false)
-  const playerRef = useRef<ReactPlayer>(null)
 
   const openPublish = () => {
     if (!projectId) return
@@ -33,13 +32,16 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
     navigate(`/project/${projectId}/publish/${clip.id}`)
   }
 
-  // 从视频第 1 秒抓一帧当缩略图
+  // 封面取约 1 秒处的一帧。先设 currentTime 再设 src 不会生效，首帧又常常是黑的。
   useEffect(() => {
     if (!videoUrl) return
+    let cancelled = false
     const video = document.createElement('video')
     video.crossOrigin = 'anonymous'
-    video.currentTime = 1
-    video.onloadeddata = () => {
+    video.preload = 'auto'
+    video.muted = true
+    const draw = () => {
+      if (cancelled || !video.videoWidth || !video.videoHeight) return
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d')
       if (!ctx) return
@@ -48,7 +50,22 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
       ctx.drawImage(video, 0, 0)
       setVideoThumbnail(canvas.toDataURL('image/jpeg', 0.8))
     }
+    video.onloadeddata = () => {
+      const duration = Number.isFinite(video.duration) ? video.duration : 0
+      const target = duration > 0 ? Math.min(1, duration / 2) : 0
+      if (target > 0 && video.currentTime < 0.05) {
+        video.currentTime = target
+        return
+      }
+      draw()
+    }
+    video.onseeked = draw
     video.src = videoUrl
+    return () => {
+      cancelled = true
+      video.removeAttribute('src')
+      video.load()
+    }
   }, [videoUrl])
 
   const handleDownload = async () => {
@@ -154,17 +171,8 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
         }
       >
         {videoUrl && (
-          <div style={{ borderRadius: 12, overflow: 'hidden', background: '#000' }}>
-            <ReactPlayer
-              ref={playerRef}
-              url={videoUrl}
-              width="100%"
-              height="430px"
-              controls
-              playing={showPlayer}
-              config={{ file: { attributes: { controlsList: 'nodownload', preload: 'metadata' }, forceHLS: false, forceDASH: false } }}
-              onError={(err) => console.error('ReactPlayer error:', err)}
-            />
+          <div style={{ borderRadius: 12, overflow: 'hidden', height: 430, background: 'var(--ac-thumb)' }}>
+            <ClipVideo url={videoUrl} playing={showPlayer} />
           </div>
         )}
       </Modal>

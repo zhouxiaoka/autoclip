@@ -126,6 +126,40 @@ class VideoProcessor:
             return 0.0
     
     @staticmethod
+    def build_extract_clip_command(
+        ffmpeg_bin: str,
+        input_video: Path,
+        output_path: Path,
+        start_time: str,
+        duration: float,
+    ) -> List[str]:
+        """切片编码成应用内 <video> 能播的 H.264 + AAC。
+
+        以前用 `-c:v copy`。B 站 `bestvideo[ext=mp4]` 经常是 HEVC，Windows
+        WebView2 / macOS WKWebView 没有系统 HEVC 解码器时画面是黑的，声音可能还在。
+        流复制还会留下非零 start time 的 edit list，Chromium 系播放器同样黑屏。
+        合集导出已经转成 H.264；单条切片以前没有。
+        """
+        return [
+            ffmpeg_bin,
+            "-ss", start_time,
+            "-i", str(input_video),
+            "-t", f"{duration:.3f}",
+            "-map", "0:v:0",
+            "-map", "0:a:0?",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-movflags", "+faststart",
+            "-avoid_negative_ts", "make_zero",
+            "-y",
+            str(output_path),
+        ]
+
+    @staticmethod
     def extract_clip(input_video: Path, output_path: Path, 
                     start_time: str, end_time: str) -> bool:
         """
@@ -153,20 +187,11 @@ class VideoProcessor:
             end_seconds = VideoProcessor.convert_ffmpeg_time_to_seconds(ffmpeg_end_time)
             duration = end_seconds - start_seconds
             
-            # 构建优化的FFmpeg命令
-            # 使用 -ss 在输入前进行精确定位，使用 -t 指定持续时间
+            # 转成浏览器能解的 H.264/yuv420p + AAC，并把 moov 放到文件头。
             ffmpeg_bin = get_ffmpeg_path()
-            cmd = [
-                ffmpeg_bin,
-                '-ss', ffmpeg_start_time,  # 在输入前定位，更精确
-                '-i', str(input_video),
-                '-t', str(duration),  # 使用持续时间而不是绝对结束时间
-                '-c:v', 'copy',  # 复制视频流
-                '-c:a', 'copy',  # 复制音频流
-                '-avoid_negative_ts', 'make_zero',
-                '-y',  # 覆盖输出文件
-                str(output_path)
-            ]
+            cmd = VideoProcessor.build_extract_clip_command(
+                ffmpeg_bin, input_video, output_path, ffmpeg_start_time, duration,
+            )
             
             # 执行命令
             result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')

@@ -9,7 +9,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 from celery import Celery
 
-from ..core.database import get_db
+from ..core.database import session_scope
 from ..models.bilibili import BilibiliAccount, BilibiliUploadRecord
 from ..services.bilibili_service import BilibiliAccountService, BilibiliUploadService
 from ..core.celery_app import celery_app
@@ -339,52 +339,45 @@ def upload_video_task(self, task_id: str, video_path: str, title: str,
     try:
         # 更新任务进度
         self.update_state(state='PROGRESS', meta={'progress': 10})
-        
-        # 获取数据库会话
-        db = next(get_db())
-        bilibili_upload_service = BilibiliUploadService(db)
-        bilibili_account_service = BilibiliAccountService(db)
-        
-        # 准备上传数据
-        clip_data = {
-            'video_path': video_path,
-            'title': title,
-            'description': description,
-            'tags': tags
-        }
-        
-        # 更新进度
-        self.update_state(state='PROGRESS', meta={'progress': 30})
-        
-        # 执行上传 - 使用线程池避免事件循环冲突
-        import concurrent.futures
-        
-        def run_async_upload():
-            return asyncio.run(
-                bilibili_upload_service.upload_clip(clip_data, account_id)
-            )
-        
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(run_async_upload)
-            upload_record = future.result()
-        
-        # 更新任务ID
-        upload_record.task_id = task_id
-        db.commit()
-        
-        # 更新账号使用时间
-        bilibili_account_service.update_account_usage(account_id)
-        
-        if upload_record.status == 'completed':
-            self.update_state(state='PROGRESS', meta={'progress': 100})
-            return {
-                'status': 'completed',
-                'bv_id': upload_record.bv_id,
-                'upload_record_id': upload_record.id
+
+        with session_scope() as db:
+            bilibili_upload_service = BilibiliUploadService(db)
+            bilibili_account_service = BilibiliAccountService(db)
+
+            clip_data = {
+                'video_path': video_path,
+                'title': title,
+                'description': description,
+                'tags': tags
             }
-        else:
+
+            self.update_state(state='PROGRESS', meta={'progress': 30})
+
+            import concurrent.futures
+
+            def run_async_upload():
+                return asyncio.run(
+                    bilibili_upload_service.upload_clip(clip_data, account_id)
+                )
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_async_upload)
+                upload_record = future.result()
+
+            upload_record.task_id = task_id
+            db.commit()
+
+            bilibili_account_service.update_account_usage(account_id)
+
+            if upload_record.status == 'completed':
+                self.update_state(state='PROGRESS', meta={'progress': 100})
+                return {
+                    'status': 'completed',
+                    'bv_id': upload_record.bv_id,
+                    'upload_record_id': upload_record.id
+                }
             raise Exception(upload_record.error_message or "上传失败")
-            
+
     except Exception as e:
         logger.error(f"Celery上传任务失败: {e}")
         raise self.retry(exc=e, countdown=60, max_retries=3)

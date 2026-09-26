@@ -13,6 +13,7 @@ import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn } from '../ui'
 import { classifyLlmKeyFailure } from '../utils/llmFailure'
 import { classifySubtitleFailure } from '../utils/subtitleFailure'
+import { classifyTimelineEmpty } from '../utils/timelineFailure'
 import { isSourceDownloading, readDownloadProgress } from '../utils/downloadProgress'
 // import { 
 //   getProjectStatusConfig, 
@@ -294,14 +295,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     stage: failedProgress?.stage,
     error_message: project.error_message || failedProgress?.message || undefined,
   }
-  const llmKeyFailure = classifyLlmKeyFailure(
-    project.error_message || failedProgress?.message,
-    project.error_code,
-  )
-  const subtitleFailure = classifySubtitleFailure(
-    project.error_message || failedProgress?.message,
-    project.error_code,
-  )
+  const failureText = project.error_message || failedProgress?.message
+  const timelineEmpty = classifyTimelineEmpty(failureText, project.error_code)
+  const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(failureText, project.error_code)
+  const subtitleFailure = timelineEmpty
+    ? null
+    : classifySubtitleFailure(failureText, project.error_code)
 
   const handleRetry = async (opts?: { silent?: boolean }) => {
     if (isRetrying) return

@@ -1099,5 +1099,7 @@
   "服务已重启，请重新导出": "Le service a redémarré. Veuillez relancer l’export.",
   "服务已重启，请重试分析": "Le service a redémarré. Veuillez relancer l’analyse.",
   "导出任务未能启动，请重试；已有成片已保留": "L’export n’a pas pu démarrer. Réessayez ; les exports existants ont été conservés.",
-  "制作任务未能启动，请重试确认；原素材与已有成片已保留": "La création n’a pas pu démarrer. Confirmez à nouveau ; la source et les exports existants ont été conservés."
+  "制作任务未能启动，请重试确认；原素材与已有成片已保留": "La création n’a pas pu démarrer. Confirmez à nouveau ; la source et les exports existants ont été conservés.",
+  "这个切片当前播放器无法解码，请下载后用系统播放器打开。": "Ce clip ne peut pas être décodé dans le lecteur. Téléchargez-le et ouvrez-le avec le lecteur du système.",
+  "切片分析会关闭 DeepSeek 的思考模式，避免按长段推理输出计费。长视频仍会按大约 30 分钟一块、分几步调用；刷新页面不会重新计费，重新开始处理才会。": "L'analyse des extraits désactive le mode réflexion de DeepSeek, pour ne pas facturer de longues traces comme sortie. Une longue vidéo reste plusieurs appels, environ un par 30 minutes de sous-titres et un par étape. Actualiser la page ne relance pas l'analyse ; relancer le traitement, si."
 }

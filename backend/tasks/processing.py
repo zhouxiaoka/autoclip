@@ -13,7 +13,7 @@ from backend.core.celery_app import celery_app
 from backend.services.websocket_notification_service import notification_service
 from backend.services.processing_service import ProcessingService
 from backend.services.pipeline_adapter import create_pipeline_adapter
-from backend.core.database import SessionLocal
+from backend.core.database import SessionLocal, session_scope
 from backend.models.project import Project, ProjectStatus
 from backend.models.task import Task, TaskStatus, TaskType
 from datetime import datetime
@@ -96,11 +96,8 @@ def process_video_pipeline(
         _active_pipeline_projects.add(project_id)
 
     try:
-        # 创建数据库会话
-        db = SessionLocal()
-        
-        try:
-            # 创建任务记录
+        # 先记下任务行再关掉会话。流水线可能跑很久，不能占着连接（#175）。
+        with session_scope() as db:
             task = Task(
                 name=f"视频处理流水线",
                 description=f"处理项目 {project_id} 的完整视频流水线",
@@ -114,50 +111,53 @@ def process_video_pipeline(
             )
             db.add(task)
             db.commit()
-            
-            # 发送开始通知
-            run_async_notification(
-                notification_service.send_processing_start(project_id, task_id)
-            )
-            
-            # 简化的进度系统不需要复杂的回调函数
-            # 新的进度系统会在流水线内部自动发送进度事件
-            
-            # 使用简化的Pipeline适配器
-            from backend.services.simple_pipeline_adapter import create_simple_pipeline_adapter
-            pipeline_adapter = create_simple_pipeline_adapter(str(project_id), str(task.id))
-            
-            # 执行Pipeline处理 - 使用异步包装器
-            import asyncio
-            result = asyncio.run(pipeline_adapter.process_project_sync(input_video_path, input_srt_path))
-            
+            task_row_id = task.id
+
+        # 发送开始通知
+        run_async_notification(
+            notification_service.send_processing_start(project_id, task_id)
+        )
+
+        # 简化的进度系统不需要复杂的回调函数
+        # 新的进度系统会在流水线内部自动发送进度事件
+
+        # 使用简化的Pipeline适配器
+        from backend.services.simple_pipeline_adapter import create_simple_pipeline_adapter
+        pipeline_adapter = create_simple_pipeline_adapter(str(project_id), str(task_row_id))
+
+        # 执行Pipeline处理 - 使用异步包装器
+        import asyncio
+        result = asyncio.run(pipeline_adapter.process_project_sync(input_video_path, input_srt_path))
+
+        with session_scope() as db:
+            task = db.query(Task).filter(Task.id == task_row_id).first()
+            project = db.query(Project).filter(Project.id == project_id).first()
             # 检查处理结果
             if result.get("status") == "failed":
                 # 处理失败。adapter 返回的是 error（以前这里只读 message，用户看到的永远是「处理失败」四个字）
                 error_msg = result.get("error") or result.get("message") or "处理失败"
-                task.status = TaskStatus.FAILED
-                task.error_message = error_msg
-                if result.get("stage"):
-                    task.current_step = f"失败于 {result['stage']}"
-                task.result_data = result
-                
-                # 更新项目状态为失败
-                project = db.query(Project).filter(Project.id == project_id).first()
+                if task:
+                    task.status = TaskStatus.FAILED
+                    task.error_message = error_msg
+                    if result.get("stage"):
+                        task.current_step = f"失败于 {result['stage']}"
+                    task.result_data = result
+
                 if project:
                     project.status = ProjectStatus.FAILED
                     project.updated_at = datetime.utcnow()
                     logger.info(f"项目状态已更新为失败: {project_id}")
-                
+
                 db.commit()
-                
+
                 # 失败状态已由简化进度系统自动处理
-                
+
                 # 发送错误通知（兼容旧版本） - 已禁用WebSocket通知
                 # run_async_notification(
                 #     notification_service.send_processing_error(project_id, task_id, error_msg)
                 # )
-                
-                return {
+
+                outcome = {
                     "success": False,
                     "project_id": project_id,
                     "task_id": task_id,
@@ -166,68 +166,57 @@ def process_video_pipeline(
                 }
             else:
                 # 处理成功
-                task.status = TaskStatus.COMPLETED
-                task.progress = 100
-                task.current_step = "处理完成"
-                task.result_data = result
-                
-                # 更新项目状态为已完成
-                project = db.query(Project).filter(Project.id == project_id).first()
+                if task:
+                    task.status = TaskStatus.COMPLETED
+                    task.progress = 100
+                    task.current_step = "处理完成"
+                    task.result_data = result
+
                 if project:
                     project.status = ProjectStatus.COMPLETED
                     project.completed_at = datetime.utcnow()
                     project.updated_at = datetime.utcnow()
                     logger.info(f"项目状态已更新为已完成: {project_id}")
-                
+
                 db.commit()
-                
+
                 # 完成状态已由简化进度系统自动处理
-                
+
                 # 发送完成通知（兼容旧版本） - 已禁用WebSocket通知
                 # run_async_notification(
                 #     notification_service.send_processing_complete(project_id, task_id, result)
                 # )
-            
-            logger.info(f"视频流水线处理完成: {project_id}")
-            return {
-                "success": True,
-                "project_id": project_id,
-                "task_id": task_id,
-                "result": result,
-                "message": "视频处理流水线完成"
-            }
-            
-        finally:
-            db.close()
-            # 释放并发去重锁（无论成功/失败/提前返回都会走到这里）
-            with _active_pipeline_lock:
-                _active_pipeline_projects.discard(project_id)
+
+                logger.info(f"视频流水线处理完成: {project_id}")
+                outcome = {
+                    "success": True,
+                    "project_id": project_id,
+                    "task_id": task_id,
+                    "result": result,
+                    "message": "视频处理流水线完成"
+                }
+        return outcome
 
     except Exception as e:
         error_msg = f"视频流水线处理失败: {str(e)}"
         logger.error(error_msg)
 
-        # 兜底释放并发锁（正常路径已在内层 finally 释放，这里防止极早期异常泄漏）
-        with _active_pipeline_lock:
-            _active_pipeline_projects.discard(project_id)
-
         # 更新任务状态为失败
         try:
-            db = SessionLocal()
-            task = db.query(Task).filter(Task.celery_task_id == task_id).first()
-            if task:
-                task.status = TaskStatus.FAILED
-                task.error_message = error_msg
-                
-                # 更新项目状态为失败
-                project = db.query(Project).filter(Project.id == project_id).first()
-                if project:
-                    project.status = ProjectStatus.FAILED
-                    project.updated_at = datetime.utcnow()
-                    logger.info(f"项目状态已更新为失败: {project_id}")
-                
-                db.commit()
-            db.close()
+            with session_scope() as db:
+                task = db.query(Task).filter(Task.celery_task_id == task_id).first()
+                if task:
+                    task.status = TaskStatus.FAILED
+                    task.error_message = error_msg
+
+                    # 更新项目状态为失败
+                    project = db.query(Project).filter(Project.id == project_id).first()
+                    if project:
+                        project.status = ProjectStatus.FAILED
+                        project.updated_at = datetime.utcnow()
+                        logger.info(f"项目状态已更新为失败: {project_id}")
+
+                    db.commit()
         except Exception as db_error:
             logger.error(f"更新任务状态失败: {str(db_error)}")
         
@@ -237,6 +226,10 @@ def process_video_pipeline(
         )
         
         raise
+    finally:
+        # 释放并发去重锁（无论成功/失败/提前返回都会走到这里）
+        with _active_pipeline_lock:
+            _active_pipeline_projects.discard(project_id)
 
 @celery_app.task(bind=True, name='backend.tasks.processing.process_single_step')
 def process_single_step(self, project_id: str, step: str, config: Dict[str, Any]) -> Dict[str, Any]:

@@ -9,6 +9,22 @@
 
 _（本周尚无改动）_
 
+## [1.3.5] - 2026-09-26
+
+### 改进
+- 导入失败的监控分类：缺字幕、缺少 API Key，以及未预期的导入故障，会以不同异常类型分开上报。Sentry 里对应 fingerprint 为 `import-processing` / `missing-subtitle`、`import-processing` / `missing-key`；未预期故障仍是 `ImportProcessingError`，沿用默认栈归组。日志里带 `kind=missing-subtitle`、`kind=missing-key` 或 `kind=unexpected`。这只改善监控分类，不改变导入是否成功，也不改变字幕质量。
+
+### 修复
+- YouTube / 链接导入时，项目卡不再停在约 5%：下载进度会写入数据库，进度条会跟上列表里的真实百分比。这不表示所有 YouTube 下载或 Whisper 转写都会成功（Related #163 / #183）
+- 切片预览改为原生 video。播放地址没有 .mp4 后缀时，ReactPlayer 不会挂上播放器，弹层只剩一块黑底。新切片转成 H.264 / AAC 并前移索引，应用内能解出画面。已经生成的旧切片不会重编码；解不开时预览会说明去下载，用系统播放器打开（Related #175）
+- 走 DeepSeek 官方接口做切片分析时关闭思考模式，并限制单次输出长度。思考模式默认开着，推理内容按输出 token 计费，长字幕会比可见回答贵很多。长视频仍按约 30 分钟一块、分几步调用；刷新页面不会重新计费，重新开始处理才会（Related #175）
+- 时间线为空时不再误导去改模型设置（Related #182）
+- 本地导入调用 Whisper 时，不再因为多传了时间戳、标点或超时参数，在转写开始前就失败。未安装时仍指到「设置 → 转写」
+- Whisper 只返回空白片段，或上次留下的字幕文件没有正文时，不再把空文件当成转写成功
+- 本地导入没有可用字幕时，失败说明会指到「设置 → 转写」，也可以在重新导入时附上 .srt。已经失败、只记下「字幕文件不存在」的项目，打开后同样能看到这条去向（#186）
+- 桌面端连续查看项目、下载或生成合集时，不再因为数据库连接占满而打不开列表和详情（#175）
+- 切片标题含中文等非英文字符时，预览和下载不再因为响应头无法编码而失败
+
 ## [1.3.4] - 2026-09-24
 
 ### 修复
@@ -228,7 +244,8 @@ _（本周尚无改动）_
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.4...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.5...HEAD
+- [1.3.5]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.4...v1.3.5
 - [1.3.4]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.3...v1.3.4
 - [1.3.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.2...v1.3.3
 - [1.3.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.1...v1.3.2

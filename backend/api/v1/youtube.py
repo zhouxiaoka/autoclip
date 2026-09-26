@@ -362,11 +362,9 @@ async def update_project_download_progress(project_id: str, progress: float, mes
             project = project_service.get(project_id)
             
             if project:
-                # 更新项目设置中的下载进度
-                if not project.processing_config:
-                    project.processing_config = {}
-                
-                project.processing_config.update({
+                # 必须换成新 dict。原地 update JSON 列不会落库，进度会停在创建时的 0%。
+                from ...services.download_progress import save_processing_config
+                save_processing_config(project, {
                     "download_progress": progress,
                     "download_message": message
                 })
@@ -513,6 +511,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         from ...services.project_service import ProjectService
         from ...core.database import SessionLocal
         
+        saved_project_id = None
         db = SessionLocal()
         try:
             project_service = ProjectService(db)
@@ -526,11 +525,9 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             project.description = f"从YouTube下载: {request.project_name}"
             # 注意：不要在这里设置video_path，等文件移动完成后再设置
             
-            # 更新项目设置
-            if not project.processing_config:
-                project.processing_config = {}
-            
-            project.processing_config.update({
+            # 更新项目设置。赋新 dict，避免 JSON 原地修改在提交时丢失。
+            from ...services.download_progress import save_processing_config
+            save_processing_config(project, {
                 "youtube_info": {
                     "title": request.project_name,
                     "uploader": "YouTube",
@@ -574,9 +571,8 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                     logger.info(f"字幕文件已移动到: {new_subtitle_path}")
                     
                     # 更新项目处理配置中的字幕路径
-                    if not project.processing_config:
-                        project.processing_config = {}
-                    project.processing_config["subtitle_path"] = str(new_subtitle_path)
+                    from ...services.download_progress import save_processing_config
+                    save_processing_config(project, {"subtitle_path": str(new_subtitle_path)})
             
             # 保存项目更新
             db.commit()
@@ -587,9 +583,11 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 logger.error(f"字幕文件不存在: {srt_file_path}，项目将标记为失败状态")
                 from ...schemas.project import ProjectStatus
                 project.status = ProjectStatus.FAILED
-                if not project.processing_config:
-                    project.processing_config = {}
-                project.processing_config["error_message"] = subtitle_error or "字幕文件不存在且Whisper生成失败"
+                from ...services.download_progress import save_processing_config
+                save_processing_config(
+                    project,
+                    {"error_message": subtitle_error or "字幕文件不存在且Whisper生成失败"},
+                )
                 db.commit()
                 
                 # 更新任务状态为失败
@@ -615,50 +613,35 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             download_tasks[task_id].updated_at = datetime.now().isoformat()
             
             logger.info(f"YouTube下载任务完成: {task_id}, 项目ID: {project.id}")
-            
-            # 自动启动处理流程
-            try:
-                # 更新项目状态为等待处理
-                from ...schemas.project import ProjectStatus
-                project.status = ProjectStatus.PENDING  # 改为PENDING，让自动化服务启动
-                db.commit()
-                
-                logger.info(f"YouTube项目 {project.id} 下载完成，等待自动化流水线启动")
-                
-                # 异步启动自动化流水线
-                import asyncio
-                from ...services.auto_pipeline_service import auto_pipeline_service
-                
-                # 使用create_task在已运行的事件循环中执行
-                try:
-                    loop = asyncio.get_running_loop()
-                    # 在已运行的事件循环中创建任务
-                    task = loop.create_task(
-                        auto_pipeline_service.auto_start_pipeline(str(project.id))
-                    )
-                    # 等待任务完成
-                    pipeline_result = await task
-                except RuntimeError:
-                    # 如果没有运行的事件循环，创建新的
-                    pipeline_result = await auto_pipeline_service.auto_start_pipeline(str(project.id))
-                
-                if pipeline_result['status'] == 'started':
-                    logger.info(f"YouTube项目 {project.id} 自动化流水线已启动: {pipeline_result}")
-                else:
-                    logger.warning(f"YouTube项目 {project.id} 自动化流水线启动结果: {pipeline_result}")
-                
-            except Exception as e:
-                logger.error(f"启动YouTube项目 {project.id} 自动化流水线失败: {str(e)}")
-                # 即使处理启动失败，也要返回下载成功
-                # 用户可以通过重试按钮重新启动处理
-            
+
+            from ...schemas.project import ProjectStatus
+            project.status = ProjectStatus.PENDING
+            db.commit()
+
+            logger.info(f"YouTube项目 {project.id} 下载完成，等待自动化流水线启动")
+            saved_project_id = str(project.id)
+
         except Exception as e:
             logger.error(f"创建项目失败: {str(e)}")
             # 即使处理启动失败，也要返回下载成功
             # 用户可以通过重试按钮重新启动处理
-            
+            saved_project_id = None
+
         finally:
             db.close()
+
+        if saved_project_id:
+            try:
+                from ...services.auto_pipeline_service import auto_pipeline_service
+                pipeline_result = await auto_pipeline_service.auto_start_pipeline(saved_project_id)
+                if pipeline_result['status'] == 'started':
+                    logger.info(f"YouTube项目 {saved_project_id} 自动化流水线已启动: {pipeline_result}")
+                else:
+                    logger.warning(f"YouTube项目 {saved_project_id} 自动化流水线启动结果: {pipeline_result}")
+            except Exception as e:
+                logger.error(f"启动YouTube项目 {saved_project_id} 自动化流水线失败: {str(e)}")
+                # 即使处理启动失败，也要返回下载成功
+                # 用户可以通过重试按钮重新启动处理
             
     except Exception as e:
         logger.error(f"处理下载任务失败: {str(e)}")

@@ -3,12 +3,14 @@ export const LLM_NOT_CONFIGURED = 'llm_not_configured'
 
 /**
  * 有 error_code 时以它为准。1.3.2 只留下「没有可用的 LLM 提供商…缺少 API Key」，
- * 那种旧文案也要能点进设置。评分阈值、字幕失败不要算进来。
+ * 那种旧文案也要能点进设置。评分阈值、字幕失败、时间线为空不要算进来。
  */
 export function classifyLlmKeyFailure(error?: string | null, code?: string | null): boolean {
   if (code === LLM_NOT_CONFIGURED) return true
+  if (code === 'timeline_empty') return false
   const text = error || ''
   if (!text) return false
+  if (text.includes('时间线提取为空') || text.includes('时间线为空')) return false
   if (text.includes('最低评分')) return false
   if (
     text.includes('没有可用的 LLM')

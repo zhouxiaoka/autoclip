@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
 from sqlalchemy.orm import Session
-from backend.core.database import SessionLocal
+from backend.core.database import SessionLocal, session_scope
 from backend.models.project import Project, ProjectStatus
 from backend.models.task import Task, TaskStatus
 from backend.services.progress_update_service import progress_update_service
@@ -87,58 +87,53 @@ class AutoPipelineService:
                 project.status = ProjectStatus.PROCESSING
                 project.updated_at = datetime.utcnow()
                 db.commit()
-                
+                task_pk = task.id
+
                 logger.info(f"项目 {project_id} 状态已更新为处理中")
-                
-                # 启动进度监控
-                await progress_update_service.start_progress_monitoring(task.id)
-                
-                # 提交Celery任务
-                logger.info(f"准备提交Celery任务: {project_id}")
-                
-                # 查找项目文件路径
-                from ..core.config import get_data_directory
-                data_dir = get_data_directory()
-                project_dir = Path(data_dir) / "projects" / project_id
-                input_video_path = str(project_dir / "raw" / "input.mp4")
-                input_srt_path = str(project_dir / "raw" / "input.srt")
-                
-                # 检查文件是否存在
-                if not Path(input_video_path).exists():
-                    raise ValueError(f"视频文件不存在: {input_video_path}")
-                
-                logger.info(f"视频文件: {input_video_path}")
-                logger.info(f"字幕文件: {input_srt_path if Path(input_srt_path).exists() else '不存在'}")
-                
-                # 提交Celery任务
-                task_result = submit_video_pipeline_task(project_id, input_video_path, input_srt_path)
-                logger.info(f"Celery任务提交结果: {task_result}")
-                
-                if task_result.get('success'):
-                    celery_task_id = task_result['task_id']
-                    logger.info(f"Celery任务已提交: {celery_task_id}")
-                    
-                    # 更新任务记录
+            finally:
+                db.close()
+
+            # 桌面端 Celery 可能就在这次调用里把流水线跑完。会话必须先关掉。
+            await progress_update_service.start_progress_monitoring(task_pk)
+
+            logger.info(f"准备提交Celery任务: {project_id}")
+
+            from ..core.config import get_data_directory
+            data_dir = get_data_directory()
+            project_dir = Path(data_dir) / "projects" / project_id
+            input_video_path = str(project_dir / "raw" / "input.mp4")
+            input_srt_path = str(project_dir / "raw" / "input.srt")
+
+            if not Path(input_video_path).exists():
+                raise ValueError(f"视频文件不存在: {input_video_path}")
+
+            logger.info(f"视频文件: {input_video_path}")
+            logger.info(f"字幕文件: {input_srt_path if Path(input_srt_path).exists() else '不存在'}")
+
+            task_result = submit_video_pipeline_task(project_id, input_video_path, input_srt_path)
+            logger.info(f"Celery任务提交结果: {task_result}")
+
+            with session_scope() as db:
+                task = db.query(Task).filter(Task.id == task_pk).first()
+                if not task_result.get('success'):
+                    error_msg = task_result.get('error', '未知错误')
+                    raise ValueError(f"提交Celery任务失败: {error_msg}")
+
+                celery_task_id = task_result['task_id']
+                logger.info(f"Celery任务已提交: {celery_task_id}")
+                if task:
                     task.celery_task_id = celery_task_id
                     task.status = TaskStatus.RUNNING
                     task.started_at = datetime.utcnow()
                     db.commit()
-                    
-                    result = {
-                        "status": "started",
-                        "message": "流水线处理已启动",
-                        "project_id": project_id,
-                        "task_id": task.id,
-                        "celery_task_id": celery_task_id
-                    }
-                else:
-                    error_msg = task_result.get('error', '未知错误')
-                    raise ValueError(f"提交Celery任务失败: {error_msg}")
-                
-                return result
-                
-            finally:
-                db.close()
+
+                return {
+                    "status": "started",
+                    "message": "流水线处理已启动",
+                    "project_id": project_id,
+                    "task_id": task_pk,
+                    "celery_task_id": celery_task_id
+                }
                 
         except Exception as e:
             logger.error(f"自动启动流水线失败: {e}")

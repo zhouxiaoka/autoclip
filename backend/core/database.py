@@ -5,6 +5,7 @@
 
 import logging
 import os
+from contextlib import contextmanager
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool, NullPool
@@ -27,16 +28,25 @@ if DATABASE_URL == "sqlite:///autoclip.db":
         # 如果导入失败，保持默认值
         pass
 
+def is_memory_sqlite(database_url: str) -> bool:
+    url = make_url(database_url)
+    return url.get_backend_name() == 'sqlite' and (not url.database or url.database == ':memory:' or url.query.get('mode') == 'memory')
+
+
+def sqlite_engine_kwargs(database_url: str) -> dict:
+    return {'poolclass': StaticPool if is_memory_sqlite(database_url) else NullPool}
+
+
 # File-backed databases use separate connections; in-memory databases keep one.
 def create_database_engine(database_url):
     url = make_url(database_url)
     if url.get_backend_name() != 'sqlite':
         return create_engine(database_url, pool_pre_ping=True, pool_recycle=300, echo=False)
-    in_memory = not url.database or url.database == ':memory:' or url.query.get('mode') == 'memory'
+    in_memory = is_memory_sqlite(database_url)
     database_engine = create_engine(
         database_url,
         connect_args={'check_same_thread': False, 'timeout': 30},
-        poolclass=StaticPool if in_memory else NullPool,
+        **sqlite_engine_kwargs(database_url),
         pool_pre_ping=True,
         echo=False,
     )
@@ -69,6 +79,22 @@ def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+    finally:
+        db.close()
+
+
+@contextmanager
+def session_scope() -> Generator[Session, None, None]:
+    """短生命周期会话。不要用 next(get_db())：生成器被丢掉时 finally 不会马上执行，连接不归还。"""
+    db = SessionLocal()
+    try:
+        yield db
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         db.close()
 

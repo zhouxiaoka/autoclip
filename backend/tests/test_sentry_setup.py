@@ -40,6 +40,49 @@ def test_before_send_rechecks_opt_out_without_restart(monkeypatch, tmp_path):
     assert sentry_setup.before_send(event, {}) is not None
 
 
+def test_before_send_splits_import_failures_without_keeping_the_message(monkeypatch, tmp_path):
+    """配置类失败用固定 fingerprint；正文仍被抹掉，未预期故障不覆盖默认归组。"""
+    monkeypatch.setenv("AUTOCLIP_APP_DIR", str(tmp_path))
+    from backend.tasks.import_processing import (
+        ImportMissingCredential,
+        ImportProcessingError,
+        ImportSubtitleUnavailable,
+    )
+
+    subtitle_message = "没有字幕可分析：/Users/private/talk.mp4 的口播内容"
+    key_message = "缺少 API Key sk-live-secret"
+    unexpected_message = "broker down /Users/private/input.mp4"
+
+    subtitle = sentry_setup.before_send(
+        {"exception": {"values": [{"type": "ImportSubtitleUnavailable", "value": subtitle_message}]}},
+        {"exc_info": (ImportSubtitleUnavailable, ImportSubtitleUnavailable(subtitle_message), None)},
+    )
+    missing_key = sentry_setup.before_send(
+        {"exception": {"values": [{"type": "ImportMissingCredential", "value": key_message}]}},
+        {},
+    )
+    unexpected = sentry_setup.before_send(
+        {"exception": {"values": [{"type": "ImportProcessingError", "value": unexpected_message}]}},
+        {"exc_info": (ImportProcessingError, ImportProcessingError(unexpected_message), None)},
+    )
+
+    assert subtitle["fingerprint"] == ["import-processing", "missing-subtitle"]
+    assert subtitle["tags"] == {"import_failure": "missing-subtitle"}
+    assert subtitle["exception"]["values"][0]["type"] == "ImportSubtitleUnavailable"
+    assert missing_key["fingerprint"] == ["import-processing", "missing-key"]
+    assert missing_key["tags"] == {"import_failure": "missing-key"}
+    assert missing_key["exception"]["values"][0]["type"] == "ImportMissingCredential"
+    assert "fingerprint" not in unexpected
+    assert unexpected["tags"] == {"import_failure": "unexpected"}
+    assert unexpected["exception"]["values"][0]["type"] == "ImportProcessingError"
+
+    blob = json.dumps({"subtitle": subtitle, "key": missing_key, "unexpected": unexpected}, ensure_ascii=False)
+    assert "private" not in blob
+    assert "sk-live-secret" not in blob
+    assert "口播" not in blob
+    assert subtitle["exception"]["values"][0]["value"] == "[message omitted for privacy]"
+
+
 def test_before_send_keeps_code_locations_without_private_payload(monkeypatch, tmp_path):
     monkeypatch.setenv("AUTOCLIP_APP_DIR", str(tmp_path))
     event = {"release": "autoclip-backend@1.3.1", "request": {"data": "private"},

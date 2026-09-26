@@ -277,6 +277,32 @@ def make_openai_http_client(base_url: Optional[str]):
         return None
 
 
+# DeepSeek 思考模式默认开启（effort 为 high），推理 token 按输出计费，单次输出上限 384K。
+# 切片分析只要结构化结果。不关的话，几小时字幕、分块多步调用，账单会明显高于可见回答。
+DEEPSEEK_COMPLETION_TOKEN_CAP = 16384
+
+
+def is_deepseek_endpoint(base_url: Optional[str]) -> bool:
+    return "api.deepseek.com" in (base_url or "").lower()
+
+
+def deepseek_chat_kwargs(base_url: Optional[str], request: Dict[str, Any]) -> Dict[str, Any]:
+    """关掉官方 DeepSeek 的默认思考模式，并给未指定的输出加上限。
+
+    调用方已经传入的 max_tokens（例如连接测试的 1）保持不变。
+    非 api.deepseek.com 的兼容接口不改请求体，避免把 thinking 字段发给不认识它的服务。
+    """
+    if not is_deepseek_endpoint(base_url):
+        return request
+    guarded = dict(request)
+    extra = dict(guarded.get("extra_body") or {})
+    extra.setdefault("thinking", {"type": "disabled"})
+    guarded["extra_body"] = extra
+    if guarded.get("max_tokens") is None:
+        guarded["max_tokens"] = DEEPSEEK_COMPLETION_TOKEN_CAP
+    return guarded
+
+
 class OpenAIProvider(LLMProvider):
     """OpenAI 及一切 OpenAI 兼容接口（智谱、DeepSeek、OpenRouter、Ollama、vLLM、LM Studio 等）
 
@@ -306,12 +332,12 @@ class OpenAIProvider(LLMProvider):
         """调用OpenAI API"""
         try:
             full_input = self._build_full_input(prompt, input_data)
-            
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[{"role": "user", "content": full_input}],
-                **kwargs
-            )
+            payload = deepseek_chat_kwargs(self.base_url, {
+                "model": self.model_name,
+                "messages": [{"role": "user", "content": full_input}],
+                **kwargs,
+            })
+            response = self.client.chat.completions.create(**payload)
             
             content = response.choices[0].message.content
             usage = {
@@ -319,6 +345,14 @@ class OpenAIProvider(LLMProvider):
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens
             } if response.usage else None
+            if usage:
+                logger.info(
+                    "LLM usage model=%s prompt_tokens=%s completion_tokens=%s total_tokens=%s",
+                    self.model_name,
+                    usage.get("prompt_tokens"),
+                    usage.get("completion_tokens"),
+                    usage.get("total_tokens"),
+                )
             
             return LLMResponse(
                 content=content,

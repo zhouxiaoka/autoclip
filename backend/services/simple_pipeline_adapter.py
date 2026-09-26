@@ -9,8 +9,9 @@ from pathlib import Path
 
 from backend.services.simple_progress import emit_progress, clear_progress
 from backend.pipeline.failures import (
-    PipelineFailure, HINT_CHECK_LLM, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG,
+    PipelineFailure, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG,
     llm_key_failure, failure_from_speech_error, missing_subtitle_failure,
+    empty_timeline_failure,
 )
 from backend.pipeline.step1_outline import run_step1_outline
 from backend.pipeline.step2_timeline import run_step2_timeline
@@ -205,11 +206,8 @@ class SimplePipelineAdapter:
                 prompt_files=prompt_files,
             )
             if not timeline_data:
-                raise PipelineFailure(
-                    "ANALYZE",
-                    f"时间线提取为空：{len(outlines)} 个话题都没能对齐到字幕时间轴。",
-                    HINT_CHECK_LLM,
-                )
+                # 能走到这里说明 _preflight_llm 已通过，连接和密钥不是这条失败的原因（#182）
+                raise empty_timeline_failure(len(outlines))
             emit_progress(self.project_id, "ANALYZE", "时间线提取完成", subpercent=50)
             
             # Step 3: 内容评分
