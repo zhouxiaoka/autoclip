@@ -50,7 +50,7 @@ Interfaz web real de v1.3.0: añade un vídeo local en el área de importación,
 | Publicar (v1.3.2) | Desde la **v1.3.2**, cuando los clips estén listos, publícalos o prográmalos en la misma página. Las plataformas de fuera usan Upload-Post; para Bilibili, pega las cookies de inicio de sesión una vez en Ajustes. El valor predeterminado es tan privado como permita la plataforma; también puedes exportar sin publicar. Detalles: [guía de publicación (chino)](docs/PUBLISH_UPLOAD_POST.md). |
 | Portada automática (v1.3.2) | Al publicar, se genera una portada automáticamente para que Bilibili no rechace una portada vacía; los valores por defecto siguen las notas del instalador. Disponible en **v1.3.2**. |
 | Exportar para publicar | Usa ajustes para Douyin, Xiaohongshu, YouTube Shorts y Bilibili, con subtítulos incrustados y tarjetas de título. |
-| Elegir modelos | Compatible con Qwen, OpenAI, Gemini, Claude, DeepSeek y modelos locales mediante Ollama / LM Studio (trae tu propia clave de API). |
+| Elegir modelos | Compatible con Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM y modelos locales mediante Ollama / LM Studio (trae tu propia clave de API). |
 | Automatizar tareas | Organiza ejecuciones con la CLI o llama al mismo flujo de procesamiento desde un cliente MCP. |
 
 > Importar vídeo → Subtítulos / transcripción → Análisis y puntuación con IA → Clips y recopilaciones → Exportación
@@ -133,7 +133,7 @@ En el cliente MCP, configura `command` con la ruta absoluta a `autoclip` dentro 
 
 | Opción | Configuración |
 | --- | --- |
-| Modelos en la nube | En Ajustes, elige Qwen, OpenAI, Gemini, Claude o DeepSeek e introduce la clave de API. Los endpoints compatibles admiten una Base URL personalizada. |
+| Modelos en la nube | En Ajustes, elige Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi o GLM e introduce la clave de API. Los endpoints compatibles admiten una Base URL personalizada. |
 | Ollama | Dirección predeterminada: `http://localhost:11434/v1`; modelo: `qwen2.5:7b`. No requiere clave de API. |
 | LM Studio | Carga un modelo e inicia Local Server, por defecto en `http://localhost:1234/v1`. Selecciona un modelo disponible en tu servidor. |
 

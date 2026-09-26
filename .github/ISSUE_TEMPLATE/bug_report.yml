@@ -33,7 +33,7 @@ body:
     id: model
     attributes:
       label: 使用的模型提供商 / LLM provider
-      placeholder: "例如 通义千问 / OpenAI / Gemini / Claude / DeepSeek / 自定义 OpenAI 兼容"
+      placeholder: "例如 通义千问 / OpenAI / Gemini / DeepSeek / 豆包 Seed / Kimi / GLM / 自定义 OpenAI 兼容"
     validations:
       required: true
 

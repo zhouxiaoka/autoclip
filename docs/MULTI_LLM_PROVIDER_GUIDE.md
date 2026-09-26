@@ -16,9 +16,11 @@
 | `openai` | OpenAI | gpt-3.5-turbo, gpt-4, gpt-4-turbo | 支持兼容接口与自定义 Base URL |
 | `gemini` | Google Gemini | gemini-2.5-flash, gemini-1.5-pro | 多模态支持，上下文长 |
 | `deepseek` | DeepSeek | 以设置页列出的为准 | 自备 API Key |
-| — | Claude | 以设置页列出的为准 | 自备 API Key |
+| `seed` | 豆包 Seed | 以设置页列出的为准 | 自备 API Key |
+| `kimi` | Kimi | 以设置页列出的为准 | 自备 API Key |
+| `glm` | GLM | 以设置页列出的为准 | 自备 API Key |
 
-硅基流动不再作为设置里的独立提供商。上表模型名是配置示例，费用和是否仍可调用以服务商为准。
+上表模型名是配置示例，费用和是否仍可调用以服务商为准。
 
 ### 系统架构
 
@@ -129,13 +131,21 @@ cd frontend && npm run dev
 - `gemini-1.5-pro`: Gemini 1.5 Pro (高质量)
 - `gemini-1.5-flash`: Gemini 1.5 Flash (平衡)
 
-### Claude
-
-在设置中选择 Claude，填写自己的 API Key。可用模型以设置页列出的为准。
-
 ### DeepSeek
 
 在设置中选择 DeepSeek，填写自己的 API Key。可用模型以设置页列出的为准。
+
+### 豆包 Seed
+
+在设置中选择豆包 Seed，填写自己的 API Key。可用模型以设置页列出的为准。
+
+### Kimi
+
+在设置中选择 Kimi，填写自己的 API Key。可用模型以设置页列出的为准。
+
+### GLM
+
+在设置中选择 GLM，填写自己的 API Key。可用模型以设置页列出的为准。
 
 ### Ollama / LM Studio（本地，无需 API 密钥）
 

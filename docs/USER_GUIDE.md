@@ -127,8 +127,10 @@
 - **阿里通义千问**：在设置中选择，填写自己的 API Key
 - **OpenAI**：在设置中选择，填写自己的 API Key；兼容接口可配置 Base URL
 - **Google Gemini**：在设置中选择，填写自己的 API Key
-- **Claude**：在设置中选择，填写自己的 API Key
 - **DeepSeek**：在设置中选择，填写自己的 API Key
+- **豆包 Seed**：在设置中选择，填写自己的 API Key
+- **Kimi**：在设置中选择，填写自己的 API Key
+- **GLM**：在设置中选择，填写自己的 API Key
 
 ### 性能设置
 
