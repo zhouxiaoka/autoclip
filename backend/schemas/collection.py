@@ -5,7 +5,7 @@ Collection-related Pydantic schemas.
 from datetime import datetime
 from typing import Optional, List, Any
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .base import BaseSchema, PaginationResponse
 
@@ -28,6 +28,13 @@ class CollectionCreate(BaseSchema):
     tags: Optional[List[str]] = Field(default_factory=list, description="Collection tags")
     metadata: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
 
+    @field_validator("metadata")
+    @classmethod
+    def reject_storage_locator(cls, value):
+        if value is not None and "metadata_file" in value:
+            raise ValueError("metadata_file is managed by the server")
+        return value
+
 
 class CollectionUpdate(BaseSchema):
     """Schema for updating a collection."""
@@ -37,6 +44,13 @@ class CollectionUpdate(BaseSchema):
     status: Optional[CollectionStatus] = Field(default=None, description="Collection status")
     tags: Optional[List[str]] = Field(default=None, description="Collection tags")
     metadata: Optional[dict] = Field(default=None, description="Additional metadata")
+
+    @field_validator("metadata")
+    @classmethod
+    def reject_storage_locator(cls, value):
+        if value is not None and "metadata_file" in value:
+            raise ValueError("metadata_file is managed by the server")
+        return value
 
 
 class CollectionResponse(BaseSchema):

@@ -202,8 +202,30 @@ def _effective_llm_settings() -> Dict[str, Any]:
         return {}
 
 
+MASKED_SECRET = "********"
+
+
+def _mask_settings(value, secret=False):
+    if isinstance(value, dict):
+        return {key: _mask_settings(item, secret or key == "api_keys" or key in {"api_key", "access_key", "secret_key", "aliyun_access_key", "aliyun_access_secret", "custom_api_key"}) for key, item in value.items()}
+    if secret and isinstance(value, str) and value:
+        return MASKED_SECRET
+    return value
+
+
+def _preserve_settings(value, saved):
+    if isinstance(value, dict):
+        return {key: _preserve_settings(item, saved.get(key) if isinstance(saved, dict) else None) for key, item in value.items()}
+    return saved if value == MASKED_SECRET else value
+
+
 @router.get("/", response_model=DesktopSettings)
 async def get_settings():
+    settings = await load_settings()
+    return DesktopSettings(**_mask_settings(settings.model_dump()))
+
+
+async def load_settings():
     """获取所有设置"""
     try:
         config = get_desktop_config()
@@ -363,6 +385,15 @@ async def test_api_connection(request: TestApiRequest):
         from backend.core.cloud_presets import resolve_cloud_preset
         # ollama / lmstudio 预设 → openai + 默认地址
         requested_provider = request.provider
+        if request.api_key == MASKED_SECRET:
+            from backend.core.model_catalog import _official_base_url
+            saved = await load_settings()
+            saved_base = saved.api.api_base_url if saved.api.api_provider == requested_provider else ""
+            trusted = normalize_base_url(_official_base_url(requested_provider, saved_base))
+            requested = normalize_base_url(_official_base_url(requested_provider, request.base_url or ""))
+            if requested_provider != "gemini" and requested != trusted:
+                raise HTTPException(status_code=400, detail="Supply a separate key for a different endpoint")
+            request.api_key = _saved_provider_api_key(saved, requested_provider)
         cloud = resolve_cloud_preset(request.provider, request.base_url)
         if cloud:
             resolved_provider, resolved_base_url, _preset = cloud
@@ -447,6 +478,8 @@ async def test_api_connection(request: TestApiRequest):
 
 @router.put("/", response_model=Dict[str, Any])
 async def update_settings(settings: DesktopSettings):
+    saved = await load_settings()
+    settings = DesktopSettings(**_preserve_settings(settings.model_dump(), saved.model_dump()))
     """更新设置"""
     try:
         config = get_desktop_config()
@@ -710,13 +743,27 @@ async def get_available_models(
     打服务商 `/models`，把账号此刻能用的型号合并进来。`refresh=1` 跳过缓存。
     """
     try:
-        from backend.core.model_catalog import list_available_models
+        from backend.core.model_catalog import list_available_models, _official_base_url
+        from backend.core.llm_providers import normalize_base_url
 
         key = (api_key or "").strip()
+        if key == MASKED_SECRET:
+            key = ""
         if not key and provider:
             try:
-                settings = await get_settings()
-                key = _saved_provider_api_key(settings, provider).strip()
+                settings = await load_settings()
+                selected_provider = provider.strip().lower()
+                saved_base = (
+                    settings.api.api_base_url
+                    if settings.api.api_provider.strip().lower() == selected_provider
+                    else ""
+                )
+                trusted_base = _official_base_url(selected_provider, saved_base)
+                requested_base = _official_base_url(selected_provider, base_url)
+                # A saved secret is usable only at its configured endpoint. Custom
+                # discovery endpoints must supply their own credential explicitly.
+                if selected_provider == "gemini" or normalize_base_url(requested_base) == normalize_base_url(trusted_base):
+                    key = _saved_provider_api_key(settings, provider).strip()
             except Exception:  # noqa: BLE001
                 key = ""
         result = await list_available_models(

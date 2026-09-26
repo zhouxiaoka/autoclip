@@ -5,7 +5,6 @@
 import logging
 import os
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.api.v1 import api_router
@@ -56,15 +55,9 @@ def create_app(mode: str = "web") -> FastAPI:
     # 设置应用状态
     app.state.mode = mode
     
-    # 配置 CORS
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # 生产环境需要配置具体域名
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    
+    from backend.core.api_security import APISecurity
+    app.add_middleware(APISecurity, mode=mode)
+
     # 注册全局异常处理器
     app.add_exception_handler(Exception, global_exception_handler)
     

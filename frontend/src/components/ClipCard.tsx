@@ -1,3 +1,4 @@
+import { authorizeMediaUrl } from '../utils/auth'
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useState, useEffect } from 'react'
@@ -57,7 +58,7 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
       draw()
     }
     video.onseeked = draw
-    video.src = videoUrl
+    void authorizeMediaUrl(videoUrl).then(url => { if (!cancelled) video.src = url }).catch(() => { /* thumbnail remains optional */ })
     return () => {
       cancelled = true
       video.removeAttribute('src')

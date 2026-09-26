@@ -2,6 +2,8 @@
 语音识别工具 - 支持多种语音识别服务
 支持本地Whisper、OpenAI API、Azure Speech Services等多种语音识别服务
 """
+from backend.core.usage_guard import paid_post, UsageDenied
+
 import logging
 import re
 import subprocess
@@ -322,6 +324,8 @@ class SpeechRecognizer:
             
         except subprocess.TimeoutExpired:
             raise SpeechRecognitionError("音频提取超时")
+        except UsageDenied:
+            raise
         except Exception as e:
             raise SpeechRecognitionError(f"音频提取失败: {e}")
     
@@ -529,6 +533,8 @@ class SpeechRecognizer:
             raise SpeechRecognitionError(
                 f"Whisper 运行时缺少依赖（{e}）。请到「设置 → 转写」重新安装 Whisper。"
             )
+        except UsageDenied:
+            raise
         except Exception as e:  # noqa: BLE001
             # 不带 exc_info：LoggingIntegration 会把带堆栈的 error 记成 Sentry 异常。
             # 这里已经变成给客户端的 SpeechRecognitionError，进程继续跑。
@@ -548,6 +554,8 @@ class SpeechRecognizer:
             # 由于需要额外的依赖，这里先抛出异常
             raise SpeechRecognitionError("OpenAI API功能暂未实现，请使用本地Whisper")
             
+        except UsageDenied:
+            raise
         except Exception as e:
             error_msg = f"OpenAI API生成字幕时发生错误: {e}"
             logger.error(error_msg)
@@ -565,6 +573,8 @@ class SpeechRecognizer:
             # 这里需要实现Azure Speech Services调用
             raise SpeechRecognitionError("Azure Speech Services功能暂未实现，请使用本地Whisper")
             
+        except UsageDenied:
+            raise
         except Exception as e:
             error_msg = f"Azure Speech Services生成字幕时发生错误: {e}"
             logger.error(error_msg)
@@ -582,11 +592,27 @@ class SpeechRecognizer:
             # 这里需要实现Google Speech-to-Text调用
             raise SpeechRecognitionError("Google Speech-to-Text功能暂未实现，请使用本地Whisper")
             
+        except UsageDenied:
+            raise
         except Exception as e:
             error_msg = f"Google Speech-to-Text生成字幕时发生错误: {e}"
             logger.error(error_msg)
             raise SpeechRecognitionError(error_msg)
     
+    @staticmethod
+    def _check_cloud_audio(path):
+        import wave
+        from backend.core.usage_guard import limit
+        if path.stat().st_size > limit('MEDIA_INPUT_BYTES', 16777216):
+            raise UsageDenied('Cloud audio byte limit exceeded')
+        try:
+            with wave.open(str(path), 'rb') as audio:
+                seconds = audio.getnframes() / audio.getframerate()
+        except (wave.Error, OSError, ZeroDivisionError) as exc:
+            raise UsageDenied('Cannot verify cloud audio duration') from exc
+        if seconds > limit('AUDIO_SECONDS', 600):
+            raise UsageDenied('Cloud audio duration limit exceeded')
+
     def _generate_subtitle_aliyun_speech(self, video_path: Path, output_path: Path, 
                                        config: SpeechRecognitionConfig) -> Path:
         """使用阿里云语音识别生成字幕"""
@@ -602,6 +628,7 @@ class SpeechRecognizer:
             
             # 提取音频文件
             audio_path = self._extract_audio_from_video(video_path, output_path.parent)
+            self._check_cloud_audio(audio_path)
             
             # 使用阿里云语音识别API
             # 注意：这里使用阿里云百炼的语音识别服务，默认使用qwen3-asr-flash模型
@@ -631,7 +658,7 @@ class SpeechRecognizer:
                 'Content-Type': 'application/json'
             }
             
-            response = requests.post(
+            response = paid_post(requests,
                 'https://dashscope.aliyuncs.com/api/v1/services/aigc/audio/asr',
                 headers=headers,
                 json=request_data,
@@ -654,6 +681,8 @@ class SpeechRecognizer:
                 error_detail = response.json().get('message', '未知错误') if response.headers.get('content-type', '').startswith('application/json') else response.text
                 raise SpeechRecognitionError(f"阿里云语音识别API调用失败: {response.status_code} - {error_detail}")
             
+        except UsageDenied:
+            raise
         except Exception as e:
             error_msg = f"阿里云语音识别生成字幕时发生错误: {e}"
             logger.error(error_msg)
@@ -676,6 +705,7 @@ class SpeechRecognizer:
             
             # 提取音频文件
             audio_path = self._extract_audio_from_video(video_path, output_path.parent)
+            self._check_cloud_audio(audio_path)
             
             # 准备API请求
             headers = {
@@ -691,7 +721,7 @@ class SpeechRecognizer:
                     'format': config.output_format
                 }
                 
-                response = requests.post(
+                response = paid_post(requests,
                     f"{config.custom_api_url}/transcribe",
                     headers=headers,
                     files=files,
@@ -710,6 +740,8 @@ class SpeechRecognizer:
             else:
                 raise SpeechRecognitionError(f"自定义API调用失败: {response.status_code} - {response.text}")
                 
+        except UsageDenied:
+            raise
         except Exception as e:
             error_msg = f"自定义API生成字幕时发生错误: {e}"
             logger.error(error_msg)

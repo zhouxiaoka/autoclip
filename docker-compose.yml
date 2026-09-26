@@ -28,11 +28,14 @@ services:
       - "8000:8000"  # 后端API
       - "3000:3000"  # 前端界面
     volumes:
+      - ./security-state:/app/security-state
       - ./data:/app/data
       - ./logs:/app/logs
       - ./uploads:/app/uploads
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - AUTOCLIP_AUTH_TOKEN=${AUTOCLIP_AUTH_TOKEN:-}
+      - AUTOCLIP_SECURITY_DIR=/app/security-state
       - DATABASE_URL=sqlite:///./data/autoclip.db
       - ENVIRONMENT=production
       - DEBUG=false
@@ -54,7 +57,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -69,11 +72,14 @@ services:
     container_name: autoclip-celery-worker
     restart: unless-stopped
     volumes:
+      - ./security-state:/app/security-state
       - ./data:/app/data
       - ./logs:/app/logs
       - ./uploads:/app/uploads
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - AUTOCLIP_AUTH_TOKEN=${AUTOCLIP_AUTH_TOKEN:-}
+      - AUTOCLIP_SECURITY_DIR=/app/security-state
       - DATABASE_URL=sqlite:///./data/autoclip.db
       - ENVIRONMENT=production
       - DEBUG=false
@@ -109,10 +115,13 @@ services:
     container_name: autoclip-celery-beat
     restart: unless-stopped
     volumes:
+      - ./security-state:/app/security-state
       - ./data:/app/data
       - ./logs:/app/logs
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - AUTOCLIP_AUTH_TOKEN=${AUTOCLIP_AUTH_TOKEN:-}
+      - AUTOCLIP_SECURITY_DIR=/app/security-state
       - DATABASE_URL=sqlite:///./data/autoclip.db
       - ENVIRONMENT=production
       - DEBUG=false
@@ -136,6 +145,8 @@ services:
       - "5555:5555"
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - AUTOCLIP_AUTH_TOKEN=${AUTOCLIP_AUTH_TOKEN:-}
+      - AUTOCLIP_SECURITY_DIR=/app/security-state
       - DATABASE_URL=sqlite:///./data/autoclip.db
       - ENVIRONMENT=production
     command: celery -A backend.core.celery_app flower --port=5555

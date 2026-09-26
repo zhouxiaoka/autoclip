@@ -5,6 +5,7 @@
 截帧也失败就空封面继续投稿。
 """
 from __future__ import annotations
+from backend.core.usage_guard import start_guarded_thread
 
 import io
 import json
@@ -713,7 +714,7 @@ def start_generate(
         "clip_id": clip_id,
         "platform": normalize_platform(platform),
     })
-    threading.Thread(
+    start_guarded_thread(
         target=_run_job,
         args=(job_id, {
             "project_id": project_id,
@@ -727,7 +728,7 @@ def start_generate(
         }),
         daemon=True,
         name=f"cover-{job_id[:8]}",
-    ).start()
+    )
     return {"ok": True, "job_id": job_id, "status": "queued"}
 
 

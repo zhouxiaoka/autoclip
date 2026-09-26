@@ -43,16 +43,15 @@ copy_backend_source
 verify_backend_deps
 
 # ---- ffmpeg ----
-# Static win64 builds. BtbN's "latest" tag is a moving pointer to the current
-# master build; gyan.dev's release-essentials is the fallback. Both zips
-# contain bin/ffmpeg.exe and bin/ffprobe.exe with no external DLL deps.
+# Pin a versioned upstream release and its official GitHub asset digest. Alternate
+# mirrors may be added only if they serve the exact same verified archive.
 echo "==> Bundling static ffmpeg + ffprobe (win64)"
 mkdir -p "$RESOURCES_DIR/ffmpeg"
 FFMPEG_CACHE="build/ffmpeg-cache"
 FFMPEG_ZIP="$FFMPEG_CACHE/ffmpeg-win64.zip"
 download_with_mirrors "$FFMPEG_ZIP" 50000000 \
-    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" \
-    "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+    "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba" \
+    "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip"
 for name in ffmpeg ffprobe; do
     extract_from_zip "$FFMPEG_ZIP" "$name.exe" "$RESOURCES_DIR/ffmpeg/$name.exe"
 done

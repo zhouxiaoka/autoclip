@@ -1,3 +1,4 @@
+import { authorizeMediaUrl } from '../utils/auth'
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useState, useEffect } from 'react'
@@ -141,7 +142,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           if (videoLoaded) break
           
           try {
-            const videoUrl = projectApi.getProjectFileUrl(project.id, path)
+            const videoUrl = await authorizeMediaUrl(projectApi.getProjectFileUrl(project.id, path))
             console.log('尝试加载视频:', videoUrl)
             
             await new Promise((resolve, reject) => {

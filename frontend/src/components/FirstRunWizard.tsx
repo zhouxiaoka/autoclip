@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../utils/auth'
 import React, { useState, useEffect } from 'react'
 import { Card, Button, Typography, Space, Alert, message, Form, Input, Select } from 'antd'
 import { 
@@ -289,7 +290,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
         output_format: 'srt'
       }
       
-      const response = await fetch('/api/v1/speech-recognition/config', {
+      const response = await authenticatedFetch('/api/v1/speech-recognition/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(speechConfig)
@@ -313,7 +314,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
 
   const downloadWhisperModel = async (modelName: string) => {
     try {
-      const response = await fetch('/api/v1/speech-recognition/whisper-models/download', {
+      const response = await authenticatedFetch('/api/v1/speech-recognition/whisper-models/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: modelName })
@@ -344,7 +345,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ onComplete }) => {
     }
     
     try {
-      const response = await fetch('/api/v1/settings/test-api', {
+      const response = await authenticatedFetch('/api/v1/settings/test-api', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider, api_key: currentApiKey })

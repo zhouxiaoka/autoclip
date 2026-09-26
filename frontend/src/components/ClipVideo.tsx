@@ -1,3 +1,4 @@
+import { authorizeMediaUrl, isDesktop } from '../utils/auth'
 import { useEffect, useRef, useState } from 'react'
 import { t } from '../i18n'
 
@@ -21,9 +22,24 @@ type ClipVideoProps = {
 export default function ClipVideo({ url, playing = false, onPlay, onPause, onEnded }: ClipVideoProps) {
   const ref = useRef<HTMLVideoElement>(null)
   const [failed, setFailed] = useState(false)
+  const [source, setSource] = useState<string>()
+  const issuedAt = useRef(0)
+  const resume = useRef<{ time: number; playing: boolean }>()
+  const refresh = () => {
+    if (!isDesktop() || Date.now() - issuedAt.current < 45000) return false
+    issuedAt.current = Date.now()
+    const el = ref.current
+    resume.current = { time: el?.currentTime || 0, playing: el ? !el.paused : playing }
+    void authorizeMediaUrl(url).then(value => setSource(value)).catch(() => setFailed(true))
+    return true
+  }
 
   useEffect(() => {
+    let cancelled = false
     setFailed(false)
+    setSource(undefined)
+    void authorizeMediaUrl(url).then(value => { if (!cancelled) { issuedAt.current = Date.now(); setSource(value) } }).catch(() => { if (!cancelled) setFailed(true) })
+    return () => { cancelled = true }
   }, [url])
 
   useEffect(() => {
@@ -35,21 +51,30 @@ export default function ClipVideo({ url, playing = false, onPlay, onPause, onEnd
     } else {
       el.pause()
     }
-  }, [playing, url, failed])
+  }, [playing, source, failed])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', background: 'var(--ac-thumb)' }}>
       <video
         ref={ref}
-        src={url}
+        src={source}
         controls
         playsInline
         preload="metadata"
         style={{ width: '100%', height: '100%', display: 'block', objectFit: 'contain', background: 'var(--ac-thumb)' }}
-        onPlay={onPlay}
+        onPlay={() => { refresh(); onPlay?.() }}
+        onSeeking={() => { refresh() }}
+        onLoadedMetadata={() => {
+          if (resume.current && ref.current) {
+            const previous = resume.current
+            resume.current = undefined
+            ref.current.currentTime = previous.time
+            if (previous.playing) void ref.current.play().catch(() => {})
+          }
+        }}
         onPause={onPause}
         onEnded={onEnded}
-        onError={() => setFailed(true)}
+        onError={() => { if (!refresh()) setFailed(true) }}
       />
       {failed && (
         <div

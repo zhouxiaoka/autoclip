@@ -13,6 +13,7 @@ edition = "2021"
 tauri-build = { version = "2.0.0-rc", features = [] }
 
 [dependencies]
+getrandom = "0.2"
 tauri = { version = "2.0.0-rc", features = ["tray-icon"] }
 tauri-plugin-autostart = "2.0.0-rc"
 tauri-plugin-shell = "2.0.0-rc"

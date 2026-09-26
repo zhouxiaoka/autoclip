@@ -1,3 +1,4 @@
+from backend.core.usage_guard import UsageDenied
 """
 任务提交工具
 独立的工具函数，避免循环导入问题
@@ -25,6 +26,8 @@ def _log_queue_depth(queue: str) -> Optional[int]:
         depth = client.llen(queue)
         logger.info(f"Redis 队列 {queue} 深度: {depth}")
         return depth
+    except UsageDenied:
+        raise
     except Exception as e:  # noqa: BLE001
         logger.warning(f"读取 Redis 队列 {queue} 深度失败（仅诊断，不影响任务）: {e}")
         return None
@@ -38,31 +41,9 @@ def _run_pipeline_locally(project_id: str, input_video_path: str, input_srt_path
     （asyncio.run(pipeline_adapter...)），不会再派发子任务，所以可以用 .apply()
     在本地线程里直接跑，进度照常写进数据库的 Task 记录供前端轮询。
     """
-    import uuid
-    import threading
-
-    task_id = str(uuid.uuid4())
-
-    def run():
-        try:
-            # 延迟导入，避免循环依赖
-            from ..tasks.processing import process_video_pipeline
-            process_video_pipeline.apply(
-                args=[project_id, input_video_path, input_srt_path],
-                task_id=task_id,
-            )
-            logger.info(f"桌面模式本地流水线执行结束: {project_id}, task_id={task_id}")
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"桌面模式本地流水线执行失败: {project_id}, 错误: {e}", exc_info=True)
-
-    threading.Thread(target=run, name=f"pipeline-{project_id[:8]}", daemon=True).start()
-    logger.info(f"桌面模式：已在本地后台线程启动视频流水线 {project_id}, task_id={task_id}")
-    return {
-        'success': True,
-        'task_id': task_id,
-        'status': 'PENDING',
-        'message': '视频流水线任务已在本地启动',
-    }
+    from ..tasks.processing import process_video_pipeline
+    result = process_video_pipeline.apply_async(args=[project_id, input_video_path, input_srt_path])
+    return {'success': True, 'task_id': result.id, 'status': 'PENDING', 'message': 'Pipeline admitted'}
 
 
 def submit_video_pipeline_task(project_id: str, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
@@ -106,6 +87,8 @@ def submit_video_pipeline_task(project_id: str, input_video_path: str, input_srt
             'message': '视频流水线任务已提交'
         }
         
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.error(f"提交视频流水线任务失败: {project_id}, 错误: {e}")
         return {
@@ -145,6 +128,8 @@ def submit_single_step_task(project_id: str, step: str, config: Dict[str, Any]) 
             'message': f'步骤 {step} 任务已提交'
         }
         
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.error(f"提交单个步骤任务失败: {project_id}, {step}, 错误: {e}")
         return {

@@ -16,6 +16,7 @@ class ApiConfigManager {
     port: 0,
     isReady: false
   };
+  private authToken = "";
   private listeners: Array<(config: ApiConfig) => void> = [];
 
   private constructor() {
@@ -40,13 +41,13 @@ class ApiConfigManager {
         await listen('backend-started', (event: any) => {
           const backendStatus = event.payload;
           if (backendStatus && backendStatus.port) {
-            this.updateFromPort(backendStatus.port);
+            this.updateFromPort(backendStatus.port, backendStatus.auth_token);
           }
         });
 
         const backendStatus = await invoke('get_service_status') as any;
         if (backendStatus?.is_running && backendStatus?.port) {
-          this.updateFromPort(backendStatus.port);
+          this.updateFromPort(backendStatus.port, backendStatus.auth_token);
         }
 
         // 尝试从全局变量获取配置
@@ -54,7 +55,7 @@ class ApiConfigManager {
           this.updateConfig({
             baseUrl: (window as any).__BACKEND_BASE__,
             port: this.extractPortFromUrl((window as any).__BACKEND_BASE__),
-            isReady: true
+            isReady: Boolean(this.authToken)
           });
         }
       } catch (error) {
@@ -63,11 +64,14 @@ class ApiConfigManager {
     }
   }
 
-  private updateFromPort(port: number) {
+  getAuthToken(): string { return this.authToken; }
+
+  private updateFromPort(port: number, token: string = "") {
+    this.authToken = token;
     this.updateConfig({
       baseUrl: `http://127.0.0.1:${port}/api/v1`,
       port,
-      isReady: true
+      isReady: Boolean(token)
     });
   }
 

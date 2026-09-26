@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../utils/auth'
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, Row, Col, Statistic, Button } from 'antd';
 import TaskProgress from './TaskProgress';
@@ -30,7 +31,7 @@ export const RealTimeStatus: React.FC<RealTimeStatusProps> = ({ userId, projectI
     console.log('📤 开始加载项目任务:', projectId);
     setLoading(true);
     try {
-      const response = await fetch(`/api/v1/tasks/project/${projectId}`);
+      const response = await authenticatedFetch(`/api/v1/tasks/project/${projectId}`);
       console.log('📡 API响应状态:', response.status);
       
       if (response.ok) {

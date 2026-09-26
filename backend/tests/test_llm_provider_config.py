@@ -36,7 +36,7 @@ def test_openai_provider_defaults_to_official_endpoint(fake_openai):
 
     assert provider.base_url == ""
     assert provider.is_custom_endpoint is False
-    assert fake_openai.created[-1] == {"api_key": "sk-test"}
+    assert fake_openai.created[-1] == {"api_key": "sk-test", "max_retries": 0}
 
 
 def test_openai_provider_uses_custom_base_url_and_placeholder_key(fake_openai):
@@ -55,6 +55,7 @@ def test_openai_provider_uses_custom_base_url_and_placeholder_key(fake_openai):
     assert http_client.trust_env is False
     assert created == {
         "api_key": OPENAI_COMPATIBLE_PLACEHOLDER_KEY,
+        "max_retries": 0,
         "base_url": "http://localhost:11434/v1",
     }
 

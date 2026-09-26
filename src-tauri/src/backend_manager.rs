@@ -13,6 +13,7 @@ pub struct BackendStatus {
     pub is_running: bool,
     pub port: u16,
     pub pid: Option<u32>,
+    pub auth_token: String,
     pub start_time: Option<u64>, // 改为u64以支持序列化
 }
 
@@ -23,6 +24,7 @@ impl Default for BackendStatus {
             port: 8000,
             pid: None,
             start_time: None,
+            auth_token: String::new(),
         }
     }
 }
@@ -55,6 +57,9 @@ impl BackendManager {
         // 启动后端服务
         let launch = self.get_backend_launch(&app_handle)?;
 
+        let mut random = [0u8; 32];
+        getrandom::getrandom(&mut random).map_err(|e| format!("Secure random unavailable: {}", e))?;
+        let auth_token: String = random.iter().map(|byte| format!("{:02x}", byte)).collect();
         let mut cmd = Command::new(&launch.program);
         cmd.args(&launch.args)
             .current_dir(&launch.working_dir)
@@ -62,6 +67,7 @@ impl BackendManager {
             .stderr(Stdio::piped())
             .env("AUTOCLIP_DESKTOP_MODE", "true")
             .env("AUTOCLIP_MODE", "desktop")
+            .env("AUTOCLIP_AUTH_TOKEN", &auth_token)
             // Single source of truth for the version the backend reports in /settings.
             .env("AUTOCLIP_APP_VERSION", env!("CARGO_PKG_VERSION"));
 
@@ -128,6 +134,7 @@ impl BackendManager {
                     port: 0, // 端口将在读取stdout后更新
                     pid: Some(pid),
                     start_time: Some(start_time),
+                    auth_token,
                 };
 
                 let mut process = self.process.lock().unwrap();
@@ -371,6 +378,7 @@ impl BackendManager {
                                     port,
                                     pid: status_guard.pid,
                                     start_time: status_guard.start_time,
+                                    auth_token: status_guard.auth_token.clone(),
                                 }
                             };
 

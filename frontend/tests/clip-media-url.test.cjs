@@ -19,6 +19,7 @@ function loadApi({ baseUrl, tauri, invokes }) {
   }
   const mocks = {
     '../i18n': { t: key => key },
+    '../utils/auth': { authHeaders: () => ({}), authorizeMediaUrl: async url => url },
     axios: {
       create: () => ({ defaults: {}, interceptors: { request: { use() {} }, response: { use() {} } } }),
       get: async (url) => { gets.push(url); return { data: blob, headers: { 'content-disposition': "attachment; filename*=UTF-8''clip.mp4" } } },

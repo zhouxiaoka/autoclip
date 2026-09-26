@@ -1,3 +1,4 @@
+import { authenticatedFetch } from './auth'
 /**
  * API工具函数
  * 统一处理API URL和请求
@@ -22,7 +23,7 @@ export const buildApiUrlAsync = async (path: string) => {
 // 统一的fetch函数
 export const apiFetch = async (path: string, options?: RequestInit) => {
   const url = await buildApiUrlAsync(path);
-  return fetch(url, options);
+  return authenticatedFetch(url, options);
 }
 
 // 统一的GET请求

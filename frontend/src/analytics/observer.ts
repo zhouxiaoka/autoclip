@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { authHeaders } from '../utils/auth'
 import { apiConfigManager } from '../utils/apiConfig'
 import { captureBusinessEvent, isAnalyticsEnabled, onAnalyticsPreferenceChange } from './posthog'
 import { WorkflowTracker, type TaskSnapshot } from './workflow'
@@ -28,11 +29,11 @@ export function startWorkflowObserver(): () => void {
         if (w.settled) continue
         try {
           if (w.kind === 'project') {
-            const { data } = await axios.get<TaskSnapshot[]>(`/tasks/project/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000 })
+            const { data } = await axios.get<TaskSnapshot[]>(`/tasks/project/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000, headers: authHeaders(`${baseURL}/`) })
             if (!stopped && workflow.active(generation) && Array.isArray(data)) workflow.observeTasks(w, data)
           } else if (w.kind === 'export') {
             if (w.seen.includes('finished')) continue
-            const { data } = await axios.get(`/projects/${encodeURIComponent(w.projectId!)}/exports/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000 })
+            const { data } = await axios.get(`/projects/${encodeURIComponent(w.projectId!)}/exports/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000, headers: authHeaders(`${baseURL}/`) })
             if (!stopped && workflow.active(generation) && ['completed', 'failed'].includes(data.status)) {
               workflow.emitOnce(w, 'finished', 'publish_export_finished', {
                 project_id: w.projectId, export_id: w.id, outcome: data.status,
@@ -41,7 +42,7 @@ export function startWorkflowObserver(): () => void {
             }
           } else {
             if (w.seen.includes('finished')) continue
-            const { data } = await axios.get(`/${w.kind}/tasks/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000 })
+            const { data } = await axios.get(`/${w.kind}/tasks/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000, headers: authHeaders(`${baseURL}/`) })
             if (!stopped && workflow.active(generation) && ['completed', 'failed'].includes(data.status)) {
               workflow.emitOnce(w, 'finished', 'import_finished', {
                 import_id: w.id, source_type: w.kind, outcome: data.status,

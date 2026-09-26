@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../utils/auth'
 import React, { useState, useEffect } from 'react';
 import {
   Card,
@@ -108,7 +109,7 @@ const AccountHealthMonitor: React.FC<AccountHealthMonitorProps> = () => {
       const method = forceCheck ? 'POST' : 'GET';
       const body = forceCheck ? JSON.stringify({ force_check: true }) : undefined;
       
-      const response = await fetch(endpoint, {
+      const response = await authenticatedFetch(endpoint, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -139,7 +140,7 @@ const AccountHealthMonitor: React.FC<AccountHealthMonitorProps> = () => {
     try {
       setRefreshing(prev => [...prev, accountId]);
       
-      const response = await fetch(`/api/v1/health/check/${accountId}?force_check=${forceCheck}`, {
+      const response = await authenticatedFetch(`/api/v1/health/check/${accountId}?force_check=${forceCheck}`, {
         method: 'GET',
       });
       
@@ -192,7 +193,7 @@ const AccountHealthMonitor: React.FC<AccountHealthMonitorProps> = () => {
   // 刷新Cookie
   const refreshCookie = async (accountId: number) => {
     try {
-      const response = await fetch('/health/refresh-cookie', {
+      const response = await authenticatedFetch('/health/refresh-cookie', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

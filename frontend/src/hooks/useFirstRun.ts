@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../utils/auth'
 import { useState, useEffect } from 'react'
 
 interface FirstRunState {
@@ -27,7 +28,7 @@ export const useFirstRun = () => {
       
       try {
         // 检查是否已有配置
-        const response = await fetch('/api/v1/settings/', {
+        const response = await authenticatedFetch('/api/v1/settings/', {
           signal: controller.signal
         })
         clearTimeout(timeoutId)

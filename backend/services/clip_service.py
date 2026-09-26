@@ -42,7 +42,11 @@ class ClipService(BaseService[Clip, ClipCreate, ClipUpdate, ClipResponse]):
         update_data = {k: v for k, v in clip_data.model_dump().items() if v is not None}
         if not update_data:
             return self.get(clip_id)
-        
+        if "clip_metadata" in update_data:
+            current = self.get(clip_id)
+            metadata = getattr(current, "clip_metadata", None) or {}
+            if "metadata_file" in metadata:
+                update_data["clip_metadata"]["metadata_file"] = metadata["metadata_file"]
         return self.update(clip_id, **update_data)
     
     def get_clips_by_project(self, project_id: str, skip: int = 0, limit: int = 100) -> List[Clip]:

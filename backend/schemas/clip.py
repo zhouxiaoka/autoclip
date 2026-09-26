@@ -5,7 +5,7 @@ Clip-related Pydantic schemas.
 from datetime import datetime
 from typing import Optional, List
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .base import BaseSchema, PaginationResponse
 
@@ -30,6 +30,13 @@ class ClipCreate(BaseSchema):
     tags: Optional[List[str]] = Field(default_factory=list, description="Clip tags")
     clip_metadata: Optional[dict] = Field(default_factory=dict, description="Additional metadata")
 
+    @field_validator("clip_metadata")
+    @classmethod
+    def reject_storage_locator(cls, value):
+        if value is not None and "metadata_file" in value:
+            raise ValueError("metadata_file is managed by the server")
+        return value
+
 
 class ClipUpdate(BaseSchema):
     """Schema for updating a clip."""
@@ -41,6 +48,13 @@ class ClipUpdate(BaseSchema):
     status: Optional[ClipStatus] = Field(default=None, description="Clip status")
     tags: Optional[List[str]] = Field(default=None, description="Clip tags")
     clip_metadata: Optional[dict] = Field(default=None, description="Additional metadata")
+
+    @field_validator("clip_metadata")
+    @classmethod
+    def reject_storage_locator(cls, value):
+        if value is not None and "metadata_file" in value:
+            raise ValueError("metadata_file is managed by the server")
+        return value
 
 
 class ClipResponse(BaseSchema):

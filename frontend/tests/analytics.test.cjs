@@ -148,6 +148,7 @@ test('actual API entrypoints enroll imports/exports and count every media downlo
   const api = load('../services/api', {
     '../i18n': { t: key => key },
     axios: { create: () => transport, get: async () => ({ data: blob, headers: {} }) },
+    '../utils/auth': { authHeaders: () => ({}), authorizeMediaUrl: async url => url },
     '../utils/errorHandler': { errorHandler: { handleError() {} } },
     '../utils/apiConfig': { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener() {} } },
     '../analytics/operations': operations, '../analytics/observer': { workflow: s.tracker },

@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../utils/auth'
 import React, { useState, useEffect } from 'react';
 import { 
   Card, 
@@ -85,7 +86,7 @@ const DesktopSettings: React.FC = () => {
   // 加载配置
   const loadConfig = async () => {
     try {
-      const response = await fetch('/api/v1/desktop/config');
+      const response = await authenticatedFetch('/api/v1/desktop/config');
       if (response.ok) {
         const data = await response.json();
         setConfig(data.config);
@@ -102,7 +103,7 @@ const DesktopSettings: React.FC = () => {
   // 加载系统信息
   const loadSystemInfo = async () => {
     try {
-      const response = await fetch('/api/v1/desktop/system/info');
+      const response = await authenticatedFetch('/api/v1/desktop/system/info');
       if (response.ok) {
         const data = await response.json();
         setSystemInfo(data);
@@ -115,7 +116,7 @@ const DesktopSettings: React.FC = () => {
   // 加载服务状态
   const loadServiceStatus = async () => {
     try {
-      const response = await fetch('/api/v1/desktop/service/status');
+      const response = await authenticatedFetch('/api/v1/desktop/service/status');
       if (response.ok) {
         const data = await response.json();
         setServiceStatus(data);
@@ -156,7 +157,7 @@ const DesktopSettings: React.FC = () => {
         log_retention_days: values.log_retention_days || 7
       };
 
-      const response = await fetch('/api/v1/desktop/config', {
+      const response = await authenticatedFetch('/api/v1/desktop/config', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

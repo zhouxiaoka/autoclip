@@ -22,7 +22,7 @@ test('clip previews use a native video element, not react-player', () => {
   }
   const player = fs.readFileSync(path.join(root, 'ClipVideo.tsx'), 'utf8')
   assert.match(player, /<video/)
-  assert.match(player, /src=\{url\}/)
+  assert.match(player, /src=\{source\}/)
   assert.match(player, /这个切片当前播放器无法解码/)
   for (const name of ['ClipCard.tsx', 'ClipDetailModal.tsx', 'CollectionPreviewModal.tsx']) {
     const source = fs.readFileSync(path.join(root, name), 'utf8')

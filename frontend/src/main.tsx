@@ -26,6 +26,7 @@ import relativeTime from 'dayjs/plugin/relativeTime'
 import timezone from 'dayjs/plugin/timezone'
 import utc from 'dayjs/plugin/utc'
 import App from './App.tsx'
+import AuthGate from './components/AuthGate'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { initAnalytics } from './analytics/posthog'
@@ -69,7 +70,7 @@ function Root() {
   // 统一在根节点接入错误边界，避免运行时异常导致白屏
   return (
     <ErrorBoundary showDetails={import.meta.env.DEV}>
-      <App />
+      <AuthGate><App /></AuthGate>
     </ErrorBoundary>
   )
 }

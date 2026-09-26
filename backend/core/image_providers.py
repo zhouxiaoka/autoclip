@@ -10,6 +10,8 @@
 """
 from __future__ import annotations
 
+from backend.core.usage_guard import paid_post
+
 import base64
 import logging
 import time
@@ -181,7 +183,7 @@ def _post_json(
     *,
     seedream: bool = False,
 ) -> Any:
-    resp = session.post(url, headers={**headers, "Content-Type": "application/json"}, json=body, timeout=90)
+    resp = paid_post(session, url, headers={**headers, "Content-Type": "application/json"}, json=body, timeout=90)
     if int(getattr(resp, "status_code", 200) or 200) == 400:
         message = _error_message(resp).lower()
         retry = dict(body)
@@ -206,7 +208,7 @@ def _post_json(
             retry.pop("watermark", None)
             changed = True
         if changed:
-            resp = session.post(url, headers={**headers, "Content-Type": "application/json"}, json=retry, timeout=90)
+            resp = paid_post(session, url, headers={**headers, "Content-Type": "application/json"}, json=retry, timeout=90)
     return resp
 
 
@@ -242,7 +244,7 @@ def generate_openai(
         return _openai_image(_raise_for_status(resp, edit=True), http)
 
     if request.reference:
-        resp = http.post(
+        resp = paid_post(http,
             f"{root}/images/edits",
             headers=headers,
             data={"model": model, "prompt": request.prompt, "size": size, "n": "1"},
@@ -316,8 +318,9 @@ def generate_dashscope(
     image_input: dict[str, Any] = {"prompt": request.prompt}
     if request.reference:
         image_input["ref_img"] = _reference_data_uri(request.reference)
-    resp = http.post(
+    resp, lease = paid_post(http,
         f"{root}/services/aigc/text2image/image-synthesis",
+        _retain_lease=True,
         headers={**headers, "Content-Type": "application/json"},
         json={
             "model": model,
@@ -327,7 +330,13 @@ def generate_dashscope(
         timeout=60,
     )
     data = _raise_for_status(resp, edit=bool(request.reference))
-    ready = _dashscope_bytes(data, http)
+    def completed(data):
+        from backend.core.usage_guard import release
+        output = data.get('output') or {}
+        if output.get('task_status') in ('SUCCEEDED', 'FAILED', 'CANCELED') or output.get('results'):
+            release(lease)
+        return _dashscope_bytes(data, http)
+    ready = completed(data)
     if ready is not None:
         return ready
     output = data.get("output") if isinstance(data.get("output"), dict) else {}
@@ -342,7 +351,7 @@ def generate_dashscope(
         if cancel is not None and cancel.is_set():
             raise ImageError("已取消")
         polled = http.get(f"{root}/tasks/{task_id}", headers=_bearer(api_key, base_url), timeout=30)
-        ready = _dashscope_bytes(_raise_for_status(polled), http)
+        ready = completed(_raise_for_status(polled))
         if ready is not None:
             return ready
     raise ImageError("生图超时")
@@ -403,7 +412,7 @@ def read_image_text(
     if kind == "dashscope":
         root = dashscope_root(base_url)
         http = _session_for(root, session)
-        resp = http.post(
+        resp = paid_post(http,
             f"{root}/services/aigc/multimodal-generation/generation",
             headers={**_bearer(api_key, base_url), "Content-Type": "application/json"},
             json={

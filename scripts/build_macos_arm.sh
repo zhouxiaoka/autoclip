@@ -41,10 +41,14 @@ declare -a FF_URLS=(
     "https://www.osxexperts.net/ffmpeg711arm.zip"
     "https://www.osxexperts.net/ffprobe711arm.zip"
 )
+declare -a FF_SHA256=(
+    "59e39a5cec2e5d2307ed079c53227a9181e64b87454ed4de998349e044bfdc70"
+    "e695da37c08c8fbc218ebc161ee20d5606b50f3c7e8d696cbcf01bd40fe20d7e"
+)
 for i in 0 1; do
     name="${FF_NAMES[$i]}"
     zip_cache="$FFMPEG_CACHE/${name}.zip"
-    download_with_mirrors "$zip_cache" "$FFMPEG_MIN_BYTES" "${FF_URLS[$i]}"
+    download_with_mirrors "$zip_cache" "$FFMPEG_MIN_BYTES" "${FF_SHA256[$i]}" "${FF_URLS[$i]}"
     # Extract just the binary, then ditto it into place (ditto strips xattrs that trip Tauri's scanner)
     tmp_bin="$FFMPEG_CACHE/extract-$name/$name"
     rm -rf "$FFMPEG_CACHE/extract-$name"

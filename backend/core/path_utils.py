@@ -4,6 +4,7 @@
 """
 
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -61,7 +62,12 @@ def get_output_directory() -> Path:
 
 def get_project_directory(project_id: str) -> Path:
     """获取项目目录"""
-    project_dir = get_projects_directory() / project_id
+    if not isinstance(project_id, str) or not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]*", project_id) or project_id.endswith("."):
+        raise ValueError("Invalid project ID")
+    projects_dir = get_projects_directory().resolve()
+    project_dir = (projects_dir / project_id).resolve()
+    if project_dir.parent != projects_dir:
+        raise ValueError("Project directory escapes storage root")
     project_dir.mkdir(parents=True, exist_ok=True)
     return project_dir
 
