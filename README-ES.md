@@ -48,7 +48,7 @@ Interfaz web real de v1.3.0: añade un vídeo local en el área de importación,
 | Encontrar momentos destacados | Extrae resúmenes, intervalos por tema, puntuaciones y títulos a partir de los subtítulos. |
 | Crear clips y recopilaciones | Genera clips y recopilaciones sugeridas, y ajusta su orden manualmente. |
 | Publicar (v1.3.2) | Desde la **v1.3.2**, cuando los clips estén listos, publícalos o prográmalos en la misma página. Las plataformas de fuera usan Upload-Post; para Bilibili, pega las cookies de inicio de sesión una vez en Ajustes. El valor predeterminado es tan privado como permita la plataforma; también puedes exportar sin publicar. Detalles: [guía de publicación (chino)](docs/PUBLISH_UPLOAD_POST.md). |
-| Portada automática (v1.3.2) | Al publicar se puede generar una portada automáticamente, para que Bilibili no rechace una portada vacía. Los detalles de la portada y la tarjeta de título por defecto siguen las notas de ese instalador. Disponible en **v1.3.2**. |
+| Portada automática (v1.3.2) | Al publicar, se genera una portada automáticamente para que Bilibili no rechace una portada vacía; los valores por defecto siguen las notas del instalador. Disponible en **v1.3.2**. |
 | Exportar para publicar | Usa ajustes para Douyin, Xiaohongshu, YouTube Shorts y Bilibili, con subtítulos incrustados y tarjetas de título. |
 | Elegir modelos | Compatible con Qwen, OpenAI, Gemini, Claude, DeepSeek y modelos locales mediante Ollama / LM Studio (trae tu propia clave de API). |
 | Automatizar tareas | Organiza ejecuciones con la CLI o llama al mismo flujo de procesamiento desde un cliente MCP. |

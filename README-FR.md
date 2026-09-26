@@ -48,7 +48,7 @@ Interface web réelle de v1.3.0 : ajoutez une vidéo locale dans la zone d’imp
 | Repérer les temps forts | Extrayez des plans, des plages temporelles par sujet, des scores et des titres à partir des sous-titres. |
 | Créer des extraits et des compilations | Générez des extraits et des compilations suggérées, puis ajustez leur ordre manuellement. |
 | Publier (v1.3.2) | Depuis la **v1.3.2**, une fois les extraits prêts, publiez-les ou planifiez-les sur la même page. Les plateformes hors de Chine passent par Upload-Post ; pour Bilibili, collez une fois les cookies de connexion dans les réglages. Le réglage par défaut reste aussi privé que la plateforme le permet ; vous pouvez aussi exporter sans publier. Détails : [guide de publication (chinois)](docs/PUBLISH_UPLOAD_POST.md). |
-| Couverture automatique (v1.3.2) | À la publication, une couverture peut être générée automatiquement, pour que Bilibili ne refuse pas une couverture vide. Le détail de la couverture et du carton de titre par défaut suit la notice de cet installeur. Disponible dans la **v1.3.2**. |
+| Couverture automatique (v1.3.2) | À la publication, une couverture est générée automatiquement pour que Bilibili ne refuse pas une couverture vide ; les réglages par défaut suivent la notice d’installation. Disponible dans la **v1.3.2**. |
 | Exporter pour publier | Profils pour Douyin, Xiaohongshu, YouTube Shorts et Bilibili, avec sous-titres incrustés et cartons de titre. |
 | Choisir les modèles | Prend en charge Qwen, OpenAI, Gemini, Claude, DeepSeek et les modèles locaux via Ollama / LM Studio (apportez votre propre clé API). |
 | Automatiser les tâches | Orchestrez les traitements avec la CLI ou appelez le même pipeline depuis un client MCP. |

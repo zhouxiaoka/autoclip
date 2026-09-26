@@ -48,7 +48,7 @@ Interface web real da v1.3.0: adicione um vídeo local na área de importação,
 | Encontrar destaques | Extraia resumos, intervalos por assunto, pontuações e títulos a partir das legendas. |
 | Criar clipes e coletâneas | Gere clipes e coletâneas sugeridas e ajuste a ordem manualmente. |
 | Publicar (v1.3.2) | A partir da **v1.3.2**, com os clipes prontos, publique ou agende na mesma página. Plataformas no exterior usam o Upload-Post; no Bilibili, cole os cookies de login uma vez em Configurações. O padrão fica o mais privado que a plataforma permitir; também dá para exportar sem publicar. Detalhes: [guia de publicação (chinês)](docs/PUBLISH_UPLOAD_POST.md). |
-| Capa automática (v1.3.2) | Na publicação, uma capa pode ser gerada automaticamente, para o Bilibili não recusar uma capa vazia. Os detalhes da capa e do cartão de título padrão seguem as notas desse instalador. Disponível na **v1.3.2**. |
+| Capa automática (v1.3.2) | Ao publicar, uma capa é gerada automaticamente para o Bilibili não recusar uma capa vazia; os padrões seguem as notas do instalador. Disponível na **v1.3.2**. |
 | Exportar para publicar | Use predefinições para Douyin, Xiaohongshu, YouTube Shorts e Bilibili, com legendas embutidas e cartões de título. |
 | Escolher modelos | Suporta Qwen, OpenAI, Gemini, Claude, DeepSeek e modelos locais via Ollama / LM Studio (traga sua própria chave de API). |
 | Automatizar tarefas | Organize execuções pela CLI ou acesse o mesmo fluxo de processamento por um cliente MCP. |
