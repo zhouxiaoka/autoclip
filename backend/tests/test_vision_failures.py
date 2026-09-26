@@ -77,6 +77,9 @@ def test_refusal_and_valid_fenced_json(monkeypatch):
 
 
 def test_stage_annotation_and_quick_fallback_preserve_diagnostics(monkeypatch):
+    from backend.services.studio import analysis_preferences as ap
+    # Exercise timeout diagnostics only after explicitly authorizing paid screening.
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto', allow_visual_screening=True))
     def fail(*a,**k):raise vision.VisionRequestError('timeout','模型超时',elapsed_seconds=30)
     monkeypatch.setattr(vision,'vision_call',fail)
     with pytest.raises(vision.VisionRequestError) as caught:vision.vision_call_at('refine',[])
@@ -87,3 +90,14 @@ def test_stage_annotation_and_quick_fallback_preserve_diagnostics(monkeypatch):
     plan=planning.recommend(Path('unused'),ImportOptions())
     assert plan['mode']=='fallback' and plan['suggested_goals']==[]
     assert plan['diagnostics']=={'code':'timeout','phase':'screening','elapsed_seconds':30}
+
+
+def test_unapproved_screening_does_not_attempt_provider_or_fabricate_timeout(monkeypatch):
+    from backend.services.studio import analysis_preferences as ap
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences())
+    monkeypatch.setattr(vision, 'ready', lambda: True)
+    monkeypatch.setattr(vision, '_probe', lambda _: {'duration': 20})
+    monkeypatch.setattr(vision, 'vision_call', lambda *a, **k: pytest.fail('unapproved provider call'))
+    plan = planning.recommend(Path('unused'), ImportOptions())
+    assert plan['mode'] == 'local'
+    assert 'diagnostics' not in plan
