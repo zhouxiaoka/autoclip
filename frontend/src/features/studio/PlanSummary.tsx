@@ -28,7 +28,7 @@ export default function PlanSummary({projectId, plan, status, onChanged, onStart
   const show=()=>{setValue({...defaultImportOptions,...plan?.overrides});setError('');setOpen(true)}
   const apply=async()=>{setBusy(true);setError('');try{await studioApi.correctPlan(projectId,value);setOpen(false);onChanged()}catch(e){setError(t(errorText(e)))}finally{setBusy(false)}}
   const start=async()=>{if(!plan||!selected.length)return;setBusy(true);setError('');try{await studioApi.confirmPlan(projectId,plan.id,selected,value,analysisMode);if(onStarted)onStarted();else onChanged()}catch(e){setError(t(errorText(e)))}finally{setBusy(false)}}
-  const incompatible=analysisMode==='subtitle'?selected.some(g=>g!=='content'):selected.length===1&&selected[0]==='content'
+  const incompatible=analysisMode==='subtitle'?selected.includes('promo'):selected.length===1&&selected[0]==='content'
   const unavailable=analysisMode==='visual'&&!capability?.visual_analysis
   const prefs=plan?.preferences
   return <>
@@ -38,9 +38,9 @@ export default function PlanSummary({projectId, plan, status, onChanged, onStart
         <label className="studio-field">{t("本次分析方式")}<select disabled={busy} value={analysisMode} onChange={e=>setAnalysisMode(e.target.value as AnalysisMode)}><option value="subtitle">{t("字幕分析 · 低成本")}</option><option value="visual">{t("视觉分析")}</option></select></label>
         <p className="studio-muted">{t(analysisMode==='subtitle'?"仅分析字幕文本；无字幕时需要转写。":"发送抽样画面与文本，按模型服务商计费。")}{analysisMode==='visual'&&capability?.visual_model?` · ${capability.visual_model}`:''}</p>
         {unavailable&&<p role="alert" className="studio-error">{t("视觉模型不可用，请前往模型设置。")}</p>}
-        {incompatible&&<p role="alert" className="studio-error">{t("当前内容切片使用字幕分析；高光和推广使用视觉分析。请调整方式或制作类型。")}</p>}
+        {incompatible&&<p role="alert" className="studio-error">{t("字幕分析支持内容切片和字幕高光；推广仍需视觉分析。请调整方式或制作类型。")}</p>}
         <p className="studio-muted">{plan.suggested_goals.length?t("已勾选建议制作的类型，你可以取消或补选。"):t("本次未能自动推荐，请按素材内容选择制作类型。")}{' '}{t("确认后才开始详细理解与剪辑。")}</p>
-        <div className="studio-output-choices">{choices.map(({goal,description})=><label key={goal} className={`studio-output-choice ${selected.includes(goal)?'is-selected':''}`}><input type="checkbox" checked={selected.includes(goal)} disabled={busy} onChange={e=>setSelected(e.target.checked?[...selected,goal]:selected.filter(g=>g!==goal))}/><b>{t(goalLabels[goal])}</b>{plan.suggested_goals.includes(goal)&&<small>{t("建议")}</small>}<span className="studio-muted">{t(description)}</span></label>)}</div>
+        <div className="studio-output-choices">{choices.map(({goal,description})=><label key={goal} className={`studio-output-choice ${selected.includes(goal)?'is-selected':''}`}><input type="checkbox" checked={selected.includes(goal)} disabled={busy} onChange={e=>setSelected(e.target.checked?[...selected,goal]:selected.filter(g=>g!==goal))}/><b>{t(goalLabels[goal])}</b>{plan.suggested_goals.includes(goal)&&<small>{t("建议")}</small>}<span className="studio-muted">{t(goal==='highlight'&&analysisMode==='subtitle'?'按语音与内容含义，提炼完整片段':description)}</span></label>)}</div>
         <details className="studio-details"><summary>{t("调整制作参数（可选）")}</summary><ImportPreferences value={value} onChange={setValue} hideGoal/></details>
         <div className="studio-row studio-confirm-footer"><span className="studio-muted">{selected.length?t('将制作 {{count}} 类内容', { count: selected.length }):t("至少选择一种制作类型")}</span><Btn variant="cta" disabled={!selected.length||busy||incompatible||unavailable} loading={busy} onClick={start}>{t("确认并开始制作")}</Btn></div>
       </> : <div className="studio-actions">{plan?.selected_goals&&<span className="studio-muted">{plan.selected_goals.map(g=>t(goalLabels[g])).join(' / ')}</span>}<Btn size="sm" disabled={running} onClick={show}>{t("修改方案")}</Btn></div>}
