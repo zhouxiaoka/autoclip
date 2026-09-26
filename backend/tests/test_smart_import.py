@@ -375,3 +375,48 @@ def test_confirmation_dispatch_failure_preserves_staging_and_allows_explicit_ret
         assert db.get(Project, pid).processing_config['import_staging'] is False
     assert client.post('/studio/'+pid+'/start', json=payload).status_code == 409
     assert len(produced) == 1
+
+
+@pytest.mark.parametrize('route', ['visual', 'subtitle'])
+@pytest.mark.parametrize('import_aspect,confirmation,expected', [
+    (None, {}, ['original', 'portrait']),
+    ('landscape', {}, ['landscape', 'landscape']),
+    ('landscape', {'aspect':None}, ['original', 'portrait']),
+    (None, {'aspect':'original'}, ['original', 'original']),
+    (None, {'aspect':'landscape'}, ['landscape', 'landscape']),
+    (None, {'aspect':'portrait'}, ['portrait', 'portrait']),
+])
+def test_confirm_matches_each_output_aspect_without_extra_analysis(
+    root, source, monkeypatch, route, import_aspect, confirmation, expected,
+):
+    from backend.services.studio.models import ConfirmPlan, Preferences, Scene
+    from backend.services.studio import subtitle_highlights, subtitle_promo
+    seen=[]; scans=[]
+    monkeypatch.setattr(jobs,'executor',Immediate())
+    monkeypatch.setattr(jobs,'source',lambda _:source)
+    monkeypatch.setattr(jobs,'mark_project',lambda *a,**kw:None)
+    monkeypatch.setattr(intelligence,'ready',lambda:True)
+    monkeypatch.setattr(intelligence,'vision_call',lambda *a,**kw:pytest.fail('paid call'))
+    def analyze(*args):
+        scans.append('visual')
+        return [Scene(id='e',start=0,end=1)], {}
+    def content(*args):
+        scans.append('subtitle')
+        return []
+    def record(prefs):
+        seen.append((prefs.goal,prefs.aspect))
+        return []
+    monkeypatch.setattr(jobs,'analyze',analyze)
+    monkeypatch.setattr(jobs,'run_content',content)
+    monkeypatch.setattr(jobs,'make_drafts',lambda events,prefs,*a,**kw:record(prefs))
+    monkeypatch.setattr(subtitle_highlights,'make_highlights',lambda clips,prefs,*a:record(prefs))
+    monkeypatch.setattr(subtitle_promo,'make_promos',lambda pid,clips,prefs,*a:record(prefs))
+    plan={'id':'screened','aspect':'original','preferences':Preferences(aspect=import_aspect or 'original').model_dump(),
+          'overrides':{'aspect':import_aspect} if import_aspect else {}}
+    store.write('p1',{'plan':plan,'analysis':{'status':'awaiting_confirmation'},'drafts':[],'events':[],'jobs':[]})
+    jobs.confirm_project('p1',ConfirmPlan(plan_id='screened',analysis_mode=route,goals=['highlight','promo'],**confirmation))
+    state=store.read('p1')
+    assert state['analysis']['status']=='completed'
+    assert seen==list(zip(['highlight','promo'],expected))
+    assert scans==[route]
+    assert state['plan']['goal_preferences']['promo']['aspect']==expected[1]
