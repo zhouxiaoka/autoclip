@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
 Goal = Literal['content', 'highlight', 'promo']
 Language = Literal['source', 'zh', 'en', 'ja']
@@ -25,11 +25,38 @@ class Scene(BaseModel):
             raise ValueError('片段至少需要 0.1 秒')
         return self
 
+class CTA(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    template: Literal['off', 'auto', 'continue', 'challenge', 'brand'] = 'off'
+    version: Literal[1] = 1
+    style: Literal['glossy', 'soft', 'tactical', 'type'] = 'glossy'
+    accent: str | None = Field(default=None, pattern=r'^#[0-9a-fA-F]{6}$')
+    brand: str = Field(default='', max_length=40)
+    text: str = Field(default='', max_length=80)
+    language: Literal['zh', 'en', 'ja'] = 'zh'
+    position: float = Field(default=.65, ge=.2, le=.7)
+    confirmed_scene: str = Field(default='', max_length=200)
+    brand_layout: Literal['classic', 'poster'] = 'classic'
+    slogan: str = Field(default='', max_length=60)
+    brand_art: str | None = Field(default=None, max_length=700000)
+    logo: str | None = Field(default=None, max_length=700000)
+    icon: str | None = Field(default=None, max_length=700000)
+
+    @field_validator('logo', 'icon', 'brand_art')
+    @classmethod
+    def valid_brand_image(cls, value):
+        if value is not None:
+            from backend.services.studio.cta_brand import decode_asset
+            decode_asset(value)
+        return value
+
+
 class Draft(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str = Field(pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     title: str = Field(min_length=1, max_length=200)
     hook: str = Field(default='', max_length=120)
+    cta: CTA = Field(default_factory=CTA)
     scenes: list[Scene] = Field(min_length=1, max_length=30)
     language: Language = 'source'
     aspect: Literal['original', 'portrait', 'landscape'] = 'original'
