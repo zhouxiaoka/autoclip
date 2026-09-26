@@ -50,7 +50,7 @@ Interface web real da v1.3.0: adicione um vídeo local na área de importação,
 | Publicar (v1.3.2) | A partir da **v1.3.2**, com os clipes prontos, publique ou agende na mesma página. Plataformas no exterior usam o Upload-Post; no Bilibili, cole os cookies de login uma vez em Configurações. O padrão fica o mais privado que a plataforma permitir; também dá para exportar sem publicar. Detalhes: [guia de publicação (chinês)](docs/PUBLISH_UPLOAD_POST.md). |
 | Capa automática (v1.3.2) | Ao publicar, uma capa é gerada automaticamente para o Bilibili não recusar uma capa vazia; os padrões seguem as notas do instalador. Disponível na **v1.3.2**. |
 | Exportar para publicar | Use predefinições para Douyin, Xiaohongshu, YouTube Shorts e Bilibili, com legendas embutidas e cartões de título. |
-| Escolher modelos | Suporta Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM e modelos locais via Ollama / LM Studio (traga sua própria chave de API). |
+| Escolher modelos | Suporta Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok e modelos locais via Ollama / LM Studio (traga sua própria chave de API). |
 | Automatizar tarefas | Organize execuções pela CLI ou acesse o mesmo fluxo de processamento por um cliente MCP. |
 
 > Importar vídeo → Legendas / transcrição → Análise e pontuação por IA → Clipes e coletâneas → Exportação
@@ -133,7 +133,7 @@ No cliente MCP, defina `command` como o caminho absoluto de `autoclip` no ambien
 
 | Opção | Configuração |
 | --- | --- |
-| Modelos na nuvem | Em Configurações, selecione Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi ou GLM e informe a chave de API. Endpoints compatíveis aceitam uma Base URL personalizada. |
+| Modelos na nuvem | Em Configurações, selecione Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM ou Grok e informe a chave de API. Endpoints compatíveis aceitam uma Base URL personalizada. |
 | Ollama | Endereço padrão: `http://localhost:11434/v1`; modelo: `qwen2.5:7b`. Não exige chave de API. |
 | LM Studio | Carregue um modelo e inicie o Local Server, por padrão em `http://localhost:1234/v1`. Selecione um modelo disponível no seu servidor. |
 

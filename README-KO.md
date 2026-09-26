@@ -50,7 +50,7 @@ v1.3.0의 실제 웹 화면입니다. 파일 가져오기 영역에서 로컬 �
 | 게시(v1.3.2) | **v1.3.2**부터, 클립이 준비되면 같은 화면에서 게시하거나 예약할 수 있습니다. 해외 플랫폼은 Upload-Post를 쓰고, Bilibili는 설정에서 로그인 Cookie를 한 번 붙여 넣습니다. 기본값은 플랫폼이 허용하는 범위에서 비공개이며, 게시하지 않고 내보내기만 할 수도 있습니다. 자세한 내용은 [게시 안내(중국어)](docs/PUBLISH_UPLOAD_POST.md). |
 | 자동 커버(v1.3.2) | 게시할 때 커버를 자동으로 만들어, Bilibili가 빈 커버로 거절하지 않게 합니다. 기본값은 설치 안내를 따릅니다. **v1.3.2**부터 사용할 수 있습니다. |
 | 게시용 내보내기 | Douyin, Xiaohongshu, YouTube Shorts, Bilibili 프리셋과 자막 삽입, 타이틀 카드를 지원합니다. |
-| 모델 선택 | Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM과 Ollama / LM Studio 로컬 모델을 지원합니다(API 키는 직접 준비). |
+| 모델 선택 | Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok과 Ollama / LM Studio 로컬 모델을 지원합니다(API 키는 직접 준비). |
 | 자동화 | CLI로 작업을 구성하거나 MCP 클라이언트에서 동일한 처리 파이프라인을 호출할 수 있습니다. |
 
 > 영상 가져오기 → 자막 준비 / 음성 전사 → AI 분석 및 평가 → 클립과 모음 영상 생성 → 내보내기
@@ -133,7 +133,7 @@ MCP 클라이언트의 `command`에는 가상 환경 내 `autoclip`의 절대 �
 
 | 방식 | 설정 |
 | --- | --- |
-| 클라우드 모델 | 설정에서 Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi 또는 GLM을 선택하고 API 키를 입력합니다. 호환 엔드포인트는 Base URL을 직접 지정할 수 있습니다. |
+| 클라우드 모델 | 설정에서 Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM 또는 Grok을 선택하고 API 키를 입력합니다. 호환 엔드포인트는 Base URL을 직접 지정할 수 있습니다. |
 | Ollama | 기본 주소는 `http://localhost:11434/v1`, 모델은 `qwen2.5:7b`입니다. API 키가 필요하지 않습니다. |
 | LM Studio | 모델을 로드하고 Local Server를 시작하세요. 기본 주소는 `http://localhost:1234/v1`이며 서버가 제공하는 모델을 선택해야 합니다. |
 

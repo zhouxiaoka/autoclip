@@ -131,6 +131,7 @@
 - **Doubao Seed**：在设置中选择，填写自己的 API Key
 - **Kimi**：在设置中选择，填写自己的 API Key
 - **GLM**：在设置中选择，填写自己的 API Key
+- **Grok**：在设置中选择，填写自己的 API Key
 
 ### 性能设置
 

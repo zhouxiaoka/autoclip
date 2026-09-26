@@ -16,7 +16,7 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 | 后端 | FastAPI + Celery（桌面模式用本地线程）+ SQLite | `backend/` |
 | 前端 | React + TypeScript + Ant Design + Vite | `frontend/` |
 | 桌面壳 | Tauri 2 + Rust | `src-tauri/` |
-| LLM | OpenAI 及 OpenAI 兼容接口（自定义 base_url）/ Gemini / Qwen (dashscope) / DeepSeek / Doubao Seed / Kimi / GLM / 本地预设 Ollama、LM Studio | `backend/core/llm_providers.py`、`llm_manager.py`、`local_presets.py` |
+| LLM | OpenAI 及 OpenAI 兼容接口（自定义 base_url）/ Gemini / Qwen (dashscope) / DeepSeek / Doubao Seed / Kimi / GLM / Grok / 本地预设 Ollama、LM Studio | `backend/core/llm_providers.py`、`llm_manager.py`、`local_presets.py` |
 | CLI / MCP | `autoclip` 命令行 + MCP server（stdio），不起 FastAPI / Celery 直接跑流水线 | `backend/cli.py`、`mcp_server.py`、`services/local_runner.py` |
 
 四种交付形态：**桌面客户端**（当前包是 v1.3.3 的 macOS arm64 DMG 与 Windows x64 安装包；Windows 包从 v1.2.1 起就有，干净机器上的完整出片仍没有记录）、**Docker 部署**（README 推荐路径）、

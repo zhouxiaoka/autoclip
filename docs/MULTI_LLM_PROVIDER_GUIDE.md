@@ -19,6 +19,7 @@
 | `seed` | Doubao Seed | 以设置页列出的为准 | 自备 API Key |
 | `kimi` | Kimi | 以设置页列出的为准 | 自备 API Key |
 | `glm` | GLM | 以设置页列出的为准 | 自备 API Key |
+| `grok` | Grok | 以设置页列出的为准 | 自备 API Key |
 
 上表模型名是配置示例，费用和是否仍可调用以服务商为准。
 
@@ -146,6 +147,10 @@ cd frontend && npm run dev
 ### GLM
 
 在设置中选择 GLM，填写自己的 API Key。可用模型以设置页列出的为准。
+
+### Grok
+
+在设置中选择 Grok，填写自己的 API Key。可用模型以设置页列出的为准。
 
 ### Ollama / LM Studio（本地，无需 API 密钥）
 

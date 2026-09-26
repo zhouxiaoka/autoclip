@@ -50,7 +50,7 @@ v1.3.0 の実際の Web 画面です。ファイル読み込み欄からロー�
 | 投稿（v1.3.2） | **v1.3.2** から、クリップができたら同じ画面で投稿または予約できます。海外のプラットフォームは Upload-Post を使い、Bilibili は設定でログイン Cookie を一度貼り付けます。既定はプラットフォームが許す範囲で非公開です。投稿せずに書き出すこともできます。詳細は [投稿ガイド（中国語）](docs/PUBLISH_UPLOAD_POST.md)。 |
 | 自動カバー（v1.3.2） | 投稿時にカバーを自動生成し、空のカバーで Bilibili に拒まれないようにします。既定はインストール説明に従います。**v1.3.2** から使えます。 |
 | 公開用の書き出し | Douyin、小紅書、YouTube Shorts、Bilibili 向けのプリセット、字幕の焼き込み、タイトルカードに対応します。 |
-| モデルの選択 | Qwen、OpenAI、Gemini、DeepSeek、Doubao Seed、Kimi、GLM、および Ollama / LM Studio のローカルモデルに対応します（API キーは自分で用意）。 |
+| モデルの選択 | Qwen、OpenAI、Gemini、DeepSeek、Doubao Seed、Kimi、GLM、Grok、および Ollama / LM Studio のローカルモデルに対応します（API キーは自分で用意）。 |
 | 自動化 | CLI で処理を組み合わせたり、MCP クライアントから同じ処理パイプラインを呼び出したりできます。 |
 
 > 動画を読み込み → 字幕の準備 / 文字起こし → AI 分析・評価 → クリップとまとめ動画を生成 → 書き出し
@@ -133,7 +133,7 @@ MCP クライアントの `command` に仮想環境内の `autoclip` の絶対�
 
 | 方式 | 設定 |
 | --- | --- |
-| クラウドモデル | 設定で Qwen、OpenAI、Gemini、DeepSeek、Doubao Seed、Kimi または GLM を選び、API キーを入力します。互換インターフェースでは Base URL を指定できます。 |
+| クラウドモデル | 設定で Qwen、OpenAI、Gemini、DeepSeek、Doubao Seed、Kimi、GLM または Grok を選び、API キーを入力します。互換インターフェースでは Base URL を指定できます。 |
 | Ollama | 既定のアドレスは `http://localhost:11434/v1`、モデルは `qwen2.5:7b`。API キーは不要です。 |
 | LM Studio | モデルを読み込み、Local Server を起動します。既定のアドレスは `http://localhost:1234/v1`。サーバーで提供中のモデルを選びます。 |
 
