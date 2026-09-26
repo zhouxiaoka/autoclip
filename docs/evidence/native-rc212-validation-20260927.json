@@ -26,11 +26,12 @@
     "codesign_after_native_render_and_restart": "passed"
   },
   "database_copy": {
-    "scope": "Read-only SQLite online backup from main workspace, bundled backend schema initialization only; no full app/assets upgrade or rollback claim",
+    "scope": "Empty SQLite online backup: seven original tables all had zero rows. Schema initialization/integrity only; does not prove preservation of user projects. Nonempty controlled upgrade/rollback is recorded separately.",
     "original_tables": 7,
     "row_counts_preserved": true,
     "integrity": "ok",
-    "bundled_backend": true
+    "bundled_backend": true,
+    "empty_database": true
   },
   "artifacts": [
     {
@@ -56,7 +57,6 @@
   },
   "remaining": [
     "Windows installer/UI on Windows host",
-    "Full copied application data/assets upgrade and rollback",
     "More game samples and complete creative quality review",
     "Final release integration/approval"
   ]
