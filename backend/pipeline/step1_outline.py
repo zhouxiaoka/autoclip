@@ -4,18 +4,38 @@ Step 1: 大纲提取 - 从转写文本中提取结构性大纲
 import json
 import logging
 import re
-from typing import List, Dict, Any, Optional
 from pathlib import Path
+from typing import Dict, List, Optional
 
 # 导入依赖
+from ..core.shared_config import CHUNK_SIZE, METADATA_DIR, PROMPT_FILES
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
-from ..core.shared_config import PROMPT_FILES, METADATA_DIR
 from .failures import (
-    PipelineFailure, HINT_CHECK_LLM, HINT_SUBTITLE, looks_like_llm_setup_error, llm_key_failure,
+    HINT_CHECK_LLM,
+    HINT_SUBTITLE,
+    PipelineFailure,
+    llm_key_failure,
+    looks_like_llm_setup_error,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_chunk_size() -> int:
+    """读取设置页保存的分块大小，失败时回退代码默认值。"""
+    try:
+        from ..core.llm_manager import get_llm_manager
+        value = get_llm_manager().get_processing_setting("chunk_size")
+        if value is not None:
+            value = int(value)
+            if value > 0:
+                return value
+            logger.warning(f"设置页的文本分块大小 {value} 必须大于 0，使用默认 {CHUNK_SIZE}")
+    except (AttributeError, ImportError, OSError, TypeError, ValueError) as e:
+        logger.debug(f"读取设置页文本分块大小失败，使用默认值: {e}")
+    return int(CHUNK_SIZE)
+
 
 class OutlineExtractor:
     """大纲提取器（重构版）"""
@@ -75,8 +95,13 @@ class OutlineExtractor:
 
         # 2. 基于时间智能分块（短 / 中视频整条一块，长视频 ~30 分钟一块）
         interval = 30 if profile.tier == "long" else max(1, int(profile.total_sec // 60) + 1)
-        chunks = self.text_processor.chunk_srt_data(srt_data, interval_minutes=interval)
-        logger.info(f"文本已按~{interval}分钟/块切分，共{len(chunks)}个块")
+        chunk_size = resolve_chunk_size()
+        chunks = self.text_processor.chunk_srt_data(
+            srt_data,
+            interval_minutes=interval,
+            max_chars=chunk_size,
+        )
+        logger.info(f"文本已按~{interval}分钟/{chunk_size}字符切分，共{len(chunks)}个块")
         
         # 3. 保存文本块和SRT块到中间文件
         chunk_files = self._save_chunks_to_files(chunks)
