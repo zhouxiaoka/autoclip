@@ -1115,5 +1115,8 @@
   "视觉模型不可用，请前往模型设置。": "Modèle visuel indisponible. Ouvrez les paramètres du modèle.",
   "按字幕链路处理，未调用视觉初筛；正式制作时使用已有字幕或转写，尚未验证语音内容。": "Utilise les sous-titres sans préexamen visuel. La production utilisera les sous-titres ou une transcription ; la parole n’a pas été vérifiée.",
   "内容切片使用字幕分析，请调整分析方式或制作类型。": "Les extraits utilisent les sous-titres. Ajustez la méthode ou les types.",
-  "字幕推广会额外调用一次文字模型生成文案，按服务商计费；请复核后使用。": "Les promos basées sur les sous-titres font un appel texte supplémentaire, facturé par le fournisseur. Relisez avant utilisation."
+  "字幕推广会额外调用一次文字模型生成文案，按服务商计费；请复核后使用。": "Les promos basées sur les sous-titres font un appel texte supplémentaire, facturé par le fournisseur. Relisez avant utilisation.",
+  "检测到可用字幕，建议按语义制作；尚未判断内容质量，也未调用模型。": "Sous-titres exploitables détectés. Montage sémantique suggéré ; qualité non évaluée, aucun modèle appelé.",
+  "未找到字幕，需要转写或提供字幕；尚未确认素材有可用语音，可手动选择制作类型。": "Aucun sous-titre trouvé. Transcription ou fichier requis ; parole exploitable non confirmée. Vous pouvez choisir les types manuellement.",
+  "字幕未通过快速检查，暂不自动勾选；请检查字幕或手动选择，原素材已保留。": "Les sous-titres n’ont pas passé la vérification rapide ; aucune présélection. Vérifiez-les ou choisissez manuellement ; la source est conservée."
 }
