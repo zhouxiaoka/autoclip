@@ -189,11 +189,21 @@ def confirm_project(project_id, body):
         plan = state.get('plan') or {}
         if plan.get('id') != body.plan_id or (state.get('analysis') or {}).get('status') != 'awaiting_confirmation':
             raise store.ConflictError('方案已变化或任务已开始，请刷新后确认')
+        route = body.analysis_mode or plan.get('recommended_analysis', 'subtitle')
+        if route == 'subtitle' and any(goal != 'content' for goal in body.goals):
+            raise ValueError('字幕链路目前支持内容切片；视觉高光与推广分析需要显式选择视觉模式，原素材已保留')
+        if route == 'visual' and body.goals == ['content']:
+            raise ValueError('内容切片当前使用字幕分析，请选择字幕模式后确认')
+        if route == 'visual':
+            from backend.services.studio import intelligence
+            if not intelligence.ready():
+                raise ValueError('视觉模型不可用，请配置后重新确认；原素材已保留')
         previous = deepcopy(state)
+        plan['confirmed_analysis'] = route
         plan['selected_goals'] = body.goals
         plan['confirmed_at'] = store.now()
         # A confirmation override is persisted separately from the AI recommendation.
-        plan['confirmed_preferences'] = {**plan['preferences'], 'goal':body.goals[0], **body.model_dump(exclude={'plan_id','goals'}, exclude_none=True)}
+        plan['confirmed_preferences'] = {**plan['preferences'], 'goal':body.goals[0], **body.model_dump(exclude={'plan_id','goals','analysis_mode'}, exclude_none=True)}
         state['analysis'] = {'status':'running', 'phase':'production', 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
         try:
@@ -227,6 +237,8 @@ def _produce_selected(project_id, plan):
                     run_content(project_id, video)
                     mark_project(project_id, 'processing')
                     continue
+                if plan.get('confirmed_analysis', 'subtitle') != 'visual':
+                    raise ValueError('此确认未授权视觉分析；请重新选择处理方式')
                 if not intelligence.ready():
                     raise ValueError('请先在设置中配置视觉理解模型')
                 if visual_error is not None:

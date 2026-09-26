@@ -47,7 +47,16 @@ def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial',
 def capabilities():
     return {'visual_analysis': intelligence.ready(), 'visual_model': intelligence.visual_config()[2], 'languages': ['source', 'zh', 'en', 'ja']}
 
-from backend.services.studio import vision_settings
+from backend.services.studio import vision_settings, analysis_preferences
+
+@router.get('/analysis-preferences')
+def get_analysis_preferences():
+    return call(analysis_preferences.load)
+
+@router.put('/analysis-preferences')
+def save_analysis_preferences(body: analysis_preferences.AnalysisPreferences):
+    return call(analysis_preferences.save, body)
+
 
 @router.get('/vision-settings')
 def get_vision_settings():

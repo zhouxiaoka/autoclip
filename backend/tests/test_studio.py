@@ -201,7 +201,7 @@ def test_visual_import_worker_persists_project_status(client,root,source,monkeyp
     pid=response.json()['project_id']
     state=client.get('/studio/'+pid).json()
     assert state['analysis']['status']=='awaiting_confirmation' and state['drafts']==[]
-    assert client.post('/studio/'+pid+'/start',json={'plan_id':state['plan']['id'],'goals':['highlight']}).status_code==200
+    assert client.post('/studio/'+pid+'/start',json={'plan_id':state['plan']['id'],'goals':['highlight'],'analysis_mode':'visual'}).status_code==200
     with SessionLocal() as db:
         p=db.get(Project,pid)
         assert p.status==ProjectStatus.COMPLETED
