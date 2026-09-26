@@ -1113,6 +1113,6 @@
   "关闭时不调用视觉初筛，确认后才开始正式分析。": "Desactivado: sin evaluación visual. El análisis completo comienza tras confirmar.",
   "分析偏好已保存": "Preferencia guardada",
   "视觉模型不可用，请前往模型设置。": "Modelo visual no disponible. Abre los ajustes del modelo.",
-  "当前内容切片使用字幕分析；高光和推广使用视觉分析。请调整方式或制作类型。": "Actualmente, los clips usan subtítulos; los momentos destacados y promociones usan análisis visual. Ajusta el método o los tipos.",
-  "按字幕链路处理，未调用视觉初筛；正式制作时使用已有字幕或转写，尚未验证语音内容。": "Usa subtítulos sin evaluación visual. La producción usará subtítulos o transcripción; el habla aún no se ha verificado."
+  "按字幕链路处理，未调用视觉初筛；正式制作时使用已有字幕或转写，尚未验证语音内容。": "Usa subtítulos sin evaluación visual. La producción usará subtítulos o transcripción; el habla aún no se ha verificado.",
+  "字幕分析支持内容切片和字幕高光；推广仍需视觉分析。请调整方式或制作类型。": "El análisis de subtítulos permite clips y momentos destacados del habla. Las promociones requieren análisis visual. Ajusta el método o los tipos."
 }
