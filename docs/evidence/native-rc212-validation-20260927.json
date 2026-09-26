@@ -1,0 +1,63 @@
+{
+  "code_commit": "d509972b",
+  "version": "1.4.0-rc.1",
+  "platform": "macOS ARM64",
+  "scope": "Native UI in isolated data directory. Drafts replayed from real model evidence; no new model calls. Source file import separately exercised to confirmation only.",
+  "native_checks": {
+    "edit_saved_revision": 2,
+    "export_status": "completed",
+    "export_media": {
+      "title": "原生验收：矿车推广",
+      "duration": 20.7,
+      "width": 1080,
+      "height": 1920,
+      "warnings": []
+    },
+    "editor_download": "passed",
+    "project_card_download": "passed",
+    "history_download": "passed",
+    "saved_copies": 4,
+    "all_match_job": true,
+    "duplicate_names_preserve_existing": true,
+    "full_ffmpeg_decode": "passed",
+    "restart_pending_import": "passed",
+    "pending_import_drafts": 0,
+    "pending_import_status": "awaiting_confirmation",
+    "codesign_after_native_render_and_restart": "passed"
+  },
+  "database_copy": {
+    "scope": "Read-only SQLite online backup from main workspace, bundled backend schema initialization only; no full app/assets upgrade or rollback claim",
+    "original_tables": 7,
+    "row_counts_preserved": true,
+    "integrity": "ok",
+    "bundled_backend": true
+  },
+  "artifacts": [
+    {
+      "name": "AutoClip Desktop_1.4.0-rc.1_aarch64.dmg",
+      "bytes": 248482767,
+      "sha256": "9eed27e16018b128de5906e8dca06f31a106b246fde6abbe7b050fe898ff27fb"
+    },
+    {
+      "name": "AutoClip.Desktop_1.4.0-rc.1_aarch64.app.tar.gz",
+      "bytes": 158998528,
+      "sha256": "38aa0636d510aa81bf7715a6fc4e1d72fa9265d2143d57cbbc9b288bbb40ae63"
+    }
+  ],
+  "screenshots": [
+    "/tmp/autoclip-rc-20260927/native-export-history.png",
+    "/tmp/autoclip-rc-20260927/native-import-confirmation.png"
+  ],
+  "windows": {
+    "rc210_build": "36258527471",
+    "rc210_result": "success; release skipped",
+    "latest_build": "36260653083",
+    "latest_result": "pending"
+  },
+  "remaining": [
+    "Windows installer/UI on Windows host",
+    "Full copied application data/assets upgrade and rollback",
+    "More game samples and complete creative quality review",
+    "Final release integration/approval"
+  ]
+}
