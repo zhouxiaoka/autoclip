@@ -37,7 +37,7 @@ def test_subtitle_confirm_uses_only_old_pipeline_and_freezes_route(client, sourc
     assert not calls and state['analysis']['status'] == 'awaiting_confirmation'
     # Changing global settings cannot upgrade an already screened plan.
     monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='visual'))
-    rejected = client.post(f'/studio/{pid}/start', json={'plan_id':state['plan']['id'], 'goals':['highlight']})
+    rejected = client.post(f'/studio/{pid}/start', json={'plan_id':state['plan']['id'], 'goals':['promo']})
     assert rejected.status_code == 422
     assert store.read(pid)['analysis']['status'] == 'awaiting_confirmation'
     accepted = client.post(f'/studio/{pid}/start', json={'plan_id':state['plan']['id'], 'goals':['content']})
