@@ -204,6 +204,15 @@ def confirm_project(project_id, body):
         plan['confirmed_at'] = store.now()
         # A confirmation override is persisted separately from the AI recommendation.
         plan['confirmed_preferences'] = {**plan['preferences'], 'goal':body.goals[0], **body.model_dump(exclude={'plan_id','goals','analysis_mode'}, exclude_none=True)}
+        # Null explicitly restores automatic matching; omitted fields retain
+        # import overrides for older clients. Match each output independently.
+        aspect = body.aspect if 'aspect' in body.model_fields_set else plan.get('overrides', {}).get('aspect')
+        plan['goal_preferences'] = {
+            goal: {**plan['confirmed_preferences'], 'goal':goal,
+                   'aspect':aspect or ('portrait' if goal == 'promo' else plan.get('aspect', 'original'))}
+            for goal in body.goals
+        }
+        plan['confirmed_preferences'] = plan['goal_preferences'][body.goals[0]].copy()
         state['analysis'] = {'status':'running', 'phase':'production', 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
         try:
@@ -233,7 +242,7 @@ def _produce_selected(project_id, plan):
         instruction = plan.get('overrides', {}).get('instruction', '')
         for goal in plan['selected_goals']:
             try:
-                prefs = Preferences.model_validate({**plan['confirmed_preferences'], 'goal':goal})
+                prefs = Preferences.model_validate(plan.get('goal_preferences', {}).get(goal) or {**plan['confirmed_preferences'], 'goal':goal})
                 stage('制作' + labels[goal])
                 if goal == 'content' or plan.get('confirmed_analysis', 'subtitle') == 'subtitle':
                     if subtitle_error is not None:
