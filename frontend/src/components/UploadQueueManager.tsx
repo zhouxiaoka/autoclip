@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../utils/auth'
 import React, { useState, useEffect } from 'react';
 import {
   Card,
@@ -89,7 +90,7 @@ const UploadQueueManager: React.FC = () => {
   // 获取队列状态
   const fetchQueueStatus = async () => {
     try {
-      const response = await fetch('/api/upload-queue/status');
+      const response = await authenticatedFetch('/api/upload-queue/status');
       if (response.ok) {
         const data = await response.json();
         setQueueStatus(data);
@@ -103,7 +104,7 @@ const UploadQueueManager: React.FC = () => {
   const fetchUploadHistory = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/upload-queue/history?limit=50');
+      const response = await authenticatedFetch('/api/upload-queue/history?limit=50');
       if (response.ok) {
         const data = await response.json();
         setTasks(data.records || []);
@@ -119,7 +120,7 @@ const UploadQueueManager: React.FC = () => {
   // 获取B站账号列表
   const fetchAccounts = async () => {
     try {
-      const response = await fetch('/bilibili/accounts');
+      const response = await authenticatedFetch('/bilibili/accounts');
       if (response.ok) {
         const data = await response.json();
         setAccounts(data.accounts || []);
@@ -132,7 +133,7 @@ const UploadQueueManager: React.FC = () => {
   // 添加单个任务
   const handleAddTask = async (values: any) => {
     try {
-      const response = await fetch('/api/upload-queue/add-task', {
+      const response = await authenticatedFetch('/api/upload-queue/add-task', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -171,7 +172,7 @@ const UploadQueueManager: React.FC = () => {
         };
       });
 
-      const response = await fetch('/api/upload-queue/add-batch-tasks', {
+      const response = await authenticatedFetch('/api/upload-queue/add-batch-tasks', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -199,7 +200,7 @@ const UploadQueueManager: React.FC = () => {
   // 取消任务
   const handleCancelTask = async (taskId: string) => {
     try {
-      const response = await fetch(`/api/upload-queue/task/${taskId}`, {
+      const response = await authenticatedFetch(`/api/upload-queue/task/${taskId}`, {
         method: 'DELETE',
       });
 
@@ -220,7 +221,7 @@ const UploadQueueManager: React.FC = () => {
   // 重试任务
   const handleRetryTask = async (taskId: string) => {
     try {
-      const response = await fetch(`/api/upload-queue/retry/${taskId}`, {
+      const response = await authenticatedFetch(`/api/upload-queue/retry/${taskId}`, {
         method: 'POST',
       });
 

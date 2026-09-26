@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../utils/auth'
 import { t } from '../i18n'
 /**
  * 简化的进度状态管理 - 基于固定阶段和轮询
@@ -72,7 +73,7 @@ export const useSimpleProgressStore = create<SimpleProgressState>((set, get) => 
       const fetchSnapshots = async () => {
         try {
           const queryString = projectIds.map(id => `project_ids=${id}`).join('&')
-          const response = await fetch(`/api/v1/simple-progress/snapshot?${queryString}`)
+          const response = await authenticatedFetch(`/api/v1/simple-progress/snapshot?${queryString}`)
           
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`)

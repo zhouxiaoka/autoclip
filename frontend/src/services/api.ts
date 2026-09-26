@@ -1,5 +1,6 @@
 import { t } from '../i18n'
 import axios from 'axios'
+import { authHeaders, authorizeMediaUrl } from '../utils/auth'
 import { Project, Clip, Collection } from '../store/useProjectStore'
 import { errorHandler } from '../utils/errorHandler'
 import { apiConfigManager } from '../utils/apiConfig'
@@ -69,7 +70,7 @@ const resolveMediaUrl = async (path: string): Promise<string> => {
   if (isTauriRuntime() && !apiConfigManager.isReady()) {
     await apiConfigManager.waitForReady()
   }
-  return mediaUrl(path)
+  return authorizeMediaUrl(mediaUrl(path))
 }
 
 const saveWithSystemDownload = async (
@@ -117,6 +118,7 @@ api.interceptors.request.use(
     }
 
     config.baseURL = apiConfigManager.getBaseUrl()
+    Object.entries(authHeaders(axios.getUri(config))).forEach(([name, value]) => config.headers.set(name, value))
     // 添加请求ID用于追踪
     config.metadata = { startTime: Date.now() }
     return config
@@ -141,6 +143,7 @@ api.interceptors.response.use(
     return response.data
   },
   async (error) => {
+    if (error?.response?.status === 401) window.dispatchEvent(new Event("autoclip-auth-required"))
     if (shouldRetry(error)) {
       const currentRetryCount = error.config?.metadata?.retryCount || 0
       if (currentRetryCount < MAX_RETRIES) {
@@ -580,7 +583,8 @@ export const projectApi = {
       const response = await observeMediaResponse({ project_id: projectId, artifact_type: clipId ? 'clip' : collectionId ? 'collection' : 'original' }, () => axios.get<Blob>(url, {
         responseType: 'blob',
         headers: {
-          'Accept': 'application/octet-stream'
+          'Accept': 'application/octet-stream',
+          ...authHeaders(url)
         }
       }))
 

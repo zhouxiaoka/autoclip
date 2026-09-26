@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../utils/auth'
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 /**
@@ -80,7 +81,7 @@ export const UnifiedStatusBar: React.FC<UnifiedStatusBarProps> = ({
       const pollDownloadProgress = async () => {
         try {
           console.log(`轮询下载进度: ${projectId}`)
-          const response = await fetch(apiConfigManager.buildUrl(`/projects/${projectId}`))
+          const response = await authenticatedFetch(apiConfigManager.buildUrl(`/projects/${projectId}`))
           if (cancelled || !response.ok) {
             if (!cancelled && !response.ok) {
               console.error('获取项目数据失败:', response.status, response.statusText)

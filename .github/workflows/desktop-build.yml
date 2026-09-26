@@ -34,7 +34,7 @@ on:
 # artifacts. Without this the default GITHUB_TOKEN is read-only and the release
 # step fails with "Resource not accessible by integration" (403).
 permissions:
-  contents: write
+  contents: read
 
 env:
   # GitHub runners are in the US; the default tsinghua mirror in the build
@@ -98,8 +98,6 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_UPLOAD_SOURCEMAPS: ${{ secrets.VITE_PUBLIC_SENTRY_DSN != '' && 'true' || 'false' }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bash scripts/build_macos_arm.sh
 
       - name: Upload DMG artifact
@@ -173,8 +171,6 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_UPLOAD_SOURCEMAPS: ${{ secrets.VITE_PUBLIC_SENTRY_DSN != '' && 'true' || 'false' }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bash scripts/build_windows_x64.sh
 
       - name: Upload installer artifact
@@ -191,15 +187,17 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') && needs.build-macos-arm64.result == 'success' && needs.build-windows-x64.result == 'success'
     needs: [build-macos-arm64, build-windows-x64]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       # 放在 job 级：step 自己的 env 在它的 if 里读不到
       WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: autoclip-desktop-*
           path: dist
@@ -211,6 +209,26 @@ jobs:
       # Release 正文 = CHANGELOG.md 里该版本的段落 + 平台安装说明（scripts/release_notes.py，仅标准库）
       - name: Render release notes from CHANGELOG
         run: python3 scripts/release_notes.py "${{ github.ref_name }}" -o release_body.md && cat release_body.md
+      # This fresh runner never executes the bundled Python/FFmpeg or installs
+      # backend dependencies. Signing credentials exist only in this step.
+      - name: Setup Rust for updater signing
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+
+      - name: Install Tauri signing CLI
+        run: cargo install tauri-cli --locked --version "=2.12.0"
+
+      - name: Sign updater artifacts on isolated release runner
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo "Missing updater signing key" >&2; exit 1; }
+          source scripts/lib/sign_updater.sh
+          for artifact in dist/*.app.tar.gz dist/*setup.exe; do
+            sign_updater_artifact "$artifact"
+          done
+
       - name: Verify updater signatures against the shipped public key
         run: |
           python3 -m pip install cryptography==50.0.1
@@ -229,7 +247,7 @@ jobs:
           ls -la dist/latest.json 2>/dev/null || echo "NOTE: latest.json not written (no signed artifacts)"
 
       - name: Create / update GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: "AutoClip Desktop ${{ github.ref_name }}"
           files: dist/*

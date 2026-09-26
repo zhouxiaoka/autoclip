@@ -1,3 +1,4 @@
+from backend.core.usage_guard import UsageDenied
 """
 任务提交服务
 避免循环导入问题
@@ -43,6 +44,8 @@ class TaskSubmissionService:
                 'message': '视频流水线任务已提交'
             }
             
+        except UsageDenied:
+            raise
         except Exception as e:
             logger.error(f"提交视频流水线任务失败: {project_id}, 错误: {e}")
             return {
@@ -83,6 +86,8 @@ class TaskSubmissionService:
                 'message': f'步骤 {step} 任务已提交'
             }
             
+        except UsageDenied:
+            raise
         except Exception as e:
             logger.error(f"提交单个步骤任务失败: {project_id}, {step}, 错误: {e}")
             return {

@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../utils/auth'
 import { t, getLocale } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useState, useEffect } from 'react'
@@ -194,7 +195,7 @@ const BilibiliManager: React.FC<BilibiliManagerProps> = ({
       }
 
       // 调用上传API
-      const response = await fetch(`/api/v1/upload/projects/${projectId}/upload`, {
+      const response = await authenticatedFetch(`/api/v1/upload/projects/${projectId}/upload`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

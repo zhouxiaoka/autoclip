@@ -37,45 +37,78 @@ human_size() {
     du -h "$1" | awk '{print $1}'
 }
 
-# download_with_mirrors <dest> <min_bytes> <url>...
-# Tries each URL in order; keeps the first download that is at least
-# <min_bytes> (guards against truncated files / HTML error pages).
-download_with_mirrors() {
-    local dest="$1" min_bytes="$2"
-    shift 2
-    if [ -f "$dest" ]; then
-        local cached_size
-        cached_size=$(file_size "$dest")
-        if [ "$cached_size" -lt "$min_bytes" ]; then
-            echo "  Cached file too small ($cached_size bytes), redownloading"
-            rm -f "$dest"
-        fi
+# Hash with host tools: never execute a downloaded interpreter to verify itself.
+sha256_file() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    else
+        echo "ERROR: install sha256sum or shasum before building" >&2
+        return 1
     fi
+}
+
+# download_with_mirrors <dest> <min_bytes> <trusted-sha256> <url>...
+# The digest comes from reviewed source or an operator-supplied trusted value,
+# never from the mirror. Verify cached archives on EVERY build, too.
+download_with_mirrors() {
+    local dest="$1" min_bytes="$2" expected="${3:-}"
+    if [[ ! "$expected" =~ ^[a-fA-F0-9]{64}$ ]]; then
+        echo "ERROR: a trusted SHA-256 digest is required for $dest" >&2
+        return 1
+    fi
+    expected=$(printf '%s' "$expected" | tr 'A-F' 'a-f')
+    shift 3
     if [ -f "$dest" ]; then
-        echo "  Cached: $dest ($(human_size "$dest"))"
-        return 0
+        if [ "$(file_size "$dest")" -ge "$min_bytes" ] && [ "$(sha256_file "$dest")" = "$expected" ]; then
+            echo "  Verified cache: $dest ($(human_size "$dest"))"
+            return 0
+        fi
+        echo "  Discarding unverified cache: $dest" >&2
+        rm -f "$dest"
     fi
     mkdir -p "$(dirname "$dest")"
-    local url tmp_size
+    local url tmp
+    tmp=$(mktemp "${dest}.tmp.XXXXXX") || return 1
     for url in "$@"; do
         echo "  Trying: $url"
-        if curl -L --fail --connect-timeout 15 --max-time 600 -o "$dest.tmp" "$url"; then
-            tmp_size=$(file_size "$dest.tmp")
-            if [ "$tmp_size" -ge "$min_bytes" ]; then
-                mv "$dest.tmp" "$dest"
-                echo "  Downloaded: $dest ($(human_size "$dest"))"
+        if curl --proto '=https' --proto-redir '=https' -L --fail --connect-timeout 15 --max-time 600 -o "$tmp" "$url"; then
+            if [ "$(file_size "$tmp")" -ge "$min_bytes" ] && [ "$(sha256_file "$tmp")" = "$expected" ]; then
+                mv "$tmp" "$dest"
+                echo "  Verified download: $dest ($(human_size "$dest"))"
                 return 0
             fi
-            echo "  Download too small ($tmp_size bytes), trying next mirror..."
-        else
-            echo "  Failed, trying next mirror..."
+            echo "  Integrity check failed; trying next source" >&2
         fi
-        rm -f "$dest.tmp"
     done
-    echo "ERROR: failed to download from all mirrors:"
-    for url in "$@"; do echo "         $url"; done
-    echo "       You can download it manually and place it at: $dest"
+    rm -f "$tmp"
+    echo "ERROR: no source supplied the trusted archive for $dest" >&2
     return 1
+}
+
+# Custom PBS versions require an independently verified operator pin. Defaults
+# are GitHub's official release asset SHA-256 values, recorded in source.
+pbs_expected_sha256() {
+    if [ -n "${PBS_SHA256:-}" ]; then
+        printf '%s\n' "$PBS_SHA256"
+        return
+    fi
+    case "${PBS_PYTHON_VERSION}+${PBS_VERSION}-${PBS_TRIPLE}" in
+        3.13.13+20260510-aarch64-apple-darwin)
+            echo 1ad1ed518447005d4b6dfa16d4f847d45790e17e94e30164a0a6e6c79a99730f ;;
+        3.13.13+20260510-x86_64-pc-windows-msvc)
+            echo aeba284d6724adefad2ce2ef9150447d0c6e0c0bc54de91a6e7d14d21466114b ;;
+        *) echo "ERROR: set PBS_SHA256 to a trusted digest for this custom PBS release" >&2; return 1 ;;
+    esac
+}
+
+# Sign in a separate process/job after build dependencies stop executing.
+require_unsigned_build_environment() {
+    if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || [ -n "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" ]; then
+        echo "ERROR: remove updater signing secrets from the build environment; sign the finished artifacts separately" >&2
+        return 1
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -106,12 +139,15 @@ prepare_portable_python() {
     local cache="build/pbs-cache/${tarball}"
     local release="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_VERSION}/${tarball}"
 
+    require_unsigned_build_environment || return 1
+    local expected
+    expected=$(pbs_expected_sha256) || return 1
     echo "==> Preparing portable Python runtime (${PBS_TRIPLE})"
     # install_only tarballs are 25-50MB; anything smaller is a partial download.
-    download_with_mirrors "$cache" 20000000 \
+    download_with_mirrors "$cache" 20000000 "$expected" \
         "https://ghproxy.com/${release}" \
         "https://mirror.ghproxy.com/${release}" \
-        "${release}"
+        "${release}" || return 1
 
     rm -rf "$PYTHON_DIR"
     mkdir -p "$RESOURCES_DIR"

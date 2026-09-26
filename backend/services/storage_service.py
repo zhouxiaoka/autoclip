@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Any, Optional
 from ..core.config import get_data_directory
+from ..core.path_utils import get_project_directory
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class StorageService:
     def __init__(self, project_id: str):
         self.project_id = project_id
         self.data_dir = get_data_directory()
-        self.project_dir = self.data_dir / "projects" / project_id
+        self.project_dir = get_project_directory(project_id)
         
         # 确保项目目录结构存在
         self._ensure_project_structure()
@@ -133,7 +134,9 @@ class StorageService:
     def get_file_content(self, file_path: str) -> Optional[Dict[str, Any]]:
         """获取文件内容"""
         try:
-            file_path_obj = Path(file_path)
+            file_path_obj = Path(file_path).resolve()
+            if not file_path_obj.is_relative_to(self.project_dir.resolve()):
+                return None
             if file_path_obj.exists() and file_path_obj.suffix == '.json':
                 with open(file_path_obj, 'r', encoding='utf-8') as f:
                     return json.load(f)

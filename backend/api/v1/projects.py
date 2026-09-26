@@ -1,3 +1,4 @@
+from backend.core.usage_guard import UsageDenied
 """
 项目API路由
 """
@@ -103,6 +104,8 @@ async def upload_files(
                 logger.info(f"项目 {project_id} 缩略图生成并保存成功")
             else:
                 logger.warning(f"项目 {project_id} 缩略图生成失败")
+        except UsageDenied:
+            raise
         except Exception as e:
             logger.error(f"生成项目缩略图时发生错误: {e}")
             # 缩略图生成失败不影响主流程，会在异步任务中重试
@@ -143,6 +146,8 @@ async def upload_files(
                 
                 logger.info(f"项目 {project_id} 异步处理任务已启动，Celery任务ID: {celery_task.id}")
             
+        except UsageDenied:
+            raise
         except Exception as e:
             logger.error(f"启动项目 {project_id} 异步处理失败: {str(e)}")
             # 即使异步任务启动失败，也要返回项目创建成功
@@ -178,6 +183,8 @@ async def upload_files(
         
     except HTTPException:
         raise
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.exception("上传文件创建项目失败")
         raise HTTPException(status_code=500, detail="创建项目失败，请稍后重试")
@@ -208,6 +215,8 @@ async def create_project(
             total_collections=0,
             total_tasks=0
         )
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.exception("创建项目失败")
         raise HTTPException(status_code=500, detail="创建项目失败，请稍后重试")
@@ -250,6 +259,8 @@ async def get_projects(
             )
         
         return project_service.get_projects_paginated(pagination, filters)
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.exception("获取项目列表失败")
         raise HTTPException(status_code=500, detail="获取项目列表失败，请稍后重试")
@@ -302,6 +313,8 @@ async def get_project(
         return ProjectResponse(**response_data)
     except HTTPException:
         raise
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.exception("获取项目详情失败: %s", project_id)
         raise HTTPException(status_code=500, detail="获取项目详情失败，请稍后重试")
@@ -338,6 +351,8 @@ async def update_project(
         )
     except HTTPException:
         raise
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.exception("更新项目失败: %s", project_id)
         raise HTTPException(status_code=500, detail="更新项目失败，请稍后重试")
@@ -355,6 +370,8 @@ async def delete_project(
             raise HTTPException(status_code=404, detail="Project not found")
         return {"message": "Project and all related files deleted successfully"}
     except HTTPException:
+        raise
+    except UsageDenied:
         raise
     except Exception as e:
         logger.exception("删除项目失败: %s", project_id)
@@ -379,6 +396,8 @@ async def sync_all_projects_data(
             "message": "数据同步完成",
             "result": result
         }
+    except UsageDenied:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"数据同步失败: {str(e)}")
 
@@ -408,6 +427,8 @@ async def sync_project_data(
         else:
             raise HTTPException(status_code=500, detail=f"数据同步失败: {result.get('error')}")
     except HTTPException:
+        raise
+    except UsageDenied:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"数据同步失败: {str(e)}")
@@ -495,6 +516,8 @@ async def start_processing(
         }
         
     except HTTPException:
+        raise
+    except UsageDenied:
         raise
     except Exception as e:
         # 发送错误通知
@@ -673,6 +696,8 @@ async def retry_processing(
         
     except HTTPException:
         raise
+    except UsageDenied:
+        raise
     except Exception as e:
         # 发送错误通知 - 已禁用WebSocket通知
         # try:
@@ -725,6 +750,8 @@ async def resume_processing(
             "start_step": start_step,
             "result": result
         }
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.exception("恢复项目处理失败: %s", project_id)
         raise HTTPException(status_code=500, detail="恢复处理失败，请稍后重试")
@@ -809,6 +836,8 @@ async def get_project_logs(
                 }
             ]
         }
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.exception("获取项目日志失败: %s", project_id)
         raise HTTPException(status_code=500, detail="获取项目日志失败，请稍后重试")
@@ -838,6 +867,8 @@ async def get_import_status(
         }
         
     except HTTPException:
+        raise
+    except UsageDenied:
         raise
     except Exception as e:
         logger.error(f"获取导入状态失败: {e}")
@@ -884,6 +915,8 @@ async def generate_project_thumbnail(
             
     except HTTPException:
         raise
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.error(f"生成项目缩略图失败: {e}")
         raise HTTPException(status_code=500, detail=f"生成缩略图失败: {str(e)}")
@@ -903,7 +936,12 @@ async def get_project_file(
         
         # 构建文件路径 - 使用正确的项目目录路径
         from ...core.path_utils import get_project_directory
-        project_root = get_project_directory(project_id)
+        if not filename or filename in {".", ".."} or any(c in filename for c in "/\\:\x00"):
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        try:
+            project_root = get_project_directory(project_id).resolve()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid project ID")
         
         # 尝试多个可能的路径
         possible_paths = [
@@ -914,8 +952,9 @@ async def get_project_file(
         
         file_path = None
         for path in possible_paths:
-            if path.exists():
-                file_path = path
+            resolved = path.resolve()
+            if resolved.is_relative_to(project_root) and resolved.is_file():
+                file_path = resolved
                 break
         
         if not file_path:
@@ -940,6 +979,8 @@ async def get_project_file(
                 }
             )
     except HTTPException:
+        raise
+    except UsageDenied:
         raise
     except Exception as e:
         logger.exception("获取项目文件失败: %s/%s", project_id, filename)
@@ -1007,6 +1048,8 @@ async def get_project_clip(
         )
     except HTTPException:
         raise
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.exception("获取项目切片失败: %s/%s", project_id, clip_id)
         raise HTTPException(status_code=500, detail="获取切片文件失败，请稍后重试")
@@ -1039,6 +1082,8 @@ async def sync_all_projects_from_filesystem(
             "total_failed": len(result.get("failed_projects", []))
         }
         
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.error(f"同步所有项目数据失败: {e}")
         raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
@@ -1088,6 +1133,8 @@ async def reorder_collection_clips(
         
     except HTTPException:
         raise
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.error(f"重新排序合集 {collection_id} 切片失败: {e}")
         raise HTTPException(status_code=500, detail=f"重新排序失败: {str(e)}")
@@ -1125,6 +1172,8 @@ async def sync_project_from_filesystem(
         }
         
     except HTTPException:
+        raise
+    except UsageDenied:
         raise
     except Exception as e:
         logger.error(f"同步项目 {project_id} 数据失败: {e}")
@@ -1245,6 +1294,8 @@ async def generate_collection_video(
                 logger.info(f"合集封面生成成功: {thumbnail_path}")
             else:
                 logger.warning(f"合集封面生成失败: {collection_id}")
+        except UsageDenied:
+            raise
         except Exception as e:
             logger.error(f"生成合集封面时出错: {e}")
         
@@ -1261,6 +1312,8 @@ async def generate_collection_video(
         }
         
     except HTTPException:
+        raise
+    except UsageDenied:
         raise
     except Exception as e:
         logger.error(f"生成合集视频失败: {e}")
@@ -1348,6 +1401,8 @@ async def download_project_file(
         
     except HTTPException:
         raise
+    except UsageDenied:
+        raise
     except Exception as e:
         logger.error(f"下载文件失败: {e}")
         raise HTTPException(status_code=500, detail=f"下载文件失败: {str(e)}")
@@ -1397,6 +1452,8 @@ async def get_collection_thumbnail(
         )
         
     except HTTPException:
+        raise
+    except UsageDenied:
         raise
     except Exception as e:
         logger.error(f"获取合集封面失败: {e}")

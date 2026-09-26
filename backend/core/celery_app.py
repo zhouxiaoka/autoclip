@@ -12,7 +12,17 @@ from pathlib import Path
 # os.environ.setdefault('CELERY_CONFIG_MODULE', 'backend.core.celery_app')
 
 # 创建Celery应用
-celery_app = Celery('autoclip')
+class GuardedCelery(Celery):
+    def send_task(self, name, args=None, kwargs=None, task_id=None, **options):
+        import uuid
+        from backend.core.usage_guard import reserve, limit
+        task_id = task_id or str(uuid.uuid4())
+        # apply_async reserves first; direct send_task callers share the same gate.
+        if not options.pop('_usage_reserved', False):
+            reserve(kind='queue', capacity=limit('OUTSTANDING_TASKS', 20), lease_id='task:' + task_id)
+        return super().send_task(name, args=args, kwargs=kwargs, task_id=task_id, **options)
+
+celery_app = GuardedCelery('autoclip')
 
 # 配置Celery
 class CeleryConfig:
@@ -102,6 +112,16 @@ class DesktopAwareTask(celery_app.Task):
     """
 
     def apply_async(self, args=None, kwargs=None, task_id=None, **options):
+        import uuid
+        from backend.core.usage_guard import reserve, limit, transaction
+        task_id = task_id or str(uuid.uuid4())
+        retrying_current = getattr(self.request, 'id', None) == task_id and options.get('retries', 0) > 0
+        existing = False
+        if retrying_current:
+            with transaction() as db:
+                existing = db.execute("SELECT 1 FROM leases WHERE id=? AND kind='queue'", ('task:' + task_id,)).fetchone() is not None
+        if not existing:
+            reserve(kind="queue", capacity=limit("OUTSTANDING_TASKS", 20), lease_id="task:" + task_id)
         if _is_desktop_mode():
             import threading
             import uuid
@@ -122,7 +142,12 @@ class DesktopAwareTask(celery_app.Task):
             threading.Thread(target=_run, name=f"task-{self.name}", daemon=True).start()
             return _LocalAsyncResult(tid)
 
-        return super().apply_async(args=args, kwargs=kwargs, task_id=task_id, **options)
+        return super().apply_async(args=args, kwargs=kwargs, task_id=task_id, _usage_reserved=True, **options)
+
+    def after_return(self, status, retval, task_id, args, kwargs, einfo):
+        from backend.core.usage_guard import release
+        release("task:" + task_id)
+        return super().after_return(status, retval, task_id, args, kwargs, einfo)
 
     def update_state(self, task_id=None, state=None, meta=None, **kwargs):
         # 桌面模式没有 Redis 结果后端；任务里的 self.update_state() 会直接 ConnectionRefused，

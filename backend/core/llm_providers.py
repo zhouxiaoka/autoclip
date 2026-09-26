@@ -11,6 +11,8 @@ from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
 
+from backend.core.usage_guard import guarded_llm
+
 logger = logging.getLogger(__name__)
 
 class ProviderType(Enum):
@@ -56,6 +58,7 @@ class LLMProvider(ABC):
         self.kwargs = kwargs
     
     @abstractmethod
+    @guarded_llm
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """
         调用模型API
@@ -121,6 +124,7 @@ class DashScopeProvider(LLMProvider):
             except ImportError:
                 raise ImportError("请安装dashscope: pip install dashscope")
     
+    @guarded_llm
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用DashScope API（mode: native|compatible）"""
         masked_key = self.api_key[:3] + "***" + self.api_key[-2:] if self.api_key else ""
@@ -318,7 +322,7 @@ class OpenAIProvider(LLMProvider):
             self.api_key = api_key
         try:
             import openai
-            client_kwargs = {"api_key": api_key}
+            client_kwargs = {"api_key": api_key, "max_retries": 0}
             if self.base_url:
                 client_kwargs["base_url"] = self.base_url
                 http_client = make_openai_http_client(self.base_url)
@@ -328,6 +332,7 @@ class OpenAIProvider(LLMProvider):
         except ImportError:
             raise ImportError("请安装openai: pip install openai")
     
+    @guarded_llm
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用OpenAI API"""
         try:
@@ -396,10 +401,11 @@ class GeminiProvider(LLMProvider):
             # New unified Google GenAI SDK (replaces the deprecated
             # google-generativeai package).
             from google import genai
-            self.client = genai.Client(api_key=api_key)
+            self.client = genai.Client(api_key=api_key, http_options={"retry_options": {"attempts": 1}})
         except ImportError:
             raise ImportError("请安装google-genai: pip install google-genai")
 
+    @guarded_llm
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用Gemini API"""
         try:
@@ -452,6 +458,7 @@ class SiliconFlowProvider(LLMProvider):
         super().__init__(api_key, model_name, **kwargs)
         self.base_url = "https://api.siliconflow.cn/v1"
     
+    @guarded_llm
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用硅基流动API"""
         try:

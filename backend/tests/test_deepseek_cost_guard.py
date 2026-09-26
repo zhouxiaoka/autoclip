@@ -77,7 +77,7 @@ def test_provider_call_sends_deepseek_guard(monkeypatch):
     assert response.content == "ok"
     assert calls[0]["model"] == "deepseek-flash"
     assert calls[0]["extra_body"]["thinking"] == {"type": "disabled"}
-    assert calls[0]["max_tokens"] == DEEPSEEK_COMPLETION_TOKEN_CAP
+    assert calls[0]["max_tokens"] == min(DEEPSEEK_COMPLETION_TOKEN_CAP, 8192)
     assert "字幕" in calls[0]["messages"][0]["content"]
 
 

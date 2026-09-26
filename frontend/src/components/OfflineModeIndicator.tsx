@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../utils/auth'
 import React, { useState, useEffect } from 'react';
 import { Badge, Tooltip, Button, Space, Typography } from 'antd';
 import { 
@@ -33,7 +34,7 @@ const OfflineModeIndicator: React.FC<OfflineModeIndicatorProps> = ({ onStatusCha
     
     try {
       // 尝试访问健康检查端点
-      const response = await fetch('/health', {
+      const response = await authenticatedFetch('/health', {
         method: 'GET',
         timeout: 5000
       } as any);

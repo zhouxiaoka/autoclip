@@ -1,6 +1,7 @@
+import { authorizeMediaUrl } from '../utils/auth'
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { message } from 'antd'
 import { Collection, Clip } from '../store/useProjectStore'
 import EditableCollectionTitle from './EditableCollectionTitle'
@@ -35,14 +36,24 @@ const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onVi
     return `/api/v1/projects/${collection.project_id}/collections/${collection.id}/thumbnail?t=${ts}`
   }, [collection.project_id, collection.id, collection.created_at])
 
+  const [authorizedThumbnail, setAuthorizedThumbnail] = useState('')
   const [imgError, setImgError] = useState(false)
-  const hasThumb = !imgError && !!collection.thumbnail_path
+  useEffect(() => {
+    let cancelled = false
+    setImgError(false)
+    setAuthorizedThumbnail('')
+    if (thumbnailUrl && collection.thumbnail_path) void authorizeMediaUrl(thumbnailUrl)
+      .then(url => { if (!cancelled) setAuthorizedThumbnail(url) })
+      .catch(() => { if (!cancelled) setImgError(true) })
+    return () => { cancelled = true }
+  }, [thumbnailUrl, collection.thumbnail_path])
+  const hasThumb = !imgError && !!collection.thumbnail_path && !!authorizedThumbnail
 
   return (
     <article className="ac-card">
       <div className="ac-card-thumb" onClick={() => onView(collection)} role="button" aria-label={t("预览合集")}>
         {hasThumb && (
-          <img src={thumbnailUrl} alt="" onError={() => setImgError(true)} draggable={false} />
+          <img src={authorizedThumbnail} alt="" onError={() => setImgError(true)} draggable={false} />
         )}
         <div className="play"><span><Icon.Play size={18} /></span></div>
         <span className="ac-tag ac-tag--tl ac-tag--sans">
