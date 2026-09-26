@@ -1,0 +1,184 @@
+{
+  "code_commit": "d509972b",
+  "scope": "Actual native file input -> resume pending confirmation -> explicitly choose visual + highlight/promo -> real Seed -> project drafts -> native export -> Downloads, isolated data. No replay injected into this project.",
+  "project_id": "7b7a18c7-8a97-4fdb-98c2-fde1aa6eaa5b",
+  "elapsed_confirmation_to_drafts_seconds": 146.65,
+  "analysis_status": "completed",
+  "confirmed_analysis": "visual",
+  "selected_goals": [
+    "highlight",
+    "promo"
+  ],
+  "confirmed_preferences": {
+    "goal": "highlight",
+    "language": "source",
+    "aspect": "original",
+    "duration": 30
+  },
+  "events": 6,
+  "drafts": [
+    {
+      "id": "0ac16ed9876c414084bd72324f72c226",
+      "title": "矿洞连续避险与道具吸金",
+      "hook": "",
+      "origin": "visual-highlight",
+      "aspect": "original",
+      "scenes": [
+        {
+          "id": "event-11",
+          "label": "矿洞连续避险与道具吸金",
+          "start": 161.5,
+          "end": 179.0,
+          "evidence": "163秒起矿洞多轨道上出现金币串、前方矿车与岔路；164-168秒角色矿车在左右轨道间移动，避开近处橙色矿车并穿过窄门；169-175秒连续经过立柱、紫色矿石障碍、两侧大型矿车和信号灯，期间172秒出现道具获取闪光，矿车底部可见蓝红磁铁，173-176秒多枚金币被吸附/沿路线收集；177秒角色抵达矿洞亮出口。"
+        }
+      ]
+    },
+    {
+      "id": "bf27446194a74c27b02c508802a12064",
+      "title": "使用圆形载具穿越森林",
+      "hook": "",
+      "origin": "visual-highlight",
+      "aspect": "original",
+      "scenes": [
+        {
+          "id": "event-8",
+          "label": "使用圆形载具穿越森林",
+          "start": 88.5,
+          "end": 118.5,
+          "evidence": "角色脚下出现圆形载具，经过绿色心形传送门后进入森林道路；前方有木桶、发光跑鞋、路中石柱和金币，角色在窄路上连续绕行。"
+        }
+      ]
+    },
+    {
+      "id": "1744c3c5f4e04e13b0da6df4b18d0511",
+      "title": "城市轨道连续越障",
+      "hook": "",
+      "origin": "visual-highlight",
+      "aspect": "original",
+      "scenes": [
+        {
+          "id": "event-6",
+          "label": "城市轨道连续越障",
+          "start": 37.5,
+          "end": 65.0,
+          "evidence": "角色沿多轨前进，先在街道轨道收集金币，随后进入绿色窄道，旁有粉色列车；再贴着蓝色墙体滑行并越过水上绿色跳板，最后回到有绿色列车和障碍的轨道。"
+        }
+      ]
+    },
+    {
+      "id": "b910754a5f89431a850518c581d35819",
+      "title": "矿车进入矿洞收集金币",
+      "hook": "",
+      "origin": "visual-highlight",
+      "aspect": "original",
+      "scenes": [
+        {
+          "id": "event-10",
+          "label": "矿车进入矿洞收集金币",
+          "start": 147.5,
+          "end": 165.0,
+          "evidence": "角色坐在蓝绿色矿车中沿矿洞轨道前进，轨道两侧有悬垂矿斗、紫水晶和工具，前方有多枚金币、红色钱袋及绿色发光道具。"
+        }
+      ]
+    },
+    {
+      "id": "57fd02917ef34dc7871bf3c90e6c636a",
+      "title": "桥面窄道穿行列车",
+      "hook": "",
+      "origin": "visual-highlight",
+      "aspect": "original",
+      "scenes": [
+        {
+          "id": "event-7",
+          "label": "桥面窄道穿行列车",
+          "start": 62.5,
+          "end": 84.0,
+          "evidence": "场景转到海上桥，角色从绿色矮障碍下方/旁边通过，随后在粉色列车之间及车厢边窄道前进，并穿过两节粉色列车间的空隙。"
+        }
+      ]
+    },
+    {
+      "id": "35a649e88b694c8ea8cde1eaf3fa7c0a",
+      "title": "警察贴近追捕起跑",
+      "hook": "",
+      "origin": "visual-highlight",
+      "aspect": "original",
+      "scenes": [
+        {
+          "id": "event-5",
+          "label": "警察贴近追捕起跑",
+          "start": 31.5,
+          "end": 40.0,
+          "evidence": "三条轨道前方显示任务列表，角色在中轨奔跑，蓝色制服警察紧随其后；任务进度分别为0/4000、10/50、1127/3000。"
+        }
+      ]
+    },
+    {
+      "id": "63e3823704174f81a4febc7004616959",
+      "title": "矿洞连续避险与道具吸金",
+      "hook": "连续躲矿车，还能把金币吸过来？",
+      "origin": "visual-promo",
+      "aspect": "original",
+      "scenes": [
+        {
+          "id": "event-11",
+          "label": "矿洞连续避险与道具吸金",
+          "start": 161.5,
+          "end": 179.0,
+          "evidence": "163秒起矿洞多轨道上出现金币串、前方矿车与岔路；164-168秒角色矿车在左右轨道间移动，避开近处橙色矿车并穿过窄门；169-175秒连续经过立柱、紫色矿石障碍、两侧大型矿车和信号灯，期间172秒出现道具获取闪光，矿车底部可见蓝红磁铁，173-176秒多枚金币被吸附/沿路线收集；177秒角色抵达矿洞亮出口。"
+        }
+      ]
+    },
+    {
+      "id": "e7279eeb21d5498490a5a89a6aed7131",
+      "title": "矿洞连续避险与道具吸金",
+      "hook": "左右换道挑战：避开矿车再穿障碍",
+      "origin": "visual-promo",
+      "aspect": "original",
+      "scenes": [
+        {
+          "id": "event-11",
+          "label": "矿洞连续避险与道具吸金",
+          "start": 161.5,
+          "end": 179.0,
+          "evidence": "163秒起矿洞多轨道上出现金币串、前方矿车与岔路；164-168秒角色矿车在左右轨道间移动，避开近处橙色矿车并穿过窄门；169-175秒连续经过立柱、紫色矿石障碍、两侧大型矿车和信号灯，期间172秒出现道具获取闪光，矿车底部可见蓝红磁铁，173-176秒多枚金币被吸附/沿路线收集；177秒角色抵达矿洞亮出口。"
+        }
+      ]
+    },
+    {
+      "id": "5cf8c1daa8e142f992d3bb6fbcad1267",
+      "title": "矿洞连续避险与道具吸金",
+      "hook": "磁铁一亮，沿路金币最后会怎样？",
+      "origin": "visual-promo",
+      "aspect": "original",
+      "scenes": [
+        {
+          "id": "event-11",
+          "label": "矿洞连续避险与道具吸金",
+          "start": 161.5,
+          "end": 179.0,
+          "evidence": "163秒起矿洞多轨道上出现金币串、前方矿车与岔路；164-168秒角色矿车在左右轨道间移动，避开近处橙色矿车并穿过窄门；169-175秒连续经过立柱、紫色矿石障碍、两侧大型矿车和信号灯，期间172秒出现道具获取闪光，矿车底部可见蓝红磁铁，173-176秒多枚金币被吸附/沿路线收集；177秒角色抵达矿洞亮出口。"
+        }
+      ]
+    }
+  ],
+  "export": {
+    "job_id": "65d473c0c2a74ccb87a93f0e64fb9836",
+    "status": "completed",
+    "saved_download_matches_job": true,
+    "sha256": "26ffef3b898a45cd830563f5f604a7fdc2542db079316d35bab34daf684d59c9",
+    "width": 1920,
+    "height": 1080,
+    "duration": 17.5,
+    "audio": true,
+    "full_decode": "passed"
+  },
+  "model_budget": "One shared scan, one best-event refinement, one promo hooks request; no retries requested. Provider billing not independently measured.",
+  "findings": [
+    "Auto aspect retained original after local subtitle recommendation was changed to visual; promo was not automatically portrait.",
+    "Six highlights span 8.5-30s; short chase-start candidate needs completeness review.",
+    "Three promo hooks use the same best event, not three distinct creative edits.",
+    "Single game sample, no paid campaign evidence."
+  ],
+  "screenshot": "/tmp/autoclip-rc-20260927/native-real-e2e-export.png"
+}
