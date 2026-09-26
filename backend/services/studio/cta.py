@@ -31,7 +31,7 @@ def plan(draft):
     extra = 2.5 if kind in ('brand', 'challenge') else 0
     start = total if extra else max(total - 3, total - scene_duration(last))
     return {'brand_layout': draft.cta.brand_layout, 'slogan': draft.cta.slogan.strip(),
-            'logo': draft.cta.logo, 'icon': draft.cta.icon, 'style': draft.cta.style, 'accent': draft.cta.accent, 'template': kind, 'reason': reason, 'start': start, 'extra_duration': extra,
+            'brand_art': draft.cta.brand_art, 'logo': draft.cta.logo, 'icon': draft.cta.icon, 'style': draft.cta.style, 'accent': draft.cta.accent, 'template': kind, 'reason': reason, 'start': start, 'extra_duration': extra,
             'duration': total + extra, 'scene_key': scene_key(last),
             'text': draft.cta.text.strip() or COPY[draft.cta.language].get(kind, ''),
             'brand': draft.cta.brand.strip(), 'position': draft.cta.position}

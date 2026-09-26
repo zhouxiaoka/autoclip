@@ -172,7 +172,7 @@ def cta_preview(project_id: str, body: Draft, db: Session = Depends(get_db)):
     from backend.services.studio.cta_materials import frame
     source_frame = call(frame, call(jobs.source, project_id), body) if spec['template'] == 'brand' else None
     data = call(cta.png_bytes, spec, int(w)//2*2, int(h)//2*2, source_frame)
-    return {**{k:v for k,v in spec.items() if k not in ('logo','icon')}, 'image': 'data:image/png;base64,' + base64.b64encode(data).decode('ascii')}
+    return {**{k:v for k,v in spec.items() if k not in ('logo','icon','brand_art')}, 'image': 'data:image/png;base64,' + base64.b64encode(data).decode('ascii')}
 
 
 @router.post('/{project_id}/title-preview')

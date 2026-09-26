@@ -38,10 +38,11 @@ class CTA(BaseModel):
     confirmed_scene: str = Field(default='', max_length=200)
     brand_layout: Literal['classic', 'poster'] = 'classic'
     slogan: str = Field(default='', max_length=60)
+    brand_art: str | None = Field(default=None, max_length=700000)
     logo: str | None = Field(default=None, max_length=700000)
     icon: str | None = Field(default=None, max_length=700000)
 
-    @field_validator('logo', 'icon')
+    @field_validator('logo', 'icon', 'brand_art')
     @classmethod
     def valid_brand_image(cls, value):
         if value is not None:

@@ -1157,5 +1157,7 @@
   "用于品牌落版：Logo 优先；未提供时使用游戏名称设计字。": "Pour la fin : le logo est prioritaire ; sinon, le nom du jeu apparaît en lettres stylisées.",
   "品牌图片随草稿保存；复制版本时可复用。仅使用你确认的品牌素材。": "Les images sont enregistrées avec le brouillon et réutilisées dans les copies. Utilisez des éléments de marque vérifiés.",
   "品牌图片需为 PNG、JPEG 或 WebP，且不超过 512 KB": "Utilisez un PNG, JPEG ou WebP de 512 Ko maximum.",
-  "读取品牌图片失败": "Impossible de lire l’image"
+  "读取品牌图片失败": "Impossible de lire l’image",
+  "品牌主视觉（含 Logo）": "Visuel de marque (avec logo)",
+  "主视觉优先完整展示，不再叠加游戏名称、Logo 或 icon。": "Le visuel reste entier, sans ajouter de nom, logo ou icône."
 }

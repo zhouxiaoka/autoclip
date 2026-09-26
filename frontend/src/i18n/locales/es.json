@@ -1157,5 +1157,7 @@
   "用于品牌落版：Logo 优先；未提供时使用游戏名称设计字。": "Para el cierre: se usa el logo o, si falta, el nombre del juego con letras decorativas.",
   "品牌图片随草稿保存；复制版本时可复用。仅使用你确认的品牌素材。": "Las imágenes se guardan con el borrador y se reutilizan en copias. Usa recursos de marca verificados.",
   "品牌图片需为 PNG、JPEG 或 WebP，且不超过 512 KB": "Usa PNG, JPEG o WebP de hasta 512 KB.",
-  "读取品牌图片失败": "No se pudo leer la imagen"
+  "读取品牌图片失败": "No se pudo leer la imagen",
+  "品牌主视觉（含 Logo）": "Imagen de marca (con logo)",
+  "主视觉优先完整展示，不再叠加游戏名称、Logo 或 icon。": "Se muestra la imagen completa, sin añadir otro nombre, logo o icono."
 }

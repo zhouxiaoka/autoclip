@@ -70,3 +70,10 @@
 - 实际 1080×1920 样片：复用上轮已保存成片的前 7.3 秒干净玩法区间，加 2.5 秒尾卡，总长 9.8 秒。原 Downloads 文件已移走，未因此重新调用模型。名称来自既有输入记录；icon 来自 [官方商店页](https://play.google.com/store/apps/details?id=com.rioo.runnersubway)，仅用于本地评审，未提交为产品资产。顶部为设计字，slogan“下一次闪避，由你决定”为本次创作文案，不是官方口号。
 - 评审入口：`http://127.0.0.1:8794/brand-review.html`，包含前后帧及真实视频。此轮只验完整构图，不声称买量效果或自动素材适配完成。
 - 验证：110 项 Studio/CTA 后端、109 项前端、typecheck、Lint、build 通过；真实样片渲染并查看导出尾帧。保留已有构建大包提示。
+
+## 原版品牌主视觉修订
+用户否定自制游戏名称设计字作为已有品牌的默认替代。新增可选 `brand_art`（与 Logo/icon 相同的受限本地图片验证），poster 模式优先完整显示品牌主视觉，采用 contain 保留海报边缘 Logo 和角色；不重复叠加名称、Logo 或 icon。CTA 与标语位于独立底部/侧面区域，预览与导出共用逻辑。历史未提供 brand_art 的配置不变。
+
+本地样片 `brand-original.mp4` 使用用户给定的 361×554 竖版角色海报，保留海报原有橙黄/蓝色标题，不提取重画 Logo；9.8 秒包括 7.3 秒既有玩法和 2.5 秒宣传尾卡。对应公开素材页面：https://multiplayy.com/subway-princess-runner/ 。官方商店：https://play.google.com/store/apps/details?id=com.rioo.runnersubway 。公开页面不是素材许可证明；第三方图片未提交或内置，仍为本地评审。
+
+限制：当前仅验构图，低分辨率原图不能作为高清投放验收；独立透明 Logo/高清源素材尚未完成核验，自动素材检索与用户确认流程也未实现。17 项 CTA 测试验证旧版兼容、边缘保留、避免重复品牌元素与素材验证；前端 109 项、typecheck、Lint 通过。

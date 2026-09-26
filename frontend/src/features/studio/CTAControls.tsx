@@ -25,7 +25,7 @@ export default function CTAControls({projectId,draft,onChange}: {projectId:strin
     return ()=>{controller.abort();clearTimeout(timer)}
   },[projectId,signature])
   const change=(value:Partial<CTA>)=>onChange({...c,...value})
-  const readAsset=async (key:'logo'|'icon',file?:File)=>{
+  const readAsset=async (key:'logo'|'icon'|'brand_art',file?:File)=>{
     if(!file)return
     setAssetError('')
     if(file.size>512*1024 || !['image/png','image/jpeg','image/webp'].includes(file.type)){
@@ -48,9 +48,10 @@ export default function CTAControls({projectId,draft,onChange}: {projectId:strin
       <details><summary>{t('品牌素材与完整尾卡')}</summary>
         <label className="studio-field">{t('完整品牌尾卡')}<input type="checkbox" checked={c.brand_layout==='poster'} onChange={e=>change({brand_layout:e.target.checked?'poster':'classic'})}/></label>
         <p className="studio-muted">{t('用于品牌落版：Logo 优先；未提供时使用游戏名称设计字。')}</p>
+        <p className="studio-muted">{t('主视觉优先完整展示，不再叠加游戏名称、Logo 或 icon。')} </p>
         <label className="studio-field">{t('品牌标语')}<input maxLength={60} value={c.slogan??''} onChange={e=>change({slogan:e.target.value})}/></label>
-        {(['logo','icon'] as const).map(key=><div key={key}>
-          <label className="studio-field">{key==='logo'?'Logo':'App icon'}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>{void readAsset(key,e.target.files?.[0]);e.target.value=''}}/></label>
+        {(['logo','icon','brand_art'] as const).map(key=><div key={key}>
+          <label className="studio-field">{key==='logo'?'Logo':key==='icon'?'App icon':t('品牌主视觉（含 Logo）')}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>{void readAsset(key,e.target.files?.[0]);e.target.value=''}}/></label>
           {c[key] && <><img src={c[key]??''} alt={key} style={{maxWidth:120,maxHeight:80,objectFit:'contain'}}/><button type="button" onClick={()=>change({[key]:null})}>{t('移除品牌图片')}</button></>}
         </div>)}
         <p className="studio-muted">{t('品牌图片随草稿保存；复制版本时可复用。仅使用你确认的品牌素材。')}</p>

@@ -52,6 +52,8 @@ def brand_letters(canvas,text,box,accent):
 
 def poster(spec,w,h,source):
     from backend.services.studio.cta_materials import fit_text,styled_button
+    if spec.get('brand_art'):
+        return key_art(spec,w,h)
     portrait=h>w
     canvas=Image.new('RGBA',(w,h),'#103441') if source is None else ImageOps.fit(source,(w,h)).convert('RGBA').filter(ImageFilter.GaussianBlur(max(3,w*.014)))
     # A quieter brand header and footer while preserving the gameplay palette.
@@ -97,4 +99,33 @@ def poster(spec,w,h,source):
             y+=size*1.18
     x,y,bw,bh=map(round,button_box)
     canvas.alpha_composite(styled_button(spec['text'],bw,bh,spec.get('style','glossy'),spec.get('accent')),(x,y))
+    return canvas
+
+
+def key_art(spec,w,h):
+    """Preserve supplied branded art intact, reserving a separate CTA footer."""
+    from backend.services.studio.cta_materials import styled_button,fit_text
+    art=decode_asset(spec['brand_art'])
+    portrait=h>w
+    canvas=ImageOps.fit(art,(w,h)).filter(ImageFilter.GaussianBlur(max(4,w*.02))).convert('RGBA')
+    canvas.alpha_composite(Image.new('RGBA',(w,h),(5,17,33,155)))
+    # Contain, never crop: an embedded original logo and character must survive.
+    area=(w,round(h*.80)) if portrait else (round(w*.65),h)
+    hero=ImageOps.contain(art,area)
+    x=(area[0]-hero.width)//2
+    y=0 if portrait else (h-hero.height)//2
+    canvas.alpha_composite(hero,(x,y))
+    bw=round(w*(.66 if portrait else .28));bh=round(bw*.29)
+    bx=(w-bw)//2 if portrait else round(w*.685)
+    by=round(h*(.855 if portrait else .57))
+    if spec.get('slogan'):
+        sw=w*.84 if portrait else w*.29
+        font,lines,size=fit_text(spec['slogan'],sw,h*.09,round(min(w,h)*.042))
+        center=w*.5 if portrait else w*.825
+        sy=h*.805 if portrait else h*.37
+        d=ImageDraw.Draw(canvas)
+        for line in lines:
+            d.text((center-font.getlength(line)/2,sy),line,font=font,anchor='lt',fill='white',stroke_width=max(1,round(size*.035)),stroke_fill='#123040')
+            sy+=size*1.18
+    canvas.alpha_composite(styled_button(spec['text'],bw,bh,spec.get('style','glossy'),spec.get('accent')),(bx,by))
     return canvas

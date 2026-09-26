@@ -144,3 +144,24 @@ def test_brand_logo_takes_precedence_over_designed_name():
     first=cta.png_bytes(cta.plan(d),180,320)
     d.cta.brand='NAME B'
     assert cta.png_bytes(cta.plan(d),180,320)==first
+
+
+def test_branded_key_art_preserves_edges_and_avoids_duplicate_branding():
+    import base64,io
+    from PIL import Image,ImageDraw,ImageOps
+    art=Image.new('RGB',(100,160),'blue')
+    ImageDraw.Draw(art).rectangle((0,0,99,15),fill='red')
+    stream=io.BytesIO();art.save(stream,format='PNG')
+    value='data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()
+    d=draft(cta=CTA(template='brand',brand_layout='poster',brand_art=value,brand='Must not overlay'))
+    for w,h in [(180,320),(320,180)]:
+        rendered=cta.artwork(cta.plan(d),w,h)
+        area=(w,round(h*.80)) if h>w else (round(w*.65),h)
+        expected=ImageOps.contain(art,area)
+        x=(area[0]-expected.width)//2
+        y=0 if h>w else (h-expected.height)//2
+        assert rendered.getpixel((x+expected.width//2,y+2))[:3]==(255,0,0)
+    first=cta.png_bytes(cta.plan(d),180,320)
+    d.cta.brand='Different name';d.cta.logo=value;d.cta.icon=value
+    assert cta.png_bytes(cta.plan(d),180,320)==first
+    with pytest.raises(ValidationError): CTA(brand_art='https://example.com/not-a-local-asset')
