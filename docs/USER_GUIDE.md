@@ -124,11 +124,11 @@
 #### 大语言模型设置
 
 **推荐配置**
-- **阿里通义千问**：在设置中选择，填写自己的 API Key
+- **Qwen**：在设置中选择，填写自己的 API Key
 - **OpenAI**：在设置中选择，填写自己的 API Key；兼容接口可配置 Base URL
 - **Google Gemini**：在设置中选择，填写自己的 API Key
 - **DeepSeek**：在设置中选择，填写自己的 API Key
-- **豆包 Seed**：在设置中选择，填写自己的 API Key
+- **Doubao Seed**：在设置中选择，填写自己的 API Key
 - **Kimi**：在设置中选择，填写自己的 API Key
 - **GLM**：在设置中选择，填写自己的 API Key
 

@@ -3,13 +3,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        说明你要的模型或供应商。设置页可选通义千问、OpenAI、Gemini、DeepSeek、豆包 Seed、Kimi、GLM，以及本机的 Ollama / LM Studio（自备 API Key）。兼容接口可配置 Base URL。
+        说明你要的模型或供应商。设置页可选 Qwen、OpenAI、Gemini、DeepSeek、Doubao Seed、Kimi、GLM，以及本机的 Ollama / LM Studio（自备 API Key）。兼容接口可配置 Base URL。
         只是「名单里没有这一项」、但兼容接口已经能填的，请在正文里写明，避免重复开需求。
   - type: input
     id: model
     attributes:
       label: 模型或供应商
-      placeholder: "Gemini 2.5 / 豆包 Seed / Qwen 某个具体型号"
+      placeholder: "Gemini 2.5 / Doubao Seed / Qwen 某个具体型号"
     validations:
       required: true
   - type: dropdown

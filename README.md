@@ -50,7 +50,7 @@ v1.3.0 真实 Web 界面：在文件导入区添加本地视频，可同时提�
 | 发布（v1.3.2） | 自 **v1.3.2** 起，切片做好后可在本页发布或预约。海外平台用 Upload-Post；B 站在设置里粘贴一次登录 Cookie。默认尽量私密；也可以只导出、不发布。细则见 [发布说明](docs/PUBLISH_UPLOAD_POST.md)。 |
 | 自动封面（v1.3.2） | 发布时可自动生成封面，避免 B 站因空封面拒稿；默认细节见安装说明。自 **v1.3.2** 起可用。 |
 | 发布导出 | 提供抖音、小红书、YouTube Shorts 和 B 站导出预设，支持烧录字幕与标题卡。 |
-| 自由选择模型 | 支持通义千问、OpenAI、Gemini、DeepSeek、豆包 Seed、Kimi、GLM，以及 Ollama / LM Studio 本地模型（自备 API Key）。 |
+| 自由选择模型 | 支持 Qwen、OpenAI、Gemini、DeepSeek、Doubao Seed、Kimi、GLM，以及 Ollama / LM Studio 本地模型（自备 API Key）。 |
 | 接入自动化 | 通过 CLI 批量编排，或让支持 MCP 的客户端调用同一条处理流水线。 |
 
 > 导入视频 → 准备字幕 / 语音转写 → AI 分析与评分 → 生成切片与合集 → 导出成片
@@ -133,7 +133,7 @@ autoclip mcp
 
 | 方式 | 配置 |
 | --- | --- |
-| 云端模型 | 在设置中选择通义千问、OpenAI、Gemini、DeepSeek、豆包 Seed、Kimi 或 GLM，填写 API Key；兼容接口可配置 Base URL。 |
+| 云端模型 | 在设置中选择 Qwen、OpenAI、Gemini、DeepSeek、Doubao Seed、Kimi 或 GLM，填写 API Key；兼容接口可配置 Base URL。 |
 | Ollama | 服务地址默认为 `http://localhost:11434/v1`，默认模型 `qwen2.5:7b`，无需 API Key。 |
 | LM Studio | 加载模型并启动 Local Server，默认地址 `http://localhost:1234/v1`，选择服务实际提供的模型。 |
 

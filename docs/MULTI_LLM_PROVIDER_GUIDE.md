@@ -12,11 +12,11 @@
 
 | 提供商 | 显示名称 | 主要模型 | 特点 |
 |--------|----------|----------|------|
-| `dashscope` | 阿里通义千问 | qwen-plus, qwen-max, qwen-turbo | 国内访问稳定，中文理解好 |
+| `dashscope` | Qwen | qwen-plus, qwen-max, qwen-turbo | 国内访问稳定，中文理解好 |
 | `openai` | OpenAI | gpt-3.5-turbo, gpt-4, gpt-4-turbo | 支持兼容接口与自定义 Base URL |
 | `gemini` | Google Gemini | gemini-2.5-flash, gemini-1.5-pro | 多模态支持，上下文长 |
 | `deepseek` | DeepSeek | 以设置页列出的为准 | 自备 API Key |
-| `seed` | 豆包 Seed | 以设置页列出的为准 | 自备 API Key |
+| `seed` | Doubao Seed | 以设置页列出的为准 | 自备 API Key |
 | `kimi` | Kimi | 以设置页列出的为准 | 自备 API Key |
 | `glm` | GLM | 以设置页列出的为准 | 自备 API Key |
 
@@ -95,17 +95,17 @@ cd frontend && npm run dev
 
 ## 📋 详细配置说明
 
-### 阿里通义千问 (DashScope)
+### Qwen (DashScope)
 
 **获取API密钥:**
 1. 访问 [阿里云控制台](https://dashscope.console.aliyun.com/)
-2. 开通通义千问服务
+2. 开通 Qwen 服务
 3. 创建API密钥
 
 **支持模型:**
-- `qwen-plus`: 通义千问Plus (推荐)
-- `qwen-max`: 通义千问Max (最强性能)
-- `qwen-turbo`: 通义千问Turbo (快速响应)
+- `qwen-plus`: Qwen Plus (推荐)
+- `qwen-max`: Qwen Max (最强性能)
+- `qwen-turbo`: Qwen Turbo (快速响应)
 
 ### OpenAI
 
@@ -135,9 +135,9 @@ cd frontend && npm run dev
 
 在设置中选择 DeepSeek，填写自己的 API Key。可用模型以设置页列出的为准。
 
-### 豆包 Seed
+### Doubao Seed
 
-在设置中选择豆包 Seed，填写自己的 API Key。可用模型以设置页列出的为准。
+在设置中选择 Doubao Seed，填写自己的 API Key。可用模型以设置页列出的为准。
 
 ### Kimi
 
