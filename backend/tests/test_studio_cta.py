@@ -90,3 +90,27 @@ def test_actual_render_preserves_body_and_appends_only_when_needed(tmp_path,monk
         expected_image=cta.artwork(cta.plan(d),320,180,frame(source,d)).convert('RGB')
         actual_image=Image.frombytes('RGB',(320,180),tail)
         assert max(ImageStat.Stat(ImageChops.difference(expected_image,actual_image)).mean)<8
+
+
+def test_styles_survive_save_and_preview_export_plan(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR',str(tmp_path))
+    store.directory('styles').mkdir(parents=True)
+    images=[]
+    for style in ('glossy','soft','tactical','type'):
+        d=draft(cta=CTA(template='continue',style=style,accent='#d37425',text='PLAY NOW'))
+        d.id=style
+        saved=store.save_draft('styles',d,create=True)
+        spec=cta.plan(Draft.model_validate(saved))
+        assert spec['style']==style and spec['accent']=='#d37425'
+        images.append(cta.png_bytes(spec,320,180))
+    assert len(set(images))==4
+    assert CTA.model_validate({'template':'continue'}).style=='glossy'
+    with pytest.raises(ValidationError): CTA(style='unknown')
+    with pytest.raises(ValidationError): CTA(accent='red;invalid')
+
+
+def test_type_style_has_no_button_plate():
+    from backend.services.studio.cta_materials import styled_button
+    image=styled_button('PLAY',320,90,'type')
+    assert image.getpixel((20,45))[3]==0
+    assert styled_button('PLAY',320,90,'soft').getpixel((20,45))[3]>0

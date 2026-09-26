@@ -1141,5 +1141,13 @@
   "CTA 画布尺寸无效": "Invalid CTA canvas size",
   "CTA 文字太长，请缩短文案": "CTA text is too long; shorten it",
   "游戏名称太长，请缩短名称": "Game name is too long; shorten it",
-  "此处预览收尾排版；完整画面、定格与声音请导出后预览。": "Ending layout preview. Export to review the complete video, freeze frame and audio."
+  "此处预览收尾排版；完整画面、定格与声音请导出后预览。": "Ending layout preview. Export to review the complete video, freeze frame and audio.",
+  "玩具厚边": "Toy bevel",
+  "轻量休闲": "Soft casual",
+  "硬朗任务框": "Tactical frame",
+  "大字邀请": "Bold invitation",
+  "CTA 视觉风格": "CTA visual style",
+  "CTA 强调色": "CTA accent color",
+  "恢复风格默认色": "Reset style color",
+  "按素材画风选择；当前不会自动识别风格。": "Choose a style to suit your footage. Automatic style recognition is not available yet."
 }

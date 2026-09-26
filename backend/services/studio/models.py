@@ -29,6 +29,8 @@ class CTA(BaseModel):
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
     template: Literal['off', 'auto', 'continue', 'challenge', 'brand'] = 'off'
     version: Literal[1] = 1
+    style: Literal['glossy', 'soft', 'tactical', 'type'] = 'glossy'
+    accent: str | None = Field(default=None, pattern=r'^#[0-9a-fA-F]{6}$')
     brand: str = Field(default='', max_length=40)
     text: str = Field(default='', max_length=80)
     language: Literal['zh', 'en', 'ja'] = 'zh'

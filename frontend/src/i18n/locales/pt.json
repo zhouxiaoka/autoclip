@@ -1141,5 +1141,13 @@
   "CTA 画布尺寸无效": "Tamanho de tela do CTA inválido",
   "CTA 文字太长，请缩短文案": "O CTA é longo demais; encurte-o",
   "游戏名称太长，请缩短名称": "O nome é longo demais; encurte-o",
-  "此处预览收尾排版；完整画面、定格与声音请导出后预览。": "Prévia do encerramento. Exporte para conferir o vídeo completo, quadro congelado e áudio."
+  "此处预览收尾排版；完整画面、定格与声音请导出后预览。": "Prévia do encerramento. Exporte para conferir o vídeo completo, quadro congelado e áudio.",
+  "玩具厚边": "Relevo de brinquedo",
+  "轻量休闲": "Casual suave",
+  "硬朗任务框": "Moldura tática",
+  "大字邀请": "Convite em destaque",
+  "CTA 视觉风格": "Estilo visual do CTA",
+  "CTA 强调色": "Cor de destaque do CTA",
+  "恢复风格默认色": "Restaurar cor padrão",
+  "按素材画风选择；当前不会自动识别风格。": "Escolha um estilo que combine com o vídeo. O reconhecimento automático ainda não está disponível."
 }

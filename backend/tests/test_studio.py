@@ -766,10 +766,12 @@ def test_cta_preview_api_uses_shared_plan_without_mutating_or_calling_models(cli
     d=client.post('/studio/p1/drafts',json={'clip_ids':['c1'],'title':'CTA preview'}).json()
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**k: pytest.fail('CTA must not invoke a model'))
     monkeypatch.setattr(intelligence,'text_json',lambda *a,**k: pytest.fail('CTA must not invoke a model'))
-    body={**d,'cta':{'template':'auto','language':'en'},'aspect':'portrait'}
+    body={**d,'cta':{'template':'auto','language':'en','style':'tactical','accent':'#e0b83e'},'aspect':'portrait'}
     response=client.post('/studio/p1/cta-preview',json=body)
     assert response.status_code==200
     expected=cta.plan(Draft.model_validate(body))
+    assert response.json()['style']=='tactical'
+    assert response.json()['accent']=='#e0b83e'
     assert response.json()['template']==expected['template']
     assert response.json()['duration']==expected['duration']
     assert response.json()['image'].startswith('data:image/png;base64,')

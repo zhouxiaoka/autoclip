@@ -1141,5 +1141,13 @@
   "CTA 画布尺寸无效": "Dimensions du CTA invalides",
   "CTA 文字太长，请缩短文案": "Le CTA est trop long ; raccourcissez-le",
   "游戏名称太长，请缩短名称": "Le nom est trop long ; raccourcissez-le",
-  "此处预览收尾排版；完整画面、定格与声音请导出后预览。": "Aperçu de la conclusion. Exportez pour vérifier la vidéo complète, l’arrêt sur image et le son."
+  "此处预览收尾排版；完整画面、定格与声音请导出后预览。": "Aperçu de la conclusion. Exportez pour vérifier la vidéo complète, l’arrêt sur image et le son.",
+  "玩具厚边": "Relief jouet",
+  "轻量休闲": "Casual doux",
+  "硬朗任务框": "Cadre tactique",
+  "大字邀请": "Invitation en grand",
+  "CTA 视觉风格": "Style visuel du CTA",
+  "CTA 强调色": "Couleur du CTA",
+  "恢复风格默认色": "Rétablir la couleur",
+  "按素材画风选择；当前不会自动识别风格。": "Choisissez un style adapté à la vidéo. La reconnaissance automatique du style n’est pas encore disponible."
 }

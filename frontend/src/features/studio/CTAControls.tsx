@@ -4,6 +4,8 @@ import { studioApi, errorText } from './api'
 import { CTA, CTAPlan, Draft, languages } from './types'
 
 const defaults: CTA = {template:'off',version:1,brand:'',text:'',language:'zh',position:.65,confirmed_scene:''}
+const styles = {glossy:'玩具厚边',soft:'轻量休闲',tactical:'硬朗任务框',type:'大字邀请'}
+const accents = {glossy:'#8ac514',soft:'#68cf43',tactical:'#f1df50',type:'#ffffff'}
 const labels = {off:'关闭',auto:'自动推荐',continue:'玩法续播',challenge:'挑战交接',brand:'品牌落版'}
 export default function CTAControls({projectId,draft,onChange}: {projectId:string;draft:Draft;onChange:(cta:CTA)=>void}) {
   const c = draft.cta ?? {...defaults,language:draft.language==='en'?'en':draft.language==='ja'?'ja':'zh'}
@@ -24,6 +26,10 @@ export default function CTAControls({projectId,draft,onChange}: {projectId:strin
     <label className="studio-field">{t('收尾方式')}<select value={c.template} onChange={e=>change({template:e.target.value as CTA['template']})}>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{t(label)}</option>)}</select></label>
     {c.template!=='off' && <>
       <p className="studio-muted">{t('按镜头时长推荐；不调用模型。请核对玩法结果与遮挡。')}</p>
+      <label className="studio-field">{t('CTA 视觉风格')}<select value={c.style??'glossy'} onChange={e=>change({style:e.target.value as CTA['style']})}>{Object.entries(styles).map(([value,label])=><option key={value} value={value}>{t(label)}</option>)}</select></label>
+      <label className="studio-field">{t('CTA 强调色')}<input type="color" value={c.accent??accents[c.style??'glossy']} onChange={e=>change({accent:e.target.value})}/></label>
+      {c.accent && <button type="button" onClick={()=>change({accent:null})}>{t('恢复风格默认色')}</button>}
+      <p className="studio-muted">{t('按素材画风选择；当前不会自动识别风格。')}</p>
       <label className="studio-field">{t('游戏名称（可选）')}<input maxLength={40} value={c.brand} onChange={e=>change({brand:e.target.value})}/></label>
       <label className="studio-field">{t('默认行动文案语言')}<select value={c.language} onChange={e=>change({language:e.target.value as CTA['language']})}>{languages.filter(l=>l.value!=='source').map(l=><option key={l.value} value={l.value}>{l.label}</option>)}</select></label>
       <label className="studio-field">{t('行动文案（留空使用默认）')}<textarea maxLength={80} value={c.text} onChange={e=>change({text:e.target.value})}/></label>

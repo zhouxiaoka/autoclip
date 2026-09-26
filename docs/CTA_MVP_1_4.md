@@ -49,3 +49,13 @@
 视觉对照检查：按钮体积与高光、粗描边字、玩法面积、真实来源、单片段不凑六格。修订产物另存 `cta-reference-v2/`，与被否定的 `cta-mvp/` 区分；仍等待用户视觉评审，不把回归测试通过当作样式验收。
 
 修订后验证：Studio 与 CTA 后端 106 passed；前端 109 passed、typecheck/lint 通过。品牌预览与真实导出增加像素对照；已重新渲染三份 1080×1920 样片。此前 600 项全量通过对应基础 MVP 提交，不与修订后验证混淆。
+
+## 2026-09-27：CTA 结构与视觉风格分离
+
+- 新增独立 `cta.style`：`glossy`（玩具厚边）、`soft`（轻量休闲）、`tactical`（硬朗任务框）、`type`（无按钮大字邀请）。与 continue/challenge/brand 结构组合使用；旧配置缺失字段时保持 glossy。
+- 新增可选 `cta.accent`，支持手动强调色、恢复默认色。预览、保存快照、导出共用同一配置；过暗的任务框/大字强调色会提亮以保留可读性。
+- UI 八语文案齐全。明确提示当前手选风格，未声称自动理解画风。现有草稿没有可靠的 UI 材质/画风字段，下一步应在已有视觉分析中采集证据，再提供可校正的推荐；字幕链路不隐式追加付费调用。
+- 参考：用户 Royal Match 截图；[制作方公开广告作品](https://www.behance.net/gallery/195249951/Static-Ads-End-Cards-for-Mobile-game-Interstitials)中的 Idle Pizza Shop、Shape Transform、My Dream Hotel 和 Color Water Sort 3D；[COD 制作方试玩广告 UI](https://www.behance.net/gallery/101914157/Call-of-Duty-Mobile-Activision)。后者只支持硬朗视觉语法，不是已验证下载尾卡。未复制第三方 Logo、玩法资产或商店控件；无投放效果结论。
+- 真实样片：同一本地跑酷源片取 10–17.5 秒，四款各导出 10 秒（含 2.5 秒尾卡），1080×1920。该样片是控制变量的样式比较，不代表射击风格适合跑酷；跨品类素材适配仍待验收。样片在本机评审页 `http://127.0.0.1:8794/style-samples.html`，不会提交用户视频。
+- 验证：Studio/CTA 后端 108 项通过；前端 109 项、typecheck、Lint、build 通过。浏览器实际切换为 tactical、保存 V2、重载确认一致。构建保留已有大包体积提示。
+- 待办：风格证据与推荐、真实跨品类对照、模板选择缩略图、文字长短与横竖画幅进一步视觉评审。动效及买量效果验收不在本次完成范围。

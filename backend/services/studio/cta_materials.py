@@ -3,8 +3,9 @@
 No third-party logo, character, store chrome or game artwork is bundled.
 """
 import io
+import colorsys
 import subprocess
-from PIL import Image, ImageDraw, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageOps, ImageColor
 from backend.services.studio.title_art import font_for, lines_for
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
@@ -73,8 +74,64 @@ def button(text,w,h):
     return art
 
 
+
+def styled_button(text, w, h, style='glossy', accent=None):
+    if style == 'glossy':
+        art = button(text, w, h)
+        if accent:
+            # Tint the face/bevel, preserving the blue casing and cream lettering.
+            target_h, target_s, target_v = colorsys.rgb_to_hsv(*(v / 255 for v in ImageColor.getrgb(accent)))
+            pixels = art.load()
+            for y in range(h):
+                for x in range(w):
+                    red, green, blue, alpha = pixels[x, y]
+                    hue, sat, val = colorsys.rgb_to_hsv(red / 255, green / 255, blue / 255)
+                    if .16 < hue < .34 and sat > .35:
+                        rgb = colorsys.hsv_to_rgb(target_h, sat * target_s, val * (.3 + .7 * target_v))
+                        pixels[x, y] = (*[round(v * 255) for v in rgb], alpha)
+        return art
+    rgb = ImageColor.getrgb(accent or {'soft':'#68cf43','tactical':'#f1df50','type':'#ffffff'}[style])
+    # Keep dark custom colors legible on the tactical plate / shadowed footage.
+    if style in ('tactical', 'type') and max(rgb) < 140:
+        rgb = tuple(round(v + (255-v)*.65) for v in rgb)
+    art = Image.new('RGBA', (w, h))
+    d = ImageDraw.Draw(art)
+    pad = max(2, round(h * .04))
+    if style == 'soft':
+        radius = round(h * .23)
+        dark = tuple(round(v * .48) for v in rgb)
+        light = tuple(round(v + (255-v) * .36) for v in rgb)
+        d.rounded_rectangle((pad, h*.10, w-pad-1, h-1), radius, fill=(*dark,255))
+        face = rounded_gradient((w-pad*2, round(h*.86)),radius,[(0,light),(1,rgb)])
+        art.alpha_composite(face,(pad,0))
+        d = ImageDraw.Draw(art)
+        d.rounded_rectangle((pad*2,pad,w-pad*2,h*.83),radius,outline=(*light,255),width=pad)
+        fill = '#ffffff' if sum(rgb)/3 < 145 else '#14231b'
+        stroke_fill = '#234c23' if fill == '#ffffff' else fill
+    elif style == 'tactical':
+        cut = round(h*.19)
+        poly = [(cut,0),(w-cut-1,0),(w-1,cut),(w-1,h-cut-1),(w-cut-1,h-1),(cut,h-1),(0,h-cut-1),(0,cut)]
+        d.polygon(poly,fill='#111713')
+        d.line(poly+[poly[0]],fill=(*rgb,255),width=pad)
+        d.rectangle((pad*3,h*.28,pad*4,h*.70),fill=(*rgb,255))
+        d.rectangle((w-pad*4,h*.28,w-pad*3,h*.70),fill=(*rgb,255))
+        fill, stroke_fill = rgb, '#111713'
+    else:
+        fill, stroke_fill = rgb, '#111713'
+    font, lines, size = fit_text(text,w*.80,h*.67,round(h*(.48 if style=='type' else .43)))
+    y=(h-len(lines)*size*1.18)/2-h*.025
+    for line in lines:
+        x=(w-font.getlength(line))/2
+        d.text((x,y+max(2,h*.025)),line,font=font,anchor='lt',fill=stroke_fill,stroke_width=max(1,round(size*.045)),stroke_fill=stroke_fill)
+        d.text((x,y),line,font=font,anchor='lt',fill=fill,stroke_width=max(1,round(size*.025)),stroke_fill=stroke_fill)
+        y+=size*1.18
+    return art
+
 def artwork(spec,w,h,source=None):
     kind=spec['template']
+    style=spec.get('style','glossy')
+    accent=spec.get('accent')
+    edge=accent or {'glossy':'#f6df77','soft':'#b7edbc','tactical':'#f1df50','type':'#ffffff'}[style]
     canvas=Image.new('RGBA',(w,h))
     if kind=='off':return canvas
     portrait=h>w
@@ -85,8 +142,8 @@ def artwork(spec,w,h,source=None):
         box=(round(w*.19),round(h*.13),round(w*.81),round(h*.66)) if portrait else (round(w*.09),round(h*.13),round(w*.55),round(h*.88))
         x0,y0,x1,y1=box;cw,ch=x1-x0,y1-y0
         d=ImageDraw.Draw(canvas)
-        radius=round(min(cw,ch)*.055)
-        d.rounded_rectangle((x0-6,y0-6,x1+6,y1+10),radius=radius+6,fill='#12334a',outline='#f6df77',width=max(2,round(w*.004)))
+        radius=round(min(cw,ch)*(.008 if style=='tactical' else .055))
+        d.rounded_rectangle((x0-6,y0-6,x1+6,y1+10),radius=radius+6,fill='#12334a',outline=edge,width=max(2,round(w*.004)))
         tile=ImageOps.fit(source,(cw,ch)).convert('RGBA')
         mask=Image.new('L',(cw,ch));ImageDraw.Draw(mask).rounded_rectangle((0,0,cw-1,ch-1),radius=radius,fill=255)
         tile.putalpha(mask);canvas.alpha_composite(tile,(x0,y0))
@@ -104,8 +161,9 @@ def artwork(spec,w,h,source=None):
     y=round(h*(.73 if kind=='brand' and portrait else .58 if kind=='brand' else spec['position']))
     if not portrait and kind=='brand':bw=round(w*.34);bh=round(bw*.29)
     y=min(y,round(h*.89)-bh)
-    art=button(spec['text'],bw,bh)
-    shadow=Image.new('RGBA',(w,h));shadow.paste((0,0,0,175),(x,y+round(bh*.08),x+bw,y+bh+round(bh*.08)))
+    art=styled_button(spec['text'],bw,bh,style,accent)
+    shadow=Image.new('RGBA',(w,h))
+    if style!='type':shadow.paste((0,0,0,175),(x,y+round(bh*.08),x+bw,y+bh+round(bh*.08)))
     shadow.putalpha(shadow.getchannel('A').filter(ImageFilter.GaussianBlur(max(2,w*.012))))
     canvas.alpha_composite(shadow);canvas.alpha_composite(art,(x,y))
     brand=spec['brand']
