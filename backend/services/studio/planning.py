@@ -26,14 +26,27 @@ def recommend(video: Path, options: ImportOptions):
     configured = intelligence.ready()
     mode = 'manual'
     diagnostics = None
+    local_evidence = None
     if options.goal != 'auto':
         result = Recommendation(content_type='other', goal=options.goal,
             reason='按你指定的制作方式处理，其他未指定选项使用推荐设置。', confidence=1,
             aspect='portrait' if options.goal == 'promo' else 'original')
     elif consent.analysis_mode == 'subtitle' or (consent.analysis_mode == 'auto' and not consent.allow_visual_screening) or (configured and not analysis_preferences.visual_screening_allowed(consent, vision_configured=configured)):
         mode = 'local'
-        result = Recommendation(content_type='other', goal='content', confidence=0, suggested_goals=['content'],
-            reason='按字幕链路处理，未调用视觉初筛；正式制作时使用已有字幕或转写，尚未验证语音内容。')
+        from backend.services.studio.local_evidence import inspect_subtitles
+        local_evidence = inspect_subtitles(video, duration)
+        if local_evidence['subtitle_status'] == 'available':
+            suggested = ['content']
+            if local_evidence['valid_cues'] >= 3 and local_evidence['covered_seconds'] >= 5:
+                suggested.append('highlight')
+            reason = '检测到可用字幕，建议按语义制作；尚未判断内容质量，也未调用模型。'
+        else:
+            suggested = []
+            reason = ('未找到字幕，需要转写或提供字幕；尚未确认素材有可用语音，可手动选择制作类型。'
+                      if local_evidence['subtitle_status'] == 'missing' else
+                      '字幕未通过快速检查，暂不自动勾选；请检查字幕或手动选择，原素材已保留。')
+        result = Recommendation(content_type='other', goal='content', confidence=0,
+            suggested_goals=suggested, reason=reason)
     elif not configured:
         mode = 'fallback'
         result = Recommendation(content_type='other', goal='content',
@@ -71,5 +84,5 @@ def recommend(video: Path, options: ImportOptions):
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
     route = 'visual' if result.goal != 'content' and (consent.analysis_mode == 'visual' or (consent.analysis_mode == 'auto' and mode == 'ai' and result.goal != 'content')) else 'subtitle'
-    return {'analysis_preferences': consent.model_dump(), 'recommended_analysis': route, **({'diagnostics': diagnostics} if diagnostics else {}), 'mode': mode, 'source_duration': duration, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
+    return {**({'local_evidence': local_evidence} if local_evidence else {}), 'analysis_preferences': consent.model_dump(), 'recommended_analysis': route, **({'diagnostics': diagnostics} if diagnostics else {}), 'mode': mode, 'source_duration': duration, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
             'overrides': options.model_dump(exclude_none=True)}

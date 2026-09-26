@@ -1115,5 +1115,8 @@
   "视觉模型不可用，请前往模型设置。": "Modelo visual indisponível. Abra as configurações do modelo.",
   "按字幕链路处理，未调用视觉初筛；正式制作时使用已有字幕或转写，尚未验证语音内容。": "Usa legendas sem triagem visual. A produção usará legendas ou transcrição; a fala ainda não foi verificada.",
   "内容切片使用字幕分析，请调整分析方式或制作类型。": "Clipes de conteúdo usam legendas. Ajuste o método ou os tipos.",
-  "字幕推广会额外调用一次文字模型生成文案，按服务商计费；请复核后使用。": "Promoções com legendas fazem uma chamada extra ao modelo de texto, cobrada pelo provedor. Revise antes de usar."
+  "字幕推广会额外调用一次文字模型生成文案，按服务商计费；请复核后使用。": "Promoções com legendas fazem uma chamada extra ao modelo de texto, cobrada pelo provedor. Revise antes de usar.",
+  "检测到可用字幕，建议按语义制作；尚未判断内容质量，也未调用模型。": "Legendas utilizáveis encontradas. Sugere-se edição semântica; qualidade não avaliada e nenhum modelo chamado.",
+  "未找到字幕，需要转写或提供字幕；尚未确认素材有可用语音，可手动选择制作类型。": "Sem legendas. É necessária transcrição ou arquivo; fala utilizável ainda não confirmada. Você pode escolher os tipos manualmente.",
+  "字幕未通过快速检查，暂不自动勾选；请检查字幕或手动选择，原素材已保留。": "As legendas não passaram na verificação rápida; nada foi pré-selecionado. Verifique ou escolha manualmente; o original foi preservado."
 }
