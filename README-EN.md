@@ -50,7 +50,7 @@ Real v1.3.0 web interface: add a local video in the file import area, with optio
 | Publish (v1.3.2) | Since **v1.3.2**, after clips are ready, publish or schedule from the same page. Overseas platforms use Upload-Post; for Bilibili, paste login cookies once in Settings. Defaults stay as private as the platform allows; you can export without publishing. Details: [Publish guide (Chinese)](docs/PUBLISH_UPLOAD_POST.md). |
 | Auto cover (v1.3.2) | When publishing, a cover can be generated automatically so Bilibili does not reject an empty cover. Default cover and title-card details follow that release’s installer notes. Available in **v1.3.2**. |
 | Export for publishing | Use presets for Douyin, Xiaohongshu, YouTube Shorts, and Bilibili, with burned-in subtitles and title cards. |
-| Choose your models | Use Qwen, OpenAI-compatible APIs, Gemini, SiliconFlow, or local models through Ollama / LM Studio. |
+| Choose your models | Support Qwen, OpenAI, Gemini, Claude, DeepSeek, and local models via Ollama / LM Studio (bring your own API key). |
 | Automate your workflow | Orchestrate runs with the CLI or call the same processing pipeline from an MCP client. |
 
 > Import video → Subtitles / transcription → AI analysis and scoring → Clips and collections → Export
@@ -133,7 +133,7 @@ In your MCP client, set `command` to the absolute path of `autoclip` in your vir
 
 | Option | Configuration |
 | --- | --- |
-| Cloud models | Select Qwen, an OpenAI-compatible API, Gemini, or SiliconFlow in Settings and enter an API key. Compatible endpoints support a custom Base URL. |
+| Cloud models | In Settings, select Qwen, OpenAI, Gemini, Claude, or DeepSeek and enter an API key. Compatible endpoints support a custom Base URL. |
 | Ollama | Default endpoint: `http://localhost:11434/v1`; default model: `qwen2.5:7b`. No API key required. |
 | LM Studio | Load a model and start Local Server at `http://localhost:1234/v1` by default. Select a model actually served by your instance. |
 

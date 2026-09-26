@@ -50,7 +50,7 @@ Interface web réelle de v1.3.0 : ajoutez une vidéo locale dans la zone d’imp
 | Publier (v1.3.2) | Depuis la **v1.3.2**, une fois les extraits prêts, publiez-les ou planifiez-les sur la même page. Les plateformes hors de Chine passent par Upload-Post ; pour Bilibili, collez une fois les cookies de connexion dans les réglages. Le réglage par défaut reste aussi privé que la plateforme le permet ; vous pouvez aussi exporter sans publier. Détails : [guide de publication (chinois)](docs/PUBLISH_UPLOAD_POST.md). |
 | Couverture automatique (v1.3.2) | À la publication, une couverture peut être générée automatiquement, pour que Bilibili ne refuse pas une couverture vide. Le détail de la couverture et du carton de titre par défaut suit la notice de cet installeur. Disponible dans la **v1.3.2**. |
 | Exporter pour publier | Profils pour Douyin, Xiaohongshu, YouTube Shorts et Bilibili, avec sous-titres incrustés et cartons de titre. |
-| Choisir les modèles | Utilisez Qwen, des API compatibles OpenAI, Gemini, SiliconFlow ou des modèles locaux via Ollama / LM Studio. |
+| Choisir les modèles | Prend en charge Qwen, OpenAI, Gemini, Claude, DeepSeek et les modèles locaux via Ollama / LM Studio (apportez votre propre clé API). |
 | Automatiser les tâches | Orchestrez les traitements avec la CLI ou appelez le même pipeline depuis un client MCP. |
 
 > Importer une vidéo → Sous-titres / transcription → Analyse et évaluation par IA → Extraits et compilations → Export
@@ -133,7 +133,7 @@ Dans votre client MCP, définissez `command` avec le chemin absolu de `autoclip`
 
 | Option | Configuration |
 | --- | --- |
-| Modèles cloud | Choisissez Qwen, une API compatible OpenAI, Gemini ou SiliconFlow et saisissez la clé API. Les services compatibles acceptent une Base URL personnalisée. |
+| Modèles cloud | Dans les réglages, choisissez Qwen, OpenAI, Gemini, Claude ou DeepSeek et saisissez la clé API. Les points de terminaison compatibles acceptent une Base URL personnalisée. |
 | Ollama | Adresse par défaut : `http://localhost:11434/v1` ; modèle : `qwen2.5:7b`. Aucune clé API nécessaire. |
 | LM Studio | Chargez un modèle et démarrez Local Server, par défaut sur `http://localhost:1234/v1`. Sélectionnez un modèle disponible sur votre serveur. |
 

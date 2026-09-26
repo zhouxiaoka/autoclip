@@ -15,7 +15,10 @@
 | `dashscope` | 阿里通义千问 | qwen-plus, qwen-max, qwen-turbo | 国内访问稳定，中文理解好 |
 | `openai` | OpenAI | gpt-3.5-turbo, gpt-4, gpt-4-turbo | 支持兼容接口与自定义 Base URL |
 | `gemini` | Google Gemini | gemini-2.5-flash, gemini-1.5-pro | 多模态支持，上下文长 |
-| `siliconflow` | 硅基流动 | Qwen2.5系列, DeepSeek-V2.5 | 性价比高，国产化 |
+| `deepseek` | DeepSeek | 以设置页列出的为准 | 自备 API Key |
+| — | Claude | 以设置页列出的为准 | 自备 API Key |
+
+硅基流动不再作为设置里的独立提供商。上表模型名是配置示例，费用和是否仍可调用以服务商为准。
 
 ### 系统架构
 
@@ -54,10 +57,6 @@
 │  │ DashScope   │  │   OpenAI    │  │   Gemini    │         │
 │  │  Provider   │  │  Provider   │  │  Provider   │         │
 │  └─────────────┘  └─────────────┘  └─────────────┘         │
-│  ┌─────────────┐                                           │
-│  │SiliconFlow  │                                           │
-│  │  Provider   │                                           │
-│  └─────────────┘                                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -130,18 +129,13 @@ cd frontend && npm run dev
 - `gemini-1.5-pro`: Gemini 1.5 Pro (高质量)
 - `gemini-1.5-flash`: Gemini 1.5 Flash (平衡)
 
-### 硅基流动
+### Claude
 
-**获取API密钥:**
-1. 访问 [硅基流动控制台](https://cloud.siliconflow.cn/)
-2. 注册账号
-3. 创建API密钥
+在设置中选择 Claude，填写自己的 API Key。可用模型以设置页列出的为准。
 
-**支持模型:**
-- `Qwen/Qwen2.5-7B-Instruct`: Qwen2.5-7B
-- `Qwen/Qwen2.5-14B-Instruct`: Qwen2.5-14B
-- `Qwen/Qwen2.5-32B-Instruct`: Qwen2.5-32B
-- `deepseek-ai/DeepSeek-V2.5`: DeepSeek-V2.5
+### DeepSeek
+
+在设置中选择 DeepSeek，填写自己的 API Key。可用模型以设置页列出的为准。
 
 ### Ollama / LM Studio（本地，无需 API 密钥）
 
@@ -187,7 +181,6 @@ class LLMProviderFactory:
         ProviderType.DASHSCOPE: DashScopeProvider,
         ProviderType.OPENAI: OpenAIProvider,
         ProviderType.GEMINI: GeminiProvider,
-        ProviderType.SILICONFLOW: SiliconFlowProvider,
     }
     
     @classmethod
