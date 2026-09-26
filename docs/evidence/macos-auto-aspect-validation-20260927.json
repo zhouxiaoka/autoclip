@@ -1,0 +1,67 @@
+{
+  "code_commit": "2f032652",
+  "scope": "New macOS package: local API imported source, native confirmation selected visual + highlight/promo with automatic aspect, local provider replayed previous real evidence; native export/download. No new paid model requests. This does not replace real-provider or creative quality acceptance.",
+  "native_checks": {
+    "confirmation_summary": "highlight original / promo 9:16 before confirmation",
+    "goal_preferences": {
+      "highlight": {
+        "goal": "highlight",
+        "language": "source",
+        "aspect": "original",
+        "duration": 30
+      },
+      "promo": {
+        "goal": "promo",
+        "language": "source",
+        "aspect": "portrait",
+        "duration": 30
+      }
+    },
+    "draft_aspects_correct": true,
+    "export": {
+      "duration": 17.5,
+      "width": 1080,
+      "height": 1920,
+      "audio": true,
+      "saved_equals_job": true,
+      "sha256": "f2038b15c4513f3c321fb7824642309a9ccf6c1717ca353cf48315001d785539",
+      "full_decode": "passed"
+    },
+    "codesign_after_native_export": "passed"
+  },
+  "local_mock_requests": [
+    "scan",
+    "refine",
+    "hooks"
+  ],
+  "artifacts": [
+    {
+      "name": "AutoClip.Desktop_1.4.0-rc.1_aarch64.app.tar.gz",
+      "bytes": 159003012,
+      "sha256": "ceb695fc8529548032617cf55c81e86bf6e0ffb0c6260407dc91b809da835241"
+    },
+    {
+      "name": "AutoClip Desktop_1.4.0-rc.1_aarch64.dmg",
+      "bytes": 249168331,
+      "sha256": "36ec67c0ddaa49bbba18b9ec5e95eb89997e885767bfc95ea5dc8dfafc885950"
+    }
+  ],
+  "build": {
+    "default_sdk": "Failed locally: macOS 27 SDK unknown architecture/linker incompatibility",
+    "successful_sdk": "/Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk",
+    "updater_signature": "not signed; internal candidate only"
+  },
+  "validation": {
+    "backend_tests": 587,
+    "frontend_tests": 108,
+    "typescript": "passed",
+    "eslint": "passed",
+    "targeted_tests": 55,
+    "remote_ci_code_commit": "5/5 passed",
+    "ruff": "5 existing F821 diagnostics unchanged in jobs.py compared with base; not a clean Ruff claim"
+  },
+  "screenshots": [
+    "/tmp/autoclip-native-rc213/confirmation.png",
+    "/tmp/autoclip-native-rc213/export.png"
+  ]
+}
