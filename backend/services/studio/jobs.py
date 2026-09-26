@@ -192,8 +192,6 @@ def confirm_project(project_id, body):
         if plan.get('id') != body.plan_id or (state.get('analysis') or {}).get('status') != 'awaiting_confirmation':
             raise store.ConflictError('方案已变化或任务已开始，请刷新后确认')
         route = body.analysis_mode or plan.get('recommended_analysis', 'subtitle')
-        if route == 'subtitle' and 'promo' in body.goals:
-            raise ValueError('字幕链路支持内容切片和字幕高光；推广分析仍需视觉模式，原素材已保留')
         if route == 'visual' and body.goals == ['content']:
             raise ValueError('内容切片当前使用字幕分析，请选择字幕模式后确认')
         if route == 'visual':
@@ -237,8 +235,6 @@ def _produce_selected(project_id, plan):
             try:
                 prefs = Preferences.model_validate({**plan['confirmed_preferences'], 'goal':goal})
                 stage('制作' + labels[goal])
-                if goal == 'promo' and plan.get('confirmed_analysis', 'subtitle') == 'subtitle':
-                    raise ValueError('推广分析需要显式选择视觉模式')
                 if goal == 'content' or plan.get('confirmed_analysis', 'subtitle') == 'subtitle':
                     if subtitle_error is not None:
                         raise subtitle_error
@@ -251,6 +247,10 @@ def _produce_selected(project_id, plan):
                     if goal == 'highlight':
                         from backend.services.studio.subtitle_highlights import make_highlights
                         drafts = make_highlights(subtitle_clips, prefs, intelligence._probe(video).get('duration'))
+                        store.change(project_id, lambda data:data['drafts'].extend({**d,'updated_at':store.now()} for d in drafts))
+                    if goal == 'promo':
+                        from backend.services.studio.subtitle_promo import make_promos
+                        drafts = make_promos(project_id, subtitle_clips, prefs, intelligence._probe(video).get('duration'), instruction)
                         store.change(project_id, lambda data:data['drafts'].extend({**d,'updated_at':store.now()} for d in drafts))
                     mark_project(project_id, 'processing')
                     continue
