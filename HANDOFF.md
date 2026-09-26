@@ -16,7 +16,7 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 | 后端 | FastAPI + Celery（桌面模式用本地线程）+ SQLite | `backend/` |
 | 前端 | React + TypeScript + Ant Design + Vite | `frontend/` |
 | 桌面壳 | Tauri 2 + Rust | `src-tauri/` |
-| LLM | OpenAI 及一切 OpenAI 兼容接口（自定义 base_url）/ Gemini(google-genai) / 通义千问(dashscope) / 硅基流动 / 本地预设 Ollama、LM Studio | `backend/core/llm_providers.py`、`llm_manager.py`、`local_presets.py` |
+| LLM | OpenAI 及 OpenAI 兼容接口（自定义 base_url）/ Gemini / Qwen (dashscope) / DeepSeek / Doubao Seed / Kimi / GLM / Grok / 本地预设 Ollama、LM Studio | `backend/core/llm_providers.py`、`llm_manager.py`、`local_presets.py` |
 | CLI / MCP | `autoclip` 命令行 + MCP server（stdio），不起 FastAPI / Celery 直接跑流水线 | `backend/cli.py`、`mcp_server.py`、`services/local_runner.py` |
 
 四种交付形态：**桌面客户端**（当前包是 v1.3.3 的 macOS arm64 DMG 与 Windows x64 安装包；Windows 包从 v1.2.1 起就有，干净机器上的完整出片仍没有记录）、**Docker 部署**（README 推荐路径）、
@@ -30,7 +30,7 @@ AutoClip 是一款 AI 视频切片工具：输入 B站/YouTube 链接或本地�
 - **v1.3.3（2026-09-23）**：热修稳定性。升级后旧项目状态不再让列表整页打不开；处理进度在终态和 4xx/5xx 后停止轮询；分类列表缺失时导入入口不崩溃；非 Mac 能装 Whisper；本地转写失败给出可读错误；桌面端下载模型不再被进度条写控制台打断。
 - **v1.3.2（2026-09-22）**：同一页发布到 B 站和海外平台、自动封面（失败截帧、不挡投稿）、设置里 B 站 Cookie 提前、应用内更新提示、模型名单可拉取。真实 Upload-Post / B 站试发脚本已进仓库，这台机器上还没有密钥，没跑过真投稿。
 - **v1.3.1（2026-09-21）**：八语界面与官网、八语 README、匿名统计 v2、崩溃上报、应用内检查更新。v1.3.0 及更早必须先手动安装这一版。生产构建验收见 `docs/UPDATES_AND_SENTRY.md`：一次前端异常能进 Sentry，且正文被去掉。该记录不代替 Windows 真机和真实视频出片。PostHog 新口径的线上接收也还没单独验收（`docs/ANALYTICS_V2.md`）。
-- **v1.3.0（2026-09-20）**：CLI / MCP、Ollama 与 LM Studio 预设、时长画像与评分兜底、竖屏发布导出、Docker 设置页可保存、失败要写明阶段、通义千问国际站、`min_score` 接到 step3、周更发版脚本。
+- **v1.3.0（2026-09-20）**：CLI / MCP、Ollama 与 LM Studio 预设、时长画像与评分兜底、竖屏发布导出、Docker 设置页可保存、失败要写明阶段、Qwen 国际站、`min_score` 接到 step3、周更发版脚本。
 - **v1.2.0（2026-06-03）**：桌面端 DMG 端到端可用（内置便携 Python + 静态 ffmpeg + 按需安装 faster-whisper），
   `desktop-build.yml` 在 tag 上跑通并自动挂 Release；v1.2.0 DMG 已有 2000+ 下载。
 - **PostHog 匿名埋点** + 隐私政策 + 设置页开关（`docs/ANALYTICS.md`、`docs/PRIVACY*.md`）。
@@ -191,7 +191,7 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - [x] CLI / MCP、本地模型预设、时长画像与评分兜底、竖屏发布导出（v1.3.0）
 - [x] Docker 设置页可保存；浏览器翻译不再把整页打崩（#100，v1.3.0）
 - [x] 失败要写明阶段和原因；本地上传会自动开始；SQLite 不再因 `StaticPool` 互相回滚（v1.3.0）
-- [x] 通义千问国际站（#45）；`min_score` 接到 step3；周更发版脚本（v1.3.0）
+- [x] Qwen 国际站（#45）；`min_score` 接到 step3；周更发版脚本（v1.3.0）
 
 ### v1.3.1 之后仍未完成
 - [ ] Windows 包稳定后：Intel mac（PBS `x86_64-apple-darwin` + osxexperts intel 静态包，脚本只需改两个变量）

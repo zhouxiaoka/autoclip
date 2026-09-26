@@ -14,6 +14,14 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
+<p align="center">
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending (Trendshift)" width="250" height="55"></a>
+</p>
+
+Local editing · bring your own model key
+
+Previously listed on GitHub Trending; not a live ranking. GitHub Trending and Trendshift are separate.
+
 [Website](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Report an issue](https://github.com/zhouxiaoka/autoclip/issues)
 
 **Desktop installers: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
@@ -32,16 +40,6 @@ AutoClip uses AI to analyze video transcripts, find highlights, write titles, an
 
 Real v1.3.0 web interface: add a local video in the file import area, with optional SRT subtitles.
 
-## Community recognition
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
-</p>
-
-These badges are provided by Trendshift. Click to view AutoClip’s recorded achievements. GitHub Trending and Trendshift are separate rankings; badges show recorded achievements, not a live position.
-
 ## What you can do
 
 | Capability | Details |
@@ -49,10 +47,10 @@ These badges are provided by Trendshift. Click to view AutoClip’s recorded ach
 | Import footage | Use local videos, YouTube or Bilibili links, with optional SRT subtitles. |
 | Find highlights | Extract outlines, topic timelines, highlight scores, and clip titles from transcripts. |
 | Create clips and collections | Generate clips and suggested collections, then adjust their order manually. |
-| Publish (v1.3.2) | After clips are ready, open Publish on a clip. Available in **v1.3.2**. Overseas publishing uses platforms connected on your own Upload-Post account: TikTok, Instagram, YouTube, Facebook, LinkedIn, X, Threads, Pinterest, Bluesky, Discord, Telegram, and Google Business, as available on that account. Bilibili is one account: paste a Cookie once in Settings. It must include SESSDATA, bili_jct, and DedeUserID. Publish now or on a schedule. Title and description are optional and default to the clip title. Burned-in captions default on, and the ~4s title card defaults on. Visibility defaults to private / self where the platform supports it. AutoClip promises that only for TikTok, YouTube, and Bilibili. You can download without publishing. The project page shows publish history and a calendar, and can cancel a schedule that has not gone out. “Plan this week” fills Monday, Wednesday, and Friday at 09:00 for overseas platforms only, not Bilibili. Vertical accounts render 9:16 without a 60-second cut. Bilibili alone renders landscape. LinkedIn or X alone keeps the original frame. Vertical and Bilibili in the same batch are rendered separately. |
-| Auto cover (v1.3.2) | When publishing, a cover can be generated automatically so Bilibili does not reject an empty cover. Default cover and title-card details follow that release’s installer notes. Available in **v1.3.2**. |
+| Publish (v1.3.2) | Since **v1.3.2**, after clips are ready, publish or schedule from the same page. Overseas platforms use Upload-Post; for Bilibili, paste login cookies once in Settings. Defaults stay as private as the platform allows; you can export without publishing. Details: [Publish guide (Chinese)](docs/PUBLISH_UPLOAD_POST.md). |
+| Auto cover (v1.3.2) | When publishing, auto-generate a cover so Bilibili does not reject an empty cover; defaults follow the installer notes. Available in **v1.3.2**. |
 | Export for publishing | Use presets for Douyin, Xiaohongshu, YouTube Shorts, and Bilibili, with burned-in subtitles and title cards. |
-| Choose your models | Use Qwen, OpenAI-compatible APIs, Gemini, SiliconFlow, or local models through Ollama / LM Studio. |
+| Choose your models | Supports Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok, and local models via Ollama / LM Studio (bring your own API key). |
 | Automate your workflow | Orchestrate runs with the CLI or call the same processing pipeline from an MCP client. |
 
 > Import video → Subtitles / transcription → AI analysis and scoring → Clips and collections → Export
@@ -135,7 +133,7 @@ In your MCP client, set `command` to the absolute path of `autoclip` in your vir
 
 | Option | Configuration |
 | --- | --- |
-| Cloud models | Select Qwen, an OpenAI-compatible API, Gemini, or SiliconFlow in Settings and enter an API key. Compatible endpoints support a custom Base URL. |
+| Cloud models | In Settings, choose Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, or Grok and enter an API key; compatible endpoints can set a Base URL. |
 | Ollama | Default endpoint: `http://localhost:11434/v1`; default model: `qwen2.5:7b`. No API key required. |
 | LM Studio | Load a model and start Local Server at `http://localhost:1234/v1` by default. Select a model actually served by your instance. |
 
