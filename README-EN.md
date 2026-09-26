@@ -15,12 +15,12 @@
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
 <p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending #3" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending (Trendshift)" width="250" height="55"></a>
 </p>
 
 Local editing · bring your own model key
 
-Recorded Trendshift achievement; not a live ranking. GitHub Trending and Trendshift are separate.
+Previously listed on GitHub Trending; not a live ranking. GitHub Trending and Trendshift are separate.
 
 [Website](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Report an issue](https://github.com/zhouxiaoka/autoclip/issues)
 

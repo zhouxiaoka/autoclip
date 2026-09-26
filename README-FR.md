@@ -15,12 +15,12 @@
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
 <p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending #3" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending (Trendshift)" width="250" height="55"></a>
 </p>
 
 Montage en local · apportez votre propre clé de modèle
 
-Résultat enregistré par Trendshift, pas un classement en direct. GitHub Trending et Trendshift sont deux classements distincts.
+A déjà figuré sur GitHub Trending ; ce n’est pas un classement en direct. GitHub Trending et Trendshift sont deux classements distincts.
 
 [Site du projet](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Signaler un problème](https://github.com/zhouxiaoka/autoclip/issues)
 

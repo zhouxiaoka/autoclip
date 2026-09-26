@@ -15,12 +15,12 @@
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
 <p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending #3" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending (Trendshift)" width="250" height="55"></a>
 </p>
 
 로컬에서 편집 · 모델 키는 직접 준비
 
-Trendshift에 기록된 순위 성과이며, 현재 실시간 순위가 아닙니다. GitHub Trending과 Trendshift는 서로 다른 순위입니다.
+GitHub Trending에 오른 적이 있으며, 현재 실시간 순위가 아닙니다. GitHub Trending과 Trendshift는 서로 다른 순위입니다.
 
 [웹사이트](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [문제 신고](https://github.com/zhouxiaoka/autoclip/issues)
 

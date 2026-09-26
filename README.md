@@ -15,12 +15,12 @@
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
 <p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending #3" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending (Trendshift)" width="250" height="55"></a>
 </p>
 
 本地剪辑 · 自备模型 Key
 
-Trendshift 记录的上榜成就，不代表当前实时排名。GitHub Trending 与 Trendshift 是不同榜单。
+曾上 GitHub Trending，非实时排名。GitHub Trending 与 Trendshift 是不同榜单。
 
 [项目网站](https://zhouxiaoka.github.io/autoclip_intro/) · [讨论](https://github.com/zhouxiaoka/autoclip/discussions) · [反馈问题](https://github.com/zhouxiaoka/autoclip/issues)
 
