@@ -86,3 +86,21 @@ def test_dense_rejection_of_only_candidate_reports_no_highlight(monkeypatch):
     monkeypatch.setattr(vision,'vision_call',lambda _: next(responses))
     with pytest.raises(ValueError,match='没有找到可用玩法高光'):
         vision.analyze(Path('unused'),Preferences(goal='highlight'))
+
+
+def test_overlong_candidate_does_not_discard_valid_independent_events():
+    raw = [candidate(i, score=90-i) for i in range(8)]
+    raw[0]['end'] = 46.3
+    raw[1]['end'] = 50.6  # 40.6s, beyond the 40s target
+    scenes, audit = vision.select_highlights(raw, 120, max_duration=40)
+    assert [s.id for s in scenes] == ['e2', 'e3', 'e4', 'e5', 'e6', 'e7']
+    assert [a['disposition'] for a in audit[:2]] == ['duration_filtered'] * 2
+    assert all(s.end == raw[int(s.id[1:])]['end'] for s in scenes)
+    assert raw[0]['end'] == 46.3  # Do not trim or split an event to satisfy duration.
+
+
+def test_all_overlong_candidates_still_fail_without_inventing_clips():
+    raw = candidate(0)
+    raw['end'] = 46.3
+    with pytest.raises(ValueError, match='超出期望时长'):
+        vision.select_highlights([raw], 120, max_duration=40)

@@ -1,0 +1,54 @@
+{
+  "scope": "Controlled project/clip/collection/subtitle/settings fixture created by official 1.3.5 bundled models; packaged backends on full stopped copies. Native candidate UI tested separately. No paid models, real user data or OS installer replacement.",
+  "phases": [
+    {
+      "phase": "stable-before",
+      "health": "passed",
+      "old_rows_and_assets": "unchanged",
+      "clip_and_collection_download_hashes": "passed",
+      "model_and_processing_settings": "preserved",
+      "privacy": "preserved"
+    },
+    {
+      "phase": "candidate-upgrade",
+      "health": "passed",
+      "old_rows_and_assets": "unchanged",
+      "clip_and_collection_download_hashes": "passed",
+      "model_and_processing_settings": "preserved",
+      "privacy": "preserved",
+      "legacy_to_shared_editor_export": "passed",
+      "export_hash": "871486299a107cfde67cec669b1080614e67cb1ee1f32fdd8f53ed5aecc834a2",
+      "export_result": {
+        "title": "旧切片升级后包装",
+        "duration": 20.0,
+        "width": 1080,
+        "height": 1920,
+        "warnings": []
+      }
+    },
+    {
+      "phase": "stable-rollback",
+      "health": "passed",
+      "old_rows_and_assets": "unchanged",
+      "clip_and_collection_download_hashes": "passed",
+      "model_and_processing_settings": "preserved",
+      "privacy": "preserved"
+    }
+  ],
+  "backup_and_new_outputs_preserved": true,
+  "code_commit": "d509972b",
+  "old_version": "1.3.5",
+  "old_official_archive_sha256": "2e69e8807519be90725ce352c37dd7f773b5a0373f6174f6d312cac1ce906fe7",
+  "native_rollback_project_clip_collection_visible": true,
+  "dmg": {
+    "readonly_mount_crc": "passed",
+    "codesign_deep_strict": "passed",
+    "fresh_isolated_data_native_start": "passed",
+    "clean_exit_and_detach": "passed",
+    "scope": "Current Mac, mounted ARM64 DMG; not a second clean Mac or Gatekeeper/quarantine acceptance"
+  },
+  "windows": {
+    "decision": "User deferred actual Windows installation/import/save acceptance; proceed with macOS first",
+    "build_36260653083": "in_progress"
+  }
+}
