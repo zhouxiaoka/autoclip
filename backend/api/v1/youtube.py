@@ -399,8 +399,12 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         from ...core.config import get_data_directory
         
         data_dir = get_data_directory()
-        download_dir = data_dir / "temp"
-        download_dir.mkdir(exist_ok=True)
+        # Each attempt owns its files, including retries of the same task.
+        # Never discover media in a directory shared with another download.
+        import tempfile
+        temp_root = data_dir / "temp"
+        temp_root.mkdir(parents=True, exist_ok=True)
+        download_dir = Path(tempfile.mkdtemp(prefix="youtube-", dir=temp_root))
         
         # 更新项目进度
         await update_project_download_progress(project_id, 30.0, "正在下载视频...")
@@ -548,7 +552,6 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             
             # 移动视频文件到项目目录
             import shutil
-            from pathlib import Path
             
             if video_path:
                 video_file_path = Path(video_path)

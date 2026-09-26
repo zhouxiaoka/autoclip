@@ -11,8 +11,8 @@ import {
 } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import ProjectCard from '../components/ProjectCard'
-import FileUpload from '../components/FileUpload'
-import BilibiliDownload from '../components/BilibiliDownload'
+import CreativeImport from '../features/studio/CreativeImport'
+
 
 import { projectApi } from '../services/api'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
@@ -28,7 +28,6 @@ const HomePage: React.FC = () => {
   const navigate = useNavigate()
   const { projects, setProjects, deleteProject, loading, setLoading } = useProjectStore()
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [activeTab, setActiveTab] = useState<'upload' | 'bilibili'>('bilibili')
 
   // 使用项目轮询Hook
   useProjectPolling({
@@ -107,7 +106,7 @@ const HomePage: React.FC = () => {
 
   const handleProjectCardClick = (project: Project) => {
     // 导入中状态的项目不能点击进入详情页
-    if (project.status === 'pending') {
+    if (project.status === 'pending' && !project.settings?.smart_import && !project.processing_config?.smart_import) {
       message.warning(t("项目正在导入中，请稍后再查看详情"))
       return
     }
@@ -116,9 +115,11 @@ const HomePage: React.FC = () => {
     navigate(`/project/${project.id}`)
   }
 
+  const pendingImports = projects.filter(p => p.settings?.import_staging || p.processing_config?.import_staging)
   const filteredProjects = (projects || [])
+    .filter(p => !p.settings?.import_staging && !p.processing_config?.import_staging)
     .filter(project => {
-      const matchesStatus = statusFilter === 'all' || project.status === statusFilter
+      const matchesStatus = !statusFilter || statusFilter === 'all' || project.status === statusFilter || (statusFilter === 'error' && project.status === 'failed')
       return matchesStatus
     })
     .sort((a, b) => {
@@ -133,83 +134,8 @@ const HomePage: React.FC = () => {
     }}>
       <Content style={{ padding: '40px 56px 56px', position: 'relative' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
-          {/* 文件上传区域 */}
-          <div style={{ 
-            marginBottom: '48px',
-            marginTop: '20px',
-            display: 'flex',
-            justifyContent: 'center'
-          }}>
-            <div style={{ width: '100%', maxWidth: '820px' }}>
-              <div style={{ fontSize: '13px', color: 'var(--ac-muted)', margin: '0 4px 14px', letterSpacing: '0.2px' }}>{t("粘贴链接，AI 自动切片")}</div>
-              <div style={{
-                background: 'var(--ac-card)',
-                borderRadius: '16px',
-                border: '1px solid var(--ac-line)',
-                padding: '18px',
-                boxShadow: 'var(--ac-shadow)'
-              }}>
-              {/* 标签页切换 — 胶囊分段 */}
-              <div style={{
-                display: 'inline-flex',
-                marginBottom: '14px',
-                borderRadius: '999px',
-                background: 'var(--ac-line-2)',
-                padding: '3px',
-                gap: '2px'
-              }}>
-                 <button
-                   style={{
-                     padding: '8px 18px',
-                     borderRadius: '999px',
-                     background: activeTab === 'bilibili' ? 'var(--ac-card)' : 'transparent',
-                     color: activeTab === 'bilibili' ? 'var(--ac-ink)' : 'var(--ac-sub)',
-                     cursor: 'pointer',
-                     fontSize: '14px',
-                     fontWeight: 500,
-                     transition: 'all 0.2s ease',
-                     border: 'none',
-                     boxShadow: activeTab === 'bilibili' ? '0 1px 2px rgba(0,0,0,.08)' : 'none'
-                   }}
-                   onClick={() => setActiveTab('bilibili')}
-                 >{t("链接导入")}</button>
-                <button
-                   style={{
-                     padding: '8px 18px',
-                     borderRadius: '999px',
-                     background: activeTab === 'upload' ? 'var(--ac-card)' : 'transparent',
-                     color: activeTab === 'upload' ? 'var(--ac-ink)' : 'var(--ac-sub)',
-                     cursor: 'pointer',
-                     fontSize: '14px',
-                     fontWeight: 500,
-                     transition: 'all 0.2s ease',
-                     border: 'none',
-                     boxShadow: activeTab === 'upload' ? '0 1px 2px rgba(0,0,0,.08)' : 'none'
-                   }}
-                   onClick={() => setActiveTab('upload')}
-                 >{t("文件导入")}</button>
-              </div>
-              
-              {/* 内容区域 */}
-              <div>
-                {activeTab === 'bilibili' && (
-                  <BilibiliDownload onDownloadSuccess={async () => {
-                    // 处理完成后刷新项目列表
-                    await loadProjects()
-                    // 不再显示重复的toast提示，BilibiliDownload组件已经显示了统一的提示
-                  }} />
-                )}
-                {activeTab === 'upload' && (
-                  <FileUpload onUploadSuccess={async () => {
-                    // 处理完成后刷新项目列表
-                    await loadProjects()
-                    message.success(t("项目创建成功，正在处理中..."))
-                  }} />
-                )}
-              </div>
-              </div>
-            </div>
-          </div>
+          <CreativeImport onImported={loadProjects} />
+          {pendingImports.length>0&&<div className="studio-import-resume"><b>{t('未完成的导入')}</b>{pendingImports.map(p=><button key={p.id} className="studio-link" onClick={()=>navigate(`/import/${p.id}`)}>{p.name} · {t('继续导入确认')}</button>)}</div>}
 
           {/* 项目管理区域 */}
           <div style={{

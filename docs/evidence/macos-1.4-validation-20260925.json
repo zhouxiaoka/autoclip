@@ -1,0 +1,40 @@
+{
+  "source_commit": "0a6b4f6a02f7b6db95ee1666788e73b8d3bf3a8d",
+  "app_version": "1.3.4",
+  "platform": "macOS arm64",
+  "status": "internal validation only; not a release candidate approval",
+  "signature": "ad-hoc; codesign deep strict passed after smoke test",
+  "updater_signed": false,
+  "notarized": false,
+  "artifacts": [
+    {
+      "name": "AutoClip Desktop_1.3.4_aarch64.dmg",
+      "bytes": 251157454,
+      "sha256": "6f35d16108e81cc4d9520ac0c81da2c4e4d4fe28b00fbb3c6fd66a856c86fddf"
+    },
+    {
+      "name": "AutoClip.Desktop_1.3.4_aarch64.app.tar.gz",
+      "bytes": 159014142,
+      "sha256": "c588660a6ee368288f8287d629aeef0a5cdc04b869613474159b430dd3eca805"
+    }
+  ],
+  "runtime_smoke": {
+    "source": "synthetic offline fixture",
+    "backend_sha256": "9b22adf20fd7adf95b2281c2b53c2bb4099c4776be14a009ccbeb7c9cf5de93a",
+    "python": "3.13.13",
+    "six_templates": "passed",
+    "original_audio": "passed",
+    "portrait_render": {
+      "width": 1080,
+      "height": 1920,
+      "duration": 1.0
+    },
+    "desktop_health": "passed"
+  },
+  "not_verified": [
+    "native UI download",
+    "install/upgrade/rollback",
+    "Windows",
+    "real model and creative quality"
+  ]
+}

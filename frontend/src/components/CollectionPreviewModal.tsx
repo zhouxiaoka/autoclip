@@ -8,7 +8,6 @@ import { Collection, Clip, useProjectStore } from '../store/useProjectStore'
 import { projectApi } from '../services/api'
 import AddClipToCollectionModal from './AddClipToCollectionModal'
 import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
-import UploadModal from './UploadModal'
 import EditableTitle from './EditableTitle'
 import ClipVideo from './ClipVideo'
 import './CollectionPreviewModal.css'
@@ -46,7 +45,6 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
 
   const [showAddClipModal, setShowAddClipModal] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
-  const [showUploadModal, setShowUploadModal] = useState(false)
   const { setDragging } = useProjectStore()
   const { isGenerating, generateAndDownloadCollectionVideo } = useCollectionVideoDownload()
 
@@ -513,18 +511,6 @@ const CollectionPreviewModal: React.FC<CollectionPreviewModalProps> = ({
         onConfirm={handleAddClips}
       />
 
-      {/* 投稿弹窗 */}
-      <UploadModal
-        visible={showUploadModal}
-        onCancel={() => setShowUploadModal(false)}
-        projectId={projectId}
-        clipIds={collectionClips.map(clip => clip.id)}
-        clipTitles={collectionClips.map(clip => clip.generated_title || clip.title || t("视频片段"))}
-        onSuccess={() => {
-          // 投稿成功后可以刷新数据或显示提示
-          console.log('合集投稿成功')
-        }}
-      />
     </Modal>
   )
 }

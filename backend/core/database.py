@@ -6,9 +6,10 @@
 import logging
 import os
 from contextlib import contextmanager
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import NullPool, StaticPool
+from sqlalchemy.pool import StaticPool, NullPool
+from sqlalchemy.engine import make_url
 from typing import Generator
 from backend.models.base import Base
 
@@ -27,63 +28,41 @@ if DATABASE_URL == "sqlite:///autoclip.db":
         # 如果导入失败，保持默认值
         pass
 
-def is_memory_sqlite(url: str) -> bool:
-    """:memory: 必须整进程共用一条连接，否则每个连接都是空库。
-
-    ``sqlite://`` 也是内存库。rstrip(\"/\") 会把它收成 ``sqlite:``，不能拿收完的字符串
-    去比 ``sqlite://``。
-    """
-    normalized = (url or "").strip()
-    if ":memory:" in normalized:
-        return True
-    return normalized.rstrip("/") in ("sqlite:", "sqlite")
+def is_memory_sqlite(database_url: str) -> bool:
+    url = make_url(database_url)
+    return url.get_backend_name() == 'sqlite' and (not url.database or url.database == ':memory:' or url.query.get('mode') == 'memory')
 
 
-def sqlite_engine_kwargs(url: str) -> dict:
-    """文件 SQLite 用 NullPool，不在进程里囤连接。
-
-    StaticPool 只适合 :memory:。文件库上用它，桌面模式里 API 请求线程、导入任务线程、
-    流水线线程会在同一条连接上交错 BEGIN / COMMIT / ROLLBACK。
-    默认 QueuePool（size 5 + overflow 10）会在会话没归还时打满，项目列表 / 详情 / 下载
-    一起超时报 QueuePool limit reached（#175）。NullPool 每次取用都新建连接，用完即关，
-    不设池上限；会话仍必须 close()，否则会泄漏文件句柄。
-    """
-    if is_memory_sqlite(url):
-        return {"poolclass": StaticPool}
-    return {"poolclass": NullPool}
+def sqlite_engine_kwargs(database_url: str) -> dict:
+    return {'poolclass': StaticPool if is_memory_sqlite(database_url) else NullPool}
 
 
-# 创建数据库引擎
-if "sqlite" in DATABASE_URL:
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={
-            "check_same_thread": False,
-            "timeout": 30
-        },
+# File-backed databases use separate connections; in-memory databases keep one.
+def create_database_engine(database_url):
+    url = make_url(database_url)
+    if url.get_backend_name() != 'sqlite':
+        return create_engine(database_url, pool_pre_ping=True, pool_recycle=300, echo=False)
+    in_memory = is_memory_sqlite(database_url)
+    database_engine = create_engine(
+        database_url,
+        connect_args={'check_same_thread': False, 'timeout': 30},
+        **sqlite_engine_kwargs(database_url),
         pool_pre_ping=True,
-        echo=False,  # 设置为True可以看到SQL语句
-        **sqlite_engine_kwargs(DATABASE_URL),
+        echo=False,
     )
-    if not is_memory_sqlite(DATABASE_URL):
-        from sqlalchemy import event
-
-        @event.listens_for(engine, "connect")
-        def _sqlite_pragmas(dbapi_connection, _record):
+    if not in_memory:
+        @event.listens_for(database_engine, 'connect')
+        def sqlite_pragmas(dbapi_connection, _record):
             cursor = dbapi_connection.cursor()
             try:
-                cursor.execute("PRAGMA journal_mode=WAL")
-                cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.execute('PRAGMA journal_mode=WAL')
+                cursor.execute('PRAGMA busy_timeout=30000')
             finally:
                 cursor.close()
-else:
-    # PostgreSQL配置
-    engine = create_engine(
-        DATABASE_URL,
-        pool_pre_ping=True,
-        pool_recycle=300,
-        echo=False
-    )
+    return database_engine
+
+
+engine = create_database_engine(DATABASE_URL)
 
 # 创建会话工厂
 SessionLocal = sessionmaker(

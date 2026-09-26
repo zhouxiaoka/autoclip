@@ -72,6 +72,9 @@ def find_source_srt(project_id: str) -> Optional[Path]:
 
 
 def load_clip_meta(project_id: str, clip_id: str) -> Dict[str, Any]:
+    if clip_id.startswith('studio-'):
+        from backend.services.studio.publishing import export_meta
+        return export_meta(project_id, clip_id)
     from backend.core.path_utils import get_project_directory
     path = get_project_directory(project_id) / "metadata" / "clips_metadata.json"
     if path.exists():
@@ -189,6 +192,15 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
         raise ValueError(f"未知预设: {req.preset}（可选 {', '.join(PRESETS)}）")
     spec = PRESETS[req.preset]
     clip = load_clip_meta(req.project_id, req.clip_id)
+    if clip.get('source_type') == 'studio':
+        duration = float(clip['duration_sec'])
+        if spec.get('max_sec') and duration > spec['max_sec']:
+            raise ValueError(f"成片超过 {req.preset} 的 {spec['max_sec']} 秒限制，请回编辑器调整后重新导出")
+        return {'ok': True, 'path': clip['video_path'], 'cached': True, 'preset': 'studio',
+                'clip_id': req.clip_id, 'title': clip['title'], 'duration_sec': duration,
+                'studio_job_id': clip['studio_job_id'], 'revision': clip['revision'],
+                'width': clip['width'], 'height': clip['height'],
+                'warnings': [*clip['warnings'], '使用已导出的成片，保留原有画幅、文字和声音，不重复渲染']}
     video = find_source_video(req.project_id)
     start = to_seconds(clip["start_time"])
     end = to_seconds(clip["end_time"])

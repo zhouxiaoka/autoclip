@@ -6,9 +6,11 @@ import { Modal, message } from 'antd'
 import { Clip } from '../store/useProjectStore'
 import EditableTitle from './EditableTitle'
 import ClipVideo from './ClipVideo'
+import { ClipExportDialog } from '../features/exports/ClipExportDialog'
 import { Btn, Icon, parseTimecode, fmtDuration, fmtClock } from '../ui'
 
 interface ClipCardProps {
+  onEdit?: () => void
   clip: Clip
   videoUrl?: string
   onDownload: (clipId: string) => void
@@ -17,11 +19,12 @@ interface ClipCardProps {
 }
 
 // Calm Premium clip card — see DESIGN.md → App Layer / Media card
-const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, projectId, onClipUpdate }) => {
+const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, projectId, onClipUpdate, onEdit }) => {
   useTranslation()
   const navigate = useNavigate()
   const [showPlayer, setShowPlayer] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
+  const [showExport, setShowExport] = useState(false)
 
   const openPublish = () => {
     if (!projectId) return
@@ -103,9 +106,11 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
         <div
           className="ac-card-thumb"
           style={videoThumbnail ? { backgroundImage: `url(${videoThumbnail})` } : undefined}
-          onClick={() => setShowPlayer(true)}
+          onClick={onEdit || (() => setShowPlayer(true))}
+          tabIndex={0}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (onEdit || (() => setShowPlayer(true)))() } }}
           role="button"
-          aria-label={t("播放")}
+          aria-label={t(onEdit ? "预览与修改" : "播放")}
         >
           <div className="play"><span><Icon.Play size={18} /></span></div>
           <span className="ac-tag ac-tag--tr" title={t("推荐分")}>{score}</span>
@@ -125,9 +130,10 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
           <div className="ac-card-foot">
             <span className="meta">{fmtDuration(durationSec)}</span>
             <div className="ac-card-actions">
-              <Btn variant="text" onClick={() => setShowPlayer(true)}>{t("播放")}</Btn>
+              <Btn variant="text" onClick={onEdit || (() => setShowPlayer(true))}>{t(onEdit ? "预览与修改" : "播放")}</Btn>
               <Btn variant="text" onClick={handleDownload}>{t("下载")}</Btn>
               {projectId && <Btn variant="text" onClick={openPublish}>{t("发布")}</Btn>}
+              {projectId && <Btn variant="text" onClick={() => setShowExport(true)}>{t("导出")}</Btn>}
             </div>
           </div>
         </div>
@@ -170,6 +176,17 @@ const ClipCard: React.FC<ClipCardProps> = ({ clip, videoUrl, onDownload, project
           </div>
         )}
       </Modal>
+
+      {projectId && (
+        <ClipExportDialog
+          key={`${projectId}:${clip.id}`}
+          open={showExport}
+          onClose={() => setShowExport(false)}
+          projectId={projectId}
+          clipId={clip.id}
+        />
+      )}
+
     </>
   )
 }

@@ -131,7 +131,8 @@ def test_cpu_encode_error_becomes_readable_and_is_not_logged_with_traceback(tmp_
         def __init__(self, model, device="auto", compute_type="int8", download_root=None):
             calls.append((device, compute_type))
 
-        def transcribe(self, path, language=None, vad_filter=False):
+        def transcribe(self, path, language=None, vad_filter=False, word_timestamps=False):
+            assert word_timestamps is True
             raise RuntimeError("cuBLAS failed with status CUBLAS_STATUS_NOT_SUPPORTED")
 
     _install_fake_whisper(monkeypatch, FakeModel)
@@ -157,11 +158,13 @@ def test_vad_fail_retries_without_filter_and_still_writes_srt(tmp_path, monkeypa
         def __init__(self, model, device="auto", compute_type="int8", download_root=None):
             assert (device, compute_type) == ("cpu", "int8")
 
-        def transcribe(self, path, language=None, vad_filter=False):
+        def transcribe(self, path, language=None, vad_filter=False, word_timestamps=False):
+            assert word_timestamps is True
             vad_flags.append(vad_filter)
             if vad_filter:
                 raise Fail("Non-zero status code returned while running")
-            return [SimpleNamespace(start=0.0, end=1.5, text="你好")], None
+            return [SimpleNamespace(start=0.0, end=1.5, text="你好",
+                                    words=[SimpleNamespace(word="你好", start=0.0, end=1.5)])], SimpleNamespace(language="zh")
 
     _install_fake_whisper(monkeypatch, FakeModel)
     video = tmp_path / "clip.mp4"
@@ -173,6 +176,8 @@ def test_vad_fail_retries_without_filter_and_still_writes_srt(tmp_path, monkeypa
     assert vad_flags == [True, False]
     assert result == output
     assert "你好" in output.read_text(encoding="utf-8")
+    from backend.utils.word_timing import load_word_timing
+    assert load_word_timing(output)[0]["words"] == [{"text": "你好", "start": 0.0, "end": 1.5}]
 
 
 def test_generate_subtitle_accepts_import_keyword_arguments(tmp_path):
@@ -207,7 +212,8 @@ def test_blank_segments_are_not_written_as_success(tmp_path, monkeypatch):
         def __init__(self, model, device="auto", compute_type="int8", download_root=None):
             pass
 
-        def transcribe(self, path, language=None, vad_filter=False):
+        def transcribe(self, path, language=None, vad_filter=False, word_timestamps=False):
+            assert word_timestamps is True
             return [
                 SimpleNamespace(start=0.0, end=1.0, text="   "),
                 SimpleNamespace(start=1.0, end=2.0, text=""),
@@ -232,7 +238,8 @@ def test_existing_blank_srt_is_transcribed_again(tmp_path, monkeypatch):
         def __init__(self, model, device="auto", compute_type="int8", download_root=None):
             pass
 
-        def transcribe(self, path, language=None, vad_filter=False):
+        def transcribe(self, path, language=None, vad_filter=False, word_timestamps=False):
+            assert word_timestamps is True
             calls.append(vad_filter)
             return [SimpleNamespace(start=0.0, end=1.2, text="有人声")], None
 
@@ -275,7 +282,8 @@ def test_gpu_runtime_error_retries_on_cpu(tmp_path, monkeypatch):
             self.device = device
             constructed.append((device, compute_type))
 
-        def transcribe(self, path, language=None, vad_filter=False):
+        def transcribe(self, path, language=None, vad_filter=False, word_timestamps=False):
+            assert word_timestamps is True
             if self.device != "cpu":
                 raise RuntimeError("CUDA failed with error out of memory")
             return [SimpleNamespace(start=0.2, end=0.8, text="ok")], None
