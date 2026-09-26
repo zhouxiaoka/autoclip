@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 from typing import Literal
 from pydantic import BaseModel, Field
-from backend.services.studio import intelligence
+from backend.services.studio import intelligence, analysis_preferences
 from backend.services.studio.models import ImportOptions, Preferences
 
 
@@ -22,13 +22,19 @@ def recommend(video: Path, options: ImportOptions):
     duration = info.get('duration', 0)
     if duration < 1 or duration > 7200:
         raise ValueError('智能制作目前支持 1 秒至 2 小时的素材')
+    consent = analysis_preferences.load()
+    configured = intelligence.ready()
     mode = 'manual'
     diagnostics = None
     if options.goal != 'auto':
         result = Recommendation(content_type='other', goal=options.goal,
             reason='按你指定的制作方式处理，其他未指定选项使用推荐设置。', confidence=1,
             aspect='portrait' if options.goal == 'promo' else 'original')
-    elif not intelligence.ready():
+    elif consent.analysis_mode == 'subtitle' or (consent.analysis_mode == 'auto' and not consent.allow_visual_screening) or (configured and not analysis_preferences.visual_screening_allowed(consent, vision_configured=configured)):
+        mode = 'local'
+        result = Recommendation(content_type='other', goal='content', confidence=0, suggested_goals=['content'],
+            reason='按字幕链路处理，未调用视觉初筛；正式制作时使用已有字幕或转写，尚未验证语音内容。')
+    elif not configured:
         mode = 'fallback'
         result = Recommendation(content_type='other', goal='content',
             reason='尚未配置视觉模型，无法自动判断；请手动选择制作类型，或在设置中配置后重新识别。', confidence=0, suggested_goals=[])
@@ -64,5 +70,6 @@ def recommend(video: Path, options: ImportOptions):
     prefs = Preferences(goal=result.goal, language=options.language,
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
-    return {**({'diagnostics': diagnostics} if diagnostics else {}), 'mode': mode, 'source_duration': duration, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
+    route = 'visual' if result.goal != 'content' and (consent.analysis_mode == 'visual' or (consent.analysis_mode == 'auto' and mode == 'ai' and result.goal != 'content')) else 'subtitle'
+    return {'analysis_preferences': consent.model_dump(), 'recommended_analysis': route, **({'diagnostics': diagnostics} if diagnostics else {}), 'mode': mode, 'source_duration': duration, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
             'overrides': options.model_dump(exclude_none=True)}
