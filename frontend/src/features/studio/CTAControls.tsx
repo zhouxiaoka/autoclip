@@ -29,7 +29,7 @@ export default function CTAControls({projectId,draft,onChange}: {projectId:strin
       <label className="studio-field">{t('行动文案（留空使用默认）')}<textarea maxLength={80} value={c.text} onChange={e=>change({text:e.target.value})}/></label>
       <p className="studio-muted">{t('自定义文案与游戏名称按原文输出，不自动翻译。')}</p>
       {c.template==='challenge' && <label><input type="checkbox" checked={!!plan && c.confirmed_scene===plan.scene_key} onChange={e=>change({confirmed_scene:e.target.checked && plan?plan.scene_key:''})} disabled={!plan}/>{t('我已确认末镜头包含完整结果，适合定格')}</label>}
-      <label className="studio-field">{t('文字位置')}<input type="range" min=".2" max=".7" step=".01" value={c.position} onChange={e=>change({position:Number(e.target.value)})}/></label>
+      {plan?.template!=='brand' && <label className="studio-field">{t('文字位置')}<input type="range" min=".2" max=".7" step=".01" value={c.position} onChange={e=>change({position:Number(e.target.value)})}/></label>}
       {error && <p className="studio-error" role="alert">{t(error)}</p>}
       {plan && <><p>{t(labels[plan.template])} · {t(plan.reason)} · +{plan.extra_duration}s</p><img src={plan.image} style={{width:'100%',maxHeight:320,objectFit:'contain',background:'#263544'}} alt={t('CTA 排版预览')}/></>}
       <p className="studio-muted">{t('此处仅预览文字图层；完整画面、定格与声音请导出后预览。')}</p>

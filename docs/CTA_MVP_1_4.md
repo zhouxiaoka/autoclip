@@ -25,6 +25,7 @@
 ## 验证与复现
 
 - `python -m pytest backend/tests/test_studio.py backend/tests/test_studio_cta.py backend/tests/test_studio_publishing.py backend/tests/test_subtitle_promo.py -q`：122 passed。
+- 完整后端 `python -m pytest backend/tests -q`：600 passed（无付费接口）。
 - 前端 typecheck、lint、build 通过；`npm test`：109 passed。
 - 真实 FFmpeg 测试覆盖三种模板及关闭、有声/无声、原内容保留、输出时长、完整解码、独立片尾。包含配置校验、短镜头降级、确认失效、旧草稿保存和无模型调用的 API 测试。
 - 浏览器隔离环境 `http://127.0.0.1:8793/#/project/cta-mvp/studio/continue`：实际操作文案修改、保存 V2、渲染、切换到实际成片，输出 1080×1920、17.5 秒。
