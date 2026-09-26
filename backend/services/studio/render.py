@@ -135,7 +135,9 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
             cta_plan = cta.plan(draft)
             if cta_plan['template'] != 'off':
                 packaged = folder / 'packaged.mp4'
-                cta.apply(partial, packaged, cta_plan, w, h, keep_audio, folder)
+                from backend.services.studio.cta_materials import frame
+                source_frame = frame(video, draft) if cta_plan['template'] == 'brand' else None
+                cta.apply(partial, packaged, cta_plan, w, h, keep_audio, folder, source_frame)
                 import shutil
                 shutil.copyfile(packaged, partial)
                 warnings.append('CTA 为视频内文字，实际点击入口需在投放平台配置')

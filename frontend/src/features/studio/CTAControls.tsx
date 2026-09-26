@@ -32,7 +32,7 @@ export default function CTAControls({projectId,draft,onChange}: {projectId:strin
       {plan?.template!=='brand' && <label className="studio-field">{t('文字位置')}<input type="range" min=".2" max=".7" step=".01" value={c.position} onChange={e=>change({position:Number(e.target.value)})}/></label>}
       {error && <p className="studio-error" role="alert">{t(error)}</p>}
       {plan && <><p>{t(labels[plan.template])} · {t(plan.reason)} · +{plan.extra_duration}s</p><img src={plan.image} style={{width:'100%',maxHeight:320,objectFit:'contain',background:'#263544'}} alt={t('CTA 排版预览')}/></>}
-      <p className="studio-muted">{t('此处仅预览文字图层；完整画面、定格与声音请导出后预览。')}</p>
+      <p className="studio-muted">{t('此处预览收尾排版；完整画面、定格与声音请导出后预览。')}</p>
       <p className="studio-muted">{t('CTA 为视频内文字，实际点击入口需在投放平台配置')}</p>
     </>}
   </details>

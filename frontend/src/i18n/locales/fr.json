@@ -1132,7 +1132,6 @@
   "自定义文案与游戏名称按原文输出，不自动翻译。": "Le texte personnalisé et le nom sont exportés sans traduction.",
   "我已确认末镜头包含完整结果，适合定格": "J’ai vérifié que le dernier plan montre le résultat complet et convient à un arrêt sur image",
   "CTA 排版预览": "Aperçu de la mise en page du CTA",
-  "此处仅预览文字图层；完整画面、定格与声音请导出后预览。": "Calque de texte uniquement. Exportez pour vérifier la vidéo, l’arrêt sur image et le son.",
   "CTA 为视频内文字，实际点击入口需在投放平台配置": "Le CTA est intégré à la vidéo. Configurez l’action cliquable sur la plateforme publicitaire.",
   "手动选择": "Choix manuel",
   "末镜头有足够续播时间": "Le dernier plan est assez long",
@@ -1141,5 +1140,6 @@
   "续播时间不足；已使用品牌落版": "Durée insuffisante ; carton de marque utilisé",
   "CTA 画布尺寸无效": "Dimensions du CTA invalides",
   "CTA 文字太长，请缩短文案": "Le CTA est trop long ; raccourcissez-le",
-  "游戏名称太长，请缩短名称": "Le nom est trop long ; raccourcissez-le"
+  "游戏名称太长，请缩短名称": "Le nom est trop long ; raccourcissez-le",
+  "此处预览收尾排版；完整画面、定格与声音请导出后预览。": "Aperçu de la conclusion. Exportez pour vérifier la vidéo complète, l’arrêt sur image et le son."
 }

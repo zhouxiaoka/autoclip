@@ -84,4 +84,9 @@ def test_actual_render_preserves_body_and_appends_only_when_needed(tmp_path,monk
     assert raw[0]>220 and raw[1]<25
     if kind=='brand':
         tail=subprocess.check_output([get_ffmpeg_path(),'-v','error','-ss','10','-i',str(output),'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','-'])
-        assert tail[0]<50  # Independent dark slate, not a fabricated gameplay result.
+        assert 60 < tail[0] < 160  # Dimmed actual source behind the framed gameplay tile.
+        from PIL import Image, ImageChops, ImageStat
+        from backend.services.studio.cta_materials import frame
+        expected_image=cta.artwork(cta.plan(d),320,180,frame(source,d)).convert('RGB')
+        actual_image=Image.frombytes('RGB',(320,180),tail)
+        assert max(ImageStat.Stat(ImageChops.difference(expected_image,actual_image)).mean)<8

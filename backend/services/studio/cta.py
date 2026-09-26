@@ -1,9 +1,7 @@
 """Bounded, model-free CTA planning and artwork shared by preview and export."""
 import io
 import subprocess
-from PIL import Image, ImageDraw
 from backend.services.studio.audio import scene_duration
-from backend.services.studio.title_art import font_for, lines_for
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
 COPY = {
@@ -38,66 +36,22 @@ def plan(draft):
             'brand': draft.cta.brand.strip(), 'position': draft.cta.position}
 
 
-def artwork(spec, w, h):
+def artwork(spec, w, h, source=None):
     if w < 16 or h < 16 or w*h > 16777216:
         raise ValueError('CTA 画布尺寸无效')
-    kind = spec['template']
-    image = Image.new('RGBA', (w, h))
-    if kind == 'off':
-        return image
-    draw = ImageDraw.Draw(image)
-    if kind == 'brand':
-        # An independent branded slate avoids presenting an arbitrary last frame as evidence.
-        for y in range(h):
-            t = y / h
-            draw.line((0,y,w,y), fill=(int(12+12*t),int(20+20*t),int(34+34*t),255))
-        draw.ellipse((w*.5,-h*.15,w*1.6,h*.6),fill=(30,63,79,255))
-    elif kind == 'challenge':
-        draw.rectangle((0,0,w,h), fill=(7,13,23,120))
-    color = '#b8ff68'
-    max_width = w*.74
-    size = max(12, round(min(w*.09,h*.075)))
-    while True:
-        font = font_for(spec['text'],size)
-        lines = lines_for(spec['text'],font,max_width)
-        if len(lines)<=2 and all(font.getlength(line)<=max_width for line in lines): break
-        size -= 2
-        if size < max(10,min(w,h)*.026):
-            raise ValueError('CTA 文字太长，请缩短文案')
-    line_h = size*1.3
-    brand = spec['brand']
-    brand_size = max(10, round(size*.55))
-    brand_font = font_for(brand,brand_size)
-    while brand and brand_font.getlength(brand)>max_width and brand_size>10:
-        brand_size-=1
-        brand_font=font_for(brand,brand_size)
-    if brand and brand_font.getlength(brand)>max_width:
-        raise ValueError('游戏名称太长，请缩短名称')
-    pad = min(w,h)*.045
-    content_h = line_h*len(lines) + (brand_size*1.8 if brand else 0)
-    y = h*(.42 if kind=='brand' else spec['position'])
-    y = min(y,h*.86-content_h-pad)
-    if kind!='brand':
-        draw.rounded_rectangle((w*.08,y-pad,w*.92,y+content_h+pad),radius=round(pad),fill=(10,19,30,238),outline=(125,160,170,210),width=max(1,round(w*.002)))
-    draw.rounded_rectangle((w*.13,y-pad*.2,w*.23,y-pad*.2+max(3,h*.004)),radius=2,fill=color)
-    if brand:
-        draw.text((w*.13,y+pad*.25),brand,font=brand_font,fill='#c6d4df',anchor='lt')
-        y+=brand_size*1.8
-    for line in lines:
-        draw.text((w*.13,y+pad*.25),line,font=font,fill=color if kind=='challenge' else 'white',anchor='lt')
-        y+=line_h
-    return image
+    from backend.services.studio.cta_materials import artwork as render_artwork
+    return render_artwork(spec, w, h, source)
 
 
-def png_bytes(spec,w,h):
+def png_bytes(spec,w,h,source=None):
     stream=io.BytesIO()
-    artwork(spec,w,h).save(stream,format='PNG')
+    artwork(spec,w,h,source).save(stream,format='PNG')
     return stream.getvalue()
 
 
-def apply(video, destination, spec, w, h, keep_audio, folder):
+def apply(video, destination, spec, w, h, keep_audio, folder, source=None):
     layer=folder/'cta.png'
-    layer.write_bytes(png_bytes(spec,w,h))
+    layer.write_bytes(png_bytes(spec,w,h,source))
     extra=spec['extra_duration']
     graph=f"[0:v]tpad=stop_mode=clone:stop_duration={extra}[base];[base][1:v]overlay=0:0:enable='gte(t,{spec['start']})':shortest=1[out]"
     cmd=[get_ffmpeg_path(),'-v','error','-i',str(video),'-loop','1','-i',str(layer),'-filter_complex',graph,'-map','[out]']

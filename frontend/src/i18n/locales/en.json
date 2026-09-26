@@ -1132,7 +1132,6 @@
   "自定义文案与游戏名称按原文输出，不自动翻译。": "Custom text and game names are exported as entered, without translation.",
   "我已确认末镜头包含完整结果，适合定格": "I confirmed the last shot includes the full outcome and a suitable freeze frame",
   "CTA 排版预览": "CTA layout preview",
-  "此处仅预览文字图层；完整画面、定格与声音请导出后预览。": "Text layer only. Export to preview the complete video, freeze frame and audio.",
   "CTA 为视频内文字，实际点击入口需在投放平台配置": "CTA is video text. Configure the actual clickable action on the ad platform.",
   "手动选择": "Manual selection",
   "末镜头有足够续播时间": "The last shot has enough time for an overlay",
@@ -1141,5 +1140,6 @@
   "续播时间不足；已使用品牌落版": "Not enough overlay time; using a brand slate",
   "CTA 画布尺寸无效": "Invalid CTA canvas size",
   "CTA 文字太长，请缩短文案": "CTA text is too long; shorten it",
-  "游戏名称太长，请缩短名称": "Game name is too long; shorten it"
+  "游戏名称太长，请缩短名称": "Game name is too long; shorten it",
+  "此处预览收尾排版；完整画面、定格与声音请导出后预览。": "Ending layout preview. Export to review the complete video, freeze frame and audio."
 }
