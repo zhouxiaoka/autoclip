@@ -1,0 +1,88 @@
+{
+  "version": "1.4.0-rc.1",
+  "base_commit": "f30c29d5",
+  "main_base": "58a49728",
+  "scope": "Internal macOS ARM64 candidate; ad-hoc signed, no updater signature/notarization/release",
+  "runtime": {
+    "source": "synthetic offline fixture",
+    "backend_sha256": "9b22adf20fd7adf95b2281c2b53c2bb4099c4776be14a009ccbeb7c9cf5de93a",
+    "python": "3.13.13",
+    "six_templates": "passed",
+    "original_audio": "passed",
+    "portrait_render": {
+      "width": 1080,
+      "height": 1920,
+      "duration": 1.0
+    },
+    "desktop_health": "passed",
+    "output": "/private/tmp/autoclip-rc-20260927/autoclip-bundle-smoke-xyyo2mgu/data/projects/bundle-smoke/output/studio/bundle-output.mp4"
+  },
+  "signature_before_smoke": "passed",
+  "signature_after_smoke": "passed",
+  "production_vision": {
+    "source": "runner-source.mp4",
+    "request_budget": 2,
+    "timeout_seconds": 180,
+    "requests": [
+      {
+        "images": 60,
+        "outcome": "failed",
+        "diagnostics": {
+          "code": "timeout",
+          "phase": "request",
+          "elapsed_seconds": 180.31
+        },
+        "elapsed_seconds": 180.31
+      }
+    ],
+    "stages": [
+      "扫描画面，寻找候选高光"
+    ],
+    "scope": "Current production analyze; isolated real-model validation, no retry",
+    "outcome": "failed",
+    "error_type": "VisionRequestError",
+    "diagnostics": {
+      "code": "timeout",
+      "phase": "scan",
+      "elapsed_seconds": 180.31
+    },
+    "elapsed_seconds": 187.39
+  },
+  "endpoint_probe": {
+    "outcome": "success",
+    "valid_json": true,
+    "scope": "One minimal no-image endpoint probe, thinking disabled",
+    "elapsed_seconds": 0.68
+  },
+  "diagnostic_no_thinking": {
+    "source": "runner-source.mp4",
+    "request_budget": 2,
+    "timeout_seconds": 180,
+    "requests": [
+      {
+        "images": 60,
+        "outcome": "success",
+        "elapsed_seconds": 51.82
+      }
+    ],
+    "stages": [
+      "扫描画面，寻找候选高光"
+    ],
+    "scope": "Diagnostic only: same 60-frame scan with Seed thinking disabled; not production default",
+    "outcome": "failed",
+    "error_type": "ValueError",
+    "elapsed_seconds": 59.25
+  },
+  "artifacts": [
+    {
+      "name": "AutoClip Desktop_1.4.0-rc.1_aarch64.dmg",
+      "bytes": 249588578,
+      "sha256": "bf0bba288706a49bf6d2fad84f41946fe7cd671cfe67c65098de49d6b5092805"
+    },
+    {
+      "name": "AutoClip.Desktop_1.4.0-rc.1_aarch64.app.tar.gz",
+      "bytes": 159002102,
+      "sha256": "f72889433ee2a59b894b4352c810325487b92731ad43fa939479a11b2d6c3477"
+    }
+  ]
+}
