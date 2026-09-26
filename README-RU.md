@@ -14,6 +14,14 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
+<p align="center">
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending #3" width="250" height="55"></a>
+</p>
+
+Локальный монтаж · свой ключ модели
+
+Зафиксированное достижение Trendshift, а не текущая позиция. GitHub Trending и Trendshift — разные рейтинги.
+
 [Сайт проекта](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Сообщить о проблеме](https://github.com/zhouxiaoka/autoclip/issues)
 
 **Установщики приложения: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
@@ -32,16 +40,6 @@ AutoClip с помощью ИИ анализирует субтитры, нах�
 
 Реальный веб-интерфейс v1.3.0: добавьте локальное видео в области импорта и при необходимости субтитры SRT.
 
-## Признание сообщества
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
-</p>
-
-Эти значки предоставляет Trendshift. Нажмите на них, чтобы посмотреть достижения AutoClip. GitHub Trending и Trendshift — разные рейтинги; значки показывают зафиксированные достижения, а не текущую позицию.
-
 ## Возможности
 
 | Возможность | Описание |
@@ -49,7 +47,7 @@ AutoClip с помощью ИИ анализирует субтитры, нах�
 | Импорт видео | Локальные файлы, ссылки YouTube и Bilibili, а также необязательные субтитры SRT. |
 | Поиск ярких моментов | Создание плана, временных интервалов по темам, оценок фрагментов и заголовков на основе субтитров. |
 | Клипы и подборки | Автоматическое создание клипов и рекомендуемых подборок с ручным изменением порядка. |
-| Публикация (v1.3.2) | Когда клипы готовы, откройте «Публикация» у клипа. Доступно в **v1.3.2**. Зарубежные площадки — те, что подключены в вашем собственном аккаунте Upload-Post: TikTok, Instagram, YouTube, Facebook, LinkedIn, X, Threads, Pinterest, Bluesky, Discord, Telegram и Google Business, по факту подключения. Bilibili — один аккаунт: один раз вставьте Cookie в настройках. Нужны SESSDATA, bili_jct и DedeUserID. Можно отправить сейчас или по расписанию. Заголовок и описание необязательны и по умолчанию берутся из названия клипа. Вшитые субтитры включены по умолчанию, как и титульная карточка примерно на 4 секунды. Видимость по умолчанию — только я / private там, где площадка это поддерживает. AutoClip обещает это только для TikTok, YouTube и Bilibili. Файл можно скачать без публикации. На странице проекта есть история и календарь, а ещё отмена расписания, которое ещё не вышло. «Составить неделю» только для зарубежных площадок: понедельник, среда и пятница в 09:00, без Bilibili. Вертикальные аккаунты рендерятся в 9:16 без обрезки до 60 секунд. Только Bilibili — альбомная ориентация. Только LinkedIn или X — исходный кадр. Вертикаль и Bilibili в одной отправке рендерятся по отдельности. |
+| Публикация (v1.3.2) | С **v1.3.2**, когда клипы готовы, их можно опубликовать или запланировать на той же странице. Зарубежные площадки идут через Upload-Post; для Bilibili один раз вставьте cookie входа в настройках. По умолчанию публикация настолько закрытая, насколько позволяет площадка; файл можно только экспортировать. Подробности: [руководство по публикации (китайский)](docs/PUBLISH_UPLOAD_POST.md). |
 | Автообложка (v1.3.2) | При публикации обложку можно создать автоматически, чтобы Bilibili не отклонил пустую обложку. Подробности обложки и титульной карточки по умолчанию — в пояснении к установщику этого выпуска. Доступно в **v1.3.2**. |
 | Экспорт для публикации | Профили Douyin, Xiaohongshu, YouTube Shorts и Bilibili, вшитые субтитры и титульные карточки. |
 | Выбор моделей | Qwen, OpenAI-совместимые API, Gemini, SiliconFlow и локальные модели через Ollama / LM Studio. |

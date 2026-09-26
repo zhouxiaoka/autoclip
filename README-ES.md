@@ -14,6 +14,14 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
+<p align="center">
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending #3" width="250" height="55"></a>
+</p>
+
+Edición en local · trae tu propia clave de modelo
+
+Logro registrado por Trendshift; no es un puesto en tiempo real. GitHub Trending y Trendshift son clasificaciones distintas.
+
 [Sitio web](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Informar de un problema](https://github.com/zhouxiaoka/autoclip/issues)
 
 **Instaladores de escritorio: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
@@ -32,16 +40,6 @@ AutoClip utiliza IA para analizar los subtítulos de un vídeo, encontrar moment
 
 Interfaz web real de v1.3.0: añade un vídeo local en el área de importación, con subtítulos SRT opcionales.
 
-## Reconocimiento de la comunidad
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
-</p>
-
-Estas insignias las proporciona Trendshift. Haz clic para consultar los logros registrados de AutoClip. GitHub Trending y Trendshift son clasificaciones distintas; las insignias muestran logros registrados, no una posición en tiempo real.
-
 ## Qué puedes hacer
 
 | Función | Descripción |
@@ -49,7 +47,7 @@ Estas insignias las proporciona Trendshift. Haz clic para consultar los logros r
 | Importar vídeos | Usa archivos locales o enlaces de YouTube y Bilibili, con subtítulos SRT opcionales. |
 | Encontrar momentos destacados | Extrae resúmenes, intervalos por tema, puntuaciones y títulos a partir de los subtítulos. |
 | Crear clips y recopilaciones | Genera clips y recopilaciones sugeridas, y ajusta su orden manualmente. |
-| Publicar (v1.3.2) | Cuando los clips estén listos, abre Publicar en un clip. Disponible en **v1.3.2**. En el extranjero se usan las plataformas conectadas en tu propia cuenta de Upload-Post: TikTok, Instagram, YouTube, Facebook, LinkedIn, X, Threads, Pinterest, Bluesky, Discord, Telegram y Google Business, según lo que esa cuenta tenga conectado. Bilibili es una sola cuenta: pega una Cookie una vez en Ajustes. Debe incluir SESSDATA, bili_jct y DedeUserID. Puedes publicar ahora o programar. El título y la descripción son opcionales y, si se dejan vacíos, usan el título del clip. Los subtítulos incrustados vienen activados, igual que la tarjeta de título de unos 4 segundos. La visibilidad predeterminada es solo yo / private donde la plataforma lo admite. AutoClip promete eso solo para TikTok, YouTube y Bilibili. También puedes descargar sin publicar. La página del proyecto muestra el historial y el calendario, y permite cancelar una programación que aún no ha salido. «Planear la semana» solo cubre el extranjero: rellena lunes, miércoles y viernes a las 09:00, sin Bilibili. Las cuentas verticales se renderizan en 9:16 sin corte a 60 segundos. Solo Bilibili usa horizontal. Solo LinkedIn o X conserva el encuadre original. Vertical y Bilibili en el mismo envío se renderizan por separado. |
+| Publicar (v1.3.2) | Desde la **v1.3.2**, cuando los clips estén listos, publícalos o prográmalos en la misma página. Las plataformas de fuera usan Upload-Post; para Bilibili, pega las cookies de inicio de sesión una vez en Ajustes. El valor predeterminado es tan privado como permita la plataforma; también puedes exportar sin publicar. Detalles: [guía de publicación (chino)](docs/PUBLISH_UPLOAD_POST.md). |
 | Portada automática (v1.3.2) | Al publicar se puede generar una portada automáticamente, para que Bilibili no rechace una portada vacía. Los detalles de la portada y la tarjeta de título por defecto siguen las notas de ese instalador. Disponible en **v1.3.2**. |
 | Exportar para publicar | Usa ajustes para Douyin, Xiaohongshu, YouTube Shorts y Bilibili, con subtítulos incrustados y tarjetas de título. |
 | Elegir modelos | Utiliza Qwen, API compatibles con OpenAI, Gemini, SiliconFlow o modelos locales con Ollama / LM Studio. |

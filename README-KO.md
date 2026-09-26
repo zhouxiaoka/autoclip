@@ -14,6 +14,14 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
+<p align="center">
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending #3" width="250" height="55"></a>
+</p>
+
+로컬에서 편집 · 모델 키는 직접 준비
+
+Trendshift에 기록된 순위 성과이며, 현재 실시간 순위가 아닙니다. GitHub Trending과 Trendshift는 서로 다른 순위입니다.
+
 [웹사이트](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [문제 신고](https://github.com/zhouxiaoka/autoclip/issues)
 
 **데스크톱 설치 파일: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
@@ -32,16 +40,6 @@ AutoClip은 AI로 영상 자막을 분석하고 하이라이트를 찾아 제목
 
 v1.3.0의 실제 웹 화면입니다. 파일 가져오기 영역에서 로컬 영상과 선택 사항인 SRT 자막을 추가할 수 있습니다.
 
-## 커뮤니티 성과
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
-</p>
-
-아래 배지는 Trendshift에서 제공합니다. 클릭하면 AutoClip의 순위 기록을 확인할 수 있습니다. GitHub Trending과 Trendshift는 서로 다른 순위이며, 배지는 현재 실시간 순위가 아닌 기록된 성과를 보여 줍니다.
-
 ## 주요 기능
 
 | 기능 | 설명 |
@@ -49,7 +47,7 @@ v1.3.0의 실제 웹 화면입니다. 파일 가져오기 영역에서 로컬 �
 | 영상 가져오기 | 로컬 영상, YouTube 및 Bilibili 링크를 지원하며 SRT 자막을 추가할 수 있습니다. |
 | 하이라이트 찾기 | 자막에서 개요, 주제별 시간 구간, 하이라이트 점수, 클립 제목을 추출합니다. |
 | 클립과 모음 영상 | 클립과 추천 모음 영상을 생성하고 순서를 직접 조정할 수 있습니다. |
-| 게시(v1.3.2) | 클립이 준비되면 그 클립에서 게시를 엽니다. **v1.3.2**부터 사용할 수 있습니다. 해외 플랫폼은 본인의 Upload-Post 계정에 연결한 곳입니다. TikTok, Instagram, YouTube, Facebook, LinkedIn, X, Threads, Pinterest, Bluesky, Discord, Telegram, Google Business 중 그 계정에서 쓸 수 있는 곳입니다. Bilibili는 계정 하나입니다. 설정에서 Cookie를 한 번 붙여 넣습니다. SESSDATA, bili_jct, DedeUserID가 있어야 합니다. 지금 올리거나 예약할 수 있습니다. 제목과 설명은 비워 두면 클립 제목을 씁니다. 자막 삽입은 기본으로 켜져 있고, 약 4초 타이틀 카드도 기본으로 켜져 있습니다. 공개 범위는 지원하는 플랫폼에서 기본이 나만 보기입니다. private / 나만 보기를 약속하는 곳은 TikTok, YouTube, Bilibili뿐입니다. 게시하지 않고 받을 수도 있습니다. 프로젝트 페이지에서 게시 기록과 달력을 보고, 아직 나가지 않은 예약을 취소할 수 있습니다. 「이번 주 배치」는 해외만 해당합니다. 아직 올리지 않은 클립을 월·수·금 09:00에 넣고, Bilibili는 넣지 않습니다. 세로 계정은 9:16으로 만들며 60초로 자르지 않습니다. Bilibili만이면 가로 화면입니다. LinkedIn 또는 X만이면 원본 화면입니다. 세로 계정과 Bilibili를 같은 번에 보내면 각각 따로 만듭니다. |
+| 게시(v1.3.2) | **v1.3.2**부터, 클립이 준비되면 같은 화면에서 게시하거나 예약할 수 있습니다. 해외 플랫폼은 Upload-Post를 쓰고, Bilibili는 설정에서 로그인 Cookie를 한 번 붙여 넣습니다. 기본값은 플랫폼이 허용하는 범위에서 비공개이며, 게시하지 않고 내보내기만 할 수도 있습니다. 자세한 내용은 [게시 안내(중국어)](docs/PUBLISH_UPLOAD_POST.md). |
 | 자동 커버(v1.3.2) | 게시할 때 커버를 자동으로 만들 수 있어, Bilibili 빈 커버 거절을 피합니다. 기본 커버와 타이틀 카드의 세부 내용은 그 버전 설치 파일 설명을 따릅니다. **v1.3.2**부터 사용할 수 있습니다. |
 | 게시용 내보내기 | Douyin, Xiaohongshu, YouTube Shorts, Bilibili 프리셋과 자막 삽입, 타이틀 카드를 지원합니다. |
 | 모델 선택 | Qwen, OpenAI 호환 API, Gemini, SiliconFlow, Ollama / LM Studio의 로컬 모델을 사용할 수 있습니다. |

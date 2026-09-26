@@ -14,6 +14,14 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
+<p align="center">
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending #3" width="250" height="55"></a>
+</p>
+
+ローカルで編集 · モデルのキーは自分で用意
+
+Trendshift が記録した掲載実績であり、現在のリアルタイム順位ではありません。GitHub Trending と Trendshift は別のランキングです。
+
 [公式サイト](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [問題を報告](https://github.com/zhouxiaoka/autoclip/issues)
 
 **デスクトップ版: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
@@ -32,16 +40,6 @@ AutoClip は AI で動画の字幕を分析し、見どころを抽出してタ�
 
 v1.3.0 の実際の Web 画面です。ファイル読み込み欄からローカル動画と任意の SRT 字幕を追加できます。
 
-## コミュニティでの実績
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
-</p>
-
-以下は Trendshift が提供するバッジです。クリックすると AutoClip の掲載履歴を確認できます。GitHub Trending と Trendshift は別のランキングであり、バッジは記録された実績を示すもので、現在の順位ではありません。
-
 ## 主な機能
 
 | 機能 | 説明 |
@@ -49,7 +47,7 @@ v1.3.0 の実際の Web 画面です。ファイル読み込み欄からロー�
 | 動画の読み込み | ローカル動画、YouTube、Bilibili のリンクに対応。SRT 字幕も指定できます。 |
 | 見どころの抽出 | 字幕から概要、トピックの時間範囲、評価スコア、クリップのタイトルを生成します。 |
 | クリップとまとめ動画 | クリップとおすすめのまとめ動画を生成し、順序を手動で変更できます。 |
-| 投稿（v1.3.2） | クリップができたら、そのクリップで投稿を開きます。**v1.3.2** から使えます。海外は、自分の Upload-Post アカウントで接続したプラットフォームです。TikTok、Instagram、YouTube、Facebook、LinkedIn、X、Threads、Pinterest、Bluesky、Discord、Telegram、Google Business のうち、そのアカウントで使えるもの。Bilibili はアカウント 1 つです。設定で Cookie を一度貼り付けます。SESSDATA、bili_jct、DedeUserID が必要です。今すぐ出すか、予約できます。タイトルと説明は任意で、空ならクリップのタイトルです。字幕の焼き込みは既定でオン、約 4 秒のタイトルカードも既定でオン。公開範囲は対応しているプラットフォームでは既定で自分だけです。private / 自分だけを約束するのは TikTok、YouTube、Bilibili だけです。投稿せずに書き出すこともできます。プロジェクトページで投稿履歴とカレンダーを見て、まだ出ていない予約を取り消せます。「今週を組む」は海外だけです。未投稿のクリップを月曜・水曜・金曜の 09:00 に入れ、Bilibili は含みません。縦型アカウントは 9:16 で、60 秒では切りません。Bilibili だけなら横画面。LinkedIn または X だけなら元の画角。縦型と Bilibili を同じ回で出すときは、それぞれ別に書き出します。 |
+| 投稿（v1.3.2） | **v1.3.2** から、クリップができたら同じ画面で投稿または予約できます。海外のプラットフォームは Upload-Post を使い、Bilibili は設定でログイン Cookie を一度貼り付けます。既定はプラットフォームが許す範囲で非公開です。投稿せずに書き出すこともできます。詳細は [投稿ガイド（中国語）](docs/PUBLISH_UPLOAD_POST.md)。 |
 | 自動カバー（v1.3.2） | 投稿時にカバーを自動生成でき、Bilibili の空カバー却下を避けます。既定のカバーとタイトルカードの詳細は、その版のインストーラー説明に従います。**v1.3.2** から使えます。 |
 | 公開用の書き出し | Douyin、小紅書、YouTube Shorts、Bilibili 向けのプリセット、字幕の焼き込み、タイトルカードに対応します。 |
 | モデルの選択 | Qwen、OpenAI 互換 API、Gemini、SiliconFlow、Ollama / LM Studio のローカルモデルを利用できます。 |

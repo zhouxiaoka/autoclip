@@ -14,6 +14,14 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
+<p align="center">
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending #3" width="250" height="55"></a>
+</p>
+
+本地剪辑 · 自备模型 Key
+
+Trendshift 记录的上榜成就，不代表当前实时排名。GitHub Trending 与 Trendshift 是不同榜单。
+
 [项目网站](https://zhouxiaoka.github.io/autoclip_intro/) · [讨论](https://github.com/zhouxiaoka/autoclip/discussions) · [反馈问题](https://github.com/zhouxiaoka/autoclip/issues)
 
 **桌面安装包: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
@@ -32,16 +40,6 @@ AutoClip 用 AI 分析视频字幕、定位高光、生成标题，并自动剪�
 
 v1.3.0 真实 Web 界面：在文件导入区添加本地视频，可同时提供 SRT 字幕。
 
-## 社区成就
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
-</p>
-
-以下徽章由 Trendshift 提供，点击可查看 AutoClip 的上榜记录。GitHub Trending 与 Trendshift 是不同榜单；徽章展示平台记录的成就，不代表当前实时排名。
-
 ## 你可以做什么
 
 | 能力 | 说明 |
@@ -49,7 +47,7 @@ v1.3.0 真实 Web 界面：在文件导入区添加本地视频，可同时提�
 | 导入素材 | 支持本地视频、YouTube 与 B 站链接，可附带 SRT 字幕。 |
 | 发现高光 | 从字幕提取大纲、话题时间线、精彩度评分和片段标题。 |
 | 剪辑与合集 | 自动生成视频切片，组合推荐合集，也可手动调整顺序。 |
-| 发布（v1.3.2） | 切片就绪后，在同一页打开发布。自 **v1.3.2** 起可用。海外走你自己的 Upload-Post 账号里已连接的平台：TikTok、Instagram、YouTube、Facebook、LinkedIn、X、Threads、Pinterest、Bluesky、Discord、Telegram、Google Business，以该账号实际连接的为准。B 站在设置里粘贴一次 Cookie（须含 SESSDATA、bili_jct、DedeUserID），一个账号。可现在发或定时；标题和描述可不填，默认用切片标题；字幕烧录默认打开，片头约 4 秒标题卡默认打开。可见范围在平台支持时默认「仅自己」，对外只对 TikTok、YouTube、B 站承诺仅自己 / private。也可以只下载、不发布。项目页有发布记录和月历，可取消尚未发出的排期。「排这一周」只排海外，填周一、周三、周五 09:00，不含 B 站。竖屏账号渲成 9:16，不按 60 秒截断；只发 B 站用横屏；只有 LinkedIn、X 这类横屏账号时用原画；竖屏和 B 站同一次各渲各的。 |
+| 发布（v1.3.2） | 自 **v1.3.2** 起，切片做好后可在本页发布或预约。海外平台用 Upload-Post；B 站在设置里粘贴一次登录 Cookie。默认尽量私密；也可以只导出、不发布。细则见 [发布说明](docs/PUBLISH_UPLOAD_POST.md)。 |
 | 自动封面（v1.3.2） | 发布时可自动生成封面，避免 B 站空封面被拒。默认封面和标题卡的细节随本版安装包说明。自 **v1.3.2** 起可用。 |
 | 发布导出 | 提供抖音、小红书、YouTube Shorts 和 B 站导出预设，支持烧录字幕与标题卡。 |
 | 自由选择模型 | 支持通义千问、OpenAI 兼容接口、Gemini、硅基流动，以及 Ollama / LM Studio 本地模型。 |
