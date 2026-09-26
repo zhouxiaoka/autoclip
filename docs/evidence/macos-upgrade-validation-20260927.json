@@ -49,6 +49,6 @@
   },
   "windows": {
     "decision": "User deferred actual Windows installation/import/save acceptance; proceed with macOS first",
-    "build_36260653083": "in_progress"
+    "build_36260653083": "success; build only, native acceptance pending"
   }
 }

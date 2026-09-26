@@ -62,6 +62,7 @@ export interface ImportOptions {
 export type AnalysisMode = 'subtitle' | 'visual'
 export interface AnalysisPreferences { analysis_mode: AnalysisMode | 'auto'; allow_visual_screening: boolean }
 export interface ImportPlan {
+  aspect?: Draft['aspect']
   recommended_analysis?: AnalysisMode; confirmed_analysis?: AnalysisMode
 
   id: string; source_duration?:number; suggested_goals: Goal[]; selected_goals?: Goal[]

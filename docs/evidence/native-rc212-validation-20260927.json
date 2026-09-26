@@ -53,7 +53,7 @@
     "rc210_build": "36258527471",
     "rc210_result": "success; release skipped",
     "latest_build": "36260653083",
-    "latest_result": "pending"
+    "latest_result": "success; native Windows acceptance deferred by user"
   },
   "remaining": [
     "Windows installer/UI on Windows host",
