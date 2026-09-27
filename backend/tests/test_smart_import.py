@@ -7,6 +7,12 @@ from backend.tests.test_studio import root, source, client
 from backend.services.studio import intelligence, jobs, store, planning
 from backend.services.studio.models import ImportOptions
 
+@pytest.fixture(autouse=True)
+def explicit_visual_preferences(monkeypatch):
+    # These existing tests exercise the opted-in visual workflow.
+    from backend.services.studio import analysis_preferences as ap
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='visual', allow_visual_screening=True))
+
 class Immediate:
     def submit(self, fn, *args): fn(*args)
 

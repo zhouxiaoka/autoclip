@@ -99,6 +99,7 @@ class ImportOptions(BaseModel):
 
 class ConfirmPlan(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    analysis_mode: Literal['subtitle', 'visual'] | None = None
     plan_id: str = Field(min_length=1, max_length=100)
     goals: list[Goal] = Field(min_length=1, max_length=3)
     language: Language | None = None
