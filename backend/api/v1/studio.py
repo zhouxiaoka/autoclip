@@ -203,9 +203,9 @@ def candidates(project_id: str, db: Session = Depends(get_db)):
 def analyze_again(project_id: str, db: Session = Depends(get_db)):
     project = project_or_404(project_id, db)
     config = project.processing_config or {}
-    prefs = ImportOptions.model_validate(config['smart_import']) if 'smart_import' in config else Preferences.model_validate(config.get('creative', {}))
-    if prefs.goal == 'content' and 'smart_import' not in config:
-        raise HTTPException(422, '内容项目请继续使用原有切片流程')
+    # Legacy visual projects must enter the same screening/confirmation boundary.
+    # A stored creative goal describes output, not permission for a new paid scan.
+    prefs = ImportOptions.model_validate(config['smart_import']) if 'smart_import' in config else ImportOptions.model_validate(Preferences.model_validate(config.get('creative', {})).model_dump())
     url = None
     try:
         jobs.source(project_id)
@@ -213,8 +213,7 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
         url = (project.project_metadata or {}).get('source_url')
         if not url:
             raise HTTPException(404, '原素材不存在，请重新导入')
-    worker = jobs.inspect_project if isinstance(prefs, ImportOptions) else jobs.analyze_project
-    call(worker, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
+    call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
     return {'ok': True}
 
 @router.put('/{project_id}/plan')
