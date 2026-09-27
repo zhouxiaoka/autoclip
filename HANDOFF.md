@@ -34,6 +34,10 @@ Studio 入口已能接受 HTTPS 的 watch、youtu.be、Shorts、live、移动端
 
 新版 [PostHog Studio 看板](https://us.posthog.com/project/450605/dashboard/2140564) 已建立，生产与 validation 分开；真实隔离应用已验证两平台收到新事件。Sentry 验收错误为 PYTHON-FASTAPI-17，缺模型配置经修复后以 PYTHON-FASTAPI-19 / warning 上报；工程异常与配置警告两个线上视图已保存。代码仍在修复分支，尚未发布；不等于所有正式安装包已验收。完整事件契约、查询、测试和剩余验收见 [Studio 监控实施记录](docs/analytics/STUDIO_MONITORING.md)，原始缺口见 [审查记录](docs/TELEMETRY_AUDIT_1_4.md)。
 
+## Windows 连接重置修复（待发布）
+
+针对 Sentry `PYTHON-FASTAPI-3`，已复现 CPython Proactor 的 socket.shutdown 遇到 reset 后跳过关闭与服务器解绑。新增仅用于 Windows 桌面 CPython 3.13 的清理兼容补丁；保留协议/其他异常上报以及异步子进程支持。本地定向 12 项通过，Windows 原生 IOCP 测试与发布前检查见 [修复记录](docs/WINDOWS_CONNECTION_RESET_FIX.md)。九千多次是跨版本累计，不能当成 1.4.0 的故障或用户数。
+
 ## 下一步
 
 1. 审阅并合入本轮修复，按正常发布流程验证安装包，不把分支测试通过当成已发布。

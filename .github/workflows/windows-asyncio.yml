@@ -1,0 +1,36 @@
+name: Windows asyncio regression
+
+on:
+  push:
+    paths:
+      - 'backend/core/windows_asyncio.py'
+      - 'backend/tests/test_windows_asyncio.py'
+      - 'backend/app_factory.py'
+      - 'scripts/lib/desktop_build_common.sh'
+      - '.github/workflows/windows-asyncio.yml'
+  pull_request:
+    paths:
+      - 'backend/core/windows_asyncio.py'
+      - 'backend/tests/test_windows_asyncio.py'
+      - 'backend/app_factory.py'
+      - 'scripts/lib/desktop_build_common.sh'
+      - '.github/workflows/windows-asyncio.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-asyncio:
+    name: Windows Proactor cleanup
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # Match the desktop bundle; review the shim when upgrading Python.
+          python-version: "3.13.13"
+      - run: python -m pip install pytest
+      - run: python -m pytest backend/tests/test_windows_asyncio.py -q
+

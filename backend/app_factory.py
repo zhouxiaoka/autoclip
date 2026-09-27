@@ -27,6 +27,10 @@ def create_app(mode: str = "web") -> FastAPI:
     # 设置模式环境变量
     os.environ["AUTOCLIP_MODE"] = mode
 
+    if mode == "desktop":
+        from backend.core.windows_asyncio import install_windows_proactor_cleanup
+        install_windows_proactor_cleanup()
+
     try:
         from backend.core.sentry_setup import init_sentry
         init_sentry(mode)
