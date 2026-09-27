@@ -7,6 +7,7 @@ import { projectApi, bilibiliApi, VideoCategory, BilibiliDownloadTask } from '..
 import { useProjectStore } from '../store/useProjectStore'
 import { applyCategoryResponse } from '../utils/videoCategories'
 import VideoCategoryPicker from './VideoCategoryPicker'
+import { getVideoType, validateVideoUrl } from '../utils/videoUrl'
 
 const { Text } = Typography
 
@@ -72,50 +73,6 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
       }
     }
   }, [pollingInterval])
-
-  const validateVideoUrl = (url: string): boolean => {
-    const bilibiliPatterns = [
-      /^https?:\/\/www\.bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
-      /^https?:\/\/bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
-      /^https?:\/\/b23\.tv\/[0-9A-Za-z]+/,
-      /^https?:\/\/www\.bilibili\.com\/video\/av\d+/,
-      /^https?:\/\/bilibili\.com\/video\/av\d+/
-    ]
-    
-    const youtubePatterns = [
-      /^https?:\/\/(www\.)?youtube\.com\/watch\?v=[a-zA-Z0-9_-]+/,
-      /^https?:\/\/youtu\.be\/[a-zA-Z0-9_-]+/,
-      /^https?:\/\/(www\.)?youtube\.com\/embed\/[a-zA-Z0-9_-]+/,
-      /^https?:\/\/(www\.)?youtube\.com\/v\/[a-zA-Z0-9_-]+/
-    ]
-    
-    return bilibiliPatterns.some(pattern => pattern.test(url)) || 
-           youtubePatterns.some(pattern => pattern.test(url))
-  }
-  
-  const getVideoType = (url: string): 'bilibili' | 'youtube' | null => {
-    const bilibiliPatterns = [
-      /^https?:\/\/www\.bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
-      /^https?:\/\/bilibili\.com\/video\/[Bb][Vv][0-9A-Za-z]+/,
-      /^https?:\/\/b23\.tv\/[0-9A-Za-z]+/,
-      /^https?:\/\/www\.bilibili\.com\/video\/av\d+/,
-      /^https?:\/\/bilibili\.com\/video\/av\d+/
-    ]
-    
-    const youtubePatterns = [
-      /^https?:\/\/(www\.)?youtube\.com\/watch\?v=[a-zA-Z0-9_-]+/,
-      /^https?:\/\/youtu\.be\/[a-zA-Z0-9_-]+/,
-      /^https?:\/\/(www\.)?youtube\.com\/embed\/[a-zA-Z0-9_-]+/,
-      /^https?:\/\/(www\.)?youtube\.com\/v\/[a-zA-Z0-9_-]+/
-    ]
-    
-    if (bilibiliPatterns.some(pattern => pattern.test(url))) {
-      return 'bilibili'
-    } else if (youtubePatterns.some(pattern => pattern.test(url))) {
-      return 'youtube'
-    }
-    return null
-  }
 
   const parseVideoInfo = async () => {
     if (!url.trim()) {

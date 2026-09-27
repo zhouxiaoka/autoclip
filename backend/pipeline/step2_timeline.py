@@ -11,6 +11,7 @@ from collections import defaultdict
 # 导入依赖
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
+from .quality import to_seconds, to_srt_time
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR
 
 logger = logging.getLogger(__name__)
@@ -271,22 +272,20 @@ class TimelineExtractor:
                         logger.warning(f"  > 话题 '{timeline_item['outline']}' 结束时间格式不正确: {timeline_item['end_time']}")
                         continue
                     
-                    start_time = self._convert_time_format(timeline_item['start_time'])
-                    end_time = self._convert_time_format(timeline_item['end_time'])
-                    
-                    start_sec = self.text_processor.time_to_seconds(start_time)
-                    end_sec = self.text_processor.time_to_seconds(end_time)
-                    chunk_start_sec = self.text_processor.time_to_seconds(chunk_start)
-                    chunk_end_sec = self.text_processor.time_to_seconds(chunk_end)
-                    
-                    if start_sec < chunk_start_sec:
-                        logger.warning(f"  > 调整话题 '{timeline_item['outline']}' 的开始时间从 {start_time} 到 {chunk_start}")
-                        timeline_item['start_time'] = chunk_start
-                    
-                    if end_sec > chunk_end_sec:
-                        logger.warning(f"  > 调整话题 '{timeline_item['outline']}' 的结束时间从 {end_time} 到 {chunk_end}")
-                        timeline_item['end_time'] = chunk_end
-                    
+                    start_sec = to_seconds(timeline_item['start_time'])
+                    end_sec = to_seconds(timeline_item['end_time'])
+                    chunk_start_sec = to_seconds(chunk_start)
+                    chunk_end_sec = to_seconds(chunk_end)
+                    start_sec = max(start_sec, chunk_start_sec)
+                    end_sec = min(end_sec, chunk_end_sec)
+                    if end_sec <= start_sec:
+                        logger.warning("  > 时间区间倒序或不在当前字幕块内，跳过: %s", timeline_item)
+                        continue
+                    # Normalize before downstream sorting: .5 means half a second,
+                    # not five milliseconds, and MM:SS must gain the hours field.
+                    timeline_item['start_time'] = to_srt_time(start_sec)
+                    timeline_item['end_time'] = to_srt_time(end_sec)
+
                     logger.info(f"  > 定位成功: {timeline_item['outline']} ({timeline_item['start_time']} -> {timeline_item['end_time']})")
                     validated_items.append(timeline_item)
                 except Exception as e:
@@ -315,9 +314,12 @@ class TimelineExtractor:
         """
         验证时间格式是否正确 (HH:MM:SS,mmm)
         """
-        pattern = r'^\d{2}:\d{2}:\d{2},\d{3}$'
-        return bool(re.match(pattern, time_str))
-    
+        if not isinstance(time_str, str):
+            return False
+        # HH:MM:SS or MM:SS, optional comma/dot fraction; reject overflow.
+        pattern = r'^(?:\d{2,}:)?[0-5]\d:[0-5]\d(?:[,.]\d{1,3})?$'
+        return bool(re.fullmatch(pattern, time_str.strip()))
+
     def _convert_time_format(self, time_str: str) -> str:
         """
         转换时间格式：SRT格式 -> FFmpeg格式

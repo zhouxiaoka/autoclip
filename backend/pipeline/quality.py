@@ -348,7 +348,19 @@ def refine_timeline(items: Sequence[Dict[str, Any]], srt_entries: Sequence[Dict[
 
         # 4) 仍然太短：与相邻段合并（间隔小）或丢弃
         result: List[Dict[str, Any]] = []
-        for it in merged:
+        pending = list(merged)
+        for idx, it in enumerate(pending):
+            # Keep a short prefix until its adjacent successors have had a chance
+            # to form a usable segment. Previously every short topic was dropped
+            # before there was a preceding result to merge it into.
+            while it["_e"] - it["_s"] < profile.min_clip_sec and idx + 1 < len(pending):
+                nxt = pending[idx + 1]
+                if nxt["_s"] - it["_e"] > profile.merge_gap_sec or \
+                        nxt["_e"] - it["_s"] > profile.max_clip_sec:
+                    break
+                _merge_into(it, nxt)
+                report["merged"].append({"kept": _title(it), "absorbed": _title(nxt), "reason": "过短，与后一段合并"})
+                pending.pop(idx + 1)
             if it["_e"] - it["_s"] >= profile.min_clip_sec:
                 result.append(it)
                 continue
