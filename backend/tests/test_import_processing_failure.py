@@ -359,7 +359,8 @@ def test_import_blank_whisper_result_is_transcription_empty(tmp_path, monkeypatc
         def __init__(self, model, device="auto", compute_type="int8", download_root=None):
             pass
 
-        def transcribe(self, path, language=None, vad_filter=False):
+        def transcribe(self, path, language=None, vad_filter=False, word_timestamps=False):
+            assert word_timestamps is True
             return [SimpleNamespace(start=0.0, end=1.0, text="   ")], None
 
     module.WhisperModel = FakeModel

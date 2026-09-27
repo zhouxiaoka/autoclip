@@ -27,7 +27,10 @@ export function startWorkflowObserver(): () => void {
         if (stopped || !workflow.active(generation)) break
         if (w.settled) continue
         try {
-          if (w.kind === 'project') {
+          if (w.kind.startsWith('studio-')) {
+            const { data } = await axios.get(`/studio/${encodeURIComponent(w.projectId || w.id)}`, { baseURL, timeout: 5000 })
+            if (!stopped && workflow.active(generation)) workflow.observeStudio(w, data)
+          } else if (w.kind === 'project') {
             const { data } = await axios.get<TaskSnapshot[]>(`/tasks/project/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000 })
             if (!stopped && workflow.active(generation) && Array.isArray(data)) workflow.observeTasks(w, data)
           } else if (w.kind === 'export') {

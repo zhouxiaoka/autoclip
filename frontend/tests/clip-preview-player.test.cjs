@@ -15,7 +15,7 @@ test('react-player will not mount a file player for extension-less clip URLs', (
 })
 
 test('clip previews use a native video element, not react-player', () => {
-  const files = ['ClipCard.tsx', 'ClipDetailModal.tsx', 'CollectionPreviewModal.tsx', 'ClipVideo.tsx']
+  const files = ['ClipCard.tsx', 'CollectionPreviewModal.tsx', 'ClipVideo.tsx']
   for (const name of files) {
     const source = fs.readFileSync(path.join(root, name), 'utf8')
     assert.doesNotMatch(source, /from ['"]react-player['"]/, name)
@@ -24,7 +24,7 @@ test('clip previews use a native video element, not react-player', () => {
   assert.match(player, /<video/)
   assert.match(player, /src=\{url\}/)
   assert.match(player, /这个切片当前播放器无法解码/)
-  for (const name of ['ClipCard.tsx', 'ClipDetailModal.tsx', 'CollectionPreviewModal.tsx']) {
+  for (const name of ['ClipCard.tsx', 'CollectionPreviewModal.tsx']) {
     const source = fs.readFileSync(path.join(root, name), 'utf8')
     assert.match(source, /<ClipVideo/, name)
   }

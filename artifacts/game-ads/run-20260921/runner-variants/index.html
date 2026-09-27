@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-composition-variables="[{&quot;id&quot;:&quot;hook&quot;,&quot;type&quot;:&quot;string&quot;,&quot;label&quot;:&quot;开场文案&quot;,&quot;default&quot;:&quot;换你能躲过去吗？&quot;}]">
+<head><meta charset="utf-8"><meta name="viewport" content="width=1080, height=1920">
+<script src="assets/gsap.min.js"></script>
+<style>
+@font-face{font-family:GameChinese;src:url('assets/chinese.woff2') format('woff2');font-weight:500 900;font-display:block}
+*{box-sizing:border-box;margin:0}html,body{width:1080px;height:1920px;overflow:hidden;background:#102c28}
+#root{width:100%;height:100%;position:relative;overflow:hidden;color:#fff7df;font-family:GameChinese,sans-serif;font-weight:700}
+.brand{position:absolute;top:62px;left:64px;color:#ffd23e;font-size:30px;letter-spacing:4px}
+.topline{position:absolute;left:64px;top:132px;width:952px;height:116px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:86px;line-height:1.2;white-space:nowrap}
+.rule{position:absolute;top:288px;left:0;width:1080px;height:8px;background:#ffd23e}
+.game-window{position:absolute;left:0;top:300px;width:1080px;height:1260px;overflow:hidden}
+#gameplay{width:100%;height:100%;object-fit:cover;object-position:50% 50%;display:block}
+.footer{position:absolute;left:64px;top:1640px;width:952px;text-align:center}
+.footer-main{font-size:60px;line-height:1.3;color:#ffd23e}
+.footer-sub{font-size:40px;line-height:1.3;margin-top:26px;color:#bbd0c7}
+#cta{position:absolute;left:64px;top:1610px;width:952px;height:202px;background:#ffd23e;color:#102c28;border-radius:28px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.cta-title{font-size:78px;line-height:1.15}.cta-sub{font-size:36px;line-height:1.2}
+</style></head><body>
+<div data-hf-id="hf-app8" id="root" data-composition-id="main" data-start="0" data-duration="22" data-width="1080" data-height="1920">
+<div data-hf-id="hf-6ej5" class="brand">SUBWAY PRINCESS RUNNER</div><div data-hf-id="hf-a46i" class="rule"></div>
+<div data-hf-id="hf-ixxq" id="opening" class="clip topline" data-start="0" data-duration="3.2" data-track-index="2"><span data-hf-id="hf-lrho" id="hook-text" data-var-text="hook">换你能躲过去吗？</span></div>
+<div data-hf-id="hf-mx12" id="ongoing" class="clip topline" data-start="3.2" data-duration="18.8" data-track-index="2"><span data-hf-id="hf-hcwm" id="ongoing-text">保持节奏</span></div>
+<div data-hf-id="hf-mbo7" class="game-window"><video data-hf-id="hf-xmfd" id="gameplay" class="clip" src="assets/gameplay.mp4" data-start="0" data-duration="22" data-track-index="0" muted playsinline></video></div>
+<audio data-hf-id="hf-hmdm" id="game-audio" src="assets/gameplay.mp4" data-start="0" data-duration="22" data-track-index="1" data-volume="1" data-automation="{&quot;version&quot;:1,&quot;lanes&quot;:[{&quot;target&quot;:&quot;volume&quot;,&quot;points&quot;:[{&quot;t&quot;:0,&quot;v&quot;:1},{&quot;t&quot;:21.7,&quot;v&quot;:1},{&quot;t&quot;:22,&quot;v&quot;:0}]}]}"></audio>
+<div data-hf-id="hf-2yxr" id="footer" class="clip footer" data-start="0" data-duration="19" data-track-index="3"><div data-hf-id="hf-4kq6" class="footer-main">看清障碍，再出手</div><div data-hf-id="hf-hm63" class="footer-sub">别被金币带偏</div></div>
+<div data-hf-id="hf-cs3e" id="cta" class="clip" data-start="19" data-duration="3" data-track-index="3"><div data-hf-id="hf-12rh" id="cta-copy"><div data-hf-id="hf-3ouv" class="cta-title">现在轮到你</div><div data-hf-id="hf-2zvz" class="cta-sub" style="text-align:center">试试自己的反应</div></div></div>
+</div><script>
+const tl=gsap.timeline({paused:true});
+tl.fromTo('#hook-text',{scale:0.91,opacity:0.15},{scale:1,opacity:1,duration:0.35,ease:'power3.out'},0);
+tl.to('#hook-text',{opacity:0,duration:0.18},3.02);
+tl.fromTo('#ongoing-text',{y:18,opacity:0},{y:0,opacity:1,duration:0.35,ease:'power3.out'},3.2);
+tl.fromTo('#cta-copy',{scale:0.88,opacity:0},{scale:1,opacity:1,duration:0.4,ease:'back.out(1.4)'},19);
+window.__timelines=window.__timelines||{};window.__timelines.main=tl;
+</script></body></html>

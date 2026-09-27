@@ -25,4 +25,4 @@ Issues = "https://github.com/zhouxiaoka/autoclip/issues"
 include = ["backend", "backend.*"]
 
 [tool.setuptools.package-data]
-backend = ["prompt/*.txt", "prompt/**/*.txt"]
+backend = ["prompt/*.txt", "prompt/**/*.txt", "assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/fonts/*.json"]

@@ -1,12 +1,12 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useMemo, useState } from 'react'
-import { message } from 'antd'
 import { Collection, Clip } from '../store/useProjectStore'
 import EditableCollectionTitle from './EditableCollectionTitle'
 import { Btn, Icon, parseTimecode, fmtDuration } from '../ui'
 
 interface CollectionCardProps {
+  onEdit?: () => void
   collection: Collection
   clips: Clip[]
   onView: (collection: Collection) => void
@@ -16,7 +16,7 @@ interface CollectionCardProps {
 }
 
 // Calm Premium collection card — same anatomy as ClipCard (see DESIGN.md)
-const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onView, onGenerateVideo, onUpdate }) => {
+const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onView, onGenerateVideo, onUpdate, onEdit }) => {
   useTranslation()
   const safeClips = Array.isArray(clips) ? clips : []
   const safeClipIds = Array.isArray(collection.clip_ids) ? collection.clip_ids : []
@@ -40,7 +40,7 @@ const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onVi
 
   return (
     <article className="ac-card">
-      <div className="ac-card-thumb" onClick={() => onView(collection)} role="button" aria-label={t("预览合集")}>
+      <div className="ac-card-thumb" onClick={onEdit || (() => onView(collection))} tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (onEdit || (() => onView(collection)))() } }} role="button" aria-label={t(onEdit ? "预览与修改" : "预览合集")}>
         {hasThumb && (
           <img src={thumbnailUrl} alt="" onError={() => setImgError(true)} draggable={false} />
         )}
@@ -67,9 +67,9 @@ const CollectionCard: React.FC<CollectionCardProps> = ({ collection, clips, onVi
         <div className="ac-card-foot">
           <span className="meta">{t("切片数量", { count: collectionClips.length })} · {fmtDuration(totalDuration)}</span>
           <div className="ac-card-actions">
-            <Btn variant="text" onClick={() => onView(collection)}>{t("预览")}</Btn>
+            <Btn variant="text" onClick={onEdit || (() => onView(collection))}>{t(onEdit ? "预览与修改" : "预览")}</Btn>
             {onGenerateVideo && <Btn variant="text" onClick={() => onGenerateVideo(collection.id)}>{t("下载")}</Btn>}
-            <Btn variant="text" onClick={() => message.info(t("投稿功能开发中"), 3)}>{t("投稿")}</Btn>
+            <Btn variant="text" onClick={() => onView(collection)}>{t("管理合集")}</Btn>
           </div>
         </div>
       </div>

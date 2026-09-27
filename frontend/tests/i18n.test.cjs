@@ -65,3 +65,51 @@ test('every static translation call has a catalog entry', () => {
     visit(source)
   }
 })
+
+test('Studio result states translate on language changes while retaining titles and version numbers', async () => {
+  const instance=createInstance()
+  await instance.init({resources:Object.fromEntries(langs.map(l=>[l,{translation:catalogs[l]}])),lng:'en',fallbackLng:'en',keySeparator:false,nsSeparator:false,interpolation:{escapeValue:false}})
+  const sourceTitle='贴壁过弯 <V2> & café'
+  const states=['草稿 · 待导出','排队中','正在导出','已导出 · 可下载','导出失败','已修改 · 需重新导出','导出记录','发布这版成片']
+  for(const lang of langs) {
+    await instance.changeLanguage(lang)
+    for(const state of states) {
+      assert.ok(Object.hasOwn(catalogs[lang],state), `${lang}: ${state}`)
+      assert.equal(instance.t(state),catalogs[lang][state])
+      if(lang!=='zh') assert.notEqual(instance.t(state),state)
+    }
+    assert.ok(instance.t('预览 {{title}}',{title:sourceTitle}).includes(sourceTitle))
+    assert.ok(instance.t('当前 V{{revision}} 成片画面',{revision:12}).includes('V12'))
+    assert.ok(instance.t('{{count}} 段',{count:3}).includes('3'))
+  }
+})
+
+test('Studio UI has no untranslated static Chinese JSX or template strings', () => {
+  const studio=path.join(__dirname,'../src/features/studio')
+  for(const name of fs.readdirSync(studio).filter(n=>n.endsWith('.tsx'))) {
+    const file=path.join(studio,name), source=ts.createSourceFile(file,fs.readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX)
+    function visit(node) {
+      if(ts.isJsxText(node)) assert.ok(!/[\u4e00-\u9fff]/.test(node.text),`${name}: untranslated JSX ${node.text}`)
+      if(ts.isJsxAttribute(node)&&node.initializer&&ts.isStringLiteral(node.initializer)) assert.ok(!/[\u4e00-\u9fff]/.test(node.initializer.text),`${name}: untranslated attribute ${node.initializer.text}`)
+      if(ts.isTemplateExpression(node)) assert.ok(!/[\u4e00-\u9fff]/.test(node.head.text+node.templateSpans.map(s=>s.literal.text).join('')),`${name}: use interpolation for translated templates`)
+      ts.forEachChild(node,visit)
+    }
+    visit(source)
+  }
+})
+
+test('Studio dynamic label maps and validation messages have translations in all eight catalogs', () => {
+  for(const name of ['types.ts','titlePresets.ts','PlanSummary.tsx']) {
+    const file=path.join(__dirname,'../src/features/studio',name),source=ts.createSourceFile(file,fs.readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true)
+    function visit(node) {
+      if(ts.isStringLiteral(node)&&/[\u4e00-\u9fff]/.test(node.text)&&!['简体中文','日本語'].includes(node.text)) {
+        for(const lang of langs) {
+          assert.ok(Object.hasOwn(catalogs[lang],node.text),`${name}: ${lang}: ${node.text}`)
+          if(lang!=='zh') assert.notEqual(catalogs[lang][node.text],node.text,`${lang}: ${node.text}`)
+        }
+      }
+      ts.forEachChild(node,visit)
+    }
+    visit(source)
+  }
+})

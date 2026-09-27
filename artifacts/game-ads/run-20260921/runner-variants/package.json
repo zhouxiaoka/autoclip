@@ -1,0 +1,11 @@
+{
+  "name": "runner-variants",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes hyperframes@0.8.58 preview",
+    "check": "npx --yes hyperframes@0.8.58 check",
+    "render": "npx --yes hyperframes@0.8.58 render",
+    "publish": "npx --yes hyperframes@0.8.58 publish"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "source": "User-approved AutoClip six-style design board",
+  "source_sha256": "153863944f5cfe86547f63ae699e9b43d9d09b99b11a86d3fc3ad3e68de67398",
+  "size": [
+    360,
+    240
+  ],
+  "crops": {
+    "comic": [
+      36,
+      89,
+      362,
+      306
+    ],
+    "neon": [
+      382,
+      89,
+      705,
+      304
+    ],
+    "arena": [
+      724,
+      89,
+      1050,
+      306
+    ],
+    "pixel": [
+      36,
+      754,
+      362,
+      971
+    ],
+    "editorial": [
+      382,
+      754,
+      705,
+      969
+    ],
+    "frosted": [
+      724,
+      754,
+      1050,
+      971
+    ]
+  }
+}

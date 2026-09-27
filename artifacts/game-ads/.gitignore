@@ -1,0 +1,13 @@
+# Local media, downloaded dependencies and renderer diagnostics
+.tools/
+**/assets/
+**/output/
+**/seed-frames/
+**/snapshots/
+**/.media/
+**/.hyperframes/
+**/.hf-tmp/
+**/check-report.json
+*.log
+**/.thumbnails/
+**/.waveform-cache/

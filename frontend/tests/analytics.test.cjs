@@ -173,3 +173,66 @@ test('actual API entrypoints enroll imports/exports and count every media downlo
   assert.equal(accepted.filter(e => e.event === 'import_accepted').length, 3)
   assert.equal(accepted.filter(e => e.event === 'publish_export_accepted').length, 1)
 })
+
+test('Studio phases dedupe locally across restart without sending internal IDs or content', () => {
+  const s = setup()
+  s.tracker.watch('studio-production', 'secret-plan', 'secret-project')
+  const w = s.tracker.list()[0]
+  s.tracker.observeStudio(w, {plan:{id:'other-plan'},analysis:{status:'completed'}})
+  assert.equal(s.events.length,0)
+  const snapshot={plan:{id:'secret-plan'},analysis:{status:'failed',error:'sk-secret /Users/private.mp4'}}
+  s.tracker.observeStudio(w,snapshot);s.tracker.observeStudio(w,snapshot)
+  const recovered=new core.WorkflowTracker(s.storage,()=>true,s.capture,()=>NOW)
+  recovered.observeStudio(recovered.list()[0],snapshot)
+  assert.equal(s.events.length,1)
+  assert.deepEqual(Object.keys(s.events[0].props),['outcome'])
+  assert.equal(s.events[0].props.outcome,'failed')
+  assert.equal(JSON.stringify(s.events).includes('secret'),false)
+  s.tracker.watch('studio-export','secret-job','secret-project')
+  s.tracker.observeStudio(s.tracker.list()[1],{jobs:[{job_id:'secret-job',status:'completed'}]})
+  assert.equal(s.events[1].event,'studio_export_finished')
+  s.enable(false);s.tracker.list();s.enable(true)
+  s.tracker.observeStudio(w,snapshot)
+  assert.equal(s.events.length,2)
+})
+test('Studio screening distinguishes recommendations, manual fallback and import failure',()=>{
+  for (const [snapshot,outcome] of [[{plan:{id:'plan',mode:'ai'}},'recommended'],[{plan:{id:'plan',mode:'fallback'}},'manual_fallback'],[{analysis:{status:'failed'}},'failed']]) {
+    const s=setup();s.tracker.watch('studio-screen','private-project')
+    s.tracker.observeStudio(s.tracker.list()[0],snapshot)
+    assert.equal(s.events[0].props.outcome,outcome)
+    assert.deepEqual(Object.keys(s.events[0].props),['outcome'])
+  }
+})
+test('actual Studio API enrolls accepted work and sends aggregate-only telemetry',async()=>{
+  const s=setup(memory(),()=>Date.now())
+  const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+  const transport={defaults:{},post:async(url)=>url==='/studio/import'?{project_id:'private-project'}:url.endsWith('/export')?{job_id:'private-job'}:{}}
+  const file=path.join(__dirname,'../src/features/studio/api.ts')
+  const js=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText
+  const module={exports:{}}
+  vm.runInNewContext(js,{module,exports:module.exports,require:id=>({'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}}[id])})
+  const api=module.exports.studioApi
+  await api.import({filename:'private.mp4',url:'https://private.test/?key=secret'})
+  await api.confirmPlan('private-project','private-plan',['highlight'],{language:'source'})
+  await api.export('private-project','private-draft',2)
+  assert.equal(s.tracker.list().length,3)
+  assert.equal(s.events.length,6)
+  assert.equal(JSON.stringify(s.events).includes('private'),false)
+  assert.equal(JSON.stringify(s.events).includes('secret'),false)
+  for(const e of s.events) assert.ok(Object.keys(e.props).every(k=>k==='request_duration_ms'))
+  s.enable(false)
+  await api.import({})
+  assert.equal(s.events.length,6)
+})
+test('Studio aggregate requests retain failures and respect consent changes in flight',async()=>{
+  const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+  const failure={response:{status:401},message:'private-key'}
+  await assert.rejects(aggregate.observeStudioOperation('studio_export',async()=>{throw failure},()=>{}),e=>e===failure)
+  assert.equal(s.events[1].props.error_code,'http_401')
+  assert.equal(JSON.stringify(s.events).includes('private-key'),false)
+  let finish;let accepted=false
+  const pending=aggregate.observeStudioOperation('studio_import',()=>new Promise(r=>{finish=r}),()=>{accepted=true})
+  s.tracker.clear();finish({project_id:'secret'});await pending
+  assert.equal(accepted,false)
+  assert.equal(s.events.length,3)
+})

@@ -1,6 +1,6 @@
 /** Versioned business telemetry. Only explicit UI operations enroll projects. */
 export type Properties = Record<string, string | number | boolean | null | undefined>
-export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean }
+export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean }
 export const WORKFLOW_KEY = 'autoclip.analytics.workflow.v2'
 const TTL = 7 * 86400000
 const LIMIT = 50
@@ -30,6 +30,12 @@ export interface TaskSnapshot {
   started_at?: string | null; completed_at?: string | null
 }
 
+export interface StudioSnapshot {
+  plan?: { id: string; mode?: string }
+  analysis?: { status: string } | null
+  jobs?: { job_id: string; status: string }[]
+}
+
 /** Storage and capture are injected so offline/privacy/replay behavior is testable. */
 export class WorkflowTracker {
   private watches: Watch[] = []
@@ -43,7 +49,7 @@ export class WorkflowTracker {
     try {
       const raw: unknown = JSON.parse(storage.getItem(WORKFLOW_KEY) || '[]')
       if (Array.isArray(raw)) this.watches = raw.filter((w): w is Watch =>
-        w && ['project', 'export', 'bilibili', 'youtube'].includes(w.kind) &&
+        w && ['project', 'export', 'bilibili', 'youtube', 'studio-screen', 'studio-production', 'studio-export'].includes(w.kind) &&
         typeof w.id === 'string' && Number.isFinite(w.since) && Array.isArray(w.seen) &&
         w.seen.every((v: unknown) => typeof v === 'string') && w.seen.length <= 2000 &&
         (w.projectId === undefined || typeof w.projectId === 'string'))
@@ -80,9 +86,31 @@ export class WorkflowTracker {
   }
   emitOnce(w: Watch, key: string, event: string, properties: Properties): void {
     if (!this.enabled() || !this.watches.includes(w) || w.seen.includes(key) || w.seen.length >= 2000) return
-    if (this.capture(event, { ...properties, $insert_id: `autoclip-v2:${w.kind}:${w.id}:${key}` })) {
+    if (this.capture(event, w.kind.startsWith('studio-') ? { outcome: properties.outcome } : { ...properties, $insert_id: `autoclip-v2:${w.kind}:${w.id}:${key}` })) {
       w.seen.push(key)
       this.persist()
+    }
+  }
+  /** IDs remain in local watches only; external payload is a fixed outcome enum. */
+  observeStudio(w: Watch, snapshot: StudioSnapshot): void {
+    if (w.settled) return
+    let event: string | undefined
+    let outcome: string | undefined
+    if (w.kind === 'studio-export') {
+      const job = snapshot.jobs?.find(j => j.job_id === w.id)
+      if (job && ['completed', 'failed'].includes(job.status)) {
+        event = 'studio_export_finished'; outcome = job.status
+      }
+    } else if (w.kind === 'studio-screen') {
+      if (snapshot.plan?.id) { event = 'studio_screen_finished'; outcome = snapshot.plan.mode === 'ai' ? 'recommended' : 'manual_fallback' }
+      else if (snapshot.analysis?.status === 'failed') { event = 'studio_screen_finished'; outcome = 'failed' }
+    } else if (w.kind === 'studio-production' && snapshot.plan?.id === w.id &&
+               ['completed', 'failed'].includes(snapshot.analysis?.status || '')) {
+      event = 'studio_production_finished'; outcome = snapshot.analysis!.status
+    }
+    if (event) {
+      this.emitOnce(w, 'finished', event, { outcome })
+      if (w.seen.includes('finished')) { w.settled = true; this.persist() }
     }
   }
   observeTasks(w: Watch, tasks: TaskSnapshot[]): void {

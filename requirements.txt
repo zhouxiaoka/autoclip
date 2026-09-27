@@ -41,6 +41,7 @@ cryptography==50.0.1
 # --- media / utilities ---
 # bilitool>=0.1.3  # 已移除，改用直接API调用
 qrcode[pil]==8.2
+Pillow==11.3.0
 yt-dlp==2026.8.19
 pysrt==1.1.2
 psutil==7.2.2
