@@ -70,7 +70,9 @@ def vision_call(content, config=None):
     if not base or not model:
         raise ValueError('请先在设置页配置视觉理解模型')
     body = {'model': model, 'messages': [{'role': 'user', 'content': content}], 'max_tokens': 1000 if config.get('quick_screening') else 4000}
-    if config.get('quick_screening') and model.lower().startswith('doubao-seed'):
+    # Structured visual observation must finish within the bounded request budget.
+    # Other compatible providers must not receive Seed-specific parameters.
+    if model.lower().startswith('doubao-seed'):
         body['thinking'] = {'type': 'disabled'}
     req = urllib.request.Request(base.rstrip('/') + '/chat/completions', data=json.dumps(body).encode(), headers={**({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'})
     started = time.monotonic()
@@ -144,14 +146,18 @@ class HighlightCandidate(Scene):
 NON_PLAY_EVENTS = {'menu', 'reward_screen', 'loading'}
 
 
-def select_highlights(raw_events, duration, limit=6):
+def select_highlights(raw_events, duration, limit=6, *, max_duration=None):
     candidates = [HighlightCandidate.model_validate(e) for e in raw_events[:12]]
     validate_scenes(candidates, duration)
     if len({e.id for e in candidates}) != len(candidates):
         raise ValueError('模型返回重复候选标识，请重试')
     # Filter only explicit categories, never words in the label (e.g. winning a reward
     # during active gameplay is a valid event). Missing annotations remain usable.
-    usable = [e for e in candidates if e.event_type not in NON_PLAY_EVENTS]
+    playable = [e for e in candidates if e.event_type not in NON_PLAY_EVENTS]
+    too_long = {e.id for e in playable if max_duration is not None and e.end - e.start > max_duration + .1}
+    usable = [e for e in playable if e.id not in too_long]
+    if playable and not usable:
+        raise ValueError('模型选段超出期望时长，请重试')
     usable.sort(key=lambda e: -(e.watch_score if e.watch_score is not None else 0))
     selected = usable[:limit]
     if not selected:
@@ -160,7 +166,7 @@ def select_highlights(raw_events, duration, limit=6):
     audit = [{'id':e.id, 'label':e.label, 'start':e.start, 'end':e.end,
               'event_type':e.event_type, 'watch_score':e.watch_score,
               'selection_reason':e.selection_reason,
-              'disposition':'selected' if e.id in ids else 'filtered' if e.event_type in NON_PLAY_EVENTS else 'limit'}
+              'disposition':'selected' if e.id in ids else 'filtered' if e.event_type in NON_PLAY_EVENTS else 'duration_filtered' if e.id in too_long else 'limit'}
              for e in candidates]
     scenes = [Scene.model_validate({k:v for k,v in e.model_dump().items() if k in Scene.model_fields}) for e in selected]
     return scenes, audit
@@ -185,7 +191,7 @@ def analyze(video: Path, prefs: Preferences, on_stage=None, instruction=""):
         on_stage('扫描画面，寻找候选高光')
     with tempfile.TemporaryDirectory(prefix='ac-vision-') as tmp:
         response = vision_call_at('scan', [{'type': 'text', 'text': prompt}] + sample(video, times, Path(tmp)))
-    events, selection = select_highlights(response.get('events', []), duration)
+    events, selection = select_highlights(response.get('events', []), duration, max_duration=prefs.duration)
     if any(e.end - e.start > prefs.duration + .1 for e in events):
         raise ValueError('模型选段超出期望时长，请重试')
     # Refine the strongest candidate with a denser second pass; preserve exact source timestamps.

@@ -1,0 +1,101 @@
+{
+  "code_commit": "d509972b",
+  "scope": "Six candidates from one real model scan, rendered offline through production renderer; full decode and four sampled frames each inspected, not complete creative/ROI acceptance",
+  "results": [
+    {
+      "index": 1,
+      "title": "矿洞连续避险集币并完成金币计量",
+      "source_start": 293.1,
+      "source_end": 313.8,
+      "media": {
+        "width": 1080,
+        "height": 1920,
+        "duration": 20.7
+      },
+      "audio": true,
+      "decode": "passed",
+      "path": "/tmp/autoclip-rc-20260927/data/projects/all-highlights/output/studio/highlight-1.mp4",
+      "opening_near_white_seconds": 0.0
+    },
+    {
+      "index": 2,
+      "title": "管道工厂里追逐与金币弧线",
+      "source_start": 224.7,
+      "source_end": 257.1,
+      "media": {
+        "width": 1080,
+        "height": 1920,
+        "duration": 32.4
+      },
+      "audio": true,
+      "decode": "passed",
+      "path": "/tmp/autoclip-rc-20260927/data/projects/all-highlights/output/studio/highlight-2.mp4",
+      "opening_near_white_seconds": 0.0
+    },
+    {
+      "index": 3,
+      "title": "矿车隧道连续避险",
+      "source_start": 149.3,
+      "source_end": 176.0,
+      "media": {
+        "width": 1080,
+        "height": 1920,
+        "duration": 26.7
+      },
+      "audio": true,
+      "decode": "passed",
+      "path": "/tmp/autoclip-rc-20260927/data/projects/all-highlights/output/studio/highlight-3.mp4",
+      "opening_near_white_seconds": 0.1
+    },
+    {
+      "index": 4,
+      "title": "乡野公路滑板躲车",
+      "source_start": 178.3,
+      "source_end": 210.8,
+      "media": {
+        "width": 1080,
+        "height": 1920,
+        "duration": 32.5
+      },
+      "audio": true,
+      "decode": "passed",
+      "path": "/tmp/autoclip-rc-20260927/data/projects/all-highlights/output/studio/highlight-4.mp4",
+      "opening_near_white_seconds": 0.0
+    },
+    {
+      "index": 5,
+      "title": "任务完成后回到铁轨冲刺",
+      "source_start": 259.4,
+      "source_end": 291.9,
+      "media": {
+        "width": 1080,
+        "height": 1920,
+        "duration": 32.5
+      },
+      "audio": true,
+      "decode": "passed",
+      "path": "/tmp/autoclip-rc-20260927/data/projects/all-highlights/output/studio/highlight-5.mp4",
+      "opening_near_white_seconds": 0.0
+    },
+    {
+      "index": 6,
+      "title": "车顶与临水轨道连跑",
+      "source_start": 44.9,
+      "source_end": 72.0,
+      "media": {
+        "width": 1080,
+        "height": 1920,
+        "duration": 27.1
+      },
+      "audio": true,
+      "decode": "passed",
+      "path": "/tmp/autoclip-rc-20260927/data/projects/all-highlights/output/studio/highlight-6.mp4",
+      "opening_near_white_seconds": 0.0
+    }
+  ],
+  "notes": [
+    "Candidate 3 retains 0.1s near-white source transition at opening",
+    "Candidate 5 crosses source scene transition",
+    "No campaign performance evidence; multiple game samples remain unreviewed"
+  ]
+}

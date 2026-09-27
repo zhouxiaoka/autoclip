@@ -213,7 +213,7 @@ def test_unchecked_goal_is_never_produced(client,source,monkeypatch):
     assert calls==['highlight']
 
 
-@pytest.mark.parametrize('model,quick,thinking', [('doubao-seed-2-1-pro-260915',True,True),('custom-vision',True,False),('doubao-seed-2-1-pro-260915',False,False)])
+@pytest.mark.parametrize('model,quick,thinking', [('doubao-seed-2-1-pro-260915',True,True),('custom-vision',True,False),('doubao-seed-2-1-pro-260915',False,True)])
 def test_quick_screening_request_is_small_and_provider_scoped(monkeypatch,model,quick,thinking):
     import io,json
     requests=[]

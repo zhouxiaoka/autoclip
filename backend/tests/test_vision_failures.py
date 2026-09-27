@@ -101,3 +101,21 @@ def test_unapproved_screening_does_not_attempt_provider_or_fabricate_timeout(mon
     plan = planning.recommend(Path('unused'), ImportOptions())
     assert plan['mode'] == 'local'
     assert 'diagnostics' not in plan
+
+
+@pytest.mark.parametrize('model,quick,expected', [
+    ('doubao-seed-2-1-pro-260915', False, {'type': 'disabled'}),
+    ('doubao-seed-2-1-pro-260915', True, {'type': 'disabled'}),
+    ('other-vision-model', False, None),
+    ('other-vision-model', True, None),
+])
+def test_seed_observation_is_bounded_without_changing_other_providers(monkeypatch, model, quick, expected):
+    requests = []
+    def send(req, **kwargs):
+        requests.append(json.loads(req.data))
+        return io.BytesIO(json.dumps({'choices': [{'message': {'content': '{"events": []}'}}]}).encode())
+    monkeypatch.setattr(vision.urllib.request, 'urlopen', send)
+    assert vision.vision_call([], config={**CONFIG, 'model': model, 'quick_screening': quick}) == {'events': []}
+    assert len(requests) == 1
+    assert requests[0].get('thinking') == expected
+    assert requests[0]['max_tokens'] == (1000 if quick else 4000)
