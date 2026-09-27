@@ -62,6 +62,8 @@ impl BackendManager {
             .stderr(Stdio::piped())
             .env("AUTOCLIP_DESKTOP_MODE", "true")
             .env("AUTOCLIP_MODE", "desktop")
+            // Keep signed bundle resources immutable, including Python startup imports.
+            .env("PYTHONDONTWRITEBYTECODE", "1")
             // Single source of truth for the version the backend reports in /settings.
             .env("AUTOCLIP_APP_VERSION", env!("CARGO_PKG_VERSION"));
 

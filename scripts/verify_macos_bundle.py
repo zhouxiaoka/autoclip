@@ -4,7 +4,13 @@
 Produces isolated evidence in a new temporary directory. Does not install the
 app, test native UI/updater/signatures, or evaluate creative/ad quality.
 """
-import os,sys,json,subprocess,time,select
+import sys
+
+# Must be set before interpreter startup (site imports can also write caches).
+if not sys.dont_write_bytecode:
+    raise SystemExit("Run bundled Python with -B to preserve signed resources.")
+
+import os,json,subprocess,time,select
 
 sys.dont_write_bytecode = True
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
