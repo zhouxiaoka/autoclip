@@ -14,6 +14,14 @@
 [![GitHub issues](https://img.shields.io/github/issues/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/issues)
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
+<p align="center">
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending (Trendshift)" width="250" height="55"></a>
+</p>
+
+Edição local · traga sua própria chave de modelo
+
+Já apareceu no GitHub Trending; não é um ranking ao vivo. GitHub Trending e Trendshift são listas diferentes.
+
 [Site](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Relatar um problema](https://github.com/zhouxiaoka/autoclip/issues)
 
 **Instaladores desktop: [macOS · Apple Silicon](https://github.com/zhouxiaoka/autoclip/releases/latest) · [Windows · x64](https://github.com/zhouxiaoka/autoclip/releases/latest)**
@@ -32,16 +40,6 @@ O AutoClip usa IA para analisar legendas, encontrar destaques, criar títulos e 
 
 Interface web real da v1.3.0: adicione um vídeo local na área de importação, com legendas SRT opcionais.
 
-## Reconhecimento da comunidade
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
-</p>
-
-Estes selos são fornecidos pelo Trendshift. Clique para consultar as conquistas registradas do AutoClip. GitHub Trending e Trendshift são rankings diferentes; os selos mostram conquistas registradas, não uma posição em tempo real.
-
 ## O que você pode fazer
 
 | Recurso | Descrição |
@@ -49,10 +47,10 @@ Estes selos são fornecidos pelo Trendshift. Clique para consultar as conquistas
 | Importar vídeos | Use arquivos locais ou links do YouTube e Bilibili, com legendas SRT opcionais. |
 | Encontrar destaques | Extraia resumos, intervalos por assunto, pontuações e títulos a partir das legendas. |
 | Criar clipes e coletâneas | Gere clipes e coletâneas sugeridas e ajuste a ordem manualmente. |
-| Publicar (v1.3.2) | Quando os clipes estiverem prontos, abra Publicar em um clipe. Disponível na **v1.3.2**. No exterior, usam-se as plataformas ligadas na sua própria conta Upload-Post: TikTok, Instagram, YouTube, Facebook, LinkedIn, X, Threads, Pinterest, Bluesky, Discord, Telegram e Google Business, conforme o que essa conta tiver ligado. O Bilibili é uma conta: cole um Cookie uma vez em Configurações. Ele precisa incluir SESSDATA, bili_jct e DedeUserID. Publique agora ou agende. Título e descrição são opcionais e, se ficarem vazios, usam o título do clipe. Legendas embutidas vêm ligadas, assim como o cartão de título de cerca de 4 segundos. A visibilidade padrão é só eu / private onde a plataforma aceita. O AutoClip promete isso apenas para TikTok, YouTube e Bilibili. Também dá para baixar sem publicar. A página do projeto mostra o histórico e o calendário, e cancela um agendamento que ainda não saiu. «Planejar a semana» vale só para o exterior: preenche segunda, quarta e sexta às 09:00, sem Bilibili. Contas verticais saem em 9:16, sem corte de 60 segundos. Só Bilibili usa paisagem. Só LinkedIn ou X mantém o enquadramento original. Vertical e Bilibili no mesmo envio são renderizados separados. |
-| Capa automática (v1.3.2) | Na publicação, uma capa pode ser gerada automaticamente, para o Bilibili não recusar uma capa vazia. Os detalhes da capa e do cartão de título padrão seguem as notas desse instalador. Disponível na **v1.3.2**. |
+| Publicar (v1.3.2) | A partir da **v1.3.2**, com os clipes prontos, publique ou agende na mesma página. Plataformas no exterior usam o Upload-Post; no Bilibili, cole os cookies de login uma vez em Configurações. O padrão fica o mais privado que a plataforma permitir; também dá para exportar sem publicar. Detalhes: [guia de publicação (chinês)](docs/PUBLISH_UPLOAD_POST.md). |
+| Capa automática (v1.3.2) | Ao publicar, uma capa é gerada automaticamente para o Bilibili não recusar uma capa vazia; os padrões seguem as notas do instalador. Disponível na **v1.3.2**. |
 | Exportar para publicar | Use predefinições para Douyin, Xiaohongshu, YouTube Shorts e Bilibili, com legendas embutidas e cartões de título. |
-| Escolher modelos | Use Qwen, APIs compatíveis com OpenAI, Gemini, SiliconFlow ou modelos locais com Ollama / LM Studio. |
+| Escolher modelos | Suporta Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok e modelos locais via Ollama / LM Studio (traga sua própria chave de API). |
 | Automatizar tarefas | Organize execuções pela CLI ou acesse o mesmo fluxo de processamento por um cliente MCP. |
 
 > Importar vídeo → Legendas / transcrição → Análise e pontuação por IA → Clipes e coletâneas → Exportação
@@ -135,7 +133,7 @@ No cliente MCP, defina `command` como o caminho absoluto de `autoclip` no ambien
 
 | Opção | Configuração |
 | --- | --- |
-| Modelos na nuvem | Selecione Qwen, uma API compatível com OpenAI, Gemini ou SiliconFlow e informe a chave de API. Serviços compatíveis permitem personalizar a Base URL. |
+| Modelos na nuvem | Em Configurações, selecione Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM ou Grok e informe a chave de API. Endpoints compatíveis aceitam uma Base URL personalizada. |
 | Ollama | Endereço padrão: `http://localhost:11434/v1`; modelo: `qwen2.5:7b`. Não exige chave de API. |
 | LM Studio | Carregue um modelo e inicie o Local Server, por padrão em `http://localhost:1234/v1`. Selecione um modelo disponível no seu servidor. |
 
