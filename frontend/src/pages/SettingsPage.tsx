@@ -5,6 +5,7 @@ import { Form, Input, Select, Switch, message } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { settingsApi } from '../services/api'
 import SpeechRecognitionConfig from '../components/SpeechRecognitionConfig'
+import AnalysisSettings from '../features/studio/AnalysisSettings'
 import VisionSettings from '../features/studio/VisionSettings'
 import FeedbackDialog from '../components/FeedbackDialog'
 import PublishSettings from '../components/PublishSettings'
@@ -95,8 +96,9 @@ const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
   seed: 'doubao-seed-2-1-lite-260915', kimi: 'kimi-k2.6', glm: 'glm-5.3', grok: 'grok-4.6',
 }
 
-type SectionKey = 'vision' | 'model' | 'speech' | 'app' | 'publish' | 'cover' | 'feedback'
+type SectionKey = 'analysis' | 'vision' | 'model' | 'speech' | 'app' | 'publish' | 'cover' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
+  { key: 'analysis', get label() { return t('分析方式') } },
   { key: 'model', get label() { return t("模型") } },
   { key: 'vision', get label() { return t('视觉理解') } },
   { key: 'speech', get label() { return t("转写") } },
@@ -385,6 +387,7 @@ const SettingsPage: React.FC = () => {
 
         <div className="ac-settings-body">
           {/* ---------------- 模型 ---------------- */}
+          {active === 'analysis' && <AnalysisSettings />}
           {active === 'vision' && <VisionSettings />}
           {active === 'model' && (
             <Section title={t("模型")} description={t("切片分析用哪个大模型。密钥只保存在运行 AutoClip 的这台机器上，不会上传。")}>

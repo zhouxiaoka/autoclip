@@ -59,9 +59,13 @@ export interface ImportOptions {
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
 }
+export type AnalysisMode = 'subtitle' | 'visual'
+export interface AnalysisPreferences { analysis_mode: AnalysisMode | 'auto'; allow_visual_screening: boolean }
 export interface ImportPlan {
+  recommended_analysis?: AnalysisMode; confirmed_analysis?: AnalysisMode
+
   id: string; source_duration?:number; suggested_goals: Goal[]; selected_goals?: Goal[]
-  mode: 'ai' | 'manual' | 'fallback'; content_type: string; reason: string; confidence: number
+  mode: 'ai' | 'manual' | 'fallback' | 'local'; content_type: string; reason: string; confidence: number
   preferences: {goal: Goal; language: Language; aspect: Draft['aspect']; duration: number}
   overrides: ImportOptions
 }
