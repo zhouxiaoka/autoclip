@@ -3,7 +3,7 @@
 *[中文版 →](./PRIVACY.md)*
 
 **Effective Date: June 3, 2026**
-**Last Updated: September 21, 2026**
+**Last Updated: September 27, 2026**
 
 > ⚠️ This is a draft template. Please have legal counsel review it before publishing (see "Clauses Requiring Legal Review" at the end).
 
@@ -15,8 +15,9 @@ This policy is drafted with reference to China's Personal Information Protection
 
 ## 1. Core Principle: Local-First
 
-- **Your videos, audio, subtitles, and transcripts are processed and stored entirely on your own device** and are never uploaded to our servers.
-- **Third-party API keys you configure** (e.g., Tongyi Qianwen, OpenAI, Gemini) **are stored only on your device**, never uploaded, and never appear in any analytics data.
+- **Cutting and rendering stay on your device.** Video, audio, and project files stay on your machine and are not uploaded to our servers.
+- When you choose a cloud model, that data goes directly to the provider, not through our servers. The subtitle route sends the relevant subtitles or copy. If you explicitly enable a cloud visual model, sampled frames and the necessary text are sent as well. Fees depend on that provider.
+- **Third-party API keys you configure** (Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok) **are stored only on your device**, never uploaded, and never appear in any analytics data. Ollama / LM Studio run as local services.
 - We **do not collect** your name, phone number, or ID documents. An email address is received only if you type one into feedback, and it is not published on the public GitHub post.
 
 ---
@@ -49,10 +50,12 @@ To fix crashes, the Software may send stack traces via **Sentry** when a DSN is 
 
 ### 2.4 Information We Do Not Collect
 
-- Your original video/audio content
-- Subtitle or transcript text
+- Your original video/audio content (our servers do not receive it; a cloud visual model you enable receives sampled frames)
+- Subtitle or transcript text (our servers do not receive it; the subtitle route sends the relevant subtitles or copy to the provider you chose)
 - Plaintext third-party API keys
 - Name, phone number, geolocation, ID documents, or other personally identifying information. An email is collected only if you type it into feedback, and it is not published on GitHub
+
+“We do not collect” means AutoClip and our servers. The cloud provider you configure receives the subtitles or copy that route needs, or sampled frames and the necessary text.
 
 ---
 
@@ -106,10 +109,10 @@ Anonymous usage analytics are stored by PostHog on **United States** servers, wh
 | Service | Provider | Purpose | Privacy Policy |
 |---------|----------|---------|----------------|
 | Product analytics | PostHog Inc. | Anonymous usage analytics | https://posthog.com/privacy |
-| Third-party AI models (you configure) | Tongyi Qianwen / OpenAI / Google, etc. | Called directly by you; keys stored locally | See each provider's policy |
+| Third-party AI models (you configure) | Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok; Ollama / LM Studio locally | The cloud subtitle route sends subtitles or copy. The cloud visual route sends sampled frames and the necessary text. Local presets stay on the device. Keys stay on your device; you call the provider directly | See each provider's policy |
 | Video platforms (you use) | Bilibili / YouTube, etc. | Downloads/uploads you initiate | See each platform's policy |
 
-When you call third-party AI services directly within the Software, the resulting data flows and privacy rules are governed by that provider's privacy policy. We do not relay or retain that data.
+When you call third-party AI services directly within the Software, the resulting data flows and privacy rules are governed by that provider's privacy policy. We do not relay or retain those subtitles, that copy, or those sampled frames. Our own cloud model proxy is still not enabled; see Section 10.
 
 ---
 

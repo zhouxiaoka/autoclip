@@ -132,6 +132,8 @@
 - **Kimi**：在设置中选择，填写自己的 API Key
 - **GLM**：在设置中选择，填写自己的 API Key
 - **Grok**：在设置中选择，填写自己的 API Key
+- **Ollama**：在设置中选择本地预设。先在本机启动服务并加载模型，无需云端 API Key
+- **LM Studio**：在设置中选择本地预设。先启动 Local Server 并加载模型，无需云端 API Key
 
 ### 性能设置
 

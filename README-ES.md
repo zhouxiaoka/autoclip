@@ -32,7 +32,7 @@ Apareció en GitHub Trending; no es un puesto en tiempo real. GitHub Trending y 
 
 Desde v1.3.1, la aplicación, el sitio web y el README admiten chino, inglés, japonés, coreano, español, portugués, ruso y francés. Elige el idioma en la cabecera o sigue el del sistema. Tus archivos y el contenido generado conservan su idioma original.
 
-AutoClip utiliza IA para analizar los subtítulos de un vídeo, encontrar momentos destacados, crear títulos y generar clips y recopilaciones. Está pensado para entrevistas, pódcasts, cursos y grabaciones de directos, con una aplicación de escritorio, una interfaz web mediante Docker y acceso por CLI / MCP.
+AutoClip usa IA para encontrar momentos destacados, crear títulos y generar clips y recopilaciones. El análisis de subtítulos es el predeterminado y encaja con entrevistas, pódcasts, cursos y grabaciones de directos. Desde la **v1.4.0** puedes activar por separado el análisis visual de juegos (multimodal): configura tu propio modelo multimodal y activa de forma explícita el cribado visual de pago. Importa y luego confirma. La comprensión y el corte empiezan solo después de confirmar, y editas el resultado en el editor compartido. Ofrece una aplicación de escritorio, una interfaz web mediante Docker y acceso por CLI / MCP.
 
 ## Vista de la aplicación
 
@@ -45,7 +45,9 @@ Interfaz web real de v1.3.0: añade un vídeo local en el área de importación,
 | Función | Descripción |
 | --- | --- |
 | Importar vídeos | Usa archivos locales o enlaces de YouTube y Bilibili, con subtítulos SRT opcionales. |
-| Encontrar momentos destacados | Extrae resúmenes, intervalos por tema, puntuaciones y títulos a partir de los subtítulos. |
+| Encontrar momentos destacados | De forma predeterminada, extrae resúmenes, intervalos por tema, puntuaciones y títulos a partir de los subtítulos. |
+| Análisis visual de juegos (v1.4.0, opcional) | Configura tu propio modelo multimodal y activa de forma explícita el cribado visual de pago. Tras confirmar, reconoce eventos independientes en la grabación y genera momentos editables y borradores de promoción. El análisis de subtítulos sigue siendo el predeterminado. Una muestra de un juego no representa todos los juegos. Revisa tú mismo los límites, el recorte y el texto. No hay promesa de rendimiento publicitario. Esta versión no incluye animación de CTA, tarjetas finales de marca generativas ni karaoke / subtítulos palabra a palabra. |
+| Confirmar antes de cortar | Tras importar, confirma el tipo de producción. Puedes corregirlo a mano. Una importación sin confirmar se puede reanudar. La comprensión y el corte empiezan solo después de confirmar; después editas en el editor compartido. |
 | Crear clips y recopilaciones | Genera clips y recopilaciones sugeridas, y ajusta su orden manualmente. |
 | Publicar (v1.3.2) | Desde la **v1.3.2**, cuando los clips estén listos, publícalos o prográmalos en la misma página. Las plataformas de fuera usan Upload-Post; para Bilibili, pega las cookies de inicio de sesión una vez en Ajustes. El valor predeterminado es tan privado como permita la plataforma; también puedes exportar sin publicar. Detalles: [guía de publicación (chino)](docs/PUBLISH_UPLOAD_POST.md). |
 | Portada automática (v1.3.2) | Al publicar, se genera una portada automáticamente para que Bilibili no rechace una portada vacía; los valores por defecto siguen las notas del instalador. Disponible en **v1.3.2**. |
@@ -53,7 +55,7 @@ Interfaz web real de v1.3.0: añade un vídeo local en el área de importación,
 | Elegir modelos | Compatible con Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok y modelos locales mediante Ollama / LM Studio (trae tu propia clave de API). |
 | Automatizar tareas | Organiza ejecuciones con la CLI o llama al mismo flujo de procesamiento desde un cliente MCP. |
 
-> Importar vídeo → Subtítulos / transcripción → Análisis y puntuación con IA → Clips y recopilaciones → Exportación
+> Importar → Confirmar → Análisis de subtítulos predeterminado, o análisis visual de juegos activado de forma explícita → Editar en el editor compartido → Exportar
 
 ## Inicio rápido
 
@@ -67,7 +69,7 @@ Descarga el instalador adecuado desde [GitHub Releases](https://github.com/zhoux
 | Windows 10 / 11 · x64 | `-setup.exe` |
 | Intel Mac / Linux | Usa Docker o la CLI, descritos abajo |
 
-Los instaladores incluyen Python y FFmpeg. Consulta cada versión para conocer las plataformas disponibles y las instrucciones del primer inicio. Tras instalar, elige un proveedor de modelos en la configuración, prueba la conexión, guarda los cambios e importa un vídeo.
+Los instaladores incluyen Python y FFmpeg. Consulta cada versión para conocer las plataformas disponibles y las instrucciones del primer inicio. Hay un paquete de Windows; la instalación, la importación y el guardado en un equipo real aún están pendientes de verificación. Tras instalar, elige un proveedor de modelos en la configuración, prueba la conexión, guarda los cambios e importa un vídeo.
 
 ### 2. Docker / Web
 
@@ -137,7 +139,7 @@ En el cliente MCP, configura `command` con la ruta absoluta a `autoclip` dentro 
 | Ollama | Dirección predeterminada: `http://localhost:11434/v1`; modelo: `qwen2.5:7b`. No requiere clave de API. |
 | LM Studio | Carga un modelo e inicia Local Server, por defecto en `http://localhost:1234/v1`. Selecciona un modelo disponible en tu servidor. |
 
-Dentro de Docker, `localhost` apunta al contenedor. Para usar un modelo del equipo anfitrión, configura una dirección accesible desde el contenedor; consulta la guía de CLI / MCP. El corte del vídeo se realiza localmente; el análisis con modelos en la nube envía el texto de los subtítulos al proveedor elegido. La descarga de vídeos y modelos requiere conexión a internet.
+Dentro de Docker, `localhost` apunta al contenedor. Para usar un modelo del equipo anfitrión, configura una dirección accesible desde el contenedor; consulta la guía de CLI / MCP. El corte y el renderizado se hacen en tu equipo. La ruta de subtítulos envía los subtítulos o el texto pertinente al proveedor en la nube elegido. Un modelo visual en la nube también envía fotogramas muestreados y el texto necesario. El coste depende de ese proveedor. La descarga de vídeos y modelos requiere conexión a internet.
 
 ## Preguntas frecuentes
 
@@ -151,7 +153,7 @@ AutoClip sigue siendo gratuito y de código abierto bajo MIT. Los proveedores de
 <details>
 <summary>¿Se suben mis vídeos?</summary>
 
-La edición permanece en tu dispositivo. El análisis con modelos en la nube envía el texto de los subtítulos al proveedor elegido. El clip terminado sale del equipo solo después de pulsar Publicar, y solo hacia las plataformas que conectaste. También puedes descargarlo sin publicar. Esa página Publicar está disponible en **v1.3.2**. Las estadísticas y los informes de errores dependen de la versión y los ajustes; consulta las notas de privacidad.
+El corte y el renderizado permanecen en tu dispositivo. La ruta de subtítulos envía los subtítulos o el texto pertinente al proveedor elegido. Un modelo visual en la nube también envía fotogramas muestreados y el texto necesario. El coste depende de ese proveedor. El clip terminado sale del equipo solo después de pulsar Publicar, y solo hacia las plataformas que conectaste. También puedes descargarlo sin publicar. Esa página Publicar está disponible en **v1.3.2**. Las estadísticas y los informes de errores dependen de la versión y los ajustes; consulta las notas de privacidad.
 
 </details>
 
@@ -172,7 +174,7 @@ Revisa la fase que falló: subtítulos vacíos, conexión al modelo, umbral de p
 <details>
 <summary>¿Qué vídeos funcionan mejor y cuánto tarda?</summary>
 
-El análisis se basa principalmente en los subtítulos: entrevistas, pódcasts, cursos y comentarios hablados son adecuados. La acción visual o la música pueden ofrecer peores resultados. El tiempo depende de la duración, el hardware, el modelo y la exportación; prueba primero con una muestra corta.
+El análisis predeterminado usa subtítulos, así que entrevistas, pódcasts, cursos y comentarios hablados encajan bien. Desde la **v1.4.0**, las grabaciones de juego pueden usar el análisis visual opcional. Una muestra no representa todos los juegos. Revisa tú mismo los límites, el recorte y el texto. No hay promesa de rendimiento publicitario. Esta versión no incluye animación de CTA, tarjetas finales de marca generativas ni karaoke / subtítulos palabra a palabra. El tiempo depende de la duración, el hardware, el modelo y la exportación; prueba primero con una muestra corta.
 
 </details>
 

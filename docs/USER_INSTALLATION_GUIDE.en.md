@@ -22,17 +22,17 @@ Open the `.dmg`, drag AutoClip Desktop into Applications, and launch it from the
 
 ### Windows
 
-Run `x64-setup.exe` and follow the installer. Installation is per user; routine use does not require administrator privileges. If WebView2 is missing, the installer may need internet access to download it. If Windows blocks an unsigned build, verify its source and consult the release notes.
+Run `x64-setup.exe` and follow the installer. Installation is per user; routine use does not require administrator privileges. If WebView2 is missing, the installer may need internet access to download it. If Windows blocks an unsigned build, verify its source and consult the release notes. v1.4.0 provides a Windows package; install, import, and save on a real device are still awaiting verification. Follow that release.
 
 ## First run
 
-1. **Configure a model.** Open Settings and choose Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok, or a local model. For cloud services, enter your own API key and model name, test the connection, and save. Compatible endpoints can set a Base URL. For Ollama / LM Studio, start the model service and load a model first.
-2. **Prepare subtitles.** Import an accurately timed `.srt` alongside your video when available. Otherwise, prepare the local Whisper components and model in the speech recognition settings. Initial installation and downloads require internet access.
-3. **Bring your own short clip.** Use a 3–5 minute video you are allowed to use, with clear speech and, preferably, an accurately timed `.srt`. On the home screen, use file import for the video and optional SRT, or link import for a Bilibili or YouTube URL. Requirements and an example are in [Bring your own short clip](#bring-your-own-short-clip) below.
-4. **Review the results.** Check the clip boundaries, titles, and scores in the project details. Preview each clip for completeness. If processing fails, identify whether subtitles, analysis, or export failed, then follow the [FAQ](FAQ.en.md).
-5. **Export.** Use the export action in the project details and choose a platform preset. Vertical exports can include subtitles and title cards. Play the exported file before publishing it yourself.
+1. **Configure a model.** Open Settings and choose Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok, or a local model. For cloud services, enter your own API key and model name, test the connection, and save. Compatible endpoints can set a Base URL. For Ollama / LM Studio, start the model service and load a model first. Subtitle analysis is the default. As of **v1.4.0**, game visual analysis is optional: it needs a multimodal model and an explicit enable of paid visual screening. Saving a model does not authorize every visual call.
+2. **Prepare subtitles (default route).** Import an accurately timed `.srt` alongside your video when available. Otherwise, prepare the local Whisper components and model in the speech recognition settings. Initial installation and downloads require internet access.
+3. **Import, then confirm.** Use a short video you are allowed to use. On the home screen, use file import for the video and optional SRT, or link import for a Bilibili or YouTube URL. Confirm the production type, and correct it by hand if needed. An unconfirmed import can be resumed. Understanding and cutting start only after confirmation. Requirements and an example are in [Bring your own short clip](#bring-your-own-short-clip) below.
+4. **Check the result in the shared editor.** Review boundaries, titles, and copy. You still need to check boundaries, crops, and copy yourself. If processing fails, identify whether subtitles, analysis, or export failed, then follow the [FAQ](FAQ.en.md).
+5. **Export.** Use the export action and choose a platform preset. Vertical exports can include subtitles and title cards. Play the exported file before publishing it yourself.
 
-Highlight analysis primarily uses transcript text. Interviews, podcasts, and courses are easier to assess this way; do not expect the same results for purely visual action, music, or videos without speech.
+Subtitle analysis is the default and suits interviews, podcasts, and courses. As of **v1.4.0**, gameplay recordings can use optional visual analysis, which needs a multimodal model and an explicit enable of paid visual screening. One sample game does not stand for every game. Review the output yourself. There is no claim about ad performance. v1.4.0 does not include CTA motion, generative brand end cards, or karaoke / word-level subtitles.
 
 ## Bring your own short clip
 
@@ -61,7 +61,7 @@ Common sticking points on a first run are in [Discussion #128](https://github.co
 | Ollama | Start Ollama, run `ollama pull qwen2.5:7b`, and select Ollama in AutoClip |
 | LM Studio | Download and load a model, start Local Server, and select an available model in AutoClip |
 
-Local presets do not require a cloud API key, but inference uses your hardware. Whisper converts speech to text; the language model analyzes that text. Configure them separately.
+Local presets do not require a cloud API key, but inference uses your hardware. Whisper converts speech to text. The subtitle route uses a language model on subtitles or copy. The visual route needs a multimodal model and sends sampled frames only after you explicitly enable it. Configure each one separately.
 
 ## Updates and backups
 

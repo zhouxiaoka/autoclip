@@ -32,7 +32,7 @@ Já apareceu no GitHub Trending; não é um ranking ao vivo. GitHub Trending e T
 
 A partir da v1.3.1, o aplicativo, o site e o README oferecem chinês, inglês, japonês, coreano, espanhol, português, russo e francês. Escolha o idioma no cabeçalho ou siga o sistema. Seus arquivos e o conteúdo gerado mantêm o idioma original.
 
-O AutoClip usa IA para analisar legendas, encontrar destaques, criar títulos e gerar clipes e coletâneas automaticamente. Ideal para entrevistas, podcasts, cursos e gravações de transmissões ao vivo, oferece um aplicativo desktop, uma interface web via Docker e acesso por CLI / MCP.
+O AutoClip usa IA para encontrar destaques, criar títulos e gerar clipes e coletâneas. A análise de legendas é o padrão e combina com entrevistas, podcasts, cursos e gravações de transmissões ao vivo. A partir da **v1.4.0**, você pode ativar à parte a análise visual de jogos (multimodal): configure seu próprio modelo multimodal e ative explicitamente a triagem visual paga. Importe e depois confirme. A compreensão e o corte começam só após a confirmação, e você edita o resultado no editor compartilhado. Oferece um aplicativo desktop, uma interface web via Docker e acesso por CLI / MCP.
 
 ## Veja a interface
 
@@ -45,7 +45,9 @@ Interface web real da v1.3.0: adicione um vídeo local na área de importação,
 | Recurso | Descrição |
 | --- | --- |
 | Importar vídeos | Use arquivos locais ou links do YouTube e Bilibili, com legendas SRT opcionais. |
-| Encontrar destaques | Extraia resumos, intervalos por assunto, pontuações e títulos a partir das legendas. |
+| Encontrar destaques | Por padrão, extraia resumos, intervalos por assunto, pontuações e títulos a partir das legendas. |
+| Análise visual de jogos (v1.4.0, opcional) | Configure seu próprio modelo multimodal e ative explicitamente a triagem visual paga. Depois de confirmar, reconhece eventos independentes na gravação e gera destaques editáveis e rascunhos de promoção. A análise de legendas continua sendo o padrão. Uma amostra de um jogo não representa todos os jogos. Revise você mesmo os limites, o recorte e o texto. Não há promessa de desempenho de anúncio. Esta versão não inclui animação de CTA, cartões finais de marca generativos nem karaokê / legendas palavra a palavra. |
+| Confirmar antes de cortar | Depois de importar, confirme o tipo de produção. Você pode corrigi-lo à mão. Uma importação não confirmada pode ser retomada. A compreensão e o corte começam só após a confirmação; em seguida você edita no editor compartilhado. |
 | Criar clipes e coletâneas | Gere clipes e coletâneas sugeridas e ajuste a ordem manualmente. |
 | Publicar (v1.3.2) | A partir da **v1.3.2**, com os clipes prontos, publique ou agende na mesma página. Plataformas no exterior usam o Upload-Post; no Bilibili, cole os cookies de login uma vez em Configurações. O padrão fica o mais privado que a plataforma permitir; também dá para exportar sem publicar. Detalhes: [guia de publicação (chinês)](docs/PUBLISH_UPLOAD_POST.md). |
 | Capa automática (v1.3.2) | Ao publicar, uma capa é gerada automaticamente para o Bilibili não recusar uma capa vazia; os padrões seguem as notas do instalador. Disponível na **v1.3.2**. |
@@ -53,7 +55,7 @@ Interface web real da v1.3.0: adicione um vídeo local na área de importação,
 | Escolher modelos | Suporta Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok e modelos locais via Ollama / LM Studio (traga sua própria chave de API). |
 | Automatizar tarefas | Organize execuções pela CLI ou acesse o mesmo fluxo de processamento por um cliente MCP. |
 
-> Importar vídeo → Legendas / transcrição → Análise e pontuação por IA → Clipes e coletâneas → Exportação
+> Importar → Confirmar → Análise de legendas padrão, ou análise visual de jogos ativada explicitamente → Editar no editor compartilhado → Exportar
 
 ## Início rápido
 
@@ -67,7 +69,7 @@ Baixe o instalador adequado em [GitHub Releases](https://github.com/zhouxiaoka/a
 | Windows 10 / 11 · x64 | `-setup.exe` |
 | Intel Mac / Linux | Use Docker ou a CLI abaixo |
 
-Os instaladores incluem Python e FFmpeg. Consulte cada versão para verificar as plataformas disponíveis e as instruções da primeira execução. Após instalar, escolha o provedor de modelos nas configurações, teste a conexão, salve e importe um vídeo.
+Os instaladores incluem Python e FFmpeg. Consulte cada versão para verificar as plataformas disponíveis e as instruções da primeira execução. Há um pacote para Windows; a instalação, a importação e o salvamento em um aparelho real ainda aguardam verificação. Após instalar, escolha o provedor de modelos nas configurações, teste a conexão, salve e importe um vídeo.
 
 ### 2. Docker / Web
 
@@ -137,7 +139,7 @@ No cliente MCP, defina `command` como o caminho absoluto de `autoclip` no ambien
 | Ollama | Endereço padrão: `http://localhost:11434/v1`; modelo: `qwen2.5:7b`. Não exige chave de API. |
 | LM Studio | Carregue um modelo e inicie o Local Server, por padrão em `http://localhost:1234/v1`. Selecione um modelo disponível no seu servidor. |
 
-Dentro do Docker, `localhost` aponta para o próprio contêiner. Para usar um modelo no host, configure um endereço acessível pelo contêiner; consulte o guia de CLI / MCP. O corte dos vídeos é local; a análise com modelos na nuvem envia o texto das legendas ao provedor escolhido. Downloads de vídeos e modelos ainda precisam de internet.
+Dentro do Docker, `localhost` aponta para o próprio contêiner. Para usar um modelo no host, configure um endereço acessível pelo contêiner; consulte o guia de CLI / MCP. O corte e a renderização ficam na sua máquina. A rota de legendas envia as legendas ou o texto pertinente ao provedor de nuvem escolhido. Um modelo visual na nuvem também envia quadros amostrados e o texto necessário. O custo depende desse provedor. Downloads de vídeos e modelos ainda precisam de internet.
 
 ## Perguntas frequentes
 
@@ -151,7 +153,7 @@ O AutoClip em si continua gratuito e de código aberto sob MIT. Provedores de mo
 <details>
 <summary>Meus vídeos são enviados para a nuvem?</summary>
 
-A edição fica no seu dispositivo. A análise com modelos na nuvem envia o texto das legendas ao provedor escolhido. O clipe pronto só sai da máquina depois que você clica em Publicar, e só para as plataformas que você conectou. Também dá para baixar sem publicar. Essa página Publicar está disponível na **v1.3.2**. Estatísticas e relatórios de erros dependem da versão e das configurações; consulte as notas de privacidade.
+O corte e a renderização ficam no seu dispositivo. A rota de legendas envia as legendas ou o texto pertinente ao provedor escolhido. Um modelo visual na nuvem também envia quadros amostrados e o texto necessário. O custo depende desse provedor. O clipe pronto só sai da máquina depois que você clica em Publicar, e só para as plataformas que você conectou. Também dá para baixar sem publicar. Essa página Publicar está disponível na **v1.3.2**. Estatísticas e relatórios de erros dependem da versão e das configurações; consulte as notas de privacidade.
 
 </details>
 
@@ -172,7 +174,7 @@ Verifique a etapa que falhou: legendas vazias, conexão com o modelo, pontuaçã
 <details>
 <summary>Quais vídeos funcionam melhor e quanto tempo leva?</summary>
 
-A análise usa principalmente as legendas, sendo adequada para entrevistas, podcasts, aulas e comentários falados. Ação visual ou música podem ter resultados limitados. O tempo depende da duração, do hardware, do modelo e da exportação; comece com uma amostra curta.
+A análise padrão usa legendas, então entrevistas, podcasts, aulas e comentários falados combinam. A partir da **v1.4.0**, gravações de jogo podem usar a análise visual opcional. Uma amostra não representa todos os jogos. Revise você mesmo os limites, o recorte e o texto. Não há promessa de desempenho de anúncio. Esta versão não inclui animação de CTA, cartões finais de marca generativos nem karaokê / legendas palavra a palavra. O tempo depende da duração, do hardware, do modelo e da exportação; comece com uma amostra curta.
 
 </details>
 
