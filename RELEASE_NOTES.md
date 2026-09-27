@@ -1,5 +1,7 @@
 # AutoClip 桌面版发布说明
 
+> 自 **v1.4.0** 起，用户可见的版本说明以 [CHANGELOG.md](CHANGELOG.md) 和 [GitHub Releases](https://github.com/zhouxiaoka/autoclip/releases) 为准。本文保留较早版本的历史说明，不单独作为当前功能范围。
+
 ## v1.1.0 - 2026年5月
 
 > 这一版让 macOS 桌面客户端**真正可装、可用、能出片**。v1.0.0 的安装包此前存在打不出产物、

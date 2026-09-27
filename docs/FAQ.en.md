@@ -12,13 +12,13 @@ As of **v1.3.2**, overseas publishing needs your own [Upload-Post](https://www.u
 
 ### Are videos uploaded? Can I work offline?
 
-Editing stays on your device, and the video stays there too. Cloud language models receive transcript text. The finished clip leaves the machine only after you click Publish, and only to the platforms you connected. You can also download it without publishing. Usage analytics and error reporting depend on the version, build configuration, and settings; see the [privacy notes](PRIVACY.en.md). The Publish page is available in **v1.3.2**.
+Cutting and rendering stay on your device, and the video stays there too. The subtitle route sends the relevant subtitles or copy to your selected cloud provider. A cloud visual model also sends sampled frames and the necessary text. Fees depend on that provider. The finished clip leaves the machine only after you click Publish, and only to the platforms you connected. You can also download it without publishing. Usage analytics and error reporting depend on the version, build configuration, and settings; see the [privacy notes](PRIVACY.en.md). The Publish page is available in **v1.3.2**.
 
 Once you have local footage, a local language model, and any required speech model, core local processing does not need a cloud model service. Video downloads, component installation, model downloads, and updates still need internet access. Local processing does not mean that every feature is offline.
 
 ### What footage works best?
 
-Analysis primarily uses transcripts, so interviews, podcasts, lectures, spoken commentary, and livestream recordings with clear speech are suitable. Music, sports action, and other primarily visual content may not have enough transcript information to identify highlights. There is no guaranteed clip count or quality.
+Subtitle analysis is the default, so interviews, podcasts, lectures, spoken commentary, and livestream recordings with clear speech are a good fit. As of **v1.4.0**, gameplay recordings can use optional visual analysis: you need a multimodal model and must explicitly enable paid visual screening. One sample game does not stand for every game. Review boundaries, crops, and copy yourself. There is no claim about ad performance. Music or other picture-led footage, when visual analysis is left off, may not have enough subtitle information to identify highlights. There is no guaranteed clip count or quality.
 
 For a first run, bring your own 3–5 minute clip with clear speech, preferably with an accurately timed `.srt`. Use a local file, Bilibili, or YouTube, and confirm that you have the right to use it. AutoClip does not host an official sample, and Releases do not include a sample zip or finished clips.
 
@@ -55,6 +55,16 @@ Inside Docker, `localhost` refers to the container. See the [Docker guide](DOCKE
 
 ## Subtitles, analysis, and export
 
+### How do I choose subtitle analysis or game visual analysis?
+
+As of **v1.4.0** there are two routes. Subtitle analysis stays the default, including for existing settings. Game visual analysis is optional: configure your own multimodal model and explicitly enable paid visual screening. Saving a model does not authorize every visual call. After you confirm, the visual route finds separate events in a gameplay recording, produces editable highlights and promo drafts, and you edit them in the shared editor. An unconfirmed import can be resumed. Understanding and cutting start only after confirmation.
+
+One sample game does not stand for every game. Review boundaries, crops, and copy yourself. There is no claim about ad performance. v1.4.0 does not include CTA motion, generative brand end cards, or karaoke / word-level subtitles.
+
+### How is visual analysis billed? Are frames sent?
+
+Cutting and rendering stay on your machine. The subtitle route sends the relevant subtitles or copy. A cloud visual model sends sampled frames and the necessary text. Fees depend on the provider you chose; there is no single price. Local Ollama / LM Studio presets are not billed by a cloud provider, but they still need your own models and hardware. An unconfirmed import does not start understanding or cutting.
+
 ### What if I have no subtitles? Which format can I import?
 
 Local file import accepts an optional `.srt`. Without usable subtitles, you need speech transcription: install the Whisper components and model in Settings first. CLI users can install `faster-whisper`. Convert other subtitle formats to accurately timed SRT rather than assuming every format is accepted.
@@ -70,7 +80,7 @@ Read the project error first, then check the failed stage:
 | Stage | Check first |
 | --- | --- |
 | SUBTITLE | Empty subtitles, timing mismatch, or missing Whisper components/model |
-| ANALYZE | Model connectivity, parseable output, and sufficient transcript content |
+| ANALYZE | Model connectivity, parseable output, and sufficient subtitle content. An empty timeline still needs a check of the subtitles and the model response. As of **v1.3.5**, that case no longer points you only at model settings |
 | Scoring | Whether candidates exist and the threshold is too high; try reducing it from 0.7 to 0.5 and processing again |
 | EXPORT | FFmpeg availability, free disk space, and write permission on the output directory |
 

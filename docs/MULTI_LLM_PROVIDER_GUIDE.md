@@ -1,6 +1,8 @@
 # 多模型提供商接入指南
 
-模型列表仅作为配置示例，不代表当前服务商仍提供全部模型。实际可用模型、权限和费用以所选服务商为准；先用短样本测试，再处理长视频。安装步骤见 [安装指南](USER_INSTALLATION_GUIDE.md)，英文用户可参阅 [English installation](USER_INSTALLATION_GUIDE.en.md)。
+具体模型 ID 以设置页里该提供商当前列出的为准，不要从本文抄旧型号。实际权限和费用以所选服务商为准；先用短样本测试，再处理长视频。安装步骤见 [安装指南](USER_INSTALLATION_GUIDE.md)，英文用户可参阅 [English installation](USER_INSTALLATION_GUIDE.en.md)。
+
+自 **v1.4.0** 起，字幕分析仍是默认。游戏视觉分析可选：需要你自己的多模态模型，并在设置里显式启用付费视觉初筛。云端视觉调用会发送抽样画面及必要文字，费用由所选服务商收取。本文不把某一家模型写成视觉路线的指定供应商。
 
 ## 🎯 功能概述
 
@@ -12,16 +14,16 @@
 
 | 提供商 | 显示名称 | 主要模型 | 特点 |
 |--------|----------|----------|------|
-| `dashscope` | Qwen | qwen-plus, qwen-max, qwen-turbo | 国内访问稳定，中文理解好 |
-| `openai` | OpenAI | gpt-3.5-turbo, gpt-4, gpt-4-turbo | 支持兼容接口与自定义 Base URL |
-| `gemini` | Google Gemini | gemini-2.5-flash, gemini-1.5-pro | 多模态支持，上下文长 |
+| `dashscope` | Qwen | 以设置页列出的为准 | 自备 API Key |
+| `openai` | OpenAI | 以设置页列出的为准 | 支持兼容接口与自定义 Base URL |
+| `gemini` | Gemini | 以设置页列出的为准 | 自备 API Key |
 | `deepseek` | DeepSeek | 以设置页列出的为准 | 自备 API Key |
 | `seed` | Doubao Seed | 以设置页列出的为准 | 自备 API Key |
 | `kimi` | Kimi | 以设置页列出的为准 | 自备 API Key |
 | `glm` | GLM | 以设置页列出的为准 | 自备 API Key |
 | `grok` | Grok | 以设置页列出的为准 | 自备 API Key |
 
-上表模型名是配置示例，费用和是否仍可调用以服务商为准。
+打开设置页查看该提供商当前列表。费用和是否仍可调用以服务商为准。
 
 ### 系统架构
 
@@ -103,10 +105,7 @@ cd frontend && npm run dev
 2. 开通 Qwen 服务
 3. 创建API密钥
 
-**支持模型:**
-- `qwen-plus`: Qwen Plus (推荐)
-- `qwen-max`: Qwen Max (最强性能)
-- `qwen-turbo`: Qwen Turbo (快速响应)
+**可用模型：** 以设置页里 Qwen 当前列出的为准。
 
 ### OpenAI
 
@@ -115,10 +114,7 @@ cd frontend && npm run dev
 2. 注册账号并充值
 3. 创建API密钥
 
-**支持模型:**
-- `gpt-3.5-turbo`: GPT-3.5 Turbo (性价比高)
-- `gpt-4`: GPT-4 (高质量)
-- `gpt-4-turbo`: GPT-4 Turbo（历史配置示例）
+**可用模型：** 以设置页里 OpenAI 当前列出的为准。兼容接口可配置 Base URL。
 
 ### Google Gemini
 
@@ -127,10 +123,7 @@ cd frontend && npm run dev
 2. 登录Google账号
 3. 创建API密钥
 
-**支持模型:**
-- `gemini-2.5-flash`: Gemini 2.5 Flash (快速)
-- `gemini-1.5-pro`: Gemini 1.5 Pro (高质量)
-- `gemini-1.5-flash`: Gemini 1.5 Flash (平衡)
+**可用模型：** 以设置页里 Gemini 当前列出的为准。视觉分析需要多模态模型，并另行显式启用。
 
 ### DeepSeek
 
