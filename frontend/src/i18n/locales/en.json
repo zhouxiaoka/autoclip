@@ -1118,5 +1118,6 @@
   "字幕推广会额外调用一次文字模型生成文案，按服务商计费；请复核后使用。": "Subtitle promos make one additional text-model request for copy, billed by your provider. Review before use.",
   "检测到可用字幕，建议按语义制作；尚未判断内容质量，也未调用模型。": "Usable subtitles found. Semantic editing is suggested; content quality has not been assessed and no model was called.",
   "未找到字幕，需要转写或提供字幕；尚未确认素材有可用语音，可手动选择制作类型。": "No subtitles found. Transcription or supplied subtitles are needed; usable speech is not yet confirmed. You can select output types manually.",
-  "字幕未通过快速检查，暂不自动勾选；请检查字幕或手动选择，原素材已保留。": "Subtitles did not pass the quick check, so nothing is preselected. Check the subtitles or select manually; the source is preserved."
+  "字幕未通过快速检查，暂不自动勾选；请检查字幕或手动选择，原素材已保留。": "Subtitles did not pass the quick check, so nothing is preselected. Check the subtitles or select manually; the source is preserved.",
+  "导入任务未能启动，请重试；原素材与已有成片已保留": "Could not start the import. Please retry; your source and existing exports are preserved."
 }

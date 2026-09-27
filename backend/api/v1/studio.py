@@ -230,9 +230,17 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
             url = (project.project_metadata or {}).get('source_url')
             if not url:
                 raise HTTPException(404, '原素材不存在，请重新导入')
-        project.processing_config = {**(project.processing_config or {}), 'smart_import': body.model_dump()}
+        previous_config = dict(project.processing_config or {})
+        project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()
-        call(jobs.inspect_project, project_id, body, url, (project.processing_config or {}).get('creative_browser'))
+        try:
+            call(jobs.inspect_project, project_id, body, url, previous_config.get('creative_browser'))
+        except Exception:
+            # A rejected submission must not persist preferences for a plan
+            # that was never produced. inspect_project restores the JSON state.
+            project.processing_config = previous_config
+            db.commit()
+            raise
     return {'ok': True}
 
 @router.post('/{project_id}/start')

@@ -85,3 +85,60 @@ def test_partial_overlap_is_clamped_to_chunk(tmp_path):
     out = extractor(tmp_path)._parse_and_validate_response(json.dumps([dict(outline="topic", start_time="00:00:05.5", end_time="00:00:40")]), "00:00:10,000", "00:00:30,000", 1)
     assert out[0]["start_time"] == "00:00:10,000"
     assert out[0]["end_time"] == "00:00:30,000"
+
+
+def prepared_extractor(tmp_path):
+    obj = extractor(tmp_path)
+    obj.timeline_prompt = 'extract'
+    obj.srt_chunks_dir = tmp_path / 'step1_srt_chunks'
+    obj.timeline_chunks_dir = tmp_path / 'step2_timeline_chunks'
+    obj.llm_raw_output_dir = tmp_path / 'step2_llm_raw_output'
+    for directory in (obj.srt_chunks_dir, obj.timeline_chunks_dir, obj.llm_raw_output_dir):
+        directory.mkdir()
+    (obj.srt_chunks_dir / 'chunk_0.json').write_text(json.dumps([dict(cue(0, 30), index=1)]))
+    obj.llm_client.call_with_retry = lambda *a, **k: ''
+    return obj
+
+
+def topic(title='current', start=0, end=30):
+    return dict(outline=title, start_time=to_srt_time(start), end_time=to_srt_time(end))
+
+
+def test_failed_run_never_returns_previous_timeline(tmp_path):
+    obj = prepared_extractor(tmp_path)
+    old = json.dumps([topic('stale')])
+    (obj.timeline_chunks_dir / 'chunk_0.json').write_text(old)
+    assert obj.extract_timeline([dict(title='new', chunk_index=0)]) == []
+    assert (obj.timeline_chunks_dir / 'chunk_0.json').read_text() == old
+
+
+def test_current_run_ignores_obsolete_result_and_subtitle_chunks(tmp_path):
+    obj = prepared_extractor(tmp_path)
+    (obj.timeline_chunks_dir / 'chunk_9.json').write_text('malformed obsolete result')
+    (obj.srt_chunks_dir / 'chunk_9.json').write_text(json.dumps([dict(cue(100, 5000), index=2)]))
+    obj.llm_client.call_with_retry = lambda *a, **k: json.dumps([topic()])
+    out = obj.extract_timeline([dict(title='current', chunk_index=0)])
+    assert [item['outline'] for item in out] == ['current']
+    report = json.loads((tmp_path / 'quality_report.json').read_text())['step2']
+    assert report['profile']['total_sec'] == 30
+
+
+@pytest.mark.parametrize('response', [json.dumps([topic()]), 'not json', ''])
+def test_cached_response_uses_validation_without_network(tmp_path, response):
+    obj = prepared_extractor(tmp_path)
+    (obj.llm_raw_output_dir / 'chunk_0.txt').write_text(response)
+    obj.llm_client.call_with_retry = lambda *a, **k: pytest.fail('cache must not trigger a paid call')
+    out = obj.extract_timeline([dict(title='current', chunk_index=0)])
+    assert len(out) == (1 if response.startswith('[') else 0)
+    if out:
+        assert json.loads((obj.timeline_chunks_dir / 'chunk_0.json').read_text())[0]['outline'] == 'current'
+
+
+def test_partial_failure_only_returns_successful_current_chunks(tmp_path):
+    obj = prepared_extractor(tmp_path)
+    (obj.srt_chunks_dir / 'chunk_1.json').write_text(json.dumps([dict(cue(40, 70), index=2)]))
+    (obj.timeline_chunks_dir / 'chunk_1.json').write_text(json.dumps([topic('stale', 40, 70)]))
+    responses = iter([json.dumps([topic()]), ''])
+    obj.llm_client.call_with_retry = lambda *a, **k: next(responses)
+    out = obj.extract_timeline([dict(title='current', chunk_index=0), dict(title='failed', chunk_index=1)])
+    assert [item['outline'] for item in out] == ['current']

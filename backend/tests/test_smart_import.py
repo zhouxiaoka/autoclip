@@ -420,3 +420,80 @@ def test_confirm_matches_each_output_aspect_without_extra_analysis(
     assert seen==list(zip(['highlight','promo'],expected))
     assert scans==[route]
     assert state['plan']['goal_preferences']['promo']['aspect']==expected[1]
+
+
+class RejectSubmission:
+    def submit(self, *args):
+        raise RuntimeError('private executor failure')
+
+
+def test_initial_import_dispatch_failure_is_retryable(client, source, monkeypatch):
+    from backend.core.database import SessionLocal
+    from backend.models import Project
+    monkeypatch.setattr(jobs, 'executor', RejectSubmission())
+    response = client.post('/studio/import', data={'name':'dispatch recovery'}, files={'video':('input.mp4', source.read_bytes(), 'video/mp4')})
+    assert response.status_code == 422
+    assert '导入任务未能启动' in response.json()['detail']
+    assert 'private executor' not in response.text
+    with SessionLocal() as db:
+        project = db.query(Project).filter(Project.name == 'dispatch recovery').one()
+        pid = str(project.id)
+        assert project.status.value == 'failed'
+    assert store.read(pid)['analysis']['status'] == 'failed'
+    assert (store.directory(pid) / 'raw/input.mp4').read_bytes() == source.read_bytes()
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    assert client.post('/studio/'+pid+'/analyze').status_code == 200
+    assert store.read(pid)['analysis']['status'] == 'awaiting_confirmation'
+
+
+@pytest.mark.parametrize("route", ["analyze", "plan"])
+def test_rescreen_dispatch_failure_preserves_plan_and_exports(client, source, monkeypatch, route):
+    from backend.tests.test_studio import draft
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    pid = client.post('/studio/import', files={'video':('input.mp4', source.read_bytes(), 'video/mp4')}).json()['project_id']
+    saved = store.save_draft(pid, draft(), create=True)
+    store.change(pid, lambda data: data['jobs'].append({'job_id':'existing', 'status':'completed', 'draft_id':saved['id']}))
+    before = store.read(pid)
+    monkeypatch.setattr(jobs, 'executor', RejectSubmission())
+    from backend.core.database import SessionLocal
+    from backend.models import Project
+    with SessionLocal() as db:
+        config = dict(db.get(Project, pid).processing_config)
+    def rescreen():
+        if route == 'plan':
+            return client.put('/studio/'+pid+'/plan', json={'goal':'highlight'})
+        return client.post('/studio/'+pid+'/analyze')
+    response = rescreen()
+    assert response.status_code == 422
+    with SessionLocal() as db:
+        assert db.get(Project, pid).processing_config == config
+    assert store.read(pid) == before
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    assert rescreen().status_code == 200
+    after = store.read(pid)
+    assert after['analysis']['status'] == 'awaiting_confirmation'
+    assert after['drafts'] == before['drafts'] and after['jobs'] == before['jobs']
+
+
+@pytest.mark.parametrize('url', [
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    'https://youtube.com/watch?si=abc&v=dQw4w9WgXcQ',
+    'https://youtu.be/dQw4w9WgXcQ?si=abc',
+    'https://m.youtube.com/watch?v=dQw4w9WgXcQ',
+    'https://youtube.com/shorts/dQw4w9WgXcQ',
+    'https://youtube.com/live/dQw4w9WgXcQ',
+])
+def test_current_studio_accepts_shared_youtube_urls(client, source, monkeypatch, url):
+    seen = []
+    def download(pid, link, browser):
+        seen.append(link)
+        (store.directory(pid) / 'raw/input.mp4').write_bytes(source.read_bytes())
+    monkeypatch.setattr(jobs, 'download', download)
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    response = client.post('/studio/import', data={'url':url})
+    assert response.status_code == 200
+    assert seen == [url]
+    assert store.read(response.json()['project_id'])['analysis']['status'] == 'awaiting_confirmation'

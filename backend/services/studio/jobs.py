@@ -157,12 +157,24 @@ def run_content(project_id, video):
 
 def inspect_project(project_id, options, url=None, browser=None):
     """Only ingest and screen. Expensive production requires an explicit confirmation."""
-    def begin(data):
-        if (data.get('analysis') or {}).get('status') == 'running':
+    # Reserve and dispatch together so another request cannot observe an
+    # accepted task before submission succeeds. Preserve existing exports/plan.
+    with store.lock:
+        previous = store.read(project_id)
+        if (previous.get('analysis') or {}).get('status') == 'running':
             raise ValueError('当前任务正在运行，请稍后再试')
-        data['analysis'] = {'status':'running', 'phase':'screening', 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
-    store.change(project_id, begin)
-    executor.submit(_inspect, project_id, options, url, browser)
+        state = deepcopy(previous)
+        state['analysis'] = {'status':'running', 'phase':'screening', 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
+        store.write(project_id, state)
+        try:
+            executor.submit(_inspect, project_id, options, url, browser)
+        except Exception as error:
+            logger.warning('Studio screening dispatch failed: %s', type(error).__name__)
+            message = '导入任务未能启动，请重试；原素材与已有成片已保留'
+            if not previous.get('analysis'):
+                previous['analysis'] = {'status':'failed', 'phase':'screening', 'error':message}
+            store.write(project_id, previous)
+            raise ValueError(message) from None
 
 
 def _inspect(project_id, options, url, browser):
