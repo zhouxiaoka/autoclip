@@ -102,6 +102,16 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bash scripts/build_macos_arm.sh
 
+      - name: Verify shipped macOS runtime before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="src-tauri/target/release/bundle/macos/AutoClip Desktop.app"
+          RESOURCES="$PWD/$APP/Contents/Resources/resources"
+          codesign --verify --deep --strict "$APP"
+          "$RESOURCES/python/bin/python3" -B scripts/verify_macos_bundle.py --resources "$RESOURCES" --output-parent "$RUNNER_TEMP/autoclip-release-validation"
+          codesign --verify --deep --strict "$APP"
+
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
