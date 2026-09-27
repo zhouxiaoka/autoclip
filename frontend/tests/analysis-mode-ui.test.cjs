@@ -20,10 +20,10 @@ function view(mode,goals,available=true){
  return {states,calls,render:()=>nodes(render())}
 }
 test('subtitle selection blocks visual goals without silently changing choices',()=>{
- const x=view('subtitle',['highlight']);let nodes=x.render()
+ const x=view('subtitle',['promo']);let nodes=x.render()
  assert.equal(nodes.find(n=>n.props?.children==='确认并开始制作').props.disabled,true)
  nodes.find(n=>n.type==='select').props.onChange({target:{value:'visual'}})
- assert.deepEqual(x.states[4],['highlight'])
+ assert.deepEqual(x.states[4],['promo'])
  assert.equal(x.render().find(n=>n.props?.children==='确认并开始制作').props.disabled,false)
 })
 test('missing capability blocks visual confirmation but subtitle content remains available',()=>{
