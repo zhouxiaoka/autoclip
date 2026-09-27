@@ -18,8 +18,8 @@
 
 ## 验证与发布前检查
 
-- 本地定向测试：12 passed，Windows IOCP 集成测试在 macOS 跳过。
+- 本地后端全量：631 passed、1 skipped（Windows IOCP 集成测试在 macOS 跳过），33 条既有弃用告警；隔离数据目录，禁用 Sentry DSN。定向测试 12 passed。
 - 覆盖原实现清理中断、修复后关闭/解绑/幂等、正常/已关闭 socket/pipe、协议异常保留、未知异常保留、平台与版本范围。
-- 独立 Windows CI 使用与安装包相同的 Python 3.13.13：20 次真实 TCP RST、服务器关闭完成、无事件循环未处理异常，以及异步子进程输出。CI 结果另行补充。
+- 独立 Windows CI 使用与安装包相同的 Python 版本 3.13.13（GitHub Actions 分发，非最终便携安装包）：20 次真实 TCP RST、服务器关闭完成、无事件循环未处理异常，以及异步子进程输出。[CI run 36308742972](https://github.com/zhouxiaoka/autoclip/actions/runs/36308742972) 在修复提交 `c6979acf` 上 **13 passed，无跳过**。
 - 发布前仍需 Windows 安装包冒烟：启动、导入/制作、取消与退出、重新打开；CI 不能替代 Tauri/WebView2 真机链路。
 - 小版本发布后按新 release 观察此错误是否复发，并对照 Studio 失败事件。当前没有发布、打 tag 或手动关闭 Sentry issue。
