@@ -1,4 +1,6 @@
 import logging
+from time import monotonic
+from backend.core.sentry_setup import capture_studio_exception, studio_error_code
 from copy import deepcopy
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -35,6 +37,7 @@ def export(project_id, draft):
                 executor.submit(_render, project_id, draft, job['job_id'])
             except Exception as error:
                 logger.warning('Studio export dispatch failed: %s', type(error).__name__)
+                capture_studio_exception(error, 'dispatch')
                 message = '导出任务未能启动，请重试；已有成片已保留'
                 def failed(data):
                     next(j for j in data['jobs'] if j['job_id'] == job['job_id']).update(status='failed', error=message)
@@ -43,6 +46,7 @@ def export(project_id, draft):
         return {k: v for k, v in added.items() if k not in ('instance', 'snapshot')}
 
 def _render(project_id, draft, job_id):
+    started = monotonic()
     def update(**values):
         def mutate(data):
             next(j for j in data['jobs'] if j['job_id'] == job_id).update(values)
@@ -50,11 +54,12 @@ def _render(project_id, draft, job_id):
     try:
         update(status='running', percent=5)
         result = render_draft(project_id, source(project_id), draft, job_id, lambda p: update(percent=p))
-        update(status='completed', percent=100, result=result)
+        update(status='completed', percent=100, result=result, duration_ms=round((monotonic() - started) * 1000))
     except Exception as error:
         logger.warning('Studio render failed: %s', type(error).__name__)
+        capture_studio_exception(error, 'render')
         try:
-            update(status='failed', error=str(error)[:700])
+            update(status='failed', error=str(error)[:700], error_code=studio_error_code(error), duration_ms=round((monotonic() - started) * 1000))
         except FileNotFoundError:
             pass
 
@@ -105,6 +110,7 @@ def _analyze(project_id, prefs, url, browser):
         mark_project(project_id, 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
         logger.warning('Studio analysis failed: %s', type(error).__name__)
+        capture_studio_exception(error, 'analysis')
         def failed(data):
             data['analysis'] = {'status': 'failed', 'error': str(error)[:700]}
             if isinstance(error, VisionRequestError):
@@ -147,7 +153,12 @@ def run_content(project_id, video):
         'input_srt_path': str(srt) if srt.exists() else None,
     }, throw=True).get()
     if not result or not result.get('success'):
-        raise RuntimeError((result or {}).get('error') or '内容切片未完成，请检查语音与文字模型设置后重试')
+        message = (result or {}).get('error') or '内容切片未完成，请检查语音与文字模型设置后重试'
+        failure = (result or {}).get('result') or {}
+        if failure.get('error_code'):
+            from backend.pipeline.failures import PipelineFailure
+            raise PipelineFailure(failure.get('stage', ''), message, code=failure['error_code'])
+        raise RuntimeError(message)
 
     clips = result.get('result', {}).get('result', {}).get('titled_clips')
     if not clips:
@@ -170,6 +181,7 @@ def inspect_project(project_id, options, url=None, browser=None):
             executor.submit(_inspect, project_id, options, url, browser)
         except Exception as error:
             logger.warning('Studio screening dispatch failed: %s', type(error).__name__)
+            capture_studio_exception(error, 'dispatch')
             message = '导入任务未能启动，请重试；原素材与已有成片已保留'
             if not previous.get('analysis'):
                 previous['analysis'] = {'status':'failed', 'phase':'screening', 'error':message}
@@ -178,6 +190,7 @@ def inspect_project(project_id, options, url=None, browser=None):
 
 
 def _inspect(project_id, options, url, browser):
+    started = monotonic()
     try:
         from backend.services.studio.planning import recommend
         mark_project(project_id, 'processing', awaiting_confirmation=False)
@@ -186,12 +199,13 @@ def _inspect(project_id, options, url, browser):
         store.change(project_id, lambda data:data['analysis'].update(message='快速判断适合的制作类型'))
         plan = recommend(source(project_id), options)
         plan['id'] = uuid.uuid4().hex
-        store.change(project_id, lambda data:data.update(plan=plan, analysis={'status':'awaiting_confirmation', 'created_at':store.now()}))
+        store.change(project_id, lambda data:data.update(plan=plan, analysis={'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)}))
         mark_project(project_id, 'pending', creative=plan['preferences'], awaiting_confirmation=True)
     except Exception as error:
         logger.warning('Studio screening failed: %s', type(error).__name__)
+        capture_studio_exception(error, 'screening')
         try:
-            store.change(project_id, lambda data:data.update(analysis={'status':'failed','phase':'screening','error':str(error)[:700]}))
+            store.change(project_id, lambda data:data.update(analysis={'status':'failed','phase':'screening','error':str(error)[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}))
             mark_project(project_id, 'failed')
         except FileNotFoundError:
             pass
@@ -231,6 +245,7 @@ def confirm_project(project_id, body):
             executor.submit(_produce_selected, project_id, plan)
         except Exception as error:
             logger.warning('Studio production dispatch failed: %s', type(error).__name__)
+            capture_studio_exception(error, 'dispatch')
             # No worker accepted this confirmation. Preserve the exact plan and
             # staging state so an explicit retry can use the same plan ID.
             store.write(project_id, previous)
@@ -239,8 +254,12 @@ def confirm_project(project_id, body):
 
 def _produce_selected(project_id, plan):
     from backend.services.studio import intelligence
+    started = monotonic()
+    succeeded_goals, failed_goals, reported = [], [], []
+    result_count = 0
     labels = {'content':'内容切片','highlight':'精彩高光','promo':'推广成片'}
     errors = []
+    error_codes = []
     diagnostics = []
     visual_error = None
     events = coverage = None
@@ -274,6 +293,8 @@ def _produce_selected(project_id, plan):
                         drafts = make_promos(project_id, subtitle_clips, prefs, intelligence._probe(video).get('duration'), instruction)
                         store.change(project_id, lambda data:data['drafts'].extend({**d,'updated_at':store.now()} for d in drafts))
                     mark_project(project_id, 'processing')
+                    result_count += len(subtitle_clips) if goal == 'content' else len(drafts)
+                    succeeded_goals.append(goal)
                     continue
                 if plan.get('confirmed_analysis', 'subtitle') != 'visual':
                     raise ValueError('此确认未授权视觉分析；请重新选择处理方式')
@@ -295,22 +316,38 @@ def _produce_selected(project_id, plan):
                     for draft in drafts:
                         draft['subtitles'] = True
                 store.change(project_id, lambda data:data['drafts'].extend({**d,'updated_at':store.now()} for d in drafts))
+                result_count += len(drafts)
+                succeeded_goals.append(goal)
             except Exception as error:
+                failed_goals.append(goal)
+                error_codes.append(studio_error_code(error))
+                if all(error is not previous_error for previous_error in reported):
+                    capture_studio_exception(error, 'production', analysis_mode=plan.get('confirmed_analysis', 'subtitle'), goal=goal)
+                    reported.append(error)
                 errors.append(labels[goal] + '：' + str(error)[:500])
                 if isinstance(error, VisionRequestError):
                     diagnostics.append({'goal':goal, **error.diagnostics()})
-        result = {'status':'failed' if errors else 'completed', 'created_at':store.now()}
+        result = {'status':'failed' if errors else 'completed', 'created_at':store.now(),
+                  'outcome':'partial' if errors and succeeded_goals else 'failed' if errors else 'completed',
+                  'requested_goals':plan['selected_goals'], 'succeeded_goals':succeeded_goals,
+                  'failed_goals':failed_goals, 'result_count':result_count,
+                  'duration_ms':round((monotonic() - started) * 1000)}
         if coverage:
             result['coverage'] = coverage
         if diagnostics:
             result['diagnostics'] = diagnostics
         if errors:
             result['error'] = '；'.join(errors)
+            result['error_code'] = error_codes[0] if len(set(error_codes)) == 1 else 'multiple'
         store.change(project_id, lambda data:data.update(analysis=result))
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
+        capture_studio_exception(error, 'production', analysis_mode=plan.get('confirmed_analysis', 'subtitle'))
         try:
-            store.change(project_id, lambda data:data.update(analysis={'status':'failed','error':str(error)[:700]}))
+            store.change(project_id, lambda data:data.update(analysis={'status':'failed','error':str(error)[:700],
+                'error_code':studio_error_code(error), 'outcome':'partial' if succeeded_goals else 'failed', 'requested_goals':plan['selected_goals'],
+                'succeeded_goals':succeeded_goals, 'failed_goals':[g for g in plan['selected_goals'] if g not in succeeded_goals],
+                'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000)}))
             mark_project(project_id,'failed')
         except FileNotFoundError:
             pass

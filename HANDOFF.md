@@ -30,7 +30,9 @@ Studio 入口已能接受 HTTPS 的 watch、youtu.be、Shorts、live、移动端
 
 ## 1.4 埋点与异常监控
 
-PostHog 已有最小 Studio 事件，但旧业务图表未纳入新事件；后台已捕获异常、桌面保存结果、重试、分析路线与部分成功仍有覆盖缺口。完整范围与优先级见 [埋点审查与补齐方案](docs/TELEMETRY_AUDIT_1_4.md)。当前完成的是审查，尚未实施这批埋点更新或修改线上看板。
+本轮已实施 Studio 导入/推荐/重试/多目标制作/编辑改写/视觉设置/导出/原生保存与社交发布事件，新增本次部分成功与执行耗时；后台已捕获的异常补 Sentry 安全上报，固定阶段/错误分类标签能通过脱敏白名单。旧用户数据和隐私开关保留。
+
+新版 [PostHog Studio 看板](https://us.posthog.com/project/450605/dashboard/2140564) 已建立，生产与 validation 分开；真实隔离应用已验证两平台收到新事件。Sentry 验收错误为 PYTHON-FASTAPI-17，缺模型配置经修复后以 PYTHON-FASTAPI-19 / warning 上报；工程异常与配置警告两个线上视图已保存。代码仍在修复分支，尚未发布；不等于所有正式安装包已验收。完整事件契约、查询、测试和剩余验收见 [Studio 监控实施记录](docs/analytics/STUDIO_MONITORING.md)，原始缺口见 [审查记录](docs/TELEMETRY_AUDIT_1_4.md)。
 
 ## 下一步
 

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Q
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from backend.core.database import get_db
+from backend.core.sentry_setup import capture_studio_exception
 from backend.models.project import Project
 from backend.models.clip import Clip
 from backend.schemas.project import ProjectCreate, ProjectType
@@ -70,7 +71,8 @@ def save_vision_settings(body: vision_settings.VisionSettingsInput):
 def test_vision_settings(body: vision_settings.VisionSettingsInput):
     try:
         return vision_settings.test(body)
-    except Exception:
+    except Exception as error:
+        capture_studio_exception(error, 'vision_test', analysis_mode='visual')
         raise HTTPException(502, '视觉连接测试失败，请检查接口地址、密钥和模型是否支持图片输入') from None
 
 @router.post('/import')
@@ -305,7 +307,8 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
     try:
         result = intelligence.text_json('你是剪辑文案编辑。按用户要求优化 title 和 hook，保持事实；依据仅限原文与镜头证据。不能声称已修改镜头、声音或视频，也不能承诺投放效果。返回 {"title":"...","hook":"..."}。', {'instruction': body.instruction, 'language': body.draft.language, 'title': body.draft.title, 'hook': body.draft.hook, 'scenes': [s.model_dump() for s in body.draft.scenes]})
         candidate = Draft.model_validate({**body.draft.model_dump(), 'title': result['title'], 'hook': result['hook']})
-    except Exception:
+    except Exception as error:
+        capture_studio_exception(error, 'rewrite')
         raise HTTPException(502, '生成文案失败，请检查模型设置后重试；原稿未改动') from None
     return candidate
 

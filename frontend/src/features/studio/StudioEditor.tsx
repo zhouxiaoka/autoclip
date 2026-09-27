@@ -86,7 +86,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const render = async () => {
     await perform('render', async () => {
       const savedDraft = await save()
-      await studioApi.export(projectId, savedDraft.id, savedDraft.revision)
+      await studioApi.export(projectId, savedDraft.id, savedDraft.revision, savedDraft)
       refresh(); setNotice("渲染已开始，可以离开页面，之后在导出记录查看")
     })
   }

@@ -34,7 +34,8 @@ export function captureBusinessEvent(name: string, properties: Properties = {}):
   try {
     return posthog.capture(name, {
       schema_version: 2,
-      analytics_environment: import.meta.env.DEV ? 'development' : 'production',
+      app_version: import.meta.env.VITE_APP_VERSION || 'unknown',
+      analytics_environment: import.meta.env.VITE_TELEMETRY_VALIDATION === 'true' ? 'validation' : import.meta.env.DEV ? 'development' : 'production',
       runtime: '__TAURI_INTERNALS__' in window ? 'desktop' : 'web',
       entrypoint: 'ui',
       app_locale: typeof document !== 'undefined' ? document.documentElement.lang : 'unknown',

@@ -54,7 +54,7 @@ export function initSentry(): void {
         type: event.type, event_id: event.event_id, timestamp: event.timestamp, platform: event.platform,
         level: event.level, release: event.release, environment: event.environment,
         sdk: event.sdk, debug_meta: event.debug_meta,
-        tags: { app_locale: typeof document !== "undefined" ? document.documentElement.lang : "unknown" },
+        tags: { ...(event.tags?.area === 'studio' && event.tags?.phase === 'native_download' ? { area: 'studio', phase: 'native_download' } : {}), app_locale: typeof document !== "undefined" ? document.documentElement.lang : "unknown" },
         exception: { values: event.exception?.values?.map(value => ({
           type: value.type, value: '[message omitted for privacy]',
           stacktrace: { frames: value.stacktrace?.frames?.map(frame => ({
@@ -83,4 +83,16 @@ export function setCrashReportsEnabled(enabled: boolean): void {
 export function captureException(error: unknown): void {
   if (!initialized || !isCrashReportsEnabled()) return
   Sentry.captureException(error)
+}
+
+/** Native disk failures have no backend exception; report them once here. */
+export function captureStudioException(error: unknown, phase: 'native_download'): void {
+  if (!initialized || !isCrashReportsEnabled()) return
+  try {
+    Sentry.withScope(scope => {
+      scope.setTag('area', 'studio')
+      scope.setTag('phase', phase)
+      Sentry.captureException(error)
+    })
+  } catch { /* monitoring must not break the download recovery UI */ }
 }
