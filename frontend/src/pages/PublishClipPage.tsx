@@ -1,3 +1,5 @@
+import { socialPublishObserved, socialPublishOutcome } from '../analytics/studio'
+import { workflow } from '../analytics/observer'
 import i18n, { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useEffect, useRef, useState } from 'react'
@@ -246,6 +248,9 @@ const PublishClipPage: React.FC = () => {
     setPhase('running')
     setPercent(12)
     const tracks: Track[] = []
+    const telemetryGeneration = workflow.generation()
+    const telemetryEnabled = workflow.active(telemetryGeneration)
+    const observed = new Set<string>()
     try {
       if (overseas.length) {
         const started = await uploadPostApi.start(projectId, clipId, {
@@ -301,6 +306,13 @@ const PublishClipPage: React.FC = () => {
           : await bilibiliApi.job(track.jobId)
         if (runId.current !== session) return
         const settled = settleJob(job, later)
+        if (!settled.pending && !observed.has(track.jobId)) {
+          observed.add(track.jobId)
+          if (telemetryEnabled) socialPublishObserved(telemetryGeneration, {
+            source_type: studioJobId ? 'studio' : 'legacy', gateway: track.kind,
+            outcome: socialPublishOutcome(job.status, settled.scheduled, settled.results),
+          })
+        }
         if (settled.pending) pending = true
         if (settled.failed) failed = true
         if (settled.scheduled) scheduled = true

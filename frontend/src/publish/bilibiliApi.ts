@@ -1,3 +1,4 @@
+import { observeStudioOperation } from '../analytics/studio'
 import api from '../services/api'
 import type { PlatformResult } from './uploadPostApi'
 
@@ -33,6 +34,6 @@ export const bilibiliApi = {
     api.put('/publish/bilibili/config', body),
   clearConfig: (): Promise<BilibiliConfigView & { ok?: boolean }> => api.delete('/publish/bilibili/config'),
   start: (projectId: string, clipId: string, body: BilibiliPublishBody): Promise<{ ok: boolean; job_id: string; status: string }> =>
-    api.post(`/publish/bilibili/${projectId}/clips/${clipId}`, body),
+    observeStudioOperation('social_publish', () => api.post(`/publish/bilibili/${projectId}/clips/${clipId}`, body), undefined, { source_type: /^studio-[a-f0-9]{32}$/.test(clipId) ? 'studio' : 'legacy', gateway: 'bilibili', scheduled: !!body.scheduled_date }),
   job: (jobId: string): Promise<BilibiliJobView> => api.get(`/publish/bilibili/jobs/${jobId}`),
 }

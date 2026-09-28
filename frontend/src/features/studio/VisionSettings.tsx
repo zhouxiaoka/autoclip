@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
 import { useEffect, useState } from 'react'
 import api from '../../services/api'
+import { observeStudioOperation } from '../../analytics/studio'
 import axios from 'axios'
 import { Btn, Row, Section } from '../../ui'
 import { errorText } from './api'
@@ -22,10 +23,10 @@ export default function VisionSettings() {
     const body = { base_url: config.base_url.trim(), model: config.model.trim(), timeout: config.timeout, api_key: key.trim() || null, clear_key: clearKey }
     try {
       if (action === 'save') {
-        const { data: result } = await axios.put<Config>(`${api.defaults.baseURL}/studio/vision-settings`, body)
+        const { data: result } = await observeStudioOperation('vision_provider_save', () => axios.put<Config>(`${api.defaults.baseURL}/studio/vision-settings`, body))
         setConfig(result); setKey(''); setClearKey(false); setNotice("视觉模型配置已保存")
       } else {
-        await axios.post(`${api.defaults.baseURL}/studio/vision-settings/test`, body, { timeout: (config.timeout + 10) * 1000 })
+        await observeStudioOperation('vision_provider_test', () => axios.post(`${api.defaults.baseURL}/studio/vision-settings/test`, body, { timeout: (config.timeout + 10) * 1000 }))
         setNotice("连接与图片理解测试通过。若修改了配置，请保存后生效")
       }
     } catch(e) { setError(t(errorText(e))) } finally { setBusy('') }

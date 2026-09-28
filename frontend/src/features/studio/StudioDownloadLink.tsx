@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { message } from 'antd'
-import { studioDownloadRequested } from '../../analytics/studio'
+import { studioDownloadRequested, observeStudioDownload } from '../../analytics/studio'
+import { captureStudioException } from '../../desktop/sentry'
 import { studioApi } from './api'
 import { isDesktopDownload, saveStudioExport } from './nativeDownload'
 
@@ -19,11 +20,11 @@ export default function StudioDownloadLink({ projectId, jobId, className = 'stud
       if (pending.current) return
       pending.current = true
       setBusy(true)
-      studioDownloadRequested()
       try {
-        await saveStudioExport(projectId, jobId)
+        await observeStudioDownload(() => saveStudioExport(projectId, jobId))
         message.success(t('已保存到下载文件夹'))
-      } catch {
+      } catch (error) {
+        captureStudioException(error, 'native_download')
         message.error(t('下载失败，请稍后重试'))
       } finally {
         pending.current = false

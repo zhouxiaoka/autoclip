@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Q
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from backend.core.database import get_db
+from backend.core.sentry_setup import capture_studio_exception
 from backend.models.project import Project
 from backend.models.clip import Clip
 from backend.schemas.project import ProjectCreate, ProjectType
@@ -70,7 +71,8 @@ def save_vision_settings(body: vision_settings.VisionSettingsInput):
 def test_vision_settings(body: vision_settings.VisionSettingsInput):
     try:
         return vision_settings.test(body)
-    except Exception:
+    except Exception as error:
+        capture_studio_exception(error, 'vision_test', analysis_mode='visual')
         raise HTTPException(502, '视觉连接测试失败，请检查接口地址、密钥和模型是否支持图片输入') from None
 
 @router.post('/import')
@@ -142,6 +144,24 @@ def workspace(project_id: str, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
     data = call(store.read, project_id)
     return {**data, 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
+
+@router.get('/{project_id}/source-preview')
+def source_preview_status(project_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    from backend.services.studio import preview
+    return call(preview.status, project_id)
+
+@router.post('/{project_id}/source-preview')
+def prepare_source_preview(project_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    from backend.services.studio import preview
+    return call(preview.start, project_id)
+
+@router.get('/{project_id}/source-preview/video')
+def source_preview_video(project_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    from backend.services.studio import preview
+    return FileResponse(call(preview.ready_file, project_id), media_type='video/mp4')
 
 @router.get('/{project_id}/source')
 def source_video(project_id: str, db: Session = Depends(get_db)):
@@ -230,9 +250,17 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
             url = (project.project_metadata or {}).get('source_url')
             if not url:
                 raise HTTPException(404, '原素材不存在，请重新导入')
-        project.processing_config = {**(project.processing_config or {}), 'smart_import': body.model_dump()}
+        previous_config = dict(project.processing_config or {})
+        project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()
-        call(jobs.inspect_project, project_id, body, url, (project.processing_config or {}).get('creative_browser'))
+        try:
+            call(jobs.inspect_project, project_id, body, url, previous_config.get('creative_browser'))
+        except Exception:
+            # A rejected submission must not persist preferences for a plan
+            # that was never produced. inspect_project restores the JSON state.
+            project.processing_config = previous_config
+            db.commit()
+            raise
     return {'ok': True}
 
 @router.post('/{project_id}/start')
@@ -297,7 +325,8 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
     try:
         result = intelligence.text_json('你是剪辑文案编辑。按用户要求优化 title 和 hook，保持事实；依据仅限原文与镜头证据。不能声称已修改镜头、声音或视频，也不能承诺投放效果。返回 {"title":"...","hook":"..."}。', {'instruction': body.instruction, 'language': body.draft.language, 'title': body.draft.title, 'hook': body.draft.hook, 'scenes': [s.model_dump() for s in body.draft.scenes]})
         candidate = Draft.model_validate({**body.draft.model_dump(), 'title': result['title'], 'hook': result['hook']})
-    except Exception:
+    except Exception as error:
+        capture_studio_exception(error, 'rewrite')
         raise HTTPException(502, '生成文案失败，请检查模型设置后重试；原稿未改动') from None
     return candidate
 

@@ -1,0 +1,47 @@
+name: Windows asyncio regression
+
+on:
+  push:
+    paths:
+      - 'backend/core/windows_asyncio.py'
+      - 'backend/tests/test_windows_asyncio.py'
+      - 'backend/app_factory.py'
+      - 'scripts/lib/desktop_build_common.sh'
+      - '.github/workflows/windows-asyncio.yml'
+      - 'src-tauri/**'
+  pull_request:
+    paths:
+      - 'backend/core/windows_asyncio.py'
+      - 'backend/tests/test_windows_asyncio.py'
+      - 'backend/app_factory.py'
+      - 'scripts/lib/desktop_build_common.sh'
+      - '.github/workflows/windows-asyncio.yml'
+      - 'src-tauri/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-asyncio:
+    name: Windows Proactor cleanup
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # Match the desktop bundle; review the shim when upgrading Python.
+          python-version: "3.13.13"
+      - run: python -m pip install pytest
+      - run: python -m pytest backend/tests/test_windows_asyncio.py -q
+
+      - name: Backend process tree lifecycle
+        run: cargo test --manifest-path src-tauri/tests/windows-job/Cargo.toml
+      - name: Prepare compile-only resource placeholders
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/resources/python, src-tauri/resources/backend, src-tauri/resources/ffmpeg, frontend/dist | Out-Null
+          Set-Content frontend/dist/index.html '<html></html>'
+      - name: Compile desktop integration (not an installer build)
+        run: cargo check --manifest-path src-tauri/Cargo.toml

@@ -14,6 +14,21 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty"}
+
+
+def studio_error_code(error: Exception) -> str:
+    from backend.services.studio.intelligence import VisionRequestError
+    from backend.pipeline.failures import PipelineFailure
+    if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:
+        return error.code
+    if isinstance(error, FileNotFoundError):
+        return "missing_resource"
+    if isinstance(error, ValueError):
+        return "validation"
+    return "unexpected"
+
+
 PRIVACY_FILE = "privacy.json"
 _initialized = False
 
@@ -112,8 +127,25 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         return None  # Logging-only payloads can contain video text; do not send them.
     clean["exception"] = {"values": values}
     kind, fingerprint = _import_monitoring_fields(event, hint)
+    tags = event.get("tags") or {}
+    allowed = {
+        "area": {"studio"}, "error_code": STUDIO_ERROR_CODES,
+        "phase": {"screening", "production", "render", "analysis", "dispatch", "vision_test", "rewrite"},
+        "analysis_mode": {"subtitle", "visual"},
+        "goal": {"content", "highlight", "promo"},
+        "runtime": {"python"}, "app_mode": {"web", "desktop"},
+        "build_environment": {"production", "development", "validation", "unknown"},
+        "telemetry_test": {"true"},
+    }
+    clean_tags = {key: value for key, value in tags.items()
+                  if key in allowed and isinstance(value, str) and value in allowed[key]}
     if kind:
-        clean["tags"] = {"import_failure": kind}
+        clean_tags["import_failure"] = kind
+    if clean_tags:
+        clean["tags"] = clean_tags
+    if clean_tags.get("area") == "studio" and clean_tags.get("error_code") in {"validation", "missing_resource", "authentication", "rate_limited", "refused", "llm_not_configured", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty"}:
+        clean["level"] = "warning"
+        clean["fingerprint"] = ["studio", clean_tags.get("phase", "unknown"), clean_tags["error_code"]]
     if fingerprint:
         clean["fingerprint"] = fingerprint
     return clean
@@ -159,6 +191,30 @@ def init_sentry(mode: str = "web") -> bool:
     )
     sentry_sdk.set_tag("runtime", "python")
     sentry_sdk.set_tag("app_mode", mode)
+    sentry_sdk.set_tag("build_environment", os.getenv("AUTOCLIP_BUILD_ENVIRONMENT", "unknown"))
     _initialized = True
     logger.info("Sentry 已启用（backend）")
     return True
+
+
+def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None, goal=None):
+    """Report caught worker errors without allowing monitoring to fail the worker.
+
+    Consent is checked both here and in before_send. Scope is isolated so worker
+    threads cannot leak their phase into unrelated requests. All tags are filtered.
+    """
+    if not _initialized or not crash_reports_enabled():
+        return None
+    try:
+        import sentry_sdk
+        with sentry_sdk.new_scope() as scope:
+            scope.set_tag("area", "studio")
+            scope.set_tag("phase", phase)
+            scope.set_tag("error_code", studio_error_code(error))
+            if analysis_mode:
+                scope.set_tag("analysis_mode", analysis_mode)
+            if goal:
+                scope.set_tag("goal", goal)
+            return sentry_sdk.capture_exception(error)
+    except Exception:
+        return None

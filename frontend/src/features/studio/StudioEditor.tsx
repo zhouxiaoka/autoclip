@@ -4,7 +4,7 @@ import StudioDownloadLink from './StudioDownloadLink'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Btn, Dialog, ProgressLine, Row, fmtDuration } from '../../ui'
-import { studioApi, errorText } from './api'
+import { studioApi, errorText, type SourcePreview } from './api'
 import { useWorkspace } from './useWorkspace'
 import { Draft, Scene, languages, draftDuration, draftError, moveScene, applyCandidate, portraitDesign } from './types'
 import CandidatePicker from './CandidatePicker'
@@ -34,6 +34,29 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const [showVariant, setShowVariant] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [showRendered, setShowRendered] = useState(false)
+  const [playbackError, setPlaybackError] = useState(false)
+  const [sourcePreview, setSourcePreview] = useState<SourcePreview>({status: 'idle'})
+  useEffect(() => {
+    if (!['queued', 'running'].includes(sourcePreview.status)) return
+    let cancelled = false
+    const timer = window.setInterval(() => {
+      studioApi.previewStatus(projectId).then(state => {
+        if (cancelled) return
+        setSourcePreview(state)
+        if (state.status === 'completed') setPlaybackError(false)
+      }).catch(error => { if (!cancelled) setSourcePreview({status:'failed', error:errorText(error)}) })
+    }, 1500)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [projectId, sourcePreview.status])
+  const preparePreview = async () => {
+    setSourcePreview({status:'queued'})
+    try {
+      const state = await studioApi.preparePreview(projectId)
+      setSourcePreview(state)
+      if (state.status === 'completed') setPlaybackError(false)
+    } catch(error) { setSourcePreview({status:'failed', error:errorText(error)}) }
+  }
+
   const [suggestion, setSuggestion] = useState<Draft | null>(null)
   const [undo, setUndo] = useState<Draft | null>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -86,7 +109,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const render = async () => {
     await perform('render', async () => {
       const savedDraft = await save()
-      await studioApi.export(projectId, savedDraft.id, savedDraft.revision)
+      await studioApi.export(projectId, savedDraft.id, savedDraft.revision, savedDraft)
       refresh(); setNotice("渲染已开始，可以离开页面，之后在导出记录查看")
     })
   }
@@ -101,10 +124,16 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     <button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>{t("‹ 返回项目")}</button>
     <header className="studio-row studio-editor-head"><div><h1 className="ac-title">{draft.title}</h1><span className="studio-muted">{dirty ? t("有修改未保存 · 本机暂存") : t("草稿已保存")} · V{draft.revision} · {fmtDuration(draftDuration(draft))}</span></div><div className="studio-actions"><Btn disabled={!!busy} onClick={() => setShowVariant(true)}>{t("另存为新版本")}</Btn><Btn disabled={!!busy || !dirty} loading={busy==='save'} onClick={() => perform('save', async () => {await save()})}>{t("保存草稿")}</Btn><Btn variant="cta" disabled={!!busy} onClick={() => setShowExport(true)}>{t("导出成片")}</Btn></div></header>
     {loadError && <p className="studio-error">{t("任务状态暂时无法更新：")}{t(loadError)}</p>}
+    {!showRendered && (sourcePreview.status !== 'completed' || playbackError) && <details open={playbackError || ['queued', 'running', 'failed'].includes(sourcePreview.status)} className="studio-muted">
+      <summary>{t('生成兼容预览')}</summary>
+      <p>{t('原片无法播放时，可生成兼容预览；原片不变，不调用模型。')}</p>
+      {sourcePreview.error && <p className="studio-error">{t(sourcePreview.error)}</p>}
+      <Btn disabled={['queued', 'running'].includes(sourcePreview.status)} onClick={preparePreview}>{t(['queued', 'running'].includes(sourcePreview.status) ? '正在生成兼容预览，长视频可能需要几分钟…' : '生成兼容预览')}</Btn>
+    </details>}
     <fieldset disabled={!!busy} className="studio-fieldset">
       <div className="studio-editor-grid"><section><div className={`studio-stage studio-stage--${draft.aspect}`}>
         <div className="studio-video-frame" style={{aspectRatio: draft.aspect==='portrait'?'9/16':draft.aspect==='landscape'?'16/9':undefined}}>
-          <video ref={video} controls preload="metadata" muted={!draft.original_audio} src={showRendered && previewUrl ? previewUrl : studioApi.source(projectId)} style={{objectFit: showRendered || draft.layout!=='crop'?'contain':'cover', objectPosition:`${(draft.crop_x ?? .5)*100}% 50%`}} onLoadedMetadata={() => { if(video.current && scene && !showRendered) { setSourceDuration(video.current.duration); video.current.currentTime=scene.start } }} onTimeUpdate={() => {const v=video.current; if(v && scene && !showRendered && v.currentTime>=scene.end) {v.pause();v.currentTime=scene.start}}} />
+          <video ref={video} controls preload="metadata" muted={!draft.original_audio} onError={() => setPlaybackError(true)} onLoadedData={() => setPlaybackError(false)} src={showRendered && previewUrl ? previewUrl : sourcePreview.status === 'completed' && sourcePreview.version ? studioApi.compatibleSource(projectId, sourcePreview.version) : studioApi.source(projectId)} style={{objectFit: showRendered || draft.layout!=='crop'?'contain':'cover', objectPosition:`${(draft.crop_x ?? .5)*100}% 50%`}} onLoadedMetadata={() => { if(video.current && scene && !showRendered) { setSourceDuration(video.current.duration); video.current.currentTime=scene.start } }} onTimeUpdate={() => {const v=video.current; if(v && scene && !showRendered && v.currentTime>=scene.end) {v.pause();v.currentTime=scene.start}}} />
           {!showRendered && selected===0 && draft.hook && !artworkStyle && <div className={`studio-hook studio-hook--${draft.title_style || 'plain'}`}>{draft.hook}</div>}
           {!showRendered && selected===0 && draft.hook && artworkStyle && <TitleArtwork projectId={projectId} draft={draft}/>}
         </div>

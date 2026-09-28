@@ -93,6 +93,7 @@ test('watch retention and capacity bounded', () => {
 test('errors and routes contain no original secrets, paths or search parameters', () => {
   assert.equal(core.routeName('/project/private-id?token=secret'), '/project/:id')
   assert.equal(core.routeName('/other/secret'), '/other')
+  assert.equal(core.errorCode({response:{status:'private'}}), 'unknown')
   assert.equal(core.errorCode({ message: 'sk-secret /Users/person.mp4', response: { status: 401 } }), 'http_401')
   assert.equal(core.errorCode({ message: 'secret' }), 'unknown')
 })
@@ -185,7 +186,7 @@ test('Studio phases dedupe locally across restart without sending internal IDs o
   const recovered=new core.WorkflowTracker(s.storage,()=>true,s.capture,()=>NOW)
   recovered.observeStudio(recovered.list()[0],snapshot)
   assert.equal(s.events.length,1)
-  assert.deepEqual(Object.keys(s.events[0].props),['outcome'])
+  assert.equal(s.events[0].props.studio_schema_version,1)
   assert.equal(s.events[0].props.outcome,'failed')
   assert.equal(JSON.stringify(s.events).includes('secret'),false)
   s.tracker.watch('studio-export','secret-job','secret-project')
@@ -196,11 +197,11 @@ test('Studio phases dedupe locally across restart without sending internal IDs o
   assert.equal(s.events.length,2)
 })
 test('Studio screening distinguishes recommendations, manual fallback and import failure',()=>{
-  for (const [snapshot,outcome] of [[{plan:{id:'plan',mode:'ai'}},'recommended'],[{plan:{id:'plan',mode:'fallback'}},'manual_fallback'],[{analysis:{status:'failed'}},'failed']]) {
+  for (const [snapshot,outcome] of [[{plan:{id:'plan',mode:'ai'},analysis:{status:'awaiting_confirmation'}},'recommended'],[{plan:{id:'plan',mode:'fallback'},analysis:{status:'awaiting_confirmation'}},'fallback'],[{analysis:{status:'failed'}},'failed']]) {
     const s=setup();s.tracker.watch('studio-screen','private-project')
     s.tracker.observeStudio(s.tracker.list()[0],snapshot)
     assert.equal(s.events[0].props.outcome,outcome)
-    assert.deepEqual(Object.keys(s.events[0].props),['outcome'])
+    assert.equal(s.events[0].props.studio_schema_version,1)
   }
 })
 test('actual Studio API enrolls accepted work and sends aggregate-only telemetry',async()=>{
@@ -219,7 +220,7 @@ test('actual Studio API enrolls accepted work and sends aggregate-only telemetry
   assert.equal(s.events.length,6)
   assert.equal(JSON.stringify(s.events).includes('private'),false)
   assert.equal(JSON.stringify(s.events).includes('secret'),false)
-  for(const e of s.events) assert.ok(Object.keys(e.props).every(k=>k==='request_duration_ms'))
+  for(const e of s.events) assert.ok(Object.keys(e.props).every(k=>['studio_schema_version','request_duration_ms','source_type','has_subtitle','aspect','goal_content','goal_highlight','goal_promo'].includes(k)))
   s.enable(false)
   await api.import({})
   assert.equal(s.events.length,6)
@@ -235,4 +236,72 @@ test('Studio aggregate requests retain failures and respect consent changes in f
   s.tracker.clear();finish({project_id:'secret'});await pending
   assert.equal(accepted,false)
   assert.equal(s.events.length,3)
+})
+
+test('Studio allowlist rejects arbitrary values and preserves per-run partial counts',()=>{
+ const props=core.safeStudioProperties({source_type:'secret',analysis_mode:'visual',title:'private',duration_ms:-1,goal:'private',requested_goals:['highlight','promo'],succeeded_goals:['highlight'],failed_goals:['promo'],error_code:'http_secret'})
+ assert.equal(props.requested_count,2);assert.equal(props.failed_promo,true)
+ assert.equal(JSON.stringify(props).includes('secret'),false);assert.equal(JSON.stringify(props).includes('private'),false)
+ const s=setup();s.tracker.watch('studio-production','plan','project')
+ s.tracker.observeStudio(s.tracker.list()[0],{plan:{id:'plan',confirmed_analysis:'visual'},analysis:{status:'failed',outcome:'partial',requested_goals:['highlight','promo'],succeeded_goals:['highlight'],failed_goals:['promo'],result_count:2,duration_ms:321}})
+ const p=s.events[0].props;assert.equal(p.outcome,'partial');assert.equal(p.succeeded_highlight,true);assert.equal(p.failed_count,1);assert.equal(p.duration_ms,321);assert.equal(p.analysis_mode,'visual')
+})
+test('rescreen ignores an old plan while running and replaces the old local watch',()=>{
+ const s=setup();s.tracker.watch('studio-screen','p');const old=s.tracker.list()[0]
+ s.tracker.watch('studio-screen','p',undefined,undefined,{},true);const current=s.tracker.list()[0]
+ s.tracker.observeStudio(old,{plan:{id:'old',mode:'ai'},analysis:{status:'awaiting_confirmation'}})
+ s.tracker.observeStudio(current,{plan:{id:'old',mode:'ai'},analysis:{status:'running'}})
+ assert.equal(s.events.length,0)
+ s.tracker.observeStudio(current,{plan:{id:'new',mode:'local',local_evidence:{subtitle_status:'available'}},analysis:{status:'awaiting_confirmation'}})
+ assert.equal(s.events[0].props.outcome,'recommended');assert.equal(s.events[0].props.recommendation_mode,'local')
+ assert.equal(core.routeName('/import/private?token=secret'),'/import/:id')
+ assert.equal(core.routeName('/project/private/studio/secret'),'/project/:id/studio/:draftId')
+})
+test('immutable export repeated acceptance does not recount its completion',()=>{
+ const s=setup();s.tracker.watch('studio-export','j','p');const w=s.tracker.list()[0]
+ s.tracker.observeStudio(w,{jobs:[{job_id:'j',status:'completed',duration_ms:20}]})
+ const insert=s.events[0].props.$insert_id
+ s.tracker.watch('studio-export','j','p');s.tracker.observeStudio(s.tracker.list()[0],{jobs:[{job_id:'j',status:'completed'}]})
+ assert.equal(s.events.length,1);assert.ok(insert.startsWith('studio-v1:'))
+})
+test('native download emits saved or failed, and opt-out in flight suppresses results',async()=>{
+ const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ await aggregate.observeStudioDownload(async()=>42)
+ assert.equal(s.events[1].event,'studio_download_saved')
+ await assert.rejects(aggregate.observeStudioDownload(async()=>{throw Error('private filename')}))
+ assert.equal(s.events[3].event,'studio_download_failed');assert.equal(JSON.stringify(s.events).includes('private'),false)
+ let finish;const pending=aggregate.observeStudioDownload(()=>new Promise(r=>finish=r));s.tracker.clear();finish();await pending
+ assert.equal(s.events.length,5)
+})
+
+test('social publishing distinguishes scheduling and inbox acceptance from published content',()=>{
+ const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ assert.equal(aggregate.socialPublishOutcome('scheduled',true,[]),'scheduled')
+ assert.equal(aggregate.socialPublishOutcome('submitted',false,[{success:true,fallback_to_inbox:true}]),'inbox')
+ assert.equal(aggregate.socialPublishOutcome('completed',false,[]),'unknown')
+ assert.equal(aggregate.socialPublishOutcome('completed',false,[{success:true},{success:false}]),'partial')
+ assert.equal(aggregate.socialPublishOutcome('completed',false,[{success:false}]),'failed')
+ aggregate.socialPublishObserved(s.tracker.generation(),{source_type:'studio',gateway:'bilibili',outcome:'completed',url:'private'})
+ assert.equal(s.events[0].props.source_type,'studio');assert.equal(JSON.stringify(s.events).includes('private'),false)
+ const gen=s.tracker.generation();s.tracker.clear();aggregate.socialPublishObserved(gen,{outcome:'completed'});assert.equal(s.events.length,1)
+})
+
+test('UI workspace snapshots capture fast screening before confirm and never enroll historical projects',async()=>{
+ const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const snapshot={plan:{id:'plan',mode:'local'},analysis:{status:'awaiting_confirmation'}}
+ await aggregate.observeStudioWorkspace('p',async()=>snapshot);assert.equal(s.events.length,0)
+ s.tracker.watch('studio-screen','p')
+ assert.equal(await aggregate.observeStudioWorkspace('p',async()=>snapshot),snapshot)
+ assert.equal(s.events.length,1);assert.equal(s.events[0].props.recommendation_mode,'local')
+ await aggregate.observeStudioWorkspace('p',async()=>snapshot);assert.equal(s.events.length,1)
+ assert.equal(core.safeStudioProperties(null).studio_schema_version,1)
+})
+
+test('late workspace response cannot settle a newer rescreen attempt',async()=>{
+ const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ s.tracker.watch('studio-screen','p');let finish
+ const pending=aggregate.observeStudioWorkspace('p',()=>new Promise(r=>finish=r))
+ s.tracker.watch('studio-screen','p',undefined,undefined,{},true)
+ finish({plan:{id:'old',mode:'ai'},analysis:{status:'awaiting_confirmation'}});await pending
+ assert.equal(s.events.length,0)
 })

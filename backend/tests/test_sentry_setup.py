@@ -112,3 +112,42 @@ def test_privacy_uses_web_data_directory(monkeypatch, tmp_path):
     sentry_setup.write_privacy(crash_reports=False)
     assert (tmp_path / "privacy.json").is_file()
     assert sentry_setup.crash_reports_enabled() is False
+
+
+def test_studio_tags_allowlisted_and_opt_out(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    event = {'exception': {'values': [{'type':'RuntimeError', 'value':'secret'}]},
+             'tags': {'area':'studio', 'phase':'production', 'goal':'promo', 'analysis_mode':'visual',
+                      'build_environment':'validation', 'telemetry_test':'true', 'url':'secret', 'runtime':'secret'}}
+    clean = sentry_setup.before_send(event)
+    assert clean['tags'] == {k:v for k,v in event['tags'].items() if k not in ('url','runtime')}
+    assert 'secret' not in json.dumps(clean)
+    monkeypatch.setattr(sentry_setup, '_initialized', True)
+    sentry_setup.write_privacy(crash_reports=False)
+    assert sentry_setup.capture_studio_exception(RuntimeError('secret'), 'render') is None
+
+
+def test_studio_capture_uses_isolated_scope_and_never_breaks_worker(monkeypatch, tmp_path):
+    import sentry_sdk
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(sentry_setup, '_initialized', True)
+    captured=[]
+    def capture(error):
+        captured.append(dict(sentry_sdk.get_current_scope()._tags))
+        raise RuntimeError('transport unavailable')
+    monkeypatch.setattr(sentry_sdk, 'capture_exception', capture)
+    assert sentry_setup.capture_studio_exception(ValueError('secret'), 'production', goal='promo') is None
+    assert captured[0]['phase'] == 'production'
+    assert sentry_sdk.get_current_scope()._tags.get('area') != 'studio'
+
+
+def test_studio_expected_pipeline_failure_keeps_code_and_warning(monkeypatch, tmp_path):
+    from backend.pipeline.failures import PipelineFailure
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    error = PipelineFailure('ANALYZE', 'private key text', code='llm_not_configured')
+    assert sentry_setup.studio_error_code(error) == 'llm_not_configured'
+    clean = sentry_setup.before_send({'tags': {'area':'studio', 'phase':'production', 'error_code':'llm_not_configured'},
+        'exception': {'values': [{'type':'PipelineFailure', 'value':str(error)}]}})
+    assert clean['level'] == 'warning'
+    assert clean['fingerprint'] == ['studio', 'production', 'llm_not_configured']
+    assert 'private' not in json.dumps(clean)

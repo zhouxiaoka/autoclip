@@ -35,7 +35,8 @@ function link({ desktop = true, save } = {}) {
   'react/jsx-runtime': { jsx: (_type,props)=>props },
   'react-i18next': { useTranslation: ()=>({t:key=>key}) },
   antd: { message: { success:()=>calls.push('success'),error:()=>calls.push('error') } },
-  '../../analytics/studio': { studioDownloadRequested:()=>calls.push('intent') },
+  '../../analytics/studio': { studioDownloadRequested:()=>calls.push('intent'), observeStudioDownload:async action=>{calls.push('intent');return action()} },
+  '../../desktop/sentry': { captureStudioException:()=>{} },
   './api': { studioApi:{video:()=>'/immutable.mp4?download=true'} },
   './nativeDownload': { isDesktopDownload:()=>desktop,saveStudioExport:save|| (async()=>{}) },
  }

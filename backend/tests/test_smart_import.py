@@ -59,7 +59,7 @@ def test_one_import_endpoint_routes_and_keeps_srt(client,source,monkeypatch,goal
         return {'events':[{'id':'e1','label':'Visible event','start':0,'end':1,'evidence':'Fixture'}]}
     monkeypatch.setattr(intelligence,'vision_call',provider)
     content_calls=[]
-    monkeypatch.setattr(jobs,'run_content',lambda pid,video:content_calls.append((pid,video)))
+    monkeypatch.setattr(jobs,'run_content',lambda pid,video:content_calls.append((pid,video)) or [{'id':'clip'}])
     response=client.post('/studio/import',data={'name':'Unified entry'},files={'video':('source.mp4',source.read_bytes(),'video/mp4'),'subtitle':('captions.srt',b'1\n00:00:00,000 --> 00:00:01,000\nHello\n','text/plain')})
     assert response.status_code==200,response.text
     pid=response.json()['project_id'];state=client.get('/studio/'+pid).json()
@@ -284,6 +284,8 @@ def test_shared_visual_failure_is_not_retried_for_second_goal(client,source,monk
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**kw:recommendation())
     calls=[]
+    reports=[]
+    monkeypatch.setattr(jobs, 'capture_studio_exception', lambda error, phase, **kwargs: reports.append((error, phase)))
     failure=intelligence.VisionRequestError('rate_limited','请稍后重试',elapsed_seconds=2,http_status=429)
     failure.phase='scan'
     def analyze(*args):
@@ -291,7 +293,7 @@ def test_shared_visual_failure_is_not_retried_for_second_goal(client,source,monk
         raise failure
     monkeypatch.setattr(jobs,'analyze',analyze)
     monkeypatch.setattr(jobs,'make_drafts',lambda *a,**kw:pytest.fail('no drafts without analysis'))
-    monkeypatch.setattr(jobs,'run_content',lambda *a,**kw:calls.append('content'))
+    monkeypatch.setattr(jobs,'run_content',lambda *a,**kw:calls.append('content') or [{'id':'clip'}])
     response=client.post('/studio/import',files={'video':('input.mp4',source.read_bytes(),'video/mp4')})
     pid=response.json()['project_id'];state=client.get('/studio/'+pid).json()
     body={'plan_id':state['plan']['id'],'goals':goals}
@@ -305,6 +307,9 @@ def test_shared_visual_failure_is_not_retried_for_second_goal(client,source,monk
     assert store.read(pid)['analysis']['diagnostics']==details
     assert client.post('/studio/'+pid+'/start',json=body).status_code==409
     assert calls.count('scan')==1
+    assert len(reports)==1
+    assert result['analysis']['failed_goals']==[g for g in goals if g!='content']
+    assert result['analysis']['outcome']==('partial' if 'content' in goals else 'failed')
 
 
 def test_hook_failure_preserves_other_goal_and_does_not_repeat_analysis(client,source,monkeypatch):
@@ -327,6 +332,11 @@ def test_hook_failure_preserves_other_goal_and_does_not_repeat_analysis(client,s
     assert client.post('/studio/'+pid+'/start',json={'plan_id':plan['id'],'goals':['promo','highlight']}).status_code==200
     result=client.get('/studio/'+pid).json()
     assert calls==['scan','promo','highlight']
+    assert result['analysis']['outcome']=='partial'
+    assert result['analysis']['succeeded_goals']==['highlight']
+    assert result['analysis']['failed_goals']==['promo']
+    assert result['analysis']['result_count']==1
+    assert result['analysis']['duration_ms']>=0
     assert [d['id'] for d in result['drafts']]==['highlight']
     assert result['analysis']['diagnostics']==[{'goal':'promo','code':'output_truncated','phase':'hooks','elapsed_seconds':8}]
 
@@ -420,3 +430,110 @@ def test_confirm_matches_each_output_aspect_without_extra_analysis(
     assert seen==list(zip(['highlight','promo'],expected))
     assert scans==[route]
     assert state['plan']['goal_preferences']['promo']['aspect']==expected[1]
+
+
+class RejectSubmission:
+    def submit(self, *args):
+        raise RuntimeError('private executor failure')
+
+
+def test_initial_import_dispatch_failure_is_retryable(client, source, monkeypatch):
+    from backend.core.database import SessionLocal
+    from backend.models import Project
+    monkeypatch.setattr(jobs, 'executor', RejectSubmission())
+    response = client.post('/studio/import', data={'name':'dispatch recovery'}, files={'video':('input.mp4', source.read_bytes(), 'video/mp4')})
+    assert response.status_code == 422
+    assert '导入任务未能启动' in response.json()['detail']
+    assert 'private executor' not in response.text
+    with SessionLocal() as db:
+        project = db.query(Project).filter(Project.name == 'dispatch recovery').one()
+        pid = str(project.id)
+        assert project.status.value == 'failed'
+    assert store.read(pid)['analysis']['status'] == 'failed'
+    assert (store.directory(pid) / 'raw/input.mp4').read_bytes() == source.read_bytes()
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    assert client.post('/studio/'+pid+'/analyze').status_code == 200
+    assert store.read(pid)['analysis']['status'] == 'awaiting_confirmation'
+
+
+@pytest.mark.parametrize("route", ["analyze", "plan"])
+def test_rescreen_dispatch_failure_preserves_plan_and_exports(client, source, monkeypatch, route):
+    from backend.tests.test_studio import draft
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    pid = client.post('/studio/import', files={'video':('input.mp4', source.read_bytes(), 'video/mp4')}).json()['project_id']
+    saved = store.save_draft(pid, draft(), create=True)
+    store.change(pid, lambda data: data['jobs'].append({'job_id':'existing', 'status':'completed', 'draft_id':saved['id']}))
+    before = store.read(pid)
+    monkeypatch.setattr(jobs, 'executor', RejectSubmission())
+    from backend.core.database import SessionLocal
+    from backend.models import Project
+    with SessionLocal() as db:
+        config = dict(db.get(Project, pid).processing_config)
+    def rescreen():
+        if route == 'plan':
+            return client.put('/studio/'+pid+'/plan', json={'goal':'highlight'})
+        return client.post('/studio/'+pid+'/analyze')
+    response = rescreen()
+    assert response.status_code == 422
+    with SessionLocal() as db:
+        assert db.get(Project, pid).processing_config == config
+    assert store.read(pid) == before
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    assert rescreen().status_code == 200
+    after = store.read(pid)
+    assert after['analysis']['status'] == 'awaiting_confirmation'
+    assert after['drafts'] == before['drafts'] and after['jobs'] == before['jobs']
+
+
+@pytest.mark.parametrize('url', [
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    'https://youtube.com/watch?si=abc&v=dQw4w9WgXcQ',
+    'https://youtu.be/dQw4w9WgXcQ?si=abc',
+    'https://m.youtube.com/watch?v=dQw4w9WgXcQ',
+    'https://youtube.com/shorts/dQw4w9WgXcQ',
+    'https://youtube.com/live/dQw4w9WgXcQ',
+])
+def test_current_studio_accepts_shared_youtube_urls(client, source, monkeypatch, url):
+    seen = []
+    def download(pid, link, browser):
+        seen.append(link)
+        (store.directory(pid) / 'raw/input.mp4').write_bytes(source.read_bytes())
+    monkeypatch.setattr(jobs, 'download', download)
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    response = client.post('/studio/import', data={'url':url})
+    assert response.status_code == 200
+    assert seen == [url]
+    assert store.read(response.json()['project_id'])['analysis']['status'] == 'awaiting_confirmation'
+
+
+def test_studio_content_preserves_structured_pipeline_failure(monkeypatch, tmp_path):
+    from backend.tasks.processing import process_video_pipeline
+    from backend.pipeline.failures import PipelineFailure
+    class Result:
+        def get(self):
+            return {'success':False, 'error':'private hint', 'result':{'stage':'ANALYZE', 'error_code':'llm_not_configured'}}
+    monkeypatch.setattr(process_video_pipeline, 'apply', lambda **kwargs: Result())
+    with pytest.raises(PipelineFailure) as caught:
+        jobs.run_content('p', tmp_path/'input.mp4')
+    assert caught.value.code == 'llm_not_configured'
+
+
+def test_local_import_creates_project_thumbnail(client, source, monkeypatch):
+    import base64
+    import io
+    from PIL import Image
+    from backend.core.database import SessionLocal
+    from backend.models import Project
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    response = client.post('/studio/import', data={'goal': 'content'},
+                           files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')})
+    assert response.status_code == 200, response.text
+    pid = response.json()['project_id']
+    with SessionLocal() as db:
+        thumbnail = db.get(Project, pid).thumbnail
+    assert thumbnail.startswith('data:image/jpeg;base64,')
+    Image.open(io.BytesIO(base64.b64decode(thumbnail.split(',', 1)[1]))).verify()
+    assert client.get('/studio/' + pid).json()['analysis']['status'] == 'awaiting_confirmation'

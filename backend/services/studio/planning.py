@@ -75,6 +75,8 @@ def recommend(video: Path, options: ImportOptions):
                 response = intelligence.vision_call([{'type':'text', 'text':prompt}] + intelligence.sample(video, times, Path(tmp), width=384), config=config)
             result = Recommendation.model_validate(response)
         except (RuntimeError, ValueError, KeyError, TypeError) as error:
+            from backend.core.sentry_setup import capture_studio_exception
+            capture_studio_exception(error, 'screening', analysis_mode='visual')
             if isinstance(error, intelligence.VisionRequestError):
                 diagnostics = {**error.diagnostics(), 'phase':'screening'}
             mode = 'fallback'
