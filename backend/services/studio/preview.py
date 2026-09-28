@@ -29,7 +29,9 @@ def status(project_id):
     with _lock:
         if output.is_file() and output.stat().st_size:
             return {'status': 'completed', 'version': token}
-        return dict(_states.get(token, {'status': 'idle'}))
+        current = _states.get(token, {'status': 'idle'})
+        # A deleted cache must be regeneratable in the same backend process.
+        return {'status': 'idle'} if current['status'] == 'completed' else dict(current)
 
 
 def start(project_id):

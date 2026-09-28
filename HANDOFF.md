@@ -1,6 +1,6 @@
 # AutoClip — 项目状态 / 进度 / 计划
 
-> 更新：2026-09-27。当前主线代码 **v1.4.0**（`0241198c`）；本轮修复位于 `codex/recent-feedback-fixes`，尚未合入主线或发布。
+> 更新：2026-09-28。当前主线代码 **v1.4.0**（`0241198c`）；本轮修复位于 `codex/recent-feedback-fixes`，尚未合入主线或发布。
 > 当前状态以本节和链接的验收记录为准；下方保留的 v1.3.3 及更早内容是历史快照，不代表当前入口或待办状态。
 
 ## 当前交付与验证范围
@@ -37,6 +37,10 @@ Studio 入口已能接受 HTTPS 的 watch、youtu.be、Shorts、live、移动端
 ## Windows 连接重置修复（待发布）
 
 针对 Sentry `PYTHON-FASTAPI-3`，已复现 CPython Proactor 的 socket.shutdown 遇到 reset 后跳过关闭与服务器解绑。新增仅用于 Windows 桌面 CPython 3.13 的清理兼容补丁；保留协议/其他异常上报以及异步子进程支持。本地后端 631 项通过，Windows CI 13 项通过（含真实 TCP RST/子进程）；修复提交 `c6979acf`。原生安装包仍待冒烟，详细验收与发布前检查见 [修复记录](docs/WINDOWS_CONNECTION_RESET_FIX.md)。九千多次是跨版本累计，不能当成 1.4.0 的故障或用户数。
+
+## 9 月 28 日新增反馈（待发布）
+
+针对 #224，已修复无效 JPEG 封面、本地 Studio 导入漏缩略图、ffprobe 无超时，以及 Windows 后端子进程残留；编辑器新增用户主动生成的兼容预览，保留原片。#225 为 1.3.3 未安装 Whisper 的配置前置条件，现有诊断回归通过。本地后端 639 项、前端 136 项通过；Windows 13 项 IOCP + 2 项进程树测试及桌面编译通过，原生安装包仍待冒烟。修复追加到 PR #221；验证证据、旧版本升级注意事项及尚未复现的用户环境见 [最新反馈排查](docs/FEEDBACK_TRIAGE_2026-09-28.md)。
 
 ## 下一步
 

@@ -124,11 +124,12 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     <button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>{t("‹ 返回项目")}</button>
     <header className="studio-row studio-editor-head"><div><h1 className="ac-title">{draft.title}</h1><span className="studio-muted">{dirty ? t("有修改未保存 · 本机暂存") : t("草稿已保存")} · V{draft.revision} · {fmtDuration(draftDuration(draft))}</span></div><div className="studio-actions"><Btn disabled={!!busy} onClick={() => setShowVariant(true)}>{t("另存为新版本")}</Btn><Btn disabled={!!busy || !dirty} loading={busy==='save'} onClick={() => perform('save', async () => {await save()})}>{t("保存草稿")}</Btn><Btn variant="cta" disabled={!!busy} onClick={() => setShowExport(true)}>{t("导出成片")}</Btn></div></header>
     {loadError && <p className="studio-error">{t("任务状态暂时无法更新：")}{t(loadError)}</p>}
-    {!showRendered && (playbackError || ['queued', 'running', 'failed'].includes(sourcePreview.status)) && <div role="status" className="studio-muted">
+    {!showRendered && (sourcePreview.status !== 'completed' || playbackError) && <details open={playbackError || ['queued', 'running', 'failed'].includes(sourcePreview.status)} className="studio-muted">
+      <summary>{t('生成兼容预览')}</summary>
       <p>{t('原片无法播放时，可生成兼容预览；原片不变，不调用模型。')}</p>
       {sourcePreview.error && <p className="studio-error">{t(sourcePreview.error)}</p>}
       <Btn disabled={['queued', 'running'].includes(sourcePreview.status)} onClick={preparePreview}>{t(['queued', 'running'].includes(sourcePreview.status) ? '正在生成兼容预览，长视频可能需要几分钟…' : '生成兼容预览')}</Btn>
-    </div>}
+    </details>}
     <fieldset disabled={!!busy} className="studio-fieldset">
       <div className="studio-editor-grid"><section><div className={`studio-stage studio-stage--${draft.aspect}`}>
         <div className="studio-video-frame" style={{aspectRatio: draft.aspect==='portrait'?'9/16':draft.aspect==='landscape'?'16/9':undefined}}>

@@ -40,6 +40,9 @@ def test_explicit_preview_transcodes_avi_preserves_source_and_serves_ranges(clie
     response = client.get('/studio/p1/source-preview/video', headers={'Range': 'bytes=0-99'})
     assert response.status_code == 206 and len(response.content) == 100
     assert response.headers['content-type'] == 'video/mp4'
+    output.unlink()
+    assert client.get('/studio/p1/source-preview').json()['status'] == 'idle'
+    assert client.post('/studio/p1/source-preview').json()['status'] == 'completed'
     avi.write_bytes(original + b'changed')
     assert client.get('/studio/p1/source-preview').json()['status'] == 'idle'
 
