@@ -4,7 +4,7 @@
 
 # AutoClip
 
-**Convierte vídeos largos en momentos que merece la pena compartir.**
+**Encuentra los mejores momentos de tus vídeos con IA y genera clips cortos en HD con un clic.**
 
 [简体中文](README.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · **Español** · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md)
 
@@ -15,12 +15,10 @@
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
 <p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending (Trendshift)" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — Trendshift" width="250" height="55"></a>
 </p>
 
-Edición en local · trae tu propia clave de modelo
-
-Apareció en GitHub Trending; no es un puesto en tiempo real. GitHub Trending y Trendshift son clasificaciones distintas.
+Gratis y de código abierto · Edición local · Modelos locales y en la nube
 
 [Sitio web](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Informar de un problema](https://github.com/zhouxiaoka/autoclip/issues)
 
@@ -30,184 +28,90 @@ Apareció en GitHub Trending; no es un puesto en tiempo real. GitHub Trending y 
 
 </div>
 
-Desde v1.3.1, la aplicación, el sitio web y el README admiten chino, inglés, japonés, coreano, español, portugués, ruso y francés. Elige el idioma en la cabecera o sigue el del sistema. Tus archivos y el contenido generado conservan su idioma original.
+Convierte entrevistas, pódcasts, cursos y grabaciones de directos en clips cortos. AutoClip encuentra momentos destacados, genera títulos y crea clips y recopilaciones que puedes ajustar y exportar.
 
-AutoClip usa IA para encontrar momentos destacados, crear títulos y generar clips y recopilaciones. El análisis de subtítulos es el predeterminado y encaja con entrevistas, pódcasts, cursos y grabaciones de directos. Desde la **v1.4.0** puedes activar por separado el análisis visual de juegos (multimodal): configura tu propio modelo multimodal y activa de forma explícita el cribado visual de pago. Importa y luego confirma. La comprensión y el corte empiezan solo después de confirmar, y editas el resultado en el editor compartido. Ofrece una aplicación de escritorio, una interfaz web mediante Docker y acceso por CLI / MCP.
+## Vista previa
 
-## Vista de la aplicación
+![Importación de vídeos en AutoClip](docs/images/import-local.jpg)
 
-![AutoClip v1.3.0 — local video import](docs/images/import-local.jpg)
+Importa un vídeo local y, si los tienes, subtítulos SRT. La captura muestra la interfaz en chino.
 
-Interfaz web real de v1.3.0: añade un vídeo local en el área de importación, con subtítulos SRT opcionales.
-
-## Qué puedes hacer
+## Funciones
 
 | Función | Descripción |
 | --- | --- |
-| Importar vídeos | Usa archivos locales o enlaces de YouTube y Bilibili, con subtítulos SRT opcionales. |
-| Encontrar momentos destacados | De forma predeterminada, extrae resúmenes, intervalos por tema, puntuaciones y títulos a partir de los subtítulos. |
-| Análisis visual de juegos (v1.4.0, opcional) | Configura tu propio modelo multimodal y activa de forma explícita el cribado visual de pago. Tras confirmar, reconoce eventos independientes en la grabación y genera momentos editables y borradores de promoción. El análisis de subtítulos sigue siendo el predeterminado. Una muestra de un juego no representa todos los juegos. Revisa tú mismo los límites, el recorte y el texto. No hay promesa de rendimiento publicitario. Esta versión no incluye animación de CTA, tarjetas finales de marca generativas ni karaoke / subtítulos palabra a palabra. |
-| Confirmar antes de cortar | Tras importar, confirma el tipo de producción. Puedes corregirlo a mano. Una importación sin confirmar se puede reanudar. La comprensión y el corte empiezan solo después de confirmar; después editas en el editor compartido. |
-| Crear clips y recopilaciones | Genera clips y recopilaciones sugeridas, y ajusta su orden manualmente. |
-| Publicar (v1.3.2) | Desde la **v1.3.2**, cuando los clips estén listos, publícalos o prográmalos en la misma página. Las plataformas de fuera usan Upload-Post; para Bilibili, pega las cookies de inicio de sesión una vez en Ajustes. El valor predeterminado es tan privado como permita la plataforma; también puedes exportar sin publicar. Detalles: [guía de publicación (chino)](docs/PUBLISH_UPLOAD_POST.md). |
-| Portada automática (v1.3.2) | Al publicar, se genera una portada automáticamente para que Bilibili no rechace una portada vacía; los valores por defecto siguen las notas del instalador. Disponible en **v1.3.2**. |
-| Exportar para publicar | Usa ajustes para Douyin, Xiaohongshu, YouTube Shorts y Bilibili, con subtítulos incrustados y tarjetas de título. |
-| Elegir modelos | Compatible con Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok y modelos locales mediante Ollama / LM Studio (trae tu propia clave de API). |
-| Automatizar tareas | Organiza ejecuciones con la CLI o llama al mismo flujo de procesamiento desde un cliente MCP. |
+| Importar vídeos | Archivos locales y enlaces de YouTube o Bilibili. |
+| Encontrar momentos destacados | Analiza subtítulos para identificar fragmentos, generar títulos y organizar temas en una línea de tiempo. |
+| Editar clips | Crea clips y recopilaciones; ajusta los puntos de inicio y fin, el texto y la relación de aspecto. |
+| Momentos de videojuegos | Detecta eventos en partidas grabadas. Requiere configurar un modelo visual y activar el análisis de juegos; el proveedor cobra las llamadas a la nube. [Configuración (chino)](docs/MULTI_LLM_PROVIDER_GUIDE.md). |
+| Exportar y publicar | Vídeos verticales u horizontales con subtítulos y tarjetas de título, portadas automáticas y publicación inmediata o programada. [Guía de publicación (chino)](docs/PUBLISH_UPLOAD_POST.md). |
+| Modelos y automatización | Modelos de Qwen, OpenAI, Gemini, DeepSeek y otros, o modelos locales con Ollama / LM Studio. Acceso mediante CLI y MCP. |
 
-> Importar → Confirmar → Análisis de subtítulos predeterminado, o análisis visual de juegos activado de forma explícita → Editar en el editor compartido → Exportar
+> Importar → Confirmar el tipo de vídeo → Análisis y edición con IA → Ajustar y exportar
 
-## Inicio rápido
+## Primeros pasos
 
-### 1. Aplicación de escritorio
+1. **Instala.** Descarga el `.dmg` para macOS Apple Silicon o el `-setup.exe` para Windows x64 desde [GitHub Releases](https://github.com/zhouxiaoka/autoclip/releases/latest). Incluyen Python y FFmpeg.
+2. **Configura un modelo.** En Ajustes, introduce tu API Key o conecta un modelo local, prueba la conexión y guarda.
+3. **Crea clips.** Importa el vídeo y confirma su tipo para iniciar el análisis y la edición. Revisa el resultado, ajústalo y exporta.
 
-Descarga el instalador adecuado desde [GitHub Releases](https://github.com/zhouxiaoka/autoclip/releases/latest):
+La instalación, importación y guardado en un equipo Windows físico siguen pendientes de validación. En Intel Mac y Linux puedes usar Docker o la CLI.
 
-| Plataforma | Instalación |
-| --- | --- |
-| macOS · Apple Silicon | `.dmg` |
-| Windows 10 / 11 · x64 | `-setup.exe` |
-| Intel Mac / Linux | Usa Docker o la CLI, descritos abajo |
+[Instalación (inglés)](docs/USER_INSTALLATION_GUIDE.en.md) · [Resolución de problemas (inglés)](docs/FAQ.en.md)
 
-Los instaladores incluyen Python y FFmpeg. Consulta cada versión para conocer las plataformas disponibles y las instrucciones del primer inicio. Hay un paquete de Windows; la instalación, la importación y el guardado en un equipo real aún están pendientes de verificación. Tras instalar, elige un proveedor de modelos en la configuración, prueba la conexión, guarda los cambios e importa un vídeo.
+<details>
+<summary>Docker / Web, CLI y MCP</summary>
 
-### 2. Docker / Web
+- **Docker / Web:** Aloja la interfaz web con la [guía de Docker (inglés)](docs/DOCKER.en.md).
+- **CLI:** Procesamiento por lotes y scripts; consulta la [guía de CLI (chino)](docs/CLI_AND_MCP.md).
+- **MCP:** Conecta un cliente siguiendo la misma guía o usa la [Agent skill (chino)](skills/autoclip/SKILL.md).
 
-Necesitas Docker y Docker Compose v2. Ejecuta estos comandos desde la raíz del repositorio:
-
-```bash
-git clone https://github.com/zhouxiaoka/autoclip.git
-cd autoclip
-```
-
-```bash
-cp env.example .env
-```
-
-Antes de iniciar, edita `.env`: selecciona `LLM_PROVIDER` e indica la clave de API y el modelo correspondientes. También puedes configurar el proveedor desde la aplicación después del inicio.
-
-```bash
-mkdir -p data logs uploads
-docker compose up -d --build
-```
-
-Abre la [interfaz web](http://localhost:3000). La [documentación de la API](http://localhost:8000/docs) estará disponible cuando arranque el backend. Consulta la [guía de Docker](DOCKER.md) (en chino) para más detalles.
-
-En Linux, si los directorios montados producen errores de permisos, corrige el propietario de los directorios de datos del proyecto con este comando y vuelve a iniciar los servicios:
-
-```bash
-docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
-docker compose up -d
-```
-
-### 3. CLI / MCP
-
-Necesitas Python 3.10 o posterior (se recomienda 3.11) y FFmpeg en el PATH. El ejemplo usa una shell de macOS / Linux; en PowerShell de Windows, activa el entorno con `venv\Scripts\Activate.ps1`. El procesamiento local por CLI no necesita Redis.
-
-```bash
-git clone https://github.com/zhouxiaoka/autoclip.git
-cd autoclip
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install -e .
-```
-
-Ejemplo con un modelo local: instala e inicia Ollama y descarga un modelo. Los vídeos sin subtítulos requieren `faster-whisper`; el modelo de voz se descarga en el primer uso. Para usar subtítulos existentes, añade `--srt talk.srt`.
-
-```bash
-ollama pull qwen2.5:7b
-python -m pip install faster-whisper
-autoclip doctor --provider ollama
-autoclip run talk.mp4 --provider ollama --json
-```
-
-Sustituye `PROJECT_ID` por el ID del proyecto devuelto al procesar el vídeo para exportar en formato Shorts. Inicia el servidor MCP por stdio con `autoclip mcp`:
-
-```bash
-autoclip export PROJECT_ID --preset shorts
-autoclip mcp
-```
-
-En el cliente MCP, configura `command` con la ruta absoluta a `autoclip` dentro del entorno virtual y `args` con `["mcp"]`. Consulta la [guía de CLI / MCP](docs/CLI_AND_MCP.md) y la [skill para agentes](skills/autoclip/SKILL.md) (ambas en chino).
-
-## Configuración de modelos
-
-| Opción | Configuración |
-| --- | --- |
-| Modelos en la nube | En Ajustes, elige Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM o Grok e introduce la clave de API. Los endpoints compatibles admiten una Base URL personalizada. |
-| Ollama | Dirección predeterminada: `http://localhost:11434/v1`; modelo: `qwen2.5:7b`. No requiere clave de API. |
-| LM Studio | Carga un modelo e inicia Local Server, por defecto en `http://localhost:1234/v1`. Selecciona un modelo disponible en tu servidor. |
-
-Dentro de Docker, `localhost` apunta al contenedor. Para usar un modelo del equipo anfitrión, configura una dirección accesible desde el contenedor; consulta la guía de CLI / MCP. El corte y el renderizado se hacen en tu equipo. La ruta de subtítulos envía los subtítulos o el texto pertinente al proveedor en la nube elegido. Un modelo visual en la nube también envía fotogramas muestreados y el texto necesario. El coste depende de ese proveedor. La descarga de vídeos y modelos requiere conexión a internet.
+</details>
 
 ## Preguntas frecuentes
 
 <details>
-<summary>¿Es gratuito? ¿Necesito una clave de API?</summary>
+<summary>¿Cuánto cuesta?</summary>
 
-AutoClip sigue siendo gratuito y de código abierto bajo MIT. Los proveedores de modelos en la nube cobran por el uso y requieren tu propia clave de API. Ollama / LM Studio no necesitan clave de nube, pero sí modelos y hardware adecuado. Desde **v1.3.2**, publicar en el extranjero requiere tu propia cuenta de [Upload-Post](https://www.upload-post.com). Los planes gratuitos y de pago, y los cupos diarios de TikTok, YouTube, Instagram y otras plataformas, siguen las páginas de Upload-Post. No son promesas de AutoClip.
+AutoClip es gratuito y de código abierto, con licencia MIT. Los modelos en la nube requieren tu propia API Key y el proveedor cobra su uso. Los modelos locales de Ollama / LM Studio no necesitan una clave de nube. Publicar en plataformas internacionales requiere tu propia cuenta de [Upload-Post](https://www.upload-post.com); consulta sus precios y límites en su web.
 
 </details>
 
 <details>
-<summary>¿Se suben mis vídeos?</summary>
+<summary>¿Se sube mi vídeo?</summary>
 
-El corte y el renderizado permanecen en tu dispositivo. La ruta de subtítulos envía los subtítulos o el texto pertinente al proveedor elegido. Un modelo visual en la nube también envía fotogramas muestreados y el texto necesario. El coste depende de ese proveedor. El clip terminado sale del equipo solo después de pulsar Publicar, y solo hacia las plataformas que conectaste. También puedes descargarlo sin publicar. Esa página Publicar está disponible en **v1.3.2**. Las estadísticas y los informes de errores dependen de la versión y los ajustes; consulta las notas de privacidad.
+La edición y el renderizado se ejecutan en tu equipo. El análisis de subtítulos en la nube envía el texto relevante; el análisis visual envía fotogramas seleccionados y el texto necesario. Al publicar se sube el vídeo final a las plataformas conectadas. También puedes exportar solo en local. [Privacidad (inglés)](docs/PRIVACY.en.md).
 
 </details>
 
 <details>
 <summary>¿Puedo usar vídeos sin subtítulos?</summary>
 
-Sí, tras preparar los componentes locales de Whisper y un modelo de voz. También puedes importar subtítulos SRT existentes. Unos subtítulos precisos pueden reducir la espera y los errores de transcripción.
+Sí. Configura Whisper local y un modelo de voz para transcribir, o importa un SRT existente. Empieza con un vídeo corto subtitulado siguiendo la [guía de inicio (inglés)](docs/USER_INSTALLATION_GUIDE.en.md).
 
 </details>
 
 <details>
-<summary>¿Por qué no se generaron clips?</summary>
+<summary>¿Qué vídeos funcionan mejor? ¿Se puede exportar en HD?</summary>
 
-Revisa la fase que falló: subtítulos vacíos, conexión al modelo, umbral de puntuación demasiado alto o problemas de FFmpeg y disco. Puedes probar a reducir el umbral de 0.7 a 0.5, pero eso no garantiza clips.
-
-</details>
-
-<details>
-<summary>¿Qué vídeos funcionan mejor y cuánto tarda?</summary>
-
-El análisis predeterminado usa subtítulos, así que entrevistas, pódcasts, cursos y comentarios hablados encajan bien. Desde la **v1.4.0**, las grabaciones de juego pueden usar el análisis visual opcional. Una muestra no representa todos los juegos. Revisa tú mismo los límites, el recorte y el texto. No hay promesa de rendimiento publicitario. Esta versión no incluye animación de CTA, tarjetas finales de marca generativas ni karaoke / subtítulos palabra a palabra. El tiempo depende de la duración, el hardware, el modelo y la exportación; prueba primero con una muestra corta.
+El análisis de subtítulos es adecuado para entrevistas, pódcasts, cursos y contenido hablado. Las partidas grabadas pueden usar análisis visual. Se admite exportación horizontal y vertical a 1080p; la calidad depende del original y de los ajustes. El tiempo de procesamiento depende de la duración, el modelo y el equipo.
 
 </details>
 
-[Guía completa de solución de problemas (inglés)](docs/FAQ.en.md) · [Problemas conocidos](https://github.com/zhouxiaoka/autoclip/issues/96)
+## Apoya el proyecto
 
-## Documentación
+Aceptamos patrocinios de empresas y particulares para apoyar el desarrollo y mantenimiento de AutoClip. Las empresas patrocinadoras pueden presentar su marca y sus servicios en el README.
 
-El README está disponible en ocho idiomas; la mayoría de las guías detalladas están en chino. Los idiomas del README no indican los idiomas que admiten la interfaz o los modelos de transcripción.
+Consultas sobre patrocinios : [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
-- [Instalación y primeros clips (English)](docs/USER_INSTALLATION_GUIDE.en.md)
-- [Despliegue con Docker (chino)](DOCKER.md)
-- [CLI, MCP y modelos locales (chino)](docs/CLI_AND_MCP.md)
-- [Proveedores de modelos (chino)](docs/MULTI_LLM_PROVIDER_GUIDE.md)
-- [Preguntas frecuentes (chino)](docs/FAQ.md)
-- [Guía de contribución (chino)](CONTRIBUTING.md)
-- [Registro de cambios](CHANGELOG.md)
-- [Privacidad (chino / inglés)](docs/PRIVACY.en.md)
-- [Traducción del README y mantenimiento de insignias (chino)](docs/i18n.md)
+## Documentación y comunidad
 
-## Contribuir y contactar
+- [Instalación (inglés)](docs/USER_INSTALLATION_GUIDE.en.md) · [Modelos (chino)](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [Ayuda (inglés)](docs/FAQ.en.md)
+- [Cambios (chino)](CHANGELOG.md) · [Documentación (chino)](docs/README.md)
+- Comparte preguntas e ideas en [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) e informa de errores en [Issues](https://github.com/zhouxiaoka/autoclip/issues/new/choose).
+- Agradecemos contribuciones de código, documentación y traducción. [Guía de contribución (chino)](CONTRIBUTING.md).
+- Contacto y patrocinios: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
-Agradecemos las correcciones, los comentarios y las mejoras de traducción. Al informar de un fallo, incluye el sistema operativo, la versión, el modelo, los pasos para reproducirlo y los registros de error sin información confidencial.
-
-Proyecto mantenido por una persona en su tiempo libre. Los tiempos de respuesta varían; no se ofrece asistencia inmediata ni ayuda individual de despliegue. Consulta las preguntas frecuentes y los problemas conocidos antes de escribir.
-
-Las ideas, los usos y las peticiones de modelos van a [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions). Los fallos reproducibles usan la [plantilla de issue](https://github.com/zhouxiaoka/autoclip/issues/new/choose). Reglas del tablero: [community board](docs/COMMUNITY_BOARD.md) (chino).
-
-- [Bienvenida y categorías](https://github.com/zhouxiaoka/autoclip/discussions/127)
-- [Preguntas sobre el primer clip](https://github.com/zhouxiaoka/autoclip/discussions/128)
-- [Ideas](https://github.com/zhouxiaoka/autoclip/discussions/129)
-
-- Correo electrónico: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
-
-Gracias a FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper y a todas las personas que contribuyen. Distribuido bajo la [licencia MIT](LICENSE). Si AutoClip te resulta útil, puedes apoyar el proyecto con una estrella.
+Gracias a quienes contribuyen y a proyectos como FastAPI, React, Tauri, FFmpeg, yt-dlp y Whisper. Si AutoClip te resulta útil, puedes apoyarlo con una Star.
 
 [![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)

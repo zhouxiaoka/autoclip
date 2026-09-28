@@ -4,7 +4,7 @@
 
 # AutoClip
 
-**긴 영상에서 공유하고 싶은 순간을 찾아보세요.**
+**AI로 영상의 하이라이트를 찾아 클릭 한 번으로 HD 숏폼 영상을 만드세요.**
 
 [简体中文](README.md) · [English](README-EN.md) · [日本語](README-JA.md) · **한국어** · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md)
 
@@ -15,12 +15,10 @@
 [![License: MIT](https://img.shields.io/github/license/zhouxiaoka/autoclip?style=flat-square)](LICENSE)
 
 <p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending (Trendshift)" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — Trendshift" width="250" height="55"></a>
 </p>
 
-로컬에서 편집 · 모델 키는 직접 준비
-
-GitHub Trending에 오른 적이 있으며, 현재 실시간 순위가 아닙니다. GitHub Trending과 Trendshift는 서로 다른 순위입니다.
+무료 오픈 소스 · 로컬 편집 · 클라우드 및 로컬 모델 지원
 
 [웹사이트](https://zhouxiaoka.github.io/autoclip_intro/) · [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [문제 신고](https://github.com/zhouxiaoka/autoclip/issues)
 
@@ -30,184 +28,90 @@ GitHub Trending에 오른 적이 있으며, 현재 실시간 순위가 아닙니
 
 </div>
 
-v1.3.1부터 앱, 웹사이트, README는 중국어, 영어, 일본어, 한국어, 스페인어, 포르투갈어, 러시아어, 프랑스어를 지원합니다. 상단에서 언어를 선택하거나 시스템 설정을 따를 수 있습니다. 원본 미디어와 생성 콘텐츠의 언어는 변경되지 않습니다.
-
-AutoClip은 AI로 하이라이트를 찾고 제목, 클립, 모음 영상을 만듭니다. 기본 경로는 자막 분석이며 인터뷰, 팟캐스트, 강의, 라이브 방송 녹화에 맞습니다. **v1.4.0**부터 게임 화면 시각 분석(멀티모달)을 따로 켤 수 있습니다. 멀티모달 모델을 직접 설정하고, 유료 시각 선별을 명시적으로 켜야 합니다. 가져온 뒤 먼저 확인하고, 확인 후에야 이해와 컷이 시작되며 공유 편집기에서 수정합니다. 데스크톱 앱, Docker 웹 UI, CLI / MCP로 사용할 수 있습니다.
+인터뷰, 팟캐스트, 강의, 라이브 다시보기에서 짧은 영상을 만드세요. AutoClip이 하이라이트를 찾고 제목, 클립, 모음 영상을 생성합니다. 결과를 직접 수정하고 내보낼 수도 있습니다.
 
 ## 화면 미리보기
 
-![AutoClip v1.3.0 — local video import](docs/images/import-local.jpg)
+![AutoClip 영상 가져오기 화면](docs/images/import-local.jpg)
 
-v1.3.0의 실제 웹 화면입니다. 파일 가져오기 영역에서 로컬 영상과 선택 사항인 SRT 자막을 추가할 수 있습니다.
+로컬 영상과 SRT 자막을 가져올 수 있습니다. 이미지는 중국어 UI입니다.
 
 ## 주요 기능
 
 | 기능 | 설명 |
 | --- | --- |
-| 영상 가져오기 | 로컬 영상, YouTube 및 Bilibili 링크를 지원하며 SRT 자막을 추가할 수 있습니다. |
-| 하이라이트 찾기 | 기본적으로 자막에서 개요, 주제별 시간 구간, 하이라이트 점수, 클립 제목을 추출합니다. |
-| 게임 시각 분석(v1.4.0, 선택) | 멀티모달 모델을 직접 설정하고 유료 시각 선별을 명시적으로 켭니다. 확인 후 녹화 속 독립 이벤트를 찾아 편집 가능한 하이라이트와 프로모 초안을 만듭니다. 자막 분석이 기본입니다. 샘플 게임 하나가 모든 게임을 대표하지 않습니다. 경계, 크롭, 문구는 사람이 확인해야 하며 광고 성과를 약속하지 않습니다. 이번 버전에는 CTA 모션, 생성형 브랜드 엔드 카드, 노래방 / 단어 단위 자막이 없습니다. |
-| 확인한 뒤 컷 | 가져온 뒤 제작 유형을 확인하고 직접 고칠 수 있습니다. 확인하지 않은 가져오기는 이어서 할 수 있습니다. 확인 후에 이해와 컷이 시작되고, 공유 편집기에서 수정합니다. |
-| 클립과 모음 영상 | 클립과 추천 모음 영상을 생성하고 순서를 직접 조정할 수 있습니다. |
-| 게시(v1.3.2) | **v1.3.2**부터, 클립이 준비되면 같은 화면에서 게시하거나 예약할 수 있습니다. 해외 플랫폼은 Upload-Post를 쓰고, Bilibili는 설정에서 로그인 Cookie를 한 번 붙여 넣습니다. 기본값은 플랫폼이 허용하는 범위에서 비공개이며, 게시하지 않고 내보내기만 할 수도 있습니다. 자세한 내용은 [게시 안내(중국어)](docs/PUBLISH_UPLOAD_POST.md). |
-| 자동 커버(v1.3.2) | 게시할 때 커버를 자동으로 만들어, Bilibili가 빈 커버로 거절하지 않게 합니다. 기본값은 설치 안내를 따릅니다. **v1.3.2**부터 사용할 수 있습니다. |
-| 게시용 내보내기 | Douyin, Xiaohongshu, YouTube Shorts, Bilibili 프리셋과 자막 삽입, 타이틀 카드를 지원합니다. |
-| 모델 선택 | Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM, Grok과 Ollama / LM Studio 로컬 모델을 지원합니다(API 키는 직접 준비). |
-| 자동화 | CLI로 작업을 구성하거나 MCP 클라이언트에서 동일한 처리 파이프라인을 호출할 수 있습니다. |
+| 영상 가져오기 | 로컬 파일, YouTube 및 Bilibili 링크 지원. |
+| 하이라이트 찾기 | 자막을 분석해 주요 장면, 제목, 주제별 타임라인 생성. |
+| 클립 편집 | 클립과 모음 영상을 만들고 시작·종료 시점, 텍스트, 화면 비율 조정. |
+| 게임 하이라이트 | 게임 녹화의 이벤트 탐지. 비전 모델을 설정하고 게임 분석을 켜야 하며, 클라우드 비용은 제공업체가 청구합니다. [설정 안내(중국어)](docs/MULTI_LLM_PROVIDER_GUIDE.md). |
+| 내보내기와 게시 | 가로·세로 영상, 자막, 타이틀 카드, 표지 생성, 즉시·예약 게시 지원. [게시 안내(중국어)](docs/PUBLISH_UPLOAD_POST.md). |
+| 모델과 자동화 | Qwen, OpenAI, Gemini, DeepSeek 등의 클라우드 모델과 Ollama / LM Studio 로컬 모델 지원. CLI 및 MCP 제공. |
 
-> 가져오기 → 확인 → 기본 자막 분석, 또는 명시적으로 켠 게임 시각 분석 → 공유 편집기에서 수정 → 내보내기
+> 가져오기 → 제작 유형 확인 → AI 분석 및 편집 → 수정 후 내보내기
 
 ## 빠른 시작
 
-### 1. 데스크톱 앱
+1. **설치하기.** [GitHub Releases](https://github.com/zhouxiaoka/autoclip/releases/latest)에서 macOS Apple Silicon용 `.dmg` 또는 Windows x64용 `-setup.exe`를 받으세요. Python과 FFmpeg가 포함되어 있습니다.
+2. **모델 설정하기.** 설정에서 클라우드 API Key를 입력하거나 로컬 모델에 연결하고 연결 테스트 후 저장하세요.
+3. **클립 만들기.** 영상을 가져오고 제작 유형을 확인하면 분석과 편집을 시작합니다. 결과를 수정하고 내보내세요.
 
-[GitHub Releases](https://github.com/zhouxiaoka/autoclip/releases/latest)에서 운영체제에 맞는 설치 파일을 다운로드하세요.
+Windows 실기기에서 설치, 가져오기, 저장 검증은 아직 완료되지 않았습니다. Intel Mac / Linux는 Docker 또는 CLI를 이용하세요.
 
-| 플랫폼 | 설치 방법 |
-| --- | --- |
-| macOS · Apple Silicon | `.dmg` |
-| Windows 10 / 11 · x64 | `-setup.exe` |
-| Intel Mac / Linux | 아래의 Docker 또는 CLI 사용 |
+[설치 안내(영어)](docs/USER_INSTALLATION_GUIDE.en.md) · [문제 해결(영어)](docs/FAQ.en.md)
 
-데스크톱 설치 파일에는 Python과 FFmpeg가 포함됩니다. 지원 플랫폼과 첫 실행 방법은 해당 릴리스를 확인하세요. Windows 설치 파일은 제공됩니다. 실제 기기에서의 설치, 가져오기, 저장 확인은 아직입니다. 설치 후 설정에서 모델 제공업체를 선택하고 연결 테스트와 저장을 마친 뒤 영상을 가져오세요.
+<details>
+<summary>Docker / Web, CLI, MCP</summary>
 
-### 2. Docker / Web
+- **Docker / Web:** [Docker 안내(영어)](docs/DOCKER.en.md)에 따라 브라우저 UI를 직접 호스팅하세요.
+- **CLI:** 일괄 처리와 스크립트 연동은 [CLI 안내(중국어)](docs/CLI_AND_MCP.md)를 참고하세요.
+- **MCP:** 같은 안내에서 클라이언트를 연결하거나 [Agent skill(중국어)](skills/autoclip/SKILL.md)을 사용하세요.
 
-Docker와 Docker Compose v2가 필요합니다. 저장소 루트에서 실행하세요.
-
-```bash
-git clone https://github.com/zhouxiaoka/autoclip.git
-cd autoclip
-```
-
-```bash
-cp env.example .env
-```
-
-시작 전에 `.env`에서 `LLM_PROVIDER`, 해당 API 키와 모델 이름을 설정하세요. 실행 후 설정 화면에서도 구성할 수 있습니다.
-
-```bash
-mkdir -p data logs uploads
-docker compose up -d --build
-```
-
-[웹 UI](http://localhost:3000)를 여세요. 백엔드가 시작되면 [API 문서](http://localhost:8000/docs)를 볼 수 있습니다. 자세한 내용은 [Docker 가이드](DOCKER.md)(중국어)를 참고하세요.
-
-Linux에서 바인드 마운트 디렉터리의 권한 오류가 발생하면 아래 명령으로 프로젝트 데이터 디렉터리의 소유권을 수정한 뒤 서비스를 다시 시작하세요.
-
-```bash
-docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
-docker compose up -d
-```
-
-### 3. CLI / MCP
-
-Python 3.10 이상(3.11 권장)과 PATH에 등록된 FFmpeg가 필요합니다. 아래 예시는 macOS / Linux 셸 기준입니다. Windows PowerShell에서는 `venv\Scripts\Activate.ps1`로 가상 환경을 활성화하세요. CLI 로컬 처리에는 Redis가 필요하지 않습니다.
-
-```bash
-git clone https://github.com/zhouxiaoka/autoclip.git
-cd autoclip
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install -e .
-```
-
-로컬 모델 예시: Ollama를 설치하고 실행한 뒤 모델을 다운로드하세요. 자막이 없는 영상에는 `faster-whisper`가 필요하며 첫 전사 시 음성 모델을 다운로드합니다. 기존 자막을 사용하려면 `--srt talk.srt`를 추가하세요.
-
-```bash
-ollama pull qwen2.5:7b
-python -m pip install faster-whisper
-autoclip doctor --provider ollama
-autoclip run talk.mp4 --provider ollama --json
-```
-
-`PROJECT_ID`를 처리 결과의 프로젝트 ID로 바꾸면 Shorts 형식으로 내보낼 수 있습니다. `autoclip mcp`는 stdio MCP 서버를 시작합니다.
-
-```bash
-autoclip export PROJECT_ID --preset shorts
-autoclip mcp
-```
-
-MCP 클라이언트의 `command`에는 가상 환경 내 `autoclip`의 절대 경로를, `args`에는 `["mcp"]`를 설정하세요. [CLI / MCP 가이드](docs/CLI_AND_MCP.md)와 [Agent skill](skills/autoclip/SKILL.md)(중국어)을 참고하세요.
-
-## 모델 설정
-
-| 방식 | 설정 |
-| --- | --- |
-| 클라우드 모델 | 설정에서 Qwen, OpenAI, Gemini, DeepSeek, Doubao Seed, Kimi, GLM 또는 Grok을 선택하고 API 키를 입력합니다. 호환 엔드포인트는 Base URL을 직접 지정할 수 있습니다. |
-| Ollama | 기본 주소는 `http://localhost:11434/v1`, 모델은 `qwen2.5:7b`입니다. API 키가 필요하지 않습니다. |
-| LM Studio | 모델을 로드하고 Local Server를 시작하세요. 기본 주소는 `http://localhost:1234/v1`이며 서버가 제공하는 모델을 선택해야 합니다. |
-
-Docker 내부의 `localhost`는 컨테이너 자체를 가리킵니다. 호스트의 모델을 사용하려면 컨테이너에서 접근 가능한 주소를 설정하세요. 자세한 내용은 CLI / MCP 가이드에 있습니다. 컷과 렌더링은 기기에서 이뤄집니다. 자막 경로는 관련 자막이나 문구를 선택한 클라우드 서비스로 보냅니다. 클라우드 시각 모델을 켜면 샘플 프레임과 필요한 텍스트를 보냅니다. 요금은 선택한 서비스에 따릅니다. 영상과 모델 다운로드에는 인터넷이 필요합니다.
+</details>
 
 ## 자주 묻는 질문
 
 <details>
-<summary>무료인가요? API 키가 필요한가요?</summary>
+<summary>비용이 드나요?</summary>
 
-AutoClip 자체는 계속 MIT 라이선스의 무료 오픈 소스입니다. 클라우드 모델은 제공업체의 요금이 적용되며 본인의 API 키가 필요합니다. Ollama / LM Studio는 클라우드 키가 필요 없지만 모델 파일과 적절한 하드웨어가 필요합니다. **v1.3.2**부터 해외 게시에는 본인의 [Upload-Post](https://www.upload-post.com) 계정이 필요합니다. 무료·유료 등급과 TikTok, YouTube, Instagram 등의 일일 한도는 Upload-Post 자신의 페이지를 따릅니다. AutoClip의 약속이 아닙니다.
+AutoClip은 MIT 라이선스의 무료 오픈 소스입니다. 클라우드 모델에는 개인 API Key가 필요하며 제공업체가 사용료를 청구합니다. Ollama / LM Studio는 클라우드 Key가 필요 없습니다. 해외 플랫폼 게시에는 개인 [Upload-Post](https://www.upload-post.com) 계정이 필요하며 요금과 한도는 해당 사이트에서 확인하세요.
 
 </details>
 
 <details>
 <summary>영상이 업로드되나요?</summary>
 
-컷과 렌더링은 사용자 기기에 남습니다. 자막 경로는 관련 자막이나 문구를 선택한 서비스로 보냅니다. 클라우드 시각 모델을 켜면 샘플 프레임과 필요한 텍스트를 보냅니다. 요금은 선택한 서비스에 따릅니다. 완성된 클립이 기기를 떠나는 때는 「게시」를 누른 뒤뿐이며, 연결해 둔 플랫폼으로만 갑니다. 게시하지 않고 받을 수도 있습니다. 이 게시 페이지는 **v1.3.2**부터 사용할 수 있습니다. 통계와 오류 보고는 버전 및 설정에 따라 달라지므로 개인정보 안내를 확인하세요.
+편집과 렌더링은 로컬에서 실행됩니다. 클라우드 자막 분석은 관련 텍스트를, 비전 분석은 샘플 프레임과 필요한 텍스트를 전송합니다. 게시하면 완성 영상을 연결한 플랫폼에 업로드합니다. 로컬로만 내보낼 수도 있습니다. [개인정보 안내(영어)](docs/PRIVACY.en.md).
 
 </details>
 
 <details>
-<summary>자막이 없어도 사용할 수 있나요?</summary>
+<summary>자막이 없어도 되나요?</summary>
 
-네. 먼저 로컬 Whisper 구성 요소와 음성 모델을 준비하세요. 기존 SRT 자막을 함께 가져올 수도 있습니다. 정확한 자막이 있으면 전사 시간과 인식 오류를 줄일 수 있습니다.
-
-</details>
-
-<details>
-<summary>클립이 생성되지 않는 이유는 무엇인가요?</summary>
-
-실패한 단계에서 빈 자막, 모델 연결, 너무 높은 점수 기준, FFmpeg 및 디스크 상태를 확인하세요. 기준을 0.7에서 0.5로 낮춰 볼 수 있지만 클립 생성을 보장하지는 않습니다.
+로컬 Whisper와 음성 모델을 설정하면 음성을 텍스트로 변환할 수 있습니다. 기존 SRT도 가져올 수 있습니다. 처음에는 자막이 있는 짧은 영상으로 시작해 보세요. [시작 안내(영어)](docs/USER_INSTALLATION_GUIDE.en.md).
 
 </details>
 
 <details>
-<summary>어떤 영상에 적합하며 얼마나 걸리나요?</summary>
+<summary>어떤 영상에 적합한가요? HD로 내보낼 수 있나요?</summary>
 
-기본 분석은 자막에 기반하므로 인터뷰, 팟캐스트, 강의, 해설 영상에 맞습니다. **v1.4.0**부터 게임 녹화는 시각 분석을 따로 켤 수 있습니다. 샘플 하나로는 모든 게임을 대표하지 않습니다. 경계, 크롭, 문구는 사람이 확인하고, 광고 성과를 약속하지 않습니다. 이번 버전에는 CTA 모션, 생성형 브랜드 엔드 카드, 노래방 / 단어 단위 자막이 없습니다. 영상 길이, 하드웨어, 모델, 내보내기 설정에 따라 시간이 달라지므로 짧은 영상부터 확인하세요.
+자막 분석은 인터뷰, 팟캐스트, 강의, 말하기 중심 영상에 적합합니다. 게임 녹화는 비전 분석을 사용할 수 있습니다. 가로·세로 1080p 내보내기를 지원하며 화질은 원본과 출력 설정에 따라 달라집니다. 처리 시간은 영상 길이, 모델, 하드웨어에 따라 달라집니다.
 
 </details>
 
-[전체 문제 해결 가이드(영어)](docs/FAQ.en.md) · [알려진 문제](https://github.com/zhouxiaoka/autoclip/issues/96)
+## 프로젝트 후원
 
-## 문서
+AutoClip의 지속적인 개발과 유지보수를 위한 기업 및 개인 후원을 환영합니다. 기업 후원사는 README에 브랜드와 서비스 소개를 게재할 수 있습니다.
 
-README는 8개 언어로 제공되며 아래 상세 문서는 대부분 중국어입니다. README 번역 언어와 앱 UI 또는 전사 모델의 지원 언어는 별개입니다.
+후원 문의 : [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
-- [설치와 첫 클립 만들기 (English)](docs/USER_INSTALLATION_GUIDE.en.md)
-- [Docker 배포(중국어)](DOCKER.md)
-- [CLI, MCP 및 로컬 모델(중국어)](docs/CLI_AND_MCP.md)
-- [모델 제공업체 설정(중국어)](docs/MULTI_LLM_PROVIDER_GUIDE.md)
-- [자주 묻는 질문(중국어)](docs/FAQ.md)
-- [기여 가이드(중국어)](CONTRIBUTING.md)
-- [변경 기록](CHANGELOG.md)
-- [개인정보 안내(중국어 / 영어)](docs/PRIVACY.en.md)
-- [README 번역 및 배지 관리(중국어)](docs/i18n.md)
+## 문서와 커뮤니티
 
-## 기여 및 연락처
+- [설치(영어)](docs/USER_INSTALLATION_GUIDE.en.md) · [모델 설정(중국어)](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [문제 해결(영어)](docs/FAQ.en.md)
+- [변경 기록(중국어)](CHANGELOG.md) · [문서(중국어)](docs/README.md)
+- 질문과 아이디어는 [Discussions](https://github.com/zhouxiaoka/autoclip/discussions), 버그는 [Issues](https://github.com/zhouxiaoka/autoclip/issues/new/choose)에 남겨 주세요.
+- 코드, 문서, 번역 기여를 환영합니다. [기여 안내(중국어)](CONTRIBUTING.md).
+- 연락 및 후원 문의: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
-코드 수정, 피드백, 번역 개선을 환영합니다. 버그를 신고할 때 OS, 버전, 모델, 재현 단계, 민감한 정보를 제거한 오류 로그를 함께 보내 주세요.
-
-개인이 여가 시간에 유지 관리합니다. 답변 시점은 일정하지 않으며 실시간 지원이나 일대일 설치 지원은 제공하지 않습니다. 연락 전에 FAQ와 알려진 문제를 확인해 주세요.
-
-기능 아이디어, 사용 사례, 모델 요청은 [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)에 올려 주세요. 재현 가능한 버그는 [Issue 템플릿](https://github.com/zhouxiaoka/autoclip/issues/new/choose)을 사용합니다. 규칙은 [커뮤니티 보드](docs/COMMUNITY_BOARD.md)(중국어)에 있습니다.
-
-- [안내와 분류](https://github.com/zhouxiaoka/autoclip/discussions/127)
-- [첫 클립 Q&A](https://github.com/zhouxiaoka/autoclip/discussions/128)
-- [아이디어](https://github.com/zhouxiaoka/autoclip/discussions/129)
-
-- 이메일: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
-
-FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper와 모든 기여자에게 감사드립니다. [MIT License](LICENSE)로 배포됩니다. AutoClip이 도움이 되었다면 Star로 응원해 주세요.
+모든 기여자와 FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper 등 오픈 소스 프로젝트에 감사드립니다. 도움이 되었다면 Star로 응원해 주세요.
 
 [![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)
