@@ -145,6 +145,24 @@ def workspace(project_id: str, db: Session = Depends(get_db)):
     data = call(store.read, project_id)
     return {**data, 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
 
+@router.get('/{project_id}/source-preview')
+def source_preview_status(project_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    from backend.services.studio import preview
+    return call(preview.status, project_id)
+
+@router.post('/{project_id}/source-preview')
+def prepare_source_preview(project_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    from backend.services.studio import preview
+    return call(preview.start, project_id)
+
+@router.get('/{project_id}/source-preview/video')
+def source_preview_video(project_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    from backend.services.studio import preview
+    return FileResponse(call(preview.ready_file, project_id), media_type='video/mp4')
+
 @router.get('/{project_id}/source')
 def source_video(project_id: str, db: Session = Depends(get_db)):
     project_or_404(project_id, db)

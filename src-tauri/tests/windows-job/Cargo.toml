@@ -7,4 +7,4 @@ edition = "2021"
 path = "../../src/windows_job.rs"
 
 [dependencies]
-windows-sys = { version = "0.61.0", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
+windows-sys = { version = "=0.61.0", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }

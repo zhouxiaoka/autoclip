@@ -2,7 +2,11 @@ import { observeStudioOperation, studioImportProperties, studioGoals, observeStu
 import { workflow } from '../../analytics/observer'
 import api from '../../services/api'
 import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences } from './types'
+export type SourcePreview = { status: 'idle' | 'queued' | 'running' | 'completed' | 'failed'; version?: string; error?: string }
 export const studioApi = {
+  preparePreview: (pid: string): Promise<SourcePreview> => api.post(`/studio/${pid}/source-preview`),
+  previewStatus: (pid: string): Promise<SourcePreview> => api.get(`/studio/${pid}/source-preview`),
+  compatibleSource: (pid: string, version: string) => `${api.defaults.baseURL}/studio/${pid}/source-preview/video?v=${version}`,
   analysisPreferences: (): Promise<AnalysisPreferences> => api.get('/studio/analysis-preferences'),
   saveAnalysisPreferences: (body: AnalysisPreferences): Promise<AnalysisPreferences> => observeStudioOperation('studio_analysis_preferences', () => api.put('/studio/analysis-preferences', body), undefined, { analysis_mode: body.analysis_mode, allow_visual_screening: body.allow_visual_screening }),
   source: (pid: string) => `${api.defaults.baseURL}/studio/${pid}/source`,

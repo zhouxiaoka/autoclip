@@ -1119,5 +1119,8 @@
   "检测到可用字幕，建议按语义制作；尚未判断内容质量，也未调用模型。": "Legendas utilizáveis encontradas. Sugere-se edição semântica; qualidade não avaliada e nenhum modelo chamado.",
   "未找到字幕，需要转写或提供字幕；尚未确认素材有可用语音，可手动选择制作类型。": "Sem legendas. É necessária transcrição ou arquivo; fala utilizável ainda não confirmada. Você pode escolher os tipos manualmente.",
   "字幕未通过快速检查，暂不自动勾选；请检查字幕或手动选择，原素材已保留。": "As legendas não passaram na verificação rápida; nada foi pré-selecionado. Verifique ou escolha manualmente; o original foi preservado.",
-  "导入任务未能启动，请重试；原素材与已有成片已保留": "Não foi possível iniciar a importação. Tente novamente; o original e as exportações existentes foram preservados."
+  "导入任务未能启动，请重试；原素材与已有成片已保留": "Não foi possível iniciar a importação. Tente novamente; o original e as exportações existentes foram preservados.",
+  "原片无法播放时，可生成兼容预览；原片不变，不调用模型。": "Se o original não reproduzir, crie uma prévia compatível. O original não muda e nenhuma IA é usada.",
+  "正在生成兼容预览，长视频可能需要几分钟…": "Preparando prévia; vídeos longos podem levar alguns minutos…",
+  "生成兼容预览": "Criar prévia compatível"
 }

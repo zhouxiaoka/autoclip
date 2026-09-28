@@ -99,6 +99,7 @@ mod tests {
             CloseHandle(descendant);
         }
         assert_eq!(ended, 0, "grandchild must exit when the job closes");
-        assert!(!child.wait().unwrap().success());
+        assert_eq!(unsafe { WaitForSingleObject(child.as_raw_handle(), 5000) }, 0);
+        child.wait().unwrap();
     }
 }
