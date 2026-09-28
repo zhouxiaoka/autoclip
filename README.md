@@ -98,6 +98,12 @@ AutoClip 免费开源，采用 MIT 许可证。云端模型需要自己的 API K
 
 </details>
 
+## 支持项目
+
+欢迎企业和个人赞助 AutoClip，支持项目的持续开发与维护。企业赞助可在 README 中展示品牌与服务介绍。
+
+赞助合作： [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+
 ## 文档与社区
 
 - [安装指南](docs/USER_INSTALLATION_GUIDE.md) · [模型配置](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [排错指南](docs/FAQ.md)

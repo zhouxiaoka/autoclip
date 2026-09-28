@@ -98,6 +98,12 @@ L’analyse des sous-titres convient aux interviews, podcasts, cours et contenus
 
 </details>
 
+## Soutenir le projet
+
+Les entreprises et les particuliers peuvent sponsoriser AutoClip pour soutenir son développement et sa maintenance. Les entreprises sponsors peuvent présenter leur marque et leurs services dans le README.
+
+Contact pour le sponsoring : [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+
 ## Documentation et communauté
 
 - [Installation (anglais)](docs/USER_INSTALLATION_GUIDE.en.md) · [Modèles (chinois)](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [Dépannage (anglais)](docs/FAQ.en.md)

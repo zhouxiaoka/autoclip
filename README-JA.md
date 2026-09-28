@@ -98,6 +98,12 @@ AutoClip は MIT ライセンスの無料オープンソースです。クラウ
 
 </details>
 
+## プロジェクトを支援する
+
+AutoClip の継続的な開発・保守を支える、企業・個人からのスポンサー支援を歓迎します。企業スポンサーは README にブランドやサービスの紹介を掲載できます。
+
+スポンサーのご相談： [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+
 ## ドキュメント・コミュニティ
 
 - [インストール（英語）](docs/USER_INSTALLATION_GUIDE.en.md) · [モデル設定（中国語）](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [トラブル解決（英語）](docs/FAQ.en.md)

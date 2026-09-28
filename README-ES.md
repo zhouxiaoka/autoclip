@@ -98,6 +98,12 @@ El análisis de subtítulos es adecuado para entrevistas, pódcasts, cursos y co
 
 </details>
 
+## Apoya el proyecto
+
+Aceptamos patrocinios de empresas y particulares para apoyar el desarrollo y mantenimiento de AutoClip. Las empresas patrocinadoras pueden presentar su marca y sus servicios en el README.
+
+Consultas sobre patrocinios : [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+
 ## Documentación y comunidad
 
 - [Instalación (inglés)](docs/USER_INSTALLATION_GUIDE.en.md) · [Modelos (chino)](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [Ayuda (inglés)](docs/FAQ.en.md)

@@ -98,6 +98,12 @@ A análise de legendas é adequada para entrevistas, podcasts, cursos e vídeos 
 
 </details>
 
+## Apoie o projeto
+
+Recebemos patrocínios de empresas e pessoas físicas para apoiar o desenvolvimento e a manutenção contínuos do AutoClip. Empresas patrocinadoras podem apresentar sua marca e seus serviços no README.
+
+Contato para patrocínios : [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+
 ## Documentação e comunidade
 
 - [Instalação (inglês)](docs/USER_INSTALLATION_GUIDE.en.md) · [Modelos (chinês)](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [Ajuda (inglês)](docs/FAQ.en.md)

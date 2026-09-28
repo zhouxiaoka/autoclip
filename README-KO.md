@@ -98,6 +98,12 @@ AutoClip은 MIT 라이선스의 무료 오픈 소스입니다. 클라우드 모�
 
 </details>
 
+## 프로젝트 후원
+
+AutoClip의 지속적인 개발과 유지보수를 위한 기업 및 개인 후원을 환영합니다. 기업 후원사는 README에 브랜드와 서비스 소개를 게재할 수 있습니다.
+
+후원 문의 : [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+
 ## 문서와 커뮤니티
 
 - [설치(영어)](docs/USER_INSTALLATION_GUIDE.en.md) · [모델 설정(중국어)](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [문제 해결(영어)](docs/FAQ.en.md)

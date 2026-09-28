@@ -98,6 +98,12 @@ Transcript analysis suits interviews, podcasts, courses, and spoken content. Gam
 
 </details>
 
+## Support the project
+
+We welcome sponsorship from companies and individuals to support the ongoing development and maintenance of AutoClip. Corporate sponsors can showcase their brand and services in the README.
+
+Sponsorship inquiries : [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
+
 ## Documentation and community
 
 - [Installation](docs/USER_INSTALLATION_GUIDE.en.md) · [Model configuration (Chinese)](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [Troubleshooting](docs/FAQ.en.md)
