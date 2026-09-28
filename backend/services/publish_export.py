@@ -285,7 +285,7 @@ def _probe(path: Path) -> Dict[str, Any]:
     try:
         cmd = [get_ffprobe_path(), "-v", "error", "-select_streams", "v:0",
                "-show_entries", "stream=width,height:format=duration", "-of", "json", str(path)]
-        raw = subprocess.check_output(cmd, text=True, encoding="utf-8", errors="ignore")
+        raw = subprocess.check_output(cmd, text=True, encoding="utf-8", errors="ignore", timeout=20)
         data = json.loads(raw)
         stream = (data.get("streams") or [{}])[0]
         return {

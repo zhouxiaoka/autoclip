@@ -30,6 +30,8 @@ impl Default for BackendStatus {
 pub struct BackendManager {
     status: Arc<Mutex<BackendStatus>>,
     process: Arc<Mutex<Option<Child>>>,
+    #[cfg(windows)]
+    job: Mutex<Option<crate::windows_job::BackendJob>>,
 }
 
 struct BackendLaunch {
@@ -43,6 +45,8 @@ impl BackendManager {
         Self {
             status: Arc::new(Mutex::new(BackendStatus::default())),
             process: Arc::new(Mutex::new(None)),
+            #[cfg(windows)]
+            job: Mutex::new(None),
         }
     }
 
@@ -121,7 +125,21 @@ impl BackendManager {
         }
 
         match cmd.spawn() {
-            Ok(child) => {
+            #[allow(unused_mut)]
+            Ok(mut child) => {
+                #[cfg(windows)]
+                {
+                    // Own the complete process tree, including Celery/ffmpeg.
+                    // Closing the app handle (even on a crash) releases DLL locks.
+                    match crate::windows_job::BackendJob::attach(&child) {
+                        Ok(job) => *self.job.lock().unwrap() = Some(job),
+                        Err(error) => {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                            return Err(format!("无法管理后端进程生命周期: {error}"));
+                        }
+                    }
+                }
                 let pid = child.id();
                 let start_time = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -156,14 +174,23 @@ impl BackendManager {
 
     pub fn stop(&self) -> Result<(), String> {
         let mut status = self.status.lock().unwrap();
-        if !status.is_running {
-            return Err("后端服务未运行".to_string());
-        }
-
         let mut process = self.process.lock().unwrap();
+        #[cfg(windows)]
+        let terminated_tree = {
+            let job = self.job.lock().unwrap().take();
+            let owned = job.is_some();
+            drop(job);
+            owned
+        };
+        #[cfg(not(windows))]
+        let terminated_tree = false;
         if let Some(mut child) = process.take() {
-            if let Err(e) = child.kill() {
-                return Err(format!("停止后端服务失败: {}", e));
+            if !terminated_tree && child.try_wait().map_err(|e| e.to_string())?.is_none() {
+                if let Err(error) = child.kill() {
+                    // Retain ownership if termination failed so it can be retried.
+                    *process = Some(child);
+                    return Err(format!("停止后端服务失败: {error}"));
+                }
             }
             let _ = child.wait();
         }

@@ -144,6 +144,27 @@ def download(project_id, url, browser):
         db.commit()
 
 
+def ensure_project_thumbnail(project_id):
+    """Local uploads need the same thumbnail initialization as URL imports."""
+    from backend.core.database import SessionLocal
+    from backend.models.project import Project
+    from backend.utils.thumbnail_generator import generate_project_thumbnail
+    try:
+        with SessionLocal() as db:
+            project = db.get(Project, project_id)
+            if project is None or project.thumbnail:
+                return
+        thumbnail = generate_project_thumbnail(project_id, source(project_id))
+        if thumbnail:
+            with SessionLocal() as db:
+                project = db.get(Project, project_id)
+                if project is not None and not project.thumbnail:
+                    project.thumbnail = thumbnail
+                    db.commit()
+    except Exception:
+        logger.warning('Project thumbnail generation failed', exc_info=True)
+
+
 def run_content(project_id, video):
     """Run the existing content pipeline in this worker, without a second broker queue."""
     from backend.tasks.processing import process_video_pipeline
@@ -198,6 +219,7 @@ def _inspect(project_id, options, url, browser):
             download(project_id, url, browser)
         store.change(project_id, lambda data:data['analysis'].update(message='快速判断适合的制作类型'))
         plan = recommend(source(project_id), options)
+        ensure_project_thumbnail(project_id)
         plan['id'] = uuid.uuid4().hex
         store.change(project_id, lambda data:data.update(plan=plan, analysis={'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)}))
         mark_project(project_id, 'pending', creative=plan['preferences'], awaiting_confirmation=True)

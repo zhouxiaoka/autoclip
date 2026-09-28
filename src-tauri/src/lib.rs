@@ -4,6 +4,8 @@ use crate::tray::setup_system_tray;
 use tauri::Manager;
 
 mod backend_manager;
+#[cfg(windows)]
+mod windows_job;
 mod commands;
 mod tray;
 
@@ -54,6 +56,11 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                let _ = app.state::<BackendManager>().stop();
+            }
+        });
 }

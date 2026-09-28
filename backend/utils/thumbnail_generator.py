@@ -74,7 +74,7 @@ class ThumbnailGenerator:
                     # 封面不存在，回退到默认时间点
                     time_offset = 1.0
                     cmd = [
-                        'ffmpeg',
+                        get_ffmpeg_path(),
                         '-ss', str(time_offset),
                         '-i', str(video_path),
                         '-vframes', '1',
@@ -100,7 +100,7 @@ class ThumbnailGenerator:
                 ]
             
             logger.info(f"生成缩略图: {video_path} -> {output_path}")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
             
             if result.returncode == 0:
                 logger.info(f"缩略图生成成功: {output_path}")
@@ -127,23 +127,32 @@ class ThumbnailGenerator:
             封面图片路径，如果不存在则返回None
         """
         try:
-            # 检查是否有嵌入的封面图片
+            # Only an attached picture is a cover. A normal video stream must
+            # follow the duration-based frame selection below (often not frame 0).
+            info = self.get_video_info(video_path) or {}
+            cover = next((stream for stream in info.get('streams', [])
+                          if stream.get('disposition', {}).get('attached_pic') == 1), None)
+            if cover is None or not isinstance(cover.get('index'), int):
+                return None
             ffmpeg_bin = get_ffmpeg_path()
             cmd = [
                 ffmpeg_bin,
                 '-i', str(video_path),
+                '-map', f"0:{cover['index']}",
                 '-an',  # 禁用音频
-                '-vcodec', 'copy',  # 复制视频流
+                '-vcodec', 'mjpeg',  # Decode video to a real JPEG, never copy H.264/HEVC bytes
                 '-f', 'image2',
                 '-vframes', '1',
                 '-y',
                 str(video_path.parent / f"{video_path.stem}_cover.jpg")
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=10)
             if result.returncode == 0:
                 cover_path = video_path.parent / f"{video_path.stem}_cover.jpg"
                 if cover_path.exists() and cover_path.stat().st_size > 0:
+                    with Image.open(cover_path) as image:
+                        image.verify()
                     logger.info(f"成功提取视频封面: {cover_path}")
                     return cover_path
             
@@ -204,7 +213,7 @@ class ThumbnailGenerator:
                 optimal_time = duration * 0.05
             
             # 确保时间点合理（至少1秒，最多不超过视频长度）
-            optimal_time = max(1.0, min(optimal_time, duration - 1))
+            optimal_time = max(0.0, min(optimal_time, max(0.0, duration - 0.05)))
             
             logger.info(f"为视频 {video_path.name} 选择最佳时间点: {optimal_time}秒 (总时长: {duration}秒)")
             return optimal_time
@@ -276,7 +285,7 @@ class ThumbnailGenerator:
                 str(video_path)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=10)
             
             if result.returncode == 0:
                 import json

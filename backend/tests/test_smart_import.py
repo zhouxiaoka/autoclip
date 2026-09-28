@@ -519,3 +519,21 @@ def test_studio_content_preserves_structured_pipeline_failure(monkeypatch, tmp_p
     with pytest.raises(PipelineFailure) as caught:
         jobs.run_content('p', tmp_path/'input.mp4')
     assert caught.value.code == 'llm_not_configured'
+
+
+def test_local_import_creates_project_thumbnail(client, source, monkeypatch):
+    import base64
+    import io
+    from PIL import Image
+    from backend.core.database import SessionLocal
+    from backend.models import Project
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    response = client.post('/studio/import', data={'goal': 'content'},
+                           files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')})
+    assert response.status_code == 200, response.text
+    pid = response.json()['project_id']
+    with SessionLocal() as db:
+        thumbnail = db.get(Project, pid).thumbnail
+    assert thumbnail.startswith('data:image/jpeg;base64,')
+    Image.open(io.BytesIO(base64.b64decode(thumbnail.split(',', 1)[1]))).verify()
+    assert client.get('/studio/' + pid).json()['analysis']['status'] == 'awaiting_confirmation'
