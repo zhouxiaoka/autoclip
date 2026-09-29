@@ -46,7 +46,7 @@ from backend.tests.test_studio import client
 
 def test_subtitle_highlight_confirmation_reaches_shared_editor(client,source,monkeypatch):
     from backend.services.studio import analysis_preferences as ap
-    monkeypatch.setattr(ap,'load',lambda:ap.AnalysisPreferences())
+    monkeypatch.setattr(ap,'load',lambda:ap.AnalysisPreferences(analysis_mode='subtitle'))
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**k:pytest.fail('vision forbidden'))
     monkeypatch.setattr(jobs,'run_content',lambda *a:[clip(0,1)])
     class Immediate:

@@ -67,6 +67,7 @@ class CoverConfigBody(BaseModel):
     base_url: str | None = None
     ocr_model: str | None = None
     allow_send_frame: bool | None = Field(None, description="是否允许把视频帧发给第三方生图服务，默认关")
+    mode: str | None = Field(None, description="text_model 跟随 AI 模型的服务商 / custom 单独配置")
 
 
 class CoverGenerateBody(BaseModel):
@@ -279,7 +280,9 @@ async def get_cover_config():
 
 @router.put("/covers/config")
 async def put_cover_config(body: CoverConfigBody):
-    if body.provider is not None and body.provider.strip().lower() not in ("openai", "seedream", "dashscope"):
+    if body.mode is not None and body.mode not in ("text_model", "custom"):
+        raise HTTPException(status_code=400, detail="mode 只能是 text_model 或 custom")
+    if body.mode != "text_model" and body.provider is not None and body.provider.strip().lower() not in ("openai", "seedream", "dashscope"):
         raise HTTPException(status_code=400, detail="生图提供商只能是 openai、seedream 或 dashscope")
     cfg = cover_svc.save_config(
         enabled=body.enabled,
@@ -289,6 +292,7 @@ async def put_cover_config(body: CoverConfigBody):
         base_url=body.base_url,
         ocr_model=body.ocr_model,
         allow_send_frame=body.allow_send_frame,
+        mode=body.mode,
     )
     payload = {"ok": True, **cfg.public()}
     if cfg.source == "env":

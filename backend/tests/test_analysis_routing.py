@@ -12,7 +12,8 @@ class Immediate:
 @pytest.mark.parametrize('configured', [False, True])
 @pytest.mark.parametrize('subtitles', [False, True])
 def test_unapproved_screening_never_calls_vision(source, monkeypatch, mode, configured, subtitles):
-    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode=mode))
+    # 用户明确关闭了视觉初筛（字幕模式本身就是关闭）
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode=mode, allow_visual_screening=False))
     monkeypatch.setattr(intelligence, 'ready', lambda: configured)
     monkeypatch.setattr(intelligence, 'vision_call', lambda *a, **k: pytest.fail('unapproved vision call'))
     if subtitles:
@@ -23,7 +24,7 @@ def test_unapproved_screening_never_calls_vision(source, monkeypatch, mode, conf
 
 
 def test_subtitle_confirm_uses_only_old_pipeline_and_freezes_route(client, source, monkeypatch):
-    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences())
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='subtitle'))
     monkeypatch.setattr(intelligence, 'ready', lambda: True)
     monkeypatch.setattr(intelligence, 'vision_call', lambda *a, **k: pytest.fail('vision forbidden'))
     monkeypatch.setattr(jobs, 'analyze', lambda *a, **k: pytest.fail('visual analysis forbidden'))
@@ -46,7 +47,9 @@ def test_subtitle_confirm_uses_only_old_pipeline_and_freezes_route(client, sourc
 
 
 def test_settings_api_strict_contract(client):
-    assert client.get('/studio/analysis-preferences').json()['analysis_mode'] == 'subtitle'
+    # 没保存过：默认智能选择，并随之允许导入时看几张画面（仍需多模态模型）
+    default = client.get('/studio/analysis-preferences').json()
+    assert default == {'analysis_mode': 'auto', 'allow_visual_screening': True}
     assert client.put('/studio/analysis-preferences', json={'analysis_mode':'subtitle','allow_visual_screening':True}).status_code == 422
     assert client.put('/studio/analysis-preferences', json={'analysis_mode':'invented'}).status_code == 422
     assert client.put('/studio/analysis-preferences', json={'analysis_mode':'auto','allow_visual_screening':True}).status_code == 200

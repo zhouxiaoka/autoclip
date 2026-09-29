@@ -282,3 +282,6 @@
 .ac-mode-card small.cost { color: var(--ac-ink); }
 .ac-savebar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 36px; padding: 14px 0; background: var(--ac-bg); border-top: 1px solid var(--ac-line); z-index: 2; }
 @media (max-width: 860px) { .ac-mode-cards { grid-template-columns: 1fr; } }
+.ac-model-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.ac-model-option .ac-mono { overflow: hidden; text-overflow: ellipsis; }
+.ac-link { color: var(--ac-accent); cursor: pointer; }

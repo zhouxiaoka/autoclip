@@ -38,7 +38,7 @@ def test_missing_subtitle_evidence_makes_no_model_call(monkeypatch):
 
 
 def test_subtitle_promo_import_confirmation_and_edit(client,source,evidence,monkeypatch):
-    monkeypatch.setattr(analysis_preferences,'load',lambda:analysis_preferences.AnalysisPreferences())
+    monkeypatch.setattr(analysis_preferences,'load',lambda:analysis_preferences.AnalysisPreferences(analysis_mode='subtitle'))
     analyses=[]; requests=[]
     monkeypatch.setattr(jobs,'run_content',lambda *a:analyses.append(a) or [clip(0,1)])
     monkeypatch.setattr(intelligence,'text_json',lambda *a:requests.append(a) or {'drafts':[{'candidate':0,'title':'Topic','hook':'Supported opening'}]})

@@ -8,7 +8,7 @@ import SpeechRecognitionConfig from '../components/SpeechRecognitionConfig'
 import AnalysisVisionSettings, { type AnalysisVisionHandle } from '../features/settings/AnalysisVisionSettings'
 import FeedbackDialog from '../components/FeedbackDialog'
 import PublishSettings from '../components/PublishSettings'
-import CoverSettings, { type CoverSettingsHandle } from '../components/CoverSettings'
+import CoverModelRow, { type CoverModelHandle } from '../features/settings/CoverModelRow'
 import { isDesktopMode } from '../utils/desktopMode'
 import { openExternalLink } from '../utils/externalLinks'
 import { trackApiKeyConfigured, trackSponsorLinkOpened } from '../analytics/events'
@@ -83,7 +83,7 @@ type DashscopeRegion = 'cn' | 'intl'
 
 // 后端 /available-models 失败时的兜底；与 backend/core/model_catalog.py 对齐
 const FALLBACK_CATALOG: Record<string, string[]> = {
-  dashscope: ['qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus', 'qwen-plus', 'qwen-plus-latest', 'qwen-max', 'qwen-max-latest', 'qwen-flash'],
+  dashscope: ['qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus', 'qwen-plus', 'qwen-plus-latest', 'qwen-max', 'qwen-max-latest', 'qwen-flash', 'qwen-vl-max', 'qwen-vl-plus'],
   openai: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'],
   gemini: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash'],
   deepseek: ['deepseek-flash', 'deepseek-v4-pro'],
@@ -134,7 +134,7 @@ const SECTION_ALIASES: Record<string, { section: SectionKey; anchor?: string }> 
   analysis: { section: 'ai', anchor: 'ai-analysis' },
   vision: { section: 'ai', anchor: 'ai-analysis' },
   speech: { section: 'ai', anchor: 'ai-speech' },
-  cover: { section: 'ai', anchor: 'ai-cover' },
+  cover: { section: 'ai', anchor: 'ai-model' },
 }
 
 // Calm Premium settings — left nav + setting rows (see DESIGN.md → App Layer)
@@ -148,7 +148,7 @@ const SettingsPage: React.FC = () => {
     SECTION_ALIASES[requested]?.section || (NAV.find((n) => n.key === requested)?.key as SectionKey) || 'ai'
   ), [requested])
   const analysisRef = useRef<AnalysisVisionHandle>(null)
-  const coverRef = useRef<CoverSettingsHandle>(null)
+  const coverRef = useRef<CoverModelHandle>(null)
   const [speechOpen, setSpeechOpen] = useState(requested === 'speech')
   useEffect(() => {
     const anchor = SECTION_ALIASES[requested]?.anchor
@@ -168,7 +168,9 @@ const SettingsPage: React.FC = () => {
     reachable: boolean
     models: string[]
     catalog: Record<string, string[]>
-  }>({ loading: false, source: 'catalog', reachable: false, models: FALLBACK_CATALOG.dashscope, catalog: FALLBACK_CATALOG })
+    visionModels: string[]
+    imageModels: string[]
+  }>({ loading: false, source: 'catalog', reachable: false, models: FALLBACK_CATALOG.dashscope, catalog: FALLBACK_CATALOG, visionModels: [], imageModels: [] })
   const [dashscopeRegion, setDashscopeRegion] = useState<DashscopeRegion>('cn')
   const [analyticsOn, setAnalyticsOn] = useState(isAnalyticsEnabled())
   const [feedbackOpen, setFeedbackOpen] = useState(false)
@@ -286,18 +288,6 @@ const SettingsPage: React.FC = () => {
     }
   }
 
-  // 视觉「同上面的模型」测试的是已保存的模型：测之前先把模型设置存下来
-  const saveModelForTest = async (): Promise<boolean> => {
-    try {
-      await form.validateFields()
-    } catch {
-      message.error(t("请先完成上面的模型设置"))
-      return false
-    }
-    await handleSave(form.getFieldsValue(true))
-    return true
-  }
-
   const handleTest = async () => {
     const cfg = PROVIDERS[selectedProvider]
     const local = isLocalProvider(selectedProvider)
@@ -353,6 +343,8 @@ const SettingsPage: React.FC = () => {
         reachable: !!r.reachable,
         models: r.models?.length ? r.models : (r.catalog?.[provider] || FALLBACK_CATALOG[provider] || []),
         catalog: r.catalog && Object.keys(r.catalog).length ? r.catalog : FALLBACK_CATALOG,
+        visionModels: r.vision_models || [],
+        imageModels: r.image_models || [],
       })
     } catch {
       setCloudModels((s) => ({ ...s, loading: false, source: 'catalog', reachable: false }))
@@ -409,6 +401,11 @@ const SettingsPage: React.FC = () => {
   const openaiBaseUrl = Form.useWatch('openai_base_url', form)
   const usingCustomEndpoint = selectedProvider === 'openai' && !!normalizeBaseUrl(openaiBaseUrl)
   const cfg = PROVIDERS[selectedProvider]
+  // 模型能力由后端 model_catalog 判断；本地模型认不出时按仅文字
+  const watchedModel = normalizeModelName(Form.useWatch('model_name', form))
+  const visionSet = new Set(cloudModels.visionModels)
+  const isMultimodal = (m: string) => visionSet.has(m)
+  const selectedMultimodal: boolean | null = watchedModel ? isMultimodal(watchedModel) || (!visionSet.size && null) : null
   const localCfg = cfg.local
   const keyUrl = selectedProvider === 'dashscope' && dashscopeRegion === 'intl'
     ? 'https://bailian.console.alibabacloud.com/?tab=model#/api-key'
@@ -417,7 +414,10 @@ const SettingsPage: React.FC = () => {
   return (
     <div className="ac-page">
       <header>
-        <h1 className="ac-title" style={{ marginTop: 0 }}>{t("设置")}</h1>
+        {/* 与详情页一致：页内返回，不依赖顶栏 logo */}
+        <button className="ac-back" onClick={() => navigate('/')}>
+          <Icon.Back />{t("项目")}</button>
+        <h1 className="ac-title">{t("设置")}</h1>
         <div className="ac-meta">
           <span className="ac-mono">{runtime.version !== 'unknown' ? `v${runtime.version}` : 'dev'}</span>
           <span className="dot" />
@@ -606,9 +606,19 @@ const SettingsPage: React.FC = () => {
                         options={(localCfg
                           ? localModels.models.map((m) => ({ value: m, label: m }))
                           : cloudModelOptions(selectedProvider, cloudModels)) as any}
+                        optionRender={(option) => (
+                          <span className="ac-model-option">
+                            <span className="ac-mono">{option.value as string}</span>
+                            {!localCfg && <span className="ac-badge">{isMultimodal(option.value as string) ? t("多模态") : t("仅文字")}</span>}
+                          </span>
+                        )}
                       />
                     </Form.Item>
                   </Row>
+
+                  {!localCfg && (
+                    <CoverModelRow ref={coverRef} provider={selectedProvider} imageModels={cloudModels.imageModels} />
+                  )}
 
                   {selectedProvider === 'deepseek' && (
                     <Row
@@ -648,17 +658,13 @@ const SettingsPage: React.FC = () => {
                 </details>
 
                 <div id="ai-analysis" className="ac-subhead">{t("分析方式")}</div>
-                <AnalysisVisionSettings ref={analysisRef} onBeforeTest={saveModelForTest} />
+                <AnalysisVisionSettings ref={analysisRef} multimodal={localCfg ? false : selectedMultimodal} />
 
                 <div id="ai-speech" className="ac-subhead">{t("无字幕时的转写")}</div>
                 <details className="ac-disclosure" open={speechOpen} onToggle={(e) => setSpeechOpen((e.target as HTMLDetailsElement).open)}>
                   <summary>{t("视频没有字幕时，用本机 Whisper 生成字幕再分析。自带字幕的视频不需要。")}</summary>
                   <SpeechRecognitionConfig />
                 </details>
-
-                <div id="ai-cover" className="ac-subhead">{t("封面生成")}</div>
-                <p className="ac-note">{t("给切片自动设计封面。生图失败时会截帧兜底，不挡住发布。")}</p>
-                <CoverSettings ref={coverRef} />
 
                 <div className="ac-savebar">
                   {currentProvider?.available && (

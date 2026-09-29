@@ -13,6 +13,7 @@ export interface CoverConfigView {
   configured: boolean
   source: string
   key_source?: 'own' | 'env' | 'text_model' | 'none'
+  mode?: 'text_model' | 'custom'
   note?: string | null
 }
 

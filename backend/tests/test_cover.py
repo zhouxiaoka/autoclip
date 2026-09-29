@@ -270,7 +270,7 @@ def test_cover_reuses_same_family_text_key_without_persisting(data_dir, monkeypa
     for name in ("IMAGE_API_KEY", "IMAGE_PROVIDER", "IMAGE_BASE_URL", "IMAGE_MODEL"):
         monkeypatch.delenv(name, raising=False)
     _text_keys(monkeypatch, dashscope_api_key="sk-dashscope-text", seed_api_key="ark-seed", infistar_api_key="sk-infistar")
-    cover.save_config(enabled=True, provider="dashscope", model="wanx2.1-t2i-turbo")
+    cover.save_config(enabled=True, provider="dashscope", model="wanx2.1-t2i-turbo", mode="custom")
     cfg = cover.load_config()
     assert cfg.api_key == "sk-dashscope-text" and cfg.key_source == "text_model"
     assert "sk-dashscope-text" not in cover.config_path().read_text()
@@ -292,3 +292,34 @@ def test_cover_title_check_uses_vision_model_unless_overridden(data_dir, monkeyp
     assert cover.verify_endpoint(cfg) == {"provider": "openai", "api_key": "sk-v", "base_url": "https://infistar.cc/v1", "model": "gemini-3.8-flash"}
     cfg.ocr_model = "doubao-1.5-vision-pro-32k"
     assert cover.verify_endpoint(cfg)["model"] == "doubao-1.5-vision-pro-32k"
+
+
+
+def test_cover_follows_text_model_service(data_dir, monkeypatch):
+    from backend.services import cover
+    for name in ("IMAGE_API_KEY", "IMAGE_PROVIDER", "IMAGE_BASE_URL", "IMAGE_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    # 没保存过：跟随模型，但默认不开
+    _text_keys(monkeypatch, llm_provider="openai", cloud_preset="seed", seed_api_key="ark-seed")
+    cfg = cover.load_config()
+    assert cfg.mode == "text_model" and not cfg.enabled
+    cover.save_config(enabled=True, model="doubao-seedream-5-0-260128", mode="text_model")
+    cfg = cover.load_config()
+    assert (cfg.provider, cfg.api_key, cfg.enabled, cfg.configured) == ("seedream", "ark-seed", True, True)
+    assert "ark-seed" not in cover.config_path().read_text()
+    # 换成 Infistar：跟着换到 OpenAI 兼容 images + Infistar 的 key
+    _text_keys(monkeypatch, llm_provider="openai", cloud_preset="infistar", infistar_api_key="sk-inf", openai_base_url="https://infistar.cc/v1")
+    cfg = cover.load_config()
+    assert (cfg.provider, cfg.base_url, cfg.api_key) == ("openai", "https://infistar.cc/v1", "sk-inf")
+    # 换成没有生图的 DeepSeek：自动关掉，封面走截帧
+    _text_keys(monkeypatch, llm_provider="openai", cloud_preset="deepseek", deepseek_api_key="sk-ds")
+    cfg = cover.load_config()
+    assert not cfg.enabled and not cfg.configured
+
+
+def test_model_catalog_marks_vision_and_image_models():
+    from backend.core import model_catalog as mc
+    assert mc.supports_vision("gemini-3.8-flash") and mc.supports_vision("claude-sonnet-5-5")
+    assert mc.supports_vision("doubao-seed-2-1-lite-260915") and mc.supports_vision("qwen-vl-plus")
+    assert not mc.supports_vision("deepseek-flash") and not mc.supports_vision("qwen-plus")
+    assert mc.IMAGE_MODELS["dashscope"][0].startswith("wanx") and "deepseek" not in mc.IMAGE_MODELS

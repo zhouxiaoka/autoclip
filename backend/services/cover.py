@@ -59,6 +59,8 @@ class CoverConfig:
     source: str = "none"
     # own / env / text_model：密钥是封面自己填的、环境变量，还是复用了「AI 模型」里同一家的 key
     key_source: str = "none"
+    # text_model：生图跟着「AI 分析 → 模型」的服务商走；custom：旧版单独配置的生图服务
+    mode: str = "custom"
 
     @property
     def configured(self) -> bool:
@@ -80,6 +82,7 @@ class CoverConfig:
             "configured": self.configured,
             "source": self.source,
             "key_source": self.key_source,
+            "mode": self.mode,
         }
 
 
@@ -110,6 +113,36 @@ def _text_model_key(provider: str, base_url: str) -> str:
     if not host or "api.openai.com" in host:
         return str(settings.get("openai_api_key") or "")
     return ""
+
+
+def text_model_image_service() -> dict[str, str] | None:
+    """「AI 分析 → 模型」当前服务商对应的生图接口：provider / base_url / api_key / 服务商名。
+
+    通义千问 → 通义万相，Seed（火山方舟）→ Seedream，OpenAI / Infistar → OpenAI 兼容 images。
+    DeepSeek、Kimi、GLM、Grok、本地模型没有生图，返回 None（封面用视频截帧）。
+    """
+    try:
+        from backend.core.llm_manager import get_llm_manager
+        s = get_llm_manager().settings
+    except Exception:  # noqa: BLE001
+        return None
+    provider = s.get("llm_provider", "dashscope")
+    preset = s.get("cloud_preset")
+    if provider == "dashscope":
+        intl = "dashscope-intl" in str(s.get("dashscope_base_url") or "")
+        return {"provider": "dashscope", "text_provider": "dashscope", "api_key": str(s.get("dashscope_api_key") or ""),
+                "base_url": "https://dashscope-intl.aliyuncs.com/api/v1" if intl else ""}
+    if provider != "openai" or s.get("llm_provider_preset"):
+        return None
+    if preset == "seed":
+        return {"provider": "seedream", "text_provider": "seed", "api_key": str(s.get("seed_api_key") or ""), "base_url": ""}
+    if preset == "infistar":
+        return {"provider": "openai", "text_provider": "infistar", "api_key": str(s.get("infistar_api_key") or ""),
+                "base_url": str(s.get("openai_base_url") or "")}
+    if preset:
+        return None
+    return {"provider": "openai", "text_provider": "openai", "api_key": str(s.get("openai_api_key") or ""),
+            "base_url": str(s.get("openai_base_url") or "")}
 
 
 def verify_endpoint(cfg: "CoverConfig") -> dict[str, str]:
@@ -155,6 +188,21 @@ def load_config() -> CoverConfig:
         source = "none"
     provider = (env_provider or str(data.get("provider") or "openai")).strip().lower() or "openai"
     base_url = env_base or str(data.get("base_url") or "").strip()
+    mode = "custom" if (env_key or env_provider or env_base) else str(data.get("mode") or ("custom" if data else "text_model"))
+    if mode == "text_model":
+        service = text_model_image_service()
+        return CoverConfig(
+            enabled=bool(data.get("enabled", False)) and service is not None,
+            provider=service["provider"] if service else provider,
+            model=env_model or str(data.get("model") or "").strip(),
+            api_key=service["api_key"] if service else "",
+            base_url=service["base_url"] if service else "",
+            ocr_model="",
+            allow_send_frame=bool(data.get("allow_send_frame", False)),
+            source="file" if data else "none",
+            key_source="text_model" if service and service["api_key"] else "none",
+            mode="text_model",
+        )
     if not api_key:
         api_key = _text_model_key(provider, base_url)
         if api_key:
@@ -169,6 +217,7 @@ def load_config() -> CoverConfig:
         allow_send_frame=bool(data.get("allow_send_frame", False)),
         source=source if (api_key or data or env_base or env_provider) else "none",
         key_source=key_source,
+        mode="custom",
     )
 
 
@@ -181,6 +230,7 @@ def save_config(
     base_url: str | None = None,
     ocr_model: str | None = None,
     allow_send_frame: bool | None = None,
+    mode: str | None = None,
 ) -> CoverConfig:
     current = load_config()
     path = config_path()
@@ -201,8 +251,15 @@ def save_config(
         "base_url": (base_url if base_url is not None else current.base_url).strip().rstrip("/"),
         "ocr_model": (ocr_model if ocr_model is not None else current.ocr_model).strip(),
         "allow_send_frame": current.allow_send_frame if allow_send_frame is None else bool(allow_send_frame),
+        # 没指明 mode 但传了服务商 / key / 地址（旧客户端、脚本）：就是单独配置
+        "mode": mode or ("custom" if (provider or api_key or base_url) else current.mode) or "custom",
     }
-    if api_key is None and existing.get("api_key"):
+    if payload["mode"] == "text_model":
+        # 跟随模型：服务商、地址、key 都从「AI 分析 → 模型」推出来，不在这里保存
+        payload.update(provider="", api_key="", base_url="", ocr_model="")
+        if enabled is None and not existing:
+            payload["enabled"] = False
+    elif api_key is None and existing.get("api_key"):
         payload["api_key"] = str(existing["api_key"])
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -12,20 +12,26 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
 
 
-def test_missing_preference_keeps_subtitle_even_with_vision_configured(tmp_path, monkeypatch):
-    monkeypatch.setenv('AUTOCLIP_VISION_BASE_URL', 'https://example.test/v1')
-    monkeypatch.setenv('AUTOCLIP_VISION_API_KEY', 'test-only-key')
-    assert prefs.load() == prefs.AnalysisPreferences()
-    vision_settings.save(vision_settings.VisionSettingsInput(base_url='https://example.test/v1', model='multimodal', api_key='test-only-key'))
-    assert prefs.load().analysis_mode == 'subtitle'
-    assert not prefs.visual_screening_allowed(prefs.load(), vision_configured=True)
-    assert not prefs.settings_path().exists()  # Reading legacy defaults does not migrate data.
+def test_missing_preference_defaults_to_smart_selection(tmp_path, monkeypatch):
+    # 没保存过：智能选择；视觉初筛随方式开启，但仍要有能看图的模型才会真的调用
+    value = prefs.load()
+    assert value.analysis_mode == 'auto' and value.allow_visual_screening is True
+    assert prefs.visual_screening_allowed(value, vision_configured=True)
+    assert not prefs.visual_screening_allowed(value, vision_configured=False)
+    assert not prefs.settings_path().exists()  # Reading defaults does not write a file.
+
+
+def test_saved_subtitle_choice_is_kept_and_never_screens(tmp_path):
+    prefs.save(prefs.AnalysisPreferences(analysis_mode='subtitle'))
+    value = prefs.load()
+    assert value.analysis_mode == 'subtitle' and value.allow_visual_screening is False
+    assert not prefs.visual_screening_allowed(value, vision_configured=True)
 
 
 @pytest.mark.parametrize('mode', ['subtitle', 'auto', 'visual'])
 @pytest.mark.parametrize('configured', [False, True])
-def test_mode_selection_alone_does_not_authorize_paid_screening(mode, configured):
-    value = prefs.AnalysisPreferences(analysis_mode=mode)
+def test_explicit_opt_out_never_authorizes_paid_screening(mode, configured):
+    value = prefs.AnalysisPreferences(analysis_mode=mode, allow_visual_screening=False)
     assert not prefs.visual_screening_allowed(value, vision_configured=configured)
 
 
@@ -54,13 +60,13 @@ def test_save_round_trip_does_not_change_model_configuration(tmp_path):
     assert prefs.load() == value
     assert model.read_bytes() == before
     assert json.loads(prefs.settings_path().read_text()) == value.model_dump()
-    prefs.save(prefs.AnalysisPreferences())
+    prefs.save(prefs.AnalysisPreferences(analysis_mode='subtitle'))
     assert prefs.load().analysis_mode == 'subtitle'
     assert not prefs.load().allow_visual_screening
 
 
 def test_failed_atomic_replace_preserves_previous_settings(tmp_path, monkeypatch):
-    prefs.save(prefs.AnalysisPreferences())
+    prefs.save(prefs.AnalysisPreferences(analysis_mode='subtitle'))
     def fail(*args): raise OSError('simulated disk error')
     monkeypatch.setattr(prefs.os, 'replace', fail)
     with pytest.raises(OSError): prefs.save(prefs.AnalysisPreferences(analysis_mode='visual'))
@@ -141,3 +147,12 @@ def test_text_model_mode_without_endpoint_is_unconfigured(monkeypatch):
     assert vision_settings.public()['configured'] is False
     with pytest.raises(ValueError, match='另选视觉模型'):
         vision_settings.test(vision_settings.VisionSettingsInput(mode='text_model'))
+
+
+def test_text_only_model_is_not_used_for_vision(monkeypatch):
+    monkeypatch.setattr(vision_settings, '_environment', lambda: None)
+    _use_text_model(monkeypatch, {'base_url': 'https://api.deepseek.com', 'api_key': 'sk-ds', 'model': 'deepseek-flash'})
+    public = vision_settings.public()
+    assert public['configured'] is False and public['text_only'] is True
+    from backend.services.studio import intelligence
+    assert intelligence.ready() is False

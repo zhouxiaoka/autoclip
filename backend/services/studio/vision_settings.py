@@ -1,7 +1,8 @@
 """视觉理解模型配置。
 
 默认复用文本模型（mode=text_model）：同一个提供商、key、模型直接发图片消息，用户只配一次。
-文本模型不能看图时，再另选一个 OpenAI 兼容的视觉接口（mode=custom）。
+模型是否多模态由 model_catalog.supports_vision 判断；仅文字的模型视为「不能看画面」，
+视觉分析与视觉初筛自动不启用，只用字幕。旧版独立视觉接口（mode=custom）仍然兼容。
 
 兼容旧数据：已有 vision-settings.json 但没有 mode 字段的，视为 custom；
 没保存过、但 .env 里配了 AUTOCLIP_VISION_BASE_URL 的（Docker），也按 custom 用环境变量。
@@ -89,8 +90,13 @@ def text_model_endpoint():
 
 
 def _with_text_model(stored):
+    from backend.core.model_catalog import supports_vision
     endpoint = text_model_endpoint() or {'base_url': '', 'api_key': '', 'model': ''}
-    return {**endpoint, 'mode': 'text_model', 'timeout': stored.get('timeout', 180),
+    text_model = endpoint.get('model', '')
+    if not supports_vision(text_model):
+        # 仅文字模型：不当成视觉端点，避免把图片发给不支持的模型
+        endpoint = {'base_url': '', 'api_key': '', 'model': ''}
+    return {**endpoint, 'mode': 'text_model', 'text_model': text_model, 'timeout': stored.get('timeout', 180),
             'verified': stored.get('verified')}
 
 
@@ -121,6 +127,8 @@ def public(config=None):
         'source': value.get('source', ''),
         'has_key': bool(value.get('api_key')),
         'configured': bool(value.get('base_url') and value.get('model')),
+        # 跟随文本模型但它只能处理文字
+        'text_only': value.get('mode') == 'text_model' and bool(value.get('text_model')) and not value.get('model'),
         # 当前端点测试通过过才算「能看图」；换了模型或地址就失效
         'verified': bool(verified) and verified.get('fingerprint') == _fingerprint(value),
         'verified_at': verified.get('at') if verified.get('fingerprint') == _fingerprint(value) else None,

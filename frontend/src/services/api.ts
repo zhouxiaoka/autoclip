@@ -275,6 +275,8 @@ export const settingsApi = {
     default_model: string
     models: string[]
     catalog: Record<string, string[]>
+    vision_models?: string[]
+    image_models?: string[]
     error?: string
   }> => {
     return api.get('/settings/available-models', {

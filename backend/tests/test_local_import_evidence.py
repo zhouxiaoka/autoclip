@@ -5,7 +5,7 @@ from backend.services.studio.models import ImportOptions
 
 @pytest.fixture
 def video(tmp_path,monkeypatch):
-    monkeypatch.setattr(analysis_preferences,'load',lambda:analysis_preferences.AnalysisPreferences())
+    monkeypatch.setattr(analysis_preferences,'load',lambda:analysis_preferences.AnalysisPreferences(analysis_mode='subtitle'))
     monkeypatch.setattr(intelligence,'_probe',lambda _:{'duration':20,'width':1920,'height':1080})
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**k:pytest.fail('no visual call'))

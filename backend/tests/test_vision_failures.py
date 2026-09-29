@@ -94,7 +94,7 @@ def test_stage_annotation_and_quick_fallback_preserve_diagnostics(monkeypatch):
 
 def test_unapproved_screening_does_not_attempt_provider_or_fabricate_timeout(monkeypatch):
     from backend.services.studio import analysis_preferences as ap
-    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences())
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto', allow_visual_screening=False))
     monkeypatch.setattr(vision, 'ready', lambda: True)
     monkeypatch.setattr(vision, '_probe', lambda _: {'duration': 20})
     monkeypatch.setattr(vision, 'vision_call', lambda *a, **k: pytest.fail('unapproved provider call'))
