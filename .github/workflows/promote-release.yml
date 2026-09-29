@@ -1,0 +1,78 @@
+# 发版分两步：tag 触发 desktop-build.yml 先发 Pre-release（应用内更新拿不到），
+# 真机冒烟和观察期过了再跑这里转正。发现坏版本时用 halt 让应用内更新退回上一个好版本。
+# 流程见 RELEASE_CHECKLIST.md。
+name: Promote / Halt Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "版本 tag，例如 v1.4.1"
+        required: true
+        type: string
+      action:
+        description: "promote = 转正并推给所有用户；halt = 撤下该版本，应用内更新退回 fallback_tag"
+        required: true
+        type: choice
+        options: [promote, halt]
+      fallback_tag:
+        description: "halt 时恢复为最新的好版本，例如 v1.4.0（promote 时忽略）"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ inputs.tag }}
+      FALLBACK: ${{ inputs.fallback_tag }}
+      WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+    steps:
+      - name: Check release assets
+        run: |
+          set -e
+          assets=$(gh release view "$TAG" --json assets -q '.assets[].name')
+          echo "$assets"
+          if [ "${{ inputs.action }}" = "promote" ]; then
+            echo "$assets" | grep -q '^latest.json$' || { echo "::error::$TAG 缺少 latest.json，应用内更新会拿不到"; exit 1; }
+            echo "$assets" | grep -q '\.dmg$' || { echo "::error::$TAG 缺少 macOS DMG"; exit 1; }
+            echo "$assets" | grep -q 'setup\.exe$' || { echo "::error::$TAG 缺少 Windows 安装包"; exit 1; }
+          fi
+
+      - name: Promote
+        if: inputs.action == 'promote'
+        run: |
+          gh release edit "$TAG" --prerelease=false --latest
+          echo "$TAG 已转正：releases/latest/download/latest.json 现在指向它" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Halt
+        if: inputs.action == 'halt'
+        run: |
+          set -e
+          [ -n "$FALLBACK" ] || { echo "::error::halt 需要 fallback_tag"; exit 1; }
+          gh release view "$FALLBACK" --json assets -q '.assets[].name' | grep -q '^latest.json$' \
+            || { echo "::error::$FALLBACK 没有 latest.json，不能作为回退目标"; exit 1; }
+          gh release edit "$FALLBACK" --prerelease=false --latest
+          gh release edit "$TAG" --prerelease=true
+          {
+            echo "$TAG 已撤回为 Pre-release，应用内更新退回 $FALLBACK。"
+            echo "已经升级到 $TAG 的用户不会被降级，需要尽快发补丁版。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 通知官网仓库更新版本号 / 下载链接（autoclip_intro/.github/workflows/sync-release.yml）。
+      # 没配 WEBSITE_DISPATCH_TOKEN 就跳过，官网每日 cron 兜底。见 scripts/website/README.md。
+      - name: Notify website (repository_dispatch)
+        if: env.WEBSITE_DISPATCH_TOKEN != ''
+        run: |
+          current="$TAG"; [ "${{ inputs.action }}" = "halt" ] && current="$FALLBACK"
+          curl -sS -f -X POST \
+            -H "Authorization: Bearer $WEBSITE_DISPATCH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/zhouxiaoka/autoclip_intro/dispatches \
+            -d "{\"event_type\":\"autoclip-release\",\"client_payload\":{\"tag\":\"$current\"}}"
+          echo "已通知官网同步到 $current"
