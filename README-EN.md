@@ -77,7 +77,7 @@ Click any thumbnail to view the full image.
     <td width="50%" valign="top">
       <h4>Find highlights</h4>
       <p>Extract outlines, topic timelines, highlight scores, and clip titles from transcripts.</p>
-      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Find highlights" width="420"></a>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Find highlights" width="260"></a>
     </td>
   </tr>
   <tr>

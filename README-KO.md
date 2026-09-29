@@ -77,7 +77,7 @@ AutoClip은 AI로 영상 자막을 분석하고 하이라이트를 찾아 제목
     <td width="50%" valign="top">
       <h4>하이라이트 찾기</h4>
       <p>자막에서 개요, 주제별 시간 구간, 하이라이트 점수, 클립 제목을 추출합니다.</p>
-      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="하이라이트 찾기" width="420"></a>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="하이라이트 찾기" width="260"></a>
     </td>
   </tr>
   <tr>

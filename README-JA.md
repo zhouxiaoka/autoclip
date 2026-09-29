@@ -77,7 +77,7 @@ AutoClip は AI で動画の字幕を分析し、見どころを抽出してタ�
     <td width="50%" valign="top">
       <h4>見どころの抽出</h4>
       <p>字幕から概要、トピックの時間範囲、評価スコア、クリップのタイトルを生成します。</p>
-      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="見どころの抽出" width="420"></a>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="見どころの抽出" width="260"></a>
     </td>
   </tr>
   <tr>

@@ -77,7 +77,7 @@ Clique em uma miniatura para ver a imagem completa.
     <td width="50%" valign="top">
       <h4>Encontrar destaques</h4>
       <p>Extraia resumos, intervalos por assunto, pontuações e títulos a partir das legendas.</p>
-      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Encontrar destaques" width="420"></a>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Encontrar destaques" width="260"></a>
     </td>
   </tr>
   <tr>

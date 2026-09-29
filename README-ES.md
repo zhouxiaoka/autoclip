@@ -77,7 +77,7 @@ Haz clic en una miniatura para ver la imagen completa.
     <td width="50%" valign="top">
       <h4>Encontrar momentos destacados</h4>
       <p>Extrae resúmenes, intervalos por tema, puntuaciones y títulos a partir de los subtítulos.</p>
-      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Encontrar momentos destacados" width="420"></a>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Encontrar momentos destacados" width="260"></a>
     </td>
   </tr>
   <tr>

@@ -77,7 +77,7 @@ Cliquez sur une miniature pour voir l’image en grand.
     <td width="50%" valign="top">
       <h4>Repérer les temps forts</h4>
       <p>Extrayez des plans, des plages temporelles par sujet, des scores et des titres à partir des sous-titres.</p>
-      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Repérer les temps forts" width="420"></a>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Repérer les temps forts" width="260"></a>
     </td>
   </tr>
   <tr>

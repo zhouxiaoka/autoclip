@@ -77,7 +77,7 @@
     <td width="50%" valign="top">
       <h4>AI 内容分析</h4>
       <p>基于字幕生成大纲与话题时间线，为片段评分、提取标题。</p>
-      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="AI 内容分析" width="420"></a>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="AI 内容分析" width="260"></a>
     </td>
   </tr>
   <tr>

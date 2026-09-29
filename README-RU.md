@@ -77,7 +77,7 @@ AutoClip с помощью ИИ анализирует субтитры, нах�
     <td width="50%" valign="top">
       <h4>Поиск ярких моментов</h4>
       <p>Создание плана, временных интервалов по темам, оценок фрагментов и заголовков на основе субтитров.</p>
-      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Поиск ярких моментов" width="420"></a>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Поиск ярких моментов" width="260"></a>
     </td>
   </tr>
   <tr>
