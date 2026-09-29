@@ -17,6 +17,7 @@ GUIDES = (
     "docs/USER_INSTALLATION_GUIDE.md", "docs/USER_INSTALLATION_GUIDE.en.md",
     "docs/FAQ.md", "docs/FAQ.en.md", "docs/images/README.md",
     "CONTRIBUTING.md", "docs/MULTI_LLM_PROVIDER_GUIDE.md",
+    "docs/INFISTAR_SETUP.md", "docs/INFISTAR_SETUP.en.md",
 )
 FENCES = re.compile(r"^```[^\n]*\n(.*?)^```\s*$", re.MULTILINE | re.DOTALL)
 LINKS = re.compile(r'\]\(([^\s)]+)\)|(?:href|src)="([^"]+)"')
