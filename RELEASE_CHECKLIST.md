@@ -55,7 +55,21 @@
 - [ ] **macOS**：同上四项（首次打开仍需右键打开，直到完成公证）
 - [ ] 本版 CHANGELOG 里每条修复，至少在一台机器上亲手确认过
 
-没有干净的 Windows 机器时，至少要 Windows CI 打包冒烟全绿（待建，见 `docs/PROJECT_REVIEW_2026-09-29.md` P1-4），并在 Release 正文里写明「Windows 未经真机验收」。
+#### 没有 Windows 真机时（当前情况）
+
+Windows 验收分三层，前两层必须过，第三层补上界面和真实网络：
+
+1. **CI 自动冒烟（必须，tag 构建自动跑，不过就不会出 Release）**：`desktop-build.yml` 的 `smoke-windows-x64` 在干净的 windows-latest 上
+   装上一个正式版 → 模拟残留后端占住 `_asyncio.pyd` → 静默覆盖安装本次构建 → 用安装目录自带的 Python 跑 `scripts/verify_windows_install.py`
+   （内置 ffmpeg 出片、中文文件名、yt-dlp 拿到 ffmpeg、桌面后端启动、来源守卫）。覆盖了近两周 Windows 反馈里的主要故障点，
+   但**看不到界面**，也不下载真实链接。
+2. **Mac 上的 Windows 虚拟机（必须，约 15 分钟）**：Parallels Desktop / VMware Fusion + Windows 11 ARM（x64 安装包可在 ARM 版 Windows 上仿真运行），
+   或 UTM（免费）。做一次快照当「干净机器」，每次发版还原快照后走上面四项。这是界面、WebView2、真实下载唯一能亲眼看的地方。
+   仿真环境里性能和个别驱动行为和真机不同，记录时注明「ARM 虚拟机」。
+3. **Pre-release 测试者（建议）**：在 Discussions 里招 3–5 位 Windows 用户（优先找报过 #163 #173 #183 这类问题的人），
+   Pre-release 发出后 @ 他们装上试一条自己的视频，在观察期内回帖。有人确认通过再转正。
+
+第 2 层做不了的那一次发版，要在 Release 正文顶部写明「本版 Windows 仅经 CI 冒烟验收，未经界面验收」，并把观察期延长到 48 小时。
 
 ### 3.4 观察期（24 小时，热修版可缩短到 4 小时）
 - [ ] Sentry：新版本的错误数 / 受影响用户数，和上一版同期对比，没有新的高频错误
