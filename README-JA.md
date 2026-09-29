@@ -68,14 +68,66 @@ AutoClip は AI で動画の字幕を分析し、見どころを抽出してタ�
 ### 長い動画から見どころを抽出
 
 - **動画の読み込み**: ローカル動画、YouTube、Bilibili のリンクに対応。SRT 字幕も指定できます。
+
+<details>
+<summary>画面を見る · 動画の読み込み</summary>
+
+![動画の読み込み](docs/images/feature-import.png)
+
+</details>
+
 - **見どころの抽出**: 字幕から概要、トピックの時間範囲、評価スコア、クリップのタイトルを生成します。
+
+<details>
+<summary>画面を見る · 見どころの抽出</summary>
+
+![見どころの抽出](docs/images/clips-v1.4.0.png)
+
+</details>
+
 - **クリップとまとめ動画**: クリップとおすすめのまとめ動画を生成し、順序を手動で変更できます。
+
+<details>
+<summary>画面を見る · クリップとまとめ動画</summary>
+
+![クリップとまとめ動画](docs/images/feature-collections.png)
+
+</details>
+
 
 ### 書き出しと投稿
 
 - **公開用の書き出し**: Douyin、小紅書、YouTube Shorts、Bilibili 向けのプリセット、字幕の焼き込み、タイトルカードに対応します。
+
+<details>
+<summary>画面を見る · 公開用の書き出し</summary>
+
+![公開用の書き出し](docs/images/feature-export.png)
+
+</details>
+
 - **カバーと投稿**：v1.3.2 以降はカバーの自動生成、即時投稿、予約投稿に対応。海外プラットフォームは自分の Upload-Post アカウントで連携し、Bilibili は別途設定します。
+
+<details>
+<summary>画面を見る · カバーと投稿</summary>
+
+![カバーと投稿](docs/images/feature-publish.png)
+
+![カバーと投稿](docs/images/feature-cover.png)
+
+このデモには投稿アカウントを接続していません。投稿入口とカバー設定の画面であり、投稿済みの結果ではありません。
+
+</details>
+
 - **投稿管理**：投稿履歴とカレンダーで予約を管理できます。投稿せず、動画をダウンロードすることも可能です。
+
+<details>
+<summary>画面を見る · 投稿管理</summary>
+
+![投稿管理](docs/images/feature-calendar.png)
+
+</details>
+
 
 <details>
 <summary>対応プラットフォーム・アカウント・書き出しの詳細</summary>
@@ -99,8 +151,36 @@ Bilibili はアカウント 1 つです。 設定で Cookie を一度貼り付�
 ### 使い方に合わせて選択
 
 - **モデルを選択**：Qwen、OpenAI 互換 API、Gemini などのクラウドサービス、または Ollama / LM Studio のローカルモデルを利用できます。
+
+<details>
+<summary>画面を見る · モデルを選択</summary>
+
+![モデルを選択](docs/images/feature-models.png)
+
+</details>
+
 - **自動化**: CLI で処理を組み合わせたり、MCP クライアントから同じ処理パイプラインを呼び出したりできます。
+
+<details>
+<summary>画面を見る · 自動化</summary>
+
+![自動化](docs/images/feature-cli.png)
+
+CLI / MCP に GUI はありません。実際のコマンドヘルプ出力を表示したページのスクリーンショットです。
+
+</details>
+
 - **多言語インターフェース**: v1.3.1 から、アプリ、公式サイト、README は中国語・英語・日本語・韓国語・スペイン語・ポルトガル語・ロシア語・フランス語に対応しています。ヘッダーで言語を選択するか、システム設定に従えます。素材と生成内容の言語は変わりません。
+
+<details>
+<summary>画面を見る · 多言語インターフェース</summary>
+
+![多言語インターフェース](docs/images/feature-languages.png)
+
+英語の UI と言語選択メニューです。素材と生成内容は元の言語を保持します。
+
+</details>
+
 
 > 動画を読み込み → 字幕の準備 / 文字起こし → AI 分析・評価 → クリップとまとめ動画を生成 → 書き出し
 

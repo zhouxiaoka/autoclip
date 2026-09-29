@@ -68,14 +68,66 @@ AutoClip utiliza IA para analizar los subtítulos de un vídeo, encontrar moment
 ### Encuentra momentos destacados
 
 - **Importar vídeos**: Usa archivos locales o enlaces de YouTube y Bilibili, con subtítulos SRT opcionales.
+
+<details>
+<summary>Ver captura · Importar vídeos</summary>
+
+![Importar vídeos](docs/images/feature-import.png)
+
+</details>
+
 - **Encontrar momentos destacados**: Extrae resúmenes, intervalos por tema, puntuaciones y títulos a partir de los subtítulos.
+
+<details>
+<summary>Ver captura · Encontrar momentos destacados</summary>
+
+![Encontrar momentos destacados](docs/images/clips-v1.4.0.png)
+
+</details>
+
 - **Crear clips y recopilaciones**: Genera clips y recopilaciones sugeridas, y ajusta su orden manualmente.
+
+<details>
+<summary>Ver captura · Crear clips y recopilaciones</summary>
+
+![Crear clips y recopilaciones](docs/images/feature-collections.png)
+
+</details>
+
 
 ### Exporta y publica
 
 - **Exportar para publicar**: Usa ajustes para Douyin, Xiaohongshu, YouTube Shorts y Bilibili, con subtítulos incrustados y tarjetas de título.
+
+<details>
+<summary>Ver captura · Exportar para publicar</summary>
+
+![Exportar para publicar](docs/images/feature-export.png)
+
+</details>
+
 - **Portadas y publicación**: Desde v1.3.2, genera portadas y publica de inmediato o con programación. Conecta plataformas internacionales mediante tu cuenta de Upload-Post; Bilibili se configura por separado.
+
+<details>
+<summary>Ver captura · Portadas y publicación</summary>
+
+![Portadas y publicación](docs/images/feature-publish.png)
+
+![Portadas y publicación](docs/images/feature-cover.png)
+
+La demo no tiene una cuenta de publicación conectada. Se muestran la entrada de publicación y los ajustes de portada, no publicaciones completadas.
+
+</details>
+
 - **Gestión de publicaciones**: Consulta el historial y el calendario, administra publicaciones pendientes o descarga los clips sin publicarlos.
+
+<details>
+<summary>Ver captura · Gestión de publicaciones</summary>
+
+![Gestión de publicaciones](docs/images/feature-calendar.png)
+
+</details>
+
 
 <details>
 <summary>Plataformas, requisitos de cuenta y detalles de exportación</summary>
@@ -97,8 +149,36 @@ Los detalles de la portada y la tarjeta de título por defecto siguen las notas 
 ### Trabaja a tu manera
 
 - **Elige tus modelos**: Qwen, API compatibles con OpenAI, Gemini y otros servicios en la nube, o modelos locales con Ollama / LM Studio.
+
+<details>
+<summary>Ver captura · Elige tus modelos</summary>
+
+![Elige tus modelos](docs/images/feature-models.png)
+
+</details>
+
 - **Automatizar tareas**: Organiza ejecuciones con la CLI o llama al mismo flujo de procesamiento desde un cliente MCP.
+
+<details>
+<summary>Ver captura · Automatizar tareas</summary>
+
+![Automatizar tareas](docs/images/feature-cli.png)
+
+CLI / MCP no tiene GUI: la captura muestra una página con la salida real de ayuda de los comandos.
+
+</details>
+
 - **Interfaz multilingüe**: Desde v1.3.1, la aplicación, el sitio web y el README admiten chino, inglés, japonés, coreano, español, portugués, ruso y francés. Elige el idioma en la cabecera o sigue el del sistema. Tus archivos y el contenido generado conservan su idioma original.
+
+<details>
+<summary>Ver captura · Interfaz multilingüe</summary>
+
+![Interfaz multilingüe](docs/images/feature-languages.png)
+
+Interfaz en inglés y menú de idiomas; los medios y el contenido generado mantienen su idioma original.
+
+</details>
+
 
 > Importar vídeo → Subtítulos / transcripción → Análisis y puntuación con IA → Clips y recopilaciones → Exportación
 

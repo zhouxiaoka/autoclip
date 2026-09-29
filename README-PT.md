@@ -68,14 +68,66 @@ O AutoClip usa IA para analisar legendas, encontrar destaques, criar títulos e 
 ### Encontre destaques em vídeos longos
 
 - **Importar vídeos**: Use arquivos locais ou links do YouTube e Bilibili, com legendas SRT opcionais.
+
+<details>
+<summary>Ver captura · Importar vídeos</summary>
+
+![Importar vídeos](docs/images/feature-import.png)
+
+</details>
+
 - **Encontrar destaques**: Extraia resumos, intervalos por assunto, pontuações e títulos a partir das legendas.
+
+<details>
+<summary>Ver captura · Encontrar destaques</summary>
+
+![Encontrar destaques](docs/images/clips-v1.4.0.png)
+
+</details>
+
 - **Criar clipes e coletâneas**: Gere clipes e coletâneas sugeridas e ajuste a ordem manualmente.
+
+<details>
+<summary>Ver captura · Criar clipes e coletâneas</summary>
+
+![Criar clipes e coletâneas](docs/images/feature-collections.png)
+
+</details>
+
 
 ### Exporte e publique
 
 - **Exportar para publicar**: Use predefinições para Douyin, Xiaohongshu, YouTube Shorts e Bilibili, com legendas embutidas e cartões de título.
+
+<details>
+<summary>Ver captura · Exportar para publicar</summary>
+
+![Exportar para publicar](docs/images/feature-export.png)
+
+</details>
+
 - **Capas e publicação**: Desde a v1.3.2, gere capas e publique imediatamente ou com agendamento. Conecte plataformas internacionais pela sua conta Upload-Post; o Bilibili é configurado separadamente.
+
+<details>
+<summary>Ver captura · Capas e publicação</summary>
+
+![Capas e publicação](docs/images/feature-publish.png)
+
+![Capas e publicação](docs/images/feature-cover.png)
+
+A demonstração não tem uma conta de publicação conectada. As imagens mostram a entrada de publicação e as configurações de capa, não publicações concluídas.
+
+</details>
+
 - **Gerenciamento de publicações**: Consulte o histórico e o calendário, gerencie publicações pendentes ou apenas baixe os clipes.
+
+<details>
+<summary>Ver captura · Gerenciamento de publicações</summary>
+
+![Gerenciamento de publicações](docs/images/feature-calendar.png)
+
+</details>
+
 
 <details>
 <summary>Plataformas, requisitos de conta e detalhes de exportação</summary>
@@ -97,8 +149,36 @@ Os detalhes da capa e do cartão de título padrão seguem as notas desse instal
 ### Trabalhe do seu jeito
 
 - **Escolha os modelos**: Qwen, APIs compatíveis com OpenAI, Gemini e outros serviços em nuvem, ou modelos locais pelo Ollama / LM Studio.
+
+<details>
+<summary>Ver captura · Escolha os modelos</summary>
+
+![Escolha os modelos](docs/images/feature-models.png)
+
+</details>
+
 - **Automatizar tarefas**: Organize execuções pela CLI ou acesse o mesmo fluxo de processamento por um cliente MCP.
+
+<details>
+<summary>Ver captura · Automatizar tarefas</summary>
+
+![Automatizar tarefas](docs/images/feature-cli.png)
+
+CLI / MCP não tem GUI: a captura mostra uma página com a saída real da ajuda dos comandos.
+
+</details>
+
 - **Interface multilíngue**: A partir da v1.3.1, o aplicativo, o site e o README oferecem chinês, inglês, japonês, coreano, espanhol, português, russo e francês. Escolha o idioma no cabeçalho ou siga o sistema. Seus arquivos e o conteúdo gerado mantêm o idioma original.
+
+<details>
+<summary>Ver captura · Interface multilíngue</summary>
+
+![Interface multilíngue](docs/images/feature-languages.png)
+
+Interface em inglês e menu de idiomas; a mídia e o conteúdo gerado mantêm o idioma original.
+
+</details>
+
 
 > Importar vídeo → Legendas / transcrição → Análise e pontuação por IA → Clipes e coletâneas → Exportação
 

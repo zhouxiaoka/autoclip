@@ -68,14 +68,66 @@
 ### 从长视频中发现高光
 
 - **多种导入方式**：本地视频、YouTube 或 B 站链接，可附带 SRT 字幕；无字幕时可使用本地 Whisper 转写。
+
+<details>
+<summary>查看界面 · 多种导入方式</summary>
+
+![多种导入方式](docs/images/feature-import.png)
+
+</details>
+
 - **AI 内容分析**：基于字幕生成大纲与话题时间线，为片段评分、提取标题。
+
+<details>
+<summary>查看界面 · AI 内容分析</summary>
+
+![AI 内容分析](docs/images/clips-v1.4.0.png)
+
+</details>
+
 - **片段与合集**：自动生成切片，预览结果，并按需要调整合集顺序。
+
+<details>
+<summary>查看界面 · 片段与合集</summary>
+
+![片段与合集](docs/images/feature-collections.png)
+
+</details>
+
 
 ### 导出与发布
 
 - **多平台导出**：提供抖音、小红书、YouTube Shorts 和 B 站预设，支持烧录字幕与标题卡。
+
+<details>
+<summary>查看界面 · 多平台导出</summary>
+
+![多平台导出](docs/images/feature-export.png)
+
+</details>
+
 - **封面与发布**：自 v1.3.2 起支持自动封面、立即发布和定时发布；海外平台通过 Upload-Post 连接，B 站单独配置。
+
+<details>
+<summary>查看界面 · 封面与发布</summary>
+
+![封面与发布](docs/images/feature-publish.png)
+
+![封面与发布](docs/images/feature-cover.png)
+
+演示环境未连接发布账号；这里展示发布入口和封面设置，并非已发布结果。
+
+</details>
+
 - **发布管理**：查看发布记录与月历，管理待发布任务；也可只下载成片。
+
+<details>
+<summary>查看界面 · 发布管理</summary>
+
+![发布管理](docs/images/feature-calendar.png)
+
+</details>
+
 
 <details>
 <summary>查看发布平台、账号要求与导出细节</summary>
@@ -93,8 +145,36 @@
 ### 按你的工作方式使用
 
 - **模型可选**：支持通义千问、OpenAI 兼容接口、Gemini 等云端服务，以及 Ollama / LM Studio 本地模型。
+
+<details>
+<summary>查看界面 · 模型可选</summary>
+
+![模型可选](docs/images/feature-models.png)
+
+</details>
+
 - **批量与 Agent 工作流**：用 CLI 编排批量任务，或通过 MCP 调用视频处理能力。
+
+<details>
+<summary>查看界面 · 批量与 Agent 工作流</summary>
+
+![批量与 Agent 工作流](docs/images/feature-cli.png)
+
+CLI / MCP 无图形界面：此图是实际命令帮助输出的展示页截图。
+
+</details>
+
 - **多语言界面**：支持中、英、日、韩、西、葡、俄、法，可在顶栏切换或跟随系统；素材与生成内容保留原文。
+
+<details>
+<summary>查看界面 · 多语言界面</summary>
+
+![多语言界面](docs/images/feature-languages.png)
+
+英文界面与语言选择菜单；素材和生成内容保持原语言。
+
+</details>
+
 
 > 导入视频 → 字幕 / 语音转写 → AI 分析 → 片段与合集 → 导出 / 发布
 

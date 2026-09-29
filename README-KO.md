@@ -68,14 +68,66 @@ AutoClip은 AI로 영상 자막을 분석하고 하이라이트를 찾아 제목
 ### 긴 영상에서 하이라이트 찾기
 
 - **영상 가져오기**: 로컬 영상, YouTube 및 Bilibili 링크를 지원하며 SRT 자막을 추가할 수 있습니다.
+
+<details>
+<summary>화면 보기 · 영상 가져오기</summary>
+
+![영상 가져오기](docs/images/feature-import.png)
+
+</details>
+
 - **하이라이트 찾기**: 자막에서 개요, 주제별 시간 구간, 하이라이트 점수, 클립 제목을 추출합니다.
+
+<details>
+<summary>화면 보기 · 하이라이트 찾기</summary>
+
+![하이라이트 찾기](docs/images/clips-v1.4.0.png)
+
+</details>
+
 - **클립과 모음 영상**: 클립과 추천 모음 영상을 생성하고 순서를 직접 조정할 수 있습니다.
+
+<details>
+<summary>화면 보기 · 클립과 모음 영상</summary>
+
+![클립과 모음 영상](docs/images/feature-collections.png)
+
+</details>
+
 
 ### 내보내기 및 게시
 
 - **게시용 내보내기**: Douyin, Xiaohongshu, YouTube Shorts, Bilibili 프리셋과 자막 삽입, 타이틀 카드를 지원합니다.
+
+<details>
+<summary>화면 보기 · 게시용 내보내기</summary>
+
+![게시용 내보내기](docs/images/feature-export.png)
+
+</details>
+
 - **표지 및 게시**: v1.3.2부터 표지 자동 생성, 즉시 게시, 예약 게시를 지원합니다. 해외 플랫폼은 본인의 Upload-Post 계정으로 연결하고 Bilibili는 별도로 설정합니다.
+
+<details>
+<summary>화면 보기 · 표지 및 게시</summary>
+
+![표지 및 게시](docs/images/feature-publish.png)
+
+![표지 및 게시](docs/images/feature-cover.png)
+
+이 데모에는 게시 계정이 연결되어 있지 않습니다. 게시 완료 결과가 아닌 게시 진입 화면과 표지 설정을 보여 줍니다.
+
+</details>
+
 - **게시 관리**: 게시 기록과 달력에서 예약을 관리할 수 있으며, 게시 없이 영상만 다운로드할 수도 있습니다.
+
+<details>
+<summary>화면 보기 · 게시 관리</summary>
+
+![게시 관리](docs/images/feature-calendar.png)
+
+</details>
+
 
 <details>
 <summary>지원 플랫폼, 계정 요건 및 내보내기 세부 정보</summary>
@@ -91,8 +143,36 @@ AutoClip은 AI로 영상 자막을 분석하고 하이라이트를 찾아 제목
 ### 작업 방식에 맞게 사용
 
 - **모델 선택**: Qwen, OpenAI 호환 API, Gemini 등 클라우드 서비스나 Ollama / LM Studio의 로컬 모델을 사용할 수 있습니다.
+
+<details>
+<summary>화면 보기 · 모델 선택</summary>
+
+![모델 선택](docs/images/feature-models.png)
+
+</details>
+
 - **자동화**: CLI로 작업을 구성하거나 MCP 클라이언트에서 동일한 처리 파이프라인을 호출할 수 있습니다.
+
+<details>
+<summary>화면 보기 · 자동화</summary>
+
+![자동화](docs/images/feature-cli.png)
+
+CLI / MCP에는 GUI가 없습니다. 실제 명령 도움말 출력을 표시한 페이지의 스크린샷입니다.
+
+</details>
+
 - **다국어 인터페이스**: v1.3.1부터 앱, 웹사이트, README는 중국어, 영어, 일본어, 한국어, 스페인어, 포르투갈어, 러시아어, 프랑스어를 지원합니다. 상단에서 언어를 선택하거나 시스템 설정을 따를 수 있습니다. 원본 미디어와 생성 콘텐츠의 언어는 변경되지 않습니다.
+
+<details>
+<summary>화면 보기 · 다국어 인터페이스</summary>
+
+![다국어 인터페이스](docs/images/feature-languages.png)
+
+영어 UI와 언어 선택 메뉴입니다. 미디어와 생성된 콘텐츠는 원래 언어를 유지합니다.
+
+</details>
+
 
 > 영상 가져오기 → 자막 준비 / 음성 전사 → AI 분석 및 평가 → 클립과 모음 영상 생성 → 내보내기
 

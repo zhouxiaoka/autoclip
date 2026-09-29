@@ -68,14 +68,66 @@ AutoClip utilise l’IA pour analyser les sous-titres, repérer les temps forts,
 ### Repérez les temps forts de vos vidéos
 
 - **Importer des vidéos**: Utilisez des fichiers locaux ou des liens YouTube et Bilibili, avec des sous-titres SRT facultatifs.
+
+<details>
+<summary>Voir la capture · Importer des vidéos</summary>
+
+![Importer des vidéos](docs/images/feature-import.png)
+
+</details>
+
 - **Repérer les temps forts**: Extrayez des plans, des plages temporelles par sujet, des scores et des titres à partir des sous-titres.
+
+<details>
+<summary>Voir la capture · Repérer les temps forts</summary>
+
+![Repérer les temps forts](docs/images/clips-v1.4.0.png)
+
+</details>
+
 - **Créer des extraits et des compilations**: Générez des extraits et des compilations suggérées, puis ajustez leur ordre manuellement.
+
+<details>
+<summary>Voir la capture · Créer des extraits et des compilations</summary>
+
+![Créer des extraits et des compilations](docs/images/feature-collections.png)
+
+</details>
+
 
 ### Exportez et publiez
 
 - **Exporter pour publier**: Profils pour Douyin, Xiaohongshu, YouTube Shorts et Bilibili, avec sous-titres incrustés et cartons de titre.
+
+<details>
+<summary>Voir la capture · Exporter pour publier</summary>
+
+![Exporter pour publier](docs/images/feature-export.png)
+
+</details>
+
 - **Couvertures et publication** : Depuis la v1.3.2, générez des couvertures et publiez immédiatement ou à une date programmée. Connectez les plateformes internationales via votre compte Upload-Post ; Bilibili se configure séparément.
+
+<details>
+<summary>Voir la capture · Couvertures et publication</summary>
+
+![Couvertures et publication](docs/images/feature-publish.png)
+
+![Couvertures et publication](docs/images/feature-cover.png)
+
+Aucun compte de publication n’est connecté dans cette démonstration. Les images montrent l’accès à la publication et les réglages de couverture, pas des publications effectuées.
+
+</details>
+
 - **Gestion des publications** : Consultez l’historique et le calendrier, gérez les publications en attente ou téléchargez simplement vos extraits.
+
+<details>
+<summary>Voir la capture · Gestion des publications</summary>
+
+![Gestion des publications](docs/images/feature-calendar.png)
+
+</details>
+
 
 <details>
 <summary>Plateformes, comptes requis et détails d’exportation</summary>
@@ -97,8 +149,36 @@ Disponible dans la **v1.3.2**.
 ### Adaptez l’outil à votre usage
 
 - **Choix des modèles** : Qwen, API compatibles avec OpenAI, Gemini et autres services cloud, ou modèles locaux via Ollama / LM Studio.
+
+<details>
+<summary>Voir la capture · Choix des modèles</summary>
+
+![Choix des modèles](docs/images/feature-models.png)
+
+</details>
+
 - **Automatiser les tâches**: Orchestrez les traitements avec la CLI ou appelez le même pipeline depuis un client MCP.
+
+<details>
+<summary>Voir la capture · Automatiser les tâches</summary>
+
+![Automatiser les tâches](docs/images/feature-cli.png)
+
+CLI / MCP n’a pas d’interface graphique : cette capture montre une page affichant la sortie réelle de l’aide des commandes.
+
+</details>
+
 - **Interface multilingue**: Depuis la v1.3.1, l’application, le site et le README sont disponibles en chinois, anglais, japonais, coréen, espagnol, portugais, russe et français. Choisissez la langue dans l’en-tête ou suivez celle du système. Vos médias et le contenu généré conservent leur langue d’origine.
+
+<details>
+<summary>Voir la capture · Interface multilingue</summary>
+
+![Interface multilingue](docs/images/feature-languages.png)
+
+Interface en anglais et menu des langues ; les médias et le contenu généré conservent leur langue d’origine.
+
+</details>
+
 
 > Importer une vidéo → Sous-titres / transcription → Analyse et évaluation par IA → Extraits et compilations → Export
 
