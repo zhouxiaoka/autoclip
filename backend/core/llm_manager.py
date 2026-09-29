@@ -304,6 +304,45 @@ class LLMManager:
         self._reload_if_settings_changed()
         value = self.settings.get(name)
         return default if value is None else value
+
+    def openai_compatible_endpoint(self) -> Optional[Dict[str, str]]:
+        """当前文本模型对应的 OpenAI 兼容 Chat Completions 地址、key、模型。
+
+        视觉理解默认复用文本模型：大多数提供商（Infistar / OpenAI / Gemini / Seed / Kimi / 通义…）
+        同一个 key 就能发图片消息。能不能看图由「测试图片理解」验证，这里只负责给出地址。
+        """
+        from backend.core.llm_providers import (
+            DASHSCOPE_CN_COMPATIBLE_BASE_URL, OPENAI_OFFICIAL_BASE_URL, normalize_base_url,
+        )
+        self._reload_if_settings_changed()
+        s = self.settings
+        provider = s.get("llm_provider", "dashscope")
+        model = (s.get("model_name") or "").strip()
+        if provider == "openai":
+            cloud_preset = s.get("cloud_preset")
+            if s.get("llm_provider_preset"):
+                key = ""
+            elif cloud_preset:
+                from backend.core.cloud_presets import CLOUD_PRESETS
+                key = s.get(CLOUD_PRESETS[cloud_preset].api_key_setting, "")
+            else:
+                key = s.get("openai_api_key", "")
+            base = normalize_base_url(s.get("openai_base_url")) or OPENAI_OFFICIAL_BASE_URL
+        elif provider == "dashscope":
+            key = s.get("dashscope_api_key", "")
+            base = normalize_base_url(s.get("dashscope_base_url")) or DASHSCOPE_CN_COMPATIBLE_BASE_URL
+        elif provider == "gemini":
+            key = s.get("gemini_api_key", "")
+            base = "https://generativelanguage.googleapis.com/v1beta/openai"
+        elif provider == "siliconflow":
+            from backend.core.model_catalog import SILICONFLOW_BASE_URL
+            key = s.get("siliconflow_api_key", "")
+            base = SILICONFLOW_BASE_URL
+        else:
+            return None
+        if not model:
+            return None
+        return {"base_url": base, "api_key": key or "", "model": model}
     
     def _get_api_key_for_provider(self, provider_type: ProviderType) -> Optional[str]:
         """获取指定提供商的API密钥"""

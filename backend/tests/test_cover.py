@@ -253,3 +253,42 @@ def test_model_failure_falls_back_to_local_or_frame(data_dir, fake_frame, monkey
     assert result["ok"]
     assert result["method"] in ("local_overlay", "frame")
     assert result.get("warning")
+
+
+class _TextSettings:
+    def __init__(self, settings):
+        self.settings = settings
+
+
+def _text_keys(monkeypatch, **keys):
+    from backend.core import llm_manager
+    monkeypatch.setattr(llm_manager, "get_llm_manager", lambda: _TextSettings(keys))
+
+
+def test_cover_reuses_same_family_text_key_without_persisting(data_dir, monkeypatch):
+    from backend.services import cover
+    for name in ("IMAGE_API_KEY", "IMAGE_PROVIDER", "IMAGE_BASE_URL", "IMAGE_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    _text_keys(monkeypatch, dashscope_api_key="sk-dashscope-text", seed_api_key="ark-seed", infistar_api_key="sk-infistar")
+    cover.save_config(enabled=True, provider="dashscope", model="wanx2.1-t2i-turbo")
+    cfg = cover.load_config()
+    assert cfg.api_key == "sk-dashscope-text" and cfg.key_source == "text_model"
+    assert "sk-dashscope-text" not in cover.config_path().read_text()
+    cover.save_config(provider="seedream")
+    assert cover.load_config().api_key == "ark-seed"
+    cover.save_config(provider="openai", base_url="https://infistar.cc/v1")
+    assert cover.load_config().api_key == "sk-infistar"
+    # 自己填的 key 优先，且会保存
+    cover.save_config(api_key="sk-own-cover-key")
+    cfg = cover.load_config()
+    assert cfg.api_key == "sk-own-cover-key" and cfg.key_source == "own"
+
+
+def test_cover_title_check_uses_vision_model_unless_overridden(data_dir, monkeypatch):
+    from backend.services import cover
+    from backend.services.studio import vision_settings
+    monkeypatch.setattr(vision_settings, "effective", lambda: {"base_url": "https://infistar.cc/v1", "api_key": "sk-v", "model": "gemini-3.8-flash"})
+    cfg = cover.CoverConfig(provider="seedream", model="doubao-seedream-5-0-260128", api_key="ark", base_url="https://ark.cn-beijing.volces.com/api/v3")
+    assert cover.verify_endpoint(cfg) == {"provider": "openai", "api_key": "sk-v", "base_url": "https://infistar.cc/v1", "model": "gemini-3.8-flash"}
+    cfg.ocr_model = "doubao-1.5-vision-pro-32k"
+    assert cover.verify_endpoint(cfg)["model"] == "doubao-1.5-vision-pro-32k"

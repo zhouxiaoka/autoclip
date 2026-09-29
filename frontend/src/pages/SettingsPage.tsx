@@ -1,15 +1,14 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Form, Input, Select, Switch, message } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { settingsApi } from '../services/api'
 import SpeechRecognitionConfig from '../components/SpeechRecognitionConfig'
-import AnalysisSettings from '../features/studio/AnalysisSettings'
-import VisionSettings from '../features/studio/VisionSettings'
+import AnalysisVisionSettings, { type AnalysisVisionHandle } from '../features/settings/AnalysisVisionSettings'
 import FeedbackDialog from '../components/FeedbackDialog'
 import PublishSettings from '../components/PublishSettings'
-import CoverSettings from '../components/CoverSettings'
+import CoverSettings, { type CoverSettingsHandle } from '../components/CoverSettings'
 import { isDesktopMode } from '../utils/desktopMode'
 import { openExternalLink } from '../utils/externalLinks'
 import { trackApiKeyConfigured, trackSponsorLinkOpened } from '../analytics/events'
@@ -121,17 +120,22 @@ const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
   seed: 'doubao-seed-2-1-lite-260915', kimi: 'kimi-k2.6', glm: 'glm-5.3', grok: 'grok-4.6', infistar: undefined,
 }
 
-type SectionKey = 'analysis' | 'vision' | 'model' | 'speech' | 'app' | 'publish' | 'cover' | 'feedback'
+// 分析方式 / 模型 / 视觉理解 / 转写 / 封面生图本是同一件事：「用什么让 AI 看懂视频、做出成片」，合成一页、一个保存
+type SectionKey = 'ai' | 'publish' | 'app' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
-  { key: 'analysis', get label() { return t('分析方式') } },
-  { key: 'model', get label() { return t("模型") } },
-  { key: 'vision', get label() { return t('视觉理解') } },
-  { key: 'speech', get label() { return t("转写") } },
-  { key: 'app', get label() { return t("应用") } },
+  { key: 'ai', get label() { return t("AI 分析") } },
   { key: 'publish', get label() { return t("发布") } },
-  { key: 'cover', get label() { return t("封面") } },
+  { key: 'app', get label() { return t("应用") } },
   { key: 'feedback', get label() { return t("反馈") } },
 ]
+// 旧链接（项目卡「模型设置」「转写设置」等）仍能打开，并滚到对应小节
+const SECTION_ALIASES: Record<string, { section: SectionKey; anchor?: string }> = {
+  model: { section: 'ai', anchor: 'ai-model' },
+  analysis: { section: 'ai', anchor: 'ai-analysis' },
+  vision: { section: 'ai', anchor: 'ai-analysis' },
+  speech: { section: 'ai', anchor: 'ai-speech' },
+  cover: { section: 'ai', anchor: 'ai-cover' },
+}
 
 // Calm Premium settings — left nav + setting rows (see DESIGN.md → App Layer)
 const SettingsPage: React.FC = () => {
@@ -139,10 +143,18 @@ const SettingsPage: React.FC = () => {
   const [form] = Form.useForm()
   const location = useLocation()
   const navigate = useNavigate()
-  const initialSection = useMemo<SectionKey>(() => {
-    const s = new URLSearchParams(location.search).get('section')
-    return (NAV.find((n) => n.key === s)?.key as SectionKey) || 'model'
-  }, [location.search])
+  const requested = new URLSearchParams(location.search).get('section') || ''
+  const initialSection = useMemo<SectionKey>(() => (
+    SECTION_ALIASES[requested]?.section || (NAV.find((n) => n.key === requested)?.key as SectionKey) || 'ai'
+  ), [requested])
+  const analysisRef = useRef<AnalysisVisionHandle>(null)
+  const coverRef = useRef<CoverSettingsHandle>(null)
+  const [speechOpen, setSpeechOpen] = useState(requested === 'speech')
+  useEffect(() => {
+    const anchor = SECTION_ALIASES[requested]?.anchor
+    if (anchor) setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120)
+    if (requested === 'speech') setSpeechOpen(true)
+  }, [requested])
   const [active, setActive] = useState<SectionKey>(initialSection)
   const [loading, setLoading] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -262,6 +274,8 @@ const SettingsPage: React.FC = () => {
         logs: { log_level: 'INFO', log_retention_days: 7 }
         // paths 由后端根据实际数据目录决定，前端不下发
       })
+      await analysisRef.current?.save()
+      await coverRef.current?.save()
       message.success(t("已保存"))
       trackApiKeyConfigured({ provider, hasKey: isLocalProvider(provider) || !!values[PROVIDERS[provider].apiKeyField] })
       await loadData()
@@ -270,6 +284,18 @@ const SettingsPage: React.FC = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  // 视觉「同上面的模型」测试的是已保存的模型：测之前先把模型设置存下来
+  const saveModelForTest = async (): Promise<boolean> => {
+    try {
+      await form.validateFields()
+    } catch {
+      message.error(t("请先完成上面的模型设置"))
+      return false
+    }
+    await handleSave(form.getFieldsValue(true))
+    return true
   }
 
   const handleTest = async () => {
@@ -413,11 +439,10 @@ const SettingsPage: React.FC = () => {
         </nav>
 
         <div className="ac-settings-body">
-          {/* ---------------- 模型 ---------------- */}
-          {active === 'analysis' && <AnalysisSettings />}
-          {active === 'vision' && <VisionSettings />}
-          {active === 'model' && (
-            <Section title={t("模型")} description={t("切片分析用哪个大模型。密钥只保存在运行 AutoClip 的这台机器上，不会上传。")}>
+          {/* ---------------- AI 分析：模型 → 分析方式与视觉 → 无字幕时的转写 → 封面生图，一个保存 ---------------- */}
+          {active === 'ai' && (
+            <Section title={t("AI 分析")} description={t("配置一次模型，就能分析视频、看画面、校对封面。密钥只保存在运行 AutoClip 的这台机器上，不会上传。")}>
+              <div id="ai-model" className="ac-subhead">{t("模型")}</div>
               <Form
                 form={form}
                 layout="vertical"
@@ -598,7 +623,8 @@ const SettingsPage: React.FC = () => {
                   </Row>
                 </div>
 
-                <div className="ac-eyebrow" style={{ marginTop: 40, marginBottom: 12 }}>{t("切片参数")}</div>
+                <details className="ac-disclosure">
+                <summary>{t("切片参数")}</summary>
                 <div className="ac-rows">
                   <Row label={t("文本分块大小")} hint={t("每次送给模型分析的字幕长度。越大越连贯、越慢，建议 5000。")}>
                     <Form.Item name="chunk_size">
@@ -619,8 +645,22 @@ const SettingsPage: React.FC = () => {
                     <span className="ac-unit">{t("条")}</span>
                   </Row>
                 </div>
+                </details>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 28 }}>
+                <div id="ai-analysis" className="ac-subhead">{t("分析方式")}</div>
+                <AnalysisVisionSettings ref={analysisRef} onBeforeTest={saveModelForTest} />
+
+                <div id="ai-speech" className="ac-subhead">{t("无字幕时的转写")}</div>
+                <details className="ac-disclosure" open={speechOpen} onToggle={(e) => setSpeechOpen((e.target as HTMLDetailsElement).open)}>
+                  <summary>{t("视频没有字幕时，用本机 Whisper 生成字幕再分析。自带字幕的视频不需要。")}</summary>
+                  <SpeechRecognitionConfig />
+                </details>
+
+                <div id="ai-cover" className="ac-subhead">{t("封面生成")}</div>
+                <p className="ac-note">{t("给切片自动设计封面。生图失败时会截帧兜底，不挡住发布。")}</p>
+                <CoverSettings ref={coverRef} />
+
+                <div className="ac-savebar">
                   {currentProvider?.available && (
                     <StatusDot tone="ok" label={<>{t("已配置")}: <span className="ac-mono">{PROVIDERS[currentProvider.provider as ProviderKey]?.name || currentProvider.display_name} · {currentProvider.model}</span></>} />
                   )}
@@ -630,24 +670,12 @@ const SettingsPage: React.FC = () => {
             </Section>
           )}
 
-          {/* ---------------- 转写 ---------------- */}
-          {active === 'speech' && (
-            <Section
-              title={t("转写")}
-              description={t("视频没有字幕时，用本地 Whisper 生成字幕再分析。B 站等自带字幕的视频不需要，装不装、装哪个模型由你决定。")}
-            >
-              <SpeechRecognitionConfig />
-            </Section>
-          )}
-
           {/* ---------------- 应用 ---------------- */}
           {active === 'app' && (
             <AppSection analyticsOn={analyticsOn} onAnalyticsChange={(on) => { setAnalyticsEnabled(on); setAnalyticsOn(on) }} />
           )}
 
           {active === 'publish' && <PublishSettings />}
-
-          {active === 'cover' && <CoverSettings />}
 
           {/* ---------------- 反馈 ---------------- */}
           {active === 'feedback' && (
