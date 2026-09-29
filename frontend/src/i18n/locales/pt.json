@@ -1122,5 +1122,12 @@
   "导入任务未能启动，请重试；原素材与已有成片已保留": "Não foi possível iniciar a importação. Tente novamente; o original e as exportações existentes foram preservados.",
   "原片无法播放时，可生成兼容预览；原片不变，不调用模型。": "Se o original não reproduzir, crie uma prévia compatível. O original não muda e nenhuma IA é usada.",
   "正在生成兼容预览，长视频可能需要几分钟…": "Preparando prévia; vídeos longos podem levar alguns minutos…",
-  "生成兼容预览": "Criar prévia compatível"
+  "生成兼容预览": "Criar prévia compatível",
+  "Infistar 无限星河": "Infistar",
+  "赞助合作伙伴。一个 Key 调用 Claude、GPT、Gemini、DeepSeek 等模型，接口地址已预设。": "Patrocinador. Uma chave para Claude, GPT, Gemini, DeepSeek e outros. O endpoint já está configurado.",
+  "开始使用": "Começar",
+  "通过 AutoClip 专属推广链接注册可领取 $5 体验额度，领取条件以活动页面为准。注册后在控制台创建 API Key，粘贴到下方。该链接含推广分成，用于支持项目维护。": "Cadastre-se pelo link de indicação do AutoClip para receber US$ 5 de crédito de teste (condições na página da promoção). Depois crie uma chave de API no console e cole abaixo. É um link de indicação; as comissões ajudam a manter o AutoClip.",
+  "注册并领取体验额度": "Cadastrar e receber crédito",
+  "接入说明": "Guia de configuração",
+  "填写 API Key 后会自动列出该账号可用的模型，选一个即可。": "Ao inserir a chave de API, os modelos disponíveis para sua conta aparecem aqui. Escolha um."
 }

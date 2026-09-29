@@ -12,7 +12,7 @@ import PublishSettings from '../components/PublishSettings'
 import CoverSettings from '../components/CoverSettings'
 import { isDesktopMode } from '../utils/desktopMode'
 import { openExternalLink } from '../utils/externalLinks'
-import { trackApiKeyConfigured } from '../analytics/events'
+import { trackApiKeyConfigured, trackSponsorLinkOpened } from '../analytics/events'
 import { isAnalyticsEnabled, setAnalyticsEnabled } from '../analytics/posthog'
 import { getRuntimeInfo } from '../analytics/lifecycle'
 import { isCrashReportsEnabled, setCrashReportsEnabled } from '../desktop/sentry'
@@ -35,12 +35,15 @@ const toNumber = (v: unknown, fallback: number): number => {
   return Number.isFinite(n) ? n : fallback
 }
 
-type ProviderKey = 'dashscope' | 'openai' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
+type ProviderKey = 'dashscope' | 'openai' | 'infistar' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
 type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string }
 type CloudPreset = { baseUrl: string; defaultModel: string }
-const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; local?: LocalPreset; cloud?: CloudPreset }> = {
+type Sponsor = { registerUrl: string; guideUrl: string }
+const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint: string; apiKeyField: string; placeholder: string; keyUrl: string; local?: LocalPreset; cloud?: CloudPreset; sponsor?: Sponsor }> = {
   dashscope: { get name() { return t("阿里通义千问") }, get short() { return t("通义千问") }, get hint() { return t("阿里云 DashScope。国内直连，qwen-plus 性价比高。") }, apiKeyField: 'dashscope_api_key', placeholder: 'sk-…', keyUrl: 'https://dashscope.console.aliyun.com/apiKey' },
   openai: { get name() { return t("OpenAI / 兼容接口") }, get short() { return t("OpenAI 兼容") }, get hint() { return t("OpenAI，或任何兼容接口：OpenRouter、vLLM。") }, apiKeyField: 'openai_api_key', get placeholder() { return t("sk-…（自建服务可留空）") }, keyUrl: 'https://platform.openai.com/api-keys' },
+  // 赞助合作伙伴（docs/INFISTAR_SETUP.md）。多模型网关，型号随账号而定：不预设默认模型，填好 key 后实时拉取
+  infistar: { get name() { return t("Infistar 无限星河") }, short: 'Infistar', get hint() { return t("赞助合作伙伴。一个 Key 调用 Claude、GPT、Gemini、DeepSeek 等模型，接口地址已预设。") }, apiKeyField: 'infistar_api_key', placeholder: 'sk-…', keyUrl: 'https://www.infistar.cc/register?aff=XLK3BCM6&ref_source=link', cloud: { baseUrl: 'https://infistar.cc/v1', defaultModel: '' }, sponsor: { registerUrl: 'https://www.infistar.cc/register?aff=XLK3BCM6&ref_source=link', guideUrl: 'https://github.com/zhouxiaoka/autoclip/blob/main/docs/INFISTAR_SETUP.md' } },
   gemini: { name: 'Google Gemini', short: 'Gemini', get hint() { return t("Google AI Studio 的 Gemini 系列。") }, apiKeyField: 'gemini_api_key', placeholder: 'AIza…', keyUrl: 'https://aistudio.google.com/apikey' },
   deepseek: { name: 'DeepSeek', short: 'DeepSeek', get hint() { return t("DeepSeek 官方。国内直连，deepseek-flash 是当前 V4.1。") }, apiKeyField: 'deepseek_api_key', placeholder: 'sk-…', keyUrl: 'https://platform.deepseek.com/api_keys', cloud: { baseUrl: 'https://api.deepseek.com', defaultModel: 'deepseek-flash' } },
   seed: { name: 'Seed', short: 'Seed', get hint() { return t("火山方舟 Seed。国内直连，豆包 Seed 2.1 系列。") }, apiKeyField: 'seed_api_key', placeholder: '…', keyUrl: 'https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey', cloud: { baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-seed-2-1-lite-260915' } },
@@ -68,11 +71,12 @@ const FALLBACK_CATALOG: Record<string, string[]> = {
   kimi: ['kimi-k3', 'kimi-k2.6', 'kimi-k2.5', 'kimi-k2.7-code'],
   glm: ['glm-5.3', 'glm-5.2', 'glm-4.7'],
   grok: ['grok-4.6', 'grok-4.5', 'grok-4.3'],
+  infistar: [],
 }
-const PROVIDER_GROUP_ORDER: ProviderKey[] = ['dashscope', 'openai', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok']
+const PROVIDER_GROUP_ORDER: ProviderKey[] = ['dashscope', 'openai', 'infistar', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok']
 const providerGroupLabel = (key: string) => ({
   dashscope: t("通义千问"), openai: 'OpenAI', gemini: 'Gemini', deepseek: 'DeepSeek',
-  seed: 'Seed', kimi: 'Kimi', glm: 'GLM', grok: 'Grok',
+  seed: 'Seed', kimi: 'Kimi', glm: 'GLM', grok: 'Grok', infistar: 'Infistar',
 } as Record<string, string>)[key] || key
 const knownCloudModels = (catalog: Record<string, string[]>, extra: string[] = []) =>
   new Set([...Object.values(catalog).flat(), ...extra])
@@ -93,7 +97,7 @@ const cloudModelOptions = (
 
 const CLOUD_DEFAULT_MODEL: Partial<Record<ProviderKey, string>> = {
   dashscope: 'qwen-plus', openai: 'gpt-5-mini', gemini: 'gemini-3.8-flash', deepseek: 'deepseek-flash',
-  seed: 'doubao-seed-2-1-lite-260915', kimi: 'kimi-k2.6', glm: 'glm-5.3', grok: 'grok-4.6',
+  seed: 'doubao-seed-2-1-lite-260915', kimi: 'kimi-k2.6', glm: 'glm-5.3', grok: 'grok-4.6', infistar: undefined,
 }
 
 type SectionKey = 'analysis' | 'vision' | 'model' | 'speech' | 'app' | 'publish' | 'cover' | 'feedback'
@@ -174,6 +178,7 @@ const SettingsPage: React.FC = () => {
         kimi_api_key: settingsData.api?.api_keys?.kimi || '',
         glm_api_key: settingsData.api?.api_keys?.glm || '',
         grok_api_key: settingsData.api?.api_keys?.grok || '',
+        infistar_api_key: settingsData.api?.api_keys?.infistar || '',
         seed_api_key: settingsData.api?.api_keys?.seed || '',
         jimeng_access_key: settingsData.api?.api_keys?.jimeng_access || '',
         jimeng_secret_key: settingsData.api?.api_keys?.jimeng_secret || '',
@@ -212,6 +217,7 @@ const SettingsPage: React.FC = () => {
             kimi: values.kimi_api_key || keys.kimi || '',
             glm: values.glm_api_key || keys.glm || '',
             grok: values.grok_api_key || keys.grok || '',
+            infistar: values.infistar_api_key || keys.infistar || '',
             seed: values.seed_api_key || keys.seed || '',
             jimeng_access: values.jimeng_access_key || keys.jimeng_access || '',
             jimeng_secret: values.jimeng_secret_key || keys.jimeng_secret || ''
@@ -476,6 +482,19 @@ const SettingsPage: React.FC = () => {
                     </Row>
                   )}
 
+                  {cfg.sponsor && (
+                    <Row
+                      wide
+                      label={t("开始使用")}
+                      hint={t("通过 AutoClip 专属推广链接注册可领取 $5 体验额度，领取条件以活动页面为准。注册后在控制台创建 API Key，粘贴到下方。该链接含推广分成，用于支持项目维护。")}
+                    >
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <Btn variant="cta" size="sm" onClick={() => { trackSponsorLinkOpened({ sponsor: 'infistar', target: 'register', placement: 'settings_model' }); openExternalLink(cfg.sponsor!.registerUrl) }}>{t("注册并领取体验额度")}</Btn>
+                        <Btn size="sm" onClick={() => { trackSponsorLinkOpened({ sponsor: 'infistar', target: 'guide', placement: 'settings_model' }); openExternalLink(cfg.sponsor!.guideUrl) }}>{t("接入说明")}</Btn>
+                      </div>
+                    </Row>
+                  )}
+
                   {!localCfg && <Row
                     wide
                     label="API Key"
@@ -512,6 +531,8 @@ const SettingsPage: React.FC = () => {
                           ? <>{t("已拉取最新模型数量", { count: cloudModels.models.length })} <a onClick={() => void loadCloudModels(selectedProvider, { refresh: true })} style={{ color: 'var(--ac-accent)', cursor: 'pointer' }}>{t("刷新")}</a></>
                           : usingCustomEndpoint
                             ? <>{t("填该服务实际提供的模型名（如 glm-4-flash、deepseek-chat、qwen2.5:7b），回车确认。")} <a onClick={() => void loadCloudModels(selectedProvider, { refresh: true })} style={{ color: 'var(--ac-accent)', cursor: 'pointer' }}>{t("刷新")}</a></>
+                            : cfg.sponsor && !cloudModels.models.length
+                              ? <>{t("填写 API Key 后会自动列出该账号可用的模型，选一个即可。")} <a onClick={() => void loadCloudModels(selectedProvider, { refresh: true })} style={{ color: 'var(--ac-accent)', cursor: 'pointer' }}>{t("刷新")}</a></>
                             : <>{t("可直接输入模型名，回车确认。")} {t("填写密钥后可拉取该账号可用的最新模型。")} <a onClick={() => void loadCloudModels(selectedProvider, { refresh: true })} style={{ color: 'var(--ac-accent)', cursor: 'pointer' }}>{t("刷新")}</a></>}
                   >
                     <Form.Item name="model_name" style={{ width: '100%' }} rules={[{ required: true, message: t("请输入或选择模型") }]}>

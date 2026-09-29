@@ -101,6 +101,7 @@ class LLMManager:
             "kimi_api_key": "",
             "glm_api_key": "",
             "grok_api_key": "",
+            "infistar_api_key": "",
             "seed_api_key": "",
             "model_name": "qwen-plus",
             "chunk_size": 5000,
@@ -127,6 +128,7 @@ class LLMManager:
                             "kimi_api_key": api_keys.get("kimi", ""),
                             "glm_api_key": api_keys.get("glm", ""),
                             "grok_api_key": api_keys.get("grok", ""),
+                            "infistar_api_key": api_keys.get("infistar", ""),
                             "seed_api_key": api_keys.get("seed", ""),
                             "model_name": api.get("api_model", "qwen-plus")
                         })
@@ -173,7 +175,7 @@ class LLMManager:
                     settings["model_name"] = default_model
 
     def _apply_cloud_preset(self, settings: Dict[str, Any]) -> None:
-        """deepseek / seed / kimi / glm / grok → openai + 官方地址，用各家自己的 key。"""
+        """deepseek / seed / kimi / glm / grok / infistar → openai + 官方地址，用各家自己的 key。"""
         from backend.core.cloud_presets import resolve_cloud_preset
         from backend.core.model_catalog import curated_models, default_model_for
 
@@ -186,8 +188,14 @@ class LLMManager:
         settings["cloud_preset"] = preset.key
         settings["openai_base_url"] = base_url
         current = (settings.get("model_name") or "").strip()
+        own = curated_models(preset.key)
+        if not own:
+            # 多模型网关（infistar）：gpt / deepseek / gemini 都是合法型号，用户选什么就用什么
+            if not current and preset.default_model:
+                settings["model_name"] = preset.default_model
+            return
         known = set(curated_models())
-        if not current or current == "qwen-plus" or (current in known and current not in curated_models(preset.key)):
+        if not current or current == "qwen-plus" or (current in known and current not in own):
             settings["model_name"] = preset.default_model or default_model_for(preset.key)
 
     # Docker / 本地脚本模式没有设置页可用，只能靠环境变量（env.example 里也是这么写的），
@@ -201,6 +209,7 @@ class LLMManager:
         "kimi_api_key": ("API_KIMI_API_KEY", "MOONSHOT_API_KEY", "KIMI_API_KEY"),
         "glm_api_key": ("API_GLM_API_KEY", "ZHIPU_API_KEY", "GLM_API_KEY"),
         "grok_api_key": ("API_GROK_API_KEY", "XAI_API_KEY", "GROK_API_KEY"),
+        "infistar_api_key": ("API_INFISTAR_API_KEY", "INFISTAR_API_KEY"),
         "seed_api_key": ("API_SEED_API_KEY", "ARK_API_KEY", "VOLCENGINE_API_KEY", "DOUBAO_API_KEY"),
     }
 

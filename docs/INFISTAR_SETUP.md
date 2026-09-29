@@ -10,6 +10,17 @@ Infistar 是 AutoClip 的赞助合作伙伴，可通过现有 OpenAI 兼容接�
 
 ## 配置 AutoClip
 
+### 新版本（1.4.1 起）：直接选择 Infistar
+
+1. 打开「设置 → 模型」，提供商选 **Infistar**。接口地址已预设为 `https://infistar.cc/v1`，不用填。
+2. 还没有账号时，点「注册并领取体验额度」，用专属链接注册并在控制台创建 API Key。
+3. 把 API Key 粘贴进来。模型下拉会自动列出这个账号可用的型号，选一个。
+4. 点「测试连接」，再保存。
+
+命令行 / MCP：`autoclip run video.mp4 --provider infistar --api-key sk-… --model <模型 ID>`，也可以设置环境变量 `INFISTAR_API_KEY`。
+
+### 旧版本：用 OpenAI 兼容接口手动填写
+
 打开「设置 → 模型」，填写以下内容：
 
 | 配置项 | 内容 |
@@ -19,7 +30,7 @@ Infistar 是 AutoClip 的赞助合作伙伴，可通过现有 OpenAI 兼容接�
 | API Key | 你在 Infistar 创建的 API Key |
 | 模型 | 当前账号可用、支持 Chat Completions 的真实模型 ID |
 
-接口地址中的 `/v1` 只填写一次，不要追加 `/chat/completions`。国际网络也可使用 `https://infistar.ai/v1`，参见 [Infistar 网关配置文档](https://doc.infistar.cc/integration-guides/gateway-config)。
+接口地址中的 `/v1` 只填写一次，不要追加 `/chat/completions`。国际网络也可使用 `https://infistar.ai/v1`（新版本选 OpenAI 兼容接口手动填写即可），参见 [Infistar 网关配置文档](https://doc.infistar.cc/integration-guides/gateway-config)。
 
 从模型列表选择或手动输入真实模型 ID，执行「测试连接」并保存。不要直接沿用 OpenAI 官方默认模型名，具体可用型号由 Infistar 账号权限和模型目录决定。
 

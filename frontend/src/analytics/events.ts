@@ -15,6 +15,8 @@ export const AnalyticsEvent = {
   ProcessingFailed: 'processing_failed',
   /** 设置/更新 LLM API key */
   ApiKeyConfigured: 'api_key_configured',
+  /** 打开赞助商的注册 / 接入说明链接（只记录是哪家、哪个入口） */
+  SponsorLinkOpened: 'sponsor_link_opened',
 } as const
 
 export type AnalyticsEventName =
@@ -53,6 +55,14 @@ export function trackProcessingFailed(props: {
 }): void {
   // Never send arbitrary exception text (may contain tokens, URLs or local paths).
   trackEvent(AnalyticsEvent.ProcessingFailed, { stage: props.stage, code: props.code })
+}
+
+export function trackSponsorLinkOpened(props: {
+  sponsor: 'infistar'
+  target: 'register' | 'guide'
+  placement: 'settings_model'
+}): void {
+  trackEvent(AnalyticsEvent.SponsorLinkOpened, props)
 }
 
 export function trackApiKeyConfigured(props: {

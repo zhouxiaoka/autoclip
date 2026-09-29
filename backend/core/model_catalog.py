@@ -74,6 +74,8 @@ CURATED_MODELS: Dict[str, List[str]] = {
         "grok-4.5",
         "grok-4.3",
     ],
+    # 多模型网关，型号随账号而定：不内置名单，填好 key 后实时拉取
+    "infistar": [],
 }
 
 DEFAULT_MODELS: Dict[str, str] = {
@@ -85,6 +87,7 @@ DEFAULT_MODELS: Dict[str, str] = {
     "kimi": "kimi-k2.6",
     "glm": "glm-5.3",
     "grok": "grok-4.6",
+    "infistar": "",
 }
 
 PROVIDER_LABELS: Dict[str, str] = {
@@ -96,6 +99,7 @@ PROVIDER_LABELS: Dict[str, str] = {
     "kimi": "Kimi",
     "glm": "GLM",
     "grok": "Grok",
+    "infistar": "Infistar",
 }
 
 CLOUD_PROVIDERS = frozenset(CURATED_MODELS)
@@ -386,7 +390,8 @@ async def list_available_models(
         source="catalog",
         reachable=False,
         default_model=default_model_for(key),
-        models=curated or curated_models("dashscope"),
+        # 已知提供商内置名单为空（如 infistar）时保持为空，别拿通义的型号冒充
+        models=curated if key in CURATED_MODELS else curated_models("dashscope"),
         catalog=catalog,
     )
 

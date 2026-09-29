@@ -10,6 +10,17 @@ Register through the [AutoClip referral link](https://www.infistar.cc/register?a
 
 ## Configure AutoClip
 
+### Version 1.4.1 and later: pick Infistar directly
+
+1. Open Settings → Model and choose **Infistar**. The base URL `https://infistar.cc/v1` is preset.
+2. No account yet? Click "Sign up & claim credit" to register through the referral link, then create an API key in the console.
+3. Paste the key. The model list fills in with the models available to your account; pick one.
+4. Test the connection and save.
+
+CLI / MCP: `autoclip run video.mp4 --provider infistar --api-key sk-… --model <model id>`, or set `INFISTAR_API_KEY`.
+
+### Older versions: configure as an OpenAI-compatible API
+
 Open Settings → Model and enter:
 
 | Field | Value |
