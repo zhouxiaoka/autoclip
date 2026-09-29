@@ -1125,9 +1125,14 @@
   "生成兼容预览": "Crear vista previa compatible",
   "Infistar 无限星河": "Infistar",
   "赞助合作伙伴。一个 Key 调用 Claude、GPT、Gemini、DeepSeek 等模型，接口地址已预设。": "Patrocinador. Una clave para Claude, GPT, Gemini, DeepSeek y más. El endpoint ya está configurado.",
-  "开始使用": "Empezar",
-  "通过 AutoClip 专属推广链接注册可领取 $5 体验额度，领取条件以活动页面为准。注册后在控制台创建 API Key，粘贴到下方。该链接含推广分成，用于支持项目维护。": "Regístrate con el enlace de referido de AutoClip para obtener $5 de crédito de prueba (condiciones en la página de la promoción). Después crea una clave API en la consola y pégala abajo. Es un enlace de referido; las comisiones ayudan a mantener AutoClip.",
   "注册并领取体验额度": "Registrarse y obtener crédito",
   "接入说明": "Guía de configuración",
-  "填写 API Key 后会自动列出该账号可用的模型，选一个即可。": "Al introducir la clave API se listan los modelos disponibles para tu cuenta. Elige uno."
+  "填写 API Key 后会自动列出该账号可用的模型，选一个即可。": "Al introducir la clave API se listan los modelos disponibles para tu cuenta. Elige uno.",
+  "赞助合作": "Patrocinadores",
+  "云端模型": "Modelos en la nube",
+  "兼容接口": "APIs compatibles",
+  "本机运行": "Ejecutar en local",
+  "赞助": "Patrocinador",
+  "通过专属链接注册可领取 $5 体验额度，注册后在控制台创建 API Key 粘贴到下方即可开始。": "Regístrate con el enlace de referido para obtener $5 de crédito de prueba; luego crea una clave API en la consola y pégala abajo.",
+  "该链接含推广分成，用于支持项目维护；领取条件以活动页面为准。": "Enlace de referido: las comisiones ayudan a mantener AutoClip. Las condiciones del crédito las fija la página de la promoción."
 }
