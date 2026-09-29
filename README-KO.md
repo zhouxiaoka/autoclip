@@ -12,6 +12,12 @@
 [![GitHub stars](https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
+<p align="center">
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
+  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
+</p>
+
 **[데스크톱 앱 다운로드](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [빠른 시작](#quick-start) · [웹사이트](https://zhouxiaoka.github.io/autoclip_intro/) · [문서](#documentation) · [문제 신고](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
 [简体中文](README.md) · [English](README-EN.md) · [日本語](README-JA.md) · **한국어** · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md)
@@ -261,12 +267,6 @@ FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper와 모든 기여자에게 감사�
 
 <details>
 <summary>커뮤니티 성과 · Star History</summary>
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
-</p>
 
 아래 배지는 Trendshift에서 제공합니다. 클릭하면 AutoClip의 순위 기록을 확인할 수 있습니다. GitHub Trending과 Trendshift는 서로 다른 순위이며, 배지는 현재 실시간 순위가 아닌 기록된 성과를 보여 줍니다.
 
