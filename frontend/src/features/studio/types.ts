@@ -19,7 +19,7 @@ export interface RenderJob {
 export interface Workspace {
   plan?: ImportPlan
   drafts: Draft[]; events: Scene[]; jobs: RenderJob[]
-  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production'; message?: string; error?: string; coverage?: { duration?:number; note: string; sample_interval: number } }
+  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production'; message?: string; percent?: number; error?: string; coverage?: { duration?:number; note: string; sample_interval: number } }
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }

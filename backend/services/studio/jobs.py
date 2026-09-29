@@ -121,12 +121,36 @@ def _analyze(project_id, prefs, url, browser):
         except FileNotFoundError:
             pass
 
+def download_progress_hook(project_id, min_interval=1.0):
+    """把 yt-dlp 的下载百分比写进 analysis.percent。
+
+    以前整段下载只显示「准备素材」，几分钟不动，用户以为卡死。音视频分两个文件下载时
+    百分比会回落，只写单调递增的值；最多每秒写一次。
+    """
+    state = {'at': 0.0, 'percent': -1}
+    def hook(d):
+        if d.get('status') != 'downloading':
+            return
+        total = d.get('total_bytes') or d.get('total_bytes_estimate')
+        if not total:
+            return
+        percent = min(99, int((d.get('downloaded_bytes') or 0) * 100 / total))
+        now = monotonic()
+        if percent <= state['percent'] or now - state['at'] < min_interval:
+            return
+        state.update(at=now, percent=percent)
+        try:
+            store.change(project_id, lambda data: data['analysis'].update(percent=percent) if data.get('analysis') else None)
+        except FileNotFoundError:
+            pass
+    return hook
+
 def download(project_id, url, browser):
     import yt_dlp
     from backend.utils.ffmpeg_utils import get_ffmpeg_path
     folder = store.directory(project_id) / 'raw'
     folder.mkdir(exist_ok=True)
-    options = {'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]', 'outtmpl': str(folder / 'input.%(ext)s'), 'merge_output_format': 'mp4', 'noplaylist': True, 'quiet': True, 'ffmpeg_location': get_ffmpeg_path(), 'socket_timeout': 30, 'retries': 2}
+    options = {'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]', 'outtmpl': str(folder / 'input.%(ext)s'), 'merge_output_format': 'mp4', 'noplaylist': True, 'quiet': True, 'ffmpeg_location': get_ffmpeg_path(), 'socket_timeout': 30, 'retries': 2, 'progress_hooks': [download_progress_hook(project_id)]}
     if browser:
         options['cookiesfrombrowser'] = (browser,)
     with yt_dlp.YoutubeDL(options) as downloader:
@@ -217,7 +241,7 @@ def _inspect(project_id, options, url, browser):
         mark_project(project_id, 'processing', awaiting_confirmation=False)
         if url:
             download(project_id, url, browser)
-        store.change(project_id, lambda data:data['analysis'].update(message='快速判断适合的制作类型'))
+        store.change(project_id, lambda data:(data['analysis'].pop('percent', None), data['analysis'].update(message='快速判断适合的制作类型')))
         plan = recommend(source(project_id), options)
         ensure_project_thumbnail(project_id)
         plan['id'] = uuid.uuid4().hex

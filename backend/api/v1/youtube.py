@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from ...core.config import get_data_directory
+from ...utils.ffmpeg_utils import ytdlp_ffmpeg_options
 import uuid
 import asyncio
 from datetime import datetime
@@ -352,6 +353,11 @@ async def get_all_youtube_tasks():
 
 async def update_project_download_progress(project_id: str, progress: float, message: str):
     """更新项目下载进度"""
+    save_project_download_progress(project_id, progress, message)
+
+
+def save_project_download_progress(project_id: str, progress: float, message: str):
+    """同步写进度，yt-dlp 的下载线程里也能直接调。"""
     try:
         from ...core.database import SessionLocal
         from ...services.project_service import ProjectService
@@ -383,6 +389,41 @@ async def update_project_download_progress(project_id: str, progress: float, mes
     except Exception as e:
         logger.error(f"更新项目下载进度失败: {e}")
 
+
+# 下载阶段在总进度里占 30%→60%
+DOWNLOAD_PROGRESS_START = 30.0
+DOWNLOAD_PROGRESS_END = 60.0
+
+
+def make_download_progress_hook(project_id: str, task_id: str, min_interval: float = 1.0):
+    """yt-dlp progress_hooks：把真实下载百分比映射到 30%→60%。
+
+    以前下载期间进度从 30 直接跳到 60，大视频下载几分钟里一直不动，用户以为卡死了。
+    音视频分两个文件下载时百分比会回落，只取单调递增的值；最多每秒写一次库。
+    """
+    import time
+    state = {"last_write": 0.0, "last_value": DOWNLOAD_PROGRESS_START}
+
+    def hook(d):
+        if d.get("status") != "downloading":
+            return
+        total = d.get("total_bytes") or d.get("total_bytes_estimate")
+        downloaded = d.get("downloaded_bytes") or 0
+        if not total:
+            return
+        fraction = max(0.0, min(1.0, downloaded / total))
+        value = round(DOWNLOAD_PROGRESS_START + fraction * (DOWNLOAD_PROGRESS_END - DOWNLOAD_PROGRESS_START - 1), 1)
+        now = time.monotonic()
+        if value <= state["last_value"] or now - state["last_write"] < min_interval:
+            return
+        state["last_value"], state["last_write"] = value, now
+        task = download_tasks.get(task_id)
+        if task is not None:
+            task.progress = value
+        save_project_download_progress(project_id, value, f"正在下载视频... {int(fraction * 100)}%")
+
+    return hook
+
 async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRequest, project_id: str):
     """处理YouTube下载任务"""
     try:
@@ -412,6 +453,8 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
         # 设置下载选项
         ydl_opts = {
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            # 合并后统一成 mp4，下面按 *.mp4 找文件
+            'merge_output_format': 'mp4',
             'writesubtitles': True,
             'writeautomaticsub': True,  # 下载自动生成的字幕
             'subtitleslangs': get_subtitle_langs(),
@@ -423,6 +466,8 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             'ignoreconfig': True,
             'config_locations': [],
             'cachedir': False,
+            'progress_hooks': [make_download_progress_hook(project_id, task_id)],
+            **ytdlp_ffmpeg_options(),
         }
         
         if request.browser:
@@ -696,6 +741,7 @@ async def _try_download_with_different_formats(url: str, download_dir: Path, bro
                 'quiet': True,
                 'ignoreconfig': True,
                 'config_locations': [],
+                **ytdlp_ffmpeg_options(),
             }
             
             if browser:
@@ -750,6 +796,7 @@ async def _try_download_with_different_langs(url: str, download_dir: Path, brows
                 'writeautomaticsub': True,
                 'subtitleslangs': langs,
                 'subtitlesformat': 'srt',
+                **ytdlp_ffmpeg_options(),
                 'outtmpl': str(download_dir / f'lang_%(title)s.%(ext)s'),
                 'noplaylist': True,
                 'quiet': True,
