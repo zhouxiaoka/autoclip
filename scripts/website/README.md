@@ -4,7 +4,9 @@
 以前发版后要手改三处；现在链路是：
 
 ```
-git tag vX.Y.0 ─▶ desktop-build.yml ─▶ Release 出包
+git tag vX.Y.0 ─▶ desktop-build.yml ─▶ Pre-release 出包（官网不动）
+                                   … 真机冒烟 + 观察期 …
+promote-release.yml(promote) ─▶ 转正为 latest
                         │
                         └─▶ repository_dispatch(autoclip-release, {tag}) ─▶ autoclip_intro/sync-release.yml
                                                                                │  python scripts/sync_release.py vX.Y.0
@@ -27,7 +29,7 @@ cd ../autoclip_intro && git add -A && git commit -m "build: sync release info au
 
 1. GitHub → Settings → Developer settings → Fine-grained tokens → 新建：Repository access 只选 `autoclip_intro`，Permissions → Contents: **Read and write**。
 2. 主仓库 `autoclip` → Settings → Secrets and variables → Actions → 新建 `WEBSITE_DISPATCH_TOKEN`。
-3. 之后每次 `desktop-build.yml` 的 `release` job 成功都会推一次 `autoclip-release` 事件；没配 token 时该步骤跳过，不影响发版。
+3. 之后每次 `promote-release.yml` 转正（或 halt 撤回）都会推一次 `autoclip-release` 事件；没配 token 时该步骤跳过，不影响发版。打 tag 只出 Pre-release，官网不会跟着变。流程见 `RELEASE_CHECKLIST.md`。
 
 ## 文件
 
