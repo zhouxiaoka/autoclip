@@ -56,5 +56,8 @@ Write-Host "从 $prev 覆盖升级到 $($install.Version) 成功，残留进程�
 
 Write-Host '==> 安装后运行时冒烟'
 $res = Join-Path $install.Dir 'resources'
+# 和桌面端启动后端时一样：强制 UTF-8，否则中文输出在 cp1252 控制台上直接报错
+$env:PYTHONUTF8 = '1'
+$env:PYTHONIOENCODING = 'utf-8'
 & (Join-Path $res 'python\python.exe') -B scripts\verify_windows_install.py --resources $res --report $Report
 if ($LASTEXITCODE -ne 0) { throw "安装后冒烟失败: $LASTEXITCODE" }

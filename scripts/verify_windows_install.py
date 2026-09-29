@@ -24,6 +24,12 @@ from urllib.request import Request, urlopen
 
 sys.dont_write_bytecode = True
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+# CI 控制台默认 cp1252，打印中文会直接崩；桌面端由 Rust 注入 PYTHONUTF8，这里自己兜住
+for stream in (sys.stdout, sys.stderr):
+    try:
+        stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--resources", type=Path, required=True)
