@@ -65,69 +65,69 @@ AutoClip utiliza IA para analizar los subtítulos de un vídeo, encontrar moment
 
 ## Qué puedes hacer
 
-### Encuentra momentos destacados
+Haz clic en una miniatura para ver la imagen completa.
 
-- **Importar vídeos**: Usa archivos locales o enlaces de YouTube y Bilibili, con subtítulos SRT opcionales.
-
-<details>
-<summary>Ver captura · Importar vídeos</summary>
-
-![Importar vídeos](docs/images/feature-import.png)
-
-</details>
-
-- **Encontrar momentos destacados**: Extrae resúmenes, intervalos por tema, puntuaciones y títulos a partir de los subtítulos.
-
-<details>
-<summary>Ver captura · Encontrar momentos destacados</summary>
-
-![Encontrar momentos destacados](docs/images/clips-v1.4.0.png)
-
-</details>
-
-- **Crear clips y recopilaciones**: Genera clips y recopilaciones sugeridas, y ajusta su orden manualmente.
-
-<details>
-<summary>Ver captura · Crear clips y recopilaciones</summary>
-
-![Crear clips y recopilaciones](docs/images/feature-collections.png)
-
-</details>
-
-
-### Exporta y publica
-
-- **Exportar para publicar**: Usa ajustes para Douyin, Xiaohongshu, YouTube Shorts y Bilibili, con subtítulos incrustados y tarjetas de título.
-
-<details>
-<summary>Ver captura · Exportar para publicar</summary>
-
-![Exportar para publicar](docs/images/feature-export.png)
-
-</details>
-
-- **Portadas y publicación**: Desde v1.3.2, genera portadas y publica de inmediato o con programación. Conecta plataformas internacionales mediante tu cuenta de Upload-Post; Bilibili se configura por separado.
-
-<details>
-<summary>Ver captura · Portadas y publicación</summary>
-
-![Portadas y publicación](docs/images/feature-publish.png)
-
-![Portadas y publicación](docs/images/feature-cover.png)
-
-La demo no tiene una cuenta de publicación conectada. Se muestran la entrada de publicación y los ajustes de portada, no publicaciones completadas.
-
-</details>
-
-- **Gestión de publicaciones**: Consulta el historial y el calendario, administra publicaciones pendientes o descarga los clips sin publicarlos.
-
-<details>
-<summary>Ver captura · Gestión de publicaciones</summary>
-
-![Gestión de publicaciones](docs/images/feature-calendar.png)
-
-</details>
-
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Importar vídeos</h4>
+      <p>Usa archivos locales o enlaces de YouTube y Bilibili, con subtítulos SRT opcionales.</p>
+      <a href="docs/images/feature-import.png"><img src="docs/images/feature-import.png" alt="Importar vídeos" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Encontrar momentos destacados</h4>
+      <p>Extrae resúmenes, intervalos por tema, puntuaciones y títulos a partir de los subtítulos.</p>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Encontrar momentos destacados" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Crear clips y recopilaciones</h4>
+      <p>Genera clips y recopilaciones sugeridas, y ajusta su orden manualmente.</p>
+      <a href="docs/images/feature-collections.png"><img src="docs/images/feature-collections.png" alt="Crear clips y recopilaciones" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Exportar para publicar</h4>
+      <p>Usa ajustes para Douyin, Xiaohongshu, YouTube Shorts y Bilibili, con subtítulos incrustados y tarjetas de título.</p>
+      <a href="docs/images/feature-export.png"><img src="docs/images/feature-export.png" alt="Exportar para publicar" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Portadas y publicación</h4>
+      <p>Desde v1.3.2, genera portadas y publica de inmediato o con programación. Conecta plataformas internacionales mediante tu cuenta de Upload-Post; Bilibili se configura por separado.</p>
+      <a href="docs/images/feature-publish.png"><img src="docs/images/feature-publish.png" alt="Portadas y publicación" width="200"></a>
+      <a href="docs/images/feature-cover.png"><img src="docs/images/feature-cover.png" alt="Portadas y publicación" width="200"></a>
+      <p><sub>La demo no tiene una cuenta de publicación conectada. Se muestran la entrada de publicación y los ajustes de portada, no publicaciones completadas.</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Gestión de publicaciones</h4>
+      <p>Consulta el historial y el calendario, administra publicaciones pendientes o descarga los clips sin publicarlos.</p>
+      <a href="docs/images/feature-calendar.png"><img src="docs/images/feature-calendar.png" alt="Gestión de publicaciones" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Elige tus modelos</h4>
+      <p>Qwen, API compatibles con OpenAI, Gemini y otros servicios en la nube, o modelos locales con Ollama / LM Studio.</p>
+      <a href="docs/images/feature-models.png"><img src="docs/images/feature-models.png" alt="Elige tus modelos" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Automatizar tareas</h4>
+      <p>Organiza ejecuciones con la CLI o llama al mismo flujo de procesamiento desde un cliente MCP.</p>
+      <a href="docs/images/feature-cli.png"><img src="docs/images/feature-cli.png" alt="Automatizar tareas" width="420"></a>
+      <p><sub>CLI / MCP no tiene GUI: la captura muestra una página con la salida real de ayuda de los comandos.</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center" valign="top">
+      <h4>Interfaz multilingüe</h4>
+      <p>Desde v1.3.1, la aplicación, el sitio web y el README admiten chino, inglés, japonés, coreano, español, portugués, ruso y francés. Elige el idioma en la cabecera o sigue el del sistema. Tus archivos y el contenido generado conservan su idioma original.</p>
+      <a href="docs/images/feature-languages.png"><img src="docs/images/feature-languages.png" alt="Interfaz multilingüe" width="420"></a>
+      <p><sub>Interfaz en inglés y menú de idiomas; los medios y el contenido generado mantienen su idioma original.</sub></p>
+    </td>
+  </tr>
+</table>
 
 <details>
 <summary>Plataformas, requisitos de cuenta y detalles de exportación</summary>
@@ -143,39 +143,6 @@ Las cuentas verticales se renderizan en 9:16 sin corte a 60 segundos. Solo Bilib
 Al publicar se puede generar una portada automáticamente, para que Bilibili no rechace una portada vacía.
 
 Los detalles de la portada y la tarjeta de título por defecto siguen las notas de ese instalador. Disponible en **v1.3.2**.
-
-</details>
-
-### Trabaja a tu manera
-
-- **Elige tus modelos**: Qwen, API compatibles con OpenAI, Gemini y otros servicios en la nube, o modelos locales con Ollama / LM Studio.
-
-<details>
-<summary>Ver captura · Elige tus modelos</summary>
-
-![Elige tus modelos](docs/images/feature-models.png)
-
-</details>
-
-- **Automatizar tareas**: Organiza ejecuciones con la CLI o llama al mismo flujo de procesamiento desde un cliente MCP.
-
-<details>
-<summary>Ver captura · Automatizar tareas</summary>
-
-![Automatizar tareas](docs/images/feature-cli.png)
-
-CLI / MCP no tiene GUI: la captura muestra una página con la salida real de ayuda de los comandos.
-
-</details>
-
-- **Interfaz multilingüe**: Desde v1.3.1, la aplicación, el sitio web y el README admiten chino, inglés, japonés, coreano, español, portugués, ruso y francés. Elige el idioma en la cabecera o sigue el del sistema. Tus archivos y el contenido generado conservan su idioma original.
-
-<details>
-<summary>Ver captura · Interfaz multilingüe</summary>
-
-![Interfaz multilingüe](docs/images/feature-languages.png)
-
-Interfaz en inglés y menú de idiomas; los medios y el contenido generado mantienen su idioma original.
 
 </details>
 

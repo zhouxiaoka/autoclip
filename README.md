@@ -65,69 +65,69 @@
 
 ## 功能特性
 
-### 从长视频中发现高光
+点击任意缩略图查看大图。
 
-- **多种导入方式**：本地视频、YouTube 或 B 站链接，可附带 SRT 字幕；无字幕时可使用本地 Whisper 转写。
-
-<details>
-<summary>查看界面 · 多种导入方式</summary>
-
-![多种导入方式](docs/images/feature-import.png)
-
-</details>
-
-- **AI 内容分析**：基于字幕生成大纲与话题时间线，为片段评分、提取标题。
-
-<details>
-<summary>查看界面 · AI 内容分析</summary>
-
-![AI 内容分析](docs/images/clips-v1.4.0.png)
-
-</details>
-
-- **片段与合集**：自动生成切片，预览结果，并按需要调整合集顺序。
-
-<details>
-<summary>查看界面 · 片段与合集</summary>
-
-![片段与合集](docs/images/feature-collections.png)
-
-</details>
-
-
-### 导出与发布
-
-- **多平台导出**：提供抖音、小红书、YouTube Shorts 和 B 站预设，支持烧录字幕与标题卡。
-
-<details>
-<summary>查看界面 · 多平台导出</summary>
-
-![多平台导出](docs/images/feature-export.png)
-
-</details>
-
-- **封面与发布**：自 v1.3.2 起支持自动封面、立即发布和定时发布；海外平台通过 Upload-Post 连接，B 站单独配置。
-
-<details>
-<summary>查看界面 · 封面与发布</summary>
-
-![封面与发布](docs/images/feature-publish.png)
-
-![封面与发布](docs/images/feature-cover.png)
-
-演示环境未连接发布账号；这里展示发布入口和封面设置，并非已发布结果。
-
-</details>
-
-- **发布管理**：查看发布记录与月历，管理待发布任务；也可只下载成片。
-
-<details>
-<summary>查看界面 · 发布管理</summary>
-
-![发布管理](docs/images/feature-calendar.png)
-
-</details>
-
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>多种导入方式</h4>
+      <p>本地视频、YouTube 或 B 站链接，可附带 SRT 字幕；无字幕时可使用本地 Whisper 转写。</p>
+      <a href="docs/images/feature-import.png"><img src="docs/images/feature-import.png" alt="多种导入方式" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>AI 内容分析</h4>
+      <p>基于字幕生成大纲与话题时间线，为片段评分、提取标题。</p>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="AI 内容分析" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>片段与合集</h4>
+      <p>自动生成切片，预览结果，并按需要调整合集顺序。</p>
+      <a href="docs/images/feature-collections.png"><img src="docs/images/feature-collections.png" alt="片段与合集" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>多平台导出</h4>
+      <p>提供抖音、小红书、YouTube Shorts 和 B 站预设，支持烧录字幕与标题卡。</p>
+      <a href="docs/images/feature-export.png"><img src="docs/images/feature-export.png" alt="多平台导出" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>封面与发布</h4>
+      <p>自 v1.3.2 起支持自动封面、立即发布和定时发布；海外平台通过 Upload-Post 连接，B 站单独配置。</p>
+      <a href="docs/images/feature-publish.png"><img src="docs/images/feature-publish.png" alt="封面与发布" width="200"></a>
+      <a href="docs/images/feature-cover.png"><img src="docs/images/feature-cover.png" alt="封面与发布" width="200"></a>
+      <p><sub>演示环境未连接发布账号；这里展示发布入口和封面设置，并非已发布结果。</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <h4>发布管理</h4>
+      <p>查看发布记录与月历，管理待发布任务；也可只下载成片。</p>
+      <a href="docs/images/feature-calendar.png"><img src="docs/images/feature-calendar.png" alt="发布管理" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>模型可选</h4>
+      <p>支持通义千问、OpenAI 兼容接口、Gemini 等云端服务，以及 Ollama / LM Studio 本地模型。</p>
+      <a href="docs/images/feature-models.png"><img src="docs/images/feature-models.png" alt="模型可选" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>批量与 Agent 工作流</h4>
+      <p>用 CLI 编排批量任务，或通过 MCP 调用视频处理能力。</p>
+      <a href="docs/images/feature-cli.png"><img src="docs/images/feature-cli.png" alt="批量与 Agent 工作流" width="420"></a>
+      <p><sub>CLI / MCP 无图形界面：此图是实际命令帮助输出的展示页截图。</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center" valign="top">
+      <h4>多语言界面</h4>
+      <p>支持中、英、日、韩、西、葡、俄、法，可在顶栏切换或跟随系统；素材与生成内容保留原文。</p>
+      <a href="docs/images/feature-languages.png"><img src="docs/images/feature-languages.png" alt="多语言界面" width="420"></a>
+      <p><sub>英文界面与语言选择菜单；素材和生成内容保持原语言。</sub></p>
+    </td>
+  </tr>
+</table>
 
 <details>
 <summary>查看发布平台、账号要求与导出细节</summary>
@@ -139,39 +139,6 @@
 竖屏账号导出为 9:16，不按 60 秒截断；只发 B 站用横屏，只有 LinkedIn、X 这类横屏账号时保留原画。竖屏平台与 B 站同次发布时分别渲染。
 
 项目页提供发布记录和月历，可取消待发布排期。「排这一周」安排在周一、周三、周五 09:00，仅用于海外平台，不包含 B 站。
-
-</details>
-
-### 按你的工作方式使用
-
-- **模型可选**：支持通义千问、OpenAI 兼容接口、Gemini 等云端服务，以及 Ollama / LM Studio 本地模型。
-
-<details>
-<summary>查看界面 · 模型可选</summary>
-
-![模型可选](docs/images/feature-models.png)
-
-</details>
-
-- **批量与 Agent 工作流**：用 CLI 编排批量任务，或通过 MCP 调用视频处理能力。
-
-<details>
-<summary>查看界面 · 批量与 Agent 工作流</summary>
-
-![批量与 Agent 工作流](docs/images/feature-cli.png)
-
-CLI / MCP 无图形界面：此图是实际命令帮助输出的展示页截图。
-
-</details>
-
-- **多语言界面**：支持中、英、日、韩、西、葡、俄、法，可在顶栏切换或跟随系统；素材与生成内容保留原文。
-
-<details>
-<summary>查看界面 · 多语言界面</summary>
-
-![多语言界面](docs/images/feature-languages.png)
-
-英文界面与语言选择菜单；素材和生成内容保持原语言。
 
 </details>
 

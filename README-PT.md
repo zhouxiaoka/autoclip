@@ -65,69 +65,69 @@ O AutoClip usa IA para analisar legendas, encontrar destaques, criar títulos e 
 
 ## O que você pode fazer
 
-### Encontre destaques em vídeos longos
+Clique em uma miniatura para ver a imagem completa.
 
-- **Importar vídeos**: Use arquivos locais ou links do YouTube e Bilibili, com legendas SRT opcionais.
-
-<details>
-<summary>Ver captura · Importar vídeos</summary>
-
-![Importar vídeos](docs/images/feature-import.png)
-
-</details>
-
-- **Encontrar destaques**: Extraia resumos, intervalos por assunto, pontuações e títulos a partir das legendas.
-
-<details>
-<summary>Ver captura · Encontrar destaques</summary>
-
-![Encontrar destaques](docs/images/clips-v1.4.0.png)
-
-</details>
-
-- **Criar clipes e coletâneas**: Gere clipes e coletâneas sugeridas e ajuste a ordem manualmente.
-
-<details>
-<summary>Ver captura · Criar clipes e coletâneas</summary>
-
-![Criar clipes e coletâneas](docs/images/feature-collections.png)
-
-</details>
-
-
-### Exporte e publique
-
-- **Exportar para publicar**: Use predefinições para Douyin, Xiaohongshu, YouTube Shorts e Bilibili, com legendas embutidas e cartões de título.
-
-<details>
-<summary>Ver captura · Exportar para publicar</summary>
-
-![Exportar para publicar](docs/images/feature-export.png)
-
-</details>
-
-- **Capas e publicação**: Desde a v1.3.2, gere capas e publique imediatamente ou com agendamento. Conecte plataformas internacionais pela sua conta Upload-Post; o Bilibili é configurado separadamente.
-
-<details>
-<summary>Ver captura · Capas e publicação</summary>
-
-![Capas e publicação](docs/images/feature-publish.png)
-
-![Capas e publicação](docs/images/feature-cover.png)
-
-A demonstração não tem uma conta de publicação conectada. As imagens mostram a entrada de publicação e as configurações de capa, não publicações concluídas.
-
-</details>
-
-- **Gerenciamento de publicações**: Consulte o histórico e o calendário, gerencie publicações pendentes ou apenas baixe os clipes.
-
-<details>
-<summary>Ver captura · Gerenciamento de publicações</summary>
-
-![Gerenciamento de publicações](docs/images/feature-calendar.png)
-
-</details>
-
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Importar vídeos</h4>
+      <p>Use arquivos locais ou links do YouTube e Bilibili, com legendas SRT opcionais.</p>
+      <a href="docs/images/feature-import.png"><img src="docs/images/feature-import.png" alt="Importar vídeos" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Encontrar destaques</h4>
+      <p>Extraia resumos, intervalos por assunto, pontuações e títulos a partir das legendas.</p>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Encontrar destaques" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Criar clipes e coletâneas</h4>
+      <p>Gere clipes e coletâneas sugeridas e ajuste a ordem manualmente.</p>
+      <a href="docs/images/feature-collections.png"><img src="docs/images/feature-collections.png" alt="Criar clipes e coletâneas" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Exportar para publicar</h4>
+      <p>Use predefinições para Douyin, Xiaohongshu, YouTube Shorts e Bilibili, com legendas embutidas e cartões de título.</p>
+      <a href="docs/images/feature-export.png"><img src="docs/images/feature-export.png" alt="Exportar para publicar" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Capas e publicação</h4>
+      <p>Desde a v1.3.2, gere capas e publique imediatamente ou com agendamento. Conecte plataformas internacionais pela sua conta Upload-Post; o Bilibili é configurado separadamente.</p>
+      <a href="docs/images/feature-publish.png"><img src="docs/images/feature-publish.png" alt="Capas e publicação" width="200"></a>
+      <a href="docs/images/feature-cover.png"><img src="docs/images/feature-cover.png" alt="Capas e publicação" width="200"></a>
+      <p><sub>A demonstração não tem uma conta de publicação conectada. As imagens mostram a entrada de publicação e as configurações de capa, não publicações concluídas.</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Gerenciamento de publicações</h4>
+      <p>Consulte o histórico e o calendário, gerencie publicações pendentes ou apenas baixe os clipes.</p>
+      <a href="docs/images/feature-calendar.png"><img src="docs/images/feature-calendar.png" alt="Gerenciamento de publicações" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Escolha os modelos</h4>
+      <p>Qwen, APIs compatíveis com OpenAI, Gemini e outros serviços em nuvem, ou modelos locais pelo Ollama / LM Studio.</p>
+      <a href="docs/images/feature-models.png"><img src="docs/images/feature-models.png" alt="Escolha os modelos" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Automatizar tarefas</h4>
+      <p>Organize execuções pela CLI ou acesse o mesmo fluxo de processamento por um cliente MCP.</p>
+      <a href="docs/images/feature-cli.png"><img src="docs/images/feature-cli.png" alt="Automatizar tarefas" width="420"></a>
+      <p><sub>CLI / MCP não tem GUI: a captura mostra uma página com a saída real da ajuda dos comandos.</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center" valign="top">
+      <h4>Interface multilíngue</h4>
+      <p>A partir da v1.3.1, o aplicativo, o site e o README oferecem chinês, inglês, japonês, coreano, espanhol, português, russo e francês. Escolha o idioma no cabeçalho ou siga o sistema. Seus arquivos e o conteúdo gerado mantêm o idioma original.</p>
+      <a href="docs/images/feature-languages.png"><img src="docs/images/feature-languages.png" alt="Interface multilíngue" width="420"></a>
+      <p><sub>Interface em inglês e menu de idiomas; a mídia e o conteúdo gerado mantêm o idioma original.</sub></p>
+    </td>
+  </tr>
+</table>
 
 <details>
 <summary>Plataformas, requisitos de conta e detalhes de exportação</summary>
@@ -143,39 +143,6 @@ Contas verticais saem em 9:16, sem corte de 60 segundos. Só Bilibili usa paisag
 Na publicação, uma capa pode ser gerada automaticamente, para o Bilibili não recusar uma capa vazia.
 
 Os detalhes da capa e do cartão de título padrão seguem as notas desse instalador. Disponível na **v1.3.2**.
-
-</details>
-
-### Trabalhe do seu jeito
-
-- **Escolha os modelos**: Qwen, APIs compatíveis com OpenAI, Gemini e outros serviços em nuvem, ou modelos locais pelo Ollama / LM Studio.
-
-<details>
-<summary>Ver captura · Escolha os modelos</summary>
-
-![Escolha os modelos](docs/images/feature-models.png)
-
-</details>
-
-- **Automatizar tarefas**: Organize execuções pela CLI ou acesse o mesmo fluxo de processamento por um cliente MCP.
-
-<details>
-<summary>Ver captura · Automatizar tarefas</summary>
-
-![Automatizar tarefas](docs/images/feature-cli.png)
-
-CLI / MCP não tem GUI: a captura mostra uma página com a saída real da ajuda dos comandos.
-
-</details>
-
-- **Interface multilíngue**: A partir da v1.3.1, o aplicativo, o site e o README oferecem chinês, inglês, japonês, coreano, espanhol, português, russo e francês. Escolha o idioma no cabeçalho ou siga o sistema. Seus arquivos e o conteúdo gerado mantêm o idioma original.
-
-<details>
-<summary>Ver captura · Interface multilíngue</summary>
-
-![Interface multilíngue](docs/images/feature-languages.png)
-
-Interface em inglês e menu de idiomas; a mídia e o conteúdo gerado mantêm o idioma original.
 
 </details>
 

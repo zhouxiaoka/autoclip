@@ -65,69 +65,69 @@ AutoClip utilise l’IA pour analyser les sous-titres, repérer les temps forts,
 
 ## Fonctionnalités
 
-### Repérez les temps forts de vos vidéos
+Cliquez sur une miniature pour voir l’image en grand.
 
-- **Importer des vidéos**: Utilisez des fichiers locaux ou des liens YouTube et Bilibili, avec des sous-titres SRT facultatifs.
-
-<details>
-<summary>Voir la capture · Importer des vidéos</summary>
-
-![Importer des vidéos](docs/images/feature-import.png)
-
-</details>
-
-- **Repérer les temps forts**: Extrayez des plans, des plages temporelles par sujet, des scores et des titres à partir des sous-titres.
-
-<details>
-<summary>Voir la capture · Repérer les temps forts</summary>
-
-![Repérer les temps forts](docs/images/clips-v1.4.0.png)
-
-</details>
-
-- **Créer des extraits et des compilations**: Générez des extraits et des compilations suggérées, puis ajustez leur ordre manuellement.
-
-<details>
-<summary>Voir la capture · Créer des extraits et des compilations</summary>
-
-![Créer des extraits et des compilations](docs/images/feature-collections.png)
-
-</details>
-
-
-### Exportez et publiez
-
-- **Exporter pour publier**: Profils pour Douyin, Xiaohongshu, YouTube Shorts et Bilibili, avec sous-titres incrustés et cartons de titre.
-
-<details>
-<summary>Voir la capture · Exporter pour publier</summary>
-
-![Exporter pour publier](docs/images/feature-export.png)
-
-</details>
-
-- **Couvertures et publication** : Depuis la v1.3.2, générez des couvertures et publiez immédiatement ou à une date programmée. Connectez les plateformes internationales via votre compte Upload-Post ; Bilibili se configure séparément.
-
-<details>
-<summary>Voir la capture · Couvertures et publication</summary>
-
-![Couvertures et publication](docs/images/feature-publish.png)
-
-![Couvertures et publication](docs/images/feature-cover.png)
-
-Aucun compte de publication n’est connecté dans cette démonstration. Les images montrent l’accès à la publication et les réglages de couverture, pas des publications effectuées.
-
-</details>
-
-- **Gestion des publications** : Consultez l’historique et le calendrier, gérez les publications en attente ou téléchargez simplement vos extraits.
-
-<details>
-<summary>Voir la capture · Gestion des publications</summary>
-
-![Gestion des publications](docs/images/feature-calendar.png)
-
-</details>
-
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Importer des vidéos</h4>
+      <p>Utilisez des fichiers locaux ou des liens YouTube et Bilibili, avec des sous-titres SRT facultatifs.</p>
+      <a href="docs/images/feature-import.png"><img src="docs/images/feature-import.png" alt="Importer des vidéos" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Repérer les temps forts</h4>
+      <p>Extrayez des plans, des plages temporelles par sujet, des scores et des titres à partir des sous-titres.</p>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Repérer les temps forts" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Créer des extraits et des compilations</h4>
+      <p>Générez des extraits et des compilations suggérées, puis ajustez leur ordre manuellement.</p>
+      <a href="docs/images/feature-collections.png"><img src="docs/images/feature-collections.png" alt="Créer des extraits et des compilations" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Exporter pour publier</h4>
+      <p>Profils pour Douyin, Xiaohongshu, YouTube Shorts et Bilibili, avec sous-titres incrustés et cartons de titre.</p>
+      <a href="docs/images/feature-export.png"><img src="docs/images/feature-export.png" alt="Exporter pour publier" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Couvertures et publication</h4>
+      <p>Depuis la v1.3.2, générez des couvertures et publiez immédiatement ou à une date programmée. Connectez les plateformes internationales via votre compte Upload-Post ; Bilibili se configure séparément.</p>
+      <a href="docs/images/feature-publish.png"><img src="docs/images/feature-publish.png" alt="Couvertures et publication" width="200"></a>
+      <a href="docs/images/feature-cover.png"><img src="docs/images/feature-cover.png" alt="Couvertures et publication" width="200"></a>
+      <p><sub>Aucun compte de publication n’est connecté dans cette démonstration. Les images montrent l’accès à la publication et les réglages de couverture, pas des publications effectuées.</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Gestion des publications</h4>
+      <p>Consultez l’historique et le calendrier, gérez les publications en attente ou téléchargez simplement vos extraits.</p>
+      <a href="docs/images/feature-calendar.png"><img src="docs/images/feature-calendar.png" alt="Gestion des publications" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Choix des modèles</h4>
+      <p>Qwen, API compatibles avec OpenAI, Gemini et autres services cloud, ou modèles locaux via Ollama / LM Studio.</p>
+      <a href="docs/images/feature-models.png"><img src="docs/images/feature-models.png" alt="Choix des modèles" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Automatiser les tâches</h4>
+      <p>Orchestrez les traitements avec la CLI ou appelez le même pipeline depuis un client MCP.</p>
+      <a href="docs/images/feature-cli.png"><img src="docs/images/feature-cli.png" alt="Automatiser les tâches" width="420"></a>
+      <p><sub>CLI / MCP n’a pas d’interface graphique : cette capture montre une page affichant la sortie réelle de l’aide des commandes.</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center" valign="top">
+      <h4>Interface multilingue</h4>
+      <p>Depuis la v1.3.1, l’application, le site et le README sont disponibles en chinois, anglais, japonais, coréen, espagnol, portugais, russe et français. Choisissez la langue dans l’en-tête ou suivez celle du système. Vos médias et le contenu généré conservent leur langue d’origine.</p>
+      <a href="docs/images/feature-languages.png"><img src="docs/images/feature-languages.png" alt="Interface multilingue" width="420"></a>
+      <p><sub>Interface en anglais et menu des langues ; les médias et le contenu généré conservent leur langue d’origine.</sub></p>
+    </td>
+  </tr>
+</table>
 
 <details>
 <summary>Plateformes, comptes requis et détails d’exportation</summary>
@@ -143,39 +143,6 @@ Bilibili seul utilise le paysage. LinkedIn ou X seul garde le cadrage d’origin
 À la publication, une couverture peut être générée automatiquement, pour que Bilibili ne refuse pas une couverture vide. Le détail de la couverture et du carton de titre par défaut suit la notice de cet installeur.
 
 Disponible dans la **v1.3.2**.
-
-</details>
-
-### Adaptez l’outil à votre usage
-
-- **Choix des modèles** : Qwen, API compatibles avec OpenAI, Gemini et autres services cloud, ou modèles locaux via Ollama / LM Studio.
-
-<details>
-<summary>Voir la capture · Choix des modèles</summary>
-
-![Choix des modèles](docs/images/feature-models.png)
-
-</details>
-
-- **Automatiser les tâches**: Orchestrez les traitements avec la CLI ou appelez le même pipeline depuis un client MCP.
-
-<details>
-<summary>Voir la capture · Automatiser les tâches</summary>
-
-![Automatiser les tâches](docs/images/feature-cli.png)
-
-CLI / MCP n’a pas d’interface graphique : cette capture montre une page affichant la sortie réelle de l’aide des commandes.
-
-</details>
-
-- **Interface multilingue**: Depuis la v1.3.1, l’application, le site et le README sont disponibles en chinois, anglais, japonais, coréen, espagnol, portugais, russe et français. Choisissez la langue dans l’en-tête ou suivez celle du système. Vos médias et le contenu généré conservent leur langue d’origine.
-
-<details>
-<summary>Voir la capture · Interface multilingue</summary>
-
-![Interface multilingue](docs/images/feature-languages.png)
-
-Interface en anglais et menu des langues ; les médias et le contenu généré conservent leur langue d’origine.
 
 </details>
 

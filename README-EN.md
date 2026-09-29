@@ -65,69 +65,69 @@ AutoClip uses AI to analyze video transcripts, find highlights, write titles, an
 
 ## What you can do
 
-### Find highlights in long videos
+Click any thumbnail to view the full image.
 
-- **Import footage**: Use local videos, YouTube or Bilibili links, with optional SRT subtitles.
-
-<details>
-<summary>View screenshot · Import footage</summary>
-
-![Import footage](docs/images/feature-import.png)
-
-</details>
-
-- **Find highlights**: Extract outlines, topic timelines, highlight scores, and clip titles from transcripts.
-
-<details>
-<summary>View screenshot · Find highlights</summary>
-
-![Find highlights](docs/images/clips-v1.4.0.png)
-
-</details>
-
-- **Create clips and collections**: Generate clips and suggested collections, then adjust their order manually.
-
-<details>
-<summary>View screenshot · Create clips and collections</summary>
-
-![Create clips and collections](docs/images/feature-collections.png)
-
-</details>
-
-
-### Export and publish
-
-- **Export for publishing**: Use presets for Douyin, Xiaohongshu, YouTube Shorts, and Bilibili, with burned-in subtitles and title cards.
-
-<details>
-<summary>View screenshot · Export for publishing</summary>
-
-![Export for publishing](docs/images/feature-export.png)
-
-</details>
-
-- **Covers and publishing**: Since v1.3.2, generate covers and publish immediately or on a schedule. Connect overseas platforms through your Upload-Post account; configure Bilibili separately.
-
-<details>
-<summary>View screenshot · Covers and publishing</summary>
-
-![Covers and publishing](docs/images/feature-publish.png)
-
-![Covers and publishing](docs/images/feature-cover.png)
-
-No publishing account is connected in this demo. These images show the publishing entry and cover settings, not completed posts.
-
-</details>
-
-- **Publishing management**: Review publishing history and the calendar, manage pending posts, or simply download your clips.
-
-<details>
-<summary>View screenshot · Publishing management</summary>
-
-![Publishing management](docs/images/feature-calendar.png)
-
-</details>
-
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Import footage</h4>
+      <p>Use local videos, YouTube or Bilibili links, with optional SRT subtitles.</p>
+      <a href="docs/images/feature-import.png"><img src="docs/images/feature-import.png" alt="Import footage" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Find highlights</h4>
+      <p>Extract outlines, topic timelines, highlight scores, and clip titles from transcripts.</p>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Find highlights" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Create clips and collections</h4>
+      <p>Generate clips and suggested collections, then adjust their order manually.</p>
+      <a href="docs/images/feature-collections.png"><img src="docs/images/feature-collections.png" alt="Create clips and collections" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Export for publishing</h4>
+      <p>Use presets for Douyin, Xiaohongshu, YouTube Shorts, and Bilibili, with burned-in subtitles and title cards.</p>
+      <a href="docs/images/feature-export.png"><img src="docs/images/feature-export.png" alt="Export for publishing" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Covers and publishing</h4>
+      <p>Since v1.3.2, generate covers and publish immediately or on a schedule. Connect overseas platforms through your Upload-Post account; configure Bilibili separately.</p>
+      <a href="docs/images/feature-publish.png"><img src="docs/images/feature-publish.png" alt="Covers and publishing" width="200"></a>
+      <a href="docs/images/feature-cover.png"><img src="docs/images/feature-cover.png" alt="Covers and publishing" width="200"></a>
+      <p><sub>No publishing account is connected in this demo. These images show the publishing entry and cover settings, not completed posts.</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Publishing management</h4>
+      <p>Review publishing history and the calendar, manage pending posts, or simply download your clips.</p>
+      <a href="docs/images/feature-calendar.png"><img src="docs/images/feature-calendar.png" alt="Publishing management" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>Choose your models</h4>
+      <p>Qwen, OpenAI-compatible APIs, Gemini and other cloud services, or local models through Ollama / LM Studio.</p>
+      <a href="docs/images/feature-models.png"><img src="docs/images/feature-models.png" alt="Choose your models" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>Automate your workflow</h4>
+      <p>Orchestrate runs with the CLI or call the same processing pipeline from an MCP client.</p>
+      <a href="docs/images/feature-cli.png"><img src="docs/images/feature-cli.png" alt="Automate your workflow" width="420"></a>
+      <p><sub>CLI / MCP has no GUI: this image captures a display page of actual command help output.</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center" valign="top">
+      <h4>Multilingual interface</h4>
+      <p>Since v1.3.1, the app, website and README support Chinese, English, Japanese, Korean, Spanish, Portuguese, Russian and French. Choose a language in the header or follow your system. Your media and generated content keep their original language.</p>
+      <a href="docs/images/feature-languages.png"><img src="docs/images/feature-languages.png" alt="Multilingual interface" width="420"></a>
+      <p><sub>English interface and language menu; media and generated content retain their original language.</sub></p>
+    </td>
+  </tr>
+</table>
 
 <details>
 <summary>Platforms, account requirements, and export details</summary>
@@ -143,39 +143,6 @@ Visibility defaults to private / self where the platform supports it. AutoClip p
 Vertical and Bilibili in the same batch are rendered separately.
 
 When publishing, a cover can be generated automatically so Bilibili does not reject an empty cover. Default cover and title-card details follow that release’s installer notes. Available in **v1.3.2**.
-
-</details>
-
-### Work your way
-
-- **Choose your models**: Qwen, OpenAI-compatible APIs, Gemini and other cloud services, or local models through Ollama / LM Studio.
-
-<details>
-<summary>View screenshot · Choose your models</summary>
-
-![Choose your models](docs/images/feature-models.png)
-
-</details>
-
-- **Automate your workflow**: Orchestrate runs with the CLI or call the same processing pipeline from an MCP client.
-
-<details>
-<summary>View screenshot · Automate your workflow</summary>
-
-![Automate your workflow](docs/images/feature-cli.png)
-
-CLI / MCP has no GUI: this image captures a display page of actual command help output.
-
-</details>
-
-- **Multilingual interface**: Since v1.3.1, the app, website and README support Chinese, English, Japanese, Korean, Spanish, Portuguese, Russian and French. Choose a language in the header or follow your system. Your media and generated content keep their original language.
-
-<details>
-<summary>View screenshot · Multilingual interface</summary>
-
-![Multilingual interface](docs/images/feature-languages.png)
-
-English interface and language menu; media and generated content retain their original language.
 
 </details>
 

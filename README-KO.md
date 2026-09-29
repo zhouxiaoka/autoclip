@@ -65,69 +65,69 @@ AutoClip은 AI로 영상 자막을 분석하고 하이라이트를 찾아 제목
 
 ## 주요 기능
 
-### 긴 영상에서 하이라이트 찾기
+썸네일을 클릭하면 큰 이미지를 볼 수 있습니다.
 
-- **영상 가져오기**: 로컬 영상, YouTube 및 Bilibili 링크를 지원하며 SRT 자막을 추가할 수 있습니다.
-
-<details>
-<summary>화면 보기 · 영상 가져오기</summary>
-
-![영상 가져오기](docs/images/feature-import.png)
-
-</details>
-
-- **하이라이트 찾기**: 자막에서 개요, 주제별 시간 구간, 하이라이트 점수, 클립 제목을 추출합니다.
-
-<details>
-<summary>화면 보기 · 하이라이트 찾기</summary>
-
-![하이라이트 찾기](docs/images/clips-v1.4.0.png)
-
-</details>
-
-- **클립과 모음 영상**: 클립과 추천 모음 영상을 생성하고 순서를 직접 조정할 수 있습니다.
-
-<details>
-<summary>화면 보기 · 클립과 모음 영상</summary>
-
-![클립과 모음 영상](docs/images/feature-collections.png)
-
-</details>
-
-
-### 내보내기 및 게시
-
-- **게시용 내보내기**: Douyin, Xiaohongshu, YouTube Shorts, Bilibili 프리셋과 자막 삽입, 타이틀 카드를 지원합니다.
-
-<details>
-<summary>화면 보기 · 게시용 내보내기</summary>
-
-![게시용 내보내기](docs/images/feature-export.png)
-
-</details>
-
-- **표지 및 게시**: v1.3.2부터 표지 자동 생성, 즉시 게시, 예약 게시를 지원합니다. 해외 플랫폼은 본인의 Upload-Post 계정으로 연결하고 Bilibili는 별도로 설정합니다.
-
-<details>
-<summary>화면 보기 · 표지 및 게시</summary>
-
-![표지 및 게시](docs/images/feature-publish.png)
-
-![표지 및 게시](docs/images/feature-cover.png)
-
-이 데모에는 게시 계정이 연결되어 있지 않습니다. 게시 완료 결과가 아닌 게시 진입 화면과 표지 설정을 보여 줍니다.
-
-</details>
-
-- **게시 관리**: 게시 기록과 달력에서 예약을 관리할 수 있으며, 게시 없이 영상만 다운로드할 수도 있습니다.
-
-<details>
-<summary>화면 보기 · 게시 관리</summary>
-
-![게시 관리](docs/images/feature-calendar.png)
-
-</details>
-
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>영상 가져오기</h4>
+      <p>로컬 영상, YouTube 및 Bilibili 링크를 지원하며 SRT 자막을 추가할 수 있습니다.</p>
+      <a href="docs/images/feature-import.png"><img src="docs/images/feature-import.png" alt="영상 가져오기" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>하이라이트 찾기</h4>
+      <p>자막에서 개요, 주제별 시간 구간, 하이라이트 점수, 클립 제목을 추출합니다.</p>
+      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="하이라이트 찾기" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>클립과 모음 영상</h4>
+      <p>클립과 추천 모음 영상을 생성하고 순서를 직접 조정할 수 있습니다.</p>
+      <a href="docs/images/feature-collections.png"><img src="docs/images/feature-collections.png" alt="클립과 모음 영상" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>게시용 내보내기</h4>
+      <p>Douyin, Xiaohongshu, YouTube Shorts, Bilibili 프리셋과 자막 삽입, 타이틀 카드를 지원합니다.</p>
+      <a href="docs/images/feature-export.png"><img src="docs/images/feature-export.png" alt="게시용 내보내기" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>표지 및 게시</h4>
+      <p>v1.3.2부터 표지 자동 생성, 즉시 게시, 예약 게시를 지원합니다. 해외 플랫폼은 본인의 Upload-Post 계정으로 연결하고 Bilibili는 별도로 설정합니다.</p>
+      <a href="docs/images/feature-publish.png"><img src="docs/images/feature-publish.png" alt="표지 및 게시" width="200"></a>
+      <a href="docs/images/feature-cover.png"><img src="docs/images/feature-cover.png" alt="표지 및 게시" width="200"></a>
+      <p><sub>이 데모에는 게시 계정이 연결되어 있지 않습니다. 게시 완료 결과가 아닌 게시 진입 화면과 표지 설정을 보여 줍니다.</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <h4>게시 관리</h4>
+      <p>게시 기록과 달력에서 예약을 관리할 수 있으며, 게시 없이 영상만 다운로드할 수도 있습니다.</p>
+      <a href="docs/images/feature-calendar.png"><img src="docs/images/feature-calendar.png" alt="게시 관리" width="420"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>모델 선택</h4>
+      <p>Qwen, OpenAI 호환 API, Gemini 등 클라우드 서비스나 Ollama / LM Studio의 로컬 모델을 사용할 수 있습니다.</p>
+      <a href="docs/images/feature-models.png"><img src="docs/images/feature-models.png" alt="모델 선택" width="420"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h4>자동화</h4>
+      <p>CLI로 작업을 구성하거나 MCP 클라이언트에서 동일한 처리 파이프라인을 호출할 수 있습니다.</p>
+      <a href="docs/images/feature-cli.png"><img src="docs/images/feature-cli.png" alt="자동화" width="420"></a>
+      <p><sub>CLI / MCP에는 GUI가 없습니다. 실제 명령 도움말 출력을 표시한 페이지의 스크린샷입니다.</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center" valign="top">
+      <h4>다국어 인터페이스</h4>
+      <p>v1.3.1부터 앱, 웹사이트, README는 중국어, 영어, 일본어, 한국어, 스페인어, 포르투갈어, 러시아어, 프랑스어를 지원합니다. 상단에서 언어를 선택하거나 시스템 설정을 따를 수 있습니다. 원본 미디어와 생성 콘텐츠의 언어는 변경되지 않습니다.</p>
+      <a href="docs/images/feature-languages.png"><img src="docs/images/feature-languages.png" alt="다국어 인터페이스" width="420"></a>
+      <p><sub>영어 UI와 언어 선택 메뉴입니다. 미디어와 생성된 콘텐츠는 원래 언어를 유지합니다.</sub></p>
+    </td>
+  </tr>
+</table>
 
 <details>
 <summary>지원 플랫폼, 계정 요건 및 내보내기 세부 정보</summary>
@@ -137,39 +137,6 @@ AutoClip은 AI로 영상 자막을 분석하고 하이라이트를 찾아 제목
 「이번 주 배치」는 해외만 해당합니다. 아직 올리지 않은 클립을 월·수·금 09:00에 넣고, Bilibili는 넣지 않습니다. 세로 계정은 9:16으로 만들며 60초로 자르지 않습니다. Bilibili만이면 가로 화면입니다. LinkedIn 또는 X만이면 원본 화면입니다. 세로 계정과 Bilibili를 같은 번에 보내면 각각 따로 만듭니다.
 
 게시할 때 커버를 자동으로 만들 수 있어, Bilibili 빈 커버 거절을 피합니다. 기본 커버와 타이틀 카드의 세부 내용은 그 버전 설치 파일 설명을 따릅니다. **v1.3.2**부터 사용할 수 있습니다.
-
-</details>
-
-### 작업 방식에 맞게 사용
-
-- **모델 선택**: Qwen, OpenAI 호환 API, Gemini 등 클라우드 서비스나 Ollama / LM Studio의 로컬 모델을 사용할 수 있습니다.
-
-<details>
-<summary>화면 보기 · 모델 선택</summary>
-
-![모델 선택](docs/images/feature-models.png)
-
-</details>
-
-- **자동화**: CLI로 작업을 구성하거나 MCP 클라이언트에서 동일한 처리 파이프라인을 호출할 수 있습니다.
-
-<details>
-<summary>화면 보기 · 자동화</summary>
-
-![자동화](docs/images/feature-cli.png)
-
-CLI / MCP에는 GUI가 없습니다. 실제 명령 도움말 출력을 표시한 페이지의 스크린샷입니다.
-
-</details>
-
-- **다국어 인터페이스**: v1.3.1부터 앱, 웹사이트, README는 중국어, 영어, 일본어, 한국어, 스페인어, 포르투갈어, 러시아어, 프랑스어를 지원합니다. 상단에서 언어를 선택하거나 시스템 설정을 따를 수 있습니다. 원본 미디어와 생성 콘텐츠의 언어는 변경되지 않습니다.
-
-<details>
-<summary>화면 보기 · 다국어 인터페이스</summary>
-
-![다국어 인터페이스](docs/images/feature-languages.png)
-
-영어 UI와 언어 선택 메뉴입니다. 미디어와 생성된 콘텐츠는 원래 언어를 유지합니다.
 
 </details>
 
