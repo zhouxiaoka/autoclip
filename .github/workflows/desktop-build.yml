@@ -196,10 +196,81 @@ jobs:
             src-tauri/target/release/bundle/nsis/*.sig
           retention-days: 30
 
+  # 没有 Windows 真机时的替代冒烟：在干净的 windows-latest 上装上一个正式版，
+  # 模拟旧版后端残留锁住 _asyncio.pyd，再静默覆盖安装本次构建，然后用安装目录里的 Python
+  # 跑后端 / ffmpeg / 来源守卫。界面和真实链接下载仍需人工或用户验证，见 RELEASE_CHECKLIST.md。
+  smoke-windows-x64:
+    needs: build-windows-x64
+    if: needs.build-windows-x64.result == 'success'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download new installer
+        uses: actions/download-artifact@v4
+        with:
+          name: autoclip-desktop-windows-x64
+          path: new
+
+      - name: Install previous stable release
+        run: |
+          $prev = gh release view --repo $env:GITHUB_REPOSITORY --json tagName -q .tagName
+          "PREV_TAG=$prev" >> $env:GITHUB_ENV
+          gh release download $prev --repo $env:GITHUB_REPOSITORY --pattern '*x64-setup.exe' --dir old
+          $installer = Get-ChildItem old\*x64-setup.exe | Select-Object -First 1
+          $p = Start-Process $installer.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "旧版 $prev 安装失败: $($p.ExitCode)" }
+          $key = Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall |
+            Get-ItemProperty | Where-Object DisplayName -like 'AutoClip*' | Select-Object -First 1
+          if (-not $key) { throw '注册表里找不到 AutoClip 安装记录' }
+          $dir = $key.InstallLocation
+          if (-not $dir) { $dir = Split-Path ($key.UninstallString -replace '"','') }
+          "INSTALL_DIR=$dir" >> $env:GITHUB_ENV
+          "旧版 $prev 安装到 $dir（$($key.DisplayVersion)）"
+
+      - name: Simulate leftover backend holding _asyncio.pyd
+        run: |
+          $py = Join-Path $env:INSTALL_DIR 'resources\python\python.exe'
+          $p = Start-Process $py -ArgumentList '-c', '"import asyncio, time; time.sleep(900)"' -PassThru -WindowStyle Hidden
+          Start-Sleep 3
+          if ($p.HasExited) { throw '模拟残留进程没起来' }
+          "LOCK_PID=$($p.Id)" >> $env:GITHUB_ENV
+          "残留 python.exe PID=$($p.Id)"
+
+      - name: Upgrade in place with the new installer
+        run: |
+          $installer = Get-ChildItem -Recurse new -Filter '*-setup.exe' | Select-Object -First 1
+          $p = Start-Process $installer.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "覆盖安装失败: $($p.ExitCode)" }
+          if (Get-Process -Id $env:LOCK_PID -ErrorAction SilentlyContinue) { throw '安装器没有结束残留的 python.exe' }
+          $marker = Join-Path $env:INSTALL_DIR 'resources\backend\core\local_origin_guard.py'
+          if (-not (Test-Path $marker)) { throw '覆盖安装后仍是旧文件（新版文件没写进去）' }
+          "从 $env:PREV_TAG 覆盖升级成功，残留进程已被安装器结束"
+
+      - name: Verify installed runtime
+        run: |
+          $res = Join-Path $env:INSTALL_DIR 'resources'
+          & (Join-Path $res 'python\python.exe') -B scripts\verify_windows_install.py --resources $res --report windows-smoke.json
+          if ($LASTEXITCODE -ne 0) { throw "安装后冒烟失败: $LASTEXITCODE" }
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smoke-report
+          path: windows-smoke.json
+          if-no-files-found: ignore
+
   # Publish only after both platforms succeed; never advertise a partial release.
   release:
-    if: startsWith(github.ref, 'refs/tags/v') && needs.build-macos-arm64.result == 'success' && needs.build-windows-x64.result == 'success'
-    needs: [build-macos-arm64, build-windows-x64]
+    if: startsWith(github.ref, 'refs/tags/v') && needs.build-macos-arm64.result == 'success' && needs.build-windows-x64.result == 'success' && needs.smoke-windows-x64.result == 'success'
+    needs: [build-macos-arm64, build-windows-x64, smoke-windows-x64]
     runs-on: ubuntu-latest
     env:
       # 放在 job 级：step 自己的 env 在它的 if 里读不到
