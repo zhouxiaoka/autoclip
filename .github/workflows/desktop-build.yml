@@ -218,46 +218,10 @@ jobs:
           name: autoclip-desktop-windows-x64
           path: new
 
-      - name: Install previous stable release
-        run: |
-          $prev = gh release view --repo $env:GITHUB_REPOSITORY --json tagName -q .tagName
-          "PREV_TAG=$prev" >> $env:GITHUB_ENV
-          gh release download $prev --repo $env:GITHUB_REPOSITORY --pattern '*x64-setup.exe' --dir old
-          $installer = Get-ChildItem old\*x64-setup.exe | Select-Object -First 1
-          $p = Start-Process $installer.FullName -ArgumentList '/S' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "旧版 $prev 安装失败: $($p.ExitCode)" }
-          $key = Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall |
-            Get-ItemProperty | Where-Object DisplayName -like 'AutoClip*' | Select-Object -First 1
-          if (-not $key) { throw '注册表里找不到 AutoClip 安装记录' }
-          $dir = $key.InstallLocation
-          if (-not $dir) { $dir = Split-Path ($key.UninstallString -replace '"','') }
-          "INSTALL_DIR=$dir" >> $env:GITHUB_ENV
-          "旧版 $prev 安装到 $dir（$($key.DisplayVersion)）"
-
-      - name: Simulate leftover backend holding _asyncio.pyd
-        run: |
-          $py = Join-Path $env:INSTALL_DIR 'resources\python\python.exe'
-          $p = Start-Process $py -ArgumentList '-c', '"import asyncio, time; time.sleep(900)"' -PassThru -WindowStyle Hidden
-          Start-Sleep 3
-          if ($p.HasExited) { throw '模拟残留进程没起来' }
-          "LOCK_PID=$($p.Id)" >> $env:GITHUB_ENV
-          "残留 python.exe PID=$($p.Id)"
-
-      - name: Upgrade in place with the new installer
+      - name: Upgrade over previous release and verify installed runtime
         run: |
           $installer = Get-ChildItem -Recurse new -Filter '*-setup.exe' | Select-Object -First 1
-          $p = Start-Process $installer.FullName -ArgumentList '/S' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "覆盖安装失败: $($p.ExitCode)" }
-          if (Get-Process -Id $env:LOCK_PID -ErrorAction SilentlyContinue) { throw '安装器没有结束残留的 python.exe' }
-          $marker = Join-Path $env:INSTALL_DIR 'resources\backend\core\local_origin_guard.py'
-          if (-not (Test-Path $marker)) { throw '覆盖安装后仍是旧文件（新版文件没写进去）' }
-          "从 $env:PREV_TAG 覆盖升级成功，残留进程已被安装器结束"
-
-      - name: Verify installed runtime
-        run: |
-          $res = Join-Path $env:INSTALL_DIR 'resources'
-          & (Join-Path $res 'python\python.exe') -B scripts\verify_windows_install.py --resources $res --report windows-smoke.json
-          if ($LASTEXITCODE -ne 0) { throw "安装后冒烟失败: $LASTEXITCODE" }
+          ./scripts/windows_upgrade_smoke.ps1 -NewInstaller $installer.FullName
 
       - name: Upload smoke report
         if: always()
