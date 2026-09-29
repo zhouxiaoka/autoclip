@@ -5,10 +5,12 @@ AutoClip MCP server（stdio）——让 Cursor / Claude Code / 任何 MCP 客户
     autoclip mcp                       # 装了包
     python -m backend.mcp_server       # 仓库内
 
-客户端配置示例（Cursor `~/.cursor/mcp.json` / Claude `claude mcp add`）：
+客户端配置示例（Cursor `~/.cursor/mcp.json` / Claude `claude mcp add` / opencode）：
     { "mcpServers": { "autoclip": { "command": "autoclip", "args": ["mcp"] } } }
     或 { "command": "/path/to/autoclip/venv/bin/python", "args": ["-m", "backend.mcp_server"],
          "env": { "PYTHONPATH": "/path/to/autoclip" } }
+    opencode（opencode.json；一条命令：`autoclip mcp install opencode`，见 docs/OPENCODE.md）：
+    { "mcp": { "autoclip": { "type": "local", "command": ["autoclip", "mcp"], "enabled": true } } }
 
 工具：
     clip_video          同步出片（几分钟到几十分钟，带进度通知）

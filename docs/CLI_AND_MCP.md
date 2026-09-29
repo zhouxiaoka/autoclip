@@ -5,7 +5,7 @@
 | 形态 | 一句话 | 入口 |
 |---|---|---|
 | CLI | `autoclip run video.mp4 --provider ollama` 一条命令出片 | `backend/cli.py` |
-| MCP server | 让 Cursor / Claude Code / 任何 MCP 客户端直接调 AutoClip | `backend/mcp_server.py` |
+| MCP server | 让 opencode / Cursor / Claude Code / 任何 MCP 客户端直接调 AutoClip | `backend/mcp_server.py` |
 | 本地模型预设 | 设置页 / CLI 直接选 Ollama、LM Studio，不用填 key | `backend/core/local_presets.py` |
 
 共享逻辑在 `backend/services/local_runner.py`：不起 FastAPI / Celery，在当前进程里跑 `SimplePipelineAdapter`，
@@ -114,6 +114,19 @@ claude mcp add autoclip -- /path/to/autoclip/venv/bin/autoclip mcp
 没装包时把 `command` 换成 `/path/to/autoclip/venv/bin/python`，`args` 为 `["-m", "backend.mcp_server"]`，
 并加 `"env": {"PYTHONPATH": "/path/to/autoclip"}`。
 
+**OpenCode**（`~/.config/opencode/opencode.json`，或项目里的 `opencode.json`；带注释的 `.jsonc` 也支持）：
+
+```json
+{
+  "mcp": {
+    "autoclip": { "type": "local", "command": ["/path/to/autoclip/venv/bin/autoclip", "mcp"], "enabled": true }
+  }
+}
+```
+
+也可以让 AutoClip 自己写：`autoclip mcp install opencode`（`--scope project --dir .` 写项目配置、`--print` 只打印片段、
+`--force` 在现有配置带注释时先备份再重写）。接入后在 opencode 里给一个视频路径即可出片，详见 `docs/OPENCODE.md`。
+
 工具：
 
 | 工具 | 说明 |
@@ -135,7 +148,7 @@ claude mcp add autoclip -- /path/to/autoclip/venv/bin/autoclip mcp
 - 任务状态在内存里；server 重启后 `get_job_status` 会退回从磁盘读项目结果。
 
 **Agent skill**：`skills/autoclip/SKILL.md` 教 agent 何时用哪个工具、参数怎么选、结果怎么呈现、切片为 0 怎么办。
-复制到 `~/.cursor/skills/autoclip/` 或 `~/.claude/skills/autoclip/` 即生效。
+复制到 `~/.cursor/skills/autoclip/`、`~/.claude/skills/autoclip/` 或 `~/.config/opencode/skills/autoclip/` 即生效。
 
 ---
 

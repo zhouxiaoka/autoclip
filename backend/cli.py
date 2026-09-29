@@ -9,6 +9,7 @@ autoclip — 命令行出片。
     autoclip run video.mp4 --srt video.srt --min-score 0.6 --json
     autoclip list / show <project_id> / providers / doctor
     autoclip publish <project_id> --clip 2 --platform tiktok --platform youtube   # 经 Upload-Post 发到海外平台
+    autoclip mcp install opencode                  # 把 AutoClip 写进 opencode 的 MCP 配置（默认全局）
 
 产物与桌面应用共用同一个数据目录（mac: ~/Library/Application Support/AutoClip），
 跑完在桌面应用首页就能看到。用 --data-dir 或 AUTOCLIP_DATA_DIR 可以换目录。
@@ -442,9 +443,53 @@ def cmd_publish(args: argparse.Namespace) -> int:
 
 # ---------------------------------------------------------------- mcp ---
 def cmd_mcp(args: argparse.Namespace) -> int:
+    if getattr(args, "mcp_cmd", None) == "install":
+        return cmd_mcp_install(args)
     from backend.mcp_server import main as mcp_main
 
     return mcp_main()
+
+
+def _print_opencode_next_steps() -> None:
+    print(_dim("  在 opencode 里直接说：把 C:\\Videos\\talk.mp4 切片，它会调 AutoClip 的 MCP 工具"))
+    print(_dim("  模型没配好先跑 autoclip doctor；opencode 要新开会话才会加载新的 MCP"))
+
+
+def cmd_mcp_install(args: argparse.Namespace) -> int:
+    """把 AutoClip 写进 MCP 客户端配置；目前支持 opencode。"""
+    from backend.services import opencode_setup
+
+    target = opencode_setup.opencode_config_path(args.scope, Path(args.dir) if args.dir else None)
+    if args.print_only:
+        snippet = opencode_setup.render_snippet(opencode_setup.build_entry(), name=args.name)
+        if args.json:
+            print(json.dumps({"client": args.client, "path": str(target), "snippet": snippet}, ensure_ascii=False, indent=2))
+        else:
+            print(snippet)
+            print(_dim(f"\n把上面的片段合并进 {target}"), file=sys.stderr)
+        return 0
+
+    report = opencode_setup.install_opencode(target, name=args.name, force=args.force)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    elif report["action"] == "created":
+        print(_c("32", "✓ ") + f"已写入 {report['path']}")
+        _print_opencode_next_steps()
+    elif report["action"] == "updated":
+        print(_c("32", "✓ ") + f"已更新 {report['path']} 的 mcp.{args.name}")
+        if report.get("backup"):
+            print(_dim(f"  旧配置已备份：{report['backup']}"))
+        _print_opencode_next_steps()
+    elif report["action"] == "unchanged":
+        print(_dim(f"• {report['path']} 里已有相同的 mcp.{args.name}，未改动"))
+    else:
+        _err(report.get("error") or "写入失败")
+        if report.get("hint"):
+            print(_dim(f"  {report['hint']}"), file=sys.stderr)
+        print(report["snippet"])
+    for w in report.get("warnings") or []:
+        print(_dim(f"  ! {w}"), file=sys.stderr)
+    return 0 if report["ok"] else 1
 
 
 # ---------------------------------------------------------------- parser ---
@@ -492,8 +537,18 @@ def build_parser() -> argparse.ArgumentParser:
     _add_llm_args(d)
     d.set_defaults(func=cmd_doctor)
 
-    m = sub.add_parser("mcp", help="以 MCP server（stdio）方式运行，供 Cursor / Claude 调用")
-    m.set_defaults(func=cmd_mcp)
+    m = sub.add_parser("mcp", help="以 MCP server（stdio）方式运行，供 Cursor / Claude / opencode 调用；install 子命令自动写客户端配置")
+    m.set_defaults(func=cmd_mcp)  # 不带子命令 = 直接起 server（子命令的分发在 cmd_mcp 里判断）
+    mi_sub = m.add_subparsers(dest="mcp_cmd")
+    mi = mi_sub.add_parser("install", help="把 AutoClip 写进 MCP 客户端配置（目前支持 opencode）")
+    mi.add_argument("client", nargs="?", default="opencode", choices=["opencode"], help="MCP 客户端（默认 opencode）")
+    mi.add_argument("--scope", choices=["global", "project"], default="global",
+                    help="global=~/.config/opencode/opencode.json；project=<--dir 目录>/opencode.json")
+    mi.add_argument("--dir", help="project 模式的项目目录（默认当前目录）")
+    mi.add_argument("--name", default="autoclip", help="配置里的 MCP 服务名（默认 autoclip）")
+    mi.add_argument("--print", dest="print_only", action="store_true", help="只打印配置片段，不改文件")
+    mi.add_argument("--force", action="store_true", help="现有配置含注释 / 尾随逗号时，先备份再重写为纯 JSON")
+    mi.add_argument("--json", action="store_true")
 
     e = sub.add_parser("export", help="把切片渲成可发布成片（9:16 / 烧字幕 / 标题卡）")
     e.add_argument("project_id")
