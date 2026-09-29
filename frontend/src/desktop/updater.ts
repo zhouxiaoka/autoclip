@@ -45,7 +45,21 @@ export async function checkForUpdate(): Promise<AppUpdate | null> {
     date: update.date,
     download: (onEvent) => update.download(onEvent),
     installAndRelaunch: async () => {
-      await update.install()
+      // 先停后端，否则 python.exe 还占着 resources\python\*.pyd，Windows 覆盖安装会失败（#224）。
+      // 停不掉也继续：安装器的 PREINSTALL 钩子还会按安装目录再清一次。
+      const { invoke } = await import('@tauri-apps/api/core')
+      try {
+        await invoke('stop_backend_service')
+      } catch (error) {
+        console.warn('更新前停止后端失败，交给安装器处理', error)
+      }
+      try {
+        await update.install()
+      } catch (error) {
+        // 安装没成功就把后端拉起来，别让用户停在一个没有后端的界面上
+        await invoke('start_backend_service').catch(() => undefined)
+        throw error
+      }
       const { relaunch } = await import('@tauri-apps/plugin-process')
       await relaunch()
     },

@@ -2,6 +2,7 @@
 API v1 package for FastAPI routes.
 统一管理所有API路由
 """
+import os
 
 from fastapi import APIRouter
 
@@ -48,7 +49,9 @@ api_router.include_router(subtitle_editor_router, prefix="/subtitle-editor", tag
 api_router.include_router(upload_router, tags=["upload"])
 api_router.include_router(progress_router, prefix="/progress", tags=["progress"])
 api_router.include_router(pipeline_control_router, prefix="/pipeline", tags=["pipeline"])
-api_router.include_router(debug_router, tags=["debug"])
+# 调试路由能直接往发布通道塞消息，只在显式开启时挂载
+if os.getenv("AUTOCLIP_ENABLE_DEBUG_ROUTES", "").lower() in ("1", "true", "yes"):
+    api_router.include_router(debug_router, tags=["debug"])
 api_router.include_router(simple_progress_router, tags=["simple-progress"])
 # api_router.include_router(environment_router, tags=["environment"])  # 文件不存在，暂时注释
 api_router.include_router(settings_router, tags=["settings"])

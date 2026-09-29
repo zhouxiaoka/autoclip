@@ -25,5 +25,8 @@ if __name__ == "__main__":
                     logger.error(f"无效的端口号: {sys.argv[i + 1]}")
                     port = 8000
     
-    logger.info(f"启动服务器，端口: {port}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # 默认只听本机；Docker / 局域网访问显式设 AUTOCLIP_HOST=0.0.0.0（Dockerfile 的 CMD 自带 --host）
+    import os
+    host = os.getenv("AUTOCLIP_HOST", "127.0.0.1")
+    logger.info(f"启动服务器，地址: {host}:{port}")
+    uvicorn.run(app, host=host, port=port)
