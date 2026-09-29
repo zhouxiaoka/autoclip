@@ -13,6 +13,8 @@ from typing import Dict, Any, Optional, Callable
 from datetime import datetime
 import yt_dlp
 
+from .ffmpeg_utils import ytdlp_ffmpeg_options
+
 try:
     from .error_handler import FileIOError, ValidationError, ProcessingError
 except ImportError:
@@ -150,6 +152,8 @@ class BilibiliDownloader:
         # 设置下载选项 - 改进字幕下载策略
         ydl_opts = {
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'merge_output_format': 'mp4',
+            **ytdlp_ffmpeg_options(),
             'writesubtitles': True,
             'writeautomaticsub': True,  # 同时尝试下载自动生成字幕
             'subtitleslangs': ['ai-zh', 'zh-Hans', 'zh', 'en'],  # 多种字幕语言
@@ -248,6 +252,7 @@ class BilibiliDownloader:
                     'writeautomaticsub': True,
                     'subtitleslangs': langs,
                     'subtitlesformat': 'srt',
+                    **ytdlp_ffmpeg_options(),
                     'outtmpl': str(self.download_dir / f'{safe_title}_sub.%(ext)s'),
                     'noplaylist': True,
                     'quiet': True,
@@ -281,6 +286,7 @@ class BilibiliDownloader:
                 'writeautomaticsub': True,
                 'subtitleslangs': ['zh-Hans', 'zh', 'en'],
                 'subtitlesformat': 'srt',
+                **ytdlp_ffmpeg_options(),
                 'outtmpl': str(self.download_dir / f'{safe_title}_nocookie.%(ext)s'),
                 'noplaylist': True,
                 'quiet': True,

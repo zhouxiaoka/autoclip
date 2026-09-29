@@ -1,0 +1,47 @@
+# 只重跑 Windows 安装冒烟，复用某次 desktop-build 已经打好的安装包，不用再等 25 分钟构建。
+# 调冒烟脚本、复现安装问题时用。
+name: Windows Install Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: "desktop-build.yml 的 run id（其中 build-windows-x64 成功）"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download installer from build run
+        uses: actions/download-artifact@v4
+        with:
+          name: autoclip-desktop-windows-x64
+          path: new
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upgrade over previous release and verify installed runtime
+        run: |
+          $installer = Get-ChildItem -Recurse new -Filter '*-setup.exe' | Select-Object -First 1
+          ./scripts/windows_upgrade_smoke.ps1 -NewInstaller $installer.FullName
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smoke-report
+          path: windows-smoke.json
+          if-no-files-found: ignore

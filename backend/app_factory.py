@@ -14,6 +14,7 @@ from backend.core.database import engine
 from backend.models.base import Base
 from backend.core.config import get_logging_config, get_api_key
 from backend.core.error_middleware import global_exception_handler
+from backend.core.local_origin_guard import LocalOriginGuard, allowed_origins
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +61,13 @@ def create_app(mode: str = "web") -> FastAPI:
     # 设置应用状态
     app.state.mode = mode
     
-    # 配置 CORS
+    # 来源守卫在内、CORS 在外：预检由 CORS 应答，其他网页的写请求由守卫拦下。
+    # 以前是 allow_origins=["*"] + allow_credentials，任意网页都能读设置里的 API Key。
+    origins = allowed_origins()
+    app.add_middleware(LocalOriginGuard, origins=origins, enforce_local_host=(mode == "desktop"))
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # 生产环境需要配置具体域名
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

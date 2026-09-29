@@ -16,6 +16,12 @@ import os
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
+# 测试库放临时目录。默认的 sqlite:///./data/autoclip.db 相对 cwd，
+# test_repositories 的 reset_database() 会 drop_all 掉开发者本机的库。
+# 必须在任何 backend.core.database 导入之前设置。
+_TEST_DB_DIR = tempfile.mkdtemp(prefix="autoclip-tests-")
+os.environ.setdefault("DATABASE_URL", f"sqlite:///{Path(_TEST_DB_DIR) / 'autoclip.db'}")
+
 
 @pytest.fixture(scope="session")
 def test_data_dir(tmp_path_factory):
