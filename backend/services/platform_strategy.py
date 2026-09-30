@@ -1,0 +1,122 @@
+"""One source of truth for platform-oriented video output defaults.
+
+Content discovery decides which moments deserve an output. This module only
+describes how an already-selected moment should be packaged for a destination.
+"""
+from __future__ import annotations
+
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass
+from typing import Literal
+
+DurationPolicy = Literal["short", "long", "adaptive"]
+
+
+@dataclass(frozen=True)
+class PlatformStrategy:
+    id: str
+    label: str
+    transport: Literal["download_only", "upload_post", "bilibili_direct"]
+    transport_platform: str | None
+    width: int | None
+    height: int | None
+    layout: Literal["blur", "crop", "fit", "none"]
+    duration_policy: DurationPolicy
+    min_recommended_duration_sec: int | None
+    max_duration_sec: int | None
+    subtitle_style: Literal["clean", "bold", "box", "accent"]
+    title_style: str
+    title_motion: bool
+    cover_aspect: Literal["portrait", "landscape", "original"]
+    aliases: tuple[str, ...] = ()
+
+    @property
+    def aspect(self) -> Literal["portrait", "landscape", "original"]:
+        if self.width and self.height:
+            return "portrait" if self.height > self.width else "landscape"
+        return "original"
+
+    def export_spec(self) -> dict[str, object]:
+        return {
+            "label": self.label,
+            "w": self.width,
+            "h": self.height,
+            "layout": self.layout,
+            "max_sec": self.max_duration_sec,
+            "strategy_id": self.id,
+            "duration_policy": self.duration_policy,
+            "min_recommended_duration_sec": self.min_recommended_duration_sec,
+            "subtitle_style": self.subtitle_style,
+            "title_style": self.title_style,
+            "title_motion": self.title_motion,
+            "cover_aspect": self.cover_aspect,
+        }
+
+    def public_summary(self) -> dict[str, object]:
+        data = asdict(self)
+        data["aliases"] = list(self.aliases)
+        data["aspect"] = self.aspect
+        return data
+
+
+_STRATEGIES = (
+    PlatformStrategy("douyin", "抖音 9:16", "download_only", None, 1080, 1920, "blur", "short", 15, 90, "accent", "comic", True, "portrait", ("douyin",)),
+    PlatformStrategy("tiktok", "TikTok 9:16", "upload_post", "tiktok", 1080, 1920, "crop", "short", 15, 90, "bold", "comic", True, "portrait", ("tiktok",)),
+    PlatformStrategy("instagram_reels", "Instagram Reels 9:16", "upload_post", "instagram", 1080, 1920, "crop", "short", 15, 90, "bold", "card", True, "portrait", ("instagram", "reels")),
+    PlatformStrategy("youtube_shorts", "YouTube Shorts 9:16", "upload_post", "youtube", 1080, 1920, "crop", "short", 15, 60, "bold", "card", True, "portrait", ("shorts", "youtube_shorts")),
+    PlatformStrategy("youtube_long", "YouTube 横屏", "upload_post", "youtube", 1920, 1080, "fit", "long", 180, None, "clean", "editorial", False, "landscape", ("youtube_long",)),
+    PlatformStrategy("bilibili", "B站横屏", "bilibili_direct", "bilibili", 1920, 1080, "fit", "adaptive", 180, None, "clean", "editorial", False, "landscape", ("bilibili",)),
+    PlatformStrategy("xiaohongshu", "小红书 9:16", "download_only", None, 1080, 1920, "blur", "short", 20, 90, "box", "card", True, "portrait", ("xiaohongshu",)),
+    PlatformStrategy("original", "原画重编码", "download_only", None, None, None, "none", "adaptive", None, None, "clean", "plain", False, "original", ("original",)),
+)
+
+PLATFORM_STRATEGIES = {strategy.id: strategy for strategy in _STRATEGIES}
+_ALIASES = {alias: strategy.id for strategy in _STRATEGIES for alias in strategy.aliases}
+LEGACY_PRESET_STRATEGIES = {
+    "douyin": "douyin", "xiaohongshu": "xiaohongshu", "shorts": "youtube_shorts",
+    "bilibili": "bilibili", "original": "original",
+}
+
+
+def platform_strategy(strategy_id: str) -> PlatformStrategy:
+    key = _ALIASES.get(strategy_id.strip().lower(), strategy_id.strip().lower())
+    try:
+        return PLATFORM_STRATEGIES[key]
+    except KeyError as error:
+        raise ValueError(f"未知平台策略: {strategy_id}") from error
+
+
+def normalize_platform_ids(strategy_ids: Iterable[str]) -> list[str]:
+    normalized: list[str] = []
+    for raw in strategy_ids:
+        strategy_id = platform_strategy(str(raw)).id
+        if strategy_id not in normalized:
+            normalized.append(strategy_id)
+    if not normalized:
+        raise ValueError("至少要选择一个发布平台")
+    return normalized
+
+
+def strategy_for_legacy_preset(preset: str) -> PlatformStrategy:
+    try:
+        return platform_strategy(LEGACY_PRESET_STRATEGIES[preset])
+    except KeyError as error:
+        raise ValueError(f"未知预设: {preset}（可选 {', '.join(LEGACY_PRESET_STRATEGIES)}）") from error
+
+
+def legacy_export_presets() -> dict[str, dict[str, object]]:
+    return {key: strategy_for_legacy_preset(key).export_spec() for key in LEGACY_PRESET_STRATEGIES}
+
+
+def default_strategy_for_transport(platforms: Iterable[str]) -> PlatformStrategy:
+    """Compatibility default for old upload requests without strategy intent."""
+    names = {str(platform).strip().lower() for platform in platforms}
+    if names & {"tiktok", "instagram", "youtube", "facebook", "threads", "pinterest"}:
+        return platform_strategy("youtube_shorts")
+    if "bilibili" in names:
+        return platform_strategy("bilibili")
+    return platform_strategy("original")
+
+
+def list_platform_strategies() -> list[dict[str, object]]:
+    return [strategy.public_summary() for strategy in _STRATEGIES]

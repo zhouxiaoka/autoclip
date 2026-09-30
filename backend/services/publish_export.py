@@ -18,17 +18,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from backend.pipeline.quality import to_seconds, to_srt_time, load_srt_chunks
+from backend.services.platform_strategy import legacy_export_presets, strategy_for_legacy_preset
 from backend.utils.ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
 
 logger = logging.getLogger(__name__)
 
-PRESETS: Dict[str, Dict[str, Any]] = {
-    "douyin": {"label": "抖音 9:16", "w": 1080, "h": 1920, "layout": "blur", "max_sec": None},
-    "xiaohongshu": {"label": "小红书 9:16", "w": 1080, "h": 1920, "layout": "blur", "max_sec": None},
-    "shorts": {"label": "YouTube Shorts", "w": 1080, "h": 1920, "layout": "crop", "max_sec": 60},
-    "bilibili": {"label": "B 站横屏", "w": 1920, "h": 1080, "layout": "fit", "max_sec": None},
-    "original": {"label": "原画重编码", "w": None, "h": None, "layout": "none", "max_sec": None},
-}
+# Kept for API/CLI callers. Platform semantics live in platform_strategy.py.
+PRESETS: Dict[str, Dict[str, Any]] = legacy_export_presets()
 
 _jobs: Dict[str, Dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
@@ -201,8 +197,7 @@ def _build_filter(req: ExportRequest, spec: Dict[str, Any], srt_path: Optional[P
 
 def export_clip(req: ExportRequest) -> Dict[str, Any]:
     """同步导出一条切片。幂等：同参数已存在直接返回。"""
-    if req.preset not in PRESETS:
-        raise ValueError(f"未知预设: {req.preset}（可选 {', '.join(PRESETS)}）")
+    strategy_for_legacy_preset(req.preset)
     spec = PRESETS[req.preset]
     clip = load_clip_meta(req.project_id, req.clip_id)
     if clip.get('source_type') == 'studio':

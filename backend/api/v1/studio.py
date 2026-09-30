@@ -12,6 +12,7 @@ from backend.models.project import Project
 from backend.models.clip import Clip
 from backend.schemas.project import ProjectCreate, ProjectType
 from backend.services.project_service import ProjectService
+from backend.services.platform_strategy import list_platform_strategies
 from backend.services.studio import store, jobs, intelligence
 from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene, ImportOptions, ConfirmPlan
 
@@ -47,6 +48,13 @@ def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial',
 @router.get('/capabilities')
 def capabilities():
     return {'visual_analysis': intelligence.ready(), 'visual_model': intelligence.visual_config()[2], 'languages': ['source', 'zh', 'en', 'ja']}
+
+
+@router.get('/platform-strategies')
+def platform_strategies():
+    """Public output targets for the quick-generation entry point."""
+    return {'strategies': list_platform_strategies()}
+
 
 from backend.services.studio import vision_settings, analysis_preferences
 

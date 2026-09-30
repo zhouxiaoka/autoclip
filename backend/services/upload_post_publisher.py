@@ -32,6 +32,8 @@ from typing import Any
 
 import requests
 
+from backend.services.platform_strategy import default_strategy_for_transport
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_API_BASE = "https://api.upload-post.com"
@@ -45,7 +47,6 @@ PLATFORMS: list[str] = [
     "tiktok", "instagram", "youtube", "facebook", "linkedin", "x", "threads",
     "pinterest", "bluesky", "discord", "telegram", "google_business",
 ]
-VERTICAL_PLATFORMS = {"tiktok", "instagram", "youtube", "facebook", "threads", "pinterest"}
 _RESERVED_FORM_FIELDS = {"user", "platform[]", "platform", "video", "async_upload", "request_id", "external_id"}
 FINAL_STATUSES = {"completed", "failed", "not_found"}
 _ACCOUNT_NAME_FIELDS = ("display_name", "username", "handle")
@@ -277,8 +278,9 @@ def normalize_platforms(platforms: Sequence[str]) -> list[str]:
 
 
 def pick_preset(platforms: Sequence[str]) -> str:
-    """没指定预设时：有竖屏平台就用 9:16 的 shorts（最长约 60 秒），否则原画。"""
-    return "shorts" if any(p in VERTICAL_PLATFORMS for p in platforms) else "original"
+    """Compatibility default for legacy publish requests without strategy intent."""
+    strategy = default_strategy_for_transport(platforms)
+    return "shorts" if strategy.id == "youtube_shorts" else strategy.id
 
 
 def records_dir(project_id: str) -> Path:
