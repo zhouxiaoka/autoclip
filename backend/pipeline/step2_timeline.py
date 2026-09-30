@@ -3,6 +3,7 @@ Step 2: 时间线提取 - 为大纲中的每个话题定位具体时间区间
 """
 import json
 import logging
+import math
 import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -199,18 +200,18 @@ class TimelineExtractor:
             # 尝试解析JSON
             parsed_response = self.llm_client.parse_json_response(response)
             
-            # 验证JSON结构
-            if not self.llm_client._validate_json_structure(parsed_response):
-                logger.error(f"  > 块 {chunk_index} JSON结构验证失败")
-                self._save_debug_response(str(parsed_response), chunk_index, "invalid_structure")
-                return []
-            
             if not isinstance(parsed_response, list):
                 logger.warning(f"  > 块 {chunk_index} LLM返回的不是一个列表")
                 self._save_debug_response(f"类型: {type(parsed_response)}, 内容: {parsed_response}", chunk_index, "not_list")
                 return []
             
-            for timeline_item in parsed_response:
+            for raw_item in parsed_response:
+                if not isinstance(raw_item, dict):
+                    continue
+                timeline_item = dict(raw_item)
+                # Some models preserve the input title instead of renaming it.
+                if 'outline' not in timeline_item and isinstance(timeline_item.get('title'), str):
+                    timeline_item['outline'] = timeline_item['title']
                 if 'outline' not in timeline_item or 'start_time' not in timeline_item or 'end_time' not in timeline_item:
                     logger.warning(f"  > 从LLM返回的某个JSON对象格式不正确: {timeline_item}")
                     continue
@@ -229,8 +230,8 @@ class TimelineExtractor:
                         logger.warning(f"  > 话题 '{timeline_item['outline']}' 结束时间格式不正确: {timeline_item['end_time']}")
                         continue
                     
-                    start_sec = to_seconds(timeline_item['start_time'])
-                    end_sec = to_seconds(timeline_item['end_time'])
+                    start_sec = self._timeline_seconds(timeline_item['start_time'])
+                    end_sec = self._timeline_seconds(timeline_item['end_time'])
                     chunk_start_sec = to_seconds(chunk_start)
                     chunk_end_sec = to_seconds(chunk_end)
                     start_sec = max(start_sec, chunk_start_sec)
@@ -267,15 +268,34 @@ class TimelineExtractor:
             self._save_debug_response(json.dumps(error_info, indent=2, ensure_ascii=False), chunk_index, "parse_error")
             return []
 
-    def _validate_time_format(self, time_str: str) -> bool:
-        """
-        验证时间格式是否正确 (HH:MM:SS,mmm)
-        """
-        if not isinstance(time_str, str):
+    @staticmethod
+    def _timeline_seconds(value: Any) -> float:
+        if isinstance(value, bool):
+            raise ValueError("boolean is not a timestamp")
+        if isinstance(value, (int, float)):
+            result = float(value)
+        elif isinstance(value, str):
+            value = value.strip()
+            if re.fullmatch(r'\d+(?:[.,]\d{1,3})?', value):
+                result = float(value.replace(',', '.'))
+            elif re.fullmatch(r'\d+:[0-5]\d(?:[,.]\d{1,3})?', value):
+                result = to_seconds(value)
+            elif re.fullmatch(r'\d+:[0-5]\d:[0-5]\d(?:[,.]\d{1,3})?', value):
+                result = to_seconds(value)
+            else:
+                raise ValueError("invalid timestamp")
+        else:
+            raise ValueError("invalid timestamp type")
+        if not math.isfinite(result) or result < 0:
+            raise ValueError("invalid timestamp range")
+        return result
+
+    def _validate_time_format(self, time_str: Any) -> bool:
+        try:
+            self._timeline_seconds(time_str)
+            return True
+        except (ValueError, TypeError):
             return False
-        # HH:MM:SS or MM:SS, optional comma/dot fraction; reject overflow.
-        pattern = r'^(?:\d{2,}:)?[0-5]\d:[0-5]\d(?:[,.]\d{1,3})?$'
-        return bool(re.fullmatch(pattern, time_str.strip()))
 
     def _convert_time_format(self, time_str: str) -> str:
         """

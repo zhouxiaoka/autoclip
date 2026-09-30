@@ -19,7 +19,7 @@ function renderCard(status, error, progressMessage) {
     '../stores/useSimpleProgressStore': {
       useSimpleProgressStore: (select) => select({ getProgress: () => ({ message: progressMessage }) }),
     },
-    '../ui': { Btn: ({ children }) => React.createElement('button', {}, children) },
+    '../ui': { Btn: ({ children }) => React.createElement('button', {}, children), Dialog: () => null, StatusDot: ({ label }) => React.createElement('span', {}, label), Icon: { Play: () => null, Refresh: () => null, Trash: () => null } },
   }
   function load(file) {
     const module = { exports: {} }

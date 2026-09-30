@@ -142,3 +142,37 @@ def test_partial_failure_only_returns_successful_current_chunks(tmp_path):
     obj.llm_client.call_with_retry = lambda *a, **k: next(responses)
     out = obj.extract_timeline([dict(title='current', chunk_index=0), dict(title='failed', chunk_index=1)])
     assert [item['outline'] for item in out] == ['current']
+
+
+def test_short_tail_can_extend_backward_without_crossing_previous_topic():
+    cues = [cue(i, i + 5) for i in range(0, 90, 5)]
+    out, report = refine_timeline([topic('earlier', 0, 30), topic('tail', 80, 90)], cues, profile_for(90))
+    tail = next(c for c in out if c['outline']=='tail')
+    assert tail['start_time'] == to_srt_time(70) and tail['duration_sec'] == 20
+    assert 'extend_start' in tail['refine']['ops']
+    assert not report['dropped']
+
+
+def test_short_tail_does_not_expand_across_silence():
+    out, report = refine_timeline([topic('tail',80,90)], [cue(50,55),cue(80,85),cue(85,90)], profile_for(90))
+    assert out == [] and report['dropped']
+
+
+@pytest.mark.parametrize('start,end', [('1:05.5','1:30'),(65.5,90),('65.5','90')])
+def test_timeline_common_model_timestamp_variants(tmp_path,start,end):
+    out=extractor(tmp_path)._parse_and_validate_response(json.dumps([dict(title='retained input title',start_time=start,end_time=end)]),to_srt_time(0),to_srt_time(120),0)
+    assert len(out)==1 and out[0]['outline']=='retained input title'
+    assert out[0]['start_time']==to_srt_time(65.5)
+
+
+def test_one_malformed_topic_does_not_discard_the_valid_batch(tmp_path):
+    obj=extractor(tmp_path)
+    from backend.utils.llm_client import LLMClient
+    obj.llm_client=LLMClient.__new__(LLMClient)
+    out=obj._parse_and_validate_response(json.dumps([{'outline':'bad','start_time':'00:00:00'},topic('valid',0,30),None]),to_srt_time(0),to_srt_time(90),0)
+    assert len(out)==1 and out[0]['outline']=='valid'
+
+
+@pytest.mark.parametrize('value',[True,float('nan'),float('inf'),-1,'1:60','00:60:01','garbage'])
+def test_timeline_invalid_numeric_and_colon_times_remain_rejected(tmp_path,value):
+    assert not extractor(tmp_path)._validate_time_format(value)
