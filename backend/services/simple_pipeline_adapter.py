@@ -205,7 +205,8 @@ class SimplePipelineAdapter:
                 prompt_files=prompt_files,
             )
             if not timeline_data:
-                # 能走到这里说明 _preflight_llm 已通过，连接和密钥不是这条失败的原因（#182）
+                # Step 2 normally raises its observed failure. Keep the legacy
+                # fallback for callers returning [] without diagnostic data.
                 raise empty_timeline_failure(len(outlines))
             emit_progress(self.project_id, "ANALYZE", "时间线提取完成", subpercent=50)
             

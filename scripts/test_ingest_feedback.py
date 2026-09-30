@@ -101,10 +101,20 @@ def test_public_body_has_no_contact_field() -> None:
     assert "邮箱留在维护者的收件记录里" in body
 
 
+def test_error_code_and_transcription_context_survive_ingest() -> None:
+    post = plan_posts([event(error_code="subtitle_setup", transcription_provider="whisper_local", transcription_model="tiny")], set())[0]
+    assert "错误码：subtitle_setup" in post["body"]
+    assert "转写模型：whisper_local / tiny" in post["body"]
+    assert "模型：ollama / qwen2.5" in post["body"]
+    post = plan_posts([event(error_code="private-path", transcription_provider="private-url")], set())[0]
+    assert "private-path" not in post["body"] and "private-url" not in post["body"]
+
+
 if __name__ == "__main__":
     test_bug_becomes_issue_without_email_or_secret()
     test_ideas_and_questions_go_to_discussions()
     test_known_ids_and_invalid_rows_are_skipped()
     test_same_batch_and_cap()
     test_public_body_has_no_contact_field()
+    test_error_code_and_transcription_context_survive_ingest()
     print("ok")
