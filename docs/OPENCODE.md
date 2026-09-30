@@ -29,6 +29,10 @@ autoclip mcp install opencode
 
 - 按 `autoclip` → `autoclip-mcp` → `python -m backend.mcp_server` 的顺序探测启动命令（结果在输出的 `entry` 里）
 - 把 `mcp.autoclip` **合并**写进配置（`type: local`），其它键原样保留；文件已存在时先备份 `opencode.json.bak`
+- 重装**不会丢同名条目里的自定义字段**：只更新 `type` / `command`（模块回退时按 key 合并 `environment`、补 `cwd`），
+  你的 `timeout`、环境变量、`enabled=false` 一概保留（后者会给出提示）
+- 优先识别已有配置文件：只有 `opencode.jsonc` 时写它；`opencode.json` 和 `opencode.jsonc` 同时存在且 jsonc 里已有 `mcp` 段时，
+  **写入前直接拒绝**（jsonc 覆盖 json，避免“写入成功但实际加载旧配置”）
 - 配置带注释 / 尾随逗号（JSONC，opencode 支持）时默认**不动文件**、只打印片段；加 `--force` 才会先备份再重写成纯 JSON
 
 | 参数 | 作用 |
@@ -90,6 +94,7 @@ cp -r skills/autoclip ~/.config/opencode/skills/autoclip   # 全局（Windows �
 | 现象 | 处理 |
 |---|---|
 | opencode 里没有 `autoclip` 工具 | 用 `--print` 确认目标文件路径；同目录只留一份 `opencode.json` / `.jsonc`；新开会话再试 |
+| 报「jsonc 里已有 mcp 段」 | `opencode.jsonc` 覆盖 `opencode.json`：只保留一份配置，或手动把片段合并进 jsonc |
 | 工具能列出但一调就报错 | 先在终端 `autoclip doctor`：多半是 ffmpeg 不在 PATH、Whisper 没装（传 `srt_path` 可绕过）、模型没 key |
 | 切片数为 0 | 让 opencode 用 `min_score=0.5` 重试；纯音乐 / 无对话的视频本身不适合切高光 |
 | 首次出片特别慢 | 无字幕时本地 Whisper 转写，首次要下模型；已有 SRT 就传进去，或改用 `ollama` |

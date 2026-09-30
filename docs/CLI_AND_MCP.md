@@ -125,7 +125,8 @@ claude mcp add autoclip -- /path/to/autoclip/venv/bin/autoclip mcp
 ```
 
 也可以让 AutoClip 自己写：`autoclip mcp install opencode`（`--scope project --dir .` 写项目配置、`--print` 只打印片段、
-`--force` 在现有配置带注释时先备份再重写）。接入后在 opencode 里给一个视频路径即可出片，详见 `docs/OPENCODE.md`。
+`--force` 在现有配置带注释时先备份再重写）。重装会保留同名条目里的 `environment` / `timeout` 等自定义字段；存在
+`opencode.jsonc` 时优先写它，两份配置冲突会在写入前直接拒绝。接入后在 opencode 里给一个视频路径即可出片，详见 `docs/OPENCODE.md`。
 
 工具：
 

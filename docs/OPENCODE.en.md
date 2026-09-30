@@ -26,7 +26,11 @@ autoclip mcp install opencode
 
 The command detects the launch command (`autoclip` → `autoclip-mcp` → `python -m backend.mcp_server`),
 merges `mcp.autoclip` into your config without touching other keys, and backs the old file up as
-`opencode.json.bak`. Commented (JSONC) configs are left untouched unless you pass `--force`.
+`opencode.json.bak`. Re-running keeps your custom fields on an existing `autoclip` entry: only
+`type` / `command` are updated (`environment` is merged key-by-key, `timeout` / `enabled` etc. stay).
+If `opencode.jsonc` exists it becomes the target; when both `opencode.json` and `opencode.jsonc` exist
+and the jsonc already defines `mcp`, the installer refuses with an explicit message instead of writing
+a config that would not take effect. Commented (JSONC) configs are left untouched unless you pass `--force`.
 
 | Option | Effect |
 |---|---|

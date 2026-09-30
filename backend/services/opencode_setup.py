@@ -10,6 +10,8 @@ opencode（https://opencode.ai）的本地 MCP server 写在配置文件的 mcp 
 
 - 全局配置：`~/.config/opencode/opencode.json`（`OPENCODE_CONFIG` / `XDG_CONFIG_HOME` 可改路径）
 - 项目配置：`<项目>/opencode.json`；opencode 会合并多处配置，项目覆盖全局
+- 同时存在 `.json` 与 `.jsonc` 时 opencode 先读 json 再读 jsonc（后者覆盖同名键）：
+  只有 jsonc 时直接写它；两份都有且 jsonc 里已有 mcp 段时拒绝写入（避免“写入成功但实际加载旧配置”）
 
 对应 CLI：`autoclip mcp install opencode`（`--scope project` 写项目配置、`--print` 只打印片段）。
 本模块只做配置读写与命令探测，不 import 后端重依赖，方便 CLI 与测试单独使用。
@@ -152,6 +154,7 @@ def parse_config_text(text: str) -> Tuple[Dict[str, Any], bool]:
     先按严格 JSON 解析；失败再容忍注释与尾随逗号（opencode 官方支持 JSONC）。
     两种都失败时抛 json.JSONDecodeError。
     """
+    text = text.lstrip("\ufeff")  # Windows 编辑器可能带 UTF-8 BOM
     try:
         data = json.loads(text)
         lenient = False
@@ -170,7 +173,7 @@ def install_opencode(
     name: str = DEFAULT_SERVER_NAME,
     force: bool = False,
 ) -> Dict[str, Any]:
-    """把 autoclip 写进 opencode 配置（合并写入，不动其它键）。
+    """把 autoclip 写进 opencode 配置（合并写入：不动其它键，重装也保留同名条目里的自定义字段）。
 
     返回报告：ok / action / path / entry / snippet / backup / warnings / error / hint。
     action 取值 created / updated / unchanged / manual；manual = 没有写文件，
@@ -190,21 +193,49 @@ def install_opencode(
         "hint": None,
     }
 
-    exists = target.is_file()
+    # 同时存在 opencode.json / opencode.jsonc 时，opencode 先读 json 再读 jsonc（后者覆盖）：
+    # 只有 jsonc 就写 jsonc；两份都有且 jsonc 里已有 mcp 段时拒绝写入，避免“成功但不生效”。
+    write_target = target
+    if target.name == "opencode.json":
+        jsonc_path = target.with_name("opencode.jsonc")
+        if jsonc_path.is_file():
+            if not target.is_file():
+                write_target = jsonc_path
+            else:
+                try:
+                    jsonc_data, _ = parse_config_text(jsonc_path.read_text(encoding="utf-8-sig"))
+                except Exception as e:  # noqa: BLE001
+                    report.update(
+                        error=f"同目录的 opencode.jsonc 无法解析：{e}",
+                        hint="opencode.jsonc 覆盖 opencode.json；请先处理它，或手动合并下面的片段",
+                    )
+                    return report
+                if isinstance(jsonc_data.get("mcp"), dict):
+                    report.update(
+                        error="opencode.json 与 opencode.jsonc 同时存在，且 jsonc 里已有 mcp 段（它覆盖 json），"
+                              "继续写入会出现“成功但实际不生效”",
+                        hint=f"请只保留一份配置，或手动把下面的片段合并进 {jsonc_path.name}",
+                    )
+                    return report
+    report["path"] = str(write_target)
+
+    exists = write_target.is_file()
     data: Dict[str, Any] = {}
     lenient = False
     if exists:
         try:
-            data, lenient = parse_config_text(target.read_text(encoding="utf-8"))
+            data, lenient = parse_config_text(write_target.read_text(encoding="utf-8-sig"))
         except Exception as e:  # noqa: BLE001
             report.update(error=f"现有配置无法解析：{e}", hint="为免误删，请手动把下面的片段合并进配置")
             return report
         if lenient and not force:
             report.update(
                 error="现有配置带注释 / 尾随逗号（JSONC），重写会丢注释，没有动它",
-                hint=f"确认可接受时重跑并加 --force（会先备份为 {target.name}.bak）",
+                hint=f"确认可接受时重跑并加 --force（会先备份为 {write_target.name}.bak）",
             )
             return report
+    if write_target is not target:
+        report["warnings"].append("未找到 opencode.json，本次写入 opencode.jsonc（它优先级更高）")
 
     mcp = data.get("mcp")
     if mcp is not None and not isinstance(mcp, dict):
@@ -212,25 +243,44 @@ def install_opencode(
         return report
     mcp = dict(mcp or {})
 
-    if exists and mcp.get(name) == entry:
+    # 重装只更新安装器负责的字段（type / command / 模块回退的 cwd 与 PYTHONPATH），
+    # 保留同名条目里用户自己的 environment、timeout、enabled 等设置。
+    existing_entry = mcp.get(name)
+    merged = entry
+    if isinstance(existing_entry, dict):
+        merged = dict(existing_entry)
+        merged["type"] = entry["type"]
+        merged["command"] = entry["command"]
+        if server.get("kind") == "module":
+            env = dict(merged.get("environment") or {})
+            for k, v in (entry.get("environment") or {}).items():
+                env.setdefault(k, v)
+            if env:
+                merged["environment"] = env
+            if entry.get("cwd"):
+                merged.setdefault("cwd", entry["cwd"])
+    report["entry"] = merged
+    report["snippet"] = render_snippet(merged, name=name)
+
+    if exists and existing_entry == merged:
         report.update(ok=True, action="unchanged")
         return report
 
     data.setdefault("$schema", OPENCODE_SCHEMA)
-    mcp[name] = entry
+    mcp[name] = merged
     data["mcp"] = mcp
 
     backup: Optional[Path] = None
     if exists:
-        backup = target.with_name(target.name + ".bak")
-        shutil.copy2(target, backup)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        backup = write_target.with_name(write_target.name + ".bak")
+        shutil.copy2(write_target, backup)
+    write_target.parent.mkdir(parents=True, exist_ok=True)
+    write_target.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     if lenient:
         report["warnings"].append(f"原配置的注释 / 尾随逗号未保留，已重写为纯 JSON（备份：{backup}）")
-    if target.name == "opencode.json" and (target.parent / "opencode.jsonc").is_file():
-        report["warnings"].append("同目录还有 opencode.jsonc，建议只保留一份配置，避免改错文件")
+    if isinstance(existing_entry, dict) and existing_entry.get("enabled") is False:
+        report["warnings"].append("原有条目 enabled=false，opencode 不会加载它；本次未改动该字段")
     if server.get("kind") == "module":
         report["warnings"].append("PATH 里没有 autoclip 命令，已回退到 python -m backend.mcp_server（依赖 cwd / PYTHONPATH）")
 

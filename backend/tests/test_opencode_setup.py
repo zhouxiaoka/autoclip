@@ -96,3 +96,137 @@ def test_project_scope_and_module_fallback(tmp_path, monkeypatch):
     assert entry["cwd"]
     assert entry["environment"]["PYTHONPATH"]
     assert any("回退" in w for w in report["warnings"])
+
+
+def test_reinstall_preserves_custom_entry_fields(tmp_path):
+    """[review P2] 重装只更新安装器负责的字段，用户自定义的 environment / timeout 不能丢。"""
+    target = tmp_path / "opencode.json"
+    existing = {
+        "$schema": opencode_setup.OPENCODE_SCHEMA,
+        "mcp": {
+            "autoclip": {
+                "type": "local",
+                "command": ["/old/venv/bin/autoclip", "mcp"],
+                "enabled": True,
+                "environment": {"AUTOCLIP_DATA_DIR": "D:/clips", "OPENAI_API_KEY": "sk-x"},
+                "timeout": 30000,
+            }
+        },
+    }
+    target.write_text(json.dumps(existing), encoding="utf-8")
+
+    report = opencode_setup.install_opencode(target, server=SERVER)
+    assert report["ok"] is True and report["action"] == "updated"
+    entry = json.loads(target.read_text(encoding="utf-8"))["mcp"]["autoclip"]
+    assert entry["command"] == SERVER["command"]                      # 命令更新
+    assert entry["timeout"] == 30000                                  # 用户字段保留
+    assert entry["environment"] == {"AUTOCLIP_DATA_DIR": "D:/clips", "OPENAI_API_KEY": "sk-x"}
+
+
+def test_module_fallback_merges_environment(tmp_path, monkeypatch):
+    """[review P2] 模块回退写 PYTHONPATH 时要合并 environment，而不是整体覆盖。"""
+    monkeypatch.setattr(opencode_setup.shutil, "which", lambda name: None)
+    server = opencode_setup.detect_server()
+    target = tmp_path / "opencode.json"
+    existing = {"mcp": {"autoclip": {
+        "type": "local", "command": ["python", "-m", "backend.mcp_server"],
+        "enabled": True, "environment": {"OPENAI_API_KEY": "sk-x"},
+    }}}
+    target.write_text(json.dumps(existing), encoding="utf-8")
+
+    report = opencode_setup.install_opencode(target, server=server)
+    assert report["ok"] is True
+    env = json.loads(target.read_text(encoding="utf-8"))["mcp"]["autoclip"]["environment"]
+    assert env["OPENAI_API_KEY"] == "sk-x"                            # 用户环境变量保留
+    assert env["PYTHONPATH"]                                          # 回退所需的 PYTHONPATH 合并进来
+
+
+def test_disabled_entry_stays_disabled_with_warning(tmp_path):
+    target = tmp_path / "opencode.json"
+    target.write_text(json.dumps({"mcp": {"autoclip": {
+        "type": "local", "command": ["/old/venv/bin/autoclip", "mcp"], "enabled": False,
+    }}}), encoding="utf-8")
+
+    report = opencode_setup.install_opencode(target, server=SERVER)
+    entry = json.loads(target.read_text(encoding="utf-8"))["mcp"]["autoclip"]
+    assert entry["enabled"] is False                                  # 不静默改用户的 enabled
+    assert any("enabled=false" in w for w in report["warnings"])
+
+
+def test_existing_jsonc_is_used_when_json_missing(tmp_path):
+    """[review P2] 只有 opencode.jsonc 时直接写它；注释沿用非 --force 保护，不再多建一份不生效的 json。"""
+    jsonc = tmp_path / "opencode.jsonc"
+    jsonc.write_text('{\n  // opencode 支持注释\n  "mcp": {}\n}\n', encoding="utf-8")
+
+    report = opencode_setup.install_opencode(tmp_path / "opencode.json", server=SERVER)
+    assert report["ok"] is False and report["action"] == "manual"     # JSONC 默认不动
+
+    report = opencode_setup.install_opencode(tmp_path / "opencode.json", server=SERVER, force=True)
+    assert report["ok"] is True and report["action"] == "updated"
+    assert report["path"].endswith("opencode.jsonc")
+    data = json.loads(jsonc.read_text(encoding="utf-8"))
+    assert data["mcp"]["autoclip"]["command"] == SERVER["command"]
+    assert (tmp_path / "opencode.jsonc.bak").is_file()
+    assert not (tmp_path / "opencode.json").exists()
+
+
+def test_plain_jsonc_only_is_targeted(tmp_path):
+    jsonc = tmp_path / "opencode.jsonc"
+    jsonc.write_text('{"model": "anthropic/claude-sonnet-4-5"}', encoding="utf-8")
+
+    report = opencode_setup.install_opencode(tmp_path / "opencode.json", server=SERVER)
+    assert report["ok"] is True and report["action"] == "updated"
+    assert report["path"].endswith("opencode.jsonc")
+    assert json.loads(jsonc.read_text(encoding="utf-8"))["mcp"]["autoclip"]["enabled"] is True
+    assert not (tmp_path / "opencode.json").exists()
+
+
+def test_conflicting_jsonc_with_mcp_blocks_write(tmp_path):
+    """[review P2] 两份配置都有且 jsonc 含 mcp 段时必须明确拒绝，不能报告成功但加载旧配置。"""
+    json_file = tmp_path / "opencode.json"
+    original = {"$schema": opencode_setup.OPENCODE_SCHEMA, "model": "x"}
+    json_file.write_text(json.dumps(original), encoding="utf-8")
+    (tmp_path / "opencode.jsonc").write_text(
+        '{"mcp": {"autoclip": {"type": "local", "command": ["old"], "enabled": false}}}', encoding="utf-8")
+
+    report = opencode_setup.install_opencode(json_file, server=SERVER)
+    assert report["ok"] is False and report["action"] == "manual"
+    assert "jsonc" in report["error"]
+    assert json.loads(json_file.read_text(encoding="utf-8")) == original   # json 未被写
+    assert report["snippet"]
+
+
+def test_both_exist_jsonc_without_mcp_writes_json(tmp_path):
+    json_file = tmp_path / "opencode.json"
+    json_file.write_text(json.dumps({"model": "x"}), encoding="utf-8")
+    jsonc = tmp_path / "opencode.jsonc"
+    jsonc.write_text('{"theme": "dark"}', encoding="utf-8")
+
+    report = opencode_setup.install_opencode(json_file, server=SERVER)
+    assert report["ok"] is True and report["action"] == "updated"
+    assert report["path"].endswith("opencode.json")
+    assert json.loads(json_file.read_text(encoding="utf-8"))["mcp"]["autoclip"]["enabled"] is True
+    assert json.loads(jsonc.read_text(encoding="utf-8")) == {"theme": "dark"}   # jsonc 未被改动
+
+
+def test_utf8_bom_jsonc_conflict_still_detected(tmp_path):
+    """Windows 编辑器常带 UTF-8 BOM，解析要容错，冲突判定不能因此失效。"""
+    json_file = tmp_path / "opencode.json"
+    json_file.write_text(json.dumps({"model": "x"}), encoding="utf-8")
+    (tmp_path / "opencode.jsonc").write_text(
+        '{"mcp": {"autoclip": {"type": "local", "command": ["old"], "enabled": false}}}', encoding="utf-8-sig")
+
+    report = opencode_setup.install_opencode(json_file, server=SERVER)
+    assert report["ok"] is False and report["action"] == "manual"
+    assert "jsonc" in report["error"]
+
+
+def test_utf8_bom_json_can_be_merged(tmp_path):
+    target = tmp_path / "opencode.json"
+    target.write_text(json.dumps({"model": "x"}), encoding="utf-8-sig")
+
+    report = opencode_setup.install_opencode(target, server=SERVER)
+    assert report["ok"] is True and report["action"] == "updated"
+    assert json.loads(target.read_text(encoding="utf-8"))["mcp"]["autoclip"]["enabled"] is True
+
+
