@@ -15,20 +15,22 @@ DRAFT = {'title': 'Great investors are flight instructors', 'hook': ''}
 def good_response(**overrides):
     body = {
         'title_lines': ['好的投资人', '应该像飞行教练'], 'accent_line': 1,
-        'translations': ['Paul 以前常说', '好的投资人像飞行教练', 'Garry，你把同样的能量带给了创始人'],
+        'segments': [{'from': 0, 'to': 1, 'text': 'Paul 以前常说，好的投资人像飞行教练'}, {'from': 2, 'to': 2, 'text': 'Garry，你把同样的能量带给了创始人'}],
         'speakers': [{'line': 0, 'name': 'Sam Altman', 'role': 'OpenAI CEO'}, {'line': 2, 'name': 'Garry Tan', 'role': 'YC 总裁'}],
         'tags': [{'line': 1, 'text': '飞行教练'}], 'highlights': [],
     }
     return {**body, **overrides}
 
 
-def test_interview_packaging_translates_every_line_and_keeps_the_original():
+def test_interview_packaging_regroups_lines_into_translated_sentences():
     sent = []
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), known_names='Sam Altman: Never a Better Time',
                                        call=lambda prompt, data: sent.append(data) or good_response())
     assert result['template'] == 'interview_zh' and result['source_language'] == 'en' and not result['fallback']
-    assert [c['text'] for c in result['cues']][1] == '好的投资人像飞行教练'
-    assert result['cues'][1]['original'] == LINES[1]['text']
+    first, second = result['cues']
+    assert (first['start'], first['end']) == (10.0, 15.0) and first['text'] == 'Paul 以前常说，好的投资人像飞行教练'
+    assert first['original'] == f"{LINES[0]['text']} {LINES[1]['text']}"
+    assert (second['start'], second['end']) == (15.0, 18.0)
     assert [s['name'] for s in result['speakers']] == ['Sam Altman', 'Garry Tan']
     assert result['tags'] == [{'at': 12.2, 'text': '飞行教练'}]
     assert [line['text'] for line in sent[0]['lines']] == [line['text'] for line in LINES]  # only the draft's rows
@@ -41,34 +43,42 @@ def test_names_not_seen_in_subtitles_or_listing_are_dropped():
 
 
 @pytest.mark.parametrize('bad', [
-    {'translations': ['only one']},
-    {'translations': ['a', 'b', 'x' * 300]},
+    {'segments': [{'from': 0, 'to': 0, 'text': 'a'}]},                                         # does not cover every line
+    {'segments': [{'from': 0, 'to': 0, 'text': 'a'}, {'from': 2, 'to': 2, 'text': 'c'}]},      # gap
+    {'segments': [{'from': 0, 'to': 2, 'text': 'x' * 300}]},                                   # too long
+    {'segments': None},
 ])
-def test_malformed_translations_fall_back_to_source_captions(bad):
+def test_malformed_segments_fall_back_to_source_captions(bad):
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=lambda *_: good_response(**bad))
     assert result['fallback'] is True
     assert [c['text'] for c in result['cues']] == [line['text'] for line in LINES]
 
 
-def test_model_unavailable_never_blocks_output():
+def test_model_unavailable_never_blocks_output_and_keeps_english_titles_whole():
     def unavailable(*_):
         raise ValueError('文字模型不可用')
-    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('tiktok'), call=unavailable)
+    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=unavailable)
     assert result['fallback'] is True and result['title_lines'] == ['Great investors are flight', 'instructors']
 
 
-def test_podcast_keeps_english_and_only_highlights_words_in_the_line():
-    response = good_response(title_lines=['Great investors are flight instructors'], translations=[],
-                             highlights=[{'line': 1, 'word': 'instructor'}, {'line': 0, 'word': 'nonexistent'}], tags=[{'line': 0, 'text': 'x'}])
+def test_podcast_keeps_english_and_only_highlights_words_in_the_segment():
+    response = good_response(title_lines=['Great investors are flight instructors'],
+                             segments=[{'from': 0, 'to': 1, 'text': 'Paul used to say a good investor is like a flight instructor'},
+                                       {'from': 2, 'to': 2, 'text': 'Garry, you brought the same energy to founders'}],
+                             highlights=[{'line': 1, 'word': 'instructor'}, {'line': 2, 'word': 'nonexistent'}], tags=[{'line': 0, 'text': 'x'}])
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('tiktok'), known_names='Sam Altman', call=lambda *_: response)
-    assert result['template'] == 'podcast_en' and result['cues'][0]['text'] == LINES[0]['text']
-    assert result['highlights'] == [{'at': 12.0, 'text': 'instructor'}]
+    assert result['template'] == 'podcast_en' and result['cues'][0]['original'] == ''
+    assert result['highlights'] == [{'at': 10.0, 'text': 'instructor'}]
     assert result['tags'] == []  # commentary tags are interview-only
 
 
 def test_burned_captions_skip_our_caption_track():
-    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), burned=True, call=lambda *_: good_response(translations=[]))
+    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), burned=True, call=lambda *_: good_response())
     assert result['burned_captions'] is True and result['cues'] == []
+
+
+def test_prompt_rejects_generic_praise_tags():
+    assert '禁止' in packaging.PROMPT and '逻辑清晰' in packaging.PROMPT
 
 
 def test_source_language_detection():

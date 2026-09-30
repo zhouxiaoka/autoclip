@@ -23,16 +23,18 @@ TAG_LIMIT = 10
 MAX_TAGS = 5
 
 PROMPT = (
-    '你是短视频包装编辑。根据 lines（已按时间排序的原字幕，每行有 id）为这段访谈做包装，返回 JSON：\n'
-    '{"title_lines":["...","..."],"accent_line":1,"translations":["..."],'
+    '你是短视频包装编辑。根据 lines（已按时间排序的原字幕，常被切成半句，每行有 id）为这段访谈做包装，返回 JSON：\n'
+    '{"title_lines":["...","..."],"accent_line":1,"segments":[{"from":0,"to":2,"text":"..."}],'
     '"speakers":[{"line":0,"name":"...","role":"..."}],"tags":[{"line":0,"text":"..."}],'
     '"highlights":[{"line":0,"word":"..."}]}\n'
     '规则：title_lines 用 audience_language 写 1–2 行，每行不超过 title_limit 个字符，概括最抓人的观点，不编造；'
-    'accent_line 是需要强调的那一行下标。translate 为 true 时 translations 必须与 lines 一一对应翻译成 audience_language，'
-    '口语化、去掉口头禅，不添加事实；为 false 时返回空数组。'
+    'accent_line 是需要强调的那一行下标（0 或 1）。'
+    'segments 把 lines 按完整句子重新分段：from/to 是连续的行 id 区间，按顺序首尾相接、覆盖全部行、不重叠；'
+    'translate 为 true 时 text 是该段翻译成 audience_language 的口语化译文（去掉口头禅，不添加事实），为 false 时 text 是整理后的原文。'
     'speakers 只填写在 lines 或 known_names 中明确出现过的人名，role 写其公开身份（不确定就留空），line 是此人第一次说话的行；'
     '不确定就返回空数组，绝不猜测身份。'
-    'tags 仅当 template 为 interview_zh 时给出 2–5 个编辑点评（中文，每个不超过 10 个字，如“教科书级”），line 指向被点评的行；'
+    'tags 仅当 template 为 interview_zh 时给出 2–4 个编辑点评（中文，每个不超过 10 个字），必须具体点出这一句最有冲击力的内容，'
+    '例如“七分钟干完三个月”“以退为进”；禁止“逻辑清晰”“直击核心”“干货满满”这类泛泛评价；line 指向被点评的行。'
     'highlights 仅当 template 为 podcast_en 时给出，每 3–4 行最多一个，word 必须是该行（翻译后）里出现的单个关键词。'
 )
 
@@ -64,8 +66,10 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
 def _fallback_title(draft: dict[str, Any], language: str) -> list[str]:
     import textwrap
     text = (draft.get('hook') or draft.get('title') or '').strip()
+    # Width follows the title's own language: an English title on a Chinese platform is not cut at 12.
+    own = 'zh' if source_language([text]) == 'zh' else 'en'
     # Word boundaries for Latin text; CJK has no spaces, so long runs are split by length.
-    return textwrap.wrap(text, width=TITLE_LIMIT[language], break_long_words=True)[:2] if text else []
+    return textwrap.wrap(text, width=TITLE_LIMIT[own], break_long_words=True)[:2] if text else []
 
 
 def _names_allowed(name: str, haystack: str) -> bool:
@@ -102,6 +106,31 @@ def _line(result_item: dict, lines: list) -> int | None:
     return index if isinstance(index, int) and 0 <= index < len(lines) else None
 
 
+def _segments(raw, lines, translate):
+    """Sentence cues from model segments: contiguous, ordered, covering every line exactly once.
+
+    Source subtitles are often cut mid-sentence, so the model regroups lines into sentences; each
+    cue spans its lines' times and keeps their joined original text for bilingual captions.
+    """
+    if not isinstance(raw, list) or not raw:
+        raise ValueError('segments missing')
+    cues, expected = [], 0
+    for item in raw:
+        start, end = (item or {}).get('from'), (item or {}).get('to')
+        text = str((item or {}).get('text') or '').strip()
+        if not (isinstance(start, int) and isinstance(end, int)) or start != expected or end < start or end >= len(lines):
+            raise ValueError('segments are not contiguous')
+        if not text or len(text) > 200:
+            raise ValueError('segment text invalid')
+        original = ' '.join(line['text'] for line in lines[start:end + 1])
+        cues.append({'start': lines[start]['start'], 'end': lines[end]['end'], 'text': text,
+                     'original': original[:300] if translate else '', 'lines': (start, end)})
+        expected = end + 1
+    if expected != len(lines):
+        raise ValueError('segments do not cover every line')
+    return cues
+
+
 def _validated(result, lines, base, translate, burned, known_names, draft):
     if not isinstance(result, dict):
         raise TypeError('packaging response is not an object')
@@ -112,12 +141,7 @@ def _validated(result, lines, base, translate, burned, known_names, draft):
     accent = result.get('accent_line') if result.get('accent_line') in (0, 1) else len(titles) - 1
     cues = []
     if not burned:
-        translations = result.get('translations') or []
-        if translate and (len(translations) != len(lines) or not all(isinstance(t, str) and 0 < len(t.strip()) <= 200 for t in translations)):
-            raise ValueError('translations do not match lines')
-        for i, line in enumerate(lines):
-            text = translations[i].strip() if translate else line['text'][:200]
-            cues.append({'start': line['start'], 'end': line['end'], 'text': text, 'original': line['text'][:300] if translate else ''})
+        cues = _segments(result.get('segments'), lines, translate)
     haystack = (' '.join(line['text'] for line in lines) + ' ' + known_names + ' ' + draft.get('title', '')).lower()
     speakers, seen = [], set()
     for item in result.get('speakers') or []:
@@ -136,8 +160,10 @@ def _validated(result, lines, base, translate, burned, known_names, draft):
     if base['template'] == 'podcast_en':
         for item in result.get('highlights') or []:
             index, word = _line(item, lines), str((item or {}).get('word') or '').strip()
-            target = cues[index]['text'] if index is not None and cues else ''
-            if index is not None and word and len(word) <= 30 and word.lower() in target.lower():
-                highlights.append({'at': lines[index]['start'], 'text': word})
+            cue = next((c for c in cues if index is not None and c['lines'][0] <= index <= c['lines'][1]), None)
+            if cue and word and len(word) <= 30 and word.lower() in cue['text'].lower():
+                highlights.append({'at': cue['start'], 'text': word})
+    for cue in cues:
+        cue.pop('lines', None)
     return {**base, 'title_lines': titles, 'title_accent_line': min(accent, max(0, len(titles) - 1)),
             'cues': cues, 'speakers': speakers[:8], 'tags': tags, 'highlights': highlights[:40]}
