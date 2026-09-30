@@ -175,6 +175,14 @@ const PublishClipPage: React.FC = () => {
     setSelected((cur) => cur.includes(platform) ? cur.filter((p) => p !== platform) : [...cur, platform])
   }
 
+  // Covers are on by default: make one as soon as the page is ready so the user sees it instead of an empty box.
+  const autoCover = useRef(false)
+  useEffect(() => {
+    if (loading || error || cover || coverBusy || autoCover.current) return
+    autoCover.current = true
+    void generateCover()
+  }, [loading, error, cover, coverBusy])
+
   const generateCover = async () => {
     if (!projectId || !clipId || coverBusy) return
     const session = ++coverJob.current
@@ -309,7 +317,7 @@ const PublishClipPage: React.FC = () => {
         if (!settled.pending && !observed.has(track.jobId)) {
           observed.add(track.jobId)
           if (telemetryEnabled) socialPublishObserved(telemetryGeneration, {
-            source_type: studioJobId ? 'studio' : 'legacy', gateway: track.kind,
+            ...workflow.context(projectId, studioJobId || undefined), source_type: studioJobId ? 'studio' : 'legacy', gateway: track.kind,
             outcome: socialPublishOutcome(job.status, settled.scheduled, settled.results),
           })
         }
@@ -489,13 +497,13 @@ const PublishClipPage: React.FC = () => {
         )}
         {!loading && !studioJobId && (
           <>
-            <Row label={t("字幕")} hint={t("从原字幕切出本段并烧进画面")}>
+            <Row label={t("字幕")} hint={t("把这段的字幕压进画面")}>
               <Segmented size="sm" ariaLabel={t("字幕")} value={subtitles ? 'on' : 'off'} onChange={(v) => setSubtitles(v === 'on')}
-                options={[{ value: 'on', label: t("烧录") }, { value: 'off', label: t("不要") }]} />
+                options={[{ value: 'on', label: t("显示") }, { value: 'off', label: t("不显示") }]} />
             </Row>
-            <Row label={t("标题卡")} hint={t("片头约 4 秒显示切片标题")}>
-              <Segmented size="sm" ariaLabel={t("标题卡")} value={titleCard ? 'on' : 'off'} onChange={(v) => setTitleCard(v === 'on')}
-                options={[{ value: 'on', label: t("显示") }, { value: 'off', label: t("不要") }]} />
+            <Row label={t("片头标题")} hint={t("片头约 4 秒显示标题文字")}>
+              <Segmented size="sm" ariaLabel={t("片头标题")} value={titleCard ? 'on' : 'off'} onChange={(v) => setTitleCard(v === 'on')}
+                options={[{ value: 'on', label: t("显示") }, { value: 'off', label: t("不显示") }]} />
             </Row>
           </>
         )}

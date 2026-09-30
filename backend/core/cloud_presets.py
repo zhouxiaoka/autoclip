@@ -1,5 +1,5 @@
 """
-云端 OpenAI 兼容预设：DeepSeek / Seed / Kimi / GLM / Grok。
+云端 OpenAI 兼容预设：DeepSeek / Seed / Kimi / GLM / Grok / Infistar / 88API（赞助）。
 
 底层仍是 openai + 官方 base_url，和 Ollama 预设同一套路，但必须带各家自己的 key，
 不能复用用户的 OpenAI key。设置页、CLI、MCP 都用 `--provider deepseek` 这种名字。
@@ -67,9 +67,28 @@ CLOUD_PRESETS: Dict[str, CloudPreset] = {
         docs_url="https://console.x.ai",
         hint="xAI Grok。需要 xAI 账号。",
     ),
+    # 赞助合作伙伴。多模型网关，可用型号随账号而定，所以不预设默认模型，填好 key 后从 /v1/models 拉取。
+    # docs_url 是 AutoClip 专属注册链接（新用户可领体验额度），说明见 docs/INFISTAR_SETUP.md。
+    "infistar": CloudPreset(
+        key="infistar",
+        display_name="Infistar 无限星河",
+        base_url="https://infistar.cc/v1",
+        default_model="",
+        api_key_setting="infistar_api_key",
+        docs_url="https://www.infistar.cc/register?aff=XLK3BCM6&ref_source=link",
+        hint="赞助合作伙伴。一个 Key 调 Claude / GPT / Gemini / DeepSeek 等模型，专属链接注册可领体验额度。",
+    ),
+    "api88": CloudPreset(
+        key="api88", display_name="88API Token聚合平台", base_url="https://88api.ai/v1",
+        default_model="", api_key_setting="api88_api_key",
+        docs_url="https://88api.ai/sign-up?aff=2PIc",
+        hint="赞助合作伙伴。新用户注册赠送体验额度，站内提供人工客服。",
+    ),
 }
 
 _ALIASES = {
+    "88api": "api88",
+    "88api.ai": "api88",
     "deepseek-ai": "deepseek",
     "moonshot": "kimi",
     "moonshotai": "kimi",
@@ -84,6 +103,8 @@ _ALIASES = {
     "ark": "seed",
     "bytedance": "seed",
     "volces": "seed",
+    "infistar.cc": "infistar",
+    "wuxianxinghe": "infistar",
 }
 
 
@@ -97,7 +118,7 @@ def normalize_cloud_preset_key(name: Optional[str]) -> Optional[str]:
 
 def resolve_cloud_preset(provider: Optional[str], base_url: Optional[str] = None) -> Optional[Tuple[str, str, CloudPreset]]:
     """
-    若 provider 是 deepseek / seed / kimi / glm / grok（或别名），返回 (openai, base_url, preset)。
+    若 provider 是 deepseek / seed / kimi / glm / grok / infistar / api88（或别名），返回 (openai, base_url, preset)。
     不是云端预设则返回 None。
     """
     key = normalize_cloud_preset_key(provider)

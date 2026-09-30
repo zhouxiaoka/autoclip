@@ -10,7 +10,7 @@ def test_legacy_retry_waits_for_explicit_confirmation(client,monkeypatch,goal):
         project=db.get(Project,'p1')
         project.processing_config={'creative':{'goal':goal}}
         db.commit()
-    monkeypatch.setattr(analysis_preferences,'load',lambda:analysis_preferences.AnalysisPreferences())
+    monkeypatch.setattr(analysis_preferences,'load',lambda:analysis_preferences.AnalysisPreferences(analysis_mode='subtitle'))
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**k:pytest.fail('unexpected visual call'))
     monkeypatch.setattr(jobs,'analyze_project',lambda *a,**k:pytest.fail('legacy bypass'))

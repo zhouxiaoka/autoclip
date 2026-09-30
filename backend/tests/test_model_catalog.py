@@ -225,3 +225,45 @@ def test_provider_catalog_infos_follow_curated_list():
     assert names == model_catalog.curated_models("dashscope")
     openai_names = [m.name for m in _catalog_model_infos(ProviderType.OPENAI)]
     assert "gpt-5" in openai_names
+
+
+def test_infistar_has_no_builtin_list_and_fetches_gateway_models(monkeypatch):
+    # 没 key：不拿通义的型号冒充
+    empty = asyncio.run(model_catalog.list_available_models("infistar"))
+    assert empty.models == [] and empty.default_model == "" and empty.source == "catalog"
+
+    _FakeAsyncClient.calls = []
+    _FakeAsyncClient.routes = {
+        "https://infistar.cc/v1/models": (
+            {"data": [{"id": "claude-sonnet-5-5"}, {"id": "deepseek-v4-pro"}, {"id": "gemini-3.8-flash"},
+                      {"id": "text-embedding-3-large"}, {"id": "sora-2"}]},
+            200,
+        )
+    }
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+    live = asyncio.run(model_catalog.list_available_models("infistar", api_key="sk-infistar-key-123", refresh=True))
+    assert live.source == "live"
+    # 网关里各家型号都保留，只去掉嵌入 / 视频
+    assert live.models == ["claude-sonnet-5-5", "deepseek-v4-pro", "gemini-3.8-flash"]
+
+
+def test_api88_has_no_builtin_list_and_fetches_gateway_models(monkeypatch):
+    # 没 key：不拿通义的型号冒充
+    empty = asyncio.run(model_catalog.list_available_models("api88"))
+    assert empty.models == [] and empty.default_model == "" and empty.source == "catalog"
+
+    _FakeAsyncClient.calls = []
+    _FakeAsyncClient.routes = {
+        "https://88api.ai/v1/models": (
+            {"data": [{"id": "claude-sonnet-5-5"}, {"id": "deepseek-v4-pro"}, {"id": "gemini-3.8-flash"},
+                      {"id": "text-embedding-3-large"}, {"id": "sora-2"}]},
+            200,
+        )
+    }
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeAsyncClient)
+    live = asyncio.run(model_catalog.list_available_models("api88", api_key="sk-api88-key-123", refresh=True))
+    assert live.source == "live"
+    # 网关里各家型号都保留，只去掉嵌入 / 视频
+    assert live.models == ["claude-sonnet-5-5", "deepseek-v4-pro", "gemini-3.8-flash"]

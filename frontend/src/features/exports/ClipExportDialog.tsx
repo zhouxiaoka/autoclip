@@ -14,7 +14,7 @@ interface Props {
 
 export function ClipExportDialog({ open, onClose, projectId, clipId }: Props) {
   useTranslation()
-  const [preset, setPreset] = useState<'douyin' | 'xiaohongshu' | 'shorts' | 'bilibili' | 'original'>('douyin')
+  const [preset, setPreset] = useState<'douyin' | 'xiaohongshu' | 'shorts' | 'bilibili' | 'original' | '1080p60'>('douyin')
   const [burnSub, setBurnSub] = useState(true)
   const [titleCard, setTitleCard] = useState(true)
   const { exporting, percent, error, result, start, reset } = useClipExport(projectId, clipId)
@@ -25,7 +25,7 @@ export function ClipExportDialog({ open, onClose, projectId, clipId }: Props) {
     <Dialog
       open={open}
       onClose={() => !exporting && onClose()}
-      title="导出成片"
+      title={t("导出成片")}
       description={t("渲成可直接上传的成片。默认流水线的切片不受影响。")}
       footer={
         <div className="right" style={{ marginLeft: 'auto' }}>
@@ -52,6 +52,7 @@ export function ClipExportDialog({ open, onClose, projectId, clipId }: Props) {
             { value: 'shorts', label: 'Shorts' },
             { value: 'bilibili', label: t("B 站") },
             { value: 'original', label: t("原画") },
+            { value: '1080p60', label: '1080p60' },
           ]}
         />
       </Row>

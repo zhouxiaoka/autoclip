@@ -27,6 +27,9 @@ CURATED_MODELS: Dict[str, List[str]] = {
         "qwen-max",
         "qwen-max-latest",
         "qwen-flash",
+        # 多模态：能看画面，视觉分析 / 封面校对用
+        "qwen-vl-max",
+        "qwen-vl-plus",
     ],
     "openai": [
         "gpt-5.6-sol",
@@ -74,6 +77,9 @@ CURATED_MODELS: Dict[str, List[str]] = {
         "grok-4.5",
         "grok-4.3",
     ],
+    # 多模型网关，型号随账号而定：不内置名单，填好 key 后实时拉取
+    "infistar": [],
+    "api88": [],
 }
 
 DEFAULT_MODELS: Dict[str, str] = {
@@ -85,6 +91,8 @@ DEFAULT_MODELS: Dict[str, str] = {
     "kimi": "kimi-k2.6",
     "glm": "glm-5.3",
     "grok": "grok-4.6",
+    "infistar": "",
+    "api88": "",
 }
 
 PROVIDER_LABELS: Dict[str, str] = {
@@ -96,9 +104,54 @@ PROVIDER_LABELS: Dict[str, str] = {
     "kimi": "Kimi",
     "glm": "GLM",
     "grok": "Grok",
+    "infistar": "Infistar",
+    "api88": "88API",
 }
 
 CLOUD_PROVIDERS = frozenset(CURATED_MODELS)
+
+# ---- 模型能力：设置页在下拉里标「多模态 / 仅文字」，视觉分析和封面校对据此决定能不能看画面 ----
+# 只收录能确认支持图片输入的系列；认不出来的按仅文字处理（宁可少用视觉，也不在不支持的模型上白花钱报错）
+_VISION_MARKERS = (
+    "gpt-4o", "gpt-4.1", "gpt-5", "o3", "o4-",
+    "gemini", "claude",
+    "-vl", "vl-", "qvq", "qwen-omni", "qwen3-omni",
+    "vision", "doubao-seed", "seed-1.6", "seed-2",
+    "grok-4", "llava", "minicpm-v", "llama3.2-vision", "gemma3",
+    "glm-4v", "glm-4.1v", "glm-4.5v", "glm-5v",
+    "kimi-k2.6", "kimi-k3", "kimi-vl", "kimi-latest",
+)
+_TEXT_ONLY_MARKERS = ("deepseek", "-code", "coder", "embedding", "-instruct-text")
+
+
+def supports_vision(model: str) -> bool:
+    name = (model or "").strip().lower()
+    # Explicitly verified official model IDs; these no longer carry a -vl suffix.
+    if name in {'qwen3.8-max', 'qwen3.8-flash'}:
+        return True
+    if not name or any(m in name for m in _TEXT_ONLY_MARKERS):
+        return False
+    return any(m in name for m in _VISION_MARKERS)
+
+
+# ---- 封面生图：跟着文本模型的服务商走，同一个 key ----
+# 这里只是下拉的常用项；填好 key 后再合并账号 /models 里实时拉到的生图型号，用户也可以直接输入模型 ID。
+# 不在表里的服务商（DeepSeek / Kimi / GLM / Grok / 本地）目前没有接入生图接口，封面用视频截帧。
+IMAGE_MODELS: Dict[str, List[str]] = {
+    "dashscope": ["wanx2.1-t2i-turbo", "wanx2.1-t2i-plus"],
+    "seed": ["doubao-seedream-5-0-260128"],
+    "openai": ["gpt-image-1"],
+    "api88": ["gpt-image-1", "dall-e-3", "dall-e-2"],
+    # Infistar 是多模型网关，主流生图模型都能调，具体以账号可用型号为准
+    "infistar": ["gpt-image-1", "dall-e-3", "doubao-seedream-5-0-260128", "flux-1.1-pro", "imagen-4", "wanx2.1-t2i-turbo"],
+}
+_IMAGE_MARKERS = ("gpt-image", "dall-e", "seedream", "wanx", "flux", "imagen", "t2i", "midjourney", "ideogram",
+                  "recraft", "stable-diffusion", "sdxl", "sd3", "kolors", "cogview", "hunyuan-image", "qwen-image")
+
+
+def is_image_model(model: str) -> bool:
+    name = (model or "").lower()
+    return any(m in name for m in _IMAGE_MARKERS)
 
 # 切片分析只要对话模型；嵌入 / 语音 / 图像 / 视频会把下拉撑得没法用
 _SKIP_SUBSTR = (
@@ -158,6 +211,7 @@ class ModelListResult:
     models: List[str]
     catalog: Dict[str, List[str]] = field(default_factory=dict)
     error: Optional[str] = None
+    image_models: List[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         payload = {
@@ -167,6 +221,10 @@ class ModelListResult:
             "default_model": self.default_model,
             "models": self.models,
             "catalog": self.catalog,
+            # 下拉里哪些是多模态；没列出的按仅文字
+            "vision_models": [m for m in self.models if supports_vision(m)],
+            # 这个服务商能不能生封面、可选哪些生图模型（空 = 用视频截帧）
+            "image_models": self.image_models,
         }
         if self.error:
             payload["error"] = self.error
@@ -386,7 +444,9 @@ async def list_available_models(
         source="catalog",
         reachable=False,
         default_model=default_model_for(key),
-        models=curated or curated_models("dashscope"),
+        # 已知提供商内置名单为空（如 infistar）时保持为空，别拿通义的型号冒充
+        models=curated if key in CURATED_MODELS else curated_models("dashscope"),
+        image_models=list(IMAGE_MODELS.get(key, [])),
         catalog=catalog,
     )
 
@@ -394,22 +454,25 @@ async def list_available_models(
         return result
 
     cache_key = _cache_key(key, base_url, api_key)
-    cached = None if refresh else _cache_get(cache_key)
-    if cached is not None:
+    official = key != "openai" or _is_official_openai(base_url)
+
+    def apply(raw: List[str]) -> ModelListResult:
+        # 缓存原始名单：对话模型进下拉，生图模型进封面生图选项
+        if result.image_models:
+            result.image_models = merge_models(result.image_models, [n for n in raw if is_image_model(n)])
         result.source = "live"
         result.reachable = True
-        result.models = merge_models(curated, cached)
+        result.models = merge_models(curated, [n for n in raw if is_chat_model(n, key, official=official)])
         return result
+
+    cached = None if refresh else _cache_get(cache_key)
+    if cached is not None:
+        return apply(cached)
 
     try:
         live = await fetch_live_models(key, api_key=api_key, base_url=base_url)
-        official = key != "openai" or _is_official_openai(base_url)
-        live = [name for name in live if is_chat_model(name, key, official=official)]
         _cache_set(cache_key, live)
-        result.source = "live"
-        result.reachable = True
-        result.models = merge_models(curated, live)
-        return result
+        return apply(live)
     except Exception as exc:  # noqa: BLE001
         logger.info("拉取 %s 模型列表失败: %s", key, exc)
         result.error = str(exc)[:200]

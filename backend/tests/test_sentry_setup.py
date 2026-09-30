@@ -151,3 +151,13 @@ def test_studio_expected_pipeline_failure_keeps_code_and_warning(monkeypatch, tm
     assert clean['level'] == 'warning'
     assert clean['fingerprint'] == ['studio', 'production', 'llm_not_configured']
     assert 'private' not in json.dumps(clean)
+
+
+def test_auto_frame_phase_survives_scrubbing_without_content(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    event = {'tags': {'area': 'studio', 'phase': 'auto_frame', 'error_code': 'unexpected', 'private': 'secret'},
+             'exception': {'values': [{'type': 'RuntimeError', 'value': 'private video title'}]}}
+    clean = sentry_setup.before_send(event)
+    assert clean['tags']['phase'] == 'auto_frame'
+    assert 'private' not in clean['tags']
+    assert 'private video title' not in str(clean)

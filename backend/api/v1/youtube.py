@@ -185,6 +185,8 @@ async def parse_youtube_video(
             }
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"解析YouTube视频失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
@@ -201,6 +203,9 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
         
         ydl_opts = {
             'quiet': True,
+            'socket_timeout': 30,
+            'retries': 2,
+            'extractor_retries': 2,
             'no_warnings': True,
             'ignoreconfig': True,
             'noplaylist': True,
@@ -479,9 +484,8 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             ydl_opts.setdefault('extractor_args', {}).setdefault('youtube', {}).setdefault('player_client', []).append(yt_client_env)
         
         def download_sync(url, ydl_opts):
-            with sanitized_yt_env():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return ydl.download([url])
+            from backend.utils.download_recovery import download_with_recovery
+            return download_with_recovery(url, ydl_opts)
         
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, download_sync, request.url, ydl_opts)
@@ -513,7 +517,7 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
                 video_file_path = Path(video_path)
                 
                 # 根据视频信息选择合适的模型
-                model = "base"  # 默认使用平衡模型
+                model = None  # Use the configured local transcription model
                 language = "auto"  # 默认自动检测语言
                 
                 # 可以根据视频标题判断内容类型

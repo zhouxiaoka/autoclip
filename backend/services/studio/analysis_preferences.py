@@ -20,11 +20,16 @@ _lock = threading.RLock()
 
 class AnalysisPreferences(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    analysis_mode: AnalysisMode = 'subtitle'
-    allow_visual_screening: StrictBool = False
+    # 默认智能选择：多模态模型会先抽几张画面判断素材，仅文字模型自动只用字幕。
+    # 选「智能 / 视觉」即同意这一步的视觉调用，设置页在卡片上写明花费；想完全不看画面就选字幕分析。
+    analysis_mode: AnalysisMode = 'auto'
+    allow_visual_screening: StrictBool | None = None
 
     @model_validator(mode='after')
     def subtitle_is_text_only(self):
+        # 没显式给出时跟随方式：智能 / 视觉 = 允许导入时看几张画面；字幕 = 不看
+        if self.allow_visual_screening is None:
+            self.allow_visual_screening = self.analysis_mode != 'subtitle'
         if self.analysis_mode == 'subtitle' and self.allow_visual_screening:
             raise ValueError('字幕分析不能启用视觉初筛')
         return self
@@ -35,11 +40,16 @@ def settings_path() -> Path:
 
 
 def load() -> AnalysisPreferences:
-    """Old installations default to subtitle, regardless of model or env keys.
+    """No saved preference → smart selection (auto). Visual calls still need a multimodal model.
 
     An invalid saved preference is an error, never permission to spend money.
     The caller should preserve source material and ask for corrected settings.
     """
+    from backend.services import ai_model_settings as ai
+    settings = ai.load()
+    if settings:
+        return AnalysisPreferences(analysis_mode=settings.analysis_mode,
+                                   allow_visual_screening=settings.allow_visual_screening)
     with _lock:
         path = settings_path()
         if not path.exists():

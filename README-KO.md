@@ -50,6 +50,18 @@ AutoClip은 AI로 영상 자막을 분석하고 하이라이트를 찾아 제목
 <table>
   <tr>
     <td align="center" width="140">
+      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
+      <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
+    </td>
+    <td>
+      <strong>88API Token 플랫폼</strong>의 AutoClip 후원에 감사드립니다! GPT, Claude, Gemini, Grok, DeepSeek, Kimi, GLM을 통합하여 자막 분석, 하이라이트 선택, 제목 생성에 활용할 수 있습니다.<br>
+      🎨 <strong>멀티미디어</strong>: GPT-Image, Seedance, Veo, MiniMax Hailuo H3, Kling, Whisper, TTS 등 이미지·영상·음성 모델을 제공합니다. AutoClip에서는 호환되는 분석·표지 생성·자막 전사 API를 사용합니다.<br>
+      🏷️ <strong>서비스 및 결제</strong>: 파트너 안내에 따르면 해외 법인이 운영하며 상담원 지원, 정식 청구서, 1:1 충전 비율을 제공합니다. 세부 조건은 플랫폼을 확인하세요.<br>
+      🎁 <strong>신규 가입 혜택</strong>: <a href="https://88api.ai/sign-up?aff=2PIc">전용 추천 링크</a>로 가입하면 모델 테스트용 체험 크레딧을 받을 수 있습니다. 이벤트 조건이 적용됩니다. <a href="docs/88API_SETUP.en.md">설정 가이드 (영어)</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="140">
       <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
       <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar.cc</strong></a>
     </td>

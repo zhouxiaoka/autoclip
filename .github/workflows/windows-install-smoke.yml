@@ -9,6 +9,10 @@ on:
         description: "desktop-build.yml 的 run id（其中 build-windows-x64 成功）"
         required: true
         type: string
+      verify_whisper:
+        description: "Install Whisper and run cached real speech with installed portable Python"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -44,4 +48,20 @@ jobs:
         with:
           name: windows-smoke-report
           path: windows-smoke.json
+          if-no-files-found: ignore
+
+      - name: Verify actual installed Whisper runtime and cached transcription
+        if: inputs.verify_whisper
+        run: |
+          $report = Get-Content windows-smoke.json -Raw | ConvertFrom-Json
+          $resources = $report.resources
+          & (Join-Path $resources 'python\python.exe') -B scripts\verify_whisper_recovery.py --resources $resources --report installed-whisper-report.json
+          if ($LASTEXITCODE -ne 0) { throw "Installed Whisper acceptance failed: $LASTEXITCODE" }
+
+      - name: Upload installed Whisper report
+        if: always() && inputs.verify_whisper
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-whisper-report
+          path: installed-whisper-report.json
           if-no-files-found: ignore

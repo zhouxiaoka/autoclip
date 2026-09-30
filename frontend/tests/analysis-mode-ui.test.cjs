@@ -10,7 +10,7 @@ function view(mode,goals,available=true){
  'react-i18next':{useTranslation:()=>{}},'../../i18n':{t:x=>x},
  react:{useState:()=>{const n=index++;return [states[n],v=>{states[n]=v}]},useEffect:()=>{}},
  'react/jsx-runtime':{jsx:element,jsxs:element,Fragment:'fragment'},
- '../../ui':{Btn:'button',Dialog:'dialog',fmtDuration:String},
+ '../../ui':{Btn:'button',Dialog:'dialog',Row:'row',Segmented:'segmented',fmtDuration:String},
  './types':{defaultImportOptions:{},goalLabels:{content:'content',highlight:'highlight',promo:'promo'},languages:[]},
  './ImportPreferences':{default:'preferences'},
  './api':{studioApi:{confirmPlan:async(...args)=>calls.push(args)},errorText:String}
@@ -22,7 +22,7 @@ function view(mode,goals,available=true){
 test('visual selection blocks content-only output without silently changing choices',()=>{
  const x=view('visual',['content']);let nodes=x.render()
  assert.equal(nodes.find(n=>n.props?.children==='确认并开始制作').props.disabled,true)
- nodes.find(n=>n.type==='select').props.onChange({target:{value:'subtitle'}})
+ nodes.find(n=>n.type==='segmented').props.onChange('subtitle')
  assert.deepEqual(x.states[4],['content'])
  assert.equal(x.render().find(n=>n.props?.children==='确认并开始制作').props.disabled,false)
 })

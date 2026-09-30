@@ -33,7 +33,7 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
   const [text, setText] = useState('')
   const [contact, setContact] = useState('')
   const [sending, setSending] = useState(false)
-  const [llm, setLlm] = useState<Pick<FeedbackContext, 'llm_provider' | 'llm_model' | 'llm_base_url'>>({})
+  const [llm, setLlm] = useState<Awaited<ReturnType<typeof collectLlmContext>>>({})
   const runtime = useMemo(() => getRuntimeInfo(), [])
 
   const fullContext: FeedbackContext = useMemo(() => ({ ...llm, ...context }), [llm, context])
@@ -45,7 +45,9 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
     setCategory(context.source === 'failure' ? 'bug' : 'idea')
     collectLlmContext().then(setLlm)
     resolveFeedbackSurvey().then((s) => trackFeedbackOpened(context, s))
-  }, [open, context])
+    // Background project refreshes replace context objects. Keep the user's
+    // typed report until the dialog closes or switches to another project.
+  }, [open, context.source, context.project_id])
 
   const handleClose = () => {
     resolveFeedbackSurvey().then((s) => trackFeedbackDismissed(context, s))
@@ -78,6 +80,8 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
   ]
   if (fullContext.llm_provider) ctxChips.push(`${fullContext.llm_provider}${fullContext.llm_model ? ` · ${fullContext.llm_model}` : ''}`)
   if (fullContext.stage) ctxChips.push(`stage: ${fullContext.stage}`)
+  if (fullContext.error_code) ctxChips.push(fullContext.error_code)
+  if (fullContext.transcription_provider) ctxChips.push(`${fullContext.transcription_provider}${fullContext.transcription_model ? ` · ${fullContext.transcription_model}` : ''}`)
 
   return (
     <Dialog

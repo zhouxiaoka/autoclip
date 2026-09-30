@@ -11,7 +11,7 @@ export async function observeOperation<T>(
   const generation = workflow.generation()
   const enabledAtStart = workflow.active(generation)
   const operationId = globalThis.crypto?.randomUUID?.() ?? `${startedAt}-${Math.random().toString(36).slice(2)}`
-  const props = { ...properties, operation_id: operationId }
+  const props = { ...workflow.context(typeof properties.project_id === 'string' ? properties.project_id : undefined, typeof properties.export_id === 'string' ? properties.export_id : undefined), ...properties, operation_id: operationId }
   if (enabledAtStart) captureBusinessEvent(`${name}_requested`, props)
   try {
     const result = await action()

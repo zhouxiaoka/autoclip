@@ -68,7 +68,7 @@ def vision_call(content, config=None):
     config = config or effective()
     key, base, model = config.get('api_key', ''), config['base_url'], config['model']
     if not base or not model:
-        raise ValueError('请先在设置页配置视觉理解模型')
+        raise ValueError('当前模型只能处理文字，不能看画面；请在「设置 → AI 分析」换成多模态模型，或改用字幕分析')
     body = {'model': model, 'messages': [{'role': 'user', 'content': content}], 'max_tokens': 1000 if config.get('quick_screening') else 4000}
     # Structured visual observation must finish within the bounded request budget.
     # Other compatible providers must not receive Seed-specific parameters.

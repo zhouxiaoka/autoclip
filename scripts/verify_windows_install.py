@@ -6,6 +6,8 @@
 - 来源守卫：自家 Origin 放行，其他网页的写请求被拒
 - 内置 ffmpeg 能生成、切片、探测视频（Windows 上最常出问题的环节）
 - yt-dlp 能拿到内置 ffmpeg 的路径（链接导入合并音视频依赖它）
+- 保存 provider，上传真实公开访谈和 SRT，整条流水线完成并产出 H.264/AAC
+  模型使用 loopback 协议 fixture，验证安装链路，不声称模型剪辑质量
 
 用法（CI 在 NSIS 静默安装后调用）：
     "<安装目录>\\resources\\python\\python.exe" -B scripts\\verify_windows_install.py --resources "<安装目录>\\resources"
@@ -34,7 +36,14 @@ for stream in (sys.stdout, sys.stderr):
 parser = argparse.ArgumentParser()
 parser.add_argument("--resources", type=Path, required=True)
 parser.add_argument("--report", type=Path)
+parser.add_argument("--launch-desktop", action="store_true", help="通过安装后的桌面 exe 启动后端")
+parser.add_argument('--source-video', type=Path, default=Path(__file__).resolve().parents[1] / 'backend/assets/example/source.mp4')
+parser.add_argument('--source-srt', type=Path, default=Path(__file__).resolve().parents[1] / 'backend/assets/example/source.srt')
 args = parser.parse_args()
+if args.report:
+    args.report = args.report.resolve()
+args.source_video = args.source_video.resolve(strict=True)
+args.source_srt = args.source_srt.resolve(strict=True)
 resources = args.resources.resolve(strict=True)
 if not Path(sys.executable).resolve().is_relative_to(resources / "python"):
     parser.error("必须用安装目录里的 python.exe 运行，而不是开发环境的 Python")
@@ -83,8 +92,15 @@ opts = ytdlp_ffmpeg_options()
 assert Path(opts.get("ffmpeg_location", "")).resolve() == ffmpeg.resolve(), opts
 report["ytdlp_ffmpeg"] = "passed"
 
-step("桌面后端启动")
-proc = subprocess.Popen([sys.executable, "-B", "-m", "backend.desktop_main"], cwd=resources, env=os.environ.copy(),
+step("桌面应用启动" if args.launch_desktop else "桌面后端启动")
+if args.launch_desktop:
+    apps = [p for p in resources.parent.glob('*.exe') if 'uninstall' not in p.name.lower()]
+    assert len(apps) == 1, f"无法唯一定位安装后的应用: {apps}"
+    command = [str(apps[0])]
+    report['desktop_executable'] = apps[0].name
+else:
+    command = [sys.executable, "-B", "-m", "backend.desktop_main"]
+proc = subprocess.Popen(command, cwd=resources, env=os.environ.copy(),
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 lines, port = [], {}
@@ -93,6 +109,8 @@ lines, port = [], {}
 def pump():
     for line in proc.stdout:
         lines.append(line.rstrip())
+        if line.startswith('Backend output: '):
+            line = line.removeprefix('Backend output: ')
         if line.startswith("PORT=") and "port" not in port:
             port["port"] = int(line.split("=", 1)[1])
 
@@ -111,6 +129,29 @@ try:
     with urlopen(base + "/api/v1/projects/", timeout=15) as r:
         assert r.status == 200
     report["backend_health"] = "passed"
+    if args.launch_desktop:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.WinDLL('user32', use_last_error=True)
+        callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        user32.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+        user32.IsWindowVisible.argtypes = [wintypes.HWND]
+        user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        windows = []
+        @callback_type
+        def inspect_window(handle, _):
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(handle, ctypes.byref(pid))
+            if pid.value == proc.pid and user32.IsWindowVisible(handle):
+                windows.append(handle)
+            return True
+        deadline = time.monotonic() + 15
+        while not windows and time.monotonic() < deadline:
+            user32.EnumWindows(inspect_window, 0)
+            if not windows:
+                time.sleep(.5)
+        assert windows, "桌面程序没有创建可见窗口"
+        report['desktop_window'] = 'passed'
 
     step("来源守卫")
     def post(origin):
@@ -124,6 +165,13 @@ try:
     assert post("http://tauri.localhost") != 403, "Windows 自家界面的 Origin 被拦了"
     assert post("https://evil.example") == 403, "其他网页的写请求没被拦"
     report["origin_guard"] = "passed"
+
+    step("保存 provider 并跑通真实本地视频（loopback 协议 fixture）")
+    from installed_video_acceptance import run
+    report["installed_video"] = run(base, root, resources, args.source_video, args.source_srt)
+except BaseException:
+    print("\n".join(lines[-120:]), flush=True)
+    raise
 finally:
     proc.terminate()
     try:

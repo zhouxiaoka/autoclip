@@ -151,7 +151,7 @@ test('actual API entrypoints enroll imports/exports and count every media downlo
     axios: { create: () => transport, get: async () => ({ data: blob, headers: {} }) },
     '../utils/errorHandler': { errorHandler: { handleError() {} } },
     '../utils/apiConfig': { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener() {} } },
-    '../analytics/operations': operations, '../analytics/observer': { workflow: s.tracker },
+    '../analytics/workflow': core, '../analytics/operations': operations, '../analytics/observer': { workflow: s.tracker },
     '../analytics/posthog': ph,
     '../analytics/events': { trackVideoImported() {}, trackClipsExported() {}, trackProcessingFailed() {} },
   }, { FormData, window: { URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} } },
@@ -186,7 +186,7 @@ test('Studio phases dedupe locally across restart without sending internal IDs o
   const recovered=new core.WorkflowTracker(s.storage,()=>true,s.capture,()=>NOW)
   recovered.observeStudio(recovered.list()[0],snapshot)
   assert.equal(s.events.length,1)
-  assert.equal(s.events[0].props.studio_schema_version,1)
+  assert.equal(s.events[0].props.studio_schema_version,2)
   assert.equal(s.events[0].props.outcome,'failed')
   assert.equal(JSON.stringify(s.events).includes('secret'),false)
   s.tracker.watch('studio-export','secret-job','secret-project')
@@ -201,7 +201,7 @@ test('Studio screening distinguishes recommendations, manual fallback and import
     const s=setup();s.tracker.watch('studio-screen','private-project')
     s.tracker.observeStudio(s.tracker.list()[0],snapshot)
     assert.equal(s.events[0].props.outcome,outcome)
-    assert.equal(s.events[0].props.studio_schema_version,1)
+    assert.equal(s.events[0].props.studio_schema_version,2)
   }
 })
 test('actual Studio API enrolls accepted work and sends aggregate-only telemetry',async()=>{
@@ -211,7 +211,7 @@ test('actual Studio API enrolls accepted work and sends aggregate-only telemetry
   const file=path.join(__dirname,'../src/features/studio/api.ts')
   const js=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText
   const module={exports:{}}
-  vm.runInNewContext(js,{module,exports:module.exports,require:id=>({'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}}[id])})
+  vm.runInNewContext(js,{module,exports:module.exports,require:id=>({'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}}[id])})
   const api=module.exports.studioApi
   await api.import({filename:'private.mp4',url:'https://private.test/?key=secret'})
   await api.confirmPlan('private-project','private-plan',['highlight'],{language:'source'})
@@ -220,7 +220,7 @@ test('actual Studio API enrolls accepted work and sends aggregate-only telemetry
   assert.equal(s.events.length,6)
   assert.equal(JSON.stringify(s.events).includes('private'),false)
   assert.equal(JSON.stringify(s.events).includes('secret'),false)
-  for(const e of s.events) assert.ok(Object.keys(e.props).every(k=>['studio_schema_version','request_duration_ms','source_type','has_subtitle','aspect','goal_content','goal_highlight','goal_promo'].includes(k)))
+  for(const e of s.events) assert.ok(Object.keys(e.props).every(k=>['operation_id','flow_id','material_origin','auto_frame_retained','has_crop_track','has_manual_adjustment','studio_schema_version','request_duration_ms','source_type','has_subtitle','aspect','goal_content','goal_highlight','goal_promo'].includes(k)))
   s.enable(false)
   await api.import({})
   assert.equal(s.events.length,6)
@@ -294,7 +294,7 @@ test('UI workspace snapshots capture fast screening before confirm and never enr
  assert.equal(await aggregate.observeStudioWorkspace('p',async()=>snapshot),snapshot)
  assert.equal(s.events.length,1);assert.equal(s.events[0].props.recommendation_mode,'local')
  await aggregate.observeStudioWorkspace('p',async()=>snapshot);assert.equal(s.events.length,1)
- assert.equal(core.safeStudioProperties(null).studio_schema_version,1)
+ assert.equal(core.safeStudioProperties(null).studio_schema_version,2)
 })
 
 test('late workspace response cannot settle a newer rescreen attempt',async()=>{
@@ -304,4 +304,137 @@ test('late workspace response cannot settle a newer rescreen attempt',async()=>{
  s.tracker.watch('studio-screen','p',undefined,undefined,{},true)
  finish({plan:{id:'old',mode:'ai'},analysis:{status:'awaiting_confirmation'}});await pending
  assert.equal(s.events.length,0)
+})
+
+test('readable but full storage cannot override an immediate opt-out', () => {
+  const captured=[]
+  const ph=load('posthog',{'posthog-js':{init(){},capture(...args){captured.push(args);return {}},opt_out_capturing(){},opt_in_capturing(){}},'./workflow':core},{localStorage:{getItem(){return null},setItem(){throw Error('quota')}},window:{}})
+  ph.initAnalytics();ph.setAnalyticsEnabled(false)
+  assert.equal(ph.isAnalyticsEnabled(),false);assert.equal(ph.captureBusinessEvent('blocked'),false)
+  assert.equal(captured.length,0)
+  ph.setAnalyticsEnabled(true);assert.equal(ph.captureBusinessEvent('allowed',{schema_version:999,runtime:'private'}),true)
+  assert.equal(captured[0][1].schema_version,2);assert.equal(captured[0][1].runtime,'web')
+})
+
+test('sample classification and opaque flow/artifact survive restart and clear on opt-out', () => {
+  const s=setup();s.tracker.rememberProject('private-project',core.projectProperties({settings:{example:true,example_version:2,secret:'sk-secret'}}))
+  const first=s.tracker.context('private-project','private-job')
+  assert.equal(first.material_origin,'sample');assert.equal(first.example_version,2)
+  assert.match(first.flow_id,/^t-/);assert.match(first.artifact_id,/^t-/)
+  const restored=new core.WorkflowTracker(s.storage,()=>true,s.capture,()=>NOW)
+  assert.equal(restored.context('private-project','private-job').artifact_id,first.artifact_id)
+  restored.rememberProject('real-project',{material_origin:'user'})
+  assert.equal(restored.context('real-project').material_origin,'user')
+  assert.notEqual(restored.context('real-project').flow_id,first.flow_id)
+  assert.equal(JSON.stringify(first).includes('private'),false)
+  restored.clear();assert.equal(restored.context('private-project').material_origin,'unknown')
+})
+
+test('immutable receipts recover the right run after a newer plan replaced current state', () => {
+  const s=setup();s.tracker.rememberProject('p',{material_origin:'sample'})
+  s.tracker.watch('studio-production','old-plan','p',undefined,{},false,'old-run')
+  const w=s.tracker.list()[0]
+  s.tracker.observeStudio(w,{material_origin:'sample',plan:{id:'new-plan'},analysis:{run_id:'new-run',phase:'screening',status:'running'},analysis_history:[{run_id:'old-run',plan:{id:'old-plan',confirmed_analysis:'subtitle'},analysis:{phase:'production',status:'completed'}}]})
+  s.tracker.observeStudio(w,{plan:{id:'new-plan'},analysis:{status:'failed'}})
+  assert.equal(s.events.length,1);assert.equal(s.events[0].props.outcome,'completed');assert.equal(s.events[0].props.material_origin,'sample')
+  assert.equal(JSON.stringify(s.events).includes('old-run'),false)
+  s.tracker.watch('studio-screen','p',undefined,undefined,{},true,'screen-run')
+  s.tracker.observeStudio(s.tracker.list()[1],{analysis:{run_id:'production-run',phase:'production',status:'failed'}})
+  assert.equal(s.events.length,1)
+})
+
+test('experience contract excludes config secrets and results cannot replay across consent changes', () => {
+  const s=setup();const x=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+  const finish=x.beginExperience('provider_connection_test',{provider:'openai',placement:'home_setup',api_key:'sk-secret',model:'private-model',base_url:'https://private'})
+  finish('failed',{error:'sk-secret'});finish('completed')
+  assert.equal(s.events.length,2);assert.equal(s.events[1].props.outcome,'failed')
+  assert.equal(JSON.stringify(s.events).includes('secret'),false);assert.equal(JSON.stringify(s.events).includes('private'),false)
+  const late=x.beginExperience('model_discovery',{provider:'openai'});s.tracker.clear();late('completed',{result_count:9})
+  assert.equal(s.events.length,3)
+})
+
+function settingsHook(s, transport, initial) {
+  let cursor=0;const slots=[]
+  const react={useState(value){const i=cursor++;if(!(i in slots))slots[i]=value;return [slots[i],next=>{slots[i]=typeof next==='function'?next(slots[i]):next}]},useRef(value){const i=cursor++;if(!(i in slots))slots[i]={current:value};return slots[i]},useEffect(){}}
+  const providers={PROVIDERS:{openai:{}},}
+  const defaults=load('../features/settings/modelDefaults')
+  const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults})
+  const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+  const hook=load('../features/settings/useModelSettings',{
+    react,antd:{message:{success(){},error(){}}},'../../i18n':{t:x=>x},'../studio/api':{errorText:()=> 'redacted'},
+    '../../analytics/experience':experience,'./providers':providers,'./modelSettingsApi':{modelSettingsApi:{get:async()=>structuredClone(initial),...transport},bindingCapability:()=> 'text'},
+    './modelDefaults':defaults,'./modelSettingsLogic':logic,
+  },{window:{setTimeout(){},clearTimeout(){},addEventListener(){},removeEventListener(){}}})
+  return ()=>{cursor=0;return hook.useModelSettings('home_setup')}
+}
+const modelFixture=()=>({version:1,saved:false,connections:[{id:'private-id',provider:'openai',api_key:'sk-secret',has_key:true,base_url:'https://private',name:'private'}],analysis:{connection_id:'private-id',model:'private-model',capability:'text'},vision:null,cover:null,cover_enabled:false,allow_send_frame:false,analysis_mode:'subtitle',allow_visual_screening:false,transcription:{provider:'whisper_local',model:'base'},chunk_size:2000,min_score_threshold:.7,max_clips_per_collection:5})
+test('actual unified settings hook records save once and HTTP-200 negative tests as failures',async()=>{
+ const s=setup();const render=settingsHook(s,{discover:async()=>({models:[],source:'catalog',preview:true}),save:async value=>({...value,saved:true}),test:async()=>({success:false})},modelFixture())
+ await render().load();await Promise.resolve();let m=render();await m.save();m=render();await m.test()
+ assert.equal(s.events.filter(e=>e.event==='provider_configuration_save_finished').length,1)
+ assert.equal(s.events.find(e=>e.event==='provider_configuration_save_finished').props.mode,'initial')
+ assert.equal(s.events.find(e=>e.event==='provider_connection_test_finished').props.outcome,'failed')
+ assert.equal(s.events.some(e=>e.event==='api_key_configured'),false)
+ assert.equal(JSON.stringify(s.events).includes('sk-secret'),false);assert.equal(JSON.stringify(s.events).includes('private'),false)
+})
+test('actual discovery ignores stale completions and distinguishes preview from live results',async()=>{
+ const s=setup();let pending=[]
+ const render=settingsHook(s,{discover:()=>new Promise(resolve=>pending.push(resolve))},modelFixture())
+ await render().load();const m=render();const c=m.settings.connections[0]
+ const second=m.discover(c,true,'manual')
+ pending[0]({models:[],source:'catalog',preview:true});await Promise.resolve()
+ pending[1]({models:[{id:'private-model',analysis:true}],source:'live',preview:false});await second
+ const results=s.events.filter(e=>e.event==='model_discovery_finished')
+ assert.equal(results.length,1);assert.equal(results[0].props.source,'live');assert.equal(results[0].props.trigger,'manual')
+})
+
+test('sample render and native save share an artifact without exposing backend IDs',async()=>{
+ const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ s.tracker.rememberProject('private-sample',{material_origin:'sample',example_version:1})
+ const ctx=s.tracker.context('private-sample','private-job')
+ s.tracker.watch('studio-export','private-job','private-sample',undefined,ctx)
+ s.tracker.observeStudio(s.tracker.list()[0],{material_origin:'sample',jobs:[{job_id:'private-job',status:'completed'}]})
+ aggregate.studioDownloadRequested('private-sample','private-job')
+ assert.equal(s.events.some(e=>e.event==='studio_download_saved'),false)
+ await aggregate.observeStudioDownload(async()=>42,'private-sample','private-job')
+ for(const event of s.events){assert.equal(event.props.material_origin,'sample');assert.equal(event.props.artifact_id,ctx.artifact_id);assert.equal(event.props.flow_id,ctx.flow_id)}
+ assert.equal(JSON.stringify(s.events).includes('private'),false)
+})
+test('retrying the same plan retains both execution attempts until independently observed',()=>{
+ const s=setup()
+ s.tracker.watch('studio-production','plan','p',undefined,{},false,'run-first')
+ s.tracker.watch('studio-production','plan','p',undefined,{},false,'run-second')
+ const state={plan:{id:'plan'},analysis:{status:'completed',phase:'production',run_id:'run-second'},analysis_history:[{run_id:'run-first',plan:{id:'plan'},analysis:{status:'failed',phase:'production'}}]}
+ for(const watch of s.tracker.list())s.tracker.observeStudio(watch,state)
+ assert.equal(s.events.length,2)
+ assert.deepEqual(s.events.map(e=>e.props.outcome),['failed','completed'])
+ assert.notEqual(s.events[0].props.attempt_id,s.events[1].props.attempt_id)
+})
+
+test('actual auto-frame API distinguishes automatic zero detection from retained edits',async()=>{
+ const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':{post:async()=>({scenes:[{crop_x:null,fit_shots:2}]})},'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}})
+ s.tracker.rememberProject('private-project',{material_origin:'user'})
+ await api.studioApi.autoFrame('private-project',{layout:'crop',scenes:[]},'auto')
+ const event=s.events.find(e=>e.event==='studio_auto_frame_finished')
+ assert.equal(event.props.framing_outcome,'no_detection');assert.equal(event.props.trigger,'auto')
+ assert.equal(event.props.fit_count,2);assert.equal(event.props.framed_count,0)
+ const draft={layout:'crop',scenes:[{framing_source:'auto',crop_track:[{private:42}]}]}
+ assert.equal(api.draftProperties(draft).auto_frame_retained,true)
+ draft.scenes[0].framing_adjusted=true
+ assert.equal(api.draftProperties(draft).auto_frame_retained,false)
+ assert.equal(api.draftProperties(draft).has_manual_adjustment,true)
+ assert.equal(JSON.stringify(s.events).includes('private'),false)
+})
+
+test('framing installation retries use distinct terminal deduplication keys',()=>{
+ const s=setup();const inserts=[]
+ for(let i=0;i<2;i++){
+  s.tracker.watch('framing-runtime','runtime',undefined,undefined,{},true)
+  const watch=s.tracker.list()[0]
+  s.tracker.emitOnce(watch,'finished','studio_framing_install_finished',{outcome:i?'completed':'failed'})
+  inserts.push(s.events[i].props.$insert_id)
+ }
+ assert.notEqual(inserts[0],inserts[1])
+ assert.equal(s.events[0].props.studio_schema_version,2)
 })

@@ -1,3 +1,5 @@
+import { trackExperience } from '../analytics/experience'
+import { workflow } from '../analytics/observer'
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useState, useEffect, useRef } from 'react'
@@ -21,6 +23,7 @@ import { useCollectionVideoDownload } from '../hooks/useCollectionVideoDownload'
 import { ProjectTaskManager } from '../components/ProjectTaskManager'
 import FeedbackDialog from '../components/FeedbackDialog'
 import { Btn, Icon, parseTimecode, fmtDuration } from '../ui'
+import { openExternalLink } from '../utils/externalLinks'
 
 const ProjectDetailPage: React.FC = () => {
   useTranslation()
@@ -41,6 +44,14 @@ const ProjectDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const loadVersion = useRef(0)
+  const exampleView = useRef('')
+  const exampleVisible = !loading && !error && currentProject?.id === id && !!(currentProject?.settings?.example || currentProject?.processing_config?.example)
+  useEffect(() => {
+    if (!exampleVisible || !id) { exampleView.current = ''; return }
+    if (exampleView.current === id) return
+    exampleView.current = id
+    trackExperience('example_project_viewed', { ...workflow.context(id), material_origin: 'sample' })
+  }, [exampleVisible, id])
   const [statusLoading, setStatusLoading] = useState(false)
   const [showCreateCollection, setShowCreateCollection] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
@@ -275,6 +286,8 @@ const ProjectDetailPage: React.FC = () => {
     const tb = b.created_at ? new Date(b.created_at).getTime() : 0
     return tb - ta
   })
+  const isExample = !!(currentProject.settings?.example || currentProject.processing_config?.example)
+  const sourceHost = (() => { try { return currentProject.source_url ? new URL(currentProject.source_url).hostname.replace(/^www\./, '') : '' } catch { return '' } })()
   const isVisual = !!currentProject.settings?.smart_import || !!currentProject.processing_config?.smart_import || ['highlight', 'promo'].includes(currentProject.settings?.creative?.goal || currentProject.processing_config?.creative?.goal)
   const isCompleted = currentProject.status === 'completed'
   const isFailed = currentProject.status === 'failed' || (currentProject.status as string) === 'error'
@@ -283,6 +296,7 @@ const ProjectDetailPage: React.FC = () => {
     source: 'failure' as const,
     project_id: currentProject.id,
     error_message: currentProject.error_message || undefined,
+    error_code: currentProject.error_code || undefined,
   }
 
   return (
@@ -314,6 +328,20 @@ const ProjectDetailPage: React.FC = () => {
                 <>
                   <span className="dot" />
                   <span>{dayjs(currentProject.created_at).fromNow()}</span>
+                </>
+              )}
+              {sourceHost && (
+                <>
+                  <span className="dot" />
+                  <a className="ac-link" href={currentProject.source_url} onClick={e => { e.preventDefault(); openExternalLink(currentProject.source_url!) }}>
+                    {t("来源")} {sourceHost} ↗
+                  </a>
+                </>
+              )}
+              {isExample && (
+                <>
+                  <span className="dot" />
+                  <span>{t("示例项目 · 原片只保留了三段")}</span>
                 </>
               )}
             </div>

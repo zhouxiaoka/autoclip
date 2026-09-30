@@ -30,6 +30,7 @@ function loadApi({ baseUrl, tauri, invokes }) {
       isReady: () => true,
       waitForReady: async () => true,
     } },
+    '../analytics/workflow': { projectProperties: () => ({ material_origin: 'unknown' }) },
     '../analytics/operations': {
       observeOperation: async (_name, _props, action) => action(),
       observeDownload: async (_props, action) => action(),

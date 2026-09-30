@@ -1,0 +1,1729 @@
+{
+  "source": "https://infistar.cc/api/pricing",
+  "checked_at": "2026-09-29",
+  "models": [
+    {
+      "id": "gpt-6-astra",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-6-sol",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-6-luna",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5.6-sol",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-5.5",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5.5-2026-04-23",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5.6-terra",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-5.6-luna",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-5.4-pro",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-5.4",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5.4-nano",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-5.3-codex",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-5.2",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5.1",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5-mini",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5-nano",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-4.1",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-4.1-mini",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-4.1-mini-2025-04-14",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-4o",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-4o-2024-11-20",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-4o-2024-08-06",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-4o-mini",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-4o-mini-2024-07-18",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-3.5-turbo-16k",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "o3",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "o1-mini",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-image-2.5-sunburst",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-image-2.5-flare",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-image-2",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-5-2025-08-07",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5-mini-2025-08-07",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5-nano-2025-08-07",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-4.1-nano",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-4.1-nano-2025-04-14",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-4-turbo",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-4-turbo-2024-04-09",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-4o-2024-05-13",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "o4-mini",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "o4-mini-2025-04-16",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-3.5-turbo",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-3.5-turbo-0125",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-3.5-turbo-1106",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "o3-2025-04-16",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "o3-mini",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "o1",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "o1-2024-12-17",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gpt-5.2-codex",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gpt-5.1-codex-mini",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "deepseek-v4.1-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "deepseek-v4-flash-vision-exp",
+      "supported_endpoint_types": [
+        "openai",
+        "openai-response"
+      ],
+      "capability": null
+    },
+    {
+      "id": "claude-fable-5-1",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-fable-5",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-opus-5-5",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-opus-5",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-sonnet-5",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-opus-4-8",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-opus-4-7",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-opus-4-6",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-opus-4-5-20251101",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": null
+    },
+    {
+      "id": "claude-sonnet-4-5-20250929",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": null
+    },
+    {
+      "id": "claude-haiku-4-5-20251001",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-opus-4-5",
+      "supported_endpoint_types": [
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-sonnet-4-5",
+      "supported_endpoint_types": [
+        "anthropic"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "supported_endpoint_types": [
+        "openai",
+        "gemini"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gemini-3.8-flash",
+      "supported_endpoint_types": [
+        "openai",
+        "gemini"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gemini-3.7-flash",
+      "supported_endpoint_types": [
+        "openai",
+        "gemini"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gemini-3.6-flash",
+      "supported_endpoint_types": [
+        "openai",
+        "gemini"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gemini-3.5-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gemini-3.5-flash-lite",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gemini-3-flash-preview",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gemini-robotics-er-2-preview",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gemini-3.1-flash-lite",
+      "supported_endpoint_types": [
+        "openai",
+        "gemini"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gemini-2.5-pro",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gemini-2.5-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gemini-2.5-flash-lite",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gemini-pro-latest",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gemini-flash-latest",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gemini-flash-lite-latest",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gemini-embedding-001",
+      "supported_endpoint_types": [
+        "embeddings"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gemini-3.1-flash-lite-preview",
+      "supported_endpoint_types": [
+        "gemini"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gemini-3-pro-preview",
+      "supported_endpoint_types": [
+        "gemini"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "gemini-3-flash",
+      "supported_endpoint_types": [
+        "openai",
+        "gemini"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3.8-max",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3.7-max",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3.7-plus",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.6-max-preview",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3.6-plus",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.5-397b-a17b",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.5-plus",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.6-35b-a3b",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.6-27b",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.5-122b-a10b",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.5-35b-a3b",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.5-27b",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.5-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3.8-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.8-omni-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.6-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.5-plus-2026-02-15",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3.5-flash-2026-02-23",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-max",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-max-2026-01-23",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-max-2025-09-23",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-max-preview",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-coder-plus",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-coder-plus-2025-09-23",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-coder-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-coder-flash-2025-07-28",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-coder-480b-a35b-instruct",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-235b-a22b",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-next-80b-a3b-thinking",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-next-80b-a3b-instruct",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-32b",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-coder-30b-a3b-instruct",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-14b",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-8b",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-max",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-plus",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwq-plus",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-plus-latest",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-plus-2025-12-01",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-turbo",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-flash-2025-07-28",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-long-latest",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "wan3.0-video",
+      "supported_endpoint_types": [
+        "/v1/videos"
+      ],
+      "capability": null
+    },
+    {
+      "id": "wan2.7-t2v",
+      "supported_endpoint_types": [
+        "/v1/videos"
+      ],
+      "capability": null
+    },
+    {
+      "id": "wan2.7-i2v",
+      "supported_endpoint_types": [
+        "/v1/videos"
+      ],
+      "capability": null
+    },
+    {
+      "id": "wan2.7-image-pro",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "wan2.7-image",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-image-2.0-pro",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-image-2.0",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-image-edit-max",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-image-max",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-image-plus",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-image-edit-plus",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-image",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "text-embedding-v4",
+      "supported_endpoint_types": [
+        "embeddings"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3.7-text-embedding",
+      "supported_endpoint_types": [
+        "embeddings"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-vl-rerank",
+      "supported_endpoint_types": [
+        "jina-rerank"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3-rerank",
+      "supported_endpoint_types": [
+        "jina-rerank"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-audio-3.0-asr-flash-streaming",
+      "supported_endpoint_types": [
+        "audio-transcription"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen-audio-3.0-asr-flash-filetrans",
+      "supported_endpoint_types": [
+        "audio-transcription"
+      ],
+      "capability": null
+    },
+    {
+      "id": "qwen3.8-27b",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "qwen3.8-max-0902",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "doubao-seed-2-1-pro-260628",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "doubao-seed-2-1-turbo-260628",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "doubao-seed-2-0-pro-260215",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "doubao-seed-2-0-mini-260428",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "doubao-seed-2-0-lite-260428",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "doubao-seedance-2-5-260628",
+      "supported_endpoint_types": [
+        "/v1/videos"
+      ],
+      "capability": null
+    },
+    {
+      "id": "doubao-seedance-2-0-260128",
+      "supported_endpoint_types": [
+        "/v1/videos"
+      ],
+      "capability": null
+    },
+    {
+      "id": "doubao-seedance-2.0-mini",
+      "supported_endpoint_types": [
+        "/v1/videos"
+      ],
+      "capability": null
+    },
+    {
+      "id": "doubao-seedance-2-0-fast-260128",
+      "supported_endpoint_types": [
+        "/v1/videos"
+      ],
+      "capability": null
+    },
+    {
+      "id": "doubao-seedream-5-0-260128",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "doubao-seedream-4-0-250828",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "hy4-preview",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "hy3",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "hunyuan-t1-vision-20250916",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "hunyuan-role-latest",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "ernie-4.5-turbo-32k",
+      "supported_endpoint_types": [
+        "/v2/chat/completions"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-5.3",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-5.3-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-5.3-flashx",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "glm-5.2",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-5.1",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-5-turbo",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-5",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-4.7",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-4.7-flashx",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-4.7-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-4.6",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-4.5-airx",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-4.5-air",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-4.5",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-4.5-x",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "glm-4.5-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "embedding-3",
+      "supported_endpoint_types": [
+        "embeddings"
+      ],
+      "capability": null
+    },
+    {
+      "id": "embedding-2",
+      "supported_endpoint_types": [
+        "embeddings"
+      ],
+      "capability": null
+    },
+    {
+      "id": "rerank",
+      "supported_endpoint_types": [
+        "jina-rerank"
+      ],
+      "capability": null
+    },
+    {
+      "id": "kimi-k3",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "kimi-k2.7-code-highspeed",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "kimi-k2.6",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "kimi-k2.5",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "step-5-preview",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "step-3.7-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "step-3.5-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "step-1o-turbo-vision",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "step-2x-large",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "step-image-edit-2",
+      "supported_endpoint_types": [
+        "image-generation",
+        "image-edit"
+      ],
+      "capability": null
+    },
+    {
+      "id": "stepaudio-2.5-chat",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "step-1o-audio",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "mimo-v2.6-pro",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "mimo-v2.6-pro-ultraspeed",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "mimo-v2.6-flash",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "mimo-v2.5-pro",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "mimo-v2.5",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "MiniMax-M3",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": "multimodal"
+    },
+    {
+      "id": "MiniMax-M2.7",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "MiniMax-M2.7-highspeed",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "MiniMax-M2.5",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "MiniMax-M2.5-highspeed",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "MiniMax-M2.1",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "MiniMax-M2",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "MiniMax-H3",
+      "supported_endpoint_types": [
+        "/v1/videos"
+      ],
+      "capability": null
+    },
+    {
+      "id": "MiniMax-M2.1-highspeed",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "360zhinao-turbo-doubao-seed-2-0-lite",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "360zhinao-turbo-doubao-seed-1-8",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "360zhinao-turbo-doubao-seed-1-8-thinking-minimal",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "360zhinao/360zhinao-pro",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "360zhinao-turbo-32k-agent",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "kling-v2-6",
+      "supported_endpoint_types": [
+        "/v1/videos"
+      ],
+      "capability": null
+    },
+    {
+      "id": "kling-v2-5-turbo",
+      "supported_endpoint_types": [
+        "/v1/videos"
+      ],
+      "capability": null
+    },
+    {
+      "id": "grok-4.7",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "grok-4.6",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "grok-4.5",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "grok-4.20-0309-reasoning",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "grok-4.20-reasoning",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "grok-imagine-image",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "grok-imagine-image-quality",
+      "supported_endpoint_types": [
+        "image-generation"
+      ],
+      "capability": null
+    },
+    {
+      "id": "baai-bge-m3",
+      "supported_endpoint_types": [
+        "embeddings"
+      ],
+      "capability": null
+    },
+    {
+      "id": "baai-bge-large-zh-v1.5",
+      "supported_endpoint_types": [
+        "embeddings"
+      ],
+      "capability": null
+    },
+    {
+      "id": "baai-bge-large-en-v1.5",
+      "supported_endpoint_types": [
+        "embeddings"
+      ],
+      "capability": null
+    },
+    {
+      "id": "baai-bge-reranker-v2-m3",
+      "supported_endpoint_types": [
+        "jina-rerank"
+      ],
+      "capability": null
+    },
+    {
+      "id": "gte-rerank-v2",
+      "supported_endpoint_types": [
+        "jina-rerank"
+      ],
+      "capability": null
+    },
+    {
+      "id": "baichuan4-turbo",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "baichuan4-air",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "baichuan4",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "Baichuan3-Turbo",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "Baichuan3-Turbo-128k",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "baichuan-m3",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "Baichuan2-Turbo",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "baichuan-m2",
+      "supported_endpoint_types": [
+        "openai"
+      ],
+      "capability": null
+    },
+    {
+      "id": "jev-1.13.0",
+      "supported_endpoint_types": [
+        "systemone"
+      ],
+      "capability": null
+    }
+  ]
+}

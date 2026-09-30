@@ -199,16 +199,29 @@ def _generate_import_subtitle(task, project_id: str, video_path: str):
     speech_config = None
     srt_path = None
     try:
-        from backend.utils.speech_recognizer import generate_subtitle_for_video
+        from backend.utils.speech_recognizer import generate_subtitle_for_video, configured_whisper_model
         from backend.core.desktop_config import get_desktop_config
 
         config = get_desktop_config()
         speech_config = config.speech_recognition
+        from backend.services.ai_model_settings import load as load_model_settings
+        models = load_model_settings()
+        if models and models.transcription:
+            from copy import deepcopy
+            speech_config = deepcopy(speech_config)
+            speech_config.method = 'whisper_local' if models.transcription.provider == 'whisper_local' else 'auto'
+            if models.transcription.provider == 'whisper_local':
+                speech_config.whisper_config.model_name = models.transcription.model
+            speech_config.enable_fallback = False
 
         logger.info(f"使用语音转写配置 - 方法: {speech_config.method}")
 
-        if speech_config.method == "whisper_local":
-            model = speech_config.whisper_config.model_name
+        if models and models.transcription and models.transcription.provider in {"cloud", "sensevoice_local"}:
+            generated_subtitle = generate_subtitle_for_video(
+                Path(video_path), method="auto", language=speech_config.whisper_config.language,
+                timeout=speech_config.whisper_config.timeout)
+        elif speech_config.method == "whisper_local":
+            model = configured_whisper_model(speech_config.whisper_config.model_name)
             language = speech_config.whisper_config.language
             enable_timestamps = speech_config.whisper_config.enable_timestamps
             enable_punctuation = speech_config.whisper_config.enable_punctuation
@@ -261,14 +274,14 @@ def _generate_import_subtitle(task, project_id: str, video_path: str):
         if speech_config is not None and speech_config.enable_fallback and speech_config.fallback_method != speech_config.method:
             try:
                 logger.info(f"尝试回退方法: {speech_config.fallback_method}")
-                from backend.utils.speech_recognizer import generate_subtitle_for_video
+                from backend.utils.speech_recognizer import generate_subtitle_for_video, configured_whisper_model
 
                 if speech_config.fallback_method == "whisper_local":
                     fallback_config = speech_config.whisper_config
                     generated_subtitle = generate_subtitle_for_video(
                         Path(video_path),
                         language=fallback_config.language,
-                        model=fallback_config.model_name,
+                        model=configured_whisper_model(fallback_config.model_name),
                         method=speech_config.fallback_method
                     )
                 else:
@@ -402,4 +415,3 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
         except Exception:
             logger.warning("导入任务失败后更新项目状态失败: %s", project_id, exc_info=True)
         raise
-

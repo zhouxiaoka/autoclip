@@ -6,15 +6,18 @@ import {
   Typography, 
   Select, 
   Spin, 
-  Empty,
   message 
 } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import ProjectCard from '../components/ProjectCard'
 import CreativeImport from '../features/studio/CreativeImport'
+import FirstRunSetup from '../features/settings/FirstRunSetup'
 
 
-import { projectApi } from '../services/api'
+import { exampleProjectApi, projectApi } from '../services/api'
+import { beginExperience } from '../analytics/experience'
+import { workflow } from '../analytics/observer'
+import { Btn } from '../ui'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Project, useProjectStore } from '../store/useProjectStore'
 import { useProjectPolling } from '../hooks/useProjectPolling'
@@ -28,6 +31,10 @@ const HomePage: React.FC = () => {
   const navigate = useNavigate()
   const { projects, setProjects, deleteProject, loading, setLoading } = useProjectStore()
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  // null until the model document has loaded; true blocks import until the first AI service is saved.
+  const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null)
+  const [setupRequest, setSetupRequest] = useState(0)
+  const [exampleBusy, setExampleBusy] = useState(false)
 
   // 使用项目轮询Hook
   useProjectPolling({
@@ -104,6 +111,24 @@ const HomePage: React.FC = () => {
     }
   }
 
+  const openExample = async () => {
+    const finish = beginExperience('example_project_open', { material_origin: 'sample' })
+    setExampleBusy(true)
+    try {
+      const { project_id, resolution, example_version } = await exampleProjectApi.create()
+      workflow.rememberProject(project_id, { material_origin: 'sample', example_version })
+      finish('completed', { resolution, example_version, ...workflow.context(project_id) })
+      void loadProjects().catch(() => undefined)
+      navigate(`/project/${project_id}`)
+    } catch (error) {
+      finish('failed', {}, error)
+      message.error(t("示例项目暂时不可用"))
+      console.error('Example project error:', error)
+    } finally {
+      setExampleBusy(false)
+    }
+  }
+
   const handleProjectCardClick = (project: Project) => {
     // 导入中状态的项目不能点击进入详情页
     if (project.status === 'pending' && !project.settings?.smart_import && !project.processing_config?.smart_import) {
@@ -134,7 +159,8 @@ const HomePage: React.FC = () => {
     }}>
       <Content style={{ padding: '40px 56px 56px', position: 'relative' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative' }}>
-          <CreativeImport onImported={loadProjects} />
+          <FirstRunSetup onStatus={setSetupNeeded} openRequest={setupRequest} />
+          <CreativeImport onImported={loadProjects} blocked={setupNeeded === true} onBlocked={() => setSetupRequest(n => n + 1)} />
           {pendingImports.length>0&&<div className="studio-import-resume"><b>{t('未完成的导入')}</b>{pendingImports.map(p=><button key={p.id} className="studio-link" onClick={()=>navigate(`/import/${p.id}`)}>{p.name} · {t('继续导入确认')}</button>)}</div>}
 
           {/* 项目管理区域 */}
@@ -197,24 +223,18 @@ const HomePage: React.FC = () => {
                    <div style={{ marginTop: '18px', color: 'var(--ac-muted)', fontSize: '14px' }}>{t("正在加载项目列表…")}</div>
                  </div>
                ) : filteredProjects.length === 0 ? (
-                 <div style={{
-                   textAlign: 'center',
-                   padding: '72px 0',
-                   background: 'var(--ac-card)',
-                   borderRadius: '16px',
-                   border: '1px solid var(--ac-line)'
-                 }}>
-                   <Empty
-                     image={Empty.PRESENTED_IMAGE_SIMPLE}
-                     description={
-                       <div>
-                         <Text type="secondary">
-                           {projects.length === 0 ? t("还没有项目，请使用上方的导入区域创建第一个项目") : t("没有找到匹配的项目")}
-                         </Text>
-                       </div>
-                     }
-                   />
-                 </div>
+                 projects.length === 0 ? (
+                   /* 空态按 DESIGN.md：一句话 + 一件可做的事。示例项目不需要 Key，先看效果再导入自己的视频。 */
+                   <div className="ac-empty">
+                     <b>{t("还没有项目")}</b>
+                     <span>{t("从上方导入一段视频，或者先用示例项目看看出片效果。")}</span>
+                     <div style={{ marginTop: 18 }}>
+                       <Btn size="sm" loading={exampleBusy} onClick={() => void openExample()}>{t("用示例项目看看效果")}</Btn>
+                     </div>
+                   </div>
+                 ) : (
+                   <div className="ac-empty"><b>{t("没有找到匹配的项目")}</b></div>
+                 )
                ) : (
                  <div style={{
                    display: 'grid',

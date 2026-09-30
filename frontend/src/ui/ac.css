@@ -40,6 +40,7 @@
 .ac-seg button:hover { color: var(--ac-ink); }
 .ac-seg button[aria-pressed="true"] { background: var(--ac-card); color: var(--ac-ink); box-shadow: 0 1px 2px rgba(26,26,25,.06); }
 .ac-seg--sm button { height: 24px; padding: 0 11px; font-size: 12px; }
+.ac-seg button:disabled { cursor: default; opacity: .5; }
 
 /* ---- buttons ---- */
 .ac-btn {
@@ -223,7 +224,8 @@
 .ac-row-label, .ac-card-foot .meta { min-width: 0; overflow-wrap: anywhere; }
 .ac-row-control, .ac-card-foot, .ac-dialog-foot, .ac-dialog-foot .right { flex-wrap: wrap; }
 .ac-settings-nav button { height: auto; min-height: 34px; padding-top: 7px; padding-bottom: 7px; }
-.ac-segmented { flex-wrap: wrap; max-width: 100%; }
+.ac-seg { flex-wrap: wrap; max-width: 100%; }
+.ac-seg button { white-space: nowrap; flex-shrink: 0; }
 .ac-btn { white-space: normal; height: auto; min-height: 36px; padding-top: 7px; padding-bottom: 7px; }
 
 /* ---- publish calendar: hairline month, one line per post ---- */
@@ -241,3 +243,97 @@
 .ac-cal-num { font-size: 12px; color: var(--ac-sub); }
 .ac-cal-item { display: flex; align-items: center; gap: 6px; margin-top: 6px; min-width: 0; font-size: 12px; color: var(--ac-ink); line-height: 1.3; }
 .ac-cal-item b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 可换行的单选胶囊组：发丝边，选中只加深边框和底色，不上色 */
+.ac-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ac-chip { appearance: none; font: inherit; font-size: 12.5px; color: var(--ac-sub); height: 28px; padding: 0 12px; border: 1px solid var(--ac-line); border-radius: 999px; background: transparent; cursor: pointer; transition: border-color var(--ac-t-short, 200ms) ease-out, color var(--ac-t-short, 200ms) ease-out; }
+.ac-chip:hover { color: var(--ac-ink); border-color: var(--ac-muted); }
+.ac-chip[aria-checked="true"] { color: var(--ac-ink); border-color: var(--ac-ink); background: var(--ac-card); }
+/* 中性小徽章：发丝边 + 灰字，不用彩色 chip */
+.ac-badge { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border: 1px solid var(--ac-line); border-radius: 999px; font-size: 11px; font-weight: 500; color: var(--ac-sub); background: transparent; }
+
+/* ---- sponsor card under the provider row ---- */
+.ac-sponsor { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin: 4px 0 2px; padding: 16px 18px; border: 1px solid var(--ac-line); border-radius: 16px; background: var(--ac-card); }
+.ac-sponsor-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ac-sponsor-text b { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--ac-ink); }
+.ac-sponsor-text span { font-size: 13px; color: var(--ac-sub); line-height: 1.55; }
+.ac-sponsor-text small { font-size: 12px; color: var(--ac-muted); line-height: 1.5; }
+.ac-sponsor-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; }
+@media (max-width: 720px) {
+  .ac-sponsor { flex-direction: column; align-items: stretch; }
+  .ac-sponsor-actions { justify-content: flex-start; }
+}
+
+/* ---- unified AI settings page ---- */
+.ac-note { margin: 10px 0 4px; font-size: 12.5px; line-height: 1.6; color: var(--ac-sub); }
+.ac-note--error { color: var(--ac-error); }
+.ac-disclosure { margin-top: 18px; }
+.ac-disclosure > summary { cursor: pointer; padding: 8px 0; font-size: 13px; color: var(--ac-sub); list-style: none; }
+.ac-disclosure > summary::before { content: '›'; display: inline-block; width: 14px; transition: transform var(--ac-t-short, 200ms) ease-out; }
+.ac-disclosure[open] > summary::before { transform: rotate(90deg); }
+.ac-disclosure > summary::-webkit-details-marker { display: none; }
+.ac-savebar { position: sticky; bottom: 0; display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 36px; padding: 14px 0; background: var(--ac-bg); border-top: 1px solid var(--ac-line); z-index: 2; }
+.ac-link { color: var(--ac-accent); cursor: pointer; }
+.ac-model-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.ac-model-fields:disabled { opacity: .65; pointer-events: none; }
+.ac-model-section-title { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; font-size: 16px; font-weight: 600; color: var(--ac-ink); }
+#ai-speech, #ai-model, #ai-cover { scroll-margin-top: 120px; }
+
+/* ---- first-run dialog: settings rows stacked to fit the 520px dialog ---- */
+.ac-setup-dialog.ac-ai-settings { padding-top: 0; }
+.ac-setup-dialog.ac-ai-settings .ac-row { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 14px 0; }
+.ac-setup-dialog.ac-ai-settings .ac-row-label { padding-top: 0; }
+.ac-setup-dialog.ac-ai-settings .ac-rows .ac-row:first-child { padding-top: 4px; }
+.ac-setup-dialog.ac-ai-settings .ac-sponsor { margin: 12px 0 4px; }
+.ac-setup-status { padding-top: 14px; border-top: 1px solid var(--ac-line); }
+.ac-setup-foot { display: flex; align-items: center; gap: 8px; width: 100%; }
+.ac-setup-foot > .ac-btn--text { margin-right: auto; }
+@media (max-width: 420px) {
+  .ac-header-permanent .ant-select { max-width: 100px !important; }
+}
+
+/* Model settings share one label/control grid, including nested local-model rows. */
+.ac-ai-settings { min-width: 0; padding-top: 8px; }
+.ac-ai-settings .ac-model-section + .ac-model-section { margin-top: 40px; }
+.ac-ai-settings .ac-model-section-title { margin: 0; }
+.ac-ai-settings .ac-model-section > .ac-note { margin: 8px 0 20px; }
+.ac-ai-settings .ac-rows { border-top: 0; }
+.ac-ai-settings .ac-row { display: grid; grid-template-columns: minmax(180px, 2fr) minmax(0, 3fr); align-items: start; gap: 24px; padding: 20px 0; }
+.ac-ai-settings .ac-row-label { padding-top: 9px; }
+.ac-ai-settings .ac-row-control,
+.ac-ai-settings .ac-row-control--wide { width: 100%; min-width: 0; justify-content: flex-start; padding-top: 0; }
+.ac-ai-settings .ac-row-control > .ant-select,
+.ac-ai-settings .ac-row-control > .ant-input-affix-wrapper,
+.ac-ai-settings .ac-row-control > .ant-input { width: 100%; }
+.ac-ai-settings .ant-select-single { height: 40px; }
+.ac-ai-settings .ant-input-affix-wrapper,
+.ac-ai-settings .ac-row-control > .ant-input { min-height: 40px; }
+.ac-ai-settings .ac-input { height: 40px; border-radius: 16px; }
+.ac-ai-settings .ac-disclosure { margin-top: 0; border-bottom: 1px solid var(--ac-line); }
+.ac-ai-settings .ac-disclosure > summary { padding: 16px 0; }
+.ac-ai-settings .ac-disclosure .ac-row:last-child { border-bottom: 0; }
+/* The save bar draws its own hairline; the last section must not add a second one. */
+.ac-ai-settings .ac-model-fields > :last-child { border-bottom: 0; }
+.ac-ai-settings .ac-model-fields > :last-child .ac-row:last-child { border-bottom: 0; }
+.ac-ai-settings .ac-model-control-action { display: flex; justify-content: flex-end; gap: 4px; margin-top: 4px; }
+.ac-ai-settings .ac-model-control-action .ac-btn { padding-right: 0; }
+.ac-ai-settings .ac-sponsor { margin: 16px 0; }
+.ac-ai-settings .ac-row-control .ac-note { display: block; margin: 8px 0 0; }
+@media (max-width: 680px) {
+  .ac-ai-settings .ac-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .ac-ai-settings .ac-row-label { padding-top: 0; }
+}
+
+/* Project cards share the media card primitives and theme tokens. */
+.ac-project-open { position: absolute; inset: 0; width: 100%; border: 0; background: transparent; color: var(--ac-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.ac-project-open:focus-visible, .ac-project-title:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: -3px; }
+.ac-project-thumbnail-loading { position: absolute; bottom: 12px; font-size: 12px; }
+.ac-project-tags { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; pointer-events: none; }
+.ac-project-tags .ac-tag { position: static; }
+.ac-project-title { padding: 0; text-align: left; border: 0; background: transparent; font-family: inherit; cursor: pointer; }
+.ac-project-card .ac-card-body { padding: 18px 20px 20px; gap: 12px; }
+.ac-project-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ac-project-counts { color: var(--ac-muted); font-size: 12.5px; }
+.ac-project-error { margin: 0; padding: 10px; text-align: left; font-size: 12.5px; overflow-wrap: anywhere; user-select: text; color: var(--ac-sub); }
+.ac-project-recovery { display: flex; gap: 2px; flex-wrap: wrap; }
+.ac-project-card:focus-within .ac-card-actions { opacity: 1; }

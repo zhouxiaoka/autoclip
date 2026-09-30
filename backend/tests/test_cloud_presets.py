@@ -31,7 +31,7 @@ def fake_openai(monkeypatch):
     monkeypatch.setitem(sys.modules, "openai", module)
     _FakeOpenAIClient.created.clear()
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    for name in ("LLM_PROVIDER", "API_MODEL_NAME", "LLM_MODEL", "API_OPENAI_API_KEY", "OPENAI_API_KEY", "API_DEEPSEEK_API_KEY", "DEEPSEEK_API_KEY"):
+    for name in ("LLM_PROVIDER", "API_MODEL_NAME", "LLM_MODEL", "API_OPENAI_API_KEY", "OPENAI_API_KEY", "API_DEEPSEEK_API_KEY", "DEEPSEEK_API_KEY", "API_INFISTAR_API_KEY", "INFISTAR_API_KEY", "API_API88_API_KEY", "API88_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     from backend.core import llm_manager as manager_module
     monkeypatch.setattr(manager_module.config_sync_service, "is_sync_needed", lambda: False)
@@ -89,4 +89,65 @@ def test_manager_uses_seed_ark_key_not_openai(fake_openai, tmp_path):
 
 def test_curated_lists_drop_retired_aliases():
     assert "gpt-4o" not in CLOUD_PRESETS
-    assert set(CLOUD_PRESETS) == {"deepseek", "seed", "kimi", "glm", "grok"}
+    assert set(CLOUD_PRESETS) == {"deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88"}
+
+
+def test_infistar_sponsor_preset_uses_gateway_and_own_key(fake_openai, tmp_path):
+    provider, url, preset = resolve_cloud_preset("infistar")
+    assert provider == "openai"
+    assert url == "https://infistar.cc/v1"
+    # 多模型网关不预设型号；专属注册链接带推广参数
+    assert preset.default_model == ""
+    assert "aff=" in preset.docs_url
+
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        '{"api": {"api_keys": {"openai": "sk-openai-should-not-be-used", "infistar": "sk-infistar-key-123"}, '
+        '"api_provider": "infistar", "api_model": "deepseek-v4-pro"}}',
+        encoding="utf-8",
+    )
+    info = LLMManager(settings_file=settings).get_current_provider_info()
+    assert info["provider"] == "infistar"
+    assert info["base_url"] == "https://infistar.cc/v1"
+    assert info["model"] == "deepseek-v4-pro"
+    assert fake_openai.created[-1]["api_key"] == "sk-infistar-key-123"
+    assert fake_openai.created[-1]["base_url"] == "https://infistar.cc/v1"
+
+
+def test_infistar_key_from_env(fake_openai, tmp_path, monkeypatch):
+    monkeypatch.setenv("INFISTAR_API_KEY", "sk-infistar-from-env")
+    settings = tmp_path / "settings.json"
+    settings.write_text('{"api": {"api_keys": {}, "api_provider": "infistar", "api_model": "gpt-5-mini"}}', encoding="utf-8")
+    LLMManager(settings_file=settings).get_current_provider_info()
+    assert fake_openai.created[-1]["api_key"] == "sk-infistar-from-env"
+
+
+def test_api88_sponsor_preset_uses_gateway_and_own_key(fake_openai, tmp_path):
+    provider, url, preset = resolve_cloud_preset("api88")
+    assert provider == "openai"
+    assert url == "https://88api.ai/v1"
+    # 多模型网关不预设型号；专属注册链接带推广参数
+    assert preset.default_model == ""
+    assert "aff=" in preset.docs_url
+
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        '{"api": {"api_keys": {"openai": "sk-openai-should-not-be-used", "api88": "sk-api88-key-123"}, '
+        '"api_provider": "api88", "api_model": "deepseek-v4-pro"}}',
+        encoding="utf-8",
+    )
+    info = LLMManager(settings_file=settings).get_current_provider_info()
+    assert info["provider"] == "api88"
+    assert info["base_url"] == "https://88api.ai/v1"
+    assert info["model"] == "deepseek-v4-pro"
+    assert fake_openai.created[-1]["api_key"] == "sk-api88-key-123"
+    assert fake_openai.created[-1]["base_url"] == "https://88api.ai/v1"
+
+
+@pytest.mark.parametrize("env_name", ["API88_API_KEY", "API_API88_API_KEY"])
+def test_api88_key_from_env(fake_openai, tmp_path, monkeypatch, env_name):
+    monkeypatch.setenv(env_name, "sk-api88-from-env")
+    settings = tmp_path / "settings.json"
+    settings.write_text('{"api": {"api_keys": {}, "api_provider": "api88", "api_model": "gpt-5-mini"}}', encoding="utf-8")
+    LLMManager(settings_file=settings).get_current_provider_info()
+    assert fake_openai.created[-1]["api_key"] == "sk-api88-from-env"

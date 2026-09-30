@@ -43,6 +43,29 @@ def get_speech_recognizer() -> SpeechRecognizer:
 
 # ===== Whisper 运行时（按需安装）=====
 
+@router.get("/sensevoice/status")
+async def sensevoice_status():
+    from backend.services import sensevoice_runtime
+    return sensevoice_runtime.status()
+
+
+@router.post("/sensevoice/prepare")
+async def sensevoice_prepare():
+    from backend.services import sensevoice_runtime
+    try:
+        return sensevoice_runtime.start_prepare()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete("/sensevoice")
+async def sensevoice_uninstall():
+    from backend.services import sensevoice_runtime
+    try:
+        return sensevoice_runtime.uninstall()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
 @router.get("/whisper/runtime-status")
 async def whisper_runtime_status():
     """Whisper 运行时安装状态（前端轮询）。"""

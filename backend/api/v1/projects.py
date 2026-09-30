@@ -1408,7 +1408,7 @@ from pydantic import BaseModel, Field
 
 
 class ClipExportRequest(BaseModel):
-    preset: str = Field("douyin", description="douyin / xiaohongshu / shorts / bilibili / original")
+    preset: str = Field("douyin", description="douyin / xiaohongshu / shorts / bilibili / original / 1080p60")
     subtitles: bool = True
     title_card: bool = True
     layout: Optional[str] = Field(None, description="覆盖预设画幅：blur / crop / fit / none")

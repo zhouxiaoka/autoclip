@@ -18,6 +18,8 @@ class ClusteringEngine:
     
     def __init__(self, metadata_dir: Optional[Path] = None, prompt_files: Dict = None):
         self.llm_client = LLMClient()
+        from .settings import processing_int
+        self.max_clips = processing_int("max_clips_per_collection", MAX_CLIPS_PER_COLLECTION, 1, 20)
         
         # 加载提示词
         prompt_files_to_use = prompt_files if prompt_files is not None else PROMPT_FILES
@@ -76,7 +78,7 @@ class ClusteringEngine:
             validated_collections = self._validate_collections(collections_data, clips_with_titles)
             
             # 如果LLM聚类结果不理想，使用预聚类结果
-            if len(validated_collections) < 3:
+            if not validated_collections:
                 logger.warning("LLM聚类结果不理想，使用预聚类结果")
                 validated_collections = self._create_collections_from_pre_clusters(pre_clusters, clips_with_titles)
             
@@ -175,8 +177,8 @@ class ClusteringEngine:
         
         for theme, clip_ids in pre_clusters.items():
             # 限制每个合集的片段数量
-            if len(clip_ids) > MAX_CLIPS_PER_COLLECTION:
-                clip_ids = clip_ids[:MAX_CLIPS_PER_COLLECTION]
+            if len(clip_ids) > self.max_clips:
+                clip_ids = clip_ids[:self.max_clips]
             
             collections.append({
                 'id': str(collection_id),
@@ -225,8 +227,8 @@ class ClusteringEngine:
                     continue
                 
                 # 限制每个合集的片段数量
-                if len(valid_clip_ids) > MAX_CLIPS_PER_COLLECTION:
-                    valid_clip_ids = valid_clip_ids[:MAX_CLIPS_PER_COLLECTION]
+                if len(valid_clip_ids) > self.max_clips:
+                    valid_clip_ids = valid_clip_ids[:self.max_clips]
                 
                 validated_collection = {
                     'id': str(i + 1),
@@ -274,7 +276,7 @@ class ClusteringEngine:
                 'id': '1',
                 'collection_title': '精选高分片段',
                 'collection_summary': '评分最高的精彩片段合集',
-                'clip_ids': [clip['id'] for clip in high_score[:MAX_CLIPS_PER_COLLECTION]]
+                'clip_ids': [clip['id'] for clip in high_score[:self.max_clips]]
             })
         
         # 创建中等分合集
@@ -283,7 +285,7 @@ class ClusteringEngine:
                 'id': '2',
                 'collection_title': '优质内容推荐',
                 'collection_summary': '精选优质内容片段',
-                'clip_ids': [clip['id'] for clip in medium_score[:MAX_CLIPS_PER_COLLECTION]]
+                'clip_ids': [clip['id'] for clip in medium_score[:self.max_clips]]
             })
         
         return collections

@@ -129,7 +129,7 @@ async def import_visual(
                     target.write(chunk)
             project.video_path = str(path)
             db.commit()
-        call(jobs.inspect_project, pid, prefs, url, browser)
+        run_id = call(jobs.inspect_project, pid, prefs, url, browser)
     except Exception:
         project.status = 'failed'
         db.commit()
@@ -137,13 +137,13 @@ async def import_visual(
     finally:
         if video:
             await video.close()
-    return {'project_id': pid}
+    return {'project_id': pid, 'analysis_run_id': run_id}
 
 @router.get('/{project_id}')
 def workspace(project_id: str, db: Session = Depends(get_db)):
-    project_or_404(project_id, db)
+    project = project_or_404(project_id, db)
     data = call(store.read, project_id)
-    return {**data, 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
+    return {**data, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
 
 @router.get('/{project_id}/source-preview')
 def source_preview_status(project_id: str, db: Session = Depends(get_db)):
@@ -233,8 +233,8 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
         url = (project.project_metadata or {}).get('source_url')
         if not url:
             raise HTTPException(404, '原素材不存在，请重新导入')
-    call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
-    return {'ok': True}
+    run_id = call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
+    return {'ok': True, 'analysis_run_id': run_id}
 
 @router.put('/{project_id}/plan')
 def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get_db)):
@@ -254,20 +254,20 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()
         try:
-            call(jobs.inspect_project, project_id, body, url, previous_config.get('creative_browser'))
+            run_id = call(jobs.inspect_project, project_id, body, url, previous_config.get('creative_browser'))
         except Exception:
             # A rejected submission must not persist preferences for a plan
             # that was never produced. inspect_project restores the JSON state.
             project.processing_config = previous_config
             db.commit()
             raise
-    return {'ok': True}
+    return {'ok': True, 'analysis_run_id': run_id}
 
 @router.post('/{project_id}/start')
 def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
-    call(jobs.confirm_project, project_id, body)
-    return {'ok': True}
+    run_id = call(jobs.confirm_project, project_id, body)
+    return {'ok': True, 'analysis_run_id': run_id}
 
 @router.post('/{project_id}/drafts')
 def create_draft(project_id: str, body: CreateDraft, db: Session = Depends(get_db)):
@@ -329,6 +329,43 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
         capture_studio_exception(error, 'rewrite')
         raise HTTPException(502, '生成文案失败，请检查模型设置后重试；原稿未改动') from None
     return candidate
+
+@router.get('/{project_id}/subtitles')
+def subtitles(project_id: str, db: Session = Depends(get_db)):
+    """Subtitle cues in seconds, for the editor's styled preview overlay."""
+    from backend.pipeline.quality import to_seconds
+    from backend.services.publish_export import _load_srt_entries
+    project_or_404(project_id, db)
+    entries = _load_srt_entries(project_id)
+    return {'cues': [{'start': to_seconds(e['start_time']), 'end': to_seconds(e['end_time']), 'text': e.get('text', '')} for e in entries]}
+
+@router.get('/framing/status')
+def framing_status():
+    from backend.services.studio import framing
+    return framing.get_status()
+
+@router.post('/framing/install')
+def framing_install():
+    from backend.services.studio import framing
+    return {**framing.start_install(), **framing.get_status()}
+
+@router.post('/{project_id}/auto-frame')
+def auto_frame(project_id: str, body: Draft, db: Session = Depends(get_db)):
+    """Centre each scene's crop window on the speaker. Pure analysis: nothing is saved."""
+    from backend.services.publish_export import _probe
+    from backend.services.studio import framing
+    project_or_404(project_id, db)
+    if not framing.is_installed():
+        raise HTTPException(409, '人物识别组件未安装')
+    video = call(jobs.source, project_id)
+    info = _probe(video)
+    if not info.get('width') or not info.get('height'):
+        raise HTTPException(422, '无法读取原视频尺寸')
+    try:
+        return framing.auto_frame(video, body, int(info['width']), int(info['height']))
+    except Exception as error:
+        capture_studio_exception(error, 'auto_frame')
+        raise HTTPException(502, '自动取景失败，可手动调整取景位置') from None
 
 @router.post('/{project_id}/drafts/{draft_id}/export')
 def export(project_id: str, draft_id: str, body: ExportDraftRequest | None = None, db: Session = Depends(get_db)):

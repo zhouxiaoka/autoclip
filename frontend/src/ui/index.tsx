@@ -9,12 +9,12 @@ import './ac.css'
 /* ---------- Segmented ---------- */
 export interface SegmentedOption<T extends string> { value: T; label: React.ReactNode }
 export function Segmented<T extends string>({
-  value, onChange, options, size, ariaLabel, className,
-}: { value: T; onChange: (v: T) => void; options: SegmentedOption<T>[]; size?: 'sm'; ariaLabel?: string; className?: string }) {
+  value, onChange, options, size, ariaLabel, className, disabled,
+}: { value: T; onChange: (v: T) => void; options: SegmentedOption<T>[]; size?: 'sm'; ariaLabel?: string; className?: string; disabled?: boolean }) {
   return (
     <div className={`ac-seg${size === 'sm' ? ' ac-seg--sm' : ''}${className ? ` ${className}` : ''}`} role="group" aria-label={ariaLabel}>
       {options.map((o) => (
-        <button key={o.value} type="button" aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
+        <button key={o.value} type="button" disabled={disabled} aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
           {o.label}
         </button>
       ))}
@@ -107,19 +107,44 @@ export const Dialog: React.FC<{
   footer?: React.ReactNode
   children?: React.ReactNode
 }> = ({ open, onClose, title, description, footer, children }) => {
+  const dialogRef = React.useRef<HTMLDivElement>(null)
+  const titleId = React.useId()
+  const closeRef = React.useRef(onClose)
+  closeRef.current = onClose
   React.useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const previousFocus = document.activeElement as HTMLElement | null
+    const focusable = () => Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    ) || []).filter(element => element.getClientRects().length > 0)
+    ;(focusable()[0] || dialogRef.current)?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      const dropdownOpen = !!document.querySelector('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')
+      if (e.key === 'Escape' && !dropdownOpen) closeRef.current()
+      if (e.key !== 'Tab' || dropdownOpen) return
+      const controls = focusable()
+      const first = controls[0]
+      const last = controls[controls.length - 1]
+      if (!first) { e.preventDefault(); dialogRef.current?.focus(); return }
+      if (e.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
+        e.preventDefault(); last.focus()
+      } else if (!e.shiftKey && (document.activeElement === last || !dialogRef.current?.contains(document.activeElement))) {
+        e.preventDefault(); first.focus()
+      }
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      if (previousFocus?.isConnected) previousFocus.focus()
+    }
+  }, [open])
   if (!open || typeof document === 'undefined') return null
   // Portal to <body>: callers often live inside transformed / hover-lifted cards,
   // which would otherwise trap the fixed backdrop in their stacking context.
   return createPortal(
     <div className="ac-dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="ac-dialog" role="dialog" aria-modal="true">
-        <h3>{title}</h3>
+      <div ref={dialogRef} className="ac-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
+        <h3 id={titleId}>{title}</h3>
         {description && <p>{description}</p>}
         <div style={{ marginTop: 18 }}>{children}</div>
         {footer && <div className="ac-dialog-foot">{footer}</div>}

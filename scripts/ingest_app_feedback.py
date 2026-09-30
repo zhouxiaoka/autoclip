@@ -27,6 +27,7 @@ REPO = os.environ.get("AUTOCLIP_REPO", "zhouxiaoka/autoclip")
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.posthog.com").rstrip("/")
 DEFAULT_PROJECT_ID = "450605"
 MAX_PER_RUN = 20
+ERROR_CODE_RE = re.compile(r"^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty)$")
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     re.I,
@@ -58,6 +59,8 @@ def normalize_event(raw: dict[str, Any]) -> dict[str, str] | None:
     text = scrub(raw.get("text"), 2000)
     if len(text) < 4:
         return None
+    error_code = scrub(raw.get("error_code"), 80)
+    transcription_provider = scrub(raw.get("transcription_provider"), 40)
     return {
         "feedback_id": feedback_id,
         "category": category,
@@ -65,6 +68,9 @@ def normalize_event(raw: dict[str, Any]) -> dict[str, str] | None:
         "source": scrub(raw.get("source"), 40),
         "stage": scrub(raw.get("stage"), 80),
         "error_message": scrub(raw.get("error_message"), 500),
+        "error_code": error_code if ERROR_CODE_RE.fullmatch(error_code) else "",
+        "transcription_provider": transcription_provider if transcription_provider in {"whisper_local", "sensevoice_local", "cloud"} else "",
+        "transcription_model": scrub(raw.get("transcription_model"), 80),
         "version": scrub(raw.get("app_version") or raw.get("version"), 40),
         "os": scrub(raw.get("os"), 40),
         "arch": scrub(raw.get("arch"), 40),
@@ -96,6 +102,11 @@ def public_body(item: dict[str, str]) -> str:
     ]
     if item["stage"]:
         lines.append(f"- 阶段：{item['stage']}")
+    if item.get("error_code"):
+        lines.append(f"- 错误码：{item['error_code']}")
+    if item.get("transcription_provider"):
+        model = f" / {item['transcription_model']}" if item.get("transcription_model") else ""
+        lines.append(f"- 转写模型：{item['transcription_provider']}{model}")
     if item["llm_provider"]:
         model = f" / {item['llm_model']}" if item["llm_model"] else ""
         lines.append(f"- 模型：{item['llm_provider']}{model}")
@@ -161,7 +172,8 @@ def fetch_events(days: int) -> dict[str, Any]:
     query = f"""
       SELECT timestamp, properties.feedback_id, properties.category, properties.source, properties.stage,
              properties.text, properties.app_version, properties.os, properties.arch,
-             properties.llm_provider, properties.llm_model, properties.error_message
+             properties.llm_provider, properties.llm_model, properties.error_message,
+             properties.error_code, properties.transcription_provider, properties.transcription_model
       FROM events
       WHERE event = 'feedback_submitted' AND timestamp > now() - INTERVAL {int(days)} DAY
       ORDER BY timestamp ASC
@@ -182,6 +194,7 @@ def fetch_events(days: int) -> dict[str, Any]:
     cols = [
         "timestamp", "feedback_id", "category", "source", "stage", "text",
         "app_version", "os", "arch", "llm_provider", "llm_model", "error_message",
+        "error_code", "transcription_provider", "transcription_model",
     ]
     items = [dict(zip(cols, row)) for row in payload.get("results") or []]
     return {"ok": True, "items": items, "note": ""}

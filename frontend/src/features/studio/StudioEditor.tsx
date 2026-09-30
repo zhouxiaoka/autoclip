@@ -6,11 +6,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Btn, Dialog, ProgressLine, Row, fmtDuration } from '../../ui'
 import { studioApi, errorText, type SourcePreview } from './api'
 import { useWorkspace } from './useWorkspace'
-import { Draft, Scene, languages, draftDuration, draftError, moveScene, applyCandidate, portraitDesign } from './types'
+import PlayerBar from './PlayerBar'
+import { CropPoint, Draft, Scene, SubtitleCue, languages, draftDuration, draftError, moveScene, applyCandidate, portraitDesign, cropAt, frameModeAt, patchShot } from './types'
 import CandidatePicker from './CandidatePicker'
 import TitleArtwork from './TitleArtwork'
 import DraftVariantDialog from './DraftVariantDialog'
-import { titlePresets, titleVersions, isArtworkStyle, titleDesignThumbnails } from './titlePresets'
+import { titlePresets, isArtworkStyle } from './titlePresets'
+import DraftSettingsPanel, { type FramingState } from './DraftSettingsPanel'
 import { draftExportState } from './draftExportState'
 import './studio.css'
 
@@ -36,6 +38,25 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const [showRendered, setShowRendered] = useState(false)
   const [playbackError, setPlaybackError] = useState(false)
   const [sourcePreview, setSourcePreview] = useState<SourcePreview>({status: 'idle'})
+  const [cues, setCues] = useState<SubtitleCue[]>([])
+  const [currentTime, setCurrentTime] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const [muted, setMuted] = useState(false)
+  const [renderedDuration, setRenderedDuration] = useState(0)
+  const [framing, setFraming] = useState<FramingState>({ busy: false })
+  useEffect(() => {
+    const controller = new AbortController()
+    studioApi.subtitles(projectId, controller.signal).then(v => setCues(v.cues)).catch(() => setCues([]))
+    studioApi.framingStatus().then(status => setFraming(f => ({ ...f, status }))).catch(() => undefined)
+    return () => controller.abort()
+  }, [projectId])
+  useEffect(() => {
+    if (framing.status?.status !== 'installing') return
+    const timer = window.setInterval(() => {
+      studioApi.framingStatus().then(status => setFraming(f => ({ ...f, status }))).catch(() => undefined)
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [framing.status?.status])
   useEffect(() => {
     if (!['queued', 'running'].includes(sourcePreview.status)) return
     let cancelled = false
@@ -57,6 +78,42 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     } catch(error) { setSourcePreview({status:'failed', error:errorText(error)}) }
   }
 
+  /** Centre every scene's crop window on the speaker; scenes without a face keep their value. */
+  const autoFrame = async (target?: Draft, trigger: 'auto' | 'manual' | 'portrait_preset' = 'manual') => {
+    const base = target || draft
+    if (!base || framing.status?.status !== 'installed') return
+    setFraming(f => ({ ...f, busy: true, error: undefined }))
+    try {
+      const result = await studioApi.autoFrame(projectId, base, trigger)
+      const found = new Map(result.scenes.filter(s => s.crop_x !== null).map(s => [s.id, s]))
+      setDraft(current => current ? { ...current, scenes: current.scenes.map(sc => { const f = found.get(sc.id); return f ? { ...sc, crop_x: f.crop_x, crop_track: f.crop_track, framing_source: 'auto' as const, framing_adjusted: false } : sc }) } : current)
+      setShowRendered(false)
+      setFraming(f => ({ ...f, busy: false, result: { framed: found.size, total: result.scenes.length, shots: result.scenes.reduce((n, s) => n + (s.crop_track?.length ?? 0), 0), fit: result.scenes.reduce((n, s) => n + s.fit_shots, 0) } }))
+    } catch (e) { setFraming(f => ({ ...f, busy: false, error: t(errorText(e)) })) }
+  }
+  const installFraming = async () => {
+    try { const status = await studioApi.framingInstall(); setFraming(f => ({ ...f, status })) }
+    catch (e) { setFraming(f => ({ ...f, error: t(errorText(e)) })) }
+  }
+  // Once the runtime lands (or the user switches to a cropped layout), frame automatically the first time.
+  const cropping = !!draft && draft.aspect !== 'original' && draft.layout === 'crop'
+  useEffect(() => {
+    if (!cropping || framing.busy || framing.result || framing.status?.status !== 'installed') return
+    if (draft?.scenes.some(s => s.crop_x != null || s.crop_track?.length)) return
+    void autoFrame(undefined, 'auto')
+  }, [cropping, framing.status?.status])
+  /** Edit only the shot under the playhead; the rest of the scene's track stays as detected. */
+  const setShot = (sceneId: string, changes: Partial<CropPoint>) => {
+    if (draft) patch({ scenes: draft.scenes.map(sc => sc.id === sceneId ? { ...patchShot(sc, currentTime, changes, draft.crop_x ?? .5), framing_source: sc.framing_source || 'manual', framing_adjusted: true } : sc) })
+  }
+  const applyPortrait = () => {
+    if (!draft) return
+    const next = portraitDesign(draft)
+    patch(next)
+    setFraming(f => ({ ...f, result: undefined }))
+    void autoFrame(next, 'portrait_preset')
+  }
+
   const [suggestion, setSuggestion] = useState<Draft | null>(null)
   const [undo, setUndo] = useState<Draft | null>(null)
   const video = useRef<HTMLVideoElement>(null)
@@ -64,6 +121,10 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const dirty = !!draft && JSON.stringify(draft) !== saved
   const artworkStyle = isArtworkStyle(draft?.title_style)
   const scene = draft?.scenes[selected] || draft?.scenes[0]
+  // The preview transport runs on the clip's own timeline: 0 = scene start (or rendered clip start).
+  const playBase = showRendered ? 0 : scene?.start ?? 0
+  const playLength = showRendered ? renderedDuration : scene ? scene.end - scene.start : 0
+  const togglePlay = () => { const v = video.current; if (!v) return; if (v.paused) void v.play().catch(() => undefined); else v.pause() }
   const jobs = workspace.jobs.filter(j => j.draft_id === draftId)
   const exportState = draft ? draftExportState(draft, jobs) : undefined
   const currentJob = !dirty ? exportState?.completed || exportState?.failure : undefined
@@ -92,6 +153,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   useEffect(() => {
     if (video.current && scene && !showRendered) video.current.currentTime = scene.start
   }, [scene?.id, scene?.start, showRendered])
+  useEffect(() => { if (draft) setMuted(!draft.original_audio) }, [draft?.original_audio])
   const patch = (changes: Partial<Draft>) => { if (draft) { setDraft({...draft, ...changes}); setShowRendered(false); setError('') } }
   const save = async (): Promise<Draft> => {
     if (!draft) throw new Error(t("草稿不存在"))
@@ -119,6 +181,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   }
   if (!draft) return <div className="ac-page"><button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>{t("‹ 返回项目")}</button><div className="ac-empty"><b>{loading ? t("加载成片草稿…") : t("无法打开草稿")}</b>{loadError || (!loading && t("草稿不存在或已移除"))}<Btn onClick={refresh}>{t("重试")}</Btn></div></div>
   const previewUrl = currentJob?.status === 'completed' ? studioApi.video(projectId, currentJob.job_id) : ''
+  const activeCue = cues.find(c => c.start <= currentTime && currentTime < c.end)
   const updateScene = (i: number, update: Partial<Scene>) => patch({ scenes: draft.scenes.map((s, index) => index === i ? {...s,...update} : s) })
   return <div className="ac-page studio-editor-page">
     <button className="ac-back" onClick={() => navigate(`/project/${projectId}`)}>{t("‹ 返回项目")}</button>
@@ -131,25 +194,28 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
       <Btn disabled={['queued', 'running'].includes(sourcePreview.status)} onClick={preparePreview}>{t(['queued', 'running'].includes(sourcePreview.status) ? '正在生成兼容预览，长视频可能需要几分钟…' : '生成兼容预览')}</Btn>
     </details>}
     <fieldset disabled={!!busy} className="studio-fieldset">
-      <div className="studio-editor-grid"><section><div className={`studio-stage studio-stage--${draft.aspect}`}>
+      <div className="studio-editor-grid"><section className="studio-editor-main"><div className="studio-editor-sticky"><div className={`studio-stage studio-stage--${draft.aspect}`}>
         <div className="studio-video-frame" style={{aspectRatio: draft.aspect==='portrait'?'9/16':draft.aspect==='landscape'?'16/9':undefined}}>
-          <video ref={video} controls preload="metadata" muted={!draft.original_audio} onError={() => setPlaybackError(true)} onLoadedData={() => setPlaybackError(false)} src={showRendered && previewUrl ? previewUrl : sourcePreview.status === 'completed' && sourcePreview.version ? studioApi.compatibleSource(projectId, sourcePreview.version) : studioApi.source(projectId)} style={{objectFit: showRendered || draft.layout!=='crop'?'contain':'cover', objectPosition:`${(draft.crop_x ?? .5)*100}% 50%`}} onLoadedMetadata={() => { if(video.current && scene && !showRendered) { setSourceDuration(video.current.duration); video.current.currentTime=scene.start } }} onTimeUpdate={() => {const v=video.current; if(v && scene && !showRendered && v.currentTime>=scene.end) {v.pause();v.currentTime=scene.start}}} />
+          <video ref={video} preload="metadata" playsInline muted={muted} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onError={() => setPlaybackError(true)} onLoadedData={() => setPlaybackError(false)} src={showRendered && previewUrl ? previewUrl : sourcePreview.status === 'completed' && sourcePreview.version ? studioApi.compatibleSource(projectId, sourcePreview.version) : studioApi.source(projectId)} style={{objectFit: showRendered || draft.layout!=='crop' || frameModeAt(scene, currentTime)==='fit'?'contain':'cover', objectPosition:`${cropAt(scene, currentTime, draft.crop_x ?? .5)*100}% 50%`}} onClick={togglePlay} onLoadedMetadata={() => { const v = video.current; if (!v) return; if (showRendered) setRenderedDuration(v.duration); else if (scene) { setSourceDuration(v.duration); v.currentTime = scene.start } }} onTimeUpdate={() => {const v=video.current; if(!v) return; setCurrentTime(v.currentTime); if(scene && !showRendered && (v.currentTime>=scene.end || v.currentTime<scene.start-.25)) {if(v.currentTime>=scene.end) v.pause(); v.currentTime=scene.start}}} />
+          {!showRendered && draft.subtitles && activeCue && <div className={`studio-caption-overlay studio-caption studio-caption--${draft.subtitle_style || 'clean'}`}>{activeCue.text}</div>}
           {!showRendered && selected===0 && draft.hook && !artworkStyle && <div className={`studio-hook studio-hook--${draft.title_style || 'plain'}`}>{draft.hook}</div>}
           {!showRendered && selected===0 && draft.hook && artworkStyle && <TitleArtwork projectId={projectId} draft={draft}/>}
         </div>
-      </div><div className="studio-row studio-preview-foot"><span className="studio-muted">{showRendered?t("实际渲染结果"):t("原片预览 · 字幕、翻译以渲染结果为准")}</span>{previewUrl ? <Btn size="sm" onClick={() => setShowRendered(!showRendered)}>{showRendered?t("查看原片"):t("播放成片")}</Btn> : <Btn size="sm" disabled={!!active} onClick={render}>{active?t("正在渲染"):t("渲染预览")}</Btn>}</div></section>
-      <aside className="studio-edit-panel"><h2>{t("改到满意，就导出。")}</h2><Btn size="sm" onClick={() => patch(portraitDesign(draft))}>{t("应用竖屏推荐")}</Btn><label className="studio-field">{t("成片名称")}<input maxLength={200} value={draft.title} onChange={e => patch({title:e.target.value})} /></label><label className="studio-field">{t("开头文字")}<textarea maxLength={120} value={draft.hook} placeholder={t("可留空；在首镜头最多显示 4 秒")} onChange={e => patch({hook:e.target.value})} /></label>
-        <div className="studio-field"><span>{t("标题模板")}</span><small className="studio-muted">{t("缩略图为设计参考，当前文案效果见预览。")}</small><div className="studio-template-options">{titlePresets.map(preset=><button type="button" key={preset.value} className={`studio-template studio-template--${preset.value} ${isArtworkStyle(preset.value)?'studio-template--art':''}`} aria-pressed={(draft.title_style || 'plain') === preset.value} onClick={()=>patch({title_style:preset.value,title_template_version:isArtworkStyle(preset.value)?6:1,title_accent:null})}>{isArtworkStyle(preset.value)&&<img src={titleDesignThumbnails[preset.value]} alt="" width={360} height={240}/>}<span>{t(preset.label)}</span></button>)}</div></div>{artworkStyle && <details className="studio-details"><summary>{t("调整文字样式")}</summary><label className="studio-field">{t("样式版本")}<select aria-label={t("样式版本")} value={draft.title_template_version??1} onChange={e=>patch({title_template_version:Number(e.target.value) as Draft['title_template_version']})}>{titleVersions(draft.title_style).map(v=><option key={v.value} value={v.value}>{t(v.label)}</option>)}</select></label><label className="studio-field">{t("强调色")}<input type="color" aria-label={t("标题强调色")} value={draft.title_accent || (draft.title_style==='comic'?'#ffe52d':draft.title_style==='neon'?'#ccff00':draft.title_style==='editorial'?'#ff4826':draft.title_style==='pixel'?'#ed327c':draft.title_style==='frosted'?'#00e6dc':'#dfff00')} onChange={e=>patch({title_accent:e.target.value})}/></label><label className="studio-field">{t("文字大小")}<input type="range" aria-label={t("文字大小")} min=".75" max="1.2" step=".05" value={draft.title_scale??1} onChange={e=>patch({title_scale:Number(e.target.value)})}/></label><label className="studio-field">{t("文字位置")}<input type="range" aria-label={t("文字位置")} min=".06" max=".70" step=".01" value={draft.title_y??.12} onChange={e=>patch({title_y:Number(e.target.value)})}/></label>{!['pixel','frosted'].includes(draft.title_style||'') && <label><input type="checkbox" checked={draft.title_motion??true} onChange={e=>patch({title_motion:e.target.checked})}/>{t("开启入场动效")}</label>}<p className="studio-muted">{t("预览使用实际文字图层。翻译与入场动效以渲染结果为准；支持手动换行。")}</p></details>}<label className="studio-field">{t("输出文字语言")}<select value={draft.language} onChange={e => patch({language:e.target.value as Draft['language']})}>{languages.map(l => <option key={l.value} value={l.value}>{l.value==='source' ? t('原语言') : l.label}</option>)}</select></label>
-        <p className="studio-muted">{t("选择翻译语言后，渲染时会翻译开头文字与所选原字幕。")}</p>
-        <Row label={t("字幕")}><label><input type="checkbox" checked={draft.subtitles} onChange={e=>patch({subtitles:e.target.checked})} />{t("烧录原字幕")}</label></Row><Row label={t("声音")}><label><input type="checkbox" checked={draft.original_audio} onChange={e=>patch({original_audio:e.target.checked})} />{t("保留原声")}</label></Row>
-        <details className="studio-details"><summary>{t("画面设置")}</summary><label className="studio-field">{t("画幅")}<select value={draft.aspect} onChange={e=>patch({aspect:e.target.value as Draft['aspect'], ...(e.target.value==='portrait'?{layout:'crop' as const}:{})})}><option value="original">{t("原画幅")}</option><option value="portrait">{t("9:16 竖屏")}</option><option value="landscape">{t("16:9 横屏")}</option></select></label><label className="studio-field">{t("构图")}<select value={draft.layout} onChange={e=>patch({layout:e.target.value as Draft['layout']})}><option value="fit">{t("完整画面 · 留边")}</option><option value="blur">{t("完整画面 · 模糊背景")}</option><option value="crop">{t("满屏取景")}</option></select></label>{draft.layout==='crop' && <label className="studio-field">{t("取景位置 · 左右移动")}<input aria-label={t("取景位置")} type="range" min="0" max="1" step=".01" value={draft.crop_x ?? .5} onChange={e=>patch({crop_x:Number(e.target.value)})}/></label>}<p className="studio-muted">{draft.layout==='crop'?t("主体铺满画面。左右调整取景，检查角色、障碍与 HUD 是否完整。"):draft.aspect==='portrait'?t("当前保留横屏全画面，会产生留边；想铺满竖屏请选择「满屏取景」。"):t("保留原画面构图。")}</p></details>
-      </aside></div>
+        <PlayerBar offset={Math.max(0, Math.min(currentTime - playBase, playLength))} length={playLength} playing={playing} muted={muted}
+          onToggle={togglePlay} onMute={() => setMuted(m => !m)}
+          onSeek={offset => { const v = video.current; if (!v) return; v.currentTime = playBase + offset; setCurrentTime(v.currentTime) }} />
+      </div><div className="studio-row studio-preview-foot"><span className="studio-muted">{showRendered?t("实际渲染结果"):t("原片预览 · 成片取 {{range}} · 字幕、翻译以渲染结果为准", { range: scene ? `${fmtDuration(scene.start)}–${fmtDuration(scene.end)}` : "" })}</span>{previewUrl ? <Btn size="sm" onClick={() => setShowRendered(!showRendered)}>{showRendered?t("查看原片"):t("播放成片")}</Btn> : <Btn size="sm" disabled={!!active} onClick={render}>{active?t("正在渲染"):t("渲染预览")}</Btn>}</div></div>
       <div className="studio-prompt"><input aria-label={t("文案修改要求")} placeholder={t("告诉 AI 怎么改文案，例如：开头改成一个简短的问题")} value={instruction} onChange={e=>setInstruction(e.target.value)} /><Btn variant="cta" loading={busy==='rewrite'} disabled={!instruction.trim()} onClick={rewrite}>{t("改一版文案")}</Btn></div>
       {undo && <Btn variant="text" onClick={()=>{setDraft({...undo, revision:draft.revision});setUndo(null);setShowRendered(false)}}>{t("撤销上次修改")}</Btn>}
       <details className="studio-details studio-source-details"><summary>{t("调整镜头")}{' '}<span className="ac-mono">{draft.scenes.length}</span>{' '}{t("· 顺序与起止点")}</summary>
         <Btn size="sm" disabled={draft.scenes.length >= 30} onClick={() => setPicker('append')}>{t("追加镜头")}</Btn>
         {draft.scenes.map((s,i)=><div className="studio-scene-row" key={s.id}><Btn size="sm" onClick={()=>{setSelected(i);setShowRendered(false)}}>{i+1}. {s.label}</Btn><label>{t("起点（秒）")}<input type="number" min={0} step={.1} value={s.start} onChange={e=>updateScene(i,{start:Number(e.target.value)})}/></label><label>{t("终点（秒）")}<input type="number" min={0} step={.1} value={s.end} onChange={e=>updateScene(i,{end:Number(e.target.value)})}/></label><div className="studio-actions"><Btn size="sm" onClick={() => setPicker(i)}>{t("替换")}</Btn><Btn size="sm" disabled={i===0} onClick={()=>patch({scenes:moveScene(draft,i,-1).scenes})}>{t("上移")}</Btn><Btn size="sm" disabled={i===draft.scenes.length-1} onClick={()=>patch({scenes:moveScene(draft,i,1).scenes})}>{t("下移")}</Btn><Btn size="sm" disabled={draft.scenes.length===1} onClick={()=>{patch({scenes:draft.scenes.filter((_,index)=>index!==i)});setSelected(0)}}>{t("移除")}</Btn></div></div>)}
       </details>
+      </section>
+      <DraftSettingsPanel draft={draft} patch={patch} scene={scene} currentTime={currentTime} onShot={setShot}
+        framing={framing} onAutoFrame={() => void autoFrame()} onInstallFraming={() => void installFraming()} onPortrait={applyPortrait}
+        coverHref={previewUrl && currentJob ? `/project/${projectId}/publish/studio-${currentJob.job_id}` : undefined}
+        onOpenCover={href => navigate(href)} /></div>
     </fieldset>
     {active && <div className="studio-render-state"><ProgressLine percent={active.percent}/><span className="studio-muted">{active.status==='queued'?t("等待渲染"):t("渲染成片")} · {active.percent}%</span></div>}
     {currentJob?.status==='failed' && <p className="studio-error" role="alert">{t(currentJob.error || '')}</p>}
@@ -169,7 +235,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     <Dialog open={!!suggestion} onClose={()=>setSuggestion(null)} title={t("查看文案修改")} description={t("确认后应用到当前草稿，镜头与声音保持原设置。")} footer={<div className="studio-actions"><Btn onClick={()=>setSuggestion(null)}>{t("保留原稿")}</Btn><Btn variant="cta" onClick={()=>{setUndo(draft);setDraft(suggestion);setSuggestion(null);setShowRendered(false)}}>{t("应用修改")}</Btn></div>}><p>{suggestion?.title}</p><p>{suggestion?.hook || t("无开头文字")}</p></Dialog>
     <Dialog open={showExport} onClose={()=>!busy && setShowExport(false)} title={t("导出成片")} description={t("保存当前修改并渲染；已有输出会保留在导出记录。")} footer={<div className="studio-actions"><Btn disabled={!!busy} onClick={()=>setShowExport(false)}>{t("关闭")}</Btn>{previewUrl && <Btn onClick={()=>navigate(`/project/${projectId}/publish/studio-${currentJob!.job_id}`)}>{t("发布这版成片")}</Btn>}{previewUrl ? <StudioDownloadLink className="ac-btn ac-btn--cta" projectId={projectId} jobId={currentJob!.job_id}/> : <Btn variant="cta" loading={busy==='render'||!!active} disabled={!!active} onClick={render}>{t("确认导出")}</Btn>}</div>}>
       <Row label={t("成片")}>{draft.title}</Row><Row label={t("格式")}>MP4 · 30 fps</Row><Row label={t("画幅")}>{draft.aspect==='portrait'?'1080 × 1920':draft.aspect==='landscape'?'1920 × 1080':t("保持原尺寸")}</Row><Row label={t("文字语言")}>{draft.language==='source' ? t('原语言') : languages.find(l=>l.value===draft.language)?.label}</Row>
-      <Row label={t("开头包装")}>{draft.hook ? t(titlePresets.find(preset=>preset.value===(draft.title_style||'plain'))?.label ?? '') : t("无开头文字")}</Row><Row label={t("原声")}>{draft.original_audio?t("保留"):t("已关闭")}</Row><Row label={t("字幕")}>{draft.subtitles?t("烧录已有字幕"):t("已关闭")}</Row>
+      <Row label={t("片头标题")}>{draft.hook ? t(titlePresets.find(preset=>preset.value===(draft.title_style||'plain'))?.label ?? '') : t("无开头文字")}</Row><Row label={t("原声")}>{draft.original_audio?t("保留"):t("已关闭")}</Row><Row label={t("字幕")}>{draft.subtitles?t("字幕压进画面"):t("已关闭")}</Row><Row label={t("封面")} hint={t("渲染完成后，在发布页按平台生成带标题的封面。")}>{previewUrl && currentJob && <Btn size="sm" variant="text" onClick={()=>navigate(`/project/${projectId}/publish/studio-${currentJob.job_id}`)}>{t("去生成")}</Btn>}</Row>
       {currentJob?.status==='completed' && !!currentJob.result?.warnings?.length && <div role="status" className="studio-muted">{currentJob.result.warnings.map(w=><p key={w}>{t(w)}</p>)}</div>}
       {active && <ProgressLine percent={active.percent}/>}<p className="studio-muted">{previewUrl?t("当前版本已渲染完成，可以直接下载。"):t("任务在后台继续，关闭面板不会取消渲染。")}</p>{error && <p className="studio-error">{error}</p>}{currentJob?.status==='failed'&&<p className="studio-error">{t(currentJob.error || '')}</p>}
     </Dialog>

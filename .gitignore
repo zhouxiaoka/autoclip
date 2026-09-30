@@ -33,6 +33,8 @@ venv_*/
 *.webm
 *.m4v
 *.3gp
+# 随包提供的示例项目原片（17 MB，backend/services/example_project.py）
+!backend/assets/example/source.mp4
 *.mp3
 *.wav
 *.flac
@@ -133,6 +135,8 @@ local_backups/
 
 # 进程ID文件
 *.pid
+*.pid.json
+*.pid.tmp
 
 # Redis数据文件
 dump.rdb

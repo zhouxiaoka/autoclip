@@ -28,11 +28,14 @@ class LLMManager:
         self.settings = self._load_settings()
         self._initialize_provider()
 
-    def _current_settings_mtime(self) -> Optional[float]:
-        try:
-            return self.settings_file.stat().st_mtime
-        except OSError:
-            return None
+    def _current_settings_mtime(self):
+        from backend.services.ai_model_settings import path as ai_path
+        def stamp(path):
+            try:
+                return path.stat().st_mtime_ns
+            except OSError:
+                return None
+        return (stamp(self.settings_file), stamp(ai_path()))
 
     def _reload_if_settings_changed(self) -> None:
         """设置页保存后 settings.json 会变；API 进程与 Celery worker 都要在下一次调用时拿到新配置，
@@ -101,6 +104,8 @@ class LLMManager:
             "kimi_api_key": "",
             "glm_api_key": "",
             "grok_api_key": "",
+            "infistar_api_key": "",
+            "api88_api_key": "",
             "seed_api_key": "",
             "model_name": "qwen-plus",
             "chunk_size": 5000,
@@ -127,6 +132,8 @@ class LLMManager:
                             "kimi_api_key": api_keys.get("kimi", ""),
                             "glm_api_key": api_keys.get("glm", ""),
                             "grok_api_key": api_keys.get("grok", ""),
+                            "infistar_api_key": api_keys.get("infistar", ""),
+                            "api88_api_key": api_keys.get("api88", ""),
                             "seed_api_key": api_keys.get("seed", ""),
                             "model_name": api.get("api_model", "qwen-plus")
                         })
@@ -156,6 +163,18 @@ class LLMManager:
         self._apply_env_fallbacks(default_settings)
         self._apply_local_preset(default_settings)
         self._apply_cloud_preset(default_settings)
+        from backend.services import ai_model_settings as ai
+        configured = ai.load()
+        if configured and configured.analysis:
+            binding = configured.analysis
+            connection = ai.connection_for(configured, binding)
+            endpoint = ai.chat_endpoint(connection, binding.model)
+            default_settings.update(llm_provider='openai', cloud_preset=None, llm_provider_preset=None,
+                                    openai_api_key=endpoint['api_key'], openai_base_url=endpoint['base_url'],
+                                    model_name=binding.model, connection_provider=connection.provider,
+                                    connection_name=connection.name, chunk_size=configured.chunk_size,
+                                    min_score_threshold=configured.min_score_threshold,
+                                    max_clips_per_collection=configured.max_clips_per_collection)
         return default_settings
 
     def _apply_local_preset(self, settings: Dict[str, Any]) -> None:
@@ -173,7 +192,7 @@ class LLMManager:
                     settings["model_name"] = default_model
 
     def _apply_cloud_preset(self, settings: Dict[str, Any]) -> None:
-        """deepseek / seed / kimi / glm / grok → openai + 官方地址，用各家自己的 key。"""
+        """deepseek / seed / kimi / glm / grok / infistar → openai + 官方地址，用各家自己的 key。"""
         from backend.core.cloud_presets import resolve_cloud_preset
         from backend.core.model_catalog import curated_models, default_model_for
 
@@ -186,8 +205,14 @@ class LLMManager:
         settings["cloud_preset"] = preset.key
         settings["openai_base_url"] = base_url
         current = (settings.get("model_name") or "").strip()
+        own = curated_models(preset.key)
+        if not own:
+            # 多模型网关（infistar）：gpt / deepseek / gemini 都是合法型号，用户选什么就用什么
+            if not current and preset.default_model:
+                settings["model_name"] = preset.default_model
+            return
         known = set(curated_models())
-        if not current or current == "qwen-plus" or (current in known and current not in curated_models(preset.key)):
+        if not current or current == "qwen-plus" or (current in known and current not in own):
             settings["model_name"] = preset.default_model or default_model_for(preset.key)
 
     # Docker / 本地脚本模式没有设置页可用，只能靠环境变量（env.example 里也是这么写的），
@@ -201,6 +226,8 @@ class LLMManager:
         "kimi_api_key": ("API_KIMI_API_KEY", "MOONSHOT_API_KEY", "KIMI_API_KEY"),
         "glm_api_key": ("API_GLM_API_KEY", "ZHIPU_API_KEY", "GLM_API_KEY"),
         "grok_api_key": ("API_GROK_API_KEY", "XAI_API_KEY", "GROK_API_KEY"),
+        "infistar_api_key": ("API_INFISTAR_API_KEY", "INFISTAR_API_KEY"),
+        "api88_api_key": ("API_API88_API_KEY", "API88_API_KEY"),
         "seed_api_key": ("API_SEED_API_KEY", "ARK_API_KEY", "VOLCENGINE_API_KEY", "DOUBAO_API_KEY"),
     }
 
@@ -295,6 +322,45 @@ class LLMManager:
         self._reload_if_settings_changed()
         value = self.settings.get(name)
         return default if value is None else value
+
+    def openai_compatible_endpoint(self) -> Optional[Dict[str, str]]:
+        """当前文本模型对应的 OpenAI 兼容 Chat Completions 地址、key、模型。
+
+        视觉理解默认复用文本模型：大多数提供商（Infistar / OpenAI / Gemini / Seed / Kimi / 通义…）
+        同一个 key 就能发图片消息。能不能看图由「测试图片理解」验证，这里只负责给出地址。
+        """
+        from backend.core.llm_providers import (
+            DASHSCOPE_CN_COMPATIBLE_BASE_URL, OPENAI_OFFICIAL_BASE_URL, normalize_base_url,
+        )
+        self._reload_if_settings_changed()
+        s = self.settings
+        provider = s.get("llm_provider", "dashscope")
+        model = (s.get("model_name") or "").strip()
+        if provider == "openai":
+            cloud_preset = s.get("cloud_preset")
+            if s.get("llm_provider_preset"):
+                key = ""
+            elif cloud_preset:
+                from backend.core.cloud_presets import CLOUD_PRESETS
+                key = s.get(CLOUD_PRESETS[cloud_preset].api_key_setting, "")
+            else:
+                key = s.get("openai_api_key", "")
+            base = normalize_base_url(s.get("openai_base_url")) or OPENAI_OFFICIAL_BASE_URL
+        elif provider == "dashscope":
+            key = s.get("dashscope_api_key", "")
+            base = normalize_base_url(s.get("dashscope_base_url")) or DASHSCOPE_CN_COMPATIBLE_BASE_URL
+        elif provider == "gemini":
+            key = s.get("gemini_api_key", "")
+            base = "https://generativelanguage.googleapis.com/v1beta/openai"
+        elif provider == "siliconflow":
+            from backend.core.model_catalog import SILICONFLOW_BASE_URL
+            key = s.get("siliconflow_api_key", "")
+            base = SILICONFLOW_BASE_URL
+        else:
+            return None
+        if not model:
+            return None
+        return {"base_url": base, "api_key": key or "", "model": model}
     
     def _get_api_key_for_provider(self, provider_type: ProviderType) -> Optional[str]:
         """获取指定提供商的API密钥"""
@@ -424,6 +490,9 @@ class LLMManager:
         base_url = self._get_provider_kwargs(provider_type).get("base_url")
         if base_url:
             info["base_url"] = base_url
+        if self.settings.get('connection_provider'):
+            info['provider'] = self.settings['connection_provider']
+            info['display_name'] = self.settings['connection_name']
         return info
     
     def _get_provider_display_name(self, provider_type: ProviderType) -> str:

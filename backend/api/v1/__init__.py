@@ -62,4 +62,7 @@ api_router.include_router(account_health_router, tags=["account-health"])
 from .studio import router as studio_router
 api_router.include_router(studio_router, prefix="/studio", tags=["studio"])
 
+from .example_project import router as example_project_router
+api_router.include_router(example_project_router, tags=["example-project"])
+
 __all__ = ["api_router"]

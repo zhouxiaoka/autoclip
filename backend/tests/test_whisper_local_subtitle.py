@@ -106,6 +106,46 @@ def test_failure_text_has_no_local_path():
     assert "设置 → 转写" in message
 
 
+@pytest.mark.parametrize("error,expected", [
+    (ImportError(r"DLL load failed C:\Users\secret\runtime.pyd"), "依赖加载失败"),
+    (MemoryError("allocation failed"), "内存不足"),
+    (RuntimeError("Unable to open model.bin"), "模型文件缺失或不完整"),
+    (ConnectionError("https://huggingface.co/model.bin?token=secret"), "下载连接失败"),
+    (PermissionError(r"C:\Users\secret\model.bin"), "访问权限"),
+    (ValueError("File does not have any audio stream"), "音轨"),
+    (RuntimeError("unknown error secret"), "RuntimeError"),
+])
+def test_whisper_failure_has_actionable_category_without_raw_details(error, expected):
+    message = describe_whisper_failure(error)
+    assert expected in message
+    assert "secret" not in message
+
+
+def test_transcription_uses_complete_cached_snapshot_without_downloading(tmp_path, monkeypatch):
+    cached = tmp_path / "hub/models--Systran--faster-whisper-base/snapshots/revision"
+    cached.mkdir(parents=True)
+    for name in ("model.bin", "config.json", "tokenizer.json", "vocabulary.json"):
+        (cached / name).write_bytes(b"fixture")
+    loaded = []
+
+    class FakeModel:
+        def __init__(self, model, **kwargs):
+            loaded.append(model)
+            assert Path(model).is_dir(), "Named model would contact the Hub again"
+
+        def transcribe(self, path, **kwargs):
+            return [SimpleNamespace(start=0, end=1, text="cached")], None
+
+    _install_fake_whisper(monkeypatch, FakeModel)
+    monkeypatch.setattr(whisper_runtime, "get_models_dir", lambda: tmp_path)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"video")
+    output = tmp_path / "clip.srt"
+    _recognizer()._generate_subtitle_whisper_local(video, output, SpeechRecognitionConfig())
+    assert loaded == [str(cached)]
+    assert "cached" in output.read_text(encoding="utf-8")
+
+
 def _install_fake_whisper(monkeypatch, factory):
     module = types.ModuleType("faster_whisper")
     module.WhisperModel = factory
@@ -299,3 +339,26 @@ def test_gpu_runtime_error_retries_on_cpu(tmp_path, monkeypatch):
     assert ("cpu", "int8") in constructed
     assert result == output
     assert "ok" in output.read_text(encoding="utf-8")
+
+
+def test_pyav19_metadata_api_failure_recovers_via_real_ffmpeg(tmp_path, monkeypatch):
+    import subprocess
+    np = pytest.importorskip('numpy')
+    from backend.utils.ffmpeg_utils import get_ffmpeg_path
+    calls = []
+    class FakeModel:
+        def __init__(self, *args, **kwargs): pass
+        def transcribe(self, audio, **kwargs):
+            calls.append(audio)
+            if isinstance(audio, str):
+                raise TypeError("open() got an unexpected keyword argument 'metadata_errors'")
+            assert isinstance(audio, np.ndarray)
+            assert audio.dtype == np.float32 and 15000 <= len(audio) <= 17000
+            return [SimpleNamespace(start=0, end=1, text='recovered')], None
+    _install_fake_whisper(monkeypatch, FakeModel)
+    video = tmp_path / '中文 sample.wav'
+    subprocess.run([get_ffmpeg_path(), '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', str(video)], check=True)
+    output = tmp_path / 'output.srt'
+    _recognizer()._generate_subtitle_whisper_local(video, output, SpeechRecognitionConfig())
+    assert len(calls) == 2
+    assert 'recovered' in output.read_text()

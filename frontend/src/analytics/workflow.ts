@@ -1,15 +1,27 @@
 /** Versioned business telemetry. Only explicit UI operations enroll projects. */
 export type Properties = Record<string, string | number | boolean | null | undefined>
-export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean; properties?: Properties; token?: string }
+export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export' | 'framing-runtime'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean; properties?: Properties; token?: string; runId?: string }
 export const WORKFLOW_KEY = 'autoclip.analytics.workflow.v2'
 const TTL = 7 * 86400000
 const LIMIT = 50
+const CONTEXT_KEY = "autoclip.analytics.context.v1"
+export function telemetryId(): string { return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}` }
+type Context = { props: Properties; updated: number; artifacts: Record<string, string> }
+
+export function projectProperties(project: { settings?: Record<string, unknown>; processing_config?: Record<string, unknown>; material_origin?: unknown; example_version?: unknown }): Properties {
+  const settings = project.processing_config || project.settings
+  const origin = project.material_origin || (settings ? settings.example === true ? 'sample' : 'user' : 'unknown')
+  return safeStudioProperties({ material_origin: origin, example_version: project.example_version || settings?.example_version })
+}
 
 /** Explicit property contract: never spread user/model data into a payload. */
 export function safeStudioProperties(value: Record<string, unknown> | null = {}): Properties {
   const input = value && typeof value === 'object' ? value : {}
-  const out: Properties = { studio_schema_version: 1 }
+  const out: Properties = { studio_schema_version: 2 }
   const enums: Record<string, string[]> = {
+    material_origin: ['sample', 'user', 'unknown'], layout: ['crop', 'fit', 'blur'],
+    trigger: ['auto', 'manual', 'portrait_preset'], framing_outcome: ['framed', 'no_detection'],
+    framing_status: ['installed', 'installing', 'failed', 'missing', 'not_installed', 'error'],
     source_type: ['file', 'youtube', 'bilibili', 'other_url', 'visual_event', 'content_clip', 'studio', 'legacy'],
     analysis_mode: ['subtitle', 'visual', 'auto'], goal: ['content', 'highlight', 'promo', 'auto'],
     aspect: ['original', 'portrait', 'landscape', 'auto'],
@@ -22,10 +34,10 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
   for (const [key, allowed] of Object.entries(enums)) {
     if (typeof input[key] === 'string' && allowed.includes(input[key] as string)) out[key] = input[key] as string
   }
-  for (const key of ['subtitle_enabled', 'has_subtitle', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
+  for (const key of ['has_crop_track', 'has_manual_adjustment', 'auto_frame_retained', 'subtitle_enabled', 'has_subtitle', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean
   }
-  for (const key of ['duration_ms', 'request_duration_ms', 'result_count', 'requested_count', 'succeeded_count', 'failed_count']) {
+  for (const key of ['example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'result_count', 'requested_count', 'succeeded_count', 'failed_count']) {
     if (typeof input[key] === 'number' && Number.isFinite(input[key]) && (input[key] as number) >= 0) out[key] = input[key] as number
   }
   for (const prefix of ['requested', 'succeeded', 'failed']) {
@@ -37,6 +49,9 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     }
   }
   if (typeof input.error_code === 'string' && /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty)$/.test(input.error_code)) out.error_code = input.error_code
+  for (const key of ['flow_id', 'operation_id', 'artifact_id', 'attempt_id']) {
+    if (typeof input[key] === 'string' && /^t-[a-z0-9-]{10,100}$/.test(input[key] as string)) out[key] = input[key] as string
+  }
   return out
 }
 
@@ -70,8 +85,11 @@ export interface TaskSnapshot {
 }
 
 export interface StudioSnapshot {
+  material_origin?: 'sample' | 'user' | 'unknown'
+  example_version?: number
+  analysis_history?: { run_id: string; plan?: StudioSnapshot['plan']; analysis: StudioSnapshot['analysis'] }[]
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; local_evidence?: { subtitle_status?: string } }
-  analysis?: { status: string; outcome?: string; duration_ms?: number; error_code?: string; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
+  analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
   jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string }[]
 }
 
@@ -79,6 +97,7 @@ export interface StudioSnapshot {
 export class WorkflowTracker {
   private watches: Watch[] = []
   private epoch = 0
+  private contexts: Record<string, Context> = {}
   constructor(
     private storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
     private enabled: () => boolean,
@@ -88,12 +107,46 @@ export class WorkflowTracker {
     try {
       const raw: unknown = JSON.parse(storage.getItem(WORKFLOW_KEY) || '[]')
       if (Array.isArray(raw)) this.watches = raw.filter((w): w is Watch =>
-        w && ['project', 'export', 'bilibili', 'youtube', 'studio-screen', 'studio-production', 'studio-export'].includes(w.kind) &&
+        w && ['project', 'export', 'bilibili', 'youtube', 'studio-screen', 'studio-production', 'studio-export', 'framing-runtime'].includes(w.kind) &&
         typeof w.id === 'string' && Number.isFinite(w.since) && Array.isArray(w.seen) &&
         w.seen.every((v: unknown) => typeof v === 'string') && w.seen.length <= 2000 &&
-        (w.projectId === undefined || typeof w.projectId === 'string'))
+        (w.projectId === undefined || typeof w.projectId === 'string') &&
+        (w.runId === undefined || typeof w.runId === 'string'))
     } catch { /* corrupted/unavailable storage cannot block the application */ }
+    try {
+      const raw = JSON.parse(storage.getItem(CONTEXT_KEY) || '{}')
+      for (const [key, value] of Object.entries(raw).slice(-500)) {
+        const c = value as Context
+        if (c && Number.isFinite(c.updated) && c.updated > this.now() - 35 * 86400000) {
+          this.contexts[key] = { props: safeStudioProperties(c.props), updated: c.updated, artifacts: Object.fromEntries(Object.entries(c.artifacts || {}).filter(([,v]) => typeof v === 'string' && /^t-[a-z0-9-]{10,100}$/.test(v)).slice(-100)) }
+        }
+      }
+    } catch { /* unavailable storage */ }
+    if (!this.enabled()) this.clear()
     this.prune()
+  }
+  private persistContexts(): void {
+    const entries = Object.entries(this.contexts).filter(([,c]) => c.updated > this.now() - 35 * 86400000).sort((a,b) => a[1].updated - b[1].updated).slice(-500)
+    this.contexts = Object.fromEntries(entries)
+    try { this.storage.setItem(CONTEXT_KEY, JSON.stringify(this.contexts)) } catch { /* best effort */ }
+  }
+  rememberProject(id: string, input: Record<string, unknown>): void {
+    if (!this.enabled() || !id) return
+    const before = this.contexts[id]
+    const props = safeStudioProperties(input)
+    this.contexts[id] = { props: { ...before?.props, ...props, flow_id: before?.props.flow_id || props.flow_id || telemetryId() }, updated: this.now(), artifacts: before?.artifacts || {} }
+    this.persistContexts()
+  }
+  context(id?: string, artifact?: string): Properties {
+    if (!this.enabled() || !id) return { material_origin: 'unknown' }
+    if (!this.contexts[id]) this.rememberProject(id, { material_origin: 'unknown' })
+    const c = this.contexts[id]
+    if (artifact && !c.artifacts[artifact]) {
+      c.artifacts[artifact] = telemetryId()
+      c.artifacts = Object.fromEntries(Object.entries(c.artifacts).slice(-100))
+      this.persistContexts()
+    }
+    return { flow_id: c.props.flow_id, material_origin: c.props.material_origin || 'unknown', ...(c.props.example_version !== undefined ? { example_version: c.props.example_version } : {}), ...(artifact ? { artifact_id: c.artifacts[artifact] } : {}) }
   }
   private prune(): void {
     this.watches = this.watches.filter(w => w.since > this.now() - TTL && w.since <= this.now()).slice(-LIMIT)
@@ -104,6 +157,8 @@ export class WorkflowTracker {
   clear(): void {
     this.epoch++
     this.watches = []
+    this.contexts = {}
+    try { this.storage.removeItem(CONTEXT_KEY) } catch { /* best effort */ }
     try { this.storage.removeItem(WORKFLOW_KEY) } catch { /* best effort */ }
   }
   generation(): number { return this.epoch }
@@ -113,19 +168,19 @@ export class WorkflowTracker {
     this.prune()
     return [...this.watches]
   }
-  watch(kind: Watch['kind'], id: string, projectId?: string, since = this.now(), properties: Properties = {}, restart = false): void {
+  watch(kind: Watch['kind'], id: string, projectId?: string, since = this.now(), properties: Properties = {}, restart = false, runId?: string): void {
     if (!this.enabled() || !id) return
     this.prune()
-    const existing = this.watches.find(w => w.kind === kind && w.id === id)
+    const existing = this.watches.find(w => w.kind === kind && w.id === id && (!runId || w.runId === runId))
     if (existing && (!existing.settled || kind === 'studio-export') && !restart) return
     if (existing) this.watches = this.watches.filter(w => w !== existing)
-    this.watches.push({ kind, id, projectId, since, seen: [], properties: safeStudioProperties(properties), token: `${this.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}` })
+    this.watches.push({ kind, id, runId, projectId, since, seen: [], properties: safeStudioProperties({ ...this.context(projectId || id), ...properties }), token: telemetryId() })
     this.prune()
     this.persist()
   }
   emitOnce(w: Watch, key: string, event: string, properties: Properties): void {
     if (!this.enabled() || !this.watches.includes(w) || w.seen.includes(key) || w.seen.length >= 2000) return
-    if (this.capture(event, w.kind.startsWith('studio-') ? { ...safeStudioProperties(w.properties), ...safeStudioProperties(properties), ...(w.token && /^[a-z0-9-]{10,100}$/.test(w.token) ? { $insert_id: `studio-v1:${w.token}:${key}` } : {}) } : { ...properties, $insert_id: `autoclip-v2:${w.kind}:${w.id}:${key}` })) {
+    if (this.capture(event, (w.kind.startsWith('studio-') || w.kind === 'framing-runtime') ? { ...safeStudioProperties(w.properties), ...safeStudioProperties(properties), ...safeStudioProperties({ attempt_id: w.token }), ...(w.token && /^[a-z0-9-]{10,100}$/.test(w.token) ? { $insert_id: `studio-v1:${w.token}:${key}` } : {}) } : { ...this.context(w.projectId || w.id), ...properties, $insert_id: `autoclip-v2:${w.kind}:${w.id}:${key}` })) {
       w.seen.push(key)
       this.persist()
     }
@@ -133,6 +188,14 @@ export class WorkflowTracker {
   /** IDs remain in local watches only; external payload follows the versioned aggregate contract. */
   observeStudio(w: Watch, snapshot: StudioSnapshot): void {
     if (w.settled) return
+    const original = snapshot
+    if (w.runId) {
+      const receipt = snapshot.analysis_history?.find(r => r.run_id === w.runId)
+      if (receipt) snapshot = { ...snapshot, plan: receipt.plan, analysis: receipt.analysis }
+      else if (snapshot.analysis?.run_id !== w.runId && w.kind !== 'studio-export') return
+    }
+    const context = this.context(w.projectId || w.id)
+    if (original.material_origin) this.rememberProject(w.projectId || w.id, { ...context, material_origin: original.material_origin, example_version: original.example_version })
     let event: string | undefined
     let outcome: string | undefined
     let details: Record<string, unknown> = {}
@@ -143,7 +206,7 @@ export class WorkflowTracker {
       }
     } else if (w.kind === 'studio-screen') {
       details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code }
-      if (snapshot.analysis?.status === 'failed') { event = 'studio_screen_finished'; outcome = 'failed' }
+      if (snapshot.analysis?.status === 'failed' && snapshot.analysis?.phase !== 'production') { event = 'studio_screen_finished'; outcome = 'failed' }
       else if (snapshot.analysis?.status === 'awaiting_confirmation' && snapshot.plan?.id) {
         event = 'studio_screen_finished'
         outcome = ['ai', 'local'].includes(snapshot.plan.mode || '') ? 'recommended' : snapshot.plan.mode
@@ -155,7 +218,7 @@ export class WorkflowTracker {
       details = { ...snapshot.analysis, analysis_mode: snapshot.plan.confirmed_analysis }
     }
     if (event) {
-      this.emitOnce(w, 'finished', event, safeStudioProperties({ ...details, outcome }))
+      this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(w.projectId || w.id), ...details, outcome }))
       if (w.seen.includes('finished')) { w.settled = true; this.persist() }
     }
   }

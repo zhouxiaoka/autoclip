@@ -15,13 +15,13 @@ export default function StudioDownloadLink({ projectId, jobId, className = 'stud
   return <a className={className} href={studioApi.video(projectId, jobId, true)} download
     aria-busy={busy} aria-disabled={busy}
     onClick={async event => {
-      if (!isDesktopDownload()) { studioDownloadRequested(); return }
+      if (!isDesktopDownload()) { studioDownloadRequested(projectId, jobId); return }
       event.preventDefault()
       if (pending.current) return
       pending.current = true
       setBusy(true)
       try {
-        await observeStudioDownload(() => saveStudioExport(projectId, jobId))
+        await observeStudioDownload(() => saveStudioExport(projectId, jobId), projectId, jobId)
         message.success(t('已保存到下载文件夹'))
       } catch (error) {
         captureStudioException(error, 'native_download')
