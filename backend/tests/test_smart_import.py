@@ -712,3 +712,35 @@ def test_local_import_creates_project_thumbnail(client, source, monkeypatch):
     assert thumbnail.startswith('data:image/jpeg;base64,')
     Image.open(io.BytesIO(base64.b64decode(thumbnail.split(',', 1)[1]))).verify()
     assert client.get('/studio/' + pid).json()['analysis']['status'] == 'awaiting_confirmation'
+
+
+def test_many_auto_variants_are_all_queued_for_rendering(root, monkeypatch):
+    submitted = []
+    class Capture:
+        def submit(self, fn, *args, **kwargs):
+            submitted.append(args)
+    monkeypatch.setattr(jobs, 'render_executor', Capture())
+    branding = {'outro_enabled': False, 'outro_version': 'v1'}
+    count = 20  # e.g. a two-hour source with many complete highlights
+    drafts = [jobs.Draft(id=f'd{i}', title=f'T{i}', scenes=[jobs.Scene(id='s', label='S', start=i, end=i + 1)], subtitles=False).model_dump() for i in range(count)]
+    store.write('p1', {
+        'schema_version': 2, 'drafts': drafts, 'events': [], 'jobs': [], 'analysis': {'status': 'running'},
+        'generation': {'auto_start': True, 'status': 'rendering'},
+        'output_variants': [{'id': f'v{i}', 'draft_id': f'd{i}', 'draft_revision': 1, 'strategy_id': 'douyin', 'strategy_version': 1, 'branding': branding, 'status': 'queued'} for i in range(count)],
+    })
+
+    jobs._dispatch_pending_variants('p1')
+    jobs._dispatch_pending_variants('p1')  # idempotent: attached variants are not resubmitted
+    state = store.read('p1')
+    assert all(item.get('render_job_id') for item in state['output_variants'])
+    assert len(submitted) == count and len(state['jobs']) == count
+    assert state['generation']['status'] == 'rendering'
+
+
+def test_render_ffmpeg_threads_are_bounded_and_low_priority():
+    from backend.services import render_limits
+    assert int(render_limits.THREADS) >= 2
+    assert '-filter_complex_threads' in render_limits.input_args()
+    cmd, kwargs = render_limits.low_priority(['ffmpeg', '-version'])
+    assert cmd[-2:] == ['ffmpeg', '-version']
+    assert 'preexec_fn' not in kwargs

@@ -10,6 +10,7 @@ from backend.services.studio.titles import template_filters
 from backend.services.studio import title_art
 from backend.services.studio import audio
 from backend.services.studio.store import directory
+from backend.services import render_limits
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
 
@@ -75,7 +76,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                         from backend.services.studio.title_materials import backdrop_png
                         backdrop = folder / 'backdrop.png'
                         backdrop.write_bytes(backdrop_png(hook, draft.title_style, w, h, **title_art.options_for(draft)))
-                cmd = [get_ffmpeg_path(), '-v', 'error', '-ss', str(scene.start), '-i', str(video)]
+                cmd = [get_ffmpeg_path(), '-v', 'error', *render_limits.input_args(), '-ss', str(scene.start), '-i', str(video)]
                 if artwork:
                     cmd += ['-loop', '1', '-i', str(artwork)]
                 if backdrop:
@@ -115,8 +116,9 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                     cmd += ['-an']
                 if graph:
                     cmd += ['-filter_complex', graph]
-                cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', '30', '-threads', '2', '-y', str(clip_path)]
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(180, (scene.end-scene.start)*20))
+                cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', '30', *render_limits.output_args(), '-y', str(clip_path)]
+                cmd, priority = render_limits.low_priority(cmd)
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(180, (scene.end-scene.start)*20), **priority)
                 if proc.returncode:
                     raise RuntimeError('渲染镜头失败：' + proc.stderr[-600:])
                 parts.append(clip_path)

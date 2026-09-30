@@ -23,6 +23,25 @@ _TEST_DB_DIR = tempfile.mkdtemp(prefix="autoclip-tests-")
 os.environ.setdefault("DATABASE_URL", f"sqlite:///{Path(_TEST_DB_DIR) / 'autoclip.db'}")
 
 
+class _FollowStudioExecutor:
+    """Route Studio renders through whatever `jobs.executor` a test installed."""
+
+    def __init__(self, jobs):
+        self.jobs = jobs
+
+    def submit(self, *args, **kwargs):
+        return self.jobs.executor.submit(*args, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _studio_render_follows_executor(monkeypatch):
+    # Tests stub `jobs.executor` to run work inline; keep renders on that stub instead of
+    # the real background render worker. Tests that target `render_executor` override this.
+    jobs = sys.modules.get("backend.services.studio.jobs")
+    if jobs is not None:
+        monkeypatch.setattr(jobs, "render_executor", _FollowStudioExecutor(jobs))
+    yield
+
 @pytest.fixture(scope="session")
 def test_data_dir(tmp_path_factory):
     """创建测试数据目录"""

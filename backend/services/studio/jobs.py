@@ -12,6 +12,9 @@ from backend.services.studio.render import render_draft
 
 logger = logging.getLogger(__name__)
 executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='studio')
+# Local encodes are CPU-bound: run one at a time on its own worker so screening and
+# analysis of other imports never wait behind a render queue.
+render_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='studio-render')
 
 
 def source(project_id):
@@ -24,8 +27,6 @@ def export(project_id, draft, *, brand_outro=False):
         active = next((j for j in data['jobs'] if j['status'] in ('queued', 'running') and j.get('snapshot') == job['snapshot']), None)
         if active:
             return active
-        if sum(j['status'] in ('queued', 'running') for j in data['jobs']) >= 3:
-            raise ValueError('已有 3 个导出任务，请等待完成后再提交')
         data['jobs'].insert(0, job)
         return job
     # Keep deduplication and dispatch atomic: another request must not receive
@@ -35,9 +36,9 @@ def export(project_id, draft, *, brand_outro=False):
         if added['job_id'] == job['job_id']:
             try:
                 if brand_outro:
-                    executor.submit(_render, project_id, draft, job['job_id'], brand_outro=True)
+                    render_executor.submit(_render, project_id, draft, job['job_id'], brand_outro=True)
                 else:
-                    executor.submit(_render, project_id, draft, job['job_id'])
+                    render_executor.submit(_render, project_id, draft, job['job_id'])
             except Exception as error:
                 logger.warning('Studio export dispatch failed: %s', type(error).__name__)
                 capture_studio_exception(error, 'dispatch')
@@ -320,12 +321,7 @@ def _auto_generate(project_id, plan):
             data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now())
             data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在生成可发布成片', 'created_at': store.now()}
         store.change(project_id, persist)
-        for variant in variants:
-            draft = next(Draft.model_validate(item) for item in derived_drafts if item['id'] == variant['draft_id'])
-            job = export(project_id, draft, brand_outro=bool(variant['branding'].get('outro_enabled', True)))
-            def attach(data, variant_id=variant['id'], job_id=job['job_id']):
-                next(item for item in data['output_variants'] if item['id'] == variant_id)['render_job_id'] = job_id
-            store.change(project_id, attach)
+        _dispatch_pending_variants(project_id)
     except Exception as error:
         capture_studio_exception(error, 'production')
         def fail(data):
@@ -376,11 +372,27 @@ def append_platform_variants(project_id, platforms, branding):
         data['generation'].update(status='rendering')
         data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在追加平台版本', 'created_at': store.now()}
     store.change(project_id, persist)
-    for variant in variants:
-        draft = next(Draft.model_validate(item) for item in derived if item['id'] == variant['draft_id'])
-        job = export(project_id, draft, brand_outro=bool(branding.get('outro_enabled', True)))
-        store.change(project_id, lambda data, variant_id=variant['id'], job_id=job['job_id']: next(item for item in data['output_variants'] if item['id'] == variant_id).update(render_job_id=job_id))
+    _dispatch_pending_variants(project_id)
     return variants
+
+
+def _dispatch_pending_variants(project_id):
+    """Queue a render for every automatic variant that does not have one yet.
+
+    There is no per-project cap on how many variants get produced: the source decides the
+    count, and `render_executor` encodes them one at a time. Re-running is safe because
+    `export` deduplicates identical draft snapshots and attached variants are skipped.
+    """
+    state = store.read(project_id)
+    pending = [item for item in state.get('output_variants', []) if item.get('status') == 'queued' and not item.get('render_job_id')]
+    drafts = {draft['id']: draft for draft in state.get('drafts', [])}
+    for variant in pending:
+        raw = drafts.get(variant['draft_id'])
+        if not raw:
+            store.change(project_id, lambda data, variant_id=variant['id']: next(item for item in data['output_variants'] if item['id'] == variant_id).update(status='failed', error='来源草稿不存在'))
+            continue
+        job = export(project_id, Draft.model_validate(raw), brand_outro=bool(variant['branding'].get('outro_enabled', True)))
+        store.change(project_id, lambda data, variant_id=variant['id'], job_id=job['job_id']: next(item for item in data['output_variants'] if item['id'] == variant_id).update(render_job_id=job_id))
 
 
 def retry_variant(project_id, variant_id):
@@ -393,15 +405,16 @@ def retry_variant(project_id, variant_id):
     raw = next((item for item in state.get('drafts', []) if item['id'] == variant['draft_id']), None)
     if not raw:
         raise FileNotFoundError('来源草稿不存在')
-    job = export(project_id, Draft.model_validate(raw), brand_outro=bool(variant['branding'].get('outro_enabled', True)))
     def update(data):
         item = next(value for value in data['output_variants'] if value['id'] == variant_id)
-        item.update(status='queued', render_job_id=job['job_id'])
+        item.update(status='queued')
+        item.pop('render_job_id', None)
         item.pop('error', None)
         data['generation'].update(status='rendering')
         data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在重试成片版本', 'created_at': store.now()}
     store.change(project_id, update)
-    return job
+    _dispatch_pending_variants(project_id)
+    return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)
 
 
 def _sync_variant_status(project_id, job_id, status, error=None):

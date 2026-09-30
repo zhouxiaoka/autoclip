@@ -302,3 +302,32 @@ frontend: npm run typecheck && npm run lint && npm run build && npm test（163 p
 
 - 多平台一次发布仍只能选一个 variant；从一个竖版 variant 同时勾选 B站时，B站会走旧导出重新生成横版，而不是自动挑选同项目的 B站 variant。后续可在发布页按平台自动匹配同内容的其他 variant。
 - 竖屏平台清单目前只包含 TikTok 与 Instagram；如 Upload-Post 平台规格变化需同步 registry。
+
+## 包 8：真实素材验收发现的出片上限 bug 与渲染资源控制
+
+状态：已完成，待合入。
+
+### 发现经过
+
+第一轮内部 E2E 用真实素材（WIRED 小岛秀夫 17 分钟、YC Sam Altman 39 分钟）走自动出片。系统按内容分别挑出 8 条和 15 条版本，但两条项目都在提交第 4 个渲染时失败：旧的“单项目同时最多 3 个导出任务”规则把自动生成整体判为 failed，其余版本永久停在排队。同时两路 ffmpeg 合计约 880% CPU，风扇明显。
+
+### 完成内容
+
+- 删除单项目 3 个导出任务的上限。成片数量只由素材内容决定；所有自动版本一次进入渲染队列，按顺序完成。重复提交同一草稿快照仍由既有去重返回同一任务。
+- 新增 `jobs.render_executor`（单 worker）：同一时刻全机只做一个本地编码，素材筛查与理解仍用原有线程池，不会排在渲染队列之后。
+- 新增 `backend/services/render_limits.py`：ffmpeg 解码、滤镜图与编码线程上限为 CPU 核数的 1/3（至少 2），并以低优先级运行（POSIX 用 `nice -n 10`，Windows 用 BELOW_NORMAL；不使用多线程下不安全的 `preexec_fn`）。
+- 追加平台与单版本重试改走同一派发函数，不再因并发上限报错。
+- 结果卡对尚未轮到的版本显示“排队生成中”。
+- 测试：20 个版本全部进入队列且幂等；ffmpeg 参数有上限且不使用 `preexec_fn`；测试环境下 `render_executor` 跟随测试替换的 executor，避免后台线程串测。
+
+### 已验证
+
+```text
+backend: 742 passed, 1 skipped
+frontend: typecheck / lint / build / test（163 passed）
+```
+
+### 仍待验收
+
+- 用新代码重跑两条真实素材，确认 8 / 15 条全部完成、CPU 占用与耗时可接受，并抽帧检查画幅与片尾。
+- 17 分钟素材产出 8 条抖音版本是否偏多，需要结合成片质量判断候选筛选阈值。
