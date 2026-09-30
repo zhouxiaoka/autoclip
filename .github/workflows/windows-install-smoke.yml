@@ -30,6 +30,8 @@ jobs:
         shell: pwsh
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
 
