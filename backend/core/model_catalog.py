@@ -79,6 +79,7 @@ CURATED_MODELS: Dict[str, List[str]] = {
     ],
     # 多模型网关，型号随账号而定：不内置名单，填好 key 后实时拉取
     "infistar": [],
+    "api88": [],
 }
 
 DEFAULT_MODELS: Dict[str, str] = {
@@ -91,6 +92,7 @@ DEFAULT_MODELS: Dict[str, str] = {
     "glm": "glm-5.3",
     "grok": "grok-4.6",
     "infistar": "",
+    "api88": "",
 }
 
 PROVIDER_LABELS: Dict[str, str] = {
@@ -103,6 +105,7 @@ PROVIDER_LABELS: Dict[str, str] = {
     "glm": "GLM",
     "grok": "Grok",
     "infistar": "Infistar",
+    "api88": "88API",
 }
 
 CLOUD_PROVIDERS = frozenset(CURATED_MODELS)
@@ -138,6 +141,7 @@ IMAGE_MODELS: Dict[str, List[str]] = {
     "dashscope": ["wanx2.1-t2i-turbo", "wanx2.1-t2i-plus"],
     "seed": ["doubao-seedream-5-0-260128"],
     "openai": ["gpt-image-1"],
+    "api88": ["gpt-image-1", "dall-e-3", "dall-e-2"],
     # Infistar 是多模型网关，主流生图模型都能调，具体以账号可用型号为准
     "infistar": ["gpt-image-1", "dall-e-3", "doubao-seedream-5-0-260128", "flux-1.1-pro", "imagen-4", "wanx2.1-t2i-turbo"],
 }
