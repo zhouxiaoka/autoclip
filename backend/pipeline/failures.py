@@ -74,7 +74,8 @@ def llm_key_failure(stage: str, message: str) -> PipelineFailure:
 HINT_SUBTITLE = "到「设置 → 转写」安装 Whisper 模型让 AutoClip 自动转写，或导入 .srt 字幕后重试。"
 HINT_LOWER_THRESHOLD = "到「设置 → 模型 → 最低评分阈值」调低后重试，或换一个更强的模型。"
 HINT_CHECK_FFMPEG = "确认 ffmpeg 可用（桌面版内置；Docker / 脚本模式请检查 PATH），以及原视频文件完整可播放。"
-# 预检已通过：空时间线更常是短片被时长下限滤掉，或时间戳对不上字幕。不要再提 API Key。
+# Legacy fallback when a caller returns [] without Step 2 diagnostics.
+# The extractor itself distinguishes request, response and duration failures.
 CODE_TIMELINE_EMPTY = "timeline_empty"
 HINT_EMPTY_TIMELINE = (
     "短视频里的片段常被最短时长滤掉（短片约 20 秒起），或模型给出的时间戳对不上字幕。"
@@ -83,7 +84,7 @@ HINT_EMPTY_TIMELINE = (
 
 
 def empty_timeline_failure(topic_count: int) -> PipelineFailure:
-    """Step 2 没有留下可用片段。调用方应已确认模型连接成功。"""
+    """旧调用方只返回空列表时的兜底。正常 Step 2 使用本轮报告分类。"""
     return PipelineFailure(
         "ANALYZE",
         f"时间线提取为空：{topic_count} 个话题在对齐并按时长筛选后没有留下可用片段。",
@@ -141,9 +142,12 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
             "ANALYZE", f"时间线模型调用失败：{len(failed_calls)}/{len(chunks)} 个字幕块调用失败，本次没有可用候选。",
             hints[code] + "大纲成功或测试连接成功，不能保证后续长文本请求也成功。", code=code,
         )
-    if chunks and all(chunk.get("outcome") in ("missing_subtitles", "chunk_error") for chunk in chunks):
+    if chunks and all(chunk.get("outcome") == "missing_subtitles" for chunk in chunks):
         return PipelineFailure("ANALYZE", "时间线所需的字幕分块无法读取。",
                                "请重新导入原视频及配套 SRT；保留原项目以便排查。", code="missing_resource")
+    if any(chunk.get("outcome") == "chunk_error" for chunk in chunks):
+        return PipelineFailure("ANALYZE", "时间线分块处理失败，本次没有可用候选。",
+                               "请确认项目数据目录可读写并保留失败阶段反馈；这不是评分阈值问题。", code="unexpected")
     if chunks:
         rejected = {}
         for chunk in chunks:

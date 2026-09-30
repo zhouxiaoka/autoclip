@@ -263,6 +263,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     project_id: project.id,
     stage: failedProgress?.stage,
     error_message: project.error_message || failedProgress?.message || undefined,
+    error_code: project.error_code || undefined,
   }
   const failureText = project.error_message || failedProgress?.message
   const timelineEmpty = classifyTimelineEmpty(failureText, project.error_code)

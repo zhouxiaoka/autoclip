@@ -296,6 +296,7 @@ const ProjectDetailPage: React.FC = () => {
     source: 'failure' as const,
     project_id: currentProject.id,
     error_message: currentProject.error_message || undefined,
+    error_code: currentProject.error_code || undefined,
   }
 
   return (

@@ -17,6 +17,7 @@
  */
 import { posthog, isAnalyticsEnabled, POSTHOG_HOST, POSTHOG_KEY } from './posthog'
 import { settingsApi } from '../services/api'
+import { modelSettingsApi } from '../features/settings/modelSettingsApi'
 import { getRuntimeInfo } from './lifecycle'
 import {
   buildFeedbackDraft,
@@ -41,11 +42,14 @@ export interface FeedbackContext {
   /** 失败态携带 */
   stage?: string
   error_message?: string
+  error_code?: string
   project_id?: string
   /** 设置页 / 失败态都会尽量补齐 */
   llm_provider?: string
   llm_model?: string
   llm_base_url?: string
+  transcription_provider?: string
+  transcription_model?: string
 }
 
 interface SurveyLike {
@@ -83,16 +87,16 @@ export function resolveFeedbackSurvey(): Promise<SurveyLike | null> {
 }
 
 /** 读取当前 LLM provider / 模型，补进反馈上下文；后端不可达时静默忽略。 */
-export async function collectLlmContext(): Promise<Pick<FeedbackContext, 'llm_provider' | 'llm_model' | 'llm_base_url'>> {
-  try {
-    const p = await settingsApi.getCurrentProvider()
-    return {
+export async function collectLlmContext(): Promise<Pick<FeedbackContext, 'llm_provider' | 'llm_model' | 'llm_base_url' | 'transcription_provider' | 'transcription_model'>> {
+  const [provider, models] = await Promise.allSettled([settingsApi.getCurrentProvider(), modelSettingsApi.get()])
+  const p = provider.status === 'fulfilled' ? provider.value : null
+  const transcription = models.status === 'fulfilled' ? models.value.transcription : null
+  return {
       llm_provider: p?.provider,
       llm_model: p?.model,
       llm_base_url: p?.base_url || undefined,
-    }
-  } catch {
-    return {}
+      transcription_provider: transcription?.provider,
+      transcription_model: transcription?.model,
   }
 }
 
@@ -144,11 +148,14 @@ export async function submitFeedback(payload: FeedbackPayload): Promise<Feedback
     source: payload.context.source,
     stage: payload.context.stage,
     errorMessage: payload.context.error_message,
+    errorCode: payload.context.error_code,
     version: runtime.version,
     os: runtime.os,
     arch: runtime.arch,
     llmProvider: payload.context.llm_provider,
     llmModel: payload.context.llm_model,
+    transcriptionProvider: payload.context.transcription_provider,
+    transcriptionModel: payload.context.transcription_model,
   })
   const fallbackUrl = githubFallbackUrl(draft)
   if (!POSTHOG_KEY) return { ok: false, fallbackUrl }

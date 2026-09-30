@@ -181,6 +181,8 @@ def test_timeline_invalid_numeric_and_colon_times_remain_rejected(tmp_path,value
 @pytest.mark.parametrize('wrap', [lambda item: item, lambda item: {'timeline': [item]}, lambda item: {'outline': [item]}])
 def test_unambiguous_compatible_response_shapes_recover_without_model_call(tmp_path, wrap):
     obj = prepared_extractor(tmp_path)
+    from backend.utils.llm_client import LLMClient
+    obj.llm_client.parse_json_response = LLMClient.__new__(LLMClient).parse_json_response
     (obj.llm_raw_output_dir / 'chunk_0.txt').write_text(json.dumps(wrap(topic())))
     obj.llm_client.call_with_retry = lambda *a, **k: pytest.fail('recovery must use the recorded response')
     assert len(obj.extract_timeline([dict(title='current', chunk_index=0)])) == 1
@@ -279,6 +281,40 @@ def test_step2_missing_subtitle_block_points_to_reimport(tmp_path, monkeypatch):
         run_prepared_step2(obj, monkeypatch)
     assert exc.value.code == 'missing_resource'
     assert '重新导入' in exc.value.hint
+
+
+def test_corrupted_chunk_is_not_a_model_or_duration_failure(tmp_path, monkeypatch):
+    from backend.pipeline.failures import PipelineFailure
+    obj = prepared_extractor(tmp_path)
+    (obj.srt_chunks_dir / 'chunk_0.json').write_text('not json')
+    with pytest.raises(PipelineFailure) as exc:
+        run_prepared_step2(obj, monkeypatch)
+    assert exc.value.code == 'unexpected'
+    assert '数据目录' in exc.value.hint
+
+
+def test_live_json_repair_stays_bounded_and_returns_recovered_chunk(tmp_path):
+    obj = prepared_extractor(tmp_path)
+    calls = []
+    def response(prompt, data):
+        calls.append(dict(data))
+        return 'not json' if len(calls) == 1 else json.dumps({'timeline':[topic()]})
+    obj.llm_client.call_with_retry = response
+    assert len(obj.extract_timeline([dict(title='current', chunk_index=0)])) == 1
+    assert len(calls) == 2
+    assert 'additional_instruction' in calls[1]
+    assert obj.extraction_report['chunks'][0]['attempts'] == 2
+
+
+def test_all_live_invalid_replies_stop_after_three_repair_attempts(tmp_path):
+    obj = prepared_extractor(tmp_path)
+    calls = []
+    def response(*a, **k):
+        calls.append(1)
+        return 'not json'
+    obj.llm_client.call_with_retry = response
+    assert obj.extract_timeline([dict(title='current', chunk_index=0)]) == []
+    assert len(calls) == 3
 
 
 def test_step2_refinement_error_never_exports_unvalidated_ranges(tmp_path, monkeypatch):
