@@ -330,6 +330,43 @@ def rewrite(project_id: str, body: RewriteRequest, db: Session = Depends(get_db)
         raise HTTPException(502, '生成文案失败，请检查模型设置后重试；原稿未改动') from None
     return candidate
 
+@router.get('/{project_id}/subtitles')
+def subtitles(project_id: str, db: Session = Depends(get_db)):
+    """Subtitle cues in seconds, for the editor's styled preview overlay."""
+    from backend.pipeline.quality import to_seconds
+    from backend.services.publish_export import _load_srt_entries
+    project_or_404(project_id, db)
+    entries = _load_srt_entries(project_id)
+    return {'cues': [{'start': to_seconds(e['start_time']), 'end': to_seconds(e['end_time']), 'text': e.get('text', '')} for e in entries]}
+
+@router.get('/framing/status')
+def framing_status():
+    from backend.services.studio import framing
+    return framing.get_status()
+
+@router.post('/framing/install')
+def framing_install():
+    from backend.services.studio import framing
+    return {**framing.start_install(), **framing.get_status()}
+
+@router.post('/{project_id}/auto-frame')
+def auto_frame(project_id: str, body: Draft, db: Session = Depends(get_db)):
+    """Centre each scene's crop window on the speaker. Pure analysis: nothing is saved."""
+    from backend.services.publish_export import _probe
+    from backend.services.studio import framing
+    project_or_404(project_id, db)
+    if not framing.is_installed():
+        raise HTTPException(409, '人物识别组件未安装')
+    video = call(jobs.source, project_id)
+    info = _probe(video)
+    if not info.get('width') or not info.get('height'):
+        raise HTTPException(422, '无法读取原视频尺寸')
+    try:
+        return framing.auto_frame(video, body, int(info['width']), int(info['height']))
+    except Exception as error:
+        capture_studio_exception(error, 'auto_frame')
+        raise HTTPException(502, '自动取景失败，可手动调整取景位置') from None
+
 @router.post('/{project_id}/drafts/{draft_id}/export')
 def export(project_id: str, draft_id: str, body: ExportDraftRequest | None = None, db: Session = Depends(get_db)):
     project_or_404(project_id, db)

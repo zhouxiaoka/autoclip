@@ -253,3 +253,117 @@ def test_model_failure_falls_back_to_local_or_frame(data_dir, fake_frame, monkey
     assert result["ok"]
     assert result["method"] in ("local_overlay", "frame")
     assert result.get("warning")
+
+
+class _TextSettings:
+    def __init__(self, settings):
+        self.settings = settings
+
+
+def _text_keys(monkeypatch, **keys):
+    from backend.core import llm_manager
+    monkeypatch.setattr(llm_manager, "get_llm_manager", lambda: _TextSettings(keys))
+
+
+def test_cover_reuses_same_family_text_key_without_persisting(data_dir, monkeypatch):
+    from backend.services import cover
+    for name in ("IMAGE_API_KEY", "IMAGE_PROVIDER", "IMAGE_BASE_URL", "IMAGE_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    _text_keys(monkeypatch, dashscope_api_key="sk-dashscope-text", seed_api_key="ark-seed", infistar_api_key="sk-infistar")
+    cover.save_config(enabled=True, provider="dashscope", model="wanx2.1-t2i-turbo", mode="custom")
+    cfg = cover.load_config()
+    assert cfg.api_key == "sk-dashscope-text" and cfg.key_source == "text_model"
+    assert "sk-dashscope-text" not in cover.config_path().read_text()
+    cover.save_config(provider="seedream")
+    assert cover.load_config().api_key == "ark-seed"
+    cover.save_config(provider="openai", base_url="https://infistar.cc/v1")
+    assert cover.load_config().api_key == "sk-infistar"
+    # 自己填的 key 优先，且会保存
+    cover.save_config(api_key="sk-own-cover-key")
+    cfg = cover.load_config()
+    assert cfg.api_key == "sk-own-cover-key" and cfg.key_source == "own"
+
+
+def test_cover_title_check_uses_vision_model_unless_overridden(data_dir, monkeypatch):
+    from backend.services import cover
+    from backend.services.studio import vision_settings
+    monkeypatch.setattr(vision_settings, "effective", lambda: {"base_url": "https://infistar.cc/v1", "api_key": "sk-v", "model": "gemini-3.8-flash"})
+    cfg = cover.CoverConfig(provider="seedream", model="doubao-seedream-5-0-260128", api_key="ark", base_url="https://ark.cn-beijing.volces.com/api/v3")
+    assert cover.verify_endpoint(cfg) == {"provider": "openai", "api_key": "sk-v", "base_url": "https://infistar.cc/v1", "model": "gemini-3.8-flash"}
+    cfg.ocr_model = "doubao-1.5-vision-pro-32k"
+    assert cover.verify_endpoint(cfg)["model"] == "doubao-1.5-vision-pro-32k"
+
+
+
+def test_cover_follows_text_model_service(data_dir, monkeypatch):
+    from backend.services import cover
+    for name in ("IMAGE_API_KEY", "IMAGE_PROVIDER", "IMAGE_BASE_URL", "IMAGE_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    # 没保存过：跟随模型，但默认不开
+    _text_keys(monkeypatch, llm_provider="openai", cloud_preset="seed", seed_api_key="ark-seed")
+    cfg = cover.load_config()
+    assert cfg.mode == "text_model" and not cfg.enabled
+    cover.save_config(enabled=True, model="doubao-seedream-5-0-260128", mode="text_model")
+    cfg = cover.load_config()
+    assert (cfg.provider, cfg.api_key, cfg.enabled, cfg.configured) == ("seedream", "ark-seed", True, True)
+    assert "ark-seed" not in cover.config_path().read_text()
+    # 换成 Infistar：跟着换到 OpenAI 兼容 images + Infistar 的 key
+    _text_keys(monkeypatch, llm_provider="openai", cloud_preset="infistar", infistar_api_key="sk-inf", openai_base_url="https://infistar.cc/v1")
+    cfg = cover.load_config()
+    assert (cfg.provider, cfg.base_url, cfg.api_key) == ("openai", "https://infistar.cc/v1", "sk-inf")
+    # 换成没有生图的 DeepSeek：自动关掉，封面走截帧
+    _text_keys(monkeypatch, llm_provider="openai", cloud_preset="deepseek", deepseek_api_key="sk-ds")
+    cfg = cover.load_config()
+    assert not cfg.enabled and not cfg.configured
+
+
+def test_model_catalog_marks_vision_and_image_models():
+    from backend.core import model_catalog as mc
+    assert mc.supports_vision("gemini-3.8-flash") and mc.supports_vision("claude-sonnet-5-5")
+    assert mc.supports_vision("doubao-seed-2-1-lite-260915") and mc.supports_vision("qwen-vl-plus")
+    assert not mc.supports_vision("deepseek-flash") and not mc.supports_vision("qwen-plus")
+    assert mc.IMAGE_MODELS["dashscope"][0].startswith("wanx") and "deepseek" not in mc.IMAGE_MODELS
+
+
+def test_gemini_cover_uses_native_multimodal_request():
+    import base64
+    from backend.core.image_providers import generate_image, ImageRequest
+    image = _jpeg()
+    session = _Session([_Resp(payload={'candidates': [{'content': {'parts': [{'text': 'caption'}, {'inlineData': {'mimeType': 'image/jpeg', 'data': base64.b64encode(image).decode()}}]}}]})])
+    result = generate_image(provider='gemini', api_key='test-key', base_url='', request=ImageRequest('cover', 1920, 1080, reference=image, model='gemini-3.1-flash-image'), session=session)
+    assert result == image
+    method, url, args = session.calls[0]
+    assert url.endswith('/models/gemini-3.1-flash-image:generateContent')
+    assert args['headers']['x-goog-api-key'] == 'test-key'
+    assert args['json']['contents'][0]['parts'][0]['inlineData']['data']
+    assert args['json']['generationConfig']['responseModalities'] == ['TEXT', 'IMAGE']
+
+
+@pytest.mark.parametrize('model,route,asynchronous', [('qwen-image-2.0', 'multimodal-generation', False), ('wan2.7-image', 'image-generation', True), ('wan2.6-t2i', 'image-generation', True)])
+def test_modern_dashscope_routes_and_extracts_images(model, route, asynchronous):
+    from backend.core.image_providers import generate_image, ImageRequest
+    image = _jpeg()
+    output = {'output': {'choices': [{'message': {'content': [{'image': 'https://image.example/cover.jpg'}]}}]}}
+    responses = [_Resp(payload={'output': {'task_id': 'task', 'task_status': 'PENDING'}}), _Resp(payload=output)] if asynchronous else [_Resp(payload=output)]
+    session = _Session(responses + [_Resp(content=image)])
+    result = generate_image(provider='dashscope', api_key='test-key', base_url='', request=ImageRequest('cover', 1920, 1080, model=model), session=session, poll_interval=0)
+    assert result == image
+    args = session.calls[0][2]
+    assert session.calls[0][1].endswith(f'/services/aigc/{route}/generation')
+    assert ('X-DashScope-Async' in args['headers']) == asynchronous
+    assert args['json']['input']['messages'][0]['content'] == [{'text': 'cover'}]
+    assert args['json']['parameters']['n'] == 1
+
+
+def test_grok_and_glm_use_vendor_image_parameters():
+    import base64
+    from backend.core.image_providers import generate_image, ImageRequest
+    image = _jpeg()
+    for provider, model in [('grok', 'grok-imagine-image-2.0'), ('glm', 'glm-image')]:
+        session = _Session([_Resp(payload={'data': [{'b64_json': base64.b64encode(image).decode()}]})])
+        assert generate_image(provider=provider, api_key='test-key', base_url='', request=ImageRequest('cover', 1920, 1080, model=model), session=session) == image
+        body = session.calls[0][2]['json']
+        if provider == 'grok':
+            assert body['aspect_ratio'] == '16:9' and 'size' not in body
+        else:
+            assert body['size'] == '1728x960' and 'response_format' not in body

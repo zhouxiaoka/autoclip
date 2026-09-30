@@ -8,7 +8,7 @@ import { defaultImportOptions, goalLabels, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import './studio.css'
 
-export default function CreativeImport({ onImported }: { onImported: () => Promise<void> }) {
+export default function CreativeImport({ onImported, blocked = false, onBlocked }: { onImported: () => Promise<void>; blocked?: boolean; onBlocked?: () => void }) {
   useTranslation()
   const navigate = useNavigate()
   const [source, setSource] = useState<'link' | 'file'>('link')
@@ -22,6 +22,7 @@ export default function CreativeImport({ onImported }: { onImported: () => Promi
   const [error, setError] = useState('')
   const custom = options.goal !== 'auto' || options.language !== 'source' || options.aspect !== null || options.duration !== null || !!subtitle || !!browser
   const submit = async () => {
+    if (blocked) { setError(t("请先连接 AI 服务，再导入视频。")); onBlocked?.(); return }
     if (source === 'file' ? !file : !url.trim()) { setError(t("请先添加视频文件或链接")); return }
     setBusy(true); setError('')
     try {

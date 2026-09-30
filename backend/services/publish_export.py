@@ -158,13 +158,26 @@ def _layout_filters(layout: str, w: Optional[int], h: Optional[int]) -> List[str
     return []
 
 
+# Whole-clip subtitle looks, expressed as libass force_style (colours are &HAABBGGRR).
+SUBTITLE_STYLES: Dict[str, str] = {
+    # White with a thin dark outline: reads on any footage.
+    "clean": "Fontsize=16,Bold=0,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=48,Alignment=2",
+    # Large bold white with a heavy outline for phone screens.
+    "bold": "Fontsize=22,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=3,Shadow=1,MarginV=56,Alignment=2",
+    # White on a translucent dark card.
+    "box": "Fontsize=17,Bold=0,PrimaryColour=&H00FFFFFF,BackColour=&H88000000,OutlineColour=&H88000000,BorderStyle=3,Outline=6,Shadow=0,MarginV=52,Alignment=2",
+    # Bold yellow with a dark outline, the classic short-video caption.
+    "accent": "Fontsize=20,Bold=1,PrimaryColour=&H0000E5FF,OutlineColour=&H00000000,BorderStyle=1,Outline=3,Shadow=0,MarginV=56,Alignment=2",
+}
+
+
 def _build_filter(req: ExportRequest, spec: Dict[str, Any], srt_path: Optional[Path],
-                  title_path: Optional[Path], font: Optional[Path]) -> Optional[str]:
+                  title_path: Optional[Path], font: Optional[Path], subtitle_style: str = "clean") -> Optional[str]:
     layout = req.layout or spec["layout"]
     parts = _layout_filters(layout, spec.get("w"), spec.get("h"))
     last = "base" if parts else "0:v"
     if srt_path is not None:
-        style = "Fontsize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=48,Alignment=2"
+        style = SUBTITLE_STYLES.get(subtitle_style, SUBTITLE_STYLES["clean"])
         if font:
             # FontName 给 libass；mac 上 PingFang SC 通常能解析
             style = "FontName=PingFang SC," + style

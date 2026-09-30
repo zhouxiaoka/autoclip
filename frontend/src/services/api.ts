@@ -275,6 +275,8 @@ export const settingsApi = {
     default_model: string
     models: string[]
     catalog: Record<string, string[]>
+    vision_models?: string[]
+    image_models?: string[]
     error?: string
   }> => {
     return api.get('/settings/available-models', {
@@ -316,6 +318,12 @@ export const settingsApi = {
 }
 
 // 项目相关API
+/** Bundled, already-finished example project (no source video, no model key needed). */
+export const exampleProjectApi = {
+  info: () => api.get<unknown, { available: boolean; project_id: string | null }>('/example-project'),
+  create: () => api.post<unknown, { project_id: string; name: string }>('/example-project/create'),
+}
+
 export const projectApi = {
   // 获取视频分类配置
   getVideoCategories: async (): Promise<VideoCategoriesResponse> => {

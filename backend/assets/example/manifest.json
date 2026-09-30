@@ -1,0 +1,66 @@
+{
+  "version": 2,
+  "project": {
+    "name": "Sam Altman interview",
+    "description": "Clips cut automatically from a 68-minute interview imported by link. The bundled source keeps only the three selected passages, stitched back to back, so every editing step still works.",
+    "source_url": "https://www.youtube.com/watch?v=VeizK1M7V7E&t=2287s",
+    "video_duration": 531,
+    "video_category": "default",
+    "cover": "cover.jpg",
+    "analysis_mode": "subtitle",
+    "produced_at": "2026-09-27T23:07:00+08:00",
+    "source": "source.mp4",
+    "subtitles": "source.srt",
+    "original_duration": 4119
+  },
+  "clips": [
+    {
+      "id": "8",
+      "title": "We over-diversified, then refocused: how OpenAI fixed its strategy",
+      "start_time": "00:00:00,000",
+      "end_time": "00:03:22,452",
+      "original_start_time": "00:41:30,400",
+      "original_end_time": "00:44:52,790",
+      "final_score": 0.91,
+      "outline": "Leadership, Execution, and Course Correction: Lessons from the Last 12 Months",
+      "recommend_reason": "Rare CEO-level accountability meets razor-sharp strategic clarity—turns failure into a compelling narrative of elite execution.",
+      "content": [
+        "Acknowledging missteps: over-diversification on the product side (browser, Sora) at the expense of pre-training and core intelligence capability",
+        "Strategic pivot: ruthless focus on becoming “an intelligent service to people,” with models now world-leading and accelerating",
+        "Leadership structure post-Fiji Simo: Greg Brockman and the CEO co-leading; decision-making evolving from “try fast” to “measure twice, cut once” at scale"
+      ]
+    },
+    {
+      "id": "11",
+      "title": "Why your chats with AI deserve legal privilege",
+      "start_time": "00:03:22,452",
+      "end_time": "00:07:11,471",
+      "original_start_time": "01:00:01,680",
+      "original_end_time": "01:03:50,630",
+      "final_score": 0.96,
+      "outline": "AI Privacy Principles and the Case for AI Privilege Law",
+      "recommend_reason": "Bold, legally grounded, and urgently relevant—introduces 'AI privilege' as a viral-ready concept that reframes privacy as a fundamental human right.",
+      "content": [
+        "Privacy commitments: no training on business data, zero data retention options",
+        "The case for an AI privilege law: conversations with AI should be protected like those with doctors or lawyers",
+        "Why this matters now as people bring their most sensitive questions to AI"
+      ]
+    },
+    {
+      "id": "13",
+      "title": "Superintelligence won’t erase humanity — the real risk is the next 12 months",
+      "start_time": "00:07:11,471",
+      "end_time": "00:08:51,302",
+      "original_start_time": "01:05:47,839",
+      "original_end_time": "01:07:27,589",
+      "final_score": 0.89,
+      "outline": "Human-Centered Vision of Superintelligence and Near-Term Risk Prioritization",
+      "recommend_reason": "Striking emotional contrast—grounds existential AI discourse in warmth, humor, and tangible humanity while naming near-term risks with surgical clarity.",
+      "content": [
+        "Building toward superintelligence while keeping people the main character",
+        "Everyday humanity persists: family, friends, and small joys don’t disappear",
+        "The near-term priority: getting safety and alignment right in the next 12 months"
+      ]
+    }
+  ]
+}

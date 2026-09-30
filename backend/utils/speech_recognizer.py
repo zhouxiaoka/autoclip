@@ -102,7 +102,7 @@ class SpeechRecognitionConfig:
                 raise ValueError(f"不支持的语言代码: {self.language}")
         
         # 验证模型
-        valid_models = ["tiny", "base", "small", "medium", "large"]
+        valid_models = ["tiny", "base", "small", "medium", "large", "large-v3"]
         if self.model not in valid_models:
             raise ValueError(f"不支持的Whisper模型: {self.model}")
         
@@ -749,9 +749,15 @@ def _stash_speech_api_key(config: SpeechRecognitionConfig, api_key: str) -> None
         config.custom_api_key = api_key
 
 
+def configured_whisper_model(fallback: str = 'base') -> str:
+    from backend.services.ai_model_settings import load
+    settings = load()
+    return settings.transcription.model if settings and settings.transcription and settings.transcription.provider == 'whisper_local' else fallback
+
+
 def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = None, 
                                method: str = "auto", language: str = "auto", 
-                               model: str = "base", enable_fallback: bool = True,
+                               model: Optional[str] = None, enable_fallback: Optional[bool] = None,
                                enable_timestamps: bool = True,
                                enable_punctuation: bool = True,
                                enable_speaker_diarization: bool = False,
@@ -780,6 +786,18 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
         SpeechRecognitionError: 语音识别失败
     """
     # 创建配置。本地导入会带上设置里的时间戳 / 超时 / 密钥；缺了这些参数会在进 Whisper 之前 TypeError。
+    from backend.services.ai_model_settings import load as load_model_settings
+    model_settings = load_model_settings()
+    selection = model_settings.transcription if model_settings else None
+    if method == 'auto' and selection and selection.provider == 'cloud':
+        from backend.services.cloud_transcription import transcribe
+        return transcribe(Path(video_path), output_path, model_settings, language, timeout)
+    local_selected = bool(selection and selection.provider == 'whisper_local')
+    if method == 'auto' and local_selected:
+        method = 'whisper_local'
+    if enable_fallback is None:
+        enable_fallback = not local_selected
+    model = model or configured_whisper_model()
     config = SpeechRecognitionConfig(
         method=SpeechRecognitionMethod(method) if method != "auto" else SpeechRecognitionMethod.WHISPER_LOCAL,
         language=LanguageCode(language),
@@ -853,4 +871,3 @@ def get_whisper_models() -> List[str]:
         Whisper模型列表
     """
     return ["tiny", "base", "small", "medium", "large"]
-

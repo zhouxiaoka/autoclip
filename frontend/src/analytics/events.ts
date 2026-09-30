@@ -15,6 +15,10 @@ export const AnalyticsEvent = {
   ProcessingFailed: 'processing_failed',
   /** 设置/更新 LLM API key */
   ApiKeyConfigured: 'api_key_configured',
+  /** 打开赞助商的注册 / 接入说明链接（只记录是哪家、哪个入口） */
+  SponsorLinkOpened: 'sponsor_link_opened',
+  /** 首页空态点开内置示例项目（无 Key、无原片） */
+  ExampleProjectOpened: 'example_project_opened',
 } as const
 
 export type AnalyticsEventName =
@@ -55,10 +59,22 @@ export function trackProcessingFailed(props: {
   trackEvent(AnalyticsEvent.ProcessingFailed, { stage: props.stage, code: props.code })
 }
 
+export function trackSponsorLinkOpened(props: {
+  sponsor: 'infistar'
+  target: 'register' | 'guide'
+  placement: 'settings_model' | 'home_setup'
+}): void {
+  trackEvent(AnalyticsEvent.SponsorLinkOpened, props)
+}
+
 export function trackApiKeyConfigured(props: {
   provider: string
   /** 不要传 key 明文，仅标记是否填写 */
   hasKey: boolean
 }): void {
   trackEvent(AnalyticsEvent.ApiKeyConfigured, props)
+}
+
+export function trackExampleProjectOpened(): void {
+  trackEvent(AnalyticsEvent.ExampleProjectOpened)
 }

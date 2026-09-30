@@ -1,21 +1,24 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Popconfirm, message } from 'antd'
+import { Popconfirm, Select, message } from 'antd'
 import { speechApi, WhisperRuntimeStatus, WhisperModel } from '../services/api'
 import { Btn, ProgressLine, Row, StatusDot } from '../ui'
 
 interface SpeechRecognitionConfigProps {
-  config?: Record<string, unknown>
-  onConfigChange?: (config: Record<string, unknown>) => void
+  hideProvider?: boolean
+  selectedModel?: string
+  onModelChange?: (model: string) => void
 }
 
 // Whisper 运行时 + 模型管理 — Calm Premium 行式布局（见 DESIGN.md）
-const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
+const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = ({ selectedModel = 'base', onModelChange, hideProvider = false }) => {
   useTranslation()
   const [runtime, setRuntime] = useState<WhisperRuntimeStatus | null>(null)
   const [models, setModels] = useState<WhisperModel[]>([])
   const [loading, setLoading] = useState(true)
+  const pendingModel = useRef<string | null>(null)
+  const [preparing, setPreparing] = useState(false)
   const timer = useRef<number | null>(null)
 
   const refresh = useCallback(async () => {
@@ -24,7 +27,7 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
       setRuntime(rt)
       setModels(Array.isArray(ms) ? ms : [])
     } catch {
-      // 后端可能尚未就绪，静默重试
+      // Keep the existing status until the next refresh.
     } finally {
       setLoading(false)
     }
@@ -52,6 +55,8 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
       setRuntime((p) => (p ? { ...p, status: 'installing', progress: 5 } : p))
       refresh()
     } catch (e: any) {
+      pendingModel.current = null
+      setPreparing(false)
       message.error(e?.response?.data?.detail || t("安装失败"))
     }
   }
@@ -87,101 +92,55 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = () => {
     }
   }
 
-  if (loading) return <div className="ac-hint">{t("读取 Whisper 状态…")}</div>
+  useEffect(() => {
+    if (runtime?.status === 'error') { pendingModel.current = null; setPreparing(false) }
+    if (runtime?.status === 'installed' && pendingModel.current) {
+      const model = pendingModel.current
+      pendingModel.current = null
+      void handleDownload(model).finally(() => setPreparing(false))
+    }
+  }, [runtime?.status])
 
+  const selected = models.find(m => m.name === selectedModel)
   const installed = runtime?.status === 'installed'
   const installing = runtime?.status === 'installing'
-  const supported = runtime?.platform_supported !== false
+  const downloading = selected?.status === 'downloading'
+  const ready = installed && selected?.status === 'downloaded'
+  const prepare = async () => {
+    setPreparing(true)
+    if (installed) {
+      await handleDownload(selectedModel)
+      setPreparing(false)
+    } else {
+      pendingModel.current = selectedModel
+      await handleInstall()
+    }
+  }
 
-  return (
-    <>
-      <div className="ac-rows">
-        <Row
-          top
-          label={t("Whisper 运行时")}
-          hint={
-            !supported ? t("当前平台不支持本地转写。")
-              : installed ? t("faster-whisper 已安装{{value1}}。", { value1: runtime?.packages?.length ? `（${runtime.packages.join(', ')}）` : '' })
-              : installing ? (runtime?.message || t("正在安装…"))
-              : runtime?.status === 'error' ? t("安装出错：{{value1}}", { value1: runtime?.message || '' })
-              : t("按需安装，约 200–400 MB（不含 PyTorch）。装好后再选一个模型下载即可。")
-          }
-        >
-          {installed && (
-            <>
-              <StatusDot tone="ok" label={t("已安装")} />
-              <Popconfirm title={t("卸载 Whisper 运行时？已下载的模型不会被删除。")} onConfirm={handleUninstall} okText={t("卸载")} cancelText={t("取消")}>
-                <Btn variant="danger" size="sm">{t("卸载")}</Btn>
-              </Popconfirm>
-            </>
-          )}
-          {installing && (
-            <div style={{ width: 220 }}>
-              <ProgressLine percent={runtime?.progress ?? 5} />
-              <div className="ac-hint" style={{ textAlign: 'right', fontFamily: 'var(--ac-font-mono)' }}>{Math.round(runtime?.progress ?? 5)}%</div>
-            </div>
-          )}
-          {runtime?.status === 'not_installed' && (
-            <Btn variant="cta" size="sm" style={{ height: 32, fontSize: 13, padding: '0 16px' }} onClick={handleInstall} disabled={!supported}>{t("安装")}</Btn>
-          )}
-          {runtime?.status === 'error' && (
-            <Btn size="sm" onClick={handleInstall} disabled={!supported}>{t("重试安装")}</Btn>
-          )}
-        </Row>
-      </div>
-
-      {installing && runtime?.log_tail && (
-        <pre className="ac-input ac-input--mono" style={{ height: 'auto', maxHeight: 120, overflow: 'auto', padding: '8px 12px', margin: '12px 0 0', color: 'var(--ac-sub)', background: 'var(--ac-line-2)', fontSize: 11, whiteSpace: 'pre-wrap' }}>
-          {runtime.log_tail}
-        </pre>
-      )}
-
-      <div className="ac-eyebrow" style={{ marginTop: 40, marginBottom: 12 }}>{t("模型")}</div>
-      {!installed ? (
-        <div className="ac-hint">{t("先安装运行时，再在这里下载模型。")}</div>
-      ) : (
-        <div className="ac-rows">
-          {models.map((m) => {
-            const downloaded = m.status === 'downloaded'
-            const downloading = m.status === 'downloading'
-            return (
-              <Row
-                key={m.name}
-                label={
-                  <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10 }}>
-                    <span className="ac-mono">{m.name}</span>
-                    <span className="ac-mono" style={{ fontSize: 12, color: 'var(--ac-muted)', fontWeight: 400 }}>{m.size}</span>
-                    {downloaded && <StatusDot tone="ok" label={t("已下载")} />}
-                  </span>
-                }
-                hint={
-                  <>
-                    {t(m.description)} {t("· 准确度")}: {t(m.accuracy)} {t("· 速度")}: {t(m.speed)}
-                    {m.status === 'error' && m.errorMessage && <span style={{ color: 'var(--ac-error)' }}> · {m.errorMessage}</span>}
-                  </>
-                }
-              >
-                {downloaded ? (
-                  <Popconfirm title={t("删除模型 {{value1}}？", { value1: m.name })} onConfirm={() => handleDelete(m.name)} okText={t("删除")} cancelText={t("取消")}>
-                    <Btn variant="danger" size="sm">{t("删除")}</Btn>
-                  </Popconfirm>
-                ) : downloading ? (
-                  <div style={{ width: 160 }}>
-                    <ProgressLine percent={m.downloadProgress ?? 0} />
-                    <div className="ac-hint" style={{ textAlign: 'right', fontFamily: 'var(--ac-font-mono)' }}>
-                      {m.downloadProgress != null ? `${Math.round(m.downloadProgress)}%` : t("下载中")}
-                    </div>
-                  </div>
-                ) : (
-                  <Btn size="sm" onClick={() => handleDownload(m.name)}>{t("下载")}</Btn>
-                )}
-              </Row>
-            )
-          })}
-        </div>
-      )}
-    </>
-  )
+  return <div className="ac-rows">
+    {!hideProvider && <Row label={t('提供商')} hint={t('在本机把音频转成字幕，不上传音频，无需 API Key。')}>
+      <span>{t('Whisper · 本地')}</span>
+    </Row>}
+    <Row wide label={t('转写模型')} hint={t('视频没有字幕时使用。模型越大通常越准确，也需要更多时间和内存。')}>
+      <Select aria-label={t('转写模型')} style={{ width: '100%' }} value={selectedModel} loading={loading} disabled={preparing || installing || downloading}
+        options={(models.length ? models.map(m => ({ value: m.name, label: `${m.name} · ${m.size}` })) : ['tiny', 'base', 'small', 'medium', 'large-v3'].map(name => ({ value: name, label: name })))}
+        onChange={onModelChange} />
+    </Row>
+    <Row label={ready ? t('模型已就绪') : t('准备本地模型')} hint={ready ? t('保存设置后，新任务将使用这个模型。') : runtime?.status === 'error' ? runtime.message : selected?.status === 'error' && installed ? selected.errorMessage : t('首次使用需下载模型和必要组件，之后可在本机转写。')}>
+      {ready ? <StatusDot tone="ok" label={t('已就绪')} /> : installing || downloading || preparing ? <div style={{ width: 220 }}>
+        <ProgressLine percent={installing ? runtime?.progress ?? 5 : selected?.downloadProgress ?? 0} />
+        <span className="ac-hint">{installing ? t('正在准备组件…') : t('正在下载模型…')}</span>
+      </div> : <Btn size="sm" disabled={runtime?.platform_supported === false || loading || !runtime} onClick={() => void prepare()}>{t('准备模型')}</Btn>}
+    </Row>
+    {!runtime && !loading && <p className="ac-note">{t('暂时无法读取本地模型状态。')} <Btn variant="text" size="sm" onClick={() => void refresh()}>{t('重试')}</Btn></p>}
+    <details className="ac-disclosure"><summary>{t('本地模型管理')}</summary>
+      {models.filter(m => m.status === 'downloaded').map(m => <Row key={m.name} label={`${m.name} · ${m.size}`}>
+        <Popconfirm title={t('删除模型 {{value1}}？', { value1: m.name })} onConfirm={() => handleDelete(m.name)} okText={t('删除')} cancelText={t('取消')}><Btn variant="danger" size="sm">{t('删除')}</Btn></Popconfirm>
+      </Row>)}
+      {installed && <Row label={t('本地转写组件')}><Popconfirm title={t('卸载 Whisper 运行时？已下载的模型不会被删除。')} onConfirm={handleUninstall} okText={t('卸载')} cancelText={t('取消')}><Btn variant="danger" size="sm">{t('卸载')}</Btn></Popconfirm></Row>}
+      {runtime?.log_tail && <pre className="ac-note" style={{ maxHeight: 120, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{runtime.log_tail}</pre>}
+    </details>
+  </div>
 }
 
 export default SpeechRecognitionConfig

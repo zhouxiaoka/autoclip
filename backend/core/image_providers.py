@@ -15,6 +15,7 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -295,6 +296,10 @@ def _dashscope_bytes(data: dict[str, Any], session: requests.Session) -> bytes |
         url = str(item.get("url") or "")
         if url.startswith(("http://", "https://")):
             return _download(session, url)
+    for choice in output.get('choices') or []:
+        for part in (choice.get('message') or {}).get('content') or []:
+            if isinstance(part, dict) and str(part.get('image', '')).startswith(('https://', 'http://')):
+                return _download(session, part['image'])
     if status == "SUCCEEDED":
         raise ImageError("生图没有返回图片")
     return None
@@ -313,20 +318,54 @@ def generate_dashscope(
     http = _session_for(root, session)
     headers = {**_bearer(api_key, base_url), "X-DashScope-Async": "enable"}
     model = request.model.strip() or "wanx2.1-t2i-turbo"
+    modern_qwen = model.startswith('qwen-image') or model == 'z-image-turbo'
+    modern_wan = model.startswith(('wan2.7-image', 'wan2.6-image', 'wan2.6-t2i'))
+    if modern_qwen or modern_wan:
+        content = [{'text': request.prompt}]
+        if request.reference:
+            if model in {'qwen-image', 'z-image-turbo'} or model.startswith(('qwen-image-plus', 'qwen-image-max')):
+                raise ImageError('该模型不支持参考帧', unsupported_edit=True)
+            content.insert(0, {'image': _reference_data_uri(request.reference)})
+        if modern_qwen:
+            headers.pop('X-DashScope-Async', None)
+        route = 'image-generation' if modern_wan else 'multimodal-generation'
+        size = '928*1664' if request.height > request.width else '1664*928'
+        if model.startswith('wan2.6-t2i'):
+            size = '960*1696' if request.height > request.width else '1696*960'
+        resp = http.post(f'{root}/services/aigc/{route}/generation',
+            headers={**headers, 'Content-Type': 'application/json'},
+            json={'model': model, 'input': {'messages': [{'role': 'user', 'content': content}]},
+                  'parameters': {'size': size, 'n': 1}}, timeout=90)
+    else:
+        return _generate_legacy_dashscope(api_key=api_key, base_url=base_url, request=request, session=http,
+                                         cancel=cancel, poll_interval=poll_interval)
+    return _wait_dashscope(_raise_for_status(resp, edit=bool(request.reference)), http, root, api_key,
+                          cancel=cancel, poll_interval=poll_interval)
+
+
+def _generate_legacy_dashscope(*, api_key, base_url, request, session, cancel, poll_interval):
+    root, http = dashscope_root(base_url), session
+    headers = {**_bearer(api_key, base_url), 'X-DashScope-Async': 'enable'}
+    model = request.model.strip() or 'wanx2.1-t2i-turbo'
     image_input: dict[str, Any] = {"prompt": request.prompt}
     if request.reference:
         image_input["ref_img"] = _reference_data_uri(request.reference)
+    size = ('960*1696' if request.height > request.width else '1696*960') if model.startswith('wan2.5-t2i') else dashscope_size(request.width, request.height)
     resp = http.post(
         f"{root}/services/aigc/text2image/image-synthesis",
         headers={**headers, "Content-Type": "application/json"},
         json={
             "model": model,
             "input": image_input,
-            "parameters": {"size": dashscope_size(request.width, request.height), "n": 1},
+            "parameters": {"size": size, "n": 1},
         },
         timeout=60,
     )
     data = _raise_for_status(resp, edit=bool(request.reference))
+    return _wait_dashscope(data, http, root, api_key, cancel=cancel, poll_interval=poll_interval)
+
+
+def _wait_dashscope(data, http, root, api_key, *, cancel, poll_interval):
     ready = _dashscope_bytes(data, http)
     if ready is not None:
         return ready
@@ -341,11 +380,48 @@ def generate_dashscope(
             time.sleep(poll_interval)
         if cancel is not None and cancel.is_set():
             raise ImageError("已取消")
-        polled = http.get(f"{root}/tasks/{task_id}", headers=_bearer(api_key, base_url), timeout=30)
+        polled = http.get(f"{root}/tasks/{task_id}", headers=_bearer(api_key, root), timeout=30)
         ready = _dashscope_bytes(_raise_for_status(polled), http)
         if ready is not None:
             return ready
     raise ImageError("生图超时")
+
+
+def generate_gemini(*, api_key, base_url, request, session=None):
+    root = (normalize_base_url(base_url) or 'https://generativelanguage.googleapis.com/v1beta').removesuffix('/openai')
+    http = _session_for(root, session)
+    parts = [{'text': request.prompt}]
+    if request.reference:
+        parts.insert(0, {'inlineData': {'mimeType': 'image/jpeg', 'data': base64.b64encode(request.reference).decode('ascii')}})
+    response = http.post(f'{root}/models/{quote(request.model, safe="")}:generateContent',
+        headers={'x-goog-api-key': api_key, 'Content-Type': 'application/json'},
+        json={'contents': [{'role': 'user', 'parts': parts}], 'generationConfig': {
+            'responseModalities': ['TEXT', 'IMAGE'], 'imageConfig': {'aspectRatio': '9:16' if request.height > request.width else '16:9'}}}, timeout=120)
+    data = _raise_for_status(response, edit=bool(request.reference))
+    for candidate in data.get('candidates') or []:
+        for part in (candidate.get('content') or {}).get('parts') or []:
+            inline = part.get('inlineData') or part.get('inline_data') or {}
+            if inline.get('data') and str(inline.get('mimeType') or inline.get('mime_type') or '').startswith('image/'):
+                return _decode_b64(inline['data'])
+    raise ImageError('生图没有返回图片')
+
+
+def generate_vendor_image(*, provider, api_key, base_url, request, session=None):
+    root = normalize_base_url(base_url) or ('https://api.x.ai/v1' if provider == 'grok' else 'https://open.bigmodel.cn/api/paas/v4')
+    http = _session_for(root, session)
+    body = {'model': request.model, 'prompt': request.prompt}
+    route = 'generations'
+    if provider == 'grok':
+        body.update(aspect_ratio='9:16' if request.height > request.width else '16:9', response_format='b64_json', n=1)
+        if request.reference:
+            route = 'edits'
+            body['image'] = {'url': _reference_data_uri(request.reference)}
+    else:
+        if request.reference:
+            raise ImageError('该模型不支持参考帧', unsupported_edit=True)
+        body['size'] = '960x1728' if request.height > request.width else '1728x960'
+    response = http.post(f'{root}/images/{route}', headers={**_bearer(api_key, root), 'Content-Type': 'application/json'}, json=body, timeout=120)
+    return _openai_image(_raise_for_status(response, edit=bool(request.reference)), http)
 
 
 def generate_image(
@@ -360,6 +436,10 @@ def generate_image(
 ) -> bytes:
     kind = (provider or "openai").strip().lower()
     logger.info("封面生图 provider=%s model=%s reference=%s", kind, request.model or "-", bool(request.reference))
+    if kind == 'gemini':
+        return generate_gemini(api_key=api_key, base_url=base_url, request=request, session=session)
+    if kind in {'grok', 'glm'}:
+        return generate_vendor_image(provider=kind, api_key=api_key, base_url=base_url, request=request, session=session)
     if kind == "dashscope":
         return generate_dashscope(
             api_key=api_key,

@@ -12,6 +12,8 @@ export interface CoverConfigView {
   allow_send_frame: boolean
   configured: boolean
   source: string
+  key_source?: 'own' | 'env' | 'text_model' | 'connection' | 'none'
+  mode?: 'text_model' | 'custom'
   note?: string | null
 }
 

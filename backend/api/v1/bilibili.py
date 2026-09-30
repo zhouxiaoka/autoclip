@@ -310,7 +310,7 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
                 video_file_path = Path(video_path)
                 
                 # 根据视频信息选择合适的模型，但始终使用自动语言检测
-                model = "base"  # 默认使用平衡模型
+                model = None  # Use the configured local transcription model
                 language = "auto"  # 始终使用自动语言检测
                 
                 # 可以根据视频标题或描述判断内容类型，选择不同的模型大小
@@ -321,6 +321,8 @@ async def process_download_task(task_id: str, request: BilibiliDownloadRequest, 
                 
                 logger.info(f"使用Whisper生成字幕 - 语言: {language}, 模型: {model}")
                 
+                from backend.utils.speech_recognizer import configured_whisper_model
+                model = configured_whisper_model(model or 'base')
                 generated_subtitle = generate_subtitle_for_video(
                     video_file_path,
                     language=language,
