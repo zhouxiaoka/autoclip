@@ -40,6 +40,10 @@ parser.add_argument("--launch-desktop", action="store_true", help="通过安装�
 parser.add_argument('--source-video', type=Path, default=Path(__file__).resolve().parents[1] / 'backend/assets/example/source.mp4')
 parser.add_argument('--source-srt', type=Path, default=Path(__file__).resolve().parents[1] / 'backend/assets/example/source.srt')
 args = parser.parse_args()
+if args.report:
+    args.report = args.report.resolve()
+args.source_video = args.source_video.resolve(strict=True)
+args.source_srt = args.source_srt.resolve(strict=True)
 resources = args.resources.resolve(strict=True)
 if not Path(sys.executable).resolve().is_relative_to(resources / "python"):
     parser.error("必须用安装目录里的 python.exe 运行，而不是开发环境的 Python")
