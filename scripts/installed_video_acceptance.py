@@ -73,13 +73,32 @@ def run(base, root, resources, source_video, source_srt):
                   'analysis_mode':'subtitle','cover_enabled':False,'allow_send_frame':False}
         headers = {'Origin':'http://tauri.localhost'}
         saved = requests.put(base+'/api/v1/settings/ai-models',json=config,headers=headers,timeout=20)
-        saved.raise_for_status()
-        persisted = requests.get(base+'/api/v1/settings/ai-models',timeout=20).json()
-        assert persisted['analysis']['model']=='installed-smoke-model', persisted
-        assert persisted['connections'][0]['base_url']==connection['base_url'], persisted
-        test = requests.post(base+'/api/v1/settings/ai-models/test',json={'connection':connection,'model':'installed-smoke-model'},headers=headers,timeout=30)
+        if saved.status_code == 404:
+            # Existing release/build artifacts predate named model connections.
+            # Exercise their real settings API rather than patching installed code.
+            settings = requests.get(base+'/api/v1/settings/',timeout=20)
+            settings.raise_for_status()
+            legacy = settings.json()
+            legacy['api'].update(api_provider='openai',api_base_url=connection['base_url'],api_model='installed-smoke-model')
+            legacy['api']['api_keys']['openai']=''
+            saved = requests.put(base+'/api/v1/settings/',json=legacy,headers=headers,timeout=20)
+            saved.raise_for_status()
+            persisted = requests.get(base+'/api/v1/settings/',timeout=20).json()
+            assert persisted['api']['api_provider']=='openai', persisted
+            assert persisted['api']['api_model']=='installed-smoke-model', persisted
+            assert persisted['api']['api_base_url']==connection['base_url'], persisted
+            test = requests.post(base+'/api/v1/settings/test-api',json={'provider':'openai','base_url':connection['base_url'],
+                                 'api_key':'','model':'installed-smoke-model'},headers=headers,timeout=30)
+            settings_api, success_field = 'legacy settings', 'success'
+        else:
+            saved.raise_for_status()
+            persisted = requests.get(base+'/api/v1/settings/ai-models',timeout=20).json()
+            assert persisted['analysis']['model']=='installed-smoke-model', persisted
+            assert persisted['connections'][0]['base_url']==connection['base_url'], persisted
+            test = requests.post(base+'/api/v1/settings/ai-models/test',json={'connection':connection,'model':'installed-smoke-model'},headers=headers,timeout=30)
+            settings_api, success_field = 'named connections', 'ok'
         test.raise_for_status()
-        assert test.json()['ok'], test.text
+        assert test.json()[success_field], test.text
 
         video = root/'公开访谈 45秒.mp4'
         ffmpeg = resources/'ffmpeg'/'ffmpeg.exe'
@@ -117,7 +136,7 @@ def run(base, root, resources, source_video, source_srt):
             assert float(info['format']['duration'])>=20, info
             probes.append({'bytes':path.stat().st_size,'duration_sec':float(info['format']['duration']),'video':'h264','audio':'aac'})
         assert {'connection','outline','timeline','score','title'} <= set(calls), calls
-        return {'status':'passed','provider_saved':True,'provider_connection':'passed','project_status':project['status'],
+        return {'status':'passed','settings_api':settings_api,'provider_saved':True,'provider_connection':'passed','project_status':project['status'],
                 'total_clips':project['total_clips'],'outputs':probes,'fixture_stages':calls,
                 'input':'repository public interview, first 45 seconds, supplied real SRT',
                 'model_mode':'loopback OpenAI protocol fixture; no real model-quality claim or paid call'}
