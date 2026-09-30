@@ -122,3 +122,16 @@ def test_youtube_permanent_failure_is_not_silently_successful(monkeypatch):
     with pytest.raises(module.yt_dlp.utils.DownloadError):
         module.download_with_recovery('https://youtube.com/watch?v=sample', {})
     assert len(calls) == 2
+
+
+def test_completion_uses_actual_step6_counter_names(tmp_path):
+    from backend.services.data_sync_service import DataSyncService
+    from backend.models.project import ProjectStatus
+    project = SimpleNamespace(status=ProjectStatus.PROCESSING)
+    query = SimpleNamespace(filter=lambda *a: SimpleNamespace(first=lambda: project))
+    service = DataSyncService.__new__(DataSyncService)
+    service.db = SimpleNamespace(query=lambda *a: query, commit=lambda: None)
+    output = tmp_path/'output';output.mkdir()
+    (output/'step6_video_output.json').write_text(json.dumps({'clips_generated': 2, 'collections_generated': 1, 'clip_paths':['a','b']}))
+    service._update_project_status_if_completed('fixture',tmp_path)
+    assert project.total_clips == 2 and project.total_collections == 1

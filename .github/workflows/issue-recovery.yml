@@ -29,7 +29,7 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: |
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements.txt numpy
           choco install ffmpeg --yes --no-progress
       - name: Failure recovery regressions
         run: python -m pytest backend/tests/test_issue_closure_regressions.py backend/tests/test_whisper_local_subtitle.py backend/tests/test_whisper_model_download.py backend/tests/test_windows_media_feedback.py backend/tests/test_windows_asyncio.py backend/tests/test_recent_feedback.py backend/tests/test_deepseek_cost_guard.py backend/tests/test_task_submission.py -q

@@ -343,7 +343,7 @@ def test_gpu_runtime_error_retries_on_cpu(tmp_path, monkeypatch):
 
 def test_pyav19_metadata_api_failure_recovers_via_real_ffmpeg(tmp_path, monkeypatch):
     import subprocess
-    import numpy as np
+    np = pytest.importorskip('numpy')
     from backend.utils.ffmpeg_utils import get_ffmpeg_path
     calls = []
     class FakeModel:
