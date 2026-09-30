@@ -21,6 +21,6 @@ body:
     id: env
     attributes:
       label: 版本 / 平台 / 模型
-      placeholder: "v1.2.1 · Windows · 通义千问 qwen-plus"
+      placeholder: "实际版本或 commit SHA · 平台 · 相关服务商与模型"
     validations:
       required: false

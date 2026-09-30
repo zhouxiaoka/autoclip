@@ -8,7 +8,7 @@ body:
     id: version
     attributes:
       label: 版本
-      placeholder: "v1.3.0"
+      placeholder: "实际发布版本 vX.Y.Z；未发布的源码更新请注明"
     validations:
       required: true
   - type: textarea
