@@ -14,7 +14,7 @@ from backend.schemas.project import ProjectCreate, ProjectType
 from backend.services.project_service import ProjectService
 from backend.services.platform_strategy import list_platform_strategies
 from backend.services.studio import store, jobs, intelligence
-from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene, ImportOptions, ConfirmPlan
+from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene, ImportOptions, ConfirmPlan, AppendPlatformsRequest
 
 router = APIRouter()
 
@@ -282,6 +282,19 @@ def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(
     project_or_404(project_id, db)
     call(jobs.confirm_project, project_id, body)
     return {'ok': True}
+
+@router.post('/{project_id}/platforms')
+def append_platforms(project_id: str, body: AppendPlatformsRequest, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    variants = call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())
+    return {'variants': variants}
+
+
+@router.post('/{project_id}/output-variants/{variant_id}/retry')
+def retry_output_variant(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    return call(jobs.retry_variant, project_id, variant_id)
+
 
 @router.post('/{project_id}/drafts')
 def create_draft(project_id: str, body: CreateDraft, db: Session = Depends(get_db)):

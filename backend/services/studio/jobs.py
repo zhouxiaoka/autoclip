@@ -336,6 +336,74 @@ def _auto_generate(project_id, plan):
         mark_project(project_id, 'failed')
 
 
+def append_platform_variants(project_id, platforms, branding):
+    """Derive only new platform versions from saved drafts; never reanalyze source media."""
+    state = store.read(project_id)
+    if not (state.get('generation') or {}).get('auto_start'):
+        raise ValueError('这个项目尚未使用自动生成流程')
+    from backend.services.platform_strategy import normalize_platform_ids, platform_strategy
+    selected = normalize_platform_ids(platforms)
+    draft_by_id = {draft['id']: draft for draft in state.get('drafts', [])}
+    existing = {
+        (item['strategy_id'], tuple((scene['start'], scene['end']) for scene in draft_by_id.get(item['draft_id'], {}).get('scenes', [])))
+        for item in state.get('output_variants', [])
+    }
+    seen_scenes, variants, derived = set(), [], []
+    for base in state.get('drafts', []):
+        signature = tuple((scene['start'], scene['end']) for scene in base.get('scenes', []))
+        if not signature or signature in seen_scenes:
+            continue
+        seen_scenes.add(signature)
+        for strategy_id in selected:
+            if (strategy_id, signature) in existing:
+                continue
+            strategy = platform_strategy(strategy_id)
+            duration = sum(end - start for start, end in signature)
+            if strategy.duration_policy == 'long' and duration < (strategy.min_recommended_duration_sec or 0):
+                continue
+            draft = _apply_strategy({**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy_id)
+            derived.append(draft.model_dump())
+            variants.append({
+                'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': 1,
+                'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
+                'status': 'queued', 'created_at': store.now(),
+            })
+    if not variants:
+        raise ValueError('没有可追加的平台版本；已存在或素材不满足所选平台要求')
+    def persist(data):
+        data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived)
+        data['output_variants'].extend(variants)
+        data['generation'].update(status='rendering')
+        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在追加平台版本', 'created_at': store.now()}
+    store.change(project_id, persist)
+    for variant in variants:
+        draft = next(Draft.model_validate(item) for item in derived if item['id'] == variant['draft_id'])
+        job = export(project_id, draft, brand_outro=bool(branding.get('outro_enabled', True)))
+        store.change(project_id, lambda data, variant_id=variant['id'], job_id=job['job_id']: next(item for item in data['output_variants'] if item['id'] == variant_id).update(render_job_id=job_id))
+    return variants
+
+
+def retry_variant(project_id, variant_id):
+    state = store.read(project_id)
+    variant = next((item for item in state.get('output_variants', []) if item['id'] == variant_id), None)
+    if not variant:
+        raise FileNotFoundError('成片版本不存在')
+    if variant.get('status') != 'failed':
+        raise ValueError('只有失败的成片版本可以重试')
+    raw = next((item for item in state.get('drafts', []) if item['id'] == variant['draft_id']), None)
+    if not raw:
+        raise FileNotFoundError('来源草稿不存在')
+    job = export(project_id, Draft.model_validate(raw), brand_outro=bool(variant['branding'].get('outro_enabled', True)))
+    def update(data):
+        item = next(value for value in data['output_variants'] if value['id'] == variant_id)
+        item.update(status='queued', render_job_id=job['job_id'])
+        item.pop('error', None)
+        data['generation'].update(status='rendering')
+        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在重试成片版本', 'created_at': store.now()}
+    store.change(project_id, update)
+    return job
+
+
 def _sync_variant_status(project_id, job_id, status, error=None):
     def update(data):
         changed = False

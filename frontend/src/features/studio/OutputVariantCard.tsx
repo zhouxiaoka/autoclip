@@ -10,7 +10,7 @@ const platformLabels: Record<string, string> = {
   youtube_long: 'YouTube 视频', bilibili: 'B站', xiaohongshu: '小红书', original: '原画',
 }
 
-export default function OutputVariantCard({ projectId, variant, draft, job }: { projectId: string; variant: OutputVariant; draft?: Draft; job?: RenderJob }) {
+export default function OutputVariantCard({ projectId, variant, draft, job, onRetry }: { projectId: string; variant: OutputVariant; draft?: Draft; job?: RenderJob; onRetry: () => void }) {
   const navigate = useNavigate()
   const completed = variant.status === 'completed' && job?.status === 'completed'
   const failed = variant.status === 'failed'
@@ -26,6 +26,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job }: { 
       {failed && <p className="studio-output-hint studio-error">{variant.error || job?.error || t('这条版本未完成，其他成片不受影响。')}</p>}
       <div className="ac-card-foot"><span className="meta">{platformLabels[variant.strategy_id] || variant.strategy_id}</span><div className="ac-card-actions">
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}`)}>{t('预览与修改')}</Btn>}
+        {failed && <Btn variant="text" onClick={onRetry}>{t('重试这条')}</Btn>}
         {completed && variant.render_job_id && <StudioDownloadLink className="studio-link" projectId={projectId} jobId={variant.render_job_id}/>}
       </div></div>
     </div>

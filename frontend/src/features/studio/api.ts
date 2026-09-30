@@ -1,7 +1,7 @@
 import { observeStudioOperation, studioImportProperties, studioGoals, observeStudioWorkspace } from '../../analytics/studio'
 import { workflow } from '../../analytics/observer'
 import api from '../../services/api'
-import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences, SubtitleCue, FramingStatus, AutoFrameResult, PlatformStrategySummary } from './types'
+import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences, SubtitleCue, FramingStatus, AutoFrameResult, PlatformStrategySummary, OutputVariant } from './types'
 export type SourcePreview = { status: 'idle' | 'queued' | 'running' | 'completed' | 'failed'; version?: string; error?: string }
 export const studioApi = {
   preparePreview: (pid: string): Promise<SourcePreview> => api.post(`/studio/${pid}/source-preview`),
@@ -16,6 +16,8 @@ export const studioApi = {
   autoFrame: (pid: string, draft: Draft): Promise<AutoFrameResult> => api.post(`/studio/${pid}/auto-frame`, draft, { timeout: 120000 }),
   capabilities: (): Promise<{ visual_analysis: boolean; visual_model: string }> => api.get('/studio/capabilities'),
   platformStrategies: (): Promise<{ strategies: PlatformStrategySummary[] }> => api.get('/studio/platform-strategies'),
+  appendPlatforms: (pid: string, platforms: string[], outroEnabled: boolean): Promise<{ variants: OutputVariant[] }> => api.post(`/studio/${pid}/platforms`, { platforms, branding: { outro_enabled: outroEnabled, outro_version: 'v1' } }),
+  retryOutputVariant: (pid: string, variantId: string): Promise<RenderJob> => api.post(`/studio/${pid}/output-variants/${variantId}/retry`),
   get: (pid: string, signal?: AbortSignal): Promise<Workspace> => observeStudioWorkspace(pid, () => api.get(`/studio/${pid}`, { signal })),
   titleThumbnail: (style: string, version = 6) => `${api.defaults.baseURL}/studio/title-presets/${style}/thumbnail?v=${version}`,
   titlePreview: (pid: string, draft: Draft, signal?: AbortSignal, layer = 'artwork'): Promise<Blob> => api.post(`/studio/${pid}/title-preview?layer=${layer}`, draft, {responseType:'blob', signal}),

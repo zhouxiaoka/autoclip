@@ -19,6 +19,52 @@ class Immediate:
 def recommendation(goal='highlight'):
     return {'content_type':'gameplay' if goal!='content' else 'talk', 'goal':goal, 'reason':'测试证据', 'confidence':.8, 'aspect':'original', 'duration':30}
 
+def test_append_platforms_reuses_saved_drafts_without_reanalysis(client, root, monkeypatch):
+    from backend.services.studio.models import Draft, Scene
+    original = Draft(id='base', title='Saved output', scenes=[Scene(id='scene', label='Scene', start=0, end=1)], subtitles=False).model_dump()
+    store.write('p1', {
+        'schema_version': 2, 'drafts': [original], 'events': [], 'jobs': [],
+        'analysis': {'status': 'completed'},
+        'generation': {'auto_start': True, 'status': 'completed', 'branding': {'outro_enabled': True, 'outro_version': 'v1'}},
+        'output_variants': [{'id': 'done', 'draft_id': 'base', 'draft_revision': 1, 'strategy_id': 'douyin', 'strategy_version': 1, 'branding': {'outro_enabled': True, 'outro_version': 'v1'}, 'status': 'completed', 'render_job_id': 'old'}],
+    })
+    calls = []
+    monkeypatch.setattr(jobs, 'run_content', lambda *_: pytest.fail('must not rerun content analysis'))
+    monkeypatch.setattr(jobs, 'analyze', lambda *_: pytest.fail('must not rerun visual analysis'))
+    monkeypatch.setattr(jobs, 'export', lambda _pid, draft, **kwargs: calls.append((draft, kwargs)) or {'job_id': 'new-job', 'status': 'queued'})
+
+    response = client.post('/studio/p1/platforms', json={'platforms': ['tiktok']})
+    assert response.status_code == 200, response.text
+    state = client.get('/studio/p1').json()
+    assert len(state['output_variants']) == 2
+    added = next(item for item in state['output_variants'] if item['strategy_id'] == 'tiktok')
+    assert added['draft_id'] != 'base' and added['render_job_id'] == 'new-job'
+    assert state['output_variants'][0]['status'] == 'completed'
+    assert len(calls) == 1 and calls[0][1] == {'brand_outro': True}
+
+
+def test_retry_variant_only_requeues_failed_output(client, root, monkeypatch):
+    draft = jobs.Draft(id='failed-draft', title='Retry', scenes=[jobs.Scene(id='scene', label='Scene', start=0, end=1)], subtitles=False).model_dump()
+    store.write('p1', {
+        'schema_version': 2, 'drafts': [draft], 'events': [], 'jobs': [], 'analysis': {'status': 'failed'},
+        'generation': {'auto_start': True, 'status': 'partial'},
+        'output_variants': [
+            {'id': 'completed', 'draft_id': 'failed-draft', 'draft_revision': 1, 'strategy_id': 'douyin', 'strategy_version': 1, 'branding': {'outro_enabled': True, 'outro_version': 'v1'}, 'status': 'completed', 'render_job_id': 'old'},
+            {'id': 'failed', 'draft_id': 'failed-draft', 'draft_revision': 1, 'strategy_id': 'tiktok', 'strategy_version': 1, 'branding': {'outro_enabled': False, 'outro_version': 'v1'}, 'status': 'failed', 'render_job_id': 'bad', 'error': 'encoder stopped'},
+        ],
+    })
+    calls = []
+    monkeypatch.setattr(jobs, 'export', lambda _pid, value, **kwargs: calls.append((value, kwargs)) or {'job_id': 'retry-job', 'status': 'queued'})
+
+    response = client.post('/studio/p1/output-variants/failed/retry')
+    assert response.status_code == 200, response.text
+    state = client.get('/studio/p1').json()
+    retried = next(item for item in state['output_variants'] if item['id'] == 'failed')
+    assert retried['status'] == 'queued' and retried['render_job_id'] == 'retry-job' and 'error' not in retried
+    assert next(item for item in state['output_variants'] if item['id'] == 'completed')['status'] == 'completed'
+    assert calls[0][1] == {'brand_outro': False}
+
+
 def test_auto_variant_passes_branding_to_render_job(client, source, monkeypatch):
     submitted = []
     class CaptureExecutor:

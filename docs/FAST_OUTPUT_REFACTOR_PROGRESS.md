@@ -189,3 +189,32 @@ backend/tests/test_studio.py
 - 片尾目前使用运行时 `drawtext`，还没有专用透明品牌图形资产；视觉设计可在后续包替换资源，但输出语义与缓存版本必须保持稳定。
 - legacy/publish API 尚未公开片尾开关，当前只为服务层和自动 variant 接通。
 - 仍需进行桌面端真实导入、自动渲染、原生下载与片尾逐帧验收。
+
+## 包 4：追加平台版本与单版本重试
+
+状态：已完成，待合入。
+
+### 完成内容
+
+- 新增 `POST /studio/{project_id}/platforms`：仅对自动项目的已保存草稿派生新平台版本，绝不调用 `run_content()` 或视觉 `analyze()`。
+- 新增 `POST /studio/{project_id}/output-variants/{variant_id}/retry`：只重试失败 variant，保留该版本自己的平台策略和片尾设置，已完成版本不变。
+- 追加逻辑按“平台策略 + 镜头范围”去重，避免同一内容重复编码成相同平台版本。
+- 结果页提供“追加平台版本”面板和失败卡片的“重试这条”，复用现有 platform picker、workspace polling 和项目的片尾偏好。
+- 为新增 API、禁止二次理解、partial 状态保留、前端 endpoint 绑定和八语文案键补充回归。
+
+### 已验证
+
+```text
+backend: 156 passed
+frontend i18n / quick output / variant actions: 11 passed
+```
+
+### 下一包
+
+自动输出的可解释性与匿名增长观测：将结果页展示为何选中/为何跳过某平台的受控结构化理由，并补全 material origin、平台版本、片尾与下载/分享的匿名白名单事件。之后进行真实桌面端冒烟。
+
+### 主要风险
+
+- 追加 API 当前从已保存草稿派生，尚未单独标记 ContentProfile 版本；后续理解策略升级时要加 analysis version 以判断能否复用。
+- 多平台派生仍逐个编码，策略等价时的共享渲染可作为性能优化，不应在可靠性工作包中提前合并。
+- 尚未实现系统分享、案例征集与远端公开链接，当前增长能力仍是品牌片尾与可直接下载的成片。
