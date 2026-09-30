@@ -153,8 +153,8 @@ def download(project_id, url, browser):
     options = {'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]', 'outtmpl': str(folder / 'input.%(ext)s'), 'merge_output_format': 'mp4', 'noplaylist': True, 'quiet': True, 'ffmpeg_location': get_ffmpeg_path(), 'socket_timeout': 30, 'retries': 2, 'progress_hooks': [download_progress_hook(project_id)]}
     if browser:
         options['cookiesfrombrowser'] = (browser,)
-    with yt_dlp.YoutubeDL(options) as downloader:
-        downloader.download([url])
+    from backend.utils.download_recovery import download_with_recovery
+    download_with_recovery(url, options)
     from backend.core.database import SessionLocal
     from backend.models.project import Project
     from backend.utils.thumbnail_generator import generate_project_thumbnail

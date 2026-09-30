@@ -84,3 +84,41 @@ def test_collection_limit_and_valid_small_collection_are_preserved(monkeypatch, 
     saved['max_clips_per_collection'] = 4
     next_engine = ClusteringEngine(tmp_path, {'clustering': prompt})
     assert len(next_engine.cluster_clips(clips)[0]['clip_ids']) == 4
+
+
+def test_youtube_subtitle_and_format_failures_recover_with_bounded_attempts(monkeypatch):
+    from backend.utils import download_recovery as module
+    calls = []
+    class Downloader:
+        def __init__(self, opts): self.opts = dict(opts)
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def download(self, urls):
+            calls.append(self.opts)
+            if len(calls) == 1: raise module.yt_dlp.utils.DownloadError('Unable to download subtitles: HTTP Error 429')
+            if len(calls) == 2: raise module.yt_dlp.utils.DownloadError('HTTP Error 403: Forbidden')
+            return 0
+    monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Downloader)
+    opts = {'writesubtitles': True, 'writeautomaticsub': True, 'format': 'best'}
+    module.download_with_recovery('https://youtube.com/watch?v=sample', opts)
+    assert len(calls) == 3
+    assert not calls[1]['writesubtitles']
+    assert 'm3u8' in calls[2]['format']
+    assert opts['writesubtitles'] is True
+    assert all(c['skip_unavailable_fragments'] is False and c['fragment_retries'] == 2 for c in calls)
+
+
+def test_youtube_permanent_failure_is_not_silently_successful(monkeypatch):
+    from backend.utils import download_recovery as module
+    calls = []
+    class Downloader:
+        def __init__(self, opts): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def download(self, urls):
+            calls.append(urls)
+            raise module.yt_dlp.utils.DownloadError('HTTP Error 403: Forbidden')
+    monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Downloader)
+    with pytest.raises(module.yt_dlp.utils.DownloadError):
+        module.download_with_recovery('https://youtube.com/watch?v=sample', {})
+    assert len(calls) == 2
