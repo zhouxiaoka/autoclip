@@ -5,8 +5,8 @@ from copy import deepcopy
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from backend.services.studio import store
-from backend.services.studio.models import Draft, Preferences
+from backend.services.studio import intelligence, store
+from backend.services.studio.models import Draft, Preferences, Scene
 from backend.services.studio.intelligence import analyze, make_drafts, VisionRequestError
 from backend.services.studio.render import render_draft
 
@@ -55,11 +55,14 @@ def _render(project_id, draft, job_id):
         update(status='running', percent=5)
         result = render_draft(project_id, source(project_id), draft, job_id, lambda p: update(percent=p))
         update(status='completed', percent=100, result=result, duration_ms=round((monotonic() - started) * 1000))
+        _sync_variant_status(project_id, job_id, 'completed')
     except Exception as error:
         logger.warning('Studio render failed: %s', type(error).__name__)
         capture_studio_exception(error, 'render')
         try:
-            update(status='failed', error=str(error)[:700], error_code=studio_error_code(error), duration_ms=round((monotonic() - started) * 1000))
+            message = str(error)[:700]
+            update(status='failed', error=message, error_code=studio_error_code(error), duration_ms=round((monotonic() - started) * 1000))
+            _sync_variant_status(project_id, job_id, 'failed', message)
         except FileNotFoundError:
             pass
 
@@ -213,6 +216,143 @@ def run_content(project_id, video):
 
     return clips
 
+def _apply_strategy(draft, strategy_id):
+    """Materialize platform packaging defaults without reinterpreting content."""
+    from backend.services.platform_strategy import platform_strategy
+    strategy = platform_strategy(strategy_id)
+    value = dict(draft)
+    value.update(
+        aspect=strategy.aspect,
+        layout=strategy.layout if strategy.layout != 'none' else value.get('layout', 'fit'),
+        subtitle_style=strategy.subtitle_style,
+        title_style=strategy.title_style,
+        title_motion=strategy.title_motion,
+    )
+    if value['title_style'] == 'editorial':
+        value['title_template_version'] = max(2, value.get('title_template_version', 1))
+    elif value['title_style'] == 'comic':
+        value['title_template_version'] = 6
+    return Draft.model_validate(value)
+
+
+def _content_drafts(project_id, plan, video):
+    """Create drafts once from the selected content route, before platform derivation."""
+    route = plan.get('recommended_analysis', 'subtitle')
+    prefs = Preferences.model_validate(plan['preferences'])
+    if route == 'subtitle' or prefs.goal == 'content':
+        clips = run_content(project_id, video)
+        drafts = []
+        for clip in clips:
+            try:
+                from backend.utils.text_processor import TextProcessor
+                start = float(clip.get('start_time_seconds')) if clip.get('start_time_seconds') is not None else TextProcessor.time_to_seconds(clip['start_time'])
+                end = float(clip.get('end_time_seconds')) if clip.get('end_time_seconds') is not None else TextProcessor.time_to_seconds(clip['end_time'])
+                scene = Scene(
+                    id=uuid.uuid4().hex,
+                    label=str(clip.get('generated_title') or clip.get('outline') or '内容片段')[:120],
+                    start=start,
+                    end=end,
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            intelligence.validate_scenes([scene], intelligence._probe(video).get('duration', 0))
+            drafts.append(Draft(
+                id=uuid.uuid4().hex, title=scene.label, scenes=[scene], origin='auto-content',
+                language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit',
+                subtitles=True,
+            ).model_dump())
+        if not drafts:
+            raise ValueError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
+        return drafts
+    if route != 'visual':
+        raise ValueError('没有可用的自动分析路径，请检查模型设置后重试')
+    if not intelligence.ready():
+        raise ValueError('请先在设置中配置视觉理解模型')
+    events, coverage = analyze(video, prefs)
+    drafts = make_drafts(events, prefs, plan.get('overrides', {}).get('instruction', ''), source_duration=intelligence._probe(video).get('duration'))
+    return drafts, [event.model_dump() for event in events], coverage
+
+
+def _auto_generate(project_id, plan):
+    """Produce and render platform variants after the cheap screening pass."""
+    started = monotonic()
+    state = store.read(project_id)
+    generation = state.get('generation') or {}
+    platforms = generation.get('requested_platforms') or []
+    branding = generation.get('branding') or {'outro_enabled': True, 'outro_version': 'v1'}
+    video = source(project_id)
+    skipped = []
+    try:
+        produced = _content_drafts(project_id, plan, video)
+        if isinstance(produced, tuple):
+            base_drafts, events, coverage = produced
+        else:
+            base_drafts, events, coverage = produced, [], None
+        variants = []
+        derived_drafts = []
+        from backend.services.platform_strategy import platform_strategy
+        for base in base_drafts:
+            for strategy_id in platforms:
+                strategy = platform_strategy(strategy_id)
+                duration = sum(scene['end'] - scene['start'] for scene in base['scenes'])
+                if strategy.duration_policy == 'long' and duration < (strategy.min_recommended_duration_sec or 0):
+                    skipped.append({'strategy_id': strategy_id, 'reason': '素材没有足够完整的长内容'})
+                    continue
+                value = {**base, 'id': uuid.uuid4().hex, 'revision': 1}
+                draft = _apply_strategy(value, strategy_id)
+                derived_drafts.append(draft.model_dump())
+                variant_id = uuid.uuid4().hex
+                variants.append({
+                    'id': variant_id, 'draft_id': draft.id, 'draft_revision': draft.revision,
+                    'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
+                    'status': 'queued', 'created_at': store.now(),
+                })
+        if not variants:
+            raise ValueError('所选平台没有可生成的完整内容版本')
+        def persist(data):
+            data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived_drafts)
+            if events:
+                data['events'] = events
+            data['output_variants'].extend(variants)
+            data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now())
+            data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在生成可发布成片', 'created_at': store.now()}
+        store.change(project_id, persist)
+        for variant in variants:
+            draft = next(Draft.model_validate(item) for item in derived_drafts if item['id'] == variant['draft_id'])
+            job = export(project_id, draft)
+            def attach(data, variant_id=variant['id'], job_id=job['job_id']):
+                next(item for item in data['output_variants'] if item['id'] == variant_id)['render_job_id'] = job_id
+            store.change(project_id, attach)
+    except Exception as error:
+        capture_studio_exception(error, 'production')
+        def fail(data):
+            if data.get('generation'):
+                data['generation'].update(status='failed', error=str(error)[:700], skipped=skipped)
+            data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': str(error)[:700], 'duration_ms': round((monotonic() - started) * 1000)}
+        store.change(project_id, fail)
+        mark_project(project_id, 'failed')
+
+
+def _sync_variant_status(project_id, job_id, status, error=None):
+    def update(data):
+        changed = False
+        for variant in data.get('output_variants', []):
+            if variant.get('render_job_id') == job_id:
+                variant.update(status=status)
+                if error:
+                    variant['error'] = error
+                changed = True
+        if not changed:
+            return
+        variants = data['output_variants']
+        if all(item['status'] in ('completed', 'failed') for item in variants):
+            completed = [item for item in variants if item['status'] == 'completed']
+            outcome = 'completed' if len(completed) == len(variants) else 'partial' if completed else 'failed'
+            data['generation'].update(status=outcome, completed_variant_count=len(completed))
+            data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'outcome': outcome, 'created_at': store.now()}
+    store.change(project_id, update)
+
+
 def inspect_project(project_id, options, url=None, browser=None):
     """Only ingest and screen. Expensive production requires an explicit confirmation."""
     # Reserve and dispatch together so another request cannot observe an
@@ -256,6 +396,23 @@ def _inspect(project_id, options, url, browser):
         plan = recommend(source(project_id), options)
         ensure_project_thumbnail(project_id)
         plan['id'] = uuid.uuid4().hex
+        if options.auto_start:
+            def start_automatic(data):
+                data.update(plan=plan, analysis={'status': 'running', 'phase': 'production', 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
+                data['generation'].update(status='production', started_at=store.now())
+            store.change(project_id, start_automatic)
+            mark_project(project_id, 'processing', creative=plan['preferences'], awaiting_confirmation=False, import_staging=False)
+            try:
+                executor.submit(_auto_generate, project_id, plan)
+            except Exception as error:
+                capture_studio_exception(error, 'dispatch')
+                message = '自动制作任务未能启动，请重试；原素材已保留'
+                def fail_automatic(data):
+                    data['generation'].update(status='failed', error=message)
+                    data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': message}
+                store.change(project_id, fail_automatic)
+                mark_project(project_id, 'failed')
+            return
         def awaiting_confirmation(data):
             data.update(plan=plan, analysis={'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)})
             if data.get('generation'):

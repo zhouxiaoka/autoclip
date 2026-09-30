@@ -19,6 +19,85 @@ class Immediate:
 def recommendation(goal='highlight'):
     return {'content_type':'gameplay' if goal!='content' else 'talk', 'goal':goal, 'reason':'测试证据', 'confidence':.8, 'aspect':'original', 'duration':30}
 
+def test_variant_terminal_states_preserve_partial_success(root):
+    store.write('p1', {
+        'schema_version': 2, 'drafts': [], 'events': [], 'jobs': [],
+        'analysis': {'status': 'running'},
+        'generation': {'status': 'rendering'},
+        'output_variants': [
+            {'id': 'one', 'draft_id': 'draft-one', 'draft_revision': 1, 'strategy_id': 'tiktok', 'strategy_version': 1, 'branding': {'outro_enabled': True, 'outro_version': 'v1'}, 'status': 'running', 'render_job_id': 'job-one'},
+            {'id': 'two', 'draft_id': 'draft-two', 'draft_revision': 1, 'strategy_id': 'youtube_shorts', 'strategy_version': 1, 'branding': {'outro_enabled': True, 'outro_version': 'v1'}, 'status': 'running', 'render_job_id': 'job-two'},
+        ],
+    })
+    jobs._sync_variant_status('p1', 'job-one', 'completed')
+    state = store.read('p1')
+    assert state['generation']['status'] == 'rendering'
+    jobs._sync_variant_status('p1', 'job-two', 'failed', 'encoder stopped')
+    state = store.read('p1')
+    assert state['generation']['status'] == 'partial'
+    assert state['generation']['completed_variant_count'] == 1
+    assert state['analysis']['outcome'] == 'partial'
+    assert state['output_variants'][1]['error'] == 'encoder stopped'
+
+
+def test_auto_start_skips_ineligible_long_output_without_faking_duration(client, source, monkeypatch):
+    class ImmediateAuto:
+        def submit(self, fn, *args):
+            return fn(*args)
+
+    monkeypatch.setattr(jobs, 'executor', ImmediateAuto())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    monkeypatch.setattr(jobs, 'run_content', lambda *args: [
+        {'generated_title': '短观点', 'start_time': '00:00:00,000', 'end_time': '00:00:01,000'},
+    ])
+    monkeypatch.setattr(jobs, 'export', lambda *_: (_ for _ in ()).throw(AssertionError('long form must not render')))
+
+    response = client.post(
+        '/studio/import',
+        data={'auto_start': 'true', 'platforms': 'youtube_long'},
+        files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')},
+    )
+    state = client.get('/studio/' + response.json()['project_id']).json()
+    assert state['generation']['status'] == 'failed'
+    assert state['output_variants'] == []
+    assert state['generation']['skipped'] == [{'strategy_id': 'youtube_long', 'reason': '素材没有足够完整的长内容'}]
+
+
+def test_auto_start_creates_platform_variants_without_confirmation(client, source, monkeypatch):
+    class ImmediateAuto:
+        def submit(self, fn, *args):
+            return fn(*args)
+
+    monkeypatch.setattr(jobs, 'executor', ImmediateAuto())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    monkeypatch.setattr(jobs, 'run_content', lambda *args: [
+        {'generated_title': '完整观点', 'start_time': '00:00:00,000', 'end_time': '00:00:01,000'},
+    ])
+    exports = []
+    def fake_export(project_id, draft):
+        exports.append(draft)
+        return {'job_id': f'job-{draft.id}', 'status': 'queued'}
+    monkeypatch.setattr(jobs, 'export', fake_export)
+
+    response = client.post(
+        '/studio/import',
+        data={'auto_start': 'true', 'platforms': 'tiktok', 'name': 'Automatic output'},
+        files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')},
+    )
+    assert response.status_code == 200, response.text
+    state = client.get('/studio/' + response.json()['project_id']).json()
+    assert state['analysis']['phase'] == 'rendering', state['generation'].get('error')
+    assert state['generation']['status'] == 'rendering'
+    assert state['generation']['requested_platforms'] == ['tiktok']
+    assert len(state['output_variants']) == len(exports) == 1
+    variant = state['output_variants'][0]
+    assert variant['strategy_id'] == 'tiktok'
+    assert variant['draft_id'] == exports[0].id
+    assert variant['render_job_id'] == f'job-{exports[0].id}'
+    assert state['plan']['id']
+    assert state['analysis']['status'] != 'awaiting_confirmation'
+
+
 def test_async_analysis_failure_persists_error_after_exception_scope(client, monkeypatch):
     monkeypatch.setattr(jobs, 'executor', Immediate())
     monkeypatch.setattr(intelligence, 'ready', lambda: True)

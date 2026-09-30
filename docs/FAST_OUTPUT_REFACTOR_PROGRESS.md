@@ -85,3 +85,39 @@ Studio v2 数据契约与自动编排：导入选择平台后，自动完成理�
 - 当前 `OutputVariant` 只是数据契约，尚未关联 render job 或用户可见结果卡，不能提前在 API/UI 暴露“追加平台”。
 - 自动路径必须把理解、制作和渲染分成可恢复阶段，不能将一次 executor 中断误报为所有结果失败。
 - 多平台必须共享理解结果；平台差异只在草稿派生与渲染阶段产生。
+
+## 包 2B-Backend：自动生产、平台 variant 与终态聚合
+
+状态：已完成，待合入。
+
+### 完成内容
+
+- 仅当导入请求显式传 `auto_start=true` 时，筛查完成后直接进入自动生产；旧客户端仍停在 `awaiting_confirmation`。
+- 自动路径将一次字幕/视觉理解的候选转为独立的每平台草稿和 `OutputVariant`，并自动提交既有 Studio render job。
+- 每个 variant 使用独立 draft ID 和 revision，避免多个平台共享可编辑快照或重试状态。
+- 自动路径按策略应用画幅、布局、字幕样式、标题样式与动效默认值。
+- 对 YouTube 长视频等长内容策略，候选不足软下限时不渲染、不填充、不拼凑；generation 保留受控 skipped 原因供结果页解释。
+- render job 完成/失败会同步到对应 variant；全部完成、部分成功和全部失败分别聚合为 `completed`、`partial`、`failed`。
+- 修复自动内容路径的时间解析，支持流水线返回 SRT 时间而非秒数。
+- 自动 executor 提交失败会写入可见失败状态，不会永久停在 production。
+
+### 已验证
+
+```text
+/Users/zhoukk/autoclip/venv/bin/pytest \
+  backend/tests/test_smart_import.py \
+  backend/tests/test_studio.py \
+  backend/tests/test_platform_strategy.py -q
+
+157 passed in 82.37s
+```
+
+### 下一包
+
+前端快速入口和结果页：首页平台选择显式传 `auto_start=true`，新项目不再去确认页；结果页用 OutputVariant 展示自动进度、播放、下载、编辑和失败重试。随后加入品牌片尾的统一 finalization。
+
+### 主要风险
+
+- 当前浏览器页面仍不会传 `auto_start=true`，因此线上默认体验尚未改变。
+- 自动多平台任务目前独立编码每个 variant，后续需要策略去重以避免对视觉相同的平台重复渲染。
+- 尚未实现追加平台 API、品牌片尾、variant 专用下载入口和跨平台发布按 variant 分组。
