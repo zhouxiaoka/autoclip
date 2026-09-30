@@ -1404,5 +1404,10 @@
   "当前镜头显示方式": "Como esta cena é exibida",
   "对准人物": "Seguir pessoa",
   "完整画面": "Quadro inteiro",
-  "原片预览 · 成片取 {{range}} · 字幕、翻译以渲染结果为准": "Prévia do original · o clipe usa {{range}} · legendas e tradução seguem a renderização"
+  "原片预览 · 成片取 {{range}} · 字幕、翻译以渲染结果为准": "Prévia do original · o clipe usa {{range}} · legendas e tradução seguem a renderização",
+  "播放控制": "Reprodução",
+  "暂停": "Pausar",
+  "成片进度": "Posição do clipe",
+  "静音": "Silenciar",
+  "取消静音": "Ativar som"
 }

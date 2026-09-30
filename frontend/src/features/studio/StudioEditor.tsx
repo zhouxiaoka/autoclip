@@ -6,6 +6,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Btn, Dialog, ProgressLine, Row, fmtDuration } from '../../ui'
 import { studioApi, errorText, type SourcePreview } from './api'
 import { useWorkspace } from './useWorkspace'
+import PlayerBar from './PlayerBar'
 import { CropPoint, Draft, Scene, SubtitleCue, languages, draftDuration, draftError, moveScene, applyCandidate, portraitDesign, cropAt, frameModeAt, patchShot } from './types'
 import CandidatePicker from './CandidatePicker'
 import TitleArtwork from './TitleArtwork'
@@ -39,6 +40,9 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const [sourcePreview, setSourcePreview] = useState<SourcePreview>({status: 'idle'})
   const [cues, setCues] = useState<SubtitleCue[]>([])
   const [currentTime, setCurrentTime] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const [muted, setMuted] = useState(false)
+  const [renderedDuration, setRenderedDuration] = useState(0)
   const [framing, setFraming] = useState<FramingState>({ busy: false })
   useEffect(() => {
     const controller = new AbortController()
@@ -117,6 +121,10 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   const dirty = !!draft && JSON.stringify(draft) !== saved
   const artworkStyle = isArtworkStyle(draft?.title_style)
   const scene = draft?.scenes[selected] || draft?.scenes[0]
+  // The preview transport runs on the clip's own timeline: 0 = scene start (or rendered clip start).
+  const playBase = showRendered ? 0 : scene?.start ?? 0
+  const playLength = showRendered ? renderedDuration : scene ? scene.end - scene.start : 0
+  const togglePlay = () => { const v = video.current; if (!v) return; if (v.paused) void v.play().catch(() => undefined); else v.pause() }
   const jobs = workspace.jobs.filter(j => j.draft_id === draftId)
   const exportState = draft ? draftExportState(draft, jobs) : undefined
   const currentJob = !dirty ? exportState?.completed || exportState?.failure : undefined
@@ -145,6 +153,7 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   useEffect(() => {
     if (video.current && scene && !showRendered) video.current.currentTime = scene.start
   }, [scene?.id, scene?.start, showRendered])
+  useEffect(() => { if (draft) setMuted(!draft.original_audio) }, [draft?.original_audio])
   const patch = (changes: Partial<Draft>) => { if (draft) { setDraft({...draft, ...changes}); setShowRendered(false); setError('') } }
   const save = async (): Promise<Draft> => {
     if (!draft) throw new Error(t("草稿不存在"))
@@ -187,11 +196,14 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     <fieldset disabled={!!busy} className="studio-fieldset">
       <div className="studio-editor-grid"><section className="studio-editor-main"><div className="studio-editor-sticky"><div className={`studio-stage studio-stage--${draft.aspect}`}>
         <div className="studio-video-frame" style={{aspectRatio: draft.aspect==='portrait'?'9/16':draft.aspect==='landscape'?'16/9':undefined}}>
-          <video ref={video} controls preload="metadata" muted={!draft.original_audio} onError={() => setPlaybackError(true)} onLoadedData={() => setPlaybackError(false)} src={showRendered && previewUrl ? previewUrl : sourcePreview.status === 'completed' && sourcePreview.version ? studioApi.compatibleSource(projectId, sourcePreview.version) : studioApi.source(projectId)} style={{objectFit: showRendered || draft.layout!=='crop' || frameModeAt(scene, currentTime)==='fit'?'contain':'cover', objectPosition:`${cropAt(scene, currentTime, draft.crop_x ?? .5)*100}% 50%`}} onLoadedMetadata={() => { if(video.current && scene && !showRendered) { setSourceDuration(video.current.duration); video.current.currentTime=scene.start } }} onTimeUpdate={() => {const v=video.current; if(!v) return; setCurrentTime(v.currentTime); if(scene && !showRendered && (v.currentTime>=scene.end || v.currentTime<scene.start-.25)) {if(v.currentTime>=scene.end) v.pause(); v.currentTime=scene.start}}} />
+          <video ref={video} preload="metadata" playsInline muted={muted} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onError={() => setPlaybackError(true)} onLoadedData={() => setPlaybackError(false)} src={showRendered && previewUrl ? previewUrl : sourcePreview.status === 'completed' && sourcePreview.version ? studioApi.compatibleSource(projectId, sourcePreview.version) : studioApi.source(projectId)} style={{objectFit: showRendered || draft.layout!=='crop' || frameModeAt(scene, currentTime)==='fit'?'contain':'cover', objectPosition:`${cropAt(scene, currentTime, draft.crop_x ?? .5)*100}% 50%`}} onClick={togglePlay} onLoadedMetadata={() => { const v = video.current; if (!v) return; if (showRendered) setRenderedDuration(v.duration); else if (scene) { setSourceDuration(v.duration); v.currentTime = scene.start } }} onTimeUpdate={() => {const v=video.current; if(!v) return; setCurrentTime(v.currentTime); if(scene && !showRendered && (v.currentTime>=scene.end || v.currentTime<scene.start-.25)) {if(v.currentTime>=scene.end) v.pause(); v.currentTime=scene.start}}} />
           {!showRendered && draft.subtitles && activeCue && <div className={`studio-caption-overlay studio-caption studio-caption--${draft.subtitle_style || 'clean'}`}>{activeCue.text}</div>}
           {!showRendered && selected===0 && draft.hook && !artworkStyle && <div className={`studio-hook studio-hook--${draft.title_style || 'plain'}`}>{draft.hook}</div>}
           {!showRendered && selected===0 && draft.hook && artworkStyle && <TitleArtwork projectId={projectId} draft={draft}/>}
         </div>
+        <PlayerBar offset={Math.max(0, Math.min(currentTime - playBase, playLength))} length={playLength} playing={playing} muted={muted}
+          onToggle={togglePlay} onMute={() => setMuted(m => !m)}
+          onSeek={offset => { const v = video.current; if (!v) return; v.currentTime = playBase + offset; setCurrentTime(v.currentTime) }} />
       </div><div className="studio-row studio-preview-foot"><span className="studio-muted">{showRendered?t("实际渲染结果"):t("原片预览 · 成片取 {{range}} · 字幕、翻译以渲染结果为准", { range: scene ? `${fmtDuration(scene.start)}–${fmtDuration(scene.end)}` : "" })}</span>{previewUrl ? <Btn size="sm" onClick={() => setShowRendered(!showRendered)}>{showRendered?t("查看原片"):t("播放成片")}</Btn> : <Btn size="sm" disabled={!!active} onClick={render}>{active?t("正在渲染"):t("渲染预览")}</Btn>}</div></div>
       <div className="studio-prompt"><input aria-label={t("文案修改要求")} placeholder={t("告诉 AI 怎么改文案，例如：开头改成一个简短的问题")} value={instruction} onChange={e=>setInstruction(e.target.value)} /><Btn variant="cta" loading={busy==='rewrite'} disabled={!instruction.trim()} onClick={rewrite}>{t("改一版文案")}</Btn></div>
       {undo && <Btn variant="text" onClick={()=>{setDraft({...undo, revision:draft.revision});setUndo(null);setShowRendered(false)}}>{t("撤销上次修改")}</Btn>}

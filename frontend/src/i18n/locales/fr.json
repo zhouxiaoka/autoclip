@@ -1404,5 +1404,10 @@
   "当前镜头显示方式": "Affichage de ce plan",
   "对准人物": "Suivre la personne",
   "完整画面": "Image entière",
-  "原片预览 · 成片取 {{range}} · 字幕、翻译以渲染结果为准": "Aperçu de la source · le clip utilise {{range}} · sous-titres et traduction selon le rendu"
+  "原片预览 · 成片取 {{range}} · 字幕、翻译以渲染结果为准": "Aperçu de la source · le clip utilise {{range}} · sous-titres et traduction selon le rendu",
+  "播放控制": "Lecture",
+  "暂停": "Pause",
+  "成片进度": "Position dans le clip",
+  "静音": "Couper le son",
+  "取消静音": "Réactiver le son"
 }

@@ -1404,5 +1404,10 @@
   "当前镜头显示方式": "How this shot is shown",
   "对准人物": "Follow person",
   "完整画面": "Whole frame",
-  "原片预览 · 成片取 {{range}} · 字幕、翻译以渲染结果为准": "Source preview · clip uses {{range}} · subtitles and translation follow the render"
+  "原片预览 · 成片取 {{range}} · 字幕、翻译以渲染结果为准": "Source preview · clip uses {{range}} · subtitles and translation follow the render",
+  "播放控制": "Playback",
+  "暂停": "Pause",
+  "成片进度": "Clip position",
+  "静音": "Mute",
+  "取消静音": "Unmute"
 }
