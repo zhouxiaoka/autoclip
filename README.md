@@ -236,7 +236,7 @@ autoclip export PROJECT_ID --preset shorts
 autoclip mcp
 ```
 
-在 MCP 客户端中将 `command` 设为虚拟环境里 `autoclip` 的绝对路径，`args` 设为 `["mcp"]`。详见 [CLI / MCP 指南](docs/CLI_AND_MCP.md)（中文）和 [Agent skill](skills/autoclip/SKILL.md)（中文）。
+在 MCP 客户端中将 `command` 设为虚拟环境里 `autoclip` 的绝对路径，`args` 设为 `["mcp"]`。opencode 用户一条命令即可接入：`autoclip mcp install opencode`（见 [OpenCode 接入](docs/OPENCODE.md)）。详见 [CLI / MCP 指南](docs/CLI_AND_MCP.md)（中文）和 [Agent skill](skills/autoclip/SKILL.md)（中文）。
 
 </details>
 
@@ -298,7 +298,7 @@ AutoClip 免费、开源（MIT）。云端模型由所选服务商计费，需�
 | 你想了解 | 文档 |
 | --- | --- |
 | 安装与首次出片 | [安装指南](docs/USER_INSTALLATION_GUIDE.md) |
-| 自建服务与自动化 | [Docker 部署](DOCKER.md) · [CLI / MCP](docs/CLI_AND_MCP.md) · [Agent skill](skills/autoclip/SKILL.md) |
+| 自建服务与自动化 | [Docker 部署](DOCKER.md) · [CLI / MCP](docs/CLI_AND_MCP.md) · [Agent skill](skills/autoclip/SKILL.md) · [OpenCode 接入](docs/OPENCODE.md) |
 | 配置模型与排错 | [模型配置](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [常见问题](docs/FAQ.md) |
 | 版本与隐私 | [更新日志](CHANGELOG.md) · [隐私说明](docs/PRIVACY.md) |
 | 参与开发与翻译 | [贡献指南](CONTRIBUTING.md) · [翻译维护](docs/i18n.md) |

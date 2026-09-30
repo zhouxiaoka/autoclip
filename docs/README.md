@@ -24,6 +24,7 @@
 - [源码 Web 服务启动](../STARTUP_GUIDE.md)
 
 - [CLI、MCP 与本地模型](CLI_AND_MCP.md)（中文）
+- [opencode CLI 接入（MCP 一键注册）](OPENCODE.md)（中文 · [English](OPENCODE.en.md)）
 - [AI 模型与本地转写配置](AI_MODEL_CONFIGURATION.md)（中文）
 - [贡献指南](../CONTRIBUTING.md)（中文）
 - [构建指南](../BUILD_GUIDE.md)（中文）

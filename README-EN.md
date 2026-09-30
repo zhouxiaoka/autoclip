@@ -242,7 +242,7 @@ autoclip export PROJECT_ID --preset shorts
 autoclip mcp
 ```
 
-In your MCP client, set `command` to the absolute path of `autoclip` in your virtual environment and `args` to `["mcp"]`. See the [CLI / MCP guide](docs/CLI_AND_MCP.md) and [Agent skill](skills/autoclip/SKILL.md) (both in Chinese).
+In your MCP client, set `command` to the absolute path of `autoclip` in your virtual environment and `args` to `["mcp"]`. opencode users can connect with one command: `autoclip mcp install opencode` (see the [OpenCode guide](docs/OPENCODE.en.md)). See the [CLI / MCP guide](docs/CLI_AND_MCP.md) and [Agent skill](skills/autoclip/SKILL.md) (both in Chinese).
 
 </details>
 
@@ -306,7 +306,7 @@ See the [first-clip guide](docs/USER_INSTALLATION_GUIDE.en.md) for sample prepar
 | Guide | Link |
 | --- | --- |
 | Getting started | [Installation](docs/USER_INSTALLATION_GUIDE.en.md) |
-| Hosting and automation | [Docker](docs/DOCKER.en.md) · [CLI / MCP (Chinese)](docs/CLI_AND_MCP.md) · [Agent skill (Chinese)](skills/autoclip/SKILL.md) |
+| Hosting and automation | [Docker](docs/DOCKER.en.md) · [CLI / MCP (Chinese)](docs/CLI_AND_MCP.md) · [Agent skill (Chinese)](skills/autoclip/SKILL.md) · [opencode guide](docs/OPENCODE.en.md) |
 | Models and troubleshooting | [Model configuration (Chinese)](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [Troubleshooting](docs/FAQ.en.md) |
 | Versions and privacy | [Changelog](CHANGELOG.md) · [Privacy](docs/PRIVACY.en.md) |
 | Development and translation | [Contributing (Chinese)](CONTRIBUTING.md) · [Translation maintenance (Chinese)](docs/i18n.md) |
