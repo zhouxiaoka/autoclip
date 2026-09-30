@@ -5,6 +5,7 @@
 
 import logging
 import os
+import sqlite3
 from contextlib import contextmanager
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
@@ -55,10 +56,24 @@ def create_database_engine(database_url):
         def sqlite_pragmas(dbapi_connection, _record):
             cursor = dbapi_connection.cursor()
             try:
-                cursor.execute('PRAGMA journal_mode=WAL')
-                cursor.execute('PRAGMA busy_timeout=30000')
+                mode = cursor.execute('PRAGMA journal_mode').fetchone()[0]
+                if str(mode).lower() != 'wal':
+                    # Switching an existing DELETE-mode database needs an
+                    # exclusive lock. A reader in another process must not make
+                    # ordinary API reads fail (or block 30s) at connection time.
+                    cursor.execute('PRAGMA busy_timeout=0')
+                    try:
+                        cursor.execute('PRAGMA journal_mode=WAL').fetchone()
+                    except sqlite3.OperationalError as error:
+                        code = getattr(error, 'sqlite_errorcode', 0) & 0xff
+                        if code not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED, sqlite3.SQLITE_READONLY):
+                            raise
+                        logging.getLogger(__name__).info('SQLite WAL initialization deferred (code=%s)', code)
             finally:
-                cursor.close()
+                try:
+                    cursor.execute('PRAGMA busy_timeout=30000')
+                finally:
+                    cursor.close()
     return database_engine
 
 
