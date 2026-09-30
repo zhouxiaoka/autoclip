@@ -6,7 +6,7 @@ from copy import deepcopy
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from backend.services.studio import intelligence, store
+from backend.services.studio import audio, intelligence, store
 from backend.services.studio.models import Draft, Preferences, Scene
 from backend.services.studio.intelligence import analyze, make_drafts, VisionRequestError
 from backend.services.studio.render import render_draft
@@ -283,7 +283,7 @@ def _complete_thought_bounds(project_id, clips):
             call = intelligence.text_json
     except Exception:  # noqa: BLE001
         call = None
-    return boundaries.refine_clips(rows, clips, call)
+    return boundaries.refine_clips(rows, clips, call, boundaries.audio_silences(source(project_id)) if audio.has_audio(source(project_id)) else None)
 
 
 def _content_drafts(project_id, plan, video):

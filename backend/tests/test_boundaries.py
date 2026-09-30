@@ -82,3 +82,53 @@ def test_refine_clips_falls_back_to_sentence_bounds_when_the_model_fails():
         raise RuntimeError('provider down')
     assert b.refine_clips(ROWS, [(104.0, 116.0)], boom) == [b.sentence_bounds(ROWS, 104.0, 116.0)]
     assert b.refine_clips(ROWS, [(104.0, 116.0)], None) == [b.sentence_bounds(ROWS, 104.0, 116.0)]
+
+
+def test_end_snaps_into_the_real_pause_instead_of_the_estimate():
+    # "…responsible." really ends at 6.1 s; the row estimate says 6.9 s, 0.4 s into "It seems like".
+    rows = [(0.0, 4.0, 'We have thought carefully about this.'),
+            (4.0, 8.0, "That's what I mean when I say we're responsible. It seems like"),
+            (9.0, 13.0, 'we have different definitions of a genius.')]
+    pauses = lambda lo, hi: [(6.1, 6.5)]
+    _, end = b.sentence_bounds(rows, 0.0, 8.0, pauses)
+    assert 6.1 < end <= 6.35  # inside the pause, before the next sentence starts at 6.5
+
+
+def test_an_end_without_a_pause_finishes_the_next_sentence_that_has_a_breath():
+    # "…is here." runs straight into "Second point…": no pause there, so end after the next breath.
+    rows = [(0.0, 5.0, 'First point is here.'), (5.0, 10.0, 'Second point follows.'), (10.0, 14.0, 'And the conclusion.')]
+    pauses = lambda lo, hi: [(7.0, 7.2), (10.0, 10.9)]  # a hitch mid-sentence, then a clear breath
+    _, end = b.sentence_bounds(rows, 0.0, 5.0, pauses)
+    assert 10.0 < end < 10.9
+
+
+def test_a_pause_after_the_rest_of_the_row_is_not_taken_for_the_sentence_end():
+    # Demo 02: "…responsible." pauses at 3230.07; the pause at 3231.5 comes after "It seems like".
+    rows = [(3226.94, 3231.46, "balance. That's what I mean when I say that we're being responsible. It seems like"),
+            (3232.42, 3236.12, 'it is possible that we just have different definitions.')]
+    pauses = lambda lo, hi: [(3230.07, 3230.47), (3231.5, 3231.84)]
+    _, end = b.sentence_bounds(rows, 3226.94, 3231.46, pauses)
+    assert 3230.07 < end < 3230.47
+
+
+def test_a_long_pause_just_after_extends_to_finish_the_passage():
+    rows = [(0.0, 4.0, 'The more you do, the more they attack you.'), (4.0, 6.0, 'State of the world. It will just escalate'),
+            (10.0, 13.0, 'One thing I noticed about ideas.')]
+    pauses = lambda lo, hi: [(4.9, 5.2), (6.1, 9.9)]  # after "world.", then the passage ends
+    _, end = b.sentence_bounds(rows, 0.0, 5.0, pauses)
+    assert 6.1 < end < 6.5
+
+
+def test_start_begins_after_the_pause_before_the_first_word():
+    rows = [(0.0, 4.0, 'Previous topic ends here.'), (4.0, 8.0, 'New question starts now.'), (8.0, 12.0, 'And it goes on.')]
+    start, _ = b.sentence_bounds(rows, 4.0, 12.0, lambda lo, hi: [(3.6, 4.3)])
+    assert 4.1 <= start < 4.3
+
+
+def test_real_silence_detection_finds_the_pause(tmp_path):
+    import subprocess
+    wav = tmp_path / 'speech.wav'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=f=300:d=2', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono:d=0.8',
+                    '-f', 'lavfi', '-i', 'sine=f=300:d=2', '-filter_complex', '[0][1][2]concat=n=3:v=0:a=1', '-y', str(wav)], check=True)
+    gaps = b.audio_silences(wav)(0, 4.8)
+    assert any(1.9 < s < 2.1 and 2.7 < e < 2.9 for s, e in gaps)

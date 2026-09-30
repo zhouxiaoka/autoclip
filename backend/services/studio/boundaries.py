@@ -30,7 +30,7 @@ JA_END = re.compile(r'(です|ます|ました|でした|ございます|ませ�
 TRAILING_QUESTION_SEC = 20  # look this far back from the end for the next topic's question
 ANSWER_STUB_SEC = 12        # an answer shorter than this after the question is the next topic's opening
 PAUSE_SEC = 0.6
-MAX_LEAD_SEC = 12      # how far a start may move back to reach its sentence start
+MAX_LEAD_SEC = 20      # how far a start may move back to reach its sentence start (a question's opening)
 MAX_TAIL_SEC = 25      # how far an end may move forward to finish its sentence
 CONTEXT_BEFORE, CONTEXT_AFTER = 40, 75
 MODEL_MAX_EXTEND = 60  # the model may extend the end by at most this much
@@ -140,18 +140,23 @@ def _start_cut(rows: list[Row], first: int, start: float, has_punct: bool) -> tu
             offset += 1
         return first, offset
     i = first
-    while i > 0 and start - rows[i - 1][0] <= MAX_LEAD_SEC:
+    while i > 0 and start - rows[i - 1][1] <= MAX_LEAD_SEC:
         i -= 1
-        if i == 0 or ends_sentence(rows, i - 1, has_punct):
-            return i, 0
         inner = _inner_ends(rows[i][2])
+        if not inner and (i == 0 or ends_sentence(rows, i - 1, has_punct)):
+            return (i, 0) if start - rows[i][0] <= MAX_LEAD_SEC else (first, 0)
         if inner:
-            return i, inner[-1] + (1 if rows[i][2][inner[-1]:inner[-1] + 1] == ' ' else 0)
+            offset = inner[-1] + (1 if rows[i][2][inner[-1]:inner[-1] + 1] == ' ' else 0)
+            return (i, offset) if start - _time_at(rows[i], offset) <= MAX_LEAD_SEC else (first, 0)
     return first, 0
 
 
-def sentence_bounds(rows: list[Row], start: float, end: float) -> tuple[float, float]:
-    """(start, end) on complete sentences, within MAX_LEAD_SEC / MAX_TAIL_SEC."""
+def sentence_bounds(rows: list[Row], start: float, end: float, silences: 'SilenceFinder | None' = None) -> tuple[float, float]:
+    """(start, end) on complete sentences, within MAX_LEAD_SEC / MAX_TAIL_SEC.
+
+    With `silences`, both cuts snap to real pauses in the audio: subtitle rows carry no word
+    timing, so a cut estimated inside a row can be a few hundred ms into the next sentence.
+    """
     if not rows:
         return start, end
     first = _index_at(rows, start + 0.05)
@@ -177,7 +182,124 @@ def sentence_bounds(rows: list[Row], start: float, end: float) -> tuple[float, f
         new_end = _time_at(rows[e_row], e_off) + 0.25
     if new_end - new_start < 1:
         return start, end
+    if silences is not None:
+        min_end = new_start + (end - start) * 0.6
+        estimate = rows[e_row][1] if e_off >= len(rows[e_row][2]) else _time_at(rows[e_row], e_off)
+        new_end = _snap_end(rows, e_row, e_off, estimate, min_end, silences) or new_end
+        new_start = _snap_start(new_start, silences, inner=s_off > 0)
     return round(new_start, 3), round(new_end, 3)
+
+
+SilenceFinder = Callable[[float, float], list[tuple[float, float]]]
+MATCH_SEC = 1.3          # a sentence end estimated inside a row may be off by this much either way
+MIN_CHAR_SEC = 0.03      # speech takes at least this long per character (bounds an estimate's drift)
+BREATH_SEC = 0.5         # a pause this long is a clear breath between statements
+PARAGRAPH_SEC = 1.2      # a pause this long right after a row ends a whole passage
+END_SEARCH_FORWARD = 10.0
+PARAGRAPH_REACH = 4.0
+
+
+def _cut_window(rows: list[Row], row: int, offset: int, estimate: float) -> tuple[float, float]:
+    """Where the pause after this cut can really be: text before the cut is spoken before it, text after after it."""
+    s, e, text = rows[row]
+    if offset >= len(text):
+        nxt = rows[row + 1][0] if row + 1 < len(rows) else e + 0.9
+        return e - 0.4, max(e, nxt) + 0.5
+    before, after = len(text[:offset].replace(' ', '')), len(text[offset:].replace(' ', ''))
+    return max(s + before * MIN_CHAR_SEC, estimate - MATCH_SEC), min(e - after * MIN_CHAR_SEC, estimate + MATCH_SEC)
+
+
+def _later_ends(rows: list[Row], row: int, offset: int, limit: float):
+    """(row, offset, estimated time) of each later sentence end, stopping before the next question."""
+    for i in range(row, len(rows)):
+        if rows[i][0] > limit:
+            return
+        text = rows[i][2]
+        offsets = [o for o in _inner_ends(text) if i > row or o > offset]
+        if ends_sentence(rows, i, None) and (i > row or offset < len(text)):
+            offsets.append(len(text))
+        for o in offsets:
+            if re.search(r'[?？]["”」』]?\s*$', text[:o]) or (o == len(text) and QUESTION.search(text)):
+                return
+            yield i, o, _time_at(rows[i], o)
+
+
+def _pause_in(gaps, lo: float, hi: float, near: float, min_sec: float = 0.0):
+    fit = [(s, e) for s, e in gaps if lo <= s <= hi and e - s >= min_sec]
+    return min(fit, key=lambda g: (g[1] - g[0] < BREATH_SEC, abs(g[0] - near))) if fit else None
+
+
+def _snap_end(rows: list[Row], row: int, offset: int, estimate: float, min_end: float, silences: SilenceFinder) -> float | None:
+    """End inside a real pause after a finished sentence, preferring the end of a whole passage.
+
+    1. A pause where the chosen sentence ends (the estimate inside a row may drift, bounded by
+       how fast the words around the cut can be spoken).
+    2. The speaker runs straight on: finish the next sentence that ends on a clear breath, then
+       on any pause, never past the next question.
+    3. A long pause (the passage is over) within PARAGRAPH_REACH after that: extend to it.
+    """
+    gaps = [g for g in silences(estimate - MATCH_SEC, estimate + END_SEARCH_FORWARD + PARAGRAPH_REACH + 2) if g[0] >= min_end]
+    lo, hi = _cut_window(rows, row, offset, estimate)
+    pause, end_row = _pause_in(gaps, lo, hi, estimate), row
+    if pause is None:
+        later = list(_later_ends(rows, row, offset, estimate + END_SEARCH_FORWARD))
+        for min_sec in (BREATH_SEC, 0.0):
+            for i, o, t in later:
+                pause = _pause_in(gaps, *_cut_window(rows, i, o, t), t, min_sec)
+                if pause:
+                    end_row = i
+                    break
+            if pause:
+                break
+    if pause is None:
+        return None
+    for s, e in gaps:  # the passage ends in a long pause just after: keep it whole
+        if pause[0] < s <= pause[0] + PARAGRAPH_REACH and e - s >= PARAGRAPH_SEC:
+            rows_before = [r for r in rows[end_row:] if r[0] < s]
+            if rows_before and abs(rows_before[-1][1] - s) <= 0.6 and not any(QUESTION.search(r[2]) or re.search(r'[?？]', r[2]) for r in rows_before[1:]):
+                pause = (s, e)
+            break
+    return pause[0] + min(0.3, (pause[1] - pause[0]) / 2)
+
+
+def _snap_start(estimate: float, silences: SilenceFinder, *, inner: bool) -> float:
+    """Start at the end of the pause just before the first word, so no tail of the previous line leaks in.
+
+    A row start is close (ASR may include a little leading silence): never move it into the first words.
+    """
+    ahead = 0.8 if inner else 0.35
+    gaps = [g for g in silences(estimate - 1.5, estimate + 1.0) if estimate - 1.2 <= g[1] <= estimate + ahead]
+    if not gaps:
+        return estimate
+    s, e = min(gaps, key=lambda g: abs(g[1] - estimate))
+    return max(s, e - min(0.12, (e - s) / 2))
+
+
+def audio_silences(video, noise_db: int = -32, min_sec: float = 0.2) -> SilenceFinder:
+    """Silence intervals (absolute seconds) in a window of the source audio, via ffmpeg silencedetect."""
+    import subprocess
+    from backend.services import render_limits
+    from backend.utils.ffmpeg_utils import get_ffmpeg_path
+
+    def find(lo: float, hi: float) -> list[tuple[float, float]]:
+        lo = max(0.0, lo)
+        cmd = [get_ffmpeg_path(), '-hide_banner', '-nostats', *render_limits.input_args(), '-ss', f'{lo:.3f}', '-t', f'{max(0.5, hi - lo):.3f}',
+               '-i', str(video), '-vn', '-af', f'silencedetect=noise={noise_db}dB:d={min_sec}', '-f', 'null', '-']
+        cmd, priority = render_limits.low_priority(cmd)
+        try:
+            log = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False, **priority).stderr
+        except (OSError, subprocess.SubprocessError):
+            return []
+        out, begin = [], None
+        for line in log.splitlines():
+            if 'silence_start:' in line:
+                begin = lo + float(line.split('silence_start:')[1].split()[0])
+            elif 'silence_end:' in line and begin is not None:
+                out.append((begin, lo + float(line.split('silence_end:')[1].split('|')[0])))
+                begin = None
+        return out
+
+    return find
 
 
 BOUNDARY_PROMPT = (
@@ -188,7 +310,7 @@ BOUNDARY_PROMPT = (
 )
 
 
-def refine_with_model(rows: list[Row], start: float, end: float, call: Callable[[str, dict], dict]) -> tuple[float, float] | None:
+def refine_with_model(rows: list[Row], start: float, end: float, call: Callable[[str, dict], dict], silences: SilenceFinder | None = None) -> tuple[float, float] | None:
     window = [(i, r) for i, r in enumerate(rows) if start - CONTEXT_BEFORE <= r[0] <= end + CONTEXT_AFTER]
     if len(window) < 3:
         return None
@@ -206,19 +328,20 @@ def refine_with_model(rows: list[Row], start: float, end: float, call: Callable[
     # Reject drastic rewrites: the model should adjust edges, not pick a different clip.
     if new_end > end + MODEL_MAX_EXTEND or new_start < start - CONTEXT_BEFORE or length < original * 0.6 or length > original + MODEL_MAX_EXTEND + 15:
         return None
-    return sentence_bounds(rows, new_start, new_end)
+    return sentence_bounds(rows, new_start, new_end, silences)
 
 
-def refine_clips(rows: list[Row], clips: list[tuple[float, float]], call: Callable[[str, dict], dict] | None = None) -> list[tuple[float, float]]:
+def refine_clips(rows: list[Row], clips: list[tuple[float, float]], call: Callable[[str, dict], dict] | None = None,
+                 silences: SilenceFinder | None = None) -> list[tuple[float, float]]:
     """Sentence-snapped bounds for every clip; model-refined where the model gives a valid answer."""
-    snapped = [sentence_bounds(rows, s, e) for s, e in clips]
+    snapped = [sentence_bounds(rows, s, e, silences) for s, e in clips]
     if call is None or not rows:
         return snapped
 
     def one(pair):
         (s, e), fallback = pair
         try:
-            return refine_with_model(rows, s, e, call) or fallback
+            return refine_with_model(rows, s, e, call, silences) or fallback
         except Exception as error:  # noqa: BLE001 - boundary polish never blocks output
             logger.warning('Boundary refinement fell back: %s', type(error).__name__)
             return fallback
