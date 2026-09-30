@@ -27,6 +27,7 @@ PRESETS: Dict[str, Dict[str, Any]] = {
     "xiaohongshu": {"label": "小红书 9:16", "w": 1080, "h": 1920, "layout": "blur", "max_sec": None},
     "shorts": {"label": "YouTube Shorts", "w": 1080, "h": 1920, "layout": "crop", "max_sec": 60},
     "bilibili": {"label": "B 站横屏", "w": 1920, "h": 1080, "layout": "fit", "max_sec": None},
+    "1080p60": {"label": "1080p60", "w": 1920, "h": 1080, "layout": "fit", "fps": 60, "max_sec": None},
     "original": {"label": "原画重编码", "w": None, "h": None, "layout": "none", "max_sec": None},
 }
 
@@ -204,8 +205,11 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
     if req.preset not in PRESETS:
         raise ValueError(f"未知预设: {req.preset}（可选 {', '.join(PRESETS)}）")
     spec = PRESETS[req.preset]
+    if req.preset == '1080p60' and req.layout not in (None, 'fit'):
+        raise ValueError("1080p60 使用固定横屏等比适配，不支持覆盖画幅")
     clip = load_clip_meta(req.project_id, req.clip_id)
-    if clip.get('source_type') == 'studio':
+    studio = clip.get('source_type') == 'studio'
+    if studio and req.preset != '1080p60':
         duration = float(clip['duration_sec'])
         if spec.get('max_sec') and duration > spec['max_sec']:
             raise ValueError(f"成片超过 {req.preset} 的 {spec['max_sec']} 秒限制，请回编辑器调整后重新导出")
@@ -214,11 +218,13 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
                 'studio_job_id': clip['studio_job_id'], 'revision': clip['revision'],
                 'width': clip['width'], 'height': clip['height'],
                 'warnings': [*clip['warnings'], '使用已导出的成片，保留原有画幅、文字和声音，不重复渲染']}
-    video = find_source_video(req.project_id)
-    start = to_seconds(clip["start_time"])
-    end = to_seconds(clip["end_time"])
+    video = Path(clip['video_path']) if studio else find_source_video(req.project_id)
+    start = 0 if studio else to_seconds(clip["start_time"])
+    end = float(clip['duration_sec']) if studio else to_seconds(clip["end_time"])
     duration = max(0.1, end - start)
     warnings: List[str] = []
+    if studio:
+        warnings.append("Studio 成片按 1080p60 重编码，保留已渲染的文字与声音，不重复烧录字幕和标题卡")
     if spec.get("max_sec") and duration > spec["max_sec"]:
         duration = float(spec["max_sec"])
         warnings.append(f"按时长上限截到 {spec['max_sec']}s（{req.preset}）")
@@ -238,19 +244,21 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
     meta_path = out_dir / f"{slug}.json"
 
     if out_path.exists() and out_path.stat().st_size > 0:
+        info = _probe(out_path)
         result = {"ok": True, "path": str(out_path), "cached": True, "preset": req.preset,
-                  "clip_id": req.clip_id, "title": title, "duration_sec": round(duration, 2),
-                  "warnings": warnings}
+                  "clip_id": req.clip_id, "title": title, "duration_sec": info.get('duration') or round(duration, 2),
+                  "width": info.get('width'), "height": info.get('height'),
+                  "fps": info.get('fps'), "video_codec": info.get('video_codec'), "warnings": warnings}
         return result
 
     font = resolve_cjk_font()
-    if req.title_card and not font:
+    if req.title_card and not studio and not font:
         warnings.append("没找到中文字体，已跳过标题卡")
     tmpdir = Path(tempfile.mkdtemp(prefix="ac-export-"))
     srt_file = None
     title_file = None
     try:
-        if req.subtitles:
+        if req.subtitles and not studio:
             entries = _load_srt_entries(req.project_id)
             body = slice_srt(entries, start, start + duration)
             if body:
@@ -258,7 +266,7 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
                 srt_file.write_text(body, encoding="utf-8")
             else:
                 warnings.append("没有可用字幕，成片不烧字")
-        if req.title_card and font:
+        if req.title_card and not studio and font:
             title_file = tmpdir / "title.txt"
             title_file.write_text(title[:40], encoding="utf-8")
 
@@ -272,6 +280,8 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
             cmd += ["-filter_complex", graph, "-map", f"[{last}]"]
         else:
             cmd += ["-map", "0:v:0"]
+        if spec.get('fps'):
+            cmd += ["-r", str(spec['fps']), "-fps_mode", "cfr"]
         cmd += ["-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
                 "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-y", str(out_path)]
         logger.info("发布导出: %s", " ".join(cmd))
@@ -285,6 +295,7 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
             "clip_id": req.clip_id, "project_id": req.project_id, "title": title,
             "duration_sec": info.get("duration") or round(duration, 2),
             "width": info.get("width"), "height": info.get("height"),
+            "fps": info.get("fps"), "video_codec": info.get("video_codec"),
             "font": str(font) if font else None, "warnings": warnings,
         }
         meta_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -297,13 +308,16 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
 def _probe(path: Path) -> Dict[str, Any]:
     try:
         cmd = [get_ffprobe_path(), "-v", "error", "-select_streams", "v:0",
-               "-show_entries", "stream=width,height:format=duration", "-of", "json", str(path)]
+               "-show_entries", "stream=width,height,avg_frame_rate,codec_name:format=duration", "-of", "json", str(path)]
         raw = subprocess.check_output(cmd, text=True, encoding="utf-8", errors="ignore", timeout=20)
         data = json.loads(raw)
         stream = (data.get("streams") or [{}])[0]
+        rate = str(stream.get('avg_frame_rate') or '0/1').split('/')
+        fps = float(rate[0]) / float(rate[1]) if len(rate) == 2 and float(rate[1]) else 0
         return {
             "width": stream.get("width"),
             "height": stream.get("height"),
+            "fps": round(fps, 3), "video_codec": stream.get("codec_name"),
             "duration": round(float((data.get("format") or {}).get("duration") or 0), 2),
         }
     except Exception as e:  # noqa: BLE001

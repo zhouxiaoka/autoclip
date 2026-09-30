@@ -6,6 +6,8 @@
 - 来源守卫：自家 Origin 放行，其他网页的写请求被拒
 - 内置 ffmpeg 能生成、切片、探测视频（Windows 上最常出问题的环节）
 - yt-dlp 能拿到内置 ffmpeg 的路径（链接导入合并音视频依赖它）
+- 保存 provider，上传真实公开访谈和 SRT，整条流水线完成并产出 H.264/AAC
+  模型使用 loopback 协议 fixture，验证安装链路，不声称模型剪辑质量
 
 用法（CI 在 NSIS 静默安装后调用）：
     "<安装目录>\\resources\\python\\python.exe" -B scripts\\verify_windows_install.py --resources "<安装目录>\\resources"
@@ -34,6 +36,8 @@ for stream in (sys.stdout, sys.stderr):
 parser = argparse.ArgumentParser()
 parser.add_argument("--resources", type=Path, required=True)
 parser.add_argument("--report", type=Path)
+parser.add_argument('--source-video', type=Path, default=Path(__file__).resolve().parents[1] / 'backend/assets/example/source.mp4')
+parser.add_argument('--source-srt', type=Path, default=Path(__file__).resolve().parents[1] / 'backend/assets/example/source.srt')
 args = parser.parse_args()
 resources = args.resources.resolve(strict=True)
 if not Path(sys.executable).resolve().is_relative_to(resources / "python"):
@@ -124,6 +128,13 @@ try:
     assert post("http://tauri.localhost") != 403, "Windows 自家界面的 Origin 被拦了"
     assert post("https://evil.example") == 403, "其他网页的写请求没被拦"
     report["origin_guard"] = "passed"
+
+    step("保存 provider 并跑通真实本地视频（loopback 协议 fixture）")
+    from installed_video_acceptance import run
+    report["installed_video"] = run(base, root, resources, args.source_video, args.source_srt)
+except BaseException:
+    print("\n".join(lines[-120:]), flush=True)
+    raise
 finally:
     proc.terminate()
     try:
