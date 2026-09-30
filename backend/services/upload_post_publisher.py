@@ -248,6 +248,7 @@ class PublishRequest:
     platforms: Sequence[str]
     user: str | None = None
     preset: str | None = None
+    output_variant_id: str | None = None
     title: str | None = None
     description: str | None = None
     subtitles: bool = True
@@ -394,15 +395,24 @@ def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
             "profile 在 https://app.upload-post.com/manage-users 创建并连接社交账号。"
         )
     preset = req.preset or pick_preset(platforms)
-    clip = load_clip_meta(req.project_id, req.clip_id)
+    if req.output_variant_id:
+        from backend.services.platform_strategy import incompatible_transport_platforms
+        from backend.services.studio.publishing import output_variant_meta
+        clip = output_variant_meta(req.project_id, req.output_variant_id)
+        blocked = incompatible_transport_platforms(clip['strategy_id'], platforms)
+        if blocked:
+            raise UploadPostError(f"横版成片不能发布到 {', '.join(blocked)}，请选择竖版版本")
+        export = {'ok': True, 'path': clip['video_path'], 'preset': clip['strategy_id'], 'warnings': clip['warnings']}
+    else:
+        clip = load_clip_meta(req.project_id, req.clip_id)
+        export = export_clip(ExportRequest(
+            project_id=req.project_id, clip_id=req.clip_id, preset=preset,
+            subtitles=req.subtitles, title_card=req.title_card,
+        ))
     title = (req.title or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
     if not title:
         title = f"切片 {req.clip_id}"
 
-    export = export_clip(ExportRequest(
-        project_id=req.project_id, clip_id=req.clip_id, preset=preset,
-        subtitles=req.subtitles, title_card=req.title_card,
-    ))
     video_path = Path(export["path"])
     if not video_path.exists() or video_path.stat().st_size == 0:
         raise UploadPostError(f"成片不存在或为空: {video_path}")
@@ -433,6 +443,7 @@ def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
         "title": title,
         "preset": export.get("preset", preset),
         "path": str(video_path),
+        **({'output_variant_id': req.output_variant_id, 'strategy_id': clip['strategy_id']} if req.output_variant_id else {}),
         **({"studio_job_id": clip["studio_job_id"], "revision": clip["revision"]} if clip.get("source_type") == "studio" else {}),
         "scheduled_date": req.scheduled_date,
         "submitted_at": datetime.now(timezone.utc).isoformat(),
@@ -452,6 +463,7 @@ def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
         "title": title,
         "preset": export.get("preset", preset),
         "path": str(video_path),
+        **({'output_variant_id': req.output_variant_id, 'strategy_id': clip['strategy_id']} if req.output_variant_id else {}),
         **({"studio_job_id": clip["studio_job_id"], "revision": clip["revision"]} if clip.get("source_type") == "studio" else {}),
         "export_warnings": export.get("warnings") or [],
         "status": record["status"],

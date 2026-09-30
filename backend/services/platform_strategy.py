@@ -120,3 +120,13 @@ def default_strategy_for_transport(platforms: Iterable[str]) -> PlatformStrategy
 
 def list_platform_strategies() -> list[dict[str, object]]:
     return [strategy.public_summary() for strategy in _STRATEGIES]
+
+
+VERTICAL_ONLY_TRANSPORTS = frozenset({"tiktok", "instagram"})
+
+
+def incompatible_transport_platforms(strategy_id: str, platforms: Iterable[str]) -> list[str]:
+    """Return upload targets that cannot receive a completed variant of this strategy."""
+    if platform_strategy(strategy_id).aspect == "portrait":
+        return []
+    return [str(p) for p in platforms if str(p).strip().lower() in VERTICAL_ONLY_TRANSPORTS]

@@ -3,8 +3,9 @@ import { workflow } from '../analytics/observer'
 import i18n, { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { studioApi } from '../features/studio/api'
+import { outputVariantPublishTarget } from '../features/studio/outputVariantPublish'
 import { projectApi } from '../services/api'
 import { Btn, Icon, ProgressLine, Row, Segmented, StatusDot } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
@@ -73,6 +74,7 @@ const PublishClipPage: React.FC = () => {
   useTranslation()
   const { id: projectId = '', clipId = '' } = useParams()
   const studioJobId = /^studio-[a-f0-9]{32}$/.test(clipId) ? clipId.slice(7) : null
+  const variantTarget = outputVariantPublishTarget(useLocation().search)
   const [studioRevision, setStudioRevision] = useState<number>()
   const navigate = useNavigate()
   const runId = useRef(0)
@@ -265,6 +267,7 @@ const PublishClipPage: React.FC = () => {
           platforms: overseas,
           user,
           preset: renderPreset(overseas),
+          output_variant_id: variantTarget.uploadPost,
           title: title.trim() || undefined,
           description: description.trim() || undefined,
           subtitles,
@@ -277,6 +280,7 @@ const PublishClipPage: React.FC = () => {
       }
       if (sendBili) {
         const started = await bilibiliApi.start(projectId, clipId, {
+          output_variant_id: variantTarget.bilibili,
           title: title.trim() || undefined,
           description: description.trim() || undefined,
           subtitles,

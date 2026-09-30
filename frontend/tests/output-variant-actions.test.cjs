@@ -19,3 +19,13 @@ test('result page appends platforms and retries only an output variant',()=>{
  assert.doesNotMatch(results,/studioApi\.import\(/)
  assert.match(card,/重试这条/)
 })
+
+test('completed variants publish their own file and only bilibili variants go straight to B站',()=>{
+ const helper=fs.readFileSync(path.join(__dirname,'../src/features/studio/outputVariantPublish.ts'),'utf8')
+ const page=fs.readFileSync(path.join(__dirname,'../src/pages/PublishClipPage.tsx'),'utf8')
+ assert.match(card,/navigate\(outputVariantPublishPath\(projectId, variant\)\)/)
+ assert.match(helper,/publish\/studio-\$\{variant\.render_job_id\}\?\$\{query\}/)
+ assert.match(helper,/strategy'\) === 'bilibili' \? id : undefined/)
+ assert.match(page,/output_variant_id: variantTarget\.uploadPost/)
+ assert.match(page,/output_variant_id: variantTarget\.bilibili/)
+})

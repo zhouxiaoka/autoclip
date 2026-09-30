@@ -4,6 +4,7 @@ import { Btn, fmtDuration } from '../../ui'
 import StudioDownloadLink from './StudioDownloadLink'
 import { Draft, OutputVariant, RenderJob } from './types'
 import { studioApi } from './api'
+import { outputVariantPublishPath } from './outputVariantPublish'
 import './quick-output.css'
 
 const platformLabels: Record<string, string> = {
@@ -28,6 +29,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       <div className="ac-card-foot"><span className="meta">{platformLabels[variant.strategy_id] || variant.strategy_id}</span><div className="ac-card-actions">
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}`)}>{t('预览与修改')}</Btn>}
         {failed && <Btn variant="text" onClick={onRetry}>{t('重试这条')}</Btn>}
+        {completed && variant.render_job_id && <Btn variant="text" onClick={() => navigate(outputVariantPublishPath(projectId, variant))}>{t('发布')}</Btn>}
         {completed && variant.render_job_id && <StudioDownloadLink className="studio-link" projectId={projectId} jobId={variant.render_job_id}/>}
       </div></div>
     </div>

@@ -63,6 +63,7 @@ class BilibiliConfig:
 class BilibiliPublishRequest:
     project_id: str
     clip_id: str
+    output_variant_id: str | None = None
     title: str | None = None
     description: str | None = None
     subtitles: bool = True
@@ -478,18 +479,25 @@ def publish_clip(req: BilibiliPublishRequest, session: requests.Session | None =
     cfg = load_config()
     if not cfg.configured:
         raise BilibiliError("还没有配置 B 站账号")
-    clip = load_clip_meta(req.project_id, req.clip_id)
+    if req.output_variant_id:
+        from backend.services.studio.publishing import output_variant_meta
+        clip = output_variant_meta(req.project_id, req.output_variant_id)
+        if clip.get('strategy_id') != 'bilibili':
+            raise BilibiliError('请选择 B站横版成片版本后再投稿')
+        export = {'ok': True, 'path': clip['video_path'], 'preset': clip['strategy_id']}
+    else:
+        clip = load_clip_meta(req.project_id, req.clip_id)
+        export = export_clip(ExportRequest(
+            project_id=req.project_id,
+            clip_id=req.clip_id,
+            preset="bilibili",
+            subtitles=req.subtitles,
+            title_card=req.title_card,
+        ))
     title = (req.title or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
     if not title:
         title = f"切片 {req.clip_id}"
     dtime = schedule_unix(req.scheduled_date, req.timezone)
-    export = export_clip(ExportRequest(
-        project_id=req.project_id,
-        clip_id=req.clip_id,
-        preset="bilibili",
-        subtitles=req.subtitles,
-        title_card=req.title_card,
-    ))
     video_path = Path(export["path"])
     uploaded = upload_video(
         cfg.cookie,

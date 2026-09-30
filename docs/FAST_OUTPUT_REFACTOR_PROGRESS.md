@@ -273,3 +273,32 @@ frontend: npm test
 ### 下一包
 
 发布路径按 variant 路由：Upload-Post/B站发布时选择正确的短竖版或横版长视频输出，不再将一个文件盲目发给所有平台。
+
+## 包 7：发布路径按 variant 路由
+
+状态：已完成，待合入。
+
+### 完成内容
+
+- Upload-Post 与 B站发布请求新增可选 `output_variant_id`。传入时直接复用该版本已完成的不可变 MP4，不再调用 `export_clip` 重新导出；未传时保持旧的 clip/preset 导出行为。
+- 新增 `studio.publishing.output_variant_meta()`：只接受状态为 completed 且有 render job 的 variant，缺失或未完成返回 404 语义错误。
+- 新增 `platform_strategy.incompatible_transport_platforms()`：横版 variant（YouTube 长视频、B站、原画）不能发给只收竖屏的 TikTok / Instagram，发布前明确报错，不会发出请求。
+- B站只接受 `bilibili` 策略的 variant；其他策略 variant 在 B站入口报“请选择 B站横版成片版本”。
+- 发布记录与返回结果写入 `output_variant_id` 与 `strategy_id`，便于后续按版本统计投递。
+- 结果卡为完成的 variant 增加“发布”入口，跳到 `/project/:id/publish/studio-{job}?variant=&strategy=`；发布页把 variant 传给 Upload-Post，仅当策略是 B站时才传给 B站，否则 B站继续走旧的横版重导出。
+
+### 已验证
+
+```text
+backend: 740 passed, 1 skipped
+frontend: npm run typecheck && npm run lint && npm run build && npm test（163 passed）
+```
+
+### 下一包
+
+真实桌面端端到端验收（包 5 记录的清单）与七个非中文语言目录的新文案正式翻译。
+
+### 主要风险
+
+- 多平台一次发布仍只能选一个 variant；从一个竖版 variant 同时勾选 B站时，B站会走旧导出重新生成横版，而不是自动挑选同项目的 B站 variant。后续可在发布页按平台自动匹配同内容的其他 variant。
+- 竖屏平台清单目前只包含 TikTok 与 Instagram；如 Upload-Post 平台规格变化需同步 registry。
