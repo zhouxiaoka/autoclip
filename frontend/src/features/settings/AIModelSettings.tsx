@@ -42,7 +42,7 @@ function SenseVoiceConfig() {
   return <div className="ac-rows">
     <Row label={t('转写模型')} hint={t('支持中文、粤语、英语、日语和韩语，使用词级时间戳生成字幕。')}><span>SenseVoiceSmall</span></Row>
     <Row label={runtime?.status === 'ready' ? t('模型已就绪') : t('准备本地模型')}
-      hint={runtime?.status === 'ready' ? t('保存设置后，新任务将使用这个模型。') : t('首次下载约 2 GB 的组件与模型，需要联网；准备完成后转写不上传音频。')}>
+      hint={runtime?.status === 'ready' ? t('保存设置后，新任务将使用这个模型。') : t('首次需联网下载组件和模型，请预留至少 8 GB 磁盘空间；准备完成后转写不上传音频。')}>
       {runtime?.status === 'ready' ? <StatusDot tone="ok" label={t('已就绪')} />
         : preparing ? <StatusDot tone="accent" label={t('正在准备组件与模型…')} />
         : <Btn size="sm" disabled={!runtime || busy} onClick={() => void act()}>{t('准备模型')}</Btn>}

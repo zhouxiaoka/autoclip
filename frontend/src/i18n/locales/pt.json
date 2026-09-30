@@ -1419,12 +1419,12 @@
   "制作中 · 查看进度": "Criando · Ver progresso",
   "SenseVoice · 本地": "SenseVoice · Local",
   "支持中文、粤语、英语、日语和韩语，使用词级时间戳生成字幕。": "Suporta mandarim, cantonês, inglês, japonês e coreano, com tempos por palavra.",
-  "首次下载约 2 GB 的组件与模型，需要联网；准备完成后转写不上传音频。": "O download inicial dos componentes e modelos é de cerca de 2 GB e requer internet. Depois, a transcrição não envia o áudio.",
   "正在准备组件与模型…": "Preparando componentes e modelo…",
   "模型准备失败，请检查网络和磁盘空间后重试。": "Falha ao preparar o modelo. Verifique a rede e o espaço em disco e tente novamente.",
   "仅安装所需模型，不启用说话人分离。": "Instala apenas os modelos necessários; a separação de falantes fica desativada.",
   "模型与许可说明": "Modelo e licença",
   "删除 SenseVoice 组件与模型": "Excluir componentes e modelos do SenseVoice",
   "删除后需要重新下载才能使用。": "Após excluir, será necessário baixar novamente.",
-  "操作失败，请稍后重试。": "A operação falhou. Tente novamente mais tarde."
+  "操作失败，请稍后重试。": "A operação falhou. Tente novamente mais tarde.",
+  "首次需联网下载组件和模型，请预留至少 8 GB 磁盘空间；准备完成后转写不上传音频。": "O download inicial dos componentes e modelos requer internet. Reserve pelo menos 8 GB de espaço em disco. Depois, a transcrição não envia o áudio."
 }

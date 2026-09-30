@@ -78,7 +78,7 @@
 
 ## 本地 SenseVoice（#67）
 
-设置 → 字幕转写 → 转写方式选择 **SenseVoice · 本地**，点击“准备模型”，就绪后保存设置。首次需联网下载 FunASR/PyTorch 组件和 SenseVoiceSmall/FSMN-VAD 模型（约 2 GB，另需安装临时空间）。转写时使用已下载的本地路径，不上传音频、不请求云端转写、不需要 API Key。默认 Whisper 和已有选择保持原样。
+设置 → 字幕转写 → 转写方式选择 **SenseVoice · 本地**，点击“准备模型”，就绪后保存设置。首次需联网下载 FunASR/PyTorch 组件和 SenseVoiceSmall/FSMN-VAD 模型，请预留至少 8 GB 磁盘空间（Windows 的真实安装验收约 5.8 GB，另需安装临时空间）。转写时使用已下载的本地路径，不上传音频、不请求云端转写、不需要 API Key。默认 Whisper 和已有选择保持原样。
 
 这是 FunASR 1.3.14 的 SenseVoiceSmall 适配器，不是把 FunASR 工具箱中的所有模型都加入列表。支持中文、粤语、英语、日语、韩语及自动语言检测。首版使用 CPU，限制为两条计算线程；不加载 CAM++ 说话人分离或额外标点模型，也不承诺 issue 中的通用速度数字。模型产生的空格和标点会保留。高光分析仍使用另行配置的分析模型。
 
