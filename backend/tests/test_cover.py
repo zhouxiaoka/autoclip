@@ -323,3 +323,47 @@ def test_model_catalog_marks_vision_and_image_models():
     assert mc.supports_vision("doubao-seed-2-1-lite-260915") and mc.supports_vision("qwen-vl-plus")
     assert not mc.supports_vision("deepseek-flash") and not mc.supports_vision("qwen-plus")
     assert mc.IMAGE_MODELS["dashscope"][0].startswith("wanx") and "deepseek" not in mc.IMAGE_MODELS
+
+
+def test_gemini_cover_uses_native_multimodal_request():
+    import base64
+    from backend.core.image_providers import generate_image, ImageRequest
+    image = _jpeg()
+    session = _Session([_Resp(payload={'candidates': [{'content': {'parts': [{'text': 'caption'}, {'inlineData': {'mimeType': 'image/jpeg', 'data': base64.b64encode(image).decode()}}]}}]})])
+    result = generate_image(provider='gemini', api_key='test-key', base_url='', request=ImageRequest('cover', 1920, 1080, reference=image, model='gemini-3.1-flash-image'), session=session)
+    assert result == image
+    method, url, args = session.calls[0]
+    assert url.endswith('/models/gemini-3.1-flash-image:generateContent')
+    assert args['headers']['x-goog-api-key'] == 'test-key'
+    assert args['json']['contents'][0]['parts'][0]['inlineData']['data']
+    assert args['json']['generationConfig']['responseModalities'] == ['TEXT', 'IMAGE']
+
+
+@pytest.mark.parametrize('model,route,asynchronous', [('qwen-image-2.0', 'multimodal-generation', False), ('wan2.7-image', 'image-generation', True), ('wan2.6-t2i', 'image-generation', True)])
+def test_modern_dashscope_routes_and_extracts_images(model, route, asynchronous):
+    from backend.core.image_providers import generate_image, ImageRequest
+    image = _jpeg()
+    output = {'output': {'choices': [{'message': {'content': [{'image': 'https://image.example/cover.jpg'}]}}]}}
+    responses = [_Resp(payload={'output': {'task_id': 'task', 'task_status': 'PENDING'}}), _Resp(payload=output)] if asynchronous else [_Resp(payload=output)]
+    session = _Session(responses + [_Resp(content=image)])
+    result = generate_image(provider='dashscope', api_key='test-key', base_url='', request=ImageRequest('cover', 1920, 1080, model=model), session=session, poll_interval=0)
+    assert result == image
+    args = session.calls[0][2]
+    assert session.calls[0][1].endswith(f'/services/aigc/{route}/generation')
+    assert ('X-DashScope-Async' in args['headers']) == asynchronous
+    assert args['json']['input']['messages'][0]['content'] == [{'text': 'cover'}]
+    assert args['json']['parameters']['n'] == 1
+
+
+def test_grok_and_glm_use_vendor_image_parameters():
+    import base64
+    from backend.core.image_providers import generate_image, ImageRequest
+    image = _jpeg()
+    for provider, model in [('grok', 'grok-imagine-image-2.0'), ('glm', 'glm-image')]:
+        session = _Session([_Resp(payload={'data': [{'b64_json': base64.b64encode(image).decode()}]})])
+        assert generate_image(provider=provider, api_key='test-key', base_url='', request=ImageRequest('cover', 1920, 1080, model=model), session=session) == image
+        body = session.calls[0][2]['json']
+        if provider == 'grok':
+            assert body['aspect_ratio'] == '16:9' and 'size' not in body
+        else:
+            assert body['size'] == '1728x960' and 'response_format' not in body

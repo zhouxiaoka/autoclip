@@ -160,11 +160,23 @@ def verify_endpoint(cfg: "CoverConfig") -> dict[str, str]:
         vision = {}
     if vision.get("base_url") and vision.get("model"):
         return {"provider": "openai", "api_key": vision.get("api_key", ""), "base_url": vision["base_url"], "model": vision["model"]}
+    if cfg.source == 'connections':
+        raise ImageError('未选择可用于封面校对的多模态模型，跳过校对')
     return {"provider": cfg.provider, "api_key": cfg.api_key, "base_url": cfg.base_url,
             "model": default_ocr_model(cfg.provider, cfg.model, cfg.base_url)}
 
 
 def load_config() -> CoverConfig:
+    from backend.services import ai_model_settings as ai
+    settings = ai.load()
+    if settings:
+        binding = settings.cover
+        endpoint = ai.image_endpoint(ai.connection_for(settings, binding)) if binding else {}
+        return CoverConfig(enabled=settings.cover_enabled, model=binding.model if binding else '',
+                           provider=endpoint.get('provider', 'openai'), base_url=endpoint.get('base_url', ''),
+                           api_key=endpoint.get('api_key', ''), allow_send_frame=settings.allow_send_frame,
+                           ocr_model=settings.cover_ocr_model,
+                           source='connections', key_source='connection', mode='custom')
     env_key = (os.getenv("IMAGE_API_KEY") or "").strip()
     env_provider = (os.getenv("IMAGE_PROVIDER") or "").strip().lower()
     env_base = (os.getenv("IMAGE_BASE_URL") or "").strip()

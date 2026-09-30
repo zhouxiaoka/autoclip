@@ -95,8 +95,7 @@ class SimplePipelineAdapter:
                 srt_path = generate_subtitle_for_video(
                     video_file_path,
                     output_path=output_path,
-                    method="whisper_local",
-                    model="base",
+                    method="auto",
                     language="auto"
                 )
                 

@@ -11,6 +11,13 @@ class Preferences(BaseModel):
     aspect: Literal['original', 'portrait', 'landscape'] = 'original'
     duration: int = Field(30, ge=10, le=120)
 
+class CropPoint(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    # Seconds from the start of the scene; the framing holds until the next point.
+    start: float = Field(ge=0)
+    crop_x: float = Field(ge=0, le=1)
+
+
 class Scene(BaseModel):
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
     id: str = Field(pattern=r'^[a-zA-Z0-9_-]+$', min_length=1, max_length=100)
@@ -18,6 +25,10 @@ class Scene(BaseModel):
     start: float = Field(ge=0)
     end: float = Field(gt=0)
     evidence: str = Field(default='', max_length=1000)
+    # Per-scene horizontal framing for the crop layout (0 = left, 1 = right); None follows the draft.
+    crop_x: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
+    # Speaker-following framing: piecewise-constant crop_x over the scene. Empty/None = static crop_x.
+    crop_track: list[CropPoint] | None = Field(default=None, max_length=400)
 
     @model_validator(mode='after')
     def interval(self):
@@ -42,6 +53,7 @@ class Draft(BaseModel):
     title_y: float = Field(default=.12, ge=.06, le=.70, allow_inf_nan=False)
     title_accent: str | None = Field(default=None, pattern=r'^#[0-9a-fA-F]{6}$')
     subtitles: bool = True
+    subtitle_style: Literal['clean', 'bold', 'box', 'accent'] = 'clean'
     original_audio: bool = True
     revision: int = Field(default=1, ge=1)
     updated_at: str = ''

@@ -169,7 +169,8 @@ stdlib = set(sys.stdlib_module_names)
 # Modules that are installed AT RUNTIME by the user (Whisper feature), not
 # bundled. They are imported lazily inside functions and must NOT fail the
 # build. Keep this list tight.
-runtime_optional = {"faster_whisper", "ctranslate2", "huggingface_hub"}
+# cv2: speaker framing (backend/services/studio/framing.py), installed on demand like Whisper.
+runtime_optional = {"faster_whisper", "ctranslate2", "huggingface_hub", "cv2"}
 mods = set()
 for root, _, files in os.walk(backend_dir):
     if '__pycache__' in root:

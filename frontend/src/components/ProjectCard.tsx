@@ -84,6 +84,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const [isRetrying, setIsRetrying] = useState(false)
 
   // 获取分类信息
+  const isExample = !!(project.settings?.example || project.processing_config?.example)
   const getCategoryInfo = (category?: string) => {
     const categoryMap: Record<string, { name: string; icon: string; color: string }> = {
       'default': { name: t("默认"), icon: '🎬', color: '#4facfe' },
@@ -409,16 +410,21 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             <PlayCircleOutlined style={{ fontSize: '32px', color: 'var(--ac-muted)' }} />
           )}
           
-          {/* 分类标签 - 左上角 */}
-          {project.video_category && project.video_category !== 'default' && (
+          {/* 分类 / 示例标签 - 左上角，中性玻璃 chip */}
+          {((project.video_category && project.video_category !== 'default') || isExample) && (
             <div style={{
               position: 'absolute',
               top: '8px',
-              left: '8px'
+              left: '8px',
+              display: 'flex',
+              gap: 6
             }}>
-              <span className="ac-tag ac-tag--sans" style={{ position: 'static', fontSize: 11 }}>
-                {getCategoryInfo(project.video_category).name}
-              </span>
+              {isExample && <span className="ac-tag ac-tag--sans" style={{ position: 'static', fontSize: 11 }}>{t("示例")}</span>}
+              {project.video_category && project.video_category !== 'default' && (
+                <span className="ac-tag ac-tag--sans" style={{ position: 'static', fontSize: 11 }}>
+                  {getCategoryInfo(project.video_category).name}
+                </span>
+              )}
             </div>
           )}
           

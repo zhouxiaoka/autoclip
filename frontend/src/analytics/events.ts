@@ -17,6 +17,8 @@ export const AnalyticsEvent = {
   ApiKeyConfigured: 'api_key_configured',
   /** 打开赞助商的注册 / 接入说明链接（只记录是哪家、哪个入口） */
   SponsorLinkOpened: 'sponsor_link_opened',
+  /** 首页空态点开内置示例项目（无 Key、无原片） */
+  ExampleProjectOpened: 'example_project_opened',
 } as const
 
 export type AnalyticsEventName =
@@ -60,7 +62,7 @@ export function trackProcessingFailed(props: {
 export function trackSponsorLinkOpened(props: {
   sponsor: 'infistar'
   target: 'register' | 'guide'
-  placement: 'settings_model'
+  placement: 'settings_model' | 'home_setup'
 }): void {
   trackEvent(AnalyticsEvent.SponsorLinkOpened, props)
 }
@@ -71,4 +73,8 @@ export function trackApiKeyConfigured(props: {
   hasKey: boolean
 }): void {
   trackEvent(AnalyticsEvent.ApiKeyConfigured, props)
+}
+
+export function trackExampleProjectOpened(): void {
+  trackEvent(AnalyticsEvent.ExampleProjectOpened)
 }

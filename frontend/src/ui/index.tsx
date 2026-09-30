@@ -109,7 +109,10 @@ export const Dialog: React.FC<{
 }> = ({ open, onClose, title, description, footer, children }) => {
   React.useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      // Esc with an AntD dropdown open only closes the dropdown, not the dialog behind it.
+      if (e.key === 'Escape' && !document.querySelector('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')) onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])

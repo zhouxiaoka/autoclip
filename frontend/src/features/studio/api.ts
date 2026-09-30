@@ -1,7 +1,7 @@
 import { observeStudioOperation, studioImportProperties, studioGoals, observeStudioWorkspace } from '../../analytics/studio'
 import { workflow } from '../../analytics/observer'
 import api from '../../services/api'
-import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences } from './types'
+import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences, SubtitleCue, FramingStatus, AutoFrameResult } from './types'
 export type SourcePreview = { status: 'idle' | 'queued' | 'running' | 'completed' | 'failed'; version?: string; error?: string }
 export const studioApi = {
   preparePreview: (pid: string): Promise<SourcePreview> => api.post(`/studio/${pid}/source-preview`),
@@ -10,6 +10,10 @@ export const studioApi = {
   analysisPreferences: (): Promise<AnalysisPreferences> => api.get('/studio/analysis-preferences'),
   saveAnalysisPreferences: (body: AnalysisPreferences): Promise<AnalysisPreferences> => observeStudioOperation('studio_analysis_preferences', () => api.put('/studio/analysis-preferences', body), undefined, { analysis_mode: body.analysis_mode, allow_visual_screening: body.allow_visual_screening }),
   source: (pid: string) => `${api.defaults.baseURL}/studio/${pid}/source`,
+  subtitles: (pid: string, signal?: AbortSignal): Promise<{ cues: SubtitleCue[] }> => api.get(`/studio/${pid}/subtitles`, { signal }),
+  framingStatus: (): Promise<FramingStatus> => api.get('/studio/framing/status'),
+  framingInstall: (): Promise<FramingStatus & { started: boolean }> => api.post('/studio/framing/install'),
+  autoFrame: (pid: string, draft: Draft): Promise<AutoFrameResult> => api.post(`/studio/${pid}/auto-frame`, draft, { timeout: 120000 }),
   capabilities: (): Promise<{ visual_analysis: boolean; visual_model: string }> => api.get('/studio/capabilities'),
   get: (pid: string, signal?: AbortSignal): Promise<Workspace> => observeStudioWorkspace(pid, () => api.get(`/studio/${pid}`, { signal })),
   titleThumbnail: (style: string, version = 6) => `${api.defaults.baseURL}/studio/title-presets/${style}/thumbnail?v=${version}`,

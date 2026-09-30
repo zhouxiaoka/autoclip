@@ -24,10 +24,13 @@ test('appending the same source twice gives independent scene identities and enf
  assert.ok(draftError(next,8));assert.equal(draftError(next,10),null)
 })
 
-test('portrait recommendation updates composition and title without modifying source or language',()=>{
- const original={...draft,language:'en',aspect:'landscape',layout:'fit'}
+test('portrait recommendation updates composition and captions without modifying source or language',()=>{
+ const original={...draft,language:'en',aspect:'landscape',layout:'fit',hook:''}
  const next=m.exports.portraitDesign(original)
- assert.equal(next.aspect,'portrait');assert.equal(next.layout,'crop');assert.equal(next.title_style,'comic');assert.equal(next.title_template_version,6)
+ assert.equal(next.aspect,'portrait');assert.equal(next.layout,'crop');assert.equal(next.subtitle_style,'bold')
+ assert.equal(next.title_style,original.title_style,'no opening title → its style is left alone')
  assert.equal(next.crop_x,.5);assert.equal(next.language,'en');assert.equal(next.scenes,original.scenes)
  assert.equal(original.layout,'fit')
+ const titled=m.exports.portraitDesign({...original,hook:'Watch this'})
+ assert.equal(titled.title_style,'comic');assert.equal(titled.title_template_version,6)
 })

@@ -1,6 +1,19 @@
 export type Goal = 'content' | 'highlight' | 'promo'
 export type Language = 'source' | 'zh' | 'en' | 'ja'
-export interface Scene { id: string; label: string; start: number; end: number; evidence: string }
+export type SubtitleStyle = 'clean' | 'bold' | 'box' | 'accent'
+export const subtitleStyles: { value: SubtitleStyle; label: string }[] = [{ value: 'clean', label: '简洁描边' }, { value: 'bold', label: '粗体大字' }, { value: 'box', label: '底色字幕条' }, { value: 'accent', label: '醒目黄字' }]
+export interface SubtitleCue { start: number; end: number; text: string }
+export interface FramingStatus { status: 'installed' | 'not_installed' | 'installing' | 'error'; progress: number; message: string; size_mb: number }
+export interface AutoFrameResult { window_fraction: number; scenes: { id: string; crop_x: number | null; crop_track: CropPoint[] | null; faces: number; samples: number; switches: number }[] }
+export interface CropPoint { start: number; crop_x: number }
+export interface Scene { id: string; label: string; start: number; end: number; evidence: string; crop_x?: number | null; crop_track?: CropPoint[] | null }
+/** Crop window position for a scene at `time` (absolute seconds): speaker track first, then static values. */
+export function cropAt(scene: Scene | undefined, time: number, fallback = .5): number {
+  if (!scene) return fallback
+  const track = scene.crop_track || []
+  if (track.length) { const rel = time - scene.start; let x = track[0].crop_x; for (const p of track) { if (p.start <= rel) x = p.crop_x; else break } return x }
+  return scene.crop_x ?? fallback
+}
 export interface Candidate extends Scene { kind: 'visual' | 'legacy' }
 export interface CandidateList { duration: number; candidates: Candidate[]; warnings: string[] }
 export interface Draft {
@@ -8,7 +21,7 @@ export interface Draft {
   aspect: 'original' | 'portrait' | 'landscape'; layout: 'fit' | 'crop' | 'blur'
   crop_x?: number; title_style?: 'plain' | 'impact' | 'card' | 'comic' | 'neon' | 'arena' | 'editorial' | 'pixel' | 'frosted'
   title_template_version?: 1 | 2 | 3 | 4 | 5 | 6; title_motion?: boolean; title_scale?: number; title_y?: number; title_accent?: string | null
-  subtitles: boolean; original_audio: boolean; revision: number; updated_at: string; origin: string
+  subtitles: boolean; subtitle_style?: SubtitleStyle; original_audio: boolean; revision: number; updated_at: string; origin: string
   parent_draft_id?: string | null; parent_revision?: number | null
 }
 export interface RenderJob {
@@ -51,8 +64,10 @@ export function applyCandidate(draft: Draft, candidate: Candidate, target: numbe
   return result
 }
 
+/** Phone-friendly defaults: fill the frame and use large captions. The title look only changes when there is an opening title. */
 export function portraitDesign(draft: Draft): Draft {
-  return {...draft, aspect:'portrait', layout:'crop', crop_x:draft.crop_x ?? .5, title_style:'comic', title_template_version:6}
+  const withTitle = draft.hook.trim() ? { title_style: 'comic' as const, title_template_version: 6 as const } : {}
+  return {...draft, aspect:'portrait', layout:'crop', crop_x:draft.crop_x ?? .5, subtitle_style: 'bold', ...withTitle}
 }
 
 export interface ImportOptions {

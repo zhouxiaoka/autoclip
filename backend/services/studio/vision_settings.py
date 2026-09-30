@@ -101,6 +101,14 @@ def _with_text_model(stored):
 
 
 def effective():
+    from backend.services import ai_model_settings as ai
+    settings = ai.load()
+    if settings:
+        endpoint = ai.vision_endpoint(settings)
+        binding = settings.vision or settings.analysis
+        return {**(endpoint or {'base_url': '', 'api_key': '', 'model': ''}),
+                'mode': 'custom' if settings.vision else 'text_model', 'source': 'connections',
+                'text_model': binding.model if binding else '', 'timeout': settings.vision_timeout}
     saved = _saved()
     if saved is not None:
         if saved['mode'] == 'text_model':

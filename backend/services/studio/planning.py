@@ -31,7 +31,7 @@ def recommend(video: Path, options: ImportOptions):
         result = Recommendation(content_type='other', goal=options.goal,
             reason='按你指定的制作方式处理，其他未指定选项使用推荐设置。', confidence=1,
             aspect='portrait' if options.goal == 'promo' else 'original')
-    elif consent.analysis_mode == 'subtitle' or (consent.analysis_mode == 'auto' and not consent.allow_visual_screening) or (configured and not analysis_preferences.visual_screening_allowed(consent, vision_configured=configured)):
+    elif consent.analysis_mode == 'subtitle' or (consent.analysis_mode == 'auto' and (not consent.allow_visual_screening or not configured)) or (configured and not analysis_preferences.visual_screening_allowed(consent, vision_configured=configured)):
         mode = 'local'
         from backend.services.studio.local_evidence import inspect_subtitles
         local_evidence = inspect_subtitles(video, duration)

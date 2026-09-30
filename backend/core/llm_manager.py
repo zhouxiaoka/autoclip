@@ -28,11 +28,14 @@ class LLMManager:
         self.settings = self._load_settings()
         self._initialize_provider()
 
-    def _current_settings_mtime(self) -> Optional[float]:
-        try:
-            return self.settings_file.stat().st_mtime
-        except OSError:
-            return None
+    def _current_settings_mtime(self):
+        from backend.services.ai_model_settings import path as ai_path
+        def stamp(path):
+            try:
+                return path.stat().st_mtime_ns
+            except OSError:
+                return None
+        return (stamp(self.settings_file), stamp(ai_path()))
 
     def _reload_if_settings_changed(self) -> None:
         """设置页保存后 settings.json 会变；API 进程与 Celery worker 都要在下一次调用时拿到新配置，
@@ -158,6 +161,18 @@ class LLMManager:
         self._apply_env_fallbacks(default_settings)
         self._apply_local_preset(default_settings)
         self._apply_cloud_preset(default_settings)
+        from backend.services import ai_model_settings as ai
+        configured = ai.load()
+        if configured and configured.analysis:
+            binding = configured.analysis
+            connection = ai.connection_for(configured, binding)
+            endpoint = ai.chat_endpoint(connection, binding.model)
+            default_settings.update(llm_provider='openai', cloud_preset=None, llm_provider_preset=None,
+                                    openai_api_key=endpoint['api_key'], openai_base_url=endpoint['base_url'],
+                                    model_name=binding.model, connection_provider=connection.provider,
+                                    connection_name=connection.name, chunk_size=configured.chunk_size,
+                                    min_score_threshold=configured.min_score_threshold,
+                                    max_clips_per_collection=configured.max_clips_per_collection)
         return default_settings
 
     def _apply_local_preset(self, settings: Dict[str, Any]) -> None:
@@ -472,6 +487,9 @@ class LLMManager:
         base_url = self._get_provider_kwargs(provider_type).get("base_url")
         if base_url:
             info["base_url"] = base_url
+        if self.settings.get('connection_provider'):
+            info['provider'] = self.settings['connection_provider']
+            info['display_name'] = self.settings['connection_name']
         return info
     
     def _get_provider_display_name(self, provider_type: ProviderType) -> str:

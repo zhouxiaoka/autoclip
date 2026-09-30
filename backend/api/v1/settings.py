@@ -20,6 +20,60 @@ from pathlib import Path
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
+from backend.services import ai_model_settings as ai_models
+
+
+@router.get('/ai-models')
+def get_ai_models():
+    return ai_models.public(ai_models.load() or ai_models.migrate_legacy())
+
+
+@router.put('/ai-models')
+def put_ai_models(body: ai_models.ModelSettings):
+    try:
+        return ai_models.save(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class ConnectionModelsRequest(BaseModel):
+    connection: ai_models.Connection
+    refresh: bool = False
+
+
+@router.post('/ai-models/discover')
+async def discover_connection_models(body: ConnectionModelsRequest):
+    from backend.core.model_registry import discover
+    try:
+        connection = ai_models.resolve_secret(body.connection, ai_models.load() or ai_models.migrate_legacy())
+        return await discover(connection, body.refresh)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class ConnectionTestRequest(BaseModel):
+    connection: ai_models.Connection
+    model: str = Field(min_length=1, max_length=200)
+    vision: bool = False
+
+
+@router.post('/ai-models/test')
+def test_connection_assignment(body: ConnectionTestRequest):
+    from backend.core.llm_providers import LLMProviderFactory, ProviderType
+    try:
+        connection = ai_models.resolve_secret(body.connection, ai_models.load() or ai_models.migrate_legacy())
+        endpoint = ai_models.chat_endpoint(connection, body.model)
+        if body.vision:
+            from backend.services.studio.vision_settings import test, VisionSettingsInput
+            return test(VisionSettingsInput(mode='custom', **endpoint))
+        provider = LLMProviderFactory.create_provider(ProviderType.OPENAI, endpoint['api_key'],
+                                                      body.model, base_url=endpoint['base_url'])
+        return {'success': provider.test_connection()}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        return {'success': False, 'error': '连接测试失败，请检查接口、密钥和模型'}
+
 
 class BasicSettings(BaseModel):
     """基础设置"""

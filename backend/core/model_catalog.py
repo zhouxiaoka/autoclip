@@ -123,6 +123,9 @@ _TEXT_ONLY_MARKERS = ("deepseek", "-code", "coder", "embedding", "-instruct-text
 
 def supports_vision(model: str) -> bool:
     name = (model or "").strip().lower()
+    # Explicitly verified official model IDs; these no longer carry a -vl suffix.
+    if name in {'qwen3.8-max', 'qwen3.8-flash'}:
+        return True
     if not name or any(m in name for m in _TEXT_ONLY_MARKERS):
         return False
     return any(m in name for m in _VISION_MARKERS)

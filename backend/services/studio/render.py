@@ -64,7 +64,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                     title.write_text('\n'.join(textwrap.wrap(hook, width=14)), encoding='utf-8')
                 spec = {'layout': draft.layout, 'w': w, 'h': h}
                 req = ExportRequest(project_id, draft.id, layout=draft.layout)
-                built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font)
+                built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font, draft.subtitle_style)
                 clip_path = folder / f'{i}.mkv'
                 artwork = None
                 backdrop = None
@@ -89,7 +89,8 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                     graph, last = built
                     graph = graph.replace(':reload=0', ':expansion=none:reload=0').replace(':fontsize=42:', f':fontsize={max(18, round(w * .06))}:').replace(f'[fg]scale={w}:-2[fg2]', f'[fg]scale={w}:{h}:force_original_aspect_ratio=decrease[fg2]')
                     if draft.layout == 'crop':
-                        graph = graph.replace(f'crop={w}:{h}[base]', f'crop={w}:{h}:x=(iw-ow)*{draft.crop_x}:y=(ih-oh)/2,setsar=1[base]')
+                        from backend.services.studio.framing import crop_expression
+                        graph = graph.replace(f'crop={w}:{h}[base]', f"crop={w}:{h}:x='(iw-ow)*{crop_expression(scene, draft.crop_x)}':y=(ih-oh)/2,setsar=1[base]")
                     if backdrop:
                         # Keep all three inputs on one clock and use RGB masks:
                         # a gray mask converted to YUV has neutral chroma (128),

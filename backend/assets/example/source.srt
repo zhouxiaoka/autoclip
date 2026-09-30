@@ -1,0 +1,1019 @@
+1
+00:00:00,000 --> 00:00:02,550
+You said we did not have our best last
+
+2
+00:00:02,560 --> 00:00:04,550
+12 months ever, which is mostly my
+
+3
+00:00:04,560 --> 00:00:06,630
+fault, but we are about to have our best
+
+4
+00:00:06,640 --> 00:00:09,110
+12 months. What did you mean by that?
+
+5
+00:00:09,120 --> 00:00:11,270
+>> Best 12 months yet.
+
+6
+00:00:11,280 --> 00:00:14,550
+>> I think we clearly had some missteps as
+
+7
+00:00:14,560 --> 00:00:15,669
+a company, which will happen
+
+8
+00:00:15,679 --> 00:00:17,030
+periodically. I mean, part of trying to
+
+9
+00:00:17,040 --> 00:00:18,630
+make a portfolio of bets is that
+
+10
+00:00:18,640 --> 00:00:19,909
+sometimes more of them work and
+
+11
+00:00:19,919 --> 00:00:22,230
+sometimes less of them work. Um but I
+
+12
+00:00:22,240 --> 00:00:23,990
+think both in terms of product direction
+
+13
+00:00:24,000 --> 00:00:26,630
+and specifically on pre-training in
+
+14
+00:00:26,640 --> 00:00:28,790
+research we fell behind where we wanted
+
+15
+00:00:28,800 --> 00:00:32,230
+to be. I think we are now executing not
+
+16
+00:00:32,240 --> 00:00:33,830
+only the best we have ever executed but
+
+17
+00:00:33,840 --> 00:00:36,550
+the best of uh kind of any company in
+
+18
+00:00:36,560 --> 00:00:39,590
+the space and it is very fun to like the
+
+19
+00:00:39,600 --> 00:00:41,510
+you know the upswing is more fun after
+
+20
+00:00:41,520 --> 00:00:44,150
+the downswing. Uh so just looking at the
+
+21
+00:00:44,160 --> 00:00:46,870
+pace of models that we really have come
+
+22
+00:00:46,880 --> 00:00:48,390
+in the way the company has come together
+
+23
+00:00:48,400 --> 00:00:50,550
+and focused and made a bunch of hard
+
+24
+00:00:50,560 --> 00:00:52,470
+decisions in very different parts of the
+
+25
+00:00:52,480 --> 00:00:54,470
+company but done sort of in unison and
+
+26
+00:00:54,480 --> 00:00:57,030
+in one direction uh it feels it feels
+
+27
+00:00:57,040 --> 00:00:57,909
+great right now
+
+28
+00:00:57,919 --> 00:00:59,189
+>> and I want to get to all that but to
+
+29
+00:00:59,199 --> 00:01:00,630
+dwell on this for a second because the
+
+30
+00:01:00,640 --> 00:01:03,030
+last year a lot has happened. Um were
+
+31
+00:01:03,040 --> 00:01:04,790
+there specific decisions you can look
+
+32
+00:01:04,800 --> 00:01:07,189
+back on that you made that cost the
+
+33
+00:01:07,199 --> 00:01:08,790
+company momentum? I mean you mentioned
+
+34
+00:01:08,800 --> 00:01:10,550
+pre-training. I know you've always been
+
+35
+00:01:10,560 --> 00:01:13,030
+very close to the research team. Uh but
+
+36
+00:01:13,040 --> 00:01:14,310
+can you elaborate on that?
+
+37
+00:01:14,320 --> 00:01:16,150
+>> I I think we were trying to do too much
+
+38
+00:01:16,160 --> 00:01:19,189
+on the product side. Uh and so there was
+
+39
+00:01:19,199 --> 00:01:21,270
+like you know we and these were all
+
+40
+00:01:21,280 --> 00:01:22,310
+things that were actually very good
+
+41
+00:01:22,320 --> 00:01:24,150
+things to do. They were just not as good
+
+42
+00:01:24,160 --> 00:01:25,590
+as the most important thing to do which
+
+43
+00:01:25,600 --> 00:01:27,429
+was sort of push on the general
+
+44
+00:01:27,439 --> 00:01:29,909
+capability of of the intelligence. Uh so
+
+45
+00:01:29,919 --> 00:01:32,150
+we were doing things like a browser and
+
+46
+00:01:32,160 --> 00:01:35,590
+Sora and we now have a very relentless
+
+47
+00:01:35,600 --> 00:01:38,070
+focus on being this intelligent service
+
+48
+00:01:38,080 --> 00:01:40,070
+to people and I think our models are
+
+49
+00:01:40,080 --> 00:01:41,669
+they have gotten to be the best in the
+
+50
+00:01:41,679 --> 00:01:43,750
+world and they will get much much better
+
+51
+00:01:43,760 --> 00:01:45,429
+over the coming months and people are
+
+52
+00:01:45,439 --> 00:01:48,630
+really doing remarkable things but that
+
+53
+00:01:48,640 --> 00:01:49,750
+is what we should have been focused on
+
+54
+00:01:49,760 --> 00:01:51,030
+and I should have been holding everybody
+
+55
+00:01:51,040 --> 00:01:53,510
+to this is the one thing we'll not worry
+
+56
+00:01:53,520 --> 00:01:55,350
+about these sort of side quests more
+
+57
+00:01:55,360 --> 00:01:56,790
+>> looking at the leadership changes you
+
+58
+00:01:56,800 --> 00:01:58,790
+had about a year ago you brought in Fiji
+
+59
+00:01:58,800 --> 00:02:01,110
+Simo to help run large parts of the
+
+60
+00:02:01,120 --> 00:02:03,510
+company. She had to step back due to her
+
+61
+00:02:03,520 --> 00:02:05,429
+health. And now you and Greg Brockman,
+
+62
+00:02:05,439 --> 00:02:07,270
+your co-founder, are effectively
+
+63
+00:02:07,280 --> 00:02:08,870
+splitting responsibilities, running the
+
+64
+00:02:08,880 --> 00:02:11,590
+company together. Is this the setup that
+
+65
+00:02:11,600 --> 00:02:14,630
+you envision will continue or is this
+
+66
+00:02:14,640 --> 00:02:15,990
+something temporary?
+
+67
+00:02:16,000 --> 00:02:18,870
+>> Um, I think it's going super well. I I
+
+68
+00:02:18,880 --> 00:02:21,350
+we will continue to bring in and promote
+
+69
+00:02:21,360 --> 00:02:25,030
+uh you know new new leaders but uh it
+
+70
+00:02:25,040 --> 00:02:28,550
+feels and I'm you know extremely sad
+
+71
+00:02:28,560 --> 00:02:31,189
+about Fiji hard to like fill her shoes
+
+72
+00:02:31,199 --> 00:02:33,830
+but it feels good and I think Greg and I
+
+73
+00:02:33,840 --> 00:02:36,150
+are executing well and the company is uh
+
+74
+00:02:36,160 --> 00:02:37,590
+you know you can like really tell when
+
+75
+00:02:37,600 --> 00:02:39,429
+things are moving in the right direction
+
+76
+00:02:39,439 --> 00:02:40,470
+and it feels like things are moving in
+
+77
+00:02:40,480 --> 00:02:41,110
+the right direction.
+
+78
+00:02:41,120 --> 00:02:42,390
+>> How do you all make decisions you and
+
+79
+00:02:42,400 --> 00:02:44,709
+Greg together? Like who decides what? Do
+
+80
+00:02:44,719 --> 00:02:46,550
+you ever have a tie you have to break?
+
+81
+00:02:46,560 --> 00:02:49,270
+Uh I mean we talk a lot like a lot lot
+
+82
+00:02:49,280 --> 00:02:51,990
+like all of the time. Uh it's not like
+
+83
+00:02:52,000 --> 00:02:53,110
+this is like a big company. It's not
+
+84
+00:02:53,120 --> 00:02:56,230
+just Greg and I. Um there's there's like
+
+85
+00:02:56,240 --> 00:02:59,030
+an incredibly talented set of people
+
+86
+00:02:59,040 --> 00:03:00,790
+managing the research program. Um
+
+87
+00:03:00,800 --> 00:03:02,150
+there's an incredibly talented set of
+
+88
+00:03:02,160 --> 00:03:04,630
+people managing the business and we all
+
+89
+00:03:04,640 --> 00:03:08,150
+just talk a lot and and uh at an earlier
+
+90
+00:03:08,160 --> 00:03:09,990
+scale I thought it was good to just sort
+
+91
+00:03:10,000 --> 00:03:12,230
+of try something and adapt quickly if it
+
+92
+00:03:12,240 --> 00:03:13,990
+works and not spend as much time really
+
+93
+00:03:14,000 --> 00:03:15,990
+trying to debate the decision. at our
+
+94
+00:03:16,000 --> 00:03:17,510
+scale. Now, I've learned that it's much
+
+95
+00:03:17,520 --> 00:03:18,949
+better to spend a lot of time trying to
+
+96
+00:03:18,959 --> 00:03:20,550
+get to the right decision and and kind
+
+97
+00:03:20,560 --> 00:03:22,390
+of a measure twice, cut once approach.
+
+98
+00:03:22,452 --> 00:03:24,601
+privacy but like the way we the
+
+99
+00:03:24,611 --> 00:03:25,802
+commitments we make about not training
+
+100
+00:03:25,812 --> 00:03:27,722
+on businesses data and about zero data
+
+101
+00:03:27,732 --> 00:03:29,642
+retention uh I think this is very
+
+102
+00:03:29,652 --> 00:03:32,361
+important and as AI becomes more and
+
+103
+00:03:32,371 --> 00:03:35,402
+more embedded in our lives privacy
+
+104
+00:03:35,412 --> 00:03:39,162
+becomes extremely important and one
+
+105
+00:03:39,172 --> 00:03:42,042
+thing I worry about is there are other
+
+106
+00:03:42,052 --> 00:03:43,881
+efforts that think differently and will
+
+107
+00:03:43,891 --> 00:03:46,762
+push on hey the safety risks are so big
+
+108
+00:03:46,772 --> 00:03:49,962
+that AI privacy can't exist. in the same
+
+109
+00:03:49,972 --> 00:03:51,561
+kind of way. I think that there should
+
+110
+00:03:51,571 --> 00:03:53,081
+be like an AI privilege law. I don't
+
+111
+00:03:53,091 --> 00:03:54,762
+even think the government should be able
+
+112
+00:03:54,772 --> 00:03:57,242
+allowed to like compel you know a
+
+113
+00:03:57,252 --> 00:03:58,601
+company to give them your chat history
+
+114
+00:03:58,611 --> 00:04:00,042
+or whatever like you know if you talk to
+
+115
+00:04:00,052 --> 00:04:01,402
+a doctor or a lawyer there's a concept
+
+116
+00:04:01,412 --> 00:04:02,601
+of privilege. You don't have that
+
+117
+00:04:02,611 --> 00:04:04,361
+talking to Chad GPT. I think you should.
+
+118
+00:04:04,371 --> 00:04:05,642
+>> In that context though that you just
+
+119
+00:04:05,652 --> 00:04:07,402
+described there's also a lot of limits
+
+120
+00:04:07,412 --> 00:04:08,922
+on what a lawyer or a doctor can do with
+
+121
+00:04:08,932 --> 00:04:10,442
+your data. It's not just sharing it
+
+122
+00:04:10,452 --> 00:04:11,722
+externally. Do you think that that kind
+
+123
+00:04:11,732 --> 00:04:13,402
+of oversight should extend to how you
+
+124
+00:04:13,412 --> 00:04:13,722
+use
+
+125
+00:04:13,732 --> 00:04:15,162
+>> Yeah. No, I was going to get to
+
+126
+00:04:15,172 --> 00:04:16,601
+>> Yeah. Yeah. So, I think there should be
+
+127
+00:04:16,611 --> 00:04:18,042
+legal limits of what the government can
+
+128
+00:04:18,052 --> 00:04:20,121
+do. I also think companies should have a
+
+129
+00:04:20,131 --> 00:04:21,802
+lot of restrictions on data shared with
+
+130
+00:04:21,812 --> 00:04:23,642
+an AI and especially if you have this
+
+131
+00:04:23,652 --> 00:04:25,162
+thing watching your computer, listen to
+
+132
+00:04:25,172 --> 00:04:27,321
+your messages, talking to you, like
+
+133
+00:04:27,331 --> 00:04:29,321
+yeah, I I think that this is I think
+
+134
+00:04:29,331 --> 00:04:30,282
+there should be something people are
+
+135
+00:04:30,292 --> 00:04:31,802
+much more animated about than they are.
+
+136
+00:04:31,812 --> 00:04:34,042
+>> How before that happens, how do you at
+
+137
+00:04:34,052 --> 00:04:37,722
+OpenAI govern that self-govern the use
+
+138
+00:04:37,732 --> 00:04:39,642
+of data? you probably have some of the
+
+139
+00:04:39,652 --> 00:04:41,561
+most powerful profile data that's ever
+
+140
+00:04:41,571 --> 00:04:43,321
+been amassed on in the history of the
+
+141
+00:04:43,331 --> 00:04:43,561
+world.
+
+142
+00:04:43,571 --> 00:04:45,242
+>> We have extremely strong internal
+
+143
+00:04:45,252 --> 00:04:47,642
+controls about how that's used. Uh and
+
+144
+00:04:47,652 --> 00:04:50,841
+we make the privacy guarantees to users
+
+145
+00:04:50,851 --> 00:04:53,722
+that we do. Um as we get closer to
+
+146
+00:04:53,732 --> 00:04:55,081
+launching this device, we'll be talking
+
+147
+00:04:55,091 --> 00:04:58,442
+about kind of the new privacy controls
+
+148
+00:04:58,452 --> 00:05:00,282
+and technology we're building for a
+
+149
+00:05:00,292 --> 00:05:02,121
+device that's like kind of ambiently
+
+150
+00:05:02,131 --> 00:05:04,282
+computing. But yeah, I think we have one
+
+151
+00:05:04,292 --> 00:05:06,361
+of the
+
+152
+00:05:06,371 --> 00:05:08,121
+more personal databases ever.
+
+153
+00:05:08,131 --> 00:05:10,682
+>> Apple has very publicly sued you guys
+
+154
+00:05:10,692 --> 00:05:13,162
+for allegedly stealing trade secrets uh
+
+155
+00:05:13,172 --> 00:05:16,042
+and hiring their employees uh to work on
+
+156
+00:05:16,052 --> 00:05:17,881
+this device with Johnny and you've
+
+157
+00:05:17,891 --> 00:05:20,202
+responded to it. Um and you've said it's
+
+158
+00:05:20,212 --> 00:05:22,682
+it's meritless, but I'm wondering it do
+
+159
+00:05:22,692 --> 00:05:25,081
+you worry about this slowing down the
+
+160
+00:05:25,091 --> 00:05:26,682
+device efforts?
+
+161
+00:05:26,692 --> 00:05:29,722
+>> No. Look, if first of all, I'm like a
+
+162
+00:05:29,732 --> 00:05:32,042
+mega Apple fanboy and I was very sad
+
+163
+00:05:32,052 --> 00:05:35,482
+about that. Um, and from when I first
+
+164
+00:05:35,492 --> 00:05:37,002
+heard about it, I was like, man, this
+
+165
+00:05:37,012 --> 00:05:38,682
+sounds egregious. Someone must have done
+
+166
+00:05:38,692 --> 00:05:40,601
+something badly. And if someone, we
+
+167
+00:05:40,611 --> 00:05:43,081
+don't like want any company's IP, and we
+
+168
+00:05:43,091 --> 00:05:44,202
+certainly don't want people who are
+
+169
+00:05:44,212 --> 00:05:45,561
+going to take a company's IP and bring
+
+170
+00:05:45,571 --> 00:05:47,642
+it to us. And if you know, we did an
+
+171
+00:05:47,652 --> 00:05:48,841
+investigation and found that about
+
+172
+00:05:48,851 --> 00:05:50,922
+somebody. Uh, we would of course just
+
+173
+00:05:50,932 --> 00:05:53,162
+terminate them and deal with it. Um, but
+
+174
+00:05:53,172 --> 00:05:55,002
+we're also going to defend someone if
+
+175
+00:05:55,012 --> 00:05:57,081
+they didn't do something wrong. And I I
+
+176
+00:05:57,091 --> 00:05:58,522
+believe after we looked into this that
+
+177
+00:05:58,532 --> 00:06:01,402
+this was a case of someone uh not doing
+
+178
+00:06:01,412 --> 00:06:03,881
+something wrong. And we tried to explain
+
+179
+00:06:03,891 --> 00:06:05,081
+some of that and you know more of that
+
+180
+00:06:05,091 --> 00:06:08,202
+will play out in a process. Um given my
+
+181
+00:06:08,212 --> 00:06:09,162
+understanding I don't think this is
+
+182
+00:06:09,172 --> 00:06:10,601
+going to slow things down.
+
+183
+00:06:10,611 --> 00:06:13,962
+>> How are you thinking about form factors?
+
+184
+00:06:13,972 --> 00:06:15,722
+Do you like I've heard you say you don't
+
+185
+00:06:15,732 --> 00:06:17,561
+in the past. Do you like glasses? Yeah.
+
+186
+00:06:17,571 --> 00:06:18,202
+Glasses.
+
+187
+00:06:18,212 --> 00:06:21,642
+>> I don't because I find it very
+
+188
+00:06:21,652 --> 00:06:23,002
+uncomfortable talking to people with
+
+189
+00:06:23,012 --> 00:06:25,402
+like a camera and a light like a lot.
+
+190
+00:06:25,412 --> 00:06:26,042
+Yeah.
+
+191
+00:06:26,052 --> 00:06:27,881
+>> Yeah. But there's a lot of other form
+
+192
+00:06:27,891 --> 00:06:28,522
+factors.
+
+193
+00:06:28,532 --> 00:06:30,682
+>> There's a lot of great form factors. Um
+
+194
+00:06:30,692 --> 00:06:32,601
+I think we'll do a small handful of form
+
+195
+00:06:32,611 --> 00:06:35,081
+factors. There's I think there's like
+
+196
+00:06:35,091 --> 00:06:37,402
+something that belongs on a table. Um
+
+197
+00:06:37,412 --> 00:06:39,482
+there is something that belongs in your
+
+198
+00:06:39,492 --> 00:06:41,242
+pocket. Uh and there is something that
+
+199
+00:06:41,252 --> 00:06:43,881
+like belongs on your body. Uh and it'll
+
+200
+00:06:43,891 --> 00:06:45,962
+take us some time to launch all of those
+
+201
+00:06:45,972 --> 00:06:49,242
+things. But I think the big adjustment
+
+202
+00:06:49,252 --> 00:06:51,242
+is going to be getting used to this idea
+
+203
+00:06:51,252 --> 00:06:53,962
+of a proactive computer.
+
+204
+00:06:53,972 --> 00:06:56,682
+>> Mhm. When you're thinking about OpenAI's
+
+205
+00:06:56,692 --> 00:06:59,321
+roadmap and and the business, are
+
+206
+00:06:59,331 --> 00:07:01,321
+consumer devices
+
+207
+00:07:01,331 --> 00:07:03,402
+existential in a sense? Are they purely
+
+208
+00:07:03,412 --> 00:07:05,642
+additative? Like and the mission that
+
+209
+00:07:05,652 --> 00:07:07,881
+that you guys talk about um you've got a
+
+210
+00:07:07,891 --> 00:07:08,922
+lot of things still happening even
+
+211
+00:07:08,932 --> 00:07:10,202
+though you've whittleled things down as
+
+212
+00:07:10,212 --> 00:07:11,402
+we talked about.
+
+213
+00:07:11,471 --> 00:07:12,661
+>> And you're building towards super
+
+214
+00:07:12,671 --> 00:07:14,181
+intelligence.
+
+215
+00:07:14,191 --> 00:07:15,542
+I'd be curious to know how you
+
+216
+00:07:15,552 --> 00:07:17,542
+personally are preparing for that. Do
+
+217
+00:07:17,552 --> 00:07:19,701
+you have a view of what life will look
+
+218
+00:07:19,711 --> 00:07:21,382
+like on the other side of what you're
+
+219
+00:07:21,392 --> 00:07:22,022
+building?
+
+220
+00:07:22,032 --> 00:07:23,542
+>> I think it will look surprisingly
+
+221
+00:07:23,552 --> 00:07:25,622
+similar to how it looks now. You know,
+
+222
+00:07:25,632 --> 00:07:27,461
+people are gonna
+
+223
+00:07:27,471 --> 00:07:29,221
+hang out with their families and fall in
+
+224
+00:07:29,231 --> 00:07:30,981
+love and get into fights and do their
+
+225
+00:07:30,991 --> 00:07:33,782
+hobbies and, you know, be entertained
+
+226
+00:07:33,792 --> 00:07:37,542
+and have a very human experience and
+
+227
+00:07:37,552 --> 00:07:39,382
+try, you know, get stressed and get
+
+228
+00:07:39,392 --> 00:07:40,822
+anxious and create value for each other
+
+229
+00:07:40,832 --> 00:07:43,862
+and play all kinds of strange games and
+
+230
+00:07:43,872 --> 00:07:46,582
+um care about other people a lot. I I
+
+231
+00:07:46,592 --> 00:07:48,421
+hope it'll not be that different. I hope
+
+232
+00:07:48,431 --> 00:07:49,862
+it'll be uh you know, the human
+
+233
+00:07:49,872 --> 00:07:51,941
+experience is richer. people have more
+
+234
+00:07:51,951 --> 00:07:54,661
+autonomy, more freedom, more wealth, can
+
+235
+00:07:54,671 --> 00:07:58,502
+do more um can be healthier, can kind of
+
+236
+00:07:58,512 --> 00:08:02,022
+have like more power to collectively
+
+237
+00:08:02,032 --> 00:08:04,022
+define the future and the world gets
+
+238
+00:08:04,032 --> 00:08:05,862
+better faster, but that the human
+
+239
+00:08:05,872 --> 00:08:07,701
+experience stays like a very human thing
+
+240
+00:08:07,711 --> 00:08:10,342
+>> if you look out over the next 12 months,
+
+241
+00:08:10,352 --> 00:08:13,622
+what is the biggest risk for open AI?
+
+242
+00:08:13,632 --> 00:08:15,302
+>> I think it's like getting safety,
+
+243
+00:08:15,312 --> 00:08:16,981
+alignment, and security wrong. I mean I
+
+244
+00:08:16,991 --> 00:08:18,262
+think it's possible that 12 months from
+
+245
+00:08:18,272 --> 00:08:22,342
+now we have extremely capable models and
+
+246
+00:08:22,352 --> 00:08:26,102
+if we are able to navigate the
+
+247
+00:08:26,112 --> 00:08:28,582
+transition to super intelligence in a
+
+248
+00:08:28,592 --> 00:08:32,502
+world where we have figured out how to
+
+249
+00:08:32,512 --> 00:08:34,582
+empower people,
+
+250
+00:08:34,592 --> 00:08:36,022
+how to make sure power is not too
+
+251
+00:08:36,032 --> 00:08:39,142
+concentrated, how to
+
+252
+00:08:39,152 --> 00:08:41,461
+deliver safety across the entire
+
+253
+00:08:41,471 --> 00:08:47,142
+spectrum. um how to let people feel very
+
+254
+00:08:47,152 --> 00:08:48,582
+in control of improving their own lives
+
+255
+00:08:48,592 --> 00:08:51,221
+in the future. Um that would be like a

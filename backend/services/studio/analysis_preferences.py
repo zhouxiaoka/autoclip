@@ -45,6 +45,11 @@ def load() -> AnalysisPreferences:
     An invalid saved preference is an error, never permission to spend money.
     The caller should preserve source material and ask for corrected settings.
     """
+    from backend.services import ai_model_settings as ai
+    settings = ai.load()
+    if settings:
+        return AnalysisPreferences(analysis_mode=settings.analysis_mode,
+                                   allow_visual_screening=settings.allow_visual_screening)
     with _lock:
         path = settings_path()
         if not path.exists():

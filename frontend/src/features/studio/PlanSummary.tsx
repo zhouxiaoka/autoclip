@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
 import { useEffect, useState } from 'react'
-import { Btn, Dialog, fmtDuration } from '../../ui'
+import { Btn, Dialog, Row, Segmented, fmtDuration } from '../../ui'
 import { AnalysisMode, Goal, ImportOptions, ImportPlan, defaultImportOptions, goalLabels, languages } from './types'
 import ImportPreferences from './ImportPreferences'
 import { studioApi, errorText } from './api'
@@ -37,12 +37,16 @@ export default function PlanSummary({projectId, plan, status, onChanged, onStart
     <div className={`studio-plan-summary ${awaiting?'studio-plan-confirm':''}`}>
       <div>{prefs?<><b>{awaiting?t("这段素材，可以这样做"):plan?.mode==='ai'?t("AI 建议"):plan?.mode==='manual'?t("你的方案"):t("当前方案")}</b><span className="studio-muted">{t(contentLabels[plan?.content_type || 'other'] ?? contentLabels.other)}{plan?.source_duration!=null?` · ${t('原素材 {{duration}}', { duration: fmtDuration(plan.source_duration) })}`:''} · {prefs.goal==='content'?t("按完整语义选段"):t('每条参考 {{seconds}} 秒', { seconds: prefs.duration })} · {aspectSummary} · {prefs.language==='source' ? t('原语言') : languages.find(l=>l.value===prefs.language)?.label}</span><details><summary>{t("查看判断依据")}{plan?.mode==='ai' && plan.confidence<.6?t("· 识别把握较低"):''}</summary><p className="studio-muted">{t(plan?.reason || '')}</p></details></>:<span className="studio-muted">{running?t("快速判断素材适合的制作类型"):t("可调整制作方案后重新识别")}</span>}</div>
       {awaiting && plan ? <>
-        <label className="studio-field">{t("本次分析方式")}<select disabled={busy} value={analysisMode} onChange={e=>setAnalysisMode(e.target.value as AnalysisMode)}><option value="subtitle">{t("字幕分析 · 低成本")}</option><option value="visual">{t("视觉分析")}</option></select></label>
-        <p className="studio-muted">{t(analysisMode==='subtitle'?"仅分析字幕文本；无字幕时需要转写。":"发送抽样画面与文本，按模型服务商计费。")}{analysisMode==='visual'&&capability?.visual_model?` · ${capability.visual_model}`:''}</p>
-        {unavailable&&<p role="alert" className="studio-error">{t("视觉模型不可用，请前往模型设置。")}</p>}
-        {incompatible&&<p role="alert" className="studio-error">{t("内容切片使用字幕分析，请调整分析方式或制作类型。")}</p>}
+        <Row label={t("分析方式")} hint={analysisMode==='visual'
+            ? <>{t("会抽样几张画面一起分析，更懂动作与场景；按模型服务商计费。")}{capability?.visual_model?` · ${capability.visual_model}`:''}</>
+            : unavailable ? t("当前模型不支持画面分析；换一个多模态模型后可开启。") : t("只分析字幕文本，成本最低；没有字幕时会先转写。")}>
+          <Segmented size="sm" ariaLabel={t("分析方式")} value={analysisMode} onChange={value=>!busy&&setAnalysisMode(value)}
+            options={[{value:'subtitle',label:t("仅字幕")},{value:'visual',label:t("字幕 + 画面")}]} />
+        </Row>
+        {unavailable&&<p role="alert" className="studio-error">{t("当前模型不支持画面分析，请先选「仅字幕」，或到设置换一个多模态模型。")}</p>}
+        {incompatible&&<p role="alert" className="studio-error">{t("「内容切片」只按字幕分析；要用画面分析，请同时勾选高光或推广。")}</p>}
         <p className="studio-muted">{plan.suggested_goals.length?t("已勾选建议制作的类型，你可以取消或补选。"):t("本次未能自动推荐，请按素材内容选择制作类型。")}{' '}{t("确认后才开始详细理解与剪辑。")}</p>
-        <div className="studio-output-choices">{choices.map(({goal,description})=><label key={goal} className={`studio-output-choice ${selected.includes(goal)?'is-selected':''}`}><input type="checkbox" checked={selected.includes(goal)} disabled={busy} onChange={e=>setSelected(e.target.checked?[...selected,goal]:selected.filter(g=>g!==goal))}/><b>{t(goalLabels[goal])}</b>{plan.suggested_goals.includes(goal)&&<small>{t("建议")}</small>}<span className="studio-muted">{t(goal==='highlight'&&analysisMode==='subtitle'?'按语音与内容含义，提炼完整片段':description)}</span></label>)}</div>
+        <div className="studio-output-choices">{choices.map(({goal,description})=><label key={goal} className={`studio-output-choice ${selected.includes(goal)?'is-selected':''}`}><input type="checkbox" checked={selected.includes(goal)} disabled={busy} onChange={e=>setSelected(e.target.checked?[...selected,goal]:selected.filter(g=>g!==goal))}/><b>{t(goalLabels[goal])}</b>{plan.suggested_goals.includes(goal)&&<small>{t("建议")}</small>}<span className="studio-muted">{t(goal==='highlight'&&analysisMode==='subtitle'?'按字幕找到高潮句，保留前后关键过程':description)}</span></label>)}</div>
         {analysisMode==='subtitle'&&selected.includes('promo')&&<p className="studio-muted">{t("字幕推广会额外调用一次文字模型生成文案，按服务商计费；请复核后使用。")}</p>}
         <details className="studio-details"><summary>{t("调整制作参数（可选）")}</summary><ImportPreferences value={value} onChange={setValue} hideGoal/></details>
         <div className="studio-row studio-confirm-footer"><span className="studio-muted">{selected.length?t('将制作 {{count}} 类内容', { count: selected.length }):t("至少选择一种制作类型")}</span><Btn variant="cta" disabled={!selected.length||busy||incompatible||unavailable} loading={busy} onClick={start}>{t("确认并开始制作")}</Btn></div>
