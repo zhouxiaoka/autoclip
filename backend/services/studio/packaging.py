@@ -39,7 +39,33 @@ PROMPT = (
     'tags 仅当 template 为 interview_zh 时给出 2–4 个编辑点评（中文，每个不超过 10 个字），必须具体点出这一句最有冲击力的内容，'
     '例如“七分钟干完三个月”“以退为进”；禁止“逻辑清晰”“直击核心”“干货满满”这类泛泛评价；line 指向被点评的行。'
     'highlights 仅当 template 为 podcast_en 时给出，每 3–4 行最多一个，word 必须是该行（翻译后）里出现的单个关键词。'
+    '另外返回 "mood"：按这段内容本身的情绪选一个——calm（冷静理性的分析）、serious（严肃、风险、警示）、'
+    'bold（强观点、冲突、爆点）、warm（真诚、感动、个人经历）、playful（轻松、幽默、有趣）。'
 )
+
+# Content looks: the mood decides which palettes and styles fit; a seed from the content picks
+# among them, so different clips look different while one clip looks the same on every platform.
+MOOD_LOOKS = {
+    'calm': (('azure', 'mint', 'lilac'), {'interview_zh': ('classic', 'spotlight'), 'podcast_en': ('cinematic', 'boxed')}),
+    'serious': (('azure', 'amber'), {'interview_zh': ('classic', 'boxed'), 'podcast_en': ('cinematic', 'boxed')}),
+    'bold': (('lemon', 'coral'), {'interview_zh': ('boxed', 'classic'), 'podcast_en': ('pop', 'boxed')}),
+    'warm': (('amber', 'rose'), {'interview_zh': ('spotlight', 'classic'), 'podcast_en': ('boxed', 'cinematic')}),
+    'playful': (('rose', 'lemon', 'mint'), {'interview_zh': ('boxed', 'spotlight'), 'podcast_en': ('pop', 'boxed')}),
+}
+
+
+def choose_look(template: str, mood: object, seed: str) -> dict[str, str | None]:
+    """{'mood', 'palette', 'style'} for this content; no valid mood keeps the golden default look."""
+    import random
+    if mood not in MOOD_LOOKS:
+        return {'mood': None, 'palette': None, 'style': None}
+    palettes, styles = MOOD_LOOKS[mood]
+    pick = random.Random(f'{seed}:{mood}')
+    return {'mood': mood, 'palette': pick.choice(palettes), 'style': pick.choice(styles[template])}
+
+
+def _seed(lines: list[dict[str, Any]]) -> str:
+    return f"{lines[0]['start']:.1f}-{lines[-1]['end']:.1f}" if lines else ''
 
 
 def source_language(texts: list[str]) -> str:
@@ -194,5 +220,6 @@ def _validated(result, lines, base, translate, burned, known_names, draft):
                 highlights.append({'at': cue['start'], 'text': word})
     for cue in cues:
         cue.pop('lines', None)
-    return {**base, 'title_lines': titles, 'title_accent_line': min(accent, max(0, len(titles) - 1)),
+    look = choose_look(base['template'], result.get('mood'), _seed(lines))
+    return {**base, **look, 'title_lines': titles, 'title_accent_line': min(accent, max(0, len(titles) - 1)),
             'cues': cues, 'speakers': speakers[:8], 'tags': tags, 'highlights': highlights[:40]}

@@ -125,3 +125,18 @@ def test_paragraph_sized_segments_are_rejected_for_translation():
 def test_source_language_detection():
     assert packaging.source_language(['这是一个中文字幕，内容比较长一些']) == 'zh'
     assert packaging.source_language(['This is an English subtitle line with words']) == 'en'
+
+
+def test_the_content_mood_picks_a_matching_look_that_is_stable_per_clip():
+    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=lambda *_: good_response(mood='bold'))
+    palettes, styles = packaging.MOOD_LOOKS['bold']
+    assert result['mood'] == 'bold' and result['palette'] in palettes and result['style'] in styles['interview_zh']
+    again = packaging.build_packaging(DRAFT, LINES, platform_strategy('xiaohongshu'), call=lambda *_: good_response(mood='bold'))
+    assert (again['palette'], again['style']) == (result['palette'], result['style'])  # same clip, same look
+    looks = {tuple(packaging.choose_look('podcast_en', 'calm', f'{n}.0-{n + 60}.0').values()) for n in range(40)}
+    assert len(looks) > 2  # different clips vary within the mood
+
+
+def test_an_unknown_mood_keeps_the_golden_default_look():
+    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=lambda *_: good_response(mood='angry'))
+    assert (result['mood'], result['palette'], result['style']) == (None, None, None)

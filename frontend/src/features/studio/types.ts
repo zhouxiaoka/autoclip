@@ -47,6 +47,8 @@ export interface Packaging {
   highlights: { at: number; text: string }[]
   burned_captions: boolean; fallback: boolean
   style?: 'classic' | 'boxed' | 'spotlight' | 'pop' | 'cinematic' | null
+  mood?: 'calm' | 'serious' | 'bold' | 'warm' | 'playful' | null
+  palette?: 'azure' | 'amber' | 'coral' | 'mint' | 'lemon' | 'rose' | 'lilac' | null
 }
 export interface Draft {
   id: string; title: string; hook: string; scenes: Scene[]; language: Language

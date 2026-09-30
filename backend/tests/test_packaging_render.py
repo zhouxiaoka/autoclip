@@ -124,3 +124,15 @@ def test_interview_window_renders_title_canvas_and_window(tmp_path):
     assert max(max(px) for px in title_region.getdata()) > 180  # bright title text drawn on the dark canvas
     window_row = [image.getpixel((x, pr.WIN_Y + 200)) for x in range(0, 1080, 60)]
     assert len(set(window_row)) > 3  # the source picture fills the 4:3 window
+
+
+def test_the_palette_colours_accents_and_keeps_pill_text_readable():
+    lemon = pr.scene_ass(_packaging(palette='lemon', style='boxed'), SCENES, 1)
+    assert '&H003CDCF4' in lemon  # lemon F4DC3C in ASS BGR order
+    pill = next(line for line in lemon.splitlines() if line.startswith('Style: TagPill'))
+    assert pill.split(',')[3] == pr.INK  # dark text on a light accent
+    azure = pr.scene_ass(_packaging(), SCENES, 1)
+    assert '&H00FF8B5A' in azure and '&H003CDCF4' not in azure
+    draft = Draft(id='d', title='T', scenes=SCENES[:1], aspect='portrait', layout='window', packaging=_packaging(palette='mint'))
+    graph, _ = pr.scene_video_graph(draft, SCENES[0], 0, pr.FONT_DIR / 'x.ass', 1080, 1920)
+    assert 'color=c=0x111917' in graph and 'color=c=0x46D3A6' in graph

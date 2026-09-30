@@ -2,7 +2,8 @@
 
 Each scene is encoded on its own (render.py), so every overlay is expressed on the output
 timeline and clipped to the scene: the scene's ASS only carries events visible inside it,
-with times relative to the scene start. Colours follow DESIGN.md (dark theme).
+with times relative to the scene start. Colours come from the content palette (mood), not the
+product UI; the default palette matches DESIGN.md's accent.
 """
 from __future__ import annotations
 
@@ -15,8 +16,29 @@ FONT_DIR = Path(__file__).resolve().parents[2] / 'assets' / 'fonts'
 FONT = 'Noto Sans SC'  # bundled (OFL); covers CJK and Latin on every platform
 W, H = 1080, 1920
 WIN_Y, WIN_H = 560, 810
-BG, ACCENT_HEX = '0x1A1A19', '0x5A8BFF'
-ACCENT, WHITE, SUB, INK, INK_SOFT = '&H00FF8B5A', '&H00E6EAEC', '&H009BA2A6', '&H00191A1A', '&H26191A1A'
+WHITE, SUB, INK, INK_SOFT = '&H00E6EAEC', '&H009BA2A6', '&H00191A1A', '&H26191A1A'
+# Content palettes (accent, canvas). Content follows its mood, not the product UI: azure is the
+# golden default; the canvas stays a near-black tinted toward the accent.
+PALETTES = {
+    'azure': ('5A8BFF', '1A1A19'), 'amber': ('F2B544', '1B1712'), 'coral': ('FF6F59', '1B1514'),
+    'mint': ('46D3A6', '111917'), 'lemon': ('F4DC3C', '141413'), 'rose': ('FF7FA9', '1B1418'),
+    'lilac': ('B69CFF', '17151C'),
+}
+
+
+def _ass(rgb: str) -> str:
+    return f'&H00{rgb[4:6]}{rgb[2:4]}{rgb[0:2]}'.upper()
+
+
+def colours(palette: str | None) -> dict[str, str]:
+    """ASS and ffmpeg colours for a palette; light accents get dark text on filled pills."""
+    accent, canvas = PALETTES.get(palette or 'azure', PALETTES['azure'])
+    r, g, b = (int(accent[i:i + 2], 16) for i in (0, 2, 4))
+    light = 0.2126 * r + 0.7152 * g + 0.0722 * b > 150
+    return {'accent': _ass(accent), 'on_accent': INK if light else WHITE, 'accent_hex': f'0x{accent}', 'bg': f'0x{canvas}'}
+
+
+BG, ACCENT_HEX, ACCENT = colours(None)['bg'], colours(None)['accent_hex'], colours(None)['accent']
 NAMEPLATE_SEC = 3.2
 
 
@@ -58,16 +80,18 @@ def _limit(font_size: int) -> float:
     return 920 / font_size
 
 
-def _emphasize(text: str, phrases: list[str]) -> str:
+def _emphasize(text: str, phrases: list[str], accent: str = ACCENT) -> str:
     """Colour phrases (already escaped) in the accent blue inside an escaped caption."""
     for phrase in sorted({p for p in phrases if p}, key=len, reverse=True):
         safe = _esc(phrase)
         if safe in text:
-            text = text.replace(safe, f'{{\\c{ACCENT}}}{safe}{{\\c{WHITE}}}', 1)
+            text = text.replace(safe, f'{{\\c{accent}}}{safe}{{\\c{WHITE}}}', 1)
     return text
 
 
-def _header() -> str:
+def _header(look: dict[str, str] | None = None) -> str:
+    look = look or colours(None)
+    ACCENT, ON_ACCENT = look['accent'], look['on_accent']  # noqa: N806 - keeps the style table readable
     return f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -88,7 +112,7 @@ Style: PlateName,{FONT},46,{WHITE},{WHITE},{INK_SOFT},{INK_SOFT},1,0,0,0,100,100
 Style: PlateRole,{FONT},32,{SUB},{SUB},{INK_SOFT},{INK_SOFT},0,0,0,0,100,100,0,0,3,12,0,7,0,0,0,1
 Style: PlateBar,{FONT},10,{ACCENT},{ACCENT},{ACCENT},{ACCENT},0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 Style: CaptionBox,{FONT},58,{WHITE},{WHITE},{INK_SOFT},{INK_SOFT},1,0,0,0,100,100,1,0,3,14,0,2,48,48,0,1
-Style: TagPill,{FONT},48,{WHITE},{WHITE},{ACCENT},{ACCENT},1,0,0,0,100,100,2,0,3,14,0,5,40,40,0,1
+Style: TagPill,{FONT},48,{ON_ACCENT},{ON_ACCENT},{ACCENT},{ACCENT},1,0,0,0,100,100,2,0,3,14,0,5,40,40,0,1
 Style: Cine,{FONT},64,{WHITE},{WHITE},&H00000000,&H00000000,1,0,0,0,100,100,2,0,1,0,0,2,60,60,0,1
 Style: CineGlow,{FONT},64,{ACCENT},{ACCENT},{ACCENT},&H00000000,1,0,0,0,100,100,2,0,1,3,0,2,60,60,0,1
 
@@ -162,6 +186,8 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     out = _Scene(offset, length)
     interview = packaging.template == 'interview_zh'
     style = packaging.style or ('classic' if interview else 'pop')
+    look = colours(packaging.palette)
+    accent = look['accent']
     tag_texts = [t.text for t in packaging.tags] if packaging.tags_enabled else []
 
     lines = packaging.title_lines
@@ -191,7 +217,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
             for s, e, text, original in timed_screens(cue.text, start, end, _limit(size), cue.original, _limit(36)):
                 body = _esc_lines(text)
                 if style == 'spotlight':
-                    body = _emphasize(body, tag_texts)
+                    body = _emphasize(body, tag_texts, accent)
                     motion = f'\\move(540,{y + 24},540,{y},0,180)\\fad(120,60)'
                 else:
                     motion = f'\\pos(540,{y})\\fad(60,60)' if style == 'classic' else f'\\pos(540,{y})\\fad(90,90)'
@@ -204,7 +230,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
             for s, e, text, _ in timed_screens(cue.text, start, end, _limit(58) / 0.95):
                 body = _esc_lines(text)
                 for word in highlights:
-                    body = re.sub(rf'(?i)\b({re.escape(_esc(word))})\b', lambda m: f'{{\\c{ACCENT}}}{m.group(1)}{{\\c{WHITE}}}', body, count=1)
+                    body = re.sub(rf'(?i)\b({re.escape(_esc(word))})\b', lambda m: f'{{\\c{accent}}}{m.group(1)}{{\\c{WHITE}}}', body, count=1)
                 out.add(2, s, e, 'CaptionBox', f'{{\\an2\\pos(540,1420)\\fad(90,90)}}{body}')
             continue
         words = _words(cue.text, start, end, None)
@@ -224,7 +250,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
                 parts = []
                 for k, (_, _, token) in enumerate(chunk):
                     active = k == j or token.strip('.,?!;:').lower() in highlights
-                    parts.append(f'{{\\c{ACCENT}}}{_esc(token)}{{\\c{WHITE}}}' if active else _esc(token))
+                    parts.append(f'{{\\c{accent}}}{_esc(token)}{{\\c{WHITE}}}' if active else _esc(token))
                 stop = chunk[j + 1][0] if j + 1 < len(chunk) else chunk_end
                 pop = '{\\fscx86\\fscy86\\t(0,110,\\fscx100\\fscy100)}' if j == 0 else ''
                 out.add(2, w0, stop, 'Words', f'{{\\an2\\pos(540,1400)}}{pop}' + ' '.join(parts))
@@ -245,7 +271,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
                 continue
             motion = '\\fscx50\\fscy50\\t(0,140,\\fscx112\\fscy112)\\t(140,260,\\fscx100\\fscy100)\\fad(0,240)'
             out.add(4, at, at + 1.8, 'Tag', f'{{\\an5\\pos(540,{WIN_Y + WIN_H - 120}){motion}}}{_esc(tag.text)}', carry=False)
-    return _header() + '\n'.join(out.lines) + '\n'
+    return _header(look) + '\n'.join(out.lines) + '\n'
 
 
 def scene_video_graph(draft: Draft, scene: Scene, index: int, ass_path: Path, w: int, h: int) -> tuple[str, str]:
@@ -261,6 +287,8 @@ def scene_video_graph(draft: Draft, scene: Scene, index: int, ass_path: Path, w:
     total = rows[-1][2] + scene_duration(draft.scenes[-1])
     offset, length = rows[index][2], scene_duration(scene)
     ass = f"ass='{_escape_filter_path(ass_path)}':fontsdir='{_escape_filter_path(FONT_DIR)}'"
+    look = colours(draft.packaging.palette if draft.packaging else None)
+    BG, ACCENT_HEX = look['bg'], look['accent_hex']  # noqa: N806
     if draft.layout == 'window':
         if scene.crop_track or scene.crop_x is not None:
             x = crop_expression(scene, draft.crop_x)
