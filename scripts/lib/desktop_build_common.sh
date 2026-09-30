@@ -170,7 +170,9 @@ stdlib = set(sys.stdlib_module_names)
 # bundled. They are imported lazily inside functions and must NOT fail the
 # build. Keep this list tight.
 # cv2: speaker framing (backend/services/studio/framing.py), installed on demand like Whisper.
-runtime_optional = {"faster_whisper", "ctranslate2", "huggingface_hub", "cv2"}
+# numpy: imported only after loading Whisper, for the PyAV decoding fallback;
+# faster-whisper's runtime installation provides it through its dependencies.
+runtime_optional = {"faster_whisper", "ctranslate2", "huggingface_hub", "cv2", "numpy"}
 mods = set()
 for root, _, files in os.walk(backend_dir):
     if '__pycache__' in root:
