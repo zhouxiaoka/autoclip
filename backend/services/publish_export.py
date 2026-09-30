@@ -138,13 +138,24 @@ def _load_srt_entries(project_id: str) -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------- ffmpeg ---
+def blurred_backdrop(w: int, h: int) -> str:
+    """Filter chain (no labels) turning the source into a dim, heavily blurred full-canvas backdrop.
+
+    Blurring at 1/8 size is far cheaper than a full-resolution gblur and blurs harder; dimming to
+    ~35% keeps text in the source (burned captions, lower thirds) from reading as a ghost copy.
+    """
+    sw, sh = max(2, w // 8 // 2 * 2), max(2, h // 8 // 2 * 2)
+    return (f"scale={sw}:{sh}:force_original_aspect_ratio=increase,crop={sw}:{sh},gblur=sigma=6,"
+            f"colorlevels=romax=0.35:gomax=0.35:bomax=0.35,scale={w}:{h}")
+
+
 def _layout_filters(layout: str, w: Optional[int], h: Optional[int]) -> List[str]:
     if layout == "none" or not w or not h:
         return []
     if layout == "blur":
         return [
             f"[0:v]split=2[bg][fg]",
-            f"[bg]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},gblur=sigma=24[bg2]",
+            f"[bg]{blurred_backdrop(w, h)}[bg2]",
             f"[fg]scale={w}:-2[fg2]",
             f"[bg2][fg2]overlay=(W-w)/2:(H-h)/2[base]",
         ]

@@ -185,8 +185,9 @@ def fit_spans(scene: Scene) -> list[tuple[float, float]]:
     return spans
 
 
-def layout_filter(scene: Scene, fallback: float, w: int, h: int, blur: int = 24) -> str:
+def layout_filter(scene: Scene, fallback: float, w: int, h: int) -> str:
     """The `[0:v]…[base]` chain for a cropped scene, switching to a blurred fit on `fit` shots."""
+    from backend.services.publish_export import blurred_backdrop
     cropped = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
                f"crop={w}:{h}:x='(iw-ow)*{crop_expression(scene, fallback)}':y=(ih-oh)/2,setsar=1")
     spans = fit_spans(scene)
@@ -194,7 +195,7 @@ def layout_filter(scene: Scene, fallback: float, w: int, h: int, blur: int = 24)
         return f"[0:v]{cropped}[base]"
     enable = "+".join(f"between(t,{start},{end})" for start, end in spans)
     return (f"[0:v]split=3[c][bg][fg];[c]{cropped}[cropped];"
-            f"[bg]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},gblur=sigma={blur}[bg2];"
+            f"[bg]{blurred_backdrop(w, h)}[bg2];"
             f"[fg]scale={w}:{h}:force_original_aspect_ratio=decrease[fg2];"
             f"[bg2][fg2]overlay=(W-w)/2:(H-h)/2[fitted];"
             f"[cropped][fitted]overlay=0:0:enable='{enable}'[base]")
