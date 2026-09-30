@@ -1455,5 +1455,18 @@
   "已按说话人重新取景": "Reenquadrado para seguir quem fala",
   "画面里没有可跟随的人物，保留完整画面": "Ninguém para seguir na tela, o quadro inteiro foi mantido",
   "人物识别组件准备中，这条先保留完整画面": "A detecção de pessoas ainda está sendo preparada; este mantém o quadro inteiro",
-  "原片自带字幕，保留完整画面以免裁掉字幕": "O original tem legendas embutidas; o quadro inteiro foi mantido para não cortá-las"
+  "原片自带字幕，保留完整画面以免裁掉字幕": "O original tem legendas embutidas; o quadro inteiro foi mantido para não cortá-las",
+  "播客式": "Estilo podcast",
+  "访谈式": "Estilo entrevista",
+  "访谈式 · 中英字幕": "Estilo entrevista · legendas em chinês e inglês",
+  "模板": "Modelo",
+  "字幕、名牌和版式由模板按发布平台自动生成。": "O modelo gera legendas, identificação de nomes e layout conforme a plataforma escolhida.",
+  "包装未能完整生成，已使用原字幕": "A edição ficou incompleta; as legendas originais foram usadas",
+  "整条视频顶部显示，第二行为强调色。": "Aparece no topo durante todo o vídeo; a segunda linha usa a cor de destaque.",
+  "开头约 3 秒显示。": "Aparece por cerca de 3 segundos no início.",
+  "标题第 {{n}} 行": "Linha {{n}} do título",
+  "第一行": "Primeira linha",
+  "第二行（可选）": "Segunda linha (opcional)",
+  "评论标签": "Etiquetas de comentário",
+  "在关键句出现的编辑点评。": "Comentários curtos que aparecem nas frases-chave."
 }

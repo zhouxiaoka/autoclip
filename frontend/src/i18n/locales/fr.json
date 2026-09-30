@@ -1455,5 +1455,18 @@
   "已按说话人重新取景": "Recadré pour suivre la personne qui parle",
   "画面里没有可跟随的人物，保留完整画面": "Personne à suivre à l’écran : l’image complète est conservée",
   "人物识别组件准备中，这条先保留完整画面": "La détection des personnes est en préparation : celle-ci garde l’image complète",
-  "原片自带字幕，保留完整画面以免裁掉字幕": "La source a des sous-titres incrustés : l’image complète est gardée pour ne pas les couper"
+  "原片自带字幕，保留完整画面以免裁掉字幕": "La source a des sous-titres incrustés : l’image complète est gardée pour ne pas les couper",
+  "播客式": "Style podcast",
+  "访谈式": "Style interview",
+  "访谈式 · 中英字幕": "Style interview · sous-titres chinois et anglais",
+  "模板": "Modèle",
+  "字幕、名牌和版式由模板按发布平台自动生成。": "Le modèle génère les sous-titres, les bandeaux de nom et la mise en page selon la plateforme choisie.",
+  "包装未能完整生成，已使用原字幕": "L’habillage est incomplet : les sous-titres d’origine sont utilisés",
+  "整条视频顶部显示，第二行为强调色。": "Affiché en haut pendant toute la vidéo ; la seconde ligne prend la couleur d’accent.",
+  "开头约 3 秒显示。": "Affiché environ 3 secondes au début.",
+  "标题第 {{n}} 行": "Ligne {{n}} du titre",
+  "第一行": "Première ligne",
+  "第二行（可选）": "Deuxième ligne (facultatif)",
+  "评论标签": "Étiquettes de commentaire",
+  "在关键句出现的编辑点评。": "Courts commentaires qui apparaissent sur les phrases clés."
 }

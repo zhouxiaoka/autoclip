@@ -38,13 +38,24 @@ export function patchShot(scene: Scene, time: number, changes: Partial<CropPoint
 }
 export interface Candidate extends Scene { kind: 'visual' | 'legacy' }
 export interface CandidateList { duration: number; candidates: Candidate[]; warnings: string[] }
+export interface Packaging {
+  version: 1; template: 'interview_zh' | 'podcast_en'; audience_language: 'zh' | 'en'; source_language: 'zh' | 'en' | 'other'
+  title_lines: string[]; title_accent_line: number
+  cues: { start: number; end: number; text: string; original: string }[]
+  speakers: { at: number; name: string; role: string }[]
+  tags: { at: number; text: string }[]; tags_enabled: boolean
+  highlights: { at: number; text: string }[]
+  burned_captions: boolean; fallback: boolean
+}
 export interface Draft {
   id: string; title: string; hook: string; scenes: Scene[]; language: Language
-  aspect: 'original' | 'portrait' | 'landscape'; layout: 'fit' | 'crop' | 'blur'
+  aspect: 'original' | 'portrait' | 'landscape'; layout: 'fit' | 'crop' | 'blur' | 'window'
   crop_x?: number; title_style?: 'plain' | 'impact' | 'card' | 'comic' | 'neon' | 'arena' | 'editorial' | 'pixel' | 'frosted'
   title_template_version?: 1 | 2 | 3 | 4 | 5 | 6; title_motion?: boolean; title_scale?: number; title_y?: number; title_accent?: string | null
   subtitles: boolean; subtitle_style?: SubtitleStyle; original_audio: boolean; revision: number; updated_at: string; origin: string
   parent_draft_id?: string | null; parent_revision?: number | null
+  /** Automatic template packaging; kept as-is on save so edits never drop it. */
+  packaging?: Packaging | null
 }
 export interface RenderJob {
   job_id: string; draft_id: string; title: string; revision: number

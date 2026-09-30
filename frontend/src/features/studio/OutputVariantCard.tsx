@@ -11,6 +11,7 @@ import { studioApi } from './api'
 import { outputVariantPublishPath } from './outputVariantPublish'
 import { copyText, markRatingAsked, shareCaption, shouldAskRating } from './outputShare'
 import { platformLabel } from './platformLabel'
+import { packagingLabel } from './packagingLabel'
 import './quick-output.css'
 
 const framingHints: Record<NonNullable<OutputVariant['framing']>, string> = {
@@ -48,6 +49,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       <p className="studio-output-hint">{variant.branding.outro_enabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾')}</p>
       {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}
       {variant.framing && framingHints[variant.framing] && <p className="studio-output-hint">{t(framingHints[variant.framing])}</p>}
+      {draft?.packaging && <p className="studio-output-hint">{packagingLabel(draft.packaging)}{draft.packaging.fallback ? ` · ${t('包装未能完整生成，已使用原字幕')}` : ''}</p>}
       {failed && <p className="studio-output-hint studio-error">{variant.error || job?.error || t('这条版本未完成，其他成片不受影响。')}</p>}
       <div className="ac-card-foot"><span className="meta">{platformLabel(variant.strategy_id)}</span><div className="ac-card-actions">
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}`)}>{t('预览与修改')}</Btn>}

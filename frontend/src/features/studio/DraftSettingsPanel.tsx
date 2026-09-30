@@ -3,6 +3,7 @@ import { t } from '../../i18n'
 import { Btn, ProgressLine, Row, Segmented, StatusDot } from '../../ui'
 import { CropPoint, Draft, FramingStatus, Scene, cropAt, frameModeAt, languages, shotIndexAt, subtitleStyles } from './types'
 import { titlePresets, titleVersions, isArtworkStyle, titleDesignThumbnails } from './titlePresets'
+import PackagingSettings from './PackagingSettings'
 
 const ACCENT_DEFAULT: Record<string, string> = { comic: '#ffe52d', neon: '#ccff00', editorial: '#ff4826', pixel: '#ed327c', frosted: '#00e6dc' }
 
@@ -53,10 +54,10 @@ export default function DraftSettingsPanel({ draft, patch, scene, currentTime, o
         <input className="ac-input" aria-label={t("成片名称")} maxLength={200} value={draft.title} onChange={e => patch({ title: e.target.value })} />
       </Row>
 
-      <Row label={t("字幕")} hint={t("把字幕压进画面，整条成片统一样式。")}>
+      {!draft.packaging && <Row label={t("字幕")} hint={t("把字幕压进画面，整条成片统一样式。")}>
         <Switch size="small" checked={draft.subtitles} onChange={value => patch({ subtitles: value })} />
-      </Row>
-      {draft.subtitles && <Row stack label={t("字幕样式")}>
+      </Row>}
+      {!draft.packaging && draft.subtitles && <Row stack label={t("字幕样式")}>
         <div className="studio-tiles" role="radiogroup" aria-label={t("字幕样式")}>
           {subtitleStyles.map(preset => <button type="button" key={preset.value} className="studio-tile" role="radio" aria-checked={(draft.subtitle_style || 'clean') === preset.value} onClick={() => patch({ subtitle_style: preset.value })}>
             <span className="studio-tile-sample"><span className={`studio-caption studio-caption--${preset.value}`}>{t("这里是字幕效果")}</span></span>
@@ -101,7 +102,7 @@ export default function DraftSettingsPanel({ draft, patch, scene, currentTime, o
           onChange={e => scene ? onShot(scene.id, { crop_x: Number(e.target.value) }) : patch({ crop_x: Number(e.target.value) })} />
       </Row>}
 
-      <details className="ac-disclosure" open={!!draft.hook.trim() || undefined}>
+      {draft.packaging ? <PackagingSettings draft={draft} patch={patch} /> : <details className="ac-disclosure" open={!!draft.hook.trim() || undefined}>
         <summary>{t("片头文字（可选）")}</summary>
         <Row stack label={t("片头文字")} hint={t("在第一个镜头上显示最多 4 秒的大字，适合游戏、推广类内容；访谈、讲解可以留空。")}>
           <textarea className="ac-input ac-textarea" style={{ minHeight: 56 }} aria-label={t("片头标题文字")} maxLength={120} value={draft.hook} placeholder={t("例如：一个问题，或一句结论")} onChange={e => patch({ hook: e.target.value })} />
@@ -139,13 +140,13 @@ export default function DraftSettingsPanel({ draft, patch, scene, currentTime, o
             </Row>}
           </details>}
         </>}
-      </details>
+      </details>}
 
-      <Row label={t("文字语言")} hint={t("选择翻译语言后，渲染时会翻译片头文字与字幕。")}>
+      {!draft.packaging && <Row label={t("文字语言")} hint={t("选择翻译语言后，渲染时会翻译片头文字与字幕。")}>
         <Select aria-label={t("文字语言")} size="small" style={{ width: 140 }} value={draft.language}
           options={languages.map(l => ({ value: l.value, label: l.value === 'source' ? t('原语言') : l.label }))}
           onChange={value => patch({ language: value as Draft['language'] })} />
-      </Row>
+      </Row>}
       <Row label={t("封面")} hint={coverHref ? t("发布时按平台生成带标题的封面，也可以用视频截帧。") : t("导出成片后，在发布页生成带标题的封面。")}>
         {coverHref && <Btn size="sm" variant="text" onClick={() => onOpenCover(coverHref)}>{t("去生成")}</Btn>}
       </Row>

@@ -1455,5 +1455,18 @@
   "已按说话人重新取景": "Reencuadrado para seguir a quien habla",
   "画面里没有可跟随的人物，保留完整画面": "No hay nadie a quien seguir, se mantiene el cuadro completo",
   "人物识别组件准备中，这条先保留完整画面": "La detección de personas aún se está preparando; este mantiene el cuadro completo",
-  "原片自带字幕，保留完整画面以免裁掉字幕": "El original trae subtítulos, se mantiene el cuadro completo para no recortarlos"
+  "原片自带字幕，保留完整画面以免裁掉字幕": "El original trae subtítulos, se mantiene el cuadro completo para no recortarlos",
+  "播客式": "Estilo pódcast",
+  "访谈式": "Estilo entrevista",
+  "访谈式 · 中英字幕": "Estilo entrevista · subtítulos en chino e inglés",
+  "模板": "Plantilla",
+  "字幕、名牌和版式由模板按发布平台自动生成。": "La plantilla genera los subtítulos, los rótulos de nombre y el diseño según la plataforma elegida.",
+  "包装未能完整生成，已使用原字幕": "La edición no se completó; se usan los subtítulos originales",
+  "整条视频顶部显示，第二行为强调色。": "Se muestra arriba durante todo el video; la segunda línea usa el color de acento.",
+  "开头约 3 秒显示。": "Se muestra unos 3 segundos al inicio.",
+  "标题第 {{n}} 行": "Línea {{n}} del título",
+  "第一行": "Primera línea",
+  "第二行（可选）": "Segunda línea (opcional)",
+  "评论标签": "Etiquetas de comentario",
+  "在关键句出现的编辑点评。": "Comentarios breves que aparecen en las frases clave."
 }
