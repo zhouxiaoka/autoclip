@@ -44,3 +44,25 @@ def test_disabled_outro_moves_content_without_extra_second(source, tmp_path):
     result = probe(output)
     assert 1.8 <= float(result['format']['duration']) <= 2.2
     assert output.exists() and not source.exists()
+
+
+@pytest.mark.parametrize('timescale', ['16000', '90000'])
+def test_outro_frames_play_for_a_full_second_when_timescales_differ(tmp_path, timescale):
+    """Real Studio output uses a 1/16000 video time base; the outro must still get real frame time."""
+    from backend.services.output_branding import append_outro
+
+    content = tmp_path / 'content.mp4'
+    subprocess.run([
+        'ffmpeg', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=640x360:d=2:r=30',
+        '-f', 'lavfi', '-i', 'sine=f=440:d=2:sample_rate=44100', '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-video_track_timescale', timescale, '-y', str(content),
+    ], check=True)
+    output = tmp_path / 'branded.mp4'
+    append_outro(content, output, width=640, height=360, enabled=True)
+    raw = subprocess.check_output([
+        'ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'frame=pts_time', '-of', 'csv=p=0', str(output),
+    ], text=True)
+    pts = [float(line.split(',')[0]) for line in raw.split() if line.strip(',')]
+    assert len(pts) >= 85
+    assert pts[-1] - pts[-30] >= 0.9, 'outro frames must span about one second, not collapse onto one timestamp'
+    assert all(later > earlier for earlier, later in zip(pts[-31:], pts[-30:]))
