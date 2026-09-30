@@ -79,6 +79,8 @@ for platform, size in [('bilibili', (1146, 717)), ('douyin', (1080, 1920))]:
     with Image.open(generated['path']) as img:
         assert img.size == size
     covers[platform] = {'method': generated['method'], 'width': size[0], 'height': size[1]}
+diagnostic.update(covers=covers, original_audio='passed', framing_runtime_install='passed', paid_calls=0)
+report_path.write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
 assert rendered_center is not None and .25 <= rendered_center <= .75, diagnostic
 report_path.write_text(json.dumps({
     'runtime_source': 'installed portable Python and installed backend',
