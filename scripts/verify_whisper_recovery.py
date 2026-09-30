@@ -35,14 +35,16 @@ recognizer._generate_subtitle_whisper_local(video, subtitle, SpeechRecognitionCo
 body = subtitle.read_text(encoding="utf-8")
 assert "-->" in body and "months" in body.lower(), body
 # Also reproduce an already-installed incompatible PyAV in a fresh interpreter.
-# Imported native modules cannot safely be replaced inside the current process.
+# Keep the incompatible version separate: Windows locks loaded .pyd files.
+av19_dir = root / 'av19-runtime'
 subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade', '--target',
-                str(whisper_runtime.get_install_dir()), 'av==19.0.0'], check=True, timeout=180)
+                str(av19_dir), 'av==19.0.0'], check=True, timeout=180)
 subprocess.run([sys.executable, '-c', '''
-import os
+import os, sys
 from pathlib import Path
 from backend.services import whisper_runtime
 whisper_runtime.ensure_on_path()
+sys.path.insert(0, str(Path(os.environ['AUTOCLIP_DATA_DIR']) / 'av19-runtime'))
 import av, huggingface_hub
 assert av.__version__ == '19.0.0', av.__version__
 def offline(*args, **kwargs): raise AssertionError('unexpected Hub access')
