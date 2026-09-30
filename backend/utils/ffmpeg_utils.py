@@ -61,14 +61,28 @@ def get_ffprobe_path() -> str:
 
 
 
+JS_RUNTIMES = ("deno", "node", "bun", "quickjs")
+
+
+def ytdlp_js_runtimes() -> dict:
+    """YouTube 现在要先解 JS 校验（yt-dlp-ejs）才能拿到视频流。
+
+    yt-dlp 默认只启用 deno，用户机器上多半没有；装了 node / bun / quickjs 也会被当成不可用，
+    报 "The page needs to be reloaded"。把本机能找到的运行时都交给它，按顺序择优使用。
+    """
+    found = {name: {"path": path} for name in JS_RUNTIMES if (path := shutil.which(name))}
+    return {"js_runtimes": found} if found else {}
+
+
 def ytdlp_ffmpeg_options() -> dict:
-    """给 yt-dlp 的 ffmpeg 选项。
+    """给 yt-dlp 的外部工具选项：ffmpeg 位置，以及可用的 JS 运行时。
 
     yt-dlp 只在 PATH 里找 ffmpeg，不读 AUTOCLIP_FFMPEG_PATH。桌面安装包的 ffmpeg 不在 PATH 上，
     Windows 上合并 bestvideo+bestaudio、转字幕格式都会失败，导入就卡住或找不到 mp4。
     只有解析到真实文件时才传，否则交给 yt-dlp 自己找。
     """
+    options = ytdlp_js_runtimes()
     path = get_ffmpeg_path()
     if os.path.isabs(path) and os.path.exists(path):
-        return {"ffmpeg_location": path}
-    return {}
+        options["ffmpeg_location"] = path
+    return options
