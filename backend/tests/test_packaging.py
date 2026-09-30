@@ -116,8 +116,8 @@ def test_same_language_keeps_the_package_when_segments_are_lumped():
 
 
 def test_paragraph_sized_segments_are_rejected_for_translation():
-    many = [{'start': float(i), 'end': float(i + 1), 'text': f'line {i} of a long monologue'} for i in range(10)]
-    response = good_response(segments=[{'from': 0, 'to': 9, 'text': '一大段合在一起的译文'}])
+    many = [{'start': float(i), 'end': float(i + 1), 'text': f'line {i} of a long monologue'} for i in range(20)]
+    response = good_response(segments=[{'from': 0, 'to': 19, 'text': '一大段合在一起的译文'}])
     result = packaging.build_packaging(DRAFT, many, platform_strategy('douyin'), call=lambda *_: response)
     assert result['fallback'] is True
 

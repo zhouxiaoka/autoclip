@@ -22,7 +22,7 @@ LATIN = re.compile(r'[A-Za-z]')
 TITLE_LIMIT = {'zh': 12, 'en': 36}
 TAG_LIMIT = 10
 MAX_TAGS = 5
-MAX_SEGMENT_LINES = 6  # a caption cue must stay a sentence or two, not a paragraph
+MAX_SEGMENT_LINES = 12  # translated sentences may span short ASR rows; reject only paragraph-sized lumps
 
 PROMPT = (
     '你是短视频包装编辑。根据 lines（已按时间排序的原字幕，常被切成半句，每行有 id）为这段访谈做包装，返回 JSON：\n'

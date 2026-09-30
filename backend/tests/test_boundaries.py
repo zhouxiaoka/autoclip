@@ -13,9 +13,38 @@ ROWS = [
 ]
 
 
-def test_end_moves_forward_until_the_sentence_is_finished():
-    start, end = b.sentence_bounds(ROWS, 104.0, 116.0)  # pipeline ended after "One,"
-    assert start == 104.0 and end >= 120.0 and end < 121.0
+def test_end_inside_a_row_cuts_at_its_sentence_end():
+    start, end = b.sentence_bounds(ROWS, 104.0, 116.0)  # pipeline ended after "several things. One,"
+    assert start == 104.0 and 114.5 < end < 116.0      # keeps "…several things." and drops "One,"
+
+
+def test_a_row_that_ends_with_a_new_sentence_is_cut_before_it():
+    rows = [(0.0, 4.0, 'We have thought carefully about this.'),
+            (4.0, 8.0, "That's what I mean when I say we're responsible. It seems like"),
+            (9.0, 13.0, 'we have different definitions of a genius.')]
+    _, end = b.sentence_bounds(rows, 0.0, 8.0)
+    assert 6.5 < end < 8.0  # after "responsible.", not on "It seems like"
+
+
+def test_a_start_on_the_tail_of_a_sentence_begins_at_the_next_one():
+    rows = [(0.0, 4.0, 'so it is about more than'),
+            (4.0, 8.0, 'white collar work. And so it might be more productive'),
+            (8.0, 12.0, 'to talk about what the models can do.')]
+    start, _ = b.sentence_bounds(rows, 4.0, 12.0)
+    assert 5.0 < start < 6.5  # begins at "And so", not "white collar work."
+
+
+def test_the_next_question_is_not_left_at_the_end():
+    rows = [(0.0, 4.0, 'Games will go beyond film.'), (4.0, 8.0, 'That is why I joined the industry.'),
+            (8.0, 11.0, 'Which director influenced you most?')]
+    _, end = b.sentence_bounds(rows, 0.0, 11.0)
+    assert end < 8.5
+
+
+def test_japanese_question_endings_are_recognised():
+    rows = [(0.0, 4.0, 'ゲーム業界に来た'), (4.0, 6.0, 'という事でございます'), (6.4, 8.0, '最も影響を与えた監督は誰だと思いますか')]
+    _, end = b.sentence_bounds(rows, 0.0, 8.0)
+    assert end <= 6.4  # ends on 「ございます」, before the next question
 
 
 def test_start_moves_back_to_the_beginning_of_its_sentence():
