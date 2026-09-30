@@ -113,6 +113,7 @@ class ApiKeys(BaseModel):
     glm: str = Field(default="", description="智谱 GLM API密钥")
     grok: str = Field(default="", description="xAI Grok API密钥")
     infistar: str = Field(default="", description="Infistar 无限星河 API密钥")
+    api88: str = Field(default="", description="88API API密钥")
     seed: str = Field(default="", description="火山方舟 Seed / 豆包 API密钥")
     jimeng_access: str = Field(default="", description="即梦AI访问密钥")
     jimeng_secret: str = Field(default="", description="即梦AI秘密密钥")
@@ -121,7 +122,7 @@ class ApiKeys(BaseModel):
 class ApiSettings(BaseModel):
     """API设置"""
     api_keys: ApiKeys = Field(default_factory=ApiKeys, description="API密钥")
-    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar，或本地预设 ollama / lmstudio）")
+    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88，或本地预设 ollama / lmstudio）")
     api_base_url: str = Field(default="", description="OpenAI 兼容接口地址；provider=openai 时空为官方地址，本地预设为空时用预设默认地址")
     api_model: str = Field(default="qwen-plus", description="默认模型")
     api_max_tokens: int = Field(default=4096, description="最大Token数")
@@ -314,6 +315,7 @@ async def get_settings():
                     glm="",
                     grok="",
                     infistar="",
+                    api88="",
                     seed="",
                     jimeng_access="",  # 默认值
                     jimeng_secret=""   # 默认值
@@ -749,6 +751,7 @@ def _saved_provider_api_key(settings: DesktopSettings, provider: str) -> str:
         "glm": keys.glm,
         "grok": keys.grok,
         "infistar": keys.infistar,
+        "api88": keys.api88,
         "seed": keys.seed,
     }.get((provider or "").strip().lower(), "") or ""
 

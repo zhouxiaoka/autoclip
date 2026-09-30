@@ -53,7 +53,7 @@ function TranscriptionSection({ m }: { m: ModelSettingsStore }) {
   const main = mainConnection(settings)
   const options = [
     { label: t('本机运行'), options: [{ value: 'whisper_local', label: t('Whisper · 本地') }] },
-    ...providerPickerOptions().map(group => ({ ...group, options: group.options.filter(p => ['openai', 'dashscope', 'infistar', 'glm', 'compatible'].includes(p.value)) })).filter(group => group.options.length),
+    ...providerPickerOptions().map(group => ({ ...group, options: group.options.filter(p => ['openai', 'dashscope', 'infistar', 'api88', 'glm', 'compatible'].includes(p.value)) })).filter(group => group.options.length),
   ]
   return <div id="ai-speech" className="ac-model-section">
     <h3 className="ac-model-section-title">{t('字幕转写')}</h3>
@@ -61,7 +61,7 @@ function TranscriptionSection({ m }: { m: ModelSettingsStore }) {
     <Row wide label={t('转写方式')} hint={t('本地转写免费，首次需下载模型；云端转写无需下载，按用量计费。')}>
       <Select aria-label={t('转写方式')} style={{ width: '100%' }} value={cloud ? connection?.provider : 'whisper_local'} options={options}
         onChange={value => value === 'whisper_local' ? m.setTranscriptionLocal(settings.transcription?.model && settings.transcription.provider === 'whisper_local' ? settings.transcription.model : 'base') : m.chooseProvider('transcription', value as ProviderKey)}
-        optionRender={option => <span>{option.value === 'whisper_local' ? t('Whisper · 本地') : PROVIDERS[option.value as ProviderKey]?.name}{option.value === 'infistar' && <small style={{ marginLeft: 8, color: 'var(--sub)' }}>{t('赞助')} · {t('$5 免费体验额度')}</small>}</span>} />
+        optionRender={option => <span>{option.value === 'whisper_local' ? t('Whisper · 本地') : PROVIDERS[option.value as ProviderKey]?.name}{PROVIDERS[option.value as ProviderKey]?.sponsor && <small style={{ marginLeft: 8, color: 'var(--sub)' }}>{t('赞助')} · {PROVIDERS[option.value as ProviderKey]?.sponsor?.offer}</small>}</span>} />
     </Row>
     {cloud && connection ? <>
       <ProviderFields connection={connection} ariaPrefix={t('转写')} hideProvider placement="settings_model"

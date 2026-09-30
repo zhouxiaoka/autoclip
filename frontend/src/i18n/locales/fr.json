@@ -1409,5 +1409,9 @@
   "暂停": "Pause",
   "成片进度": "Position dans le clip",
   "静音": "Couper le son",
-  "取消静音": "Réactiver le son"
+  "取消静音": "Réactiver le son",
+  "88API Token聚合平台": "Plateforme de tokens 88API",
+  "赞助合作伙伴。聚合语言、图片与语音模型，接口地址已预设。": "Partenaire sponsor. Modèles de langage, d’image et d’audio avec une adresse API préconfigurée.",
+  "新用户体验额度": "Crédit d’essai pour les nouveaux utilisateurs",
+  "新用户通过专属链接注册可获体验额度；站内提供人工客服。": "Les nouveaux utilisateurs peuvent recevoir un crédit d’essai via notre lien ; une assistance humaine est disponible sur la plateforme."
 }
