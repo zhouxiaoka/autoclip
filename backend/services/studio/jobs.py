@@ -446,7 +446,11 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache):
     key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template)
     if key not in cache:
         lines = packaging.draft_lines(cache['entries'], value['scenes'])
-        cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, known_names=cache['names'])
+        used = cache.setdefault('palettes', [])
+        cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, known_names=cache['names'],
+                                               avoid_palettes=tuple(used[-2:]))
+        if cache[key].get('palette'):
+            used.append(cache[key]['palette'])
     return {**value, 'packaging': cache[key]}
 
 

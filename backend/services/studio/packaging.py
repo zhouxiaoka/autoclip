@@ -30,6 +30,7 @@ PROMPT = (
     '"speakers":[{"line":0,"name":"...","role":"..."}],"tags":[{"line":0,"text":"..."}],'
     '"highlights":[{"line":0,"word":"..."}]}\n'
     '规则：title_lines 用 audience_language 写 1–2 行，每行不超过 title_limit 个字符，概括最抓人的观点，不编造；'
+    '两行合起来必须是完整的一句话或两个完整短语，宁短勿长，不要写到一半、不要破折号续半句，不用 markdown 或 HTML 符号；'
     'accent_line 是需要强调的那一行下标（0 或 1）。'
     'segments 把 lines 按完整句子重新分段：from/to 是连续的行 id 区间，按顺序首尾相接、覆盖全部行、不重叠；'
     '每段只含 1–2 句话、最多覆盖 4 行，不要把大段内容合成一段；'
@@ -54,14 +55,25 @@ MOOD_LOOKS = {
 }
 
 
-def choose_look(template: str, mood: object, seed: str) -> dict[str, str | None]:
-    """{'mood', 'palette', 'style'} for this content; no valid mood keeps the golden default look."""
+def choose_look(template: str, mood: object, seed: str, avoid: tuple[str, ...] = ()) -> dict[str, str | None]:
+    """{'mood', 'palette', 'style'} for this content; no valid mood keeps the golden default look.
+
+    `avoid` = palettes already used by the other clips of this batch: pick a fresh one when the
+    mood allows, so a batch the model calls all "bold" still does not repeat one colour.
+    """
     import random
     if mood not in MOOD_LOOKS:
         return {'mood': None, 'palette': None, 'style': None}
     palettes, styles = MOOD_LOOKS[mood]
     pick = random.Random(f'{seed}:{mood}')
-    return {'mood': mood, 'palette': pick.choice(palettes), 'style': pick.choice(styles[template])}
+    fresh = [p for p in palettes if p not in avoid] or list(palettes)
+    return {'mood': mood, 'palette': pick.choice(fresh), 'style': pick.choice(styles[template])}
+
+
+def _clean(text: str) -> str:
+    """Model text as plain words: decode HTML entities, drop markdown emphasis."""
+    import html
+    return re.sub(r'[*_`#]+', '', html.unescape(text)).strip()
 
 
 def _seed(lines: list[dict[str, Any]]) -> str:
@@ -99,8 +111,16 @@ def _fallback_title(draft: dict[str, Any], language: str) -> list[str]:
     text = (draft.get('hook') or draft.get('title') or '').strip()
     # Width follows the title's own language: an English title on a Chinese platform is not cut at 12.
     own = 'zh' if source_language([text]) == 'zh' else 'en'
-    # Word boundaries for Latin text; CJK has no spaces, so long runs are split by length.
-    return textwrap.wrap(text, width=TITLE_LIMIT[own], break_long_words=True)[:2] if text else []
+    wrap = lambda t: textwrap.wrap(t, width=TITLE_LIMIT[own], break_long_words=True)  # noqa: E731
+    # Keep whole clauses: two lines of the first clauses read better than a line cut mid-phrase.
+    clauses = [c for c in re.split(r'(?<=[，。：；！？、,:;!?—])', text) if c.strip()]
+    kept = ''
+    for clause in clauses:
+        if len(wrap(kept + clause)) > 2:
+            break
+        kept += clause
+    kept = kept.rstrip('，、：；,:;— ') or text
+    return wrap(kept)[:2] if text else []
 
 
 def _names_allowed(name: str, haystack: str) -> bool:
@@ -109,7 +129,8 @@ def _names_allowed(name: str, haystack: str) -> bool:
 
 
 def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy, *, burned: bool = False,
-                    known_names: str = '', call: Callable[[str, dict], dict] | None = None) -> dict[str, Any]:
+                    known_names: str = '', call: Callable[[str, dict], dict] | None = None,
+                    avoid_palettes: tuple[str, ...] = ()) -> dict[str, Any]:
     """Packaging dict for `Draft.packaging`; never raises for model problems."""
     template, audience = strategy.template, strategy.audience_language
     src = source_language([line['text'] for line in lines])
@@ -123,15 +144,22 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
         return Packaging.model_validate(fallback).model_dump()
     if call is None:
         from backend.services.studio.intelligence import text_json as call
-    try:
-        payload = {'template': template, 'audience_language': audience, 'translate': translate,
-                   'title_limit': TITLE_LIMIT[audience], 'title_hint': draft.get('title', ''),
-                   'known_names': known_names[:300], 'lines': [{'id': i, 'text': l['text']} for i, l in enumerate(lines)]}
-        result = call(PROMPT, payload)
-        return Packaging.model_validate(_validated(result, lines, base, translate, burned, known_names, draft)).model_dump()
-    except Exception as error:  # noqa: BLE001 - packaging must never block output
-        logger.warning('Packaging fell back: %s', type(error).__name__)
-        return Packaging.model_validate(fallback).model_dump()
+    payload = {'template': template, 'audience_language': audience, 'translate': translate,
+               'title_limit': TITLE_LIMIT[audience], 'title_hint': draft.get('title', ''),
+               'known_names': known_names[:300], 'lines': [{'id': i, 'text': l['text']} for i, l in enumerate(lines)]}
+    # Short ASR rows make the segment contract easy to break once; a second try with the reason
+    # usually fixes it, and losing the whole package (captions included) costs far more.
+    for attempt in range(2):
+        try:
+            result = call(PROMPT, payload)
+            return Packaging.model_validate(_validated(result, lines, base, translate, burned, known_names, draft, avoid_palettes)).model_dump()
+        except (ValueError, TypeError) as error:
+            logger.warning('Packaging response rejected (attempt %d): %s', attempt + 1, error)
+            payload = {**payload, 'previous_error': f'上一次返回不合格：{error}。请严格按规则重新返回。'}
+        except Exception as error:  # noqa: BLE001 - packaging must never block output
+            logger.warning('Packaging fell back: %s', type(error).__name__)
+            break
+    return Packaging.model_validate(fallback).model_dump()
 
 
 def _line(result_item: dict, lines: list) -> int | None:
@@ -150,7 +178,7 @@ def _segments(raw, lines, translate):
     cues, expected = [], 0
     for item in raw:
         start, end = (item or {}).get('from'), (item or {}).get('to')
-        text = str((item or {}).get('text') or '').strip()
+        text = _clean(str((item or {}).get('text') or ''))
         if not (isinstance(start, int) and isinstance(end, int)) or start != expected or end < start or end >= len(lines):
             raise ValueError('segments are not contiguous')
         if end - start >= MAX_SEGMENT_LINES:
@@ -166,11 +194,13 @@ def _segments(raw, lines, translate):
     return cues
 
 
-def _validated(result, lines, base, translate, burned, known_names, draft):
+def _validated(result, lines, base, translate, burned, known_names, draft, avoid_palettes=()):
     if not isinstance(result, dict):
         raise TypeError('packaging response is not an object')
     audience = base['audience_language']
-    titles = [t.strip() for t in result.get('title_lines') or [] if isinstance(t, str) and t.strip()][:2]
+    titles = [_clean(t) for t in result.get('title_lines') or [] if isinstance(t, str) and _clean(t)][:2]
+    if audience == 'zh' and any(KANA.search(t) for t in titles):
+        titles = []  # a Japanese title on a Chinese platform: use the draft title instead
     limit = TITLE_LIMIT[audience]
     if titles and any(len(t) > limit + 2 for t in titles):
         # Models often return one long line: keep their wording when it fits two lines, breaking
@@ -220,6 +250,6 @@ def _validated(result, lines, base, translate, burned, known_names, draft):
                 highlights.append({'at': cue['start'], 'text': word})
     for cue in cues:
         cue.pop('lines', None)
-    look = choose_look(base['template'], result.get('mood'), _seed(lines))
+    look = choose_look(base['template'], result.get('mood'), _seed(lines), avoid_palettes)
     return {**base, **look, 'title_lines': titles, 'title_accent_line': min(accent, max(0, len(titles) - 1)),
             'cues': cues, 'speakers': speakers[:8], 'tags': tags, 'highlights': highlights[:40]}

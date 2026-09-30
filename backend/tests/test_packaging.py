@@ -140,3 +140,31 @@ def test_the_content_mood_picks_a_matching_look_that_is_stable_per_clip():
 def test_an_unknown_mood_keeps_the_golden_default_look():
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=lambda *_: good_response(mood='angry'))
     assert (result['mood'], result['palette'], result['style']) == (None, None, None)
+
+
+def test_a_rejected_response_is_retried_once_with_the_reason():
+    sent = []
+    replies = iter([good_response(segments=[{'from': 1, 'to': 2, 'text': '乱序'}]), good_response()])
+    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=lambda _, data: sent.append(data) or next(replies))
+    assert not result['fallback'] and len(result['cues']) == 2
+    assert 'previous_error' not in sent[0] and 'contiguous' in sent[1]['previous_error']
+
+
+def test_titles_are_plain_text_in_the_audience_language():
+    clean = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'),
+                                      call=lambda *_: good_response(title_lines=['*好的*投资人', 'R&amp;D 像飞行教练']))
+    assert clean['title_lines'] == ['好的投资人', 'R&D 像飞行教练']
+    japanese = packaging.build_packaging({'title': '好的投资人像飞行教练', 'hook': ''}, LINES, platform_strategy('douyin'),
+                                         call=lambda *_: good_response(title_lines=['最高検査は最新作']))
+    assert japanese['title_lines'] == ['好的投资人像飞行教练']
+
+
+def test_fallback_titles_keep_whole_clauses():
+    title = packaging._fallback_title({'hook': '《死亡搁浅》不是先有玩法再讲故事：主题即机制，故事与玩法同时诞生'}, 'zh')
+    assert title == ['《死亡搁浅》不是先有玩法', '再讲故事：主题即机制']  # not "…主题即机制，故"
+
+
+def test_a_batch_does_not_repeat_the_last_palettes_when_the_mood_allows():
+    palettes, _ = packaging.MOOD_LOOKS['bold']
+    for seed in ('1.0-60.0', '2.0-61.0', '3.0-62.0'):
+        assert packaging.choose_look('interview_zh', 'bold', seed, avoid=(palettes[0],))['palette'] == palettes[1]
