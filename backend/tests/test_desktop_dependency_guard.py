@@ -29,6 +29,11 @@ def test_missing_mandatory_dependency_still_blocks_bundle(tmp_path):
     assert "- openai" in result.stdout
 
 
+def test_isolated_sensevoice_worker_dependencies_are_not_bundled(tmp_path):
+    result = run_guard(tmp_path, "def worker():\n    import torch\n    import funasr\n    import huggingface_hub\n")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_bundle_local_modules_resolve(tmp_path):
     result = run_guard(tmp_path, "import backend\nimport json\n")
     assert result.returncode == 0, result.stdout + result.stderr

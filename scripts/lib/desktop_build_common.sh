@@ -172,7 +172,7 @@ stdlib = set(sys.stdlib_module_names)
 # cv2: speaker framing (backend/services/studio/framing.py), installed on demand like Whisper.
 # numpy: imported only after loading Whisper, for the PyAV decoding fallback;
 # faster-whisper's runtime installation provides it through its dependencies.
-runtime_optional = {"faster_whisper", "ctranslate2", "huggingface_hub", "cv2", "numpy"}
+runtime_optional = {"faster_whisper", "ctranslate2", "huggingface_hub", "cv2", "numpy", "funasr", "torch"}
 mods = set()
 for root, _, files in os.walk(backend_dir):
     if '__pycache__' in root:

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Select, Switch } from 'antd'
 import { t } from '../../i18n'
@@ -9,6 +9,53 @@ import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
 import { connectionOf, isTextOnly, mainConnection, presetKey, type SaveIssue } from './modelSettingsLogic'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
+import api from '../../services/api'
+
+type SenseVoiceStatus = { status: 'not_installed' | 'installing' | 'ready' | 'error'; message: string }
+
+function SenseVoiceConfig() {
+  const [runtime, setRuntime] = useState<SenseVoiceStatus | null>(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    let active = true
+    const refresh = async () => {
+      try {
+        const value = await api.get<unknown, SenseVoiceStatus>('/sensevoice/status')
+        if (active) { setRuntime(value); setError('') }
+      } catch { if (active) setError(t('暂时无法读取本地模型状态。')) }
+    }
+    void refresh()
+    const timer = window.setInterval(() => void refresh(), 3000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [])
+  const act = async (remove = false) => {
+    setBusy(true)
+    try {
+      const value = remove ? await api.delete<unknown, SenseVoiceStatus>('/sensevoice')
+        : await api.post<unknown, SenseVoiceStatus>('/sensevoice/prepare')
+      setRuntime(value); setError('')
+    } catch { setError(t('操作失败，请稍后重试。')) }
+    finally { setBusy(false) }
+  }
+  const preparing = runtime?.status === 'installing'
+  return <div className="ac-rows">
+    <Row label={t('转写模型')} hint={t('支持中文、粤语、英语、日语和韩语，使用词级时间戳生成字幕。')}><span>SenseVoiceSmall</span></Row>
+    <Row label={runtime?.status === 'ready' ? t('模型已就绪') : t('准备本地模型')}
+      hint={runtime?.status === 'ready' ? t('保存设置后，新任务将使用这个模型。') : t('首次下载约 2 GB 的组件与模型，需要联网；准备完成后转写不上传音频。')}>
+      {runtime?.status === 'ready' ? <StatusDot tone="ok" label={t('已就绪')} />
+        : preparing ? <StatusDot tone="accent" label={t('正在准备组件与模型…')} />
+        : <Btn size="sm" disabled={!runtime || busy} onClick={() => void act()}>{t('准备模型')}</Btn>}
+    </Row>
+    {(error || runtime?.status === 'error') && <p className="ac-note" role="alert">{error || t('模型准备失败，请检查网络和磁盘空间后重试。')}</p>}
+    <p className="ac-note">{t('仅安装所需模型，不启用说话人分离。')} <a href="https://huggingface.co/FunAudioLLM/SenseVoiceSmall" target="_blank" rel="noreferrer">{t('模型与许可说明')}</a></p>
+    {runtime?.status === 'ready' && <details className="ac-disclosure"><summary>{t('高级')}</summary>
+      <Row label={t('删除 SenseVoice 组件与模型')} hint={t('删除后需要重新下载才能使用。')}>
+        <Btn variant="danger" size="sm" disabled={busy} onClick={() => void act(true)}>{t('删除')}</Btn>
+      </Row>
+    </details>}
+  </div>
+}
 
 const ANCHORS: Record<string, string> = { model: 'ai-model', analysis: 'ai-model', vision: 'ai-model', speech: 'ai-speech', cover: 'ai-cover' }
 const issueAnchor = (issue: SaveIssue) => issue.role === 'transcription' ? 'ai-speech' : issue.role === 'cover' ? 'ai-cover' : 'ai-model'
@@ -49,19 +96,20 @@ function TranscriptionSection({ m }: { m: ModelSettingsStore }) {
   const { settings, lists, busy, listErrors } = m
   if (!settings) return null
   const cloud = settings.transcription?.provider === 'cloud'
+  const sensevoice = settings.transcription?.provider === 'sensevoice_local'
   const connection = cloud ? connectionOf(settings, 'transcription') : undefined
   const main = mainConnection(settings)
   const options = [
-    { label: t('本机运行'), options: [{ value: 'whisper_local', label: t('Whisper · 本地') }] },
+    { label: t('本机运行'), options: [{ value: 'whisper_local', label: t('Whisper · 本地') }, { value: 'sensevoice_local', label: t('SenseVoice · 本地') }] },
     ...providerPickerOptions().map(group => ({ ...group, options: group.options.filter(p => ['openai', 'dashscope', 'infistar', 'api88', 'glm', 'compatible'].includes(p.value)) })).filter(group => group.options.length),
   ]
   return <div id="ai-speech" className="ac-model-section">
     <h3 className="ac-model-section-title">{t('字幕转写')}</h3>
     <p className="ac-note">{t('视频没有字幕时，先把说话声转成字幕。默认在本机免费转写，不上传音频。')}</p>
     <Row wide label={t('转写方式')} hint={t('本地转写免费，首次需下载模型；云端转写无需下载，按用量计费。')}>
-      <Select aria-label={t('转写方式')} style={{ width: '100%' }} value={cloud ? connection?.provider : 'whisper_local'} options={options}
-        onChange={value => value === 'whisper_local' ? m.setTranscriptionLocal(settings.transcription?.model && settings.transcription.provider === 'whisper_local' ? settings.transcription.model : 'base') : m.chooseProvider('transcription', value as ProviderKey)}
-        optionRender={option => <span>{option.value === 'whisper_local' ? t('Whisper · 本地') : PROVIDERS[option.value as ProviderKey]?.name}{PROVIDERS[option.value as ProviderKey]?.sponsor && <small style={{ marginLeft: 8, color: 'var(--sub)' }}>{t('赞助')} · {PROVIDERS[option.value as ProviderKey]?.sponsor?.offer}</small>}</span>} />
+      <Select aria-label={t('转写方式')} style={{ width: '100%' }} value={cloud ? connection?.provider : sensevoice ? 'sensevoice_local' : 'whisper_local'} options={options}
+        onChange={value => value === 'sensevoice_local' ? m.update({ transcription: { provider: 'sensevoice_local', model: 'SenseVoiceSmall' } }) : value === 'whisper_local' ? m.setTranscriptionLocal(settings.transcription?.model && settings.transcription.provider === 'whisper_local' ? settings.transcription.model : 'base') : m.chooseProvider('transcription', value as ProviderKey)}
+        optionRender={option => <span>{option.value === 'whisper_local' ? t('Whisper · 本地') : option.value === 'sensevoice_local' ? t('SenseVoice · 本地') : PROVIDERS[option.value as ProviderKey]?.name}{PROVIDERS[option.value as ProviderKey]?.sponsor && <small style={{ marginLeft: 8, color: 'var(--sub)' }}>{t('赞助')} · {PROVIDERS[option.value as ProviderKey]?.sponsor?.offer}</small>}</span>} />
     </Row>
     {cloud && connection ? <>
       <ProviderFields connection={connection} ariaPrefix={t('转写')} hideProvider placement="settings_model"
@@ -71,7 +119,7 @@ function TranscriptionSection({ m }: { m: ModelSettingsStore }) {
         <ModelPicker role="transcription" model={settings.transcription?.model || ''} connection={connection} list={lists[connection.id]} busy={!!busy[connection.id]} listError={listErrors[connection.id]} mode={settings.analysis_mode}
           onChange={model => m.update({ transcription: { provider: 'cloud', connection_id: connection.id, model } })} onRefresh={() => void m.discover(connection, true)} />
       </Row>
-    </> : <SpeechRecognitionConfig hideProvider selectedModel={settings.transcription?.model || 'base'} onModelChange={m.setTranscriptionLocal} />}
+    </> : sensevoice ? <SenseVoiceConfig /> : <SpeechRecognitionConfig hideProvider selectedModel={settings.transcription?.model || 'base'} onModelChange={m.setTranscriptionLocal} />}
   </div>
 }
 

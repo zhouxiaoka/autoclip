@@ -1416,5 +1416,15 @@
   "新用户通过专属链接注册可获体验额度；站内提供人工客服。": "Los nuevos usuarios pueden recibir crédito de prueba mediante nuestro enlace; la plataforma ofrece atención humana.",
   "待确认制作类型": "Pendiente de confirmar el tipo de producción",
   "查看建议": "Ver sugerencia",
-  "制作中 · 查看进度": "Creando · Ver progreso"
+  "制作中 · 查看进度": "Creando · Ver progreso",
+  "SenseVoice · 本地": "SenseVoice · Local",
+  "支持中文、粤语、英语、日语和韩语，使用词级时间戳生成字幕。": "Admite mandarín, cantonés, inglés, japonés y coreano, con marcas de tiempo por palabra.",
+  "首次下载约 2 GB 的组件与模型，需要联网；准备完成后转写不上传音频。": "La descarga inicial de componentes y modelos es de unos 2 GB y requiere internet. Después, la transcripción no sube el audio.",
+  "正在准备组件与模型…": "Preparando componentes y modelo…",
+  "模型准备失败，请检查网络和磁盘空间后重试。": "No se pudo preparar el modelo. Comprueba la conexión y el espacio en disco y reintenta.",
+  "仅安装所需模型，不启用说话人分离。": "Solo instala los modelos necesarios; la separación de hablantes está desactivada.",
+  "模型与许可说明": "Modelo y licencia",
+  "删除 SenseVoice 组件与模型": "Eliminar componentes y modelos de SenseVoice",
+  "删除后需要重新下载才能使用。": "Después de eliminarlo, tendrás que descargarlo de nuevo.",
+  "操作失败，请稍后重试。": "La operación falló. Inténtalo más tarde."
 }

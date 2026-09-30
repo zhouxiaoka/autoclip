@@ -168,6 +168,12 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
 def missing_subtitle_failure() -> PipelineFailure:
     """视频没有字幕，自动转写也没留下 srt。按当前 Whisper 状态区分下一步。"""
     from backend.services import whisper_runtime
+    from backend.services.ai_model_settings import load
+    settings = load()
+    if settings and settings.transcription and settings.transcription.provider == 'sensevoice_local':
+        return PipelineFailure('SUBTITLE', '没有字幕可分析：SenseVoice 本次没有生成可用字幕。',
+                               '到「设置 → 转写」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。',
+                               code='subtitle_setup')
 
     status = whisper_runtime.get_status()
     state = status.get("status")
@@ -196,6 +202,10 @@ def missing_subtitle_failure() -> PipelineFailure:
 def failure_from_speech_error(message: str) -> PipelineFailure:
     """转写异常收成同一套失败码，不再把「设置 → 语音识别」和「设置 → 转写」叠在一起。"""
     text = (message or "").strip().replace("设置 → 语音识别", "设置 → 转写")
+    if 'SenseVoice' in text:
+        return PipelineFailure('SUBTITLE', text,
+                               '' if '设置 → 转写' in text else '到「设置 → 转写」检查 SenseVoiceSmall，或导入 .srt 字幕。',
+                               code='subtitle_setup')
     from backend.services import whisper_runtime
 
     state = whisper_runtime.get_status().get("status")

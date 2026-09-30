@@ -76,7 +76,7 @@ class Assignment(BaseModel):
 
 
 class Transcription(BaseModel):
-    provider: Literal['whisper_local', 'cloud'] = 'whisper_local'
+    provider: Literal['whisper_local', 'sensevoice_local', 'cloud'] = 'whisper_local'
     model: str = Field(default='base', min_length=1, max_length=200)
     connection_id: str | None = None
 
@@ -88,6 +88,10 @@ class Transcription(BaseModel):
         if self.provider == 'whisper_local':
             if self.model not in {'tiny', 'base', 'small', 'medium', 'large', 'large-v3'}:
                 raise ValueError('请选择本地 Whisper 模型')
+            self.connection_id = None
+        elif self.provider == 'sensevoice_local':
+            if self.model != 'SenseVoiceSmall':
+                raise ValueError('请选择本地 SenseVoiceSmall 模型')
             self.connection_id = None
         elif not self.connection_id:
             raise ValueError('请选择转写供应商')
