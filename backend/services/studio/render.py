@@ -13,7 +13,7 @@ from backend.services.studio.store import directory
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
 
-def render_draft(project_id, video, draft: Draft, job_id, progress):
+def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
     w, h = {'portrait': (1080, 1920), 'landscape': (1920, 1080)}.get(draft.aspect, (info.get('width'), info.get('height')))
@@ -133,7 +133,8 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                 cmd += ['-an']
             cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]
             subprocess.run(cmd, check=True, capture_output=True, timeout=max(180, sum(durations)*2))
-            os.replace(partial, output)
+            from backend.services.output_branding import append_outro
+            append_outro(partial, output, width=w, height=h, enabled=brand_outro)
         return {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings}
     finally:
         partial.unlink(missing_ok=True)

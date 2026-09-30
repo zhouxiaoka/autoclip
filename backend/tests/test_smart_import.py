@@ -19,6 +19,21 @@ class Immediate:
 def recommendation(goal='highlight'):
     return {'content_type':'gameplay' if goal!='content' else 'talk', 'goal':goal, 'reason':'测试证据', 'confidence':.8, 'aspect':'original', 'duration':30}
 
+def test_auto_variant_passes_branding_to_render_job(client, source, monkeypatch):
+    submitted = []
+    class CaptureExecutor:
+        def submit(self, fn, *args, **kwargs):
+            submitted.append((fn, args, kwargs))
+            return None
+
+    monkeypatch.setattr(jobs, 'executor', CaptureExecutor())
+    draft = jobs.Draft(id='brand-draft', title='Brand', scenes=[jobs.Scene(id='scene', label='Scene', start=0, end=1)], subtitles=False)
+    job = jobs.export('p1', draft, brand_outro=True)
+    assert job['brand_outro'] is True
+    assert submitted[0][2] == {'brand_outro': True}
+    assert submitted[0][1][-1] == job['job_id']
+
+
 def test_variant_terminal_states_preserve_partial_success(root):
     store.write('p1', {
         'schema_version': 2, 'drafts': [], 'events': [], 'jobs': [],
@@ -74,7 +89,8 @@ def test_auto_start_creates_platform_variants_without_confirmation(client, sourc
         {'generated_title': '完整观点', 'start_time': '00:00:00,000', 'end_time': '00:00:01,000'},
     ])
     exports = []
-    def fake_export(project_id, draft):
+    def fake_export(project_id, draft, **kwargs):
+        assert kwargs == {'brand_outro': True}
         exports.append(draft)
         return {'job_id': f'job-{draft.id}', 'status': 'queued'}
     monkeypatch.setattr(jobs, 'export', fake_export)

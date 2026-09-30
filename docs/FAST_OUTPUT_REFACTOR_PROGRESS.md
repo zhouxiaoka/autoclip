@@ -155,3 +155,37 @@ backend: 731 passed, 1 skipped
 - UI 已暴露片尾开关，但渲染层尚未消费它；这必须作为下一个包优先完成，不能在发布前停留在“只存设置”。
 - 结果卡当前为自动 variant 提供下载/编辑，但尚未有“追加平台版本”与单 variant 重试 API。
 - 自动项目的真实桌面端导入、渲染和原生保存还需要在 branding 完成后做端到端冒烟。
+
+## 包 3：可关闭的品牌片尾与统一输出收口
+
+状态：已完成，待合入。
+
+### 完成内容
+
+- 新增 `backend/services/output_branding.py`，在内容视频最终完成后追加一次 1 秒 `Made with AutoClip` 片尾；不叠常驻水印，不在每个镜头重复覆盖。
+- 自动平台 variant 的 `branding.outro_enabled` 已传入 Studio render job；旧手动 Studio 导出默认保持不带片尾，避免改变历史行为。
+- `ExportRequest.brand_outro` 让 legacy/publish 导出也使用相同 finalization；输出缓存文件名包含 `autoclip-outro-v1`，带/不带片尾不会错误复用。
+- 输出合成使用独立 `.branding.part.mp4` 临时文件和原子替换，避免覆盖 Studio 内容渲染的 `.part.mp4`。
+- 片尾关闭时只原子移动内容文件，不增加时长；带片尾时保留同画幅、视频与音频 stream，并增加约 1 秒。
+
+### 已验证
+
+```text
+backend/tests/test_output_branding.py
+backend/tests/test_publish_export.py
+backend/tests/test_studio.py
+
+99 passed in 69.03s
+```
+
+并新增自动 variant branding 参数传递回归，待全量后端套件完成后一起确认。
+
+### 下一包
+
+追加平台版本与单 variant 重试：复用 ContentProfile/候选草稿，只派生和渲染新增平台，不重新下载、转写或调用内容理解；结果页提供“追加平台版本”和失败版本重试。
+
+### 主要风险
+
+- 片尾目前使用运行时 `drawtext`，还没有专用透明品牌图形资产；视觉设计可在后续包替换资源，但输出语义与缓存版本必须保持稳定。
+- legacy/publish API 尚未公开片尾开关，当前只为服务层和自动 variant 接通。
+- 仍需进行桌面端真实导入、自动渲染、原生下载与片尾逐帧验收。

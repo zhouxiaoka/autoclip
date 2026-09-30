@@ -38,6 +38,7 @@ class ExportRequest:
     subtitles: bool = True
     title_card: bool = True
     layout: Optional[str] = None  # 覆盖预设：blur / crop / fit / none
+    brand_outro: bool = False
 
 
 # ---------------------------------------------------------------- resolve ---
@@ -229,6 +230,8 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
         slug += "_notitle"
     if req.layout:
         slug += f"_{req.layout}"
+    if req.brand_outro:
+        slug += "_autoclip-outro-v1"
     out_path = out_dir / f"{slug}.mp4"
     meta_path = out_dir / f"{slug}.json"
 
@@ -259,6 +262,7 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
 
         built = _build_filter(req, spec, srt_file, title_file if req.title_card else None, font)
         ffmpeg = get_ffmpeg_path()
+        temp_output = tmpdir / 'content.mp4'
         cmd = [ffmpeg, "-hide_banner", "-loglevel", "error",
                "-ss", f"{start:.3f}", "-i", str(video), "-t", f"{duration:.3f}"]
         maps: List[str] = []
@@ -268,11 +272,16 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
         else:
             cmd += ["-map", "0:v:0"]
         cmd += ["-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-                "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-y", str(out_path)]
+                "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-y", str(temp_output)]
         logger.info("发布导出: %s", " ".join(cmd))
         proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
-        if proc.returncode != 0 or not out_path.exists() or out_path.stat().st_size == 0:
+        if proc.returncode != 0 or not temp_output.exists() or temp_output.stat().st_size == 0:
             raise RuntimeError((proc.stderr or proc.stdout or "ffmpeg 失败")[-800:])
+        from backend.services.output_branding import append_outro
+        info = _probe(temp_output)
+        append_outro(temp_output, out_path, width=int(info.get('width') or 0), height=int(info.get('height') or 0), enabled=req.brand_outro)
+        if not out_path.exists() or out_path.stat().st_size == 0:
+            raise RuntimeError('最终成片文件为空')
 
         info = _probe(out_path)
         result = {

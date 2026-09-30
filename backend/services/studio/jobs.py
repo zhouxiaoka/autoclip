@@ -18,8 +18,8 @@ def source(project_id):
     from backend.services.publish_export import find_source_video
     return find_source_video(project_id)
 
-def export(project_id, draft):
-    job = {'job_id': uuid.uuid4().hex, 'status': 'queued', 'percent': 0, 'draft_id': draft.id, 'title': draft.title, 'revision': draft.revision, 'created_at': store.now(), 'instance': store.INSTANCE, 'snapshot': draft.model_dump()}
+def export(project_id, draft, *, brand_outro=False):
+    job = {'job_id': uuid.uuid4().hex, 'status': 'queued', 'percent': 0, 'draft_id': draft.id, 'title': draft.title, 'revision': draft.revision, 'brand_outro': brand_outro, 'created_at': store.now(), 'instance': store.INSTANCE, 'snapshot': draft.model_dump()}
     def add(data):
         active = next((j for j in data['jobs'] if j['status'] in ('queued', 'running') and j.get('snapshot') == job['snapshot']), None)
         if active:
@@ -34,7 +34,10 @@ def export(project_id, draft):
         added = store.change(project_id, add)
         if added['job_id'] == job['job_id']:
             try:
-                executor.submit(_render, project_id, draft, job['job_id'])
+                if brand_outro:
+                    executor.submit(_render, project_id, draft, job['job_id'], brand_outro=True)
+                else:
+                    executor.submit(_render, project_id, draft, job['job_id'])
             except Exception as error:
                 logger.warning('Studio export dispatch failed: %s', type(error).__name__)
                 capture_studio_exception(error, 'dispatch')
@@ -45,7 +48,7 @@ def export(project_id, draft):
                 raise ValueError(message) from None
         return {k: v for k, v in added.items() if k not in ('instance', 'snapshot')}
 
-def _render(project_id, draft, job_id):
+def _render(project_id, draft, job_id, *, brand_outro=False):
     started = monotonic()
     def update(**values):
         def mutate(data):
@@ -53,7 +56,7 @@ def _render(project_id, draft, job_id):
         store.change(project_id, mutate)
     try:
         update(status='running', percent=5)
-        result = render_draft(project_id, source(project_id), draft, job_id, lambda p: update(percent=p))
+        result = render_draft(project_id, source(project_id), draft, job_id, lambda p: update(percent=p), brand_outro=brand_outro)
         update(status='completed', percent=100, result=result, duration_ms=round((monotonic() - started) * 1000))
         _sync_variant_status(project_id, job_id, 'completed')
     except Exception as error:
@@ -319,7 +322,7 @@ def _auto_generate(project_id, plan):
         store.change(project_id, persist)
         for variant in variants:
             draft = next(Draft.model_validate(item) for item in derived_drafts if item['id'] == variant['draft_id'])
-            job = export(project_id, draft)
+            job = export(project_id, draft, brand_outro=bool(variant['branding'].get('outro_enabled', True)))
             def attach(data, variant_id=variant['id'], job_id=job['job_id']):
                 next(item for item in data['output_variants'] if item['id'] == variant_id)['render_job_id'] = job_id
             store.change(project_id, attach)
