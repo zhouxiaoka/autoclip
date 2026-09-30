@@ -1440,5 +1440,16 @@
   "这条版本未完成，其他成片不受影响。": "Cette version n’a pas abouti. Les autres vidéos ne sont pas affectées.",
   "素材没有足够完整的长内容": "la source ne contient pas de passage complet assez long",
   "YouTube 视频": "Vidéo YouTube",
-  "平台上限 {{seconds}} 秒，已在句子结束处截断": "Limite de la plateforme : {{seconds}} s ; coupé à la fin d’une phrase"
+  "平台上限 {{seconds}} 秒，已在句子结束处截断": "Limite de la plateforme : {{seconds}} s ; coupé à la fin d’une phrase",
+  "用 AutoClip 剪的": "Réalisé avec AutoClip",
+  "复制分享文案": "Copier la légende",
+  "分享文案已复制，发布视频时粘贴即可": "Légende copiée. Collez-la en publiant la vidéo.",
+  "复制失败，请稍后重试": "Copie impossible. Réessayez plus tard.",
+  "这条成片能直接用吗？": "Pouvez-vous utiliser cette vidéo telle quelle ?",
+  "能直接用": "Prête à l’emploi",
+  "改一下能用": "Quelques retouches",
+  "不能用": "Inutilisable",
+  "收到，我们会继续改进挑片和剪辑。": "Bien noté. Nous continuons d’améliorer la sélection et le montage.",
+  "谢谢反馈。愿意把这条成片分享为使用案例吗？": "Merci ! Voulez-vous partager cette vidéo comme cas d’usage ?",
+  "分享使用案例": "Partager un cas d’usage"
 }

@@ -35,6 +35,16 @@ export function trackQuickOutputPlatforms(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_platforms_selected', safeStudioProperties(properties))
 }
 
+/** Share intent only: which enum target, never the caption, title or link text. */
+export function trackOutputShare(properties: { share_target: 'copy_caption' | 'use_case_discussion'; strategy_id?: string }) {
+  captureBusinessEvent('studio_output_shared', safeStudioProperties(properties))
+}
+
+/** Anonymous three-level rating; free text is never collected. */
+export function trackOutputRating(properties: { output_rating: 'ready' | 'needs_edit' | 'unusable'; strategy_id?: string }) {
+  captureBusinessEvent('studio_output_rated', safeStudioProperties(properties))
+}
+
 /** Navigation intent only; no claim about successful disk writes. */
 export function studioDownloadRequested() {
   captureBusinessEvent('studio_download_requested', safeStudioProperties({ download_mode: 'browser' }))

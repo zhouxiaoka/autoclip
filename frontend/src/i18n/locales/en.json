@@ -1440,5 +1440,16 @@
   "这条版本未完成，其他成片不受影响。": "This version did not finish. Your other videos are not affected.",
   "素材没有足够完整的长内容": "the source has no complete segment long enough",
   "YouTube 视频": "YouTube video",
-  "平台上限 {{seconds}} 秒，已在句子结束处截断": "Platform limit is {{seconds}}s; trimmed at the end of a sentence"
+  "平台上限 {{seconds}} 秒，已在句子结束处截断": "Platform limit is {{seconds}}s; trimmed at the end of a sentence",
+  "用 AutoClip 剪的": "Made with AutoClip",
+  "复制分享文案": "Copy caption",
+  "分享文案已复制，发布视频时粘贴即可": "Caption copied. Paste it when you post the video.",
+  "复制失败，请稍后重试": "Could not copy. Try again later.",
+  "这条成片能直接用吗？": "Can you use this video as is?",
+  "能直接用": "Ready to use",
+  "改一下能用": "Needs small edits",
+  "不能用": "Not usable",
+  "收到，我们会继续改进挑片和剪辑。": "Got it. We will keep improving clip selection and editing.",
+  "谢谢反馈。愿意把这条成片分享为使用案例吗？": "Thanks! Would you share this video as a use case?",
+  "分享使用案例": "Share a use case"
 }

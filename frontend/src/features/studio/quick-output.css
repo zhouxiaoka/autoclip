@@ -95,3 +95,20 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.studio-output-feedback {
+  align-items: center;
+  border-top: 1px solid var(--ac-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.studio-output-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}

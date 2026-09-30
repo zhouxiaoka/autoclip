@@ -1,18 +1,36 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { message } from 'antd'
 import { t } from '../../i18n'
 import { Btn, fmtDuration } from '../../ui'
+import { trackOutputShare } from '../../analytics/studio'
 import StudioDownloadLink from './StudioDownloadLink'
+import OutputFeedback from './OutputFeedback'
 import { Draft, OutputVariant, RenderJob } from './types'
 import { studioApi } from './api'
 import { outputVariantPublishPath } from './outputVariantPublish'
+import { copyText, markRatingAsked, shareCaption, shouldAskRating } from './outputShare'
 import { platformLabel } from './platformLabel'
 import './quick-output.css'
 
 export default function OutputVariantCard({ projectId, variant, draft, job, onRetry }: { projectId: string; variant: OutputVariant; draft?: Draft; job?: RenderJob; onRetry: () => void }) {
   const navigate = useNavigate()
+  const [asking, setAsking] = useState(false)
   const completed = variant.status === 'completed' && job?.status === 'completed'
   const failed = variant.status === 'failed'
   const duration = job?.result?.duration ?? (draft ? draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) : 0)
+  const copyCaption = async () => {
+    const copied = await copyText(shareCaption(draft?.title))
+    if (copied) {
+      trackOutputShare({ share_target: 'copy_caption', strategy_id: variant.strategy_id })
+      message.success(t('分享文案已复制，发布视频时粘贴即可'))
+    } else message.error(t('复制失败，请稍后重试'))
+  }
+  const downloaded = () => {
+    if (!shouldAskRating(projectId)) return
+    markRatingAsked(projectId)
+    setAsking(true)
+  }
   return <article className="ac-card">
     <div className="studio-variant-thumb">{completed && variant.render_job_id ? <video className="studio-variant-video" controls preload="metadata" src={studioApi.video(projectId, variant.render_job_id)}/> : <span className="play">▷</span>}<span className="ac-tag ac-tag--tl">{platformLabel(variant.strategy_id)}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}</div>
     <div className="ac-card-body">
@@ -27,8 +45,10 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}`)}>{t('预览与修改')}</Btn>}
         {failed && <Btn variant="text" onClick={onRetry}>{t('重试这条')}</Btn>}
         {completed && variant.render_job_id && <Btn variant="text" onClick={() => navigate(outputVariantPublishPath(projectId, variant))}>{t('发布')}</Btn>}
-        {completed && variant.render_job_id && <StudioDownloadLink className="studio-link" projectId={projectId} jobId={variant.render_job_id}/>}
+        {completed && <Btn variant="text" onClick={() => void copyCaption()}>{t('复制分享文案')}</Btn>}
+        {completed && variant.render_job_id && <StudioDownloadLink className="studio-link" projectId={projectId} jobId={variant.render_job_id} onSaved={downloaded}/>}
       </div></div>
+      {asking && <OutputFeedback strategyId={variant.strategy_id} onDone={() => setAsking(false)}/>}
     </div>
   </article>
 }

@@ -21,6 +21,8 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     outcome: ['completed', 'failed', 'partial', 'recommended', 'manual', 'fallback', 'scheduled', 'inbox', 'unknown'],
     download_mode: ['native', 'browser'], gateway: ['bilibili', 'upload-post'],
     title_style: ['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'],
+    share_target: ['copy_caption', 'use_case_discussion'],
+    output_rating: ['ready', 'needs_edit', 'unusable'],
   }
   for (const [key, allowed] of Object.entries(enums)) {
     if (typeof input[key] === 'string' && allowed.includes(input[key] as string)) out[key] = input[key] as string
