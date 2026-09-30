@@ -78,6 +78,29 @@ class TextProcessor:
         
         return chunks
     
+    @staticmethod
+    def limit_srt_chunk_size(chunks: List[Dict], max_chars: int) -> List[Dict]:
+        """按设置限制模型输入字符数；保留完整字幕 cue 和绝对时间轴。"""
+        result = []
+        for chunk in chunks:
+            entries, length = [], 0
+            def append_group():
+                result.append({"chunk_index": len(result),
+                               "text": " ".join(entry["text"] for entry in entries),
+                               "start_time": entries[0]["start_time"],
+                               "end_time": entries[-1]["end_time"], "srt_entries": list(entries)})
+            for entry in chunk["srt_entries"]:
+                size = len(entry["text"]) + (1 if entries else 0)
+                if entries and length + size > max_chars:
+                    append_group()
+                    entries, length = [], 0
+                    size = len(entry["text"])
+                entries.append(entry)
+                length += size
+            if entries:
+                append_group()
+        return result
+
     def chunk_srt_data(self, srt_data: List[Dict], interval_minutes: int = 30, pause_threshold_ms: int = 1000) -> List[Dict]:
         """
         根据停顿时间，将SRT数据切分为大约相等时间长度的块。
