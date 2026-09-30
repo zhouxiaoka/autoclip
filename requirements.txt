@@ -49,7 +49,7 @@ pytz==2026.3.post1
 
 # --- LLM provider SDKs ---
 # Required for the AI clipping pipeline. These used to live only in
-# install_llm_dependencies.py (installed separately), so the portable desktop
+# a separate, unpinned SDK installer, so the portable desktop
 # build shipped without them and any provider call failed. Bundle them so the
 # desktop app works out of the box.
 openai==3.8.0

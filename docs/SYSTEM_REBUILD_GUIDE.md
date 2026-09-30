@@ -1,4 +1,6 @@
-# AutoClip 系统重建指南
+# 历史记录：AutoClip 系统重建
+
+> 以下是早期一次清理后的排障记录，不代表当前数据库状态，也不适用于日常安装、更新或启动。常规操作请使用 [STARTUP_GUIDE.md](../STARTUP_GUIDE.md) 和 [DOCKER.md](../DOCKER.md)。执行任何历史清理步骤前应备份并确认用途。
 
 ## 🎯 重建目标
 

@@ -5,6 +5,7 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
+ENV PATH="/app/venv/bin:$PATH"
 
 WORKDIR /app
 
@@ -32,7 +33,7 @@ RUN . venv/bin/activate && pip install -r requirements.txt
 COPY frontend/package*.json ./frontend/
 
 # 安装前端依赖
-RUN cd frontend && npm install && npm run build
+RUN cd frontend && npm ci
 
 # 复制项目文件
 COPY . .
@@ -44,7 +45,6 @@ COPY docker-dev-entrypoint.sh ./
 RUN mkdir -p data/projects data/uploads data/temp data/output logs
 
 # 设置权限
-RUN chmod +x *.sh
 RUN chmod +x docker-dev-entrypoint.sh
 
 # 暴露端口
