@@ -204,10 +204,12 @@ def layout_filter(scene: Scene, fallback: float, w: int, h: int) -> str:
 # ------------------------------------------------------------------- shots ---
 def detect_cuts(video: Path, start: float, length: float) -> list[float]:
     """Hard cuts inside [start, start+length) as seconds relative to `start`."""
-    cmd = [get_ffmpeg_path(), "-v", "info", "-nostats", "-ss", f"{start:.3f}", "-t", f"{length:.3f}", "-i", str(video),
-           "-an", "-vf", f"scale=320:-2,select='gt(scene,{CUT_THRESHOLD})',showinfo", "-f", "null", "-"]
+    from backend.services import render_limits
+    cmd = [get_ffmpeg_path(), "-v", "info", "-nostats", *render_limits.input_args(), "-ss", f"{start:.3f}", "-t", f"{length:.3f}", "-i", str(video),
+           "-an", "-vf", f"scale=320:-2,select='gt(scene,{CUT_THRESHOLD})',showinfo", *render_limits.output_args(), "-f", "null", "-"]
+    cmd, priority = render_limits.low_priority(cmd)
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(60, length * 4), check=False)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(60, length * 4), check=False, **priority)
     except subprocess.TimeoutExpired:
         return []
     cuts = []
@@ -251,11 +253,13 @@ def sample_offsets(start: float, end: float) -> list[float]:
 
 # ------------------------------------------------------------------ frames ---
 def _grab_pair(video: Path, at: float, folder: Path, key: str) -> tuple[Path, Path] | None:
+    from backend.services import render_limits
     pattern = folder / f"{key}-%d.jpg"
-    cmd = [get_ffmpeg_path(), "-v", "error", "-ss", f"{at:.3f}", "-i", str(video), "-frames:v", "2",
+    cmd = [get_ffmpeg_path(), "-v", "error", *render_limits.input_args(), "-ss", f"{at:.3f}", "-i", str(video), "-frames:v", "2",
            "-vf", f"fps=1/{PAIR_GAP},scale={FRAME_WIDTH}:-2", "-q:v", "4", "-y", str(pattern)]
+    cmd, priority = render_limits.low_priority(cmd)
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+        subprocess.run(cmd, check=True, capture_output=True, timeout=30, **priority)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
     first, second = folder / f"{key}-1.jpg", folder / f"{key}-2.jpg"

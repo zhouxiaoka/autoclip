@@ -274,7 +274,8 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
         built = _build_filter(req, spec, srt_file, title_file if req.title_card else None, font)
         ffmpeg = get_ffmpeg_path()
         temp_output = tmpdir / 'content.mp4'
-        cmd = [ffmpeg, "-hide_banner", "-loglevel", "error",
+        from backend.services import render_limits
+        cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", *render_limits.input_args(),
                "-ss", f"{start:.3f}", "-i", str(video), "-t", f"{duration:.3f}"]
         maps: List[str] = []
         if built:
@@ -282,10 +283,11 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
             cmd += ["-filter_complex", graph, "-map", f"[{last}]"]
         else:
             cmd += ["-map", "0:v:0"]
-        cmd += ["-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+        cmd += ["-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", *render_limits.output_args(),
                 "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-y", str(temp_output)]
         logger.info("发布导出: %s", " ".join(cmd))
-        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+        cmd, priority = render_limits.low_priority(cmd)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore", **priority)
         if proc.returncode != 0 or not temp_output.exists() or temp_output.stat().st_size == 0:
             raise RuntimeError((proc.stderr or proc.stdout or "ffmpeg 失败")[-800:])
         from backend.services.output_branding import append_outro
