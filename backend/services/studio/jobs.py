@@ -379,7 +379,7 @@ def _auto_generate(project_id, plan):
                 data['events'] = events
             data['output_variants'].extend(variants)
             data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now())
-            data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在生成可发布成片', 'created_at': store.now()}
+            data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
         store.change(project_id, persist)
         _dispatch_pending_variants(project_id)
     except Exception as error:
@@ -433,7 +433,7 @@ def append_platform_variants(project_id, platforms, branding):
         data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived)
         data['output_variants'].extend(variants)
         data['generation'].update(status='rendering')
-        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在追加平台版本', 'created_at': store.now()}
+        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在追加平台版本', 'instance': store.INSTANCE, 'created_at': store.now()}
     store.change(project_id, persist)
     _dispatch_pending_variants(project_id)
     return variants
@@ -474,7 +474,7 @@ def retry_variant(project_id, variant_id):
         item.pop('render_job_id', None)
         item.pop('error', None)
         data['generation'].update(status='rendering')
-        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在重试成片版本', 'created_at': store.now()}
+        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
     store.change(project_id, update)
     _dispatch_pending_variants(project_id)
     return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)

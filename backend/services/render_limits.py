@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import sys
 
-THREADS = str(max(2, (os.cpu_count() or 4) // 3))
+THREADS = str(max(2, (os.cpu_count() or 4) // 4))
 
 
 def input_args() -> list[str]:

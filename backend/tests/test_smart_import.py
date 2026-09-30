@@ -61,6 +61,7 @@ def test_retry_variant_only_requeues_failed_output(client, root, monkeypatch):
     state = client.get('/studio/p1').json()
     retried = next(item for item in state['output_variants'] if item['id'] == 'failed')
     assert retried['status'] == 'queued' and retried['render_job_id'] == 'retry-job' and 'error' not in retried
+    assert state['analysis']['status'] == 'running'  # same process: must not be mistaken for a restart
     assert next(item for item in state['output_variants'] if item['id'] == 'completed')['status'] == 'completed'
     assert calls[0][1] == {'brand_outro': False}
 
