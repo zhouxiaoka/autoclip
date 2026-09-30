@@ -69,7 +69,7 @@ def normalize_event(raw: dict[str, Any]) -> dict[str, str] | None:
         "stage": scrub(raw.get("stage"), 80),
         "error_message": scrub(raw.get("error_message"), 500),
         "error_code": error_code if ERROR_CODE_RE.fullmatch(error_code) else "",
-        "transcription_provider": transcription_provider if transcription_provider in {"whisper_local", "cloud"} else "",
+        "transcription_provider": transcription_provider if transcription_provider in {"whisper_local", "sensevoice_local", "cloud"} else "",
         "transcription_model": scrub(raw.get("transcription_model"), 80),
         "version": scrub(raw.get("app_version") or raw.get("version"), 40),
         "os": scrub(raw.get("os"), 40),

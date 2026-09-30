@@ -830,6 +830,9 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
     from backend.services.ai_model_settings import load as load_model_settings
     model_settings = load_model_settings()
     selection = model_settings.transcription if model_settings else None
+    if method == 'sensevoice_local' or method == 'auto' and selection and selection.provider == 'sensevoice_local':
+        from backend.services.sensevoice_runtime import transcribe
+        return transcribe(Path(video_path), output_path, language, timeout)
     if method == 'auto' and selection and selection.provider == 'cloud':
         from backend.services.cloud_transcription import transcribe
         return transcribe(Path(video_path), output_path, model_settings, language, timeout)

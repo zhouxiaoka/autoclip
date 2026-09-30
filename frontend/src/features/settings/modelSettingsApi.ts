@@ -20,7 +20,7 @@ export interface ModelSettings {
   analysis: Assignment | null
   vision: Assignment | null
   cover: Assignment | null
-  transcription?: { provider: 'whisper_local' | 'cloud'; model: string; connection_id?: string; capability?: Capability } | null
+  transcription?: { provider: 'whisper_local' | 'sensevoice_local' | 'cloud'; model: string; connection_id?: string; capability?: Capability } | null
   cover_enabled: boolean
   allow_send_frame: boolean
   analysis_mode: 'auto' | 'subtitle' | 'visual'

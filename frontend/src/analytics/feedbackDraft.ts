@@ -78,7 +78,7 @@ export function buildFeedbackDraft(input: FeedbackDraftInput): FeedbackDraft {
     stage: scrubText(input.stage, 80) || undefined,
     errorMessage: scrubText(input.errorMessage, 500) || undefined,
     errorCode: safeFeedbackErrorCode(input.errorCode),
-    transcriptionProvider: ['whisper_local', 'cloud'].includes(input.transcriptionProvider || '') ? input.transcriptionProvider : undefined,
+    transcriptionProvider: ['whisper_local', 'sensevoice_local', 'cloud'].includes(input.transcriptionProvider || '') ? input.transcriptionProvider : undefined,
     transcriptionModel: scrubText(input.transcriptionModel, 80) || undefined,
     version: scrubText(input.version, 40),
     os: scrubText(input.os, 40),

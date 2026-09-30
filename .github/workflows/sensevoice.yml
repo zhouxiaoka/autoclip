@@ -1,0 +1,45 @@
+name: Local SenseVoice acceptance
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'backend/services/sensevoice*.py'
+      - 'backend/tests/test_sensevoice.py'
+      - 'scripts/verify_sensevoice.py'
+      - '.github/workflows/sensevoice.yml'
+permissions:
+  contents: read
+jobs:
+  real-transcription:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
+      HF_HUB_DISABLE_PROGRESS_BARS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - if: runner.os == 'Windows'
+        run: choco install ffmpeg --yes --no-progress
+      - if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - run: python -m pytest backend/tests/test_sensevoice.py -q
+      - name: Install optional runtime, download models, transcribe real speech offline
+        run: python scripts/verify_sensevoice.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sensevoice-${{ matrix.os }}
+          path: sensevoice-acceptance.json
+          if-no-files-found: ignore

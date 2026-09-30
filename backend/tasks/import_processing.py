@@ -216,8 +216,10 @@ def _generate_import_subtitle(task, project_id: str, video_path: str):
 
         logger.info(f"使用语音转写配置 - 方法: {speech_config.method}")
 
-        if models and models.transcription and models.transcription.provider == "cloud":
-            generated_subtitle = generate_subtitle_for_video(Path(video_path), method="auto")
+        if models and models.transcription and models.transcription.provider in {"cloud", "sensevoice_local"}:
+            generated_subtitle = generate_subtitle_for_video(
+                Path(video_path), method="auto", language=speech_config.whisper_config.language,
+                timeout=speech_config.whisper_config.timeout)
         elif speech_config.method == "whisper_local":
             model = configured_whisper_model(speech_config.whisper_config.model_name)
             language = speech_config.whisper_config.language

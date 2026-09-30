@@ -14,7 +14,7 @@ const enums: Record<string, readonly string[]> = {
   provider: ['dashscope', 'openai', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok', 'infistar', 'api88', 'compatible', 'ollama', 'lmstudio', 'other'],
   source: ['live', 'cache', 'catalog'], outcome: ['completed', 'failed', 'blocked', 'unknown'],
   resolution: ['created', 'reused'], material_origin: ['sample', 'user', 'unknown'],
-  analysis_mode: ['auto', 'subtitle', 'visual'], transcription_mode: ['whisper_local', 'cloud', 'unknown'],
+  analysis_mode: ['auto', 'subtitle', 'visual'], transcription_mode: ['whisper_local', 'sensevoice_local', 'cloud', 'unknown'],
   cover_mode: ['ai', 'frame'], capability: ['text', 'multimodal', 'auto'],
 }
 export function safeExperience(value: Record<string, unknown>): Properties {
