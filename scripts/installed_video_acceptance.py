@@ -89,16 +89,16 @@ def run(base, root, resources, source_video, source_srt):
             assert persisted['api']['api_base_url']==connection['base_url'], persisted
             test = requests.post(base+'/api/v1/settings/test-api',json={'provider':'openai','base_url':connection['base_url'],
                                  'api_key':'','model':'installed-smoke-model'},headers=headers,timeout=30)
-            settings_api, success_field = 'legacy settings', 'success'
+            settings_api = 'legacy settings'
         else:
             saved.raise_for_status()
             persisted = requests.get(base+'/api/v1/settings/ai-models',timeout=20).json()
             assert persisted['analysis']['model']=='installed-smoke-model', persisted
             assert persisted['connections'][0]['base_url']==connection['base_url'], persisted
             test = requests.post(base+'/api/v1/settings/ai-models/test',json={'connection':connection,'model':'installed-smoke-model'},headers=headers,timeout=30)
-            settings_api, success_field = 'named connections', 'ok'
+            settings_api = 'named connections'
         test.raise_for_status()
-        assert test.json()[success_field], test.text
+        assert test.json().get('success') is True, test.text
 
         video = root/'公开访谈 45秒.mp4'
         ffmpeg = resources/'ffmpeg'/'ffmpeg.exe'
