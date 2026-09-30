@@ -1409,5 +1409,8 @@
   "暂停": "Pausar",
   "成片进度": "Posición del clip",
   "静音": "Silenciar",
-  "取消静音": "Activar sonido"
+  "取消静音": "Activar sonido",
+  "待确认制作类型": "Pendiente de confirmar el tipo de producción",
+  "查看建议": "Ver sugerencia",
+  "制作中 · 查看进度": "Creando · Ver progreso"
 }

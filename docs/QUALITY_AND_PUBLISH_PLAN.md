@@ -63,7 +63,7 @@
 - `python -m backend.eval` 跑全部 case，打印表格 + 写 `eval/reports/<date>.json`；`--live` 真调模型并录制
 - 首批 case：由维护者用本机 3 条不同长度的视频（75 s / 3 min / 8 min）录制；用户视频不进仓库，只进 `.gitignore` 掉的 cache
 
-**E.（后续）** Step 3 评分后端可插拔（接纳 #75 思路），ASR 可插拔（#67），基于回归集做提示词 A/B。
+**E.** Step 3 评分协议与默认 LLM 实现已接入（#117，见 [SCORING_BACKENDS.md](SCORING_BACKENDS.md)）；后续仍需评估具体评分服务、ASR 可插拔（#67）及基于回归集的提示词 A/B。
 
 ---
 

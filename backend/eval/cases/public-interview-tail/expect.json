@@ -1,0 +1,7 @@
+{
+  "clips_min": 1,
+  "clips_max": 1,
+  "duration_min": 20,
+  "duration_max": 150,
+  "must_not_zero": true
+}

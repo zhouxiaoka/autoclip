@@ -322,3 +322,17 @@
   .ac-ai-settings .ac-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .ac-ai-settings .ac-row-label { padding-top: 0; }
 }
+
+/* Project cards share the media card primitives and theme tokens. */
+.ac-project-open { position: absolute; inset: 0; width: 100%; border: 0; background: transparent; color: var(--ac-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.ac-project-open:focus-visible, .ac-project-title:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: -3px; }
+.ac-project-thumbnail-loading { position: absolute; bottom: 12px; font-size: 12px; }
+.ac-project-tags { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; pointer-events: none; }
+.ac-project-tags .ac-tag { position: static; }
+.ac-project-title { padding: 0; text-align: left; border: 0; background: transparent; font-family: inherit; cursor: pointer; }
+.ac-project-card .ac-card-body { padding: 18px 20px 20px; gap: 12px; }
+.ac-project-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ac-project-counts { color: var(--ac-muted); font-size: 12.5px; }
+.ac-project-error { margin: 0; padding: 10px; text-align: left; font-size: 12.5px; overflow-wrap: anywhere; user-select: text; color: var(--ac-sub); }
+.ac-project-recovery { display: flex; gap: 2px; flex-wrap: wrap; }
+.ac-project-card:focus-within .ac-card-actions { opacity: 1; }

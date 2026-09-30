@@ -164,6 +164,9 @@ class OutlineExtractor:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(srt_entries, f, ensure_ascii=False, indent=2)
         
+        (self.srt_chunks_dir / "manifest.json").write_text(
+            json.dumps([f"chunk_{chunk['chunk_index']}.json" for chunk in chunks]), encoding="utf-8"
+        )
         logger.info(f"所有SRT块已保存到: {self.srt_chunks_dir}")
 
     def _parse_outline_response(self, response: str, chunk_index: int) -> List[Dict]:
