@@ -321,7 +321,7 @@ const PublishClipPage: React.FC = () => {
         if (!settled.pending && !observed.has(track.jobId)) {
           observed.add(track.jobId)
           if (telemetryEnabled) socialPublishObserved(telemetryGeneration, {
-            source_type: studioJobId ? 'studio' : 'legacy', gateway: track.kind,
+            ...workflow.context(projectId, studioJobId || undefined), source_type: studioJobId ? 'studio' : 'legacy', gateway: track.kind,
             outcome: socialPublishOutcome(job.status, settled.scheduled, settled.results),
           })
         }

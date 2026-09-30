@@ -20,8 +20,12 @@
 
 ## 开发与进阶
 
+- [仓库目录与旧文件用途](REPOSITORY_LAYOUT.md)
+- [源码 Web 服务启动](../STARTUP_GUIDE.md)
+
 - [CLI、MCP 与本地模型](CLI_AND_MCP.md)（中文）
-- [多模型提供商配置](MULTI_LLM_PROVIDER_GUIDE.md)（中文）
+- [opencode CLI 接入（MCP 一键注册）](OPENCODE.md)（中文 · [English](OPENCODE.en.md)）
+- [AI 模型与本地转写配置](AI_MODEL_CONFIGURATION.md)（中文）
 - [贡献指南](../CONTRIBUTING.md)（中文）
 - [构建指南](../BUILD_GUIDE.md)（中文）
 - [README 翻译与徽章维护](i18n.md)（中文）

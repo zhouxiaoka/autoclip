@@ -50,6 +50,18 @@ AutoClip utilise l’IA pour analyser les sous-titres, repérer les temps forts,
 <table>
   <tr>
     <td align="center" width="140">
+      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
+      <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
+    </td>
+    <td>
+      Merci à <strong>88API</strong> de sponsoriser AutoClip ! La plateforme réunit GPT, Claude, Gemini, Grok, DeepSeek, Kimi et GLM pour analyser les transcriptions, sélectionner les temps forts et générer des titres.<br>
+      🎨 <strong>Multimédia</strong> : Modèles d’image, de vidéo et d’audio, dont GPT-Image, Seedance, Veo, MiniMax Hailuo H3, Kling, Whisper et TTS. AutoClip utilise les API compatibles d’analyse, de couverture et de transcription.<br>
+      🏷️ <strong>Service et facturation</strong> : Le partenaire indique être exploité par une société à l’étranger et proposer une assistance humaine, des factures et un ratio de recharge de 1:1 ; les conditions de la plateforme s’appliquent.<br>
+      🎁 <strong>Nouveaux utilisateurs</strong> : Recevez un crédit d’essai pour tester les modèles via le <a href="https://88api.ai/sign-up?aff=2PIc">lien de parrainage</a>, selon les conditions de la promotion. <a href="docs/88API_SETUP.en.md">Guide de configuration (anglais)</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="140">
       <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
       <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar.cc</strong></a>
     </td>

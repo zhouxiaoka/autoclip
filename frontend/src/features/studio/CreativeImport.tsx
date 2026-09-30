@@ -1,3 +1,4 @@
+import { trackExperience } from '../../analytics/experience'
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
 import { useState } from 'react'
@@ -26,7 +27,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const submit = async () => {
-    if (blocked) { setError(t("请先连接 AI 服务，再导入视频。")); onBlocked?.(); return }
+    if (blocked) { trackExperience('import_blocked', { reason: 'setup_required', placement: 'home_setup' }); setError(t("请先连接 AI 服务，再导入视频。")); onBlocked?.(); return }
     if (source === 'file' ? !file : !url.trim()) { setError(t("请先添加视频文件或链接")); return }
     setBusy(true); setError('')
     try {

@@ -50,6 +50,18 @@ AutoClip uses AI to analyze video transcripts, find highlights, write titles, an
 <table>
   <tr>
     <td align="center" width="140">
+      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
+      <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
+    </td>
+    <td>
+      Thank you to <strong>88API Token Platform</strong> for sponsoring AutoClip! It brings together GPT, Claude, Gemini, Grok, DeepSeek, Kimi and GLM for transcript analysis, highlight selection and title generation.<br>
+      🎨 <strong>Media capabilities</strong>: The platform offers image, video and audio models, including GPT-Image, Seedance, Veo, MiniMax Hailuo H3, Kling, Whisper and TTS. AutoClip uses compatible analysis, cover-image and transcription APIs.<br>
+      🏷️ <strong>Service and billing</strong>: The partner reports overseas corporate operation, live support, invoices and a 1:1 top-up ratio; platform terms apply.<br>
+      🎁 <strong>New-user offer</strong>: Receive trial credit to test models through our <a href="https://88api.ai/sign-up?aff=2PIc">referral registration link</a>, subject to promotion terms. <a href="docs/88API_SETUP.en.md">Setup guide</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="140">
       <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
       <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar.cc</strong></a>
     </td>
@@ -230,7 +242,7 @@ autoclip export PROJECT_ID --preset shorts
 autoclip mcp
 ```
 
-In your MCP client, set `command` to the absolute path of `autoclip` in your virtual environment and `args` to `["mcp"]`. See the [CLI / MCP guide](docs/CLI_AND_MCP.md) and [Agent skill](skills/autoclip/SKILL.md) (both in Chinese).
+In your MCP client, set `command` to the absolute path of `autoclip` in your virtual environment and `args` to `["mcp"]`. opencode users can connect with one command: `autoclip mcp install opencode` (see the [OpenCode guide](docs/OPENCODE.en.md)). See the [CLI / MCP guide](docs/CLI_AND_MCP.md) and [Agent skill](skills/autoclip/SKILL.md) (both in Chinese).
 
 </details>
 
@@ -294,7 +306,7 @@ See the [first-clip guide](docs/USER_INSTALLATION_GUIDE.en.md) for sample prepar
 | Guide | Link |
 | --- | --- |
 | Getting started | [Installation](docs/USER_INSTALLATION_GUIDE.en.md) |
-| Hosting and automation | [Docker](docs/DOCKER.en.md) · [CLI / MCP (Chinese)](docs/CLI_AND_MCP.md) · [Agent skill (Chinese)](skills/autoclip/SKILL.md) |
+| Hosting and automation | [Docker](docs/DOCKER.en.md) · [CLI / MCP (Chinese)](docs/CLI_AND_MCP.md) · [Agent skill (Chinese)](skills/autoclip/SKILL.md) · [opencode guide](docs/OPENCODE.en.md) |
 | Models and troubleshooting | [Model configuration (Chinese)](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [Troubleshooting](docs/FAQ.en.md) |
 | Versions and privacy | [Changelog](CHANGELOG.md) · [Privacy](docs/PRIVACY.en.md) |
 | Development and translation | [Contributing (Chinese)](CONTRIBUTING.md) · [Translation maintenance (Chinese)](docs/i18n.md) |

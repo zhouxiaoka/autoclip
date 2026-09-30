@@ -43,8 +43,10 @@ def valid_words(segment):
         return False
 
 
-def write_word_timing(srt: Path, segments, language=None):
-    payload = {'schema_version': 1, 'source': 'faster-whisper', 'language': language,
+def write_word_timing(srt: Path, segments, language=None, source='faster-whisper'):
+    if source not in {'faster-whisper', 'sensevoice'}:
+        raise ValueError('Unsupported ASR word timing source')
+    payload = {'schema_version': 1, 'source': source, 'language': language,
                'srt_sha256': hashlib.sha256(srt.read_bytes()).hexdigest(),
                'segments': [s for s in segments if s.get('text', '').strip()]}
     # A bad segment keeps sentence captions usable, but must not become karaoke.
@@ -65,7 +67,7 @@ def load_word_timing(srt: Path):
     """Return only complete, unchanged source captions; otherwise safe fallback."""
     try:
         payload = json.loads(sidecar_path(srt).read_text(encoding='utf-8'))
-        if payload.get('schema_version') != 1 or payload.get('source') != 'faster-whisper':
+        if payload.get('schema_version') != 1 or payload.get('source') not in {'faster-whisper', 'sensevoice'}:
             return None
         if payload.get('srt_sha256') != hashlib.sha256(srt.read_bytes()).hexdigest():
             return None

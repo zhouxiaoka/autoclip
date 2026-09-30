@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import re
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -164,7 +166,18 @@ def load_srt_chunks(metadata_dir: Path) -> List[Dict[str, Any]]:
     if not chunks_dir.exists():
         return []
     entries: List[Dict[str, Any]] = []
-    files = sorted(chunks_dir.glob("chunk_*.json"), key=lambda p: int(p.stem.split("_")[1]) if p.stem.split("_")[1].isdigit() else 0)
+    manifest = chunks_dir / "manifest.json"
+    if manifest.exists():
+        try:
+            names = json.loads(manifest.read_text(encoding="utf-8"))
+            if not isinstance(names, list) or any(not isinstance(name, str) or not re.fullmatch(r"chunk_\d+\.json", name) for name in names):
+                raise ValueError("invalid chunk manifest")
+            files = [chunks_dir / name for name in names]
+        except (ValueError, OSError) as error:
+            logger.warning("读取当前字幕块清单失败: %s", error)
+            return []
+    else:
+        files = sorted(chunks_dir.glob("chunk_*.json"), key=lambda p: int(p.stem.split("_")[1]) if p.stem.split("_")[1].isdigit() else 0)
     for f in files:
         try:
             entries.extend(json.loads(f.read_text(encoding="utf-8")))
@@ -232,14 +245,30 @@ def _snap_end(sec: float, cues: List[_Cue], window: float) -> Tuple[float, int]:
     return cues[0].end, 0
 
 
-def _extend_to_min(start: float, end_i: int, cues: List[_Cue], min_sec: float, limit: float) -> Tuple[float, int]:
+def _extend_to_min(start: float, end_i: int, cues: List[_Cue], min_sec: float, limit: float, gap: float) -> Tuple[float, int]:
     """沿 cue 向后延长，直到时长 ≥ min_sec 或撞到 limit（下一段起点 / 视频末尾）。"""
     i = end_i
     end = cues[i].end if 0 <= i < len(cues) else start
     while end - start < min_sec and i + 1 < len(cues) and cues[i + 1].end <= limit + 1e-6:
+        if cues[i + 1].start - end > gap:
+            break
         i += 1
         end = cues[i].end
     return end, i
+
+
+def _extend_start_to_min(end: float, start_i: int, cues: List[_Cue], min_sec: float,
+                         floor: float, gap: float) -> Tuple[float, int]:
+    """Recover a short tail using adjacent earlier cues without crossing a neighbour."""
+    i = start_i
+    start = cues[i].start
+    while end - start < min_sec and i > 0:
+        previous = cues[i - 1]
+        if previous.start < floor - 1e-6 or start - previous.end > gap:
+            break
+        i -= 1
+        start = previous.start
+    return start, i
 
 
 def _trim_to_max(start: float, end_i: int, cues: List[_Cue], max_sec: float) -> Tuple[float, int]:
@@ -333,10 +362,18 @@ def refine_timeline(items: Sequence[Dict[str, Any]], srt_entries: Sequence[Dict[
             limit = merged[idx + 1]["_s"] if idx + 1 < len(merged) else video_end
             dur = it["_e"] - it["_s"]
             if dur < profile.min_clip_sec:
-                e, ei = _extend_to_min(it["_s"], it["_ei"], cues, profile.min_clip_sec, limit)
+                e, ei = _extend_to_min(it["_s"], it["_ei"], cues, profile.min_clip_sec, limit, profile.merge_gap_sec)
                 if e > it["_e"]:
                     it["_e"], it["_ei"] = e, ei
                     it["_ops"].append("extend")
+                    report["extended"] += 1
+            if it["_e"] - it["_s"] < profile.min_clip_sec:
+                floor = merged[idx - 1]["_e"] if idx else cues[0].start
+                start, si = _extend_start_to_min(it["_e"], it["_si"], cues,
+                                                profile.min_clip_sec, floor, profile.merge_gap_sec)
+                if start < it["_s"] and it["_e"] - start >= profile.min_clip_sec:
+                    it["_s"], it["_si"] = start, si
+                    it["_ops"].append("extend_start")
                     report["extended"] += 1
             dur = it["_e"] - it["_s"]
             if dur > profile.max_clip_sec:
@@ -443,28 +480,36 @@ def save_report(report: Dict[str, Any], metadata_dir: Path) -> Path:
 
 # ---------------------------------------------------------------- scoring guards ---
 def align_scores(clips: Sequence[Dict[str, Any]], llm_results: Any,
-                 default_score: float = 0.5) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+                 default_score: float = 0.5, score_source: str = "llm") -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     """
-    把 LLM 的评分结果合并回 clips。数量一致按序对齐；不一致按 outline 文本对齐；
+    把 LLM 的评分结果合并回 clips。先按 id、再按完整 outline 对齐；没有身份字段且数量一致时才按序；
     对不上的给 default_score + 「未评分（自动兜底）」。返回 (clips, {matched, fallback})。
     """
     stats = {"matched": 0, "fallback": 0}
     results = llm_results if isinstance(llm_results, list) else []
-    by_outline: Dict[str, Dict[str, Any]] = {}
+    by_id: Dict[str, Any] = {}
+    by_outline: Dict[str, Any] = {}
     for r in results:
-        if isinstance(r, dict):
-            key = _norm(r.get("outline") or r.get("title") or "")
-            if key and key not in by_outline:
-                by_outline[key] = r
+        if not isinstance(r, dict):
+            continue
+        identifier = str(r.get("id")) if r.get("id") is not None else ""
+        title = _score_outline(r)
+        for key, mapping in ((identifier, by_id), (title, by_outline)):
+            if key:
+                # An ambiguous identity is not permission to assign either score.
+                mapping[key] = None if key in mapping else r
+    positional = len(results) == len(clips) and not by_id and not by_outline
 
     out: List[Dict[str, Any]] = []
     for i, clip in enumerate(clips):
         c = dict(clip)
-        r = None
-        if len(results) == len(clips) and isinstance(results[i], dict):
-            r = results[i]
+        identifier = str(c.get("id")) if c.get("id") is not None else ""
+        if identifier and identifier in by_id:
+            r = by_id[identifier]
         else:
-            r = by_outline.get(_norm(_title(c)))
+            r = by_outline.get(_score_outline(c))
+        if positional and isinstance(results[i], dict):
+            r = results[i]
         score = _to_score(r.get("final_score")) if r else None
         if score is None:
             c["final_score"] = default_score
@@ -474,24 +519,35 @@ def align_scores(clips: Sequence[Dict[str, Any]], llm_results: Any,
         else:
             c["final_score"] = score
             c["recommend_reason"] = r.get("recommend_reason") or ""
-            c["score_source"] = "llm"
+            c["score_source"] = score_source
             stats["matched"] += 1
         out.append(c)
     return out, stats
 
 
 def _norm(s: Any) -> str:
-    return "".join(str(s).split()).lower()[:80]
+    return "".join(str(s).split()).lower()
+
+
+def _score_outline(item: Dict[str, Any]) -> str:
+    value = item.get("outline") or item.get("title") or ""
+    if isinstance(value, dict):
+        value = value.get("title", "")
+    return _norm(value)
 
 
 def _to_score(v: Any) -> Optional[float]:
+    if isinstance(v, bool):
+        return None
     try:
         f = float(v)
     except (TypeError, ValueError):
         return None
-    if f > 1.0:  # 有的模型会给 0–10 / 0–100
+    if not math.isfinite(f) or f < 0 or f > 100:
+        return None
+    if f > 1.0:  # 兼容已有 0–10 / 0–100 响应
         f = f / 10 if f <= 10 else f / 100
-    return round(max(0.0, min(1.0, f)), 2)
+    return round(f, 2)
 
 
 def select_clips(scored: Sequence[Dict[str, Any]], threshold: float,

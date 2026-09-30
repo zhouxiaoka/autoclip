@@ -59,5 +59,5 @@ $res = Join-Path $install.Dir 'resources'
 # 和桌面端启动后端时一样：强制 UTF-8，否则中文输出在 cp1252 控制台上直接报错
 $env:PYTHONUTF8 = '1'
 $env:PYTHONIOENCODING = 'utf-8'
-& (Join-Path $res 'python\python.exe') -B scripts\verify_windows_install.py --resources $res --report $Report
+& (Join-Path $res 'python\python.exe') -B scripts\verify_windows_install.py --resources $res --report $Report --launch-desktop
 if ($LASTEXITCODE -ne 0) { throw "安装后冒烟失败: $LASTEXITCODE" }

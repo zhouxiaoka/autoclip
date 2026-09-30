@@ -27,9 +27,11 @@ logger = logging.getLogger(__name__)
 
 # 要安装的运行时包（faster-whisper 带上 ctranslate2、onnxruntime、av、huggingface_hub 等，
 # 不含 PyTorch）
-WHISPER_PACKAGES = ["faster-whisper"]
+# PyAV 19 removed av.open(metadata_errors=...), still used by faster-whisper.
+WHISPER_PACKAGES = ["faster-whisper", "av<19"]
 # 运行时核心模块（用于探测是否已装）
 WHISPER_IMPORT_NAME = "faster_whisper"
+_runtime_import_error = ""
 
 
 def _data_dir() -> Path:
@@ -100,11 +102,18 @@ def ensure_on_path() -> None:
 
 def is_installed() -> bool:
     """运行时是否已就绪（faster_whisper 可被导入）。"""
+    global _runtime_import_error
     ensure_on_path()
     try:
-        import importlib.util
-        return importlib.util.find_spec(WHISPER_IMPORT_NAME) is not None
-    except Exception:
+        import importlib
+        importlib.import_module(WHISPER_IMPORT_NAME)
+        _runtime_import_error = ""
+        return True
+    except Exception as exc:
+        missing_package = isinstance(exc, ModuleNotFoundError) and exc.name == WHISPER_IMPORT_NAME
+        _runtime_import_error = "" if missing_package else (
+            f"Whisper 运行时依赖加载失败（{type(exc).__name__}）。请重新安装 Whisper 后重启 AutoClip。"
+        )
         return False
 
 
@@ -135,7 +144,7 @@ def get_status() -> Dict[str, Any]:
         elif st["status"] == "error":
             pass
         else:
-            remembered = _read_install_error()
+            remembered = _runtime_import_error or _read_install_error()
             if remembered:
                 st["status"] = "error"
                 st["message"] = remembered
@@ -161,7 +170,8 @@ def _do_install(index_url: Optional[str]) -> None:
     try:
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1,
+            text=True, encoding="utf-8", errors="replace", bufsize=1,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8", "PIP_PROGRESS_BAR": "off"},
         )
         lines: list[str] = []
         for line in iter(proc.stdout.readline, ""):
@@ -205,6 +215,7 @@ def start_install(index_url: Optional[str] = None) -> Dict[str, Any]:
     with _state_lock:
         if _state["status"] == "installing":
             return {"started": False, "message": "正在安装中"}
+        _state.update(status="installing", progress=0, message="正在检查运行时…", log_tail="")
     if is_installed():
         _set_state(status="installed", progress=100, message="已安装")
         return {"started": False, "message": "已安装"}

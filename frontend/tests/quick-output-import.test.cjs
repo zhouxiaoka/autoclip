@@ -19,7 +19,7 @@ test('quick import submits platform targets, branding and auto-starts to results
   react:{useState:()=>states[index++],useEffect:()=>{}},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
   'react/jsx-runtime':{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'fragment'},
   '../../ui':{Btn:'button',Segmented:'segmented',Dialog:'dialog'},'./PlatformPicker':{default:'platform-picker'},
-  './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}}},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){}},
+  './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}}},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){}},'../../analytics/experience':{trackExperience(){}},
   './types':{defaultImportOptions:{goal:'auto',language:'source',aspect:null,duration:null,instruction:''}},
   './ImportPreferences':{default:'preferences'},'./studio.css':{},'./quick-output.css':{},
  })

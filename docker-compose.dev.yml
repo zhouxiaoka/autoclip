@@ -9,12 +9,18 @@ services:
     volumes:
       - redis_dev_data:/data
     command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   # 主应用服务（开发模式）
   autoclip-dev:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    image: autoclip:dev
     container_name: autoclip-app-dev
     restart: unless-stopped
     ports:
@@ -26,7 +32,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./uploads:/app/uploads
-      - /app/venv  # 排除虚拟环境
+      - frontend_dev_modules:/app/frontend/node_modules
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=sqlite:///./data/autoclip.db
@@ -45,22 +51,21 @@ services:
       - API_SILICONFLOW_API_KEY=${API_SILICONFLOW_API_KEY:-}
       - AUTOCLIP_YT_SUBTITLE_LANGS=${AUTOCLIP_YT_SUBTITLE_LANGS:-}
     depends_on:
-      - redis
-    command: >
-      sh -c "
-        source venv/bin/activate &&
-        python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload &
-        cd frontend && 
-        if [ ! -d node_modules ]; then npm install; fi &&
-        npx vite --host 0.0.0.0 --port 3000 &
-        wait
-      "
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
 
   # Celery Worker服务（开发模式）
   celery-worker-dev:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    image: autoclip:dev
     container_name: autoclip-celery-worker-dev
     restart: unless-stopped
     volumes:
@@ -68,7 +73,6 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./uploads:/app/uploads
-      - /app/venv
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=sqlite:///./data/autoclip.db
@@ -86,16 +90,15 @@ services:
       - API_GEMINI_API_KEY=${API_GEMINI_API_KEY:-}
       - API_SILICONFLOW_API_KEY=${API_SILICONFLOW_API_KEY:-}
       - AUTOCLIP_YT_SUBTITLE_LANGS=${AUTOCLIP_YT_SUBTITLE_LANGS:-}
-    command: >
-      sh -c "
-        source venv/bin/activate &&
-        celery -A backend.core.celery_app worker --loglevel=debug --reload -Q celery,processing,video,notification,upload
-      "
+    command: ["celery", "-A", "backend.core.celery_app", "worker", "--loglevel=debug", "--concurrency=1", "-Q", "celery,processing,video,notification,upload"]
     depends_on:
-      - redis
-      - autoclip-dev
+      redis:
+        condition: service_healthy
+      autoclip-dev:
+        condition: service_healthy
 
 volumes:
+  frontend_dev_modules:
   redis_dev_data:
     driver: local
 

@@ -771,3 +771,33 @@ def test_export_dispatch_failure_is_retryable_and_preserves_success(root, monkey
     assert jobs.export('p1', Draft.model_validate(saved))['job_id'] == retry['job_id']
     assert len(calls) == 2  # retry accepted once; duplicate does not dispatch again
     assert len(store.read('p1')['jobs']) == 3
+
+
+def test_analysis_receipts_survive_new_plan_and_do_not_contain_user_content(root):
+    base = {'drafts': [], 'events': [], 'jobs': [], 'plan': {'id': 'old', 'mode': 'ai', 'instruction': 'private'},
+            'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'run-old', 'instance': store.INSTANCE}}
+    store.write('p1', base)
+    store.change('p1', lambda d: d.update(analysis={'status': 'failed', 'error_code': 'llm_not_configured', 'error': 'private /file'}))
+    old = store.read('p1')['analysis_history'][0]
+    assert old['run_id'] == 'run-old'
+    assert old['analysis']['phase'] == 'production'
+    assert 'private' not in str(old)
+    store.change('p1', lambda d: d.update(plan={'id': 'new'}, analysis={'status': 'running', 'phase': 'screening', 'run_id': 'run-new', 'instance': store.INSTANCE}))
+    store.change('p1', lambda d: d.update(analysis={'status': 'awaiting_confirmation'}))
+    history = store.read('p1')['analysis_history']
+    assert [r['run_id'] for r in history] == ['run-old', 'run-new']
+    assert history[0] == old
+    store.change('p1', lambda d: d.update(another_field=True))
+    assert len(store.read('p1')['analysis_history']) == 2
+
+
+def test_restart_failure_is_preserved_when_immediately_rescreened(root):
+    state = {'drafts': [], 'events': [], 'jobs': [], 'plan': {'id': 'before'},
+             'analysis': {'status': 'running', 'phase': 'production', 'run_id': 'interrupted', 'instance': 'old-process'}}
+    store.write('p1', state)
+    store.change('p1', lambda d: d.update(plan={'id': 'after'}, analysis={
+        'status': 'running', 'phase': 'screening', 'run_id': 'retry', 'instance': store.INSTANCE}))
+    receipt = store.read('p1')['analysis_history'][0]
+    assert receipt['run_id'] == 'interrupted'
+    assert receipt['analysis']['status'] == 'failed'
+    assert receipt['plan']['id'] == 'before'

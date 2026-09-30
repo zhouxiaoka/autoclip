@@ -1,3 +1,4 @@
+import json
 import logging
 from time import monotonic, sleep
 from backend.core.sentry_setup import capture_studio_exception, studio_error_code
@@ -155,16 +156,22 @@ def download_progress_hook(project_id, min_interval=1.0):
     return hook
 
 def download(project_id, url, browser):
-    import yt_dlp
     from backend.utils.ffmpeg_utils import get_ffmpeg_path, ytdlp_js_runtimes
     folder = store.directory(project_id) / 'raw'
     folder.mkdir(exist_ok=True)
     options = {'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]', 'outtmpl': str(folder / 'input.%(ext)s'), 'merge_output_format': 'mp4', 'noplaylist': True, 'quiet': True, 'ffmpeg_location': get_ffmpeg_path(), 'socket_timeout': 30, 'retries': 2, 'progress_hooks': [download_progress_hook(project_id)], **ytdlp_js_runtimes()}
     if browser:
         options['cookiesfrombrowser'] = (browser,)
-    with yt_dlp.YoutubeDL(options) as downloader:
-        info = downloader.extract_info(url, download=True) or {}
+    from backend.utils.download_recovery import download_with_recovery
+    download_with_recovery(url, {**options, 'writeinfojson': True})
     # Public listing text only: packaging checks nameplate names against it instead of guessing.
+    info_path = folder / 'input.info.json'
+    try:
+        info = json.loads(info_path.read_text(encoding='utf-8')) if info_path.exists() else {}
+    except (OSError, ValueError):
+        info = {}
+    finally:
+        info_path.unlink(missing_ok=True)
     meta = {key: str(info.get(field) or '')[:300] for key, field in (('title', 'title'), ('channel', 'channel'))}
     store.change(project_id, lambda data: data.update(source_meta=meta))
     from backend.core.database import SessionLocal
@@ -631,7 +638,7 @@ def inspect_project(project_id, options, url=None, browser=None):
             'created_at': store.now(),
         }
         state.setdefault('output_variants', [])
-        state['analysis'] = {'status':'running', 'phase':'screening', 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
+        state['analysis'] = {'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
         if options.auto_start:
             _prepare_speaker_framing(options.platforms)
@@ -645,6 +652,8 @@ def inspect_project(project_id, options, url=None, browser=None):
                 previous['analysis'] = {'status':'failed', 'phase':'screening', 'error':message}
             store.write(project_id, previous)
             raise ValueError(message) from None
+
+        return state['analysis']['run_id']
 
 
 def _inspect(project_id, options, url, browser):
@@ -719,7 +728,7 @@ def confirm_project(project_id, body):
             for goal in body.goals
         }
         plan['confirmed_preferences'] = plan['goal_preferences'][body.goals[0]].copy()
-        state['analysis'] = {'status':'running', 'phase':'production', 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
+        state['analysis'] = {'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
         try:
             executor.submit(_produce_selected, project_id, plan)
@@ -730,6 +739,8 @@ def confirm_project(project_id, body):
             # staging state so an explicit retry can use the same plan ID.
             store.write(project_id, previous)
             raise ValueError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
+
+        return state['analysis']['run_id']
 
 
 def _produce_selected(project_id, plan):

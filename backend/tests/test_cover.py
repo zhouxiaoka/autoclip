@@ -311,6 +311,12 @@ def test_cover_follows_text_model_service(data_dir, monkeypatch):
     _text_keys(monkeypatch, llm_provider="openai", cloud_preset="infistar", infistar_api_key="sk-inf", openai_base_url="https://infistar.cc/v1")
     cfg = cover.load_config()
     assert (cfg.provider, cfg.base_url, cfg.api_key) == ("openai", "https://infistar.cc/v1", "sk-inf")
+    # 88API uses its own credentials and gateway when following the text service.
+    _text_keys(monkeypatch, llm_provider="openai", cloud_preset="api88", api88_api_key="sk-88", openai_base_url="https://88api.ai/v1")
+    cfg = cover.load_config()
+    assert (cfg.provider, cfg.base_url, cfg.api_key) == ("openai", "https://88api.ai/v1", "sk-88")
+    assert cover._text_model_key("openai", "https://88api.ai/v1") == "sk-88"
+    assert cover._text_model_key("openai", "https://88api.ai.evil.example/v1") == ""
     # 换成没有生图的 DeepSeek：自动关掉，封面走截帧
     _text_keys(monkeypatch, llm_provider="openai", cloud_preset="deepseek", deepseek_api_key="sk-ds")
     cfg = cover.load_config()

@@ -1,14 +1,14 @@
 import { captureBusinessEvent } from './posthog'
 import { workflow } from './observer'
-import { errorCode, safeStudioProperties, type Properties, type StudioSnapshot } from './workflow'
+import { errorCode, safeStudioProperties, telemetryId, type Properties, type StudioSnapshot } from './workflow'
 
-/** Only allowlisted categories, booleans, counts and elapsed milliseconds leave the app.
- * No project/job/operation IDs, URLs, filenames, content or model output are captured. */
+/** Only allowlisted values and randomly generated telemetry correlation tokens leave the app.
+ * Internal project/job IDs, URLs, filenames, content and model output stay local. */
 export async function observeStudioOperation<T>(
-  name: 'studio_import' | 'studio_confirm' | 'studio_export' | 'studio_rescreen' | 'studio_plan_update' | 'studio_draft_create' | 'studio_draft_save' | 'studio_draft_duplicate' | 'studio_rewrite' | 'studio_analysis_preferences' | 'vision_provider_test' | 'vision_provider_save' | 'social_publish' | 'studio_platform_append' | 'studio_variant_retry',
-  action: () => Promise<T>, accepted: (result: T) => void = () => {}, properties: Record<string, unknown> = {},
+  name: 'studio_import' | 'studio_confirm' | 'studio_export' | 'studio_rescreen' | 'studio_plan_update' | 'studio_draft_create' | 'studio_draft_save' | 'studio_draft_duplicate' | 'studio_rewrite' | 'studio_analysis_preferences' | 'vision_provider_test' | 'vision_provider_save' | 'social_publish' | 'studio_auto_frame' | 'studio_framing_install' | 'studio_platform_append' | 'studio_variant_retry',
+  action: () => Promise<T>, accepted: (result: T, props: Properties) => void = () => {}, properties: Record<string, unknown> = {},
 ): Promise<T> {
-  const props = safeStudioProperties(properties)
+  const props = safeStudioProperties({ ...properties, operation_id: telemetryId() })
   const started = Date.now(), generation = workflow.generation()
   const enabled = workflow.active(generation)
   if (enabled) captureBusinessEvent(`${name}_requested`, props)
@@ -16,7 +16,7 @@ export async function observeStudioOperation<T>(
     const result = await action()
     if (enabled && workflow.active(generation)) {
       captureBusinessEvent(`${name}_accepted`, { ...props, request_duration_ms: Date.now() - started })
-      try { accepted(result) } catch { /* local watch failures never change the API result */ }
+      try { accepted(result, props) } catch { /* local watch failures never change the API result */ }
     }
     return result
   } catch (error) {
@@ -46,14 +46,14 @@ export function trackOutputRating(properties: { output_rating: 'ready' | 'needs_
 }
 
 /** Navigation intent only; no claim about successful disk writes. */
-export function studioDownloadRequested() {
-  captureBusinessEvent('studio_download_requested', safeStudioProperties({ download_mode: 'browser' }))
+export function studioDownloadRequested(projectId?: string, jobId?: string) {
+  captureBusinessEvent('studio_download_requested', safeStudioProperties({ ...workflow.context(projectId, jobId), download_mode: 'browser' }))
 }
 
-export async function observeStudioDownload<T>(action: () => Promise<T>): Promise<T> {
+export async function observeStudioDownload<T>(action: () => Promise<T>, projectId?: string, jobId?: string): Promise<T> {
   const generation = workflow.generation(), started = Date.now()
   const enabled = workflow.active(generation)
-  const props = safeStudioProperties({ download_mode: 'native' })
+  const props = safeStudioProperties({ ...workflow.context(projectId, jobId), operation_id: telemetryId(), download_mode: 'native' })
   const emit = (name: string, result: Properties = {}) => {
     if (enabled && workflow.active(generation)) captureBusinessEvent(name, { ...props, ...result })
   }
@@ -79,7 +79,7 @@ export function studioImportProperties(body: FormData): Record<string, unknown> 
       else if (host === 'b23.tv' || host === 'bilibili.com' || host.endsWith('.bilibili.com')) source_type = 'bilibili'
     } catch { /* invalid input remains an enum; URL is never captured */ }
   }
-  return { source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length, brand_outro_enabled: body.get?.('brand_outro_enabled') !== 'false' }
+  return { material_origin: 'user', flow_id: telemetryId(), source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length, brand_outro_enabled: body.get?.('brand_outro_enabled') !== 'false' }
 }
 
 export function studioGoals(goals: string[]): Properties {
@@ -108,6 +108,7 @@ export async function observeStudioWorkspace<T extends StudioSnapshot>(projectId
   const generation = workflow.generation(), enabled = workflow.active(generation)
   const watches = enabled ? workflow.list().filter(watch => watch.kind.startsWith('studio-') && (watch.projectId || watch.id) === projectId) : []
   const snapshot = await action()
+  if (enabled && workflow.active(generation)) workflow.rememberProject(projectId, snapshot as Record<string, unknown>)
   if (enabled && workflow.active(generation)) {
     try {
       for (const watch of watches) workflow.observeStudio(watch, snapshot)

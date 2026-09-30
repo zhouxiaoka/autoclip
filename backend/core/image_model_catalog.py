@@ -4,6 +4,7 @@ Checked 2026-09-29. Keep exact provider IDs: gateway aliases are not official ID
 Sources are retained so catalog additions can be reviewed against provider docs.
 """
 SOURCES = {
+    'api88': 'https://88api.ai/zh/docs/api/image/openai-image/',
     'seed': 'https://docs.volcengine.com/docs/ark/model-release-announcement?lang=zh',
     'dashscope': 'https://help.aliyun.com/en/model-studio/image-model/',
     'openai': 'https://developers.openai.com/api/docs/guides/image-generation',
@@ -12,6 +13,7 @@ SOURCES = {
     'glm': 'https://docs.bigmodel.cn/cn/guide/models/image-generation/glm-image',
 }
 MODELS = {
+    'api88': ['gpt-image-1', 'dall-e-3', 'dall-e-2'],
     'seed': ['doubao-seedream-5-0-flash-260915', 'doubao-seedream-5-0-pro-260628', 'doubao-seedream-4-0-20260415'],
     'openai': ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2', 'gpt-image-1.5', 'gpt-image-1', 'gpt-image-1-mini', 'chatgpt-image-latest'],
     'gemini': ['gemini-3.1-flash-lite-image', 'gemini-3.1-flash-image', 'gemini-3-pro-image', 'gemini-2.5-flash-image'],

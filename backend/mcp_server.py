@@ -5,10 +5,12 @@ AutoClip MCP server（stdio）——让 Cursor / Claude Code / 任何 MCP 客户
     autoclip mcp                       # 装了包
     python -m backend.mcp_server       # 仓库内
 
-客户端配置示例（Cursor `~/.cursor/mcp.json` / Claude `claude mcp add`）：
+客户端配置示例（Cursor `~/.cursor/mcp.json` / Claude `claude mcp add` / opencode）：
     { "mcpServers": { "autoclip": { "command": "autoclip", "args": ["mcp"] } } }
     或 { "command": "/path/to/autoclip/venv/bin/python", "args": ["-m", "backend.mcp_server"],
          "env": { "PYTHONPATH": "/path/to/autoclip" } }
+    opencode（opencode.json；一条命令：`autoclip mcp install opencode`，见 docs/OPENCODE.md）：
+    { "mcp": { "autoclip": { "type": "local", "command": ["autoclip", "mcp"], "enabled": true } } }
 
 工具：
     clip_video          同步出片（几分钟到几十分钟，带进度通知）
@@ -121,7 +123,7 @@ def _make_override(provider: Optional[str], model: Optional[str], base_url: Opti
     description=(
         "把一条本地视频切成高光片段（同步，耗时数分钟到数十分钟，期间会发进度）。"
         "返回切片列表（标题 / 起止时间 / 评分 / mp4 路径）与合集。"
-        "provider 可选 dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / ollama / lmstudio；不填用桌面应用里已配置的模型。"
+        "provider 可选 dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88 / ollama / lmstudio；不填用桌面应用里已配置的模型。"
     ),
 )
 async def clip_video(
@@ -220,7 +222,7 @@ def list_providers() -> Dict[str, Any]:
 
     return {
         "current": get_llm_manager().get_current_provider_info(),
-        "cloud": ["dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok", "infistar"],
+        "cloud": ["dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok", "infistar", "api88"],
         "local_presets": presets_as_dicts(),
     }
 

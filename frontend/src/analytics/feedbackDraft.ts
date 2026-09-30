@@ -12,6 +12,9 @@ export interface FeedbackDraftInput {
   source: string
   stage?: string
   errorMessage?: string
+  errorCode?: string
+  transcriptionProvider?: string
+  transcriptionModel?: string
   version: string
   os: string
   arch: string
@@ -27,6 +30,9 @@ export interface FeedbackDraft {
   source: string
   stage?: string
   errorMessage?: string
+  errorCode?: string
+  transcriptionProvider?: string
+  transcriptionModel?: string
   version: string
   os: string
   arch: string
@@ -36,6 +42,12 @@ export interface FeedbackDraft {
 }
 
 const SECRET = /sk-[A-Za-z0-9_-]{8,}|ghp_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{8,}|xox[baprs]-[A-Za-z0-9-]+|(?:api[_-]?key|token|secret|password|bearer)\s*[:=]\s*\S+/gi
+
+const ERROR_CODE = /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty)$/
+
+export function safeFeedbackErrorCode(value?: string): string | undefined {
+  return value && ERROR_CODE.test(value) ? value : undefined
+}
 
 export function newFeedbackId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
@@ -65,6 +77,9 @@ export function buildFeedbackDraft(input: FeedbackDraftInput): FeedbackDraft {
     source: scrubText(input.source, 40),
     stage: scrubText(input.stage, 80) || undefined,
     errorMessage: scrubText(input.errorMessage, 500) || undefined,
+    errorCode: safeFeedbackErrorCode(input.errorCode),
+    transcriptionProvider: ['whisper_local', 'sensevoice_local', 'cloud'].includes(input.transcriptionProvider || '') ? input.transcriptionProvider : undefined,
+    transcriptionModel: scrubText(input.transcriptionModel, 80) || undefined,
     version: scrubText(input.version, 40),
     os: scrubText(input.os, 40),
     arch: scrubText(input.arch, 40),
@@ -89,6 +104,9 @@ export function captureProperties(draft: FeedbackDraft): Record<string, string> 
   if (draft.contact) props.contact = draft.contact
   if (draft.stage) props.stage = draft.stage
   if (draft.errorMessage) props.error_message = draft.errorMessage
+  if (draft.errorCode) props.error_code = draft.errorCode
+  if (draft.transcriptionProvider) props.transcription_provider = draft.transcriptionProvider
+  if (draft.transcriptionModel) props.transcription_model = draft.transcriptionModel
   if (draft.llmProvider) props.llm_provider = draft.llmProvider
   if (draft.llmModel) props.llm_model = draft.llmModel
   return props
@@ -113,6 +131,8 @@ function publicLines(draft: FeedbackDraft): string {
     `来源：${draft.source || '未知'}`,
   ]
   if (draft.stage) lines.push(`阶段：${draft.stage}`)
+  if (draft.errorCode) lines.push(`错误码：${draft.errorCode}`)
+  if (draft.transcriptionProvider) lines.push(`转写模型：${draft.transcriptionProvider}${draft.transcriptionModel ? ` / ${draft.transcriptionModel}` : ''}`)
   if (draft.llmProvider) lines.push(`模型：${draft.llmProvider}${draft.llmModel ? ` / ${draft.llmModel}` : ''}`)
   if (draft.errorMessage) lines.push('', '错误', draft.errorMessage)
   return lines.join('\n').slice(0, 1500)

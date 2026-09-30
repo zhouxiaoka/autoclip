@@ -54,3 +54,27 @@ test('ideas and other notes open discussions', () => {
   assert.ok(other.includes('category=q-a'))
   assert.ok(!idea.includes('person@example.com'))
 })
+
+test('stable failure code and transcription role survive capture and fallback separately from analysis', () => {
+  const { buildFeedbackDraft, captureProperties, githubFallbackUrl } = loadDraft()
+  const draft = buildFeedbackDraft({ ...draftInput, errorCode: 'subtitle_setup', transcriptionProvider: 'whisper_local', transcriptionModel: 'tiny' })
+  const props = captureProperties(draft)
+  assert.equal(props.error_code, 'subtitle_setup')
+  assert.equal(props.transcription_provider, 'whisper_local')
+  assert.equal(props.transcription_model, 'tiny')
+  assert.equal(props.llm_model, 'qwen2.5')
+  const body = new URL(githubFallbackUrl(draft)).searchParams.get('what')
+  assert.ok(body.includes('错误码：subtitle_setup'))
+  assert.ok(body.includes('转写模型：whisper_local / tiny'))
+  assert.ok(!body.includes('person@example.com'))
+})
+
+test('arbitrary failure codes and transcription provider payloads are not published', () => {
+  const { buildFeedbackDraft, captureProperties, githubFallbackUrl } = loadDraft()
+  const draft = buildFeedbackDraft({ ...draftInput, errorCode: 'private-path', transcriptionProvider: 'secret-url', transcriptionModel: 'sk-test-abc1234567890' })
+  const props = captureProperties(draft)
+  assert.equal(props.error_code, undefined)
+  assert.equal(props.transcription_provider, undefined)
+  assert.ok(!githubFallbackUrl(draft).includes('secret-url'))
+  assert.ok(!JSON.stringify(props).includes('sk-test-abc1234567890'))
+})

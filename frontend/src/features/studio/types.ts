@@ -8,7 +8,7 @@ export interface AutoFrameResult { window_fraction: number; scenes: { id: string
 export type FrameMode = 'crop' | 'fit'
 /** One shot of a scene: from `start` (seconds into the scene) until the next point. `fit` shows the whole frame. */
 export interface CropPoint { start: number; crop_x: number; mode?: FrameMode }
-export interface Scene { id: string; label: string; start: number; end: number; evidence: string; crop_x?: number | null; crop_track?: CropPoint[] | null }
+export interface Scene { framing_source?: 'auto' | 'manual' | null; framing_adjusted?: boolean; id: string; label: string; start: number; end: number; evidence: string; crop_x?: number | null; crop_track?: CropPoint[] | null }
 /** Index of the track point covering `time` (absolute seconds), or -1 without a track. */
 export function shotIndexAt(scene: Scene | undefined, time: number): number {
   const track = scene?.crop_track || []

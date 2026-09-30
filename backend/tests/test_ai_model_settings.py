@@ -346,3 +346,32 @@ def test_cloud_selection_routes_auto_without_loading_whisper(monkeypatch, tmp_pa
     assert generate_subtitle_for_video(tmp_path / 'video.mp4') == tmp_path / 'result.srt'
     assert calls[0][2] is value
     assert configured_whisper_model('small') == 'small'
+
+
+def test_api88_gateway_catalog_routes_account_models_and_isolates_keys(monkeypatch):
+    async def no_metadata():
+        pass
+
+    async def account_models(url, **kwargs):
+        assert url == 'https://88api.ai/v1/models'
+        assert kwargs['headers']['Authorization'] == 'Bearer sk-88-only'
+        return {'data': [{'id': 'gpt-image-1'}, {'id': 'whisper-1'},
+                         {'id': 'gpt-5-mini'}, {'id': 'tts-1'}, {'id': 'sora-2'}]}
+
+    monkeypatch.setattr(registry, '_ensure_metadata', no_metadata)
+    monkeypatch.setattr(registry.model_catalog, '_http_get_json', account_models)
+    c = ai.Connection(id='88', name='88API', provider='api88', api_key='sk-88-only')
+    result = asyncio.run(registry.discover(c, refresh=True))
+    by_id = {m['id']: m for m in result['models']}
+    assert by_id['gpt-image-1']['image'] and not by_id['gpt-image-1']['analysis']
+    assert by_id['whisper-1']['asr_supported'] and not by_id['whisper-1']['analysis']
+    assert by_id['gpt-5-mini']['analysis']
+    assert not by_id['tts-1']['analysis'] and not by_id['sora-2']['analysis']
+    assert ai.image_endpoint(c)['base_url'] == 'https://88api.ai/v1'
+    assert ai.image_endpoint(c)['api_key'] == 'sk-88-only'
+
+    config = ai.ModelSettings(connections=[c], analysis=ai.Assignment(connection_id='88', model='gpt-5-mini'),
+                              transcription=ai.Transcription(provider='cloud', connection_id='88', model='whisper-1'))
+    response = ai.save(config)
+    assert 'sk-88-only' not in json.dumps(response)
+    assert ai.load().connections[0].api_key == 'sk-88-only'

@@ -22,6 +22,8 @@ class CropPoint(BaseModel):
 
 
 class Scene(BaseModel):
+    framing_source: Literal["auto", "manual"] | None = None
+    framing_adjusted: bool = False
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
     id: str = Field(pattern=r'^[a-zA-Z0-9_-]+$', min_length=1, max_length=100)
     label: str = Field(default='片段', max_length=120)

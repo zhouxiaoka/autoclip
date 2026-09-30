@@ -47,6 +47,27 @@ def write(project_id, data):
         raise FileNotFoundError('项目目录不存在')
     path = root / 'metadata' / 'studio.json'
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Preserve content-free execution receipts in the same atomic write as business state.
+    # Re-screening must not destroy an unobserved production terminal.
+    previous = read(project_id) if path.exists() else {}
+    analysis = data.get('analysis') or {}
+    prior = previous.get('analysis') or {}
+    if analysis.get('status') in ('awaiting_confirmation', 'completed', 'failed') and not analysis.get('run_id') and prior.get('run_id'):
+        analysis['run_id'] = prior['run_id']
+        analysis.setdefault('phase', prior.get('phase'))
+    history = list(previous.get('analysis_history', []))
+    for terminal, state in ((prior, previous), (analysis, data)):
+        if terminal.get('run_id') and terminal.get('status') in ('awaiting_confirmation', 'completed', 'failed'):
+            key = terminal['run_id']
+            if not any(row['run_id'] == key for row in history):
+                plan = state.get('plan') or {}
+                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id') if k in terminal}
+                plan_summary = {k: plan[k] for k in ('id', 'mode', 'confirmed_analysis', 'recommended_analysis') if k in plan}
+                subtitle_status = (plan.get('local_evidence') or {}).get('subtitle_status')
+                if subtitle_status:
+                    plan_summary['local_evidence'] = {'subtitle_status': subtitle_status}
+                history.append({'run_id': key, 'finished_at': now(), 'plan': plan_summary, 'analysis': summary})
+    data['analysis_history'] = history[-100:]
     tmp = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
