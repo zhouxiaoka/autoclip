@@ -12,6 +12,8 @@ def test_burned_captions_keep_the_full_frame_without_running_detection(monkeypat
     monkeypatch.setattr(jobs, '_speaker_framing', lambda *_a, **_k: pytest.fail('must not detect faces'))
     value, framed = jobs._apply_framing('p1', _value(), 'tiktok', 'video.mp4', True, {})
     assert framed == 'full_frame_captions' and value['layout'] == 'blur'
+    value, framed = jobs._apply_framing('p1', _value(), 'douyin', 'video.mp4', True, {})
+    assert framed == 'full_frame_captions' and value['layout'] == 'window'
 
 
 def test_landscape_outputs_are_not_reframed(monkeypatch):
@@ -20,28 +22,48 @@ def test_landscape_outputs_are_not_reframed(monkeypatch):
     assert framed is None and value == _value()
 
 
-def test_faces_give_speaker_crop_and_one_detection_serves_every_vertical_platform(monkeypatch):
+def test_faces_give_speaker_crop_and_one_detection_per_window_shape(monkeypatch):
     calls = []
-    def detect(value, video):
-        calls.append(video)
+    def detect(value, video, *, window=None):
+        calls.append(window)
         return [{**scene, 'crop_x': .3, 'crop_track': [{'start': 0, 'crop_x': .3, 'mode': 'crop'}]} for scene in value['scenes']], 'speaker'
     monkeypatch.setattr(jobs, '_speaker_framing', detect)
     cache = {}
-    for strategy_id in ('douyin', 'tiktok', 'youtube_shorts'):
+    expected = {'douyin': 'window', 'xiaohongshu': 'window', 'tiktok': 'crop', 'youtube_shorts': 'crop'}
+    for strategy_id, layout in expected.items():
         value, framed = jobs._apply_framing('p1', _value(), strategy_id, 'video.mp4', False, cache)
         draft = jobs._apply_strategy(value, strategy_id, layout=value['layout'])
-        assert framed == 'speaker' and draft.layout == 'crop' and draft.scenes[0].crop_track[0].crop_x == .3
-    assert len(calls) == 1
+        assert framed == 'speaker' and draft.layout == layout and draft.scenes[0].crop_track[0].crop_x == .3
+    assert calls == [jobs.INTERVIEW_WINDOW, None]  # 4:3 interview window once, 9:16 once
+
+
+def test_one_packaging_call_per_content_and_template(monkeypatch, tmp_path):
+    from backend.services import publish_export
+    from backend.services.studio import packaging, store
+    calls = []
+    monkeypatch.setattr(publish_export, '_load_srt_entries', lambda _pid: [])
+    monkeypatch.setattr(store, 'read', lambda _pid: {'source_meta': {'title': 'Sam Altman', 'channel': 'YC'}})
+    monkeypatch.setattr(packaging, 'build_packaging', lambda value, lines, strategy, **kw: calls.append(strategy.template) or {'template': strategy.template})
+    cache = {}
+    for strategy_id in ('douyin', 'xiaohongshu', 'tiktok', 'youtube_shorts', 'instagram_reels'):
+        value = jobs._apply_packaging('p1', _value(), strategy_id, False, cache)
+        assert value['packaging']['template'] in ('interview_zh', 'podcast_en')
+    assert calls == ['interview_zh', 'podcast_en']
+    landscape = jobs._apply_packaging('p1', {**_value(), 'packaging': {'template': 'interview_zh'}}, 'bilibili', False, cache)
+    assert 'packaging' not in landscape  # never inherit a vertical template on landscape
 
 
 def test_missing_detector_falls_back_to_full_frame_and_says_so(monkeypatch):
     monkeypatch.setattr(framing, 'is_installed', lambda: False)
     monkeypatch.setattr(framing, 'get_status', lambda: {'status': 'not_installed'})
-    value, framed = jobs._apply_framing('p1', _value(), 'douyin', 'video.mp4', False, {})
+    value, framed = jobs._apply_framing('p1', _value(), 'tiktok', 'video.mp4', False, {})
     assert framed == 'full_frame_pending' and value['layout'] == 'blur'
 
 
-def test_detection_errors_never_fail_the_output(monkeypatch):
+def test_detection_errors_never_fail_the_output_and_drop_inherited_tracks(monkeypatch):
     monkeypatch.setattr(jobs, '_speaker_framing', lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError('cv2 crashed')))
-    value, framed = jobs._apply_framing('p1', _value(), 'douyin', 'video.mp4', False, {})
-    assert framed == 'full_frame' and value['layout'] == 'blur'
+    inherited = _value()
+    inherited['scenes'][0]['crop_track'] = [{'start': 0, 'crop_x': .9, 'mode': 'crop'}]
+    value, framed = jobs._apply_framing('p1', inherited, 'douyin', 'video.mp4', False, {})
+    assert framed == 'full_frame' and value['layout'] == 'window'
+    assert value['scenes'][0]['crop_track'] is None  # 9:16 tracks must not drive the 4:3 window

@@ -346,15 +346,16 @@ def merge_points(points: list[dict[str, Any]], min_jump: float = MIN_JUMP) -> li
     return merged
 
 
-def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int) -> dict[str, Any]:
+def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int, *, window: tuple[int, int] | None = None) -> dict[str, Any]:
     """Shot-aligned crop tracks per scene.
 
     Scenes get a track only when somebody is visible somewhere in the draft; a clip with no
     people at all (gameplay, screen recording) keeps the layout the user chose untouched.
+    `window` overrides the output size, e.g. the 4:3 window of the interview template.
     """
     if not is_installed():
         raise RuntimeError("人物识别组件未安装")
-    out_w, out_h = {"portrait": (1080, 1920), "landscape": (1920, 1080)}.get(draft.aspect, (source_w, source_h))
+    out_w, out_h = window or {"portrait": (1080, 1920), "landscape": (1920, 1080)}.get(draft.aspect, (source_w, source_h))
     fraction = window_fraction(source_w, source_h, out_w, out_h)
     scenes = []
     with tempfile.TemporaryDirectory(prefix="ac-framing-") as temp:

@@ -156,14 +156,17 @@ def download_progress_hook(project_id, min_interval=1.0):
 
 def download(project_id, url, browser):
     import yt_dlp
-    from backend.utils.ffmpeg_utils import get_ffmpeg_path
+    from backend.utils.ffmpeg_utils import get_ffmpeg_path, ytdlp_js_runtimes
     folder = store.directory(project_id) / 'raw'
     folder.mkdir(exist_ok=True)
-    options = {'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]', 'outtmpl': str(folder / 'input.%(ext)s'), 'merge_output_format': 'mp4', 'noplaylist': True, 'quiet': True, 'ffmpeg_location': get_ffmpeg_path(), 'socket_timeout': 30, 'retries': 2, 'progress_hooks': [download_progress_hook(project_id)]}
+    options = {'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]', 'outtmpl': str(folder / 'input.%(ext)s'), 'merge_output_format': 'mp4', 'noplaylist': True, 'quiet': True, 'ffmpeg_location': get_ffmpeg_path(), 'socket_timeout': 30, 'retries': 2, 'progress_hooks': [download_progress_hook(project_id)], **ytdlp_js_runtimes()}
     if browser:
         options['cookiesfrombrowser'] = (browser,)
     with yt_dlp.YoutubeDL(options) as downloader:
-        downloader.download([url])
+        info = downloader.extract_info(url, download=True) or {}
+    # Public listing text only: packaging checks nameplate names against it instead of guessing.
+    meta = {key: str(info.get(field) or '')[:300] for key, field in (('title', 'title'), ('channel', 'channel'))}
+    store.change(project_id, lambda data: data.update(source_meta=meta))
     from backend.core.database import SessionLocal
     from backend.models.project import Project
     from backend.utils.thumbnail_generator import generate_project_thumbnail
@@ -319,8 +322,8 @@ def _prepare_speaker_framing(platforms):
         logger.warning('Framing install could not start: %s', type(error).__name__)
 
 
-def _speaker_framing(value, video, *, wait_sec=120):
-    """Speaker-following crop tracks for a vertical draft.
+def _speaker_framing(value, video, *, window=None, wait_sec=120):
+    """Speaker-following crop tracks for a vertical draft (or the given output window).
 
     Returns (scenes, framing): `speaker` when faces drive the crop, `full_frame` when the clip has
     nobody to follow, `full_frame_pending` when the detector is not available yet.
@@ -335,7 +338,7 @@ def _speaker_framing(value, video, *, wait_sec=120):
     info = _probe(video)
     if not info.get('width') or not info.get('height'):
         return None, 'full_frame'
-    result = framing.auto_frame(video, Draft.model_validate({**value, 'aspect': 'portrait', 'layout': 'crop'}), int(info['width']), int(info['height']))
+    result = framing.auto_frame(video, Draft.model_validate({**value, 'aspect': 'portrait', 'layout': 'crop'}), int(info['width']), int(info['height']), window=window)
     tracks = {scene['id']: scene for scene in result['scenes']}
     if not any(scene.get('faces') for scene in result['scenes']):
         return None, 'full_frame'
@@ -343,29 +346,66 @@ def _speaker_framing(value, video, *, wait_sec=120):
     return scenes, 'speaker'
 
 
+INTERVIEW_WINDOW = (1080, 810)  # 4:3 speaker window of the interview template
+
+
 def _apply_framing(project_id, value, strategy_id, video, burned, cache):
     """Pick true vertical speaker framing when it is safe; otherwise keep the full frame on a backdrop.
 
     Burned-in captions would be cut by a 9:16 window, so those sources always keep the full frame.
     Tracks depend only on the scenes, so one detection pass is shared by every vertical platform.
+    The interview template frames a 4:3 window instead; without a track it shows the whole frame.
     """
     from backend.services.platform_strategy import platform_strategy
-    if platform_strategy(strategy_id).aspect != 'portrait':
+    strategy = platform_strategy(strategy_id)
+    if strategy.aspect != 'portrait':
         return value, None
+    interview = strategy.template == 'interview_zh'
+    fallback_layout = 'window' if interview else 'blur'
     if burned:
-        return {**value, 'layout': 'blur'}, 'full_frame_captions'
-    key = tuple((scene['start'], scene['end']) for scene in value['scenes'])
+        plain = [{**scene, 'crop_x': None, 'crop_track': None} for scene in value['scenes']]
+        return {**value, 'scenes': plain, 'layout': fallback_layout}, 'full_frame_captions'
+    window = INTERVIEW_WINDOW if interview else None
+    key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), window)
     if key not in cache:
         try:
-            cache[key] = _speaker_framing(value, video)
+            cache[key] = _speaker_framing(value, video, window=window)
         except Exception as error:  # noqa: BLE001 - fall back to the full frame rather than fail output
             logger.warning('Speaker framing failed: %s', type(error).__name__)
             capture_studio_exception(error, 'auto_frame')
             cache[key] = (None, 'full_frame')
     scenes, framing = cache[key]
     if scenes is None:
-        return {**value, 'layout': 'blur'}, framing
-    return {**value, 'scenes': scenes, 'layout': 'crop'}, framing
+        # Drop tracks inherited from another platform's framing: they were computed for a different window.
+        plain = [{**scene, 'crop_x': None, 'crop_track': None} for scene in value['scenes']]
+        return {**value, 'scenes': plain, 'layout': fallback_layout}, framing
+    return {**value, 'scenes': scenes, 'layout': 'window' if interview else 'crop'}, framing
+
+
+def _apply_packaging(project_id, value, strategy_id, burned, cache):
+    """Attach template packaging (title, captions, nameplates, tags) for vertical templates.
+
+    One model call per scene set and template; every vertical platform of the same audience
+    reuses it. Only the subtitle rows this draft uses are sent.
+    """
+    from backend.services.platform_strategy import platform_strategy
+    strategy = platform_strategy(strategy_id)
+    if strategy.template not in ('interview_zh', 'podcast_en'):
+        return {key: item for key, item in value.items() if key != 'packaging'}  # never inherit another template's packaging
+    from backend.services.studio import packaging
+    if 'entries' not in cache:
+        from backend.services.publish_export import _load_srt_entries
+        try:
+            cache['entries'] = _load_srt_entries(project_id)
+        except Exception:  # noqa: BLE001 - no subtitles: packaging falls back to the title only
+            cache['entries'] = []
+        meta = store.read(project_id).get('source_meta') or {}
+        cache['names'] = f"{meta.get('title', '')} {meta.get('channel', '')}"
+    key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template)
+    if key not in cache:
+        lines = packaging.draft_lines(cache['entries'], value['scenes'])
+        cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, known_names=cache['names'])
+    return {**value, 'packaging': cache[key]}
 
 
 def _fit_platform_limit(project_id, value, strategy):
@@ -417,6 +457,7 @@ def _auto_generate(project_id, plan):
         from backend.services.platform_strategy import platform_strategy
         burned = _source_has_burned_subtitles(project_id, video)
         framing_cache = {}
+        packaging_cache = {}
         for base in base_drafts:
             for strategy_id in platforms:
                 strategy = platform_strategy(strategy_id)
@@ -426,6 +467,7 @@ def _auto_generate(project_id, plan):
                     continue
                 value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
                 value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
+                value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
                 draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
                 derived_drafts.append(draft.model_dump())
                 variant_id = uuid.uuid4().hex
@@ -473,6 +515,7 @@ def append_platform_variants(project_id, platforms, branding):
     burned = _source_has_burned_subtitles(project_id)
     video = source(project_id)
     framing_cache = {}
+    packaging_cache = {}
     for base in state.get('drafts', []):
         signature = tuple((scene['start'], scene['end']) for scene in base.get('scenes', []))
         if not signature or signature in seen_scenes:
@@ -487,6 +530,7 @@ def append_platform_variants(project_id, platforms, branding):
                 continue
             value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
             value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
+            value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
             draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
             derived.append(draft.model_dump())
             variants.append({

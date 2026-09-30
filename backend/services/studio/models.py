@@ -39,6 +39,55 @@ class Scene(BaseModel):
             raise ValueError('片段至少需要 0.1 秒')
         return self
 
+class PackagingCue(BaseModel):
+    """One caption line in source seconds: text in the audience language, plus the original."""
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    start: float = Field(ge=0)
+    end: float = Field(gt=0)
+    text: str = Field(min_length=1, max_length=200)
+    original: str = Field(default='', max_length=300)
+
+
+class PackagingSpeaker(BaseModel):
+    """Lower-third nameplate shown when this person first appears (source seconds)."""
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    at: float = Field(ge=0)
+    name: str = Field(min_length=1, max_length=40)
+    role: str = Field(default='', max_length=60)
+
+
+class PackagingMark(BaseModel):
+    """A commentary tag or a highlighted word anchored at a source time."""
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    at: float = Field(ge=0)
+    text: str = Field(min_length=1, max_length=30)
+
+
+class Packaging(BaseModel):
+    """Automatic template packaging, generated once per content and audience language."""
+    model_config = ConfigDict(extra='forbid')
+    version: Literal[1] = 1
+    template: Literal['interview_zh', 'podcast_en']
+    audience_language: Literal['zh', 'en']
+    source_language: Literal['zh', 'en', 'other'] = 'other'
+    title_lines: list[str] = Field(default_factory=list, max_length=2)
+    title_accent_line: int = Field(default=1, ge=0, le=1)
+    cues: list[PackagingCue] = Field(default_factory=list, max_length=600)
+    speakers: list[PackagingSpeaker] = Field(default_factory=list, max_length=8)
+    tags: list[PackagingMark] = Field(default_factory=list, max_length=8)
+    tags_enabled: bool = True
+    highlights: list[PackagingMark] = Field(default_factory=list, max_length=40)
+    burned_captions: bool = False
+    fallback: bool = False
+
+    @model_validator(mode='after')
+    def short_title_lines(self):
+        self.title_lines = [line.strip() for line in self.title_lines if line.strip()]
+        if any(len(line) > 40 for line in self.title_lines):
+            raise ValueError('标题每行最多 40 个字符')
+        return self
+
+
 class Draft(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str = Field(pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
@@ -47,7 +96,7 @@ class Draft(BaseModel):
     scenes: list[Scene] = Field(min_length=1, max_length=30)
     language: Language = 'source'
     aspect: Literal['original', 'portrait', 'landscape'] = 'original'
-    layout: Literal['fit', 'crop', 'blur'] = 'fit'
+    layout: Literal['fit', 'crop', 'blur', 'window'] = 'fit'
     crop_x: float = Field(default=.5, ge=0, le=1, allow_inf_nan=False)
     title_style: Literal['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'] = 'plain'
     title_template_version: Literal[1, 2, 3, 4, 5, 6] = 1
@@ -63,6 +112,7 @@ class Draft(BaseModel):
     origin: str = 'manual'
     parent_draft_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     parent_revision: int | None = Field(default=None, ge=1)
+    packaging: Packaging | None = None
 
     @model_validator(mode='after')
     def title_version(self):

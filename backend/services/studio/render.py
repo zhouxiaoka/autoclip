@@ -25,11 +25,13 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     keep_audio = draft.original_audio and audio.has_audio(video)
     if draft.original_audio and not keep_audio:
         warnings.append('原素材没有音轨，本次导出无声')
-    entries = _load_srt_entries(project_id) if draft.subtitles else []
+    packaged = draft.packaging is not None
+    # Template packaging carries its own captions and title; the legacy subtitle/title path stays off.
+    entries = _load_srt_entries(project_id) if draft.subtitles and not packaged else []
     # Only transmit the subtitle rows used by this draft, never unrelated transcript text.
     from backend.pipeline.quality import to_seconds
     entries = [e.copy() for e in entries if any(to_seconds(e['start_time']) < s.end and to_seconds(e['end_time']) > s.start for s in draft.scenes)]
-    hook = draft.hook
+    hook = '' if packaged else draft.hook
     if draft.language != 'source' and (hook or entries):
         translated = text_json('将 title 和 subtitles 翻译成指定语言；保持 subtitles 的数量与顺序，不添加事实。返回 {"title":"...","subtitles":["..."]}。', {'language': draft.language, 'title': hook, 'subtitles': [e.get('text', '') for e in entries]})
         rows = translated.get('subtitles', [])
@@ -43,7 +45,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     font = resolve_cjk_font()
     if hook and draft.title_style not in title_art.STYLES and not font:
         raise ValueError('缺少中文字体，无法烧录开头文字，请安装 Noto Sans CJK')
-    if draft.subtitles and not entries:
+    if draft.subtitles and not entries and not packaged:
         warnings.append('原素材没有可用字幕，本次未烧录字幕')
     out_dir = directory(project_id) / 'output' / 'studio'
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -65,7 +67,13 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                     title.write_text('\n'.join(textwrap.wrap(hook, width=14)), encoding='utf-8')
                 spec = {'layout': draft.layout, 'w': w, 'h': h}
                 req = ExportRequest(project_id, draft.id, layout=draft.layout)
-                built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font, draft.subtitle_style)
+                if packaged:
+                    from backend.services.studio import packaging_render
+                    ass_path = folder / f'{i}.ass'
+                    ass_path.write_text(packaging_render.scene_ass(draft.packaging, draft.scenes, i), encoding='utf-8')
+                    built = packaging_render.scene_video_graph(draft, scene, i, ass_path, w, h)
+                else:
+                    built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font, draft.subtitle_style)
                 clip_path = folder / f'{i}.mkv'
                 artwork = None
                 backdrop = None

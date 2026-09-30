@@ -22,6 +22,17 @@ def test_short_and_long_youtube_are_distinct_strategies():
     assert long.max_duration_sec is None
 
 
+def test_templates_follow_the_audience_of_each_platform():
+    expected = {
+        "douyin": ("interview_zh", "zh"), "xiaohongshu": ("interview_zh", "zh"),
+        "tiktok": ("podcast_en", "en"), "instagram_reels": ("podcast_en", "en"), "youtube_shorts": ("podcast_en", "en"),
+        "bilibili": ("landscape", "zh"), "youtube_long": ("landscape", "en"), "original": ("none", "zh"),
+    }
+    for strategy_id, (template, language) in expected.items():
+        strategy = platform_strategy(strategy_id)
+        assert (strategy.template, strategy.audience_language) == (template, language), strategy_id
+
+
 def test_only_youtube_shorts_has_a_hard_length_limit():
     # Douyin, TikTok, Reels and Xiaohongshu accept long uploads: their 90-180 s values are guidance only.
     for strategy_id in ("douyin", "tiktok", "instagram_reels", "xiaohongshu"):

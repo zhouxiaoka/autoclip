@@ -33,6 +33,9 @@ class PlatformStrategy:
     aliases: tuple[str, ...] = ()
     # Typical length that performs well; guidance only, never enforced by trimming.
     recommended_max_duration_sec: int | None = None
+    # Automatic packaging: which template wraps the clip, and the language its audience reads.
+    template: Literal["interview_zh", "podcast_en", "landscape", "none"] = "none"
+    audience_language: Literal["zh", "en"] = "zh"
 
     @property
     def aspect(self) -> Literal["portrait", "landscape", "original"]:
@@ -51,6 +54,8 @@ class PlatformStrategy:
             "duration_policy": self.duration_policy,
             "min_recommended_duration_sec": self.min_recommended_duration_sec,
             "recommended_max_duration_sec": self.recommended_max_duration_sec,
+            "template": self.template,
+            "audience_language": self.audience_language,
             "subtitle_style": self.subtitle_style,
             "title_style": self.title_style,
             "title_motion": self.title_motion,
@@ -67,13 +72,13 @@ class PlatformStrategy:
 _STRATEGIES = (
     # Hard limits checked 2026-09: Douyin uploads up to ~15 min, TikTok up to 60 min, Reels up to
     # 20 min (only <=3 min is recommended to new viewers), YouTube Shorts is capped at 3 min.
-    PlatformStrategy("douyin", "抖音 9:16", "download_only", None, 1080, 1920, "blur", "short", 15, None, "accent", "comic", True, "portrait", ("douyin",), 90),
-    PlatformStrategy("tiktok", "TikTok 9:16", "upload_post", "tiktok", 1080, 1920, "crop", "short", 15, None, "bold", "comic", True, "portrait", ("tiktok",), 90),
-    PlatformStrategy("instagram_reels", "Instagram Reels 9:16", "upload_post", "instagram", 1080, 1920, "crop", "short", 15, None, "bold", "card", True, "portrait", ("instagram", "reels"), 180),
-    PlatformStrategy("youtube_shorts", "YouTube Shorts 9:16", "upload_post", "youtube", 1080, 1920, "crop", "short", 15, 180, "bold", "card", True, "portrait", ("shorts", "youtube_shorts"), 60),
-    PlatformStrategy("youtube_long", "YouTube 横屏", "upload_post", "youtube", 1920, 1080, "fit", "long", 180, None, "clean", "editorial", False, "landscape", ("youtube_long",)),
-    PlatformStrategy("bilibili", "B站横屏", "bilibili_direct", "bilibili", 1920, 1080, "fit", "adaptive", 180, None, "clean", "editorial", False, "landscape", ("bilibili",)),
-    PlatformStrategy("xiaohongshu", "小红书 9:16", "download_only", None, 1080, 1920, "blur", "short", 20, None, "box", "card", True, "portrait", ("xiaohongshu",), 90),
+    PlatformStrategy("douyin", "抖音 9:16", "download_only", None, 1080, 1920, "blur", "short", 15, None, "accent", "comic", True, "portrait", ("douyin",), 90, "interview_zh", "zh"),
+    PlatformStrategy("tiktok", "TikTok 9:16", "upload_post", "tiktok", 1080, 1920, "crop", "short", 15, None, "bold", "comic", True, "portrait", ("tiktok",), 90, "podcast_en", "en"),
+    PlatformStrategy("instagram_reels", "Instagram Reels 9:16", "upload_post", "instagram", 1080, 1920, "crop", "short", 15, None, "bold", "card", True, "portrait", ("instagram", "reels"), 180, "podcast_en", "en"),
+    PlatformStrategy("youtube_shorts", "YouTube Shorts 9:16", "upload_post", "youtube", 1080, 1920, "crop", "short", 15, 180, "bold", "card", True, "portrait", ("shorts", "youtube_shorts"), 60, "podcast_en", "en"),
+    PlatformStrategy("youtube_long", "YouTube 横屏", "upload_post", "youtube", 1920, 1080, "fit", "long", 180, None, "clean", "editorial", False, "landscape", ("youtube_long",), None, "landscape", "en"),
+    PlatformStrategy("bilibili", "B站横屏", "bilibili_direct", "bilibili", 1920, 1080, "fit", "adaptive", 180, None, "clean", "editorial", False, "landscape", ("bilibili",), None, "landscape", "zh"),
+    PlatformStrategy("xiaohongshu", "小红书 9:16", "download_only", None, 1080, 1920, "blur", "short", 20, None, "box", "card", True, "portrait", ("xiaohongshu",), 90, "interview_zh", "zh"),
     PlatformStrategy("original", "原画重编码", "download_only", None, None, None, "none", "adaptive", None, None, "clean", "plain", False, "original", ("original",)),
 )
 
