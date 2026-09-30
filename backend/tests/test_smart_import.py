@@ -212,6 +212,14 @@ def test_manual_correction_does_not_call_classifier(source,monkeypatch,goal):
     plan=planning.recommend(source,ImportOptions(goal=goal))
     assert plan['mode']=='manual' and plan['preferences']['goal']==goal
 
+@pytest.mark.parametrize('hours, route', [(1, 'visual'), (4, 'subtitle')])
+def test_long_sources_are_accepted_and_skip_costly_visual_analysis(source, monkeypatch, hours, route):
+    real_probe = intelligence._probe
+    monkeypatch.setattr(intelligence, '_probe', lambda video: {**real_probe(video), 'duration': hours * 3600.0})
+    plan = planning.recommend(source, ImportOptions(goal='highlight'))
+    assert plan['source_duration'] == hours * 3600.0
+    assert plan['recommended_analysis'] == route
+
 def test_missing_vision_is_explicit_fallback_not_fake_ai(source,monkeypatch):
     monkeypatch.setattr(intelligence,'ready',lambda:False)
     plan=planning.recommend(source,ImportOptions())

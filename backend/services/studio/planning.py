@@ -17,11 +17,14 @@ class Recommendation(BaseModel):
     suggested_goals: list[Literal['content', 'highlight', 'promo']] | None = Field(default=None, max_length=3)
 
 
+VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sources use the subtitle route
+
+
 def recommend(video: Path, options: ImportOptions):
     info = intelligence._probe(video)
     duration = info.get('duration', 0)
-    if duration < 1 or duration > 7200:
-        raise ValueError('智能制作目前支持 1 秒至 2 小时的素材')
+    if duration < 1:
+        raise ValueError('素材时长无法读取或不足 1 秒')
     consent = analysis_preferences.load()
     configured = intelligence.ready()
     mode = 'manual'
@@ -85,6 +88,6 @@ def recommend(video: Path, options: ImportOptions):
     prefs = Preferences(goal=result.goal, language=options.language,
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
-    route = 'visual' if result.goal != 'content' and (consent.analysis_mode == 'visual' or (consent.analysis_mode == 'auto' and mode == 'ai' and result.goal != 'content')) else 'subtitle'
+    route = 'visual' if duration <= VISUAL_MAX_SOURCE_SEC and result.goal != 'content' and (consent.analysis_mode == 'visual' or (consent.analysis_mode == 'auto' and mode == 'ai' and result.goal != 'content')) else 'subtitle'
     return {**({'local_evidence': local_evidence} if local_evidence else {}), 'analysis_preferences': consent.model_dump(), 'recommended_analysis': route, **({'diagnostics': diagnostics} if diagnostics else {}), 'mode': mode, 'source_duration': duration, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
             'overrides': options.model_dump(exclude_none=True)}
