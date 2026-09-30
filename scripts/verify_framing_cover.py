@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import shutil
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--resources', type=Path, required=True)
@@ -52,7 +53,15 @@ assert 5.9 <= rendered['duration'] <= 6.1 and has_audio(video)
 pair = framing._grab_pair(video, 1, project, 'rendered-person')
 assert pair, 'rendered video frame extraction failed'
 rendered_center = framing._speaker_center(pair)
-assert rendered_center is not None and .25 <= rendered_center <= .75, rendered_center
+source_pair = framing._grab_pair(source, 1, project, 'source-person')
+source_center = framing._speaker_center(source_pair) if source_pair else None
+diagnostic = {'source_center': source_center, 'rendered_center': rendered_center, 'framing': result,
+              'portrait_render': rendered, 'runtime_source': 'installed portable Python and installed backend'}
+report_path.write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
+shutil.copyfile(pair[0], report_path.parent / 'publishing-frame-rendered.jpg')
+if source_pair:
+    shutil.copyfile(source_pair[0], report_path.parent / 'publishing-frame-source.jpg')
+print(json.dumps(diagnostic, ensure_ascii=False))
 (project / 'metadata/clips_metadata.json').write_text(json.dumps([{
     'id': '1', 'generated_title': '公开访谈', 'start_time': '00:00:00,000',
     'end_time': '00:00:06,000', 'source_type': 'studio', 'video_path': str(video),
@@ -70,6 +79,7 @@ for platform, size in [('bilibili', (1146, 717)), ('douyin', (1080, 1920))]:
     with Image.open(generated['path']) as img:
         assert img.size == size
     covers[platform] = {'method': generated['method'], 'width': size[0], 'height': size[1]}
+assert rendered_center is not None and .25 <= rendered_center <= .75, diagnostic
 report_path.write_text(json.dumps({
     'runtime_source': 'installed portable Python and installed backend',
     'source': 'repository public interview, first six seconds',
@@ -77,5 +87,6 @@ report_path.write_text(json.dumps({
     'samples': scene['samples'], 'faces': scene['faces'], 'crop_track': scene['crop_track'],
     'portrait_render': rendered, 'original_audio': 'passed', 'covers': covers, 'paid_calls': 0,
     'rendered_face_center': rendered_center,
+    'source_face_center': source_center,
 }, ensure_ascii=False, indent=2), encoding='utf-8')
 print('Installed face detection, portrait render and both local covers passed')
