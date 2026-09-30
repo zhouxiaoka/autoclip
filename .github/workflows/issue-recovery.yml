@@ -19,8 +19,8 @@ jobs:
       PYTHONUTF8: '1'
       PYTHONIOENCODING: utf-8
       HF_HUB_DISABLE_PROGRESS_BARS: '1'
-      AUTOCLIP_DATA_DIR: '${{ runner.temp }}/autoclip-recovery'
-      AUTOCLIP_APP_DIR: '${{ runner.temp }}/autoclip-recovery'
+      AUTOCLIP_DATA_DIR: '${{ github.workspace }}/.test-data/autoclip-recovery'
+      AUTOCLIP_APP_DIR: '${{ github.workspace }}/.test-data/autoclip-recovery'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
