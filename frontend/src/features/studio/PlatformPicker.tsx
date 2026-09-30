@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { t } from '../../i18n'
 import { studioApi } from './api'
+import { platformLabel } from './platformLabel'
 import type { PlatformStrategySummary } from './types'
 
 const fallback: PlatformStrategySummary[] = [
@@ -38,7 +39,7 @@ export default function PlatformPicker({ value, onChange, disabled = false }: { 
       {strategies.filter(strategy => strategy.id !== 'original').map(strategy => {
         const selected = value.includes(strategy.id)
         return <button type="button" key={strategy.id} className={`studio-platform-option${selected ? ' is-selected' : ''}`} aria-pressed={selected} onClick={() => toggle(strategy.id)}>
-          <b>{strategy.label}</b><span>{summary(strategy)}</span>
+          <b>{platformLabel(strategy.id)}</b><span>{summary(strategy)}</span>
         </button>
       })}
     </div>
