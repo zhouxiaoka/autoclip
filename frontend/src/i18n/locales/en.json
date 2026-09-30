@@ -1451,5 +1451,9 @@
   "不能用": "Not usable",
   "收到，我们会继续改进挑片和剪辑。": "Got it. We will keep improving clip selection and editing.",
   "谢谢反馈。愿意把这条成片分享为使用案例吗？": "Thanks! Would you share this video as a use case?",
-  "分享使用案例": "Share a use case"
+  "分享使用案例": "Share a use case",
+  "已按说话人重新取景": "Reframed to follow the speaker",
+  "画面里没有可跟随的人物，保留完整画面": "No one to follow on screen, so the full frame is kept",
+  "人物识别组件准备中，这条先保留完整画面": "Speaker detection is still being set up, so this one keeps the full frame",
+  "原片自带字幕，保留完整画面以免裁掉字幕": "The source has built-in captions, so the full frame is kept to avoid cutting them"
 }

@@ -42,6 +42,14 @@ def _studio_render_follows_executor(monkeypatch):
         monkeypatch.setattr(jobs, "render_executor", _FollowStudioExecutor(jobs))
     yield
 
+
+@pytest.fixture(autouse=True)
+def _no_framing_install(monkeypatch):
+    # Automatic output starts the on-demand OpenCV install; tests must never run pip.
+    from backend.services.studio import framing
+    monkeypatch.setattr(framing, "start_install", lambda index_url=None: {"started": False, "message": "test"})
+    yield
+
 @pytest.fixture(scope="session")
 def test_data_dir(tmp_path_factory):
     """创建测试数据目录"""

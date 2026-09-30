@@ -56,6 +56,7 @@ export interface OutputVariant {
   branding: { outro_enabled: boolean; outro_version: string }
   status: 'queued' | 'running' | 'completed' | 'failed'; render_job_id?: string; created_at: string; error?: string
   trimmed_to_sec?: number
+  framing?: 'speaker' | 'full_frame' | 'full_frame_pending' | 'full_frame_captions'
 }
 export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }

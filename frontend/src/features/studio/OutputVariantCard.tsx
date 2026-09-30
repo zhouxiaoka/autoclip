@@ -13,6 +13,13 @@ import { copyText, markRatingAsked, shareCaption, shouldAskRating } from './outp
 import { platformLabel } from './platformLabel'
 import './quick-output.css'
 
+const framingHints: Record<NonNullable<OutputVariant['framing']>, string> = {
+  speaker: '已按说话人重新取景',
+  full_frame: '画面里没有可跟随的人物，保留完整画面',
+  full_frame_pending: '人物识别组件准备中，这条先保留完整画面',
+  full_frame_captions: '原片自带字幕，保留完整画面以免裁掉字幕',
+}
+
 export default function OutputVariantCard({ projectId, variant, draft, job, onRetry }: { projectId: string; variant: OutputVariant; draft?: Draft; job?: RenderJob; onRetry: () => void }) {
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
@@ -40,6 +47,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       </div>
       <p className="studio-output-hint">{variant.branding.outro_enabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾')}</p>
       {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}
+      {variant.framing && framingHints[variant.framing] && <p className="studio-output-hint">{t(framingHints[variant.framing])}</p>}
       {failed && <p className="studio-output-hint studio-error">{variant.error || job?.error || t('这条版本未完成，其他成片不受影响。')}</p>}
       <div className="ac-card-foot"><span className="meta">{platformLabel(variant.strategy_id)}</span><div className="ac-card-actions">
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}`)}>{t('预览与修改')}</Btn>}

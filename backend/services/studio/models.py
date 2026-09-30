@@ -124,6 +124,8 @@ class OutputVariant(BaseModel):
     error: str | None = Field(default=None, max_length=700)
     # Set only when a hard platform limit (e.g. YouTube Shorts 180 s) shortened the moment.
     trimmed_to_sec: int | None = Field(default=None, ge=1)
+    # How a vertical version was framed: speaker-following crop, or the full frame on a backdrop.
+    framing: Literal['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'] | None = None
 
 
 class ImportOptions(BaseModel):

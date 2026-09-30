@@ -1,5 +1,5 @@
 import logging
-from time import monotonic
+from time import monotonic, sleep
 from backend.core.sentry_setup import capture_studio_exception, studio_error_code
 from copy import deepcopy
 import uuid
@@ -220,16 +220,17 @@ def run_content(project_id, video):
 
     return clips
 
-def _apply_strategy(draft, strategy_id, *, burned_subtitles=False):
+def _apply_strategy(draft, strategy_id, *, burned_subtitles=False, layout=None):
     """Materialize platform packaging defaults without reinterpreting content.
 
     When the source already has subtitles in the picture, do not stack a second track, and
     keep the full frame on vertical outputs so cropping cannot cut the original lines.
+    `layout` overrides the strategy default once framing has decided crop vs full frame.
     """
     from backend.services.platform_strategy import platform_strategy
     strategy = platform_strategy(strategy_id)
     value = dict(draft)
-    layout = strategy.layout if strategy.layout != 'none' else value.get('layout', 'fit')
+    layout = layout or (strategy.layout if strategy.layout != 'none' else value.get('layout', 'fit'))
     if burned_subtitles and strategy.aspect == 'portrait' and layout == 'crop':
         layout = 'blur'
     value.update(
@@ -306,6 +307,67 @@ def _source_has_burned_subtitles(project_id, video=None):
     return found
 
 
+def _prepare_speaker_framing(platforms):
+    """Start the on-demand face-detection install as soon as a vertical output is requested."""
+    from backend.services.platform_strategy import platform_strategy
+    if not any(platform_strategy(p).aspect == 'portrait' for p in platforms):
+        return
+    try:
+        from backend.services.studio import framing
+        framing.start_install()
+    except Exception as error:  # noqa: BLE001 - framing is an enhancement, never a blocker
+        logger.warning('Framing install could not start: %s', type(error).__name__)
+
+
+def _speaker_framing(value, video, *, wait_sec=120):
+    """Speaker-following crop tracks for a vertical draft.
+
+    Returns (scenes, framing): `speaker` when faces drive the crop, `full_frame` when the clip has
+    nobody to follow, `full_frame_pending` when the detector is not available yet.
+    """
+    from backend.services.studio import framing
+    deadline = monotonic() + wait_sec
+    while not framing.is_installed() and framing.get_status().get('status') == 'installing' and monotonic() < deadline:
+        sleep(2)
+    if not framing.is_installed():
+        return None, 'full_frame_pending'
+    from backend.services.publish_export import _probe
+    info = _probe(video)
+    if not info.get('width') or not info.get('height'):
+        return None, 'full_frame'
+    result = framing.auto_frame(video, Draft.model_validate({**value, 'aspect': 'portrait', 'layout': 'crop'}), int(info['width']), int(info['height']))
+    tracks = {scene['id']: scene for scene in result['scenes']}
+    if not any(scene.get('faces') for scene in result['scenes']):
+        return None, 'full_frame'
+    scenes = [{**scene, 'crop_x': tracks[scene['id']]['crop_x'], 'crop_track': tracks[scene['id']]['crop_track']} for scene in value['scenes']]
+    return scenes, 'speaker'
+
+
+def _apply_framing(project_id, value, strategy_id, video, burned, cache):
+    """Pick true vertical speaker framing when it is safe; otherwise keep the full frame on a backdrop.
+
+    Burned-in captions would be cut by a 9:16 window, so those sources always keep the full frame.
+    Tracks depend only on the scenes, so one detection pass is shared by every vertical platform.
+    """
+    from backend.services.platform_strategy import platform_strategy
+    if platform_strategy(strategy_id).aspect != 'portrait':
+        return value, None
+    if burned:
+        return {**value, 'layout': 'blur'}, 'full_frame_captions'
+    key = tuple((scene['start'], scene['end']) for scene in value['scenes'])
+    if key not in cache:
+        try:
+            cache[key] = _speaker_framing(value, video)
+        except Exception as error:  # noqa: BLE001 - fall back to the full frame rather than fail output
+            logger.warning('Speaker framing failed: %s', type(error).__name__)
+            capture_studio_exception(error, 'auto_frame')
+            cache[key] = (None, 'full_frame')
+    scenes, framing = cache[key]
+    if scenes is None:
+        return {**value, 'layout': 'blur'}, framing
+    return {**value, 'scenes': scenes, 'layout': 'crop'}, framing
+
+
 def _fit_platform_limit(project_id, value, strategy):
     """Trim a draft to the platform's hard length limit at the last subtitle sentence end.
 
@@ -354,6 +416,7 @@ def _auto_generate(project_id, plan):
         derived_drafts = []
         from backend.services.platform_strategy import platform_strategy
         burned = _source_has_burned_subtitles(project_id, video)
+        framing_cache = {}
         for base in base_drafts:
             for strategy_id in platforms:
                 strategy = platform_strategy(strategy_id)
@@ -362,7 +425,8 @@ def _auto_generate(project_id, plan):
                     skipped.append({'strategy_id': strategy_id, 'reason': '素材没有足够完整的长内容'})
                     continue
                 value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
-                draft = _apply_strategy(value, strategy_id, burned_subtitles=burned)
+                value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
+                draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
                 derived_drafts.append(draft.model_dump())
                 variant_id = uuid.uuid4().hex
                 variants.append({
@@ -370,6 +434,7 @@ def _auto_generate(project_id, plan):
                     'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
                     'status': 'queued', 'created_at': store.now(),
                     **({'trimmed_to_sec': trimmed} if trimmed else {}),
+                    **({'framing': framed} if framed else {}),
                 })
         if not variants:
             raise ValueError('所选平台没有可生成的完整内容版本')
@@ -406,6 +471,8 @@ def append_platform_variants(project_id, platforms, branding):
     }
     seen_scenes, variants, derived = set(), [], []
     burned = _source_has_burned_subtitles(project_id)
+    video = source(project_id)
+    framing_cache = {}
     for base in state.get('drafts', []):
         signature = tuple((scene['start'], scene['end']) for scene in base.get('scenes', []))
         if not signature or signature in seen_scenes:
@@ -419,13 +486,15 @@ def append_platform_variants(project_id, platforms, branding):
             if strategy.duration_policy == 'long' and duration < (strategy.min_recommended_duration_sec or 0):
                 continue
             value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
-            draft = _apply_strategy(value, strategy_id, burned_subtitles=burned)
+            value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
+            draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
             derived.append(draft.model_dump())
             variants.append({
                 'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': 1,
                 'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
                 'status': 'queued', 'created_at': store.now(),
                 **({'trimmed_to_sec': trimmed} if trimmed else {}),
+                **({'framing': framed} if framed else {}),
             })
     if not variants:
         raise ValueError('没有可追加的平台版本；已存在或素材不满足所选平台要求')
@@ -520,6 +589,8 @@ def inspect_project(project_id, options, url=None, browser=None):
         state.setdefault('output_variants', [])
         state['analysis'] = {'status':'running', 'phase':'screening', 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
+        if options.auto_start:
+            _prepare_speaker_framing(options.platforms)
         try:
             executor.submit(_inspect, project_id, options, url, browser)
         except Exception as error:

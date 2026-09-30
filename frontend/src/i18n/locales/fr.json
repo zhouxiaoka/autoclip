@@ -1451,5 +1451,9 @@
   "不能用": "Inutilisable",
   "收到，我们会继续改进挑片和剪辑。": "Bien noté. Nous continuons d’améliorer la sélection et le montage.",
   "谢谢反馈。愿意把这条成片分享为使用案例吗？": "Merci ! Voulez-vous partager cette vidéo comme cas d’usage ?",
-  "分享使用案例": "Partager un cas d’usage"
+  "分享使用案例": "Partager un cas d’usage",
+  "已按说话人重新取景": "Recadré pour suivre la personne qui parle",
+  "画面里没有可跟随的人物，保留完整画面": "Personne à suivre à l’écran : l’image complète est conservée",
+  "人物识别组件准备中，这条先保留完整画面": "La détection des personnes est en préparation : celle-ci garde l’image complète",
+  "原片自带字幕，保留完整画面以免裁掉字幕": "La source a des sous-titres incrustés : l’image complète est gardée pour ne pas les couper"
 }
