@@ -934,7 +934,6 @@
   "保存草稿": "Enregistrer le brouillon",
   "任务状态暂时无法更新：": "Impossible d’actualiser l’état :",
   "实际渲染结果": "Résultat du rendu",
-  "原片预览 · 字幕、翻译以渲染结果为准": "Aperçu de la source · Sous-titres et traductions visibles après rendu",
   "查看原片": "Voir la source",
   "播放成片": "Lire la vidéo exportée",
   "渲染预览": "Calculer l’aperçu",
@@ -1404,5 +1403,6 @@
   "镜头 {{n}}/{{total}}": "Plan {{n}}/{{total}}",
   "当前镜头显示方式": "Affichage de ce plan",
   "对准人物": "Suivre la personne",
-  "完整画面": "Image entière"
+  "完整画面": "Image entière",
+  "原片预览 · 成片取 {{range}} · 字幕、翻译以渲染结果为准": "Aperçu de la source · le clip utilise {{range}} · sous-titres et traduction selon le rendu"
 }

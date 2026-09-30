@@ -934,7 +934,6 @@
   "保存草稿": "Salvar rascunho",
   "任务状态暂时无法更新：": "Não foi possível atualizar o status:",
   "实际渲染结果": "Resultado renderizado",
-  "原片预览 · 字幕、翻译以渲染结果为准": "Prévia do original · Legendas e tradução aparecem na renderização",
   "查看原片": "Ver original",
   "播放成片": "Reproduzir vídeo exportado",
   "渲染预览": "Renderizar prévia",
@@ -1404,5 +1403,6 @@
   "镜头 {{n}}/{{total}}": "Cena {{n}}/{{total}}",
   "当前镜头显示方式": "Como esta cena é exibida",
   "对准人物": "Seguir pessoa",
-  "完整画面": "Quadro inteiro"
+  "完整画面": "Quadro inteiro",
+  "原片预览 · 成片取 {{range}} · 字幕、翻译以渲染结果为准": "Prévia do original · o clipe usa {{range}} · legendas e tradução seguem a renderização"
 }
