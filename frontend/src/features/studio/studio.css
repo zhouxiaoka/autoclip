@@ -59,6 +59,7 @@
 .studio-preferences .ac-row:last-child{border-bottom:0}
 .studio-plan-confirm .ac-row{padding:14px 0}
 /* ---- style tiles: pick by looking, not by reading names ---- */
+.studio-shot-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%}
 .studio-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
 .studio-tiles--3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .studio-tile{appearance:none;font:inherit;padding:0;border:1px solid var(--ac-line);border-radius:10px;background:var(--ac-card);cursor:pointer;overflow:hidden;text-align:center;transition:border-color var(--ac-t-short,200ms) ease-out}

@@ -4,15 +4,37 @@ export type SubtitleStyle = 'clean' | 'bold' | 'box' | 'accent'
 export const subtitleStyles: { value: SubtitleStyle; label: string }[] = [{ value: 'clean', label: '简洁描边' }, { value: 'bold', label: '粗体大字' }, { value: 'box', label: '底色字幕条' }, { value: 'accent', label: '醒目黄字' }]
 export interface SubtitleCue { start: number; end: number; text: string }
 export interface FramingStatus { status: 'installed' | 'not_installed' | 'installing' | 'error'; progress: number; message: string; size_mb: number }
-export interface AutoFrameResult { window_fraction: number; scenes: { id: string; crop_x: number | null; crop_track: CropPoint[] | null; faces: number; samples: number; switches: number }[] }
-export interface CropPoint { start: number; crop_x: number }
+export interface AutoFrameResult { window_fraction: number; scenes: { id: string; crop_x: number | null; crop_track: CropPoint[] | null; faces: number; samples: number; shots: number; fit_shots: number; switches: number }[] }
+export type FrameMode = 'crop' | 'fit'
+/** One shot of a scene: from `start` (seconds into the scene) until the next point. `fit` shows the whole frame. */
+export interface CropPoint { start: number; crop_x: number; mode?: FrameMode }
 export interface Scene { id: string; label: string; start: number; end: number; evidence: string; crop_x?: number | null; crop_track?: CropPoint[] | null }
+/** Index of the track point covering `time` (absolute seconds), or -1 without a track. */
+export function shotIndexAt(scene: Scene | undefined, time: number): number {
+  const track = scene?.crop_track || []
+  if (!scene || !track.length) return -1
+  const rel = time - scene.start
+  let index = 0
+  track.forEach((p, i) => { if (p.start <= rel) index = i })
+  return index
+}
 /** Crop window position for a scene at `time` (absolute seconds): speaker track first, then static values. */
 export function cropAt(scene: Scene | undefined, time: number, fallback = .5): number {
   if (!scene) return fallback
-  const track = scene.crop_track || []
-  if (track.length) { const rel = time - scene.start; let x = track[0].crop_x; for (const p of track) { if (p.start <= rel) x = p.crop_x; else break } return x }
+  const index = shotIndexAt(scene, time)
+  if (index >= 0) return scene.crop_track![index].crop_x
   return scene.crop_x ?? fallback
+}
+/** How the current shot is shown in a cropped layout. */
+export function frameModeAt(scene: Scene | undefined, time: number): FrameMode {
+  const index = shotIndexAt(scene, time)
+  return index >= 0 ? scene!.crop_track![index].mode || 'crop' : 'crop'
+}
+/** Update the shot under `time`; a scene without a track gets a single point covering the whole scene. */
+export function patchShot(scene: Scene, time: number, changes: Partial<CropPoint>, fallback = .5): Scene {
+  const track = scene.crop_track?.length ? scene.crop_track : [{ start: 0, crop_x: scene.crop_x ?? fallback, mode: 'crop' as FrameMode }]
+  const index = Math.max(0, shotIndexAt({ ...scene, crop_track: track }, time))
+  return { ...scene, crop_track: track.map((p, i) => i === index ? { ...p, ...changes } : p) }
 }
 export interface Candidate extends Scene { kind: 'visual' | 'legacy' }
 export interface CandidateList { duration: number; candidates: Candidate[]; warnings: string[] }

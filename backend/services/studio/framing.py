@@ -1,10 +1,16 @@
-"""Speaker-following framing for the portrait crop layout.
+"""Shot-aware framing for the portrait crop layout.
 
-Every few seconds we grab two frames a quarter second apart, detect faces with OpenCV's YuNet model
-(bundled ONNX, MIT licence) and pick the face whose mouth region moved most — the person talking.
-Those positions become a piecewise-constant crop track per scene, so the crop window follows the
-conversation instead of freezing on one side. OpenCV is not part of the base install (≈45 MB); it is
-installed on demand into the data directory, the same way the Whisper runtime is.
+Work in shots, not on a clock. Each scene is first split at hard cuts (ffmpeg scene-change scores),
+then every shot is classified from a few frame pairs: OpenCV's YuNet model (bundled ONNX, MIT licence)
+finds faces and the face whose mouth region moved most is the person talking.
+
+- a shot with a usable face → `crop`, window centred on the speaker (long shots may switch inside);
+- a shot without one (quote cards, slides, screen recordings, empty wide shots) → `fit`: the whole
+  frame on a blurred backdrop, so nothing gets sliced off.
+
+Track points sit exactly on the cuts, so the window jumps with the edit instead of lagging behind
+it. OpenCV is not part of the base install (≈45 MB); it is installed on demand into the data
+directory, the same way the Whisper runtime is.
 """
 from __future__ import annotations
 
@@ -27,11 +33,17 @@ logger = logging.getLogger(__name__)
 PACKAGES = ["opencv-python-headless>=4.10"]
 MODEL = Path(__file__).resolve().parents[2] / "assets" / "models" / "face_detection_yunet_2023mar.onnx"
 IMPORT_NAME = "cv2"
-SAMPLE_INTERVAL = 2.5      # seconds between samples inside a scene
+CUT_THRESHOLD = 0.3        # ffmpeg scene-change score that counts as a hard cut
+MIN_SHOT = 0.4             # seconds; cuts closer than this are flicker/transitions, not shots
+MAX_SHOTS = 120            # per scene; beyond this the footage is a montage and we sample coarsely
+CUT_MARGIN = 0.3           # seconds kept clear of a cut when sampling (transition frames lie)
+SAMPLE_INTERVAL = 2.5      # seconds between samples inside a long shot
+LONG_SHOT = 6.0            # shots longer than this may switch speaker inside
 PAIR_GAP = 0.25            # seconds between the two frames of one sample (mouth motion)
 FRAME_WIDTH = 480
 MOTION_THRESHOLD = 4.0     # mean abs grey difference in the mouth box that counts as "talking"
-MIN_HOLD = 2               # samples a new speaker must persist before the window moves
+MIN_FACE = 0.035           # face width below this fraction of the frame is too small to frame on
+MIN_HOLD = 2               # samples a new speaker must persist before the window moves (inside a shot)
 MIN_JUMP = 0.12            # normalised distance below which two positions are the same framing
 
 
@@ -159,6 +171,83 @@ def crop_expression(scene: Scene, fallback: float) -> str:
     return expression
 
 
+def fit_spans(scene: Scene) -> list[tuple[float, float]]:
+    """Scene-relative (start, end) ranges rendered as `fit` instead of the moving crop."""
+    points = scene.crop_track or []
+    spans: list[tuple[float, float]] = []
+    length = scene.end - scene.start
+    for i, point in enumerate(points):
+        if point.mode != "fit":
+            continue
+        end = points[i + 1].start if i + 1 < len(points) else length
+        if end > point.start:
+            spans.append((point.start, end))
+    return spans
+
+
+def layout_filter(scene: Scene, fallback: float, w: int, h: int, blur: int = 24) -> str:
+    """The `[0:v]…[base]` chain for a cropped scene, switching to a blurred fit on `fit` shots."""
+    cropped = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+               f"crop={w}:{h}:x='(iw-ow)*{crop_expression(scene, fallback)}':y=(ih-oh)/2,setsar=1")
+    spans = fit_spans(scene)
+    if not spans:
+        return f"[0:v]{cropped}[base]"
+    enable = "+".join(f"between(t,{start},{end})" for start, end in spans)
+    return (f"[0:v]split=3[c][bg][fg];[c]{cropped}[cropped];"
+            f"[bg]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},gblur=sigma={blur}[bg2];"
+            f"[fg]scale={w}:{h}:force_original_aspect_ratio=decrease[fg2];"
+            f"[bg2][fg2]overlay=(W-w)/2:(H-h)/2[fitted];"
+            f"[cropped][fitted]overlay=0:0:enable='{enable}'[base]")
+
+
+# ------------------------------------------------------------------- shots ---
+def detect_cuts(video: Path, start: float, length: float) -> list[float]:
+    """Hard cuts inside [start, start+length) as seconds relative to `start`."""
+    cmd = [get_ffmpeg_path(), "-v", "info", "-nostats", "-ss", f"{start:.3f}", "-t", f"{length:.3f}", "-i", str(video),
+           "-an", "-vf", f"scale=320:-2,select='gt(scene,{CUT_THRESHOLD})',showinfo", "-f", "null", "-"]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(60, length * 4), check=False)
+    except subprocess.TimeoutExpired:
+        return []
+    cuts = []
+    for line in proc.stderr.splitlines():
+        if "pts_time:" not in line:
+            continue
+        try:
+            cuts.append(float(line.split("pts_time:")[1].split()[0]))
+        except (IndexError, ValueError):
+            continue
+    return cuts
+
+
+def split_shots(length: float, cuts: list[float], min_shot: float = MIN_SHOT, max_shots: int = MAX_SHOTS) -> list[tuple[float, float]]:
+    """Turn cut times into (start, end) shots; cuts too close together collapse into one shot."""
+    bounds = [0.0]
+    for cut in sorted(cuts):
+        if cut - bounds[-1] >= min_shot and length - cut >= min_shot:
+            bounds.append(cut)
+    if len(bounds) > max_shots:
+        step = len(bounds) / max_shots
+        bounds = [bounds[int(i * step)] for i in range(max_shots)]
+    return [(bounds[i], bounds[i + 1] if i + 1 < len(bounds) else length) for i in range(len(bounds))]
+
+
+def sample_offsets(start: float, end: float) -> list[float]:
+    """Where to look inside one shot: away from the cuts, more often in long shots."""
+    length = end - start
+    if length <= PAIR_GAP + .1:
+        return [start]
+    margin = min(CUT_MARGIN, (length - PAIR_GAP) / 2)
+    first, last = start + margin, end - margin - PAIR_GAP
+    if last <= first:
+        return [first]
+    if length <= LONG_SHOT:
+        count = 1 if length < 1.5 else 3
+        return [first + (last - first) * i / max(1, count - 1) for i in range(count)] if count > 1 else [(first + last) / 2]
+    count = int((last - first) // SAMPLE_INTERVAL) + 1
+    return [first + SAMPLE_INTERVAL * i for i in range(count)]
+
+
 # ------------------------------------------------------------------ frames ---
 def _grab_pair(video: Path, at: float, folder: Path, key: str) -> tuple[Path, Path] | None:
     pattern = folder / f"{key}-%d.jpg"
@@ -174,9 +263,21 @@ def _grab_pair(video: Path, at: float, folder: Path, key: str) -> tuple[Path, Pa
     return first, second if second.exists() else first
 
 
+_detectors: dict[tuple[int, int], Any] = {}
+
+
+def _detector(cv2: Any, width: int, height: int) -> Any:
+    """One YuNet instance per frame size; every sampled frame in a run has the same size."""
+    key = (width, height)
+    if key not in _detectors:
+        _detectors[key] = cv2.FaceDetectorYN.create(str(MODEL), "", key, score_threshold=0.6, nms_threshold=0.3, top_k=50)
+    return _detectors[key]
+
+
 def _speaker_center(pair: tuple[Path, Path]) -> float | None:
     """Normalised x-centre of the talking face; the largest face when nobody's mouth moves."""
     ensure_on_path()
+    os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")  # the DNN backend prints a harmless warning per detector
     import cv2  # installed on demand
 
     first = cv2.imread(str(pair[0]))
@@ -184,9 +285,12 @@ def _speaker_center(pair: tuple[Path, Path]) -> float | None:
     if first is None:
         return None
     height, width = first.shape[:2]
-    detector = cv2.FaceDetectorYN.create(str(MODEL), "", (width, height), score_threshold=0.6, nms_threshold=0.3, top_k=50)
-    _, faces = detector.detect(first)
+    _, faces = _detector(cv2, width, height).detect(first)
     if faces is None or len(faces) == 0:
+        return None
+    # Audience shots and far wide shots have faces too small to frame on; treat them as none.
+    faces = [face for face in faces if face[2] >= MIN_FACE * width]
+    if not faces:
         return None
     grey_a = cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)
     grey_b = cv2.cvtColor(second, cv2.COLOR_BGR2GRAY) if second is not None and second.shape == first.shape else None
@@ -212,8 +316,37 @@ def _speaker_center(pair: tuple[Path, Path]) -> float | None:
     return float((x + w / 2) / width)
 
 
+def frame_shot(samples: list[tuple[float, float | None]], shot_start: float, shot_length: float, fraction: float) -> list[dict[str, Any]]:
+    """Track points for one shot from (offset-in-shot, speaker centre | None) samples.
+
+    Most samples without a usable face → the shot is a card/slide/empty frame: show it whole (`fit`).
+    Otherwise centre on the speaker; long shots may switch speaker inside via segment_track.
+    """
+    seen = [(t, crop_x_for_center(c, fraction)) for t, c in samples if c is not None]
+    if not samples or len(seen) * 2 < len(samples):
+        return [{"start": round(shot_start, 2), "crop_x": .5, "mode": "fit"}]
+    if shot_length <= LONG_SHOT or len(seen) < 3:
+        return [{"start": round(shot_start, 2), "crop_x": round(statistics.median(x for _, x in seen), 3), "mode": "crop"}]
+    return [{"start": round(shot_start + p["start"], 2), "crop_x": p["crop_x"], "mode": "crop"} for p in segment_track(seen)]
+
+
+def merge_points(points: list[dict[str, Any]], min_jump: float = MIN_JUMP) -> list[dict[str, Any]]:
+    """Drop points that do not change anything visible (same mode, near-identical position)."""
+    merged: list[dict[str, Any]] = []
+    for point in points:
+        last = merged[-1] if merged else None
+        if last and last["mode"] == point["mode"] and (point["mode"] == "fit" or abs(last["crop_x"] - point["crop_x"]) < min_jump):
+            continue
+        merged.append(point)
+    return merged
+
+
 def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int) -> dict[str, Any]:
-    """Speaker-following crop tracks per scene; scenes without a face keep the draft framing."""
+    """Shot-aligned crop tracks per scene.
+
+    Scenes get a track only when somebody is visible somewhere in the draft; a clip with no
+    people at all (gameplay, screen recording) keeps the layout the user chose untouched.
+    """
     if not is_installed():
         raise RuntimeError("人物识别组件未安装")
     out_w, out_h = {"portrait": (1080, 1920), "landscape": (1920, 1080)}.get(draft.aspect, (source_w, source_h))
@@ -223,23 +356,24 @@ def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int) -> dict[
         folder = Path(temp)
         for scene in draft.scenes:
             length = scene.end - scene.start
-            count = max(1, int(length // SAMPLE_INTERVAL) + 1)
-            samples: list[tuple[float, float]] = []
-            grabbed = 0
-            for i in range(count):
-                rel = min(length - PAIR_GAP - .05, SAMPLE_INTERVAL * i + .5) if length > 1 else length / 2
-                rel = max(0.0, rel)
-                pair = _grab_pair(video, scene.start + rel, folder, f"{scene.id}-{i}")
-                if not pair:
-                    continue
-                grabbed += 1
-                center = _speaker_center(pair)
-                if center is not None:
-                    samples.append((rel, crop_x_for_center(center, fraction)))
-            if samples:
-                track = segment_track(samples)
-                scenes.append({"id": scene.id, "crop_x": track[0]["crop_x"], "crop_track": track,
-                               "faces": len(samples), "samples": grabbed, "switches": len(track) - 1})
-            else:
-                scenes.append({"id": scene.id, "crop_x": None, "crop_track": None, "faces": 0, "samples": grabbed, "switches": 0})
+            shots = split_shots(length, detect_cuts(video, scene.start, length))
+            points: list[dict[str, Any]] = []
+            faces = grabbed = 0
+            for index, (shot_start, shot_end) in enumerate(shots):
+                samples: list[tuple[float, float | None]] = []
+                for j, at in enumerate(sample_offsets(shot_start, shot_end)):
+                    pair = _grab_pair(video, scene.start + at, folder, f"{scene.id}-{index}-{j}")
+                    if not pair:
+                        continue
+                    grabbed += 1
+                    center = _speaker_center(pair)
+                    faces += center is not None
+                    samples.append((at - shot_start, center))
+                points += frame_shot(samples, shot_start, shot_end - shot_start, fraction)
+            track = merge_points(points)
+            scenes.append({"id": scene.id, "crop_x": track[0]["crop_x"], "crop_track": track, "faces": faces, "samples": grabbed,
+                           "shots": len(shots), "fit_shots": sum(p["mode"] == "fit" for p in track), "switches": len(track) - 1})
+    if not any(s["faces"] for s in scenes):
+        for s in scenes:
+            s.update(crop_x=None, crop_track=None, fit_shots=0, switches=0)
     return {"scenes": scenes, "window_fraction": round(fraction, 3)}

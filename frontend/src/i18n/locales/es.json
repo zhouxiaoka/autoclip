@@ -1386,9 +1386,7 @@
   "醒目黄字": "Amarillo llamativo",
   "主体铺满画面，自动对准说话的人。": "El sujeto llena el encuadre, centrado en quien habla.",
   "取景": "Encuadre",
-  "首次使用需下载人物识别组件（约 {{size}} MB），之后自动对准说话的人。": "La primera vez se descarga el componente de detección de personas (unos {{size}} MB); después el encuadre sigue automáticamente a quien habla.",
   "正在下载人物识别组件…": "Descargando el componente de detección de personas…",
-  "正在识别人物位置…": "Localizando personas en la imagen…",
   "没有识别到人物，请手动调整取景位置。": "No se detectó a nadie; ajusta el encuadre manualmente.",
   "拖动调整当前镜头的取景位置。": "Arrastra para ajustar el encuadre del plano actual.",
   "下载并自动取景": "Descargar y encuadrar",
@@ -1399,6 +1397,12 @@
   "在第一个镜头上显示最多 4 秒的大字，适合游戏、推广类内容；访谈、讲解可以留空。": "Texto grande sobre el primer plano hasta 4 segundos; útil para gameplay y promos, déjalo vacío en entrevistas y explicaciones.",
   "缩略图为设计参考，实际文字效果见左侧预览。": "Las miniaturas son referencias de diseño; el texto real se ve en la vista previa.",
   "片头": "Título",
-  "已跟随说话人自动取景（{{framed}}/{{total}} 个镜头，{{switches}} 次切换）。拖动滑块会改为固定取景。": "El encuadre sigue a quien habla ({{framed}}/{{total}} planos, {{switches}} cambios). Mover el control lo fija.",
-  "正在跟随说话人取景；拖动滑块会改为固定取景。": "El encuadre sigue a quien habla; mover el control lo fija."
+  "首次使用需下载人物识别组件（约 {{size}} MB），之后按镜头自动对准说话的人；没有人物的画面（引用卡、PPT）会完整显示。": "El primer uso descarga el componente de detección de personas (unos {{size}} MB). Después cada plano se encuadra en quien habla; los planos sin personas (tarjetas de cita, diapositivas) se muestran completos.",
+  "正在按镜头识别人物位置…": "Localizando personas plano a plano…",
+  "已按 {{shots}} 个镜头自动取景，{{fit}} 个没有人物的镜头改为完整显示。播放到某个镜头时可单独调整它。": "Se encuadraron {{shots}} planos automáticamente; {{fit}} planos sin personas se muestran completos. Reproduce hasta un plano para ajustarlo por separado.",
+  "按镜头跟随说话人取景；播放到某个镜头时可单独调整它。": "El encuadre sigue a quien habla plano a plano; reproduce hasta un plano para ajustarlo por separado.",
+  "镜头 {{n}}/{{total}}": "Plano {{n}}/{{total}}",
+  "当前镜头显示方式": "Cómo se muestra este plano",
+  "对准人物": "Seguir persona",
+  "完整画面": "Imagen completa"
 }

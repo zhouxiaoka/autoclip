@@ -1386,9 +1386,7 @@
   "醒目黄字": "Jaune accrocheur",
   "主体铺满画面，自动对准说话的人。": "Le sujet remplit le cadre, centré sur la personne qui parle.",
   "取景": "Cadrage",
-  "首次使用需下载人物识别组件（约 {{size}} MB），之后自动对准说话的人。": "La première fois, le composant de détection de personnes (environ {{size}} Mo) est téléchargé ; ensuite le cadrage suit automatiquement la personne qui parle.",
   "正在下载人物识别组件…": "Téléchargement du composant de détection de personnes…",
-  "正在识别人物位置…": "Repérage des personnes dans l’image…",
   "没有识别到人物，请手动调整取景位置。": "Personne détectée ; ajustez le cadrage manuellement.",
   "拖动调整当前镜头的取景位置。": "Faites glisser pour ajuster le cadrage du plan actuel.",
   "下载并自动取景": "Télécharger et cadrer",
@@ -1399,6 +1397,12 @@
   "在第一个镜头上显示最多 4 秒的大字，适合游戏、推广类内容；访谈、讲解可以留空。": "Grand texte sur le premier plan pendant 4 secondes max ; utile pour le gameplay et les promos, à laisser vide pour les interviews et explications.",
   "缩略图为设计参考，实际文字效果见左侧预览。": "Les vignettes sont des références de design ; le texte réel s’affiche dans l’aperçu.",
   "片头": "Titre",
-  "已跟随说话人自动取景（{{framed}}/{{total}} 个镜头，{{switches}} 次切换）。拖动滑块会改为固定取景。": "Le cadrage suit la personne qui parle ({{framed}}/{{total}} plans, {{switches}} changements). Déplacer le curseur fige le cadrage.",
-  "正在跟随说话人取景；拖动滑块会改为固定取景。": "Le cadrage suit la personne qui parle ; déplacer le curseur fige le cadrage."
+  "首次使用需下载人物识别组件（约 {{size}} MB），之后按镜头自动对准说话的人；没有人物的画面（引用卡、PPT）会完整显示。": "La première utilisation télécharge le composant de détection de personnes (environ {{size}} Mo). Ensuite chaque plan est cadré sur la personne qui parle ; les plans sans personne (cartes de citation, diapositives) sont affichés en entier.",
+  "正在按镜头识别人物位置…": "Repérage des personnes plan par plan…",
+  "已按 {{shots}} 个镜头自动取景，{{fit}} 个没有人物的镜头改为完整显示。播放到某个镜头时可单独调整它。": "{{shots}} plans cadrés automatiquement ; {{fit}} plans sans personne sont affichés en entier. Lisez jusqu'à un plan pour l'ajuster séparément.",
+  "按镜头跟随说话人取景；播放到某个镜头时可单独调整它。": "Le cadrage suit la personne qui parle plan par plan ; lisez jusqu'à un plan pour l'ajuster séparément.",
+  "镜头 {{n}}/{{total}}": "Plan {{n}}/{{total}}",
+  "当前镜头显示方式": "Affichage de ce plan",
+  "对准人物": "Suivre la personne",
+  "完整画面": "Image entière"
 }

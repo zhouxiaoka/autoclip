@@ -1386,9 +1386,7 @@
   "醒目黄字": "Amarelo em destaque",
   "主体铺满画面，自动对准说话的人。": "O assunto preenche o quadro, centrado em quem está falando.",
   "取景": "Enquadramento",
-  "首次使用需下载人物识别组件（约 {{size}} MB），之后自动对准说话的人。": "No primeiro uso, baixa o componente de detecção de pessoas (cerca de {{size}} MB); depois o enquadramento segue quem fala automaticamente.",
   "正在下载人物识别组件…": "Baixando o componente de detecção de pessoas…",
-  "正在识别人物位置…": "Localizando pessoas no quadro…",
   "没有识别到人物，请手动调整取景位置。": "Ninguém foi detectado; ajuste o enquadramento manualmente.",
   "拖动调整当前镜头的取景位置。": "Arraste para ajustar o enquadramento da cena atual.",
   "下载并自动取景": "Baixar e enquadrar",
@@ -1399,6 +1397,12 @@
   "在第一个镜头上显示最多 4 秒的大字，适合游戏、推广类内容；访谈、讲解可以留空。": "Texto grande sobre a primeira cena por até 4 segundos; bom para gameplay e promos, deixe vazio em entrevistas e explicações.",
   "缩略图为设计参考，实际文字效果见左侧预览。": "As miniaturas são referências de design; o texto real aparece na prévia à esquerda.",
   "片头": "Título",
-  "已跟随说话人自动取景（{{framed}}/{{total}} 个镜头，{{switches}} 次切换）。拖动滑块会改为固定取景。": "O enquadramento segue quem fala ({{framed}}/{{total}} cenas, {{switches}} trocas). Mover o controle fixa o enquadramento.",
-  "正在跟随说话人取景；拖动滑块会改为固定取景。": "O enquadramento segue quem fala; mover o controle fixa o enquadramento."
+  "首次使用需下载人物识别组件（约 {{size}} MB），之后按镜头自动对准说话的人；没有人物的画面（引用卡、PPT）会完整显示。": "O primeiro uso baixa o componente de detecção de pessoas (cerca de {{size}} MB). Depois, cada cena é enquadrada em quem fala; cenas sem pessoas (cartões de citação, slides) aparecem inteiras.",
+  "正在按镜头识别人物位置…": "Localizando pessoas cena a cena…",
+  "已按 {{shots}} 个镜头自动取景，{{fit}} 个没有人物的镜头改为完整显示。播放到某个镜头时可单独调整它。": "{{shots}} cenas enquadradas automaticamente; {{fit}} cenas sem pessoas aparecem inteiras. Reproduza até uma cena para ajustá-la separadamente.",
+  "按镜头跟随说话人取景；播放到某个镜头时可单独调整它。": "O enquadramento segue quem fala cena a cena; reproduza até uma cena para ajustá-la separadamente.",
+  "镜头 {{n}}/{{total}}": "Cena {{n}}/{{total}}",
+  "当前镜头显示方式": "Como esta cena é exibida",
+  "对准人物": "Seguir pessoa",
+  "完整画面": "Quadro inteiro"
 }

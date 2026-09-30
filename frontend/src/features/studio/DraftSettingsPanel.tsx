@@ -1,7 +1,7 @@
 import { Select, Switch } from 'antd'
 import { t } from '../../i18n'
 import { Btn, ProgressLine, Row, Segmented, StatusDot } from '../../ui'
-import { Draft, FramingStatus, Scene, cropAt, languages, subtitleStyles } from './types'
+import { CropPoint, Draft, FramingStatus, Scene, cropAt, frameModeAt, languages, shotIndexAt, subtitleStyles } from './types'
 import { titlePresets, titleVersions, isArtworkStyle, titleDesignThumbnails } from './titlePresets'
 
 const ACCENT_DEFAULT: Record<string, string> = { comic: '#ffe52d', neon: '#ccff00', editorial: '#ff4826', pixel: '#ed327c', frosted: '#00e6dc' }
@@ -10,8 +10,8 @@ export interface FramingState {
   status?: FramingStatus
   /** Auto framing is running against the current scenes. */
   busy: boolean
-  /** Set after a run: how many scenes got a speaker position. */
-  result?: { framed: number; total: number; switches: number }
+  /** Set after a run: scenes with a track, shots found, and how many shots are shown whole. */
+  result?: { framed: number; total: number; shots: number; fit: number }
   error?: string
 }
 
@@ -20,13 +20,14 @@ export interface FramingState {
  * Top to bottom: name → subtitles (whole clip) → audio → frame + speaker framing → opening title
  * (optional, folded) → text language → cover. Everything has a working default.
  */
-export default function DraftSettingsPanel({ draft, patch, scene, currentTime, onSceneCrop, framing, onAutoFrame, onInstallFraming, onPortrait, coverHref, onOpenCover }: {
+export default function DraftSettingsPanel({ draft, patch, scene, currentTime, onShot, framing, onAutoFrame, onInstallFraming, onPortrait, coverHref, onOpenCover }: {
   draft: Draft
   patch: (changes: Partial<Draft>) => void
   /** Scene currently shown in the preview; the framing slider edits this one. */
   scene?: Scene
   currentTime: number
-  onSceneCrop: (sceneId: string, cropX: number) => void
+  /** Change the shot under the playhead (position or crop/fit). */
+  onShot: (sceneId: string, changes: Partial<CropPoint>) => void
   framing: FramingState
   onAutoFrame: () => void
   onInstallFraming: () => void
@@ -39,6 +40,8 @@ export default function DraftSettingsPanel({ draft, patch, scene, currentTime, o
   const cropping = draft.aspect !== 'original' && draft.layout === 'crop'
   const sceneCrop = cropAt(scene, currentTime, draft.crop_x ?? .5)
   const tracked = !!scene?.crop_track?.length
+  const shotMode = frameModeAt(scene, currentTime)
+  const shotIndex = shotIndexAt(scene, currentTime)
   const runtime = framing.status?.status
   return <aside className="studio-edit-panel">
     <div className="studio-panel-head">
@@ -77,19 +80,25 @@ export default function DraftSettingsPanel({ draft, patch, scene, currentTime, o
           onChange={value => patch({ layout: value })} />
       </Row>}
       {cropping && <Row stack label={t("取景")} hint={
-        runtime === 'not_installed' ? t("首次使用需下载人物识别组件（约 {{size}} MB），之后自动对准说话的人。", { size: framing.status?.size_mb ?? 45 })
+        runtime === 'not_installed' ? t("首次使用需下载人物识别组件（约 {{size}} MB），之后按镜头自动对准说话的人；没有人物的画面（引用卡、PPT）会完整显示。", { size: framing.status?.size_mb ?? 45 })
         : runtime === 'installing' ? t("正在下载人物识别组件…")
-        : framing.busy ? t("正在识别人物位置…")
+        : framing.busy ? t("正在按镜头识别人物位置…")
         : framing.error ? framing.error
-        : framing.result ? (framing.result.framed ? t("已跟随说话人自动取景（{{framed}}/{{total}} 个镜头，{{switches}} 次切换）。拖动滑块会改为固定取景。", framing.result) : t("没有识别到人物，请手动调整取景位置。"))
-        : tracked ? t("正在跟随说话人取景；拖动滑块会改为固定取景。")
+        : framing.result ? (framing.result.framed ? t("已按 {{shots}} 个镜头自动取景，{{fit}} 个没有人物的镜头改为完整显示。播放到某个镜头时可单独调整它。", framing.result) : t("没有识别到人物，请手动调整取景位置。"))
+        : tracked ? t("按镜头跟随说话人取景；播放到某个镜头时可单独调整它。")
         : t("拖动调整当前镜头的取景位置。")}>
         {runtime === 'not_installed' && <Btn size="sm" onClick={onInstallFraming}>{t("下载并自动取景")}</Btn>}
         {runtime === 'installing' && <ProgressLine percent={framing.status?.progress ?? 5} />}
         {runtime === 'error' && <StatusDot tone="error" label={framing.status?.message} />}
         {runtime === 'installed' && !framing.busy && <Btn size="sm" onClick={onAutoFrame}>{framing.result ? t("重新自动取景") : t("自动取景")}</Btn>}
-        <input aria-label={t("取景位置")} type="range" min="0" max="1" step=".01" value={sceneCrop} disabled={framing.busy}
-          onChange={e => scene ? onSceneCrop(scene.id, Number(e.target.value)) : patch({ crop_x: Number(e.target.value) })} />
+        {scene && <div className="studio-shot-controls">
+          {tracked && <span className="studio-muted ac-mono">{t("镜头 {{n}}/{{total}}", { n: shotIndex + 1, total: scene.crop_track!.length })}</span>}
+          <Segmented size="sm" ariaLabel={t("当前镜头显示方式")} value={shotMode} disabled={framing.busy}
+            options={[{ value: 'crop', label: t("对准人物") }, { value: 'fit', label: t("完整画面") }]}
+            onChange={value => onShot(scene.id, { mode: value })} />
+        </div>}
+        <input aria-label={t("取景位置")} type="range" min="0" max="1" step=".01" value={sceneCrop} disabled={framing.busy || shotMode === 'fit'}
+          onChange={e => scene ? onShot(scene.id, { crop_x: Number(e.target.value) }) : patch({ crop_x: Number(e.target.value) })} />
       </Row>}
 
       <details className="ac-disclosure" open={!!draft.hook.trim() || undefined}>

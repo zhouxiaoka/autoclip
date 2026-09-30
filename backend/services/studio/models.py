@@ -16,6 +16,8 @@ class CropPoint(BaseModel):
     # Seconds from the start of the scene; the framing holds until the next point.
     start: float = Field(ge=0)
     crop_x: float = Field(ge=0, le=1)
+    # 'crop' follows crop_x; 'fit' shows the whole frame on a blurred backdrop (text cards, slides, no faces).
+    mode: Literal['crop', 'fit'] = 'crop'
 
 
 class Scene(BaseModel):

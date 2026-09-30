@@ -1386,9 +1386,7 @@
   "醒目黄字": "Bold yellow",
   "主体铺满画面，自动对准说话的人。": "The subject fills the frame, centred on whoever is speaking.",
   "取景": "Framing",
-  "首次使用需下载人物识别组件（约 {{size}} MB），之后自动对准说话的人。": "First use downloads the person-detection component (about {{size}} MB); after that, framing follows the speaker automatically.",
   "正在下载人物识别组件…": "Downloading the person-detection component…",
-  "正在识别人物位置…": "Locating people in the frame…",
   "没有识别到人物，请手动调整取景位置。": "No one was detected; adjust the framing manually.",
   "拖动调整当前镜头的取景位置。": "Drag to adjust the framing of the current shot.",
   "下载并自动取景": "Download and auto-frame",
@@ -1399,6 +1397,12 @@
   "在第一个镜头上显示最多 4 秒的大字，适合游戏、推广类内容；访谈、讲解可以留空。": "Large text over the first shot for up to 4 seconds — good for gameplay and promos; leave empty for interviews and explainers.",
   "缩略图为设计参考，实际文字效果见左侧预览。": "Thumbnails are design references; the actual text shows in the preview on the left.",
   "片头": "Title",
-  "已跟随说话人自动取景（{{framed}}/{{total}} 个镜头，{{switches}} 次切换）。拖动滑块会改为固定取景。": "Framing follows the speaker ({{framed}}/{{total}} shots, {{switches}} switches). Dragging the slider switches to a fixed frame.",
-  "正在跟随说话人取景；拖动滑块会改为固定取景。": "Framing follows the speaker; dragging the slider switches to a fixed frame."
+  "首次使用需下载人物识别组件（约 {{size}} MB），之后按镜头自动对准说话的人；没有人物的画面（引用卡、PPT）会完整显示。": "First use downloads the person-detection component (about {{size}} MB). After that each shot is framed on the speaker; shots without people (quote cards, slides) are shown whole.",
+  "正在按镜头识别人物位置…": "Locating people shot by shot…",
+  "已按 {{shots}} 个镜头自动取景，{{fit}} 个没有人物的镜头改为完整显示。播放到某个镜头时可单独调整它。": "Framed {{shots}} shots automatically; {{fit}} shots without people are shown whole. Play to a shot to adjust it on its own.",
+  "按镜头跟随说话人取景；播放到某个镜头时可单独调整它。": "Framing follows the speaker shot by shot; play to a shot to adjust it on its own.",
+  "镜头 {{n}}/{{total}}": "Shot {{n}}/{{total}}",
+  "当前镜头显示方式": "How this shot is shown",
+  "对准人物": "Follow person",
+  "完整画面": "Whole frame"
 }

@@ -34,3 +34,20 @@ test('portrait recommendation updates composition and captions without modifying
  const titled=m.exports.portraitDesign({...original,hook:'Watch this'})
  assert.equal(titled.title_style,'comic');assert.equal(titled.title_template_version,6)
 })
+const {cropAt,frameModeAt,shotIndexAt,patchShot}=m.exports
+test('shot lookups follow the track from the scene start and fall back to static crop',()=>{
+ const scene={id:'s',label:'a',start:10,end:25,evidence:'',crop_x:.4,crop_track:[{start:0,crop_x:.5,mode:'fit'},{start:3,crop_x:.2},{start:9,crop_x:.8,mode:'crop'}]}
+ assert.equal(shotIndexAt(scene,11),0);assert.equal(frameModeAt(scene,11),'fit')
+ assert.equal(shotIndexAt(scene,13.5),1);assert.equal(frameModeAt(scene,13.5),'crop','missing mode means crop');assert.equal(cropAt(scene,13.5),.2)
+ assert.equal(cropAt(scene,24.9),.8)
+ const plain={...scene,crop_track:null}
+ assert.equal(shotIndexAt(plain,12),-1);assert.equal(frameModeAt(plain,12),'crop');assert.equal(cropAt(plain,12),.4);assert.equal(cropAt(undefined,12,.7),.7)
+})
+test('patchShot edits only the shot under the playhead and seeds a track for untracked scenes',()=>{
+ const scene={id:'s',label:'a',start:10,end:25,evidence:'',crop_track:[{start:0,crop_x:.5,mode:'fit'},{start:3,crop_x:.2,mode:'crop'}]}
+ const next=patchShot(scene,11,{mode:'crop',crop_x:.6})
+ assert.deepEqual(next.crop_track,[{start:0,crop_x:.6,mode:'crop'},{start:3,crop_x:.2,mode:'crop'}]);assert.equal(scene.crop_track[0].mode,'fit','original untouched')
+ const seeded=patchShot({id:'u',label:'b',start:0,end:5,evidence:'',crop_x:.3},2,{mode:'fit'},.5)
+ assert.deepEqual(seeded.crop_track,[{start:0,crop_x:.3,mode:'fit'}])
+ assert.deepEqual(patchShot({id:'v',label:'c',start:0,end:5,evidence:''},2,{crop_x:.9},.5).crop_track,[{start:0,crop_x:.9,mode:'crop'}])
+})
