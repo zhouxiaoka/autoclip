@@ -13,6 +13,9 @@ from backend.services.studio.store import directory
 from backend.services import render_limits
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
+# Portrait captions: ~62 px glyphs in a 1080 px frame -> 15 CJK characters per line, two lines max.
+PORTRAIT_LINE = 15
+
 
 def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False):
     info = _probe(video)
@@ -58,7 +61,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             for i, scene in enumerate(draft.scenes):
                 duration = audio.scene_duration(scene)
                 srt = folder / f'{i}.srt'
-                body = slice_srt(entries, scene.start, scene.end)
+                body = slice_srt(entries, scene.start, scene.end, PORTRAIT_LINE if h > w else None)
                 if body:
                     srt.write_text(body, encoding='utf-8')
                 title = folder / 'title.txt'

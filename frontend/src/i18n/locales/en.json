@@ -1468,5 +1468,12 @@
   "第一行": "First line",
   "第二行（可选）": "Second line (optional)",
   "评论标签": "Editor tags",
-  "在关键句出现的编辑点评。": "Short editor comments that pop in on key lines."
+  "在关键句出现的编辑点评。": "Short editor comments that pop in on key lines.",
+  "样式": "Style",
+  "改变字幕与动效的风格，版式和配色保持一致。": "Changes the look and motion of captions; layout and colours stay the same.",
+  "经典": "Classic",
+  "字幕条": "Caption bar",
+  "聚焦": "Spotlight",
+  "跳字": "Word pop",
+  "电影感": "Cinematic"
 }

@@ -6,6 +6,7 @@ with times relative to the scene start. Colours follow DESIGN.md (dark theme).
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from backend.services.studio.models import Draft, Packaging, Scene
@@ -47,6 +48,25 @@ def _esc(text: str) -> str:
     return text.replace('\\', '＼').replace('{', '（').replace('}', '）').replace('\n', ' ')
 
 
+def _esc_lines(text: str) -> str:
+    """Escape user text but keep the layout's explicit ASS line breaks."""
+    return '\\N'.join(_esc(part) for part in text.split('\\N'))
+
+
+def _limit(font_size: int) -> float:
+    """Line width budget (CJK characters) for a font size inside the 1080 px frame margins."""
+    return 920 / font_size
+
+
+def _emphasize(text: str, phrases: list[str]) -> str:
+    """Colour phrases (already escaped) in the accent blue inside an escaped caption."""
+    for phrase in sorted({p for p in phrases if p}, key=len, reverse=True):
+        safe = _esc(phrase)
+        if safe in text:
+            text = text.replace(safe, f'{{\\c{ACCENT}}}{safe}{{\\c{WHITE}}}', 1)
+    return text
+
+
 def _header() -> str:
     return f"""[Script Info]
 ScriptType: v4.00+
@@ -67,6 +87,10 @@ Style: Tag,{FONT},60,{ACCENT},{ACCENT},&H00000000,&H80000000,1,1,0,0,100,100,2,0
 Style: PlateName,{FONT},46,{WHITE},{WHITE},{INK_SOFT},{INK_SOFT},1,0,0,0,100,100,0,0,3,14,0,7,0,0,0,1
 Style: PlateRole,{FONT},32,{SUB},{SUB},{INK_SOFT},{INK_SOFT},0,0,0,0,100,100,0,0,3,12,0,7,0,0,0,1
 Style: PlateBar,{FONT},10,{ACCENT},{ACCENT},{ACCENT},{ACCENT},0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
+Style: CaptionBox,{FONT},58,{WHITE},{WHITE},{INK_SOFT},{INK_SOFT},1,0,0,0,100,100,1,0,3,14,0,2,48,48,0,1
+Style: TagPill,{FONT},48,{WHITE},{WHITE},{ACCENT},{ACCENT},1,0,0,0,100,100,2,0,3,14,0,5,40,40,0,1
+Style: Cine,{FONT},96,{WHITE},{WHITE},&H00000000,&H00000000,1,0,0,0,100,100,2,0,1,0,0,2,60,60,0,1
+Style: CineGlow,{FONT},96,{ACCENT},{ACCENT},{ACCENT},&H00000000,1,0,0,0,100,100,2,0,1,3,0,2,60,60,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -125,20 +149,30 @@ def _nameplate(scene: _Scene, at: float, name: str, role: str, y: int) -> None:
 
 
 def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing: dict | None = None) -> str:
-    """ASS document for scene `index`; times are relative to that scene's start."""
+    """ASS document for scene `index`; times are relative to that scene's start.
+
+    Every caption screen is at most two lines (see caption_layout). Styles only change looks and
+    motion, never the layout contract: title on top, captions at the window edge, plate lower-left.
+    """
+    from backend.services.studio.caption_layout import timed_screens
     rows = timeline(scenes)
     total = rows[-1][2] + (rows[-1][1] - rows[-1][0])
     offset = rows[index][2]
     length = rows[index][1] - rows[index][0]
     out = _Scene(offset, length)
     interview = packaging.template == 'interview_zh'
+    style = packaging.style or ('classic' if interview else 'pop')
+    tag_texts = [t.text for t in packaging.tags] if packaging.tags_enabled else []
 
     lines = packaging.title_lines
     if interview and lines:
-        pop = '\\fscx88\\fscy88\\t(0,200,\\fscx100\\fscy100)\\fad(180,0)' if index == 0 else ''
+        entrance = {'classic': '\\fscx88\\fscy88\\t(0,200,\\fscx100\\fscy100)\\fad(180,0)',
+                    'boxed': '\\fad(160,0)', 'spotlight': '\\fad(320,0)'}[style] if index == 0 else ''
         for i, line in enumerate(lines):
-            style = 'TitleAccent' if i == packaging.title_accent_line and len(lines) > 1 else 'Title'
-            out.add(3, 0, total, style, f'{{\\an8\\pos(540,{150 + i * 150}){pop}}}{_esc(line)}')
+            y = 150 + i * 150
+            title_style = 'TitleAccent' if i == packaging.title_accent_line and len(lines) > 1 else 'Title'
+            move = f'\\move(540,{y + 40},540,{y},{i * 120},{i * 120 + 280})' if style == 'boxed' and index == 0 else f'\\pos(540,{y})'
+            out.add(3, 0, total, title_style, f'{{\\an8{move}{entrance}}}{_esc(line)}')
     elif lines:
         hook = ' '.join(lines)
         out.add(3, 0, 2.8, 'Hook', f'{{\\an8\\pos(540,250)\\move(540,300,540,250,0,260)\\fad(140,220)}}{_esc(hook)}')
@@ -149,12 +183,37 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
             continue
         end = max(end, start + .3)
         if interview:
-            out.add(2, start, end, 'Caption', f'{{\\an2\\pos(540,{WIN_Y + WIN_H - 22})\\fad(60,60)}}{_esc(cue.text)}')
-            if cue.original:
-                out.add(1, start, end, 'Original', f'{{\\an8\\pos(540,{WIN_Y + WIN_H + 34})\\fad(60,60)}}{_esc(cue.original)}')
+            caption_style = 'CaptionBox' if style == 'boxed' else 'Caption'
+            size = 58 if style == 'boxed' else 62
+            y = WIN_Y + WIN_H - 22
+            for s, e, text, original in timed_screens(cue.text, start, end, _limit(size), cue.original, _limit(36)):
+                body = _esc_lines(text)
+                if style == 'spotlight':
+                    body = _emphasize(body, tag_texts)
+                    motion = f'\\move(540,{y + 24},540,{y},0,180)\\fad(120,60)'
+                else:
+                    motion = f'\\pos(540,{y})\\fad(60,60)' if style == 'classic' else f'\\pos(540,{y})\\fad(90,90)'
+                out.add(2, s, e, caption_style, f'{{\\an2{motion}}}{body}')
+                if original:
+                    out.add(1, s, e, 'Original', f'{{\\an8\\pos(540,{WIN_Y + WIN_H + 34})\\fad(60,60)}}{_esc_lines(original)}')
             continue
         highlights = {h.text.lower() for h in packaging.highlights if cue.start <= h.at < cue.end}
-        for chunk in _chunks(_words(cue.text, start, end, None)):
+        if style == 'boxed':
+            for s, e, text, _ in timed_screens(cue.text, start, end, _limit(58) / 0.95):
+                body = _esc_lines(text)
+                for word in highlights:
+                    body = re.sub(rf'(?i)\b({re.escape(_esc(word))})\b', lambda m: f'{{\\c{ACCENT}}}{m.group(1)}{{\\c{WHITE}}}', body, count=1)
+                out.add(2, s, e, 'CaptionBox', f'{{\\an2\\pos(540,1420)\\fad(90,90)}}{body}')
+            continue
+        words = _words(cue.text, start, end, None)
+        if style == 'cinematic':
+            for w0, w1, token in words:
+                glow = f'{{\\an2\\pos(540,1320)\\blur8\\alpha&H70&\\fad(80,80)}}{_esc(token)}'
+                crisp = f'{{\\an2\\pos(540,1320)\\fad(80,80)}}{_esc(token)}'
+                out.add(1, w0, max(w1, w0 + .18), 'CineGlow', glow)
+                out.add(2, w0, max(w1, w0 + .18), 'Cine', crisp)
+            continue
+        for chunk in _chunks(words):
             chunk_end = chunk[-1][1] + .05
             for j, (w0, _, _) in enumerate(chunk):
                 parts = []
@@ -171,10 +230,13 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
         if at is not None:
             _nameplate(out, at, speaker.name, speaker.role, plate_y)
 
-    if interview and packaging.tags_enabled:
+    if interview and packaging.tags_enabled and style != 'spotlight':
         for tag in packaging.tags:
             at = to_output(tag.at, rows)
             if at is None:
+                continue
+            if style == 'boxed':
+                out.add(4, at, at + 1.8, 'TagPill', f'{{\\an5\\pos(540,{WIN_Y + WIN_H - 130})\\fscx80\\fscy80\\t(0,160,\\fscx100\\fscy100)\\fad(120,200)}}{_esc(tag.text)}', carry=False)
                 continue
             motion = '\\fscx50\\fscy50\\t(0,140,\\fscx112\\fscy112)\\t(140,260,\\fscx100\\fscy100)\\fad(0,240)'
             out.add(4, at, at + 1.8, 'Tag', f'{{\\an5\\pos(540,{WIN_Y + WIN_H - 120}){motion}}}{_esc(tag.text)}', carry=False)
@@ -211,4 +273,5 @@ def scene_video_graph(draft: Draft, scene: Scene, index: int, ass_path: Path, w:
         base = layout_filter(scene, draft.crop_x, w, h)
     else:
         base = ';'.join(_layout_filters(draft.layout if draft.layout in ('blur', 'fit') else 'fit', w, h))
-    return f"{base};[base]{ass}[packaged]", 'packaged'
+    grade = 'eq=saturation=0.72:brightness=-0.03,vignette=PI/5,' if draft.packaging and draft.packaging.style == 'cinematic' else ''
+    return f"{base};[base]{grade}{ass}[packaged]", 'packaged'

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 import tempfile
 import threading
@@ -105,7 +106,8 @@ def _escape_filter_path(p: Path) -> str:
     return str(p.resolve()).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
 
 
-def slice_srt(entries: Sequence[Dict[str, Any]], start: float, end: float) -> str:
+def slice_srt(entries: Sequence[Dict[str, Any]], start: float, end: float, line_limit: Optional[float] = None) -> str:
+    """SRT for [start, end); with `line_limit`, long rows become consecutive screens of ≤ 2 lines."""
     lines: List[str] = []
     idx = 1
     for e in entries:
@@ -119,8 +121,14 @@ def slice_srt(entries: Sequence[Dict[str, Any]], start: float, end: float) -> st
         text = str(e.get("text") or "").replace("\n", " ").strip()
         if not text:
             continue
-        lines.append(f"{idx}\n{to_srt_time(ns)} --> {to_srt_time(nt)}\n{text}\n")
-        idx += 1
+        if line_limit:
+            from backend.services.studio.caption_layout import timed_screens
+            screens = [(a, b, screen.replace('\\N', '\n')) for a, b, screen, _ in timed_screens(text, ns, nt, line_limit)]
+        else:
+            screens = [(ns, nt, text)]
+        for a, b, screen in screens:
+            lines.append(f"{idx}\n{to_srt_time(a)} --> {to_srt_time(b)}\n{screen}\n")
+            idx += 1
     return "\n".join(lines)
 
 
@@ -179,6 +187,18 @@ SUBTITLE_STYLES: Dict[str, str] = {
 }
 
 
+def portrait_subtitle_style(style: str, factor: float = 0.47) -> str:
+    """Scale a force_style for 9:16 output.
+
+    libass lays SRT out on a 288 px-high virtual canvas, so the same Fontsize is ~1.8× larger on
+    a 1920 px-high portrait frame than on 1080 px landscape (Fontsize 20 ≈ 133 px, five lines per
+    sentence). Scale size, outline, shadow and margin so portrait captions match landscape.
+    """
+    def scale(match):
+        return f"{match.group(1)}={float(match.group(2)) * factor:.1f}"
+    return re.sub(r'\b(Fontsize|Outline|Shadow|MarginV)=([0-9.]+)', scale, style)
+
+
 def _build_filter(req: ExportRequest, spec: Dict[str, Any], srt_path: Optional[Path],
                   title_path: Optional[Path], font: Optional[Path], subtitle_style: str = "clean") -> Optional[str]:
     layout = req.layout or spec["layout"]
@@ -186,6 +206,8 @@ def _build_filter(req: ExportRequest, spec: Dict[str, Any], srt_path: Optional[P
     last = "base" if parts else "0:v"
     if srt_path is not None:
         style = SUBTITLE_STYLES.get(subtitle_style, SUBTITLE_STYLES["clean"])
+        if spec.get("w") and spec.get("h") and spec["h"] > spec["w"]:
+            style = portrait_subtitle_style(style)
         if font:
             # FontName 给 libass；mac 上 PingFang SC 通常能解析
             style = "FontName=PingFang SC," + style
@@ -261,7 +283,7 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
     try:
         if req.subtitles:
             entries = _load_srt_entries(req.project_id)
-            body = slice_srt(entries, start, start + duration)
+            body = slice_srt(entries, start, start + duration, 15 if (spec.get("h") or 0) > (spec.get("w") or 0) else None)
             if body:
                 srt_file = tmpdir / "clip.srt"
                 srt_file.write_text(body, encoding="utf-8")

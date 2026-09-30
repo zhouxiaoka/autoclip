@@ -1468,5 +1468,12 @@
   "第一行": "Primeira linha",
   "第二行（可选）": "Segunda linha (opcional)",
   "评论标签": "Etiquetas de comentário",
-  "在关键句出现的编辑点评。": "Comentários curtos que aparecem nas frases-chave."
+  "在关键句出现的编辑点评。": "Comentários curtos que aparecem nas frases-chave.",
+  "样式": "Estilo",
+  "改变字幕与动效的风格，版式和配色保持一致。": "Muda o visual e o movimento das legendas; layout e cores continuam iguais.",
+  "经典": "Clássico",
+  "字幕条": "Barra de legenda",
+  "聚焦": "Foco",
+  "跳字": "Palavra a palavra",
+  "电影感": "Cinematográfico"
 }

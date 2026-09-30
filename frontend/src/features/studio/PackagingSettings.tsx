@@ -1,10 +1,14 @@
 import { Switch } from 'antd'
 import { t } from '../../i18n'
-import { Row } from '../../ui'
+import { Row, Segmented } from '../../ui'
 import { packagingLabel } from './packagingLabel'
 import type { Draft, Packaging } from './types'
 
 const TITLE_MAX = { zh: 12, en: 36 }
+const STYLES: Record<Packaging['template'], { value: NonNullable<Packaging['style']>; label: string }[]> = {
+  interview_zh: [{ value: 'classic', label: '经典' }, { value: 'boxed', label: '字幕条' }, { value: 'spotlight', label: '聚焦' }],
+  podcast_en: [{ value: 'pop', label: '跳字' }, { value: 'boxed', label: '字幕条' }, { value: 'cinematic', label: '电影感' }],
+}
 
 /**
  * Editing for automatic template packaging. This release only allows the two title lines and
@@ -24,6 +28,11 @@ export default function PackagingSettings({ draft, patch }: { draft: Draft; patc
   return <>
     <Row stack label={t('模板')} hint={t('字幕、名牌和版式由模板按发布平台自动生成。')}>
       <span className="studio-muted">{packagingLabel(packaging)}{packaging.fallback ? ` · ${t('包装未能完整生成，已使用原字幕')}` : ''}</span>
+    </Row>
+    <Row stack label={t('样式')} hint={t('改变字幕与动效的风格，版式和配色保持一致。')}>
+      <Segmented size="sm" ariaLabel={t('样式')} value={packaging.style ?? STYLES[packaging.template][0].value}
+        options={STYLES[packaging.template].map(option => ({ value: option.value, label: t(option.label) }))}
+        onChange={value => update({ style: value as Packaging['style'] })} />
     </Row>
     <Row stack label={t('标题')} hint={packaging.template === 'interview_zh' ? t('整条视频顶部显示，第二行为强调色。') : t('开头约 3 秒显示。')}>
       {lines.map((line, index) => <input key={index} className="ac-input" aria-label={t('标题第 {{n}} 行', { n: index + 1 })} maxLength={max}

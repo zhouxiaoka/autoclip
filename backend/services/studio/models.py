@@ -79,12 +79,17 @@ class Packaging(BaseModel):
     highlights: list[PackagingMark] = Field(default_factory=list, max_length=40)
     burned_captions: bool = False
     fallback: bool = False
+    # Visual style inside the template; None = the golden default (classic / pop).
+    style: Literal['classic', 'boxed', 'spotlight', 'pop', 'cinematic'] | None = None
 
     @model_validator(mode='after')
     def short_title_lines(self):
         self.title_lines = [line.strip() for line in self.title_lines if line.strip()]
         if any(len(line) > 40 for line in self.title_lines):
             raise ValueError('标题每行最多 40 个字符')
+        allowed = {'interview_zh': ('classic', 'boxed', 'spotlight'), 'podcast_en': ('pop', 'boxed', 'cinematic')}[self.template]
+        if self.style is not None and self.style not in allowed:
+            raise ValueError('这个模板不支持所选样式')
         return self
 
 

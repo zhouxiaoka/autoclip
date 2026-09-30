@@ -1468,5 +1468,12 @@
   "第一行": "Première ligne",
   "第二行（可选）": "Deuxième ligne (facultatif)",
   "评论标签": "Étiquettes de commentaire",
-  "在关键句出现的编辑点评。": "Courts commentaires qui apparaissent sur les phrases clés."
+  "在关键句出现的编辑点评。": "Courts commentaires qui apparaissent sur les phrases clés.",
+  "样式": "Style",
+  "改变字幕与动效的风格，版式和配色保持一致。": "Change l’allure et l’animation des sous-titres ; la mise en page et les couleurs restent identiques.",
+  "经典": "Classique",
+  "字幕条": "Bandeau",
+  "聚焦": "Focus",
+  "跳字": "Mot à mot",
+  "电影感": "Cinéma"
 }

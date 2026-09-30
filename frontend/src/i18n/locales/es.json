@@ -1468,5 +1468,12 @@
   "第一行": "Primera línea",
   "第二行（可选）": "Segunda línea (opcional)",
   "评论标签": "Etiquetas de comentario",
-  "在关键句出现的编辑点评。": "Comentarios breves que aparecen en las frases clave."
+  "在关键句出现的编辑点评。": "Comentarios breves que aparecen en las frases clave.",
+  "样式": "Estilo",
+  "改变字幕与动效的风格，版式和配色保持一致。": "Cambia el aspecto y el movimiento de los subtítulos; el diseño y los colores se mantienen.",
+  "经典": "Clásico",
+  "字幕条": "Barra de subtítulos",
+  "聚焦": "Foco",
+  "跳字": "Palabra a palabra",
+  "电影感": "Cinematográfico"
 }

@@ -46,6 +46,7 @@ export interface Packaging {
   tags: { at: number; text: string }[]; tags_enabled: boolean
   highlights: { at: number; text: string }[]
   burned_captions: boolean; fallback: boolean
+  style?: 'classic' | 'boxed' | 'spotlight' | 'pop' | 'cinematic' | null
 }
 export interface Draft {
   id: string; title: string; hook: string; scenes: Scene[]; language: Language

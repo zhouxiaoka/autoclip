@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 
 from backend.services.publish_export import (
     SUBTITLE_STYLES,
+    portrait_subtitle_style,
     ExportRequest,
     _build_filter,
 )
@@ -166,7 +167,9 @@ def test_subtitle_styles_reach_the_ffmpeg_filter(tmp_path):
     req = ExportRequest("p", "c", layout="fit")
     for name, style in SUBTITLE_STYLES.items():
         graph, _last = _build_filter(req, {"layout": "fit", "w": 1080, "h": 1920}, srt, None, None, name)
-        assert f"force_style='{style}'" in graph
+        assert f"force_style='{portrait_subtitle_style(style)}'" in graph
+        landscape, _last = _build_filter(req, {"layout": "fit", "w": 1920, "h": 1080}, srt, None, None, name)
+        assert f"force_style='{style}'" in landscape
     default_graph, _ = _build_filter(req, {"layout": "fit", "w": 1080, "h": 1920}, srt, None, None)
     unknown_graph, _ = _build_filter(req, {"layout": "fit", "w": 1080, "h": 1920}, srt, None, None, "nope")
     assert default_graph == unknown_graph, "unknown styles fall back to the clean default"

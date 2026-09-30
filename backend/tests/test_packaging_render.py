@@ -2,6 +2,7 @@
 import re
 import subprocess
 
+import pytest
 from PIL import Image
 
 from backend.services.studio import packaging_render as pr
@@ -59,6 +60,38 @@ def test_podcast_captions_show_at_most_three_words_with_the_active_word_highligh
         visible = re.sub(r'\{[^}]*\}', ' ', line.split(',,0,0,0,,', 1)[1]).split()
         assert len(visible) <= 3
     assert all(pr.ACCENT in line for line in words)
+
+
+LONG = '这些年把同样的能量，带给了无数创始人，而且这种手把手的方式一直延续到今天，影响了整整一代人'
+
+
+@pytest.mark.parametrize('template, style', [('interview_zh', 'classic'), ('interview_zh', 'boxed'), ('interview_zh', 'spotlight'),
+                                             ('podcast_en', 'pop'), ('podcast_en', 'boxed'), ('podcast_en', 'cinematic')])
+def test_every_style_keeps_captions_within_two_lines_and_renders(tmp_path, template, style):
+    interview = template == 'interview_zh'
+    text = LONG if interview else 'and brought exactly the same energy to a great many YC founders over the years, and that shaped a generation'
+    packaging = _packaging(template=template, audience_language='zh' if interview else 'en', style=style,
+                           title_lines=['好的投资人', '应该像飞行教练'] if interview else ['Great investors'],
+                           cues=[{'start': 0.2, 'end': 2.8, 'text': text, 'original': 'the original English line that is fairly long as well' if interview else ''}],
+                           speakers=[{'at': 0.2, 'name': 'Sam Altman', 'role': 'OpenAI CEO'}],
+                           tags=[{'at': 0.5, 'text': '手把手'}] if interview else [], highlights=[] if interview else [{'at': 0.2, 'text': 'energy'}])
+    doc = pr.scene_ass(packaging, [Scene(id='a', label='a', start=0, end=3)], 0)
+    for line in _dialogues(doc):
+        name = line.split(',')[3]
+        if name in ('Caption', 'CaptionBox', 'Original'):
+            body = re.sub(r'\{[^}]*\}', '', line.split(',,0,0,0,,', 1)[1])
+            assert body.count('\\N') <= 1, (style, body)
+    source = tmp_path / 'source.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=640x360:d=4:r=30', '-pix_fmt', 'yuv420p', '-y', str(source)], check=True)
+    scene = Scene(id='a', label='a', start=0, end=3)
+    draft = Draft(id='d', title='T', scenes=[scene], aspect='portrait', layout='window' if interview else 'blur', packaging=packaging)
+    ass = tmp_path / '0.ass'
+    ass.write_text(doc, encoding='utf-8')
+    graph, label = pr.scene_video_graph(draft, scene, 0, ass, 1080, 1920)
+    frame = tmp_path / 'frame.png'
+    subprocess.run(['ffmpeg', '-v', 'error', '-t', '3', '-i', str(source), '-filter_complex', graph,
+                    '-map', f'[{label}]', '-ss', '1', '-frames:v', '1', '-y', str(frame)], check=True)
+    assert Image.open(frame).size == (1080, 1920)
 
 
 def test_interview_window_renders_title_canvas_and_window(tmp_path):
