@@ -21,6 +21,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
         {completed ? t('已生成 · 可下载') : failed ? t('生成失败') : job?.status === 'running' ? t('正在生成') : t('排队生成中')}
       </div>
       <p className="studio-output-hint">{variant.branding.outro_enabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾')}</p>
+      {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}
       {failed && <p className="studio-output-hint studio-error">{variant.error || job?.error || t('这条版本未完成，其他成片不受影响。')}</p>}
       <div className="ac-card-foot"><span className="meta">{platformLabel(variant.strategy_id)}</span><div className="ac-card-actions">
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}`)}>{t('预览与修改')}</Btn>}

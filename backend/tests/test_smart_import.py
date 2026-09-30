@@ -737,6 +737,23 @@ def test_many_auto_variants_are_all_queued_for_rendering(root, monkeypatch):
     assert state['generation']['status'] == 'rendering'
 
 
+def test_only_hard_platform_limits_trim_and_they_cut_at_sentence_ends(root, monkeypatch):
+    from backend.services import publish_export
+    from backend.services.platform_strategy import platform_strategy
+    monkeypatch.setattr(publish_export, '_load_srt_entries', lambda _pid: [
+        {'start_time': '00:00:00,000', 'end_time': '00:02:50,000'},
+        {'start_time': '00:02:50,000', 'end_time': '00:03:05,000'},
+    ])
+    long_moment = {'id': 'x', 'revision': 1, 'scenes': [{'id': 's', 'label': 'S', 'start': 0.0, 'end': 240.0}]}
+
+    kept, trimmed = jobs._fit_platform_limit('p1', long_moment, platform_strategy('douyin'))
+    assert trimmed is None and kept['scenes'][0]['end'] == 240.0  # Douyin accepts long uploads: stay whole
+
+    cut, trimmed = jobs._fit_platform_limit('p1', long_moment, platform_strategy('youtube_shorts'))
+    assert trimmed == 180 and cut['scenes'][0]['end'] == 170.0  # last sentence end within 180 s
+    assert long_moment['scenes'][0]['end'] == 240.0  # input draft is not mutated
+
+
 def test_render_ffmpeg_threads_are_bounded_and_low_priority():
     from backend.services import render_limits
     assert int(render_limits.THREADS) >= 2

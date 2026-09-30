@@ -277,6 +277,35 @@ def _content_drafts(project_id, plan, video):
     return drafts, [event.model_dump() for event in events], coverage
 
 
+def _fit_platform_limit(project_id, value, strategy):
+    """Trim a draft to the platform's hard length limit at the last subtitle sentence end.
+
+    Only strategies with a real platform cap (YouTube Shorts) set `max_duration_sec`; every
+    other platform keeps the complete moment. Returns (draft, trimmed_to_seconds_or_None).
+    """
+    limit = strategy.max_duration_sec
+    scenes = value.get('scenes', [])
+    if not limit or sum(s['end'] - s['start'] for s in scenes) <= limit:
+        return value, None
+    try:
+        from backend.services.publish_export import _load_srt_entries, to_seconds
+        ends = sorted(to_seconds(e['end_time']) for e in _load_srt_entries(project_id) if e.get('end_time'))
+    except Exception:  # noqa: BLE001 - no subtitles: fall back to an exact cut
+        ends = []
+    remaining, kept = float(limit), []
+    for scene in scenes:
+        length = scene['end'] - scene['start']
+        if length <= remaining:
+            kept.append(scene)
+            remaining -= length
+            continue
+        target = scene['start'] + remaining
+        boundary = [end for end in ends if scene['start'] + 1 < end <= target]
+        kept.append({**scene, 'end': max(boundary) if boundary else target})
+        break
+    return {**value, 'scenes': kept}, limit
+
+
 def _auto_generate(project_id, plan):
     """Produce and render platform variants after the cheap screening pass."""
     started = monotonic()
@@ -302,7 +331,7 @@ def _auto_generate(project_id, plan):
                 if strategy.duration_policy == 'long' and duration < (strategy.min_recommended_duration_sec or 0):
                     skipped.append({'strategy_id': strategy_id, 'reason': '素材没有足够完整的长内容'})
                     continue
-                value = {**base, 'id': uuid.uuid4().hex, 'revision': 1}
+                value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
                 draft = _apply_strategy(value, strategy_id)
                 derived_drafts.append(draft.model_dump())
                 variant_id = uuid.uuid4().hex
@@ -310,6 +339,7 @@ def _auto_generate(project_id, plan):
                     'id': variant_id, 'draft_id': draft.id, 'draft_revision': draft.revision,
                     'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
                     'status': 'queued', 'created_at': store.now(),
+                    **({'trimmed_to_sec': trimmed} if trimmed else {}),
                 })
         if not variants:
             raise ValueError('所选平台没有可生成的完整内容版本')
@@ -357,12 +387,14 @@ def append_platform_variants(project_id, platforms, branding):
             duration = sum(end - start for start, end in signature)
             if strategy.duration_policy == 'long' and duration < (strategy.min_recommended_duration_sec or 0):
                 continue
-            draft = _apply_strategy({**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy_id)
+            value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
+            draft = _apply_strategy(value, strategy_id)
             derived.append(draft.model_dump())
             variants.append({
                 'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': 1,
                 'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
                 'status': 'queued', 'created_at': store.now(),
+                **({'trimmed_to_sec': trimmed} if trimmed else {}),
             })
     if not variants:
         raise ValueError('没有可追加的平台版本；已存在或素材不满足所选平台要求')

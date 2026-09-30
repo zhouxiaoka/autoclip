@@ -17,9 +17,17 @@ def test_short_and_long_youtube_are_distinct_strategies():
     long = platform_strategy("youtube_long")
 
     assert shorts.transport_platform == long.transport_platform == "youtube"
-    assert shorts.aspect == "portrait" and shorts.max_duration_sec == 60
+    assert shorts.aspect == "portrait" and shorts.max_duration_sec == 180  # Shorts hard cap since 2024-10
     assert long.aspect == "landscape" and long.min_recommended_duration_sec == 180
     assert long.max_duration_sec is None
+
+
+def test_only_youtube_shorts_has_a_hard_length_limit():
+    # Douyin, TikTok, Reels and Xiaohongshu accept long uploads: their 90-180 s values are guidance only.
+    for strategy_id in ("douyin", "tiktok", "instagram_reels", "xiaohongshu"):
+        strategy = platform_strategy(strategy_id)
+        assert strategy.max_duration_sec is None and strategy.recommended_max_duration_sec
+    assert legacy_export_presets()["douyin"]["max_sec"] is None
 
 
 def test_legacy_presets_keep_existing_keys_and_render_specs():
@@ -27,7 +35,7 @@ def test_legacy_presets_keep_existing_keys_and_render_specs():
 
     assert set(presets) == {"douyin", "xiaohongshu", "shorts", "bilibili", "original"}
     assert presets["shorts"]["strategy_id"] == "youtube_shorts"
-    assert presets["shorts"]["max_sec"] == 60
+    assert presets["shorts"]["max_sec"] == 180
     assert presets["bilibili"]["w"] == 1920
     assert presets["bilibili"]["subtitle_style"] == "clean"
     assert strategy_for_legacy_preset("douyin").id == "douyin"

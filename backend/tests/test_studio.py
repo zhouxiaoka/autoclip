@@ -153,7 +153,8 @@ def test_api_platform_strategies_distinguish_short_and_long_youtube(client):
     assert response.status_code == 200
     strategies = {strategy['id']: strategy for strategy in response.json()['strategies']}
     assert strategies['youtube_shorts']['transport_platform'] == 'youtube'
-    assert strategies['youtube_shorts']['max_duration_sec'] == 60
+    assert strategies['youtube_shorts']['max_duration_sec'] == 180
+    assert strategies['douyin']['max_duration_sec'] is None
     assert strategies['youtube_long']['transport_platform'] == 'youtube'
     assert strategies['youtube_long']['min_recommended_duration_sec'] == 180
     assert strategies['youtube_long']['aspect'] == 'landscape'

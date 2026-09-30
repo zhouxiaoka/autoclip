@@ -23,12 +23,16 @@ class PlatformStrategy:
     layout: Literal["blur", "crop", "fit", "none"]
     duration_policy: DurationPolicy
     min_recommended_duration_sec: int | None
+    # Hard platform limit only (e.g. YouTube Shorts 180 s). Longer outputs are trimmed at a
+    # sentence boundary. Platforms that accept long uploads leave this None so content stays whole.
     max_duration_sec: int | None
     subtitle_style: Literal["clean", "bold", "box", "accent"]
     title_style: str
     title_motion: bool
     cover_aspect: Literal["portrait", "landscape", "original"]
     aliases: tuple[str, ...] = ()
+    # Typical length that performs well; guidance only, never enforced by trimming.
+    recommended_max_duration_sec: int | None = None
 
     @property
     def aspect(self) -> Literal["portrait", "landscape", "original"]:
@@ -46,6 +50,7 @@ class PlatformStrategy:
             "strategy_id": self.id,
             "duration_policy": self.duration_policy,
             "min_recommended_duration_sec": self.min_recommended_duration_sec,
+            "recommended_max_duration_sec": self.recommended_max_duration_sec,
             "subtitle_style": self.subtitle_style,
             "title_style": self.title_style,
             "title_motion": self.title_motion,
@@ -60,13 +65,15 @@ class PlatformStrategy:
 
 
 _STRATEGIES = (
-    PlatformStrategy("douyin", "抖音 9:16", "download_only", None, 1080, 1920, "blur", "short", 15, 90, "accent", "comic", True, "portrait", ("douyin",)),
-    PlatformStrategy("tiktok", "TikTok 9:16", "upload_post", "tiktok", 1080, 1920, "crop", "short", 15, 90, "bold", "comic", True, "portrait", ("tiktok",)),
-    PlatformStrategy("instagram_reels", "Instagram Reels 9:16", "upload_post", "instagram", 1080, 1920, "crop", "short", 15, 90, "bold", "card", True, "portrait", ("instagram", "reels")),
-    PlatformStrategy("youtube_shorts", "YouTube Shorts 9:16", "upload_post", "youtube", 1080, 1920, "crop", "short", 15, 60, "bold", "card", True, "portrait", ("shorts", "youtube_shorts")),
+    # Hard limits checked 2026-09: Douyin uploads up to ~15 min, TikTok up to 60 min, Reels up to
+    # 20 min (only <=3 min is recommended to new viewers), YouTube Shorts is capped at 3 min.
+    PlatformStrategy("douyin", "抖音 9:16", "download_only", None, 1080, 1920, "blur", "short", 15, None, "accent", "comic", True, "portrait", ("douyin",), 90),
+    PlatformStrategy("tiktok", "TikTok 9:16", "upload_post", "tiktok", 1080, 1920, "crop", "short", 15, None, "bold", "comic", True, "portrait", ("tiktok",), 90),
+    PlatformStrategy("instagram_reels", "Instagram Reels 9:16", "upload_post", "instagram", 1080, 1920, "crop", "short", 15, None, "bold", "card", True, "portrait", ("instagram", "reels"), 180),
+    PlatformStrategy("youtube_shorts", "YouTube Shorts 9:16", "upload_post", "youtube", 1080, 1920, "crop", "short", 15, 180, "bold", "card", True, "portrait", ("shorts", "youtube_shorts"), 60),
     PlatformStrategy("youtube_long", "YouTube 横屏", "upload_post", "youtube", 1920, 1080, "fit", "long", 180, None, "clean", "editorial", False, "landscape", ("youtube_long",)),
     PlatformStrategy("bilibili", "B站横屏", "bilibili_direct", "bilibili", 1920, 1080, "fit", "adaptive", 180, None, "clean", "editorial", False, "landscape", ("bilibili",)),
-    PlatformStrategy("xiaohongshu", "小红书 9:16", "download_only", None, 1080, 1920, "blur", "short", 20, 90, "box", "card", True, "portrait", ("xiaohongshu",)),
+    PlatformStrategy("xiaohongshu", "小红书 9:16", "download_only", None, 1080, 1920, "blur", "short", 20, None, "box", "card", True, "portrait", ("xiaohongshu",), 90),
     PlatformStrategy("original", "原画重编码", "download_only", None, None, None, "none", "adaptive", None, None, "clean", "plain", False, "original", ("original",)),
 )
 

@@ -1439,5 +1439,6 @@
   "不含品牌片尾": "Sans écran de fin de marque",
   "这条版本未完成，其他成片不受影响。": "Cette version n’a pas abouti. Les autres vidéos ne sont pas affectées.",
   "素材没有足够完整的长内容": "la source ne contient pas de passage complet assez long",
-  "YouTube 视频": "Vidéo YouTube"
+  "YouTube 视频": "Vidéo YouTube",
+  "平台上限 {{seconds}} 秒，已在句子结束处截断": "Limite de la plateforme : {{seconds}} s ; coupé à la fin d’une phrase"
 }

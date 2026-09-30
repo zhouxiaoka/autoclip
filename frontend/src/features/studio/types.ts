@@ -55,6 +55,7 @@ export interface OutputVariant {
   id: string; draft_id: string; draft_revision: number; strategy_id: string; strategy_version: number
   branding: { outro_enabled: boolean; outro_version: string }
   status: 'queued' | 'running' | 'completed' | 'failed'; render_job_id?: string; created_at: string; error?: string
+  trimmed_to_sec?: number
 }
 export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }

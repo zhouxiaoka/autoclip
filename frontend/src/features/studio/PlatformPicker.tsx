@@ -5,17 +5,17 @@ import { platformLabel } from './platformLabel'
 import type { PlatformStrategySummary } from './types'
 
 const fallback: PlatformStrategySummary[] = [
-  { id: 'douyin', label: '抖音', aspect: 'portrait', duration_policy: 'short', min_recommended_duration_sec: 15, max_duration_sec: 90, transport: 'download_only', transport_platform: null },
-  { id: 'tiktok', label: 'TikTok', aspect: 'portrait', duration_policy: 'short', min_recommended_duration_sec: 15, max_duration_sec: 90, transport: 'upload_post', transport_platform: 'tiktok' },
-  { id: 'youtube_shorts', label: 'YouTube Shorts', aspect: 'portrait', duration_policy: 'short', min_recommended_duration_sec: 15, max_duration_sec: 60, transport: 'upload_post', transport_platform: 'youtube' },
+  { id: 'douyin', label: '抖音', aspect: 'portrait', duration_policy: 'short', min_recommended_duration_sec: 15, max_duration_sec: null, transport: 'download_only', transport_platform: null },
+  { id: 'tiktok', label: 'TikTok', aspect: 'portrait', duration_policy: 'short', min_recommended_duration_sec: 15, max_duration_sec: null, transport: 'upload_post', transport_platform: 'tiktok' },
+  { id: 'youtube_shorts', label: 'YouTube Shorts', aspect: 'portrait', duration_policy: 'short', min_recommended_duration_sec: 15, max_duration_sec: 180, transport: 'upload_post', transport_platform: 'youtube' },
   { id: 'youtube_long', label: 'YouTube 视频', aspect: 'landscape', duration_policy: 'long', min_recommended_duration_sec: 180, max_duration_sec: null, transport: 'upload_post', transport_platform: 'youtube' },
   { id: 'bilibili', label: 'B站', aspect: 'landscape', duration_policy: 'adaptive', min_recommended_duration_sec: 180, max_duration_sec: null, transport: 'bilibili_direct', transport_platform: 'bilibili' },
-  { id: 'xiaohongshu', label: '小红书', aspect: 'portrait', duration_policy: 'short', min_recommended_duration_sec: 20, max_duration_sec: 90, transport: 'download_only', transport_platform: null },
+  { id: 'xiaohongshu', label: '小红书', aspect: 'portrait', duration_policy: 'short', min_recommended_duration_sec: 20, max_duration_sec: null, transport: 'download_only', transport_platform: null },
 ]
 
 function summary(strategy: PlatformStrategySummary): string {
   if (strategy.duration_policy === 'long') return t('完整横版内容')
-  if (strategy.max_duration_sec) return t('短视频')
+  if (strategy.duration_policy === 'short') return t('短视频')
   return t('自适应成片')
 }
 

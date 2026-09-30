@@ -122,6 +122,8 @@ class OutputVariant(BaseModel):
     render_job_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     created_at: str = ''
     error: str | None = Field(default=None, max_length=700)
+    # Set only when a hard platform limit (e.g. YouTube Shorts 180 s) shortened the moment.
+    trimmed_to_sec: int | None = Field(default=None, ge=1)
 
 
 class ImportOptions(BaseModel):

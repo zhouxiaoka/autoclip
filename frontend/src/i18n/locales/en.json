@@ -1439,5 +1439,6 @@
   "不含品牌片尾": "No brand end card",
   "这条版本未完成，其他成片不受影响。": "This version did not finish. Your other videos are not affected.",
   "素材没有足够完整的长内容": "the source has no complete segment long enough",
-  "YouTube 视频": "YouTube video"
+  "YouTube 视频": "YouTube video",
+  "平台上限 {{seconds}} 秒，已在句子结束处截断": "Platform limit is {{seconds}}s; trimmed at the end of a sentence"
 }
