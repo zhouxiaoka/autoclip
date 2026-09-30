@@ -108,7 +108,7 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
 
 def _fallback_title(draft: dict[str, Any], language: str) -> list[str]:
     import textwrap
-    text = (draft.get('hook') or draft.get('title') or '').strip()
+    text = _clean(draft.get('hook') or draft.get('title') or '')
     # Width follows the title's own language: an English title on a Chinese platform is not cut at 12.
     own = 'zh' if source_language([text]) == 'zh' else 'en'
     wrap = lambda t: textwrap.wrap(t, width=TITLE_LIMIT[own], break_long_words=True)  # noqa: E731

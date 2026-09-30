@@ -162,6 +162,7 @@ def test_titles_are_plain_text_in_the_audience_language():
 def test_fallback_titles_keep_whole_clauses():
     title = packaging._fallback_title({'hook': '《死亡搁浅》不是先有玩法再讲故事：主题即机制，故事与玩法同时诞生'}, 'zh')
     assert title == ['《死亡搁浅》不是先有玩法', '再讲故事：主题即机制']  # not "…主题即机制，故"
+    assert packaging._fallback_title({'hook': 'Starting a Startup *Is* Your Move'}, 'en') == ['Starting a Startup Is Your Move']
 
 
 def test_a_batch_does_not_repeat_the_last_palettes_when_the_mood_allows():
