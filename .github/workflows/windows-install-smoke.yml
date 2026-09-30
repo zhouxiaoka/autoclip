@@ -13,6 +13,10 @@ on:
         description: "Install Whisper and run cached real speech with installed portable Python"
         type: boolean
         default: false
+      verify_publishing:
+        description: "Install framing runtime, detect faces and render local covers with installed Python"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -64,4 +68,20 @@ jobs:
         with:
           name: installed-whisper-report
           path: installed-whisper-report.json
+          if-no-files-found: ignore
+
+      - name: Verify actual installed speaker framing and local covers
+        if: inputs.verify_publishing
+        run: |
+          $report = Get-Content windows-smoke.json -Raw | ConvertFrom-Json
+          $resources = $report.resources
+          & (Join-Path $resources 'python\python.exe') -B scripts\verify_framing_cover.py --resources $resources --report installed-publishing-report.json
+          if ($LASTEXITCODE -ne 0) { throw "Installed publishing acceptance failed: $LASTEXITCODE" }
+
+      - name: Upload installed publishing report
+        if: always() && inputs.verify_publishing
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-publishing-report
+          path: installed-publishing-report.json
           if-no-files-found: ignore
