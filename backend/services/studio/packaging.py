@@ -21,6 +21,7 @@ LATIN = re.compile(r'[A-Za-z]')
 TITLE_LIMIT = {'zh': 12, 'en': 36}
 TAG_LIMIT = 10
 MAX_TAGS = 5
+MAX_SEGMENT_LINES = 6  # a caption cue must stay a sentence or two, not a paragraph
 
 PROMPT = (
     '你是短视频包装编辑。根据 lines（已按时间排序的原字幕，常被切成半句，每行有 id）为这段访谈做包装，返回 JSON：\n'
@@ -30,6 +31,7 @@ PROMPT = (
     '规则：title_lines 用 audience_language 写 1–2 行，每行不超过 title_limit 个字符，概括最抓人的观点，不编造；'
     'accent_line 是需要强调的那一行下标（0 或 1）。'
     'segments 把 lines 按完整句子重新分段：from/to 是连续的行 id 区间，按顺序首尾相接、覆盖全部行、不重叠；'
+    '每段只含 1–2 句话、最多覆盖 4 行，不要把大段内容合成一段；'
     'translate 为 true 时 text 是该段翻译成 audience_language 的口语化译文（去掉口头禅，不添加事实），为 false 时 text 是整理后的原文。'
     'speakers 只填写在 lines 或 known_names 中明确出现过的人名，role 写其公开身份（不确定就留空），line 是此人第一次说话的行；'
     '不确定就返回空数组，绝不猜测身份。'
@@ -120,6 +122,8 @@ def _segments(raw, lines, translate):
         text = str((item or {}).get('text') or '').strip()
         if not (isinstance(start, int) and isinstance(end, int)) or start != expected or end < start or end >= len(lines):
             raise ValueError('segments are not contiguous')
+        if end - start >= MAX_SEGMENT_LINES:
+            raise ValueError('segment spans too many lines')
         if not text or len(text) > 600:
             raise ValueError('segment text invalid')
         original = ' '.join(line['text'] for line in lines[start:end + 1])
@@ -138,18 +142,28 @@ def _validated(result, lines, base, translate, burned, known_names, draft):
     titles = [t.strip() for t in result.get('title_lines') or [] if isinstance(t, str) and t.strip()][:2]
     limit = TITLE_LIMIT[audience]
     if titles and any(len(t) > limit + 2 for t in titles):
-        # Models often return one long line: keep their wording when it fits two lines.
-        import textwrap
-        joined = ' '.join(titles)
-        width = min(40, max(limit, len(joined) // 2 + 2))  # balanced two lines, within the model's 40-char cap
-        rewrapped = textwrap.wrap(joined, width=width, break_long_words=audience == 'zh')
-        titles = rewrapped if 0 < len(rewrapped) <= 2 else []
+        # Models often return one long line: keep their wording when it fits two lines, breaking
+        # Chinese at punctuation / natural joints and Latin at spaces, never through a word.
+        from backend.services.studio.caption_layout import lines_for
+        joined = ('' if audience == 'zh' else ' ').join(titles)
+        cap = 16 if audience == 'zh' else 40
+        chars = min(cap, max(limit, len(joined) / 2 + 4))  # balanced two lines with slack for word boundaries
+        # lines_for works in display width (CJK 1, Latin 0.55); convert the character budget.
+        rewrapped = lines_for(joined, chars if audience == 'zh' else chars * 0.55)
+        titles = rewrapped if 0 < len(rewrapped) <= 2 and all(len(t) <= cap for t in rewrapped) else []
     if not titles:
         titles = _fallback_title(draft, audience)
     accent = result.get('accent_line') if result.get('accent_line') in (0, 1) else len(titles) - 1
     cues = []
     if not burned:
-        cues = _segments(result.get('segments'), lines, translate)
+        try:
+            cues = _segments(result.get('segments'), lines, translate)
+        except ValueError:
+            if translate:
+                raise  # no usable translation: the whole package falls back
+            # Same language: the source rows are already the right captions; keep title, names, highlights.
+            cues = [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': '', 'lines': (i, i)}
+                    for i, l in enumerate(lines)]
     haystack = (' '.join(line['text'] for line in lines) + ' ' + known_names + ' ' + draft.get('title', '')).lower()
     speakers, seen = [], set()
     for item in result.get('speakers') or []:

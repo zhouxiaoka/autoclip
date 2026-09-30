@@ -154,7 +154,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     Every caption screen is at most two lines (see caption_layout). Styles only change looks and
     motion, never the layout contract: title on top, captions at the window edge, plate lower-left.
     """
-    from backend.services.studio.caption_layout import timed_screens
+    from backend.services.studio.caption_layout import timed_screens, width
     rows = timeline(scenes)
     total = rows[-1][2] + (rows[-1][1] - rows[-1][0])
     offset = rows[index][2]
@@ -172,7 +172,8 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
             y = 150 + i * 150
             title_style = 'TitleAccent' if i == packaging.title_accent_line and len(lines) > 1 else 'Title'
             move = f'\\move(540,{y + 40},540,{y},{i * 120},{i * 120 + 280})' if style == 'boxed' and index == 0 else f'\\pos(540,{y})'
-            out.add(3, 0, total, title_style, f'{{\\an8{move}{entrance}}}{_esc(line)}')
+            size = min(112, int(1000 / max(width(line), 1)))  # one line always fits the 1080 px frame
+            out.add(3, 0, total, title_style, f'{{\\an8{move}\\fs{size}{entrance}}}{_esc(line)}')
     elif lines:
         hook = ' '.join(lines)
         out.add(3, 0, 2.8, 'Hook', f'{{\\an8\\pos(540,250)\\move(540,300,540,250,0,260)\\fad(140,220)}}{_esc(hook)}')

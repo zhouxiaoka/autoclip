@@ -91,6 +91,23 @@ def test_long_english_sentences_and_titles_survive_validation():
     assert ' '.join(result['title_lines']).startswith("API pricing won't die")
 
 
+def test_same_language_keeps_the_package_when_segments_are_lumped():
+    lumped = good_response(title_lines=['Great investors are flight instructors'],
+                           segments=[{'from': 0, 'to': 0, 'text': 'a'}],  # does not cover every row
+                           highlights=[{'line': 1, 'word': 'instructor'}])
+    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('tiktok'), call=lambda *_: lumped)
+    assert result['fallback'] is False and [c['text'] for c in result['cues']] == [l['text'] for l in LINES]
+    assert result['title_lines'] == ['Great investors are flight instructors']
+    assert result['highlights'] == [{'at': 12.0, 'text': 'instructor'}]
+
+
+def test_paragraph_sized_segments_are_rejected_for_translation():
+    many = [{'start': float(i), 'end': float(i + 1), 'text': f'line {i} of a long monologue'} for i in range(10)]
+    response = good_response(segments=[{'from': 0, 'to': 9, 'text': '一大段合在一起的译文'}])
+    result = packaging.build_packaging(DRAFT, many, platform_strategy('douyin'), call=lambda *_: response)
+    assert result['fallback'] is True
+
+
 def test_source_language_detection():
     assert packaging.source_language(['这是一个中文字幕，内容比较长一些']) == 'zh'
     assert packaging.source_language(['This is an English subtitle line with words']) == 'en'

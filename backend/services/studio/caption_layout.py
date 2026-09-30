@@ -91,18 +91,40 @@ def _split_words(text: str, parts: int) -> list[str]:
     return [' '.join(words[round(i * size):round((i + 1) * size)]) for i in range(parts)]
 
 
+def _fit_two(text: str, line_limit: float) -> str:
+    """Two lines at most; if the text needs more, cut the second line with an ellipsis."""
+    lines = lines_for(text, line_limit)
+    if len(lines) <= 2:
+        return '\\N'.join(lines)
+    second, budget = '', line_limit - width('…')
+    for word in ' '.join(lines[1:]).split(' '):
+        candidate = f'{second} {word}'.strip()
+        if width(candidate) > budget:
+            break
+        second = candidate
+    return f'{lines[0]}\\N{second}…'
+
+
 def timed_screens(text: str, start: float, end: float, line_limit: float, original: str = '',
                   original_limit: float = 0) -> list[tuple[float, float, str, str]]:
-    """(start, end, screen text, original text) screens covering [start, end)."""
+    """(start, end, screen text, original text) screens covering [start, end).
+
+    A long original (e.g. English under a short Chinese line) gets more screens: the caption then
+    shows one line per screen so both stay within two lines; beyond that the original is cut.
+    """
     screens = split_screens(text, line_limit)
     if not screens:
         return []
+    if original and original_limit:
+        needed = -(-width(original) // (2 * original_limit * 0.9))
+        if needed > len(screens):
+            screens = lines_for(text, line_limit)
     originals = _split_words(original, len(screens)) if original else [''] * len(screens)
     weights = [max(width(s.replace('\\N', '')), 1) for s in screens]
     out, cursor = [], start
     for screen, orig, weight in zip(screens, originals, weights):
         span = (end - start) * weight / sum(weights)
-        out.append((cursor, cursor + span, screen, wrap_two(orig, original_limit) if orig and original_limit else orig))
+        out.append((cursor, cursor + span, screen, _fit_two(orig, original_limit) if orig and original_limit else orig))
         cursor += span
     return out
 

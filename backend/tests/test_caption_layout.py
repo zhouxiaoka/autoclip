@@ -22,6 +22,16 @@ def test_line_breaks_prefer_punctuation_and_natural_joints():
     assert '延\\N续' not in '\\N'.join(lines) and not any(line.endswith('延') for line in lines)
 
 
+def test_a_long_original_under_a_short_caption_never_exceeds_two_lines():
+    original = ('about my preferences and tastes and the different trade-offs we have and just over the course of '
+                'many months building up this understanding of what works for our audience and what does not')
+    screens = cl.timed_screens('的工作部分在于持续学习观众的偏好、我的个人审美与取舍，', 0, 6, 15, original, 25.5)
+    assert len(screens) >= 2
+    for _, _, text, orig in screens:
+        assert cl.line_count(text) <= 2 and cl.line_count(orig) <= 2
+        assert all(cl.width(line) <= 25.5 + 1e-6 for line in orig.split('\\N'))
+
+
 def test_screens_share_time_by_width_and_keep_the_original_in_step():
     screens = cl.timed_screens(LONG_ZH, 10.0, 16.0, 15, LONG_EN, 25)
     assert len(screens) >= 2

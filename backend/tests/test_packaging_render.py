@@ -94,6 +94,17 @@ def test_every_style_keeps_captions_within_two_lines_and_renders(tmp_path, templ
     assert Image.open(frame).size == (1080, 1920)
 
 
+def test_long_title_lines_shrink_to_fit_the_frame():
+    from backend.services.studio.caption_layout import width
+    doc = pr.scene_ass(_packaging(title_lines=['AI无法替代视频编辑的关键：', '边干边学理解观众偏好需数月积累']), SCENES, 0)
+    titles = [line for line in _dialogues(doc) if line.split(',')[3] in ('Title', 'TitleAccent')]
+    assert len(titles) == 2
+    for line in titles:
+        size = int(re.search(r'\\fs(\d+)', line).group(1))
+        text = re.sub(r'\{[^}]*\}', '', line.split(',,0,0,0,,', 1)[1])
+        assert size <= 112 and size * width(text) <= 1000
+
+
 def test_interview_window_renders_title_canvas_and_window(tmp_path):
     source = tmp_path / 'source.mp4'
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=640x360:d=4:r=30', '-pix_fmt', 'yuv420p', '-y', str(source)], check=True)
