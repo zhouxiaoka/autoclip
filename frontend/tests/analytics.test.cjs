@@ -39,6 +39,25 @@ const task = overrides => ({ id: 'task-1', task_type: 'video_processing', status
   created_at: '2026-09-21T01:00:00', started_at: '2026-09-21T01:00:01Z',
   completed_at: '2026-09-21T01:00:06Z', ...overrides })
 
+test('quick-output properties accept only bounded platform and branding fields', () => {
+  const props = core.safeStudioProperties({
+    strategy_id: 'tiktok', material_origin: 'user', generation_reason: 'platform_append',
+    platform_count: 2, variant_count: 3, completed_variant_count: 2, brand_outro_enabled: true,
+    project_id: 'private-project', filename: 'private.mp4', reason: 'raw user text', url: 'https://private.example',
+  })
+  assert.equal(props.studio_schema_version, 2)
+  assert.equal(props.strategy_id, 'tiktok')
+  assert.equal(props.material_origin, 'user')
+  assert.equal(props.generation_reason, 'platform_append')
+  assert.equal(props.platform_count, 2)
+  assert.equal(props.variant_count, 3)
+  assert.equal(props.completed_variant_count, 2)
+  assert.equal(props.brand_outro_enabled, true)
+  assert.equal(JSON.stringify(props).includes('private'), false)
+  assert.equal(core.safeStudioProperties({ strategy_id: 'untrusted', generation_reason: 'raw text', platform_count: -1 }).strategy_id, undefined)
+})
+
+
 test('duplicate polling and restart preserve deduplication, actual duration and stable IDs', () => {
   const s = setup(); s.tracker.watch('project', 'p')
   const w = s.tracker.list()[0]
@@ -186,7 +205,7 @@ test('Studio phases dedupe locally across restart without sending internal IDs o
   const recovered=new core.WorkflowTracker(s.storage,()=>true,s.capture,()=>NOW)
   recovered.observeStudio(recovered.list()[0],snapshot)
   assert.equal(s.events.length,1)
-  assert.equal(s.events[0].props.studio_schema_version,1)
+  assert.equal(s.events[0].props.studio_schema_version,2)
   assert.equal(s.events[0].props.outcome,'failed')
   assert.equal(JSON.stringify(s.events).includes('secret'),false)
   s.tracker.watch('studio-export','secret-job','secret-project')
@@ -201,7 +220,7 @@ test('Studio screening distinguishes recommendations, manual fallback and import
     const s=setup();s.tracker.watch('studio-screen','private-project')
     s.tracker.observeStudio(s.tracker.list()[0],snapshot)
     assert.equal(s.events[0].props.outcome,outcome)
-    assert.equal(s.events[0].props.studio_schema_version,1)
+    assert.equal(s.events[0].props.studio_schema_version,2)
   }
 })
 test('actual Studio API enrolls accepted work and sends aggregate-only telemetry',async()=>{
@@ -220,7 +239,7 @@ test('actual Studio API enrolls accepted work and sends aggregate-only telemetry
   assert.equal(s.events.length,6)
   assert.equal(JSON.stringify(s.events).includes('private'),false)
   assert.equal(JSON.stringify(s.events).includes('secret'),false)
-  for(const e of s.events) assert.ok(Object.keys(e.props).every(k=>['studio_schema_version','request_duration_ms','source_type','has_subtitle','aspect','goal_content','goal_highlight','goal_promo'].includes(k)))
+  for(const e of s.events) assert.ok(Object.keys(e.props).every(k=>['studio_schema_version','request_duration_ms','source_type','has_subtitle','aspect','platform_count','brand_outro_enabled','goal_content','goal_highlight','goal_promo'].includes(k)))
   s.enable(false)
   await api.import({})
   assert.equal(s.events.length,6)
@@ -294,7 +313,7 @@ test('UI workspace snapshots capture fast screening before confirm and never enr
  assert.equal(await aggregate.observeStudioWorkspace('p',async()=>snapshot),snapshot)
  assert.equal(s.events.length,1);assert.equal(s.events[0].props.recommendation_mode,'local')
  await aggregate.observeStudioWorkspace('p',async()=>snapshot);assert.equal(s.events.length,1)
- assert.equal(core.safeStudioProperties(null).studio_schema_version,1)
+ assert.equal(core.safeStudioProperties(null).studio_schema_version,2)
 })
 
 test('late workspace response cannot settle a newer rescreen attempt',async()=>{

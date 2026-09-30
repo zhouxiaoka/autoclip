@@ -8,8 +8,11 @@ const LIMIT = 50
 /** Explicit property contract: never spread user/model data into a payload. */
 export function safeStudioProperties(value: Record<string, unknown> | null = {}): Properties {
   const input = value && typeof value === 'object' ? value : {}
-  const out: Properties = { studio_schema_version: 1 }
+  const out: Properties = { studio_schema_version: 2 }
   const enums: Record<string, string[]> = {
+    strategy_id: ['douyin', 'tiktok', 'instagram_reels', 'youtube_shorts', 'youtube_long', 'bilibili', 'xiaohongshu', 'original'],
+    material_origin: ['user', 'sample', 'unknown'],
+    generation_reason: ['content_complete', 'platform_append', 'platform_ineligible'],
     source_type: ['file', 'youtube', 'bilibili', 'other_url', 'visual_event', 'content_clip', 'studio', 'legacy'],
     analysis_mode: ['subtitle', 'visual', 'auto'], goal: ['content', 'highlight', 'promo', 'auto'],
     aspect: ['original', 'portrait', 'landscape', 'auto'],
@@ -22,10 +25,10 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
   for (const [key, allowed] of Object.entries(enums)) {
     if (typeof input[key] === 'string' && allowed.includes(input[key] as string)) out[key] = input[key] as string
   }
-  for (const key of ['subtitle_enabled', 'has_subtitle', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
+  for (const key of ['brand_outro_enabled', 'reused_content_profile', 'subtitle_enabled', 'has_subtitle', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean
   }
-  for (const key of ['duration_ms', 'request_duration_ms', 'result_count', 'requested_count', 'succeeded_count', 'failed_count']) {
+  for (const key of ['duration_ms', 'request_duration_ms', 'variant_count', 'completed_variant_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count']) {
     if (typeof input[key] === 'number' && Number.isFinite(input[key]) && (input[key] as number) >= 0) out[key] = input[key] as number
   }
   for (const prefix of ['requested', 'succeeded', 'failed']) {

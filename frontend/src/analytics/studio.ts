@@ -5,7 +5,7 @@ import { errorCode, safeStudioProperties, type Properties, type StudioSnapshot }
 /** Only allowlisted categories, booleans, counts and elapsed milliseconds leave the app.
  * No project/job/operation IDs, URLs, filenames, content or model output are captured. */
 export async function observeStudioOperation<T>(
-  name: 'studio_import' | 'studio_confirm' | 'studio_export' | 'studio_rescreen' | 'studio_plan_update' | 'studio_draft_create' | 'studio_draft_save' | 'studio_draft_duplicate' | 'studio_rewrite' | 'studio_analysis_preferences' | 'vision_provider_test' | 'vision_provider_save' | 'social_publish',
+  name: 'studio_import' | 'studio_confirm' | 'studio_export' | 'studio_rescreen' | 'studio_plan_update' | 'studio_draft_create' | 'studio_draft_save' | 'studio_draft_duplicate' | 'studio_rewrite' | 'studio_analysis_preferences' | 'vision_provider_test' | 'vision_provider_save' | 'social_publish' | 'studio_platform_append' | 'studio_variant_retry',
   action: () => Promise<T>, accepted: (result: T) => void = () => {}, properties: Record<string, unknown> = {},
 ): Promise<T> {
   const props = safeStudioProperties(properties)
@@ -25,6 +25,14 @@ export async function observeStudioOperation<T>(
     })
     throw error
   }
+}
+
+export function trackQuickOutput(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_auto_generation_finished', safeStudioProperties(properties))
+}
+
+export function trackQuickOutputPlatforms(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_platforms_selected', safeStudioProperties(properties))
 }
 
 /** Navigation intent only; no claim about successful disk writes. */
@@ -61,7 +69,7 @@ export function studioImportProperties(body: FormData): Record<string, unknown> 
       else if (host === 'b23.tv' || host === 'bilibili.com' || host.endsWith('.bilibili.com')) source_type = 'bilibili'
     } catch { /* invalid input remains an enum; URL is never captured */ }
   }
-  return { source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto' }
+  return { source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length, brand_outro_enabled: body.get?.('brand_outro_enabled') !== 'false' }
 }
 
 export function studioGoals(goals: string[]): Properties {

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { Btn, Segmented, Dialog } from '../../ui'
 import PlatformPicker from './PlatformPicker'
 import { studioApi, errorText } from './api'
+import { trackQuickOutputPlatforms } from '../../analytics/studio'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import './studio.css'
@@ -41,6 +42,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       if (source === 'file' && file) body.append('video', file)
       else { body.append('url', url.trim()); if (browser) body.append('browser', browser) }
       const result = await studioApi.import(body)
+      trackQuickOutputPlatforms({ platform_count: platforms.length, brand_outro_enabled: brandOutro })
       // Project refresh should never make a successful import look like an upload failure.
       void onImported().catch(() => undefined)
       navigate(`/project/${result.project_id}`)

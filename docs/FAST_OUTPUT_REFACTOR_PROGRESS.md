@@ -218,3 +218,32 @@ frontend i18n / quick output / variant actions: 11 passed
 - 追加 API 当前从已保存草稿派生，尚未单独标记 ContentProfile 版本；后续理解策略升级时要加 analysis version 以判断能否复用。
 - 多平台派生仍逐个编码，策略等价时的共享渲染可作为性能优化，不应在可靠性工作包中提前合并。
 - 尚未实现系统分享、案例征集与远端公开链接，当前增长能力仍是品牌片尾与可直接下载的成片。
+
+## 包 5：可解释性与匿名增长观测
+
+状态：已完成，待合入。
+
+### 完成内容
+
+- 自动结果页在素材不足以生成长内容时显示受控原因，例如“未生成 YouTube：素材没有足够完整的长内容”，不暴露内部策略 ID、模型输出或素材文本。
+- Studio analytics schema 升级到 v2，新增且仅允许：平台策略枚举、素材来源枚举、平台/variant 数量、片尾开关、受控 generation reason 与复用理解布尔值。
+- 快速入口记录平台数量和片尾开关；结果页只在自动 generation 到 `completed/partial/failed` 时本地去重上报一次聚合结果。
+- 追加平台与单版本重试复用既有 request lifecycle 埋点，追加明确带 `reused_content_profile=true`，不上传 project/variant/draft ID。
+- 增加隐私白名单回归，断言 project ID、文件名、URL、自由理由与未知策略不会进入 payload；旧 Studio 去重与 consent 行为继续覆盖。
+
+### 已验证
+
+```text
+frontend analytics / i18n / quick output: 33 passed
+frontend typecheck: passed
+```
+
+### 下一包
+
+真实桌面端端到端验收：从新首页导入受控素材，选择平台，验证自动出片、片尾、原生保存、追加平台、失败版本重试与关闭分析统计。验收前先启动本地桌面运行时或等价的开发环境。
+
+### 主要风险
+
+- 当前“分享/案例征集”尚未落地，不能把品牌片尾展示次数解释为真实外部传播。
+- 浏览器下载只表示下载请求；成功交付率仍以桌面原生保存为主证据。
+- 全部新版指标需要在独立 validation 环境和真实安装包中验证收数，不能从本地测试推断线上已生效。
