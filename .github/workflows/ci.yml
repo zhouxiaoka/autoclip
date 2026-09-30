@@ -59,6 +59,10 @@ jobs:
           (cd frontend && npm ci)
           cp env.example .env
           docker run -d --name autoclip-source-redis -p 6379:6379 redis:7-alpine
+          for i in $(seq 1 30); do
+            if docker exec autoclip-source-redis redis-cli ping; then break; fi
+            sleep 1
+          done
           ./quick_start.sh
           ./status_autoclip.sh
           ./stop_autoclip.sh

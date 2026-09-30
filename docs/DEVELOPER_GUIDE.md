@@ -22,7 +22,7 @@ python -m pytest backend/tests -q
 ## 主要入口
 
 - Web API：`backend/main.py`，模块方式启动 `python -m uvicorn backend.main:app`。
-- 桌面 API：`backend/desktop_app.py`；由 Tauri 客户端管理生命周期。
+- 桌面 API：`backend/desktop_main.py`；由 Tauri 客户端管理生命周期。
 - CLI / MCP：见 [CLI_AND_MCP.md](CLI_AND_MCP.md)。
 - UI：`frontend/src/`；视觉修改先阅读 [DESIGN.md](../DESIGN.md)。
 - 模型与本地字幕转写：见 [AI_MODEL_CONFIGURATION.md](AI_MODEL_CONFIGURATION.md)。
