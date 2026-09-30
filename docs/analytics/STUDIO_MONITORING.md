@@ -1,5 +1,7 @@
 # Studio 1.4 监控契约与验收
 
+> 历史验收记录。2026-09-30 的新增实现使用 Studio schema 2，契约、关联标记和本地 SQL 迁移见 [新版说明](NEW_USER_STUDIO_V2.md)。以下 schema 1 与线上看板描述保留为历史记录，不能视为本轮已发布或线上看板已更新。
+
 2026-09-27，分支 `codex/recent-feedback-fixes`。代码已实施，尚未合入或发布；已安装的 1.4.0 不会自动获得这些改动。
 
 ## PostHog

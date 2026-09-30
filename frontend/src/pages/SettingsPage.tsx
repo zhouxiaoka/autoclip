@@ -1,6 +1,7 @@
+import { trackExperience } from '../analytics/experience'
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Switch, message } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { settingsApi } from '../services/api'
@@ -47,6 +48,12 @@ const SettingsPage: React.FC = () => {
   const [analyticsOn, setAnalyticsOn] = useState(isAnalyticsEnabled())
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const runtime = getRuntimeInfo()
+  const viewedSection = useRef<SectionKey | null>(null)
+  useEffect(() => {
+    if (viewedSection.current === active) return
+    viewedSection.current = active
+    trackExperience('settings_section_viewed', { section: active, entry_source: location.state?.settingsEntry === 'home_setup' ? 'home_setup' : 'direct' })
+  }, [active])
   useEffect(() => { setActive(initialSection) }, [initialSection])
   return (
     <div className="ac-page">

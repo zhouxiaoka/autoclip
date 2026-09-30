@@ -1,3 +1,5 @@
+import { trackExperience } from '../../analytics/experience'
+import { telemetryId } from '../../analytics/workflow'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -17,7 +19,7 @@ const DISMISSED_KEY = 'autoclip.firstRunSetup.dismissed'
 export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?: (needed: boolean) => void; openRequest?: number }) {
   useTranslation()
   const navigate = useNavigate()
-  const m = useModelSettings()
+  const m = useModelSettings('home_setup')
   const { settings } = m
   const [open, setOpen] = useState(false)
   // Decide once from the loaded document: typing a key must not close the dialog mid-edit.
@@ -32,9 +34,19 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
     if (!dismissed) setOpen(true)
   }, [needed])
   useEffect(() => { if (openRequest > 0 && needed) setOpen(true) }, [openRequest])
+  const presentation = useRef('')
+  const showing = open && needed && !!settings
+  useEffect(() => {
+    if (!showing) { presentation.current = ''; return }
+    if (!presentation.current) {
+      presentation.current = telemetryId()
+      trackExperience('setup_presented', { placement: 'home_setup', presentation_id: presentation.current, trigger: openRequest > 0 ? 'import_blocked' : 'initial' })
+    }
+  }, [showing, openRequest])
+  const action = (value: 'later' | 'open_settings') => trackExperience('setup_action', { placement: 'home_setup', presentation_id: presentation.current, action: value })
   if (!settings || !needed) return null
 
-  const later = () => { try { sessionStorage.setItem(DISMISSED_KEY, '1') } catch { /* ignore */ } setOpen(false) }
+  const later = () => { action('later'); try { sessionStorage.setItem(DISMISSED_KEY, '1') } catch { /* ignore */ } setOpen(false) }
   const main = mainConnection(settings)
   const model = settings.analysis?.model
   const fetching = !!main && !!m.busy[main.id] && !model
@@ -46,7 +58,7 @@ export default function FirstRunSetup({ onStatus, openRequest = 0 }: { onStatus?
   return <Dialog open={open} onClose={later} title={t('先连接一个 AI 服务')}
     description={t('选一家服务、填好 API Key 就能开始，模型会自动选好。之后随时可以在设置里调整。')}
     footer={<div className="ac-setup-foot">
-      <Btn variant="text" size="sm" onClick={() => { setOpen(false); navigate('/settings?section=ai') }}>{t('更多选项')}</Btn>
+      <Btn variant="text" size="sm" onClick={() => { action('open_settings'); setOpen(false); navigate('/settings?section=ai', { state: { settingsEntry: 'home_setup' } }) }}>{t('更多选项')}</Btn>
       <Btn size="sm" onClick={later}>{t('稍后再说')}</Btn>
       <Btn variant="cta" size="sm" loading={m.saving} disabled={fetching} onClick={() => void m.save()}>{t('连接并保存')}</Btn>
     </div>}>

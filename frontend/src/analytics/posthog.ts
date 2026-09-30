@@ -33,6 +33,7 @@ export function captureBusinessEvent(name: string, properties: Properties = {}):
   if (!initialized || !isAnalyticsEnabled()) return false
   try {
     return posthog.capture(name, {
+      ...properties,
       schema_version: 2,
       app_version: import.meta.env.VITE_APP_VERSION || 'unknown',
       analytics_environment: import.meta.env.VITE_TELEMETRY_VALIDATION === 'true' ? 'validation' : import.meta.env.DEV ? 'development' : 'production',
@@ -40,7 +41,6 @@ export function captureBusinessEvent(name: string, properties: Properties = {}):
       entrypoint: 'ui',
       app_locale: typeof document !== 'undefined' ? document.documentElement.lang : 'unknown',
       system_locale: typeof navigator !== 'undefined' ? navigator.language : 'unknown',
-      ...properties,
     }) !== undefined
   } catch { return false }
 }
@@ -48,6 +48,7 @@ export function captureBusinessEvent(name: string, properties: Properties = {}):
 /** 是否启用了埋点（已配置 key 且用户未关闭）。 */
 export function isAnalyticsEnabled(): boolean {
   if (!POSTHOG_KEY) return false
+  if (preferenceOverride !== undefined) return preferenceOverride
   try {
     return localStorage.getItem(OPT_OUT_STORAGE_KEY) !== 'true'
   } catch {
@@ -106,7 +107,7 @@ export function setAnalyticsEnabled(enabled: boolean): void {
   } catch {
     /* localStorage 不可用时忽略 */
   }
-  for (const listener of preferenceListeners) listener()
+  for (const listener of preferenceListeners) { try { listener() } catch { /* isolate observers */ } }
   if (!initialized) return
   try {
     if (enabled) posthog.opt_in_capturing()

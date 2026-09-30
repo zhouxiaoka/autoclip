@@ -17,7 +17,7 @@ export const AnalyticsEvent = {
   ApiKeyConfigured: 'api_key_configured',
   /** 打开赞助商的注册 / 接入说明链接（只记录是哪家、哪个入口） */
   SponsorLinkOpened: 'sponsor_link_opened',
-  /** 首页空态点开内置示例项目（无 Key、无原片） */
+  /** 历史兼容事件；当前有真实素材的示例改用 example_project_open_* 与 example_project_viewed */
   ExampleProjectOpened: 'example_project_opened',
 } as const
 

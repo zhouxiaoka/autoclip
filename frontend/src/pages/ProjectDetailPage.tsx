@@ -1,3 +1,5 @@
+import { trackExperience } from '../analytics/experience'
+import { workflow } from '../analytics/observer'
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
 import React, { useState, useEffect, useRef } from 'react'
@@ -42,6 +44,14 @@ const ProjectDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const loadVersion = useRef(0)
+  const exampleView = useRef('')
+  const exampleVisible = !loading && !error && currentProject?.id === id && !!(currentProject?.settings?.example || currentProject?.processing_config?.example)
+  useEffect(() => {
+    if (!exampleVisible || !id) { exampleView.current = ''; return }
+    if (exampleView.current === id) return
+    exampleView.current = id
+    trackExperience('example_project_viewed', { ...workflow.context(id), material_origin: 'sample' })
+  }, [exampleVisible, id])
   const [statusLoading, setStatusLoading] = useState(false)
   const [showCreateCollection, setShowCreateCollection] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)

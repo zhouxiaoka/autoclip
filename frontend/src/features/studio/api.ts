@@ -1,8 +1,17 @@
+import { captureBusinessEvent } from '../../analytics/posthog'
+import { safeStudioProperties, type Properties } from '../../analytics/workflow'
 import { observeStudioOperation, studioImportProperties, studioGoals, observeStudioWorkspace } from '../../analytics/studio'
 import { workflow } from '../../analytics/observer'
 import api from '../../services/api'
 import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences, SubtitleCue, FramingStatus, AutoFrameResult } from './types'
 export type SourcePreview = { status: 'idle' | 'queued' | 'running' | 'completed' | 'failed'; version?: string; error?: string }
+export function draftProperties(draft?: Partial<Draft>): Properties {
+  return safeStudioProperties({ aspect: draft?.aspect, subtitle_enabled: draft?.subtitles, title_style: draft?.title_style,
+    layout: draft?.layout, has_crop_track: !!draft?.scenes?.some(s => s.crop_track?.length),
+    has_manual_adjustment: !!draft?.scenes?.some(s => s.framing_adjusted),
+    auto_frame_retained: draft?.layout === 'crop' && !!draft?.scenes?.some(s => s.framing_source === 'auto' && !s.framing_adjusted && s.crop_track?.length),
+  })
+}
 export const studioApi = {
   preparePreview: (pid: string): Promise<SourcePreview> => api.post(`/studio/${pid}/source-preview`),
   previewStatus: (pid: string): Promise<SourcePreview> => api.get(`/studio/${pid}/source-preview`),
@@ -12,23 +21,32 @@ export const studioApi = {
   source: (pid: string) => `${api.defaults.baseURL}/studio/${pid}/source`,
   subtitles: (pid: string, signal?: AbortSignal): Promise<{ cues: SubtitleCue[] }> => api.get(`/studio/${pid}/subtitles`, { signal }),
   framingStatus: (): Promise<FramingStatus> => api.get('/studio/framing/status'),
-  framingInstall: (): Promise<FramingStatus & { started: boolean }> => api.post('/studio/framing/install'),
-  autoFrame: (pid: string, draft: Draft): Promise<AutoFrameResult> => api.post(`/studio/${pid}/auto-frame`, draft, { timeout: 120000 }),
+  framingInstall: (): Promise<FramingStatus & { started: boolean }> => observeStudioOperation('studio_framing_install', () => api.post('/studio/framing/install'), (_result, props) => workflow.watch('framing-runtime', 'runtime', undefined, undefined, props, true)),
+  autoFrame: (pid: string, draft: Draft, trigger: 'auto' | 'manual' | 'portrait_preset' = 'manual'): Promise<AutoFrameResult> => observeStudioOperation('studio_auto_frame', () => api.post(`/studio/${pid}/auto-frame`, draft, { timeout: 120000 }), (result: AutoFrameResult, props) => {
+    const framed = result.scenes.filter(s => s.crop_x !== null).length
+    captureBusinessEvent('studio_auto_frame_finished', safeStudioProperties({ ...props, outcome: 'completed', framing_outcome: framed ? 'framed' : 'no_detection', framed_count: framed, scene_count: result.scenes.length, fit_count: result.scenes.reduce((n,s) => n + s.fit_shots, 0) }))
+  }, { ...workflow.context(pid), trigger, ...draftProperties(draft) }),
   capabilities: (): Promise<{ visual_analysis: boolean; visual_model: string }> => api.get('/studio/capabilities'),
   get: (pid: string, signal?: AbortSignal): Promise<Workspace> => observeStudioWorkspace(pid, () => api.get(`/studio/${pid}`, { signal })),
   titleThumbnail: (style: string, version = 6) => `${api.defaults.baseURL}/studio/title-presets/${style}/thumbnail?v=${version}`,
   titlePreview: (pid: string, draft: Draft, signal?: AbortSignal, layer = 'artwork'): Promise<Blob> => api.post(`/studio/${pid}/title-preview?layer=${layer}`, draft, {responseType:'blob', signal}),
   candidates: (pid: string, signal?: AbortSignal): Promise<CandidateList> => api.get(`/studio/${pid}/candidates`, { signal }),
-  import: (body: FormData): Promise<{ project_id: string }> => observeStudioOperation('studio_import', () => api.post('/studio/import', body, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 0 }), (result: { project_id: string }) => workflow.watch('studio-screen', result.project_id, undefined, undefined, studioImportProperties(body) as Record<string, string | boolean>), studioImportProperties(body)),
-  confirmPlan: (pid: string, planId: string, goals: Goal[], options: ImportOptions, analysisMode: AnalysisMode) => observeStudioOperation('studio_confirm', () => api.post(`/studio/${pid}/start`, {plan_id:planId, goals, analysis_mode:analysisMode, language:options.language, aspect:options.aspect, duration:options.duration}), () => workflow.watch('studio-production', planId, pid, undefined, { analysis_mode: analysisMode, ...studioGoals(goals) }), { analysis_mode: analysisMode, ...studioGoals(goals), aspect: options.aspect || 'auto' }),
-  correctPlan: (pid: string, body: ImportOptions) => observeStudioOperation('studio_plan_update', () => api.put(`/studio/${pid}/plan`, body), () => workflow.watch('studio-screen', pid, undefined, undefined, {}, true), {goal: body.goal, aspect: body.aspect || 'auto'}),
-  analyze: (pid: string) => observeStudioOperation('studio_rescreen', () => api.post(`/studio/${pid}/analyze`), () => workflow.watch('studio-screen', pid, undefined, undefined, {}, true)),
-  create: (pid: string, clip_ids: string[], title: string, reuse_existing = false): Promise<Draft> => observeStudioOperation('studio_draft_create', () => api.post(`/studio/${pid}/drafts`, { clip_ids, title, reuse_existing }), undefined, {source_type: 'content_clip'}),
-  eventDraft: (pid: string, id: string): Promise<Draft> => observeStudioOperation('studio_draft_create', () => api.post(`/studio/${pid}/events/${id}/draft`), undefined, {source_type: 'visual_event'}),
-  save: (pid: string, draft: Draft): Promise<Draft> => observeStudioOperation('studio_draft_save', () => api.put(`/studio/${pid}/drafts/${draft.id}`, draft), undefined, { aspect: draft.aspect, subtitle_enabled: draft.subtitles, title_style: draft.title_style }),
-  duplicate: (pid: string, draft: Draft, title: string, language: Language): Promise<Draft> => observeStudioOperation('studio_draft_duplicate', () => api.post(`/studio/${pid}/drafts/${draft.id}/duplicate`, { draft, title, language }), undefined, { aspect: draft.aspect, subtitle_enabled: draft.subtitles, title_style: draft.title_style }),
-  rewrite: (pid: string, draft: Draft, instruction: string): Promise<Draft> => observeStudioOperation('studio_rewrite', () => api.post(`/studio/${pid}/rewrite`, { draft, instruction }, { timeout: 310000 }), undefined, { aspect: draft.aspect, subtitle_enabled: draft.subtitles, title_style: draft.title_style }),
-  export: (pid: string, draft: string, revision: number, settings?: Pick<Draft, 'aspect' | 'subtitles' | 'title_style'>): Promise<RenderJob> => observeStudioOperation('studio_export', () => api.post(`/studio/${pid}/drafts/${draft}/export`, { revision }), (job: RenderJob) => workflow.watch('studio-export', job.job_id, pid, undefined, { aspect: settings?.aspect, subtitle_enabled: settings?.subtitles, title_style: settings?.title_style }), { aspect: settings?.aspect, subtitle_enabled: settings?.subtitles, title_style: settings?.title_style }),
+  import: (body: FormData): Promise<{ project_id: string; analysis_run_id?: string }> => {
+    const props = studioImportProperties(body)
+    return observeStudioOperation('studio_import', () => api.post('/studio/import', body, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 0 }), (result: { project_id: string; analysis_run_id?: string }, observed) => {
+      workflow.rememberProject(result.project_id, props)
+      workflow.watch('studio-screen', result.project_id, undefined, undefined, observed, false, result.analysis_run_id)
+    }, props)
+  },
+  confirmPlan: (pid: string, planId: string, goals: Goal[], options: ImportOptions, analysisMode: AnalysisMode) => observeStudioOperation('studio_confirm', () => api.post<unknown, { analysis_run_id?: string }>(`/studio/${pid}/start`, {plan_id:planId, goals, analysis_mode:analysisMode, language:options.language, aspect:options.aspect, duration:options.duration}), (_result, props) => workflow.watch('studio-production', planId, pid, undefined, { ...props, ...workflow.context(pid), analysis_mode: analysisMode, ...studioGoals(goals) }, false, _result.analysis_run_id), { ...workflow.context(pid), analysis_mode: analysisMode, ...studioGoals(goals), aspect: options.aspect || 'auto' }),
+  correctPlan: (pid: string, body: ImportOptions) => observeStudioOperation('studio_plan_update', () => api.put<unknown, { analysis_run_id?: string }>(`/studio/${pid}/plan`, body), (_result, props) => workflow.watch('studio-screen', pid, undefined, undefined, props, true, _result.analysis_run_id), {...workflow.context(pid), goal: body.goal, aspect: body.aspect || 'auto'}),
+  analyze: (pid: string) => observeStudioOperation('studio_rescreen', () => api.post<unknown, { analysis_run_id?: string }>(`/studio/${pid}/analyze`), (_result, props) => workflow.watch('studio-screen', pid, undefined, undefined, props, true, _result.analysis_run_id), workflow.context(pid)),
+  create: (pid: string, clip_ids: string[], title: string, reuse_existing = false): Promise<Draft> => observeStudioOperation('studio_draft_create', () => api.post(`/studio/${pid}/drafts`, { clip_ids, title, reuse_existing }), undefined, {...workflow.context(pid), source_type: 'content_clip'}),
+  eventDraft: (pid: string, id: string): Promise<Draft> => observeStudioOperation('studio_draft_create', () => api.post(`/studio/${pid}/events/${id}/draft`), undefined, {...workflow.context(pid), source_type: 'visual_event'}),
+  save: (pid: string, draft: Draft): Promise<Draft> => observeStudioOperation('studio_draft_save', () => api.put(`/studio/${pid}/drafts/${draft.id}`, draft), undefined, { ...workflow.context(pid), ...draftProperties(draft) }),
+  duplicate: (pid: string, draft: Draft, title: string, language: Language): Promise<Draft> => observeStudioOperation('studio_draft_duplicate', () => api.post(`/studio/${pid}/drafts/${draft.id}/duplicate`, { draft, title, language }), undefined, { ...workflow.context(pid), ...draftProperties(draft) }),
+  rewrite: (pid: string, draft: Draft, instruction: string): Promise<Draft> => observeStudioOperation('studio_rewrite', () => api.post(`/studio/${pid}/rewrite`, { draft, instruction }, { timeout: 310000 }), undefined, { ...workflow.context(pid), ...draftProperties(draft) }),
+  export: (pid: string, draft: string, revision: number, settings?: Partial<Draft>): Promise<RenderJob> => observeStudioOperation('studio_export', () => api.post(`/studio/${pid}/drafts/${draft}/export`, { revision }), (job: RenderJob, props) => workflow.watch('studio-export', job.job_id, pid, undefined, { ...props, ...workflow.context(pid, job.job_id) }), { ...workflow.context(pid), ...draftProperties(settings) }),
   thumbnail: (pid: string, draft: string, revision: number, job?: string) => `${api.defaults.baseURL}/studio/${pid}/drafts/${draft}/thumbnail?revision=${revision}${job ? `&job_id=${job}` : ''}`,
   video: (pid: string, jid: string, download = false) => `${api.defaults.baseURL}/studio/${pid}/exports/${jid}/video${download ? '?download=true' : ''}`,
 }

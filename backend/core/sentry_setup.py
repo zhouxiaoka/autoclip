@@ -130,7 +130,7 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     tags = event.get("tags") or {}
     allowed = {
         "area": {"studio"}, "error_code": STUDIO_ERROR_CODES,
-        "phase": {"screening", "production", "render", "analysis", "dispatch", "vision_test", "rewrite"},
+        "phase": {"screening", "production", "render", "analysis", "dispatch", "vision_test", "rewrite", "auto_frame", "framing_install"},
         "analysis_mode": {"subtitle", "visual"},
         "goal": {"content", "highlight", "promo"},
         "runtime": {"python"}, "app_mode": {"web", "desktop"},

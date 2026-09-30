@@ -27,7 +27,13 @@ export function startWorkflowObserver(): () => void {
         if (stopped || !workflow.active(generation)) break
         if (w.settled) continue
         try {
-          if (w.kind.startsWith('studio-')) {
+          if (w.kind === 'framing-runtime') {
+            const { data } = await axios.get('/studio/framing/status', { baseURL, timeout: 5000 })
+            if (!stopped && workflow.active(generation) && ['installed', 'error'].includes(data.status)) {
+              workflow.emitOnce(w, 'finished', 'studio_framing_install_finished', { ...w.properties, outcome: data.status === 'installed' ? 'completed' : 'failed', framing_status: data.status })
+              if (w.seen.includes('finished')) w.settled = true
+            }
+          } else if (w.kind.startsWith('studio-')) {
             const { data } = await axios.get(`/studio/${encodeURIComponent(w.projectId || w.id)}`, { baseURL, timeout: 5000 })
             if (!stopped && workflow.active(generation)) workflow.observeStudio(w, data)
           } else if (w.kind === 'project') {

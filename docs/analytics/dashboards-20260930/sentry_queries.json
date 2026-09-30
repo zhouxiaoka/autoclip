@@ -1,0 +1,13 @@
+{
+  "organization": "autoclip-ts",
+  "dashboard_id": "10252510",
+  "title": "AutoClip｜出片稳定性与故障定位",
+  "period": "7d",
+  "widgets": [
+    {"id":"2249816","title":"工程异常趋势（排除验收）","display":"line","fields":["count()"],"conditions":"(level:error OR level:fatal) !telemetry_test:true !build_environment:development !environment:development"},
+    {"id":"2249817","title":"Studio 故障阶段（含配置警告）","display":"line","fields":["phase","count()"],"conditions":"area:studio !telemetry_test:true !build_environment:development !environment:development","sort":"-count()"},
+    {"id":"2249818","title":"工程异常按版本（定位发布回归）","display":"line","fields":["release","count()"],"conditions":"(level:error OR level:fatal) !telemetry_test:true !build_environment:development !environment:development","sort":"-count()"},
+    {"id":"2249819","title":"高频问题排查","display":"table","fields":["issue","count()"],"conditions":"(level:error OR level:fatal) !telemetry_test:true !build_environment:development !environment:development","sort":"-count()"}
+  ],
+  "notes": "Excludes explicitly marked development and telemetry_test; unknown environments remain visible. Error counts are not failed jobs or affected users."
+}
