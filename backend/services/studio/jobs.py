@@ -220,7 +220,7 @@ def inspect_project(project_id, options, url=None, browser=None):
         if (previous.get('analysis') or {}).get('status') == 'running':
             raise ValueError('当前任务正在运行，请稍后再试')
         state = deepcopy(previous)
-        state['analysis'] = {'status':'running', 'phase':'screening', 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
+        state['analysis'] = {'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
         try:
             executor.submit(_inspect, project_id, options, url, browser)
@@ -232,6 +232,8 @@ def inspect_project(project_id, options, url=None, browser=None):
                 previous['analysis'] = {'status':'failed', 'phase':'screening', 'error':message}
             store.write(project_id, previous)
             raise ValueError(message) from None
+
+        return state['analysis']['run_id']
 
 
 def _inspect(project_id, options, url, browser):
@@ -285,7 +287,7 @@ def confirm_project(project_id, body):
             for goal in body.goals
         }
         plan['confirmed_preferences'] = plan['goal_preferences'][body.goals[0]].copy()
-        state['analysis'] = {'status':'running', 'phase':'production', 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
+        state['analysis'] = {'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
         try:
             executor.submit(_produce_selected, project_id, plan)
@@ -296,6 +298,8 @@ def confirm_project(project_id, body):
             # staging state so an explicit retry can use the same plan ID.
             store.write(project_id, previous)
             raise ValueError('制作任务未能启动，请重试确认；原素材与已有成片已保留') from None
+
+        return state['analysis']['run_id']
 
 
 def _produce_selected(project_id, plan):

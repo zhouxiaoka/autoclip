@@ -79,14 +79,14 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   }
 
   /** Centre every scene's crop window on the speaker; scenes without a face keep their value. */
-  const autoFrame = async (target?: Draft) => {
+  const autoFrame = async (target?: Draft, trigger: 'auto' | 'manual' | 'portrait_preset' = 'manual') => {
     const base = target || draft
     if (!base || framing.status?.status !== 'installed') return
     setFraming(f => ({ ...f, busy: true, error: undefined }))
     try {
-      const result = await studioApi.autoFrame(projectId, base)
+      const result = await studioApi.autoFrame(projectId, base, trigger)
       const found = new Map(result.scenes.filter(s => s.crop_x !== null).map(s => [s.id, s]))
-      setDraft(current => current ? { ...current, scenes: current.scenes.map(sc => { const f = found.get(sc.id); return f ? { ...sc, crop_x: f.crop_x, crop_track: f.crop_track } : sc }) } : current)
+      setDraft(current => current ? { ...current, scenes: current.scenes.map(sc => { const f = found.get(sc.id); return f ? { ...sc, crop_x: f.crop_x, crop_track: f.crop_track, framing_source: 'auto' as const, framing_adjusted: false } : sc }) } : current)
       setShowRendered(false)
       setFraming(f => ({ ...f, busy: false, result: { framed: found.size, total: result.scenes.length, shots: result.scenes.reduce((n, s) => n + (s.crop_track?.length ?? 0), 0), fit: result.scenes.reduce((n, s) => n + s.fit_shots, 0) } }))
     } catch (e) { setFraming(f => ({ ...f, busy: false, error: t(errorText(e)) })) }
@@ -100,18 +100,18 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
   useEffect(() => {
     if (!cropping || framing.busy || framing.result || framing.status?.status !== 'installed') return
     if (draft?.scenes.some(s => s.crop_x != null || s.crop_track?.length)) return
-    void autoFrame()
+    void autoFrame(undefined, 'auto')
   }, [cropping, framing.status?.status])
   /** Edit only the shot under the playhead; the rest of the scene's track stays as detected. */
   const setShot = (sceneId: string, changes: Partial<CropPoint>) => {
-    if (draft) patch({ scenes: draft.scenes.map(sc => sc.id === sceneId ? patchShot(sc, currentTime, changes, draft.crop_x ?? .5) : sc) })
+    if (draft) patch({ scenes: draft.scenes.map(sc => sc.id === sceneId ? { ...patchShot(sc, currentTime, changes, draft.crop_x ?? .5), framing_source: sc.framing_source || 'manual', framing_adjusted: true } : sc) })
   }
   const applyPortrait = () => {
     if (!draft) return
     const next = portraitDesign(draft)
     patch(next)
     setFraming(f => ({ ...f, result: undefined }))
-    void autoFrame(next)
+    void autoFrame(next, 'portrait_preset')
   }
 
   const [suggestion, setSuggestion] = useState<Draft | null>(null)

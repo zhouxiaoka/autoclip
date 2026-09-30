@@ -15,7 +15,8 @@ import FirstRunSetup from '../features/settings/FirstRunSetup'
 
 
 import { exampleProjectApi, projectApi } from '../services/api'
-import { trackExampleProjectOpened } from '../analytics/events'
+import { beginExperience } from '../analytics/experience'
+import { workflow } from '../analytics/observer'
 import { Btn } from '../ui'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Project, useProjectStore } from '../store/useProjectStore'
@@ -111,13 +112,16 @@ const HomePage: React.FC = () => {
   }
 
   const openExample = async () => {
+    const finish = beginExperience('example_project_open', { material_origin: 'sample' })
     setExampleBusy(true)
     try {
-      const { project_id } = await exampleProjectApi.create()
-      trackExampleProjectOpened()
+      const { project_id, resolution, example_version } = await exampleProjectApi.create()
+      workflow.rememberProject(project_id, { material_origin: 'sample', example_version })
+      finish('completed', { resolution, example_version, ...workflow.context(project_id) })
       void loadProjects().catch(() => undefined)
       navigate(`/project/${project_id}`)
     } catch (error) {
+      finish('failed', {}, error)
       message.error(t("示例项目暂时不可用"))
       console.error('Example project error:', error)
     } finally {

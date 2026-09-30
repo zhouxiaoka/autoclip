@@ -1,0 +1,37 @@
+[
+  {
+    "name": "01｜新用户引导与配置障碍（7日·生产）",
+    "short_id": "OEM1aRq2",
+    "sql": "SELECT event, properties.placement AS placement, properties.section AS section, properties.provider AS provider, properties.trigger AS trigger, properties.outcome AS outcome, count() AS events, uniq(distinct_id) AS devices FROM events WHERE timestamp >= now() - INTERVAL 7 DAY AND properties.experience_schema_version = 1 AND properties.analytics_environment = 'production' GROUP BY event, placement, section, provider, trigger, outcome ORDER BY events DESC LIMIT 200"
+  },
+  {
+    "name": "02｜示例与真实素材交付（渲染·保存·发布）",
+    "short_id": "MKW3Cujb",
+    "sql": "SELECT properties.material_origin AS material_origin, event, properties.runtime AS runtime, uniq(distinct_id) AS devices, uniq(tuple(distinct_id, properties.flow_id)) AS flows, uniq(tuple(distinct_id, properties.artifact_id)) AS artifacts FROM events WHERE timestamp >= now() - INTERVAL 7 DAY AND properties.studio_schema_version = 2 AND properties.analytics_environment = 'production' AND properties.material_origin IN ('sample','user','unknown') AND properties.artifact_id IS NOT NULL AND (event = 'studio_download_saved' OR (event IN ('studio_export_finished','social_publish_finished') AND properties.outcome = 'completed')) GROUP BY material_origin, event, runtime ORDER BY devices DESC"
+  },
+  {
+    "name": "03｜制作结果与失败原因（7日·生产）",
+    "short_id": "52q51Mkw",
+    "sql": "SELECT properties.material_origin AS material_origin, event, properties.outcome AS outcome, properties.error_code AS error_code, properties.analysis_mode AS analysis_mode, count() AS events, uniq(distinct_id) AS devices, avg(toFloat(properties.duration_ms)) AS avg_duration_ms, sum(toFloat(properties.result_count)) AS outputs FROM events WHERE timestamp >= now() - INTERVAL 7 DAY AND properties.studio_schema_version = 2 AND properties.analytics_environment = 'production' AND event IN ('studio_screen_finished','studio_production_finished','studio_export_finished','studio_download_failed','social_publish_finished') GROUP BY material_origin,event,outcome,error_code,analysis_mode ORDER BY events DESC LIMIT 100"
+  },
+  {
+    "name": "04｜示例后7日真实出片（成熟设备队列·非安装转化）",
+    "short_id": "XzZK8Afr",
+    "sql": "WITH sample_cohort AS (SELECT distinct_id, min(timestamp) AS sample_at FROM events WHERE event = 'example_project_viewed' AND properties.experience_schema_version = 1 AND properties.analytics_environment = 'production' AND timestamp >= now() - INTERVAL 14 DAY AND timestamp < now() - INTERVAL 7 DAY GROUP BY distinct_id), real_renders AS (SELECT distinct_id, timestamp AS rendered_at FROM events WHERE event = 'studio_export_finished' AND properties.studio_schema_version = 2 AND properties.analytics_environment = 'production' AND properties.material_origin = 'user' AND properties.outcome = 'completed' AND timestamp >= now() - INTERVAL 14 DAY) SELECT uniq(s.distinct_id) AS observed_sample_devices, uniqIf(s.distinct_id, r.rendered_at > s.sample_at AND r.rendered_at <= s.sample_at + INTERVAL 7 DAY) AS real_render_within_7d_devices FROM sample_cohort s LEFT JOIN real_renders r ON s.distinct_id = r.distinct_id"
+  },
+  {
+    "name": "05｜自动取景结果与最终采用（7日·生产）",
+    "short_id": "S7FF0GVR",
+    "sql": "SELECT event, properties.material_origin AS material_origin, properties.trigger AS trigger, properties.outcome AS outcome, properties.framing_outcome AS framing_outcome, properties.layout AS layout, properties.auto_frame_retained AS auto_frame_retained, properties.has_manual_adjustment AS has_manual_adjustment, count() AS events, uniq(distinct_id) AS devices FROM events WHERE timestamp >= now() - INTERVAL 7 DAY AND properties.studio_schema_version = 2 AND properties.analytics_environment = 'production' AND event IN ('studio_framing_install_requested','studio_framing_install_request_failed','studio_framing_install_finished','studio_auto_frame_requested','studio_auto_frame_request_failed','studio_auto_frame_finished','studio_draft_save_accepted','studio_export_finished') GROUP BY event,material_origin,trigger,outcome,framing_outcome,layout,auto_frame_retained,has_manual_adjustment ORDER BY events DESC LIMIT 100"
+  },
+  {
+    "name": "06｜引导决策与模型发现诊断（保存≠连通）",
+    "short_id": "R8M5o8fj",
+    "sql": "SELECT event, properties.placement AS placement, properties.action AS action, properties.reason AS reason, properties.role AS role, properties.mode AS mode, properties.source AS discovery_source, properties.preview AS preview, properties.defaults_applied AS defaults_applied, properties.error_code AS error_code, properties.outcome AS outcome, count() AS events, uniq(distinct_id) AS devices FROM events WHERE timestamp >= now() - INTERVAL 7 DAY AND properties.experience_schema_version = 1 AND properties.analytics_environment = 'production' AND event IN ('setup_action','import_blocked','provider_configuration_save_finished','provider_connection_test_finished','model_discovery_finished') GROUP BY event,placement,action,reason,role,mode,discovery_source,preview,defaults_applied,error_code,outcome ORDER BY events DESC LIMIT 100"
+  },
+  {
+    "name": "07｜数据覆盖与最近收数（验收·未知环境单列）",
+    "short_id": "2u7biycg",
+    "sql": "SELECT toString(properties.schema_version) AS base_schema, toString(properties.studio_schema_version) AS studio_schema, toString(properties.experience_schema_version) AS experience_schema, toString(properties.analytics_environment) AS environment, toString(properties.app_version) AS app_version, toString(properties.runtime) AS runtime, count() AS events, uniq(distinct_id) AS devices, uniq(event) AS event_types, max(timestamp) AS last_seen FROM events WHERE timestamp >= now() - INTERVAL 7 DAY AND event NOT LIKE '$%' GROUP BY base_schema,studio_schema,experience_schema,environment,app_version,runtime ORDER BY last_seen DESC LIMIT 100"
+  }
+]

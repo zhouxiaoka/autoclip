@@ -19,6 +19,7 @@ def example_project_info(db: Session = Depends(get_db)):
 
 @router.post('/example-project/create')
 def create_example_project(db: Session = Depends(get_db)):
+    existing = example_project.find_existing(db)
     try:
         project = example_project.create(db)
     except FileNotFoundError as exc:
@@ -26,4 +27,4 @@ def create_example_project(db: Session = Depends(get_db)):
     except Exception:
         logger.exception('创建示例项目失败')
         raise HTTPException(status_code=500, detail='创建示例项目失败，请稍后重试')
-    return {'project_id': project.id, 'name': project.name}
+    return {'project_id': project.id, 'name': project.name, 'resolution': 'reused' if existing else 'created', 'example_version': (project.processing_config or {}).get('example_version', 1)}

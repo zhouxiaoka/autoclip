@@ -3,7 +3,7 @@
 *[中文版 →](./PRIVACY.md)*
 
 **Effective Date: June 3, 2026**
-**Last Updated: September 27, 2026**
+**Last Updated: September 30, 2026**
 
 > ⚠️ This is a draft template. Please have legal counsel review it before publishing (see "Clauses Requiring Legal Review" at the end).
 
@@ -34,6 +34,10 @@ To understand how features are used, find and fix problems, and improve the prod
 | Usage behavior | Events such as app launch, page views, video import, clip export, saving settings | Measure feature usage & conversion |
 | Outcomes | Success/failure of processing, the failing stage and error code | Improve stability |
 | Anonymous identifier | A randomly generated device ID (stored locally, not linked to your real identity) | Distinguish devices, compute retention |
+
+| Workflow correlation | Independently generated random flow, operation, attempt and artifact tokens; sample/user material category; enumerated setup, connection-test, settings-section and framing results and counts | Relate stages and outcomes and distinguish sample use; internal project/job IDs, model names, addresses and content are not sent |
+
+Local correlation mappings retain up to 500 projects active within 35 days and 100 artifact tokens per project; disabling analytics clears them. Studio project files also retain up to 100 compact execution receipts for state recovery, without video or prompt content. These are local project data and are not deleted by disabling analytics.
 
 - **Anonymity**: We use a randomly generated device identifier and do not build identifiable user profiles.
 - **Recipient**: PostHog Inc., with data stored on its **United States** servers (see Section 6, "International Transfers").

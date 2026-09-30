@@ -129,7 +129,7 @@ async def import_visual(
                     target.write(chunk)
             project.video_path = str(path)
             db.commit()
-        call(jobs.inspect_project, pid, prefs, url, browser)
+        run_id = call(jobs.inspect_project, pid, prefs, url, browser)
     except Exception:
         project.status = 'failed'
         db.commit()
@@ -137,13 +137,13 @@ async def import_visual(
     finally:
         if video:
             await video.close()
-    return {'project_id': pid}
+    return {'project_id': pid, 'analysis_run_id': run_id}
 
 @router.get('/{project_id}')
 def workspace(project_id: str, db: Session = Depends(get_db)):
-    project_or_404(project_id, db)
+    project = project_or_404(project_id, db)
     data = call(store.read, project_id)
-    return {**data, 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
+    return {**data, 'material_origin': 'sample' if (project.processing_config or {}).get('example') else 'user', 'example_version': (project.processing_config or {}).get('example_version'), 'jobs': [{k: v for k, v in j.items() if k not in ('instance', 'snapshot')} for j in data['jobs']]}
 
 @router.get('/{project_id}/source-preview')
 def source_preview_status(project_id: str, db: Session = Depends(get_db)):
@@ -233,8 +233,8 @@ def analyze_again(project_id: str, db: Session = Depends(get_db)):
         url = (project.project_metadata or {}).get('source_url')
         if not url:
             raise HTTPException(404, '原素材不存在，请重新导入')
-    call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
-    return {'ok': True}
+    run_id = call(jobs.inspect_project, project_id, prefs, url, (project.processing_config or {}).get('creative_browser'))
+    return {'ok': True, 'analysis_run_id': run_id}
 
 @router.put('/{project_id}/plan')
 def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get_db)):
@@ -254,20 +254,20 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()
         try:
-            call(jobs.inspect_project, project_id, body, url, previous_config.get('creative_browser'))
+            run_id = call(jobs.inspect_project, project_id, body, url, previous_config.get('creative_browser'))
         except Exception:
             # A rejected submission must not persist preferences for a plan
             # that was never produced. inspect_project restores the JSON state.
             project.processing_config = previous_config
             db.commit()
             raise
-    return {'ok': True}
+    return {'ok': True, 'analysis_run_id': run_id}
 
 @router.post('/{project_id}/start')
 def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
-    call(jobs.confirm_project, project_id, body)
-    return {'ok': True}
+    run_id = call(jobs.confirm_project, project_id, body)
+    return {'ok': True, 'analysis_run_id': run_id}
 
 @router.post('/{project_id}/drafts')
 def create_draft(project_id: str, body: CreateDraft, db: Session = Depends(get_db)):
