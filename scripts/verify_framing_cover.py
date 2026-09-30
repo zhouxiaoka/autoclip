@@ -49,6 +49,10 @@ video = project / 'output/studio/speaker.mp4'
 rendered = _probe(video)
 assert (rendered['width'], rendered['height']) == (1080, 1920)
 assert 5.9 <= rendered['duration'] <= 6.1 and has_audio(video)
+pair = framing._grab_pair(video, 1, project, 'rendered-person')
+assert pair, 'rendered video frame extraction failed'
+rendered_center = framing._speaker_center(pair)
+assert rendered_center is not None and .25 <= rendered_center <= .75, rendered_center
 (project / 'metadata/clips_metadata.json').write_text(json.dumps([{
     'id': '1', 'generated_title': '公开访谈', 'start_time': '00:00:00,000',
     'end_time': '00:00:06,000', 'source_type': 'studio', 'video_path': str(video),
@@ -72,5 +76,6 @@ report_path.write_text(json.dumps({
     'framing_runtime_install': 'passed', 'actual_face_detection': 'passed',
     'samples': scene['samples'], 'faces': scene['faces'], 'crop_track': scene['crop_track'],
     'portrait_render': rendered, 'original_audio': 'passed', 'covers': covers, 'paid_calls': 0,
+    'rendered_face_center': rendered_center,
 }, ensure_ascii=False, indent=2), encoding='utf-8')
 print('Installed face detection, portrait render and both local covers passed')
