@@ -220,18 +220,27 @@ def run_content(project_id, video):
 
     return clips
 
-def _apply_strategy(draft, strategy_id):
-    """Materialize platform packaging defaults without reinterpreting content."""
+def _apply_strategy(draft, strategy_id, *, burned_subtitles=False):
+    """Materialize platform packaging defaults without reinterpreting content.
+
+    When the source already has subtitles in the picture, do not stack a second track, and
+    keep the full frame on vertical outputs so cropping cannot cut the original lines.
+    """
     from backend.services.platform_strategy import platform_strategy
     strategy = platform_strategy(strategy_id)
     value = dict(draft)
+    layout = strategy.layout if strategy.layout != 'none' else value.get('layout', 'fit')
+    if burned_subtitles and strategy.aspect == 'portrait' and layout == 'crop':
+        layout = 'blur'
     value.update(
         aspect=strategy.aspect,
-        layout=strategy.layout if strategy.layout != 'none' else value.get('layout', 'fit'),
+        layout=layout,
         subtitle_style=strategy.subtitle_style,
         title_style=strategy.title_style,
         title_motion=strategy.title_motion,
     )
+    if burned_subtitles:
+        value['subtitles'] = False
     if value['title_style'] == 'editorial':
         value['title_template_version'] = max(2, value.get('title_template_version', 1))
     elif value['title_style'] == 'comic':
@@ -275,6 +284,26 @@ def _content_drafts(project_id, plan, video):
     events, coverage = analyze(video, prefs)
     drafts = make_drafts(events, prefs, plan.get('overrides', {}).get('instruction', ''), source_duration=intelligence._probe(video).get('duration'))
     return drafts, [event.model_dump() for event in events], coverage
+
+
+def _source_has_burned_subtitles(project_id, video=None):
+    """Detect once per project and cache on the generation; detection failure means 'no'."""
+    cached = (store.read(project_id).get('generation') or {}).get('source_has_burned_subtitles')
+    if cached is not None:
+        return bool(cached)
+    try:
+        from backend.services.publish_export import _probe
+        from backend.services.studio.burned_subtitles import has_burned_subtitles
+        video = video or source(project_id)
+        found = has_burned_subtitles(video, float(_probe(video).get('duration') or 0))
+    except Exception as error:  # noqa: BLE001 - never block output on a heuristic
+        logger.warning('Burned subtitle detection failed: %s', type(error).__name__)
+        found = False
+    def remember(data):
+        if data.get('generation') is not None:
+            data['generation']['source_has_burned_subtitles'] = found
+    store.change(project_id, remember)
+    return found
 
 
 def _fit_platform_limit(project_id, value, strategy):
@@ -324,6 +353,7 @@ def _auto_generate(project_id, plan):
         variants = []
         derived_drafts = []
         from backend.services.platform_strategy import platform_strategy
+        burned = _source_has_burned_subtitles(project_id, video)
         for base in base_drafts:
             for strategy_id in platforms:
                 strategy = platform_strategy(strategy_id)
@@ -332,7 +362,7 @@ def _auto_generate(project_id, plan):
                     skipped.append({'strategy_id': strategy_id, 'reason': '素材没有足够完整的长内容'})
                     continue
                 value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
-                draft = _apply_strategy(value, strategy_id)
+                draft = _apply_strategy(value, strategy_id, burned_subtitles=burned)
                 derived_drafts.append(draft.model_dump())
                 variant_id = uuid.uuid4().hex
                 variants.append({
@@ -375,6 +405,7 @@ def append_platform_variants(project_id, platforms, branding):
         for item in state.get('output_variants', [])
     }
     seen_scenes, variants, derived = set(), [], []
+    burned = _source_has_burned_subtitles(project_id)
     for base in state.get('drafts', []):
         signature = tuple((scene['start'], scene['end']) for scene in base.get('scenes', []))
         if not signature or signature in seen_scenes:
@@ -388,7 +419,7 @@ def append_platform_variants(project_id, platforms, branding):
             if strategy.duration_policy == 'long' and duration < (strategy.min_recommended_duration_sec or 0):
                 continue
             value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
-            draft = _apply_strategy(value, strategy_id)
+            draft = _apply_strategy(value, strategy_id, burned_subtitles=burned)
             derived.append(draft.model_dump())
             variants.append({
                 'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': 1,
