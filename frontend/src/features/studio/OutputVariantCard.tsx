@@ -3,6 +3,7 @@ import { t } from '../../i18n'
 import { Btn, fmtDuration } from '../../ui'
 import StudioDownloadLink from './StudioDownloadLink'
 import { Draft, OutputVariant, RenderJob } from './types'
+import { studioApi } from './api'
 import './quick-output.css'
 
 const platformLabels: Record<string, string> = {
@@ -16,7 +17,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const failed = variant.status === 'failed'
   const duration = job?.result?.duration ?? (draft ? draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) : 0)
   return <article className="ac-card">
-    <div className="studio-variant-thumb"><span className="play">▷</span><span className="ac-tag ac-tag--tl">{platformLabels[variant.strategy_id] || variant.strategy_id}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}</div>
+    <div className="studio-variant-thumb">{completed && variant.render_job_id ? <video className="studio-variant-video" controls preload="metadata" src={studioApi.video(projectId, variant.render_job_id)}/> : <span className="play">▷</span>}<span className="ac-tag ac-tag--tl">{platformLabels[variant.strategy_id] || variant.strategy_id}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}</div>
     <div className="ac-card-body">
       <h2 className="ac-card-title">{draft?.title || t('正在准备成片')}</h2>
       <div className={`studio-output-state studio-output-state--${failed ? 'failed' : completed ? 'ready' : 'rendering'}`} role="status">

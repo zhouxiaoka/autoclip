@@ -247,3 +247,29 @@ frontend typecheck: passed
 - 当前“分享/案例征集”尚未落地，不能把品牌片尾展示次数解释为真实外部传播。
 - 浏览器下载只表示下载请求；成功交付率仍以桌面原生保存为主证据。
 - 全部新版指标需要在独立 validation 环境和真实安装包中验证收数，不能从本地测试推断线上已生效。
+
+## 包 6：结果页真实成片预览
+
+状态：已完成，待合入。
+
+### 完成内容
+
+- 自动 variant 完成后，结果卡直接播放 immutable render job 的真实 MP4，不再只显示占位图。
+- 排队/失败版本继续显示稳定状态占位，完成后自动切换为视频播放器。
+- 保留下载、Studio 编辑和单版本重试入口；预览不新增后端截图缓存。
+- 增加静态回归，确认完成 variant 使用 `/studio/{project}/exports/{job}/video`。
+
+### 已验证
+
+```text
+frontend: npm run typecheck
+frontend: npm run lint
+frontend: npm run build
+frontend: npm test
+```
+
+全部通过。构建继续保留既有动态导入和主 bundle 体积警告。
+
+### 下一包
+
+发布路径按 variant 路由：Upload-Post/B站发布时选择正确的短竖版或横版长视频输出，不再将一个文件盲目发给所有平台。
