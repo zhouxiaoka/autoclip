@@ -680,7 +680,18 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             </div>
           )}
 
-          {/* 详细进度显示已隐藏 - 只在状态块中显示百分比 */}
+          {normalizedStatus === 'failed' && failureText && (
+            <div
+              className="ac-empty"
+              role="alert"
+              onClick={(e) => e.stopPropagation()}
+              style={{ marginTop: 8, padding: 8, textAlign: 'left' }}
+            >
+              <span className="ac-mono" style={{ fontSize: 12.5, color: 'var(--ac-sub)', overflowWrap: 'anywhere', userSelect: 'text' }}>
+                {failureText}
+              </span>
+            </div>
+          )}
 
         </div>
       </div>
