@@ -36,4 +36,6 @@
 
 实际浏览器验收了 FeedbackDialog：可见错误码与独立的 Whisper/tiny 配置；填写正文与邮箱后刷新父组件，草稿保留；向本机 fixture 发送的负载保留错误码/阶段/转写型号，不含接口地址；无运行时错误或遮罩。前端 173 个测试、类型检查、lint 和构建通过，收件纯函数测试通过。
 
+Windows 安装包另有可选的真实 Whisper 验收：`windows-install-smoke.yml` 的 `verify_whisper` 会在覆盖安装、桌面窗口和真实视频流水线通过后，用安装目录内的便携 Python 运行 `verify_whisper_recovery.py --resources ...`。该模式断言导入的 backend 来自安装目录，使用内置 ffmpeg，实际安装运行时/下载 tiny，再验证离线真实语音以及已有 PyAV 19 的恢复。报告明确区分开发环境与安装版；没有付费模型请求。测试脚本和工作流未改变打包的应用代码，可以复用 `fa2e9d22` 的安装包。
+
 原始反馈继续跟踪，只有收到对应输入并验证恢复才按已修复关闭。
