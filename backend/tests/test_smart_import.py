@@ -19,6 +19,40 @@ class Immediate:
 def recommendation(goal='highlight'):
     return {'content_type':'gameplay' if goal!='content' else 'talk', 'goal':goal, 'reason':'测试证据', 'confidence':.8, 'aspect':'original', 'duration':30}
 
+def test_async_analysis_failure_persists_error_after_exception_scope(client, monkeypatch):
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: True)
+    monkeypatch.setattr(jobs, 'analyze', lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('analysis failed')))
+
+    jobs.analyze_project('p1', ImportOptions(goal='highlight'))
+    state = client.get('/studio/p1').json()
+    assert state['analysis']['status'] == 'failed'
+    assert state['analysis']['error'] == 'analysis failed'
+
+
+def test_import_persists_platform_and_branding_contract_without_auto_start(client, source, monkeypatch):
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+
+    response = client.post(
+        '/studio/import',
+        data={'platforms': 'tiktok', 'brand_outro_enabled': 'false', 'name': 'Platform contract'},
+        files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')},
+    )
+    assert response.status_code == 200, response.text
+    state = client.get('/studio/' + response.json()['project_id']).json()
+    assert state['schema_version'] == 2
+    assert state['generation'] == {
+        'requested_platforms': ['tiktok'],
+        'branding': {'outro_enabled': False, 'outro_version': 'v1'},
+        'auto_start': False,
+        'status': 'awaiting_confirmation',
+        'created_at': state['generation']['created_at'],
+    }
+    assert state['output_variants'] == []
+    assert ImportOptions(platforms=['tiktok', 'reels', 'tiktok']).platforms == ['tiktok', 'instagram_reels']
+
+
 def test_ai_plan_samples_real_source_and_explicit_preferences_win(source,monkeypatch):
     inputs=[]
     monkeypatch.setattr(intelligence,'ready',lambda:True)

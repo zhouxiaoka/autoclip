@@ -111,10 +111,12 @@ def _analyze(project_id, prefs, url, browser):
     except Exception as error:
         logger.warning('Studio analysis failed: %s', type(error).__name__)
         capture_studio_exception(error, 'analysis')
+        message = str(error)[:700]
+        diagnostics = [error.diagnostics()] if isinstance(error, VisionRequestError) else None
         def failed(data):
-            data['analysis'] = {'status': 'failed', 'error': str(error)[:700]}
-            if isinstance(error, VisionRequestError):
-                data['analysis']['diagnostics'] = [error.diagnostics()]
+            data['analysis'] = {'status': 'failed', 'error': message}
+            if diagnostics:
+                data['analysis']['diagnostics'] = diagnostics
         try:
             store.change(project_id, failed)
             mark_project(project_id, 'completed' if store.read(project_id)['drafts'] else 'failed')
@@ -220,6 +222,15 @@ def inspect_project(project_id, options, url=None, browser=None):
         if (previous.get('analysis') or {}).get('status') == 'running':
             raise ValueError('当前任务正在运行，请稍后再试')
         state = deepcopy(previous)
+        state.setdefault('schema_version', 2)
+        state['generation'] = {
+            'requested_platforms': list(options.platforms),
+            'branding': options.branding.model_dump(),
+            'auto_start': options.auto_start,
+            'status': 'screening',
+            'created_at': store.now(),
+        }
+        state.setdefault('output_variants', [])
         state['analysis'] = {'status':'running', 'phase':'screening', 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
         try:
@@ -245,7 +256,11 @@ def _inspect(project_id, options, url, browser):
         plan = recommend(source(project_id), options)
         ensure_project_thumbnail(project_id)
         plan['id'] = uuid.uuid4().hex
-        store.change(project_id, lambda data:data.update(plan=plan, analysis={'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)}))
+        def awaiting_confirmation(data):
+            data.update(plan=plan, analysis={'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)})
+            if data.get('generation'):
+                data['generation']['status'] = 'awaiting_confirmation'
+        store.change(project_id, awaiting_confirmation)
         mark_project(project_id, 'pending', creative=plan['preferences'], awaiting_confirmation=True)
     except Exception as error:
         logger.warning('Studio screening failed: %s', type(error).__name__)

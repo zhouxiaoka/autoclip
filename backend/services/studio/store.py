@@ -6,6 +6,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
 from backend.core.path_utils import get_projects_directory
 
 lock = threading.RLock()
@@ -25,8 +26,13 @@ def directory(project_id: str) -> Path:
 def read(project_id: str):
     path = directory(project_id) / 'metadata' / 'studio.json'
     if not path.exists():
-        return {'drafts': [], 'events': [], 'jobs': [], 'analysis': None}
+        return {'schema_version': 2, 'drafts': [], 'events': [], 'jobs': [], 'analysis': None, 'output_variants': []}
     data = json.loads(path.read_text(encoding='utf-8'))
+    data.setdefault('schema_version', 1)
+    data.setdefault('drafts', [])
+    data.setdefault('events', [])
+    data.setdefault('jobs', [])
+    data.setdefault('output_variants', [])
     for job in data['jobs']:
         if job['status'] in ('queued', 'running') and job.get('instance') != INSTANCE:
             job.update(status='failed', error='服务已重启，请重新导出')

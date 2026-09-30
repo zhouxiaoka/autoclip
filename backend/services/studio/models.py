@@ -1,4 +1,5 @@
 from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Goal = Literal['content', 'highlight', 'promo']
@@ -102,6 +103,27 @@ class ExportDraftRequest(BaseModel):
     revision: int = Field(ge=1)
 
 
+class BrandingOptions(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    outro_enabled: bool = True
+    outro_version: str = 'v1'
+
+
+class OutputVariant(BaseModel):
+    """One immutable rendered delivery version derived from a draft revision."""
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(pattern=r'^[a-zA-Z0-9_-]+$', min_length=1, max_length=100)
+    draft_id: str = Field(pattern=r'^[a-zA-Z0-9_-]+$', min_length=1, max_length=100)
+    draft_revision: int = Field(ge=1)
+    strategy_id: str = Field(min_length=1, max_length=64)
+    strategy_version: int = Field(default=1, ge=1)
+    branding: BrandingOptions = Field(default_factory=BrandingOptions)
+    status: Literal['queued', 'running', 'completed', 'failed'] = 'queued'
+    render_job_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
+    created_at: str = ''
+    error: str | None = Field(default=None, max_length=700)
+
+
 class ImportOptions(BaseModel):
     model_config = ConfigDict(extra='forbid')
     goal: Literal['auto', 'content', 'highlight', 'promo'] = 'auto'
@@ -109,6 +131,27 @@ class ImportOptions(BaseModel):
     aspect: Literal['original', 'portrait', 'landscape'] | None = None
     duration: int | None = Field(default=None, ge=10, le=120)
     instruction: str = Field(default='', max_length=1000)
+    platforms: list[str] = Field(default_factory=lambda: ['douyin'], min_length=1, max_length=8)
+    auto_start: bool = False
+    branding: BrandingOptions = Field(default_factory=BrandingOptions)
+
+    @model_validator(mode='after')
+    def unique_platforms(self):
+        from backend.services.platform_strategy import normalize_platform_ids
+        self.platforms = normalize_platform_ids(self.platforms)
+        return self
+
+
+class AppendPlatformsRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    platforms: list[str] = Field(min_length=1, max_length=8)
+    branding: BrandingOptions = Field(default_factory=BrandingOptions)
+
+    @model_validator(mode='after')
+    def unique_platforms(self):
+        from backend.services.platform_strategy import normalize_platform_ids
+        self.platforms = normalize_platform_ids(self.platforms)
+        return self
 
 
 class ConfirmPlan(BaseModel):

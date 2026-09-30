@@ -90,6 +90,9 @@ async def import_visual(
     aspect: Optional[Literal['original', 'portrait', 'landscape']] = Form(None),
     duration: Optional[int] = Form(None, ge=10, le=120),
     instruction: str = Form('', max_length=1000),
+    platforms: list[str] = Form(['douyin']),
+    auto_start: bool = Form(False),
+    brand_outro_enabled: bool = Form(True),
     subtitle: Optional[UploadFile] = File(None),
     name: str = Form('智能剪辑', max_length=200),
     url: Optional[str] = Form(None),
@@ -121,8 +124,11 @@ async def import_visual(
                 raise HTTPException(422, '字幕文件为空或超过 2 MB')
         finally:
             await subtitle.close()
-    prefs = ImportOptions(goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction)
-    project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': True, 'creative_browser': browser}))
+    prefs = ImportOptions(
+        goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
+        platforms=platforms, auto_start=auto_start, branding={'outro_enabled': brand_outro_enabled},
+    )
+    project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': True, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
     pid = str(project.id)
     raw = store.directory(pid) / 'raw'
     raw.mkdir(parents=True, exist_ok=True)
