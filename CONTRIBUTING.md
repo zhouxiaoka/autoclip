@@ -1,313 +1,80 @@
 # 贡献指南
 
-感谢您对AutoClip项目的关注！我们欢迎所有形式的贡献，包括但不限于：
+AutoClip 接受故障修复、文档与翻译改进，以及已经确认范围的功能贡献。首次参与可先看 [README](README.md)、[仓库目录说明](docs/REPOSITORY_LAYOUT.md) 和 [当前状态](HANDOFF.md)。个人业余维护，回复时间不固定。
 
-- 🐛 Bug修复
-- ✨ 新功能开发
-- 📚 文档改进
-- 🧪 测试用例
-- 💡 功能建议
-- 🎨 UI/UX改进
+## 先选择反馈入口
 
-## 开发环境设置
+- 可复现故障：[Bug 报告](https://github.com/zhouxiaoka/autoclip/issues/new/choose)。提供实际版本或源码提交、平台、相关模型、复现步骤、预期与实际结果，以及脱敏日志。
+- 使用提问：[Q&A](https://github.com/zhouxiaoka/autoclip/discussions/categories/q-a)。先查 [FAQ](docs/FAQ.md) 与 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)。
+- 新想法与功能建议：[Ideas](https://github.com/zhouxiaoka/autoclip/discussions/categories/ideas)。说明场景与遇到的问题；较大的功能先讨论范围，再开始实现。
+- 安全问题：按 [SECURITY.md](SECURITY.md) 私下联系，不在公开帖子中披露漏洞细节或凭据。
 
-### 1. Fork并克隆项目
+Discussions 中的想法不代表开发承诺，确认后的工作才进入 Issue 与路线图，见 [社区看板](docs/COMMUNITY_BOARD.md)。
+
+## 准备开发环境
+
+Fork 本仓库并克隆你的 Fork，添加上游：
 
 ```bash
-# Fork 项目到您的 GitHub 账户，再将下面的 your-username 替换为您的用户名
-git clone https://github.com/your-username/autoclip.git
 cd autoclip
-
-# 添加上游仓库
 git remote add upstream https://github.com/zhouxiaoka/autoclip.git
+git fetch upstream
+git switch -c fix/your-change upstream/main
 ```
 
-### 2. 设置开发环境
+源码 Web 环境以 [STARTUP_GUIDE.md](STARTUP_GUIDE.md) 为准；当前 CI 验证 Python 3.11 和 Node.js 20。Python 依赖统一在根目录 `requirements.txt`，Node 依赖只在 `frontend/`，安装时使用锁定依赖：
 
 ```bash
-# 创建虚拟环境
 python3 -m venv venv
-source venv/bin/activate  # Linux/macOS
-# 或 venv\Scripts\activate  # Windows
-
-# 安装依赖
-pip install -r requirements.txt
-cd frontend && npm install && cd ..
-
-# 配置环境变量
+source venv/bin/activate
+python -m pip install -r requirements.txt
+(cd frontend && npm ci)
 cp env.example .env
-# 编辑.env文件，填入必要的配置
 ```
 
-### 3. 启动开发服务器
+以上命令适用于 macOS/Linux。Windows 桌面开发与打包按 [BUILD_GUIDE.md](BUILD_GUIDE.md) 和 [scripts/README.md](scripts/README.md) 准备工具链，不要直接套用 POSIX Web 启动脚本。
+
+Web 开发需要 Redis，准备后用 `./start_autoclip.sh`；管理命令和手动启动方式见启动指南。桌面后端由 Tauri 管理，入口是 `backend/desktop_main.py`；容器部署见 [DOCKER.md](DOCKER.md)，CLI/MCP 见 [对应指南](docs/CLI_AND_MCP.md)。
+
+## 修改与验证
+
+保持改动聚焦，遵循相关模块已有的结构和命名。说明解决了什么问题，以及哪些条件会触发它。UI 修改遵循 [DESIGN.md](DESIGN.md)，涉及行为变化时附截图或操作说明。翻译修改遵循 [翻译维护](docs/i18n.md)。
+
+后端测试从仓库根目录运行：
 
 ```bash
-# 启动Redis
-brew services start redis  # macOS
-# 或 sudo systemctl start redis-server  # Linux
-
-# 启动后端
-python -m uvicorn backend.main:app --reload --port 8000
-
-# 启动Celery Worker（必须带 -Q，否则只消费默认 `celery` 队列，流水线任务无人执行）
-celery -A backend.core.celery_app worker --loglevel=info -Q celery,processing,video,notification,upload
-
-# 启动前端
-cd frontend && npm run dev
+python -m pytest backend/tests -q
+# 开发时可先运行与改动相关的现有测试文件
 ```
 
-## 开发流程
-
-### 1. 创建功能分支
-
-```bash
-# 从main分支创建新分支
-git checkout main
-git pull upstream main
-git checkout -b feature/your-feature-name
-```
-
-### 2. 开发规范
-
-#### 代码风格
-
-**Python (后端)**
-- 遵循PEP 8规范
-- 使用Black进行代码格式化
-- 使用isort进行导入排序
-- 函数和类需要添加docstring
-
-```python
-def example_function(param1: str, param2: int) -> bool:
-    """
-    示例函数的文档字符串
-    
-    Args:
-        param1: 参数1的描述
-        param2: 参数2的描述
-        
-    Returns:
-        返回值的描述
-    """
-    pass
-```
-
-**TypeScript (前端)**
-- 使用ESLint和Prettier
-- 组件需要添加JSDoc注释
-- 使用函数组件和Hooks
-- 遵循Ant Design设计规范
-
-```typescript
-/**
- * 示例组件的描述
- */
-interface ExampleProps {
-  /** 属性描述 */
-  title: string;
-  /** 可选属性描述 */
-  optional?: boolean;
-}
-
-const ExampleComponent: React.FC<ExampleProps> = ({ title, optional = false }) => {
-  return <div>{title}</div>;
-};
-```
-
-#### 提交信息规范
-
-使用约定式提交格式：
-
-```
-<type>(<scope>): <description>
-
-[optional body]
-
-[optional footer(s)]
-```
-
-**类型 (type):**
-- `feat`: 新功能
-- `fix`: Bug修复
-- `docs`: 文档更新
-- `style`: 代码格式调整
-- `refactor`: 代码重构
-- `test`: 测试相关
-- `chore`: 构建过程或辅助工具的变动
-
-**示例:**
-```
-feat(api): add video download endpoint
-fix(ui): resolve upload modal display issue
-docs(readme): update installation instructions
-```
-
-### 3. 测试
-
-#### 后端测试
-
-```bash
-# 运行所有测试
-pytest
-
-# 运行特定测试文件
-pytest tests/test_api.py
-
-# 生成覆盖率报告
-pytest --cov=backend --cov-report=html
-```
-
-#### 前端测试
+前端验证使用 `frontend/package.json` 中的真实脚本：
 
 ```bash
 cd frontend
-
-# 运行测试
-npm test
-
-# 运行lint检查
 npm run lint
-
-# 类型检查
-npm run type-check
+npm run typecheck
+npm test
+npm run build
 ```
 
-### 4. 提交代码
+CI 的后端 lint 使用 Ruff，目前是非阻塞检查；测试及前端检查仍需通过。项目没有统一配置 Black、isort 或 Prettier，不要为无关修改重新格式化整个仓库。修复可复现的代码故障时补充有意义的回归覆盖；纯文档修改检查命令、链接和对应实现即可。
+
+涉及启动、Docker、桌面安装或平台差异时，应验证受影响路线并记录平台与结果。CI 通过不等于安装包已完成界面或真实出片验收，发布必须遵守 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)。
+
+## 提交 Pull Request
+
+先检查改动，再按文件添加；下例用 `git add -p` 选择已有文件的修改，新文件需按实际路径添加。提交标题可使用 `fix:`、`feat:`、`docs:`、`refactor:`、`test:` 或 `chore:`，简述具体变化。推送分支后向本仓库 `main` 发起 PR：
 
 ```bash
-# 添加更改
-git add .
-
-# 提交更改
-git commit -m "feat(api): add video download endpoint"
-
-# 推送分支
-git push origin feature/your-feature-name
+git add -p
+git commit -m "fix: describe the problem being resolved"
+git push -u origin fix/your-change
 ```
 
-### 5. 创建Pull Request
+按 [PR 模板](.github/PULL_REQUEST_TEMPLATE.md) 说明问题、最终行为和验证结果；有相关 Issue 时附链接。验证未覆盖的平台或步骤应明确写出，避免把未运行的检查标为通过。不要提交 `.env`、API Key、Cookie、私人素材、运行数据库、模型缓存或构建产物；文件归档规则见 [归档规范](docs/REPOSITORY_ARCHIVE_POLICY.md)。
 
-1. 在GitHub上创建Pull Request
-2. 填写PR模板
-3. 确保所有检查通过
-4. 等待代码审查
+收到审查反馈后在同一 PR 更新。较大的方案调整先在对应讨论中说明，避免把无关改动混在一起。合入源码与正式安装包发布是不同步骤；发布信息以 [Releases](https://github.com/zhouxiaoka/autoclip/releases) 为准。
 
-## 代码审查流程
+## 社区与联系
 
-### 审查标准
-
-- ✅ 代码符合项目规范
-- ✅ 功能正常工作
-- ✅ 测试用例覆盖
-- ✅ 文档已更新
-- ✅ 无安全漏洞
-- ✅ 性能影响评估
-
-### 审查反馈
-
-- 积极回应审查意见
-- 及时修复问题
-- 保持PR更新
-- 与审查者保持沟通
-
-## 问题报告
-
-### Bug报告
-
-使用GitHub Issues报告Bug时，请包含：
-
-1. **环境信息**
-   - 操作系统版本
-   - Python版本
-   - Node.js版本
-   - 浏览器版本
-
-2. **重现步骤**
-   - 详细的操作步骤
-   - 预期结果
-   - 实际结果
-
-3. **错误信息**
-   - 完整的错误日志
-   - 截图或录屏
-
-4. **附加信息**
-   - 相关配置文件
-   - 网络环境
-   - 其他可能相关的信息
-
-### 功能建议
-
-提出新功能建议时，请说明：
-
-1. **功能描述**
-   - 详细的功能说明
-   - 使用场景
-   - 预期效果
-
-2. **实现方案**
-   - 技术实现思路
-   - 可能的挑战
-   - 替代方案
-
-3. **影响评估**
-   - 对现有功能的影响
-   - 性能影响
-   - 用户体验影响
-
-## 文档贡献
-
-### 文档类型
-
-- 📖 用户文档
-- 🔧 开发者文档
-- 🚀 部署指南
-- ❓ 常见问题
-- 📝 API文档
-
-### 文档规范
-
-- 使用Markdown格式
-- 添加目录结构
-- 包含代码示例
-- 保持内容更新
-- 使用清晰的标题层级
-
-## 想法放哪里
-
-希望 AutoClip 支持什么、你的用法、想要哪个模型，发到 [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions)。
-能复现的故障用 Issue 里的 bug 模板。已经决定要做的需求才会出现在公开路线图上。
-分类、六列和 Agent 的操作见 [社区看板](docs/COMMUNITY_BOARD.md)。
-
-## 社区行为准则
-
-### 我们的承诺
-
-为了营造开放和友好的环境，我们承诺：
-
-- 尊重所有贡献者
-- 接受建设性批评
-- 关注社区最佳利益
-- 对其他社区成员表示同理心
-
-### 不可接受的行为
-
-- 使用性暗示的语言或图像
-- 人身攻击或侮辱性评论
-- 公开或私下骚扰
-- 未经许可发布他人私人信息
-- 其他在专业环境中不当的行为
-
-## 联系方式
-
-个人业余维护，回复时间不固定。请先查看 [常见问题](docs/FAQ.md)。
-
-邮箱：[christine_zhouye@163.com](mailto:christine_zhouye@163.com)
-
-## 致谢
-
-感谢所有为AutoClip项目做出贡献的开发者！您的贡献让这个项目变得更好。
-
----
-
-**再次感谢您的贡献！** 🎉
+尊重其他参与者，围绕问题和证据讨论；不接受骚扰、人身攻击或公开他人私人信息。一般提问优先使用社区入口，私密联系可发送至 [christine_zhouye@163.com](mailto:christine_zhouye@163.com)。

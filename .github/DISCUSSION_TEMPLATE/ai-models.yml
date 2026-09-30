@@ -3,13 +3,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        说明你要的模型或供应商。设置页可选 Qwen、OpenAI、Gemini、DeepSeek、Doubao Seed、Kimi、GLM、Grok，以及本机的 Ollama / LM Studio（自备 API Key）。兼容接口可配置 Base URL。
+        说明你要的模型或供应商，以及用途：分析、视觉、封面或字幕转写。当前支持与配置以[模型指南](https://github.com/zhouxiaoka/autoclip/blob/main/docs/AI_MODEL_CONFIGURATION.md)和设置页为准；本地转写包括 Whisper 与 SenseVoice。
         只是「名单里没有这一项」、但兼容接口已经能填的，请在正文里写明，避免重复开需求。
   - type: input
     id: model
     attributes:
       label: 模型或供应商
-      placeholder: "Gemini 2.5 / Doubao Seed / Qwen 某个具体型号"
+      placeholder: "服务商与具体型号；本地转写注明模型名称"
     validations:
       required: true
   - type: dropdown
@@ -27,6 +27,6 @@ body:
     id: detail
     attributes:
       label: 补充
-      description: 报错请打码，不要贴 API Key。
+      description: 报错请先脱敏，移除 API Key、Cookie 和私人素材内容；可复现故障请使用 Bug 模板。
     validations:
       required: false

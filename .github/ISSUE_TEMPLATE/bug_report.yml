@@ -24,16 +24,17 @@ body:
     id: version
     attributes:
       label: AutoClip 版本 / Version
-      description: 设置页底部或「关于」里可见 / Shown in Settings → About
-      placeholder: "v1.2.1"
+      description: 填写实际安装版本；源码用户附提交 SHA / Installed version, or commit SHA for source builds
+      placeholder: "vX.Y.Z；源码附 commit SHA / include commit SHA for source"
     validations:
       required: true
 
   - type: input
     id: model
     attributes:
-      label: 使用的模型提供商 / LLM provider
-      placeholder: "例如 Qwen / OpenAI / Gemini / DeepSeek / Doubao Seed / Kimi / GLM / Grok / 自定义 OpenAI 兼容"
+      label: 相关模型 / Relevant models
+      description: 分析服务与具体型号；转写问题附 Whisper / SenseVoice 型号。尚未配置或不相关可注明 / Provider and model; include transcription model when relevant
+      placeholder: "分析：服务商 + 型号；转写：Whisper / SenseVoice / 不相关"
     validations:
       required: true
 
@@ -66,5 +67,5 @@ body:
     attributes:
       label: 日志 / 截图 / Logs or screenshots
       description: |
-        桌面版日志位置：macOS `~/Library/Application Support/AutoClip/logs`，Windows `%APPDATA%\AutoClip\logs`。粘贴最后 50 行即可，注意删掉 API Key。
+        桌面版日志位置：macOS `~/Library/Application Support/AutoClip/logs`，Windows `%APPDATA%\AutoClip\logs`。粘贴失败前后相关日志即可，删除 API Key、Cookie、邮箱、私人路径与素材内容。Docker/源码用户请注明运行方式与日志来源。安全问题按 SECURITY.md 私下联系。
       render: text

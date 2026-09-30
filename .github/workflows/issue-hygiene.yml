@@ -30,9 +30,9 @@ jobs:
               '',
               '- 当前状态与已知问题：#96',
               '- Issue 只收能复现的故障，以及维护者确认后放进路线图的需求。希望支持什么、你的用法、想要哪个模型，请发到 [Discussions](https://github.com/zhouxiaoka/autoclip/discussions)。',
-              '- bug 缺少 **版本 / 平台 / 模型** 时会被打上 `needs-info`，14 天内没补充会自动关闭（补充后重开即可）。',
+              '- bug 缺少 **版本 / 平台 / 模型** 时会被打上 `needs-info`，14 天内没人补充会先标记为 stale，再过 7 天仍无回复才自动关闭；补充后由维护者确认是否重开。',
               '',
-              '_Issues are for reproducible bugs and accepted roadmap items. Ideas belong in Discussions. Bugs missing version / platform / model get `needs-info` and auto-close after 14 days without a reply._'
+              '_Issues are for reproducible bugs and accepted roadmap items. Ideas belong in Discussions. Bugs missing version / platform / model get `needs-info`, are marked stale after 14 days without a reply, then close after 7 more days._'
             ].join('\n');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -53,8 +53,8 @@ jobs:
           days-before-pr-stale: -1
           days-before-pr-close: -1
           stale-issue-label: stale
-          stale-issue-message: "还缺少复现所需的信息（版本 / 平台 / 模型 / 日志），7 天内没有补充会自动关闭。补充后会自动重开处理。"
-          close-issue-message: "因长期缺少复现信息已关闭。补充信息后回复即可重开。"
+          stale-issue-message: "还缺少复现所需的信息（版本 / 平台 / 模型 / 日志），7 天内没有补充会自动关闭。补充后由维护者确认是否重开。"
+          close-issue-message: "因长期缺少复现信息已关闭。可在此回复补充信息，由维护者确认是否重开。"
           remove-stale-when-updated: true
           operations-per-run: 100
 
