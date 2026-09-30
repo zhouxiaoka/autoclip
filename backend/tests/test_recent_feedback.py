@@ -176,3 +176,121 @@ def test_one_malformed_topic_does_not_discard_the_valid_batch(tmp_path):
 @pytest.mark.parametrize('value',[True,float('nan'),float('inf'),-1,'1:60','00:60:01','garbage'])
 def test_timeline_invalid_numeric_and_colon_times_remain_rejected(tmp_path,value):
     assert not extractor(tmp_path)._validate_time_format(value)
+
+
+@pytest.mark.parametrize('wrap', [lambda item: item, lambda item: {'timeline': [item]}, lambda item: {'outline': [item]}])
+def test_unambiguous_compatible_response_shapes_recover_without_model_call(tmp_path, wrap):
+    obj = prepared_extractor(tmp_path)
+    (obj.llm_raw_output_dir / 'chunk_0.txt').write_text(json.dumps(wrap(topic())))
+    obj.llm_client.call_with_retry = lambda *a, **k: pytest.fail('recovery must use the recorded response')
+    assert len(obj.extract_timeline([dict(title='current', chunk_index=0)])) == 1
+    assert obj.extraction_report['chunks'][0]['source'] == 'cache'
+
+
+def test_ambiguous_response_envelope_is_not_guessed(tmp_path):
+    response = json.dumps({'timeline': [topic()], 'outline': [topic('other')]})
+    obj = extractor(tmp_path)
+    assert obj._parse_and_validate_response(response, to_srt_time(0), to_srt_time(30), 0) == []
+    assert obj._last_parse_diagnostics['rejected']['invalid_container'] == 1
+
+
+def run_prepared_step2(obj, monkeypatch):
+    from backend.pipeline import step2_timeline
+    monkeypatch.setattr(step2_timeline, 'TimelineExtractor', lambda *a, **k: obj)
+    path = obj.metadata_dir / 'step1_outline.json'
+    path.write_text(json.dumps([dict(title='current', chunk_index=0)]))
+    return step2_timeline.run_step2_timeline(path, metadata_dir=obj.metadata_dir)
+
+
+@pytest.mark.parametrize('error,code', [
+    (TimeoutError('private-url secret-key'), 'timeout'),
+    (ConnectionError('private-url secret-key'), 'connection'),
+    (RuntimeError('API调用失败 - Status: 429, Message: secret-key'), 'rate_limited'),
+    (RuntimeError('API调用失败 - Status: 401, Message: secret-key'), 'authentication'),
+    (RuntimeError('API调用失败 - Status: 503, Message: secret-key'), 'provider_error'),
+])
+def test_step2_call_failure_is_not_reported_as_short_content(tmp_path, monkeypatch, error, code):
+    from backend.pipeline.failures import PipelineFailure
+    obj = prepared_extractor(tmp_path)
+    calls = []
+    def fail(*a, **k):
+        calls.append(1)
+        raise error
+    obj.llm_client.call_with_retry = fail
+    with pytest.raises(PipelineFailure) as exc:
+        run_prepared_step2(obj, monkeypatch)
+    assert len(calls) == 1  # The inner client already owns transport retries.
+    assert exc.value.code == code
+    assert '最短时长' not in exc.value.user_message()
+    assert 'secret-key' not in exc.value.user_message()
+    report = json.loads((tmp_path / 'quality_report.json').read_text())['step2_extraction']
+    assert report['chunks'][0]['error_code'] == code
+    assert 'secret-key' not in json.dumps(report)
+    assert json.loads((tmp_path / 'step2_timeline.json').read_text()) == []
+
+
+@pytest.mark.parametrize('response,reason', [
+    ('not json', 'malformed_json'),
+    ('{}', 'invalid_container'),
+    ('[]', 'empty_array'),
+    (json.dumps([topic('outside', 40, 60)]), 'outside_chunk_or_reversed'),
+    (json.dumps([{'outline':'bad', 'start_time':'NaN', 'end_time':30}]), 'invalid_time'),
+])
+def test_step2_invalid_reply_has_current_safe_diagnostics(tmp_path, monkeypatch, response, reason):
+    from backend.pipeline.failures import PipelineFailure
+    obj = prepared_extractor(tmp_path)
+    (obj.llm_raw_output_dir / 'chunk_0.txt').write_text(response)
+    obj.llm_client.call_with_retry = lambda *a, **k: pytest.fail('invalid cache cannot silently spend money')
+    # A failed rerun must replace the previous successful Step 2 report.
+    (tmp_path / 'quality_report.json').write_text(json.dumps({'step2': {'input':99, 'output':99}}))
+    with pytest.raises(PipelineFailure) as exc:
+        run_prepared_step2(obj, monkeypatch)
+    assert exc.value.code == 'invalid_response'
+    assert '尚未进入评分或最短时长筛选' in exc.value.user_message()
+    assert '创建新项目' in exc.value.hint
+    saved = json.loads((tmp_path / 'quality_report.json').read_text())
+    report = saved['step2_extraction']
+    assert report['parsed'] == report['output'] == 0
+    assert saved['step2']['output'] == 0
+    assert report['chunks'][0]['rejected'][reason] == 1
+
+
+@pytest.mark.parametrize('total,min_sec,start,end', [(10,20,0,10), (600,45,0,30), (3600,90,0,30)])
+def test_step2_duration_failure_reports_actual_profile(tmp_path, monkeypatch, total, min_sec, start, end):
+    from backend.pipeline.failures import PipelineFailure
+    from backend.pipeline.quality import save_profile
+    obj = prepared_extractor(tmp_path)
+    (obj.srt_chunks_dir / 'chunk_0.json').write_text(json.dumps([dict(cue(start, end), index=1)]))
+    save_profile(profile_for(total), tmp_path)
+    obj.llm_client.call_with_retry = lambda *a, **k: json.dumps([topic('short', start, end)])
+    with pytest.raises(PipelineFailure) as exc:
+        run_prepared_step2(obj, monkeypatch)
+    assert exc.value.code == 'timeline_empty'
+    assert f'{min_sec} 秒' in exc.value.message
+    assert '模型' not in exc.value.hint
+    assert obj.extraction_report['parsed'] == 1 and obj.extraction_report['output'] == 0
+
+
+def test_step2_missing_subtitle_block_points_to_reimport(tmp_path, monkeypatch):
+    from backend.pipeline.failures import PipelineFailure
+    obj = prepared_extractor(tmp_path)
+    (obj.srt_chunks_dir / 'chunk_0.json').unlink()
+    with pytest.raises(PipelineFailure) as exc:
+        run_prepared_step2(obj, monkeypatch)
+    assert exc.value.code == 'missing_resource'
+    assert '重新导入' in exc.value.hint
+
+
+def test_step2_refinement_error_never_exports_unvalidated_ranges(tmp_path, monkeypatch):
+    from backend.pipeline.failures import PipelineFailure
+    from backend.pipeline import quality
+    obj = prepared_extractor(tmp_path)
+    obj.llm_client.call_with_retry = lambda *a, **k: json.dumps([topic()])
+    def fail(*a, **k):
+        raise RuntimeError('private local path')
+    monkeypatch.setattr(quality, 'refine_timeline', fail)
+    with pytest.raises(PipelineFailure) as exc:
+        obj.extract_timeline([dict(title='current', chunk_index=0)])
+    assert exc.value.code == 'unexpected'
+    assert 'private' not in exc.value.user_message()
+    assert obj.extraction_report['refinement_failed']
