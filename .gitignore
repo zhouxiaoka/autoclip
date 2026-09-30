@@ -135,6 +135,7 @@ local_backups/
 
 # 进程ID文件
 *.pid
+*.pid.json
 
 # Redis数据文件
 dump.rdb
