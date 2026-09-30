@@ -1,5 +1,10 @@
 """opencode 接入：配置路径 / 合并写入 / JSONC 与失败保护。全部落在 tmp_path，不碰真实用户配置。"""
 import json
+import os
+import subprocess
+import sys
+
+import pytest
 
 from backend.services import opencode_setup
 
@@ -230,3 +235,90 @@ def test_utf8_bom_json_can_be_merged(tmp_path):
     assert json.loads(target.read_text(encoding="utf-8"))["mcp"]["autoclip"]["enabled"] is True
 
 
+@pytest.mark.parametrize("config_exists", [False, True])
+def test_cli_explicit_config_does_not_discover_sibling_jsonc(tmp_path, monkeypatch, capsys, config_exists):
+    from backend import cli
+
+    target = tmp_path / "custom" / "opencode.json"
+    target.parent.mkdir()
+    if config_exists:
+        target.write_text(json.dumps({"model": "original"}), encoding="utf-8")
+    sibling = target.with_suffix(".jsonc")
+    original_sibling = '{"mcp": {"other": {"type": "remote", "url": "https://example.com/mcp"}}}'
+    sibling.write_text(original_sibling, encoding="utf-8")
+    monkeypatch.setenv("OPENCODE_CONFIG", str(target))
+    monkeypatch.setattr(opencode_setup, "detect_server", lambda: SERVER)
+
+    args = cli.build_parser().parse_args(["mcp", "install", "opencode", "--json"])
+    assert cli.cmd_mcp_install(args) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["path"] == str(target)
+    assert report["action"] == ("updated" if config_exists else "created")
+    data = json.loads(target.read_text(encoding="utf-8"))
+    assert data["mcp"]["autoclip"]["command"] == SERVER["command"]
+    if config_exists:
+        assert data["model"] == "original"
+    assert sibling.read_text(encoding="utf-8") == original_sibling
+
+
+def test_cli_project_scope_discovers_jsonc_with_global_override(tmp_path, monkeypatch, capsys):
+    from backend import cli
+
+    global_config = tmp_path / "global" / "opencode.json"
+    monkeypatch.setenv("OPENCODE_CONFIG", str(global_config))
+    monkeypatch.setattr(opencode_setup, "detect_server", lambda: SERVER)
+    project = tmp_path / "project"
+    project.mkdir()
+    jsonc = project / "opencode.jsonc"
+    jsonc.write_text('{"mcp": {}}', encoding="utf-8")
+
+    args = cli.build_parser().parse_args([
+        "mcp", "install", "opencode", "--scope", "project", "--dir", str(project), "--json",
+    ])
+    assert cli.cmd_mcp_install(args) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["path"] == str(jsonc)
+    assert json.loads(jsonc.read_text(encoding="utf-8"))["mcp"]["autoclip"]["command"] == SERVER["command"]
+    assert not (project / "opencode.json").exists()
+    assert not global_config.exists()
+
+
+def test_module_reinstall_refreshes_paths_after_checkout_move(tmp_path):
+    old_repo = tmp_path / "old-checkout"
+    backend = old_repo / "backend"
+    backend.mkdir(parents=True)
+    (backend / "__init__.py").write_text("", encoding="utf-8")
+    (backend / "mcp_server.py").write_text('print("current-checkout")\n', encoding="utf-8")
+    extra_modules = tmp_path / "custom-modules"
+    extra_modules.mkdir()
+    target = tmp_path / "opencode.json"
+    old_server = {
+        "kind": "module", "command": [sys.executable, "-m", "backend.mcp_server"],
+        "cwd": str(old_repo), "environment": {"PYTHONPATH": str(old_repo)},
+    }
+    assert opencode_setup.install_opencode(target, server=old_server)["ok"] is True
+    data = json.loads(target.read_text(encoding="utf-8"))
+    data["mcp"]["autoclip"]["environment"].update({
+        "PYTHONPATH": os.pathsep.join([str(old_repo), str(extra_modules)]),
+        "AUTOCLIP_DATA_DIR": str(tmp_path / "clips"),
+    })
+    target.write_text(json.dumps(data), encoding="utf-8")
+
+    new_repo = tmp_path / "new-checkout"
+    old_repo.rename(new_repo)
+    new_server = dict(old_server, cwd=str(new_repo), environment={"PYTHONPATH": str(new_repo)})
+    report = opencode_setup.install_opencode(target, server=new_server)
+    assert report["ok"] is True and report["action"] == "updated"
+    entry = json.loads(target.read_text(encoding="utf-8"))["mcp"]["autoclip"]
+    assert entry["cwd"] == str(new_repo)
+    paths = entry["environment"]["PYTHONPATH"].split(os.pathsep)
+    assert paths[0] == str(new_repo)
+    assert str(extra_modules) in paths
+    assert entry["environment"]["AUTOCLIP_DATA_DIR"] == str(tmp_path / "clips")
+    process = subprocess.run(
+        entry["command"], cwd=entry["cwd"], env=dict(os.environ, **entry["environment"]),
+        capture_output=True, text=True, timeout=10,
+    )
+    assert process.returncode == 0, process.stderr
+    assert process.stdout.strip() == "current-checkout"
+    assert opencode_setup.install_opencode(target, server=new_server)["action"] == "unchanged"

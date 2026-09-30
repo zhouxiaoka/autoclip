@@ -26,8 +26,9 @@ autoclip mcp install opencode
 
 The command detects the launch command (`autoclip` → `autoclip-mcp` → `python -m backend.mcp_server`),
 merges `mcp.autoclip` into your config without touching other keys, and backs the old file up as
-`opencode.json.bak`. Re-running keeps your custom fields on an existing `autoclip` entry: only
-`type` / `command` are updated (`environment` is merged key-by-key, `timeout` / `enabled` etc. stay).
+`opencode.json.bak`. Re-running keeps your custom fields on an existing `autoclip` entry while updating
+`type` / `command`. The module fallback refreshes `cwd` and prepends the current installation to `PYTHONPATH`,
+preserving other module paths, environment variables, `timeout`, and `enabled`.
 If `opencode.jsonc` exists it becomes the target; when both `opencode.json` and `opencode.jsonc` exist
 and the jsonc already defines `mcp`, the installer refuses with an explicit message instead of writing
 a config that would not take effect. Commented (JSONC) configs are left untouched unless you pass `--force`.
@@ -38,7 +39,8 @@ a config that would not take effect. Commented (JSONC) configs are left untouche
 | `--scope project --dir <dir>` | `<dir>/opencode.json` (project-only) |
 | `--print` / `--json` | print the snippet / machine-readable report |
 
-`OPENCODE_CONFIG` overrides the global path; `XDG_CONFIG_HOME` is honored.
+`OPENCODE_CONFIG` selects the exact global file to write, without switching to a sibling `.jsonc`;
+`XDG_CONFIG_HOME` is honored.
 
 ## 3. Manual config
 

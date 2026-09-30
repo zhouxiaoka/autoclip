@@ -172,12 +172,14 @@ def install_opencode(
     server: Optional[Dict[str, Any]] = None,
     name: str = DEFAULT_SERVER_NAME,
     force: bool = False,
+    discover_jsonc: bool = True,
 ) -> Dict[str, Any]:
     """把 autoclip 写进 opencode 配置（合并写入：不动其它键，重装也保留同名条目里的自定义字段）。
 
     返回报告：ok / action / path / entry / snippet / backup / warnings / error / hint。
     action 取值 created / updated / unchanged / manual；manual = 没有写文件，
     需要用户手动合并 snippet（配置解析失败，或带注释又没给 force）。
+    discover_jsonc=False 时严格写 target，用于 OPENCODE_CONFIG 显式指定的文件。
     """
     server = server or detect_server()
     entry = build_entry(server)
@@ -196,7 +198,7 @@ def install_opencode(
     # 同时存在 opencode.json / opencode.jsonc 时，opencode 先读 json 再读 jsonc（后者覆盖）：
     # 只有 jsonc 就写 jsonc；两份都有且 jsonc 里已有 mcp 段时拒绝写入，避免“成功但不生效”。
     write_target = target
-    if target.name == "opencode.json":
+    if discover_jsonc and target.name == "opencode.json":
         jsonc_path = target.with_name("opencode.jsonc")
         if jsonc_path.is_file():
             if not target.is_file():
@@ -254,11 +256,16 @@ def install_opencode(
         if server.get("kind") == "module":
             env = dict(merged.get("environment") or {})
             for k, v in (entry.get("environment") or {}).items():
-                env.setdefault(k, v)
+                if k == "PYTHONPATH":
+                    # 当前安装路径优先，同时保留用户的额外模块路径；重复安装不再追加。
+                    paths = env[k].split(os.pathsep) if env.get(k) else []
+                    env[k] = os.pathsep.join([v, *(p for p in paths if p != v)])
+                else:
+                    env.setdefault(k, v)
             if env:
                 merged["environment"] = env
             if entry.get("cwd"):
-                merged.setdefault("cwd", entry["cwd"])
+                merged["cwd"] = entry["cwd"]
     report["entry"] = merged
     report["snippet"] = render_snippet(merged, name=name)
 
@@ -286,5 +293,3 @@ def install_opencode(
 
     report.update(ok=True, action="updated" if exists else "created", backup=str(backup) if backup else None)
     return report
-
-

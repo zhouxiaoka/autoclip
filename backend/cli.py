@@ -469,7 +469,10 @@ def cmd_mcp_install(args: argparse.Namespace) -> int:
             print(_dim(f"\n把上面的片段合并进 {target}"), file=sys.stderr)
         return 0
 
-    report = opencode_setup.install_opencode(target, name=args.name, force=args.force)
+    explicit_config = args.scope == "global" and bool(os.environ.get("OPENCODE_CONFIG"))
+    report = opencode_setup.install_opencode(
+        target, name=args.name, force=args.force, discover_jsonc=not explicit_config,
+    )
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     elif report["action"] == "created":

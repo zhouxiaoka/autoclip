@@ -29,8 +29,8 @@ autoclip mcp install opencode
 
 - 按 `autoclip` → `autoclip-mcp` → `python -m backend.mcp_server` 的顺序探测启动命令（结果在输出的 `entry` 里）
 - 把 `mcp.autoclip` **合并**写进配置（`type: local`），其它键原样保留；文件已存在时先备份 `opencode.json.bak`
-- 重装**不会丢同名条目里的自定义字段**：只更新 `type` / `command`（模块回退时按 key 合并 `environment`、补 `cwd`），
-  你的 `timeout`、环境变量、`enabled=false` 一概保留（后者会给出提示）
+- 重装**不会丢同名条目里的自定义字段**：更新 `type` / `command`；模块回退时刷新 `cwd`，
+  并把当前安装路径放到 `PYTHONPATH` 最前面，保留其余模块路径、环境变量、`timeout` 和 `enabled=false`（后者会给出提示）
 - 优先识别已有配置文件：只有 `opencode.jsonc` 时写它；`opencode.json` 和 `opencode.jsonc` 同时存在且 jsonc 里已有 `mcp` 段时，
   **写入前直接拒绝**（jsonc 覆盖 json，避免“写入成功但实际加载旧配置”）
 - 配置带注释 / 尾随逗号（JSONC，opencode 支持）时默认**不动文件**、只打印片段；加 `--force` 才会先备份再重写成纯 JSON
@@ -42,7 +42,7 @@ autoclip mcp install opencode
 | `--name <名字>` | 配置里的服务名（默认 `autoclip`；opencode 里工具会带 `autoclip_` 前缀） |
 | `--print` / `--json` | 只打印片段 / 输出机器可读报告 |
 
-环境变量：设了 `OPENCODE_CONFIG` 就写它指向的文件；设了 `XDG_CONFIG_HOME` 用 `$XDG_CONFIG_HOME/opencode/opencode.json`。
+环境变量：设了 `OPENCODE_CONFIG` 就严格写它指向的文件，不改写同目录的 `.jsonc`；设了 `XDG_CONFIG_HOME` 用 `$XDG_CONFIG_HOME/opencode/opencode.json`。
 
 ## 3. 手动配置
 
