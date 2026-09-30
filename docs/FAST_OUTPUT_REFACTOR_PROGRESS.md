@@ -121,3 +121,37 @@ Studio v2 数据契约与自动编排：导入选择平台后，自动完成理�
 - 当前浏览器页面仍不会传 `auto_start=true`，因此线上默认体验尚未改变。
 - 自动多平台任务目前独立编码每个 variant，后续需要策略去重以避免对视觉相同的平台重复渲染。
 - 尚未实现追加平台 API、品牌片尾、variant 专用下载入口和跨平台发布按 variant 分组。
+
+## 包 2C：快速入口与自动结果页
+
+状态：已完成，待合入。
+
+### 完成内容
+
+- 首页导入改为选择具体发布平台后直接发送 `auto_start=true`，成功后跳到项目结果页，不再默认进入方案确认页。
+- 新增 `PlatformPicker`，从 `/studio/platform-strategies` 读取策略；后端暂时不可用时使用受控 fallback，入口不会消失。
+- 默认选择抖音，用户可以多选平台；请求会重复提交 `platforms` form field，后端复用同一次内容理解。
+- 快速入口提供默认开启的 `Made with AutoClip` 片尾开关；该开关目前已持久化，实际渲染片尾将在后续 branding 包实现。
+- 新增 `OutputVariantCard`，自动版本直接显示生成状态、下载入口和 Studio 编辑入口；自动项目不再显示“继续确认方案”。
+- workspace 类型与 API 扩展为 generation、output variants 和平台策略摘要。
+- 新增平台选择和自动跳转的前端静态行为测试；八个语言目录补齐快速出片静态文案键。
+
+### 已验证
+
+```text
+frontend: npm run typecheck && npm run lint && npm run build
+frontend: npm test
+backend: 731 passed, 1 skipped
+```
+
+构建仍报告已有的 Ant Design/Tauri 动态导入与主 bundle 体积警告，本包未新增该类警告。
+
+### 下一包
+
+品牌片尾与统一 finalization：在 Studio 和 legacy/publish 导出的最终合成阶段各追加一次 1 秒、可关闭的 `Made with AutoClip` 片尾，并为带/不带片尾的输出建立独立缓存与回归验证。
+
+### 主要风险
+
+- UI 已暴露片尾开关，但渲染层尚未消费它；这必须作为下一个包优先完成，不能在发布前停留在“只存设置”。
+- 结果卡当前为自动 variant 提供下载/编辑，但尚未有“追加平台版本”与单 variant 重试 API。
+- 自动项目的真实桌面端导入、渲染和原生保存还需要在 branding 完成后做端到端冒烟。

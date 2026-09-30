@@ -1,0 +1,89 @@
+.studio-platform-picker {
+  border: 0;
+  margin: 18px 0 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.studio-platform-picker legend {
+  color: var(--ac-ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.studio-platform-picker p {
+  margin: 5px 0 10px;
+}
+
+.studio-platform-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.studio-platform-option {
+  align-items: flex-start;
+  background: var(--ac-card);
+  border: 1px solid var(--ac-line);
+  border-radius: 10px;
+  color: var(--ac-ink);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 3px;
+  min-height: 58px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.studio-platform-option b {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.studio-platform-option span {
+  color: var(--ac-sub);
+  font-size: 11px;
+}
+
+.studio-platform-option.is-selected {
+  border-color: var(--ac-accent);
+  box-shadow: inset 0 0 0 1px var(--ac-accent);
+}
+
+.studio-branding-option {
+  align-items: center;
+  color: var(--ac-sub);
+  cursor: pointer;
+  display: flex;
+  font-size: 12.5px;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.studio-branding-option input {
+  accent-color: var(--ac-accent);
+}
+
+.studio-variant-thumb {
+  align-items: center;
+  aspect-ratio: 16 / 9;
+  background: var(--ac-thumb);
+  border-radius: 12px 12px 0 0;
+  color: var(--ac-sub);
+  display: flex;
+  justify-content: center;
+  position: relative;
+}
+
+.studio-variant-thumb .play {
+  color: var(--ac-ink);
+  font-size: 28px;
+}
+
+@media (max-width: 650px) {
+  .studio-platform-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

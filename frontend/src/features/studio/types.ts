@@ -51,10 +51,26 @@ export interface RenderJob {
   status: 'queued' | 'running' | 'completed' | 'failed'; percent: number; created_at: string; error?: string
   result?: { width: number; height: number; duration: number; warnings: string[] }
 }
+export interface OutputVariant {
+  id: string; draft_id: string; draft_revision: number; strategy_id: string; strategy_version: number
+  branding: { outro_enabled: boolean; outro_version: string }
+  status: 'queued' | 'running' | 'completed' | 'failed'; render_job_id?: string; created_at: string; error?: string
+}
+export interface GenerationState {
+  requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
+  auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'
+  created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; completed_variant_count?: number
+}
+export interface PlatformStrategySummary {
+  id: string; label: string; aspect: 'portrait' | 'landscape' | 'original'; duration_policy: 'short' | 'long' | 'adaptive'
+  min_recommended_duration_sec: number | null; max_duration_sec: number | null
+  transport: 'download_only' | 'upload_post' | 'bilibili_direct'; transport_platform: string | null
+}
+
 export interface Workspace {
-  plan?: ImportPlan
-  drafts: Draft[]; events: Scene[]; jobs: RenderJob[]
-  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production'; message?: string; percent?: number; error?: string; coverage?: { duration?:number; note: string; sample_interval: number } }
+  schema_version?: number; plan?: ImportPlan
+  drafts: Draft[]; events: Scene[]; jobs: RenderJob[]; output_variants?: OutputVariant[]; generation?: GenerationState
+  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; error?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }
