@@ -7,6 +7,8 @@ on:
       - 'backend/services/whisper_model_manager.py'
       - 'backend/utils/speech_recognizer.py'
       - 'backend/pipeline/**'
+      - 'backend/core/database.py'
+      - 'backend/tests/test_database_connections.py'
       - 'scripts/verify_whisper_recovery.py'
       - '.github/workflows/issue-recovery.yml'
 permissions:
@@ -32,7 +34,7 @@ jobs:
           python -m pip install -r requirements.txt numpy
           choco install ffmpeg --yes --no-progress
       - name: Failure recovery regressions
-        run: python -m pytest backend/tests/test_issue_closure_regressions.py backend/tests/test_whisper_local_subtitle.py backend/tests/test_whisper_model_download.py backend/tests/test_windows_media_feedback.py backend/tests/test_windows_asyncio.py backend/tests/test_recent_feedback.py backend/tests/test_deepseek_cost_guard.py backend/tests/test_task_submission.py -q
+        run: python -m pytest backend/tests/test_issue_closure_regressions.py backend/tests/test_whisper_local_subtitle.py backend/tests/test_whisper_model_download.py backend/tests/test_windows_media_feedback.py backend/tests/test_windows_asyncio.py backend/tests/test_recent_feedback.py backend/tests/test_deepseek_cost_guard.py backend/tests/test_task_submission.py backend/tests/test_database_connections.py -q
       - name: Install Whisper and transcribe real speech offline
         run: python scripts/verify_whisper_recovery.py
       - uses: actions/upload-artifact@v4
