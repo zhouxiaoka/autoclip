@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
-import { ReactNode, useEffect, useRef, useState } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Project, Clip } from '../../store/useProjectStore'
 import { Btn, Section, Dialog, fmtDuration } from '../../ui'
@@ -12,7 +12,6 @@ import DraftResultCard from './DraftResultCard'
 import OutputVariantCard from './OutputVariantCard'
 import PlatformPicker from './PlatformPicker'
 import { platformLabel } from './platformLabel'
-import { trackQuickOutput } from '../../analytics/studio'
 
 import './studio.css'
 
@@ -27,7 +26,6 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const [exporting,setExporting] = useState<Draft|null>(null)
   const [addingPlatforms, setAddingPlatforms] = useState(false)
   const [platforms, setPlatforms] = useState<string[]>([])
-  const trackedGeneration = useRef('')
   const goal = project.settings?.creative?.goal || project.processing_config?.creative?.goal || 'content'
   const visual = goal !== 'content'
   const sourceDuration=workspace.plan?.source_duration ?? workspace.analysis?.coverage?.duration
@@ -36,14 +34,8 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const variantDraft = (draftId: string) => workspace.drafts.find(draft => draft.id === draftId)
   const variantJob = (jobId?: string) => workspace.jobs.find(job => job.job_id === jobId)
   useEffect(()=>{if(workspace.analysis && workspace.analysis.status!=='running' && project.status!=='completed') onReload()},[workspace.analysis?.status])
-  useEffect(() => {
-    const generation = workspace.generation
-    if (!generation || !['completed', 'partial', 'failed'].includes(generation.status)) return
-    const token = `${generation.status}:${workspace.output_variants?.length || 0}:${generation.completed_variant_count || 0}`
-    if (trackedGeneration.current === token) return
-    trackedGeneration.current = token
-    trackQuickOutput({ outcome: generation.status, variant_count: workspace.output_variants?.length || 0, completed_variant_count: generation.completed_variant_count || 0, platform_count: generation.requested_platforms.length, brand_outro_enabled: generation.branding.outro_enabled })
-  }, [workspace.generation, workspace.output_variants])
+  // The generation terminal event comes from the persisted `studio-generation` watch registered at
+  // import, so it is reported once even when the user leaves this page before rendering ends.
   const act = async (key: string, fn:()=>Promise<void>) => {setBusy(key);setActionError('');try{await fn();refresh()}catch(e){setActionError(t(errorText(e)))}finally{setBusy('')}}
   const appendPlatforms = () => act('append-platforms', async () => { await studioApi.appendPlatforms(project.id, platforms, workspace.generation?.branding.outro_enabled ?? true); setAddingPlatforms(false) })
   const createLegacy = (clip: Clip) => act(clip.id, async()=>{const draft=await studioApi.create(project.id,[clip.id],clip.generated_title||clip.title||t("新成片"));navigate(`/project/${project.id}/studio/${draft.id}`)})

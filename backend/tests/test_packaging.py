@@ -45,7 +45,7 @@ def test_names_not_seen_in_subtitles_or_listing_are_dropped():
 @pytest.mark.parametrize('bad', [
     {'segments': [{'from': 0, 'to': 0, 'text': 'a'}]},                                         # does not cover every line
     {'segments': [{'from': 0, 'to': 0, 'text': 'a'}, {'from': 2, 'to': 2, 'text': 'c'}]},      # gap
-    {'segments': [{'from': 0, 'to': 2, 'text': 'x' * 300}]},                                   # too long
+    {'segments': [{'from': 0, 'to': 2, 'text': 'x' * 700}]},                                   # too long
     {'segments': None},
 ])
 def test_malformed_segments_fall_back_to_source_captions(bad):
@@ -79,6 +79,16 @@ def test_burned_captions_skip_our_caption_track():
 
 def test_prompt_rejects_generic_praise_tags():
     assert '禁止' in packaging.PROMPT and '逻辑清晰' in packaging.PROMPT
+
+
+def test_long_english_sentences_and_titles_survive_validation():
+    long_text = ' '.join(['token value asymmetry will redefine the economics of every model we ship'] * 5)  # ~370 chars
+    response = good_response(title_lines=["API pricing won't die—token value asymmetry will redefine AGI economics"],
+                             segments=[{'from': 0, 'to': 2, 'text': long_text}])
+    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('tiktok'), call=lambda *_: response)
+    assert result['fallback'] is False and result['cues'][0]['text'] == long_text
+    assert len(result['title_lines']) == 2 and all(len(line) <= 40 for line in result['title_lines'])
+    assert ' '.join(result['title_lines']).startswith("API pricing won't die")
 
 
 def test_source_language_detection():

@@ -14,7 +14,7 @@ test('share caption credits AutoClip with the repository link and is copied loca
  assert.match(share,/t\('用 AutoClip 剪的'\)\} · \$\{REPO_URL\}/)
  assert.match(share,/navigator\.clipboard\.writeText/)
  assert.match(card,/copyText\(shareCaption\(draft\?\.title\)\)/)
- assert.match(card,/trackOutputShare\(\{ share_target: 'copy_caption'/)
+ assert.match(card,/trackOutputShare\(projectId, \{ share_target: 'copy_caption', \.\.\.analytics \}\)/)
 })
 
 test('rating is asked after a successful download at most once per project and once a week',()=>{
@@ -34,6 +34,8 @@ test('use-case invite goes to GitHub Discussions and nothing is uploaded',()=>{
 test('share and rating analytics only carry allowlisted enums',()=>{
  assert.match(workflow,/share_target: \['copy_caption', 'use_case_discussion'\]/)
  assert.match(workflow,/output_rating: \['ready', 'needs_edit', 'unusable'\]/)
- assert.match(studio,/captureBusinessEvent\('studio_output_shared', safeStudioProperties\(properties\)\)/)
- assert.match(studio,/captureBusinessEvent\('studio_output_rated', safeStudioProperties\(properties\)\)/)
+ assert.match(studio,/captureBusinessEvent\('studio_output_shared', safeStudioProperties\(\{ \.\.\.workflow\.context\(projectId\), \.\.\.properties \}\)\)/)
+ assert.match(studio,/captureBusinessEvent\('studio_output_rated', safeStudioProperties\(\{ \.\.\.workflow\.context\(projectId\), \.\.\.properties \}\)\)/)
+ assert.match(workflow,/template: \['interview_zh', 'podcast_en', 'landscape', 'none'\]/)
+ assert.match(workflow,/packaging_style: \['classic', 'boxed', 'spotlight', 'pop', 'cinematic'\]/)
 })

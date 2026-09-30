@@ -85,7 +85,7 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     translate = src != audience and not burned
     base = {'template': template, 'audience_language': audience, 'source_language': src, 'burned_captions': burned}
     fallback = {**base, 'title_lines': _fallback_title(draft, audience), 'fallback': True,
-                'cues': [] if burned else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:200], 'original': ''} for l in lines]}
+                'cues': [] if burned else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
     if not lines:
         return Packaging.model_validate(fallback).model_dump()
     if call is None:
@@ -120,11 +120,11 @@ def _segments(raw, lines, translate):
         text = str((item or {}).get('text') or '').strip()
         if not (isinstance(start, int) and isinstance(end, int)) or start != expected or end < start or end >= len(lines):
             raise ValueError('segments are not contiguous')
-        if not text or len(text) > 200:
+        if not text or len(text) > 600:
             raise ValueError('segment text invalid')
         original = ' '.join(line['text'] for line in lines[start:end + 1])
         cues.append({'start': lines[start]['start'], 'end': lines[end]['end'], 'text': text,
-                     'original': original[:300] if translate else '', 'lines': (start, end)})
+                     'original': original[:900] if translate else '', 'lines': (start, end)})
         expected = end + 1
     if expected != len(lines):
         raise ValueError('segments do not cover every line')
@@ -136,7 +136,15 @@ def _validated(result, lines, base, translate, burned, known_names, draft):
         raise TypeError('packaging response is not an object')
     audience = base['audience_language']
     titles = [t.strip() for t in result.get('title_lines') or [] if isinstance(t, str) and t.strip()][:2]
-    if not titles or any(len(t) > TITLE_LIMIT[audience] + 2 for t in titles):
+    limit = TITLE_LIMIT[audience]
+    if titles and any(len(t) > limit + 2 for t in titles):
+        # Models often return one long line: keep their wording when it fits two lines.
+        import textwrap
+        joined = ' '.join(titles)
+        width = min(40, max(limit, len(joined) // 2 + 2))  # balanced two lines, within the model's 40-char cap
+        rewrapped = textwrap.wrap(joined, width=width, break_long_words=audience == 'zh')
+        titles = rewrapped if 0 < len(rewrapped) <= 2 else []
+    if not titles:
         titles = _fallback_title(draft, audience)
     accent = result.get('accent_line') if result.get('accent_line') in (0, 1) else len(titles) - 1
     cues = []

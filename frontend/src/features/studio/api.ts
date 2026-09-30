@@ -6,10 +6,14 @@ import api from '../../services/api'
 import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences, SubtitleCue, FramingStatus, AutoFrameResult, PlatformStrategySummary, OutputVariant } from './types'
 export type SourcePreview = { status: 'idle' | 'queued' | 'running' | 'completed' | 'failed'; version?: string; error?: string }
 export function draftProperties(draft?: Partial<Draft>): Properties {
+  const packaging = draft?.packaging
   return safeStudioProperties({ aspect: draft?.aspect, subtitle_enabled: draft?.subtitles, title_style: draft?.title_style,
     layout: draft?.layout, has_crop_track: !!draft?.scenes?.some(s => s.crop_track?.length),
     has_manual_adjustment: !!draft?.scenes?.some(s => s.framing_adjusted),
-    auto_frame_retained: draft?.layout === 'crop' && !!draft?.scenes?.some(s => s.framing_source === 'auto' && !s.framing_adjusted && s.crop_track?.length),
+    auto_frame_retained: (draft?.layout === 'crop' || draft?.layout === 'window') && !!draft?.scenes?.some(s => s.framing_source === 'auto' && !s.framing_adjusted && s.crop_track?.length),
+    // Template packaging: enums and booleans only, never the title, captions, names or tags.
+    template: packaging?.template, packaging_style: packaging ? packaging.style || (packaging.template === 'podcast_en' ? 'pop' : 'classic') : undefined,
+    tags_enabled: packaging ? packaging.tags_enabled : undefined, packaging_fallback: packaging ? packaging.fallback : undefined,
   })
 }
 export const studioApi = {
@@ -39,6 +43,8 @@ export const studioApi = {
     return observeStudioOperation('studio_import', () => api.post('/studio/import', body, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 0 }), (result: { project_id: string; analysis_run_id?: string }, observed) => {
       workflow.rememberProject(result.project_id, props)
       workflow.watch('studio-screen', result.project_id, undefined, undefined, observed, false, result.analysis_run_id)
+      // Automatic output has no confirmation step: watch the generation itself to its terminal state.
+      if (body.get?.('auto_start') === 'true') workflow.watch('studio-generation', result.project_id, undefined, undefined, observed)
     }, props)
   },
   confirmPlan: (pid: string, planId: string, goals: Goal[], options: ImportOptions, analysisMode: AnalysisMode) => observeStudioOperation('studio_confirm', () => api.post<unknown, { analysis_run_id?: string }>(`/studio/${pid}/start`, {plan_id:planId, goals, analysis_mode:analysisMode, language:options.language, aspect:options.aspect, duration:options.duration}), (_result, props) => workflow.watch('studio-production', planId, pid, undefined, { ...props, ...workflow.context(pid), analysis_mode: analysisMode, ...studioGoals(goals) }, false, _result.analysis_run_id), { ...workflow.context(pid), analysis_mode: analysisMode, ...studioGoals(goals), aspect: options.aspect || 'auto' }),

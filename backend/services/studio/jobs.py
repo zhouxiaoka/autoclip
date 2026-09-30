@@ -252,9 +252,18 @@ def _apply_strategy(draft, strategy_id, *, burned_subtitles=False, layout=None):
     )
     if burned_subtitles:
         value['subtitles'] = False
+    # The template version follows the new title style: a draft derived for one platform (comic, v6)
+    # must not carry a version the next platform's style rejects (card only supports v1).
+    version = value.get('title_template_version', 1)
     if value['title_style'] == 'editorial':
-        value['title_template_version'] = max(2, value.get('title_template_version', 1))
+        value['title_template_version'] = max(2, version if version in (2, 3, 6) else 2)
     elif value['title_style'] == 'comic':
+        value['title_template_version'] = 6
+    elif value['title_style'] in ('plain', 'impact', 'card'):
+        value['title_template_version'] = 1
+    elif value['title_style'] in ('pixel', 'frosted') and version not in (3, 6):
+        value['title_template_version'] = 6
+    elif version in (4, 5):
         value['title_template_version'] = 6
     return Draft.model_validate(value)
 
@@ -349,7 +358,8 @@ def _speaker_framing(value, video, *, window=None, wait_sec=120):
     tracks = {scene['id']: scene for scene in result['scenes']}
     if not any(scene.get('faces') for scene in result['scenes']):
         return None, 'full_frame'
-    scenes = [{**scene, 'crop_x': tracks[scene['id']]['crop_x'], 'crop_track': tracks[scene['id']]['crop_track']} for scene in value['scenes']]
+    scenes = [{**scene, 'crop_x': tracks[scene['id']]['crop_x'], 'crop_track': tracks[scene['id']]['crop_track'],
+               'framing_source': 'auto', 'framing_adjusted': False} for scene in value['scenes']]
     return scenes, 'speaker'
 
 
@@ -370,7 +380,7 @@ def _apply_framing(project_id, value, strategy_id, video, burned, cache):
     interview = strategy.template == 'interview_zh'
     fallback_layout = 'window' if interview else 'blur'
     if burned:
-        plain = [{**scene, 'crop_x': None, 'crop_track': None} for scene in value['scenes']]
+        plain = [{**scene, 'crop_x': None, 'crop_track': None, 'framing_source': None, 'framing_adjusted': False} for scene in value['scenes']]
         return {**value, 'scenes': plain, 'layout': fallback_layout}, 'full_frame_captions'
     window = INTERVIEW_WINDOW if interview else None
     key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), window)
@@ -384,7 +394,7 @@ def _apply_framing(project_id, value, strategy_id, video, burned, cache):
     scenes, framing = cache[key]
     if scenes is None:
         # Drop tracks inherited from another platform's framing: they were computed for a different window.
-        plain = [{**scene, 'crop_x': None, 'crop_track': None} for scene in value['scenes']]
+        plain = [{**scene, 'crop_x': None, 'crop_track': None, 'framing_source': None, 'framing_adjusted': False} for scene in value['scenes']]
         return {**value, 'scenes': plain, 'layout': fallback_layout}, framing
     return {**value, 'scenes': scenes, 'layout': 'window' if interview else 'crop'}, framing
 
@@ -493,15 +503,15 @@ def _auto_generate(project_id, plan):
                 data['events'] = events
             data['output_variants'].extend(variants)
             data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now())
-            data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
+            data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
         store.change(project_id, persist)
         _dispatch_pending_variants(project_id)
     except Exception as error:
         capture_studio_exception(error, 'production')
         def fail(data):
             if data.get('generation'):
-                data['generation'].update(status='failed', error=str(error)[:700], skipped=skipped)
-            data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': str(error)[:700], 'duration_ms': round((monotonic() - started) * 1000)}
+                data['generation'].update(status='failed', error=str(error)[:700], skipped=skipped, finished_at=store.now())
+            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': str(error)[:700], 'duration_ms': round((monotonic() - started) * 1000)}
         store.change(project_id, fail)
         mark_project(project_id, 'failed')
 
@@ -615,8 +625,8 @@ def _sync_variant_status(project_id, job_id, status, error=None):
         if all(item['status'] in ('completed', 'failed') for item in variants):
             completed = [item for item in variants if item['status'] == 'completed']
             outcome = 'completed' if len(completed) == len(variants) else 'partial' if completed else 'failed'
-            data['generation'].update(status=outcome, completed_variant_count=len(completed))
-            data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'outcome': outcome, 'created_at': store.now()}
+            data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=store.now())
+            data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': store.now()}
     store.change(project_id, update)
 
 
@@ -669,7 +679,8 @@ def _inspect(project_id, options, url, browser):
         plan['id'] = uuid.uuid4().hex
         if options.auto_start:
             def start_automatic(data):
-                data.update(plan=plan, analysis={'status': 'running', 'phase': 'production', 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
+                run_id = (data.get('analysis') or {}).get('run_id')  # observers match the run across phases
+                data.update(plan=plan, analysis={'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
                 data['generation'].update(status='production', started_at=store.now())
             store.change(project_id, start_automatic)
             mark_project(project_id, 'processing', creative=plan['preferences'], awaiting_confirmation=False, import_staging=False)
@@ -679,7 +690,7 @@ def _inspect(project_id, options, url, browser):
                 capture_studio_exception(error, 'dispatch')
                 message = '自动制作任务未能启动，请重试；原素材已保留'
                 def fail_automatic(data):
-                    data['generation'].update(status='failed', error=message)
+                    data['generation'].update(status='failed', error=message, finished_at=store.now())
                     data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': message}
                 store.change(project_id, fail_automatic)
                 mark_project(project_id, 'failed')

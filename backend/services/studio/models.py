@@ -46,8 +46,8 @@ class PackagingCue(BaseModel):
     model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
     start: float = Field(ge=0)
     end: float = Field(gt=0)
-    text: str = Field(min_length=1, max_length=200)
-    original: str = Field(default='', max_length=300)
+    text: str = Field(min_length=1, max_length=600)
+    original: str = Field(default='', max_length=900)
 
 
 class PackagingSpeaker(BaseModel):

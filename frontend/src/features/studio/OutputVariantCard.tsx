@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { message } from 'antd'
 import { t } from '../../i18n'
 import { Btn, fmtDuration } from '../../ui'
-import { trackOutputShare } from '../../analytics/studio'
+import { trackOutputShare, type VariantProperties } from '../../analytics/studio'
 import StudioDownloadLink from './StudioDownloadLink'
 import OutputFeedback from './OutputFeedback'
 import { Draft, OutputVariant, RenderJob } from './types'
@@ -24,13 +24,18 @@ const framingHints: Record<NonNullable<OutputVariant['framing']>, string> = {
 export default function OutputVariantCard({ projectId, variant, draft, job, onRetry }: { projectId: string; variant: OutputVariant; draft?: Draft; job?: RenderJob; onRetry: () => void }) {
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
+  const packaging = draft?.packaging
+  const analytics: VariantProperties = {
+    strategy_id: variant.strategy_id, framing: variant.framing, template: packaging?.template,
+    packaging_style: packaging ? packaging.style || (packaging.template === 'podcast_en' ? 'pop' : 'classic') : undefined,
+  }
   const completed = variant.status === 'completed' && job?.status === 'completed'
   const failed = variant.status === 'failed'
   const duration = job?.result?.duration ?? (draft ? draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) : 0)
   const copyCaption = async () => {
     const copied = await copyText(shareCaption(draft?.title))
     if (copied) {
-      trackOutputShare({ share_target: 'copy_caption', strategy_id: variant.strategy_id })
+      trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })
       message.success(t('分享文案已复制，发布视频时粘贴即可'))
     } else message.error(t('复制失败，请稍后重试'))
   }
@@ -56,9 +61,9 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
         {failed && <Btn variant="text" onClick={onRetry}>{t('重试这条')}</Btn>}
         {completed && variant.render_job_id && <Btn variant="text" onClick={() => navigate(outputVariantPublishPath(projectId, variant))}>{t('发布')}</Btn>}
         {completed && <Btn variant="text" onClick={() => void copyCaption()}>{t('复制分享文案')}</Btn>}
-        {completed && variant.render_job_id && <StudioDownloadLink className="studio-link" projectId={projectId} jobId={variant.render_job_id} onSaved={downloaded}/>}
+        {completed && variant.render_job_id && <StudioDownloadLink className="studio-link" projectId={projectId} jobId={variant.render_job_id} onSaved={downloaded} variant={analytics}/>}
       </div></div>
-      {asking && <OutputFeedback strategyId={variant.strategy_id} onDone={() => setAsking(false)}/>}
+      {asking && <OutputFeedback projectId={projectId} variant={analytics} onDone={() => setAsking(false)}/>}
     </div>
   </article>
 }

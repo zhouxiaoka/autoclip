@@ -1,6 +1,6 @@
 /** Versioned business telemetry. Only explicit UI operations enroll projects. */
 export type Properties = Record<string, string | number | boolean | null | undefined>
-export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export' | 'framing-runtime'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean; properties?: Properties; token?: string; runId?: string }
+export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export' | 'studio-generation' | 'framing-runtime'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean; properties?: Properties; token?: string; runId?: string }
 export const WORKFLOW_KEY = 'autoclip.analytics.workflow.v2'
 const TTL = 7 * 86400000
 const LIMIT = 50
@@ -29,19 +29,22 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     aspect: ['original', 'portrait', 'landscape', 'auto'],
     recommendation_mode: ['ai', 'local', 'manual', 'fallback'],
     subtitle_status: ['available', 'missing', 'invalid', 'unreadable', 'too_large'],
-    outcome: ['completed', 'failed', 'partial', 'recommended', 'manual', 'fallback', 'scheduled', 'inbox', 'unknown'],
+    outcome: ['completed', 'failed', 'partial', 'recommended', 'manual', 'fallback', 'scheduled', 'inbox', 'unknown', 'auto_started'],
     download_mode: ['native', 'browser'], gateway: ['bilibili', 'upload-post'],
     title_style: ['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'],
     share_target: ['copy_caption', 'use_case_discussion'],
     output_rating: ['ready', 'needs_edit', 'unusable'],
+    template: ['interview_zh', 'podcast_en', 'landscape', 'none'],
+    packaging_style: ['classic', 'boxed', 'spotlight', 'pop', 'cinematic'],
+    framing: ['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'],
   }
   for (const [key, allowed] of Object.entries(enums)) {
     if (typeof input[key] === 'string' && allowed.includes(input[key] as string)) out[key] = input[key] as string
   }
-  for (const key of ['brand_outro_enabled', 'reused_content_profile', 'has_crop_track', 'has_manual_adjustment', 'auto_frame_retained', 'subtitle_enabled', 'has_subtitle', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
+  for (const key of ['brand_outro_enabled', 'reused_content_profile', 'has_crop_track', 'has_manual_adjustment', 'auto_frame_retained', 'tags_enabled', 'packaging_fallback', 'burned_captions', 'subtitle_enabled', 'has_subtitle', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean
   }
-  for (const key of ['example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'variant_count', 'completed_variant_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count']) {
+  for (const key of ['example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count']) {
     if (typeof input[key] === 'number' && Number.isFinite(input[key]) && (input[key] as number) >= 0) out[key] = input[key] as number
   }
   for (const prefix of ['requested', 'succeeded', 'failed']) {
@@ -95,6 +98,33 @@ export interface StudioSnapshot {
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; local_evidence?: { subtitle_status?: string } }
   analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
   jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string }[]
+  generation?: { auto_start?: boolean; status?: string; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string } | null
+  output_variants?: { draft_id: string; strategy_id: string; status: string; framing?: string; trimmed_to_sec?: number }[]
+  drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
+}
+
+/** Aggregate counts for one automatic generation; no titles, captions, names or IDs. */
+export function generationSummary(snapshot: StudioSnapshot): Record<string, unknown> {
+  const variants = snapshot.output_variants || []
+  const templates = new Map((snapshot.drafts || []).map(d => [d.id, d.packaging] as const))
+  const packaged = variants.map(v => templates.get(v.draft_id)).filter(Boolean)
+  const count = (test: (v: (typeof variants)[number]) => boolean) => variants.filter(test).length
+  const created = utcMillis(snapshot.generation?.created_at), finished = utcMillis(snapshot.generation?.finished_at)
+  return {
+    variant_count: variants.length,
+    completed_variant_count: count(v => v.status === 'completed'),
+    failed_variant_count: count(v => v.status === 'failed'),
+    skipped_variant_count: Array.isArray(snapshot.generation?.skipped) ? snapshot.generation!.skipped!.length : 0,
+    platform_count: snapshot.generation?.requested_platforms?.length || 0,
+    interview_count: packaged.filter(p => p?.template === 'interview_zh').length,
+    podcast_count: packaged.filter(p => p?.template === 'podcast_en').length,
+    landscape_count: variants.length - packaged.length,
+    speaker_framed_count: count(v => v.framing === 'speaker'),
+    packaging_fallback_count: packaged.filter(p => p?.fallback).length,
+    trimmed_count: count(v => !!v.trimmed_to_sec),
+    burned_captions: !!snapshot.generation?.source_has_burned_subtitles,
+    duration_ms: created !== undefined && finished !== undefined ? Math.max(0, finished - created) : undefined,
+  }
 }
 
 /** Storage and capture are injected so offline/privacy/replay behavior is testable. */
@@ -111,7 +141,7 @@ export class WorkflowTracker {
     try {
       const raw: unknown = JSON.parse(storage.getItem(WORKFLOW_KEY) || '[]')
       if (Array.isArray(raw)) this.watches = raw.filter((w): w is Watch =>
-        w && ['project', 'export', 'bilibili', 'youtube', 'studio-screen', 'studio-production', 'studio-export', 'framing-runtime'].includes(w.kind) &&
+        w && ['project', 'export', 'bilibili', 'youtube', 'studio-screen', 'studio-production', 'studio-export', 'studio-generation', 'framing-runtime'].includes(w.kind) &&
         typeof w.id === 'string' && Number.isFinite(w.since) && Array.isArray(w.seen) &&
         w.seen.every((v: unknown) => typeof v === 'string') && w.seen.length <= 2000 &&
         (w.projectId === undefined || typeof w.projectId === 'string') &&
@@ -210,12 +240,20 @@ export class WorkflowTracker {
       }
     } else if (w.kind === 'studio-screen') {
       details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code }
-      if (snapshot.analysis?.status === 'failed' && snapshot.analysis?.phase !== 'production') { event = 'studio_screen_finished'; outcome = 'failed' }
+      const automatic = !!snapshot.generation?.auto_start && ['production', 'rendering'].includes(snapshot.analysis?.phase || '')
+      if (automatic) {
+        // Automatic output skips confirmation: screening ended once production started, whatever came after.
+        event = 'studio_screen_finished'; outcome = 'auto_started'
+        details = { ...details, duration_ms: undefined, error_code: undefined, recommendation_mode: snapshot.plan?.mode, analysis_mode: snapshot.plan?.recommended_analysis, subtitle_status: snapshot.plan?.local_evidence?.subtitle_status }
+      } else if (snapshot.analysis?.status === 'failed' && snapshot.analysis?.phase !== 'production') { event = 'studio_screen_finished'; outcome = 'failed' }
       else if (snapshot.analysis?.status === 'awaiting_confirmation' && snapshot.plan?.id) {
         event = 'studio_screen_finished'
         outcome = ['ai', 'local'].includes(snapshot.plan.mode || '') ? 'recommended' : snapshot.plan.mode
         details = { ...details, recommendation_mode: snapshot.plan.mode, analysis_mode: snapshot.plan.recommended_analysis, subtitle_status: snapshot.plan.local_evidence?.subtitle_status }
       }
+    } else if (w.kind === 'studio-generation' && ['completed', 'partial', 'failed'].includes(snapshot.generation?.status || '')) {
+      event = 'studio_generation_finished'; outcome = snapshot.generation!.status
+      details = generationSummary(snapshot)
     } else if (w.kind === 'studio-production' && snapshot.plan?.id === w.id &&
                ['completed', 'failed'].includes(snapshot.analysis?.status || '')) {
       event = 'studio_production_finished'; outcome = snapshot.analysis!.outcome || snapshot.analysis!.status

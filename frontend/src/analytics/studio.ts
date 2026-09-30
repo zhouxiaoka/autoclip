@@ -27,33 +27,32 @@ export async function observeStudioOperation<T>(
   }
 }
 
-export function trackQuickOutput(properties: Record<string, unknown>) {
-  captureBusinessEvent('studio_auto_generation_finished', safeStudioProperties(properties))
-}
-
 export function trackQuickOutputPlatforms(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_platforms_selected', safeStudioProperties(properties))
 }
 
+/** Enum/boolean summary of one output variant for delivery events; never titles, captions or names. */
+export type VariantProperties = { strategy_id?: string; template?: string; packaging_style?: string; framing?: string }
+
 /** Share intent only: which enum target, never the caption, title or link text. */
-export function trackOutputShare(properties: { share_target: 'copy_caption' | 'use_case_discussion'; strategy_id?: string }) {
-  captureBusinessEvent('studio_output_shared', safeStudioProperties(properties))
+export function trackOutputShare(projectId: string, properties: { share_target: 'copy_caption' | 'use_case_discussion' } & VariantProperties) {
+  captureBusinessEvent('studio_output_shared', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
 }
 
 /** Anonymous three-level rating; free text is never collected. */
-export function trackOutputRating(properties: { output_rating: 'ready' | 'needs_edit' | 'unusable'; strategy_id?: string }) {
-  captureBusinessEvent('studio_output_rated', safeStudioProperties(properties))
+export function trackOutputRating(projectId: string, properties: { output_rating: 'ready' | 'needs_edit' | 'unusable' } & VariantProperties) {
+  captureBusinessEvent('studio_output_rated', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
 }
 
 /** Navigation intent only; no claim about successful disk writes. */
-export function studioDownloadRequested(projectId?: string, jobId?: string) {
-  captureBusinessEvent('studio_download_requested', safeStudioProperties({ ...workflow.context(projectId, jobId), download_mode: 'browser' }))
+export function studioDownloadRequested(projectId?: string, jobId?: string, variant: VariantProperties = {}) {
+  captureBusinessEvent('studio_download_requested', safeStudioProperties({ ...workflow.context(projectId, jobId), ...variant, download_mode: 'browser' }))
 }
 
-export async function observeStudioDownload<T>(action: () => Promise<T>, projectId?: string, jobId?: string): Promise<T> {
+export async function observeStudioDownload<T>(action: () => Promise<T>, projectId?: string, jobId?: string, variant: VariantProperties = {}): Promise<T> {
   const generation = workflow.generation(), started = Date.now()
   const enabled = workflow.active(generation)
-  const props = safeStudioProperties({ ...workflow.context(projectId, jobId), operation_id: telemetryId(), download_mode: 'native' })
+  const props = safeStudioProperties({ ...workflow.context(projectId, jobId), ...variant, operation_id: telemetryId(), download_mode: 'native' })
   const emit = (name: string, result: Properties = {}) => {
     if (enabled && workflow.active(generation)) captureBusinessEvent(name, { ...props, ...result })
   }

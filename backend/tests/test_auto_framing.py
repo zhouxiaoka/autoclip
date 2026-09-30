@@ -37,6 +37,13 @@ def test_faces_give_speaker_crop_and_one_detection_per_window_shape(monkeypatch)
     assert calls == [jobs.INTERVIEW_WINDOW, None]  # 4:3 interview window once, 9:16 once
 
 
+@pytest.mark.parametrize('strategy_id', ['douyin', 'tiktok', 'instagram_reels', 'youtube_shorts', 'youtube_long', 'bilibili', 'xiaohongshu', 'original'])
+def test_redirecting_a_derived_draft_to_any_platform_keeps_a_valid_title_version(strategy_id):
+    derived = {**_value(), 'title_style': 'comic', 'title_template_version': 6}  # e.g. an earlier Douyin variant
+    draft = jobs._apply_strategy(derived, strategy_id)
+    assert draft.title_style and draft.title_template_version in (1, 2, 3, 4, 5, 6)
+
+
 def test_one_packaging_call_per_content_and_template(monkeypatch, tmp_path):
     from backend.services import publish_export
     from backend.services.studio import packaging, store
