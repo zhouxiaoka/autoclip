@@ -268,18 +268,43 @@ def _apply_strategy(draft, strategy_id, *, burned_subtitles=False, layout=None):
     return Draft.model_validate(value)
 
 
+def _complete_thought_bounds(project_id, clips):
+    """Clip bounds that start and end on complete sentences, and complete thoughts when a text model is set up."""
+    from backend.services.studio import boundaries
+    try:
+        from backend.services.publish_export import _load_srt_entries
+        rows = boundaries.rows_from_entries(_load_srt_entries(project_id))
+    except Exception:  # noqa: BLE001 - no subtitles: keep the pipeline's bounds
+        return clips
+    call = None
+    try:
+        from backend.utils.llm_client import LLMClient
+        if LLMClient().llm_manager.get_current_provider_info().get('available'):
+            call = intelligence.text_json
+    except Exception:  # noqa: BLE001
+        call = None
+    return boundaries.refine_clips(rows, clips, call)
+
+
 def _content_drafts(project_id, plan, video):
     """Create drafts once from the selected content route, before platform derivation."""
     route = plan.get('recommended_analysis', 'subtitle')
     prefs = Preferences.model_validate(plan['preferences'])
     if route == 'subtitle' or prefs.goal == 'content':
         clips = run_content(project_id, video)
-        drafts = []
+        from backend.utils.text_processor import TextProcessor
+        picked = []
         for clip in clips:
             try:
-                from backend.utils.text_processor import TextProcessor
                 start = float(clip.get('start_time_seconds')) if clip.get('start_time_seconds') is not None else TextProcessor.time_to_seconds(clip['start_time'])
                 end = float(clip.get('end_time_seconds')) if clip.get('end_time_seconds') is not None else TextProcessor.time_to_seconds(clip['end_time'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            picked.append((clip, start, end))
+        bounds = _complete_thought_bounds(project_id, [(s, e) for _, s, e in picked])
+        drafts = []
+        for (clip, _, _), (start, end) in zip(picked, bounds):
+            try:
                 scene = Scene(
                     id=uuid.uuid4().hex,
                     label=str(clip.get('generated_title') or clip.get('outline') or '内容片段')[:120],

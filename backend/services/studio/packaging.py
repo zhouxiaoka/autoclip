@@ -17,6 +17,7 @@ from backend.services.studio.models import Packaging
 logger = logging.getLogger(__name__)
 
 CJK = re.compile(r'[㐀-鿿]')
+KANA = re.compile(r'[぀-ヿ]')
 LATIN = re.compile(r'[A-Za-z]')
 TITLE_LIMIT = {'zh': 12, 'en': 36}
 TAG_LIMIT = 10
@@ -44,6 +45,8 @@ PROMPT = (
 def source_language(texts: list[str]) -> str:
     joined = ''.join(texts)
     cjk, latin = len(CJK.findall(joined)), len(LATIN.findall(joined))
+    if len(KANA.findall(joined)) >= max(5, cjk * 0.1):
+        return 'other'  # Japanese: kanji alone must not pass for Chinese
     if cjk >= max(10, latin * 0.5):
         return 'zh'
     if latin >= 20 and cjk < latin * 0.05:
@@ -84,7 +87,9 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     """Packaging dict for `Draft.packaging`; never raises for model problems."""
     template, audience = strategy.template, strategy.audience_language
     src = source_language([line['text'] for line in lines])
-    translate = src != audience and not burned
+    # Burned captions only replace ours when they are already in the audience language: a Japanese
+    # talk with English captions still needs Chinese captions for Douyin.
+    translate = src != audience
     base = {'template': template, 'audience_language': audience, 'source_language': src, 'burned_captions': burned}
     fallback = {**base, 'title_lines': _fallback_title(draft, audience), 'fallback': True,
                 'cues': [] if burned else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
@@ -155,15 +160,17 @@ def _validated(result, lines, base, translate, burned, known_names, draft):
         titles = _fallback_title(draft, audience)
     accent = result.get('accent_line') if result.get('accent_line') in (0, 1) else len(titles) - 1
     cues = []
-    if not burned:
-        try:
-            cues = _segments(result.get('segments'), lines, translate)
-        except ValueError:
-            if translate:
-                raise  # no usable translation: the whole package falls back
-            # Same language: the source rows are already the right captions; keep title, names, highlights.
+    if not burned or translate:
+        if translate:
+            cues = _segments(result.get('segments'), lines, translate)  # invalid translation: whole package falls back
+        else:
+            # Same language: the source rows are what is actually said and carry the tightest timing.
+            # Merged sentence segments spread word timing over 20 s+ and drift from the audio.
             cues = [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': '', 'lines': (i, i)}
                     for i, l in enumerate(lines)]
+        if burned:
+            for cue in cues:
+                cue['original'] = ''  # the picture already carries a caption; never stack a third line
     haystack = (' '.join(line['text'] for line in lines) + ' ' + known_names + ' ' + draft.get('title', '')).lower()
     speakers, seen = [], set()
     for item in result.get('speakers') or []:

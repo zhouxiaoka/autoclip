@@ -68,13 +68,27 @@ def test_podcast_keeps_english_and_only_highlights_words_in_the_segment():
                              highlights=[{'line': 1, 'word': 'instructor'}, {'line': 2, 'word': 'nonexistent'}], tags=[{'line': 0, 'text': 'x'}])
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('tiktok'), known_names='Sam Altman', call=lambda *_: response)
     assert result['template'] == 'podcast_en' and result['cues'][0]['original'] == ''
-    assert result['highlights'] == [{'at': 10.0, 'text': 'instructor'}]
+    assert result['highlights'] == [{'at': 12.0, 'text': 'instructor'}]  # anchored on the row that says it
     assert result['tags'] == []  # commentary tags are interview-only
 
 
-def test_burned_captions_skip_our_caption_track():
-    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), burned=True, call=lambda *_: good_response())
+def test_burned_captions_in_the_audience_language_skip_our_track():
+    zh_lines = [{'start': 0.0, 'end': 3.0, 'text': '这是一个中文字幕，内容比较长一些'}]
+    result = packaging.build_packaging(DRAFT, zh_lines, platform_strategy('douyin'), burned=True,
+                                       call=lambda *_: good_response(segments=[{'from': 0, 'to': 0, 'text': '这是一个中文字幕'}]))
     assert result['burned_captions'] is True and result['cues'] == []
+
+
+def test_burned_foreign_captions_still_get_audience_captions_without_the_original():
+    ja_lines = [{'start': 0.0, 'end': 3.0, 'text': 'ゲーム業界に来たという事でございます'}]
+    response = good_response(segments=[{'from': 0, 'to': 0, 'text': '所以我才进了游戏行业'}])
+    result = packaging.build_packaging(DRAFT, ja_lines, platform_strategy('douyin'), burned=True, call=lambda *_: response)
+    assert result['source_language'] == 'other'
+    assert [c['text'] for c in result['cues']] == ['所以我才进了游戏行业'] and result['cues'][0]['original'] == ''
+
+
+def test_japanese_is_not_mistaken_for_chinese():
+    assert packaging.source_language(['最高傑作は何ですか', '今後多分映画を超えるものになる']) == 'other'
 
 
 def test_prompt_rejects_generic_praise_tags():
@@ -86,7 +100,7 @@ def test_long_english_sentences_and_titles_survive_validation():
     response = good_response(title_lines=["API pricing won't die—token value asymmetry will redefine AGI economics"],
                              segments=[{'from': 0, 'to': 2, 'text': long_text}])
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('tiktok'), call=lambda *_: response)
-    assert result['fallback'] is False and result['cues'][0]['text'] == long_text
+    assert result['fallback'] is False and [c['text'] for c in result['cues']] == [l['text'] for l in LINES]  # same language: source rows
     assert len(result['title_lines']) == 2 and all(len(line) <= 40 for line in result['title_lines'])
     assert ' '.join(result['title_lines']).startswith("API pricing won't die")
 

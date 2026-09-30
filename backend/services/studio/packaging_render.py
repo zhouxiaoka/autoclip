@@ -89,8 +89,8 @@ Style: PlateRole,{FONT},32,{SUB},{SUB},{INK_SOFT},{INK_SOFT},0,0,0,0,100,100,0,0
 Style: PlateBar,{FONT},10,{ACCENT},{ACCENT},{ACCENT},{ACCENT},0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 Style: CaptionBox,{FONT},58,{WHITE},{WHITE},{INK_SOFT},{INK_SOFT},1,0,0,0,100,100,1,0,3,14,0,2,48,48,0,1
 Style: TagPill,{FONT},48,{WHITE},{WHITE},{ACCENT},{ACCENT},1,0,0,0,100,100,2,0,3,14,0,5,40,40,0,1
-Style: Cine,{FONT},96,{WHITE},{WHITE},&H00000000,&H00000000,1,0,0,0,100,100,2,0,1,0,0,2,60,60,0,1
-Style: CineGlow,{FONT},96,{ACCENT},{ACCENT},{ACCENT},&H00000000,1,0,0,0,100,100,2,0,1,3,0,2,60,60,0,1
+Style: Cine,{FONT},64,{WHITE},{WHITE},&H00000000,&H00000000,1,0,0,0,100,100,2,0,1,0,0,2,60,60,0,1
+Style: CineGlow,{FONT},64,{ACCENT},{ACCENT},{ACCENT},&H00000000,1,0,0,0,100,100,2,0,1,3,0,2,60,60,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -186,7 +186,8 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
         if interview:
             caption_style = 'CaptionBox' if style == 'boxed' else 'Caption'
             size = 58 if style == 'boxed' else 62
-            y = WIN_Y + WIN_H - 22
+            # Burned captions sit at the bottom of the picture: put ours under the window instead.
+            anchor, y = ('\\an8', WIN_Y + WIN_H + 30) if packaging.burned_captions else ('\\an2', WIN_Y + WIN_H - 22)
             for s, e, text, original in timed_screens(cue.text, start, end, _limit(size), cue.original, _limit(36)):
                 body = _esc_lines(text)
                 if style == 'spotlight':
@@ -194,7 +195,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
                     motion = f'\\move(540,{y + 24},540,{y},0,180)\\fad(120,60)'
                 else:
                     motion = f'\\pos(540,{y})\\fad(60,60)' if style == 'classic' else f'\\pos(540,{y})\\fad(90,90)'
-                out.add(2, s, e, caption_style, f'{{\\an2{motion}}}{body}')
+                out.add(2, s, e, caption_style, f'{{{anchor}{motion}}}{body}')
                 if original:
                     out.add(1, s, e, 'Original', f'{{\\an8\\pos(540,{WIN_Y + WIN_H + 34})\\fad(60,60)}}{_esc_lines(original)}')
             continue
@@ -208,11 +209,14 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
             continue
         words = _words(cue.text, start, end, None)
         if style == 'cinematic':
-            for w0, w1, token in words:
-                glow = f'{{\\an2\\pos(540,1320)\\blur8\\alpha&H70&\\fad(80,80)}}{_esc(token)}'
-                crisp = f'{{\\an2\\pos(540,1320)\\fad(80,80)}}{_esc(token)}'
-                out.add(1, w0, max(w1, w0 + .18), 'CineGlow', glow)
-                out.add(2, w0, max(w1, w0 + .18), 'Cine', crisp)
+            # One calm line of 2–5 words at a time; single-word flashes read as jittery.
+            phrases = _chunks(words, max_words=5, max_chars=26)
+            for n, phrase in enumerate(phrases):
+                p0 = phrase[0][0]
+                p1 = phrases[n + 1][0][0] if n + 1 < len(phrases) else phrase[-1][1] + .1
+                text = _esc(' '.join(token for _, _, token in phrase))
+                out.add(1, p0, max(p1, p0 + .4), 'CineGlow', f'{{\\an2\\pos(540,1320)\\blur8\\alpha&H70&\\fad(160,120)}}{text}')
+                out.add(2, p0, max(p1, p0 + .4), 'Cine', f'{{\\an2\\pos(540,1320)\\fad(160,120)}}{text}')
             continue
         for chunk in _chunks(words):
             chunk_end = chunk[-1][1] + .05
