@@ -490,10 +490,33 @@ class SpeechRecognizer:
                     download_root=models_dir,
                 )
 
+            audio_input = str(video_path)
+
             def transcribe(model, *, vad_filter: bool):
-                seg_iter, _info = model.transcribe(
-                    str(video_path), language=language, vad_filter=vad_filter, word_timestamps=True,
-                )
+                nonlocal audio_input
+                try:
+                    seg_iter, _info = model.transcribe(
+                        audio_input, language=language, vad_filter=vad_filter, word_timestamps=True,
+                    )
+                except TypeError as exc:
+                    if 'metadata_errors' not in str(exc) or not isinstance(audio_input, str):
+                        raise
+                    # Existing installations may already contain PyAV 19. Decode
+                    # with the bundled ffmpeg instead; don't patch global av.open.
+                    import numpy as np
+                    decoded = subprocess.run(
+                        [get_ffmpeg_path(), '-nostdin', '-v', 'error', '-i', str(video_path),
+                         '-vn', '-ac', '1', '-ar', '16000', '-f', 's16le', '-'],
+                        capture_output=True, timeout=config.timeout or 300,
+                    )
+                    if decoded.returncode or not decoded.stdout:
+                        raise SpeechRecognitionError(
+                            "Whisper 无法解码视频音轨。请确认视频有可播放的人声，或导入 SRT 字幕。"
+                        ) from exc
+                    audio_input = np.frombuffer(decoded.stdout, np.int16).astype(np.float32) / 32768.0
+                    seg_iter, _info = model.transcribe(
+                        audio_input, language=language, vad_filter=vad_filter, word_timestamps=True,
+                    )
                 return ([{"start": s.start, "end": s.end, "text": s.text,
                          "words": [{"text": w.word, "start": w.start, "end": w.end}
                                    for w in (getattr(s, "words", None) or [])]} for s in seg_iter], _info)

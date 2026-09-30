@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 
 # 要安装的运行时包（faster-whisper 带上 ctranslate2、onnxruntime、av、huggingface_hub 等，
 # 不含 PyTorch）
-WHISPER_PACKAGES = ["faster-whisper"]
+# PyAV 19 removed av.open(metadata_errors=...), still used by faster-whisper.
+WHISPER_PACKAGES = ["faster-whisper", "av<19"]
 # 运行时核心模块（用于探测是否已装）
 WHISPER_IMPORT_NAME = "faster_whisper"
 _runtime_import_error = ""

@@ -736,8 +736,8 @@ class DataSyncService:
                         
                         # 更新项目状态和统计信息
                         project.status = ProjectStatus.COMPLETED
-                        project.total_clips = step6_output.get("clips_count", 0)
-                        project.total_collections = step6_output.get("collections_count", 0)
+                        project.total_clips = step6_output.get("clips_generated", step6_output.get("clips_count", len(step6_output.get("clip_paths", []))))
+                        project.total_collections = step6_output.get("collections_generated", step6_output.get("collections_count", len(step6_output.get("collection_paths", []))))
                         project.completed_at = datetime.now()
                         
                         self.db.commit()
