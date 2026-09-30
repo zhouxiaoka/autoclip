@@ -35,7 +35,7 @@ def test_slice_srt_shifts_to_zero():
 def test_list_presets_has_vertical_and_horizontal():
     from backend.services.publish_export import list_presets
     keys = {p["key"] for p in list_presets()}
-    assert keys == {"douyin", "xiaohongshu", "shorts", "bilibili", "original"}
+    assert keys == {"douyin", "xiaohongshu", "shorts", "bilibili", "original", "1080p60"}
 
 
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="本机没有 ffmpeg")
@@ -69,3 +69,42 @@ def test_export_original_reencodes_and_is_idempotent(data_dir, tmp_path):
     assert r1.get("cached") is False
     r2 = export_clip(req)
     assert r2.get("cached") is True and r2["path"] == r1["path"]
+
+
+@pytest.mark.skipif(not shutil.which('ffmpeg'), reason='本机没有 ffmpeg')
+def test_1080p60_actual_file_and_cache_keep_spec(data_dir, tmp_path, monkeypatch):
+    from backend.services import publish_export as export
+    video = tmp_path / '24fps portrait.mp4'
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=180x320:rate=24:duration=1',
+                    '-f','lavfi','-i','sine=frequency=440:duration=1','-c:v','libx264','-c:a','aac',str(video)], check=True)
+    monkeypatch.setattr(export, 'find_source_video', lambda _:video)
+    monkeypatch.setattr(export, 'load_clip_meta', lambda *_:{'id':'1','title':'spec','start_time':'00:00:00,000','end_time':'00:00:01,000'})
+    original = export.export_clip(export.ExportRequest('spec','1','original',False,False))
+    assert original['fps'] == 24 and original['width'] == 180
+    req = export.ExportRequest('spec','1','1080p60',False,False)
+    output = export.export_clip(req)
+    assert output['path'] != original['path']
+    assert (output['width'], output['height'], output['fps'], output['video_codec']) == (1920,1080,60,'h264')
+    streams = json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',output['path']]))['streams']
+    assert next(s for s in streams if s['codec_type']=='audio')['codec_name'] == 'aac'
+    assert int(next(s for s in streams if s['codec_type']=='video')['nb_frames']) == 60
+    again = export.export_clip(req)
+    assert again['cached'] and again['fps'] == 60 and again['width'] == 1920
+    with pytest.raises(ValueError, match='固定横屏'):
+        export.export_clip(export.ExportRequest('spec','1','1080p60',layout='none'))
+
+
+@pytest.mark.skipif(not shutil.which('ffmpeg'), reason='本机没有 ffmpeg')
+def test_studio_1080p60_reencodes_final_file_without_double_text(data_dir, tmp_path, monkeypatch):
+    from backend.services import publish_export as export
+    video = tmp_path / 'studio final.mp4'
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','color=size=320x180:rate=30:duration=1',
+                    '-c:v','libx264',str(video)],check=True)
+    monkeypatch.setattr(export,'load_clip_meta',lambda *_:{'source_type':'studio','video_path':str(video),'title':'finished','duration_sec':1})
+    def forbidden(*_):
+        pytest.fail('must retain Studio rendered text instead of loading raw subtitles')
+    monkeypatch.setattr(export,'find_source_video',forbidden)
+    monkeypatch.setattr(export,'_load_srt_entries',forbidden)
+    output=export.export_clip(export.ExportRequest('spec','studio-1','1080p60'))
+    assert (output['width'],output['height'],output['fps']) == (1920,1080,60)
+    assert '不重复烧录' in output['warnings'][0]
