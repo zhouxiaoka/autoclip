@@ -76,6 +76,8 @@ class OutlineExtractor:
         # 2. 基于时间智能分块（短 / 中视频整条一块，长视频 ~30 分钟一块）
         interval = 30 if profile.tier == "long" else max(1, int(profile.total_sec // 60) + 1)
         chunks = self.text_processor.chunk_srt_data(srt_data, interval_minutes=interval)
+        from .settings import processing_int
+        chunks = self.text_processor.limit_srt_chunk_size(chunks, processing_int("chunk_size", 5000, 1000, 10000))
         logger.info(f"文本已按~{interval}分钟/块切分，共{len(chunks)}个块")
         
         # 3. 保存文本块和SRT块到中间文件
@@ -175,6 +177,21 @@ class OutlineExtractor:
         Returns:
             解析后的大纲结构
         """
+        # 分类提示词同时存在 JSON 和 Markdown 契约，统一成下游结构。
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.strip(), flags=re.IGNORECASE)
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            data = None
+        if isinstance(data, list):
+            return [
+                {"title": item["title"].strip(),
+                 "subtopics": [s.strip() for s in item.get("subtopics", []) if isinstance(s, str) and s.strip()],
+                 "chunk_index": chunk_index}
+                for item in data
+                if isinstance(item, dict) and isinstance(item.get("title"), str)
+                and item["title"].strip() and isinstance(item.get("subtopics", []), list)
+            ]
         outlines = []
         lines = response.split('\n')
         current_outline = None

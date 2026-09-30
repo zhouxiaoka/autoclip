@@ -91,6 +91,19 @@ def repo_id_for(model_name: str) -> Optional[str]:
     return cfg["repo_id"] if cfg else None
 
 
+def _snapshot_is_complete(snapshot: Path) -> bool:
+    """HF 会在权重下载完成前创建 snapshot；目录存在不代表可以离线转写。"""
+    try:
+        required = [snapshot / name for name in ("model.bin", "config.json", "tokenizer.json")]
+        vocabulary = list(snapshot.glob("vocabulary.*"))
+        return (
+            all(path.is_file() and path.stat().st_size > 0 for path in required)
+            and any(path.is_file() and path.stat().st_size > 0 for path in vocabulary)
+        )
+    except OSError:
+        return False
+
+
 class WhisperModelManager:
     def __init__(self):
         self.model_configs = _MODELS
@@ -104,10 +117,26 @@ class WhisperModelManager:
         # HF 缓存目录命名：models--<org>--<name>
         return whisper_runtime.get_models_dir() / "hub" / ("models--" + repo.replace("/", "--"))
 
-    def _is_downloaded(self, model_name: str) -> bool:
+    def get_local_model_path(self, model_name: str) -> Optional[Path]:
+        # SpeechRecognitionConfig 兼容旧配置的 large 别名。
+        model_name = "large-v3" if model_name == "large" else model_name
+        if model_name not in self.model_configs:
+            return None
         d = self._model_cache_dir(model_name)
         snaps = d / "snapshots"
-        return snaps.exists() and any(snaps.iterdir())
+        try:
+            candidates = sorted(snaps.iterdir(), key=lambda path: path.stat().st_mtime, reverse=True)
+            ref = d / "refs" / "main"
+            if ref.is_file():
+                revision = ref.read_text(encoding="utf-8").strip()
+                # 只选当前缓存内的 snapshot，不使用任意路径。
+                candidates.sort(key=lambda path: path.name != revision)
+            return next((path for path in candidates if _snapshot_is_complete(path)), None)
+        except OSError:
+            return None
+
+    def _is_downloaded(self, model_name: str) -> bool:
+        return self.get_local_model_path(model_name) is not None
 
     def _check_model_status(self, model_name: str) -> ModelStatus:
         with self._lock:
@@ -171,10 +200,12 @@ class WhisperModelManager:
             from huggingface_hub import snapshot_download
             _silence_download_progress()
             logger.info(f"开始下载 Whisper 模型 {model_name} ({repo_id})")
-            snapshot_download(
+            snapshot = snapshot_download(
                 repo_id=repo_id,
                 cache_dir=str(whisper_runtime.get_models_dir() / "hub"),
             )
+            if not _snapshot_is_complete(Path(snapshot)):
+                raise RuntimeError("Whisper 模型文件不完整，请重新下载模型后再试。")
             with self._lock:
                 self._download_state[model_name] = {"status": "downloaded", "progress": 100, "error": None}
             logger.info(f"Whisper 模型 {model_name} 下载完成")
@@ -191,7 +222,7 @@ class WhisperModelManager:
     def get_download_progress(self, model_name: str) -> Optional[int]:
         with self._lock:
             st = self._download_state.get(model_name)
-        if not st:
+        if not st or st.get("status") == "downloaded":
             return 100 if self._is_downloaded(model_name) else None
         return st.get("progress")
 

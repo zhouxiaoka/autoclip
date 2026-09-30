@@ -8,6 +8,8 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 from backend.services import whisper_runtime
 from backend.services.whisper_model_manager import (
     ModelStatus,
@@ -84,7 +86,7 @@ def test_download_success_marks_downloaded(monkeypatch, tmp_path):
 
     def ok(**kwargs):
         seen.update(kwargs)
-        (tmp_path / "hub").mkdir(parents=True, exist_ok=True)
+        return str(_snapshot(tmp_path))
 
     _install_fake_hub(monkeypatch, ok)
     manager = _manager(monkeypatch, tmp_path)
@@ -95,6 +97,92 @@ def test_download_success_marks_downloaded(monkeypatch, tmp_path):
     assert seen["cache_dir"] == str(tmp_path / "hub")
     with manager._lock:
         assert manager._download_state["base"]["status"] == "downloaded"
+
+
+def _snapshot(root, revision="complete"):
+    snapshot = root / "hub/models--Systran--faster-whisper-base/snapshots" / revision
+    snapshot.mkdir(parents=True, exist_ok=True)
+    for name in ("model.bin", "config.json", "tokenizer.json", "vocabulary.json"):
+        (snapshot / name).write_bytes(b"data")
+    return snapshot
+
+
+@pytest.mark.parametrize("missing", ["model.bin", "config.json", "tokenizer.json", "vocabulary.json"])
+def test_partial_snapshot_is_not_downloaded(monkeypatch, tmp_path, missing):
+    manager = _manager(monkeypatch, tmp_path)
+    snapshot = _snapshot(tmp_path)
+    (snapshot / missing).unlink()
+    assert manager.get_model_info("base").status == ModelStatus.AVAILABLE
+    assert manager.get_download_progress("base") is None
+
+
+def test_empty_weights_and_broken_symlinks_are_not_downloaded(monkeypatch, tmp_path):
+    manager = _manager(monkeypatch, tmp_path)
+    snapshot = _snapshot(tmp_path)
+    (snapshot / "model.bin").write_bytes(b"")
+    assert not manager._is_downloaded("base")
+    (snapshot / "model.bin").unlink()
+    (snapshot / "model.bin").symlink_to(tmp_path / "missing-blob")
+    assert not manager._is_downloaded("base")
+
+
+def test_download_does_not_report_success_for_incomplete_snapshot(monkeypatch, tmp_path):
+    manager = _manager(monkeypatch, tmp_path)
+    snapshot = _snapshot(tmp_path)
+    (snapshot / "model.bin").unlink()
+    _install_fake_hub(monkeypatch, lambda **kwargs: str(snapshot))
+    manager._download_blocking("base")
+    assert manager.get_model_info("base").status == ModelStatus.ERROR
+    assert manager.get_download_progress("base") != 100
+
+
+def test_complete_cached_model_can_be_resolved_without_hub(monkeypatch, tmp_path):
+    manager = _manager(monkeypatch, tmp_path)
+    snapshot = _snapshot(tmp_path)
+    assert manager.get_local_model_path("base") == snapshot
+    assert manager.get_model_info("base").status == ModelStatus.DOWNLOADED
+
+
+def test_cached_main_revision_is_preferred_and_large_alias_is_supported(monkeypatch, tmp_path):
+    manager = _manager(monkeypatch, tmp_path)
+    main = _snapshot(tmp_path, "main-revision")
+    _snapshot(tmp_path, "other-revision")
+    ref = main.parent.parent / "refs/main"
+    ref.parent.mkdir()
+    ref.write_text("main-revision", encoding="utf-8")
+    assert manager.get_local_model_path("base") == main
+    large = tmp_path / "hub/models--Systran--faster-whisper-large-v3"
+    main.parent.parent.rename(large)
+    assert manager.get_local_model_path("large") == large / "snapshots/main-revision"
+
+
+def test_incomplete_cache_can_be_downloaded_again(monkeypatch, tmp_path):
+    import asyncio
+    manager = _manager(monkeypatch, tmp_path)
+    snapshot = _snapshot(tmp_path)
+    (snapshot / "model.bin").unlink()
+    calls = []
+
+    def complete(**kwargs):
+        calls.append(kwargs)
+        (snapshot / "model.bin").write_bytes(b"weights")
+        return str(snapshot)
+
+    class ImmediateThread:
+        def __init__(self, target, args, **kwargs):
+            self.run = lambda: target(*args)
+
+        def start(self):
+            self.run()
+
+    _install_fake_hub(monkeypatch, complete)
+    monkeypatch.setattr("backend.services.whisper_model_manager.threading.Thread", ImmediateThread)
+    assert asyncio.run(manager.download_model("base"))
+    assert len(calls) == 1
+    assert manager.get_model_info("base").status == ModelStatus.DOWNLOADED
+    assert manager.get_download_progress("base") == 100
+    (snapshot / "model.bin").unlink()
+    assert manager.get_download_progress("base") is None
 
 
 def test_ensure_on_path_disables_progress_bars(monkeypatch, tmp_path):
