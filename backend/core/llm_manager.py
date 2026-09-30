@@ -105,6 +105,7 @@ class LLMManager:
             "glm_api_key": "",
             "grok_api_key": "",
             "infistar_api_key": "",
+            "api88_api_key": "",
             "seed_api_key": "",
             "model_name": "qwen-plus",
             "chunk_size": 5000,
@@ -132,6 +133,7 @@ class LLMManager:
                             "glm_api_key": api_keys.get("glm", ""),
                             "grok_api_key": api_keys.get("grok", ""),
                             "infistar_api_key": api_keys.get("infistar", ""),
+                            "api88_api_key": api_keys.get("api88", ""),
                             "seed_api_key": api_keys.get("seed", ""),
                             "model_name": api.get("api_model", "qwen-plus")
                         })
@@ -225,6 +227,7 @@ class LLMManager:
         "glm_api_key": ("API_GLM_API_KEY", "ZHIPU_API_KEY", "GLM_API_KEY"),
         "grok_api_key": ("API_GROK_API_KEY", "XAI_API_KEY", "GROK_API_KEY"),
         "infistar_api_key": ("API_INFISTAR_API_KEY", "INFISTAR_API_KEY"),
+        "api88_api_key": ("API_API88_API_KEY", "API88_API_KEY"),
         "seed_api_key": ("API_SEED_API_KEY", "ARK_API_KEY", "VOLCENGINE_API_KEY", "DOUBAO_API_KEY"),
     }
 

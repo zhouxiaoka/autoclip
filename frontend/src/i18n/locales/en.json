@@ -1410,6 +1410,10 @@
   "成片进度": "Clip position",
   "静音": "Mute",
   "取消静音": "Unmute",
+  "88API Token聚合平台": "88API Token Platform",
+  "赞助合作伙伴。聚合语言、图片与语音模型，接口地址已预设。": "Sponsor partner. Language, image and audio models with a preset API endpoint.",
+  "新用户体验额度": "New-user trial credit",
+  "新用户通过专属链接注册可获体验额度；站内提供人工客服。": "New users can receive trial credit via our referral link; live support is available on the platform.",
   "待确认制作类型": "Waiting for production type confirmation",
   "查看建议": "View suggestion",
   "制作中 · 查看进度": "Creating · View progress"

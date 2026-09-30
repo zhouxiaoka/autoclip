@@ -29,18 +29,18 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
   const picker = !hideProvider && <Row wide label={t('提供商')} hint={preset?.hint || t('国内直连、国际服务和本机免费模型都可以选；不确定就从「推荐」开始。')}>
     <Select aria-label={label(t('提供商'))} value={key} placeholder={t('选择一家 AI 服务')} showSearch optionFilterProp="search" style={{ width: '100%' }} options={providerPickerOptions()}
       onChange={onChoose}
-      optionRender={option => { const p = PROVIDERS[option.value as ProviderKey]; return <span>{p.name}{p.sponsor && <small style={{ marginLeft: 8, color: 'var(--sub)', fontWeight: 400 }}>{t('赞助')} · {t('$5 免费体验额度')}</small>}</span> }} />
+      optionRender={option => { const p = PROVIDERS[option.value as ProviderKey]; return <span>{p.name}{p.sponsor && <small style={{ marginLeft: 8, color: 'var(--sub)', fontWeight: 400 }}>{t('赞助')} · {p.sponsor.offer}</small>}</span> }} />
   </Row>
   if (!connection) return <>{picker}</>
   return <>
     {picker}
     {preset?.sponsor && <div className="ac-sponsor">
       <div className="ac-sponsor-text"><b>{preset.name}<span className="ac-badge">{t('赞助')}</span></b>
-        <span>{t('通过专属链接注册，可领取 $5 免费体验额度。')}</span>
+        <span>{preset.sponsor.description}</span>
         <small>{t('该链接含推广分成，用于支持项目维护；领取条件以活动页面为准。')}</small></div>
       <div className="ac-sponsor-actions">
-        <Btn variant="cta" size="sm" onClick={() => { trackSponsorLinkOpened({ sponsor: 'infistar', target: 'register', placement }); openExternalLink(preset.sponsor!.registerUrl) }}>{t('注册并领取体验额度')}</Btn>
-        <Btn variant="text" size="sm" onClick={() => { trackSponsorLinkOpened({ sponsor: 'infistar', target: 'guide', placement }); openExternalLink(preset.sponsor!.guideUrl) }}>{t('接入说明')}</Btn>
+        <Btn variant="cta" size="sm" onClick={() => { trackSponsorLinkOpened({ sponsor: preset.sponsor!.id, target: 'register', placement }); openExternalLink(preset.sponsor!.registerUrl) }}>{t('注册并领取体验额度')}</Btn>
+        <Btn variant="text" size="sm" onClick={() => { trackSponsorLinkOpened({ sponsor: preset.sponsor!.id, target: 'guide', placement }); openExternalLink(preset.sponsor!.guideUrl) }}>{t('接入说明')}</Btn>
       </div>
     </div>}
     {!preset?.local && (sharedKey && !editShared

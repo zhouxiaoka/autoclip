@@ -108,6 +108,9 @@ def _text_model_key(provider: str, base_url: str) -> str:
         return str(settings.get("dashscope_api_key") or "")
     if kind == "seedream":
         return str(settings.get("seed_api_key") or "")
+    from urllib.parse import urlparse
+    if urlparse(base_url or "").hostname == "88api.ai":
+        return str(settings.get("api88_api_key") or "")
     if "infistar" in host:
         return str(settings.get("infistar_api_key") or "")
     if not host or "api.openai.com" in host:
@@ -136,8 +139,8 @@ def text_model_image_service() -> dict[str, str] | None:
         return None
     if preset == "seed":
         return {"provider": "seedream", "text_provider": "seed", "api_key": str(s.get("seed_api_key") or ""), "base_url": ""}
-    if preset == "infistar":
-        return {"provider": "openai", "text_provider": "infistar", "api_key": str(s.get("infistar_api_key") or ""),
+    if preset in {"infistar", "api88"}:
+        return {"provider": "openai", "text_provider": preset, "api_key": str(s.get(f"{preset}_api_key") or ""),
                 "base_url": str(s.get("openai_base_url") or "")}
     if preset:
         return None

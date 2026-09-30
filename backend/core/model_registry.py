@@ -139,7 +139,7 @@ def _catalog_record(provider, model, data):
 
 def _catalog_capability(provider, model, data):
     known = _VERIFIED.get((provider, model)) or _catalog_record(provider, model, data).get('capability')
-    if not known and provider == 'infistar':
+    if not known and provider in {'infistar', 'api88'}:
         # Public gateway IDs can match original vendors exactly. Require agreement;
         # do not infer a capability from a name prefix or missing image tags.
         matches = {models[model]['capability'] for models in data.get('metadata', {}).get('providers', {}).values()

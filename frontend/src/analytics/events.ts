@@ -5,6 +5,7 @@
  * 所有 capture 都通过 trackEvent，未初始化 / 已关闭时自动 no-op。
  */
 import { captureBusinessEvent } from './posthog'
+import type { SponsorId } from '../features/settings/providers'
 
 export const AnalyticsEvent = {
   /** 导入素材（上传/选择视频开始一个项目） */
@@ -60,7 +61,7 @@ export function trackProcessingFailed(props: {
 }
 
 export function trackSponsorLinkOpened(props: {
-  sponsor: 'infistar'
+  sponsor: SponsorId
   target: 'register' | 'guide'
   placement: 'settings_model' | 'home_setup'
 }): void {
