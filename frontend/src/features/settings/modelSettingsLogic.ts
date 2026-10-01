@@ -33,12 +33,13 @@ export const needsSetup = (s: ModelSettings) => {
 }
 
 /**
- * Loaded document → editable state. On first run nothing is pre-selected: the user picks a provider,
- * the recommendation follows the key, and AI covers (frame reference on) are tried by default.
+ * Loaded document → editable state. On first run nothing is pre-selected: the user picks a provider and
+ * the recommendation follows the key. Covers are designed locally (free) until the user picks an image
+ * model themselves: no account with any image service is assumed.
  */
 export function prepareLoaded(value: ModelSettings): ModelSettings {
   if (!needsSetup(value)) return value
-  return { ...value, analysis: null, cover: null, vision: null, cover_enabled: true, allow_send_frame: true }
+  return { ...value, analysis: null, cover: null, vision: null, cover_enabled: false, allow_send_frame: true }
 }
 
 /** AI covers stay on by default, but a service without any image model falls back to frames instead of blocking save. */

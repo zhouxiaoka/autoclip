@@ -183,6 +183,8 @@ def chat_endpoint(connection: Connection, model: str) -> dict:
 
 def image_endpoint(connection: Connection) -> dict:
     kind = connection.image_api
+    if kind == 'auto' and 'fal.run' in (connection.image_base_url or connection.base_url or ''):
+        kind = 'fal'  # an OpenAI-compatible connection pointed at fal.run speaks fal's model API
     if kind == 'auto':
         kind = {'dashscope': 'dashscope', 'seed': 'seedream', 'gemini': 'gemini', 'grok': 'grok', 'glm': 'glm'}.get(connection.provider, 'openai')
     base = connection.image_base_url

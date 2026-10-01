@@ -1508,5 +1508,7 @@
   "编辑文案": "Modifier le texte",
   "导出发布包": "Exporter le kit",
   "AI 重新设计封面": "Redessiner la couverture avec l’IA",
-  "使用百炼专属接入地址时填写，留空用默认地址。": "Uniquement pour un point d’accès Bailian dédié ; laissez vide pour l’adresse par défaut."
+  "使用百炼专属接入地址时填写，留空用默认地址。": "Uniquement pour un point d’accès Bailian dédié ; laissez vide pour l’adresse par défaut.",
+  "自动设计（免费）": "Design automatique (gratuit)",
+  "默认用成片里嘉宾最清晰的画面自动设计封面，免费、秒出。想要更有设计感可以改用 AI 生成，生图服务和模型由你自己选择，按所选服务计费。": "Les couvertures sont conçues automatiquement à partir de l'image la plus nette de l'invité : gratuit et immédiat. Pour plus de design, passez à la génération par IA ; vous choisissez le service et le modèle d'images, facturés par ce service."
 }
