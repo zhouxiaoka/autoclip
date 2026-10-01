@@ -290,6 +290,12 @@ def append_platforms(project_id: str, body: AppendPlatformsRequest, db: Session 
     return {'variants': variants}
 
 
+@router.post('/{project_id}/output-variants/{variant_id}/produce')
+def produce_output_variant(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    return call(jobs.produce_variant, project_id, variant_id)
+
+
 @router.post('/{project_id}/output-variants/{variant_id}/retry')
 def retry_output_variant(project_id: str, variant_id: str, db: Session = Depends(get_db)):
     project_or_404(project_id, db)

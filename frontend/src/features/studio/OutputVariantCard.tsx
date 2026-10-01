@@ -21,7 +21,7 @@ const framingHints: Record<NonNullable<OutputVariant['framing']>, string> = {
   full_frame_captions: '原片自带字幕，保留完整画面以免裁掉字幕',
 }
 
-export default function OutputVariantCard({ projectId, variant, draft, job, onRetry }: { projectId: string; variant: OutputVariant; draft?: Draft; job?: RenderJob; onRetry: () => void }) {
+export default function OutputVariantCard({ projectId, variant, draft, job, onRetry, onProduce }: { projectId: string; variant: OutputVariant; draft?: Draft; job?: RenderJob; onRetry: () => void; onProduce: () => void }) {
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
   const packaging = draft?.packaging
@@ -31,6 +31,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   }
   const completed = variant.status === 'completed' && job?.status === 'completed'
   const failed = variant.status === 'failed'
+  const onDemand = variant.status === 'on_demand'
   const duration = job?.result?.duration ?? (draft ? draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) : 0)
   const copyCaption = async () => {
     const copied = await copyText(shareCaption(draft?.title))
@@ -48,8 +49,8 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
     <div className="studio-variant-thumb">{completed && variant.render_job_id ? <video className="studio-variant-video" controls preload="metadata" src={studioApi.video(projectId, variant.render_job_id)}/> : <span className="play">▷</span>}<span className="ac-tag ac-tag--tl">{platformLabel(variant.strategy_id)}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}</div>
     <div className="ac-card-body">
       <h2 className="ac-card-title">{draft?.title || t('正在准备成片')}</h2>
-      <div className={`studio-output-state studio-output-state--${failed ? 'failed' : completed ? 'ready' : 'rendering'}`} role="status">
-        {completed ? t('已生成 · 可下载') : failed ? t('生成失败') : job?.status === 'running' ? t('正在生成') : t('排队生成中')}
+      <div className={`studio-output-state studio-output-state--${failed ? 'failed' : completed || onDemand ? 'ready' : 'rendering'}`} role="status">
+        {completed ? t('已生成 · 可下载') : failed ? t('生成失败') : onDemand ? t('备选片段 · 需要时再生成') : job?.status === 'running' ? t('正在生成') : t('排队生成中')}
       </div>
       <p className="studio-output-hint">{variant.branding.outro_enabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾')}</p>
       {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}
@@ -59,6 +60,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       <div className="ac-card-foot"><span className="meta">{platformLabel(variant.strategy_id)}</span><div className="ac-card-actions">
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}`)}>{t('预览与修改')}</Btn>}
         {failed && <Btn variant="text" onClick={onRetry}>{t('重试这条')}</Btn>}
+        {onDemand && <Btn variant="text" onClick={onProduce}>{t('生成这条')}</Btn>}
         {completed && variant.render_job_id && <Btn variant="text" onClick={() => navigate(outputVariantPublishPath(projectId, variant))}>{t('发布')}</Btn>}
         {completed && <Btn variant="text" onClick={() => void copyCaption()}>{t('复制分享文案')}</Btn>}
         {completed && variant.render_job_id && <StudioDownloadLink className="studio-link" projectId={projectId} jobId={variant.render_job_id} onSaved={downloaded} variant={analytics}/>}

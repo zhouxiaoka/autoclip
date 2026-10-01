@@ -5,7 +5,7 @@ import { errorCode, safeStudioProperties, telemetryId, type Properties, type Stu
 /** Only allowlisted values and randomly generated telemetry correlation tokens leave the app.
  * Internal project/job IDs, URLs, filenames, content and model output stay local. */
 export async function observeStudioOperation<T>(
-  name: 'studio_import' | 'studio_confirm' | 'studio_export' | 'studio_rescreen' | 'studio_plan_update' | 'studio_draft_create' | 'studio_draft_save' | 'studio_draft_duplicate' | 'studio_rewrite' | 'studio_analysis_preferences' | 'vision_provider_test' | 'vision_provider_save' | 'social_publish' | 'studio_auto_frame' | 'studio_framing_install' | 'studio_platform_append' | 'studio_variant_retry',
+  name: 'studio_import' | 'studio_confirm' | 'studio_export' | 'studio_rescreen' | 'studio_plan_update' | 'studio_draft_create' | 'studio_draft_save' | 'studio_draft_duplicate' | 'studio_rewrite' | 'studio_analysis_preferences' | 'vision_provider_test' | 'vision_provider_save' | 'social_publish' | 'studio_auto_frame' | 'studio_framing_install' | 'studio_platform_append' | 'studio_variant_retry' | 'studio_variant_produce',
   action: () => Promise<T>, accepted: (result: T, props: Properties) => void = () => {}, properties: Record<string, unknown> = {},
 ): Promise<T> {
   const props = safeStudioProperties({ ...properties, operation_id: telemetryId() })

@@ -25,13 +25,14 @@ const SNAPSHOT={
  output_variants:[
   {draft_id:'a',strategy_id:'douyin',status:'completed',framing:'speaker'},
   {draft_id:'b',strategy_id:'tiktok',status:'failed',framing:'full_frame',trimmed_to_sec:180},
+  {draft_id:'c',strategy_id:'douyin',status:'on_demand'},
  ],
  drafts:[{id:'a',title:'Private title',packaging:{template:'interview_zh',fallback:false}},{id:'b',packaging:{template:'podcast_en',fallback:true}}],
 }
 
 test('generation summary counts templates, framing and fallbacks without any content',()=>{
  const summary=workflow.generationSummary(SNAPSHOT)
- assert.deepEqual({...summary},{variant_count:2,completed_variant_count:1,failed_variant_count:1,skipped_variant_count:1,platform_count:2,
+ assert.deepEqual({...summary},{variant_count:3,completed_variant_count:1,failed_variant_count:1,on_demand_variant_count:1,skipped_variant_count:1,platform_count:2,
   interview_count:1,podcast_count:1,landscape_count:0,speaker_framed_count:1,packaging_fallback_count:1,trimmed_count:1,burned_captions:false,duration_ms:240000})
  const props=workflow.safeStudioProperties({...summary,title:'Private title',name:'Sam Altman',template:'interview_zh',packaging_style:'boxed',framing:'speaker'})
  assert.equal(JSON.stringify(props).includes('Private'),false)

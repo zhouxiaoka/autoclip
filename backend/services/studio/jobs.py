@@ -332,11 +332,11 @@ def _content_drafts(project_id, plan, video):
             except (KeyError, TypeError, ValueError):
                 continue
             intelligence.validate_scenes([scene], intelligence._probe(video).get('duration', 0))
-            drafts.append(Draft(
+            drafts.append({**Draft(
                 id=uuid.uuid4().hex, title=scene.label, scenes=[scene], origin='auto-content',
                 language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit',
                 subtitles=True,
-            ).model_dump())
+            ).model_dump(), SCORE_KEY: _score(clip)})
         if not drafts:
             raise ValueError('没有提取到可渲染的内容片段，请检查字幕或重新导入')
         return drafts
@@ -532,7 +532,9 @@ def _auto_generate(project_id, plan):
         burned = _source_has_burned_subtitles(project_id, video)
         framing_cache = {}
         packaging_cache = {}
+        automatic = _automatic_drafts(base_drafts)
         for base in base_drafts:
+            base = {key: item for key, item in base.items() if key != SCORE_KEY}
             for strategy_id in platforms:
                 strategy = platform_strategy(strategy_id)
                 duration = sum(scene['end'] - scene['start'] for scene in base['scenes'])
@@ -540,15 +542,18 @@ def _auto_generate(project_id, plan):
                     skipped.append({'strategy_id': strategy_id, 'reason': '素材没有足够完整的长内容'})
                     continue
                 value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
-                value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
-                value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+                if base['id'] in automatic:
+                    value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
+                    value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+                else:
+                    framed = None  # framed and packaged when the user asks for it (produce_variant)
                 draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
                 derived_drafts.append(draft.model_dump())
                 variant_id = uuid.uuid4().hex
                 variants.append({
                     'id': variant_id, 'draft_id': draft.id, 'draft_revision': draft.revision,
                     'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
-                    'status': 'queued', 'created_at': store.now(),
+                    'status': 'queued' if base['id'] in automatic else 'on_demand', 'created_at': store.now(),
                     **({'trimmed_to_sec': trimmed} if trimmed else {}),
                     **({'framing': framed} if framed else {}),
                 })
@@ -585,6 +590,12 @@ def append_platform_variants(project_id, platforms, branding):
         (item['strategy_id'], tuple((scene['start'], scene['end']) for scene in draft_by_id.get(item['draft_id'], {}).get('scenes', [])))
         for item in state.get('output_variants', [])
     }
+    # A moment rendered automatically on one platform renders automatically on the new one too;
+    # moments left on demand stay on demand.
+    automatic = {
+        tuple((scene['start'], scene['end']) for scene in draft_by_id.get(item['draft_id'], {}).get('scenes', []))
+        for item in state.get('output_variants', []) if item.get('status') != 'on_demand'
+    }
     seen_scenes, variants, derived = set(), [], []
     burned = _source_has_burned_subtitles(project_id)
     video = source(project_id)
@@ -603,14 +614,17 @@ def append_platform_variants(project_id, platforms, branding):
             if strategy.duration_policy == 'long' and duration < (strategy.min_recommended_duration_sec or 0):
                 continue
             value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
-            value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
-            value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+            now = signature in automatic
+            framed = None
+            if now:
+                value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
+                value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
             draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
             derived.append(draft.model_dump())
             variants.append({
                 'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': 1,
                 'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
-                'status': 'queued', 'created_at': store.now(),
+                'status': 'queued' if now else 'on_demand', 'created_at': store.now(),
                 **({'trimmed_to_sec': trimmed} if trimmed else {}),
                 **({'framing': framed} if framed else {}),
             })
@@ -643,6 +657,79 @@ def _dispatch_pending_variants(project_id):
             continue
         job = export(project_id, Draft.model_validate(raw), brand_outro=bool(variant['branding'].get('outro_enabled', True)))
         store.change(project_id, lambda data, variant_id=variant['id'], job_id=job['job_id']: next(item for item in data['output_variants'] if item['id'] == variant_id).update(render_job_id=job_id))
+
+
+SCORE_KEY = '_auto_score'
+AUTO_RENDER_LIMIT = 10  # clips rendered automatically per import; the rest wait for a click
+
+
+def _score(clip):
+    try:
+        return float(clip.get('final_score'))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _automatic_drafts(base_drafts):
+    """Ids of the drafts rendered without asking: the highest-scored AUTO_RENDER_LIMIT.
+
+    A two-hour talk yields 30+ clips; rendering all of them up front cost most of the run, while
+    people publish a handful. Drafts without a score (visual highlights, at most a few) all render.
+    """
+    scored = [draft for draft in base_drafts if SCORE_KEY in draft]
+    if len(scored) <= AUTO_RENDER_LIMIT:
+        return {draft['id'] for draft in base_drafts}
+    top = sorted(scored, key=lambda draft: draft[SCORE_KEY], reverse=True)[:AUTO_RENDER_LIMIT]
+    return {draft['id'] for draft in top} | {draft['id'] for draft in base_drafts if SCORE_KEY not in draft}
+
+
+def produce_variant(project_id, variant_id):
+    """Frame, package and render one on-demand variant."""
+    state = store.read(project_id)
+    variant = next((item for item in state.get('output_variants', []) if item['id'] == variant_id), None)
+    if not variant:
+        raise FileNotFoundError('成片版本不存在')
+    if variant.get('status') != 'on_demand':
+        raise ValueError('这条成片已经在生成或已完成')
+    if not any(item['id'] == variant['draft_id'] for item in state.get('drafts', [])):
+        raise FileNotFoundError('来源草稿不存在')
+
+    def start(data):
+        item = next(value for value in data['output_variants'] if value['id'] == variant_id)
+        item.update(status='queued')
+        data['generation'].update(status='rendering')
+    store.change(project_id, start)
+    executor.submit(_produce_on_demand, project_id, variant_id)
+    return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)
+
+
+@_tracked('production')
+def _produce_on_demand(project_id, variant_id):
+    try:
+        state = store.read(project_id)
+        variant = next(item for item in state['output_variants'] if item['id'] == variant_id)
+        raw = next(item for item in state['drafts'] if item['id'] == variant['draft_id'])
+        video = source(project_id)
+        burned = _source_has_burned_subtitles(project_id, video)
+        strategy_id = variant['strategy_id']
+        value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {})
+        value = _apply_packaging(project_id, value, strategy_id, burned, {})
+        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None).model_dump()
+
+        def ready(data):
+            for index, item in enumerate(data['drafts']):
+                if item['id'] == draft['id']:
+                    data['drafts'][index] = {**draft, 'updated_at': store.now()}
+            target = next(item for item in data['output_variants'] if item['id'] == variant_id)
+            if framed:
+                target['framing'] = framed
+        store.change(project_id, ready)
+        _dispatch_pending_variants(project_id)
+    except Exception as error:  # noqa: BLE001 - the variant shows the failure and can be retried
+        logger.warning('On-demand variant failed: %s', type(error).__name__)
+        capture_studio_exception(error, 'production')
+        store.change(project_id, lambda data: next(item for item in data['output_variants'] if item['id'] == variant_id).update(
+            status='failed', error='这条成片准备失败，请重试'))
 
 
 def retry_variant(project_id, variant_id):
@@ -678,7 +765,7 @@ def _sync_variant_status(project_id, job_id, status, error=None):
                 changed = True
         if not changed:
             return
-        variants = data['output_variants']
+        variants = [item for item in data['output_variants'] if item['status'] != 'on_demand']
         if all(item['status'] in ('completed', 'failed') for item in variants):
             completed = [item for item in variants if item['status'] == 'completed']
             outcome = 'completed' if len(completed) == len(variants) else 'partial' if completed else 'failed'

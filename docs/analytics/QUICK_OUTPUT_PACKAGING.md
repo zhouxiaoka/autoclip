@@ -25,6 +25,8 @@
 | 草稿保存/复制/改写/导出 | 增加 `template`、`packaging_style`、`tags_enabled`、`packaging_fallback`；`layout` 枚举增加 `window`；`auto_frame_retained` 同时认 `crop` 与 `window` |
 | 成片下载（requested/saved/failed） | 成片卡下载带 `strategy_id`、`template`、`packaging_style`、`framing` |
 | `studio_output_shared` / `studio_output_rated` | 带 main 的 `flow_id`、`material_origin` 上下文与上述版本枚举 |
+| `studio_variant_produce_requested/accepted/request_failed`（新） | 用户点「生成这条」生成备选片段；带 `strategy_id` |
+| `on_demand_variant_count`（生成汇总新增） | 只自动渲染评分最高的 10 条，其余为备选；该计数说明本次留了多少备选 |
 
 后端配合：自动出片在制作/渲染/结束各阶段保留 `analysis.run_id`（main 的观察按 run 匹配）；生成终态写入 `generation.finished_at`；自动取景结果写入 `framing_source=auto`，使 main 的“自动取景被保留”指标覆盖自动出片。
 

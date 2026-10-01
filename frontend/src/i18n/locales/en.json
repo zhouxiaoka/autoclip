@@ -1492,5 +1492,7 @@
   "字幕条": "Caption bar",
   "聚焦": "Spotlight",
   "跳字": "Word pop",
-  "电影感": "Cinematic"
+  "电影感": "Cinematic",
+  "备选片段 · 需要时再生成": "Backup clip · generate when needed",
+  "生成这条": "Generate this one"
 }

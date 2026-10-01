@@ -44,7 +44,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
   for (const key of ['brand_outro_enabled', 'reused_content_profile', 'has_crop_track', 'has_manual_adjustment', 'auto_frame_retained', 'tags_enabled', 'packaging_fallback', 'burned_captions', 'subtitle_enabled', 'has_subtitle', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean
   }
-  for (const key of ['example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count']) {
+  for (const key of ['example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'on_demand_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count']) {
     if (typeof input[key] === 'number' && Number.isFinite(input[key]) && (input[key] as number) >= 0) out[key] = input[key] as number
   }
   for (const prefix of ['requested', 'succeeded', 'failed']) {
@@ -105,15 +105,18 @@ export interface StudioSnapshot {
 
 /** Aggregate counts for one automatic generation; no titles, captions, names or IDs. */
 export function generationSummary(snapshot: StudioSnapshot): Record<string, unknown> {
-  const variants = snapshot.output_variants || []
+  const all = snapshot.output_variants || []
+  // Backup clips are not packaged until someone asks for them: template counts cover produced versions.
+  const variants = all.filter(v => v.status !== 'on_demand')
   const templates = new Map((snapshot.drafts || []).map(d => [d.id, d.packaging] as const))
   const packaged = variants.map(v => templates.get(v.draft_id)).filter(Boolean)
   const count = (test: (v: (typeof variants)[number]) => boolean) => variants.filter(test).length
   const created = utcMillis(snapshot.generation?.created_at), finished = utcMillis(snapshot.generation?.finished_at)
   return {
-    variant_count: variants.length,
+    variant_count: all.length,
     completed_variant_count: count(v => v.status === 'completed'),
     failed_variant_count: count(v => v.status === 'failed'),
+    on_demand_variant_count: all.length - variants.length,
     skipped_variant_count: Array.isArray(snapshot.generation?.skipped) ? snapshot.generation!.skipped!.length : 0,
     platform_count: snapshot.generation?.requested_platforms?.length || 0,
     interview_count: packaged.filter(p => p?.template === 'interview_zh').length,

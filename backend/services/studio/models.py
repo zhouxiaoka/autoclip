@@ -178,7 +178,8 @@ class OutputVariant(BaseModel):
     strategy_id: str = Field(min_length=1, max_length=64)
     strategy_version: int = Field(default=1, ge=1)
     branding: BrandingOptions = Field(default_factory=BrandingOptions)
-    status: Literal['queued', 'running', 'completed', 'failed'] = 'queued'
+    # on_demand: ranked below the automatic limit; framed, packaged and rendered when the user asks.
+    status: Literal['queued', 'running', 'completed', 'failed', 'on_demand'] = 'queued'
     render_job_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     created_at: str = ''
     error: str | None = Field(default=None, max_length=700)

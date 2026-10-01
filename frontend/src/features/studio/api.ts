@@ -34,6 +34,7 @@ export const studioApi = {
   platformStrategies: (): Promise<{ strategies: PlatformStrategySummary[] }> => api.get('/studio/platform-strategies'),
   appendPlatforms: (pid: string, platforms: string[], outroEnabled: boolean): Promise<{ variants: OutputVariant[] }> => observeStudioOperation('studio_platform_append', () => api.post(`/studio/${pid}/platforms`, { platforms, branding: { outro_enabled: outroEnabled, outro_version: 'v1' } }), undefined, { platform_count: platforms.length, brand_outro_enabled: outroEnabled, reused_content_profile: true }),
   retryOutputVariant: (pid: string, variantId: string): Promise<RenderJob> => observeStudioOperation('studio_variant_retry', () => api.post(`/studio/${pid}/output-variants/${variantId}/retry`)),
+  produceOutputVariant: (pid: string, variantId: string, strategyId: string): Promise<OutputVariant> => observeStudioOperation('studio_variant_produce', () => api.post(`/studio/${pid}/output-variants/${variantId}/produce`), undefined, { strategy_id: strategyId }),
   get: (pid: string, signal?: AbortSignal): Promise<Workspace> => observeStudioWorkspace(pid, () => api.get(`/studio/${pid}`, { signal })),
   titleThumbnail: (style: string, version = 6) => `${api.defaults.baseURL}/studio/title-presets/${style}/thumbnail?v=${version}`,
   titlePreview: (pid: string, draft: Draft, signal?: AbortSignal, layer = 'artwork'): Promise<Blob> => api.post(`/studio/${pid}/title-preview?layer=${layer}`, draft, {responseType:'blob', signal}),
