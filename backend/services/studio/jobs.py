@@ -74,7 +74,8 @@ def _render(project_id, draft, job_id, *, brand_outro=False):
         store.change(project_id, mutate)
     try:
         update(status='running', percent=5)
-        result = render_draft(project_id, source(project_id), draft, job_id, lambda p: update(percent=p), brand_outro=brand_outro)
+        with llm_usage.timed('render'):
+            result = render_draft(project_id, source(project_id), draft, job_id, lambda p: update(percent=p), brand_outro=brand_outro)
         update(status='completed', percent=100, result=result, duration_ms=round((monotonic() - started) * 1000))
         _design_covers(project_id, draft, job_id)
         _sync_variant_status(project_id, job_id, 'completed')
@@ -114,7 +115,8 @@ def _analyze(project_id, prefs, url, browser):
     try:
         mark_project(project_id, 'processing')
         if url:
-            download(project_id, url, browser)
+            with llm_usage.timed('download'):
+                download(project_id, url, browser)
         video = source(project_id)
         def stage(message):
             store.change(project_id, lambda data: data['analysis'].update(message=message))
@@ -399,7 +401,7 @@ def _complete_thought_bounds(project_id, clips):
             call = intelligence.text_json
     except Exception:  # noqa: BLE001
         call = None
-    with llm_usage.stage('boundaries'):
+    with llm_usage.stage('boundaries'), llm_usage.timed('boundaries'):
         return boundaries.refine_clips(rows, clips, call, boundaries.audio_silences(source(project_id)) if audio.has_audio(source(project_id)) else None)
 
 
@@ -782,10 +784,13 @@ def _auto_generate(project_id, plan):
                 now = base['id'] in automatic
                 framed = None  # on-demand versions are framed and packaged when the user asks (produce_variant)
                 if now:
-                    value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
+                    with llm_usage.timed('framing'):
+                        value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
                 planned.append((strategy_id, value, trimmed, framed, now))
-        _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now in planned if now], burned, packaging_cache)
-        posts = _posts_for(project_id, [(strategy_id, value) for strategy_id, value, _, _, now in planned if now], packaging_cache)
+        with llm_usage.timed('packaging'):
+            _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now in planned if now], burned, packaging_cache)
+        with llm_usage.timed('post_copy'):
+            posts = _posts_for(project_id, [(strategy_id, value) for strategy_id, value, _, _, now in planned if now], packaging_cache)
         for strategy_id, value, trimmed, framed, now in planned:
             if now:
                 value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
@@ -1062,7 +1067,8 @@ def _inspect(project_id, options, url, browser):
         from backend.services.studio.planning import recommend
         mark_project(project_id, 'processing', awaiting_confirmation=False)
         if url:
-            download(project_id, url, browser)
+            with llm_usage.timed('download'):
+                download(project_id, url, browser)
         store.change(project_id, lambda data:(data['analysis'].pop('percent', None), data['analysis'].update(message='快速判断适合的制作类型')))
         plan = recommend(source(project_id), options)
         ensure_project_thumbnail(project_id)

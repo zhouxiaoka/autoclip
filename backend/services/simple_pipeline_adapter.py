@@ -147,7 +147,8 @@ class SimplePipelineAdapter:
         emit_progress(self.project_id, "ANALYZE", "正在通读全文挑选片段")
         try:
             entries = TextProcessor.parse_srt(Path(srt_path))
-            return find_clips(entries, text_json, threshold=resolve_min_score_threshold(), metadata_dir=metadata_dir)
+            with llm_usage.timed("clip_finder"):
+                return find_clips(entries, text_json, threshold=resolve_min_score_threshold(), metadata_dir=metadata_dir)
         except Exception as error:  # noqa: BLE001 - the legacy steps still work with any model
             logger.warning("一次挑片不可用，改用分步分析: %s", error)
             return None
@@ -199,7 +200,8 @@ class SimplePipelineAdapter:
                 from backend.utils.speech_recognizer import SpeechRecognitionError
                 logger.warning("没有SRT文件，尝试自动生成字幕")
                 try:
-                    srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
+                    with llm_usage.timed("transcribe"):
+                        srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
                 except SpeechRecognitionError as e:
                     raise failure_from_speech_error(str(e)) from e
                 if not (srt_path and srt_path.exists()):

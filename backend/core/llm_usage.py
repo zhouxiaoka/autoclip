@@ -88,6 +88,8 @@ def summary(project_id: str) -> dict[str, Any]:
             row = json.loads(line)
         except ValueError:
             continue
+        if row.get('kind') == 'timing':
+            continue
         item = stages.setdefault(row.get('stage', 'other'), {'calls': 0, 'prompt_tokens': 0, 'completion_tokens': 0, 'estimated_calls': 0})
         item['calls'] += 1
         item['prompt_tokens'] += row.get('prompt_tokens') or 0
@@ -101,3 +103,39 @@ def run_in_context(fn):
     """Wrap `fn` so a worker thread records into the caller's sink and stage."""
     context = contextvars.copy_context()
     return lambda *args, **kwargs: context.copy().run(fn, *args, **kwargs)
+
+
+@contextmanager
+def timed(stage_name: str):
+    """Record how long a step took (wall seconds) next to its token usage, for cost/time reports."""
+    started = time.monotonic()
+    try:
+        yield
+    finally:
+        path = _sink.get()
+        if path is not None:
+            row = {'at': round(time.time(), 1), 'kind': 'timing', 'stage': stage_name, 'seconds': round(time.monotonic() - started, 2)}
+            try:
+                with _lock:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    with path.open('a', encoding='utf-8') as handle:
+                        handle.write(json.dumps(row) + '\n')
+            except OSError:
+                pass
+
+
+def timings(project_id: str) -> dict[str, float]:
+    """Total wall seconds per timed stage of one project."""
+    out: dict[str, float] = {}
+    try:
+        lines = usage_path(project_id).read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if row.get('kind') == 'timing':
+            out[row['stage']] = round(out.get(row['stage'], 0) + float(row.get('seconds') or 0), 2)
+    return out

@@ -45,3 +45,15 @@ def test_manager_calls_record_provider_usage(monkeypatch, tmp_path):
     with llm_usage.tracking('p1'), llm_usage.stage('scoring'):
         assert manager.call('score', {'x': 1}) == '{"ok": true}'
     assert llm_usage.summary('p1')['stages']['scoring']['prompt_tokens'] == 42
+
+
+def test_stage_timings_add_up_and_do_not_count_as_model_calls(monkeypatch, tmp_path):
+    clock = iter([10.0, 12.5, 20.0, 21.0])
+    monkeypatch.setattr(llm_usage.time, 'monotonic', lambda: next(clock))
+    monkeypatch.setattr(llm_usage, 'usage_path', lambda _p: tmp_path / llm_usage.FILE)
+    with llm_usage.tracking('p1'):
+        for _ in range(2):
+            with llm_usage.timed('render'):
+                pass
+    assert llm_usage.timings('p1') == {'render': 3.5}
+    assert llm_usage.summary('p1')['total']['calls'] == 0
