@@ -88,3 +88,33 @@ def test_detection_errors_never_fail_the_output_and_drop_inherited_tracks(monkey
     value, framed = jobs._apply_framing('p1', inherited, 'douyin', 'video.mp4', False, {})
     assert framed == 'full_frame' and value['layout'] == 'window'
     assert value['scenes'][0]['crop_track'] is None  # 9:16 tracks must not drive the 4:3 window
+
+
+def test_packaging_of_a_batch_runs_side_by_side_once_per_content(monkeypatch):
+    import threading
+    import time
+    from backend.services import publish_export
+    from backend.services.studio import packaging, store
+    monkeypatch.setenv('AUTOCLIP_LLM_CONCURRENCY', '4')
+    monkeypatch.setattr(publish_export, '_load_srt_entries', lambda _pid: [])
+    monkeypatch.setattr(store, 'read', lambda _pid: {'source_meta': {}})
+    calls, active, peak, lock = [], [0], [0], threading.Lock()
+
+    def build(value, lines, strategy, **kw):
+        with lock:
+            calls.append(value['scenes'][0]['start'])
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+        time.sleep(0.05)
+        with lock:
+            active[0] -= 1
+        return {'template': strategy.template}
+
+    monkeypatch.setattr(packaging, 'build_packaging', build)
+    clips = [{**_value(), 'scenes': [{**_value()['scenes'][0], 'start': float(n), 'end': n + 60.0}]} for n in range(6)]
+    items = [(platform, clip) for clip in clips for platform in ('douyin', 'xiaohongshu')]  # same template twice
+    cache = {}
+    jobs._prefetch_packaging('p1', items, False, cache)
+    assert sorted(calls) == [float(n) for n in range(6)] and peak[0] > 1
+    assert jobs._apply_packaging('p1', clips[0], 'xiaohongshu', False, cache)['packaging'] == {'template': 'interview_zh'}
+    assert len(calls) == 6  # served from the cache

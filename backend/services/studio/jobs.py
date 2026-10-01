@@ -488,6 +488,33 @@ def _apply_framing(project_id, value, strategy_id, video, burned, cache):
     return {**value, 'scenes': scenes, 'layout': 'window' if interview else 'crop'}, framing
 
 
+def _packaging_inputs(project_id, cache):
+    """Subtitle rows and listing names shared by every packaging call of one batch."""
+    if 'entries' not in cache:
+        from backend.services.publish_export import _load_srt_entries
+        try:
+            cache['entries'] = _load_srt_entries(project_id)
+        except Exception:  # noqa: BLE001 - no subtitles: packaging falls back to the title only
+            cache['entries'] = []
+        meta = store.read(project_id).get('source_meta') or {}
+        cache['names'] = f"{meta.get('title', '')} {meta.get('channel', '')}"
+
+
+def _prefetch_packaging(project_id, items, burned, cache):
+    """Run the packaging model calls of a batch side by side (one per distinct content and template).
+
+    Each call waits ~20 s on the model; done one after another they were ~8 minutes for 25 clips.
+    """
+    from backend.pipeline.concurrency import map_chunks
+    from backend.services.platform_strategy import platform_strategy
+    _packaging_inputs(project_id, cache)  # load shared inputs once, before the threads
+    first = {}
+    for strategy_id, value in items:
+        key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), platform_strategy(strategy_id).template)
+        first.setdefault(key, (strategy_id, value))
+    map_chunks(lambda item: _apply_packaging(project_id, item[1], item[0], burned, cache), first.values())
+
+
 def _apply_packaging(project_id, value, strategy_id, burned, cache):
     """Attach template packaging (title, captions, nameplates, tags) for vertical templates.
 
@@ -499,14 +526,7 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache):
     if strategy.template not in ('interview_zh', 'podcast_en'):
         return {key: item for key, item in value.items() if key != 'packaging'}  # never inherit another template's packaging
     from backend.services.studio import packaging
-    if 'entries' not in cache:
-        from backend.services.publish_export import _load_srt_entries
-        try:
-            cache['entries'] = _load_srt_entries(project_id)
-        except Exception:  # noqa: BLE001 - no subtitles: packaging falls back to the title only
-            cache['entries'] = []
-        meta = store.read(project_id).get('source_meta') or {}
-        cache['names'] = f"{meta.get('title', '')} {meta.get('channel', '')}"
+    _packaging_inputs(project_id, cache)
     key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template)
     if key not in cache:
         lines = packaging.draft_lines(cache['entries'], value['scenes'])
@@ -571,6 +591,7 @@ def _auto_generate(project_id, plan):
         framing_cache = {}
         packaging_cache = {}
         automatic = _automatic_drafts(base_drafts)
+        planned = []
         for base in base_drafts:
             base = {key: item for key, item in base.items() if key != SCORE_KEY}
             for strategy_id in platforms:
@@ -580,21 +601,24 @@ def _auto_generate(project_id, plan):
                     skipped.append({'strategy_id': strategy_id, 'reason': '素材没有足够完整的长内容'})
                     continue
                 value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
-                if base['id'] in automatic:
+                now = base['id'] in automatic
+                framed = None  # on-demand versions are framed and packaged when the user asks (produce_variant)
+                if now:
                     value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
-                    value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
-                else:
-                    framed = None  # framed and packaged when the user asks for it (produce_variant)
-                draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
-                derived_drafts.append(draft.model_dump())
-                variant_id = uuid.uuid4().hex
-                variants.append({
-                    'id': variant_id, 'draft_id': draft.id, 'draft_revision': draft.revision,
-                    'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
-                    'status': 'queued' if base['id'] in automatic else 'on_demand', 'created_at': store.now(),
-                    **({'trimmed_to_sec': trimmed} if trimmed else {}),
-                    **({'framing': framed} if framed else {}),
-                })
+                planned.append((strategy_id, value, trimmed, framed, now))
+        _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now in planned if now], burned, packaging_cache)
+        for strategy_id, value, trimmed, framed, now in planned:
+            if now:
+                value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+            draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
+            derived_drafts.append(draft.model_dump())
+            variants.append({
+                'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': draft.revision,
+                'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
+                'status': 'queued' if now else 'on_demand', 'created_at': store.now(),
+                **({'trimmed_to_sec': trimmed} if trimmed else {}),
+                **({'framing': framed} if framed else {}),
+            })
         if not variants:
             raise ValueError('所选平台没有可生成的完整内容版本')
         def persist(data):
