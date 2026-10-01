@@ -23,7 +23,7 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端全量回归 | 1100 passed、2 skipped；新增字幕 / 两种版式 / 语言隔离 / headless 状态与启动均覆盖 |
+| 后端全量回归 | 1101 passed、2 skipped；新增字幕 / 两种版式 / 语言隔离 / headless 状态与启动 / 实际中文字体均覆盖 |
 | 前端 | 194 passed；typecheck、lint、生产构建通过 |
 | Rust 下载回归 | 5 passed，包含真实分块 HTTP 响应、截断下载清理和不覆盖已有文件 |
 | `python -m backend.eval` | 两个黄金案例通过 |
@@ -65,7 +65,12 @@ MCP 成片时长约 45.8 / 17.7 / 87.8 秒（各两种语言），两边实际�
 桌面候选构建 `36860101368` 的 macOS / Windows 打包已通过；Windows 1.4→1.5 覆盖升级也已成功。
 其安装后视频检查因测试脚本把文本连接测试的 `success` 字段错写为 `ok` 而中断，已修脚本，仍须重跑整个安装冒烟，不能计为通过。
 
-本机文件在 `dist/acceptance-1.5/`；CLI / MCP 安装包为 `dist/autoclip-1.5.0-cli-mcp-test.zip`。
+复测已完成：代码提交 `ee73e594` 的 [全量 CI](https://github.com/zhouxiaoka/autoclip/actions/runs/36865434865) 全绿，Linux 安装 wheel 后的检测与中文字体检查通过。
+[Windows 完整补测](https://github.com/zhouxiaoka/autoclip/actions/runs/36865502695) 也通过：1.4→1.5 覆盖升级、桌面启动、本地真实视频制作，以及从新 wheel 检测人物和匹配中文字体；模型调用为本机协议 fixture，无付费调用。
+macOS 本机新 wheel 检查通过；三条约 46 秒的实际取景 / 字体 / 片尾样片在 `dist/autoclip-1.5.0-portrait-demo-e3e57236.zip`。
+测试入口验证不能代替下节的完整界面、链接和无字幕验收；正式 tag 构建仍需使用最终源码。
+
+本机文件在 `dist/acceptance-1.5/`；已验收代码的 CLI / MCP 安装包为 `dist/autoclip-1.5.0-cli-mcp-test-ee73e594.zip`，`dist/autoclip-1.5.0-cli-mcp-test.zip` 指向同一份新包。
 包内有 Python wheel、固定依赖的 `requirements.txt`、本说明、CLI / MCP 使用指南和不含真实密钥的模型配置示例。
 包不含开发者的模型配置、数据库、`node_modules` 或 benchmark 报告。测试包的哈希记录在旁边的 SHA256 文件。
 
@@ -74,7 +79,7 @@ MCP 成片时长约 45.8 / 17.7 / 87.8 秒（各两种语言），两边实际�
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install autoclip-1.5.0-py3-none-any.whl
+python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
 autoclip --version
 
 # 复用已保存的桌面模型配置；已有字幕可跳过语音识别。
@@ -83,6 +88,7 @@ autoclip outputs PROJECT_ID --export-kits
 ```
 
 Windows 用 `.venv\Scripts\Activate.ps1` 激活。MCP 客户端的 `command` 使用该虚拟环境中 `autoclip` 的绝对路径，`args` 为 `["mcp"]`。
+候选版本号仍为 1.5.0，更新旧候选 wheel 必须强制重装，避免普通安装保留旧代码。demo 前建议预装 `opencv-python-headless>=4.10`；应用也会按需下载人物识别运行库。
 调用 `get_version` 后使用 `start_quick_output` + `get_quick_output_status`，示例见 [CLI / MCP 指南](CLI_AND_MCP.md)。
 需要独立测试数据时设置 `AUTOCLIP_DATA_DIR`，将示例改成同事自己的连接和密钥，保存为该目录的 `ai-model-settings.json`。
 本地语音识别需可用 Whisper；这轮真实模型验证使用已有 SRT，没有验证新的云端 ASR 调用或真实链接重新下载。
