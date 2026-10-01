@@ -1,7 +1,7 @@
 # AutoClip — 项目状态 / 进度 / 计划
 
-> 更新：2026-10-01。主线 **v1.4.0**；**1.5.0 快速出片迭代**在分支 `worktree-project-diagnosis`，尚未合入、尚未发布。
-> **本轮候选版验收与同事 CLI / MCP 测试见 [RELEASE_1_5.md](docs/RELEASE_1_5.md)**：已加入竖版选择、片尾开关、字幕修复与完整 headless 出片，尚待 Pre-release 和双平台安装冒烟。
+> 更新：2026-10-01。**1.5.0 快速出片迭代已通过 [PR #250](https://github.com/zhouxiaoka/autoclip/pull/250) 合入 main**；固定 tag `v1.5.0` 指向 `e940f5ae`。桌面与 CLI/MCP 从同一 tag 构建，正式 / Pre-release 状态及最终资产见 [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)。
+> **验收与同事 CLI / MCP 测试见 [RELEASE_1_5.md](docs/RELEASE_1_5.md)**：竖版选择、片尾开关、字幕修复、完整 headless 出片，以及人物模型漏包 / 长视频队列两个 P1 均已修复并复测。旧候选 wheel 不含最后的长视频修复，同事应以正式 tag 资产为准，同版本候选包须强制重装。
 > **接手 1.5.0 先读 [1.5.0 交接文档](docs/HANDOFF_1_5_FAST_OUTPUT.md)**：现状、负责人决定、迭代过程、代码地图、踩坑和待办都在那里，随进度维护。
 > 下方 2026-09-28 及更早的内容是历史快照。
 

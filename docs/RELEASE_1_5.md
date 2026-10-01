@@ -1,6 +1,14 @@
-# 1.5.0 候选版验收与同事测试
+# 1.5.0 发版验收与同事测试
 
 更新：2026-10-01。桌面配置、Cargo、Python 包、CLI、MCP 均为 **1.5.0**。
+
+## 正式 tag 与交付入口
+
+[PR #250](https://github.com/zhouxiaoka/autoclip/pull/250) 已合并，tag `v1.5.0` 固定在 main `e940f5aef485409b13950c405fab6a9344376c88`。PR 和 [main 全量 CI](https://github.com/zhouxiaoka/autoclip/actions/runs/36872311072) 全绿，Windows 异步连接清理专项也通过。
+
+最终包由 [tag 双平台构建](https://github.com/zhouxiaoka/autoclip/actions/runs/36873288668) 生成；安装包、签名更新清单、CLI/MCP wheel、无密钥 ZIP 与 SHA256，以及正式 / Pre-release 状态，以 [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0) 为准。下方候选包名称是历史验收记录，`ee73e594` 包尚未包含最后的 YouTube 长视频修复。同版本候选更新必须强制重装，不能只检查 `--version`。
+
+本次按负责人尽快正式发布的要求推进。Windows 已有 CI 覆盖升级与实装视频验收，没有人工真机界面验收；正式 Release 需明确该限制和未完成的观察期，官网由负责人另行更新。
 分支 `worktree-project-diagnosis`，接手基线 `723eefbd`。当前为候选版，尚未打 tag、尚未向正式用户推送。
 
 ## 这轮完成的验收修复
@@ -23,7 +31,7 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端全量回归 | 1101 passed、2 skipped；新增字幕 / 两种版式 / 语言隔离 / headless 状态与启动 / 实际中文字体均覆盖 |
+| 后端全量回归 | 最终 PR 1106 passed、2 skipped；新增字幕 / 两种版式 / 语言隔离 / headless 状态与启动 / 实际中文字体 / 长视频平台排序均覆盖 |
 | 前端 | 194 passed；typecheck、lint、生产构建通过 |
 | Rust 下载回归 | 5 passed，包含真实分块 HTTP 响应、截断下载清理和不覆盖已有文件 |
 | `python -m backend.eval` | 两个黄金案例通过 |
@@ -95,9 +103,11 @@ Windows 用 `.venv\Scripts\Activate.ps1` 激活。MCP 客户端的 `command` 使
 CLI / MCP 与桌面共用项目格式；同一数据目录制作时保持一个入口运行，另开 CLI 查询进度可以。
 YouTube 横版当前要求单条完整片段至少 180 秒，因此短 demo 选 Shorts 或 B站；本轮短输入的横版请求已确认明确报无合格长片段。
 
-## 仍待发版验收
+## 切 tag 时的验收快照
 
-- [ ] 最终 PR 与 main CI 全绿，按负责人 2026-10-01 的授权合并并打 `v1.5.0` tag，先出 Pre-release。
+本节记录切 tag 时的范围；正式产物后续检查及是否转为 latest 见上方 Release 与构建链接。
+
+- [x] 最终 PR 与 main CI 全绿，按负责人 2026-10-01 的授权合并并打 `v1.5.0` tag，自动先出 Pre-release。
 - [ ] Windows 安装覆盖升级、干净安装、设置保存、本地及链接导入、预览、导出、片尾关闭再导出。
 - [ ] macOS 安装包同样四项；核对 1.4 的项目与模型设置保留。
 - [ ] 真实链接导入和无字幕转写：桌面 / CLI / MCP 各入口检查数据和产物一致。
@@ -117,3 +127,5 @@ YouTube 横版当前要求单条完整片段至少 180 秒，因此短 demo 选 
 现已按各平台先过滤资格、再从合格候选选前十。保留备选；全部候选不合格时继续明确拒绝，不降低 YouTube 长视频的时长要求。分发失败或只剩备选、没有可执行任务时补上失败终态，避免 CLI/MCP 无限等待。新增 5 个回归覆盖单条低分长片段、多平台各选前十、无合格片段、只有备选与缺草稿。
 
 针对性回归 126 passed；最后的状态收尾和共享资格规则调整后，备选/智能导入相关回归 79 passed。原 case 03 的视频、字幕、完整候选和已精修边界在隔离目录重放，使用新安装的 wheel 与真实渲染，不触碰原失败记录，不增加模型费用。复测结果独立写入 `dist/acceptance-1.5/`，不将 B站 03R 作为 YouTube 长视频通过的证据。
+
+安装包重放已通过：21 条候选保留、20 条短候选排除，唯一合格长片段自动生成 1920×1080、215.13 秒的视频（含实际 1.8 秒片尾），无渲染警告；自动设计封面与视频/文案 ZIP 齐全，CLI 与 MCP 独立进程都返回 `completed`。本次候选分析与边界复用原缓存，文案走无模型离线降级，不能据此宣称新的长视频模型文案验收。报告为 `youtube-long-case03-replay.json` 及对应 CLI/MCP 状态，原失败证据与成本保留。
