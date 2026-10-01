@@ -130,14 +130,17 @@ def _names_allowed(name: str, haystack: str) -> bool:
 
 
 def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy, *, burned: bool = False,
-                    known_names: str = '', call: Callable[[str, dict], dict] | None = None,
+                    burned_language: str | None = None, known_names: str = '', call: Callable[[str, dict], dict] | None = None,
                     avoid_palettes: tuple[str, ...] = ()) -> dict[str, Any]:
     """Packaging dict for `Draft.packaging`; never raises for model problems."""
     template, audience = strategy.template, strategy.audience_language
     src = source_language([line['text'] for line in lines])
-    # Burned captions only replace ours when they are already in the audience language: a Japanese
-    # talk with English captions still needs Chinese captions for Douyin.
-    translate = src != audience
+    # Captions already in the picture replace ours only when the audience reads them: Chinese
+    # captions on a Chinese talk need nothing more for Douyin but English ones for TikTok; English
+    # captions on a Japanese talk (read from the frame, else assumed to follow the speech) are
+    # enough for TikTok, while Douyin still needs Chinese.
+    captions = not burned or (burned_language or src) != audience
+    translate = captions and src != audience
     base = {'template': template, 'audience_language': audience, 'source_language': src, 'burned_captions': burned}
     fallback = {**base, 'title_lines': _fallback_title(draft, audience), 'fallback': True,
                 'cues': [] if burned else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
@@ -153,7 +156,7 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     for attempt in range(2):
         try:
             result = call(PROMPT, payload)
-            return Packaging.model_validate(_validated(result, lines, base, translate, burned, known_names, draft, avoid_palettes)).model_dump()
+            return Packaging.model_validate(_validated(result, lines, base, translate, burned, known_names, draft, avoid_palettes, captions)).model_dump()
         except (ValueError, TypeError) as error:
             logger.warning('Packaging response rejected (attempt %d): %s', attempt + 1, error)
             payload = {**payload, 'previous_error': f'上一次返回不合格：{error}。请严格按规则重新返回。'}
@@ -195,7 +198,7 @@ def _segments(raw, lines, translate):
     return cues
 
 
-def _validated(result, lines, base, translate, burned, known_names, draft, avoid_palettes=()):
+def _validated(result, lines, base, translate, burned, known_names, draft, avoid_palettes=(), captions=None):
     if not isinstance(result, dict):
         raise TypeError('packaging response is not an object')
     audience = base['audience_language']
@@ -217,7 +220,7 @@ def _validated(result, lines, base, translate, burned, known_names, draft, avoid
         titles = _fallback_title(draft, audience)
     accent = result.get('accent_line') if result.get('accent_line') in (0, 1) else len(titles) - 1
     cues = []
-    if not burned or translate:
+    if captions if captions is not None else (not burned or translate):
         if translate:
             cues = _segments(result.get('segments'), lines, translate)  # invalid translation: whole package falls back
         else:

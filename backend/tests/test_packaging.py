@@ -87,6 +87,25 @@ def test_burned_foreign_captions_still_get_audience_captions_without_the_origina
     assert [c['text'] for c in result['cues']] == ['所以我才进了游戏行业'] and result['cues'][0]['original'] == ''
 
 
+@pytest.mark.parametrize('lines, burned_language, platform, expect', [
+    # Chinese talk with Chinese captions in the picture (TIM × 罗永浩).
+    ([{'start': 0.0, 'end': 3.0, 'text': '这是一个中文字幕，内容比较长一些'}], 'zh', 'douyin', None),
+    ([{'start': 0.0, 'end': 3.0, 'text': '这是一个中文字幕，内容比较长一些'}], 'zh', 'tiktok', 'This is a subtitle'),
+    # Japanese talk with English captions in the picture (Kojima × WIRED).
+    ([{'start': 0.0, 'end': 3.0, 'text': 'ゲーム業界に来たという事でございます'}], 'en', 'tiktok', None),
+    ([{'start': 0.0, 'end': 3.0, 'text': 'ゲーム業界に来たという事でございます'}], 'en', 'douyin', '所以我才进了游戏行业'),
+])
+def test_captions_are_added_only_when_the_audience_cannot_read_the_burned_ones(lines, burned_language, platform, expect):
+    zh = platform == 'douyin'
+    sent = []
+    response = good_response(segments=[{'from': 0, 'to': 0, 'text': '所以我才进了游戏行业' if zh else 'This is a subtitle'}],
+                             title_lines=['好的投资人'] if zh else ['Great investors'])
+    result = packaging.build_packaging(DRAFT, lines, platform_strategy(platform), burned=True, burned_language=burned_language,
+                                       call=lambda _p, data: sent.append(data) or response)
+    assert [c['text'] for c in result['cues']] == ([expect] if expect else [])
+    assert sent[0]['translate'] is bool(expect and (expect == 'This is a subtitle' or zh))  # no translation asked for when not shown
+
+
 def test_japanese_is_not_mistaken_for_chinese():
     assert packaging.source_language(['最高傑作は何ですか', '今後多分映画を超えるものになる']) == 'other'
 

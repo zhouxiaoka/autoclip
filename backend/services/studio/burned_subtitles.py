@@ -14,10 +14,10 @@ from pathlib import Path
 from backend.services import render_limits
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
-BAND_WIDTH, BAND_HEIGHT = 320, 64
+BAND_WIDTH, BAND_HEIGHT = 960, 192  # thin outline-free captions (e.g. Bilibili interviews) vanish when shrunk further
 SAMPLES = 12
 BRIGHT, DARK, REACH = 200, 80, 2
-MIN_TEXT_FRACTION = 0.004      # share of band pixels that look like outlined glyphs
+MIN_TEXT_FRACTION = 0.0012     # share of band pixels that look like glyphs on a darker edge
 MIN_FRAMES_WITH_TEXT = 0.6     # most samples must carry text
 MAX_MEDIAN_OVERLAP = 0.5       # text must change between samples (logos do not)
 

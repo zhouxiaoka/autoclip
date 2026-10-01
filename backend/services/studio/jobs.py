@@ -461,11 +461,60 @@ def _source_has_burned_subtitles(project_id, video=None):
     except Exception as error:  # noqa: BLE001 - never block output on a heuristic
         logger.warning('Burned subtitle detection failed: %s', type(error).__name__)
         found = False
+    language = _burned_caption_language(video, found, (store.read(project_id).get('source_meta') or {}).get('title', ''))
+
     def remember(data):
         if data.get('generation') is not None:
             data['generation']['source_has_burned_subtitles'] = found
+            if language:
+                data['generation']['burned_caption_language'] = language
     store.change(project_id, remember)
     return found
+
+
+BURNED_LANGUAGE_PROMPT = (
+    '这几张图是同一个视频画面的底部区域，里面有烧录在画面上的字幕。判断字幕文字是哪种语言，'
+    '只返回 JSON：{"language":"zh|en|ja|ko|other|none"}（none 表示看不到字幕）。'
+)
+
+
+def _burned_caption_language(video, found, title=''):
+    """Language of the captions burned into the picture.
+
+    The speech language is not enough: foreign interviews often carry English captions. The vision
+    model reads them when one is set up; otherwise captions are taken to be written for the
+    video's own audience, i.e. in the language of its title. None means unknown (packaging then
+    assumes the speech language).
+    """
+    if not found:
+        return None
+    from backend.services.studio.packaging import source_language
+    guess = source_language([title]) if title else None
+    guess = guess if guess in ('zh', 'en') else None
+    if not intelligence.ready():
+        return guess
+    import base64
+    import subprocess
+    import tempfile
+    from backend.utils.ffmpeg_utils import get_ffmpeg_path
+    try:
+        from backend.services.publish_export import _probe
+        duration = float(_probe(video).get('duration') or 0)
+        with tempfile.TemporaryDirectory(prefix='ac-captions-') as folder:
+            frames = []
+            for index, at in enumerate((duration * 0.3, duration * 0.5, duration * 0.7)):
+                path = Path(folder) / f'{index}.jpg'
+                subprocess.run([get_ffmpeg_path(), '-v', 'error', '-ss', f'{at:.2f}', '-i', str(video), '-frames:v', '1',
+                                '-vf', 'crop=iw:ih*0.35:0:ih*0.65,scale=960:-2', '-y', str(path)], check=True, capture_output=True, timeout=30)
+                frames.append({'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(path.read_bytes()).decode()}})
+            from backend.services.studio.vision_settings import effective
+            with llm_usage.stage('burned_captions'):
+                answer = intelligence.vision_call([{'type': 'text', 'text': BURNED_LANGUAGE_PROMPT}, *frames], {**effective(), 'quick_screening': True})
+        language = str((answer or {}).get('language') or '').lower()
+        return language if language in ('zh', 'en', 'ja', 'ko', 'other') else guess
+    except Exception as error:  # noqa: BLE001 - fall back to the title's language
+        logger.warning('Burned caption language unknown: %s', type(error).__name__)
+        return guess
 
 
 def _prepare_speaker_framing(platforms):
@@ -622,8 +671,10 @@ def _packaging_inputs(project_id, cache):
             cache['entries'] = _load_srt_entries(project_id)
         except Exception:  # noqa: BLE001 - no subtitles: packaging falls back to the title only
             cache['entries'] = []
-        meta = store.read(project_id).get('source_meta') or {}
+        state = store.read(project_id)
+        meta = state.get('source_meta') or {}
         cache['names'] = f"{meta.get('title', '')} {meta.get('channel', '')}"
+        cache['burned_language'] = (state.get('generation') or {}).get('burned_caption_language')
 
 
 def _prefetch_packaging(project_id, items, burned, cache):
@@ -658,7 +709,8 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache):
         lines = packaging.draft_lines(cache['entries'], value['scenes'])
         used = cache.setdefault('palettes', [])
         with llm_usage.stage('packaging'):
-            cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, known_names=cache['names'],
+            cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, burned_language=cache.get('burned_language'),
+                                                   known_names=cache['names'],
                                                    avoid_palettes=tuple(used[-2:]))
         if cache[key].get('palette'):
             used.append(cache[key]['palette'])
