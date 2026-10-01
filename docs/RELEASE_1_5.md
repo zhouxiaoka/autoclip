@@ -6,10 +6,15 @@
 
 [PR #250](https://github.com/zhouxiaoka/autoclip/pull/250) 已合并，tag `v1.5.0` 固定在 main `e940f5aef485409b13950c405fab6a9344376c88`。PR 和 [main 全量 CI](https://github.com/zhouxiaoka/autoclip/actions/runs/36872311072) 全绿，Windows 异步连接清理专项也通过。
 
-最终包由 [tag 双平台构建](https://github.com/zhouxiaoka/autoclip/actions/runs/36873288668) 生成；安装包、签名更新清单、CLI/MCP wheel、无密钥 ZIP 与 SHA256，以及正式 / Pre-release 状态，以 [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0) 为准。下方候选包名称是历史验收记录，`ee73e594` 包尚未包含最后的 YouTube 长视频修复。同版本候选更新必须强制重装，不能只检查 `--version`。
+最终包由 [tag 双平台构建](https://github.com/zhouxiaoka/autoclip/actions/runs/36873288668) 生成；[1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0) 已正式发布为 latest。9 项公开资产的 SHA256 已核对，macOS / Windows 更新包签名均验证通过，公开 `releases/latest/download/latest.json` 已确认返回 1.5.0。下方候选包名称是历史验收记录，`ee73e594` 包尚未包含最后的 YouTube 长视频修复。同版本候选更新必须强制重装，不能只检查 `--version`。
 
-本次按负责人尽快正式发布的要求推进。Windows 已有 CI 覆盖升级与实装视频验收，没有人工真机界面验收；正式 Release 需明确该限制和未完成的观察期，官网由负责人另行更新。
-分支 `worktree-project-diagnosis`，接手基线 `723eefbd`。当前为候选版，尚未打 tag、尚未向正式用户推送。
+正式 Windows 安装包的 [CI 冒烟](https://github.com/zhouxiaoka/autoclip/actions/runs/36876463485) 通过：1.4→1.5 覆盖升级、桌面窗口与内置后端、provider 配置、本地视频 + SRT 处理及正式 wheel 人物检测/字体。模型端为本机协议 fixture，无新增付费调用。macOS 正式包的内置后端、六种文字模板，以及中文播客 / 英文播客 / 英文访谈的实际取景、字体和片尾均通过；公开 wheel 已在 checkout 外冷安装验收。
+
+本次按负责人尽快正式发布的要求推进。Windows 没有人工真机界面验收，完整观察期尚未完成；这两项限制已在正式 Release 中明确，官网由负责人另行更新。分支 `worktree-project-diagnosis`，接手基线 `723eefbd`；该基线与下方候选包状态均为历史记录。
+
+### 社区 issue 收口
+
+按负责人要求，25 条相关发布 / 验收 / 复现说明已回复，补齐此前“已合入但未发布”的正式下载入口。[置顶 #96](https://github.com/zhouxiaoka/autoclip/issues/96) 已更新为 1.5.0；[说话人裁切与封面 #115](https://github.com/zhouxiaoka/autoclip/issues/115) 已按 completed 关闭并标记 shipped，其他已结案修复保留原关闭状态。新的 Whisper 反馈 [#247](https://github.com/zhouxiaoka/autoclip/issues/247) / [#249](https://github.com/zhouxiaoka/autoclip/issues/249) 已说明升级与补日志步骤，保持开放并标记 needs-info；#116 质量对照、#124 人工看片、#119 系统签名和 #122 Intel Mac 包仍保持开放，不将本次发版冒充这些事项完成。
 
 ## 这轮完成的验收修复
 
@@ -32,7 +37,7 @@
 | 检查 | 结果 |
 |---|---|
 | 后端全量回归 | 最终 PR 1106 passed、2 skipped；新增字幕 / 两种版式 / 语言隔离 / headless 状态与启动 / 实际中文字体 / 长视频平台排序均覆盖 |
-| 前端 | 194 passed；typecheck、lint、生产构建通过 |
+| 前端 | 最终 198 passed；typecheck、lint、生产构建通过 |
 | Rust 下载回归 | 5 passed，包含真实分块 HTTP 响应、截断下载清理和不覆盖已有文件 |
 | `python -m backend.eval` | 两个黄金案例通过 |
 | `python scripts/bump_version.py --check` | 五处版本均为 1.5.0 |
@@ -111,7 +116,7 @@ YouTube 横版当前要求单条完整片段至少 180 秒，因此短 demo 选 
 - [ ] Windows 安装覆盖升级、干净安装、设置保存、本地及链接导入、预览、导出、片尾关闭再导出。
 - [ ] macOS 安装包同样四项；核对 1.4 的项目与模型设置保留。
 - [ ] 真实链接导入和无字幕转写：桌面 / CLI / MCP 各入口检查数据和产物一致。
-- [ ] 核对正式 tag 双平台安装包、签名更新清单与 CLI/MCP 资产后转为 latest；本次按负责人尽快正式发布的要求推进，Windows 缺人工界面验收和未完成观察期须在 Release 中明确。官网由负责人另行更新。
+- [x] 正式 tag 双平台安装包、签名更新清单与 CLI/MCP 资产已核对，已转为 latest；本次按负责人尽快正式发布的要求推进，Windows 缺人工界面验收和未完成观察期已在 Release 中明确。官网由负责人另行更新。
 
 下一版仍保留：词级时间清洗、讲解 / 录屏 / 分屏模板、并行包装的配色避让、封面设计线程优化、跨编码器拼接专项验证和低影响的反馈关闭图标。
 本轮不删除原来的 `frontend/node_modules` 软链接或 `benchmarks/fast_output/reports/`。
