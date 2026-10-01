@@ -14,6 +14,7 @@
 - 略超出源视频结尾的内容片段截断到有效时长；无效片段不再拖垮全部生成。
 - 发布包在磁盘生成，桌面下载逐段写入；同名下载不会覆盖已有文件，失败时清理残缺下载。
 - CLI / MCP 新入口使用桌面 Studio 的完整一键出片链路，交付视频、封面、文案和发布包；旧切片命令继续兼容。
+- CLI / MCP 启动也安装 Windows Python 3.13 的断连清理修复，保持网络连接释放行为与桌面一致；其他平台与 Python 版本不改动。
 
 ## 本机验证
 
@@ -22,12 +23,12 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端全量回归 | 1099 passed、2 skipped；新增字幕 / 两种版式 / 语言隔离 / headless 状态均覆盖 |
+| 后端全量回归 | 1100 passed、2 skipped；新增字幕 / 两种版式 / 语言隔离 / headless 状态与启动均覆盖 |
 | 前端 | 194 passed；typecheck、lint、生产构建通过 |
 | Rust 下载回归 | 5 passed，包含真实分块 HTTP 响应、截断下载清理和不覆盖已有文件 |
 | `python -m backend.eval` | 两个黄金案例通过 |
 | `python scripts/bump_version.py --check` | 五处版本均为 1.5.0 |
-| 文档 / 轻量运行时检查 | 八份 README 一致；Windows asyncio 测试隔离应用依赖后本机 12 passed、1 skipped（真实 Windows 项由 CI 执行）；相关业务回归 38 passed |
+| 文档 / 轻量运行时检查 | 八份 README 一致；Windows asyncio 测试隔离应用依赖后本机 13 passed、1 skipped（真实 Windows 项由 CI 执行）；相关业务回归 38 passed、CLI / MCP 23 passed |
 | 浏览器 | 片尾默认开启、关闭后刷新保留；复制按钮只有一个且无署名；竖版选项可切换 |
 | CLI 真实模型 | DevDay 181 秒输入 → Shorts 3 条成片，视频 / 封面 / 文案 / ZIP 齐全，实际追加片尾，无渲染警告 |
 | 英文访谈窗口渲染 | 使用已生成的英文包装离线渲染 8 秒编辑片段，字幕正常、片尾成功、无警告 |
