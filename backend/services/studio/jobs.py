@@ -464,6 +464,8 @@ def _source_has_burned_subtitles(project_id, video=None):
         logger.warning('Burned subtitle detection failed: %s', type(error).__name__)
         found = False
     language = _burned_caption_language(video, found, (store.read(project_id).get('source_meta') or {}).get('title', ''))
+    if language == 'none':
+        found, language = False, None  # the vision model saw no captions: the pixel heuristic was fooled by scene text
 
     def remember(data):
         if data.get('generation') is not None:
@@ -475,8 +477,9 @@ def _source_has_burned_subtitles(project_id, video=None):
 
 
 BURNED_LANGUAGE_PROMPT = (
-    '这几张图是同一个视频画面的底部区域，里面有烧录在画面上的字幕。判断字幕文字是哪种语言，'
-    '只返回 JSON：{"language":"zh|en|ja|ko|other|none"}（none 表示看不到字幕）。'
+    '这几张图是同一个视频画面的底部区域。判断画面上有没有烧录的对白字幕（随说话变化的字幕条），以及它是哪种语言。'
+    '台标、角标、logo、产品名、幻灯片或屏幕上的文字都不算字幕。'
+    '只返回 JSON：{"language":"zh|en|ja|ko|other|none"}（none 表示没有对白字幕）。'
 )
 
 
@@ -513,7 +516,7 @@ def _burned_caption_language(video, found, title=''):
             with llm_usage.stage('burned_captions'):
                 answer = intelligence.vision_call([{'type': 'text', 'text': BURNED_LANGUAGE_PROMPT}, *frames], {**effective(), 'quick_screening': True})
         language = str((answer or {}).get('language') or '').lower()
-        return language if language in ('zh', 'en', 'ja', 'ko', 'other') else guess
+        return language if language in ('zh', 'en', 'ja', 'ko', 'other', 'none') else guess
     except Exception as error:  # noqa: BLE001 - fall back to the title's language
         logger.warning('Burned caption language unknown: %s', type(error).__name__)
         return guess
@@ -598,6 +601,17 @@ def _apply_framing(project_id, value, strategy_id, video, burned, cache):
         plain = [{**scene, 'crop_x': None, 'crop_track': None, 'framing_source': None, 'framing_adjusted': False} for scene in value['scenes']]
         return {**value, 'scenes': plain, 'layout': fallback_layout}, framing
     return {**value, 'scenes': scenes, 'layout': 'window' if interview else 'crop'}, framing
+
+
+def _audience_title(value, strategy_id, post):
+    """The version's title in its audience's language: clip titles are written in Chinese."""
+    from backend.services.platform_strategy import platform_strategy
+    from backend.services.studio.packaging import CJK
+    if platform_strategy(strategy_id).audience_language != 'en' or not CJK.search(value.get('title') or ''):
+        return value
+    lines = (value.get('packaging') or {}).get('title_lines') or []
+    english = ' '.join(lines) if lines and not any(CJK.search(line) for line in lines) else (post or {}).get('title', '')
+    return {**value, 'title': english[:120]} if english else value
 
 
 def _content_key(value):
@@ -819,6 +833,7 @@ def _auto_generate(project_id, plan):
         for strategy_id, value, trimmed, framed, now in planned:
             if now:
                 value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+                value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
             draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
             derived_drafts.append(draft.model_dump())
             variants.append({

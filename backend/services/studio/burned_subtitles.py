@@ -20,6 +20,7 @@ BRIGHT, DARK, REACH = 200, 80, 2
 MIN_TEXT_FRACTION = 0.0012     # share of band pixels that look like glyphs on a darker edge
 MIN_FRAMES_WITH_TEXT = 0.6     # most samples must carry text
 MAX_MEDIAN_OVERLAP = 0.5       # text must change between samples (logos do not)
+EDGE = 0.15                    # captions are centred; corner logos and watermarks live in the outer 15 %
 
 
 def _band(video: Path, at: float) -> bytes | None:
@@ -37,10 +38,11 @@ def _band(video: Path, at: float) -> bytes | None:
 def text_mask(pixels: bytes) -> set[int]:
     """Indexes of bright pixels that sit next to a dark pixel on the same row (outlined glyphs)."""
     mask = set()
+    left, right = int(BAND_WIDTH * EDGE), int(BAND_WIDTH * (1 - EDGE))
     for y in range(BAND_HEIGHT):
         row = pixels[y * BAND_WIDTH:(y + 1) * BAND_WIDTH]
         for x, value in enumerate(row):
-            if value < BRIGHT:
+            if value < BRIGHT or x < left or x >= right:
                 continue
             lo, hi = max(0, x - REACH), min(BAND_WIDTH, x + REACH + 1)
             if min(row[lo:hi]) < DARK:

@@ -48,10 +48,23 @@ def test_names_not_seen_in_subtitles_or_listing_are_dropped():
     {'segments': [{'from': 0, 'to': 2, 'text': 'x' * 700}]},                                   # too long
     {'segments': None},
 ])
-def test_malformed_segments_fall_back_to_source_captions(bad):
-    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=lambda *_: good_response(**bad))
+def test_malformed_segments_fall_back_to_line_translation_never_the_source_language(bad):
+    def call(prompt, data):
+        if '逐条翻译' in prompt:
+            return {'lines': [f'第{i}句' for i in range(len(data['lines']))]}
+        return good_response(**bad)
+    result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=call)
     assert result['fallback'] is True
-    assert [c['text'] for c in result['cues']] == [line['text'] for line in LINES]
+    assert [c['text'] for c in result['cues']] == ['第0句', '第1句', '第2句']
+    broken = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=lambda *_: good_response(**bad))
+    assert broken['cues'] == []  # no English captions on a Chinese platform
+
+
+def test_an_english_platform_never_shows_a_chinese_fallback_title():
+    def unavailable(*_):
+        raise ValueError('文字模型不可用')
+    result = packaging.build_packaging({'title': '好的投资人像飞行教练', 'hook': ''}, LINES, platform_strategy('tiktok'), call=unavailable)
+    assert result['title_lines'] == [] and all(not packaging.CJK.search(c['text']) for c in result['cues'])
 
 
 def test_model_unavailable_never_blocks_output_and_keeps_english_titles_whole():

@@ -76,7 +76,10 @@ def _tags(raw: Any, rules: PostRules) -> list[str]:
 
 def fallback(title: str, platform: str) -> dict[str, Any]:
     rules = RULES.get(platform, RULES['original'])
-    return {'title': _fit(_clean(title), rules.title_max), 'description': '', 'tags': []}
+    text = _clean(title)
+    if rules.language == 'en' and re.search(r'[\u3040-\u30ff\u4e00-\u9fff]', text):
+        text = ''  # never a Chinese title on an English platform; the user fills it in
+    return {'title': _fit(text, rules.title_max), 'description': '', 'tags': []}
 
 
 def build_posts(title: str, lines: list[str], platforms: list[str], *, source: str = '',

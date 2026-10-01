@@ -42,3 +42,11 @@ def test_producing_a_variant_frames_packages_and_queues_it(monkeypatch):
     variant = state['output_variants'][0]
     assert variant['status'] == 'queued' and variant['framing'] == 'speaker' and dispatched == ['p1']
     assert state['drafts'][0]['layout'] == 'window' and state['generation']['status'] == 'rendering'
+
+
+def test_english_platform_versions_are_titled_in_english():
+    value = {'title': '一次挑片的中文标题', 'packaging': {'title_lines': ['Choose partners', 'for your worst day']}}
+    assert jobs._audience_title(value, 'tiktok', None)['title'] == 'Choose partners for your worst day'
+    no_lines = {'title': '中文标题', 'packaging': {'title_lines': []}}
+    assert jobs._audience_title(no_lines, 'youtube_shorts', {'title': 'Bet on yourself'})['title'] == 'Bet on yourself'
+    assert jobs._audience_title(value, 'douyin', None)['title'] == '一次挑片的中文标题'

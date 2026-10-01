@@ -142,8 +142,12 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     captions = not burned or (burned_language or src) != audience
     translate = captions and src != audience
     base = {'template': template, 'audience_language': audience, 'source_language': src, 'burned_captions': burned}
-    fallback = {**base, 'title_lines': _fallback_title(draft, audience), 'fallback': True,
-                'cues': [] if burned else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
+    # Never mix languages: a fallback shows only what is already in the audience's language.
+    fallback_title = _fallback_title(draft, audience)
+    if audience == 'en':
+        fallback_title = [line for line in fallback_title if not CJK.search(line) and not KANA.search(line)]
+    fallback = {**base, 'title_lines': fallback_title, 'fallback': True,
+                'cues': [] if not captions or translate else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
     if not lines:
         return Packaging.model_validate(fallback).model_dump()
     if call is None:
@@ -163,7 +167,25 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
         except Exception as error:  # noqa: BLE001 - packaging must never block output
             logger.warning('Packaging fell back: %s', type(error).__name__)
             break
+    if translate:
+        # Last resort for foreign-language audiences: plain line-by-line translation, so the
+        # version still gets captions in its own language instead of none (or the source's).
+        fallback['cues'] = _translated_rows(lines, audience, call)
     return Packaging.model_validate(fallback).model_dump()
+
+
+def _translated_rows(lines: list[dict[str, Any]], audience: str, call) -> list[dict[str, Any]]:
+    language = {'zh': '简体中文', 'en': 'English'}[audience]
+    try:
+        result = call(f'把 lines 逐条翻译成{language}，口语自然，保持条数与顺序，不添加事实。返回 {{"lines":["..."]}}',
+                      {'lines': [line['text'] for line in lines]})
+        rows = (result or {}).get('lines') if isinstance(result, dict) else None
+        if not isinstance(rows, list) or len(rows) != len(lines) or not all(isinstance(r, str) and r.strip() for r in rows):
+            return []
+        return [{'start': l['start'], 'end': l['end'], 'text': _clean(r)[:600], 'original': ''} for l, r in zip(lines, rows)]
+    except Exception as error:  # noqa: BLE001
+        logger.warning('Row translation failed: %s', type(error).__name__)
+        return []
 
 
 def _line(result_item: dict, lines: list) -> int | None:
