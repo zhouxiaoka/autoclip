@@ -1,17 +1,27 @@
-"""Final output branding shared by Studio and legacy exports."""
+"""Final output branding shared by Studio and legacy exports.
+
+The outro is a designed 1.8 s animation (logo, wordmark, chime; source in design/outro-v5),
+shipped pre-rendered in vertical and horizontal. It is conformed once per output spec (size,
+frame rate, time base, audio layout) and cached, then joined to the content by stream copy.
+"""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 from backend.services.publish_export import resolve_cjk_font
 from backend.utils.ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
 
-OUTRO_SECONDS = 1.0
-OUTRO_VERSION = "v1"
+OUTRO_SECONDS = 1.8
+OUTRO_VERSION = "v5"
+OUTRO_DIR = Path(__file__).resolve().parents[1] / 'assets' / 'outro'
+OUTRO_BACKGROUND = '0x080809'  # the animation's own background, for padding other aspect ratios
+_cache_lock = threading.Lock()
 
 
 def _font_arg() -> str:
@@ -40,33 +50,75 @@ def _stream_params(source: Path) -> dict:
     }
 
 
+def _cache_dir() -> Path:
+    from backend.core.path_utils import get_data_directory
+    path = get_data_directory() / 'cache' / 'outro'
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _designed_outro(width: int, height: int, params: dict) -> Path | None:
+    """The animation conformed to this output, from the cache when it was made before."""
+    asset = OUTRO_DIR / ('outro-vertical.mp4' if height > width else 'outro-horizontal.mp4')
+    if not asset.is_file():
+        return None
+    key = hashlib.sha1(json.dumps([OUTRO_VERSION, asset.stat().st_size, width, height, params], sort_keys=True).encode()).hexdigest()[:16]
+    target = _cache_dir() / f'{key}.mp4'
+    with _cache_lock:
+        if target.is_file() and target.stat().st_size:
+            return target
+        layout = 'mono' if params['channels'] == 1 else 'stereo'
+        partial = target.with_suffix('.part.mp4')
+        subprocess.run([
+            get_ffmpeg_path(), '-v', 'error', '-i', str(asset),
+            '-vf', f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={OUTRO_BACKGROUND},fps={params['fps']},format=yuv420p",
+            '-af', f"aresample={params['sample_rate']},aformat=channel_layouts={layout}",
+            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-r', params['fps'], '-video_track_timescale', params['timescale'],
+            '-c:a', 'aac', '-b:a', '160k', '-ar', params['sample_rate'], '-ac', str(params['channels']),
+            '-movflags', '+faststart', '-y', str(partial),
+        ], check=True, capture_output=True, timeout=120)
+        os.replace(partial, target)
+        return target
+
+
 def append_outro(source: Path, destination: Path, *, width: int, height: int, enabled: bool = True) -> None:
-    """Append one branded second atomically, preserving the original on failure."""
+    """Append the branded outro atomically, preserving the original on failure."""
     partial = destination.with_name(f'{destination.stem}.branding.part.mp4')
     partial.unlink(missing_ok=True)
     if not enabled:
         os.replace(source, destination)
         return
     with tempfile.TemporaryDirectory(prefix='ac-outro-') as tmp:
-        outro = Path(tmp) / 'outro.mp4'
         concat = Path(tmp) / 'concat.txt'
         ffmpeg = get_ffmpeg_path()
         params = _stream_params(source)
-        layout = 'mono' if params['channels'] == 1 else 'stereo'
-        drawtext = f"drawtext={_font_arg()}:text='Made with AutoClip':x=(w-text_w)/2:y=(h-text_h)/2:fontsize={max(22, round(width * .035))}:fontcolor=white"
         # Stream copy concat keeps packet timestamps in each file's own time base; the outro
         # must share the content's video timescale and frame rate or its frames collapse.
-        subprocess.run([
-            ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', f"color=c=0x1A1A19:s={width}x{height}:d={OUTRO_SECONDS}:r={params['fps']}",
-            '-f', 'lavfi', '-i', f"anullsrc=channel_layout={layout}:sample_rate={params['sample_rate']}", '-t', str(OUTRO_SECONDS),
-            '-vf', drawtext, '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-r', params['fps'],
-            '-video_track_timescale', params['timescale'],
-            '-c:a', 'aac', '-b:a', '160k', '-ar', params['sample_rate'], '-ac', str(params['channels']),
-            '-movflags', '+faststart', '-y', str(outro),
-        ], check=True, capture_output=True, timeout=60)
+        try:
+            outro = _designed_outro(width, height, params)
+        except (OSError, subprocess.SubprocessError):
+            outro = None
+        if outro is None:
+            outro = Path(tmp) / 'outro.mp4'
+            _text_outro(outro, width, height, params)
         concat.write_text(f"file '{source}'\nfile '{outro}'\n", encoding='utf-8')
         subprocess.run([
             ffmpeg, '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-map', '0:a:0?',
             '-c', 'copy', '-movflags', '+faststart', '-y', str(partial),
         ], check=True, capture_output=True, timeout=120)
         os.replace(partial, destination)
+
+
+def _text_outro(outro: Path, width: int, height: int, params: dict) -> None:
+    """Fallback when the designed animation is missing: one dark second with the credit line."""
+    ffmpeg = get_ffmpeg_path()
+    layout = 'mono' if params['channels'] == 1 else 'stereo'
+    drawtext = f"drawtext={_font_arg()}:text='Made with AutoClip':x=(w-text_w)/2:y=(h-text_h)/2:fontsize={max(22, round(width * .035))}:fontcolor=white"
+    subprocess.run([
+        ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', f"color=c=0x1A1A19:s={width}x{height}:d=1:r={params['fps']}",
+        '-f', 'lavfi', '-i', f"anullsrc=channel_layout={layout}:sample_rate={params['sample_rate']}", '-t', '1',
+        '-vf', drawtext, '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-r', params['fps'],
+        '-video_track_timescale', params['timescale'],
+        '-c:a', 'aac', '-b:a', '160k', '-ar', params['sample_rate'], '-ac', str(params['channels']),
+        '-movflags', '+faststart', '-y', str(outro),
+    ], check=True, capture_output=True, timeout=60)

@@ -4,6 +4,15 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def outro_cache(tmp_path, monkeypatch):
+    from backend.services import output_branding
+    cache = tmp_path / 'outro-cache'
+    cache.mkdir()
+    monkeypatch.setattr(output_branding, '_cache_dir', lambda: cache)
+    return cache
+
+
 @pytest.fixture
 def source(tmp_path):
     path = tmp_path / 'content.mp4'
@@ -33,7 +42,7 @@ def test_append_outro_preserves_video_and_audio(source, tmp_path):
     assert output.exists() and output.stat().st_size > 0
     assert video['width'] == 640 and video['height'] == 360
     assert stream_types == {'video', 'audio'}
-    assert 2.8 <= float(result['format']['duration']) <= 3.3
+    assert 3.6 <= float(result['format']['duration']) <= 4.1  # 2 s content + the 1.8 s designed outro
 
 
 def test_disabled_outro_moves_content_without_extra_second(source, tmp_path):
@@ -63,6 +72,24 @@ def test_outro_frames_play_for_a_full_second_when_timescales_differ(tmp_path, ti
         'ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'frame=pts_time', '-of', 'csv=p=0', str(output),
     ], text=True)
     pts = [float(line.split(',')[0]) for line in raw.split() if line.strip(',')]
-    assert len(pts) >= 85
-    assert pts[-1] - pts[-30] >= 0.9, 'outro frames must span about one second, not collapse onto one timestamp'
-    assert all(later > earlier for earlier, later in zip(pts[-31:], pts[-30:]))
+    assert len(pts) >= 110
+    assert pts[-1] - pts[-54] >= 1.6, 'outro frames must span the whole animation, not collapse onto one timestamp'
+    assert all(later > earlier for earlier, later in zip(pts[-55:], pts[-54:]))
+
+
+def test_the_designed_outro_is_used_and_cached_per_output_spec(source, tmp_path, outro_cache):
+    from backend.services.output_branding import append_outro
+    for name in ('a.mp4', 'b.mp4'):
+        content = tmp_path / f'content-{name}'
+        content.write_bytes(source.read_bytes())
+        append_outro(content, tmp_path / name, width=640, height=360, enabled=True)
+    assert len(list(outro_cache.glob('*.mp4'))) == 1  # conformed once, reused
+    # The chime plays in the outro: the last second is not silent.
+    level = subprocess.run(['ffmpeg', '-v', 'info', '-sseof', '-1.2', '-i', str(tmp_path / 'a.mp4'), '-af', 'volumedetect', '-f', 'null', '-'],
+                           capture_output=True, text=True).stderr
+    peak = float(level.split('max_volume:')[1].split('dB')[0])
+    assert peak > -40
+    # The animation's near-black background, not the blue content, ends the video.
+    frame = subprocess.run(['ffmpeg', '-v', 'error', '-sseof', '-0.2', '-i', str(tmp_path / 'a.mp4'), '-frames:v', '1', '-vf', 'scale=1:1',
+                            '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], capture_output=True).stdout
+    assert max(frame) < 60
