@@ -14,7 +14,7 @@ from backend.schemas.project import ProjectCreate, ProjectType
 from backend.services.project_service import ProjectService
 from backend.services.platform_strategy import list_platform_strategies
 from backend.services.studio import store, jobs, intelligence
-from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene, ImportOptions, ConfirmPlan, AppendPlatformsRequest
+from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene, ImportOptions, ConfirmPlan, AppendPlatformsRequest, PostCopy
 
 router = APIRouter()
 
@@ -288,6 +288,50 @@ def append_platforms(project_id: str, body: AppendPlatformsRequest, db: Session 
     project_or_404(project_id, db)
     variants = call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())
     return {'variants': variants}
+
+
+def _variant_job(project_id: str, variant_id: str):
+    state = call(store.read, project_id)
+    variant = next((item for item in state.get('output_variants', []) if item['id'] == variant_id), None)
+    if not variant:
+        raise HTTPException(404, '成片版本不存在')
+    job = next((j for j in state['jobs'] if j['job_id'] == variant.get('render_job_id')), None)
+    if not job or job['status'] != 'completed':
+        raise HTTPException(409, '成片尚未生成')
+    return variant, job
+
+
+@router.get('/{project_id}/output-variants/{variant_id}/cover')
+def output_variant_cover(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    from backend.services.studio import publish_kit
+    project_or_404(project_id, db)
+    variant, job = _variant_job(project_id, variant_id)
+    path, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
+    if path is None:
+        raise HTTPException(404, '封面尚未生成')
+    return FileResponse(path, media_type='image/jpeg', headers={'Cache-Control': 'no-store'})
+
+
+@router.put('/{project_id}/output-variants/{variant_id}/post')
+def update_output_variant_post(project_id: str, variant_id: str, body: PostCopy, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    return call(jobs.update_post, project_id, variant_id, body)
+
+
+@router.get('/{project_id}/output-variants/{variant_id}/kit')
+def output_variant_kit(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    from urllib.parse import quote
+    from backend.services.platform_strategy import platform_strategy
+    from backend.services.studio import publish_kit
+    project_or_404(project_id, db)
+    variant, job = _variant_job(project_id, variant_id)
+    video = store.directory(project_id) / 'output' / 'studio' / f"{job['job_id']}.mp4"
+    if not video.is_file():
+        raise HTTPException(404, '成片文件已移除')
+    cover, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
+    post = variant.get('post') or {'title': (job.get('result') or {}).get('title', '')}
+    data, name = publish_kit.kit_zip(video, cover, post, platform_strategy(variant['strategy_id']).label)
+    return Response(data, media_type='application/zip', headers={'Content-Disposition': f"attachment; filename*=UTF-8''{quote(name)}"})
 
 
 @router.post('/{project_id}/output-variants/{variant_id}/produce')

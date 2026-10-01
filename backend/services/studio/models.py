@@ -169,6 +169,14 @@ class BrandingOptions(BaseModel):
     outro_version: str = 'v1'
 
 
+class PostCopy(BaseModel):
+    """Ready-to-publish copy for one platform (post_copy enforces the platform's limits)."""
+    model_config = ConfigDict(extra='forbid')
+    title: str = Field(default='', max_length=100)
+    description: str = Field(default='', max_length=2000)
+    tags: list[str] = Field(default_factory=list, max_length=12)
+
+
 class OutputVariant(BaseModel):
     """One immutable rendered delivery version derived from a draft revision."""
     model_config = ConfigDict(extra='forbid')
@@ -187,6 +195,9 @@ class OutputVariant(BaseModel):
     trimmed_to_sec: int | None = Field(default=None, ge=1)
     # How a vertical version was framed: speaker-following crop, or the full frame on a backdrop.
     framing: Literal['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'] | None = None
+    # Publish kit: copy written during production, cover designed after the render.
+    post: PostCopy | None = None
+    cover: Literal['design', 'ai'] | None = None
 
 
 class ImportOptions(BaseModel):

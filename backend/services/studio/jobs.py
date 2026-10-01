@@ -75,6 +75,7 @@ def _render(project_id, draft, job_id, *, brand_outro=False):
         update(status='running', percent=5)
         result = render_draft(project_id, source(project_id), draft, job_id, lambda p: update(percent=p), brand_outro=brand_outro)
         update(status='completed', percent=100, result=result, duration_ms=round((monotonic() - started) * 1000))
+        _design_covers(project_id, draft, job_id)
         _sync_variant_status(project_id, job_id, 'completed')
     except Exception as error:
         logger.warning('Studio render failed: %s', type(error).__name__)
@@ -488,6 +489,71 @@ def _apply_framing(project_id, value, strategy_id, video, burned, cache):
     return {**value, 'scenes': scenes, 'layout': 'window' if interview else 'crop'}, framing
 
 
+def _content_key(value):
+    return tuple((scene['start'], scene['end']) for scene in value['scenes'])
+
+
+def _posts_for(project_id, items, cache):
+    """{(content key, strategy id): post copy}: one model call per clip covering all its platforms, side by side."""
+    from backend.pipeline.concurrency import map_chunks
+    from backend.services.studio import packaging, post_copy
+    _packaging_inputs(project_id, cache)
+    clips = {}
+    for strategy_id, value in items:
+        clips.setdefault(_content_key(value), (value, []))[1].append(strategy_id)
+
+    def one(entry):
+        key, (value, platforms) = entry
+        lines = [line['text'] for line in packaging.draft_lines(cache['entries'], value['scenes'])]
+        title = ((value.get('packaging') or {}).get('title_lines') and ''.join(value['packaging']['title_lines'])) or value.get('title', '')
+        return key, post_copy.build_posts(title, lines, platforms, source=cache.get('names', ''))
+
+    try:
+        with llm_usage.stage('post_copy'):
+            results = map_chunks(one, clips.items())
+    except Exception as error:  # noqa: BLE001 - copy is never a blocker
+        logger.warning('Post copy failed: %s', type(error).__name__)
+        return {}
+    return {(key, platform): post for key, by_platform in results for platform, post in by_platform.items()}
+
+
+def _design_covers(project_id, draft, job_id):
+    """Design the cover of every variant this render belongs to; never fails the render."""
+    from backend.services.studio import publish_kit
+    state = store.read(project_id)
+    targets = [item for item in state.get('output_variants', []) if item.get('render_job_id') == job_id]
+    designed = []
+    for variant in targets:
+        try:
+            publish_kit.design_cover(project_id, source(project_id), draft.model_dump() if hasattr(draft, 'model_dump') else draft,
+                                     job_id, variant['strategy_id'], (variant.get('post') or {}).get('title', ''))
+            designed.append(variant['id'])
+        except Exception as error:  # noqa: BLE001 - the video is done; the cover can be redone from the card
+            logger.warning('Cover design failed: %s', type(error).__name__)
+    if designed:
+        def mark(data):
+            for item in data.get('output_variants', []):
+                if item['id'] in designed and item.get('cover') != 'ai':
+                    item['cover'] = 'design'
+        store.change(project_id, mark)
+
+
+def update_post(project_id, variant_id, post):
+    """Save the user's edited copy for one variant (limits re-applied)."""
+    from backend.services.studio import post_copy
+    from backend.services.studio.models import PostCopy
+    state = store.read(project_id)
+    variant = next((item for item in state.get('output_variants', []) if item['id'] == variant_id), None)
+    if not variant:
+        raise FileNotFoundError('成片版本不存在')
+    rules = post_copy.RULES.get(variant['strategy_id'], post_copy.RULES['original'])
+    clean = PostCopy(title=post_copy._fit(post_copy._clean(post.title), rules.title_max) or variant.get('post', {}).get('title', ''),
+                     description=post_copy._fit(post_copy._clean(post.description), rules.description_max),
+                     tags=post_copy._tags(post.tags, rules)).model_dump()
+    store.change(project_id, lambda data: next(item for item in data['output_variants'] if item['id'] == variant_id).update(post=clean))
+    return clean
+
+
 def _packaging_inputs(project_id, cache):
     """Subtitle rows and listing names shared by every packaging call of one batch."""
     if 'entries' not in cache:
@@ -607,6 +673,7 @@ def _auto_generate(project_id, plan):
                     value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
                 planned.append((strategy_id, value, trimmed, framed, now))
         _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now in planned if now], burned, packaging_cache)
+        posts = _posts_for(project_id, [(strategy_id, value) for strategy_id, value, _, _, now in planned if now], packaging_cache)
         for strategy_id, value, trimmed, framed, now in planned:
             if now:
                 value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
@@ -618,6 +685,7 @@ def _auto_generate(project_id, plan):
                 'status': 'queued' if now else 'on_demand', 'created_at': store.now(),
                 **({'trimmed_to_sec': trimmed} if trimmed else {}),
                 **({'framing': framed} if framed else {}),
+                **({'post': posts[_content_key(value), strategy_id]} if (_content_key(value), strategy_id) in posts else {}),
             })
         if not variants:
             raise ValueError('所选平台没有可生成的完整内容版本')
@@ -777,6 +845,7 @@ def _produce_on_demand(project_id, variant_id):
         value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {})
         value = _apply_packaging(project_id, value, strategy_id, burned, {})
         draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None).model_dump()
+        posts = _posts_for(project_id, [(strategy_id, value)], {})
 
         def ready(data):
             for index, item in enumerate(data['drafts']):
@@ -785,6 +854,8 @@ def _produce_on_demand(project_id, variant_id):
             target = next(item for item in data['output_variants'] if item['id'] == variant_id)
             if framed:
                 target['framing'] = framed
+            if (_content_key(value), strategy_id) in posts:
+                target['post'] = posts[_content_key(value), strategy_id]
         store.change(project_id, ready)
         _dispatch_pending_variants(project_id)
     except Exception as error:  # noqa: BLE001 - the variant shows the failure and can be retried
