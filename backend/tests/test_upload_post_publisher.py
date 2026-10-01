@@ -536,3 +536,70 @@ def test_api_router_is_mounted():
     assert "/publish/bilibili/config" in paths
     assert "/publish/bilibili/{project_id}/clips/{clip_id}" in paths
     assert "/publish/bilibili/jobs/{job_id}" in paths
+
+
+# --------------------------------------------------------- output variants ---
+def _variant_meta(path, strategy_id, title="Auto version"):
+    return {"id": "studio-" + "a" * 32, "title": title, "generated_title": title, "source_type": "studio",
+            "studio_job_id": "a" * 32, "revision": 1, "video_path": str(path), "warnings": [],
+            "output_variant_id": "v1", "strategy_id": strategy_id, "branding": {"outro_enabled": True}}
+
+
+def test_publish_variant_uses_completed_file_without_reexport(data_dir, monkeypatch):
+    from backend.services import upload_post_publisher as up
+
+    video = _fake_clip(data_dir)
+    monkeypatch.setattr("backend.services.studio.publishing.output_variant_meta",
+                        lambda _p, _v: _variant_meta(video, "tiktok"))
+    monkeypatch.setattr("backend.services.publish_export.export_clip",
+                        lambda req: pytest.fail("variant publish must not re-export"))
+    session = _Session([_Resp(200, {"success": True, "request_id": "v-req"})])
+    cfg = up.UploadPostConfig(api_key="k-1234567890", user="me", base_url="https://api.example.test")
+
+    r = up.publish_clip(up.PublishRequest("p1", "studio-" + "a" * 32, ["tiktok", "instagram"], output_variant_id="v1"),
+                        config=cfg, session=session)
+    assert r["output_variant_id"] == "v1" and r["strategy_id"] == "tiktok" and r["preset"] == "tiktok"
+    assert r["path"] == str(video)
+    record = up.list_records("p1")[0]
+    assert record["output_variant_id"] == "v1" and record["strategy_id"] == "tiktok"
+
+
+def test_an_english_platform_version_is_never_posted_with_a_chinese_title(data_dir, monkeypatch):
+    from backend.services import upload_post_publisher as up
+
+    video = _fake_clip(data_dir)
+    monkeypatch.setattr("backend.services.studio.publishing.output_variant_meta",
+                        lambda _p, _v: _variant_meta(video, "tiktok", title="自动版本"))
+    session = _Session([])
+    cfg = up.UploadPostConfig(api_key="k-1234567890", user="me", base_url="https://api.example.test")
+    with pytest.raises(up.UploadPostError, match="英文"):
+        up.publish_clip(up.PublishRequest("p1", "studio-" + "a" * 32, ["tiktok"], output_variant_id="v1"),
+                        config=cfg, session=session)
+    assert not session.calls
+
+
+def test_publish_landscape_variant_refuses_vertical_only_targets(data_dir, monkeypatch):
+    from backend.services import upload_post_publisher as up
+
+    video = _fake_clip(data_dir)
+    monkeypatch.setattr("backend.services.studio.publishing.output_variant_meta",
+                        lambda _p, _v: _variant_meta(video, "youtube_long"))
+    session = _Session([])
+    cfg = up.UploadPostConfig(api_key="k-1234567890", user="me", base_url="https://api.example.test")
+    with pytest.raises(up.UploadPostError, match="竖版"):
+        up.publish_clip(up.PublishRequest("p1", "studio-" + "a" * 32, ["youtube", "tiktok"], output_variant_id="v1"),
+                        config=cfg, session=session)
+    assert not session.calls
+
+
+def test_output_variant_meta_requires_completed_variant(data_dir):
+    from backend.services.studio import publishing, store
+
+    _fake_clip(data_dir)
+    store.write("p1", {"jobs": [], "drafts": [], "output_variants": [
+        {"id": "v1", "strategy_id": "douyin", "status": "rendering", "render_job_id": "b" * 32},
+    ]})
+    with pytest.raises(FileNotFoundError):
+        publishing.output_variant_meta("p1", "v1")
+    with pytest.raises(FileNotFoundError):
+        publishing.output_variant_meta("p1", "missing")

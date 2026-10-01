@@ -23,6 +23,46 @@ _TEST_DB_DIR = tempfile.mkdtemp(prefix="autoclip-tests-")
 os.environ.setdefault("DATABASE_URL", f"sqlite:///{Path(_TEST_DB_DIR) / 'autoclip.db'}")
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "stdlib_only: runtime regression without application dependencies")
+
+
+class _FollowStudioExecutor:
+    """Route Studio renders through whatever `jobs.executor` a test installed."""
+
+    def __init__(self, jobs):
+        self.jobs = jobs
+
+    def submit(self, *args, **kwargs):
+        return self.jobs.executor.submit(*args, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _studio_render_follows_executor(monkeypatch):
+    # Tests stub `jobs.executor` to run work inline; keep renders on that stub instead of
+    # the real background render worker. Tests that target `render_executor` override this.
+    jobs = sys.modules.get("backend.services.studio.jobs")
+    if jobs is not None:
+        monkeypatch.setattr(jobs, "render_executor", _FollowStudioExecutor(jobs))
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _isolated_branding_settings(tmp_path, monkeypatch, request):
+    if request.node.get_closest_marker("stdlib_only"):
+        return
+    from backend.services import output_branding
+    monkeypatch.setattr(output_branding, 'settings_path', lambda: tmp_path / 'output-branding.json')
+
+
+@pytest.fixture(autouse=True)
+def _no_framing_install(monkeypatch, request):
+    # Automatic output starts the on-demand OpenCV install; tests must never run pip.
+    if not request.node.get_closest_marker("stdlib_only"):
+        from backend.services.studio import framing
+        monkeypatch.setattr(framing, "start_install", lambda index_url=None: {"started": False, "message": "test"})
+    yield
+
 @pytest.fixture(scope="session")
 def test_data_dir(tmp_path_factory):
     """创建测试数据目录"""
@@ -253,4 +293,4 @@ def assert_dict_contains(dict_obj: dict, expected_keys: list, description: str =
 def assert_error_contains(error: Exception, expected_message: str, description: str = ""):
     """断言错误信息包含指定内容"""
     assert expected_message in str(error), \
-        f"错误信息不包含预期内容: {expected_message} {description}" 
+        f"错误信息不包含预期内容: {expected_message} {description}"

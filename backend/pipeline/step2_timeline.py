@@ -89,12 +89,17 @@ class TimelineExtractor:
 
         all_timeline_data = []
         current_srt_entries = []
-        # 3. 遍历每个块，批量处理，并将结果存为独立的JSON文件
-        for chunk_index, chunk_outlines in outlines_by_chunk.items():
+        # 3. 每个块独立调用模型（并行），结果按块顺序合并，并存为独立的JSON文件
+        import threading
+        from .concurrency import map_chunks
+        parse_lock = threading.Lock()
+
+        def timeline_chunk(item):
+            chunk_index, chunk_outlines = item
+            srt_entries, parsed = [], []
             logger.info(f"处理块 {chunk_index}，其中包含 {len(chunk_outlines)} 个话题...")
             chunk_report = {"index": chunk_index, "topics": len(chunk_outlines),
                             "attempts": 0, "outcome": "missing_subtitles"}
-            self.extraction_report["chunks"].append(chunk_report)
             
             # 结果文件只用于诊断；本次返回值仅由本次验证成功的块组成
             chunk_output_path = self.timeline_chunks_dir / f"chunk_{chunk_index}.json"
@@ -104,20 +109,20 @@ class TimelineExtractor:
                 srt_chunk_path = self.srt_chunks_dir / f"chunk_{chunk_index}.json"
                 if not srt_chunk_path.exists():
                     logger.warning(f"  > 找不到对应的SRT块文件: {srt_chunk_path}，跳过整个块。")
-                    continue
+                    return chunk_report, srt_entries, parsed
                 
                 with open(srt_chunk_path, 'r', encoding='utf-8') as f:
                     srt_chunk_data = json.load(f)
 
                 if not srt_chunk_data:
                     logger.warning(f"  > SRT块文件为空: {srt_chunk_path}，跳过整个块。")
-                    continue
+                    return chunk_report, srt_entries, parsed
 
                 # 获取时间范围信息
                 chunk_start_time = srt_chunk_data[0]['start_time']
                 chunk_end_time = srt_chunk_data[-1]['end_time']
 
-                current_srt_entries.extend(srt_chunk_data)
+                srt_entries = srt_chunk_data
                 llm_cache_path = self.llm_raw_output_dir / f"chunk_{chunk_index}.txt"
                 cached = llm_cache_path.exists()
                 chunk_report["source"] = "cache" if cached else "model"
@@ -153,16 +158,17 @@ class TimelineExtractor:
                             chunk_report["outcome"] = "empty_response"
                             logger.warning("块 %s 响应为空，跳过", chunk_index)
                             break
-                        parsed_items = self._parse_and_validate_response(
-                            raw_response, chunk_start_time, chunk_end_time, chunk_index
-                        )
-                        chunk_report.update(self._last_parse_diagnostics)
+                        with parse_lock:  # the parser reports through instance state
+                            parsed_items = self._parse_and_validate_response(
+                                raw_response, chunk_start_time, chunk_end_time, chunk_index
+                            )
+                            chunk_report.update(self._last_parse_diagnostics)
                         if parsed_items:
                             chunk_report["outcome"] = "parsed"
                             chunk_output_path.write_text(
                                 json.dumps(parsed_items, ensure_ascii=False, indent=2), encoding='utf-8'
                             )
-                            all_timeline_data.extend(parsed_items)
+                            parsed = parsed_items
                             break
                         input_data['additional_instruction'] = (
                             "仅返回有效 JSON 数组，使用英文双引号；起止时间必须引用当前字幕块，结束晚于开始。"
@@ -177,7 +183,13 @@ class TimelineExtractor:
             except Exception as e:
                 chunk_report["outcome"] = "chunk_error"
                 logger.error(f"  > 处理块 {chunk_index} 时出错: {str(e)}")
-                continue
+                return chunk_report, srt_entries, parsed
+            return chunk_report, srt_entries, parsed
+
+        for chunk_report, srt_entries, parsed in map_chunks(timeline_chunk, outlines_by_chunk.items()):
+            self.extraction_report["chunks"].append(chunk_report)
+            current_srt_entries.extend(srt_entries)
+            all_timeline_data.extend(parsed)
         
         logger.info("本次成功提取 %s 个话题。", len(all_timeline_data))
         self.extraction_report["parsed"] = len(all_timeline_data)

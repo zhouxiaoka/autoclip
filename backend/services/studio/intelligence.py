@@ -99,6 +99,11 @@ def vision_call(content, config=None):
         raise failure('connection', '视觉模型连接中断，请稍后重试；原素材已保留') from None
     except (ValueError, UnicodeError):
         raise failure('invalid_response', '视觉模型返回了无法解析的响应，请检查接口兼容性后重试') from None
+    from backend.core import llm_usage
+    llm_usage.record(model, result.get('usage') if isinstance(result, dict) else None, kind='vision',
+                     prompt_chars=sum(len(part.get('text', '')) for part in content if isinstance(part, dict)),
+                     completion_chars=len(str(((result.get('choices') or [{}])[0].get('message') or {}).get('content') or '')) if isinstance(result, dict) else 0,
+                     images=sum(1 for part in content if isinstance(part, dict) and part.get('type') == 'image_url'))
     try:
         choice = result['choices'][0]
         if choice.get('finish_reason') == 'length':

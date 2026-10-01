@@ -19,6 +19,183 @@ class Immediate:
 def recommendation(goal='highlight'):
     return {'content_type':'gameplay' if goal!='content' else 'talk', 'goal':goal, 'reason':'测试证据', 'confidence':.8, 'aspect':'original', 'duration':30}
 
+def test_append_platforms_reuses_saved_drafts_without_reanalysis(client, root, monkeypatch):
+    from backend.services.studio.models import Draft, Scene
+    original = Draft(id='base', title='Saved output', scenes=[Scene(id='scene', label='Scene', start=0, end=1)], subtitles=False).model_dump()
+    store.write('p1', {
+        'schema_version': 2, 'drafts': [original], 'events': [], 'jobs': [],
+        'analysis': {'status': 'completed'},
+        'generation': {'auto_start': True, 'status': 'completed', 'branding': {'outro_enabled': True, 'outro_version': 'v1'}},
+        'output_variants': [{'id': 'done', 'draft_id': 'base', 'draft_revision': 1, 'strategy_id': 'douyin', 'strategy_version': 1, 'branding': {'outro_enabled': True, 'outro_version': 'v1'}, 'status': 'completed', 'render_job_id': 'old'}],
+    })
+    calls = []
+    monkeypatch.setattr(jobs, 'run_content', lambda *_: pytest.fail('must not rerun content analysis'))
+    monkeypatch.setattr(jobs, 'analyze', lambda *_: pytest.fail('must not rerun visual analysis'))
+    monkeypatch.setattr(jobs, 'export', lambda _pid, draft, **kwargs: calls.append((draft, kwargs)) or {'job_id': 'new-job', 'status': 'queued'})
+
+    response = client.post('/studio/p1/platforms', json={'platforms': ['tiktok']})
+    assert response.status_code == 200, response.text
+    state = client.get('/studio/p1').json()
+    assert len(state['output_variants']) == 2
+    added = next(item for item in state['output_variants'] if item['strategy_id'] == 'tiktok')
+    assert added['draft_id'] != 'base' and added['render_job_id'] == 'new-job'
+    assert state['output_variants'][0]['status'] == 'completed'
+    assert len(calls) == 1 and calls[0][1] == {'brand_outro': True}
+
+
+def test_retry_variant_only_requeues_failed_output(client, root, monkeypatch):
+    draft = jobs.Draft(id='failed-draft', title='Retry', scenes=[jobs.Scene(id='scene', label='Scene', start=0, end=1)], subtitles=False).model_dump()
+    store.write('p1', {
+        'schema_version': 2, 'drafts': [draft], 'events': [], 'jobs': [], 'analysis': {'status': 'failed'},
+        'generation': {'auto_start': True, 'status': 'partial'},
+        'output_variants': [
+            {'id': 'completed', 'draft_id': 'failed-draft', 'draft_revision': 1, 'strategy_id': 'douyin', 'strategy_version': 1, 'branding': {'outro_enabled': True, 'outro_version': 'v1'}, 'status': 'completed', 'render_job_id': 'old'},
+            {'id': 'failed', 'draft_id': 'failed-draft', 'draft_revision': 1, 'strategy_id': 'tiktok', 'strategy_version': 1, 'branding': {'outro_enabled': False, 'outro_version': 'v1'}, 'status': 'failed', 'render_job_id': 'bad', 'error': 'encoder stopped'},
+        ],
+    })
+    calls = []
+    monkeypatch.setattr(jobs, 'export', lambda _pid, value, **kwargs: calls.append((value, kwargs)) or {'job_id': 'retry-job', 'status': 'queued'})
+
+    response = client.post('/studio/p1/output-variants/failed/retry')
+    assert response.status_code == 200, response.text
+    state = client.get('/studio/p1').json()
+    retried = next(item for item in state['output_variants'] if item['id'] == 'failed')
+    assert retried['status'] == 'queued' and retried['render_job_id'] == 'retry-job' and 'error' not in retried
+    assert state['analysis']['status'] == 'running'  # same process: must not be mistaken for a restart
+    assert next(item for item in state['output_variants'] if item['id'] == 'completed')['status'] == 'completed'
+    assert calls[0][1] == {'brand_outro': False}
+
+
+def test_auto_variant_passes_branding_to_render_job(client, source, monkeypatch):
+    submitted = []
+    class CaptureExecutor:
+        def submit(self, fn, *args, **kwargs):
+            submitted.append((fn, args, kwargs))
+            return None
+
+    monkeypatch.setattr(jobs, 'executor', CaptureExecutor())
+    draft = jobs.Draft(id='brand-draft', title='Brand', scenes=[jobs.Scene(id='scene', label='Scene', start=0, end=1)], subtitles=False)
+    job = jobs.export('p1', draft, brand_outro=True)
+    assert job['brand_outro'] is True
+    assert submitted[0][2] == {'brand_outro': True}
+    assert submitted[0][1][-1] == job['job_id']
+
+
+def test_variant_terminal_states_preserve_partial_success(root):
+    store.write('p1', {
+        'schema_version': 2, 'drafts': [], 'events': [], 'jobs': [],
+        'analysis': {'status': 'running'},
+        'generation': {'status': 'rendering'},
+        'output_variants': [
+            {'id': 'one', 'draft_id': 'draft-one', 'draft_revision': 1, 'strategy_id': 'tiktok', 'strategy_version': 1, 'branding': {'outro_enabled': True, 'outro_version': 'v1'}, 'status': 'running', 'render_job_id': 'job-one'},
+            {'id': 'two', 'draft_id': 'draft-two', 'draft_revision': 1, 'strategy_id': 'youtube_shorts', 'strategy_version': 1, 'branding': {'outro_enabled': True, 'outro_version': 'v1'}, 'status': 'running', 'render_job_id': 'job-two'},
+        ],
+    })
+    jobs._sync_variant_status('p1', 'job-one', 'completed')
+    state = store.read('p1')
+    assert state['generation']['status'] == 'rendering'
+    jobs._sync_variant_status('p1', 'job-two', 'failed', 'encoder stopped')
+    state = store.read('p1')
+    assert state['generation']['status'] == 'partial'
+    assert state['generation']['completed_variant_count'] == 1
+    assert state['analysis']['outcome'] == 'partial'
+    assert state['output_variants'][1]['error'] == 'encoder stopped'
+
+
+def test_auto_start_skips_ineligible_long_output_without_faking_duration(client, source, monkeypatch):
+    class ImmediateAuto:
+        def submit(self, fn, *args):
+            return fn(*args)
+
+    monkeypatch.setattr(jobs, 'executor', ImmediateAuto())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    monkeypatch.setattr(jobs, 'run_content', lambda *args: [
+        {'generated_title': '短观点', 'start_time': '00:00:00,000', 'end_time': '00:00:01,000'},
+    ])
+    monkeypatch.setattr(jobs, 'export', lambda *_: (_ for _ in ()).throw(AssertionError('long form must not render')))
+
+    response = client.post(
+        '/studio/import',
+        data={'auto_start': 'true', 'platforms': 'youtube_long'},
+        files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')},
+    )
+    state = client.get('/studio/' + response.json()['project_id']).json()
+    assert state['generation']['status'] == 'failed'
+    assert state['output_variants'] == []
+    assert state['generation']['skipped'] == [{'strategy_id': 'youtube_long', 'reason': '素材没有足够完整的长内容'}]
+
+
+def test_auto_start_creates_platform_variants_without_confirmation(client, source, monkeypatch):
+    class ImmediateAuto:
+        def submit(self, fn, *args):
+            return fn(*args)
+
+    monkeypatch.setattr(jobs, 'executor', ImmediateAuto())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    monkeypatch.setattr(jobs, 'run_content', lambda *args: [
+        {'generated_title': '完整观点', 'start_time': '00:00:00,000', 'end_time': '00:00:01,000'},
+    ])
+    exports = []
+    def fake_export(project_id, draft, **kwargs):
+        assert kwargs == {'brand_outro': True}
+        exports.append(draft)
+        return {'job_id': f'job-{draft.id}', 'status': 'queued'}
+    monkeypatch.setattr(jobs, 'export', fake_export)
+
+    response = client.post(
+        '/studio/import',
+        data={'auto_start': 'true', 'platforms': 'tiktok', 'name': 'Automatic output'},
+        files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')},
+    )
+    assert response.status_code == 200, response.text
+    state = client.get('/studio/' + response.json()['project_id']).json()
+    assert state['analysis']['phase'] == 'rendering', state['generation'].get('error')
+    assert state['generation']['status'] == 'rendering'
+    assert state['generation']['requested_platforms'] == ['tiktok']
+    assert len(state['output_variants']) == len(exports) == 1
+    variant = state['output_variants'][0]
+    assert variant['strategy_id'] == 'tiktok'
+    assert variant['draft_id'] == exports[0].id
+    assert variant['render_job_id'] == f'job-{exports[0].id}'
+    assert state['plan']['id']
+    assert state['analysis']['status'] != 'awaiting_confirmation'
+
+
+def test_async_analysis_failure_persists_error_after_exception_scope(client, monkeypatch):
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: True)
+    monkeypatch.setattr(jobs, 'analyze', lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('analysis failed')))
+
+    jobs.analyze_project('p1', ImportOptions(goal='highlight'))
+    state = client.get('/studio/p1').json()
+    assert state['analysis']['status'] == 'failed'
+    assert state['analysis']['error'] == 'analysis failed'
+
+
+def test_import_persists_platform_and_branding_contract_without_auto_start(client, source, monkeypatch):
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+
+    response = client.post(
+        '/studio/import',
+        data={'platforms': 'tiktok', 'brand_outro_enabled': 'false', 'name': 'Platform contract'},
+        files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')},
+    )
+    assert response.status_code == 200, response.text
+    state = client.get('/studio/' + response.json()['project_id']).json()
+    assert state['schema_version'] == 2
+    assert state['generation'] == {
+        'requested_platforms': ['tiktok'],
+        'branding': {'outro_enabled': False, 'outro_version': 'v1'},
+        'auto_start': False,
+        'portrait_style': 'auto',
+        'status': 'awaiting_confirmation',
+        'created_at': state['generation']['created_at'],
+    }
+    assert state['output_variants'] == []
+    assert ImportOptions(platforms=['tiktok', 'reels', 'tiktok']).platforms == ['tiktok', 'instagram_reels']
+
+
 def test_ai_plan_samples_real_source_and_explicit_preferences_win(source,monkeypatch):
     inputs=[]
     monkeypatch.setattr(intelligence,'ready',lambda:True)
@@ -35,6 +212,14 @@ def test_manual_correction_does_not_call_classifier(source,monkeypatch,goal):
     monkeypatch.setattr(intelligence,'vision_call',lambda *a, **kw: pytest.fail('manual choice must win'))
     plan=planning.recommend(source,ImportOptions(goal=goal))
     assert plan['mode']=='manual' and plan['preferences']['goal']==goal
+
+@pytest.mark.parametrize('hours, route', [(1, 'visual'), (4, 'subtitle')])
+def test_long_sources_are_accepted_and_skip_costly_visual_analysis(source, monkeypatch, hours, route):
+    real_probe = intelligence._probe
+    monkeypatch.setattr(intelligence, '_probe', lambda video: {**real_probe(video), 'duration': hours * 3600.0})
+    plan = planning.recommend(source, ImportOptions(goal='highlight'))
+    assert plan['source_duration'] == hours * 3600.0
+    assert plan['recommended_analysis'] == route
 
 def test_missing_vision_is_explicit_fallback_not_fake_ai(source,monkeypatch):
     monkeypatch.setattr(intelligence,'ready',lambda:False)
@@ -537,3 +722,52 @@ def test_local_import_creates_project_thumbnail(client, source, monkeypatch):
     assert thumbnail.startswith('data:image/jpeg;base64,')
     Image.open(io.BytesIO(base64.b64decode(thumbnail.split(',', 1)[1]))).verify()
     assert client.get('/studio/' + pid).json()['analysis']['status'] == 'awaiting_confirmation'
+
+
+def test_many_auto_variants_are_all_queued_for_rendering(root, monkeypatch):
+    submitted = []
+    class Capture:
+        def submit(self, fn, *args, **kwargs):
+            submitted.append(args)
+    monkeypatch.setattr(jobs, 'render_executor', Capture())
+    branding = {'outro_enabled': False, 'outro_version': 'v1'}
+    count = 20  # e.g. a two-hour source with many complete highlights
+    drafts = [jobs.Draft(id=f'd{i}', title=f'T{i}', scenes=[jobs.Scene(id='s', label='S', start=i, end=i + 1)], subtitles=False).model_dump() for i in range(count)]
+    store.write('p1', {
+        'schema_version': 2, 'drafts': drafts, 'events': [], 'jobs': [], 'analysis': {'status': 'running'},
+        'generation': {'auto_start': True, 'status': 'rendering'},
+        'output_variants': [{'id': f'v{i}', 'draft_id': f'd{i}', 'draft_revision': 1, 'strategy_id': 'douyin', 'strategy_version': 1, 'branding': branding, 'status': 'queued'} for i in range(count)],
+    })
+
+    jobs._dispatch_pending_variants('p1')
+    jobs._dispatch_pending_variants('p1')  # idempotent: attached variants are not resubmitted
+    state = store.read('p1')
+    assert all(item.get('render_job_id') for item in state['output_variants'])
+    assert len(submitted) == count and len(state['jobs']) == count
+    assert state['generation']['status'] == 'rendering'
+
+
+def test_only_hard_platform_limits_trim_and_they_cut_at_sentence_ends(root, monkeypatch):
+    from backend.services import publish_export
+    from backend.services.platform_strategy import platform_strategy
+    monkeypatch.setattr(publish_export, '_load_srt_entries', lambda _pid: [
+        {'start_time': '00:00:00,000', 'end_time': '00:02:50,000'},
+        {'start_time': '00:02:50,000', 'end_time': '00:03:05,000'},
+    ])
+    long_moment = {'id': 'x', 'revision': 1, 'scenes': [{'id': 's', 'label': 'S', 'start': 0.0, 'end': 240.0}]}
+
+    kept, trimmed = jobs._fit_platform_limit('p1', long_moment, platform_strategy('douyin'))
+    assert trimmed is None and kept['scenes'][0]['end'] == 240.0  # Douyin accepts long uploads: stay whole
+
+    cut, trimmed = jobs._fit_platform_limit('p1', long_moment, platform_strategy('youtube_shorts'))
+    assert trimmed == 180 and cut['scenes'][0]['end'] == 170.0  # last sentence end within 180 s
+    assert long_moment['scenes'][0]['end'] == 240.0  # input draft is not mutated
+
+
+def test_render_ffmpeg_threads_are_bounded_and_low_priority():
+    from backend.services import render_limits
+    assert int(render_limits.THREADS) >= 2
+    assert '-filter_complex_threads' in render_limits.input_args()
+    cmd, kwargs = render_limits.low_priority(['ffmpeg', '-version'])
+    assert cmd[-2:] == ['ffmpeg', '-version']
+    assert 'preexec_fn' not in kwargs

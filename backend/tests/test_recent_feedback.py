@@ -138,8 +138,8 @@ def test_partial_failure_only_returns_successful_current_chunks(tmp_path):
     obj = prepared_extractor(tmp_path)
     (obj.srt_chunks_dir / 'chunk_1.json').write_text(json.dumps([dict(cue(40, 70), index=2)]))
     (obj.timeline_chunks_dir / 'chunk_1.json').write_text(json.dumps([topic('stale', 40, 70)]))
-    responses = iter([json.dumps([topic()]), ''])
-    obj.llm_client.call_with_retry = lambda *a, **k: next(responses)
+    # Chunks run side by side: answer by chunk content, not call order (chunk 1 starts at 40 s and fails).
+    obj.llm_client.call_with_retry = lambda prompt, data, **k: '' if '00:00:40' in data['srt_text'] else json.dumps([topic()])
     out = obj.extract_timeline([dict(title='current', chunk_index=0), dict(title='failed', chunk_index=1)])
     assert [item['outline'] for item in out] == ['current']
 

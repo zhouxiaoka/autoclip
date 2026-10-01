@@ -63,6 +63,7 @@ class BilibiliConfig:
 class BilibiliPublishRequest:
     project_id: str
     clip_id: str
+    output_variant_id: str | None = None
     title: str | None = None
     description: str | None = None
     subtitles: bool = True
@@ -226,6 +227,7 @@ def build_submit(
     cid: int,
     tid: int = DEFAULT_TID,
     cover: str = "",
+    tags: list[str] | None = None,
 ) -> dict[str, Any]:
     text = title.strip()[:TITLE_LIMIT].rstrip() or "切片"
     cover_url = (cover or "").strip()
@@ -236,7 +238,7 @@ def build_submit(
         "cover43": cover_url,
         "title": text,
         "tid": tid,
-        "tag": "日常",
+        "tag": ",".join(tag.replace(",", " ") for tag in (tags or [])[:10]) or "日常",
         "desc_format_id": 9999,
         "desc": (description or "")[:2000],
         "recreate": -1,
@@ -324,6 +326,7 @@ def upload_video(
     cover_jpeg: bytes | None = None,
     project_id: str | None = None,
     clip_id: str | None = None,
+    tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """把一个 mp4 投稿到 B 站，返回 bvid / aid。
 
@@ -446,6 +449,7 @@ def upload_video(
         filename=filename,
         cid=biz_id,
         cover=cover_url,
+        tags=tags,
     )
     submitted = http.post(
         "https://member.bilibili.com/x/vu/web/add/v3",
@@ -478,29 +482,39 @@ def publish_clip(req: BilibiliPublishRequest, session: requests.Session | None =
     cfg = load_config()
     if not cfg.configured:
         raise BilibiliError("还没有配置 B 站账号")
-    clip = load_clip_meta(req.project_id, req.clip_id)
-    title = (req.title or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
+    if req.output_variant_id:
+        from backend.services.studio.publishing import output_variant_meta
+        clip = output_variant_meta(req.project_id, req.output_variant_id)
+        if clip.get('strategy_id') != 'bilibili':
+            raise BilibiliError('请选择 B站横版成片版本后再投稿')
+        export = {'ok': True, 'path': clip['video_path'], 'preset': clip['strategy_id']}
+    else:
+        clip = load_clip_meta(req.project_id, req.clip_id)
+        export = export_clip(ExportRequest(
+            project_id=req.project_id,
+            clip_id=req.clip_id,
+            preset="bilibili",
+            subtitles=req.subtitles,
+            title_card=req.title_card,
+        ))
+    post = clip.get("post") or {}
+    title = (req.title or post.get("title") or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
     if not title:
         title = f"切片 {req.clip_id}"
+    description = req.description if req.description is not None else post.get("description", "")
     dtime = schedule_unix(req.scheduled_date, req.timezone)
-    export = export_clip(ExportRequest(
-        project_id=req.project_id,
-        clip_id=req.clip_id,
-        preset="bilibili",
-        subtitles=req.subtitles,
-        title_card=req.title_card,
-    ))
     video_path = Path(export["path"])
     uploaded = upload_video(
         cfg.cookie,
         video_path,
         title=title,
-        description=req.description or "",
+        description=description or "",
         private=req.visibility != "public",
         dtime=dtime,
         session=session,
         project_id=req.project_id,
         clip_id=req.clip_id,
+        tags=post.get("tags") or None,
     )
     request_id = str(uuid.uuid4())
     record = {

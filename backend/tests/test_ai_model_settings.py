@@ -375,3 +375,34 @@ def test_api88_gateway_catalog_routes_account_models_and_isolates_keys(monkeypat
     response = ai.save(config)
     assert 'sk-88-only' not in json.dumps(response)
     assert ai.load().connections[0].api_key == 'sk-88-only'
+
+
+def test_a_dedicated_bailian_endpoint_serves_text_models_on_its_compatible_path():
+    host = 'https://llm-x.cn-beijing.maas.aliyuncs.com'
+    for pasted in (host, host + '/api/v1', host + '/api/v1/', host + '/compatible-mode/v1'):
+        connection = ai.Connection(id='b', name='百炼', provider='dashscope', base_url=pasted)
+        assert ai.chat_endpoint(connection, 'qwen-plus')['base_url'] == host + '/compatible-mode/v1'
+    assert ai.chat_endpoint(ai.Connection(id='d', name='d', provider='dashscope'), 'm')['base_url'] == 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    relay = ai.Connection(id='r', name='relay', provider='dashscope', base_url='https://proxy.example.com/v1')
+    assert ai.chat_endpoint(relay, 'm')['base_url'] == 'https://proxy.example.com/v1', 'a 1.4 relay address is used as entered'
+
+
+def test_fal_image_connections_and_unknown_image_apis_from_newer_versions():
+    fal = ai.Connection(id='f', name='fal', provider='compatible', base_url='https://fal.run', api_key='k', image_api='fal')
+    assert ai.image_endpoint(fal) == {'provider': 'fal', 'base_url': 'https://fal.run', 'api_key': 'k'}
+    future = ai.Connection(id='n', name='n', provider='openai', image_api='some-future-api')
+    assert future.image_api == 'auto'  # an unknown value never invalidates the whole settings file
+
+
+def test_ai_covers_switched_on_by_1_4_are_off_after_upgrade_until_chosen_again():
+    from backend.services import cover
+    written_by_1_4 = example().model_dump()
+    written_by_1_4.pop('cover_choice_version')
+    ai.path().parent.mkdir(parents=True, exist_ok=True)
+    ai.path().write_text(json.dumps(written_by_1_4), encoding='utf-8')
+    loaded = ai.load()
+    assert loaded.cover_enabled is False and loaded.cover.model == 'my-image', 'the chosen model stays for one click'
+    assert cover.load_config().enabled is False, 'no billed AI cover in the background'
+    loaded.cover_enabled = True  # the user picks AI generation in 1.5
+    ai.save(loaded)
+    assert ai.load().cover_enabled is True and cover.load_config().enabled is True

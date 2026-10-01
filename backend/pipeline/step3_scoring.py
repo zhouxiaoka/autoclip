@@ -75,21 +75,22 @@ class ClipScorer:
                 logger.warning(f"  > 话题 '{item.get('outline', '未知')}' 缺少 chunk_index，将被跳过。")
         
         all_scored_clips = []
-        # 2. 遍历每个块，批量处理其中的所有话题
-        for chunk_index, chunk_items in timeline_by_chunk.items():
+        # 2. 每个块独立评分（并行，结果按块顺序）
+        def score_chunk(item):
+            chunk_index, chunk_items = item
             logger.info(f"处理块 {chunk_index}，其中包含 {len(chunk_items)} 个话题...")
             try:
-                # 3. 使用LLM进行批量评估
                 scored_chunk_items = self._get_llm_evaluation(chunk_items)
-                
-                if scored_chunk_items:
-                    all_scored_clips.extend(scored_chunk_items)
-                else:
+                if not scored_chunk_items:
                     logger.warning(f"块 {chunk_index} 的LLM评估返回为空，跳过。")
-
+                return scored_chunk_items or []
             except Exception as e:
                 logger.error(f"  > 处理块 {chunk_index} 进行评分时出错: {str(e)}")
-                continue
+                return []
+
+        from .concurrency import map_chunks
+        for scored_chunk_items in map_chunks(score_chunk, timeline_by_chunk.items()):
+            all_scored_clips.extend(scored_chunk_items)
 
         # 4. 按最终得分对所有结果进行排序
         if all_scored_clips:

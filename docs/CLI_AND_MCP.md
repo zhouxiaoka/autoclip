@@ -8,10 +8,49 @@
 | MCP server | 让 opencode / Cursor / Claude Code / 任何 MCP 客户端直接调 AutoClip | `backend/mcp_server.py` |
 | 本地模型预设 | 设置页 / CLI 直接选 Ollama、LM Studio，不用填 key | `backend/core/local_presets.py` |
 
-共享逻辑在 `backend/services/local_runner.py`：不起 FastAPI / Celery，在当前进程里跑 `SimplePipelineAdapter`，
+1.5 一键出片共用 `backend/services/quick_output_runner.py` 与桌面 Studio；旧切片入口的共享逻辑在 `backend/services/local_runner.py`：不起 FastAPI / Celery，在当前进程里跑 `SimplePipelineAdapter`，
 产物目录、metadata、SQLite 记录与桌面端一致——CLI 出的片，打开桌面应用首页就能看到。
 
 ---
+
+## 1.5 一键出片（推荐）
+
+CLI / MCP 与桌面统一为 1.5.0。先核对 `autoclip --version`；MCP 可调用 `get_version`。
+本轮验收及同事测试步骤见 [1.5 验收与测试包](RELEASE_1_5.md)。
+
+```bash
+# 使用桌面已经保存的 AI 模型配置；本地文件和 HTTPS 的 B站 / YouTube 链接均可。
+autoclip produce talk.mp4 --srt talk.srt --platform douyin --platform youtube_shorts --json
+autoclip produce talk.mp4 --platform douyin --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
+`produce` 等待制作及自动封面任务完成，返回各版本的 `video_path`、`cover_path`、`post`、`kit_path`。
+`partial` 表示有部分版本失败，已完成的版本仍保留；`failed` 的退出码为 1，输入无效为 2。
+`outputs` 不调用模型；`--export-kits` 在磁盘写 ZIP，文案或封面变化后生成新的包。
+`--timeout` 只停止进度等待，不取消渲染，CLI 会等待后台线程安全收尾；需要后台轮询时优先使用 MCP。
+
+MCP 使用 `start_quick_output`（立即返回 ID）和 `get_quick_output_status`（轮询）：
+
+```json
+{"source":"/absolute/path/talk.mp4","srt_path":"/absolute/path/talk.srt","platforms":["douyin","youtube_shorts"],"portrait_style":"podcast"}
+```
+
+然后调用 `get_quick_output_status`，参数为 `{"project_id":"返回的ID","export_kits":true}`。
+终态为 `completed` / `partial` / `failed`。MCP 握手版本和 `get_version` 都为 1.5.0。
+保持 MCP 服务运行至制作完成；制作进程提前退出时查询会显示 `interrupted`，已完成的视频仍可取回。
+
+竖版版式参数为 `auto` / `interview` / `podcast`。默认抖音、小红书用访谈式，TikTok、Reels、Shorts 用播客式；
+手动选择只改变竖版布局，中文平台仍用中文，英文平台仍用英文，横版保持 16:9。中文满屏字幕按两行分页。
+完整来源保留和人物取景的降级规则仍适用：没有可用的人物轨迹、或原片字幕不能裁切时，会保留完整画面。
+
+支持平台 ID：`douyin`、`xiaohongshu`、`bilibili`、`tiktok`、`instagram_reels`、`youtube_shorts`、`youtube_long`。
+`reels`、`shorts` 是别名；`youtube_long` 当前只生成至少 180 秒的完整片段，较短素材请先选 Shorts 或 B站。
+
+模型、AI 封面和自动片尾共用桌面设置。制作时保持一个入口运行；新 CLI / MCP demo 建议用独立数据目录，
+通过 `autoclip --data-dir /path/to/demo-data produce ...` 或 MCP 环境变量 `AUTOCLIP_DATA_DIR` 指定。
+独立目录需要自己的模型配置，不会读取另一个数据目录的密钥；新入口不使用旧 `run --provider` 的临时覆盖。
+旧 `run` / `clip_video` / `start_clip_job` 继续提供原始切片与合集。
 
 ## 1. 安装
 

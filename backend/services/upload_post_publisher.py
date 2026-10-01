@@ -32,6 +32,8 @@ from typing import Any
 
 import requests
 
+from backend.services.platform_strategy import default_strategy_for_transport
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_API_BASE = "https://api.upload-post.com"
@@ -45,7 +47,6 @@ PLATFORMS: list[str] = [
     "tiktok", "instagram", "youtube", "facebook", "linkedin", "x", "threads",
     "pinterest", "bluesky", "discord", "telegram", "google_business",
 ]
-VERTICAL_PLATFORMS = {"tiktok", "instagram", "youtube", "facebook", "threads", "pinterest"}
 _RESERVED_FORM_FIELDS = {"user", "platform[]", "platform", "video", "async_upload", "request_id", "external_id"}
 FINAL_STATUSES = {"completed", "failed", "not_found"}
 _ACCOUNT_NAME_FIELDS = ("display_name", "username", "handle")
@@ -247,6 +248,7 @@ class PublishRequest:
     platforms: Sequence[str]
     user: str | None = None
     preset: str | None = None
+    output_variant_id: str | None = None
     title: str | None = None
     description: str | None = None
     subtitles: bool = True
@@ -277,8 +279,9 @@ def normalize_platforms(platforms: Sequence[str]) -> list[str]:
 
 
 def pick_preset(platforms: Sequence[str]) -> str:
-    """没指定预设时：有竖屏平台就用 9:16 的 shorts（最长约 60 秒），否则原画。"""
-    return "shorts" if any(p in VERTICAL_PLATFORMS for p in platforms) else "original"
+    """Compatibility default for legacy publish requests without strategy intent."""
+    strategy = default_strategy_for_transport(platforms)
+    return "shorts" if strategy.id == "youtube_shorts" else strategy.id
 
 
 def records_dir(project_id: str) -> Path:
@@ -392,15 +395,36 @@ def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
             "profile 在 https://app.upload-post.com/manage-users 创建并连接社交账号。"
         )
     preset = req.preset or pick_preset(platforms)
-    clip = load_clip_meta(req.project_id, req.clip_id)
-    title = (req.title or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
+    if req.output_variant_id:
+        from backend.services.platform_strategy import incompatible_transport_platforms
+        from backend.services.studio.publishing import output_variant_meta
+        clip = output_variant_meta(req.project_id, req.output_variant_id)
+        blocked = incompatible_transport_platforms(clip['strategy_id'], platforms)
+        if blocked:
+            raise UploadPostError(f"横版成片不能发布到 {', '.join(blocked)}，请选择竖版版本")
+        export = {'ok': True, 'path': clip['video_path'], 'preset': clip['strategy_id'], 'warnings': clip['warnings']}
+    else:
+        clip = load_clip_meta(req.project_id, req.clip_id)
+        export = export_clip(ExportRequest(
+            project_id=req.project_id, clip_id=req.clip_id, preset=preset,
+            subtitles=req.subtitles, title_card=req.title_card,
+        ))
+    post = clip.get("post") or {}
+    if not req.description and post:
+        # The output's publish kit: description plus hashtags, written for this platform.
+        from dataclasses import replace
+        from backend.services.studio.publish_kit import caption_text
+        req = replace(req, description=caption_text({"description": post.get("description", ""), "tags": post.get("tags", [])}) or None)
+    title = (req.title or post.get("title") or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
     if not title:
         title = f"切片 {req.clip_id}"
+    if clip.get("strategy_id"):
+        from backend.services.platform_strategy import platform_strategy
+        from backend.services.studio.packaging import foreign_for
+        if platform_strategy(clip["strategy_id"]).audience_language == "en" and foreign_for("en", title):
+            # Never post a Chinese title to an English platform; the publish page asks for one.
+            raise UploadPostError("这个平台的标题需要是英文，请在发布页填写英文标题后再发布")
 
-    export = export_clip(ExportRequest(
-        project_id=req.project_id, clip_id=req.clip_id, preset=preset,
-        subtitles=req.subtitles, title_card=req.title_card,
-    ))
     video_path = Path(export["path"])
     if not video_path.exists() or video_path.stat().st_size == 0:
         raise UploadPostError(f"成片不存在或为空: {video_path}")
@@ -431,6 +455,7 @@ def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
         "title": title,
         "preset": export.get("preset", preset),
         "path": str(video_path),
+        **({'output_variant_id': req.output_variant_id, 'strategy_id': clip['strategy_id']} if req.output_variant_id else {}),
         **({"studio_job_id": clip["studio_job_id"], "revision": clip["revision"]} if clip.get("source_type") == "studio" else {}),
         "scheduled_date": req.scheduled_date,
         "submitted_at": datetime.now(timezone.utc).isoformat(),
@@ -450,6 +475,7 @@ def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
         "title": title,
         "preset": export.get("preset", preset),
         "path": str(video_path),
+        **({'output_variant_id': req.output_variant_id, 'strategy_id': clip['strategy_id']} if req.output_variant_id else {}),
         **({"studio_job_id": clip["studio_job_id"], "revision": clip["revision"]} if clip.get("source_type") == "studio" else {}),
         "export_warnings": export.get("warnings") or [],
         "status": record["status"],

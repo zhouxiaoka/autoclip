@@ -37,6 +37,7 @@ class BilibiliConfigBody(BaseModel):
 
 
 class BilibiliPublishBody(BaseModel):
+    output_variant_id: str | None = Field(None, pattern=r'^[a-zA-Z0-9_-]{1,100}$', description="已完成的 B站自动成片版本；传入时不重新导出")
     title: str | None = None
     description: str | None = None
     subtitles: bool = True
@@ -50,6 +51,7 @@ class PublishBody(BaseModel):
     platforms: list[str] = Field(..., description="tiktok / instagram / youtube / facebook / linkedin / x / threads / pinterest / bluesky …")
     user: str | None = Field(None, description="Upload-Post profile；不填用配置里的默认值")
     preset: str | None = Field(None, description="发布导出预设；不填按平台自动选（竖屏平台 shorts，否则 original）")
+    output_variant_id: str | None = Field(None, pattern=r'^[a-zA-Z0-9_-]{1,100}$', description="已完成的自动平台成片版本；传入时不重新导出")
     title: str | None = Field(None, description="标题；不填用切片标题")
     description: str | None = Field(None, description="YouTube / LinkedIn / Facebook / Pinterest 的描述")
     subtitles: bool = True
@@ -168,7 +170,7 @@ async def start_upload_post_publish(project_id: str, clip_id: str, body: Publish
     if not (body.user or cfg.user):
         raise HTTPException(status_code=400, detail="没有指定 Upload-Post profile（user）")
     return up.start_publish(up.PublishRequest(
-        project_id=project_id, clip_id=clip_id, platforms=platforms, user=body.user, preset=body.preset,
+        project_id=project_id, clip_id=clip_id, platforms=platforms, user=body.user, preset=body.preset, output_variant_id=body.output_variant_id,
         title=body.title, description=body.description, subtitles=body.subtitles, title_card=body.title_card,
         scheduled_date=body.scheduled_date, timezone=body.timezone, extra=body.extra,
     ))
@@ -246,6 +248,7 @@ async def start_bilibili_publish(project_id: str, clip_id: str, body: BilibiliPu
     return bili.start_publish(bili.BilibiliPublishRequest(
         project_id=project_id,
         clip_id=clip_id,
+        output_variant_id=body.output_variant_id,
         title=body.title,
         description=body.description,
         subtitles=body.subtitles,

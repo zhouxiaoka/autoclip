@@ -6,9 +6,9 @@
 
 ### リンク一つ、ワンクリックで完成。
 
-オープンソース、無料、手元のパソコンで動きます。リンクを貼り、数十円で <b>10本以上の投稿用クリップ</b> を受け取り、<br>
-表紙・タイトル・説明・ハッシュタグまで、抖音・小紅書・TikTok・Reels・YouTube Shorts 用に揃います。<br>
-編集ソフトも、AI との長いやり取りも不要です。
+オープンソース。カットと書き出しは手元のパソコンで。リンクと投稿先を選び、<b>動画・表紙・投稿文</b>を生成します。<br>
+抖音・小紅書・TikTok・Reels・YouTube Shorts・Bilibili・YouTube に対応。<br>
+アプリは無料、クラウドモデルは従量課金。調整したいときはエディターを使えます。
 
 <p>
   <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square" alt="GitHub release"></a>
@@ -25,61 +25,54 @@
 
 </div>
 
+**[1.5.0 正式リリース](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)**。デスクトップ・CLI・MCP を同時更新。自動制作、字幕のページ分割、人物構図、長尺キューの修正は [変更履歴](CHANGELOG.md) を参照し、旧版から更新してください。
+
 ## 実際の完成クリップ
 
 ![AutoClip の縦型クリップ：小紅書インタビュー、TikTok ポッドキャスト、抖音インタビュー、Shorts ポッドキャスト](docs/images/v2/demo-wall.webp)
 
 元動画はリンクを貼っただけです。上の各本は AutoClip が自動で選び、構図を決め、翻訳し、包装したそのままの出力で、人手の修正はありません。**[事例ライブラリで音声付きで見る →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**
 
-各クリップは対象プラットフォーム向けの一式です。縦動画、表紙、タイトル、説明、ハッシュタグ。ライブラリは随時更新します。[投稿する](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell)。
+投稿先に合わせた動画・表紙・タイトル・説明・ハッシュタグ・ZIP 投稿パックを生成。事例は随時更新、[完成動画の投稿](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell)も歓迎。
 
 元映像の著作権は原作者にあります。効果展示：[Dwarkesh Patel — Dario Amodei](https://www.youtube.com/watch?v=n1E9IZfvGMA) · [Y Combinator — Sam Altman](https://www.youtube.com/watch?v=ZIaOBAjvc38) · [WIRED — Hideo Kojima](https://www.youtube.com/watch?v=02Ah5VQrzvA)
 
 ## できること
 
 ### リンクを貼れば完成
-編集ソフトも AI チャットも不要。プラットフォームを選び、画角どおりに生成。表紙・タイトル・説明・ハッシュタグ付き。
+
+投稿先の画角と長さ条件に合わせて生成。各プラットフォームで条件を満たす上位最大 10 本を自動制作し、残りは必要時に生成します。表紙・タイトル・説明・ハッシュタグ・ZIP 投稿パックを同梱。
 
 ### 包装は自動
-抖音 / 小紅書はインタビュー型、TikTok / Reels / Shorts はポッドキャスト型。画面は話者を追い、外国語素材には現地語タイトルと二カ国語字幕。
+
+抖音 / 小紅書は対談式、TikTok / Reels / Shorts は全画面ポッドキャスト式が既定。縦型レイアウトは選択でき、字幕と投稿文の言語は投稿先に従います。Bilibili / YouTube は横型。人物を追従し、人物のいない場面は全体を保持。ブランドのアウトロは既定でオン、設定でオフにできます。コピーした投稿文に AutoClip の署名は付きません。
 
 ### 手元のパソコンで
-カットと書き出しはローカル。モデルは自分で選ぶ。直したいときだけ編集、一括は CLI / MCP。
 
-## 速く、安い
+カット・構図・書き出しはローカル。分析モデルを選び、作者字幕、ローカル Whisper / SenseVoice、設定済みクラウド文字起こしを利用できます。CLI / MCP も同じ自動制作パイプラインです。
 
-リンク一つで、**10本以上**の投稿可能なクリップ。表紙・タイトル・説明・ハッシュタグ付き。
+## 実素材での時間と費用
 
-| 版 | 元動画 | 出力 | 費用 |
+開発中の異なる 3 素材の記録であり、同一入力の比較試験ではありません。当時の qwen-plus テキストモデル使用量による推計で、クラウド ASR・AI 画像生成・投稿サービスの費用は含みません。実際の請求は事業者によります。
+
+| 版 | 元動画 | 出力 | テキストモデル費用の推計（人民元） |
 | --- | --- | ---: | ---: |
 | **新版 · 字幕あり** | Jensen · 1h43m（英 → 小紅書） | **7.5 分 / 10 本** | **¥0.09** |
 | 新版 · 字幕なし | TIM × 羅永浩 · 2h52m（中 → 抖音） | 29.5 分 / 10 本 | ¥0.20 |
 | 旧版 | MrBeast · 2h06m（英 → TikTok） | 65 分 | ¥0.64 |
 
-2–3 時間の対談はだいたい ¥0.1–0.2。作者字幕が無いと音声認識はローカルで、時間は長くなります。動画はパソコンから出ません。
-
 <details>
-<summary>計測条件</summary>
+<summary>測定条件と記録</summary>
 
-2026 年 10 月 1 日、同じ Apple Silicon Mac、分析モデル qwen-plus（100 万 tokens 入力 ¥0.8 / 出力 ¥2、阿里云百煉の第三者掲載価格）。費用はモデル呼び出しのみ。
+2026-10-01、同じ Apple Silicon Mac。新パイプラインの 2 件は 10 本、旧版は 33 本を生成し、素材と本数が異なります。Jensen は作者字幕、TIM はローカル Whisper base を使用。
 
-Jensen の 7.5 分：ダウンロード約 1 分、作者字幕で文字起こし省略、ハイライト 25 秒、カット / 構図 / 包装約 2.5 分、10 本の書き出し約 3 分。旧版はハイライトだけで 35 分。
-
-この版の主な変更：全文を一度にハイライト抽出、モデル呼び出しの並列化、作者字幕があればローカル ASR を省略、既定は上位 10 本だけ書き出し。
+作者字幕があれば文字起こしを省略。なければローカルまたはクラウド ASR を選択。投稿先や追加クリップが増えると時間・使用量も増えます。[詳細記録](docs/COST_PER_VIDEO.md)（中国語）。
 
 </details>
 
-## 月額クラウドツールとの違い
+## モデルとデータの送り先を選ぶ
 
-| | AutoClip | 月額のクラウドツール |
-| --- | --- | --- |
-| 費用 | アプリ無料。モデルは従量。2–3 時間対談で約 ¥0.1–0.2 | 月額、処理時間で課金 |
-| 動画の処理場所 | 自分のパソコン。クラウドモデルは字幕テキストのみ | 事業者のクラウドへアップロード |
-| モデル | 自分で選ぶ、ローカルも可 | プラットフォーム指定 |
-| 中国向け | 抖音・小紅書・B 站の専用テンプレ | 海外向けが中心 |
-| コード | MIT、改変・自前デプロイ可 | クローズド |
-
-右列は 2026 年 10 月時点の公開ページに基づきます。各製品の最新説明を確認してください。
+カットと書き出しは端末内。クラウド分析には関連字幕と投稿文、映像理解や参照画像生成には必要な抽出フレーム、クラウド文字起こしには音声を送ります。ローカル分析・文字起こしは対応するクラウド API 不要です。投稿を選ぶと完成動画を接続済みの投稿先へ送信。統計・エラー報告は設定で無効にできます。[プライバシー](docs/PRIVACY.en.md)。
 
 ## クイックスタート
 
@@ -93,10 +86,12 @@ Jensen の 7.5 分：ダウンロード約 1 分、作者字幕で文字起こ�
 
 1. **インストール。** [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) から。macOS Apple Silicon は `.dmg`、Windows 10 / 11 x64 は `-setup.exe`。Python と FFmpeg 同梱。
 2. **モデル。** 設定で事業者を選び API Key を入れると分析モデルは自動選択。ローカルなら先に Ollama か LM Studio を起動。
-3. **リンクを貼り、配信先を選ぶ。** 字幕付きの 10–30 分対談から。字幕が無い場合は設定で Whisper か SenseVoice を用意。
-4. **受け取る。** 上位 10 本を確認し、必要なら編集してダウンロードまたは投稿。
+3. **リンクと投稿先を選ぶ。** 字幕付きの対談やポッドキャストで試し、縦型レイアウトを選択。字幕がなければ設定で Whisper / SenseVoice を準備、またはクラウド文字起こしを設定。
+4. **確認して保存。** 字幕・構図・内容の完全性を確認し、投稿パックを保存または接続済みアカウントへ投稿。必要に応じて追加候補を生成。
 
 インストーラはまだ Apple 公証・Windows 署名がありません。macOS は初回右クリック「開く」、Windows は SmartScreen で「詳細情報 → 実行」。
+
+Intel Mac / Linux は Docker または CLI を利用できます。Windows 正式パッケージは CI のインストール・更新・動画処理検証に合格。人による UI 検証と全観察期間は未完了です。[1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0) を参照。
 
 [インストールガイド](docs/USER_INSTALLATION_GUIDE.en.md) · [トラブルシュート](docs/FAQ.en.md)
 
@@ -105,7 +100,7 @@ Jensen の 7.5 分：ダウンロード約 1 分、作者字幕で文字起こ�
 ```bash
 git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
-cp env.example .env          # 选择 LLM_PROVIDER，填 API Key 和模型名；也可以启动后在设置页配置
+cp env.example .env
 mkdir -p data logs uploads
 docker compose up -d --build
 ```
@@ -119,29 +114,32 @@ docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown
 docker compose up -d
 ```
 
+LAN IP や独自ドメインから開く場合、`.env` の `AUTOCLIP_ALLOWED_ORIGINS` にフロントエンドの URL をカンマ区切りで追加。
+
 **CLI / MCP**
 
-Python 3.10+（3.11 推奨）と PATH 上の FFmpeg。CLI のローカル処理に Redis は不要。
+Python 3.10+（3.11 推奨）、PATH 上の FFmpeg と FFprobe が必要。Redis は不要です。[正式 CLI / MCP ZIP](https://github.com/zhouxiaoka/autoclip/releases/download/v1.5.0/autoclip-1.5.0-cli-mcp.zip) を解凍し、そのディレクトリで実行：
 
 ```bash
-git clone https://github.com/zhouxiaoka/autoclip.git
-cd autoclip
-python3 -m venv venv && source venv/bin/activate   # Windows PowerShell：venv\Scripts\Activate.ps1
+python3 -m venv venv
+source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install -e .
+python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
 ```
+
+上記は macOS / Linux 用。Windows は `py -m venv venv` で作成し、`venv\Scripts\Activate.ps1` で有効化。旧 1.5 候補 wheel は正式 wheel を強制再インストールしてください。版番号だけでは判別できません。
+
+先にモデル設定を保存。デスクトップ設定を共有、または ZIP の Key 無しサンプルで専用データディレクトリを設定。[CLI / MCP](docs/CLI_AND_MCP.md)（中国語）。`produce` は旧 `run --provider` の一時指定を使いません。`--srt` で文字起こしを省略。
 
 ```bash
-ollama pull qwen2.5:7b
-python -m pip install faster-whisper                # 无字幕视频需要；已有字幕可用 --srt talk.srt
-autoclip doctor --provider ollama
-autoclip run talk.mp4 --provider ollama --json
-autoclip export PROJECT_ID --preset shorts
-autoclip mcp                                        # stdio MCP 服务
-autoclip mcp install opencode                       # opencode 一条命令接入
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+autoclip mcp
+autoclip mcp install opencode
 ```
 
-MCP クライアントでは `command` を仮想環境の `autoclip` 絶対パス、`args` を `["mcp"]` に。[CLI / MCP](docs/CLI_AND_MCP.md)（中国語）、[OpenCode](docs/OPENCODE.en.md)、[Agent skill](skills/autoclip/SKILL.md)（中国語）。
+`PROJECT_ID` は制作結果の ID に置換。MCP は `start_quick_output` / `get_quick_output_status` を使用。クライアントの `command` は仮想環境の `autoclip` 絶対パス、`args` は `["mcp"]`。旧 `run` / `export` と切片ツールも利用可能。[CLI / MCP](docs/CLI_AND_MCP.md)（中国語）・[OpenCode](docs/OPENCODE.en.md)・[Agent skill](skills/autoclip/SKILL.md)（中国語）。
 
 ## モデル設定
 
@@ -187,28 +185,28 @@ AutoClip を支援してくださっているパートナーです。どちら�
 <details>
 <summary>有料ですか。API Key は必要ですか。</summary>
 
-AutoClip は無料・MIT。クラウドモデルは事業者の従量で自分の Key が必要。1 時間 43 分の対談で約 ¥0.09。Ollama / LM Studio はクラウド Key 不要ですが機材は必要。海外投稿には自分の [Upload-Post](https://www.upload-post.com) アカウント。
+アプリは無料・MIT。クラウド分析・文字起こし・AI 画像生成は自分の認証情報と事業者の料金を使用。既定の自動表紙は有料の画像生成を使いません。Ollama / LM Studio はクラウド Key 不要ですが適切な機材が必要。直接投稿には自分の Bilibili または [Upload-Post](https://www.upload-post.com) アカウントが必要。
 
 </details>
 
 <details>
 <summary>動画はアップロードされますか。</summary>
 
-カットと書き出しは端末内。クラウドモデルには字幕テキストだけ。完成クリップは「公開」を押したあと、接続済みの先にだけ送られます。分析とエラー報告は設定でオフにできます。[プライバシー](docs/PRIVACY.en.md)。
+カットと書き出しは端末内。クラウド分析には関連字幕と投稿文、映像理解や参照画像生成には必要な抽出フレーム、クラウド文字起こしには音声を送ります。ローカル分析・文字起こしは対応するクラウド API 不要です。投稿を選ぶと完成動画を接続済みの投稿先へ送信。統計・エラー報告は設定で無効にできます。[プライバシー](docs/PRIVACY.en.md)。
 
 </details>
 
 <details>
 <summary>向いている動画は。</summary>
 
-字幕ベースなので対談・ポッドキャスト・講義・トーク向き。作者字幕があると最速。無い場合は先にローカル文字起こし。映像だけ・音楽ものは限定的。
+主に検証しているのは対談・ポッドキャスト・講義・トーク。作者字幕があれば最速、なければローカルまたはクラウド文字起こし。ゲームや会話の少ない素材は画像対応モデルで映像理解を有効にし、選ばれた場面を確認してください。
 
 </details>
 
 <details>
 <summary>クリップができません。</summary>
 
-失敗段階を確認：字幕空、モデル接続、FFmpeg、ディスク。より強いモデルを試す。続く場合は [既知の問題](https://github.com/zhouxiaoka/autoclip/issues/96) に種類・尺・モデルを添えて。
+字幕・文字起こし、モデル接続、FFmpeg、ディスク、投稿先条件を確認。YouTube 長尺は完結した 180 秒以上のクリップが必要。短い素材は Shorts / Bilibili を選択。続く場合は版・OS・尺・モデル・匿名化ログを [既知の問題](https://github.com/zhouxiaoka/autoclip/issues/96) へ。
 
 </details>
 

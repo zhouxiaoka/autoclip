@@ -94,7 +94,8 @@ class LLMProvider(ABC):
         """构建完整的输入"""
         if input_data:
             if isinstance(input_data, (dict, list, tuple)):
-                return f"{prompt}\n\n输入内容：\n{json.dumps(input_data, ensure_ascii=False, indent=2, default=str)}"
+                # Compact JSON: indentation adds ~10 tokens per subtitle row for no gain.
+                return f"{prompt}\n\n输入内容：\n{json.dumps(input_data, ensure_ascii=False, default=str)}"
             else:
                 return f"{prompt}\n\n输入内容：\n{input_data}"
         return prompt
@@ -148,8 +149,10 @@ class DashScopeProvider(LLMProvider):
                     del os.environ["DASHSCOPE_API_KEY"]
                 if resp and getattr(resp, 'status_code', 200) == 200:
                     if getattr(resp, 'output', None) and getattr(resp.output, 'text', None) is not None:
+                        usage = getattr(resp, 'usage', None)
                         return LLMResponse(
                             content=resp.output.text,
+                            usage={'input_tokens': usage.get('input_tokens'), 'output_tokens': usage.get('output_tokens')} if usage else None,
                             model=self.model_name,
                             finish_reason=getattr(resp.output, 'finish_reason', None)
                         )

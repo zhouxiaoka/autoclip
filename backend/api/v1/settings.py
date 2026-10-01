@@ -21,6 +21,17 @@ from pathlib import Path
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 from backend.services import ai_model_settings as ai_models
+from backend.services import output_branding
+
+
+@router.get('/output-branding')
+def get_output_branding():
+    return output_branding.load_settings()
+
+
+@router.put('/output-branding')
+def set_output_branding(body: output_branding.BrandingSettings):
+    return output_branding.save_settings(body)
 
 
 @router.get('/ai-models')

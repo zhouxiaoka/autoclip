@@ -49,6 +49,10 @@ def configure_environment(data_dir: Optional[Path] = None, quiet: bool = True) -
     设定数据目录 / 数据库 / 日志相关环境变量。返回实际数据目录。
     必须在 import backend.core.database 之前调用。
     """
+    # Headless model/MCP connections need the same reset cleanup as the desktop
+    # runtime. The shim is idempotent and applies only to Windows CPython 3.13.
+    from backend.core.windows_asyncio import install_windows_proactor_cleanup
+    install_windows_proactor_cleanup()
     target = (data_dir or default_app_dir()).expanduser()
     target.mkdir(parents=True, exist_ok=True)
     (target / "logs").mkdir(parents=True, exist_ok=True)

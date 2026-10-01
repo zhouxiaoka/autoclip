@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::backend_manager::BackendStatus;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_autostart::AutoLaunchManager;
+use tokio::io::AsyncWriteExt;
 
 #[tauri::command]
 pub async fn start_backend_service(app_handle: AppHandle) -> Result<String, String> {
@@ -113,18 +114,38 @@ pub async fn save_local_download(app: AppHandle, url: String) -> Result<SavedDow
             .get(reqwest::header::CONTENT_DISPOSITION)
             .and_then(|value| value.to_str().ok()),
     );
-    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-    if bytes.is_empty() {
-        return Err("empty media response".into());
-    }
     let dir = app.path().download_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = unique_download_path(&dir, &filename);
-    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
-    Ok(SavedDownload {
-        path: path.to_string_lossy().into_owned(),
-        size_bytes: bytes.len() as u64,
-    })
+    save_response(response, &dir, &filename).await
+}
+
+/// Stream large videos and kits to disk; remove an incomplete download on any error.
+async fn save_response(mut response: reqwest::Response, dir: &Path, filename: &str) -> Result<SavedDownload, String> {
+    let (path, mut file) = loop {
+        let path = unique_download_path(dir, filename);
+        match tokio::fs::OpenOptions::new().write(true).create_new(true).open(&path).await {
+            Ok(file) => break (path, file),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        }
+    };
+    let result = async {
+        let mut size_bytes = 0;
+        while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+            file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+            size_bytes += chunk.len() as u64;
+        }
+        if size_bytes == 0 {
+            return Err("empty media response".to_string());
+        }
+        file.flush().await.map_err(|e| e.to_string())?;
+        Ok(SavedDownload { path: path.to_string_lossy().into_owned(), size_bytes })
+    }.await;
+    drop(file); // Windows cannot remove an open file.
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(&path).await;
+    }
+    result
 }
 
 fn local_http_url(url: &str) -> Result<reqwest::Url, String> {
@@ -234,7 +255,45 @@ fn unique_download_path(dir: &Path, filename: &str) -> PathBuf {
 
 #[cfg(test)]
 mod download_tests {
-    use super::{filename_from_disposition, local_http_url, safe_filename, unique_download_path};
+    use super::{filename_from_disposition, local_http_url, safe_filename, save_response, unique_download_path};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    async fn response_from_fixture(length: usize) -> reqwest::Response {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0; 4096];
+            socket.read(&mut request).await.unwrap();
+            socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+            for _ in 0..32 {
+                socket.write_all(&[42; 8192]).await.unwrap();
+            }
+        });
+        reqwest::Client::builder().no_proxy().build().unwrap()
+            .get(format!("http://{address}/kit.zip")).send().await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn saves_a_chunked_download_without_overwriting() {
+        let dir = std::env::temp_dir().join(format!("autoclip-stream-success-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("kit.zip"), b"previous").unwrap();
+        let saved = save_response(response_from_fixture(32 * 8192).await, &dir, "kit.zip").await.unwrap();
+        assert_eq!(saved.size_bytes, 32 * 8192);
+        assert_eq!(std::fs::read(&saved.path).unwrap(), vec![42; 32 * 8192]);
+        assert_eq!(std::fs::read(dir.join("kit.zip")).unwrap(), b"previous");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn removes_a_truncated_download() {
+        let dir = std::env::temp_dir().join(format!("autoclip-stream-failure-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(save_response(response_from_fixture(64 * 8192).await, &dir, "kit.zip").await.is_err());
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn rejects_remote_and_custom_scheme_urls() {

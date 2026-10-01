@@ -6,6 +6,17 @@ from backend.services.studio import store
 
 PREFIX = 'studio-'
 
+def output_variant_meta(project_id: str, variant_id: str):
+    """Resolve a completed automatic output variant without re-exporting it."""
+    data = store.read(project_id)
+    variant = next((item for item in data.get('output_variants', []) if item.get('id') == variant_id), None)
+    if not variant or variant.get('status') != 'completed' or not variant.get('render_job_id'):
+        raise FileNotFoundError('成片版本尚未完成或不存在')
+    meta = export_meta(project_id, PREFIX + variant['render_job_id'])
+    return {**meta, 'output_variant_id': variant_id, 'strategy_id': variant['strategy_id'], 'branding': variant.get('branding', {}),
+            'post': variant.get('post') or {}}
+
+
 def export_meta(project_id: str, source_id: str):
     job_id = source_id.removeprefix(PREFIX)
     if not source_id.startswith(PREFIX) or not re.fullmatch(r'[a-f0-9]{32}', job_id):

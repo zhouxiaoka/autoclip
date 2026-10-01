@@ -1,5 +1,4 @@
 title: "成片投稿："
-labels: ["showcase"]
 body:
   - type: markdown
     attributes:
@@ -29,7 +28,7 @@ body:
     id: clips
     attributes:
       label: 成片
-      description: 把成片 MP4 直接拖进来（单个不超过 100 MB）。有发布包的，把封面和发布文案一起附上。
+      description: 附上成片 MP4 或可访问的成片链接；有发布包的，把封面和发布文案一起附上。
     validations:
       required: true
   - type: input

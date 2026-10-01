@@ -27,7 +27,7 @@ class Connection(BaseModel):
     provider: str = 'openai'
     base_url: str = ''
     api_key: str | None = Field(default=None, max_length=2000)
-    image_api: Literal['auto', 'openai', 'seedream', 'dashscope'] = 'auto'
+    image_api: Literal['auto', 'openai', 'seedream', 'dashscope', 'fal'] = 'auto'
     image_base_url: str = ''
 
     @field_validator('provider')
@@ -37,6 +37,13 @@ class Connection(BaseModel):
         if value not in {'dashscope', 'openai', 'compatible', 'gemini', 'siliconflow', 'ollama', 'lmstudio', *CLOUD_PRESETS}:
             raise ValueError('请选择支持的服务类型；自定义服务请选择 OpenAI 兼容')
         return value
+
+    @field_validator('image_api', mode='before')
+    @classmethod
+    def known_image_api(cls, value):
+        # A settings file written by a newer version may name an image API this one lacks:
+        # fall back to auto instead of rejecting every connection (and every task) with it.
+        return value if value in ('auto', 'openai', 'seedream', 'dashscope', 'fal') else 'auto'
 
     @model_validator(mode='after')
     def custom_requires_url(self):
@@ -108,6 +115,10 @@ class ModelSettings(BaseModel):
     transcription: Transcription | None = None
     cover_enabled: bool = False
     allow_send_frame: bool = False
+    # 1 = saved by 1.5+, where AI covers are an explicit choice. 1.4 switched them on by itself at
+    # first setup, and 1.5 generates one per output in the background (billed), so a file 1.4 wrote
+    # reads with AI covers off; the chosen model stays, one click turns them back on.
+    cover_choice_version: int = 0
     cover_ocr_model: str = ''
     vision_timeout: int = Field(default=180, ge=10, le=300)
     analysis_mode: Literal['auto', 'subtitle', 'visual'] = 'auto'
@@ -138,6 +149,9 @@ class ModelSettings(BaseModel):
         return self
 
 
+COVER_CHOICE_VERSION = 1
+
+
 def path():
     return get_data_directory() / 'ai-model-settings.json'
 
@@ -147,7 +161,10 @@ def load() -> ModelSettings | None:
         target = path()
         if not target.exists():
             return None
-        return ModelSettings.model_validate_json(target.read_text(encoding='utf-8'))
+        settings = ModelSettings.model_validate_json(target.read_text(encoding='utf-8'))
+        if settings.cover_choice_version < COVER_CHOICE_VERSION and settings.cover_enabled:
+            settings = settings.model_copy(update={'cover_enabled': False})
+        return settings
 
 
 def connection_for(settings: ModelSettings, assignment: Assignment) -> Connection:
@@ -165,12 +182,20 @@ def chat_endpoint(connection: Connection, model: str) -> dict:
         **{key: preset.base_url for key, preset in CLOUD_PRESETS.items()},
         **{key: preset.base_url for key, preset in LOCAL_PRESETS.items()},
     }
-    return {'base_url': connection.base_url or defaults[connection.provider],
-            'api_key': connection.api_key or '', 'model': model}
+    base = connection.base_url or defaults[connection.provider]
+    if connection.provider == 'dashscope' and connection.base_url and (urlparse(base).hostname or '').endswith('.aliyuncs.com'):
+        # Dedicated Bailian endpoints are pasted as a host or its native /api/v1 path; text models
+        # use the OpenAI-compatible path on the same host (speech recognition uses /api/v1).
+        # Other hosts (a relay or proxy someone set up in 1.4) are used exactly as entered.
+        host = base.rstrip('/').removesuffix('/compatible-mode/v1').removesuffix('/api/v1')
+        base = host + '/compatible-mode/v1'
+    return {'base_url': base, 'api_key': connection.api_key or '', 'model': model}
 
 
 def image_endpoint(connection: Connection) -> dict:
     kind = connection.image_api
+    if kind == 'auto' and 'fal.run' in (connection.image_base_url or connection.base_url or ''):
+        kind = 'fal'  # an OpenAI-compatible connection pointed at fal.run speaks fal's model API
     if kind == 'auto':
         kind = {'dashscope': 'dashscope', 'seed': 'seedream', 'gemini': 'gemini', 'grok': 'grok', 'glm': 'glm'}.get(connection.provider, 'openai')
     base = connection.image_base_url
@@ -180,6 +205,8 @@ def image_endpoint(connection: Connection) -> dict:
                     else 'https://dashscope.aliyuncs.com/api/v1')
         elif kind == 'gemini':
             base = connection.base_url.removesuffix('/openai') if connection.base_url else 'https://generativelanguage.googleapis.com/v1beta'
+        elif kind == 'fal':
+            base = 'https://fal.run'
         else:
             base = chat_endpoint(connection, '')['base_url']
     return {'provider': kind, 'base_url': base, 'api_key': connection.api_key or ''}
@@ -227,7 +254,8 @@ def save(settings: ModelSettings) -> dict:
     with _lock:
         settings = ModelSettings.model_validate(settings.model_dump())
         previous = load() or migrate_legacy()
-        resolved = settings.model_copy(update={'connections': [resolve_secret(c, previous) for c in settings.connections]})
+        resolved = settings.model_copy(update={'connections': [resolve_secret(c, previous) for c in settings.connections],
+                                               'cover_choice_version': COVER_CHOICE_VERSION})
         if not resolved.analysis:
             raise ValueError('请选择高光分析模型')
         if resolved.analysis_mode == 'visual' and not vision_endpoint(resolved):

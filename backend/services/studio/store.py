@@ -6,6 +6,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
 from backend.core.path_utils import get_projects_directory
 
 lock = threading.RLock()
@@ -22,18 +23,56 @@ def directory(project_id: str) -> Path:
         raise ValueError('无效项目 ID')
     return get_projects_directory() / project_id
 
-def read(project_id: str):
+def read(project_id: str, *, recover: bool = True):
     path = directory(project_id) / 'metadata' / 'studio.json'
     if not path.exists():
-        return {'drafts': [], 'events': [], 'jobs': [], 'analysis': None}
+        return {'schema_version': 2, 'drafts': [], 'events': [], 'jobs': [], 'analysis': None, 'output_variants': []}
     data = json.loads(path.read_text(encoding='utf-8'))
+    data.setdefault('schema_version', 1)
+    data.setdefault('drafts', [])
+    data.setdefault('events', [])
+    data.setdefault('jobs', [])
+    data.setdefault('output_variants', [])
+    if not recover:
+        # CLI status commands are observers in another process, not a server restart.
+        return data
+    interrupted = set()
     for job in data['jobs']:
         if job['status'] in ('queued', 'running') and job.get('instance') != INSTANCE:
             job.update(status='failed', error='服务已重启，请重新导出')
+            interrupted.add(job.get('job_id'))
+    settle = False
+    for variant in data['output_variants']:
+        cover_job = variant.get('cover_job') or {}
+        if cover_job.get('status') in ('queued', 'running') and cover_job.get('instance') != INSTANCE:
+            cover_job.update(status='failed', error='服务已重启，请重新生成封面')
+        if variant.get('status') == 'preparing' and variant.get('instance') != INSTANCE:
+            variant.update(status='failed', error='服务已重启，请重试这条', needs_prepare=True)
+            settle = True
+        elif variant.get('status') in ('queued', 'running') and variant.get('render_job_id') in interrupted:
+            # The app closed mid-render: the version becomes retryable instead of queued forever.
+            variant.update(status='failed', error='服务已重启，请重试这条')
+            settle = True
+    if settle and data.get('generation'):
+        settle_generation(data)
     analysis = data.get('analysis')
     if analysis and analysis['status'] == 'running' and analysis.get('instance') != INSTANCE:
         analysis.update(status='failed', error='服务已重启，请重试分析')
     return data
+
+def settle_generation(data):
+    """Settle the generation once every requested (not backup) variant is completed or failed."""
+    variants = [item for item in data['output_variants'] if item['status'] != 'on_demand']
+    if all(item['status'] in ('completed', 'failed') for item in variants):
+        completed = [item for item in variants if item['status'] == 'completed']
+        outcome = 'completed' if completed and len(completed) == len(variants) else 'partial' if completed else 'failed'
+        if not variants:
+            data['generation']['error'] = '没有自动生成的成片，可选择备选片段继续生成'
+        elif completed:
+            data['generation'].pop('error', None)
+        data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now())
+        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now()}
+
 
 def write(project_id, data):
     root = directory(project_id)

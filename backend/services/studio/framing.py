@@ -185,8 +185,9 @@ def fit_spans(scene: Scene) -> list[tuple[float, float]]:
     return spans
 
 
-def layout_filter(scene: Scene, fallback: float, w: int, h: int, blur: int = 24) -> str:
+def layout_filter(scene: Scene, fallback: float, w: int, h: int) -> str:
     """The `[0:v]…[base]` chain for a cropped scene, switching to a blurred fit on `fit` shots."""
+    from backend.services.publish_export import blurred_backdrop
     cropped = (f"scale={w}:{h}:force_original_aspect_ratio=increase,"
                f"crop={w}:{h}:x='(iw-ow)*{crop_expression(scene, fallback)}':y=(ih-oh)/2,setsar=1")
     spans = fit_spans(scene)
@@ -194,7 +195,7 @@ def layout_filter(scene: Scene, fallback: float, w: int, h: int, blur: int = 24)
         return f"[0:v]{cropped}[base]"
     enable = "+".join(f"between(t,{start},{end})" for start, end in spans)
     return (f"[0:v]split=3[c][bg][fg];[c]{cropped}[cropped];"
-            f"[bg]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},gblur=sigma={blur}[bg2];"
+            f"[bg]{blurred_backdrop(w, h)}[bg2];"
             f"[fg]scale={w}:{h}:force_original_aspect_ratio=decrease[fg2];"
             f"[bg2][fg2]overlay=(W-w)/2:(H-h)/2[fitted];"
             f"[cropped][fitted]overlay=0:0:enable='{enable}'[base]")
@@ -203,10 +204,12 @@ def layout_filter(scene: Scene, fallback: float, w: int, h: int, blur: int = 24)
 # ------------------------------------------------------------------- shots ---
 def detect_cuts(video: Path, start: float, length: float) -> list[float]:
     """Hard cuts inside [start, start+length) as seconds relative to `start`."""
-    cmd = [get_ffmpeg_path(), "-v", "info", "-nostats", "-ss", f"{start:.3f}", "-t", f"{length:.3f}", "-i", str(video),
-           "-an", "-vf", f"scale=320:-2,select='gt(scene,{CUT_THRESHOLD})',showinfo", "-f", "null", "-"]
+    from backend.services import render_limits
+    cmd = [get_ffmpeg_path(), "-v", "info", "-nostats", *render_limits.input_args(), "-ss", f"{start:.3f}", "-t", f"{length:.3f}", "-i", str(video),
+           "-an", "-vf", f"scale=320:-2,select='gt(scene,{CUT_THRESHOLD})',showinfo", *render_limits.output_args(), "-f", "null", "-"]
+    cmd, priority = render_limits.low_priority(cmd)
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(60, length * 4), check=False)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(60, length * 4), check=False, **priority)
     except subprocess.TimeoutExpired:
         return []
     cuts = []
@@ -250,11 +253,13 @@ def sample_offsets(start: float, end: float) -> list[float]:
 
 # ------------------------------------------------------------------ frames ---
 def _grab_pair(video: Path, at: float, folder: Path, key: str) -> tuple[Path, Path] | None:
+    from backend.services import render_limits
     pattern = folder / f"{key}-%d.jpg"
-    cmd = [get_ffmpeg_path(), "-v", "error", "-ss", f"{at:.3f}", "-i", str(video), "-frames:v", "2",
+    cmd = [get_ffmpeg_path(), "-v", "error", *render_limits.input_args(), "-ss", f"{at:.3f}", "-i", str(video), "-frames:v", "2",
            "-vf", f"fps=1/{PAIR_GAP},scale={FRAME_WIDTH}:-2", "-q:v", "4", "-y", str(pattern)]
+    cmd, priority = render_limits.low_priority(cmd)
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+        subprocess.run(cmd, check=True, capture_output=True, timeout=30, **priority)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
     first, second = folder / f"{key}-1.jpg", folder / f"{key}-2.jpg"
@@ -341,25 +346,18 @@ def merge_points(points: list[dict[str, Any]], min_jump: float = MIN_JUMP) -> li
     return merged
 
 
-def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int) -> dict[str, Any]:
-    """Shot-aligned crop tracks per scene.
-
-    Scenes get a track only when somebody is visible somewhere in the draft; a clip with no
-    people at all (gameplay, screen recording) keeps the layout the user chose untouched.
-    """
+def scan_speakers(video: Path, scenes) -> list[dict[str, Any]]:
+    """Shots and sampled speaker centres per scene: the expensive part, independent of the output window."""
     if not is_installed():
         raise RuntimeError("人物识别组件未安装")
-    out_w, out_h = {"portrait": (1080, 1920), "landscape": (1920, 1080)}.get(draft.aspect, (source_w, source_h))
-    fraction = window_fraction(source_w, source_h, out_w, out_h)
-    scenes = []
+    scans = []
     with tempfile.TemporaryDirectory(prefix="ac-framing-") as temp:
         folder = Path(temp)
-        for scene in draft.scenes:
+        for scene in scenes:
             length = scene.end - scene.start
-            shots = split_shots(length, detect_cuts(video, scene.start, length))
-            points: list[dict[str, Any]] = []
+            shots = []
             faces = grabbed = 0
-            for index, (shot_start, shot_end) in enumerate(shots):
+            for index, (shot_start, shot_end) in enumerate(split_shots(length, detect_cuts(video, scene.start, length))):
                 samples: list[tuple[float, float | None]] = []
                 for j, at in enumerate(sample_offsets(shot_start, shot_end)):
                     pair = _grab_pair(video, scene.start + at, folder, f"{scene.id}-{index}-{j}")
@@ -369,10 +367,32 @@ def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int) -> dict[
                     center = _speaker_center(pair)
                     faces += center is not None
                     samples.append((at - shot_start, center))
-                points += frame_shot(samples, shot_start, shot_end - shot_start, fraction)
-            track = merge_points(points)
-            scenes.append({"id": scene.id, "crop_x": track[0]["crop_x"], "crop_track": track, "faces": faces, "samples": grabbed,
-                           "shots": len(shots), "fit_shots": sum(p["mode"] == "fit" for p in track), "switches": len(track) - 1})
+                shots.append((shot_start, shot_end, samples))
+            scans.append({"shots": shots, "faces": faces, "samples": grabbed})
+    return scans
+
+
+def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int, *, window: tuple[int, int] | None = None,
+               scans: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Shot-aligned crop tracks per scene.
+
+    Scenes get a track only when somebody is visible somewhere in the draft; a clip with no
+    people at all (gameplay, screen recording) keeps the layout the user chose untouched.
+    `window` overrides the output size, e.g. the 4:3 window of the interview template.
+    `scans` reuses a `scan_speakers` pass, so several windows cost one detection.
+    """
+    if scans is None:
+        scans = scan_speakers(video, draft.scenes)
+    out_w, out_h = window or {"portrait": (1080, 1920), "landscape": (1920, 1080)}.get(draft.aspect, (source_w, source_h))
+    fraction = window_fraction(source_w, source_h, out_w, out_h)
+    scenes = []
+    for scene, scan in zip(draft.scenes, scans):
+        points: list[dict[str, Any]] = []
+        for shot_start, shot_end, samples in scan["shots"]:
+            points += frame_shot(samples, shot_start, shot_end - shot_start, fraction)
+        track = merge_points(points)
+        scenes.append({"id": scene.id, "crop_x": track[0]["crop_x"], "crop_track": track, "faces": scan["faces"], "samples": scan["samples"],
+                       "shots": len(scan["shots"]), "fit_shots": sum(p["mode"] == "fit" for p in track), "switches": len(track) - 1})
     if not any(s["faces"] for s in scenes):
         for s in scenes:
             s.update(crop_x=None, crop_track=None, fit_shots=0, switches=0)

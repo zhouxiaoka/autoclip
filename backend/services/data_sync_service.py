@@ -153,7 +153,8 @@ class DataSyncService:
                 project_dir / "step4_title" / "step4_title.json",
                 project_dir / "step4_titles.json",
                 project_dir / "clips_metadata.json",
-                project_dir / "metadata" / "clips_metadata.json"
+                project_dir / "metadata" / "clips_metadata.json",
+                project_dir / "metadata" / "step4_titles.json",  # fast output skips step 6
             ]
             
             clips_data = None

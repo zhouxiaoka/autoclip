@@ -42,6 +42,16 @@ def _fake_project(data_dir: Path, project_id: str = "p1", name: str = "示例") 
 
 
 # ---------------------------------------------------------------- parser ---
+def test_cli_and_mcp_report_the_package_version(capsys):
+    from backend import __version__
+    from backend.cli import main
+    from backend.mcp_server import get_version
+    with pytest.raises(SystemExit) as result:
+        main(['--version'])
+    assert result.value.code == 0 and capsys.readouterr().out.strip() == f'autoclip {__version__}'
+    assert get_version() == {'version': __version__}
+
+
 def test_parser_run_accepts_provider_presets():
     from backend.cli import build_parser
 
@@ -189,7 +199,7 @@ def test_mcp_server_registers_tools(data_dir):
 
     tools = asyncio.run(mcp_server.server.list_tools())
     names = {t.name for t in tools}
-    assert {"clip_video", "start_clip_job", "get_job_status", "get_project", "list_projects", "list_providers", "check_environment", "export_clip"} <= names
+    assert {"clip_video", "start_clip_job", "get_job_status", "get_project", "list_projects", "list_providers", "check_environment", "export_clip", "get_version", "start_quick_output", "get_quick_output_status"} <= names
 
 
 def test_mcp_get_project_falls_back_to_disk(data_dir):

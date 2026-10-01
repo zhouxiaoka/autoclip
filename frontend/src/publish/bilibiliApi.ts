@@ -20,6 +20,7 @@ export interface BilibiliJobView {
 }
 
 export interface BilibiliPublishBody {
+  output_variant_id?: string
   title?: string
   description?: string
   subtitles: boolean

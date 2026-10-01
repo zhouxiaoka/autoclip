@@ -6,9 +6,9 @@
 
 ### Un enlace. Un clic.
 
-Código abierto, gratis y en tu ordenador. Pega un enlace, gasta unos céntimos y recibe <b>más de 10 clips listos para publicar</b>,<br>
-cada uno con portada, título, descripción y etiquetas para Douyin, Xiaohongshu, TikTok, Reels o YouTube Shorts.<br>
-Sin editor. Sin idas y venidas con un chat de IA.
+Código abierto, con corte y render en tu ordenador. Pega un enlace, elige plataforma y genera <b>vídeo, portada y texto</b>,<br>
+para Douyin, Xiaohongshu, TikTok, Reels, YouTube Shorts, Bilibili o YouTube.<br>
+La app es gratis; los modelos cloud cobran por uso. Puedes ajustar el resultado en el editor.
 
 <p>
   <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square" alt="GitHub release"></a>
@@ -25,61 +25,54 @@ Sin editor. Sin idas y venidas con un chat de IA.
 
 </div>
 
+**[1.5.0 ya está publicado](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)**, con escritorio, CLI y MCP actualizados. El [registro de cambios](CHANGELOG.md) detalla la producción automática, paginación de subtítulos, encuadre y cola de vídeos largos. Actualiza versiones anteriores.
+
 ## Clips reales
 
 ![Clips verticales de AutoClip: entrevista Xiaohongshu, pódcast TikTok, entrevista Douyin, pódcast Shorts](docs/images/v2/demo-wall.webp)
 
 Cada original fue un solo enlace. Cada clip de arriba es la salida cruda de AutoClip —selección, encuadre, traducción, empaquetado— sin retoque manual. **[Ver con audio en la biblioteca →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**
 
-Cada clip entrega el kit de publicación: vídeo vertical, portada, título, descripción y etiquetas. La biblioteca se actualiza; [envía los tuyos](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell).
+Cada clip incluye vídeo, portada, título, descripción, hashtags y paquete ZIP para la plataforma. La biblioteca se actualiza; [envía tus clips](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell).
 
 Los derechos del original pertenecen a sus autores. Ejemplos: [Dwarkesh Patel — Dario Amodei](https://www.youtube.com/watch?v=n1E9IZfvGMA) · [Y Combinator — Sam Altman](https://www.youtube.com/watch?v=ZIaOBAjvc38) · [WIRED — Hideo Kojima](https://www.youtube.com/watch?v=02Ah5VQrzvA)
 
 ## Qué hace
 
 ### Pega un enlace y listo
-Sin editor ni chat de IA. Elige la plataforma y genera en el formato correcto. Portada, título, descripción y etiquetas incluidos.
+
+Genera según formato y duración de la plataforma. Cada plataforma produce automáticamente hasta 10 clips aptos mejor puntuados; el resto queda bajo demanda. Incluye portada, título, descripción, hashtags y paquete ZIP.
 
 ### El empaquetado va incluido
-Estilo entrevista en Douyin / Xiaohongshu; estilo pódcast en TikTok / Reels / Shorts. El encuadre sigue a quien habla; el material extranjero recibe título local y subtítulos bilingües.
+
+Douyin / Xiaohongshu usan entrevista por defecto; TikTok / Reels / Shorts, pódcast a pantalla completa. Puedes elegir el diseño vertical sin cambiar el idioma de subtítulos y texto de la plataforma. Bilibili / YouTube son horizontales. El encuadre sigue al hablante y conserva escenas sin personas. El cierre de marca está activo por defecto y se desactiva en Ajustes; el texto copiado no lleva firma AutoClip.
 
 ### Se queda en tu ordenador
-Corte y render son locales. Eliges el modelo, abres el editor solo si quieres retocar, y usas CLI / MCP para lotes.
 
-## Rápido y barato
+Corte, encuadre y render son locales. Elige modelo de análisis y usa subtítulos del autor, Whisper / SenseVoice local o transcripción cloud configurada. CLI / MCP comparten el flujo de escritorio.
 
-Un enlace entra, **más de 10** clips listos salen, cada uno con portada, título, descripción y etiquetas.
+## Tiempo y coste con vídeos reales
 
-| Versión | Original | Salida | Coste |
+Son tres fuentes distintas medidas durante el desarrollo, no una comparación controlada del mismo vídeo. Los costes estiman el uso de texto de qwen-plus de entonces y excluyen ASR cloud, imágenes AI y servicios de publicación. La factura depende del proveedor.
+
+| Versión | Original | Salida | Coste estimado del modelo de texto (CNY) |
 | --- | --- | ---: | ---: |
 | **Nueva · con subtítulos** | Jensen · 1h43m (EN → Xiaohongshu) | **7,5 min / 10 clips** | **¥0,09** |
 | Nueva · sin subtítulos | TIM × Luo Yonghao · 2h52m (ZH → Douyin) | 29,5 min / 10 clips | ¥0,20 |
 | Anterior | MrBeast · 2h06m (EN → TikTok) | 65 min | ¥0,64 |
 
-Una entrevista de 2–3 h suele costar ¥0,1–0,2. Sin subtítulos del autor, el reconocimiento de voz es local y tarda más; el vídeo no sale de tu máquina.
-
 <details>
-<summary>Cómo se midieron estos números</summary>
+<summary>Condiciones y registros</summary>
 
-1 de octubre de 2026, el mismo Mac Apple Silicon, modelo de análisis qwen-plus (¥0,8 / ¥2 por millón de tokens de entrada / salida, precio de terceros Aliyun Bailian). El coste son solo llamadas al modelo.
+1 de octubre de 2026, el mismo Mac Apple Silicon. Los dos casos nuevos generaron 10 clips; el anterior, 33. Cambian tanto la fuente como la cantidad. Jensen usó subtítulos del autor; TIM, Whisper base local.
 
-Los 7,5 min de Jensen: ~1 min de descarga, sin ASR gracias a subtítulos del autor, 25 s de selección, ~2,5 min de corte / encuadre / empaquetado, ~3 min para renderizar 10. La versión anterior gastaba 35 min solo en seleccionar.
-
-Esta versión hace cuatro cosas distintas: una sola pasada sobre la transcripción; llamadas en paralelo; omite ASR local si hay subtítulos del autor; renderiza solo los 10 mejores por defecto.
+Los subtítulos del autor evitan transcribir. Sin ellos, elige ASR local o cloud. Plataformas y clips adicionales aumentan tiempo y consumo. [Mediciones y cálculo](docs/COST_PER_VIDEO.md) (chino).
 
 </details>
 
-## Frente a herramientas cloud de suscripción
+## Elige modelos y flujo de datos
 
-| | AutoClip | Herramientas cloud mensuales |
-| --- | --- | --- |
-| Coste | La app es gratis; el modelo se paga por uso, ~¥0,1–0,2 por 2–3 h | Suscripción mensual, por tiempo de proceso |
-| Dónde se procesa el vídeo | Tu ordenador; el modelo en la nube solo ve el texto | Subida a la nube del proveedor |
-| Modelos | Tú eliges, también locales | Los del proveedor |
-| Plataformas chinas | Plantillas Douyin, Xiaohongshu, Bilibili | Sobre todo internacionales |
-| Código | MIT, se puede cambiar y autohospedar | Cerrado |
-
-La columna derecha sigue páginas públicas de productos similares en octubre de 2026; comprueba cada producto.
+Corte y render se realizan en tu ordenador. El análisis cloud envía subtítulos y texto relevante; la comprensión visual o generación con referencias envía fotogramas necesarios, y la transcripción cloud envía audio. El análisis y la transcripción locales no necesitan la API cloud correspondiente. Los clips se suben a plataformas conectadas cuando eliges publicar. Analítica e informes de error se desactivan en Ajustes. [Privacidad](docs/PRIVACY.en.md).
 
 ## Inicio rápido
 
@@ -93,10 +86,12 @@ La columna derecha sigue páginas públicas de productos similares en octubre de
 
 1. **Instala.** Desde [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest). macOS Apple Silicon: `.dmg`. Windows 10 / 11 x64: `-setup.exe`. Python y FFmpeg van incluidos.
 2. **Configura un modelo.** Elige proveedor en Ajustes y pon tu API Key; el modelo de análisis se elige solo. En local, arranca antes Ollama o LM Studio.
-3. **Pega un enlace y elige plataforma.** Empieza con una entrevista o pódcast de 10–30 min con subtítulos. Sin ellos, prepara Whisper o SenseVoice en Ajustes.
-4. **Recoge los clips.** Revisa los 10 mejores, edita si quieres, descarga o publica.
+3. **Enlace y plataforma.** Empieza con una entrevista o pódcast con subtítulos y elige diseño vertical. Sin subtítulos, prepara Whisper / SenseVoice o configura transcripción cloud en Ajustes.
+4. **Revisa y descarga.** Comprueba subtítulos, encuadre y contenido, y guarda el paquete o conecta una cuenta para publicar. Genera alternativas si necesitas más clips.
 
 Los instaladores aún no tienen notarización de Apple ni firma de Windows. En macOS, primera apertura con clic derecho → Abrir. En Windows, Más información → Ejecutar de todos modos.
+
+Intel Mac / Linux pueden usar Docker o CLI. El paquete Windows pasó instalación, actualización y vídeo en CI; faltan la revisión humana de interfaz y el período completo de observación. Alcance en [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0).
 
 [Guía de instalación](docs/USER_INSTALLATION_GUIDE.en.md) · [Problemas](docs/FAQ.en.md)
 
@@ -105,7 +100,7 @@ Los instaladores aún no tienen notarización de Apple ni firma de Windows. En m
 ```bash
 git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
-cp env.example .env          # 选择 LLM_PROVIDER，填 API Key 和模型名；也可以启动后在设置页配置
+cp env.example .env
 mkdir -p data logs uploads
 docker compose up -d --build
 ```
@@ -119,29 +114,32 @@ docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown
 docker compose up -d
 ```
 
+Para IP LAN o dominio propio, añade la dirección del frontend a `AUTOCLIP_ALLOWED_ORIGINS` en `.env` (separada por comas).
+
 **CLI / MCP**
 
-Hace falta Python 3.10+ (3.11 recomendado) y FFmpeg en el PATH. El CLI local no necesita Redis.
+Python 3.10+ (3.11 recomendado), FFmpeg y FFprobe en PATH; no hace falta Redis. Descarga el [ZIP oficial CLI / MCP](https://github.com/zhouxiaoka/autoclip/releases/download/v1.5.0/autoclip-1.5.0-cli-mcp.zip), descomprímelo y ejecuta desde ese directorio:
 
 ```bash
-git clone https://github.com/zhouxiaoka/autoclip.git
-cd autoclip
-python3 -m venv venv && source venv/bin/activate   # Windows PowerShell：venv\Scripts\Activate.ps1
+python3 -m venv venv
+source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install -e .
+python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
 ```
+
+La activación anterior es para macOS / Linux. En Windows crea con `py -m venv venv` y activa con `venv\Scripts\Activate.ps1`. Reinstala forzosamente el wheel oficial sobre candidatos 1.5 anteriores; el número de versión no basta.
+
+Guarda primero la configuración del modelo: reutiliza la del escritorio o configura tu directorio con el ejemplo sin claves del ZIP. [Guía CLI / MCP](docs/CLI_AND_MCP.md) (chino). `produce` no usa la modificación temporal de `run --provider`. `--srt` evita transcribir.
 
 ```bash
-ollama pull qwen2.5:7b
-python -m pip install faster-whisper                # 无字幕视频需要；已有字幕可用 --srt talk.srt
-autoclip doctor --provider ollama
-autoclip run talk.mp4 --provider ollama --json
-autoclip export PROJECT_ID --preset shorts
-autoclip mcp                                        # stdio MCP 服务
-autoclip mcp install opencode                       # opencode 一条命令接入
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+autoclip mcp
+autoclip mcp install opencode
 ```
 
-En el cliente MCP, `command` es la ruta absoluta de `autoclip` en el venv y `args` es `["mcp"]`. [CLI / MCP](docs/CLI_AND_MCP.md) (chino), [OpenCode](docs/OPENCODE.en.md), [Agent skill](skills/autoclip/SKILL.md) (chino).
+Sustituye `PROJECT_ID` por el ID devuelto. MCP usa `start_quick_output` / `get_quick_output_status`; `command` debe ser la ruta absoluta de `autoclip` en el venv y `args`, `["mcp"]`. Siguen disponibles `run` / `export` y herramientas anteriores. [CLI / MCP](docs/CLI_AND_MCP.md) (chino), [OpenCode](docs/OPENCODE.en.md), [Agent skill](skills/autoclip/SKILL.md) (chino).
 
 ## Modelos
 
@@ -185,34 +183,34 @@ Servicios, precios y ofertas los dan los socios; manda lo que diga su web.
 ## Preguntas frecuentes
 
 <details>
-<summary>¿Es gratis? ¿Hace falta API Key?</summary>
+<summary>¿Es gratis? ¿Necesito una API Key?</summary>
 
-AutoClip es gratis y MIT. Los modelos en la nube los cobra el proveedor y necesitan tu clave; una entrevista de 1 h 43 min midió unos ¥0,09. Ollama / LM Studio no piden clave en la nube, pero sí hardware. Publicar fuera requiere tu cuenta [Upload-Post](https://www.upload-post.com).
+App gratuita y MIT. Análisis, transcripción e imágenes cloud usan tus credenciales y tarifas del proveedor; la portada automática no usa generación de pago por defecto. Ollama / LM Studio no necesitan clave cloud, pero sí hardware. Publicar requiere tu cuenta Bilibili o [Upload-Post](https://www.upload-post.com).
 
 </details>
 
 <details>
 <summary>¿Se suben mis vídeos?</summary>
 
-Corte y render se quedan en el dispositivo. Los modelos en la nube reciben el texto. El clip solo sale al pulsar Publicar, hacia las plataformas que conectaste. Analítica e informes se pueden apagar. [Privacidad](docs/PRIVACY.en.md).
+Corte y render se realizan en tu ordenador. El análisis cloud envía subtítulos y texto relevante; la comprensión visual o generación con referencias envía fotogramas necesarios, y la transcripción cloud envía audio. El análisis y la transcripción locales no necesitan la API cloud correspondiente. Los clips se suben a plataformas conectadas cuando eliges publicar. Analítica e informes de error se desactivan en Ajustes. [Privacidad](docs/PRIVACY.en.md).
 
 </details>
 
 <details>
 <summary>¿Qué vídeos funcionan mejor?</summary>
 
-El análisis usa sobre todo la transcripción: entrevistas, pódcast, cursos y talking-head. Los subtítulos del autor son lo más rápido; si no hay, primero transcribe en local. Acción o música pura rinden poco.
+Entrevistas, pódcast, cursos y vídeos hablados son los casos más validados. Los subtítulos del autor son más rápidos; si faltan, usa transcripción local/cloud. Para juegos o poco diálogo, activa comprensión visual con un modelo de imágenes y revisa los momentos elegidos.
 
 </details>
 
 <details>
-<summary>¿Por qué no hay clips?</summary>
+<summary>¿Por qué no se generaron clips?</summary>
 
-Mira la etapa fallida: subtítulos vacíos, conexión del modelo, FFmpeg o disco. Prueba un modelo más fuerte. Si sigue, añade tipo, duración y modelo en [problemas conocidos](https://github.com/zhouxiaoka/autoclip/issues/96).
+Revisa transcripción, conexión del modelo, FFmpeg, disco y reglas de plataforma. YouTube largo exige fragmentos completos de al menos 180 segundos; usa Shorts/Bilibili para fuentes cortas. Si falla, adjunta versión 1.5.0, OS, duración, modelo y logs sin secretos en [problemas conocidos](https://github.com/zhouxiaoka/autoclip/issues/96).
 
 </details>
 
-[Guía de problemas](docs/FAQ.en.md) · [Problemas conocidos](https://github.com/zhouxiaoka/autoclip/issues/96)
+[Solución de problemas](docs/FAQ.en.md) · [Problemas conocidos](https://github.com/zhouxiaoka/autoclip/issues/96)
 
 ## Documentación
 
