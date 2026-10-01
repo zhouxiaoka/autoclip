@@ -17,7 +17,7 @@ from backend.services.ai_model_settings import chat_endpoint
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
 
-UPLOAD_WORKERS = int(os.getenv('AUTOCLIP_ASR_CONCURRENCY', '4') or 4)  # parallel chunk uploads
+UPLOAD_WORKERS = int(os.getenv('AUTOCLIP_ASR_CONCURRENCY', '8') or 8)  # parallel chunk uploads (16 gained only ~10 %)
 
 
 class CloudTranscriptionError(RuntimeError):

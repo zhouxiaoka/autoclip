@@ -130,8 +130,8 @@ def main() -> int:
     args = parser.parse_args()
     cases = [c for c in json.loads(CASES.read_text(encoding='utf-8'))['cases'] if c.get('url')]
     if args.cases:
-        wanted = args.cases.split(',')
-        cases = [c for c in cases if c['id'] in wanted]
+        by_id = {c['id']: c for c in cases}
+        cases = [by_id[i] for i in args.cases.split(',') if i in by_id]  # run in the order given
     baseline = json.loads(args.baseline.read_text(encoding='utf-8')) if args.baseline else None
     REPORTS.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime('%Y%m%d-%H%M')
