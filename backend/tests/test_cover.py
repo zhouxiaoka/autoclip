@@ -142,6 +142,22 @@ def test_openai_provider_uses_edits_then_falls_back_on_unsupported(data_dir):
     assert session.calls[0][1].endswith("/images/edits")
 
 
+def test_gpt_image_2_gets_the_platform_ratio_and_falls_back_to_the_legacy_one(data_dir):
+    import base64
+    from backend.core.image_providers import ImageRequest, generate_openai, openai_size
+
+    assert openai_size(1080, 1920, "gpt-image-2.5-flare") == "1088x1920"
+    assert openai_size(1920, 1080, "gpt-image-2.5-flare") == "1920x1088"
+    assert openai_size(1080, 1920, "gpt-image-1") == "1024x1536"
+    buf = io.BytesIO()
+    Image.new("RGB", (32, 32)).save(buf, format="PNG")
+    ok = _Resp(200, {"data": [{"b64_json": base64.b64encode(buf.getvalue()).decode("ascii")}]})
+    session = _Session([_Resp(400, {"error": {"message": "Invalid size '1088x1920'"}}), ok])
+    generate_openai(api_key="sk", base_url="http://127.0.0.1:9/v1", session=session,
+                    request=ImageRequest(prompt="hi", width=1080, height=1920, reference=b"jpg", model="gpt-image-2.5-flare"))
+    assert [call[2]["data"]["size"] for call in session.calls] == ["1088x1920", "1024x1536"]
+
+
 def test_seedream_uses_generations_with_image_field(data_dir):
     from backend.core.image_providers import ImageRequest, generate_image, is_seedream, seedream_size
 

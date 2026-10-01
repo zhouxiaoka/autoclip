@@ -161,9 +161,42 @@ def _title_ok(image: bytes, lines: list[str]) -> bool | None:
     return squash(''.join(lines)) in squash(answer.get('text', ''))
 
 
+def _fit(image, size: tuple[int, int]):
+    """Pad, never crop: a model that ignores the size must not lose the edges of its headline.
+
+    The gap is filled by stretching the image's outermost pixels, blurred and feathered into it, so a
+    2:3 image on a 9:16 cover reads as one picture instead of sitting between flat bars. Only an
+    edge a few pixels deep is reused: mirroring more would echo the headline into the gap.
+    """
+    from PIL import Image, ImageFilter, ImageOps
+    width, height = size
+    contained = ImageOps.contain(image, size, method=Image.Resampling.LANCZOS)
+    x, y = (width - contained.width) // 2, (height - contained.height) // 2
+    if (x, y) == (0, 0):
+        return contained.resize(size, Image.Resampling.LANCZOS)
+    canvas = Image.new('RGB', size)
+    canvas.paste(contained, (x, y))
+    edge, cw, ch = 4, contained.width, contained.height
+    if y:
+        bottom = height - y - ch
+        canvas.paste(contained.crop((0, 0, cw, edge)).resize((cw, y)), (x, 0))
+        canvas.paste(contained.crop((0, ch - edge, cw, ch)).resize((cw, bottom)), (x, y + ch))
+    else:
+        right = width - x - cw
+        canvas.paste(contained.crop((0, 0, edge, ch)).resize((x, ch)), (0, y))
+        canvas.paste(contained.crop((cw - edge, 0, cw, ch)).resize((right, ch)), (x + cw, y))
+    blurred = canvas.filter(ImageFilter.GaussianBlur(28)).point(lambda value: int(value * .8))
+    feather = max(8, min(48, (y or x) // 2))
+    mask = Image.new('L', size, 255)
+    sharp = (x, y + feather, x + cw, y + ch - feather) if y else (x + feather, y, x + cw - feather, y + ch)
+    mask.paste(0, sharp)
+    mask = mask.filter(ImageFilter.GaussianBlur(feather / 2))
+    return Image.composite(blurred, canvas, mask)
+
+
 def ai_cover(project_id: str, job_id: str, strategy_id: str) -> bool:
     """Generate the AI cover for one variant from its designed cover's frame and title; True when stored."""
-    from PIL import Image, ImageOps
+    from PIL import Image
     from backend.core.image_providers import ImageRequest, generate_image
     from backend.services import cover
     from backend.services.studio import cover_design as cd
@@ -189,8 +222,7 @@ def ai_cover(project_id: str, job_id: str, strategy_id: str) -> bool:
     else:
         return False  # the title stayed wrong twice: keep the designed cover
     generated = Image.open(io.BytesIO(image)).convert('RGB')
-    # Pad, never crop: a model that ignores the size must not lose the edges of its headline.
-    fitted = ImageOps.pad(generated, (width, height), method=Image.Resampling.LANCZOS, color=generated.getpixel((2, 2)))
+    fitted = _fit(generated, (width, height))
     if meta.get('guest') and meta.get('name'):
         fitted = cd.nameplate(fitted, meta['name'], meta.get('role', ''), meta.get('palette'))
     out = io.BytesIO()

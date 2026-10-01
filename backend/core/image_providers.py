@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -73,8 +74,16 @@ def is_seedream(*, provider: str = "", model: str = "", base_url: str = "") -> b
     return any(m in blob for m in SEEDREAM_MODEL_MARKERS) or any(h in blob for h in SEEDREAM_HOST_MARKERS)
 
 
-def openai_size(width: int, height: int) -> str:
-    """不要求模型吐出平台像素。横屏 / 竖屏各要一个它认识的比例。"""
+def openai_size(width: int, height: int, model: str = "") -> str:
+    """不要求模型吐出平台像素。GPT Image 2.x 接受任意比例（边长为 16 的倍数），直接要平台比例，
+    免得 2:3 补边成 9:16 时上下出现色块；更早的模型只认横屏 / 竖屏两种比例。"""
+    if "gpt-image-2" in model.lower():
+        scale = 1920 / max(width, height)
+        return f"{round(width * scale / 16) * 16}x{round(height * scale / 16) * 16}"
+    return legacy_openai_size(width, height)
+
+
+def legacy_openai_size(width: int, height: int) -> str:
     if height > width:
         return "1024x1536"
     return "1536x1024"
@@ -202,7 +211,9 @@ def _post_json(
                     retry["size"] = fallback
                     changed = True
             elif current not in (None, "", "1024x1024"):
-                retry["size"] = "1024x1024"
+                width, height = (int(n) for n in current.split("x")) if re.fullmatch(r"\d+x\d+", current) else (1, 1)
+                legacy = legacy_openai_size(width, height) if width != height else "1024x1024"
+                retry["size"] = legacy if current != legacy else "1024x1024"
                 changed = True
         if "watermark" in message and "watermark" in retry:
             retry.pop("watermark", None)
@@ -228,8 +239,8 @@ def generate_openai(
     root = seedream_root(base_url) if seedream else openai_root(base_url)
     http = _session_for(root, session)
     headers = _bearer(api_key, base_url)
-    size = seedream_size(request.width, request.height) if seedream else openai_size(request.width, request.height)
     model = request.model.strip() or (SEEDREAM_DEFAULT_MODEL if seedream else "gpt-image-1")
+    size = seedream_size(request.width, request.height) if seedream else openai_size(request.width, request.height, model)
 
     if request.reference and seedream:
         body: dict[str, Any] = {
@@ -244,13 +255,20 @@ def generate_openai(
         return _openai_image(_raise_for_status(resp, edit=True), http)
 
     if request.reference:
-        resp = http.post(
-            f"{root}/images/edits",
-            headers=headers,
-            data={"model": model, "prompt": request.prompt, "size": size, "n": "1"},
-            files={"image": ("frame.jpg", request.reference, "image/jpeg")},
-            timeout=IMAGE_TIMEOUT,
-        )
+        def edit(size: str):
+            return http.post(
+                f"{root}/images/edits",
+                headers=headers,
+                data={"model": model, "prompt": request.prompt, "size": size, "n": "1"},
+                files={"image": ("frame.jpg", request.reference, "image/jpeg")},
+                timeout=IMAGE_TIMEOUT,
+            )
+        resp = edit(size)
+        legacy = legacy_openai_size(request.width, request.height)
+        if int(getattr(resp, "status_code", 200) or 200) == 400 and size != legacy and "size" in _error_message(resp).lower():
+            # A relay that maps the model to an older backend rejects the platform ratio: use its own.
+            size = legacy
+            resp = edit(size)
         try:
             data = _raise_for_status(resp, edit=True)
             return _openai_image(data, http)

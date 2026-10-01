@@ -68,3 +68,14 @@ def test_the_kit_bundles_video_cover_and_copy(tmp_path):
     assert name == 'AI 还不能当实习生.zip' and names == ['AI 还不能当实习生.mp4', 'AI 还不能当实习生 封面.jpg', 'AI 还不能当实习生 发布文案.txt']
     text = zipfile.ZipFile(io.BytesIO(data)).read(names[2]).decode()
     assert '#AI #Karpathy' in text and '抖音' in text
+
+
+def test_ai_cover_fit_fills_the_gap_from_the_image_edge_without_cropping():
+    generated = Image.new('RGB', (1024, 1536), (20, 20, 20))
+    generated.paste((240, 200, 40), (0, 300, 1024, 400))  # a headline band well inside the image
+    fitted = publish_kit._fit(generated, (1080, 1920))
+    assert fitted.size == (1080, 1920)
+    top = fitted.getpixel((540, 20))
+    assert max(top) < 40, 'the gap continues the dark edge instead of echoing the headline'
+    band_y = (1920 - 1620) // 2 + round(350 * 1620 / 1536)
+    assert fitted.getpixel((540, band_y))[0] > 200, 'the image itself is kept sharp, not blurred'
