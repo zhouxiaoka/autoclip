@@ -112,3 +112,47 @@
   flex-wrap: wrap;
   gap: 2px;
 }
+
+.studio-post {
+  border-top: 1px solid var(--ac-line);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.studio-post-title {
+  color: var(--ac-ink);
+  font-size: 13.5px;
+  font-weight: 500;
+  margin: 0 0 6px;
+}
+
+.studio-post-desc {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--ac-sub);
+  display: -webkit-box;
+  font-size: 12.5px;
+  line-height: 1.55;
+  margin: 0 0 6px;
+  overflow: hidden;
+  white-space: pre-line;
+}
+
+.studio-post-tags {
+  color: var(--ac-sub);
+  font-size: 12px;
+  margin: 0 0 4px;
+}
+
+.studio-post-edit {
+  display: grid;
+  gap: 8px;
+}
+
+.studio-post-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 6px;
+}

@@ -1,0 +1,27 @@
+const {test}=require('node:test')
+const assert=require('node:assert/strict')
+const fs=require('node:fs'),path=require('node:path')
+const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8')
+const kit=read('src/features/studio/PublishKit.tsx')
+const card=read('src/features/studio/OutputVariantCard.tsx')
+const api=read('src/features/studio/api.ts')
+const publish=read('src/pages/PublishClipPage.tsx')
+
+test('every output card shows its publish kit and uses the designed cover as the poster',()=>{
+ assert.match(card,/<PublishKit projectId=\{projectId\} variant=\{variant\}/)
+ assert.match(card,/poster=\{variant\.cover \? studioApi\.variantCover\(projectId, variant\.id, coverStamp\) : undefined\}/)
+ assert.match(api,/output-variants\/\$\{variantId\}\/kit/)
+ assert.match(api,/api\.put\(`\/studio\/\$\{pid\}\/output-variants\/\$\{variantId\}\/post`, post\)/)
+})
+
+test('post copy is pasted as title, description, then hashtags; the kit saves natively on desktop',()=>{
+ assert.match(kit,/\[post\.title, post\.description, post\.tags\.map\(tag => `#\$\{tag\}`\)\.join\(' '\)\]\.filter\(Boolean\)\.join\('\\n\\n'\)/)
+ assert.match(kit,/if \(!isDesktopDownload\(\)\) return\n\s+event\.preventDefault\(\)\n\s+try \{ await saveLocalFile\(kitPath\)/)
+ assert.match(kit,/platform: LANDSCAPE\.has\(variant\.strategy_id\) \? 'bilibili' : 'douyin'/)
+})
+
+test('the publish page starts from the output kit: copy, hashtags and the matching cover slot',()=>{
+ assert.match(publish,/setTitle\(variant\.post\.title\)/)
+ assert.match(publish,/setDescription\(\[variant\.post\.description, variant\.post\.tags\.map/)
+ assert.match(publish,/coverApi\.get\(projectId, clipId, coverSlot\)/)
+})

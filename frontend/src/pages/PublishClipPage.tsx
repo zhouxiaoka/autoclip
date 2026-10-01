@@ -124,6 +124,7 @@ const PublishClipPage: React.FC = () => {
         }
         const clip = clips.find((item) => item.id === clipId)
         let nextTitle = clip?.generated_title || clip?.title || ''
+        let coverSlot = 'bilibili'
         if (studioJobId) {
           const workspace = await studioApi.get(projectId)
           if (cancelled || runId.current !== session) return
@@ -131,13 +132,21 @@ const PublishClipPage: React.FC = () => {
           if (!exported) throw new Error(t('成片尚未完成或不存在，请返回项目重新导出'))
           nextTitle = exported.title
           setStudioRevision(exported.revision)
+          // An automatic output arrives with its publish kit: start from its copy and cover.
+          const variant = (workspace.output_variants || []).find(item => item.id === variantTarget.uploadPost)
+          if (variant?.post) {
+            nextTitle = variant.post.title || nextTitle
+            setTitle(variant.post.title)
+            setDescription([variant.post.description, variant.post.tags.map(tag => `#${tag}`).join(' ')].filter(Boolean).join('\n\n'))
+          }
+          if (variant && !['bilibili', 'youtube_long', 'original'].includes(variant.strategy_id)) coverSlot = 'douyin'
         }
         setClipTitle(nextTitle)
         setCoverTitle(nextTitle)
         setConfigured(cfg.configured)
         setBiliConfigured(bili.configured)
         try {
-          const existing = await coverApi.get(projectId, clipId, 'bilibili')
+          const existing = await coverApi.get(projectId, clipId, coverSlot)
           if (!cancelled && runId.current === session && existing.ok && existing.url) {
             setCover(existing)
             if (existing.title) setCoverTitle(existing.title)

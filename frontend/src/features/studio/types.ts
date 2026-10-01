@@ -71,7 +71,11 @@ export interface OutputVariant {
   status: 'queued' | 'running' | 'completed' | 'failed' | 'on_demand'; render_job_id?: string; created_at: string; error?: string
   trimmed_to_sec?: number
   framing?: 'speaker' | 'full_frame' | 'full_frame_pending' | 'full_frame_captions'
+  /** Publish kit: copy written for this platform, and a cover designed (or AI-made) after the render. */
+  post?: PostCopy | null
+  cover?: 'design' | 'ai' | null
 }
+export interface PostCopy { title: string; description: string; tags: string[] }
 export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
   auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'

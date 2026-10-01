@@ -1494,5 +1494,18 @@
   "跳字": "Mot à mot",
   "电影感": "Cinéma",
   "备选片段 · 需要时再生成": "Extrait de réserve · à générer au besoin",
-  "生成这条": "Générer celui-ci"
+  "生成这条": "Générer celui-ci",
+  "文案已保存": "Texte enregistré",
+  "保存失败，请稍后重试": "Échec de l’enregistrement, réessayez",
+  "发布文案已复制": "Texte de publication copié",
+  "发布包已保存到下载文件夹": "Kit de publication enregistré dans Téléchargements",
+  "封面已用 AI 重新设计": "Couverture redessinée par l’IA",
+  "AI 封面没有生成成功，可以在设置里检查图像模型": "La couverture IA n’a pas été créée ; vérifiez le modèle d’image dans les réglages",
+  "简介": "Description",
+  "话题": "Hashtags",
+  "话题，用空格分隔": "Hashtags séparés par des espaces",
+  "复制发布文案": "Copier le texte",
+  "编辑文案": "Modifier le texte",
+  "导出发布包": "Exporter le kit",
+  "AI 重新设计封面": "Redessiner la couverture avec l’IA"
 }

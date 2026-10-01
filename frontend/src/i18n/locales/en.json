@@ -1494,5 +1494,18 @@
   "跳字": "Word pop",
   "电影感": "Cinematic",
   "备选片段 · 需要时再生成": "Backup clip · generate when needed",
-  "生成这条": "Generate this one"
+  "生成这条": "Generate this one",
+  "文案已保存": "Copy saved",
+  "保存失败，请稍后重试": "Could not save, please try again",
+  "发布文案已复制": "Post copy copied",
+  "发布包已保存到下载文件夹": "Publish kit saved to Downloads",
+  "封面已用 AI 重新设计": "Cover redesigned with AI",
+  "AI 封面没有生成成功，可以在设置里检查图像模型": "The AI cover was not created; check the image model in Settings",
+  "简介": "Description",
+  "话题": "Hashtags",
+  "话题，用空格分隔": "Hashtags, separated by spaces",
+  "复制发布文案": "Copy post text",
+  "编辑文案": "Edit copy",
+  "导出发布包": "Export publish kit",
+  "AI 重新设计封面": "Redesign cover with AI"
 }

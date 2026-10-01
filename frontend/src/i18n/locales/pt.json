@@ -1494,5 +1494,18 @@
   "跳字": "Palavra a palavra",
   "电影感": "Cinematográfico",
   "备选片段 · 需要时再生成": "Clipe reserva · gere quando precisar",
-  "生成这条": "Gerar este"
+  "生成这条": "Gerar este",
+  "文案已保存": "Texto salvo",
+  "保存失败，请稍后重试": "Não foi possível salvar, tente de novo",
+  "发布文案已复制": "Texto do post copiado",
+  "发布包已保存到下载文件夹": "Kit de publicação salvo em Downloads",
+  "封面已用 AI 重新设计": "Capa refeita com IA",
+  "AI 封面没有生成成功，可以在设置里检查图像模型": "A capa com IA não foi criada; verifique o modelo de imagem nas Configurações",
+  "简介": "Descrição",
+  "话题": "Hashtags",
+  "话题，用空格分隔": "Hashtags separadas por espaço",
+  "复制发布文案": "Copiar texto",
+  "编辑文案": "Editar texto",
+  "导出发布包": "Exportar kit",
+  "AI 重新设计封面": "Refazer capa com IA"
 }

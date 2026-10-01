@@ -12,6 +12,7 @@ import { outputVariantPublishPath } from './outputVariantPublish'
 import { copyText, markRatingAsked, shareCaption, shouldAskRating } from './outputShare'
 import { platformLabel } from './platformLabel'
 import { packagingLabel } from './packagingLabel'
+import PublishKit, { postCaption } from './PublishKit'
 import './quick-output.css'
 
 const framingHints: Record<NonNullable<OutputVariant['framing']>, string> = {
@@ -24,6 +25,7 @@ const framingHints: Record<NonNullable<OutputVariant['framing']>, string> = {
 export default function OutputVariantCard({ projectId, variant, draft, job, onRetry, onProduce }: { projectId: string; variant: OutputVariant; draft?: Draft; job?: RenderJob; onRetry: () => void; onProduce: () => void }) {
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
+  const [coverStamp, setCoverStamp] = useState(0)
   const packaging = draft?.packaging
   const analytics: VariantProperties = {
     strategy_id: variant.strategy_id, framing: variant.framing, template: packaging?.template,
@@ -34,7 +36,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const onDemand = variant.status === 'on_demand'
   const duration = job?.result?.duration ?? (draft ? draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) : 0)
   const copyCaption = async () => {
-    const copied = await copyText(shareCaption(draft?.title))
+    const copied = await copyText(variant.post ? `${postCaption(variant.post)}\n\n${shareCaption('')}`.trim() : shareCaption(draft?.title))
     if (copied) {
       trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })
       message.success(t('分享文案已复制，发布视频时粘贴即可'))
@@ -46,7 +48,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
     setAsking(true)
   }
   return <article className="ac-card">
-    <div className="studio-variant-thumb">{completed && variant.render_job_id ? <video className="studio-variant-video" controls preload="metadata" src={studioApi.video(projectId, variant.render_job_id)}/> : <span className="play">▷</span>}<span className="ac-tag ac-tag--tl">{platformLabel(variant.strategy_id)}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}</div>
+    <div className="studio-variant-thumb">{completed && variant.render_job_id ? <video className="studio-variant-video" controls preload="metadata" poster={variant.cover ? studioApi.variantCover(projectId, variant.id, coverStamp) : undefined} src={studioApi.video(projectId, variant.render_job_id)}/> : <span className="play">▷</span>}<span className="ac-tag ac-tag--tl">{platformLabel(variant.strategy_id)}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}</div>
     <div className="ac-card-body">
       <h2 className="ac-card-title">{draft?.title || t('正在准备成片')}</h2>
       <div className={`studio-output-state studio-output-state--${failed ? 'failed' : completed || onDemand ? 'ready' : 'rendering'}`} role="status">
@@ -56,6 +58,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}
       {variant.framing && framingHints[variant.framing] && <p className="studio-output-hint">{t(framingHints[variant.framing])}</p>}
       {draft?.packaging && <p className="studio-output-hint">{packagingLabel(draft.packaging)}{draft.packaging.fallback ? ` · ${t('包装未能完整生成，已使用原字幕')}` : ''}</p>}
+      <PublishKit projectId={projectId} variant={variant} onCoverChanged={() => setCoverStamp(Date.now())}/>
       {failed && <p className="studio-output-hint studio-error">{variant.error || job?.error || t('这条版本未完成，其他成片不受影响。')}</p>}
       <div className="ac-card-foot"><span className="meta">{platformLabel(variant.strategy_id)}</span><div className="ac-card-actions">
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}`)}>{t('预览与修改')}</Btn>}

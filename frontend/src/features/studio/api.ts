@@ -3,7 +3,7 @@ import { safeStudioProperties, type Properties } from '../../analytics/workflow'
 import { observeStudioOperation, studioImportProperties, studioGoals, observeStudioWorkspace } from '../../analytics/studio'
 import { workflow } from '../../analytics/observer'
 import api from '../../services/api'
-import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences, SubtitleCue, FramingStatus, AutoFrameResult, PlatformStrategySummary, OutputVariant } from './types'
+import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences, SubtitleCue, FramingStatus, AutoFrameResult, PlatformStrategySummary, OutputVariant, PostCopy } from './types'
 export type SourcePreview = { status: 'idle' | 'queued' | 'running' | 'completed' | 'failed'; version?: string; error?: string }
 export function draftProperties(draft?: Partial<Draft>): Properties {
   const packaging = draft?.packaging
@@ -34,6 +34,9 @@ export const studioApi = {
   platformStrategies: (): Promise<{ strategies: PlatformStrategySummary[] }> => api.get('/studio/platform-strategies'),
   appendPlatforms: (pid: string, platforms: string[], outroEnabled: boolean): Promise<{ variants: OutputVariant[] }> => observeStudioOperation('studio_platform_append', () => api.post(`/studio/${pid}/platforms`, { platforms, branding: { outro_enabled: outroEnabled, outro_version: 'v1' } }), undefined, { platform_count: platforms.length, brand_outro_enabled: outroEnabled, reused_content_profile: true }),
   retryOutputVariant: (pid: string, variantId: string): Promise<RenderJob> => observeStudioOperation('studio_variant_retry', () => api.post(`/studio/${pid}/output-variants/${variantId}/retry`)),
+  variantCover: (pid: string, variantId: string, stamp = 0) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/cover?t=${stamp}`,
+  variantKit: (pid: string, variantId: string) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/kit`,
+  updateVariantPost: (pid: string, variantId: string, post: PostCopy): Promise<PostCopy> => api.put(`/studio/${pid}/output-variants/${variantId}/post`, post),
   produceOutputVariant: (pid: string, variantId: string, strategyId: string): Promise<OutputVariant> => observeStudioOperation('studio_variant_produce', () => api.post(`/studio/${pid}/output-variants/${variantId}/produce`), undefined, { strategy_id: strategyId }),
   get: (pid: string, signal?: AbortSignal): Promise<Workspace> => observeStudioWorkspace(pid, () => api.get(`/studio/${pid}`, { signal })),
   titleThumbnail: (style: string, version = 6) => `${api.defaults.baseURL}/studio/title-presets/${style}/thumbnail?v=${version}`,
