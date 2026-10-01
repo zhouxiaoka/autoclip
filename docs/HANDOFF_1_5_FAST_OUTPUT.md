@@ -10,7 +10,7 @@
 - **完成度**：后端链路、前端结果页 / 发布包卡片 / 设置页都已实现并有测试；17 条真实素材回归集跑过；demo 成品在 `/private/tmp/autoclip-e2e/demos`（本机临时目录，含测试 key，测完要删）。
 - **效果**（详见 [成本与时间](COST_PER_VIDEO.md)）：2 小时访谈从链接到成片 65 分钟 → 有作者字幕 7–8 分钟、云端语音识别 5–18 分钟；模型费用 ¥0.64 → ¥0.02–0.2。
 - **测试**：本轮全量与真实 CLI / MCP 结果见 [1.5 验收记录](RELEASE_1_5.md)。前端 198 passed，typecheck / lint / build 通过；Rust 下载回归 5 passed。
-- **下一步**：最终 PR / main CI → 已授权的合并、tag、Pre-release → 核对双平台安装 / 升级与 CLI/MCP 同源资产 → 按负责人尽快正式发布的要求转为 latest。Windows 缺人工界面验收及未完成观察期须在 Release 中明确；官网由负责人更新。版本已统一到 1.5.0。
+- **发布入口**：PR #250 已合入 main，tag `v1.5.0` 固定为 `e940f5ae`，最终 PR / main CI 全绿，后端 1106 passed、2 skipped。双平台构建、签名、安装升级和 CLI/MCP 同源资产及正式状态见 [验收记录](RELEASE_1_5.md#正式-tag-与交付入口) 与 [Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)。Windows 缺人工界面验收及未完成观察期须在 Release 中明确；官网由负责人更新。
 
 ## 负责人已拍板的产品决定（不要擅自改）
 
