@@ -105,3 +105,7 @@ YouTube 横版当前要求单条完整片段至少 180 秒，因此短 demo 选 
 
 下一版仍保留：词级时间清洗、讲解 / 录屏 / 分屏模板、并行包装的配色避让、封面设计线程优化、跨编码器拼接专项验证和低影响的反馈关闭图标。
 本轮不删除原来的 `frontend/node_modules` 软链接或 `benchmarks/fast_output/reports/`。
+
+## 发布前埋点收口与授权
+
+2026-10-01 负责人已授权合并 main、打 v1.5.0 与发布。客户端补齐发布包、AI 封面后台终态、单条重试/备选生成、版式选择、片尾设置及实际添加/降级结果；前端 198 passed，typecheck/lint/build 通过，明细见 [埋点验收](analytics/QUICK_OUTPUT_RELEASE_1_5.md)。正式 tag 在双平台构建成功后，从同一提交构建并冷安装验收 CLI/MCP wheel，随版附无密钥 ZIP 与 SHA256。

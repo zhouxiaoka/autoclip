@@ -43,7 +43,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       if (source === 'file' && file) body.append('video', file)
       else { body.append('url', url.trim()); if (browser) body.append('browser', browser) }
       const result = await studioApi.import(body)
-      trackQuickOutputPlatforms({ platform_count: platforms.length })
+      trackQuickOutputPlatforms({ platform_count: platforms.length, portrait_style: options.portrait_style || 'auto' })
       // Project refresh should never make a successful import look like an upload failure.
       void onImported().catch(() => undefined)
       navigate(`/project/${result.project_id}`)

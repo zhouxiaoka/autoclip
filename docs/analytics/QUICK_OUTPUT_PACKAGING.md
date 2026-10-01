@@ -51,3 +51,5 @@
 ## 仍需上线后验证
 
 新事件与字段需在 validation 环境实际收数，再在 PostHog 看板增加“快速出片”分组（`studio_generation_finished` 按 `outcome`，下载按 `template`/`packaging_style`）。schema 1、上一版 `studio_auto_generation_finished` 与本版不可跨版本合并比较。
+
+2026-10-01 发版前补充：[客户端新增流程与实际交付复核](QUICK_OUTPUT_RELEASE_1_5.md)。

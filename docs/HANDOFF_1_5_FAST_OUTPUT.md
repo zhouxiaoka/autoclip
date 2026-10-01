@@ -9,8 +9,8 @@
 - **目标**：贴一个视频链接、选平台 → 自动出可直接发布的成片，每条成片带「发布包」（视频 + 封面 + 各平台标题/简介/话题）。
 - **完成度**：后端链路、前端结果页 / 发布包卡片 / 设置页都已实现并有测试；17 条真实素材回归集跑过；demo 成品在 `/private/tmp/autoclip-e2e/demos`（本机临时目录，含测试 key，测完要删）。
 - **效果**（详见 [成本与时间](COST_PER_VIDEO.md)）：2 小时访谈从链接到成片 65 分钟 → 有作者字幕 7–8 分钟、云端语音识别 5–18 分钟；模型费用 ¥0.64 → ¥0.02–0.2。
-- **测试**：本轮全量与真实 CLI / MCP 结果见 [1.5 验收记录](RELEASE_1_5.md)。前端 194 passed，typecheck / lint / build 通过；Rust 下载回归 5 passed。
-- **下一步**：同事使用 CLI / MCP 候选包制作 demo → PR CI 与 main 同步 → 按 `RELEASE_CHECKLIST.md` 出 Pre-release（**打 tag 前要问负责人**）→ 双平台安装 / 升级冒烟 → 观察期 → promote。版本已统一到 1.5.0。
+- **测试**：本轮全量与真实 CLI / MCP 结果见 [1.5 验收记录](RELEASE_1_5.md)。前端 198 passed，typecheck / lint / build 通过；Rust 下载回归 5 passed。
+- **下一步**：同事使用 CLI / MCP 候选包制作 demo → PR CI 与 main 同步 → 按 `RELEASE_CHECKLIST.md` 出 Pre-release（负责人已于 2026-10-01 授权合并、打 tag 与发布）→ 双平台安装 / 升级冒烟 → 观察期 → promote。版本已统一到 1.5.0。
 
 ## 负责人已拍板的产品决定（不要擅自改）
 
@@ -162,10 +162,14 @@ Windows 桌面候选已完成覆盖升级，安装后视频测试因检查脚本
 1. [x] demo 目录已重建（2026-10-01）：10 条素材 42 套成品，封面全部由 88API GPT 生成。
 2. [x] 竖屏 AI 封面黑边：GPT Image 2.x 直接按平台比例出图；比例不符时用画面边缘延伸补齐。
 3. [x] 前端 QA（`/browse`），问题已修。
-4. [x] `origin/main` 没有新提交，无需同步。后端 1032 passed、前端 194 passed，typecheck、lint、build 全部通过；`/review` 已完成（见上节）。
+4. [x] `origin/main` 没有新提交，无需同步。后端 1032 passed、前端 198 passed，typecheck、lint、build 全部通过；`/review` 已完成（见上节）。
 5. [x] 文档收尾：CHANGELOG、COST_PER_VIDEO（云端语音识别数据）、PIPELINE_V2_PLAN 都已更新。
 6. [x] 负责人决定的两件事已实现（见上节）。
 7. [x] 桌面 / Python / CLI / MCP 版本统一为 1.5.0，候选包与验收说明见 [RELEASE_1_5.md](RELEASE_1_5.md)。
 8. [ ] **先问负责人**，再打 tag 出 Pre-release；Windows + macOS 冒烟 → 观察期 → `promote-release.yml` 转正。
 9. [ ] 清理测试敏感配置前由负责人确认；本轮按负责人要求不删除 / 提交 `frontend/node_modules` 软链接和 `benchmarks/fast_output/reports/`。新增真实模型验收临时配置在 `/private/tmp/autoclip-1.5-cli-demo`，交付包不含密钥。
 10. 延后到下一版：Whisper 词级时间；讲解动画、录屏、分屏带货类模板。
+
+## 2026-10-01 发版收口
+
+负责人已授权补齐客户端埋点后合并 main、打 v1.5.0 并发布；不再重复请求合并/tag 授权。新增流程复核见 [埋点验收](analytics/QUICK_OUTPUT_RELEASE_1_5.md)。正式 tag 构建同步发布 CLI/MCP wheel 和无密钥 ZIP，避免同事继续使用旧候选包。

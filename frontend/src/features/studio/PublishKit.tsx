@@ -6,6 +6,7 @@ import { studioApi } from './api'
 import { copyText } from './outputShare'
 import { isDesktopDownload, saveLocalFile } from './nativeDownload'
 import type { OutputVariant, PostCopy } from './types'
+import { studioDownloadRequested, observeStudioDownload, type VariantProperties } from '../../analytics/studio'
 
 const LANDSCAPE = new Set(['bilibili', 'youtube_long', 'original'])
 
@@ -15,7 +16,7 @@ export function postCaption(post: PostCopy) {
 }
 
 /** Ready-to-publish copy and cover of one output: read, edit, copy, export as a bundle, redo the cover with AI. */
-export default function PublishKit({ projectId, variant, coverStamp, onCoverChanged, onCopied }: { projectId: string; variant: OutputVariant; coverStamp: number; onCoverChanged: () => void; onCopied: () => void }) {
+export default function PublishKit({ projectId, variant, analytics = {}, coverStamp, onCoverChanged, onCopied }: { projectId: string; variant: OutputVariant; analytics?: VariantProperties; coverStamp: number; onCoverChanged: () => void; onCopied: () => void }) {
   // A saved edit shows right away: the workspace stops polling once every output is done.
   const [saved, setSaved] = useState<PostCopy | null>(null)
   useEffect(() => setSaved(null), [variant.post])
@@ -45,9 +46,10 @@ export default function PublishKit({ projectId, variant, coverStamp, onCoverChan
   const kitPath = `/studio/${projectId}/output-variants/${variant.id}/kit`
   const coverUrl = studioApi.variantCover(projectId, variant.id, coverStamp)
   const exportKit = async (event: React.MouseEvent) => {
-    if (!isDesktopDownload()) return
+    const props = { ...analytics, strategy_id: variant.strategy_id, artifact_type: 'publish_kit' as const }
+    if (!isDesktopDownload()) { studioDownloadRequested(projectId, variant.render_job_id, props); return }
     event.preventDefault()
-    try { await saveLocalFile(kitPath); message.success(t('发布包已保存到下载文件夹')) } catch { message.error(t('下载失败，请稍后重试')) }
+    try { await observeStudioDownload(() => saveLocalFile(kitPath), projectId, variant.render_job_id, props); message.success(t('发布包已保存到下载文件夹')) } catch { message.error(t('下载失败，请稍后重试')) }
   }
   const redesign = async () => {
     if (!variant.render_job_id) return
