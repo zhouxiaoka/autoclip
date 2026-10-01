@@ -72,6 +72,7 @@ def design_cover(project_id: str, video: Path, draft: dict[str, Any], job_id: st
     # The chosen frame is the AI cover's reference (same person, same moment).
     frame_path(project_id, job_id, strategy_id).write_bytes(frame)
     cd_meta_path(project_id, job_id, strategy_id).write_text(json.dumps({'guest': guest_on_screen, 'name': (speaker or ('', ''))[0],
+                                                                          'role': (speaker or ('', ''))[1],
                                                                           'lines': lines, 'accent': accent, 'palette': packaging.get('palette')},
                                                                          ensure_ascii=False), encoding='utf-8')
     slot = _publish_slot(strategy_id)
@@ -133,7 +134,8 @@ def ai_prompt(strategy_id: str, lines: list[str], accent: int, name: str, palett
         f'Typography: a heavy condensed sans-serif headline, {"set in English" if english else "set in Simplified Chinese"}, '
         f'stacked in short lines exactly reading "{title}"; the words "{keyword}" sit on a solid {colour} colour block (or in {colour}), '
         f'the rest in off-white; strong hierarchy, generous margins, nothing touching the edges, the face never covered. '
-        f'Optional: a small off-white name tag "{name}" near the subject. '
+        f'Keep every letter inside the central 88% of the width and below the top 5% of the height; never crop or cut off text. '
+        f'Do not write any names or labels; the only text is the headline. '
         f'Spell every character exactly as given; no other words, no watermark, no logo, no subtitles, no UI elements. '
         f'High contrast, crisp and clean, designed to stand out in a feed and earn the click.'
     )
@@ -186,7 +188,11 @@ def ai_cover(project_id: str, job_id: str, strategy_id: str) -> bool:
                                reference=request.reference, model=cfg.model)
     else:
         return False  # the title stayed wrong twice: keep the designed cover
-    fitted = ImageOps.fit(Image.open(io.BytesIO(image)).convert('RGB'), (width, height), method=Image.Resampling.LANCZOS)
+    generated = Image.open(io.BytesIO(image)).convert('RGB')
+    # Pad, never crop: a model that ignores the size must not lose the edges of its headline.
+    fitted = ImageOps.pad(generated, (width, height), method=Image.Resampling.LANCZOS, color=generated.getpixel((2, 2)))
+    if meta.get('guest') and meta.get('name'):
+        fitted = cd.nameplate(fitted, meta['name'], meta.get('role', ''), meta.get('palette'))
     out = io.BytesIO()
     fitted.save(out, format='JPEG', quality=92)
     kit_cover_path(project_id, job_id, strategy_id).write_bytes(out.getvalue())

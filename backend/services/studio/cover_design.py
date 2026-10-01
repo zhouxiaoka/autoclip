@@ -381,6 +381,31 @@ def design(frame_jpeg: bytes, *, width: int, height: int, title_lines: list[str]
     return out.getvalue()
 
 
+def nameplate(image, name: str, role: str = '', palette: str | None = None):
+    """Our own, always-correct nameplate on an AI cover (image models invent names)."""
+    from PIL import ImageDraw
+    from backend.services.studio.packaging_render import PALETTES
+    accent = _rgb(PALETTES.get(palette or 'azure', PALETTES['azure'])[0])
+    image = image.convert('RGB')
+    draw = ImageDraw.Draw(image)
+    width, height = image.size
+    portrait = height > width
+    margin = round(width * (0.07 if portrait else 0.05))
+    name_font = _font(round(width * (0.042 if portrait else 0.026)), 'Bold')
+    role_font = _font(round(width * (0.028 if portrait else 0.017)), 'Regular')
+    base = height - round(height * (0.08 if portrait else 0.1))
+    text_w = max(draw.textlength(name, font=name_font), draw.textlength(role, font=role_font) if role else 0)
+    pad = round(name_font.size * 0.45)
+    top = base - name_font.size - pad
+    bottom = base + (role_font.size + 12 if role else 0) + pad
+    draw.rectangle([margin, top, margin + 8 + pad * 2 + text_w + 16, bottom], fill=(18, 18, 18))
+    draw.rectangle([margin, top, margin + 8, bottom], fill=accent)
+    draw.text((margin + 8 + pad + 8, base - name_font.size), name, font=name_font, fill=(236, 234, 230))
+    if role:
+        draw.text((margin + 8 + pad + 8, base + 6), role, font=role_font, fill=(190, 190, 190))
+    return image
+
+
 def title_lines_for(draft: dict[str, Any], post_title: str, strategy_id: str) -> tuple[list[str], int]:
     """The video's own title lines when it has packaging, else the post title split in two."""
     packaging = draft.get('packaging') or {}

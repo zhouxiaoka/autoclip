@@ -426,6 +426,34 @@ def generate_vendor_image(*, provider, api_key, base_url, request, session=None)
     return _openai_image(_raise_for_status(response, edit=bool(request.reference)), http)
 
 
+FAL_ROOT = "https://fal.run"
+
+
+def generate_fal(*, api_key: str, base_url: str, request: ImageRequest, session: requests.Session | None = None) -> bytes:
+    """fal.ai models (e.g. `openai/gpt-image-2.5/flare`): `/edit` with the reference frame, else `/text-to-image`.
+
+    The exact output size is requested, so nothing has to be cropped off the generated layout.
+    """
+    root = (base_url or FAL_ROOT).rstrip("/")
+    http = _session_for(root, session)
+    model = request.model.strip().strip("/") or "openai/gpt-image-2.5/flare"
+    if not model.endswith(("/edit", "/text-to-image")):
+        model += "/edit" if request.reference else "/text-to-image"
+    body: dict[str, Any] = {"prompt": request.prompt, "image_size": {"width": request.width, "height": request.height}}
+    if request.reference:
+        body["image_urls"] = [_reference_data_uri(request.reference)]
+    resp = http.post(f"{root}/{model}", headers={"Authorization": f"Key {api_key}", "Content-Type": "application/json"},
+                     json=body, timeout=IMAGE_TIMEOUT)
+    data = _raise_for_status(resp, edit=bool(request.reference))
+    images = data.get("images") or []
+    url = (images[0] or {}).get("url") if images else None
+    if not url:
+        raise ImageError("fal 没有返回图片")
+    if url.startswith("data:"):
+        return _decode_b64(url.split(",", 1)[1])
+    return _download(http, url)
+
+
 def generate_image(
     *,
     provider: str,
@@ -440,6 +468,8 @@ def generate_image(
     logger.info("封面生图 provider=%s model=%s reference=%s", kind, request.model or "-", bool(request.reference))
     if kind == 'gemini':
         return generate_gemini(api_key=api_key, base_url=base_url, request=request, session=session)
+    if kind == 'fal':
+        return generate_fal(api_key=api_key, base_url=base_url, request=request, session=session)
     if kind in {'grok', 'glm'}:
         return generate_vendor_image(provider=kind, api_key=api_key, base_url=base_url, request=request, session=session)
     if kind == "dashscope":

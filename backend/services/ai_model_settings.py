@@ -27,7 +27,7 @@ class Connection(BaseModel):
     provider: str = 'openai'
     base_url: str = ''
     api_key: str | None = Field(default=None, max_length=2000)
-    image_api: Literal['auto', 'openai', 'seedream', 'dashscope'] = 'auto'
+    image_api: Literal['auto', 'openai', 'seedream', 'dashscope', 'fal'] = 'auto'
     image_base_url: str = ''
 
     @field_validator('provider')
@@ -185,6 +185,8 @@ def image_endpoint(connection: Connection) -> dict:
                     else 'https://dashscope.aliyuncs.com/api/v1')
         elif kind == 'gemini':
             base = connection.base_url.removesuffix('/openai') if connection.base_url else 'https://generativelanguage.googleapis.com/v1beta'
+        elif kind == 'fal':
+            base = 'https://fal.run'
         else:
             base = chat_endpoint(connection, '')['base_url']
     return {'provider': kind, 'base_url': base, 'api_key': connection.api_key or ''}
