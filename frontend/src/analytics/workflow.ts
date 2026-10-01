@@ -233,6 +233,11 @@ export class WorkflowTracker {
       this.persist()
     }
   }
+  observeCoverJob(w: Watch, job?: { job_id: string; status: string } | null): void {
+    if (w.kind !== 'studio-cover' || w.settled || job?.job_id !== w.id || !['completed', 'failed'].includes(job.status)) return
+    this.emitOnce(w, 'finished', 'studio_cover_redesign_finished', safeStudioProperties({ ...this.context(w.projectId), outcome: job.status }))
+    if (w.seen.includes('finished')) { w.settled = true; this.persist() }
+  }
   /** IDs remain in local watches only; external payload follows the versioned aggregate contract. */
   observeStudio(w: Watch, snapshot: StudioSnapshot): void {
     if (w.settled) return
@@ -249,7 +254,8 @@ export class WorkflowTracker {
     let details: Record<string, unknown> = {}
     if (w.kind === 'studio-cover') {
       const job = snapshot.output_variants?.find(v => v.cover_job?.job_id === w.id)?.cover_job
-      if (job && ['completed', 'failed'].includes(job.status)) { event = 'studio_cover_redesign_finished'; outcome = job.status }
+      this.observeCoverJob(w, job)
+      return
     } else if (w.kind === 'studio-variant') {
       const variant = snapshot.output_variants?.find(v => v.id === w.id && (!w.runId || v.render_job_id === w.runId))
       const job = snapshot.jobs?.find(j => j.job_id === variant?.render_job_id)

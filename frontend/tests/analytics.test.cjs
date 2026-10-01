@@ -461,10 +461,12 @@ test('framing installation retries use distinct terminal deduplication keys',()=
 test('1.5 API observes cover and retry terminal results across restart without content',async()=>{
  const s=setup()
  const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
- const transport={post:async url=>url.endsWith('/cover/ai')?{job_id:'private-cover',status:'queued'}:{job_id:'private-new-render',status:'queued'},put:async()=>({title:'private-title',description:'private-description',tags:['private-tag']})}
+ const transport={post:async url=>url.endsWith('/cover/ai')?{job_id:'private-cover',status:'queued'}:{job_id:'private-new-render',status:'queued'},get:async()=>({job_id:'private-cover',status:'completed'}),put:async()=>({title:'private-title',description:'private-description',tags:['private-tag']})}
  const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}}).studioApi
  s.tracker.rememberProject('private-project',{material_origin:'user'})
  await api.redesignVariantCover('private-project','private-variant')
+ await api.variantCoverJob('private-project','private-variant') // terminal before the global poll
+ assert.equal(s.events.filter(e=>e.event==='studio_cover_redesign_finished').length,1)
  await api.retryOutputVariant('private-project','private-variant')
  await api.updateVariantPost('private-project','private-variant',{title:'private-title',description:'private-description',tags:['private-tag']})
  const recovered=new core.WorkflowTracker(s.storage,()=>true,s.capture,()=>NOW)

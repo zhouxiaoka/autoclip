@@ -37,8 +37,19 @@ export const studioApi = {
   variantCover: (pid: string, variantId: string, stamp = 0) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/cover?t=${stamp}`,
   variantKit: (pid: string, variantId: string) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/kit`,
   updateVariantPost: (pid: string, variantId: string, post: PostCopy): Promise<PostCopy> => observeStudioOperation('studio_post_save', () => api.put(`/studio/${pid}/output-variants/${variantId}/post`, post), undefined, workflow.context(pid)),
-  redesignVariantCover: (pid: string, variantId: string): Promise<NonNullable<OutputVariant['cover_job']>> => observeStudioOperation('studio_cover_redesign', () => api.post(`/studio/${pid}/output-variants/${variantId}/cover/ai`), (job: NonNullable<OutputVariant['cover_job']>, props) => workflow.watch('studio-cover', job.job_id, pid, undefined, props), workflow.context(pid)),
-  variantCoverJob: (pid: string, variantId: string): Promise<NonNullable<OutputVariant['cover_job']>> => api.get(`/studio/${pid}/output-variants/${variantId}/cover/ai`),
+  redesignVariantCover: (pid: string, variantId: string): Promise<NonNullable<OutputVariant['cover_job']>> => observeStudioOperation('studio_cover_redesign', () => api.post(`/studio/${pid}/output-variants/${variantId}/cover/ai`), (job: NonNullable<OutputVariant['cover_job']>, props) => {
+    workflow.watch('studio-cover', job.job_id, pid, undefined, props)
+    for (const watch of workflow.list().filter(w => w.kind === 'studio-cover' && w.projectId === pid && w.id === job.job_id)) workflow.observeCoverJob(watch, job)
+  }, workflow.context(pid)),
+  variantCoverJob: async (pid: string, variantId: string): Promise<NonNullable<OutputVariant['cover_job']>> => {
+    const generation = workflow.generation(), enabled = workflow.active(generation)
+    const job = await api.get<unknown, NonNullable<OutputVariant['cover_job']>>(`/studio/${pid}/output-variants/${variantId}/cover/ai`)
+    // Observe the result already polled by the UI before another redesign overwrites it.
+    if (enabled && workflow.active(generation)) {
+      for (const watch of workflow.list().filter(w => w.kind === 'studio-cover' && w.projectId === pid && w.id === job.job_id)) workflow.observeCoverJob(watch, job)
+    }
+    return job
+  },
   produceOutputVariant: (pid: string, variantId: string, strategyId: string): Promise<OutputVariant> => observeStudioOperation('studio_variant_produce', () => api.post(`/studio/${pid}/output-variants/${variantId}/produce`), (variant: OutputVariant, props) => workflow.watch('studio-variant', variantId, pid, undefined, props, false, variant.render_job_id), { ...workflow.context(pid), strategy_id: strategyId }),
   get: (pid: string, signal?: AbortSignal): Promise<Workspace> => observeStudioWorkspace(pid, () => api.get(`/studio/${pid}`, { signal })),
   titleThumbnail: (style: string, version = 6) => `${api.defaults.baseURL}/studio/title-presets/${style}/thumbnail?v=${version}`,

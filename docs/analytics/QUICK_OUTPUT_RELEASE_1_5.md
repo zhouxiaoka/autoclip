@@ -25,4 +25,5 @@
 - 前端 198 tests passed；typecheck / lint / production build 通过。新增用例覆盖实际 API、后台任务重启恢复/去重、旧失败与新重试隔离、片尾关闭/失败/未知、发布包保存/失败/浏览器意图与中途关闭统计。
 - GitHub 正式构建已配置公共 PostHog client key、前后端 Sentry DSN 和 sourcemap 上传凭据；复核只读取 Secret 名称，不读取其值。
 - 已打开既有 PostHog 新用户/Studio V2 看板，确认存在引导与模型发现的生产收数；原有交付图还不覆盖快速出片新事件，不能据其空结果判断 1.5 无用户。新增查询见 [快速出片交付](quick_output_release.sql)，发布后按版本与 production/validation 分开检查。
-- 代码测试和配置检查不能证明新增事件已经到达线上；正式包安装后仍需检查接收端。原有看板历史口径保留。
+- 独立 validation 页面使用实际 SDK 与当前埋点模块发送合成状态；PostHog 接收端已确认片尾设置、发布包保存、AI 封面完成事件，以及 app_version=1.5.0、analytics_environment=validation、artifact_type=publish_kit、outro_applied=false、Studio schema 2。合成状态不作为实际制作/磁盘交付证据；正式包仍需持续看真实收数。
+- AI 封面也用界面已收到的终态结算，防止再次重做覆盖前一次记录；与后台观察共用去重。Sentry 排除 telemetry_test 后当前无 1.5 错误样本，不据此宣称零错误。原有看板历史口径保留。
