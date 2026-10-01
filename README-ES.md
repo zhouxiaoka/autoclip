@@ -151,32 +151,35 @@ Dentro de Docker, `localhost` es el contenedor. Usa una dirección del host alca
 
 [Modelos](docs/MULTI_LLM_PROVIDER_GUIDE.md) (chino) · [Local y contenedores](docs/CLI_AND_MCP.md) (chino)
 
-## Patrocinadores
-
-Gracias a estos socios. Ambos exponen API compatible con OpenAI: elígelos en Ajustes, pon la clave y aparecen los modelos.
+## Agradecimientos ❤️
 
 <table>
   <tr>
-    <td align="center" width="140" valign="middle">
-      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="72"></a><br>
+    <td align="center" width="140">
+      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
       <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
     </td>
-    <td valign="middle">
-      API multimodelo compatible con OpenAI. Modelos, precios y ofertas se consultan en el proveedor. <a href="https://88api.ai/sign-up?aff=2PIc">Detalles</a> · <a href="docs/88API_SETUP.en.md">Configuración</a>
+    <td>
+      ¡Gracias a <strong>88API</strong> por patrocinar AutoClip! Reúne GPT, Claude, Gemini, Grok, DeepSeek, Kimi y GLM para analizar subtítulos, seleccionar momentos destacados y generar títulos.<br>
+      🎨 <strong>Multimedia</strong>: Ofrece modelos de imagen, vídeo y audio como GPT-Image, Seedance, Veo, MiniMax Hailuo H3, Kling, Whisper y TTS. AutoClip utiliza API compatibles de análisis, portadas y transcripción.<br>
+      🏷️ <strong>Servicio y facturación</strong>: Según el patrocinador, opera mediante una empresa extranjera y ofrece atención humana, facturas y recargas con proporción 1:1; se aplican las condiciones de la plataforma.<br>
+      🎁 <strong>Nuevos usuarios</strong>: Obtén crédito de prueba para evaluar modelos mediante el <a href="https://88api.ai/sign-up?aff=2PIc">enlace de referido</a>, según las condiciones de la promoción. <a href="docs/88API_SETUP.en.md">Guía de configuración (inglés)</a>
     </td>
   </tr>
   <tr>
-    <td align="center" width="140" valign="middle">
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="72"></a><br>
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar</strong></a>
+    <td align="center" width="140">
+      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
+      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar.cc</strong></a>
     </td>
-    <td valign="middle">
-      API multimodelo compatible con OpenAI. Modelos, precios y ofertas se consultan en el proveedor. <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">Detalles</a> · <a href="docs/INFISTAR_SETUP.en.md">Configuración</a>
+    <td>
+      ¡Gracias a <strong>Infistar.cc</strong> por patrocinar AutoClip! Ofrece una API multimodelo para analizar transcripciones de vídeos largos, seleccionar momentos destacados y generar títulos.<br>
+      ⚙️ <strong>Configuración compatible</strong>: En AutoClip, elige el proveedor compatible con OpenAI e introduce la Base URL, tu clave API y un modelo disponible.<br>
+      🧩 <strong>Variedad de modelos</strong>: El proveedor ofrece Claude, GPT, Gemini, DeepSeek y otras familias. Elige modelos que admitan el endpoint compatible para comparar el análisis de transcripciones y la selección de momentos destacados.<br>
+      🏷️ <strong>Precios y servicios</strong>: Según el patrocinador, algunos modelos cuestan desde el <strong>1% del precio oficial</strong>, con facturación en RMB, emisión de facturas y verificación de autenticidad del modelo. Consulta en la plataforma los modelos, precios y condiciones vigentes.<br>
+      🎁 <strong>Oferta para AutoClip</strong>: Los nuevos usuarios pueden recibir <strong>$5 de crédito de prueba</strong> al registrarse mediante el <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">enlace de referido</a>, según las condiciones de la promoción. <a href="docs/INFISTAR_SETUP.en.md">Guía de configuración (inglés)</a>
     </td>
   </tr>
 </table>
-
-Servicios, precios y ofertas los dan los socios; manda lo que diga su web.
 
 ## Preguntas frecuentes
 

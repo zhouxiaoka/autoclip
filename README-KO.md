@@ -151,32 +151,35 @@ Docker 안 `localhost`는 컨테이너입니다. 호스트 모델은 컨테이�
 
 [모델 설정](docs/MULTI_LLM_PROVIDER_GUIDE.md)(중국어) · [로컬과 컨테이너](docs/CLI_AND_MCP.md)(중국어)
 
-## 스폰서
-
-AutoClip을 후원하는 파트너입니다. 둘 다 OpenAI 호환 API라 설정에서 고르고 Key를 넣으면 모델이 나열됩니다.
+## 후원에 감사드립니다 ❤️
 
 <table>
   <tr>
-    <td align="center" width="140" valign="middle">
-      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="72"></a><br>
+    <td align="center" width="140">
+      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
       <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
     </td>
-    <td valign="middle">
-      OpenAI 호환 멀티 모델 API. 이용 가능한 모델, 요금, 혜택은 제공자 안내를 확인하세요. <a href="https://88api.ai/sign-up?aff=2PIc">자세히</a> · <a href="docs/88API_SETUP.en.md">연결 안내</a>
+    <td>
+      <strong>88API Token 플랫폼</strong>의 AutoClip 후원에 감사드립니다! GPT, Claude, Gemini, Grok, DeepSeek, Kimi, GLM을 통합하여 자막 분석, 하이라이트 선택, 제목 생성에 활용할 수 있습니다.<br>
+      🎨 <strong>멀티미디어</strong>: GPT-Image, Seedance, Veo, MiniMax Hailuo H3, Kling, Whisper, TTS 등 이미지·영상·음성 모델을 제공합니다. AutoClip에서는 호환되는 분석·표지 생성·자막 전사 API를 사용합니다.<br>
+      🏷️ <strong>서비스 및 결제</strong>: 파트너 안내에 따르면 해외 법인이 운영하며 상담원 지원, 정식 청구서, 1:1 충전 비율을 제공합니다. 세부 조건은 플랫폼을 확인하세요.<br>
+      🎁 <strong>신규 가입 혜택</strong>: <a href="https://88api.ai/sign-up?aff=2PIc">전용 추천 링크</a>로 가입하면 모델 테스트용 체험 크레딧을 받을 수 있습니다. 이벤트 조건이 적용됩니다. <a href="docs/88API_SETUP.en.md">설정 가이드 (영어)</a>
     </td>
   </tr>
   <tr>
-    <td align="center" width="140" valign="middle">
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="72"></a><br>
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar</strong></a>
+    <td align="center" width="140">
+      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
+      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar.cc</strong></a>
     </td>
-    <td valign="middle">
-      OpenAI 호환 멀티 모델 API. 이용 가능한 모델, 요금, 혜택은 제공자 안내를 확인하세요. <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">자세히</a> · <a href="docs/INFISTAR_SETUP.en.md">연결 안내</a>
+    <td>
+      AutoClip을 후원하는 <strong>Infistar.cc</strong>에 감사드립니다! 긴 영상의 자막 분석, 하이라이트 선택, 제목 생성에 활용할 수 있는 여러 모델의 API를 제공합니다.<br>
+      ⚙️ <strong>호환 API 설정</strong>: AutoClip에서 OpenAI 호환 제공업체를 선택하고 Base URL, API 키, 사용 가능한 모델을 입력하세요.<br>
+      🧩 <strong>다양한 모델</strong>: 후원사는 Claude, GPT, Gemini, DeepSeek 등을 제공합니다. 호환 엔드포인트를 지원하는 모델을 선택하여 자막 분석과 하이라이트 선택 결과를 비교할 수 있습니다.<br>
+      🏷️ <strong>가격 및 서비스</strong>: 후원사 안내에 따르면 일부 모델은 <strong>공식 정가의 1%부터</strong> 이용할 수 있으며, 위안화 결제, 청구서 발행, 모델 진위 확인을 지원합니다. 적용 모델, 현재 가격과 조건은 플랫폼에서 확인하세요.<br>
+      🎁 <strong>AutoClip 전용 혜택</strong>: 신규 사용자는 <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">전용 추천 링크</a>로 가입하면 <strong>$5 체험 크레딧</strong>을 받을 수 있습니다. 적용 조건은 이벤트 안내를 확인하세요. <a href="docs/INFISTAR_SETUP.en.md">설정 가이드 (영어)</a>
     </td>
   </tr>
 </table>
-
-서비스·가격·혜택은 파트너 제공, 각 사이트 안내가 우선입니다.
 
 ## 자주 묻는 질문
 

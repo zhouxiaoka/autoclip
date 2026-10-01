@@ -153,32 +153,35 @@ Inside Docker, `localhost` is the container. Point at a host address the contain
 
 [Model setup](docs/MULTI_LLM_PROVIDER_GUIDE.md) (Chinese) · [Local models and containers](docs/CLI_AND_MCP.md) (Chinese)
 
-## Sponsors
-
-Thanks to these partners for sponsoring AutoClip. Both expose an OpenAI-compatible API: pick them in Settings, enter a key, and available models are listed.
+## Special thanks ❤️
 
 <table>
   <tr>
-    <td align="center" width="140" valign="middle">
-      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="72"></a><br>
+    <td align="center" width="140">
+      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
       <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
     </td>
-    <td valign="middle">
-      OpenAI-compatible multi-model API. Available models, prices, and offers are listed by the provider. <a href="https://88api.ai/sign-up?aff=2PIc">Details</a> · <a href="docs/88API_SETUP.en.md">Setup</a>
+    <td>
+      Thank you to <strong>88API Token Platform</strong> for sponsoring AutoClip! It brings together GPT, Claude, Gemini, Grok, DeepSeek, Kimi and GLM for transcript analysis, highlight selection and title generation.<br>
+      🎨 <strong>Media capabilities</strong>: The platform offers image, video and audio models, including GPT-Image, Seedance, Veo, MiniMax Hailuo H3, Kling, Whisper and TTS. AutoClip uses compatible analysis, cover-image and transcription APIs.<br>
+      🏷️ <strong>Service and billing</strong>: The partner reports overseas corporate operation, live support, invoices and a 1:1 top-up ratio; platform terms apply.<br>
+      🎁 <strong>New-user offer</strong>: Receive trial credit to test models through our <a href="https://88api.ai/sign-up?aff=2PIc">referral registration link</a>, subject to promotion terms. <a href="docs/88API_SETUP.en.md">Setup guide</a>
     </td>
   </tr>
   <tr>
-    <td align="center" width="140" valign="middle">
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="72"></a><br>
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar</strong></a>
+    <td align="center" width="140">
+      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
+      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar.cc</strong></a>
     </td>
-    <td valign="middle">
-      OpenAI-compatible multi-model API. Available models, prices, and offers are listed by the provider. <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">Details</a> · <a href="docs/INFISTAR_SETUP.en.md">Setup</a>
+    <td>
+      Thank you to <strong>Infistar.cc</strong> for sponsoring AutoClip! Its multi-model API service can support long-video transcript analysis, highlight selection, and title generation.<br>
+      ⚙️ <strong>Compatible setup</strong>: Choose the OpenAI-compatible provider in AutoClip and enter the Base URL, your API key, and an available model.<br>
+      🧩 <strong>Model choice</strong>: The partner offers Claude, GPT, Gemini, DeepSeek, and other model families. Choose models that support the compatible endpoint to compare transcript analysis and highlight selection.<br>
+      🏷️ <strong>Pricing and services</strong>: According to the partner, selected models cost as little as <strong>1% of official list prices</strong>, with RMB billing, invoices, and model authenticity verification. Check the platform for eligible models, current prices, and service terms.<br>
+      🎁 <strong>AutoClip offer</strong>: New users can receive <strong>$5 in trial credit</strong> through our <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">referral registration link</a>, subject to the promotion terms. <a href="docs/INFISTAR_SETUP.en.md">Setup guide</a>
     </td>
   </tr>
 </table>
-
-Services, prices, and offers are provided by the partners; the platform pages are authoritative.
 
 ## FAQ
 

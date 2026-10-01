@@ -151,32 +151,35 @@ autoclip outputs PROJECT_ID --export-kits
 
 [Модели](docs/MULTI_LLM_PROVIDER_GUIDE.md) (кит.) · [Локально и контейнеры](docs/CLI_AND_MCP.md) (кит.)
 
-## Спонсоры
-
-Спасибо партнёрам. Оба дают API, совместимый с OpenAI: выберите в настройках, вставьте ключ — появятся модели.
+## Благодарим спонсоров ❤️
 
 <table>
   <tr>
-    <td align="center" width="140" valign="middle">
-      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="72"></a><br>
+    <td align="center" width="140">
+      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
       <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
     </td>
-    <td valign="middle">
-      Мультимодельный API, совместимый с OpenAI. Доступные модели, цены и акции указаны у провайдера. <a href="https://88api.ai/sign-up?aff=2PIc">Подробнее</a> · <a href="docs/88API_SETUP.en.md">Настройка</a>
+    <td>
+      Благодарим <strong>88API</strong> за поддержку AutoClip! Платформа объединяет GPT, Claude, Gemini, Grok, DeepSeek, Kimi и GLM для анализа субтитров, выбора ярких моментов и создания заголовков.<br>
+      🎨 <strong>Мультимедиа</strong>: Модели изображений, видео и аудио, включая GPT-Image, Seedance, Veo, MiniMax Hailuo H3, Kling, Whisper и TTS. AutoClip использует совместимые API анализа, создания обложек и транскрипции.<br>
+      🏷️ <strong>Сервис и оплата</strong>: По информации партнёра, сервис управляется зарубежной компанией и предлагает поддержку операторов, счета и пополнение в соотношении 1:1; действуют условия платформы.<br>
+      🎁 <strong>Новым пользователям</strong>: Получите пробный кредит для проверки моделей по <a href="https://88api.ai/sign-up?aff=2PIc">реферальной ссылке</a> на условиях акции. <a href="docs/88API_SETUP.en.md">Инструкция по настройке (англ.)</a>
     </td>
   </tr>
   <tr>
-    <td align="center" width="140" valign="middle">
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="72"></a><br>
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar</strong></a>
+    <td align="center" width="140">
+      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
+      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar.cc</strong></a>
     </td>
-    <td valign="middle">
-      Мультимодельный API, совместимый с OpenAI. Доступные модели, цены и акции указаны у провайдера. <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">Подробнее</a> · <a href="docs/INFISTAR_SETUP.en.md">Настройка</a>
+    <td>
+      Благодарим <strong>Infistar.cc</strong> за поддержку AutoClip! Сервис предоставляет API разных моделей для анализа субтитров длинных видео, выбора ярких моментов и создания заголовков.<br>
+      ⚙️ <strong>Совместимый API</strong>: Выберите в AutoClip провайдера с поддержкой OpenAI-совместимого API и укажите Base URL, свой ключ API и доступную модель.<br>
+      🧩 <strong>Выбор моделей</strong>: Партнёр предлагает Claude, GPT, Gemini, DeepSeek и другие семейства. Выбирайте модели, поддерживающие совместимую конечную точку, чтобы сравнивать анализ субтитров и подбор ярких моментов.<br>
+      🏷️ <strong>Цены и услуги</strong>: По данным партнёра, некоторые модели доступны по цене <strong>от 1% официального тарифа</strong>, с оплатой в юанях, выставлением счетов и проверкой подлинности модели. Список моделей, действующие цены и условия уточняйте на платформе.<br>
+      🎁 <strong>Предложение для AutoClip</strong>: Новые пользователи могут получить <strong>$5 пробного кредита</strong> при регистрации по <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">реферальной ссылке</a> на условиях акции. <a href="docs/INFISTAR_SETUP.en.md">Инструкция по настройке (англ.)</a>
     </td>
   </tr>
 </table>
-
-Услуги, цены и акции дают партнёры; смотрите их сайты.
 
 ## Частые вопросы
 
