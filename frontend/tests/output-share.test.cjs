@@ -5,15 +5,17 @@ const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8')
 const share=read('src/features/studio/outputShare.ts')
 const feedback=read('src/features/studio/OutputFeedback.tsx')
 const card=read('src/features/studio/OutputVariantCard.tsx')
+const kit=read('src/features/studio/PublishKit.tsx')
 const download=read('src/features/studio/StudioDownloadLink.tsx')
 const studio=read('src/analytics/studio.ts')
 const workflow=read('src/analytics/workflow.ts')
 
-test('share caption credits AutoClip with the repository link and is copied locally',()=>{
- assert.match(share,/REPO_URL = 'https:\/\/github\.com\/zhouxiaoka\/autoclip'/)
- assert.match(share,/t\('用 AutoClip 剪的'\)\} · \$\{REPO_URL\}/)
+test('one copy action keeps platform post copy without adding a product credit',()=>{
  assert.match(share,/navigator\.clipboard\.writeText/)
- assert.match(card,/copyText\(variant\.post \? `\$\{postCaption\(variant\.post\)\}\\n\\n\$\{shareCaption\('', english\)\}`\.trim\(\) : shareCaption\(draft\?\.title, english\)\)/)
+ assert.match(kit,/copyText\(postCaption\(post\)\)/)
+ assert.doesNotMatch(kit,/shareCaption|用 AutoClip 剪的|Made with AutoClip/)
+ assert.doesNotMatch(card,/复制分享文案|shareCaption/)
+ assert.match(kit,/onCopied\(\)/)
  assert.match(card,/trackOutputShare\(projectId, \{ share_target: 'copy_caption', \.\.\.analytics \}\)/)
 })
 

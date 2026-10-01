@@ -5,6 +5,7 @@ from typing import Optional, Literal
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import FileResponse, Response
+from starlette.background import BackgroundTask
 from sqlalchemy.orm import Session
 from backend.core.database import get_db
 from backend.core.sentry_setup import capture_studio_exception
@@ -92,6 +93,7 @@ async def import_visual(
     instruction: str = Form('', max_length=1000),
     platforms: list[str] = Form(['douyin']),
     auto_start: bool = Form(False),
+    portrait_style: Literal['auto', 'interview', 'podcast'] = Form('auto'),
     brand_outro_enabled: bool = Form(True),
     subtitle: Optional[UploadFile] = File(None),
     name: str = Form('智能剪辑', max_length=200),
@@ -126,7 +128,7 @@ async def import_visual(
             await subtitle.close()
     prefs = ImportOptions(
         goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
-        platforms=platforms, auto_start=auto_start, branding={'outro_enabled': brand_outro_enabled},
+        platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, branding={'outro_enabled': brand_outro_enabled},
     )
     project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': True, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
     pid = str(project.id)
@@ -320,8 +322,19 @@ def redesign_output_variant_cover(project_id: str, variant_id: str, db: Session 
     cfg = cover.load_config()
     if not (cfg.enabled and cfg.configured):
         raise HTTPException(409, '请先在设置里开启 AI 封面并选择图像模型')
-    call(jobs.request_ai_cover, project_id, variant_id)
-    return {'ok': True}
+    if not cfg.allow_send_frame:
+        raise HTTPException(409, '请先在设置里允许发送参考帧')
+    job = call(jobs.request_ai_cover, project_id, variant_id)
+    if job is None:
+        raise HTTPException(409, '请先检查 AI 封面设置')
+    return job
+
+
+@router.get('/{project_id}/output-variants/{variant_id}/cover/ai')
+def output_variant_cover_job(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    _variant_job(project_id, variant_id)
+    return call(jobs.ai_cover_status, project_id, variant_id)
 
 
 @router.put('/{project_id}/output-variants/{variant_id}/post')
@@ -343,8 +356,9 @@ def output_variant_kit(project_id: str, variant_id: str, db: Session = Depends(g
     cover, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
     post = variant.get('post') or {'title': (job.get('result') or {}).get('title', '')}
     strategy = platform_strategy(variant['strategy_id'])
-    data, name = publish_kit.kit_zip(video, cover, post, strategy.label, english=strategy.audience_language == 'en')
-    return Response(data, media_type='application/zip', headers={'Content-Disposition': f"attachment; filename*=UTF-8''{quote(name)}"})
+    path, name = publish_kit.kit_file(video, cover, post, strategy.label, english=strategy.audience_language == 'en')
+    return FileResponse(path, media_type='application/zip', headers={'Content-Disposition': f"attachment; filename*=UTF-8''{quote(name)}"},
+                        background=BackgroundTask(path.unlink, missing_ok=True))
 
 
 @router.post('/{project_id}/output-variants/{variant_id}/produce')
@@ -460,13 +474,17 @@ def auto_frame(project_id: str, body: Draft, db: Session = Depends(get_db)):
 @router.post('/{project_id}/drafts/{draft_id}/export')
 def export(project_id: str, draft_id: str, body: ExportDraftRequest | None = None, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
-    raw = next((d for d in store.read(project_id)['drafts'] if d['id'] == draft_id), None)
+    state = store.read(project_id)
+    raw = next((d for d in state['drafts'] if d['id'] == draft_id), None)
     if not raw:
         raise HTTPException(404, '草稿不存在')
     if body and body.revision != raw['revision']:
         raise HTTPException(409, '草稿已在另一窗口更新，请重新加载后再导出')
     draft = Draft.model_validate(raw)
     call(validate_draft, project_id, draft)
+    variant = next((v for v in state.get('output_variants', []) if v['draft_id'] == draft_id), None)
+    if variant:
+        return call(jobs.export, project_id, draft, brand_outro=bool(variant.get('branding', {}).get('outro_enabled', True)))
     return call(jobs.export, project_id, draft)
 
 @router.get('/{project_id}/exports/{job_id}/video')

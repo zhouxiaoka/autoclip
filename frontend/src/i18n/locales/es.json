@@ -1513,5 +1513,12 @@
   "默认用成片里嘉宾最清晰的画面自动设计封面，免费、秒出。想要更有设计感可以改用 AI 生成，生图服务和模型由你自己选择，按所选服务计费。": "Las portadas se diseñan automáticamente con el fotograma más nítido del invitado: gratis e inmediato. Para más diseño, cambia a generación con IA; tú eliges el servicio y el modelo de imágenes, que cobra ese servicio.",
   "查看封面": "Ver portada",
   "AI 封面还在生成，稍后刷新查看": "La portada con IA aún se está creando; actualiza en un momento.",
-  "正在准备取景与包装": "Preparando encuadre y diseño"
+  "正在准备取景与包装": "Preparando encuadre y diseño",
+  "自动添加品牌片尾": "Añadir automáticamente un cierre de marca",
+  "默认开启，为自动成片及修改后的导出添加 1.8 秒 AutoClip 动画。关闭后不影响已生成的视频。": "Activado por defecto. Añade una animación de AutoClip de 1,8 segundos a los vídeos automáticos y a sus exportaciones editadas. Desactivarlo no cambia los vídeos existentes.",
+  "竖版版式": "Diseño vertical",
+  "按平台默认": "Predeterminado de la plataforma",
+  "访谈式（人物窗口）": "Entrevista (ventana del hablante)",
+  "播客式（满屏）": "Pódcast (pantalla completa)",
+  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Solo cambia el diseño vertical. El idioma de subtítulos y publicaciones sigue el de la plataforma."
 }

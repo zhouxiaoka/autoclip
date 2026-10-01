@@ -184,6 +184,13 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     offset = rows[index][2]
     length = rows[index][1] - rows[index][0]
     out = _Scene(offset, length)
+    source_scene = scenes[index]
+    def add_caption(layer, start, end, style, text):
+        # Caption pages/words keep the cue's source clock. Edits and reordered scenes select
+        # only their overlapping text instead of replaying it or dropping a boundary cue.
+        start, end = max(start, source_scene.start), min(end, source_scene.end)
+        if end > start:
+            out.add(layer, offset + start - source_scene.start, offset + end - source_scene.start, style, text)
     interview = packaging.template == 'interview_zh'
     style = packaging.style or ('classic' if interview else 'pop')
     look = colours(packaging.palette)
@@ -201,14 +208,14 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
             size = min(112, int(1000 / max(width(line), 1)))  # one line always fits the 1080 px frame
             out.add(3, 0, total, title_style, f'{{\\an8{move}\\fs{size}{entrance}}}{_esc(line)}')
     elif lines:
-        hook = ' '.join(lines)
-        out.add(3, 0, 2.8, 'Hook', f'{{\\an8\\pos(540,250)\\move(540,300,540,250,0,260)\\fad(140,220)}}{_esc(hook)}')
+        size = min(66, int(920 / max(max(width(line) for line in lines), 1)))
+        hook = '\\N'.join(_esc(line) for line in lines)
+        out.add(3, 0, 2.8, 'Hook', f'{{\\an8\\fs{size}\\pos(540,250)\\move(540,300,540,250,0,260)\\fad(140,220)}}{hook}')
 
     for cue in packaging.cues:
-        start, end = to_output(cue.start, rows), to_output(max(cue.start, cue.end - 1e-3), rows)
-        if start is None or end is None:
+        start, end = cue.start, cue.end
+        if end <= source_scene.start or start >= source_scene.end:
             continue
-        end = max(end, start + .3)
         if interview:
             caption_style = 'CaptionBox' if style == 'boxed' else 'Caption'
             size = 58 if style == 'boxed' else 62
@@ -221,17 +228,20 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
                     motion = f'\\move(540,{y + 24},540,{y},0,180)\\fad(120,60)'
                 else:
                     motion = f'\\pos(540,{y})\\fad(60,60)' if style == 'classic' else f'\\pos(540,{y})\\fad(90,90)'
-                out.add(2, s, e, caption_style, f'{{{anchor}{motion}}}{body}')
+                add_caption(2, s, e, caption_style, f'{{{anchor}{motion}}}{body}')
                 if original:
-                    out.add(1, s, e, 'Original', f'{{\\an8\\pos(540,{WIN_Y + WIN_H + 34})\\fad(60,60)}}{_esc_lines(original)}')
+                    add_caption(1, s, e, 'Original', f'{{\\an8\\pos(540,{WIN_Y + WIN_H + 34})\\fad(60,60)}}{_esc_lines(original)}')
             continue
         highlights = {h.text.lower() for h in packaging.highlights if cue.start <= h.at < cue.end}
-        if style == 'boxed':
-            for s, e, text, _ in timed_screens(cue.text, start, end, _limit(58) / 0.95):
+        if style == 'boxed' or packaging.audience_language == 'zh':
+            caption_style, size = {'boxed': ('CaptionBox', 58), 'cinematic': ('Cine', 64)}.get(style, ('Words', 82))
+            for s, e, text, _ in timed_screens(cue.text, start, end, _limit(size) / 0.95):
                 body = _esc_lines(text)
+                if packaging.audience_language == 'zh':
+                    body = _emphasize(body, list(highlights), accent)
                 for word in highlights:
                     body = re.sub(rf'(?i)\b({re.escape(_esc(word))})\b', lambda m: f'{{\\c{accent}}}{m.group(1)}{{\\c{WHITE}}}', body, count=1)
-                out.add(2, s, e, 'CaptionBox', f'{{\\an2\\pos(540,1420)\\fad(90,90)}}{body}')
+                add_caption(2, s, e, caption_style, f'{{\\an2\\pos(540,1420)\\fad(90,90)}}{body}')
             continue
         words = _words(cue.text, start, end, None)
         if style == 'cinematic':
@@ -241,11 +251,13 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
                 p0 = phrase[0][0]
                 p1 = phrases[n + 1][0][0] if n + 1 < len(phrases) else phrase[-1][1] + .1
                 text = _esc(' '.join(token for _, _, token in phrase))
-                out.add(1, p0, max(p1, p0 + .4), 'CineGlow', f'{{\\an2\\pos(540,1320)\\blur8\\alpha&H70&\\fad(160,120)}}{text}')
-                out.add(2, p0, max(p1, p0 + .4), 'Cine', f'{{\\an2\\pos(540,1320)\\fad(160,120)}}{text}')
+                size = min(64, int(920 / max(width(text), 1)))
+                add_caption(1, p0, max(p1, p0 + .4), 'CineGlow', f'{{\\an2\\fs{size}\\pos(540,1320)\\blur8\\alpha&H70&\\fad(160,120)}}{text}')
+                add_caption(2, p0, max(p1, p0 + .4), 'Cine', f'{{\\an2\\fs{size}\\pos(540,1320)\\fad(160,120)}}{text}')
             continue
         for chunk in _chunks(words):
             chunk_end = chunk[-1][1] + .05
+            size = min(82, int(920 / max(width(' '.join(word[2] for word in chunk)), 1)))
             for j, (w0, _, _) in enumerate(chunk):
                 parts = []
                 for k, (_, _, token) in enumerate(chunk):
@@ -253,7 +265,7 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
                     parts.append(f'{{\\c{accent}}}{_esc(token)}{{\\c{WHITE}}}' if active else _esc(token))
                 stop = chunk[j + 1][0] if j + 1 < len(chunk) else chunk_end
                 pop = '{\\fscx86\\fscy86\\t(0,110,\\fscx100\\fscy100)}' if j == 0 else ''
-                out.add(2, w0, stop, 'Words', f'{{\\an2\\pos(540,1400)}}{pop}' + ' '.join(parts))
+                add_caption(2, w0, stop, 'Words', f'{{\\an2\\fs{size}\\pos(540,1400)}}{pop}' + ' '.join(parts))
 
     plate_y = WIN_Y + WIN_H - 250 if interview else 1180
     for speaker in packaging.speakers:

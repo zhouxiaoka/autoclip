@@ -1,4 +1,4 @@
-"""Caption screens that never exceed two lines on a vertical frame.
+"""Caption screens that never exceed two lines on any output frame.
 
 Rows are cut into clauses at punctuation, each clause gets its own line when it fits, and lines
 are paired into screens; so line breaks land on punctuation whenever the text allows. A clause

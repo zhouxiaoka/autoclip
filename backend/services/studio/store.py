@@ -23,7 +23,7 @@ def directory(project_id: str) -> Path:
         raise ValueError('无效项目 ID')
     return get_projects_directory() / project_id
 
-def read(project_id: str):
+def read(project_id: str, *, recover: bool = True):
     path = directory(project_id) / 'metadata' / 'studio.json'
     if not path.exists():
         return {'schema_version': 2, 'drafts': [], 'events': [], 'jobs': [], 'analysis': None, 'output_variants': []}
@@ -33,6 +33,9 @@ def read(project_id: str):
     data.setdefault('events', [])
     data.setdefault('jobs', [])
     data.setdefault('output_variants', [])
+    if not recover:
+        # CLI status commands are observers in another process, not a server restart.
+        return data
     interrupted = set()
     for job in data['jobs']:
         if job['status'] in ('queued', 'running') and job.get('instance') != INSTANCE:
@@ -40,6 +43,9 @@ def read(project_id: str):
             interrupted.add(job.get('job_id'))
     settle = False
     for variant in data['output_variants']:
+        cover_job = variant.get('cover_job') or {}
+        if cover_job.get('status') in ('queued', 'running') and cover_job.get('instance') != INSTANCE:
+            cover_job.update(status='failed', error='服务已重启，请重新生成封面')
         if variant.get('status') == 'preparing' and variant.get('instance') != INSTANCE:
             variant.update(status='failed', error='服务已重启，请重试这条', needs_prepare=True)
             settle = True

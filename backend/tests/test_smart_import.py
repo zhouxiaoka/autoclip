@@ -188,6 +188,7 @@ def test_import_persists_platform_and_branding_contract_without_auto_start(clien
         'requested_platforms': ['tiktok'],
         'branding': {'outro_enabled': False, 'outro_version': 'v1'},
         'auto_start': False,
+        'portrait_style': 'auto',
         'status': 'awaiting_confirmation',
         'created_at': state['generation']['created_at'],
     }

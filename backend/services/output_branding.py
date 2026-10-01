@@ -13,7 +13,9 @@ import os
 import subprocess
 import tempfile
 import threading
+import uuid
 from pathlib import Path
+from pydantic import BaseModel, ConfigDict, StrictBool
 
 from backend.services.publish_export import resolve_cjk_font
 from backend.utils.ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
@@ -23,6 +25,34 @@ OUTRO_VERSION = "v5"
 OUTRO_DIR = Path(__file__).resolve().parents[1] / 'assets' / 'outro'
 OUTRO_BACKGROUND = '0x080809'  # the animation's own background, for padding other aspect ratios
 _cache_lock = threading.Lock()
+
+
+class BrandingSettings(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    enabled: StrictBool = True
+
+
+def settings_path() -> Path:
+    from backend.core.path_utils import get_data_directory
+    return get_data_directory() / 'output-branding.json'
+
+
+def load_settings() -> BrandingSettings:
+    path = settings_path()
+    return BrandingSettings.model_validate_json(path.read_text(encoding='utf-8')) if path.exists() else BrandingSettings()
+
+
+def save_settings(settings: BrandingSettings) -> BrandingSettings:
+    settings = BrandingSettings.model_validate(settings.model_dump())
+    path = settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(f'.{uuid.uuid4().hex}.tmp')
+    try:
+        temporary.write_text(settings.model_dump_json(), encoding='utf-8')
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return settings
 
 
 def _font_arg() -> str:
@@ -83,21 +113,23 @@ def _designed_outro(width: int, height: int, params: dict) -> Path | None:
         return target
 
 
-def append_outro(source: Path, destination: Path, *, width: int, height: int, enabled: bool = True) -> None:
+def append_outro(source: Path, destination: Path, *, width: int, height: int, enabled: bool = True) -> bool:
     """Append the branded outro atomically. If branding fails, the video is delivered without it:
     a finished render must never be lost to the end card."""
     partial = destination.with_name(f'{destination.stem}.branding.part.mp4')
     partial.unlink(missing_ok=True)
     if not enabled:
         os.replace(source, destination)
-        return
+        return False
     try:
         _append(source, partial, width, height)
         os.replace(partial, destination)
+        return True
     except (OSError, subprocess.SubprocessError, ValueError, KeyError) as error:
         logging.getLogger(__name__).warning('Outro skipped: %s', type(error).__name__)
         partial.unlink(missing_ok=True)
         os.replace(source, destination)
+        return False
 
 
 def _append(source: Path, partial: Path, width: int, height: int) -> None:

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { message } from 'antd'
 import { t } from '../../i18n'
 import { Btn } from '../../ui'
-import { coverApi } from '../../publish/coverApi'
 import { studioApi } from './api'
 import { copyText } from './outputShare'
 import { isDesktopDownload, saveLocalFile } from './nativeDownload'
@@ -16,7 +15,7 @@ export function postCaption(post: PostCopy) {
 }
 
 /** Ready-to-publish copy and cover of one output: read, edit, copy, export as a bundle, redo the cover with AI. */
-export default function PublishKit({ projectId, variant, coverStamp, onCoverChanged }: { projectId: string; variant: OutputVariant; coverStamp: number; onCoverChanged: () => void }) {
+export default function PublishKit({ projectId, variant, coverStamp, onCoverChanged, onCopied }: { projectId: string; variant: OutputVariant; coverStamp: number; onCoverChanged: () => void; onCopied: () => void }) {
   // A saved edit shows right away: the workspace stops polling once every output is done.
   const [saved, setSaved] = useState<PostCopy | null>(null)
   useEffect(() => setSaved(null), [variant.post])
@@ -40,7 +39,7 @@ export default function PublishKit({ projectId, variant, coverStamp, onCoverChan
     } finally { setSaving(false) }
   }
   const copy = async () => {
-    if (await copyText(postCaption(post))) message.success(t('发布文案已复制'))
+    if (await copyText(postCaption(post))) { onCopied(); message.success(t('发布文案已复制')) }
     else message.error(t('复制失败，请稍后重试'))
   }
   const kitPath = `/studio/${projectId}/output-variants/${variant.id}/kit`
@@ -54,17 +53,17 @@ export default function PublishKit({ projectId, variant, coverStamp, onCoverChan
     if (!variant.render_job_id) return
     setRedesigning(true)
     try {
-      const clip = `studio-${variant.render_job_id}`
-      const started = await coverApi.start(projectId, clip, { platform: LANDSCAPE.has(variant.strategy_id) ? 'bilibili' : 'douyin', title: post.title })
-      let done = !('job_id' in started)
+      let job = await studioApi.redesignVariantCover(projectId, variant.id)
+      let done = job.status === 'completed'
       for (let tries = 0; !done && tries < 90; tries++) {
+        if (job.status === 'failed') throw new Error(job.error || 'failed')
         await new Promise(resolve => setTimeout(resolve, 2000))
         if (!mounted.current) return
-        const job = await coverApi.job((started as { job_id: string }).job_id)
-        if (job.status === 'failed' || job.status === 'cancelled') throw new Error(job.error || 'failed')
+        job = await studioApi.variantCoverJob(projectId, variant.id)
         done = job.status === 'completed'
       }
       if (!mounted.current) return
+      if (job.status === 'failed') throw new Error(job.error || 'failed')
       if (!done) { message.info(t('AI 封面还在生成，稍后刷新查看')); return }
       onCoverChanged()
       message.success(t('封面已用 AI 重新设计'))

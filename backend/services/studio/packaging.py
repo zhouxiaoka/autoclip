@@ -48,8 +48,8 @@ PROMPT = (
     'translate 为 false 时字幕直接用原文，segments 返回空数组 []，不要复述原文。'
     'speakers 只填写在 lines 或 known_names 中明确出现过的人名，role 写其公开身份（不确定就留空），line 是此人第一次说话的行；'
     '不确定就返回空数组，绝不猜测身份。'
-    'tags 仅当 template 为 interview_zh 时给出 2–4 个编辑点评（中文，每个不超过 10 个字），必须具体点出这一句最有冲击力的内容，'
-    '例如“七分钟干完三个月”“以退为进”；禁止“逻辑清晰”“直击核心”“干货满满”这类泛泛评价；line 指向被点评的行。'
+    'tags 仅当 template 为 interview_zh 时给出 2–4 个编辑点评（中文每个不超过 10 个字，英文不超过 30 个字符），必须具体点出这一句最有冲击力的内容，'
+    '文字使用 audience_language（英文平台不得写中文）；例如“七分钟干完三个月”“以退为进”；禁止“逻辑清晰”“直击核心”“干货满满”这类泛泛评价；line 指向被点评的行。'
     'highlights 仅当 template 为 podcast_en 时给出，每 3–4 行最多一个，word 必须是该行（翻译后）里出现的单个关键词。'
     '另外返回 "mood"：按这段内容本身的情绪选一个——calm（冷静理性的分析）、serious（严肃、风险、警示）、'
     'bold（强观点、冲突、爆点）、warm（真诚、感动、个人经历）、playful（轻松、幽默、有趣）。'
@@ -113,7 +113,14 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
             text = str(entry.get('text') or '').strip()
             if not text or end <= scene['start'] or start >= scene['end']:
                 continue
-            lines.append({'start': max(start, scene['start']), 'end': min(end, scene['end']), 'text': text})
+            from backend.services.studio.caption_layout import timed_screens, width
+            # Paragraph cues need pages on their source clock, just like landscape subtitles.
+            # This also avoids silently losing their tail to PackagingCue's 600-character cap.
+            pages = timed_screens(text, start, end, 24) if len(text) > 600 or (end - start > 8 and width(text) > 48) else [(start, end, text, '')]
+            for a, b, page, _ in pages:
+                a, b = max(a, scene['start']), min(b, scene['end'])
+                if b > a:
+                    lines.append({'start': a, 'end': b, 'text': page.replace('\\N', ' ')})
     return lines
 
 
@@ -285,7 +292,7 @@ def _validated(result, lines, base, translate, burned, known_names, draft, avoid
     if base['template'] == 'interview_zh':
         for item in _items(result.get('tags'))[:MAX_TAGS]:
             index, text = _line(item, lines), str(item.get('text') or '').strip()
-            if index is not None and 0 < len(text) <= TAG_LIMIT:
+            if index is not None and 0 < len(text) <= (TAG_LIMIT if audience == 'zh' else 30) and not foreign_for(audience, text):
                 tags.append({'at': lines[index]['start'] + .2, 'text': text})
     highlights = []
     if base['template'] == 'podcast_en':

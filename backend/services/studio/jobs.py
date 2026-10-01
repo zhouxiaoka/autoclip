@@ -25,9 +25,12 @@ def source(project_id):
     return find_source_video(project_id)
 
 def export(project_id, draft, *, brand_outro=False):
+    from backend.services.output_branding import load_settings
+    brand_outro = bool(brand_outro and load_settings().enabled)
     job = {'job_id': uuid.uuid4().hex, 'status': 'queued', 'percent': 0, 'draft_id': draft.id, 'title': draft.title, 'revision': draft.revision, 'brand_outro': brand_outro, 'created_at': store.now(), 'instance': store.INSTANCE, 'snapshot': draft.model_dump()}
     def add(data):
-        active = next((j for j in data['jobs'] if j['status'] in ('queued', 'running') and j.get('snapshot') == job['snapshot']), None)
+        active = next((j for j in data['jobs'] if j['status'] in ('queued', 'running') and j.get('snapshot') == job['snapshot']
+                       and j.get('brand_outro', False) == brand_outro), None)
         if active:
             return active
         data['jobs'].insert(0, job)
@@ -427,8 +430,12 @@ def _content_drafts(project_id, plan, video):
                 continue
             picked.append((clip, start, end))
         bounds = _complete_thought_bounds(project_id, [(s, e) for _, s, e in picked])
+        source_duration = float(intelligence._probe(video).get('duration') or 0)
         drafts = []
         for (clip, _, _), (start, end) in zip(picked, bounds):
+            # Transcript timestamps can run past the final video frame. Keep valid content
+            # from that clip, and never let one invalid range discard the whole batch.
+            end = min(end, source_duration)
             try:
                 scene = Scene(
                     id=uuid.uuid4().hex,
@@ -436,9 +443,9 @@ def _content_drafts(project_id, plan, video):
                     start=start,
                     end=end,
                 )
+                intelligence.validate_scenes([scene], source_duration)
             except (KeyError, TypeError, ValueError):
                 continue
-            intelligence.validate_scenes([scene], intelligence._probe(video).get('duration', 0))
             drafts.append({**Draft(
                 id=uuid.uuid4().hex, title=scene.label, scenes=[scene], origin='auto-content',
                 language=prefs.language, aspect=prefs.aspect, layout='crop' if prefs.aspect == 'portrait' else 'fit',
@@ -592,6 +599,16 @@ def _speaker_framing(value, video, *, window=None, wait_sec=120, scans=None):
 INTERVIEW_WINDOW = (1080, 810)  # 4:3 speaker window of the interview template
 
 
+def _project_strategy(project_id, strategy_id):
+    """Visual template is a preference; platform language, dimensions and limits stay intact."""
+    from dataclasses import replace
+    from backend.services.platform_strategy import platform_strategy
+    strategy = platform_strategy(strategy_id)
+    style = (store.read(project_id).get('generation') or {}).get('portrait_style', 'auto')
+    template = {'interview': 'interview_zh', 'podcast': 'podcast_en'}.get(style)
+    return replace(strategy, template=template) if template and strategy.aspect == 'portrait' else strategy
+
+
 def _apply_framing(project_id, value, strategy_id, video, burned, cache):
     """Pick true vertical speaker framing when it is safe; otherwise keep the full frame on a backdrop.
 
@@ -599,8 +616,7 @@ def _apply_framing(project_id, value, strategy_id, video, burned, cache):
     Tracks depend only on the scenes, so one detection pass is shared by every vertical platform.
     The interview template frames a 4:3 window instead; without a track it shows the whole frame.
     """
-    from backend.services.platform_strategy import platform_strategy
-    strategy = platform_strategy(strategy_id)
+    strategy = _project_strategy(project_id, strategy_id)
     if strategy.aspect != 'portrait':
         return value, None
     interview = strategy.template == 'interview_zh'
@@ -699,22 +715,65 @@ cover_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix='studio-co
 
 
 def request_ai_cover(project_id, variant_id):
-    """Upgrade a variant's designed cover with the AI image model in the background (when one is set up)."""
-    cover_executor.submit(_ai_cover_job, project_id, variant_id)
+    """Share one tracked AI task between automatic covers and requests from the output card."""
+    from backend.services import cover
+    cfg = cover.load_config()
+    if not (cfg.enabled and cfg.configured and cfg.allow_send_frame):
+        return None
+    job_id = uuid.uuid4().hex
+
+    def claim(data):
+        variant = next((item for item in data['output_variants'] if item['id'] == variant_id), None)
+        if variant is None:
+            raise FileNotFoundError('成片版本不存在')
+        active = variant.get('cover_job')
+        if active and active['status'] in ('queued', 'running'):
+            return active
+        variant['cover_job'] = {'job_id': job_id, 'status': 'queued', 'instance': store.INSTANCE}
+        return variant['cover_job']
+
+    with store.lock:
+        claimed = store.change(project_id, claim)
+        if claimed['job_id'] == job_id:
+            try:
+                cover_executor.submit(_ai_cover_job, project_id, variant_id, job_id)
+            except Exception as error:  # noqa: BLE001 - preserve the ready video and designed cover
+                logger.warning('AI cover dispatch failed: %s', type(error).__name__)
+                _update_cover_job(project_id, variant_id, job_id, status='failed', error='AI 封面任务未能启动，请重试')
+        return ai_cover_status(project_id, variant_id)
+
+
+def ai_cover_status(project_id, variant_id):
+    variant = next((item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id), None)
+    if variant is None or not variant.get('cover_job'):
+        raise FileNotFoundError('封面任务不存在')
+    return {key: value for key, value in variant['cover_job'].items() if key != 'instance'}
+
+
+def _update_cover_job(project_id, variant_id, job_id, **values):
+    def update(data):
+        variant = next(item for item in data['output_variants'] if item['id'] == variant_id)
+        job = variant.get('cover_job') or {}
+        if job.get('job_id') == job_id:
+            job.update(values)
+            if values.get('status') == 'completed':
+                variant['cover'] = 'ai'
+    store.change(project_id, update)
 
 
 @_tracked('ai_cover')
-def _ai_cover_job(project_id, variant_id):
+def _ai_cover_job(project_id, variant_id, job_id):
     from backend.services.studio import publish_kit
     try:
+        _update_cover_job(project_id, variant_id, job_id, status='running')
         variant = next(item for item in store.read(project_id).get('output_variants', []) if item['id'] == variant_id)
         with llm_usage.timed('ai_cover'):
             made = publish_kit.ai_cover(project_id, variant['render_job_id'], variant['strategy_id'])
     except Exception as error:  # noqa: BLE001 - the designed cover stays
         logger.warning('AI cover job failed: %s', type(error).__name__)
         made = False
-    if made:
-        store.change(project_id, lambda data: next(item for item in data['output_variants'] if item['id'] == variant_id).update(cover='ai'))
+    _update_cover_job(project_id, variant_id, job_id, **({'status': 'completed'} if made else
+                      {'status': 'failed', 'error': 'AI 封面未生成，已保留原封面'}))
 
 
 def update_post(project_id, variant_id, post):
@@ -753,11 +812,11 @@ def _prefetch_packaging(project_id, items, burned, cache):
     Each call waits ~20 s on the model; done one after another they were ~8 minutes for 25 clips.
     """
     from backend.pipeline.concurrency import map_chunks
-    from backend.services.platform_strategy import platform_strategy
     _packaging_inputs(project_id, cache)  # load shared inputs once, before the threads
     first = {}
     for strategy_id, value in items:
-        key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), platform_strategy(strategy_id).template)
+        strategy = _project_strategy(project_id, strategy_id)
+        key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template, strategy.audience_language)
         first.setdefault(key, (strategy_id, value))
     map_chunks(lambda item: _apply_packaging(project_id, item[1], item[0], burned, cache), first.values())
 
@@ -768,8 +827,7 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache):
     One model call per scene set and template; every vertical platform of the same audience
     reuses it. Only the subtitle rows this draft uses are sent.
     """
-    from backend.services.platform_strategy import platform_strategy
-    strategy = platform_strategy(strategy_id)
+    strategy = _project_strategy(project_id, strategy_id)
     mask = _caption_mask(project_id, strategy_id) if burned else None
     value = {**{key: item for key, item in value.items() if key != 'caption_mask'}, **({'caption_mask': mask} if mask else {})}
     if mask:
@@ -778,7 +836,7 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache):
         return {key: item for key, item in value.items() if key != 'packaging'}  # never inherit another template's packaging
     from backend.services.studio import packaging
     _packaging_inputs(project_id, cache)
-    key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template)
+    key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), strategy.template, strategy.audience_language)
     if key not in cache:
         lines = packaging.draft_lines(cache['entries'], value['scenes'])
         used = cache.setdefault('palettes', [])
@@ -1125,7 +1183,7 @@ def _finish_generation(data):
     store.settle_generation(data)
 
 
-def inspect_project(project_id, options, url=None, browser=None):
+def inspect_project(project_id, options, url=None, browser=None, *, producer=None):
     """Only ingest and screen. Expensive production requires an explicit confirmation."""
     # Reserve and dispatch together so another request cannot observe an
     # accepted task before submission succeeds. Preserve existing exports/plan.
@@ -1139,6 +1197,8 @@ def inspect_project(project_id, options, url=None, browser=None):
             'requested_platforms': list(options.platforms),
             'branding': options.branding.model_dump(),
             'auto_start': options.auto_start,
+            'portrait_style': options.portrait_style,
+            **({'producer': producer} if producer else {}),
             'status': 'screening',
             'created_at': store.now(),
         }

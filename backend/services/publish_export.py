@@ -121,16 +121,22 @@ def slice_srt(entries: Sequence[Dict[str, Any]], start: float, end: float, line_
             continue
         if t <= start or s >= end:
             continue
-        ns, nt = max(0.0, s - start), min(end, t) - start
+        if t <= s:
+            continue
         text = str(e.get("text") or "").replace("\n", " ").strip()
         if not text:
             continue
         if line_limit:
             from backend.services.studio.caption_layout import timed_screens
-            screens = [(a, b, screen.replace('\\N', '\n')) for a, b, screen, _ in timed_screens(text, ns, nt, line_limit)]
+            # Paginate on the source clock BEFORE clipping. A scene starting halfway through
+            # a paragraph must not replay all of its earlier words in the remaining time.
+            screens = [(a, b, screen.replace('\\N', '\n')) for a, b, screen, _ in timed_screens(text, s, t, line_limit)]
         else:
-            screens = [(ns, nt, text)]
+            screens = [(s, t, text)]
         for a, b, screen in screens:
+            a, b = max(a, start) - start, min(b, end) - start
+            if b <= a or round(b * 1000) <= round(a * 1000):
+                continue
             lines.append(f"{idx}\n{to_srt_time(a)} --> {to_srt_time(b)}\n{screen}\n")
             idx += 1
     return "\n".join(lines)
@@ -189,6 +195,19 @@ SUBTITLE_STYLES: Dict[str, str] = {
     # Bold yellow with a dark outline, the classic short-video caption.
     "accent": "Fontsize=20,Bold=1,PrimaryColour=&H0000E5FF,OutlineColour=&H00000000,BorderStyle=1,Outline=3,Shadow=0,MarginV=56,Alignment=2",
 }
+
+
+def subtitle_line_limit(w: int, h: int, subtitle_style: str = 'clean') -> int:
+    """Two-line captions with a width budget for the selected frame and font size.
+
+    SRT uses a 288 px-high libass canvas. Leave horizontal padding and cap density even on
+    wide footage; Latin width is measured as 0.55 CJK units by caption_layout.
+    """
+    style = SUBTITLE_STYLES.get(subtitle_style, SUBTITLE_STYLES['clean'])
+    size = float(re.search(r'Fontsize=([0-9.]+)', style).group(1))
+    if h > w:
+        size = round(size * 0.47, 1)
+    return max(1, min(15 if h >= w else 24, int(w / h * 288 * 0.86 / size)))
 
 
 def portrait_subtitle_style(style: str, factor: float = 0.47) -> str:
@@ -273,6 +292,8 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
         slug += "_notitle"
     if req.layout:
         slug += f"_{req.layout}"
+    if req.subtitles and not studio:
+        slug += '_captions-v2'
     if req.brand_outro:
         slug += "_autoclip-outro-v1"
     out_path = out_dir / f"{slug}.mp4"
@@ -295,7 +316,10 @@ def export_clip(req: ExportRequest) -> Dict[str, Any]:
     try:
         if req.subtitles and not studio:
             entries = _load_srt_entries(req.project_id)
-            body = slice_srt(entries, start, start + duration, 15 if (spec.get("h") or 0) > (spec.get("w") or 0) else None)
+            source_info = _probe(video) if not spec.get('w') or not spec.get('h') else spec
+            width = source_info.get('w') or source_info.get('width') or 1920
+            height = source_info.get('h') or source_info.get('height') or 1080
+            body = slice_srt(entries, start, start + duration, subtitle_line_limit(width, height))
             if body:
                 srt_file = tmpdir / "clip.srt"
                 srt_file.write_text(body, encoding="utf-8")

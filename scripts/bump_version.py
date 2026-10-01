@@ -11,6 +11,7 @@
   src-tauri/Cargo.toml       version = "..."（[package] 段）
   pyproject.toml             version = "..."（[project] 段）
   backend/core/desktop_config.py  AUTOCLIP_APP_VERSION 的回退值
+  backend/__init__.py        CLI / MCP 的 __version__
   CHANGELOG.md               [未发布] → [X.Y.Z] - YYYY-MM-DD，再插入一个空的 [未发布]；底部 compare 链接
 
 只用标准库。
@@ -33,6 +34,7 @@ TAURI_CONF = ROOT / "src-tauri" / "tauri.conf.json"
 CARGO_TOML = ROOT / "src-tauri" / "Cargo.toml"
 PYPROJECT = ROOT / "pyproject.toml"
 DESKTOP_CONFIG = ROOT / "backend" / "core" / "desktop_config.py"
+PACKAGE_INIT = ROOT / "backend" / "__init__.py"
 CHANGELOG = ROOT / "CHANGELOG.md"
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
@@ -60,6 +62,8 @@ def current_versions() -> dict[str, str]:
 
     m = re.search(r'os\.getenv\("AUTOCLIP_APP_VERSION",\s*"([^"]+)"\)', _read(DESKTOP_CONFIG))
     out["desktop_config.py"] = m.group(1) if m else "?"
+    m = re.search(r'^__version__\s*=\s*"([^"]+)"', _read(PACKAGE_INIT), re.MULTILINE)
+    out["backend/__init__.py"] = m.group(1) if m else "?"
     return out
 
 
@@ -86,6 +90,10 @@ def set_version(new: str) -> None:
     if n != 1:
         raise SystemExit("desktop_config.py 里没找到 AUTOCLIP_APP_VERSION 回退值")
     _write(DESKTOP_CONFIG, dc_new)
+    package, n = re.subn(r'(^__version__\s*=\s*")[^"]+("$)', rf"\g<1>{new}\g<2>", _read(PACKAGE_INIT), count=1, flags=re.MULTILINE)
+    if n != 1:
+        raise SystemExit("backend/__init__.py 里没找到 __version__")
+    _write(PACKAGE_INIT, package)
 
 
 def roll_changelog(new: str, today: str) -> None:
@@ -154,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"已把 {', '.join(versions)} 改为 {new}，CHANGELOG 已滚动到 [{new}] - {args.date}")
 
     if args.commit:
-        files = [str(p.relative_to(ROOT)) for p in (TAURI_CONF, CARGO_TOML, PYPROJECT, DESKTOP_CONFIG, CHANGELOG)]
+        files = [str(p.relative_to(ROOT)) for p in (TAURI_CONF, CARGO_TOML, PYPROJECT, DESKTOP_CONFIG, PACKAGE_INIT, CHANGELOG)]
         subprocess.run(["git", "add", *files], cwd=ROOT, check=True)
         subprocess.run(["git", "commit", "-m", f"chore: release v{new}"], cwd=ROOT, check=True)
         print(f"已提交。下一步：git tag v{new} && git push origin main v{new}")

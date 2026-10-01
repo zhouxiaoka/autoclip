@@ -243,6 +243,8 @@ export interface BilibiliDownloadTask {
 
 // 设置相关API
 export const settingsApi = {
+  getOutputBranding: (): Promise<{ enabled: boolean }> => api.get('/settings/output-branding'),
+  setOutputBranding: (enabled: boolean): Promise<{ enabled: boolean }> => api.put('/settings/output-branding', { enabled }),
   // 获取系统配置
   getSettings: (): Promise<any> => {
     return api.get('/settings')

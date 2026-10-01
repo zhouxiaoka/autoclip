@@ -9,7 +9,10 @@ from __future__ import annotations
 import io
 import json
 import logging
+import os
 import re
+import tempfile
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -17,6 +20,15 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 AI_METHODS = ('model', 'model_bg')
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    temporary = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')
+    try:
+        temporary.write_bytes(data)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def clip_id(job_id: str) -> str:
@@ -68,18 +80,18 @@ def design_cover(project_id: str, video: Path, draft: dict[str, Any], job_id: st
     speaker = cd.cover_speaker(packaging) if guest_on_screen else None
     data = cd.design(frame, width=width, height=height, title_lines=lines, accent_line=accent,
                      palette=packaging.get('palette'), speaker=speaker, crop_centre=centre)
-    kit_cover_path(project_id, job_id, strategy_id).write_bytes(data)
+    _atomic_write(kit_cover_path(project_id, job_id, strategy_id), data)
     # The chosen frame is the AI cover's reference (same person, same moment).
-    frame_path(project_id, job_id, strategy_id).write_bytes(frame)
-    cd_meta_path(project_id, job_id, strategy_id).write_text(json.dumps({'guest': guest_on_screen, 'name': (speaker or ('', ''))[0],
+    _atomic_write(frame_path(project_id, job_id, strategy_id), frame)
+    _atomic_write(cd_meta_path(project_id, job_id, strategy_id), json.dumps({'guest': guest_on_screen, 'name': (speaker or ('', ''))[0],
                                                                           'role': (speaker or ('', ''))[1],
                                                                           'lines': lines, 'accent': accent, 'palette': packaging.get('palette')},
-                                                                         ensure_ascii=False), encoding='utf-8')
+                                                                         ensure_ascii=False).encode('utf-8'))
     slot = _publish_slot(strategy_id)
     meta = cover.read_cover_meta(project_id, clip_id(job_id), slot) or {}
     if meta.get('method') not in AI_METHODS and cd.size_for(strategy_id, source_w, source_h)[1] != 1440:
         # Xiaohongshu's 3:4 design stays kit-only; the vertical publish slot expects 9:16.
-        cover.cover_path(project_id, clip_id(job_id), slot).write_bytes(data)
+        _atomic_write(cover.cover_path(project_id, clip_id(job_id), slot), data)
         cover.write_cover_meta(project_id, clip_id(job_id), slot, {'method': 'design', 'title': ' '.join(lines)})
     return True
 
@@ -230,10 +242,10 @@ def ai_cover(project_id: str, job_id: str, strategy_id: str) -> bool:
         fitted = cd.nameplate(fitted, meta['name'], meta.get('role', ''), meta.get('palette'))
     out = io.BytesIO()
     fitted.save(out, format='JPEG', quality=92)
-    kit_cover_path(project_id, job_id, strategy_id).write_bytes(out.getvalue())
+    _atomic_write(kit_cover_path(project_id, job_id, strategy_id), out.getvalue())
     if height != 1440:  # the publish slot is 9:16 / 16:9; Xiaohongshu's 3:4 stays kit-only
         slot = _publish_slot(strategy_id)
-        cover.cover_path(project_id, clip_id(job_id), slot).write_bytes(out.getvalue())
+        _atomic_write(cover.cover_path(project_id, clip_id(job_id), slot), out.getvalue())
         cover.write_cover_meta(project_id, clip_id(job_id), slot, {'method': 'model', 'title': ' '.join(meta['lines'])})
     return True
 
@@ -247,17 +259,30 @@ def _safe_name(text: str) -> str:
     return re.sub(r'[\\/:*?"<>|\n\r\t]+', ' ', text).strip()[:60] or 'autoclip'
 
 
-def kit_zip(video: Path, cover: Path | None, post: dict[str, Any], platform_label: str, *, english: bool = False) -> tuple[bytes, str]:
-    """(zip bytes, file name): the video, its cover and the post copy for one platform.
-
-    An English platform's kit is English throughout, file names included.
-    """
+def _write_kit(target, video: Path, cover: Path | None, post: dict[str, Any], platform_label: str, *, english: bool) -> str:
     name = _safe_name(post.get('title') or video.stem)
     cover_name, copy_name, platform = ('cover', 'post', 'Platform: ') if english else ('封面', '发布文案', '平台：')
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_STORED) as archive:  # mp4/jpg are already compressed
+    with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_STORED) as archive:  # mp4/jpg are already compressed
         archive.write(video, f'{name}.mp4')
         if cover is not None:
             archive.write(cover, f'{name} {cover_name}.jpg')
         archive.writestr(f'{name} {copy_name}.txt', f'{platform}{platform_label}\n\n{caption_text(post)}\n')
-    return buffer.getvalue(), f'{name}.zip'
+    return f'{name}.zip'
+
+
+def kit_file(video: Path, cover: Path | None, post: dict[str, Any], platform_label: str, *, english: bool = False) -> tuple[Path, str]:
+    """Build on disk: a long video must not be duplicated into server memory for its download."""
+    with tempfile.NamedTemporaryFile(prefix='autoclip-kit-', suffix='.zip', delete=False) as temporary:
+        path = Path(temporary.name)
+    try:
+        return path, _write_kit(path, video, cover, post, platform_label, english=english)
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+
+
+def kit_zip(video: Path, cover: Path | None, post: dict[str, Any], platform_label: str, *, english: bool = False) -> tuple[bytes, str]:
+    """In-memory helper for small callers; HTTP downloads use kit_file."""
+    buffer = io.BytesIO()
+    name = _write_kit(buffer, video, cover, post, platform_label, english=english)
+    return buffer.getvalue(), name

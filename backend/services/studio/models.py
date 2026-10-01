@@ -180,6 +180,13 @@ class PostCopy(BaseModel):
     tags: list[str] = Field(default_factory=list, max_length=12)
 
 
+class CoverJob(BaseModel):
+    job_id: str
+    status: Literal['queued', 'running', 'completed', 'failed']
+    error: str | None = None
+    instance: str | None = None
+
+
 class OutputVariant(BaseModel):
     """One immutable rendered delivery version derived from a draft revision."""
     model_config = ConfigDict(extra='forbid')
@@ -202,6 +209,7 @@ class OutputVariant(BaseModel):
     # Publish kit: copy written during production, cover designed after the render.
     post: PostCopy | None = None
     cover: Literal['design', 'ai'] | None = None
+    cover_job: CoverJob | None = None
     # A backup whose preparation failed or was interrupted: retrying prepares it again instead of
     # rendering the unpackaged draft. `instance` marks which server run is preparing it.
     needs_prepare: bool = False
@@ -217,6 +225,7 @@ class ImportOptions(BaseModel):
     instruction: str = Field(default='', max_length=1000)
     platforms: list[str] = Field(default_factory=lambda: ['douyin'], min_length=1, max_length=8)
     auto_start: bool = False
+    portrait_style: Literal['auto', 'interview', 'podcast'] = 'auto'
     branding: BrandingOptions = Field(default_factory=BrandingOptions)
 
     @model_validator(mode='after')

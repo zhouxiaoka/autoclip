@@ -31,10 +31,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import inspect
 import sys
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from backend import __version__
 
 from backend.services.local_runner import (
     LLMOverride,
@@ -53,8 +55,10 @@ except ImportError:  # mcp 1.x
     except ImportError as e:  # pragma: no cover
         raise SystemExit("缺少 mcp SDK：pip install mcp") from e
 
-INSTRUCTIONS = """AutoClip 把长视频（讲座 / 访谈 / 播客录像）切成带标题、带评分的高光片段，并按主题串成合集。
-典型用法：用户给一个本地视频路径 → 调 clip_video（或 start_clip_job + get_job_status 轮询）→
+INSTRUCTIONS = """AutoClip 1.5 把长视频自动制作成适合指定平台的视频、封面、发布文案和 ZIP 发布包。
+优先用 start_quick_output + get_quick_output_status；platforms 支持 douyin、xiaohongshu、bilibili、tiktok、reels、shorts、youtube_long。
+共用桌面的模型与片尾设置；没有字幕时自动转写。完成后 export_kits=true 获取发布包。
+需要旧的原始切片 / 合集时，用户给一个本地视频路径 → 调 clip_video（或 start_clip_job + get_job_status 轮询）→
 把返回的切片列表（标题 / 时间段 / 评分 / 文件路径）整理给用户。
 没有字幕时会用本地 Whisper 转写，首次较慢。想省钱或离线：provider="ollama"（需本机装 Ollama）。
 切片为 0 通常是评分阈值过高，用 min_score=0.5 重试。"""
@@ -62,7 +66,35 @@ INSTRUCTIONS = """AutoClip 把长视频（讲座 / 访谈 / 播客录像）切�
 server = _Server(
     name="autoclip",
     instructions=INSTRUCTIONS,
+    **({'version': __version__} if 'version' in inspect.signature(_Server).parameters else {}),
 )
+
+
+@server.tool(name='get_version', description='读取 AutoClip CLI / MCP 的版本号，核对同事的测试环境。')
+def get_version() -> Dict[str, Any]:
+    return {'version': __version__}
+
+
+@server.tool(name='start_quick_output', description='1.5 一键出片：本地视频或 HTTPS 的 YouTube / B 站链接，按 platforms 自动制作视频、封面和发布文案。共用桌面 AI 与片尾设置，立即返回 project_id；之后用 get_quick_output_status 查询。')
+def start_quick_output(source: str, platforms: Optional[List[str]] = None, name: Optional[str] = None,
+                       srt_path: Optional[str] = None, instruction: str = '', browser: Optional[str] = None,
+                       portrait_style: str = 'auto') -> Dict[str, Any]:
+    from backend.services import quick_output_runner as quick
+    try:
+        return {'ok': True, 'version': __version__, 'project_id': quick.start(source, platforms or ['douyin'],
+                name=name, srt_path=srt_path, instruction=instruction, browser=browser, portrait_style=portrait_style), 'status': 'running'}
+    except (ValueError, FileNotFoundError) as error:
+        return {'ok': False, 'error': str(error)}
+
+
+@server.tool(name='get_quick_output_status', description='查询 1.5 一键出片状态；返回各平台的视频、封面和文案。完成后用 export_kits=true 获取发布包 ZIP 路径。此工具不调用模型或启动制作。')
+def get_quick_output_status(project_id: str, export_kits: bool = False) -> Dict[str, Any]:
+    from backend.services import quick_output_runner as quick
+    try:
+        result = quick.status(project_id, export_kits=export_kits)
+        return {'ok': result['status'] != 'failed', **result}
+    except (ValueError, FileNotFoundError) as error:
+        return {'ok': False, 'error': str(error)}
 
 # ---------------------------------------------------------------- job registry ---
 _jobs: Dict[str, Dict[str, Any]] = {}

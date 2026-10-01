@@ -13,10 +13,10 @@ function nodes(value){return !value||typeof value!=='object'?[]:Array.isArray(va
 
 test('quick import submits platform targets, branding and auto-starts to results',async()=>{
  const calls=[],navigations=[];let index=0
- const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[true,()=>{}],[false,()=>{}],['',()=>{}],['',()=>{}]]
+ const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}]]
  const component=load({
   'react-i18next':{useTranslation:()=>{}},'../../i18n':{t:x=>x},
-  react:{useState:()=>states[index++],useEffect:()=>{}},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
+  react:{useState:()=>states[index++],useEffect:()=>{}},antd:{Select:'select'},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
   'react/jsx-runtime':{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'fragment'},
   '../../ui':{Btn:'button',Segmented:'segmented',Dialog:'dialog'},'./PlatformPicker':{default:'platform-picker'},
   './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}}},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){}},'../../analytics/experience':{trackExperience(){}},
@@ -28,7 +28,8 @@ test('quick import submits platform targets, branding and auto-starts to results
  assert.equal(calls.length,1)
  assert.deepEqual([...calls[0].entries()].filter(([key])=>key==='platforms'),[['platforms','douyin']])
  assert.equal(calls[0].get('auto_start'),'true')
- assert.equal(calls[0].get('brand_outro_enabled'),'true')
+ assert.equal(calls[0].get('portrait_style'),'auto')
+ assert.equal(calls[0].get('brand_outro_enabled'),undefined, 'the backend uses the saved application setting')
  assert.deepEqual(navigations,['/project/project-1'])
 })
 

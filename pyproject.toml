@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autoclip"
-version = "1.4.0"
+version = "1.5.0"
 description = "AutoClip — AI 长视频自动切片：CLI 与 MCP server 入口"
 readme = "README.md"
 requires-python = ">=3.10"

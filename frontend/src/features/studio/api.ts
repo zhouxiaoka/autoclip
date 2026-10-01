@@ -37,6 +37,8 @@ export const studioApi = {
   variantCover: (pid: string, variantId: string, stamp = 0) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/cover?t=${stamp}`,
   variantKit: (pid: string, variantId: string) => `${api.defaults.baseURL}/studio/${pid}/output-variants/${variantId}/kit`,
   updateVariantPost: (pid: string, variantId: string, post: PostCopy): Promise<PostCopy> => api.put(`/studio/${pid}/output-variants/${variantId}/post`, post),
+  redesignVariantCover: (pid: string, variantId: string): Promise<NonNullable<OutputVariant['cover_job']>> => api.post(`/studio/${pid}/output-variants/${variantId}/cover/ai`),
+  variantCoverJob: (pid: string, variantId: string): Promise<NonNullable<OutputVariant['cover_job']>> => api.get(`/studio/${pid}/output-variants/${variantId}/cover/ai`),
   produceOutputVariant: (pid: string, variantId: string, strategyId: string): Promise<OutputVariant> => observeStudioOperation('studio_variant_produce', () => api.post(`/studio/${pid}/output-variants/${variantId}/produce`), undefined, { strategy_id: strategyId }),
   get: (pid: string, signal?: AbortSignal): Promise<Workspace> => observeStudioWorkspace(pid, () => api.get(`/studio/${pid}`, { signal })),
   titleThumbnail: (style: string, version = 6) => `${api.defaults.baseURL}/studio/title-presets/${style}/thumbnail?v=${version}`,

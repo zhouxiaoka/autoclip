@@ -44,6 +44,12 @@ def _studio_render_follows_executor(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_branding_settings(tmp_path, monkeypatch):
+    from backend.services import output_branding
+    monkeypatch.setattr(output_branding, 'settings_path', lambda: tmp_path / 'output-branding.json')
+
+
+@pytest.fixture(autouse=True)
 def _no_framing_install(monkeypatch):
     # Automatic output starts the on-demand OpenCV install; tests must never run pip.
     from backend.services.studio import framing
@@ -280,4 +286,4 @@ def assert_dict_contains(dict_obj: dict, expected_keys: list, description: str =
 def assert_error_contains(error: Exception, expected_message: str, description: str = ""):
     """断言错误信息包含指定内容"""
     assert expected_message in str(error), \
-        f"错误信息不包含预期内容: {expected_message} {description}" 
+        f"错误信息不包含预期内容: {expected_message} {description}"

@@ -3,7 +3,7 @@ name: autoclip
 description: >-
   用 AutoClip 把本地长视频（讲座 / 访谈 / 播客录像 / 课程）切成带标题、评分的高光片段并串成合集。
   当用户要"切片""剪高光""把这个视频切成短视频""找出精彩片段""做合集"，
-  或给出一个本地视频路径并希望得到片段列表时使用。优先走 MCP 工具（clip_video / start_clip_job），
+  或给出一个本地视频路径并希望得到片段列表时使用。发布成片优先走 MCP 工具（start_quick_output / get_quick_output_status），原始切片用 clip_video / start_clip_job，
   没有 MCP 时用 `autoclip` CLI 的 `--json` 输出。
 ---
 
@@ -19,6 +19,18 @@ AutoClip 是本地运行的 AI 切片工具：字幕（自带 SRT 或本地 Whis
 3. 两者都没有 → 让用户安装：`pip install -e .`（仓库根目录）或参考 `docs/CLI_AND_MCP.md`。
 
 ## MCP 工具用法
+
+### 1.5 平台成片（优先）
+
+先 `get_version` 核对为 1.5.0。使用 `start_quick_output`，传 `source`（本地视频绝对路径或 HTTPS 的 B站 / YouTube 链接）、
+`platforms`（douyin / xiaohongshu / bilibili / tiktok / instagram_reels / youtube_shorts / youtube_long）、已有字幕的 `srt_path`。
+`portrait_style` 可选 `auto` / `interview` / `podcast`，只改竖版布局，语言仍按平台。
+返回 ID 后每 10 秒调用 `get_quick_output_status`；完成时加 `export_kits=true` 获取视频、封面、发布文案与 ZIP 路径。
+保持 MCP 服务运行至完成。`partial` 时交付已完成的成片并报告失败版本；不要重复提交整条任务。
+新入口共用桌面模型、封面和片尾设置。`youtube_long` 仅生成至少 180 秒的完整片段；短素材先用 Shorts 或 B站。
+无 MCP 时用 `autoclip produce video.mp4 --platform douyin --portrait-style podcast --json`。
+
+### 原始切片与合集（兼容入口）
 
 | 工具 | 何时用 |
 |---|---|

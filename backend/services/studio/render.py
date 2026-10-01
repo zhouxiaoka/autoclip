@@ -3,7 +3,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from backend.services.publish_export import ExportRequest, _build_filter, _load_srt_entries, _probe, resolve_cjk_font, slice_srt
+from backend.services.publish_export import ExportRequest, _build_filter, _load_srt_entries, _probe, resolve_cjk_font, slice_srt, subtitle_line_limit
 from backend.services.studio.intelligence import text_json, validate_scenes
 from backend.services.studio.models import Draft
 from backend.services.studio.titles import template_filters
@@ -12,9 +12,6 @@ from backend.services.studio import audio
 from backend.services.studio.store import directory
 from backend.services import render_limits
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
-
-# Portrait captions: ~62 px glyphs in a 1080 px frame -> 15 CJK characters per line, two lines max.
-PORTRAIT_LINE = 15
 
 
 def _mask_captions(graph, band):
@@ -92,7 +89,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             for i, scene in enumerate(draft.scenes):
                 duration = audio.scene_duration(scene)
                 srt = folder / f'{i}.srt'
-                body = slice_srt(entries, scene.start, scene.end, PORTRAIT_LINE if h > w else None)
+                body = slice_srt(entries, scene.start, scene.end, subtitle_line_limit(w, h, draft.subtitle_style))
                 if body:
                     srt.write_text(body, encoding='utf-8')
                 title = folder / 'title.txt'
@@ -189,7 +186,9 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]
             subprocess.run(cmd, check=True, capture_output=True, timeout=max(180, sum(durations)*2))
             from backend.services.output_branding import append_outro
-            append_outro(partial, output, width=w, height=h, enabled=brand_outro)
-        return {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings}
+            outro_applied = append_outro(partial, output, width=w, height=h, enabled=brand_outro)
+            if brand_outro and not outro_applied:
+                warnings.append('品牌片尾未能添加，已保留成片')
+        return {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
     finally:
         partial.unlink(missing_ok=True)

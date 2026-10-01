@@ -1,6 +1,7 @@
 """Publish kit: per-platform post copy within platform rules, designed covers, the bundle (no model calls)."""
 import io
 import zipfile
+import pytest
 
 from PIL import Image
 
@@ -91,3 +92,24 @@ def test_no_ai_cover_without_permission_to_send_the_frame(tmp_path, monkeypatch)
     monkeypatch.setattr(publish_kit, 'frame_path', lambda *_: frame)
     monkeypatch.setattr(publish_kit, 'cd_meta_path', lambda *_: meta)
     assert publish_kit.ai_cover('p', 'j', 'tiktok') is False, 'a made-up face must never carry the guest nameplate'
+
+
+def test_disk_kit_contains_the_whole_video_without_an_in_memory_archive(tmp_path, monkeypatch):
+    video = tmp_path / 'long.mp4'
+    video.write_bytes(b'video-data' * 100_000)
+    with monkeypatch.context() as patch:
+        patch.setattr(publish_kit.io, 'BytesIO', lambda: pytest.fail('HTTP kit must be built on disk'))
+        path, name = publish_kit.kit_file(video, None, {'title': 'Long interview'}, 'YouTube', english=True)
+    try:
+        with zipfile.ZipFile(path) as archive:
+            assert archive.read('Long interview.mp4') == video.read_bytes()
+        assert name == 'Long interview.zip'
+    finally:
+        path.unlink()
+
+
+def test_failed_disk_kit_removes_its_temporary_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(publish_kit.tempfile, 'tempdir', str(tmp_path))
+    with pytest.raises(FileNotFoundError):
+        publish_kit.kit_file(tmp_path / 'missing.mp4', None, {}, 'YouTube')
+    assert list(tmp_path.iterdir()) == []

@@ -1513,5 +1513,12 @@
   "默认用成片里嘉宾最清晰的画面自动设计封面，免费、秒出。想要更有设计感可以改用 AI 生成，生图服务和模型由你自己选择，按所选服务计费。": "Covers are designed automatically from the guest's sharpest frame: free and instant. For more design, switch to AI generation; you choose the image service and model, billed by that service.",
   "查看封面": "View cover",
   "AI 封面还在生成，稍后刷新查看": "The AI cover is still being made; refresh in a moment.",
-  "正在准备取景与包装": "Preparing framing and packaging"
+  "正在准备取景与包装": "Preparing framing and packaging",
+  "自动添加品牌片尾": "Automatically add a branded outro",
+  "默认开启，为自动成片及修改后的导出添加 1.8 秒 AutoClip 动画。关闭后不影响已生成的视频。": "Enabled by default. Adds a 1.8-second AutoClip animation to automatic outputs and their edited exports. Turning it off does not change existing videos.",
+  "竖版版式": "Portrait layout",
+  "按平台默认": "Platform default",
+  "访谈式（人物窗口）": "Interview (speaker window)",
+  "播客式（满屏）": "Podcast (full screen)",
+  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Changes portrait layout only. Caption and post language still follow the platform."
 }

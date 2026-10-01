@@ -63,7 +63,8 @@ export interface Draft {
 export interface RenderJob {
   job_id: string; draft_id: string; title: string; revision: number
   status: 'queued' | 'running' | 'completed' | 'failed'; percent: number; created_at: string; error?: string
-  result?: { width: number; height: number; duration: number; warnings: string[] }
+  brand_outro?: boolean
+  result?: { width: number; height: number; duration: number; warnings: string[]; outro_applied?: boolean }
 }
 export interface OutputVariant {
   id: string; draft_id: string; draft_revision: number; strategy_id: string; strategy_version: number
@@ -74,6 +75,7 @@ export interface OutputVariant {
   /** Publish kit: copy written for this platform, and a cover designed (or AI-made) after the render. */
   post?: PostCopy | null
   cover?: 'design' | 'ai' | null
+  cover_job?: { job_id: string; status: 'queued' | 'running' | 'completed' | 'failed'; error?: string } | null
 }
 export interface PostCopy { title: string; description: string; tags: string[] }
 export interface GenerationState {
@@ -131,6 +133,7 @@ export function portraitDesign(draft: Draft): Draft {
 export interface ImportOptions {
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
+  portrait_style?: 'auto' | 'interview' | 'podcast'
 }
 export type AnalysisMode = 'subtitle' | 'visual'
 export interface AnalysisPreferences { analysis_mode: AnalysisMode | 'auto'; allow_visual_screening: boolean }
@@ -143,5 +146,5 @@ export interface ImportPlan {
   preferences: {goal: Goal; language: Language; aspect: Draft['aspect']; duration: number}
   overrides: ImportOptions
 }
-export const defaultImportOptions: ImportOptions = {goal:'auto', language:'source', aspect:null, duration:null, instruction:''}
+export const defaultImportOptions: ImportOptions = {goal:'auto', language:'source', aspect:null, duration:null, instruction:'', portrait_style:'auto'}
 export const goalLabels = {auto:'AI 自动匹配', content:'内容切片', highlight:'精彩高光', promo:'推广成片'} as const
