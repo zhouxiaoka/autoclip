@@ -204,10 +204,13 @@ def ai_cover(project_id: str, job_id: str, strategy_id: str) -> bool:
     frame_file, meta_file = frame_path(project_id, job_id, strategy_id), cd_meta_path(project_id, job_id, strategy_id)
     if not (cfg.enabled and cfg.configured) or not frame_file.is_file() or not meta_file.is_file():
         return False
+    if not cfg.allow_send_frame:
+        # Without the frame the model would invent a face, then carry the real guest's nameplate.
+        return False
     meta = json.loads(meta_file.read_text(encoding='utf-8'))
     width, height = cd.size_for(strategy_id)
     request = ImageRequest(prompt=ai_prompt(strategy_id, meta['lines'], meta['accent'], meta.get('name', ''), meta.get('palette')), width=width, height=height,
-                           reference=frame_file.read_bytes() if cfg.allow_send_frame else None, model=cfg.model)
+                           reference=frame_file.read_bytes(), model=cfg.model)
     image = None
     for attempt in range(2):
         try:

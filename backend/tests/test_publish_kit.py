@@ -79,3 +79,15 @@ def test_ai_cover_fit_fills_the_gap_from_the_image_edge_without_cropping():
     assert max(top) < 40, 'the gap continues the dark edge instead of echoing the headline'
     band_y = (1920 - 1620) // 2 + round(350 * 1620 / 1536)
     assert fitted.getpixel((540, band_y))[0] > 200, 'the image itself is kept sharp, not blurred'
+
+
+def test_no_ai_cover_without_permission_to_send_the_frame(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from backend.services import cover
+    monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=True, configured=True, allow_send_frame=False))
+    frame, meta = tmp_path / 'f.jpg', tmp_path / 'm.json'
+    frame.write_bytes(b'f')
+    meta.write_text('{}')
+    monkeypatch.setattr(publish_kit, 'frame_path', lambda *_: frame)
+    monkeypatch.setattr(publish_kit, 'cd_meta_path', lambda *_: meta)
+    assert publish_kit.ai_cover('p', 'j', 'tiktok') is False, 'a made-up face must never carry the guest nameplate'

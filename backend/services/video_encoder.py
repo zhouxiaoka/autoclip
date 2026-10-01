@@ -88,8 +88,17 @@ def run_with_fallback(build, run):
     `build(name)` returns the ffmpeg command for that encoder; `run(cmd)` returns a completed process.
     """
     name = encoder()
-    proc = run(build(name))
-    if proc.returncode and name != SOFTWARE:
-        mark_broken(name)
-        proc = run(build(SOFTWARE))
+    if name == SOFTWARE:
+        return run(build(name))
+    try:
+        proc = run(build(name))
+    except (subprocess.TimeoutExpired, OSError):
+        proc = None  # a stalled hardware encoder: software encoding still gets its chance
+    if proc is None or proc.returncode:
+        retry = run(build(SOFTWARE))
+        # Only blame the hardware encoder when software succeeds on the same input; a bad source
+        # or filter graph fails both and must not disable hardware encoding for the session.
+        if not retry.returncode:
+            mark_broken(name)
+        return retry
     return proc

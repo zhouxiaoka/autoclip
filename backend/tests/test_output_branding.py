@@ -93,3 +93,22 @@ def test_the_designed_outro_is_used_and_cached_per_output_spec(source, tmp_path,
     frame = subprocess.run(['ffmpeg', '-v', 'error', '-sseof', '-0.2', '-i', str(tmp_path / 'a.mp4'), '-frames:v', '1', '-vf', 'scale=1:1',
                             '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], capture_output=True).stdout
     assert max(frame) < 60
+
+
+def test_a_failed_outro_delivers_the_video_without_it(tmp_path, monkeypatch):
+    from backend.services import output_branding
+
+    def broken(*_args):
+        raise subprocess.CalledProcessError(1, 'ffmpeg')
+    monkeypatch.setattr(output_branding, '_append', broken)
+    source, destination = tmp_path / 'render.mp4', tmp_path / 'final.mp4'
+    source.write_bytes(b'video')
+    output_branding.append_outro(source, destination, width=1080, height=1920)
+    assert destination.read_bytes() == b'video'
+    assert not list(tmp_path.glob('*.branding.part.mp4'))
+
+
+def test_windows_font_paths_survive_the_drawtext_parser(monkeypatch):
+    from backend.services import output_branding
+    monkeypatch.setattr(output_branding, 'resolve_cjk_font', lambda: 'C:\\Windows\\Fonts\\msyh.ttc')
+    assert output_branding._font_arg() == "fontfile='C\\:/Windows/Fonts/msyh.ttc'"

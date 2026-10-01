@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import subprocess
 import tempfile
@@ -28,7 +29,8 @@ def _font_arg() -> str:
     font = resolve_cjk_font()
     if not font:
         return "font='Sans'"
-    path = str(font).replace(':', r'\:')
+    # Forward slashes: drawtext's option parser eats Windows backslashes (C:\\Windows\\Fonts\\...).
+    path = str(font).replace('\\', '/').replace(':', r'\:').replace("'", r"\'")
     return f"fontfile='{path}'"
 
 
@@ -82,12 +84,23 @@ def _designed_outro(width: int, height: int, params: dict) -> Path | None:
 
 
 def append_outro(source: Path, destination: Path, *, width: int, height: int, enabled: bool = True) -> None:
-    """Append the branded outro atomically, preserving the original on failure."""
+    """Append the branded outro atomically. If branding fails, the video is delivered without it:
+    a finished render must never be lost to the end card."""
     partial = destination.with_name(f'{destination.stem}.branding.part.mp4')
     partial.unlink(missing_ok=True)
     if not enabled:
         os.replace(source, destination)
         return
+    try:
+        _append(source, partial, width, height)
+        os.replace(partial, destination)
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError) as error:
+        logging.getLogger(__name__).warning('Outro skipped: %s', type(error).__name__)
+        partial.unlink(missing_ok=True)
+        os.replace(source, destination)
+
+
+def _append(source: Path, partial: Path, width: int, height: int) -> None:
     with tempfile.TemporaryDirectory(prefix='ac-outro-') as tmp:
         concat = Path(tmp) / 'concat.txt'
         ffmpeg = get_ffmpeg_path()
@@ -101,12 +114,12 @@ def append_outro(source: Path, destination: Path, *, width: int, height: int, en
         if outro is None:
             outro = Path(tmp) / 'outro.mp4'
             _text_outro(outro, width, height, params)
-        concat.write_text(f"file '{source}'\nfile '{outro}'\n", encoding='utf-8')
+        quote = lambda path: str(path).replace("'", "'\\''")  # noqa: E731 - concat list syntax for an apostrophe in a path
+        concat.write_text(f"file '{quote(source)}'\nfile '{quote(outro)}'\n", encoding='utf-8')
         subprocess.run([
             ffmpeg, '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-map', '0:a:0?',
             '-c', 'copy', '-movflags', '+faststart', '-y', str(partial),
         ], check=True, capture_output=True, timeout=120)
-        os.replace(partial, destination)
 
 
 def _text_outro(outro: Path, width: int, height: int, params: dict) -> None:
