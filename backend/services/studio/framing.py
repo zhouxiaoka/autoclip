@@ -346,26 +346,18 @@ def merge_points(points: list[dict[str, Any]], min_jump: float = MIN_JUMP) -> li
     return merged
 
 
-def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int, *, window: tuple[int, int] | None = None) -> dict[str, Any]:
-    """Shot-aligned crop tracks per scene.
-
-    Scenes get a track only when somebody is visible somewhere in the draft; a clip with no
-    people at all (gameplay, screen recording) keeps the layout the user chose untouched.
-    `window` overrides the output size, e.g. the 4:3 window of the interview template.
-    """
+def scan_speakers(video: Path, scenes) -> list[dict[str, Any]]:
+    """Shots and sampled speaker centres per scene: the expensive part, independent of the output window."""
     if not is_installed():
         raise RuntimeError("人物识别组件未安装")
-    out_w, out_h = window or {"portrait": (1080, 1920), "landscape": (1920, 1080)}.get(draft.aspect, (source_w, source_h))
-    fraction = window_fraction(source_w, source_h, out_w, out_h)
-    scenes = []
+    scans = []
     with tempfile.TemporaryDirectory(prefix="ac-framing-") as temp:
         folder = Path(temp)
-        for scene in draft.scenes:
+        for scene in scenes:
             length = scene.end - scene.start
-            shots = split_shots(length, detect_cuts(video, scene.start, length))
-            points: list[dict[str, Any]] = []
+            shots = []
             faces = grabbed = 0
-            for index, (shot_start, shot_end) in enumerate(shots):
+            for index, (shot_start, shot_end) in enumerate(split_shots(length, detect_cuts(video, scene.start, length))):
                 samples: list[tuple[float, float | None]] = []
                 for j, at in enumerate(sample_offsets(shot_start, shot_end)):
                     pair = _grab_pair(video, scene.start + at, folder, f"{scene.id}-{index}-{j}")
@@ -375,10 +367,32 @@ def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int, *, windo
                     center = _speaker_center(pair)
                     faces += center is not None
                     samples.append((at - shot_start, center))
-                points += frame_shot(samples, shot_start, shot_end - shot_start, fraction)
-            track = merge_points(points)
-            scenes.append({"id": scene.id, "crop_x": track[0]["crop_x"], "crop_track": track, "faces": faces, "samples": grabbed,
-                           "shots": len(shots), "fit_shots": sum(p["mode"] == "fit" for p in track), "switches": len(track) - 1})
+                shots.append((shot_start, shot_end, samples))
+            scans.append({"shots": shots, "faces": faces, "samples": grabbed})
+    return scans
+
+
+def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int, *, window: tuple[int, int] | None = None,
+               scans: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Shot-aligned crop tracks per scene.
+
+    Scenes get a track only when somebody is visible somewhere in the draft; a clip with no
+    people at all (gameplay, screen recording) keeps the layout the user chose untouched.
+    `window` overrides the output size, e.g. the 4:3 window of the interview template.
+    `scans` reuses a `scan_speakers` pass, so several windows cost one detection.
+    """
+    if scans is None:
+        scans = scan_speakers(video, draft.scenes)
+    out_w, out_h = window or {"portrait": (1080, 1920), "landscape": (1920, 1080)}.get(draft.aspect, (source_w, source_h))
+    fraction = window_fraction(source_w, source_h, out_w, out_h)
+    scenes = []
+    for scene, scan in zip(draft.scenes, scans):
+        points: list[dict[str, Any]] = []
+        for shot_start, shot_end, samples in scan["shots"]:
+            points += frame_shot(samples, shot_start, shot_end - shot_start, fraction)
+        track = merge_points(points)
+        scenes.append({"id": scene.id, "crop_x": track[0]["crop_x"], "crop_track": track, "faces": scan["faces"], "samples": scan["samples"],
+                       "shots": len(scan["shots"]), "fit_shots": sum(p["mode"] == "fit" for p in track), "switches": len(track) - 1})
     if not any(s["faces"] for s in scenes):
         for s in scenes:
             s.update(crop_x=None, crop_track=None, fit_shots=0, switches=0)

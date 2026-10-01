@@ -346,5 +346,6 @@ def refine_clips(rows: list[Row], clips: list[tuple[float, float]], call: Callab
             logger.warning('Boundary refinement fell back: %s', type(error).__name__)
             return fallback
 
+    from backend.core.llm_usage import run_in_context
     with ThreadPoolExecutor(max_workers=4, thread_name_prefix='studio-bounds') as pool:
-        return list(pool.map(one, zip(clips, snapped)))
+        return list(pool.map(run_in_context(one), zip(clips, snapped)))

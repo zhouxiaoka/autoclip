@@ -24,7 +24,7 @@ def test_landscape_outputs_are_not_reframed(monkeypatch):
 
 def test_faces_give_speaker_crop_and_one_detection_per_window_shape(monkeypatch):
     calls = []
-    def detect(value, video, *, window=None):
+    def detect(value, video, *, window=None, scans=None):
         calls.append(window)
         return [{**scene, 'crop_x': .3, 'crop_track': [{'start': 0, 'crop_x': .3, 'mode': 'crop'}]} for scene in value['scenes']], 'speaker'
     monkeypatch.setattr(jobs, '_speaker_framing', detect)
@@ -35,6 +35,20 @@ def test_faces_give_speaker_crop_and_one_detection_per_window_shape(monkeypatch)
         draft = jobs._apply_strategy(value, strategy_id, layout=value['layout'])
         assert framed == 'speaker' and draft.layout == layout and draft.scenes[0].crop_track[0].crop_x == .3
     assert calls == [jobs.INTERVIEW_WINDOW, None]  # 4:3 interview window once, 9:16 once
+
+
+def test_both_window_shapes_share_one_face_detection_pass(monkeypatch):
+    from backend.services import publish_export
+    from backend.services.studio import framing
+    scans = []
+    monkeypatch.setattr(framing, 'is_installed', lambda: True)
+    monkeypatch.setattr(publish_export, '_probe', lambda _v: {'width': 1920, 'height': 1080})
+    monkeypatch.setattr(framing, 'scan_speakers', lambda _v, scenes: scans.append(1) or [{'shots': [(0.0, 10.0, [(1.0, .3), (5.0, .3)])], 'faces': 2, 'samples': 2} for _ in scenes])
+    cache = {}
+    for strategy_id in ('douyin', 'tiktok'):
+        _, framed = jobs._apply_framing('p1', _value(), strategy_id, 'video.mp4', False, cache)
+        assert framed == 'speaker'
+    assert len(scans) == 1
 
 
 @pytest.mark.parametrize('strategy_id', ['douyin', 'tiktok', 'instagram_reels', 'youtube_shorts', 'youtube_long', 'bilibili', 'xiaohongshu', 'original'])

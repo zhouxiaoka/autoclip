@@ -6,6 +6,7 @@ from copy import deepcopy
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from backend.core import llm_usage
 from backend.services.studio import audio, intelligence, store
 from backend.services.studio.models import Draft, Preferences, Scene
 from backend.services.studio.intelligence import analyze, make_drafts, VisionRequestError
@@ -50,6 +51,20 @@ def export(project_id, draft, *, brand_outro=False):
                 raise ValueError(message) from None
         return {k: v for k, v in added.items() if k not in ('instance', 'snapshot')}
 
+def _tracked(stage):
+    """Record model token usage of a studio job (first argument: project id) under `stage`."""
+    def wrap(fn):
+        from functools import wraps
+
+        @wraps(fn)
+        def run(project_id, *args, **kwargs):
+            with llm_usage.tracking(project_id), llm_usage.stage(stage):
+                return fn(project_id, *args, **kwargs)
+        return run
+    return wrap
+
+
+@_tracked('render')
 def _render(project_id, draft, job_id, *, brand_outro=False):
     started = monotonic()
     def update(**values):
@@ -92,6 +107,7 @@ def mark_project(project_id, status, **config):
                 p.completed_at = datetime.now(timezone.utc)
             db.commit()
 
+@_tracked('visual_analysis')
 def _analyze(project_id, prefs, url, browser):
     try:
         mark_project(project_id, 'processing')
@@ -215,6 +231,7 @@ def run_content(project_id, video):
     result = process_video_pipeline.apply(kwargs={
         'project_id': project_id, 'input_video_path': str(video),
         'input_srt_path': str(srt) if srt.exists() else None,
+        'clips_only': True,  # studio renders from the source: no clustering, no per-clip re-encode
     }, throw=True).get()
     if not result or not result.get('success'):
         message = (result or {}).get('error') or '内容切片未完成，请检查语音与文字模型设置后重试'
@@ -283,7 +300,8 @@ def _complete_thought_bounds(project_id, clips):
             call = intelligence.text_json
     except Exception:  # noqa: BLE001
         call = None
-    return boundaries.refine_clips(rows, clips, call, boundaries.audio_silences(source(project_id)) if audio.has_audio(source(project_id)) else None)
+    with llm_usage.stage('boundaries'):
+        return boundaries.refine_clips(rows, clips, call, boundaries.audio_silences(source(project_id)) if audio.has_audio(source(project_id)) else None)
 
 
 def _content_drafts(project_id, plan, video):
@@ -363,7 +381,7 @@ def _prepare_speaker_framing(platforms):
         logger.warning('Framing install could not start: %s', type(error).__name__)
 
 
-def _speaker_framing(value, video, *, window=None, wait_sec=120):
+def _speaker_framing(value, video, *, window=None, wait_sec=120, scans=None):
     """Speaker-following crop tracks for a vertical draft (or the given output window).
 
     Returns (scenes, framing): `speaker` when faces drive the crop, `full_frame` when the clip has
@@ -379,7 +397,15 @@ def _speaker_framing(value, video, *, window=None, wait_sec=120):
     info = _probe(video)
     if not info.get('width') or not info.get('height'):
         return None, 'full_frame'
-    result = framing.auto_frame(video, Draft.model_validate({**value, 'aspect': 'portrait', 'layout': 'crop'}), int(info['width']), int(info['height']), window=window)
+    draft = Draft.model_validate({**value, 'aspect': 'portrait', 'layout': 'crop'})
+    # Detection does not depend on the window: one pass serves the interview and podcast crops.
+    key = tuple((scene.start, scene.end) for scene in draft.scenes)
+    if scans is None or key not in scans:
+        detected = framing.scan_speakers(video, draft.scenes)
+        if scans is None:
+            scans = {}
+        scans[key] = detected
+    result = framing.auto_frame(video, draft, int(info['width']), int(info['height']), window=window, scans=scans[key])
     tracks = {scene['id']: scene for scene in result['scenes']}
     if not any(scene.get('faces') for scene in result['scenes']):
         return None, 'full_frame'
@@ -411,7 +437,7 @@ def _apply_framing(project_id, value, strategy_id, video, burned, cache):
     key = (tuple((scene['start'], scene['end']) for scene in value['scenes']), window)
     if key not in cache:
         try:
-            cache[key] = _speaker_framing(value, video, window=window)
+            cache[key] = _speaker_framing(value, video, window=window, scans=cache.setdefault('scans', {}))
         except Exception as error:  # noqa: BLE001 - fall back to the full frame rather than fail output
             logger.warning('Speaker framing failed: %s', type(error).__name__)
             capture_studio_exception(error, 'auto_frame')
@@ -447,8 +473,9 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache):
     if key not in cache:
         lines = packaging.draft_lines(cache['entries'], value['scenes'])
         used = cache.setdefault('palettes', [])
-        cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, known_names=cache['names'],
-                                               avoid_palettes=tuple(used[-2:]))
+        with llm_usage.stage('packaging'):
+            cache[key] = packaging.build_packaging(value, lines, strategy, burned=burned, known_names=cache['names'],
+                                                   avoid_palettes=tuple(used[-2:]))
         if cache[key].get('palette'):
             used.append(cache[key]['palette'])
     return {**value, 'packaging': cache[key]}
@@ -483,6 +510,7 @@ def _fit_platform_limit(project_id, value, strategy):
     return {**value, 'scenes': kept}, limit
 
 
+@_tracked('production')
 def _auto_generate(project_id, plan):
     """Produce and render platform variants after the cheap screening pass."""
     started = monotonic()
@@ -695,6 +723,7 @@ def inspect_project(project_id, options, url=None, browser=None):
         return state['analysis']['run_id']
 
 
+@_tracked('screening')
 def _inspect(project_id, options, url, browser):
     started = monotonic()
     try:
@@ -783,6 +812,7 @@ def confirm_project(project_id, body):
         return state['analysis']['run_id']
 
 
+@_tracked('production')
 def _produce_selected(project_id, plan):
     from backend.services.studio import intelligence
     started = monotonic()

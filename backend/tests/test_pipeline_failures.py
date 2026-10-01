@@ -317,6 +317,26 @@ def test_adapter_fails_when_ffmpeg_produced_no_clip(adapter, monkeypatch, tmp_pa
     assert "ffmpeg" in result["error"]
 
 
+def test_fast_output_skips_clustering_and_clip_encoding(adapter, monkeypatch, tmp_path):
+    import pytest
+    from backend.services import simple_pipeline_adapter as mod
+
+    _fake_manager(monkeypatch, available=True)
+    srt = tmp_path / "in.srt"
+    srt.write_text(SRT, encoding="utf-8")
+    monkeypatch.setattr(mod, "run_step1_outline", lambda *a, **k: [{"title": "t"}])
+    monkeypatch.setattr(mod, "run_step2_timeline", lambda *a, **k: [{"id": 1}])
+    monkeypatch.setattr(mod, "run_step3_scoring", lambda *a, **k: [{"id": 1, "final_score": 0.9}])
+    monkeypatch.setattr(mod, "run_step4_title", lambda *a, **k: [{"id": 1, "generated_title": "x"}])
+    monkeypatch.setattr(mod, "run_step5_clustering", lambda *a, **k: pytest.fail("studio never reads collections"))
+    monkeypatch.setattr(mod, "run_step6_video", lambda *a, **k: pytest.fail("studio renders from the source"))
+
+    result = asyncio.run(adapter.process_project_sync(str(tmp_path / "in.mp4"), str(srt), clips_only=True))
+
+    assert result["status"] == "succeeded"
+    assert result["result"]["titled_clips"] == [{"id": 1, "generated_title": "x"}]
+
+
 def test_adapter_happy_path_still_succeeds(adapter, monkeypatch, tmp_path):
     from backend.services import simple_pipeline_adapter as mod
 

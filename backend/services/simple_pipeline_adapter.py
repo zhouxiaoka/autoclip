@@ -17,6 +17,7 @@ from backend.pipeline.step1_outline import run_step1_outline
 from backend.pipeline.step2_timeline import run_step2_timeline
 from backend.pipeline.step3_scoring import run_step3_scoring
 from backend.pipeline.step4_title import run_step4_title
+from backend.core import llm_usage
 from backend.pipeline.step5_clustering import run_step5_clustering
 from backend.pipeline.step6_video import run_step6_video
 
@@ -136,13 +137,15 @@ class SimplePipelineAdapter:
             f"没有可用的 LLM 提供商（当前选择：{name} · {model}），缺少 API Key 或本地服务地址。",
         )
 
-    async def process_project_sync(self, input_video_path: str, input_srt_path: str) -> Dict[str, Any]:
+    async def process_project_sync(self, input_video_path: str, input_srt_path: str, clips_only: bool = False) -> Dict[str, Any]:
         """
         同步处理项目 - 使用简化的进度系统
         
         Args:
             input_video_path: 输入视频路径
             input_srt_path: 输入SRT路径
+            clips_only: 快速出片只需要带标题的片段时间：跳过主题聚类（一次模型调用）与逐片段
+                重新编码（Studio 直接从原片渲染），省下模型费用和大量 CPU。
             
         Returns:
             处理结果
@@ -191,6 +194,7 @@ class SimplePipelineAdapter:
 
             # Step 1: 大纲提取（字幕为空 / 模型全部失败 / 无法解析时由 step1 自己抛 PipelineFailure）
             logger.info("执行Step 1: 大纲提取")
+            llm_usage.set_stage("outline")
             outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files)
             emit_progress(self.project_id, "SUBTITLE", "字幕处理完成", subpercent=50)
             
@@ -199,6 +203,7 @@ class SimplePipelineAdapter:
             
             # Step 2: 时间线提取
             logger.info("执行Step 2: 时间线提取")
+            llm_usage.set_stage("timeline")
             timeline_data = run_step2_timeline(
                 metadata_dir / "step1_outline.json",
                 metadata_dir=metadata_dir,
@@ -212,6 +217,7 @@ class SimplePipelineAdapter:
             
             # Step 3: 内容评分
             logger.info("执行Step 3: 内容评分")
+            llm_usage.set_stage("scoring")
             scored_clips = run_step3_scoring(
                 metadata_dir / "step2_timeline.json",
                 metadata_dir=metadata_dir,
@@ -231,6 +237,7 @@ class SimplePipelineAdapter:
             
             # Step 4: 标题生成
             logger.info("执行Step 4: 标题生成")
+            llm_usage.set_stage("titles")
             titled_clips = run_step4_title(
                 metadata_dir / "step3_high_score_clips.json",
                 metadata_dir=str(metadata_dir),
@@ -238,36 +245,41 @@ class SimplePipelineAdapter:
             )
             emit_progress(self.project_id, "HIGHLIGHT", "标题生成完成", subpercent=40)
             
-            # Step 5: 主题聚类
-            logger.info("执行Step 5: 主题聚类")
-            collections = run_step5_clustering(
-                metadata_dir / "step4_titles.json",
-                metadata_dir=str(metadata_dir),
-                prompt_files=prompt_files,
-            )
-            emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
-            
-            # 阶段5: 视频导出
-            emit_progress(self.project_id, "EXPORT", "开始视频导出")
-            
-            # Step 6: 视频切割
-            logger.info("执行Step 6: 视频切割")
-            video_result = run_step6_video(
-                metadata_dir / "step4_titles.json",
-                metadata_dir / "step5_collections.json",
-                input_video_path,
-                output_dir=output_dir,
-                clips_dir=str(clips_output_dir),
-                collections_dir=str(collections_output_dir),
-                metadata_dir=str(metadata_dir)
-            )
-            if titled_clips and not video_result.get("clips_generated"):
-                raise PipelineFailure(
-                    "EXPORT",
-                    f"视频切割没有产出任何文件（{len(titled_clips)} 个片段待切）。",
-                    HINT_CHECK_FFMPEG,
+            if clips_only:
+                collections, video_result = [], {}
+                emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
+            else:
+                # Step 5: 主题聚类
+                logger.info("执行Step 5: 主题聚类")
+                llm_usage.set_stage("clustering")
+                collections = run_step5_clustering(
+                    metadata_dir / "step4_titles.json",
+                    metadata_dir=str(metadata_dir),
+                    prompt_files=prompt_files,
                 )
-            emit_progress(self.project_id, "EXPORT", "视频导出完成", subpercent=100)
+                emit_progress(self.project_id, "HIGHLIGHT", "片段定位完成", subpercent=100)
+            
+                # 阶段5: 视频导出
+                emit_progress(self.project_id, "EXPORT", "开始视频导出")
+            
+                # Step 6: 视频切割
+                logger.info("执行Step 6: 视频切割")
+                video_result = run_step6_video(
+                    metadata_dir / "step4_titles.json",
+                    metadata_dir / "step5_collections.json",
+                    input_video_path,
+                    output_dir=output_dir,
+                    clips_dir=str(clips_output_dir),
+                    collections_dir=str(collections_output_dir),
+                    metadata_dir=str(metadata_dir)
+                )
+                if titled_clips and not video_result.get("clips_generated"):
+                    raise PipelineFailure(
+                        "EXPORT",
+                        f"视频切割没有产出任何文件（{len(titled_clips)} 个片段待切）。",
+                        HINT_CHECK_FFMPEG,
+                    )
+                emit_progress(self.project_id, "EXPORT", "视频导出完成", subpercent=100)
             
             # 阶段6: 处理完成
             emit_progress(self.project_id, "DONE", "处理完成")
