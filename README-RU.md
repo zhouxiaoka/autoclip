@@ -4,337 +4,236 @@
 
 # AutoClip
 
-### Открытый инструмент для нарезки лучших моментов видео с помощью ИИ
+### Одна ссылка — один клик.
 
-Превращайте длинные видео в моменты, которыми хочется поделиться.
+Открытый код, бесплатно, на вашем компьютере. Вставьте ссылку, потратьте несколько центов и получите <b>10+ готовых клипов</b>,<br>
+каждый с обложкой, заголовком, описанием и хештегами для Douyin, Xiaohongshu, TikTok, Reels или YouTube Shorts.<br>
+Без монтажки. Без долгого диалога с ИИ.
 
-[![GitHub release](https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/releases/latest)
-[![GitHub stars](https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/stargazers)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
+<p>
+  <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square" alt="GitHub release"></a>
+  <a href="https://github.com/zhouxiaoka/autoclip/stargazers"><img src="https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square" alt="GitHub stars"></a>
+  <a href="https://github.com/zhouxiaoka/autoclip/releases"><img src="https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square" alt="Downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
 </p>
 
-**[Скачать приложение](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Быстрый старт](#quick-start) · [Сайт](https://zhouxiaoka.github.io/autoclip_intro/) · [Документация](#documentation) · [Сообщить об ошибке](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+<a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
+
+**[Скачать десктоп](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Кейсы](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Быстрый старт](#быстрый-старт) · [Документация](#документация) · [Ошибка](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
 [简体中文](README.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · **Русский** · [Français](README-FR.md)
 
 </div>
 
-AutoClip с помощью ИИ анализирует субтитры, находит яркие моменты, придумывает заголовки и автоматически создаёт клипы и подборки. Подходит для интервью, подкастов, лекций и записей трансляций. Доступны настольное приложение, веб-интерфейс через Docker и CLI / MCP.
+## Настоящие клипы
 
-## Интерфейс приложения
+![Вертикальные клипы AutoClip: интервью Xiaohongshu, подкаст TikTok, интервью Douyin, подкаст Shorts](docs/images/v2/demo-wall.webp)
 
-![Импорт видео и управление проектами](docs/images/home-v1.4.0.png)
+Каждый исходник — одна вставленная ссылка. Каждый клип выше — сырой вывод AutoClip: выбор, кадр, перевод, упаковка, без ручной правки. **[Смотреть со звуком в библиотеке →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**
 
-<table>
-  <tr>
-    <td width="50%" align="center"><strong>Клипы, созданные ИИ</strong></td>
-    <td width="50%" align="center"><strong>Просмотр и редактирование в Studio</strong></td>
-  </tr>
-  <tr>
-    <td><a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Клипы, созданные ИИ" width="100%"></a></td>
-    <td><a href="docs/images/studio-v1.4.0.png"><img src="docs/images/studio-v1.4.0.png" alt="Просмотр и редактирование в Studio" width="100%"></a></td>
-  </tr>
-</table>
+Каждый клип — полный набор для площадки: вертикальное видео, обложка, заголовок, описание, хештеги. Библиотека обновляется; [пришлите свои](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell).
 
-<sub>Реальный интерфейс v1.4.0 с последующими исправлениями Studio: импорт видео, просмотр действительно созданных клипов и редактирование в Studio. Интерфейс на китайском; субтитры и заголовки примера — на английском.</sub>
+Права на исходник остаются у авторов. Примеры: [Dwarkesh Patel — Dario Amodei](https://www.youtube.com/watch?v=n1E9IZfvGMA) · [Y Combinator — Sam Altman](https://www.youtube.com/watch?v=ZIaOBAjvc38) · [WIRED — Hideo Kojima](https://www.youtube.com/watch?v=02Ah5VQrzvA)
 
-[Версия снимков и источник примера (кит.)](docs/images/README.md)
+## Что умеет
 
-## Благодарим спонсоров ❤️
+### Вставил ссылку — получил клипы
+Без монтажки и чата с ИИ. Выберите площадку и получите нужный кадр. Обложка, заголовок, описание и хештеги уже внутри.
 
-<table>
-  <tr>
-    <td align="center" width="140">
-      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="88"></a><br>
-      <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
-    </td>
-    <td>
-      Благодарим <strong>88API</strong> за поддержку AutoClip! Платформа объединяет GPT, Claude, Gemini, Grok, DeepSeek, Kimi и GLM для анализа субтитров, выбора ярких моментов и создания заголовков.<br>
-      🎨 <strong>Мультимедиа</strong>: Модели изображений, видео и аудио, включая GPT-Image, Seedance, Veo, MiniMax Hailuo H3, Kling, Whisper и TTS. AutoClip использует совместимые API анализа, создания обложек и транскрипции.<br>
-      🏷️ <strong>Сервис и оплата</strong>: По информации партнёра, сервис управляется зарубежной компанией и предлагает поддержку операторов, счета и пополнение в соотношении 1:1; действуют условия платформы.<br>
-      🎁 <strong>Новым пользователям</strong>: Получите пробный кредит для проверки моделей по <a href="https://88api.ai/sign-up?aff=2PIc">реферальной ссылке</a> на условиях акции. <a href="docs/88API_SETUP.en.md">Инструкция по настройке (англ.)</a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="140">
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="88"></a><br>
-      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar.cc</strong></a>
-    </td>
-    <td>
-      Благодарим <strong>Infistar.cc</strong> за поддержку AutoClip! Сервис предоставляет API разных моделей для анализа субтитров длинных видео, выбора ярких моментов и создания заголовков.<br>
-      ⚙️ <strong>Совместимый API</strong>: Выберите в AutoClip провайдера с поддержкой OpenAI-совместимого API и укажите Base URL, свой ключ API и доступную модель.<br>
-      🧩 <strong>Выбор моделей</strong>: Партнёр предлагает Claude, GPT, Gemini, DeepSeek и другие семейства. Выбирайте модели, поддерживающие совместимую конечную точку, чтобы сравнивать анализ субтитров и подбор ярких моментов.<br>
-      🏷️ <strong>Цены и услуги</strong>: По данным партнёра, некоторые модели доступны по цене <strong>от 1% официального тарифа</strong>, с оплатой в юанях, выставлением счетов и проверкой подлинности модели. Список моделей, действующие цены и условия уточняйте на платформе.<br>
-      🎁 <strong>Предложение для AutoClip</strong>: Новые пользователи могут получить <strong>$5 пробного кредита</strong> при регистрации по <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">реферальной ссылке</a> на условиях акции. <a href="docs/INFISTAR_SETUP.en.md">Инструкция по настройке (англ.)</a>
-    </td>
-  </tr>
-</table>
+### Упаковка встроена
+Интервью для Douyin / Xiaohongshu; подкаст для TikTok / Reels / Shorts. Кадр следит за говорящим; иностранный материал получает локальный заголовок и двуязычные субтитры.
 
-## Возможности
+### Остаётся на компьютере
+Нарезка и рендер локальные. Модель выбираете сами, редактор — только если хотите поправить, пакеты — через CLI / MCP.
 
-Нажмите на миниатюру, чтобы открыть полное изображение.
+## Быстро и дёшево
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <h4>Импорт видео</h4>
-      <p>Локальные файлы, ссылки YouTube и Bilibili, а также необязательные субтитры SRT.</p>
-      <a href="docs/images/feature-import.png"><img src="docs/images/feature-import.png" alt="Импорт видео" width="420"></a>
-    </td>
-    <td width="50%" valign="top">
-      <h4>Поиск ярких моментов</h4>
-      <p>Создание плана, временных интервалов по темам, оценок фрагментов и заголовков на основе субтитров.</p>
-      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="Поиск ярких моментов" width="260"></a>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h4>Клипы и подборки</h4>
-      <p>Автоматическое создание клипов и рекомендуемых подборок с ручным изменением порядка.</p>
-      <a href="docs/images/feature-collections.png"><img src="docs/images/feature-collections.png" alt="Клипы и подборки" width="420"></a>
-    </td>
-    <td width="50%" valign="top">
-      <h4>Экспорт для публикации</h4>
-      <p>Профили Douyin, Xiaohongshu, YouTube Shorts и Bilibili, вшитые субтитры и титульные карточки.</p>
-      <a href="docs/images/feature-export.png"><img src="docs/images/feature-export.png" alt="Экспорт для публикации" width="420"></a>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h4>Обложки и публикация</h4>
-      <p>Начиная с v1.3.2 доступны создание обложек, немедленная и отложенная публикация. Международные платформы подключаются через ваш аккаунт Upload-Post, Bilibili настраивается отдельно.</p>
-      <a href="docs/images/feature-publish.png"><img src="docs/images/feature-publish.png" alt="Обложки и публикация" width="200"></a>
-      <a href="docs/images/feature-cover.png"><img src="docs/images/feature-cover.png" alt="Обложки и публикация" width="200"></a>
-      <p><sub>В демонстрации не подключён аккаунт для публикации. Показаны экран публикации и настройки обложки, а не результаты отправки.</sub></p>
-    </td>
-    <td width="50%" valign="top">
-      <h4>Управление публикациями</h4>
-      <p>Просматривайте историю и календарь, управляйте запланированными постами или просто скачивайте клипы.</p>
-      <a href="docs/images/feature-calendar.png"><img src="docs/images/feature-calendar.png" alt="Управление публикациями" width="420"></a>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h4>Выбор моделей</h4>
-      <p>Qwen, совместимые с OpenAI API, Gemini и другие облачные сервисы либо локальные модели через Ollama / LM Studio.</p>
-      <a href="docs/images/feature-models.png"><img src="docs/images/feature-models.png" alt="Выбор моделей" width="420"></a>
-    </td>
-    <td width="50%" valign="top">
-      <h4>Автоматизация</h4>
-      <p>Организация запусков через CLI или вызов того же конвейера обработки из клиента MCP.</p>
-      <a href="docs/images/feature-cli.png"><img src="docs/images/feature-cli.png" alt="Автоматизация" width="420"></a>
-      <p><sub>У CLI / MCP нет GUI: это снимок страницы с реальным выводом справки команд.</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center" valign="top">
-      <h4>Многоязычный интерфейс</h4>
-      <p>Начиная с v1.3.1, приложение, сайт и README доступны на китайском, английском, японском, корейском, испанском, португальском, русском и французском языках. Выберите язык в верхней панели или используйте язык системы. Язык ваших материалов и созданного контента не меняется.</p>
-      <a href="docs/images/feature-languages.png"><img src="docs/images/feature-languages.png" alt="Многоязычный интерфейс" width="420"></a>
-      <p><sub>Интерфейс на английском и меню языков; материалы и созданный контент сохраняют исходный язык.</sub></p>
-    </td>
-  </tr>
-</table>
+Одна ссылка на входе, **10+** готовых клипов на выходе, каждый с обложкой, заголовком, описанием и хештегами.
+
+| Версия | Исходник | Выход | Стоимость |
+| --- | --- | ---: | ---: |
+| **Новая · есть субтитры** | Jensen · 1ч43м (EN → Xiaohongshu) | **7,5 мин / 10 клипов** | **¥0,09** |
+| Новая · без субтитров | TIM × Ло Юнхао · 2ч52м (ZH → Douyin) | 29,5 мин / 10 клипов | ¥0,20 |
+| Старая | MrBeast · 2ч06м (EN → TikTok) | 65 мин | ¥0,64 |
+
+Интервью на 2–3 часа обычно ¥0,1–0,2. Без авторских субтитров распознавание речи локальное и дольше; видео не покидает машину.
 
 <details>
-<summary>Платформы, требования к аккаунтам и параметры экспорта</summary>
+<summary>Как сняты эти цифры</summary>
 
-Когда клипы готовы, откройте «Публикация» у клипа. Доступно в **v1.3.2**. Зарубежные площадки — те, что подключены в вашем собственном аккаунте Upload-Post: TikTok, Instagram, YouTube, Facebook, LinkedIn, X, Threads, Pinterest, Bluesky, Discord, Telegram и Google Business, по факту подключения. Bilibili — один аккаунт: один раз вставьте Cookie в настройках.
+1 октября 2026, тот же Mac Apple Silicon, модель анализа qwen-plus (¥0,8 / ¥2 за миллион входных / выходных токенов, сторонний прайс Aliyun Bailian). В стоимость входят только вызовы модели.
 
-Нужны SESSDATA, bili_jct и DedeUserID. Можно отправить сейчас или по расписанию. Заголовок и описание необязательны и по умолчанию берутся из названия клипа. Вшитые субтитры включены по умолчанию, как и титульная карточка примерно на 4 секунды.
+7,5 мин Jensen: ~1 мин скачивание, без ASR благодаря авторским субтитрам, 25 с отбор, ~2,5 мин нарезка / кадр / упаковка, ~3 мин рендер 10 штук. Старая сборка тратила 35 мин только на отбор.
 
-Видимость по умолчанию — только я / private там, где площадка это поддерживает. AutoClip обещает это только для TikTok, YouTube и Bilibili. Файл можно скачать без публикации. На странице проекта есть история и календарь, а ещё отмена расписания, которое ещё не вышло. «Составить неделю» только для зарубежных площадок: понедельник, среда и пятница в 09:00, без Bilibili.
-
-Вертикальные аккаунты рендерятся в 9:16 без обрезки до 60 секунд. Только Bilibili — альбомная ориентация. Только LinkedIn или X — исходный кадр. Вертикаль и Bilibili в одной отправке рендерятся по отдельности.
-
-При публикации обложку можно создать автоматически, чтобы Bilibili не отклонил пустую обложку.
-
-Подробности обложки и титульной карточки по умолчанию — в пояснении к установщику этого выпуска. Доступно в **v1.3.2**.
+В этой версии четыре отличия: один проход по всей расшифровке; параллельные вызовы; пропуск локального ASR при авторских субтитрах; по умолчанию рендерятся только топ-10.
 
 </details>
 
+## Сравнение с облачной подпиской
 
-> Импорт видео → Субтитры / распознавание речи → Анализ и оценка ИИ → Клипы и подборки → Экспорт
+| | AutoClip | Облачные инструменты по подписке |
+| --- | --- | --- |
+| Стоимость | Приложение бесплатно; модель — по факту, ~¥0,1–0,2 за 2–3 ч | Ежемесячная подписка, по времени обработки |
+| Где обрабатывается видео | Ваш компьютер; в облако уходит только текст | Загрузка в облако поставщика |
+| Модели | Выбираете сами, в том числе локальные | Задаёт площадка |
+| Китайские площадки | Шаблоны Douyin, Xiaohongshu, Bilibili | В основном зарубежные |
+| Код | MIT, можно менять и хостить | Закрытый |
 
-<a id="quick-start"></a>
+Правый столбец по открытым страницам похожих облачных продуктов на октябрь 2026; сверяйте актуальные условия.
 
 ## Быстрый старт
 
-| Задача | Рекомендуемый способ | Требования |
+| Задача | Способ | Нужно |
 | --- | --- | --- |
-| Монтаж на компьютере | **Приложение** | macOS Apple Silicon / Windows x64 |
-| Свой сервер / Linux | **Docker** | Docker + Compose v2 |
-| Пакетная обработка / агенты | **CLI / MCP** | Python 3.10+ (рекомендуется 3.11) + FFmpeg |
+| Делать клипы на этом ПК | **Десктоп** | macOS Apple Silicon или Windows x64 |
+| Свой веб / Linux | **Docker** | Docker и Compose v2 |
+| Пакеты / агенты | **CLI / MCP** | Python 3.10+ (лучше 3.11) и FFmpeg |
 
-### Приложение: первые клипы
+### Десктоп
 
-1. **Установка.** Скачайте из [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) файл `.dmg` для macOS Apple Silicon или `-setup.exe` для Windows 10 / 11 x64. Python и FFmpeg включены. Для Intel Mac / Linux используйте Docker или CLI. Системные требования указаны в описании выпуска.
-2. **Настройка модели.** Выберите провайдера в настройках, введите ключ API и имя модели, проверьте соединение и сохраните. Для локальных моделей сначала запустите Ollama или LM Studio.
-3. **Импорт видео.** Начните с фрагмента длиной 3–5 минут; можно добавить субтитры SRT. Если субтитров нет, сначала подготовьте локальные компоненты Whisper и речевую модель в настройках.
-4. **Проверка и экспорт.** Проверьте границы клипов, заголовки и содержание, затем выберите профиль экспорта или подключите аккаунт для публикации.
+1. **Установка.** Из [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest). macOS Apple Silicon: `.dmg`. Windows 10 / 11 x64: `-setup.exe`. Python и FFmpeg уже внутри.
+2. **Модель.** В настройках выберите провайдера и вставьте API Key; модель анализа подставится сама. Для локальных сначала запустите Ollama или LM Studio.
+3. **Вставьте ссылку и выберите площадку.** Начните с интервью или подкаста на 10–30 мин с субтитрами. Без них подготовьте Whisper или SenseVoice в настройках.
+4. **Заберите клипы.** Посмотрите топ-10, при необходимости поправьте, скачайте или опубликуйте.
 
-[Полная инструкция по установке (англ.)](docs/USER_INSTALLATION_GUIDE.en.md) · [Решение проблем (англ.)](docs/FAQ.en.md)
+Установщики ещё без нотаризации Apple и подписи Windows. На macOS первый запуск — правый клик → Открыть. На Windows в SmartScreen — Подробнее → Выполнить в любом случае.
 
-<details>
-<summary><strong>Docker / Web</strong></summary>
+[Установка](docs/USER_INSTALLATION_GUIDE.en.md) · [Неполадки](docs/FAQ.en.md)
 
-Требуются Docker и Docker Compose v2. Выполняйте команды из корня репозитория:
+**Docker / Web**
 
 ```bash
 git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
-```
-
-```bash
-cp env.example .env
-```
-
-Перед запуском отредактируйте `.env`: задайте `LLM_PROVIDER`, соответствующий API-ключ и имя модели. Провайдера также можно настроить в интерфейсе после запуска.
-
-```bash
+cp env.example .env          # 选择 LLM_PROVIDER，填 API Key 和模型名；也可以启动后在设置页配置
 mkdir -p data logs uploads
 docker compose up -d --build
 ```
 
-Откройте [веб-интерфейс](http://localhost:3000). [Документация API](http://localhost:8000/docs) доступна после запуска сервера. Подробности — в [руководстве по Docker](DOCKER.md) на китайском языке.
+Откройте [веб-интерфейс](http://localhost:3000). [API](http://localhost:8000/docs) доступна после старта бэкенда. [Гид по Docker](docs/DOCKER.en.md).
 
-Если в Linux возникают ошибки доступа к примонтированным каталогам, исправьте владельца каталогов данных проекта следующей командой и снова запустите сервисы:
+В Linux при ошибке прав на bind сначала исправьте владельца:
 
 ```bash
 docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
 docker compose up -d
 ```
 
-</details>
+**CLI / MCP**
 
-<details>
-<summary><strong>CLI / MCP</strong></summary>
-
-Нужны Python 3.10+ (рекомендуется 3.11) и FFmpeg в PATH. Пример рассчитан на оболочку macOS / Linux; в Windows PowerShell активируйте окружение командой `venv\Scripts\Activate.ps1`. Для локальной обработки через CLI Redis не требуется.
+Нужны Python 3.10+ (лучше 3.11) и FFmpeg в PATH. Локальному CLI Redis не нужен.
 
 ```bash
 git clone https://github.com/zhouxiaoka/autoclip.git
 cd autoclip
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv venv && source venv/bin/activate   # Windows PowerShell：venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
 
-Пример с локальной моделью: установите и запустите Ollama, затем скачайте модель. Для видео без субтитров нужен `faster-whisper`; речевая модель загружается при первом использовании. Для готовых субтитров добавьте `--srt talk.srt`.
-
 ```bash
 ollama pull qwen2.5:7b
-python -m pip install faster-whisper
+python -m pip install faster-whisper                # 无字幕视频需要；已有字幕可用 --srt talk.srt
 autoclip doctor --provider ollama
 autoclip run talk.mp4 --provider ollama --json
-```
-
-Замените `PROJECT_ID` на идентификатор проекта из результата обработки, чтобы экспортировать видео для Shorts. Команда `autoclip mcp` запускает MCP-сервер через stdio:
-
-```bash
 autoclip export PROJECT_ID --preset shorts
-autoclip mcp
+autoclip mcp                                        # stdio MCP 服务
+autoclip mcp install opencode                       # opencode 一条命令接入
 ```
 
-В клиенте MCP укажите абсолютный путь к `autoclip` в виртуальном окружении в поле `command`, а `["mcp"]` — в поле `args`. См. [руководство по CLI / MCP](docs/CLI_AND_MCP.md) и [навык для агентов](skills/autoclip/SKILL.md) на китайском языке.
+В MCP-клиенте `command` — абсолютный путь к `autoclip` в venv, `args` — `["mcp"]`. [CLI / MCP](docs/CLI_AND_MCP.md) (кит.), [OpenCode](docs/OPENCODE.en.md), [Agent skill](skills/autoclip/SKILL.md) (кит.).
 
-</details>
+## Модели
 
-## Настройка моделей
-
-| Вариант | Настройка |
+| Способ | Настройка |
 | --- | --- |
-| Облачные модели | Выберите провайдера в настройках и укажите свой ключ API и модель. Для совместимых с OpenAI сервисов можно задать Base URL. |
-| Ollama | Адрес по умолчанию: `http://localhost:11434/v1`; модель: `qwen2.5:7b`. API-ключ не нужен. |
-| LM Studio | Загрузите модель и запустите Local Server, по умолчанию на `http://localhost:1234/v1`. Выберите модель, доступную на вашем сервере. |
+| Облачный API | Провайдер и API Key в настройках. Совместимые с OpenAI принимают Base URL. |
+| Ollama | По умолчанию `http://localhost:11434/v1`, модель `qwen2.5:7b`, ключ не нужен. |
+| LM Studio | Загрузите модель и запустите Local Server, по умолчанию `http://localhost:1234/v1`. |
 
-В Docker адрес `localhost` указывает на сам контейнер. Для доступа к модели на хосте задайте адрес, доступный из контейнера; см. руководство по CLI / MCP. Нарезка видео выполняется локально, но при анализе облачной моделью текст субтитров отправляется выбранному провайдеру. Для скачивания видео и моделей нужен интернет.
+В Docker `localhost` — сам контейнер. Для модели на хосте укажите адрес, доступный из контейнера.
 
-[Infistar · Инструкция по настройке (англ.)](docs/INFISTAR_SETUP.en.md)
+[Модели](docs/MULTI_LLM_PROVIDER_GUIDE.md) (кит.) · [Локально и контейнеры](docs/CLI_AND_MCP.md) (кит.)
+
+## Спонсоры
+
+Спасибо партнёрам. Оба дают API, совместимый с OpenAI: выберите в настройках, вставьте ключ — появятся модели.
+
+<table>
+  <tr>
+    <td align="center" width="140" valign="middle">
+      <a href="https://88api.ai/sign-up?aff=2PIc"><img src="docs/sponsors/88api-logo.jpg" alt="88API" width="72"></a><br>
+      <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
+    </td>
+    <td valign="middle">
+      Агрегатор токенов: GPT, Claude, Gemini, Grok, DeepSeek, Kimi, GLM, плюс картинка, видео и речь. Поддержка, счета, пополнение 1:1. Пробный кредит по <a href="https://88api.ai/sign-up?aff=2PIc">реферальной ссылке</a>. <a href="docs/88API_SETUP.en.md">Настройка</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="140" valign="middle">
+      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><img src="docs/sponsors/infistar-logo.svg" alt="Infistar" width="72"></a><br>
+      <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar</strong></a>
+    </td>
+    <td valign="middle">
+      Мультимодельный API: Claude, GPT, Gemini, DeepSeek и другие; часть моделей до 1% от прайса, юани, счета, проверка. $5 пробных по <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">реферальной ссылке</a>. <a href="docs/INFISTAR_SETUP.en.md">Настройка</a>
+    </td>
+  </tr>
+</table>
+
+Услуги, цены и акции дают партнёры; смотрите их сайты.
 
 ## Частые вопросы
 
 <details>
-<summary>Это бесплатно? Нужен API-ключ?</summary>
+<summary>Это бесплатно? Нужен ли API Key?</summary>
 
-Сам AutoClip по-прежнему бесплатен и открыт по лицензии MIT. Облачные провайдеры взимают плату за использование моделей и требуют ваш API-ключ. Для Ollama / LM Studio облачный ключ не нужен, но необходимы модели и подходящее оборудование. С **v1.3.2** зарубежная отправка требует ваш собственный аккаунт [Upload-Post](https://www.upload-post.com). Бесплатные и платные тарифы, а также дневные лимиты TikTok, YouTube, Instagram и других площадок, берутся со страниц самого Upload-Post. Это не обещания AutoClip.
-
-</details>
-
-<details>
-<summary>Мои видео загружаются на сервер?</summary>
-
-Монтаж остаётся на вашем устройстве. Облачной модели отправляется текст субтитров. Готовый клип покидает компьютер только после нажатия «Публикация» и только на подключённые площадки. Его также можно скачать без публикации. Эта страница доступна в **v1.3.2**. Статистика и отчёты об ошибках зависят от версии и настроек; см. сведения о конфиденциальности.
+AutoClip бесплатен и MIT. Облачные модели тарифицирует провайдер, нужен ваш ключ; интервью на 1 ч 43 мин вышло около ¥0,09. Ollama / LM Studio без облачного ключа, но нужно железо. Зарубежная публикация — свой аккаунт [Upload-Post](https://www.upload-post.com).
 
 </details>
 
 <details>
-<summary>Можно работать без субтитров?</summary>
+<summary>Видео куда-то уходит?</summary>
 
-Да, после установки локальных компонентов Whisper и речевой модели. Можно также импортировать готовый SRT. Точные субтитры помогают сократить ожидание и ошибки распознавания.
-
-</details>
-
-<details>
-<summary>Почему клипы не созданы?</summary>
-
-Проверьте этап сбоя: пустые субтитры, подключение к модели, слишком высокий порог оценки, FFmpeg и свободное место. Можно снизить порог с 0.7 до 0.5, но это не гарантирует создание клипов.
+Нарезка и рендер на устройстве. В облако уходит только текст. Готовый клип уходит только после «Опубликовать», на подключённые площадки. Аналитику и отчёты об ошибках можно выключить. [Конфиденциальность](docs/PRIVACY.en.md).
 
 </details>
 
 <details>
-<summary>Какие видео подходят и сколько времени занимает обработка?</summary>
+<summary>Какие видео лучше всего?</summary>
 
-Анализ опирается на субтитры, поэтому подходят интервью, подкасты, лекции и речевые комментарии. Для визуального действия или музыки результат может быть ограничен. Время зависит от длительности, оборудования, модели и экспорта; начните с короткого образца.
-
-Подготовка образцов и ссылки на общедоступные видео описаны в [руководстве по первым клипам (англ.)](docs/USER_INSTALLATION_GUIDE.en.md).
+Анализ в основном по расшифровке: интервью, подкасты, курсы, говорящая голова. Авторские субтитры быстрее всего; без них сначала локальная транскрипция. Чистый экшен или музыка — слабо.
 
 </details>
 
-[Полное руководство по устранению неполадок (английский)](docs/FAQ.en.md) · [Известные проблемы](https://github.com/zhouxiaoka/autoclip/issues/96)
+<details>
+<summary>Почему нет клипов?</summary>
 
-<a id="documentation"></a>
+Смотрите этап сбоя: пустые субтитры, связь с моделью, FFmpeg или диск. Попробуйте более сильную модель. Если не поможет — тип, длительность и модель в [известных проблемах](https://github.com/zhouxiaoka/autoclip/issues/96).
+
+</details>
+
+[Неполадки](docs/FAQ.en.md) · [Известные проблемы](https://github.com/zhouxiaoka/autoclip/issues/96)
 
 ## Документация
 
-| Тема | Документация |
+| Нужно | Документы |
 | --- | --- |
-| Начало работы | [Установка (англ.)](docs/USER_INSTALLATION_GUIDE.en.md) |
-| Развёртывание и автоматизация | [Docker (англ.)](docs/DOCKER.en.md) · [CLI / MCP (кит.)](docs/CLI_AND_MCP.md) · [Agent skill (кит.)](skills/autoclip/SKILL.md) |
-| Модели и решение проблем | [Настройка моделей (кит.)](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [Решение проблем (англ.)](docs/FAQ.en.md) |
-| Версии и конфиденциальность | [История изменений](CHANGELOG.md) · [Конфиденциальность (англ.)](docs/PRIVACY.en.md) |
-| Разработка и перевод | [Участие в разработке (кит.)](CONTRIBUTING.md) · [Поддержка переводов (кит.)](docs/i18n.md) |
-| Настройка сервиса спонсора | [Infistar](docs/INFISTAR_SETUP.en.md) |
+| Установка и первые клипы | [Установка](docs/USER_INSTALLATION_GUIDE.en.md) |
+| Свой хостинг и автоматизация | [Docker](docs/DOCKER.en.md) · [CLI / MCP](docs/CLI_AND_MCP.md) (кит.) · [Agent skill](skills/autoclip/SKILL.md) (кит.) · [OpenCode](docs/OPENCODE.en.md) |
+| Модели и сбои | [Модели](docs/MULTI_LLM_PROVIDER_GUIDE.md) (кит.) · [FAQ](docs/FAQ.en.md) |
+| Версии, план, приватность | [Changelog](CHANGELOG.md) · [План](ROADMAP.md) (кит.) · [Доска](docs/COMMUNITY_BOARD.md) (кит.) · [Приватность](docs/PRIVACY.en.md) |
+| Участие и перевод | [Вклад](CONTRIBUTING.md) (кит.) · [Переводы](docs/i18n.md) (кит.) |
 
-README доступен на восьми языках. Руководства по установке, Docker и решению проблем есть на английском; остальные подробные материалы преимущественно на китайском.
+## Участие
 
-## Участие и обратная связь
+Правки, примеры, отзывы и переводы приветствуются. Если AutoClip помог — звезда кстати.
 
-Приветствуются исправления, отзывы и улучшения переводов. В сообщении об ошибке укажите ОС, версию, модель, шаги воспроизведения и журналы ошибок без конфиденциальных данных.
+- **Общение:** [Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [Первый клип](https://github.com/zhouxiaoka/autoclip/discussions/128) · [Идеи](https://github.com/zhouxiaoka/autoclip/discussions/129)
+- **Баги:** [форма](https://github.com/zhouxiaoka/autoclip/issues/new/choose) с ОС, версией, моделью, шагами и журналами без секретов
+- **Партнёрство:** [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
-Проект поддерживает один человек в свободное время. Срок ответа не фиксирован; мгновенная поддержка и индивидуальная помощь с развёртыванием не предоставляются. Перед обращением прочитайте FAQ и список известных проблем.
+Ведёт один человек. Живой поддержки и личного деплоя нет.
 
-Идеи, сценарии и запросы моделей публикуйте в [GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions). Воспроизводимые ошибки оформляйте через [шаблон issue](https://github.com/zhouxiaoka/autoclip/issues/new/choose). Правила доски: [community board](docs/COMMUNITY_BOARD.md) (на китайском).
+![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)
 
-- [Приветствие и категории](https://github.com/zhouxiaoka/autoclip/discussions/127)
-- [Вопросы о первом клипе](https://github.com/zhouxiaoka/autoclip/discussions/128)
-- [Идеи](https://github.com/zhouxiaoka/autoclip/discussions/129)
-
-- Электронная почта: [christine_zhouye@163.com](mailto:christine_zhouye@163.com)
-
-Спасибо проектам FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper и всем участникам. Проект распространяется по [лицензии MIT](LICENSE). Если AutoClip вам помогает, поддержите проект звездой.
-
-<details>
-<summary>Признание сообщества · Star History</summary>
-
-Эти значки предоставляет Trendshift. Нажмите на них, чтобы посмотреть достижения AutoClip. GitHub Trending и Trendshift — разные рейтинги; значки показывают зафиксированные достижения, а не текущую позицию.
-
-[![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)
-
-</details>
+Спасибо FastAPI, React, Tauri, FFmpeg, yt-dlp, Whisper, FunASR и всем, кто вкладывается. [MIT License](LICENSE).
