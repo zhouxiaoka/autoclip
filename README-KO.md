@@ -222,6 +222,16 @@ python -m pip install -e .
 
 로컬 모델 예시: Ollama를 설치하고 실행한 뒤 모델을 다운로드하세요. 자막이 없는 영상에는 `faster-whisper`가 필요하며 첫 전사 시 음성 모델을 다운로드합니다. 기존 자막을 사용하려면 `--srt talk.srt`를 추가하세요.
 
+**1.5 원클릭 제작**은 데스크톱 앱에 저장된 모델 설정으로 플랫폼별 영상, 표지, 게시 문구, ZIP 게시 패키지를 생성합니다.
+
+```bash
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
+MCP는 `start_quick_output` + `get_quick_output_status`를 사용하며 같은 플랫폼과 세로 레이아웃을 지원합니다. 설치 및 동료 테스트 방법은 [1.5 검증 기록](docs/RELEASE_1_5.md)(중국어)을 참고하세요.
+
 ```bash
 ollama pull qwen2.5:7b
 python -m pip install faster-whisper

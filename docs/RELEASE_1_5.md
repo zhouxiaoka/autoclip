@@ -27,6 +27,7 @@
 | Rust 下载回归 | 5 passed，包含真实分块 HTTP 响应、截断下载清理和不覆盖已有文件 |
 | `python -m backend.eval` | 两个黄金案例通过 |
 | `python scripts/bump_version.py --check` | 五处版本均为 1.5.0 |
+| 文档 / 轻量运行时检查 | 八份 README 一致；Windows asyncio 测试隔离应用依赖后本机 12 passed、1 skipped（真实 Windows 项由 CI 执行）；相关业务回归 38 passed |
 | 浏览器 | 片尾默认开启、关闭后刷新保留；复制按钮只有一个且无署名；竖版选项可切换 |
 | CLI 真实模型 | DevDay 181 秒输入 → Shorts 3 条成片，视频 / 封面 / 文案 / ZIP 齐全，实际追加片尾，无渲染警告 |
 | 英文访谈窗口渲染 | 使用已生成的英文包装离线渲染 8 秒编辑片段，字幕正常、片尾成功、无警告 |

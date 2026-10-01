@@ -8,6 +8,8 @@ import pytest
 
 from backend.core import windows_asyncio
 
+pytestmark = pytest.mark.stdlib_only
+
 
 @pytest.fixture
 def transport():

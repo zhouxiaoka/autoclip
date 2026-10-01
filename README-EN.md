@@ -228,6 +228,16 @@ python -m pip install -e .
 
 Local model example: install and start Ollama, then download a model. Videos without subtitles require `faster-whisper`; the speech model is downloaded on first use. To supply existing subtitles, add `--srt talk.srt`.
 
+**1.5 quick output** uses the model settings saved by the desktop app to create platform videos, covers, post copy, and ZIP publishing kits:
+
+```bash
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
+MCP uses `start_quick_output` + `get_quick_output_status` with the same platforms and portrait layouts. See the [1.5 acceptance record](docs/RELEASE_1_5.md) (Chinese) for installation and colleague testing.
+
 ```bash
 ollama pull qwen2.5:7b
 python -m pip install faster-whisper
