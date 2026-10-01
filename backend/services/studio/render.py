@@ -127,9 +127,16 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                     cmd += ['-an']
                 if graph:
                     cmd += ['-filter_complex', graph]
-                cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', '30', *render_limits.output_args(), '-y', str(clip_path)]
-                cmd, priority = render_limits.low_priority(cmd)
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(180, (scene.end-scene.start)*20), **priority)
+                from backend.services import video_encoder
+
+                def build(name, base=cmd, clip_path=clip_path):
+                    return [*base, *video_encoder.h264_args(w, h, name), '-r', '30', *render_limits.output_args(), '-y', str(clip_path)]
+
+                def run(full, length=scene.end - scene.start):
+                    full, priority = render_limits.low_priority(full)
+                    return subprocess.run(full, capture_output=True, text=True, timeout=max(180, length * 20), **priority)
+
+                proc = video_encoder.run_with_fallback(build, run)
                 if proc.returncode:
                     raise RuntimeError('渲染镜头失败：' + proc.stderr[-600:])
                 parts.append(clip_path)
