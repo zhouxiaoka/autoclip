@@ -42,7 +42,7 @@ export function prepareLoaded(value: ModelSettings): ModelSettings {
   return { ...value, analysis: null, cover: null, vision: null, cover_enabled: false, allow_send_frame: true }
 }
 
-/** AI covers stay on by default, but a service without any image model falls back to frames instead of blocking save. */
+/** AI covers are opt-in; once chosen, a service without any image model falls back to the designed cover instead of blocking save. */
 export function coverFallback(s: ModelSettings, lists: Record<string, ModelList>): ModelSettings {
   if (!s.cover_enabled || s.cover?.model) return s
   const connection = connectionOf(s, 'cover') || mainConnection(s)

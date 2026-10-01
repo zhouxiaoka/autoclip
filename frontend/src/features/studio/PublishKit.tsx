@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { message } from 'antd'
 import { t } from '../../i18n'
 import { Btn } from '../../ui'
@@ -17,8 +17,13 @@ export function postCaption(post: PostCopy) {
 
 /** Ready-to-publish copy and cover of one output: read, edit, copy, export as a bundle, redo the cover with AI. */
 export default function PublishKit({ projectId, variant, coverStamp, onCoverChanged }: { projectId: string; variant: OutputVariant; coverStamp: number; onCoverChanged: () => void }) {
-  const post = variant.post
+  // A saved edit shows right away: the workspace stops polling once every output is done.
+  const [saved, setSaved] = useState<PostCopy | null>(null)
+  useEffect(() => setSaved(null), [variant.post])
+  const post = saved || variant.post
   const [editing, setEditing] = useState(false)
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const [draft, setDraft] = useState<PostCopy | null>(post || null)
   const [saving, setSaving] = useState(false)
   const [redesigning, setRedesigning] = useState(false)
@@ -27,7 +32,7 @@ export default function PublishKit({ projectId, variant, coverStamp, onCoverChan
   const save = async () => {
     setSaving(true)
     try {
-      await studioApi.updateVariantPost(projectId, variant.id, draft)
+      setSaved(await studioApi.updateVariantPost(projectId, variant.id, draft))
       setEditing(false)
       message.success(t('文案已保存'))
     } catch {
@@ -51,19 +56,21 @@ export default function PublishKit({ projectId, variant, coverStamp, onCoverChan
     try {
       const clip = `studio-${variant.render_job_id}`
       const started = await coverApi.start(projectId, clip, { platform: LANDSCAPE.has(variant.strategy_id) ? 'bilibili' : 'douyin', title: post.title })
-      if ('job_id' in started) {
-        for (let tries = 0; tries < 90; tries++) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          const job = await coverApi.job(started.job_id)
-          if (job.status === 'completed') break
-          if (job.status === 'failed' || job.status === 'cancelled') throw new Error(job.error || 'failed')
-        }
+      let done = !('job_id' in started)
+      for (let tries = 0; !done && tries < 90; tries++) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        if (!mounted.current) return
+        const job = await coverApi.job((started as { job_id: string }).job_id)
+        if (job.status === 'failed' || job.status === 'cancelled') throw new Error(job.error || 'failed')
+        done = job.status === 'completed'
       }
+      if (!mounted.current) return
+      if (!done) { message.info(t('AI 封面还在生成，稍后刷新查看')); return }
       onCoverChanged()
       message.success(t('封面已用 AI 重新设计'))
     } catch {
-      message.error(t('AI 封面没有生成成功，可以在设置里检查图像模型'))
-    } finally { setRedesigning(false) }
+      if (mounted.current) message.error(t('AI 封面没有生成成功，可以在设置里检查图像模型'))
+    } finally { if (mounted.current) setRedesigning(false) }
   }
   return <div className="studio-post">
     {editing ? <div className="studio-post-edit">

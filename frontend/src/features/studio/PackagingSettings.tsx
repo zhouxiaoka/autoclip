@@ -23,7 +23,8 @@ export default function PackagingSettings({ draft, patch }: { draft: Draft; patc
   const setLine = (index: number, value: string) => {
     const next = [...lines]
     next[index] = value.slice(0, max)
-    update({ title_lines: next.filter(line => line.trim()) })
+    // Lines stay in place while typing (saving drops empty ones); only an empty second line is dropped.
+    update({ title_lines: next[1].trim() ? next : [next[0]] })
   }
   return <>
     <Row stack label={t('模板')} hint={t('字幕、名牌和版式由模板按发布平台自动生成。')}>

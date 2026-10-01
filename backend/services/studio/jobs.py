@@ -972,22 +972,28 @@ def _automatic_drafts(base_drafts):
 
 def produce_variant(project_id, variant_id):
     """Frame, package and render one on-demand variant."""
-    state = store.read(project_id)
-    variant = next((item for item in state.get('output_variants', []) if item['id'] == variant_id), None)
-    if not variant:
-        raise FileNotFoundError('成片版本不存在')
-    if variant.get('status') != 'on_demand':
-        raise ValueError('这条成片已经在生成或已完成')
-    if not any(item['id'] == variant['draft_id'] for item in state.get('drafts', [])):
-        raise FileNotFoundError('来源草稿不存在')
-
     def start(data):
-        item = next(value for value in data['output_variants'] if value['id'] == variant_id)
-        item.update(status='queued')
-        data['generation'].update(status='rendering')
+        item = next((value for value in data.get('output_variants', []) if value['id'] == variant_id), None)
+        if not item:
+            raise FileNotFoundError('成片版本不存在')
+        if item.get('status') != 'on_demand':
+            raise ValueError('这条成片已经在生成或已完成')
+        if not any(draft['id'] == item['draft_id'] for draft in data.get('drafts', [])):
+            raise FileNotFoundError('来源草稿不存在')
+        _start_preparing(data, item)
+    # One locked change checks and claims: a double click must not prepare (and pay for) it twice.
     store.change(project_id, start)
     executor.submit(_produce_on_demand, project_id, variant_id)
     return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)
+
+
+def _start_preparing(data, item):
+    # 'preparing' is invisible to _dispatch_pending_variants: rendering the stored draft now would
+    # ship it without speaker framing, packaging or captions.
+    item.update(status='preparing', instance=store.INSTANCE)
+    for key in ('error', 'needs_prepare', 'render_job_id'):
+        item.pop(key, None)
+    data['generation'].update(status='rendering')
 
 
 @_tracked('production')
@@ -1013,13 +1019,23 @@ def _produce_on_demand(project_id, variant_id):
                 target['framing'] = framed
             if (_content_key(value), strategy_id) in posts:
                 target['post'] = posts[_content_key(value), strategy_id]
+            target['status'] = 'queued'  # ready: only now may a dispatcher render it
+            target.pop('instance', None)
         store.change(project_id, ready)
         _dispatch_pending_variants(project_id)
     except Exception as error:  # noqa: BLE001 - the variant shows the failure and can be retried
         logger.warning('On-demand variant failed: %s', type(error).__name__)
         capture_studio_exception(error, 'production')
-        store.change(project_id, lambda data: next(item for item in data['output_variants'] if item['id'] == variant_id).update(
-            status='failed', error='这条成片准备失败，请重试'))
+
+        def failed(data):
+            target = next(item for item in data['output_variants'] if item['id'] == variant_id)
+            target.update(status='failed', error='这条成片准备失败，请重试', needs_prepare=True)
+            target.pop('instance', None)
+            _finish_generation(data)
+        try:
+            store.change(project_id, failed)
+        except Exception:  # noqa: BLE001 - never lose the failure silently inside the executor
+            logger.exception('Could not record the on-demand failure')
 
 
 def retry_variant(project_id, variant_id):
@@ -1032,6 +1048,15 @@ def retry_variant(project_id, variant_id):
     raw = next((item for item in state.get('drafts', []) if item['id'] == variant['draft_id']), None)
     if not raw:
         raise FileNotFoundError('来源草稿不存在')
+    if variant.get('needs_prepare'):
+        def prepare(data):
+            item = next(value for value in data['output_variants'] if value['id'] == variant_id)
+            if item.get('status') != 'failed':
+                raise ValueError('只有失败的成片版本可以重试')
+            _start_preparing(data, item)
+        store.change(project_id, prepare)
+        executor.submit(_produce_on_demand, project_id, variant_id)
+        return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)
     def update(data):
         item = next(value for value in data['output_variants'] if value['id'] == variant_id)
         item.update(status='queued')
@@ -1053,15 +1078,19 @@ def _sync_variant_status(project_id, job_id, status, error=None):
                 if error:
                     variant['error'] = error
                 changed = True
-        if not changed:
-            return
-        variants = [item for item in data['output_variants'] if item['status'] != 'on_demand']
-        if all(item['status'] in ('completed', 'failed') for item in variants):
-            completed = [item for item in variants if item['status'] == 'completed']
-            outcome = 'completed' if len(completed) == len(variants) else 'partial' if completed else 'failed'
-            data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=store.now())
-            data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': store.now()}
+        if changed:
+            _finish_generation(data)
     store.change(project_id, update)
+
+
+def _finish_generation(data):
+    """Settle the generation once every requested (not backup) variant is completed or failed."""
+    variants = [item for item in data['output_variants'] if item['status'] != 'on_demand']
+    if all(item['status'] in ('completed', 'failed') for item in variants):
+        completed = [item for item in variants if item['status'] == 'completed']
+        outcome = 'completed' if len(completed) == len(variants) else 'partial' if completed else 'failed'
+        data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=store.now())
+        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': store.now()}
 
 
 def inspect_project(project_id, options, url=None, browser=None):

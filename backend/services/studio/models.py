@@ -187,7 +187,8 @@ class OutputVariant(BaseModel):
     strategy_version: int = Field(default=1, ge=1)
     branding: BrandingOptions = Field(default_factory=BrandingOptions)
     # on_demand: ranked below the automatic limit; framed, packaged and rendered when the user asks.
-    status: Literal['queued', 'running', 'completed', 'failed', 'on_demand'] = 'queued'
+    # preparing: being framed and packaged for that request; it is queued for rendering only once ready.
+    status: Literal['queued', 'running', 'completed', 'failed', 'on_demand', 'preparing'] = 'queued'
     render_job_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     created_at: str = ''
     error: str | None = Field(default=None, max_length=700)
@@ -198,6 +199,10 @@ class OutputVariant(BaseModel):
     # Publish kit: copy written during production, cover designed after the render.
     post: PostCopy | None = None
     cover: Literal['design', 'ai'] | None = None
+    # A backup whose preparation failed or was interrupted: retrying prepares it again instead of
+    # rendering the unpackaged draft. `instance` marks which server run is preparing it.
+    needs_prepare: bool = False
+    instance: str | None = None
 
 
 class ImportOptions(BaseModel):

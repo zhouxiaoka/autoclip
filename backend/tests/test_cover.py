@@ -198,11 +198,30 @@ def test_seedream_uses_generations_with_image_field(data_dir):
     assert "n" not in body
 
 
+def test_image_urls_from_a_remote_provider_never_reach_this_machine(data_dir):
+    from backend.core.image_providers import ImageError, _download
+
+    for url in ("http://127.0.0.1:8000/api/v1/settings", "http://localhost/x.png", "http://10.0.0.5/x.png",
+                "http://169.254.169.254/latest", "file:///etc/passwd"):
+        session = _Session([_Resp(200, content=b"img")])
+        with pytest.raises(ImageError):
+            _download(session, url)
+        assert session.calls == [], url
+    redirected = _Session([_Resp(302, content=b""), _Resp(200, content=b"img")])
+    redirected.responses[0].headers = {"location": "http://127.0.0.1/x.png"}
+    with pytest.raises(ImageError):
+        _download(redirected, "https://cdn.example.com/x.png")
+    assert len(redirected.calls) == 1, "the redirect to a local address is not followed"
+    local = _Session([_Resp(200, content=b"img")])
+    local.autoclip_local = True
+    assert _download(local, "http://127.0.0.1:7860/out.png") == b"img", "a local image server may serve local URLs"
+
+
 def test_seedream_text_to_image_skips_n_and_uses_url(data_dir):
     from backend.core.image_providers import ImageRequest, generate_openai
 
     session = _Session([
-        _Resp(200, {"data": [{"url": "http://127.0.0.1:9/out.png"}]}),
+        _Resp(200, {"data": [{"url": "https://ark-cdn.example.com/out.png"}]}),
         _Resp(200, content=b"PNGDATA"),
     ])
     out = generate_openai(

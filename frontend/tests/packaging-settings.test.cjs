@@ -14,7 +14,7 @@ test('draft edits keep template packaging intact on save',()=>{
 })
 
 test('this release edits the two title lines, the editor tags switch and the template style',()=>{
- assert.match(settings,/title_lines: next\.filter/)
+ assert.match(settings,/title_lines: next\[1\]\.trim\(\) \? next : \[next\[0\]\]/)
  assert.match(settings,/update\(\{ tags_enabled: checked \}\)/)
  assert.match(settings,/update\(\{ style: value as Packaging\['style'\] \}\)/)
  assert.match(settings,/interview_zh: \[\{ value: 'classic'/)

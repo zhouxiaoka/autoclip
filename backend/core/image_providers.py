@@ -11,12 +11,13 @@
 from __future__ import annotations
 
 import base64
+import ipaddress
 import logging
 import re
 import time
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlparse
 
 import requests
 
@@ -108,6 +109,7 @@ def _session_for(base_url: str, session: requests.Session | None) -> requests.Se
     http = requests.Session()
     if is_local_url(base_url):
         http.trust_env = False
+        http.autoclip_local = True  # a local image server may return its own local image URLs
     return http
 
 
@@ -146,11 +148,53 @@ def _raise_for_status(resp: Any, *, edit: bool = False) -> dict[str, Any]:
     return data
 
 
+MAX_IMAGE_BYTES = 40 * 1024 * 1024
+
+
+def _check_image_url(url: str, allow_local: bool) -> None:
+    """The image URL comes from the provider's response: never let it point the backend at this machine
+    or its network (the app's own API listens on 127.0.0.1), unless the provider itself is local."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ImageError("生图返回的图片地址无效")
+    if allow_local:
+        return
+    host = parsed.hostname.lower()
+    if host == "localhost" or host.endswith(".localhost"):
+        raise ImageError("生图返回的图片地址无效")
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_unspecified or ip.is_multicast:
+        raise ImageError("生图返回的图片地址无效")
+
+
 def _download(session: requests.Session, url: str) -> bytes:
-    resp = session.get(url, timeout=60)
-    status = int(getattr(resp, "status_code", 200) or 200)
-    content = getattr(resp, "content", b"") or b""
-    if status >= 400 or not content:
+    allow_local = bool(getattr(session, "autoclip_local", False))
+    for _ in range(4):  # follow redirects by hand so every hop is checked
+        _check_image_url(url, allow_local)
+        resp = session.get(url, timeout=60, stream=True, allow_redirects=False)
+        status = int(getattr(resp, "status_code", 200) or 200)
+        location = (getattr(resp, "headers", None) or {}).get("location")
+        if status in (301, 302, 303, 307, 308) and location:
+            url = urljoin(url, location)
+            continue
+        break
+    else:
+        raise ImageError("下载生成图失败")
+    if status >= 400:
+        raise ImageError("下载生成图失败")
+    if hasattr(resp, "iter_content"):
+        content = bytearray()
+        for chunk in resp.iter_content(1 << 16):
+            content += chunk
+            if len(content) > MAX_IMAGE_BYTES:
+                raise ImageError("生成图过大")
+        content = bytes(content)
+    else:
+        content = getattr(resp, "content", b"") or b""
+    if not content or len(content) > MAX_IMAGE_BYTES:
         raise ImageError("下载生成图失败")
     return content
 

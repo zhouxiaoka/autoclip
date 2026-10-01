@@ -20,7 +20,9 @@ export async function pollWorkspace(
       if (signal.aborted) return
       failures = 0
       options.onData(data)
+      // A backup being prepared has no render job yet, and a rendered one is still getting its cover.
       retry = data.analysis?.status === 'running' || data.jobs.some(j => j.status === 'queued' || j.status === 'running')
+        || (data.output_variants || []).some(v => v.status === 'preparing' || v.status === 'queued' || v.status === 'running')
     } catch (error) {
       if (signal.aborted) return
       options.onError(error)

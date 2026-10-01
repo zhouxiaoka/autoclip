@@ -36,6 +36,9 @@ def read(project_id: str):
     for job in data['jobs']:
         if job['status'] in ('queued', 'running') and job.get('instance') != INSTANCE:
             job.update(status='failed', error='服务已重启，请重新导出')
+    for variant in data['output_variants']:
+        if variant.get('status') == 'preparing' and variant.get('instance') != INSTANCE:
+            variant.update(status='failed', error='服务已重启，请重试这条', needs_prepare=True)
     analysis = data.get('analysis')
     if analysis and analysis['status'] == 'running' and analysis.get('instance') != INSTANCE:
         analysis.update(status='failed', error='服务已重启，请重试分析')

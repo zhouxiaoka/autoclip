@@ -51,8 +51,8 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
     <div className="studio-variant-thumb">{completed && variant.render_job_id ? <video className="studio-variant-video" controls preload="metadata" poster={variant.cover ? studioApi.variantCover(projectId, variant.id, coverStamp) : undefined} src={studioApi.video(projectId, variant.render_job_id)}/> : <span className="play">▷</span>}<span className="ac-tag ac-tag--tl">{platformLabel(variant.strategy_id)}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}</div>
     <div className="ac-card-body">
       <h2 className="ac-card-title">{draft?.title || t('正在准备成片')}</h2>
-      <div className={`studio-output-state studio-output-state--${failed ? 'failed' : completed || onDemand ? 'ready' : 'rendering'}`} role="status">
-        {completed ? t('已生成 · 可下载') : failed ? t('生成失败') : onDemand ? t('备选片段 · 需要时再生成') : job?.status === 'running' ? t('正在生成') : t('排队生成中')}
+      <div className={`studio-output-state studio-output-state--${failed ? 'failed' : completed ? 'ready' : onDemand ? 'backup' : 'rendering'}`} role="status">
+        {completed ? t('已生成 · 可下载') : failed ? t('生成失败') : onDemand ? t('备选片段 · 需要时再生成') : variant.status === 'preparing' ? t('正在准备取景与包装') : job?.status === 'running' ? t('正在生成') : t('排队生成中')}
       </div>
       <p className="studio-output-hint">{variant.branding.outro_enabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾')}</p>
       {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}

@@ -68,7 +68,7 @@ export interface RenderJob {
 export interface OutputVariant {
   id: string; draft_id: string; draft_revision: number; strategy_id: string; strategy_version: number
   branding: { outro_enabled: boolean; outro_version: string }
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'on_demand'; render_job_id?: string; created_at: string; error?: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'on_demand' | 'preparing'; render_job_id?: string; created_at: string; error?: string
   trimmed_to_sec?: number
   framing?: 'speaker' | 'full_frame' | 'full_frame_pending' | 'full_frame_captions'
   /** Publish kit: copy written for this platform, and a cover designed (or AI-made) after the render. */
