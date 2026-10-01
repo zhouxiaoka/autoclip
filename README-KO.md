@@ -31,7 +31,7 @@
 
 ![AutoClip 세로 클립: 小红书 인터뷰, TikTok 팟캐스트, 抖音 인터뷰, Shorts 팟캐스트](docs/images/v2/demo-wall.webp)
 
-원본은 링크 하나뿐입니다. 위 클립은 AutoClip이 고르고, 구도를 잡고, 번역하고, 포장한 원본 출력입니다. 손 편집 없음. **[사례 라이브러리에서 소리와 함께 보기 →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**
+AutoClip의 인터뷰식·팟캐스트식 패키징 예시입니다. 전체 영상과 원본 출처는 **[사례 라이브러리 →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**에서 확인하세요.
 
 플랫폼별 영상·표지·제목·설명·해시태그·ZIP 게시 패키지를 제공합니다. 사례는 계속 추가하며 [완성 클립 제출](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell)을 환영합니다.
 
@@ -85,13 +85,11 @@
 ### 데스크톱
 
 1. **설치.** [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest)에서. macOS Apple Silicon은 `.dmg`, Windows 10 / 11 x64는 `-setup.exe`. Python과 FFmpeg 포함.
-2. **모델.** 설정에서 제공자를 고르고 API Key를 넣으면 분석 모델은 자동. 로컬이면 먼저 Ollama 또는 LM Studio 실행.
+2. **모델 설정.** 제공자와 API Key를 입력하고 이용 가능한 분석 모델을 선택한 뒤 연결을 테스트하고 저장하세요. 로컬은 먼저 Ollama / LM Studio에서 모델을 로드하고 서비스를 시작하세요.
 3. **링크와 플랫폼 선택.** 자막이 있는 인터뷰나 팟캐스트로 시작하고 세로 레이아웃을 고르세요. 자막이 없으면 설정에서 Whisper / SenseVoice를 준비하거나 클라우드 전사를 설정하세요.
 4. **확인 후 저장.** 자막·구도·내용의 완결성을 확인하고 게시 패키지를 저장하거나 계정을 연결해 게시하세요. 더 필요하면 대체 후보를 제작하세요.
 
-설치 파일은 아직 Apple 공증·Windows 서명이 없습니다. macOS는 처음 우클릭「열기」, Windows는 SmartScreen에서「추가 정보 → 실행」.
-
-Intel Mac / Linux는 Docker 또는 CLI를 이용하세요. Windows 정식 패키지는 CI 설치·업그레이드·영상 흐름 검증을 통과했지만 사람의 UI 검증과 전체 관찰 기간은 아직 완료하지 않았습니다. [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0).
+Intel Mac / Linux는 Docker 또는 CLI를 이용할 수 있습니다. 요구 사항, 첫 실행 안내, 검증 범위는 [설치 가이드](docs/USER_INSTALLATION_GUIDE.en.md)와 [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)를 참고하세요.
 
 [설치 가이드](docs/USER_INSTALLATION_GUIDE.en.md) · [문제 해결](docs/FAQ.en.md)
 
@@ -127,7 +125,7 @@ python -m pip install -r requirements.txt
 python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
 ```
 
-위 활성화는 macOS / Linux용입니다. Windows는 `py -m venv venv`로 만들고 `venv\Scripts\Activate.ps1`로 활성화합니다. 이전 1.5 후보 wheel은 정식 wheel을 강제 재설치해야 하며 버전 번호만 확인하면 안 됩니다.
+위 명령은 macOS / Linux용입니다. Windows는 `py -m venv venv`로 만들고 `.\venv\Scripts\Activate.ps1`로 활성화한 뒤 같은 `python -m pip` 설치 명령을 실행하세요.
 
 먼저 모델 설정을 저장하세요. 데스크톱 설정을 공유하거나 ZIP의 키 없는 예제로 전용 데이터 디렉터리를 설정합니다. [CLI / MCP](docs/CLI_AND_MCP.md)(중국어). `produce`는 이전 `run --provider` 임시 설정을 쓰지 않습니다. `--srt`로 전사를 생략할 수 있습니다.
 
@@ -135,9 +133,9 @@ python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.wh
 autoclip --version
 autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
 autoclip outputs PROJECT_ID --export-kits
-autoclip mcp
-autoclip mcp install opencode
 ```
+
+MCP 클라이언트가 서버를 시작합니다. 별도 디버깅은 다른 터미널에서 `autoclip mcp`; OpenCode 설정은 `autoclip mcp install opencode`로 작성할 수 있습니다.
 
 `PROJECT_ID`는 제작 결과의 ID로 바꾸세요. MCP는 `start_quick_output` / `get_quick_output_status`. 클라이언트 `command`는 가상환경 `autoclip` 절대 경로, `args`는 `["mcp"]`. 이전 `run` / `export`와 클립 도구도 유지됩니다. [CLI / MCP](docs/CLI_AND_MCP.md)(중국어)·[OpenCode](docs/OPENCODE.en.md)·[Agent skill](skills/autoclip/SKILL.md)(중국어).
 
@@ -146,7 +144,7 @@ autoclip mcp install opencode
 | 방식 | 설정 |
 | --- | --- |
 | 클라우드 API | 설정에서 제공자와 API Key. OpenAI 호환은 Base URL도 가능. |
-| Ollama | 기본 `http://localhost:11434/v1`, 모델 `qwen2.5:7b`, Key 없음. |
+| Ollama | 기본 주소 `http://localhost:11434/v1`. 로컬 모델을 내려받아 실행하고 서비스가 제공하는 모델을 선택하세요. API Key는 필요 없습니다. |
 | LM Studio | 모델을 열고 Local Server. 기본 `http://localhost:1234/v1`. |
 
 Docker 안 `localhost`는 컨테이너입니다. 호스트 모델은 컨테이너가 닿는 주소를 쓰세요.
@@ -164,7 +162,7 @@ AutoClip을 후원하는 파트너입니다. 둘 다 OpenAI 호환 API라 설정
       <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
     </td>
     <td valign="middle">
-      GPT, Claude, Gemini, Grok, DeepSeek, Kimi, GLM과 이미지·영상·음성. 상담, 영수증, 충전 1:1. <a href="https://88api.ai/sign-up?aff=2PIc">추천 링크</a>로 체험. <a href="docs/88API_SETUP.en.md">설정</a>
+      OpenAI 호환 멀티 모델 API. 이용 가능한 모델, 요금, 혜택은 제공자 안내를 확인하세요. <a href="https://88api.ai/sign-up?aff=2PIc">자세히</a> · <a href="docs/88API_SETUP.en.md">연결 안내</a>
     </td>
   </tr>
   <tr>
@@ -173,7 +171,7 @@ AutoClip을 후원하는 파트너입니다. 둘 다 OpenAI 호환 API라 설정
       <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar</strong></a>
     </td>
     <td valign="middle">
-      Claude, GPT, Gemini, DeepSeek 등. 일부는 공식가 0.1할인, 위안 결제, 영수증, 모델 검증. <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">추천 링크</a>로 $5 체험. <a href="docs/INFISTAR_SETUP.en.md">설정</a>
+      OpenAI 호환 멀티 모델 API. 이용 가능한 모델, 요금, 혜택은 제공자 안내를 확인하세요. <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">자세히</a> · <a href="docs/INFISTAR_SETUP.en.md">연결 안내</a>
     </td>
   </tr>
 </table>

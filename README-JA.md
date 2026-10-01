@@ -31,7 +31,7 @@
 
 ![AutoClip の縦型クリップ：小紅書インタビュー、TikTok ポッドキャスト、抖音インタビュー、Shorts ポッドキャスト](docs/images/v2/demo-wall.webp)
 
-元動画はリンクを貼っただけです。上の各本は AutoClip が自動で選び、構図を決め、翻訳し、包装したそのままの出力で、人手の修正はありません。**[事例ライブラリで音声付きで見る →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**
+AutoClip による対談式・ポッドキャスト式の包装例です。完成動画と原作者情報は **[事例ライブラリ →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**。
 
 投稿先に合わせた動画・表紙・タイトル・説明・ハッシュタグ・ZIP 投稿パックを生成。事例は随時更新、[完成動画の投稿](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell)も歓迎。
 
@@ -85,13 +85,11 @@
 ### デスクトップ
 
 1. **インストール。** [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) から。macOS Apple Silicon は `.dmg`、Windows 10 / 11 x64 は `-setup.exe`。Python と FFmpeg 同梱。
-2. **モデル。** 設定で事業者を選び API Key を入れると分析モデルは自動選択。ローカルなら先に Ollama か LM Studio を起動。
+2. **モデル設定。** 事業者と API Key を設定し、利用可能な分析モデルを選択、接続テスト後に保存。ローカルは先に Ollama / LM Studio でモデルを読み込み、サービスを起動します。
 3. **リンクと投稿先を選ぶ。** 字幕付きの対談やポッドキャストで試し、縦型レイアウトを選択。字幕がなければ設定で Whisper / SenseVoice を準備、またはクラウド文字起こしを設定。
 4. **確認して保存。** 字幕・構図・内容の完全性を確認し、投稿パックを保存または接続済みアカウントへ投稿。必要に応じて追加候補を生成。
 
-インストーラはまだ Apple 公証・Windows 署名がありません。macOS は初回右クリック「開く」、Windows は SmartScreen で「詳細情報 → 実行」。
-
-Intel Mac / Linux は Docker または CLI を利用できます。Windows 正式パッケージは CI のインストール・更新・動画処理検証に合格。人による UI 検証と全観察期間は未完了です。[1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0) を参照。
+Intel Mac / Linux は Docker または CLI を利用できます。必要環境・初回起動・検証範囲は [インストールガイド](docs/USER_INSTALLATION_GUIDE.en.md) と [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0) を参照。
 
 [インストールガイド](docs/USER_INSTALLATION_GUIDE.en.md) · [トラブルシュート](docs/FAQ.en.md)
 
@@ -127,7 +125,7 @@ python -m pip install -r requirements.txt
 python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
 ```
 
-上記は macOS / Linux 用。Windows は `py -m venv venv` で作成し、`venv\Scripts\Activate.ps1` で有効化。旧 1.5 候補 wheel は正式 wheel を強制再インストールしてください。版番号だけでは判別できません。
+上記は macOS / Linux 用。Windows は `py -m venv venv` で作成し、`.\venv\Scripts\Activate.ps1` で有効化。その後は同じ `python -m pip` コマンドでインストールします。
 
 先にモデル設定を保存。デスクトップ設定を共有、または ZIP の Key 無しサンプルで専用データディレクトリを設定。[CLI / MCP](docs/CLI_AND_MCP.md)（中国語）。`produce` は旧 `run --provider` の一時指定を使いません。`--srt` で文字起こしを省略。
 
@@ -135,9 +133,9 @@ python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.wh
 autoclip --version
 autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
 autoclip outputs PROJECT_ID --export-kits
-autoclip mcp
-autoclip mcp install opencode
 ```
+
+MCP サーバーはクライアントが起動します。単独の確認は別の端末で `autoclip mcp`。OpenCode の設定は `autoclip mcp install opencode` で作成できます。
 
 `PROJECT_ID` は制作結果の ID に置換。MCP は `start_quick_output` / `get_quick_output_status` を使用。クライアントの `command` は仮想環境の `autoclip` 絶対パス、`args` は `["mcp"]`。旧 `run` / `export` と切片ツールも利用可能。[CLI / MCP](docs/CLI_AND_MCP.md)（中国語）・[OpenCode](docs/OPENCODE.en.md)・[Agent skill](skills/autoclip/SKILL.md)（中国語）。
 
@@ -146,7 +144,7 @@ autoclip mcp install opencode
 | 方法 | 設定 |
 | --- | --- |
 | クラウド API | 設定で事業者を選び API Key。OpenAI 互換は Base URL も可。 |
-| Ollama | 既定 `http://localhost:11434/v1`、モデル `qwen2.5:7b`、Key 不要。 |
+| Ollama | 既定 `http://localhost:11434/v1`。ローカルモデルを取得・起動し、サービスが提供するモデルを選択。Key 不要。 |
 | LM Studio | モデルを読み Local Server を起動。既定 `http://localhost:1234/v1`。 |
 
 Docker 内の `localhost` はコンテナ自身です。ホストのモデルにはコンテナから届く住所を指定。
@@ -164,7 +162,7 @@ AutoClip を支援してくださっているパートナーです。どちら�
       <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
     </td>
     <td valign="middle">
-      GPT、Claude、Gemini、Grok、DeepSeek、Kimi、GLM と画像・動画・音声。有人サポート、正規領収書、チャージ 1:1。<a href="https://88api.ai/sign-up?aff=2PIc">紹介リンク</a>で体験枠。<a href="docs/88API_SETUP.en.md">手順</a>
+      OpenAI 互換の複数モデル API。利用可能モデル・料金・特典は事業者の案内を参照。 <a href="https://88api.ai/sign-up?aff=2PIc">詳細</a> · <a href="docs/88API_SETUP.en.md">接続手順</a>
     </td>
   </tr>
   <tr>
@@ -173,7 +171,7 @@ AutoClip を支援してくださっているパートナーです。どちら�
       <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar</strong></a>
     </td>
     <td valign="middle">
-      Claude、GPT、Gemini、DeepSeek など。一部は公式の 0.1 折、人民元決済、領収書、モデル検証。<a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">紹介リンク</a>で $5 体験。<a href="docs/INFISTAR_SETUP.en.md">手順</a>
+      OpenAI 互換の複数モデル API。利用可能モデル・料金・特典は事業者の案内を参照。 <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">詳細</a> · <a href="docs/INFISTAR_SETUP.en.md">接続手順</a>
     </td>
   </tr>
 </table>

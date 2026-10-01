@@ -4,7 +4,7 @@
 
 | 形态 | 一句话 | 入口 |
 |---|---|---|
-| CLI | `autoclip run video.mp4 --provider ollama` 一条命令出片 | `backend/cli.py` |
+| CLI | `autoclip produce video.mp4 --platform douyin` 一键出片；`run` 保留旧切片入口 | `backend/cli.py` |
 | MCP server | 让 opencode / Cursor / Claude Code / 任何 MCP 客户端直接调 AutoClip | `backend/mcp_server.py` |
 | 本地模型预设 | 设置页 / CLI 直接选 Ollama、LM Studio，不用填 key | `backend/core/local_presets.py` |
 

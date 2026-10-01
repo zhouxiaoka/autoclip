@@ -31,7 +31,7 @@ O app é grátis; modelos cloud cobram por uso. Ajuste no editor quando precisar
 
 ![Cortes verticais do AutoClip: entrevista Xiaohongshu, podcast TikTok, entrevista Douyin, podcast Shorts](docs/images/v2/demo-wall.webp)
 
-Cada original foi um único link. Cada corte acima é a saída crua do AutoClip — escolha, enquadramento, tradução, empacotamento — sem edição manual. **[Assistir com áudio na biblioteca →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**
+Exemplos dos formatos entrevista e podcast do AutoClip. Vídeos completos e fontes estão na **[biblioteca de casos →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**.
 
 Cada clipe tem vídeo, capa, título, descrição, hashtags e kit ZIP para a plataforma. A biblioteca recebe novidades; [envie seus clipes](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell).
 
@@ -85,13 +85,11 @@ Corte e render ficam no computador. Análise cloud envia legendas e texto releva
 ### Desktop
 
 1. **Instale.** Em [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest). macOS Apple Silicon: `.dmg`. Windows 10 / 11 x64: `-setup.exe`. Python e FFmpeg vêm junto.
-2. **Configure um modelo.** Escolha o provedor em Ajustes e cole a API Key; o modelo de análise é escolhido sozinho. No local, inicie o Ollama ou o LM Studio antes.
+2. **Configure um modelo.** Escolha o provedor e a API Key, selecione um modelo de análise disponível, teste a conexão e salve. Para modelos locais, carregue um modelo e inicie Ollama / LM Studio primeiro.
 3. **Link e plataforma.** Comece com entrevista ou podcast legendado e escolha layout vertical. Sem legendas, prepare Whisper / SenseVoice ou configure transcrição cloud nas configurações.
 4. **Revise e salve.** Confira legendas, quadro e conteúdo, depois baixe o kit ou conecte uma conta para postar. Gere alternativas quando precisar de mais clipes.
 
-Os instaladores ainda não têm notarização da Apple nem assinatura do Windows. No macOS, a primeira abertura é com clique direito → Abrir. No Windows, Mais informações → Executar mesmo assim.
-
-Intel Mac / Linux podem usar Docker ou CLI. O pacote Windows passou instalação, atualização e vídeo no CI; a validação humana da interface e o período completo de observação continuam incompletos. Veja [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0).
+Intel Mac / Linux podem usar Docker ou CLI. Veja o [guia de instalação](docs/USER_INSTALLATION_GUIDE.en.md) e a [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0) para requisitos, primeira abertura e escopo de validação.
 
 [Guia de instalação](docs/USER_INSTALLATION_GUIDE.en.md) · [Problemas](docs/FAQ.en.md)
 
@@ -127,7 +125,7 @@ python -m pip install -r requirements.txt
 python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
 ```
 
-A ativação acima é para macOS / Linux. No Windows, crie com `py -m venv venv` e ative com `venv\Scripts\Activate.ps1`. Reinstale à força o wheel oficial sobre candidatos 1.5 antigos; conferir só a versão não basta.
+Os comandos acima são para macOS / Linux. No Windows, crie com `py -m venv venv` e ative com `.\venv\Scripts\Activate.ps1`; depois use os mesmos comandos `python -m pip`.
 
 Salve os modelos antes: use configurações do desktop ou configure seu diretório pelo exemplo sem chaves do ZIP. [CLI / MCP](docs/CLI_AND_MCP.md) (chinês). `produce` não usa a substituição temporária de `run --provider`. `--srt` evita transcrever.
 
@@ -135,9 +133,9 @@ Salve os modelos antes: use configurações do desktop ou configure seu diretór
 autoclip --version
 autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
 autoclip outputs PROJECT_ID --export-kits
-autoclip mcp
-autoclip mcp install opencode
 ```
+
+O cliente MCP inicia o servidor. Para depuração separada, execute `autoclip mcp` em outro terminal; o OpenCode pode ser configurado com `autoclip mcp install opencode`.
 
 Troque `PROJECT_ID` pelo ID retornado. MCP usa `start_quick_output` / `get_quick_output_status`; `command` aponta ao caminho absoluto de `autoclip` no venv e `args` é `["mcp"]`. `run` / `export` e ferramentas antigas continuam. [CLI / MCP](docs/CLI_AND_MCP.md) (chinês), [OpenCode](docs/OPENCODE.en.md), [Agent skill](skills/autoclip/SKILL.md) (chinês).
 
@@ -146,7 +144,7 @@ Troque `PROJECT_ID` pelo ID retornado. MCP usa `start_quick_output` / `get_quick
 | Opção | Configuração |
 | --- | --- |
 | API na nuvem | Escolha o provedor e a API Key. Compatível com OpenAI aceita Base URL. |
-| Ollama | `http://localhost:11434/v1` por padrão, modelo `qwen2.5:7b`, sem chave. |
+| Ollama | Endereço padrão `http://localhost:11434/v1`. Baixe e inicie um modelo local, depois escolha um modelo oferecido pelo servidor. Sem API Key. |
 | LM Studio | Carregue um modelo e inicie o Local Server, `http://localhost:1234/v1` por padrão. |
 
 Dentro do Docker, `localhost` é o contêiner. Use um endereço do host que o contêiner alcance.
@@ -164,7 +162,7 @@ Obrigado a estes parceiros. Os dois expõem API compatível com OpenAI: escolha 
       <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
     </td>
     <td valign="middle">
-      Agregador de tokens: GPT, Claude, Gemini, Grok, DeepSeek, Kimi, GLM, mais imagem, vídeo e voz. Suporte, nota fiscal, recarga 1:1. Crédito de teste no <a href="https://88api.ai/sign-up?aff=2PIc">link de indicação</a>. <a href="docs/88API_SETUP.en.md">Guia</a>
+      API multimodelo compatível com OpenAI. Modelos disponíveis, preços e ofertas constam no provedor. <a href="https://88api.ai/sign-up?aff=2PIc">Detalhes</a> · <a href="docs/88API_SETUP.en.md">Configuração</a>
     </td>
   </tr>
   <tr>
@@ -173,7 +171,7 @@ Obrigado a estes parceiros. Os dois expõem API compatível com OpenAI: escolha 
       <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar</strong></a>
     </td>
     <td valign="middle">
-      API multimodelo: Claude, GPT, Gemini, DeepSeek e outros; alguns a 1% do preço oficial, RMB, nota e verificação. US$ 5 de teste no <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">link de indicação</a>. <a href="docs/INFISTAR_SETUP.en.md">Guia</a>
+      API multimodelo compatível com OpenAI. Modelos disponíveis, preços e ofertas constam no provedor. <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">Detalhes</a> · <a href="docs/INFISTAR_SETUP.en.md">Configuração</a>
     </td>
   </tr>
 </table>

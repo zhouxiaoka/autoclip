@@ -31,7 +31,7 @@
 
 ![AutoClip 自动生成的竖屏成片：小红书访谈式、TikTok 播客式、抖音访谈式、Shorts 播客式](docs/images/v2/demo-wall.webp)
 
-每个原片只贴了一个链接。上面每一条都是 AutoClip 自动挑片、取景、翻译、包装后的原样输出，没有人工修改。**[到官网案例库带声音看 →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**
+图中展示 AutoClip 自动包装的访谈式与播客式成片。完整视频与原片来源见 **[官网案例库 →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**。
 
 每条成片按目标平台交付视频、封面、标题、简介、话题和 ZIP 发布包。案例库持续更新，欢迎[投稿你的成片](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell)。
 
@@ -85,13 +85,11 @@
 ### 桌面版
 
 1. **下载安装**：在 [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 下载。macOS Apple Silicon 选 `.dmg`，Windows 10 / 11 x64 选 `-setup.exe`。安装包自带 Python 和 FFmpeg。
-2. **配置模型**：在设置里选一家服务商，填好 API Key，分析模型会自动选好；用本地模型时先启动 Ollama 或 LM Studio。
+2. **配置模型**：在设置里选择服务商、填写 API Key，选择可用的分析模型，测试连接并保存；本地模型先在 Ollama / LM Studio 启动服务并加载模型。
 3. **贴链接，选平台**：先试一条有字幕的访谈或播客，可选择竖版版式；无字幕时在设置中准备 Whisper / SenseVoice，或配置云端转写。
 4. **检查并下载**：预览自动成片，检查字幕、取景与内容完整性，再下载发布包或连接账号投稿；需要更多片段时生成备选。
 
-安装包还没有做 Apple 公证和 Windows 代码签名：macOS 第一次请右键应用选「打开」，Windows 在 SmartScreen 里选「更多信息 → 仍要运行」。
-
-Intel Mac / Linux 可使用 Docker 或 CLI。Windows 正式安装包已通过 CI 安装、覆盖升级与视频链路验收，人工界面验收和完整观察期尚未完成，具体范围见 [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)。
+Intel Mac / Linux 可使用 Docker 或 CLI。安装要求、系统首次启动提示和本次发布的验收范围见 [安装指南](docs/USER_INSTALLATION_GUIDE.md) 与 [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)。
 
 [完整安装与首次使用指南](docs/USER_INSTALLATION_GUIDE.md) · [遇到问题？](docs/FAQ.md)
 
@@ -127,7 +125,7 @@ python -m pip install -r requirements.txt
 python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
 ```
 
-以上激活命令用于 macOS / Linux。Windows 用 `py -m venv venv` 创建环境、`venv\Scripts\Activate.ps1` 激活。旧 1.5 候选 wheel 须强制重装正式 wheel，不能只检查版本号。
+以上命令用于 macOS / Linux。Windows 用 `py -m venv venv` 创建环境、`.\venv\Scripts\Activate.ps1` 激活；随后使用相同的 `python -m pip` 安装命令。
 
 先保存模型配置：可复用桌面设置；独立使用时按 ZIP 的无密钥示例配置自己的数据目录，详见 [CLI / MCP 指南](docs/CLI_AND_MCP.md)。`produce` 不使用旧 `run --provider` 的临时覆盖。已有字幕可用 `--srt` 跳过转写。
 
@@ -135,9 +133,9 @@ python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.wh
 autoclip --version
 autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
 autoclip outputs PROJECT_ID --export-kits
-autoclip mcp
-autoclip mcp install opencode
 ```
+
+MCP 服务由客户端启动。需要单独调试时，在另一个终端运行 `autoclip mcp`；使用 OpenCode 可执行 `autoclip mcp install opencode` 写入客户端配置。
 
 把 `PROJECT_ID` 换成制作结果中的项目 ID。MCP 新入口为 `start_quick_output` / `get_quick_output_status`；客户端 `command` 指向虚拟环境中的 `autoclip` 绝对路径，`args` 为 `["mcp"]`。旧 `run` / `export` 和旧切片工具继续兼容。详见 [CLI / MCP](docs/CLI_AND_MCP.md)、[OpenCode 接入](docs/OPENCODE.md) 与 [Agent skill](skills/autoclip/SKILL.md)。
 
@@ -146,7 +144,7 @@ autoclip mcp install opencode
 | 方式        | 配置                                                             |
 | --------- | -------------------------------------------------------------- |
 | 云端 API    | 在设置中选择服务商，填写自己的 API Key。OpenAI 兼容服务还可配置 Base URL。              |
-| Ollama    | 默认地址 `http://localhost:11434/v1`，默认模型 `qwen2.5:7b`，无需 API Key。 |
+| Ollama | 默认地址 `http://localhost:11434/v1`；先拉取并启动本地模型，再选择服务实际提供的模型，无需 API Key。 |
 | LM Studio | 加载模型并启动 Local Server，默认地址 `http://localhost:1234/v1`。          |
 
 Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要改为容器可访问的宿主机地址。
@@ -164,7 +162,7 @@ Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要�
       <a href="https://88api.ai/sign-up?aff=2PIc"><strong>88API</strong></a>
     </td>
     <td valign="middle">
-      Token 聚合平台，提供 GPT、Claude、Gemini、Grok、DeepSeek、Kimi、GLM 等模型，以及图片、视频与语音能力。人工客服、正规发票，充值 1:1。通过<a href="https://88api.ai/sign-up?aff=2PIc">专属链接注册</a>可获体验额度。<a href="docs/88API_SETUP.md">接入说明</a>
+      提供 OpenAI 兼容的多模型 API；可用模型、价格与活动以服务商页面为准。 <a href="https://88api.ai/sign-up?aff=2PIc">了解详情</a> · <a href="docs/88API_SETUP.md">接入说明</a>
     </td>
   </tr>
   <tr>
@@ -173,7 +171,7 @@ Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要�
       <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link"><strong>Infistar 无限星河</strong></a>
     </td>
     <td valign="middle">
-      多模型 API 服务，提供 Claude、GPT、Gemini、DeepSeek 等系列，部分模型低至官方定价的 0.1 折，支持人民币结算、开票及模型验真。通过<a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">专属链接注册</a>可领 $5 体验额度。<a href="docs/INFISTAR_SETUP.md">接入说明</a>
+      提供 OpenAI 兼容的多模型 API；可用模型、价格与活动以服务商页面为准。 <a href="https://www.infistar.cc/register?aff=XLK3BCM6&amp;ref_source=link">了解详情</a> · <a href="docs/INFISTAR_SETUP.md">接入说明</a>
     </td>
   </tr>
 </table>
