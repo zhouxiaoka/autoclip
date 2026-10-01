@@ -189,6 +189,8 @@ def download(project_id, url, browser):
     finally:
         info_path.unlink(missing_ok=True)
     meta = {key: str(info.get(field) or '')[:300] for key, field in (('title', 'title'), ('channel', 'channel'))}
+    if _fetch_platform_subtitles(url, options, info, folder):
+        meta['subtitle_source'] = 'platform'
     store.change(project_id, lambda data: data.update(source_meta=meta))
     from backend.core.database import SessionLocal
     from backend.models.project import Project
@@ -201,6 +203,42 @@ def download(project_id, url, browser):
         p.video_path = str(video)
         p.thumbnail = generate_project_thumbnail(project_id, video)
         db.commit()
+
+
+MIN_PLATFORM_CUES = 20
+
+
+def _fetch_platform_subtitles(url, options, info, folder):
+    """Use the creator's own subtitles in the video's language instead of speech recognition.
+
+    Uploaded subtitles are punctuated and human-checked, and skip ~9 minutes of local Whisper per
+    two hours of audio. Automatic captions are not used: they have no punctuation and repeat
+    rolling lines, which breaks sentence-based cut points. Any problem keeps speech recognition.
+    """
+    language = str(info.get('language') or '').lower()
+    manual = info.get('subtitles') or {}
+    code = next((c for c in manual if language and (c.lower() == language or c.lower().split('-')[0] == language)), None)
+    target = folder / 'input.srt'
+    if not code or target.exists():
+        return False
+    try:
+        from backend.utils.download_recovery import download_with_recovery
+        download_with_recovery(url, {
+            **{key: value for key, value in options.items() if key not in ('format', 'merge_output_format', 'progress_hooks')},
+            'skip_download': True, 'writesubtitles': True, 'subtitleslangs': [code], 'subtitlesformat': 'srt/best',
+            'postprocessors': [{'key': 'FFmpegSubtitlesConvertor', 'format': 'srt'}], 'outtmpl': str(folder / 'platform.%(ext)s'),
+        })
+        fetched = folder / f'platform.{code}.srt'
+        if not fetched.exists() or fetched.read_text(encoding='utf-8', errors='ignore').count('-->') < MIN_PLATFORM_CUES:
+            return False
+        fetched.replace(target)
+        return True
+    except Exception as error:  # noqa: BLE001 - speech recognition still works
+        logger.warning('Platform subtitles unavailable: %s', type(error).__name__)
+        return False
+    finally:
+        for leftover in folder.glob('platform.*'):
+            leftover.unlink(missing_ok=True)
 
 
 def ensure_project_thumbnail(project_id):
