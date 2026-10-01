@@ -50,6 +50,29 @@ jobs:
           path: windows-smoke.json
           if-no-files-found: ignore
 
+      - name: Installed CLI/MCP wheel portrait and font smoke
+        run: |
+          $resources = (Get-Content windows-smoke.json -Raw | ConvertFrom-Json).resources
+          $python = Join-Path $resources 'python\python.exe'
+          $runtime = Join-Path $env:RUNNER_TEMP 'wheel-framing-runtime'
+          & $python -m pip install --target $runtime 'opencv-python-headless>=4.10'
+          if ($LASTEXITCODE -ne 0) { throw 'OpenCV test runtime install failed' }
+          & $python -m pip wheel --no-deps --wheel-dir wheel .
+          if ($LASTEXITCODE -ne 0) { throw 'CLI/MCP wheel build failed' }
+          $wheel = Get-ChildItem wheel -Filter 'autoclip-*-py3-none-any.whl' | Select-Object -First 1
+          $env:AUTOCLIP_FFMPEG_PATH = Join-Path $resources 'ffmpeg\ffmpeg.exe'
+          $env:AUTOCLIP_FFPROBE_PATH = Join-Path $resources 'ffmpeg\ffprobe.exe'
+          & $python -B scripts/verify_python_wheel.py $wheel.FullName --opencv-dir $runtime --video backend/assets/example/source.mp4 --report installed-wheel-portrait.json
+          if ($LASTEXITCODE -ne 0) { throw 'Installed wheel portrait/font smoke failed' }
+
+      - name: Upload installed wheel portrait report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-wheel-portrait-report
+          path: installed-wheel-portrait.json
+          if-no-files-found: ignore
+
       - name: Verify actual installed Whisper runtime and cached transcription
         if: inputs.verify_whisper
         run: |
