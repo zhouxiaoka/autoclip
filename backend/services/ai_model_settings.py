@@ -38,6 +38,13 @@ class Connection(BaseModel):
             raise ValueError('请选择支持的服务类型；自定义服务请选择 OpenAI 兼容')
         return value
 
+    @field_validator('image_api', mode='before')
+    @classmethod
+    def known_image_api(cls, value):
+        # A settings file written by a newer version may name an image API this one lacks:
+        # fall back to auto instead of rejecting every connection (and every task) with it.
+        return value if value in ('auto', 'openai', 'seedream', 'dashscope', 'fal') else 'auto'
+
     @model_validator(mode='after')
     def custom_requires_url(self):
         if self.provider == 'compatible' and not self.base_url:
