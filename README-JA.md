@@ -35,25 +35,25 @@
 
 <table width="100%">
 <tr>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="docs/images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
 <strong>Bill Gates</strong><br>
 インタビュー形式 · Douyin · 中国語<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g">▶ 再生 1:01</a> · <a href="https://www.youtube.com/watch?v=A_156w0aYtU">元動画</a>
 </td>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="docs/images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
 <strong>AI Experts Debate</strong><br>
 インタビュー形式 · Shorts · 英語<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g">▶ 再生 1:25</a> · <a href="https://www.youtube.com/watch?v=OhOmLqR5nN4">元動画</a>
 </td>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="docs/images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
 <strong>Tony Robbins</strong><br>
 全画面ポッドキャスト形式 · Douyin · 中国語<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g">▶ 再生 1:45</a> · <a href="https://www.youtube.com/watch?v=DuRcrbP3kag">元動画</a>
 </td>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="docs/images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
 <strong>Andrew Garfield × Amy Poehler</strong><br>
 全画面ポッドキャスト形式 · Shorts · 英語<br>
@@ -66,13 +66,13 @@
 
 <table width="100%">
 <tr>
-<td align="center" width="50%">
+<td align="center" valign="top" width="50%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
 <strong>佟丽娅 × 鲁豫</strong><br>
 元の画角 · Bilibili · 中国語<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g">▶ 再生 1:41</a> · <a href="https://www.bilibili.com/video/BV1qheu6kEFV/">元動画</a>
 </td>
-<td align="center" width="50%">
+<td align="center" valign="top" width="50%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="docs/images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
 <strong>Sam Altman</strong><br>
 元の画角 · Bilibili · 中国語<br>
@@ -86,25 +86,25 @@
 
 <table width="100%">
 <tr>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="docs/images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
 <strong>Adam Neumann</strong><br>
 全画面ポッドキャスト形式 · TikTok · 英語<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g">▶ 再生 0:59</a> · <a href="https://www.youtube.com/watch?v=IQ4JVWdj4Q0">元動画</a>
 </td>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
 <strong>小奇 × 鲁豫</strong><br>
 インタビュー形式 · Douyin · 中国語<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g">▶ 再生 0:50</a> · <a href="https://www.bilibili.com/video/BV1ighy6AEPz/">元動画</a>
 </td>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
 <strong>郭柯宇 × 鲁豫</strong><br>
 インタビュー形式 · Douyin · 中国語<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g">▶ 再生 1:11</a> · <a href="https://www.bilibili.com/video/BV1LDYV6HEXR/">元動画</a>
 </td>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="docs/images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
 <strong>Willem Dafoe</strong><br>
 全画面ポッドキャスト形式 · TikTok · 英語<br>
@@ -112,25 +112,25 @@
 </td>
 </tr>
 <tr>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="docs/images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
 <strong>TIM × 罗永浩</strong><br>
 インタビュー形式 · Douyin · 中国語<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g">▶ 再生 1:05</a> · <a href="https://www.bilibili.com/video/BV1B5xkzPEhx/">元動画</a>
 </td>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
 <strong>Jensen Huang</strong><br>
 インタビュー形式 · 小紅書 · 中国語<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g">▶ 再生 1:17</a> · <a href="https://www.youtube.com/watch?v=Hrbq66XqtCo">元動画</a>
 </td>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
 <strong>Andrej Karpathy</strong><br>
 インタビュー形式 · Douyin · 中国語<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g">▶ 再生 0:43</a> · <a href="https://www.youtube.com/watch?v=lXUZvyajciY">元動画</a>
 </td>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="docs/images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
 <strong>A20 Pro</strong><br>
 インタビュー形式 · 小紅書 · 中国語<br>
@@ -138,13 +138,13 @@
 </td>
 </tr>
 <tr>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="docs/images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
 <strong>Sylvester Stallone</strong><br>
 インタビュー形式 · Douyin · 中国語<br>
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g">▶ 再生 1:39</a> · <a href="https://www.youtube.com/watch?v=ccs-B_nTfZs">元動画</a>
 </td>
-<td align="center" width="25%">
+<td align="center" valign="top" width="25%">
 <a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="docs/images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
 <strong>MrBeast</strong><br>
 全画面ポッドキャスト形式 · TikTok · 英語<br>
