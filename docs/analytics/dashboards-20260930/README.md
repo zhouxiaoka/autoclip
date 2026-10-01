@@ -2,6 +2,7 @@
 
 - PostHog：[AutoClip｜新用户到真实出片（Studio V2）](https://us.posthog.com/project/450605/dashboard/2152007)
 - Sentry：[AutoClip｜出片稳定性与故障定位](https://autoclip-ts.sentry.io/dashboard/10252510/?statsPeriod=7d)
+- 每日三数（2026-10-01）：[创始人三数日报](../dashboards-20261001/README.md)，口径见 [DAILY_FOUNDER_REPORT.md](../DAILY_FOUNDER_REPORT.md)
 
 旧 PostHog Studio V1 与业务健康看板保留；新版单独建板，不改变历史图的统计口径。Sentry 既有 Studio 工程异常/配置警告 Issue View 保留。
 

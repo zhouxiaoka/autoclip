@@ -105,7 +105,7 @@ python scripts/verify_python_wheel.py dist/autoclip-1.5.0-py3-none-any.whl --vid
 
 ## 社区看板
 
-`community_board.py`、`feature_signals.py`、`setup_community_board.py` 服务于公开路线图，不参与打包。`ingest_app_feedback.py` 把应用内反馈写进 Issue 和 Discussions。用法见 `docs/COMMUNITY_BOARD.md`。
+`community_board.py`、`feature_signals.py`、`setup_community_board.py` 服务于公开路线图，不参与打包。`ingest_app_feedback.py` 把应用内反馈写进 Issue 和 Discussions。`weekly_digest.py` 是反馈周报，`daily_founder_report.py` 是三个创始人数的日报。用法见 `docs/COMMUNITY_BOARD.md` 和 `docs/analytics/DAILY_FOUNDER_REPORT.md`。
 
 ## 开发模式（不打包）
 
