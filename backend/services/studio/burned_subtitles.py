@@ -61,10 +61,32 @@ def decide(masks: list[set[int]]) -> bool:
     return statistics.median(overlaps) < MAX_MEDIAN_OVERLAP
 
 
-def has_burned_subtitles(video: Path, duration: float) -> bool:
+def caption_band(masks: list[set[int]]) -> tuple[float, float] | None:
+    """(top, bottom) of the caption lines as fractions of the frame height, with a little margin.
+
+    The sampled band is the bottom 35 % of the frame; rows come from the glyph pixels of the
+    frames that carry text, trimmed of stray outliers.
+    """
+    threshold = MIN_TEXT_FRACTION * BAND_WIDTH * BAND_HEIGHT
+    rows = sorted(index // BAND_WIDTH for mask in masks if len(mask) >= threshold for index in mask)
+    if not rows:
+        return None
+    low, high = rows[int(len(rows) * .03)], rows[min(len(rows) - 1, int(len(rows) * .97))]
+    top = 0.65 + 0.35 * low / BAND_HEIGHT - 0.02
+    bottom = 0.65 + 0.35 * (high + 1) / BAND_HEIGHT + 0.02
+    return round(max(0.6, top), 4), round(min(1.0, bottom), 4)
+
+
+def detect(video: Path, duration: float) -> tuple[bool, tuple[float, float] | None]:
+    """(has burned captions, where they sit) from one sampling pass."""
     if duration <= 0:
-        return False
+        return False, None
     start, span = duration * 0.05, duration * 0.9
     times = [start + span * (i + 0.5) / SAMPLES for i in range(SAMPLES)]
     masks = [text_mask(band) for band in (_band(video, t) for t in times) if band]
-    return decide(masks)
+    found = decide(masks)
+    return found, caption_band(masks) if found else None
+
+
+def has_burned_subtitles(video: Path, duration: float) -> bool:
+    return detect(video, duration)[0]

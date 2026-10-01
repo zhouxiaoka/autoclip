@@ -359,6 +359,8 @@ def _apply_strategy(draft, strategy_id, *, burned_subtitles=False, layout=None):
     strategy = platform_strategy(strategy_id)
     value = dict(draft)
     layout = layout or (strategy.layout if strategy.layout != 'none' else value.get('layout', 'fit'))
+    if value.get('caption_mask'):
+        burned_subtitles = False  # blurred out: our own captions and framing apply
     if burned_subtitles and strategy.aspect == 'portrait' and layout == 'crop':
         layout = 'blur'
     value.update(
@@ -461,12 +463,12 @@ def _source_has_burned_subtitles(project_id, video=None):
         return bool(cached)
     try:
         from backend.services.publish_export import _probe
-        from backend.services.studio.burned_subtitles import has_burned_subtitles
+        from backend.services.studio.burned_subtitles import detect
         video = video or source(project_id)
-        found = has_burned_subtitles(video, float(_probe(video).get('duration') or 0))
+        found, band = detect(video, float(_probe(video).get('duration') or 0))
     except Exception as error:  # noqa: BLE001 - never block output on a heuristic
         logger.warning('Burned subtitle detection failed: %s', type(error).__name__)
-        found = False
+        found, band = False, None
     language = _burned_caption_language(video, found, (store.read(project_id).get('source_meta') or {}).get('title', ''))
     if language == 'none':
         found, language = False, None  # the vision model saw no captions: the pixel heuristic was fooled by scene text
@@ -476,8 +478,24 @@ def _source_has_burned_subtitles(project_id, video=None):
             data['generation']['source_has_burned_subtitles'] = found
             if language:
                 data['generation']['burned_caption_language'] = language
+            if found and band:
+                data['generation']['burned_caption_band'] = list(band)
     store.change(project_id, remember)
     return found
+
+
+def _caption_mask(project_id, strategy_id):
+    """The burned caption band to blur out of this version, or None.
+
+    An English platform must not show the source's Chinese (or other non-English) captions:
+    the band is blurred and the version is framed and captioned like a caption-free source.
+    """
+    from backend.services.platform_strategy import platform_strategy
+    generation = store.read(project_id).get('generation') or {}
+    band, language = generation.get('burned_caption_band'), generation.get('burned_caption_language')
+    if not (generation.get('source_has_burned_subtitles') and band and language and language != 'en'):
+        return None
+    return list(band) if platform_strategy(strategy_id).audience_language == 'en' else None
 
 
 BURNED_LANGUAGE_PROMPT = (
@@ -587,6 +605,8 @@ def _apply_framing(project_id, value, strategy_id, video, burned, cache):
         return value, None
     interview = strategy.template == 'interview_zh'
     fallback_layout = 'window' if interview else 'blur'
+    if burned and _caption_mask(project_id, strategy_id):
+        burned = False  # the band is blurred out, so cropping cannot cut captions anyone reads
     if burned:
         plain = [{**scene, 'crop_x': None, 'crop_track': None, 'framing_source': None, 'framing_adjusted': False} for scene in value['scenes']]
         return {**value, 'scenes': plain, 'layout': fallback_layout}, 'full_frame_captions'
@@ -750,6 +770,10 @@ def _apply_packaging(project_id, value, strategy_id, burned, cache):
     """
     from backend.services.platform_strategy import platform_strategy
     strategy = platform_strategy(strategy_id)
+    mask = _caption_mask(project_id, strategy_id) if burned else None
+    value = {**{key: item for key, item in value.items() if key != 'caption_mask'}, **({'caption_mask': mask} if mask else {})}
+    if mask:
+        burned = False
     if strategy.template not in ('interview_zh', 'podcast_en'):
         return {key: item for key, item in value.items() if key != 'packaging'}  # never inherit another template's packaging
     from backend.services.studio import packaging

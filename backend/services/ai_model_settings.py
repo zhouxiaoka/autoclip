@@ -115,6 +115,10 @@ class ModelSettings(BaseModel):
     transcription: Transcription | None = None
     cover_enabled: bool = False
     allow_send_frame: bool = False
+    # 1 = saved by 1.5+, where AI covers are an explicit choice. 1.4 switched them on by itself at
+    # first setup, and 1.5 generates one per output in the background (billed), so a file 1.4 wrote
+    # reads with AI covers off; the chosen model stays, one click turns them back on.
+    cover_choice_version: int = 0
     cover_ocr_model: str = ''
     vision_timeout: int = Field(default=180, ge=10, le=300)
     analysis_mode: Literal['auto', 'subtitle', 'visual'] = 'auto'
@@ -145,6 +149,9 @@ class ModelSettings(BaseModel):
         return self
 
 
+COVER_CHOICE_VERSION = 1
+
+
 def path():
     return get_data_directory() / 'ai-model-settings.json'
 
@@ -154,7 +161,10 @@ def load() -> ModelSettings | None:
         target = path()
         if not target.exists():
             return None
-        return ModelSettings.model_validate_json(target.read_text(encoding='utf-8'))
+        settings = ModelSettings.model_validate_json(target.read_text(encoding='utf-8'))
+        if settings.cover_choice_version < COVER_CHOICE_VERSION and settings.cover_enabled:
+            settings = settings.model_copy(update={'cover_enabled': False})
+        return settings
 
 
 def connection_for(settings: ModelSettings, assignment: Assignment) -> Connection:
@@ -244,7 +254,8 @@ def save(settings: ModelSettings) -> dict:
     with _lock:
         settings = ModelSettings.model_validate(settings.model_dump())
         previous = load() or migrate_legacy()
-        resolved = settings.model_copy(update={'connections': [resolve_secret(c, previous) for c in settings.connections]})
+        resolved = settings.model_copy(update={'connections': [resolve_secret(c, previous) for c in settings.connections],
+                                               'cover_choice_version': COVER_CHOICE_VERSION})
         if not resolved.analysis:
             raise ValueError('请选择高光分析模型')
         if resolved.analysis_mode == 'visual' and not vision_endpoint(resolved):

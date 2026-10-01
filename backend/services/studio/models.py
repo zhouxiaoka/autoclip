@@ -123,6 +123,9 @@ class Draft(BaseModel):
     parent_draft_id: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9_-]+$', max_length=100)
     parent_revision: int | None = Field(default=None, ge=1)
     packaging: Packaging | None = None
+    # (top, bottom) of burned captions as fractions of the frame height, blurred out before layout:
+    # an English version of a source with Chinese captions in the picture.
+    caption_mask: tuple[float, float] | None = None
 
     @model_validator(mode='after')
     def title_version(self):

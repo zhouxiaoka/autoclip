@@ -392,3 +392,17 @@ def test_fal_image_connections_and_unknown_image_apis_from_newer_versions():
     assert ai.image_endpoint(fal) == {'provider': 'fal', 'base_url': 'https://fal.run', 'api_key': 'k'}
     future = ai.Connection(id='n', name='n', provider='openai', image_api='some-future-api')
     assert future.image_api == 'auto'  # an unknown value never invalidates the whole settings file
+
+
+def test_ai_covers_switched_on_by_1_4_are_off_after_upgrade_until_chosen_again():
+    from backend.services import cover
+    written_by_1_4 = example().model_dump()
+    written_by_1_4.pop('cover_choice_version')
+    ai.path().parent.mkdir(parents=True, exist_ok=True)
+    ai.path().write_text(json.dumps(written_by_1_4), encoding='utf-8')
+    loaded = ai.load()
+    assert loaded.cover_enabled is False and loaded.cover.model == 'my-image', 'the chosen model stays for one click'
+    assert cover.load_config().enabled is False, 'no billed AI cover in the background'
+    loaded.cover_enabled = True  # the user picks AI generation in 1.5
+    ai.save(loaded)
+    assert ai.load().cover_enabled is True and cover.load_config().enabled is True

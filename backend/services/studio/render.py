@@ -17,6 +17,25 @@ from backend.utils.ffmpeg_utils import get_ffmpeg_path
 PORTRAIT_LINE = 15
 
 
+def _mask_captions(graph, band):
+    """Blur the burned caption band of the source before any layout uses it.
+
+    Every layout reads the source as `[0:v]`; each use gets the masked copy instead. With no
+    graph at all, returns a graph whose output label replaces the plain `0:v:0` map.
+    """
+    top, bottom = (min(max(float(v), 0.0), 1.0) for v in band)
+    height = max(0.02, bottom - top)
+    uses = graph.count('[0:v]') if graph else 0
+    labels = ''.join(f'[masked{k}]' for k in range(max(1, uses)))
+    prefix = (f"[0:v]split=2[maskbase][maskband];[maskband]crop=iw:ih*{height:.4f}:0:ih*{top:.4f},gblur=sigma=40:steps=2[maskblur];"
+              f"[maskbase][maskblur]overlay=0:main_h*{top:.4f},split={max(1, uses)}{labels}")
+    if not uses:  # no video graph (maybe audio only): the masked copy is mapped directly
+        return prefix + (';' + graph if graph else ''), '[masked0]'
+    parts = graph.split('[0:v]')
+    rebuilt = parts[0] + ''.join(f'[masked{k}]' + part for k, part in enumerate(parts[1:]))
+    return prefix + ';' + rebuilt, None
+
+
 def _needs_translation(language, hook, entries):
     """Skip the model call when the hook and captions are already in the target language."""
     from backend.services.studio.packaging import CJK, foreign_for, source_language
@@ -137,6 +156,10 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                     cmd += ['-map', '[audioout]', '-c:a', 'pcm_s16le', '-ar', '48000', '-ac', '2']
                 else:
                     cmd += ['-an']
+                if draft.caption_mask:
+                    graph, masked_map = _mask_captions(graph, draft.caption_mask)
+                    if masked_map:
+                        cmd[cmd.index('0:v:0') - 1:cmd.index('0:v:0') + 1] = ['-map', masked_map]
                 if graph:
                     cmd += ['-filter_complex', graph]
                 from backend.services import video_encoder
