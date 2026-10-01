@@ -227,6 +227,7 @@ def build_submit(
     cid: int,
     tid: int = DEFAULT_TID,
     cover: str = "",
+    tags: list[str] | None = None,
 ) -> dict[str, Any]:
     text = title.strip()[:TITLE_LIMIT].rstrip() or "切片"
     cover_url = (cover or "").strip()
@@ -237,7 +238,7 @@ def build_submit(
         "cover43": cover_url,
         "title": text,
         "tid": tid,
-        "tag": "日常",
+        "tag": ",".join(tag.replace(",", " ") for tag in (tags or [])[:10]) or "日常",
         "desc_format_id": 9999,
         "desc": (description or "")[:2000],
         "recreate": -1,
@@ -325,6 +326,7 @@ def upload_video(
     cover_jpeg: bytes | None = None,
     project_id: str | None = None,
     clip_id: str | None = None,
+    tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """把一个 mp4 投稿到 B 站，返回 bvid / aid。
 
@@ -447,6 +449,7 @@ def upload_video(
         filename=filename,
         cid=biz_id,
         cover=cover_url,
+        tags=tags,
     )
     submitted = http.post(
         "https://member.bilibili.com/x/vu/web/add/v3",
@@ -494,21 +497,24 @@ def publish_clip(req: BilibiliPublishRequest, session: requests.Session | None =
             subtitles=req.subtitles,
             title_card=req.title_card,
         ))
-    title = (req.title or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
+    post = clip.get("post") or {}
+    title = (req.title or post.get("title") or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
     if not title:
         title = f"切片 {req.clip_id}"
+    description = req.description if req.description is not None else post.get("description", "")
     dtime = schedule_unix(req.scheduled_date, req.timezone)
     video_path = Path(export["path"])
     uploaded = upload_video(
         cfg.cookie,
         video_path,
         title=title,
-        description=req.description or "",
+        description=description or "",
         private=req.visibility != "public",
         dtime=dtime,
         session=session,
         project_id=req.project_id,
         clip_id=req.clip_id,
+        tags=post.get("tags") or None,
     )
     request_id = str(uuid.uuid4())
     record = {

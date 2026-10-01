@@ -13,7 +13,8 @@ def output_variant_meta(project_id: str, variant_id: str):
     if not variant or variant.get('status') != 'completed' or not variant.get('render_job_id'):
         raise FileNotFoundError('成片版本尚未完成或不存在')
     meta = export_meta(project_id, PREFIX + variant['render_job_id'])
-    return {**meta, 'output_variant_id': variant_id, 'strategy_id': variant['strategy_id'], 'branding': variant.get('branding', {})}
+    return {**meta, 'output_variant_id': variant_id, 'strategy_id': variant['strategy_id'], 'branding': variant.get('branding', {}),
+            'post': variant.get('post') or {}}
 
 
 def export_meta(project_id: str, source_id: str):

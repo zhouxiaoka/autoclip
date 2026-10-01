@@ -409,7 +409,13 @@ def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
             project_id=req.project_id, clip_id=req.clip_id, preset=preset,
             subtitles=req.subtitles, title_card=req.title_card,
         ))
-    title = (req.title or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
+    post = clip.get("post") or {}
+    if not req.description and post:
+        # The output's publish kit: description plus hashtags, written for this platform.
+        from dataclasses import replace
+        from backend.services.studio.publish_kit import caption_text
+        req = replace(req, description=caption_text({"description": post.get("description", ""), "tags": post.get("tags", [])}) or None)
+    title = (req.title or post.get("title") or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
     if not title:
         title = f"切片 {req.clip_id}"
 
