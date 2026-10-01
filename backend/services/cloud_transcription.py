@@ -5,6 +5,7 @@ import base64
 import json
 import math
 import os
+import time
 from pathlib import Path
 import subprocess
 import tempfile
@@ -15,6 +16,23 @@ import httpx
 from backend.core.asr_model_catalog import adapter
 from backend.services.ai_model_settings import chat_endpoint
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
+
+
+def _workers() -> int:
+    try:
+        return max(1, int(os.getenv('AUTOCLIP_ASR_CONCURRENCY', '8') or 8))
+    except ValueError:
+        return 8
+
+
+UPLOAD_WORKERS = _workers()  # parallel chunk uploads (16 gained only ~10 %)
+CHUNK_ATTEMPTS = 3  # parallel uploads meet rate limits more often: a busy chunk waits and retries alone
+
+
+def _retryable(error: Exception) -> bool:
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response.status_code == 429 or error.response.status_code >= 500
+    return isinstance(error, httpx.RequestError)
 
 
 class CloudTranscriptionError(RuntimeError):
@@ -119,21 +137,43 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
         segments = []
         from backend.core.llm_providers import is_local_url
         try:
-            with wave.open(str(audio), 'rb') as source, httpx.Client(timeout=timeout or 300, follow_redirects=False,
-                    trust_env=not is_local_url(chat_endpoint(connection, '')['base_url'])) as client:
-                offset = 0
+            # Cut every chunk first, then upload them side by side: one request after another made a
+            # three-hour talk ~60 sequential round trips. Offsets come from exact sample counts.
+            chunks, offset = [], 0.0
+            with wave.open(str(audio), 'rb') as source:
                 while True:
                     samples = source.readframes(16000 * 180)
                     if not samples:
                         break
-                    chunk = Path(temp) / 'chunk.wav'
+                    chunk = Path(temp) / f'chunk-{len(chunks):04d}.wav'
                     with wave.open(str(chunk), 'wb') as target:
                         target.setparams(source.getparams())
                         target.writeframes(samples)
                     duration = len(samples) / 32000
-                    items, milliseconds = request_chunk(client, connection, selection.model, chunk, language)
-                    segments.extend(normalize_segments(items, offset, milliseconds, duration))
+                    chunks.append((chunk, offset, duration))
                     offset += duration
+            with httpx.Client(timeout=timeout or 300, follow_redirects=False,
+                              trust_env=not is_local_url(chat_endpoint(connection, '')['base_url'])) as client:
+                def one(part):
+                    chunk, start, duration = part
+                    for attempt in range(CHUNK_ATTEMPTS):
+                        try:
+                            items, milliseconds = request_chunk(client, connection, selection.model, chunk, language)
+                            break
+                        except (httpx.HTTPStatusError, httpx.RequestError) as error:
+                            if attempt == CHUNK_ATTEMPTS - 1 or not _retryable(error):
+                                raise
+                            time.sleep(2 * 2 ** attempt)
+                    return normalize_segments(items, start, milliseconds, duration)
+
+                from concurrent.futures import ThreadPoolExecutor
+                pool = ThreadPoolExecutor(max_workers=UPLOAD_WORKERS, thread_name_prefix='asr-chunk')
+                try:
+                    for part in pool.map(one, chunks):
+                        segments.extend(part)
+                finally:
+                    # On a failure, chunks not yet sent are dropped instead of spending more quota.
+                    pool.shutdown(wait=True, cancel_futures=True)
         except httpx.HTTPStatusError as exc:
             raise CloudTranscriptionError(f'云端转写请求失败（HTTP {exc.response.status_code}），请检查密钥、额度和模型权限。') from None
         except (httpx.RequestError, ValueError) as exc:

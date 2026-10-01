@@ -38,23 +38,61 @@ export function patchShot(scene: Scene, time: number, changes: Partial<CropPoint
 }
 export interface Candidate extends Scene { kind: 'visual' | 'legacy' }
 export interface CandidateList { duration: number; candidates: Candidate[]; warnings: string[] }
+export interface Packaging {
+  version: 1; template: 'interview_zh' | 'podcast_en'; audience_language: 'zh' | 'en'; source_language: 'zh' | 'en' | 'other'
+  title_lines: string[]; title_accent_line: number
+  cues: { start: number; end: number; text: string; original: string }[]
+  speakers: { at: number; name: string; role: string }[]
+  tags: { at: number; text: string }[]; tags_enabled: boolean
+  highlights: { at: number; text: string }[]
+  burned_captions: boolean; fallback: boolean
+  style?: 'classic' | 'boxed' | 'spotlight' | 'pop' | 'cinematic' | null
+  mood?: 'calm' | 'serious' | 'bold' | 'warm' | 'playful' | null
+  palette?: 'azure' | 'amber' | 'coral' | 'mint' | 'lemon' | 'rose' | 'lilac' | null
+}
 export interface Draft {
   id: string; title: string; hook: string; scenes: Scene[]; language: Language
-  aspect: 'original' | 'portrait' | 'landscape'; layout: 'fit' | 'crop' | 'blur'
+  aspect: 'original' | 'portrait' | 'landscape'; layout: 'fit' | 'crop' | 'blur' | 'window'
   crop_x?: number; title_style?: 'plain' | 'impact' | 'card' | 'comic' | 'neon' | 'arena' | 'editorial' | 'pixel' | 'frosted'
   title_template_version?: 1 | 2 | 3 | 4 | 5 | 6; title_motion?: boolean; title_scale?: number; title_y?: number; title_accent?: string | null
   subtitles: boolean; subtitle_style?: SubtitleStyle; original_audio: boolean; revision: number; updated_at: string; origin: string
   parent_draft_id?: string | null; parent_revision?: number | null
+  /** Automatic template packaging; kept as-is on save so edits never drop it. */
+  packaging?: Packaging | null
 }
 export interface RenderJob {
   job_id: string; draft_id: string; title: string; revision: number
   status: 'queued' | 'running' | 'completed' | 'failed'; percent: number; created_at: string; error?: string
-  result?: { width: number; height: number; duration: number; warnings: string[] }
+  brand_outro?: boolean
+  result?: { width: number; height: number; duration: number; warnings: string[]; outro_applied?: boolean }
 }
+export interface OutputVariant {
+  id: string; draft_id: string; draft_revision: number; strategy_id: string; strategy_version: number
+  branding: { outro_enabled: boolean; outro_version: string }
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'on_demand' | 'preparing'; render_job_id?: string; created_at: string; error?: string
+  trimmed_to_sec?: number
+  framing?: 'speaker' | 'full_frame' | 'full_frame_pending' | 'full_frame_captions'
+  /** Publish kit: copy written for this platform, and a cover designed (or AI-made) after the render. */
+  post?: PostCopy | null
+  cover?: 'design' | 'ai' | null
+  cover_job?: { job_id: string; status: 'queued' | 'running' | 'completed' | 'failed'; error?: string } | null
+}
+export interface PostCopy { title: string; description: string; tags: string[] }
+export interface GenerationState {
+  requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
+  auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'
+  created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; completed_variant_count?: number
+}
+export interface PlatformStrategySummary {
+  id: string; label: string; aspect: 'portrait' | 'landscape' | 'original'; duration_policy: 'short' | 'long' | 'adaptive'
+  min_recommended_duration_sec: number | null; max_duration_sec: number | null
+  transport: 'download_only' | 'upload_post' | 'bilibili_direct'; transport_platform: string | null
+}
+
 export interface Workspace {
-  plan?: ImportPlan
-  drafts: Draft[]; events: Scene[]; jobs: RenderJob[]
-  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production'; message?: string; percent?: number; error?: string; coverage?: { duration?:number; note: string; sample_interval: number } }
+  schema_version?: number; plan?: ImportPlan
+  drafts: Draft[]; events: Scene[]; jobs: RenderJob[]; output_variants?: OutputVariant[]; generation?: GenerationState
+  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; error?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }
@@ -95,6 +133,7 @@ export function portraitDesign(draft: Draft): Draft {
 export interface ImportOptions {
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
+  portrait_style?: 'auto' | 'interview' | 'podcast'
 }
 export type AnalysisMode = 'subtitle' | 'visual'
 export interface AnalysisPreferences { analysis_mode: AnalysisMode | 'auto'; allow_visual_screening: boolean }
@@ -107,5 +146,5 @@ export interface ImportPlan {
   preferences: {goal: Goal; language: Language; aspect: Draft['aspect']; duration: number}
   overrides: ImportOptions
 }
-export const defaultImportOptions: ImportOptions = {goal:'auto', language:'source', aspect:null, duration:null, instruction:''}
+export const defaultImportOptions: ImportOptions = {goal:'auto', language:'source', aspect:null, duration:null, instruction:'', portrait_style:'auto'}
 export const goalLabels = {auto:'AI 自动匹配', content:'内容切片', highlight:'精彩高光', promo:'推广成片'} as const

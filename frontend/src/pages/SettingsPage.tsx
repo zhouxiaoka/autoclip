@@ -6,6 +6,7 @@ import { Switch, message } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { settingsApi } from '../services/api'
 import AIModelSettings from '../features/settings/AIModelSettings'
+import OutputBrandingSetting from '../features/settings/OutputBrandingSetting'
 import FeedbackDialog from '../components/FeedbackDialog'
 import PublishSettings from '../components/PublishSettings'
 import { isDesktopMode } from '../utils/desktopMode'
@@ -212,6 +213,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         <Row label={t("开机自动启动")} hint={t("启用后随系统启动，可从托盘打开。仅桌面应用可用。")}>
           <Switch checked={autostart} onChange={toggleAutostart} loading={busy} disabled={!desktop} />
         </Row>
+        <OutputBrandingSetting />
         {(desktop || appUpdate.preview) && (
           <Row label={t('版本')} hint={versionHint}>
             {appUpdate.phase === 'ready' || appUpdate.phase === 'restarting' ? (

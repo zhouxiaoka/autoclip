@@ -22,7 +22,7 @@ export function safeExperience(value: Record<string, unknown>): Properties {
   for (const [key, choices] of Object.entries(enums)) {
     if (typeof value[key] === 'string' && choices.includes(value[key] as string)) out[key] = value[key] as string
   }
-  for (const key of ['changed_connections', 'changed_analysis', 'changed_vision', 'changed_cover', 'changed_transcription', 'preview', 'has_warning', 'defaults_applied', 'analysis_configured', 'vision_configured', 'cover_configured', 'transcription_configured', 'cover_separate']) {
+  for (const key of ['brand_outro_enabled', 'changed_connections', 'changed_analysis', 'changed_vision', 'changed_cover', 'changed_transcription', 'preview', 'has_warning', 'defaults_applied', 'analysis_configured', 'vision_configured', 'cover_configured', 'transcription_configured', 'cover_separate']) {
     if (typeof value[key] === 'boolean') out[key] = value[key] as boolean
   }
   for (const key of ['result_count', 'duration_ms', 'example_version']) {
@@ -38,7 +38,7 @@ export function trackExperience(event: ExperienceEvent, properties: Record<strin
   captureBusinessEvent(event, safeExperience(properties))
 }
 /** The same token gates request + result, including consent changes while awaiting an API. */
-export function beginExperience(name: 'model_settings_load' | 'model_discovery' | 'provider_configuration_save' | 'provider_connection_test' | 'example_project_open', properties: Record<string, unknown>) {
+export function beginExperience(name: 'model_settings_load' | 'model_discovery' | 'provider_configuration_save' | 'provider_connection_test' | 'example_project_open' | 'output_branding_save', properties: Record<string, unknown>) {
   const generation = workflow.generation(), enabled = workflow.active(generation), started = Date.now()
   const props = safeExperience({ ...properties, operation_id: telemetryId() })
   if (enabled) captureBusinessEvent(`${name}_requested`, props)

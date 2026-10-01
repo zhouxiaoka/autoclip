@@ -49,7 +49,9 @@ class TitleGenerator:
             clips_by_chunk[clip.get('chunk_index', 0)].append(clip)
             
         all_clips_with_titles = []
-        for chunk_index, chunk_clips in clips_by_chunk.items():
+
+        def title_chunk(item):
+            chunk_index, chunk_clips = item
             logger.info(f"处理块 {chunk_index}，其中包含 {len(chunk_clips)} 个片段...")
             
             try:
@@ -78,8 +80,7 @@ class TitleGenerator:
                 if not isinstance(titles_map, dict):
                     logger.warning(f"  > LLM返回的标题不是一个字典: {titles_map}，跳过该块。")
                     # 即使失败，也把原始片段加回去，避免数据丢失
-                    all_clips_with_titles.extend(chunk_clips)
-                    continue
+                    return chunk_clips
 
                 for clip in chunk_clips:
                     clip_id = clip.get('id')
@@ -97,14 +98,16 @@ class TitleGenerator:
                         clip['generated_title'] = clip.get('outline', f"片段_{clip_id}")  # 使用outline作为fallback
                         logger.warning(f"  > 未能为片段 {clip_id} 找到或解析标题，使用原始outline")
                 
-                all_clips_with_titles.extend(chunk_clips)
+                return chunk_clips
 
             except Exception as e:
                 logger.error(f"  > 为块 {chunk_index} 生成标题时出错: {e}")
                 # 即使出错，也添加原始数据以防丢失
-                all_clips_with_titles.extend(chunk_clips)
-                continue
-                
+                return chunk_clips
+
+        from .concurrency import map_chunks
+        for chunk_clips in map_chunks(title_chunk, clips_by_chunk.items()):
+            all_clips_with_titles.extend(chunk_clips)
         logger.info("所有高分片段标题生成完成")
         return all_clips_with_titles
         

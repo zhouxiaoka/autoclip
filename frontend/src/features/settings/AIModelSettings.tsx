@@ -132,9 +132,9 @@ function CoverSection({ m }: { m: ModelSettingsStore }) {
   const mainHasImage = !!lists[main?.id || '']?.models.some(x => x.image)
   return <div id="ai-cover" className="ac-model-section">
     <h3 className="ac-model-section-title">{t('封面')}</h3>
-    <p className="ac-note">{t('默认由 AI 用上面的服务画一张带标题的封面；也可以改用视频截帧。')}</p>
+    <p className="ac-note">{t('默认用成片里嘉宾最清晰的画面自动设计封面，免费、秒出。想要更有设计感可以改用 AI 生成，生图服务和模型由你自己选择，按所选服务计费。')}</p>
     <Row wide label={t('封面来源')}>
-      <Segmented ariaLabel={t('封面来源')} value={settings.cover_enabled ? 'ai' : 'frame'} options={[{ value: 'frame', label: t('视频截帧') }, { value: 'ai', label: t('AI 生成') }]} onChange={value => m.setCoverEnabled(value === 'ai')} />
+      <Segmented ariaLabel={t('封面来源')} value={settings.cover_enabled ? 'ai' : 'frame'} options={[{ value: 'frame', label: t('自动设计（免费）') }, { value: 'ai', label: t('AI 生成') }]} onChange={value => m.setCoverEnabled(value === 'ai')} />
     </Row>
     {settings.cover_enabled && !main && <p className="ac-note">{t('先在上面选择一家 AI 服务，生图模型会自动选好。')}</p>}
     {settings.cover_enabled && main && <>

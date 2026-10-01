@@ -5,6 +5,7 @@ from typing import Optional, Literal
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import FileResponse, Response
+from starlette.background import BackgroundTask
 from sqlalchemy.orm import Session
 from backend.core.database import get_db
 from backend.core.sentry_setup import capture_studio_exception
@@ -12,8 +13,9 @@ from backend.models.project import Project
 from backend.models.clip import Clip
 from backend.schemas.project import ProjectCreate, ProjectType
 from backend.services.project_service import ProjectService
+from backend.services.platform_strategy import list_platform_strategies
 from backend.services.studio import store, jobs, intelligence
-from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene, ImportOptions, ConfirmPlan
+from backend.services.studio.models import Draft, CreateDraft, DuplicateDraft, ExportDraftRequest, RewriteRequest, Preferences, Language, Scene, ImportOptions, ConfirmPlan, AppendPlatformsRequest, PostCopy
 
 router = APIRouter()
 
@@ -47,6 +49,13 @@ def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial',
 @router.get('/capabilities')
 def capabilities():
     return {'visual_analysis': intelligence.ready(), 'visual_model': intelligence.visual_config()[2], 'languages': ['source', 'zh', 'en', 'ja']}
+
+
+@router.get('/platform-strategies')
+def platform_strategies():
+    """Public output targets for the quick-generation entry point."""
+    return {'strategies': list_platform_strategies()}
+
 
 from backend.services.studio import vision_settings, analysis_preferences
 
@@ -82,6 +91,10 @@ async def import_visual(
     aspect: Optional[Literal['original', 'portrait', 'landscape']] = Form(None),
     duration: Optional[int] = Form(None, ge=10, le=120),
     instruction: str = Form('', max_length=1000),
+    platforms: list[str] = Form(['douyin']),
+    auto_start: bool = Form(False),
+    portrait_style: Literal['auto', 'interview', 'podcast'] = Form('auto'),
+    brand_outro_enabled: bool = Form(True),
     subtitle: Optional[UploadFile] = File(None),
     name: str = Form('智能剪辑', max_length=200),
     url: Optional[str] = Form(None),
@@ -113,8 +126,11 @@ async def import_visual(
                 raise HTTPException(422, '字幕文件为空或超过 2 MB')
         finally:
             await subtitle.close()
-    prefs = ImportOptions(goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction)
-    project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': True, 'creative_browser': browser}))
+    prefs = ImportOptions(
+        goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
+        platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, branding={'outro_enabled': brand_outro_enabled},
+    )
+    project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': True, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
     pid = str(project.id)
     raw = store.directory(pid) / 'raw'
     raw.mkdir(parents=True, exist_ok=True)
@@ -269,6 +285,94 @@ def confirm_and_start(project_id: str, body: ConfirmPlan, db: Session = Depends(
     run_id = call(jobs.confirm_project, project_id, body)
     return {'ok': True, 'analysis_run_id': run_id}
 
+@router.post('/{project_id}/platforms')
+def append_platforms(project_id: str, body: AppendPlatformsRequest, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    variants = call(jobs.append_platform_variants, project_id, body.platforms, body.branding.model_dump())
+    return {'variants': variants}
+
+
+def _variant_job(project_id: str, variant_id: str):
+    state = call(store.read, project_id)
+    variant = next((item for item in state.get('output_variants', []) if item['id'] == variant_id), None)
+    if not variant:
+        raise HTTPException(404, '成片版本不存在')
+    job = next((j for j in state['jobs'] if j['job_id'] == variant.get('render_job_id')), None)
+    if not job or job['status'] != 'completed':
+        raise HTTPException(409, '成片尚未生成')
+    return variant, job
+
+
+@router.get('/{project_id}/output-variants/{variant_id}/cover')
+def output_variant_cover(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    from backend.services.studio import publish_kit
+    project_or_404(project_id, db)
+    variant, job = _variant_job(project_id, variant_id)
+    path, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
+    if path is None:
+        raise HTTPException(404, '封面尚未生成')
+    return FileResponse(path, media_type='image/jpeg', headers={'Cache-Control': 'no-store'})
+
+
+@router.post('/{project_id}/output-variants/{variant_id}/cover/ai')
+def redesign_output_variant_cover(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    from backend.services import cover
+    project_or_404(project_id, db)
+    _variant_job(project_id, variant_id)
+    cfg = cover.load_config()
+    if not (cfg.enabled and cfg.configured):
+        raise HTTPException(409, '请先在设置里开启 AI 封面并选择图像模型')
+    if not cfg.allow_send_frame:
+        raise HTTPException(409, '请先在设置里允许发送参考帧')
+    job = call(jobs.request_ai_cover, project_id, variant_id)
+    if job is None:
+        raise HTTPException(409, '请先检查 AI 封面设置')
+    return job
+
+
+@router.get('/{project_id}/output-variants/{variant_id}/cover/ai')
+def output_variant_cover_job(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    _variant_job(project_id, variant_id)
+    return call(jobs.ai_cover_status, project_id, variant_id)
+
+
+@router.put('/{project_id}/output-variants/{variant_id}/post')
+def update_output_variant_post(project_id: str, variant_id: str, body: PostCopy, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    return call(jobs.update_post, project_id, variant_id, body)
+
+
+@router.get('/{project_id}/output-variants/{variant_id}/kit')
+def output_variant_kit(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    from urllib.parse import quote
+    from backend.services.platform_strategy import platform_strategy
+    from backend.services.studio import publish_kit
+    project_or_404(project_id, db)
+    variant, job = _variant_job(project_id, variant_id)
+    video = store.directory(project_id) / 'output' / 'studio' / f"{job['job_id']}.mp4"
+    if not video.is_file():
+        raise HTTPException(404, '成片文件已移除')
+    cover, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
+    post = variant.get('post') or {'title': (job.get('result') or {}).get('title', '')}
+    strategy = platform_strategy(variant['strategy_id'])
+    path, name = publish_kit.kit_file(video, cover, post, strategy.label, english=strategy.audience_language == 'en')
+    return FileResponse(path, media_type='application/zip', headers={'Content-Disposition': f"attachment; filename*=UTF-8''{quote(name)}"},
+                        background=BackgroundTask(path.unlink, missing_ok=True))
+
+
+@router.post('/{project_id}/output-variants/{variant_id}/produce')
+def produce_output_variant(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    return call(jobs.produce_variant, project_id, variant_id)
+
+
+@router.post('/{project_id}/output-variants/{variant_id}/retry')
+def retry_output_variant(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    project_or_404(project_id, db)
+    return call(jobs.retry_variant, project_id, variant_id)
+
+
 @router.post('/{project_id}/drafts')
 def create_draft(project_id: str, body: CreateDraft, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
@@ -370,13 +474,17 @@ def auto_frame(project_id: str, body: Draft, db: Session = Depends(get_db)):
 @router.post('/{project_id}/drafts/{draft_id}/export')
 def export(project_id: str, draft_id: str, body: ExportDraftRequest | None = None, db: Session = Depends(get_db)):
     project_or_404(project_id, db)
-    raw = next((d for d in store.read(project_id)['drafts'] if d['id'] == draft_id), None)
+    state = store.read(project_id)
+    raw = next((d for d in state['drafts'] if d['id'] == draft_id), None)
     if not raw:
         raise HTTPException(404, '草稿不存在')
     if body and body.revision != raw['revision']:
         raise HTTPException(409, '草稿已在另一窗口更新，请重新加载后再导出')
     draft = Draft.model_validate(raw)
     call(validate_draft, project_id, draft)
+    variant = next((v for v in state.get('output_variants', []) if v['draft_id'] == draft_id), None)
+    if variant:
+        return call(jobs.export, project_id, draft, brand_outro=bool(variant.get('branding', {}).get('outro_enabled', True)))
     return call(jobs.export, project_id, draft)
 
 @router.get('/{project_id}/exports/{job_id}/video')

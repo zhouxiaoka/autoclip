@@ -250,6 +250,22 @@ jobs:
       - name: List artifacts
         run: ls -la dist
 
+      - name: Set up Python for CLI and MCP release
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build and verify CLI and MCP wheel from the same tag
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
+          python -m pip install -r requirements.txt
+          python -m pip install 'opencv-python-headless>=4.10'
+          python -m pip wheel --no-deps --wheel-dir dist .
+          python scripts/verify_python_wheel.py dist/autoclip-*-py3-none-any.whl --video backend/assets/example/source.mp4 --report "$RUNNER_TEMP/wheel-portrait-report.json"
+          python scripts/build_python_release.py dist/autoclip-*-py3-none-any.whl --out "dist/autoclip-${GITHUB_REF_NAME#v}-cli-mcp.zip"
+          (cd dist && sha256sum *.whl *-cli-mcp.zip > python-release-sha256.txt)
+
       # Release 正文 = CHANGELOG.md 里该版本的段落 + 平台安装说明（scripts/release_notes.py，仅标准库）
       - name: Render release notes from CHANGELOG
         run: python3 scripts/release_notes.py "${{ github.ref_name }}" -o release_body.md && cat release_body.md

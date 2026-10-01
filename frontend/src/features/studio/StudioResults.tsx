@@ -9,33 +9,45 @@ import { useWorkspace } from './useWorkspace'
 import { Scene, Draft } from './types'
 import ExportHistory from './ExportHistory'
 import DraftResultCard from './DraftResultCard'
+import OutputVariantCard from './OutputVariantCard'
+import PlatformPicker from './PlatformPicker'
+import { platformLabel } from './platformLabel'
 
 import './studio.css'
 
 export default function StudioResults({ project, children, onCreateCollection, onReload }: { project: Project; children: ReactNode; onCreateCollection: () => void; onReload: () => void }) {
   useTranslation()
   const navigate = useNavigate()
-  const {workspace,error,loading,refresh} = useWorkspace(project.id)
+  const {workspace,error,loading,loaded,refresh} = useWorkspace(project.id)
   const [history, setHistory] = useState(false)
   const [busy,setBusy] = useState('')
   const [actionError,setActionError] = useState('')
   const [preview,setPreview] = useState<Scene|null>(null)
   const [exporting,setExporting] = useState<Draft|null>(null)
+  const [addingPlatforms, setAddingPlatforms] = useState(false)
+  const [platforms, setPlatforms] = useState<string[]>([])
   const goal = project.settings?.creative?.goal || project.processing_config?.creative?.goal || 'content'
   const visual = goal !== 'content'
   const sourceDuration=workspace.plan?.source_duration ?? workspace.analysis?.coverage?.duration
   const managed = visual || !!project.settings?.smart_import || !!project.processing_config?.smart_import
+  const automatic = !!workspace.generation?.auto_start
+  const variantDraft = (draftId: string) => workspace.drafts.find(draft => draft.id === draftId)
+  const variantJob = (jobId?: string) => workspace.jobs.find(job => job.job_id === jobId)
   useEffect(()=>{if(workspace.analysis && workspace.analysis.status!=='running' && project.status!=='completed') onReload()},[workspace.analysis?.status])
+  // The generation terminal event comes from the persisted `studio-generation` watch registered at
+  // import, so it is reported once even when the user leaves this page before rendering ends.
   const act = async (key: string, fn:()=>Promise<void>) => {setBusy(key);setActionError('');try{await fn();refresh()}catch(e){setActionError(t(errorText(e)))}finally{setBusy('')}}
+  const appendPlatforms = () => act('append-platforms', async () => { await studioApi.appendPlatforms(project.id, platforms, workspace.generation?.branding.outro_enabled ?? true); setAddingPlatforms(false) })
   const createLegacy = (clip: Clip) => act(clip.id, async()=>{const draft=await studioApi.create(project.id,[clip.id],clip.generated_title||clip.title||t("新成片"));navigate(`/project/${project.id}/studio/${draft.id}`)})
   return <>
-    {managed && <div className="studio-row"><span className="studio-muted">{sourceDuration!=null?`${t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) })} · `:''}{workspace.analysis?.status==='awaiting_confirmation'?t("新制作方案待确认，已有结果保留。"):t("制作结果与编辑")}</span><Btn size="sm" disabled={workspace.analysis?.status==='running'} onClick={()=>navigate(`/import/${project.id}`)}>{workspace.analysis?.status==='awaiting_confirmation'?t("继续确认方案"):t("调整制作方案")}</Btn></div>}
-    {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={workspace.drafts.length+(project.clips?.length||0)+(project.collections?.length||0)} description={visual?t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。"):t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions"><Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}</Btn>{!managed&&<Btn size="sm" onClick={onCreateCollection}>{t("新建合集")}</Btn>}</div>}>
+    {managed && !automatic && <div className="studio-row"><span className="studio-muted">{sourceDuration!=null?`${t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) })} · `:''}{workspace.analysis?.status==='awaiting_confirmation'?t("新制作方案待确认，已有结果保留。"):t("制作结果与编辑")}</span><Btn size="sm" disabled={workspace.analysis?.status==='running'} onClick={()=>navigate(`/import/${project.id}`)}>{workspace.analysis?.status==='awaiting_confirmation'?t("继续确认方案"):t("调整制作方案")}</Btn></div>}
+    {automatic && <><div className="studio-row"><span className="studio-muted">{workspace.generation?.status==='completed'?t('已按所选平台生成可发布成片。'):workspace.generation?.status==='partial'?t('部分成片已完成，未完成版本可稍后重试。'):t('AI 正在按所选平台制作成片。')}</span><Btn size="sm" disabled={!!busy} onClick={()=>{setPlatforms([]);setAddingPlatforms(value=>!value)}}>{t('追加平台版本')}</Btn></div>{workspace.generation?.skipped?.map(item=><p key={item.strategy_id} className="studio-output-hint">{t('未生成 {{platform}}：{{reason}}', { platform: platformLabel(item.strategy_id), reason: t(item.reason) })}</p>)}{addingPlatforms && <div className="studio-import-box"><PlatformPicker value={platforms} onChange={setPlatforms} disabled={!!busy}/><div className="studio-actions"><Btn size="sm" onClick={()=>setAddingPlatforms(false)}>{t('关闭')}</Btn><Btn variant="cta" size="sm" disabled={!platforms.length} loading={busy==='append-platforms'} onClick={appendPlatforms}>{t('生成追加版本')}</Btn></div></div>}</>}
+    {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={automatic ? (workspace.output_variants?.length || 0) : workspace.drafts.length+(project.clips?.length||0)+(project.collections?.length||0)} description={visual?t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。"):t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions"><Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}</Btn>{!managed&&<Btn size="sm" onClick={onCreateCollection}>{t("新建合集")}</Btn>}</div>}>
       {workspace.analysis?.status==='running' && <div className="ac-empty studio-processing"><b><span className="spin"/> {t(workspace.analysis.message||"分析画面中")}{typeof workspace.analysis.percent==='number' && ` · ${workspace.analysis.percent}%`}</b>{workspace.analysis.phase==='screening'?t("识别完成后，请确认要制作的类型；现在还不会开始剪辑。"):t("完成后草稿会出现在这里，可以先处理其他项目。")}</div>}
       {workspace.analysis?.status==='failed' && <div className="ac-empty"><b>{t("这次制作未完成")}</b><span className="studio-error">{t(workspace.analysis.error || '')}</span><Btn onClick={()=>navigate('/settings')}>{t("模型设置")}</Btn></div>}
       {error && <div className="ac-empty"><b>{t("成片草稿加载失败")}</b>{t(error)}<Btn onClick={refresh}>{t("重试")}</Btn></div>}
-      <div className="ac-grid-3 studio-result-grid">{workspace.drafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}
-        onEdit={()=>navigate(`/project/${project.id}/studio/${d.id}`)} onExport={()=>setExporting(d)} onHistory={()=>setHistory(true)} />)}{children}</div>
+      <div className="ac-grid-3 studio-result-grid">{automatic ? [...(workspace.output_variants || [])].sort((a, b) => Number(a.status === 'on_demand') - Number(b.status === 'on_demand')).map(variant => <OutputVariantCard key={variant.id} projectId={project.id} variant={variant} draft={variantDraft(variant.draft_id)} job={variantJob(variant.render_job_id)} onRetry={()=>act(`retry-${variant.id}`, async()=>{await studioApi.retryOutputVariant(project.id, variant.id)})} onProduce={()=>act(`produce-${variant.id}`, async()=>{await studioApi.produceOutputVariant(project.id, variant.id, variant.strategy_id)})}/>) : workspace.drafts.map(d => <DraftResultCard key={d.id} projectId={project.id} draft={d} jobs={workspace.jobs}
+        onEdit={()=>navigate(`/project/${project.id}/studio/${d.id}`)} onExport={()=>setExporting(d)} onHistory={()=>setHistory(true)} />)}{loaded && !automatic && children}</div>
       {!loading&&!error&&!workspace.drafts.length&&!project.clips?.length&&!project.collections?.length&&workspace.analysis?.status!=='running'&&<div className="ac-empty"><b>{t("暂时没有可用成片")}</b>{managed?t("可以重试，或修改制作方案。"):t("可调整最低评分后重试内容处理。")}</div>}
     </Section>}
     {actionError&&<p className="studio-error" role="alert">{actionError}</p>}

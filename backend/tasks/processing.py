@@ -67,6 +67,7 @@ def process_video_pipeline(
     project_id: str,
     input_video_path: str,
     input_srt_path: Optional[str] = None,
+    clips_only: bool = False,
 ) -> Dict[str, Any]:
     """
     处理视频流水线任务 - 使用Pipeline适配器
@@ -127,7 +128,7 @@ def process_video_pipeline(
 
         # 执行Pipeline处理 - 使用异步包装器
         import asyncio
-        result = asyncio.run(pipeline_adapter.process_project_sync(input_video_path, input_srt_path))
+        result = asyncio.run(pipeline_adapter.process_project_sync(input_video_path, input_srt_path, clips_only=clips_only))
 
         with session_scope() as db:
             task = db.query(Task).filter(Task.id == task_row_id).first()

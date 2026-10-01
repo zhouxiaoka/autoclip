@@ -428,6 +428,9 @@ class LLMManager:
         try:
             response = self.current_provider.call(prompt, input_data, **kwargs)
             content = response.content
+            from backend.core import llm_usage
+            llm_usage.record(response.model or getattr(self.current_provider, 'model_name', None), response.usage,
+                             prompt_chars=len(self.current_provider._build_full_input(prompt, input_data)), completion_chars=len(content or ''))
             if cache_path is not None:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 cache_path.write_text(content, encoding="utf-8")

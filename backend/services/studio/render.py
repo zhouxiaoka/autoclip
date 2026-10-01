@@ -3,17 +3,49 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from backend.services.publish_export import ExportRequest, _build_filter, _load_srt_entries, _probe, resolve_cjk_font, slice_srt
+from backend.services.publish_export import ExportRequest, _build_filter, _load_srt_entries, _probe, resolve_cjk_font, slice_srt, subtitle_line_limit
 from backend.services.studio.intelligence import text_json, validate_scenes
 from backend.services.studio.models import Draft
 from backend.services.studio.titles import template_filters
 from backend.services.studio import title_art
 from backend.services.studio import audio
 from backend.services.studio.store import directory
+from backend.services import render_limits
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
 
-def render_draft(project_id, video, draft: Draft, job_id, progress):
+def _mask_captions(graph, band):
+    """Blur the burned caption band of the source before any layout uses it.
+
+    Every layout reads the source as `[0:v]`; each use gets the masked copy instead. With no
+    graph at all, returns a graph whose output label replaces the plain `0:v:0` map.
+    """
+    top, bottom = (min(max(float(v), 0.0), 1.0) for v in band)
+    height = max(0.02, bottom - top)
+    uses = graph.count('[0:v]') if graph else 0
+    labels = ''.join(f'[masked{k}]' for k in range(max(1, uses)))
+    prefix = (f"[0:v]split=2[maskbase][maskband];[maskband]crop=iw:ih*{height:.4f}:0:ih*{top:.4f},gblur=sigma=40:steps=2[maskblur];"
+              f"[maskbase][maskblur]overlay=0:main_h*{top:.4f},split={max(1, uses)}{labels}")
+    if not uses:  # no video graph (maybe audio only): the masked copy is mapped directly
+        return prefix + (';' + graph if graph else ''), '[masked0]'
+    parts = graph.split('[0:v]')
+    rebuilt = parts[0] + ''.join(f'[masked{k}]' + part for k, part in enumerate(parts[1:]))
+    return prefix + ';' + rebuilt, None
+
+
+def _needs_translation(language, hook, entries):
+    """Skip the model call when the hook and captions are already in the target language."""
+    from backend.services.studio.packaging import CJK, foreign_for, source_language
+    if language not in ('zh', 'en'):
+        return True
+    if entries and source_language([e.get('text', '') for e in entries]) != language:
+        return True
+    if hook and (foreign_for('en', hook) if language == 'en' else not CJK.search(hook)):
+        return True
+    return False
+
+
+def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
     w, h = {'portrait': (1080, 1920), 'landscape': (1920, 1080)}.get(draft.aspect, (info.get('width'), info.get('height')))
@@ -24,12 +56,14 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
     keep_audio = draft.original_audio and audio.has_audio(video)
     if draft.original_audio and not keep_audio:
         warnings.append('原素材没有音轨，本次导出无声')
-    entries = _load_srt_entries(project_id) if draft.subtitles else []
+    packaged = draft.packaging is not None
+    # Template packaging carries its own captions and title; the legacy subtitle/title path stays off.
+    entries = _load_srt_entries(project_id) if draft.subtitles and not packaged else []
     # Only transmit the subtitle rows used by this draft, never unrelated transcript text.
     from backend.pipeline.quality import to_seconds
     entries = [e.copy() for e in entries if any(to_seconds(e['start_time']) < s.end and to_seconds(e['end_time']) > s.start for s in draft.scenes)]
-    hook = draft.hook
-    if draft.language != 'source' and (hook or entries):
+    hook = '' if packaged else draft.hook
+    if draft.language != 'source' and (hook or entries) and _needs_translation(draft.language, hook, entries):
         translated = text_json('将 title 和 subtitles 翻译成指定语言；保持 subtitles 的数量与顺序，不添加事实。返回 {"title":"...","subtitles":["..."]}。', {'language': draft.language, 'title': hook, 'subtitles': [e.get('text', '') for e in entries]})
         rows = translated.get('subtitles', [])
         if len(rows) != len(entries) or not all(isinstance(t, str) for t in rows) or not isinstance(translated.get('title'), str):
@@ -42,7 +76,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
     font = resolve_cjk_font()
     if hook and draft.title_style not in title_art.STYLES and not font:
         raise ValueError('缺少中文字体，无法烧录开头文字，请安装 Noto Sans CJK')
-    if draft.subtitles and not entries:
+    if draft.subtitles and not entries and not packaged:
         warnings.append('原素材没有可用字幕，本次未烧录字幕')
     out_dir = directory(project_id) / 'output' / 'studio'
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -55,7 +89,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
             for i, scene in enumerate(draft.scenes):
                 duration = audio.scene_duration(scene)
                 srt = folder / f'{i}.srt'
-                body = slice_srt(entries, scene.start, scene.end)
+                body = slice_srt(entries, scene.start, scene.end, subtitle_line_limit(w, h, draft.subtitle_style))
                 if body:
                     srt.write_text(body, encoding='utf-8')
                 title = folder / 'title.txt'
@@ -64,7 +98,13 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                     title.write_text('\n'.join(textwrap.wrap(hook, width=14)), encoding='utf-8')
                 spec = {'layout': draft.layout, 'w': w, 'h': h}
                 req = ExportRequest(project_id, draft.id, layout=draft.layout)
-                built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font, draft.subtitle_style)
+                if packaged:
+                    from backend.services.studio import packaging_render
+                    ass_path = folder / f'{i}.ass'
+                    ass_path.write_text(packaging_render.scene_ass(draft.packaging, draft.scenes, i), encoding='utf-8')
+                    built = packaging_render.scene_video_graph(draft, scene, i, ass_path, w, h)
+                else:
+                    built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font, draft.subtitle_style)
                 clip_path = folder / f'{i}.mkv'
                 artwork = None
                 backdrop = None
@@ -75,7 +115,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                         from backend.services.studio.title_materials import backdrop_png
                         backdrop = folder / 'backdrop.png'
                         backdrop.write_bytes(backdrop_png(hook, draft.title_style, w, h, **title_art.options_for(draft)))
-                cmd = [get_ffmpeg_path(), '-v', 'error', '-ss', str(scene.start), '-i', str(video)]
+                cmd = [get_ffmpeg_path(), '-v', 'error', *render_limits.input_args(), '-ss', str(scene.start), '-i', str(video)]
                 if artwork:
                     cmd += ['-loop', '1', '-i', str(artwork)]
                 if backdrop:
@@ -113,10 +153,22 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                     cmd += ['-map', '[audioout]', '-c:a', 'pcm_s16le', '-ar', '48000', '-ac', '2']
                 else:
                     cmd += ['-an']
+                if draft.caption_mask:
+                    graph, masked_map = _mask_captions(graph, draft.caption_mask)
+                    if masked_map:
+                        cmd[cmd.index('0:v:0') - 1:cmd.index('0:v:0') + 1] = ['-map', masked_map]
                 if graph:
                     cmd += ['-filter_complex', graph]
-                cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', '30', '-threads', '2', '-y', str(clip_path)]
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=max(180, (scene.end-scene.start)*20))
+                from backend.services import video_encoder
+
+                def build(name, base=cmd, clip_path=clip_path):
+                    return [*base, *video_encoder.h264_args(w, h, name), '-r', '30', *render_limits.output_args(), '-y', str(clip_path)]
+
+                def run(full, length=scene.end - scene.start):
+                    full, priority = render_limits.low_priority(full)
+                    return subprocess.run(full, capture_output=True, text=True, timeout=max(180, length * 20), **priority)
+
+                proc = video_encoder.run_with_fallback(build, run)
                 if proc.returncode:
                     raise RuntimeError('渲染镜头失败：' + proc.stderr[-600:])
                 parts.append(clip_path)
@@ -133,7 +185,10 @@ def render_draft(project_id, video, draft: Draft, job_id, progress):
                 cmd += ['-an']
             cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]
             subprocess.run(cmd, check=True, capture_output=True, timeout=max(180, sum(durations)*2))
-            os.replace(partial, output)
-        return {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings}
+            from backend.services.output_branding import append_outro
+            outro_applied = append_outro(partial, output, width=w, height=h, enabled=brand_outro)
+            if brand_outro and not outro_applied:
+                warnings.append('品牌片尾未能添加，已保留成片')
+        return {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
     finally:
         partial.unlink(missing_ok=True)

@@ -89,6 +89,16 @@ Tauri 合并，不影响 macOS。
 
 ## CI
 
+Python wheel 的资源和人物取景校验：安装基础依赖与 `opencv-python-headless>=4.10`，
+先构建 wheel，再执行：
+
+```bash
+python scripts/verify_python_wheel.py dist/autoclip-1.5.0-py3-none-any.whl --video backend/assets/example/source.mp4 --report /tmp/wheel-portrait.json
+```
+
+脚本把 wheel 安装到源码目录外，核对 ONNX 与 MIT 许可证，并从真实视频抽帧生成访谈 / 播客两种裁切轨迹。
+不读取旧任务的取景缓存、不调用付费模型；CI 每次运行这个检查。
+
 `.github/workflows/desktop-build.yml`：
 - `workflow_dispatch`：可勾选只构建 macOS 或只构建 Windows
 - `v*` tag：两个平台并行构建，`release` job 汇总产物挂到 GitHub Release（任一平台失败不阻塞另一平台上传）

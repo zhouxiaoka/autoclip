@@ -19,12 +19,14 @@ autoclip — 命令行出片。
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
+from backend import __version__
 
 # 只 import 不触发数据库 / 模型初始化的东西；重活放在子命令里、configure_environment 之后
 from backend.services.local_runner import (
@@ -76,6 +78,35 @@ def _llm_override(args: argparse.Namespace) -> LLMOverride:
 
 
 # ---------------------------------------------------------------- run ---
+def cmd_produce(args: argparse.Namespace) -> int:
+    from backend.services import quick_output_runner as quick
+    try:
+        # Providers and ASR may print progress from worker threads. Keep stdout parseable
+        # for scripts, just as the MCP stdio entry point keeps its protocol stream clean.
+        with contextlib.redirect_stdout(sys.stderr):
+            project_id = quick.start(args.source, args.platform or ['douyin'], name=args.name, srt_path=args.srt,
+                                     instruction=args.instruction, browser=args.browser, portrait_style=args.portrait_style)
+            if not args.json:
+                print(f'1.5 一键出片 · {project_id} · 进度写入项目目录', file=sys.stderr)
+            result = quick.wait(project_id, timeout=args.timeout)
+        result['ok'] = result['status'] in ('completed', 'partial') and not result.get('timed_out')
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result['ok'] else 1
+    except (ValueError, FileNotFoundError) as error:
+        print(json.dumps({'ok': False, 'error': str(error)}, ensure_ascii=False))
+        return 2
+
+
+def cmd_outputs(args: argparse.Namespace) -> int:
+    from backend.services import quick_output_runner as quick
+    try:
+        print(json.dumps(quick.status(args.project_id, export_kits=args.export_kits), ensure_ascii=False, indent=2))
+        return 0
+    except (ValueError, FileNotFoundError) as error:
+        print(json.dumps({'ok': False, 'error': str(error)}, ensure_ascii=False))
+        return 2
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     from backend.services.local_runner import configure_llm, prepare_project, run_pipeline, summarize_project
 
@@ -506,8 +537,26 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=__doc__.split("\n\n", 1)[1] if __doc__ else None,
     )
     p.add_argument("--data-dir", help="数据目录（默认与桌面应用共用；也可用 AUTOCLIP_DATA_DIR）")
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     p.add_argument("-v", "--verbose", action="store_true", help="在终端输出后端日志")
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    q = sub.add_parser('produce', help='1.5 一键出片：平台视频、封面、发布文案与发布包（共用桌面设置）')
+    q.add_argument('source', help='本地视频路径或 HTTPS 的 YouTube / B 站链接')
+    q.add_argument('--platform', action='append', help='平台，可重复：douyin / xiaohongshu / tiktok / instagram_reels / youtube_shorts / youtube_long / bilibili')
+    q.add_argument('--name')
+    q.add_argument('--srt', help='本地 SRT 字幕文件')
+    q.add_argument('--instruction', default='')
+    q.add_argument('--portrait-style', choices=['auto', 'interview', 'podcast'], default='auto', help='竖版版式；画幅和文字语言仍按平台')
+    q.add_argument('--browser', choices=['chrome', 'edge', 'firefox', 'safari'])
+    q.add_argument('--timeout', type=float, default=7200, help='等待秒数；超时不会取消项目')
+    q.add_argument('--json', action='store_true', help='只在 stdout 输出 JSON 结果')
+    q.set_defaults(func=cmd_produce)
+
+    outputs = sub.add_parser('outputs', help='查询一键出片进度和文件路径（不触发生成）')
+    outputs.add_argument('project_id')
+    outputs.add_argument('--export-kits', action='store_true', help='为已完成的版本写入发布包 ZIP')
+    outputs.set_defaults(func=cmd_outputs)
 
     r = sub.add_parser("run", help="处理一条视频，输出切片与合集")
     r.add_argument("video", help="视频文件路径")

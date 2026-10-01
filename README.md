@@ -222,6 +222,16 @@ python -m pip install -e .
 
 本地模型示例：先安装并启动 Ollama，再下载模型。无字幕视频需要 `faster-whisper`，首次转写会下载语音模型；已有字幕可用 `--srt talk.srt`。
 
+**1.5 一键出片**使用桌面已经保存的模型配置，直接生成平台视频、封面、发布文案和 ZIP 发布包：
+
+```bash
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
+MCP 对应 `start_quick_output` + `get_quick_output_status`，支持同样的平台和竖版选择。安装与同事测试说明见 [1.5 验收记录](docs/RELEASE_1_5.md)。
+
 ```bash
 ollama pull qwen2.5:7b
 python -m pip install faster-whisper

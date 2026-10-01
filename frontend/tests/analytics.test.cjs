@@ -39,6 +39,25 @@ const task = overrides => ({ id: 'task-1', task_type: 'video_processing', status
   created_at: '2026-09-21T01:00:00', started_at: '2026-09-21T01:00:01Z',
   completed_at: '2026-09-21T01:00:06Z', ...overrides })
 
+test('quick-output properties accept only bounded platform and branding fields', () => {
+  const props = core.safeStudioProperties({
+    strategy_id: 'tiktok', material_origin: 'user', generation_reason: 'platform_append',
+    platform_count: 2, variant_count: 3, completed_variant_count: 2, brand_outro_enabled: true,
+    project_id: 'private-project', filename: 'private.mp4', reason: 'raw user text', url: 'https://private.example',
+  })
+  assert.equal(props.studio_schema_version, 2)
+  assert.equal(props.strategy_id, 'tiktok')
+  assert.equal(props.material_origin, 'user')
+  assert.equal(props.generation_reason, 'platform_append')
+  assert.equal(props.platform_count, 2)
+  assert.equal(props.variant_count, 3)
+  assert.equal(props.completed_variant_count, 2)
+  assert.equal(props.brand_outro_enabled, true)
+  assert.equal(JSON.stringify(props).includes('private'), false)
+  assert.equal(core.safeStudioProperties({ strategy_id: 'untrusted', generation_reason: 'raw text', platform_count: -1 }).strategy_id, undefined)
+})
+
+
 test('duplicate polling and restart preserve deduplication, actual duration and stable IDs', () => {
   const s = setup(); s.tracker.watch('project', 'p')
   const w = s.tracker.list()[0]
@@ -220,7 +239,7 @@ test('actual Studio API enrolls accepted work and sends aggregate-only telemetry
   assert.equal(s.events.length,6)
   assert.equal(JSON.stringify(s.events).includes('private'),false)
   assert.equal(JSON.stringify(s.events).includes('secret'),false)
-  for(const e of s.events) assert.ok(Object.keys(e.props).every(k=>['operation_id','flow_id','material_origin','auto_frame_retained','has_crop_track','has_manual_adjustment','studio_schema_version','request_duration_ms','source_type','has_subtitle','aspect','goal_content','goal_highlight','goal_promo'].includes(k)))
+  for(const e of s.events) assert.ok(Object.keys(e.props).every(k=>['operation_id','flow_id','material_origin','auto_frame_retained','has_crop_track','has_manual_adjustment','studio_schema_version','request_duration_ms','source_type','has_subtitle','aspect','portrait_style','platform_count','brand_outro_enabled','goal_content','goal_highlight','goal_promo'].includes(k)))
   s.enable(false)
   await api.import({})
   assert.equal(s.events.length,6)
@@ -437,4 +456,57 @@ test('framing installation retries use distinct terminal deduplication keys',()=
  }
  assert.notEqual(inserts[0],inserts[1])
  assert.equal(s.events[0].props.studio_schema_version,2)
+})
+
+test('1.5 API observes cover and retry terminal results across restart without content',async()=>{
+ const s=setup()
+ const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const transport={post:async url=>url.endsWith('/cover/ai')?{job_id:'private-cover',status:'queued'}:{job_id:'private-new-render',status:'queued'},get:async()=>({job_id:'private-cover',status:'completed'}),put:async()=>({title:'private-title',description:'private-description',tags:['private-tag']})}
+ const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}}).studioApi
+ s.tracker.rememberProject('private-project',{material_origin:'user'})
+ await api.redesignVariantCover('private-project','private-variant')
+ await api.variantCoverJob('private-project','private-variant') // terminal before the global poll
+ assert.equal(s.events.filter(e=>e.event==='studio_cover_redesign_finished').length,1)
+ await api.retryOutputVariant('private-project','private-variant')
+ await api.updateVariantPost('private-project','private-variant',{title:'private-title',description:'private-description',tags:['private-tag']})
+ const recovered=new core.WorkflowTracker(s.storage,()=>true,s.capture,()=>NOW)
+ const snapshot={output_variants:[{id:'private-variant',draft_id:'private-draft',render_job_id:'private-old-render',strategy_id:'douyin',status:'failed',cover_job:{job_id:'private-cover',status:'completed'}}]}
+ for(const w of recovered.list())recovered.observeStudio(w,snapshot)
+ assert.equal(s.events.filter(e=>e.event==='studio_cover_redesign_finished').length,1)
+ assert.equal(s.events.filter(e=>e.event==='studio_variant_finished').length,0) // not this retry
+ snapshot.output_variants[0].render_job_id='private-new-render';snapshot.output_variants[0].status='completed'
+ snapshot.jobs=[{job_id:'private-new-render',status:'completed',result:{outro_applied:false,warnings:['private error']}}]
+ for(const w of recovered.list()){recovered.observeStudio(w,snapshot);recovered.observeStudio(w,snapshot)}
+ const finished=s.events.filter(e=>e.event==='studio_variant_finished')
+ assert.equal(finished.length,1);assert.equal(finished[0].props.outcome,'completed');assert.equal(finished[0].props.outro_applied,false);assert.equal(finished[0].props.warning_count,1)
+ assert.equal(JSON.stringify(s.events).includes('private'),false)
+ assert.equal(s.events.filter(e=>e.event==='studio_post_save_accepted').length,1)
+})
+
+test('publish kit saving has disk evidence; browser clicks and opt-out never invent success',async()=>{
+ const s=setup();const x=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const props={artifact_type:'publish_kit',strategy_id:'douyin'}
+ x.studioDownloadRequested('private-project','private-render',props)
+ assert.equal(s.events.length,1);assert.equal(s.events[0].props.download_mode,'browser')
+ await x.observeStudioDownload(async()=>42,'private-project','private-render',props)
+ assert.equal(s.events.at(-1).event,'studio_download_saved');assert.equal(s.events.at(-1).props.artifact_type,'publish_kit')
+ await assert.rejects(x.observeStudioDownload(async()=>{throw {code:'ERR_NETWORK',message:'private path'}},'private-project','private-render',props))
+ assert.equal(s.events.at(-1).event,'studio_download_failed');assert.equal(s.events.at(-1).props.error_code,'network')
+ let finish;const pending=x.observeStudioDownload(()=>new Promise(r=>finish=r),'p','j',props)
+ const count=s.events.length;s.tracker.clear();finish(42);await pending
+ assert.equal(s.events.length,count);assert.equal(JSON.stringify(s.events).includes('private'),false)
+})
+
+test('portrait import and saved outro preference retain explicit enums and confirmed state',()=>{
+ const s=setup();const x=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const body=new FormData();body.set('portrait_style','podcast');body.set('name','private name');body.append('platforms','douyin')
+ const props=core.safeStudioProperties(x.studioImportProperties(body))
+ assert.equal(props.portrait_style,'podcast');assert.equal(props.brand_outro_enabled,undefined)
+ body.set('brand_outro_enabled','false');assert.equal(x.studioImportProperties(body).brand_outro_enabled,false)
+ const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const done=experience.beginExperience('output_branding_save',{section:'app',brand_outro_enabled:false})
+ done('completed',{brand_outro_enabled:false});done('failed')
+ assert.equal(s.events.length,2);assert.equal(s.events[1].props.brand_outro_enabled,false)
+ const late=experience.beginExperience('output_branding_save',{brand_outro_enabled:true});const n=s.events.length;s.tracker.clear();late('completed')
+ assert.equal(s.events.length,n);assert.equal(JSON.stringify(props).includes('private'),false)
 })

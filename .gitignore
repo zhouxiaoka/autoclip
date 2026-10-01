@@ -35,6 +35,8 @@ venv_*/
 *.3gp
 # 随包提供的示例项目原片（17 MB，backend/services/example_project.py）
 !backend/assets/example/source.mp4
+# 随包提供的片尾动画（backend/services/output_branding.py，源文件见 design/outro-v5）
+!backend/assets/outro/*.mp4
 *.mp3
 *.wav
 *.flac

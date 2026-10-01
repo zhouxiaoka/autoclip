@@ -42,6 +42,7 @@ export interface PublishClipBody {
   platforms: string[]
   user?: string
   preset?: string
+  output_variant_id?: string
   title?: string
   description?: string
   subtitles: boolean

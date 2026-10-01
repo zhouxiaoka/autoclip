@@ -88,3 +88,17 @@ def test_missing_timestamps_not_treated_as_subtitles(tmp_path):
     with httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(200, json={'text': 'text only'}))) as client:
         with pytest.raises(asr.CloudTranscriptionError, match='时间戳'):
             asr.request_chunk(client, Connection(id='a', name='a'), 'whisper-1', audio, 'auto')
+
+
+def test_rate_limits_and_server_errors_are_retried_but_auth_errors_are_not(monkeypatch):
+    import httpx
+    from backend.services import cloud_transcription as ct
+
+    def status(code):
+        request = httpx.Request('POST', 'https://asr.example.com')
+        return httpx.HTTPStatusError('x', request=request, response=httpx.Response(code, request=request))
+    assert ct._retryable(status(429)) and ct._retryable(status(503)) and ct._retryable(httpx.ConnectError('down'))
+    assert not ct._retryable(status(401)) and not ct._retryable(status(400))
+    for value, expected in (('0', 1), ('abc', 8), ('4', 4)):
+        monkeypatch.setenv('AUTOCLIP_ASR_CONCURRENCY', value)
+        assert ct._workers() == expected

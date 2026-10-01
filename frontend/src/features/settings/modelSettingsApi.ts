@@ -9,7 +9,7 @@ export interface Connection {
   api_key?: string | null
   has_key?: boolean
   api_key_masked?: string
-  image_api: 'auto' | 'openai' | 'seedream' | 'dashscope'
+  image_api: 'auto' | 'openai' | 'seedream' | 'dashscope' | 'fal'
   image_base_url: string
 }
 export interface Assignment { connection_id: string; model: string; capability: Capability }

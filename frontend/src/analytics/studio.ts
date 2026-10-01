@@ -5,7 +5,7 @@ import { errorCode, safeStudioProperties, telemetryId, type Properties, type Stu
 /** Only allowlisted values and randomly generated telemetry correlation tokens leave the app.
  * Internal project/job IDs, URLs, filenames, content and model output stay local. */
 export async function observeStudioOperation<T>(
-  name: 'studio_import' | 'studio_confirm' | 'studio_export' | 'studio_rescreen' | 'studio_plan_update' | 'studio_draft_create' | 'studio_draft_save' | 'studio_draft_duplicate' | 'studio_rewrite' | 'studio_analysis_preferences' | 'vision_provider_test' | 'vision_provider_save' | 'social_publish' | 'studio_auto_frame' | 'studio_framing_install',
+  name: 'studio_import' | 'studio_confirm' | 'studio_export' | 'studio_rescreen' | 'studio_plan_update' | 'studio_draft_create' | 'studio_draft_save' | 'studio_draft_duplicate' | 'studio_rewrite' | 'studio_analysis_preferences' | 'vision_provider_test' | 'vision_provider_save' | 'social_publish' | 'studio_auto_frame' | 'studio_framing_install' | 'studio_platform_append' | 'studio_variant_retry' | 'studio_variant_produce' | 'studio_post_save' | 'studio_cover_redesign',
   action: () => Promise<T>, accepted: (result: T, props: Properties) => void = () => {}, properties: Record<string, unknown> = {},
 ): Promise<T> {
   const props = safeStudioProperties({ ...properties, operation_id: telemetryId() })
@@ -27,15 +27,32 @@ export async function observeStudioOperation<T>(
   }
 }
 
-/** Navigation intent only; no claim about successful disk writes. */
-export function studioDownloadRequested(projectId?: string, jobId?: string) {
-  captureBusinessEvent('studio_download_requested', safeStudioProperties({ ...workflow.context(projectId, jobId), download_mode: 'browser' }))
+export function trackQuickOutputPlatforms(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_platforms_selected', safeStudioProperties(properties))
 }
 
-export async function observeStudioDownload<T>(action: () => Promise<T>, projectId?: string, jobId?: string): Promise<T> {
+/** Enum/boolean summary of one output variant for delivery events; never titles, captions or names. */
+export type VariantProperties = { strategy_id?: string; template?: string; packaging_style?: string; framing?: string; artifact_type?: 'video' | 'publish_kit'; outro_applied?: boolean }
+
+/** Share intent only: which enum target, never the caption, title or link text. */
+export function trackOutputShare(projectId: string, properties: { share_target: 'copy_caption' | 'use_case_discussion' } & VariantProperties) {
+  captureBusinessEvent('studio_output_shared', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
+}
+
+/** Anonymous three-level rating; free text is never collected. */
+export function trackOutputRating(projectId: string, properties: { output_rating: 'ready' | 'needs_edit' | 'unusable' } & VariantProperties) {
+  captureBusinessEvent('studio_output_rated', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
+}
+
+/** Navigation intent only; no claim about successful disk writes. */
+export function studioDownloadRequested(projectId?: string, jobId?: string, variant: VariantProperties = {}) {
+  captureBusinessEvent('studio_download_requested', safeStudioProperties({ ...workflow.context(projectId, jobId), artifact_type: 'video', ...variant, download_mode: 'browser' }))
+}
+
+export async function observeStudioDownload<T>(action: () => Promise<T>, projectId?: string, jobId?: string, variant: VariantProperties = {}): Promise<T> {
   const generation = workflow.generation(), started = Date.now()
   const enabled = workflow.active(generation)
-  const props = safeStudioProperties({ ...workflow.context(projectId, jobId), operation_id: telemetryId(), download_mode: 'native' })
+  const props = safeStudioProperties({ ...workflow.context(projectId, jobId), artifact_type: 'video', ...variant, operation_id: telemetryId(), download_mode: 'native' })
   const emit = (name: string, result: Properties = {}) => {
     if (enabled && workflow.active(generation)) captureBusinessEvent(name, { ...props, ...result })
   }
@@ -61,7 +78,9 @@ export function studioImportProperties(body: FormData): Record<string, unknown> 
       else if (host === 'b23.tv' || host === 'bilibili.com' || host.endsWith('.bilibili.com')) source_type = 'bilibili'
     } catch { /* invalid input remains an enum; URL is never captured */ }
   }
-  return { material_origin: 'user', flow_id: telemetryId(), source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto' }
+  return { material_origin: 'user', flow_id: telemetryId(), source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,
+    // Omitted means the backend's saved preference: do not claim it is enabled.
+    brand_outro_enabled: body.get?.('brand_outro_enabled') === 'true' ? true : body.get?.('brand_outro_enabled') === 'false' ? false : undefined }
 }
 
 export function studioGoals(goals: string[]): Properties {

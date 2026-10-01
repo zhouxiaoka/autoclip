@@ -96,7 +96,7 @@ def run(base, root, resources, source_video, source_srt):
             assert persisted['analysis']['model']=='installed-smoke-model', persisted
             assert persisted['connections'][0]['base_url']==connection['base_url'], persisted
             test = requests.post(base+'/api/v1/settings/ai-models/test',json={'connection':connection,'model':'installed-smoke-model'},headers=headers,timeout=30)
-            settings_api, success_field = 'named connections', 'ok'
+            settings_api, success_field = 'named connections', 'success'
         test.raise_for_status()
         assert test.json()[success_field], test.text
 

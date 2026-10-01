@@ -1,0 +1,188 @@
+.studio-platform-picker {
+  border: 0;
+  margin: 18px 0 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.studio-platform-picker legend {
+  color: var(--ac-ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.studio-platform-picker p {
+  margin: 5px 0 10px;
+}
+
+.studio-platform-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.studio-platform-option {
+  align-items: flex-start;
+  background: var(--ac-card);
+  border: 1px solid var(--ac-line);
+  border-radius: 10px;
+  color: var(--ac-ink);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 3px;
+  min-height: 58px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.studio-platform-option b {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.studio-platform-option span {
+  color: var(--ac-sub);
+  font-size: 11px;
+}
+
+.studio-platform-option.is-selected {
+  border-color: var(--ac-accent);
+  box-shadow: inset 0 0 0 1px var(--ac-accent);
+}
+
+.studio-branding-option {
+  align-items: center;
+  color: var(--ac-sub);
+  cursor: pointer;
+  display: flex;
+  font-size: 12.5px;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.studio-branding-option input {
+  accent-color: var(--ac-accent);
+}
+
+.studio-variant-thumb {
+  align-items: center;
+  aspect-ratio: 16 / 9;
+  background: var(--ac-thumb);
+  border-radius: 12px 12px 0 0;
+  color: var(--ac-sub);
+  display: flex;
+  justify-content: center;
+  position: relative;
+}
+
+.studio-variant-thumb .play {
+  color: var(--ac-ink);
+  font-size: 28px;
+}
+
+.studio-variant-video {
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+@media (max-width: 650px) {
+  .studio-platform-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.studio-output-feedback {
+  align-items: center;
+  border-top: 1px solid var(--ac-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.studio-output-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.studio-post {
+  border-top: 1px solid var(--ac-line);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.studio-post-body {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+}
+
+.studio-post-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The cover at its real ratio: the video thumbnail above crops it to 16:9. */
+.studio-post-cover {
+  border: 1px solid var(--ac-line);
+  border-radius: 10px;
+  flex: none;
+  overflow: hidden;
+  width: 64px;
+}
+
+.studio-post-cover--wide {
+  width: 104px;
+}
+
+.studio-post-cover img {
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.studio-post-title {
+  color: var(--ac-ink);
+  font-size: 13.5px;
+  font-weight: 500;
+  margin: 0 0 6px;
+}
+
+.studio-post-desc {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--ac-sub);
+  display: -webkit-box;
+  font-size: 12.5px;
+  line-height: 1.55;
+  margin: 0 0 6px;
+  overflow: hidden;
+  white-space: pre-line;
+}
+
+.studio-post-tags {
+  color: var(--ac-sub);
+  font-size: 12px;
+  margin: 0 0 4px;
+}
+
+.studio-post-edit {
+  display: grid;
+  gap: 8px;
+}
+
+.studio-post-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 6px;
+}

@@ -8,7 +8,24 @@ def test_ytdlp_ffmpeg_options_uses_bundled_binary(tmp_path, monkeypatch):
     binary = tmp_path / "ffmpeg.exe"
     binary.write_bytes(b"")
     monkeypatch.setenv("AUTOCLIP_FFMPEG_PATH", str(binary))
-    assert ffmpeg_utils.ytdlp_ffmpeg_options() == {"ffmpeg_location": str(binary)}
+    assert ffmpeg_utils.ytdlp_ffmpeg_options()["ffmpeg_location"] == str(binary)
+
+
+def test_ytdlp_options_enable_every_js_runtime_found(monkeypatch):
+    monkeypatch.delenv("AUTOCLIP_FFMPEG_PATH", raising=False)
+    monkeypatch.delenv("FFMPEG_PATH", raising=False)
+    found = {"node": "/usr/local/bin/node", "bun": "/opt/bun"}
+    monkeypatch.setattr(ffmpeg_utils.shutil, "which", lambda name: found.get(name))
+    assert ffmpeg_utils.ytdlp_ffmpeg_options() == {
+        "js_runtimes": {"node": {"path": "/usr/local/bin/node"}, "bun": {"path": "/opt/bun"}},
+    }
+
+
+def test_ytdlp_js_runtimes_are_valid_for_yt_dlp(monkeypatch):
+    import yt_dlp
+    monkeypatch.setattr(ffmpeg_utils.shutil, "which", lambda name: f"/bin/{name}" if name == "node" else None)
+    with yt_dlp.YoutubeDL({"quiet": True, **ffmpeg_utils.ytdlp_js_runtimes()}) as ydl:
+        assert "node" in ydl.params["js_runtimes"]
 
 
 def test_ytdlp_ffmpeg_options_empty_when_unresolved(monkeypatch):

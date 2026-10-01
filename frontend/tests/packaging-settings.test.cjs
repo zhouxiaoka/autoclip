@@ -1,0 +1,25 @@
+const {test}=require('node:test')
+const assert=require('node:assert/strict')
+const fs=require('node:fs'),path=require('node:path')
+const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8')
+const settings=read('src/features/studio/PackagingSettings.tsx')
+const panel=read('src/features/studio/DraftSettingsPanel.tsx')
+const editor=read('src/features/studio/StudioEditor.tsx')
+const types=read('src/features/studio/types.ts')
+
+test('draft edits keep template packaging intact on save',()=>{
+ assert.match(types,/packaging\?: Packaging \| null/)
+ assert.match(editor,/const patch = \(changes: Partial<Draft>\) => \{ if \(draft\) \{ setDraft\(\{\.\.\.draft, \.\.\.changes\}\)/)
+ assert.match(settings,/patch\(\{ packaging: \{ \.\.\.packaging, \.\.\.changes \} \}\)/)
+})
+
+test('this release edits the two title lines, the editor tags switch and the template style',()=>{
+ assert.match(settings,/title_lines: next\[1\]\.trim\(\) \? next : \[next\[0\]\]/)
+ assert.match(settings,/update\(\{ tags_enabled: checked \}\)/)
+ assert.match(settings,/update\(\{ style: value as Packaging\['style'\] \}\)/)
+ assert.match(settings,/interview_zh: \[\{ value: 'classic'/)
+ assert.match(settings,/podcast_en: \[\{ value: 'pop'/)
+ assert.doesNotMatch(settings,/cues:|speakers:|highlights:/)
+ assert.match(panel,/draft\.packaging \? <PackagingSettings draft=\{draft\} patch=\{patch\} \/>/)
+ assert.match(panel,/\{!draft\.packaging && <Row label=\{t\("字幕"\)\}/)
+})

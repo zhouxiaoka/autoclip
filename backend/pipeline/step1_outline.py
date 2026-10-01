@@ -88,32 +88,31 @@ class OutlineExtractor:
         failed_chunks = 0
         last_error: Optional[BaseException] = None
         
-        # 4. 逐一处理每个文本块文件
-        for i, chunk_file in enumerate(chunk_files):
+        # 4. 每个文本块独立调用模型（并行，结果按块顺序）
+        def outline_chunk(item):
+            i, chunk_file = item
             logger.info(f"处理第{i+1}/{len(chunks)}个文本块: {chunk_file.name}")
             try:
-                # 读取文本块内容
                 with open(chunk_file, 'r', encoding='utf-8') as f:
                     chunk_text = f.read()
-                
-                # 为每个块调用LLM
-                input_data = {"text": chunk_text}
-                response = self.llm_client.call_with_retry(outline_prompt, input_data)
-                
-                if response:
-                    # 解析响应并附加块索引
-                    # 注意：这里的chunk_index直接用i，与文件名和原始chunk对应
-                    parsed_outlines = self._parse_outline_response(response, i)
-                    all_outlines.extend(parsed_outlines)
-                else:
+                response = self.llm_client.call_with_retry(outline_prompt, {"text": chunk_text})
+                if not response:
                     logger.warning(f"处理第{i+1}个文本块时返回空响应")
+                    return [], None
+                # chunk_index 直接用 i，与文件名和原始 chunk 对应
+                return self._parse_outline_response(response, i), None
             except Exception as e:
-                # 单块失败可以继续（长视频某一块偶发超时不该毁掉整条），但要记账：
-                # 全部失败 = 提供商 / key / 模型不对，必须报错而不是交一个空大纲出去
-                failed_chunks += 1
-                last_error = e
                 logger.error(f"处理第{i+1}个文本块失败: {e}")
-                continue
+                return [], e
+
+        from .concurrency import map_chunks
+        for parsed_outlines, error in map_chunks(outline_chunk, enumerate(chunk_files)):
+            # 单块失败可以继续（长视频某一块偶发超时不该毁掉整条），但要记账：
+            # 全部失败 = 提供商 / key / 模型不对，必须报错而不是交一个空大纲出去
+            if error is not None:
+                failed_chunks += 1
+                last_error = error
+            all_outlines.extend(parsed_outlines)
 
         total_chunks = len(chunk_files)
         if total_chunks and failed_chunks == total_chunks:
