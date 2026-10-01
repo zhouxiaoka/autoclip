@@ -900,18 +900,23 @@ def _auto_generate(project_id, plan):
         burned = _source_has_burned_subtitles(project_id, video)
         framing_cache = {}
         packaging_cache = {}
-        automatic = _automatic_drafts(base_drafts)
+        # Platform eligibility must precede the score limit: otherwise ten short clips
+        # can exclude the only valid YouTube long clip and leave nothing to render.
+        automatic = {
+            strategy_id: _automatic_drafts([base for base in base_drafts
+                if _eligible_for_platform(base, platform_strategy(strategy_id))])
+            for strategy_id in platforms
+        }
         planned = []
         for base in base_drafts:
             base = {key: item for key, item in base.items() if key != SCORE_KEY}
             for strategy_id in platforms:
                 strategy = platform_strategy(strategy_id)
-                duration = sum(scene['end'] - scene['start'] for scene in base['scenes'])
-                if strategy.duration_policy == 'long' and duration < (strategy.min_recommended_duration_sec or 0):
+                if not _eligible_for_platform(base, strategy):
                     skipped.append({'strategy_id': strategy_id, 'reason': '素材没有足够完整的长内容'})
                     continue
                 value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
-                now = base['id'] in automatic
+                now = base['id'] in automatic[strategy_id]
                 framed = None  # on-demand versions are framed and packaged when the user asks (produce_variant)
                 if now:
                     with llm_usage.timed('framing'):
@@ -988,8 +993,7 @@ def append_platform_variants(project_id, platforms, branding):
             if (strategy_id, signature) in existing:
                 continue
             strategy = platform_strategy(strategy_id)
-            duration = sum(end - start for start, end in signature)
-            if strategy.duration_policy == 'long' and duration < (strategy.min_recommended_duration_sec or 0):
+            if not _eligible_for_platform(base, strategy):
                 continue
             value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
             now = signature in automatic
@@ -1039,10 +1043,18 @@ def _dispatch_pending_variants(project_id):
             continue
         job = export(project_id, Draft.model_validate(raw), brand_outro=bool(variant['branding'].get('outro_enabled', True)))
         store.change(project_id, lambda data, variant_id=variant['id'], job_id=job['job_id']: next(item for item in data['output_variants'] if item['id'] == variant_id).update(render_job_id=job_id))
+    # Failed dispatch prerequisites or a backup-only batch have no render callback to
+    # settle them. Queued/running/preparing variants still keep generation open.
+    store.change(project_id, lambda data: _finish_generation(data) if data.get('generation') and data.get('output_variants') else None)
 
 
 SCORE_KEY = '_auto_score'
 AUTO_RENDER_LIMIT = 10  # clips rendered automatically per import; the rest wait for a click
+
+
+def _eligible_for_platform(draft, strategy):
+    duration = sum(scene['end'] - scene['start'] for scene in draft['scenes'])
+    return strategy.duration_policy != 'long' or duration >= (strategy.min_recommended_duration_sec or 0)
 
 
 def _score(clip):

@@ -65,7 +65,11 @@ def settle_generation(data):
     variants = [item for item in data['output_variants'] if item['status'] != 'on_demand']
     if all(item['status'] in ('completed', 'failed') for item in variants):
         completed = [item for item in variants if item['status'] == 'completed']
-        outcome = 'completed' if len(completed) == len(variants) else 'partial' if completed else 'failed'
+        outcome = 'completed' if completed and len(completed) == len(variants) else 'partial' if completed else 'failed'
+        if not variants:
+            data['generation']['error'] = '没有自动生成的成片，可选择备选片段继续生成'
+        elif completed:
+            data['generation'].pop('error', None)
         data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now())
         data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now()}
 
