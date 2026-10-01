@@ -17,6 +17,9 @@ from backend.services.ai_model_settings import chat_endpoint
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
 
+UPLOAD_WORKERS = int(os.getenv('AUTOCLIP_ASR_CONCURRENCY', '4') or 4)  # parallel chunk uploads
+
+
 class CloudTranscriptionError(RuntimeError):
     pass
 
@@ -119,21 +122,32 @@ def transcribe(video: Path, output: Path | None, settings, language='auto', time
         segments = []
         from backend.core.llm_providers import is_local_url
         try:
-            with wave.open(str(audio), 'rb') as source, httpx.Client(timeout=timeout or 300, follow_redirects=False,
-                    trust_env=not is_local_url(chat_endpoint(connection, '')['base_url'])) as client:
-                offset = 0
+            # Cut every chunk first, then upload them side by side: one request after another made a
+            # three-hour talk ~60 sequential round trips. Offsets come from exact sample counts.
+            chunks, offset = [], 0.0
+            with wave.open(str(audio), 'rb') as source:
                 while True:
                     samples = source.readframes(16000 * 180)
                     if not samples:
                         break
-                    chunk = Path(temp) / 'chunk.wav'
+                    chunk = Path(temp) / f'chunk-{len(chunks):04d}.wav'
                     with wave.open(str(chunk), 'wb') as target:
                         target.setparams(source.getparams())
                         target.writeframes(samples)
                     duration = len(samples) / 32000
-                    items, milliseconds = request_chunk(client, connection, selection.model, chunk, language)
-                    segments.extend(normalize_segments(items, offset, milliseconds, duration))
+                    chunks.append((chunk, offset, duration))
                     offset += duration
+            with httpx.Client(timeout=timeout or 300, follow_redirects=False,
+                              trust_env=not is_local_url(chat_endpoint(connection, '')['base_url'])) as client:
+                def one(part):
+                    chunk, start, duration = part
+                    items, milliseconds = request_chunk(client, connection, selection.model, chunk, language)
+                    return normalize_segments(items, start, milliseconds, duration)
+
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=UPLOAD_WORKERS, thread_name_prefix='asr-chunk') as pool:
+                    for part in pool.map(one, chunks):
+                        segments.extend(part)
         except httpx.HTTPStatusError as exc:
             raise CloudTranscriptionError(f'云端转写请求失败（HTTP {exc.response.status_code}），请检查密钥、额度和模型权限。') from None
         except (httpx.RequestError, ValueError) as exc:
