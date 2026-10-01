@@ -13,7 +13,7 @@
 [![Downloads](https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square)](https://github.com/zhouxiaoka/autoclip/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-**[下载桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [看真实成片](https://zhouxiaoka.github.io/autoclip_intro/#clips) · [快速开始](#快速开始) · [文档](#文档) · [问题反馈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+**[下载桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [案例库](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [快速开始](#快速开始) · [文档](#文档) · [问题反馈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
 **简体中文** · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md)
 
@@ -21,9 +21,11 @@
 
 ## 真实成片
 
-<a href="https://zhouxiaoka.github.io/autoclip_intro/#clips"><img src="docs/images/v2/demo-wall.webp" alt="AutoClip 自动生成的竖屏成片：小红书访谈式、TikTok 播客式、抖音访谈式、Shorts 播客式" width="100%"></a>
+<a href="https://zhouxiaoka.github.io/autoclip_intro/cases/"><img src="docs/images/v2/demo-wall.webp" alt="AutoClip 自动生成的竖屏成片：小红书访谈式、TikTok 播客式、抖音访谈式、Shorts 播客式" width="100%"></a>
 
-三场英文访谈，各贴一个链接。上面每一条都是 AutoClip 自动挑片、取景、翻译、包装后的原样输出，没有人工修改。**[到官网带声音看完整成片 →](https://zhouxiaoka.github.io/autoclip_intro/#clips)**
+每个原片只贴了一个链接。上面每一条都是 AutoClip 自动挑片、取景、翻译、包装后的原样输出，没有人工修改。**[到官网案例库带声音看 →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**
+
+每条成片按目标平台交付一整套：竖屏视频、封面、标题、简介和话题，可以直接发布。案例库持续更新，欢迎[投稿你的成片](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell)。
 
 <sub>原片版权归原作者，仅作效果展示：[Dwarkesh Patel — Dario Amodei](https://www.youtube.com/watch?v=n1E9IZfvGMA) · [Y Combinator — Sam Altman](https://www.youtube.com/watch?v=ZIaOBAjvc38) · [WIRED — Hideo Kojima](https://www.youtube.com/watch?v=02Ah5VQrzvA)</sub>
 
@@ -57,6 +59,7 @@ Jensen 这条 7.5 分钟的构成：下载约 1 分钟；语音识别 0（直接
 ## 能做什么
 
 - **一键出片**：贴一个链接，选好要发的平台（抖音、小红书、TikTok、Reels、YouTube Shorts、B 站、YouTube），按每个平台的画幅、时长和包装直接生成可发布成片。之后可以追加平台，失败的单条可以重试。
+- **整套发布包**：每条成片附带按平台规则写好的标题、简介和话题，以及与视频风格一致的封面，可以一键复制文案或打包下载。
 - **两套包装模板**：抖音 / 小红书用「访谈式」，上方两行标题、4:3 说话人窗口、中英双语字幕、名牌与编辑点评标签；TikTok / Reels / Shorts 用「播客式」，全屏跟随说话人、逐词高亮字幕、开头一句 hook。
 - **外语素材自动翻译**：英文访谈发抖音，自动配中文标题和双语字幕；原片自带字幕时保留完整画面。
 - **按内容情绪换风格**：模型判断每段的情绪（冷静、严肃、强观点、真诚、轻松），从 7 套配色和多种字幕动效里挑。
