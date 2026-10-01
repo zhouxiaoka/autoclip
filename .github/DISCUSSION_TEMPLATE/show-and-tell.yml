@@ -1,0 +1,52 @@
+title: "成片投稿："
+body:
+  - type: markdown
+    attributes:
+      value: |
+        用 AutoClip 做出了好片子？发在这里。维护者会挑选收录到[官网案例库](https://zhouxiaoka.github.io/autoclip_intro/cases/)，并署上你的名字。
+        收录标准：AutoClip 生成、没有在其他软件里再剪辑（在 AutoClip 里改标题、换模板可以）；原片是公开视频；你有权发布这些成片。
+  - type: input
+    id: source
+    attributes:
+      label: 原片链接
+      placeholder: "https://www.youtube.com/watch?v=… 或 B 站链接"
+    validations:
+      required: true
+  - type: checkboxes
+    id: platforms
+    attributes:
+      label: 成片平台
+      options:
+        - label: 抖音
+        - label: 小红书
+        - label: B 站
+        - label: TikTok
+        - label: Instagram Reels
+        - label: YouTube Shorts
+        - label: YouTube
+  - type: textarea
+    id: clips
+    attributes:
+      label: 成片
+      description: 附上成片 MP4 或可访问的成片链接；有发布包的，把封面和发布文案一起附上。
+    validations:
+      required: true
+  - type: input
+    id: setup
+    attributes:
+      label: 版本与模型
+      placeholder: "例如 v1.5.0 · qwen-plus · macOS"
+    validations:
+      required: true
+  - type: input
+    id: run
+    attributes:
+      label: 用时与费用（可选）
+      placeholder: "例如 原片 1h20m，出片 9 分钟，模型费用约 ¥0.1"
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: 授权
+      options:
+        - label: 我同意 AutoClip 在官网和 README 展示这些成片，并署名链接到我的 GitHub
+          required: true

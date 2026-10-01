@@ -4,46 +4,152 @@
 
 # AutoClip
 
-### 开源 AI 高光剪辑工具
+### 一个链接，一键出片
 
-导入长视频，AI 分析字幕、找出精彩片段，自动剪成短视频与合集。
+开源，在你的电脑上剪辑与渲染。贴一个链接，选好平台，生成 <b>视频、封面和发布文案</b>，<br>
+适配抖音、小红书、TikTok、Reels、YouTube Shorts、B 站与 YouTube。<br>
+软件免费，云端模型按量计费；需要调整时可进入编辑器。
 
-[![GitHub release](https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/releases/latest)
-[![GitHub stars](https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square)](https://github.com/zhouxiaoka/autoclip/stargazers)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily?language=Python" alt="AutoClip — Trendshift Python daily ranking" width="250" height="55"></a>
-  <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/trendshift/repositories/25801/daily" alt="AutoClip — Trendshift daily ranking, all languages" width="250" height="55"></a>
+<p>
+  <a href="https://github.com/zhouxiaoka/autoclip/releases/latest"><img src="https://img.shields.io/github/v/release/zhouxiaoka/autoclip?style=flat-square" alt="GitHub release"></a>
+  <a href="https://github.com/zhouxiaoka/autoclip/stargazers"><img src="https://img.shields.io/github/stars/zhouxiaoka/autoclip?style=flat-square" alt="GitHub stars"></a>
+  <a href="https://github.com/zhouxiaoka/autoclip/releases"><img src="https://img.shields.io/github/downloads/zhouxiaoka/autoclip/total?style=flat-square" alt="Downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License: MIT"></a>
 </p>
 
-**[下载桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [快速开始](#快速开始) · [项目网站](https://zhouxiaoka.github.io/autoclip_intro/) · [使用文档](#文档) · [问题反馈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+<a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
+
+**[下载桌面版](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [案例库](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [快速开始](#快速开始) · [文档](#文档) · [问题反馈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
 **简体中文** · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md)
 
 </div>
 
-适合访谈、播客、课程、口播与直播回放。提供桌面应用、Docker Web 界面和 CLI / MCP，可交互使用，也可批量处理。
+**[1.5.0 已正式发布](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)**，桌面、CLI 与 MCP 同步更新。一键出片、字幕分页、人物取景与长视频队列修复见 [更新日志](CHANGELOG.md)。旧版用户请升级。
 
-## 界面预览
+## 真实成片
 
-![导入视频与项目管理](docs/images/home-v1.4.0.png)
+![AutoClip 自动生成的竖屏成片：小红书访谈式、TikTok 播客式、抖音访谈式、Shorts 播客式](docs/images/v2/demo-wall.webp)
 
-<table>
-  <tr>
-    <td width="50%" align="center"><strong>AI 切片结果</strong></td>
-    <td width="50%" align="center"><strong>Studio 预览与修改</strong></td>
-  </tr>
-  <tr>
-    <td><a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="AI 切片结果" width="100%"></a></td>
-    <td><a href="docs/images/studio-v1.4.0.png"><img src="docs/images/studio-v1.4.0.png" alt="Studio 预览与修改" width="100%"></a></td>
-  </tr>
-</table>
+图中展示 AutoClip 自动包装的访谈式与播客式成片。完整视频与原片来源见 **[官网案例库 →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**。
 
-<sub>v1.4.0 界面实拍（含后续 Studio 修复）：导入视频、查看真实切片结果，再进入 Studio 修改成片。截图为中文界面，案例字幕与生成标题保留英文。</sub>
+每条成片按目标平台交付视频、封面、标题、简介、话题和 ZIP 发布包。案例库持续更新，欢迎[投稿你的成片](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell)。
 
-[截图版本与案例来源](docs/images/README.md)
+原片版权归原作者，仅作效果展示：[Dwarkesh Patel — Dario Amodei](https://www.youtube.com/watch?v=n1E9IZfvGMA) · [Y Combinator — Sam Altman](https://www.youtube.com/watch?v=ZIaOBAjvc38) · [WIRED — Hideo Kojima](https://www.youtube.com/watch?v=02Ah5VQrzvA)
+
+## 能做什么
+
+### 贴链接就出片
+
+选好平台，按平台的画幅与时长要求自动生成。每个平台按评分自动生成至多 10 条合格片段，其余列为备选，点「生成这条」再制作。每条都带封面、标题、简介、话题和 ZIP 发布包。
+
+### 成片自己会包装
+
+抖音 / 小红书默认访谈式，TikTok / Reels / Shorts 默认满屏播客式；竖版也可自行选择两种版式。字幕和文案语言仍按平台，B 站 / YouTube 为横版。画面跟随说话人，无人镜头保留完整画面。自动品牌片尾默认开启，可在设置中关闭；复制发布文案不附 AutoClip 署名。
+
+### 还在你的电脑上
+
+剪辑、取景与渲染在本机完成。分析模型自选，字幕可用作者字幕、本地 Whisper / SenseVoice 或已配置的云端转写。CLI / MCP 与桌面共用同一条一键出片链路。
+
+## 真实素材的耗时与费用
+
+以下是开发期间三条不同素材的实测，不是同一输入的速度对照。费用按当时 qwen-plus 的文字模型用量估算，不含云端语音识别、AI 生图或投稿服务费用；实际账单以所选服务商为准。
+
+| 版本 | 原片 | 出片 | 文字模型费用估算（人民币） |
+| --- | --- | ---: | ---: |
+| **新版 · 有字幕** | Jensen · 1h43m（英 → 小红书） | **7.5 分钟 / 10 条** | **¥0.09** |
+| 新版 · 无字幕 | TIM × 罗永浩 · 2h52m（中 → 抖音） | 29.5 分钟 / 10 条 | ¥0.20 |
+| 旧版 | MrBeast · 2h06m（英 → TikTok） | 65 分钟 | ¥0.64 |
+
+<details>
+<summary>测试条件与记录</summary>
+
+2026-10-01，同一台 Apple Silicon Mac。前两条为新链路、自动生成 10 条；旧链路生成 33 条，素材与输出数量不同。Jensen 使用作者字幕，TIM 使用本地 Whisper base。
+
+已有作者字幕时跳过转写；没有字幕时可选本地或云端转写。追加平台和制作备选会增加处理时间与用量。完整阶段记录与估算口径见 [成本与时间](docs/COST_PER_VIDEO.md)。
+
+</details>
+
+## 模型与数据由你选择
+
+剪辑和渲染在你的电脑上完成。使用云端分析会发送相关字幕与文案；画面理解或参考帧生图会发送所需抽样画面，云端转写会发送音频。使用本地分析与本地转写时不需要对应云端 API。成片只有选择投稿后才上传到已连接的平台；匿名统计与错误报告可在设置中关闭。详见 [隐私说明](docs/PRIVACY.md)。
+
+## 快速开始
+
+| 你的使用场景            | 建议方式          | 准备事项                              |
+| ----------------- | ------------- | --------------------------------- |
+| 在电脑上出片            | **桌面版**       | macOS Apple Silicon 或 Windows x64 |
+| 自建 Web 服务 / Linux | **Docker**    | Docker 与 Compose v2               |
+| 批量处理 / 接入 Agent   | **CLI / MCP** | Python 3.10+（建议 3.11）与 FFmpeg     |
+
+### 桌面版
+
+1. **下载安装**：在 [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest) 下载。macOS Apple Silicon 选 `.dmg`，Windows 10 / 11 x64 选 `-setup.exe`。安装包自带 Python 和 FFmpeg。
+2. **配置模型**：在设置里选择服务商、填写 API Key，选择可用的分析模型，测试连接并保存；本地模型先在 Ollama / LM Studio 启动服务并加载模型。
+3. **贴链接，选平台**：先试一条有字幕的访谈或播客，可选择竖版版式；无字幕时在设置中准备 Whisper / SenseVoice，或配置云端转写。
+4. **检查并下载**：预览自动成片，检查字幕、取景与内容完整性，再下载发布包或连接账号投稿；需要更多片段时生成备选。
+
+Intel Mac / Linux 可使用 Docker 或 CLI。安装要求、系统首次启动提示和本次发布的验收范围见 [安装指南](docs/USER_INSTALLATION_GUIDE.md) 与 [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)。
+
+[完整安装与首次使用指南](docs/USER_INSTALLATION_GUIDE.md) · [遇到问题？](docs/FAQ.md)
+
+**Docker / Web 部署**
+
+```bash
+git clone https://github.com/zhouxiaoka/autoclip.git
+cd autoclip
+cp env.example .env
+mkdir -p data logs uploads
+docker compose up -d --build
+```
+
+打开 [Web 界面](http://localhost:3000)；[API 文档](http://localhost:8000/docs) 在后端启动后可用。部署细节见 [Docker 指南](DOCKER.md)。
+
+Linux 上若绑定目录出现权限错误，先修正数据目录的归属再启动：
+
+```bash
+docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
+docker compose up -d
+```
+
+从局域网 IP 或自定义域名打开时，在 `.env` 的 `AUTOCLIP_ALLOWED_ORIGINS` 填入前端地址（可逗号分隔）。
+
+**CLI / MCP**
+
+需要 Python 3.10+（建议 3.11），FFmpeg 与 FFprobe 在 PATH 中可用；本地 CLI 不需要 Redis。下载 [正式 CLI / MCP ZIP](https://github.com/zhouxiaoka/autoclip/releases/download/v1.5.0/autoclip-1.5.0-cli-mcp.zip)，解压后在该目录执行：
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
+```
+
+以上命令用于 macOS / Linux。Windows 用 `py -m venv venv` 创建环境、`.\venv\Scripts\Activate.ps1` 激活；随后使用相同的 `python -m pip` 安装命令。
+
+先保存模型配置：可复用桌面设置；独立使用时按 ZIP 的无密钥示例配置自己的数据目录，详见 [CLI / MCP 指南](docs/CLI_AND_MCP.md)。`produce` 不使用旧 `run --provider` 的临时覆盖。已有字幕可用 `--srt` 跳过转写。
+
+```bash
+autoclip --version
+autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
+autoclip outputs PROJECT_ID --export-kits
+```
+
+MCP 服务由客户端启动。需要单独调试时，在另一个终端运行 `autoclip mcp`；使用 OpenCode 可执行 `autoclip mcp install opencode` 写入客户端配置。
+
+把 `PROJECT_ID` 换成制作结果中的项目 ID。MCP 新入口为 `start_quick_output` / `get_quick_output_status`；客户端 `command` 指向虚拟环境中的 `autoclip` 绝对路径，`args` 为 `["mcp"]`。旧 `run` / `export` 和旧切片工具继续兼容。详见 [CLI / MCP](docs/CLI_AND_MCP.md)、[OpenCode 接入](docs/OPENCODE.md) 与 [Agent skill](skills/autoclip/SKILL.md)。
+
+## 模型配置
+
+| 方式        | 配置                                                             |
+| --------- | -------------------------------------------------------------- |
+| 云端 API    | 在设置中选择服务商，填写自己的 API Key。OpenAI 兼容服务还可配置 Base URL。              |
+| Ollama | 默认地址 `http://localhost:11434/v1`；先拉取并启动本地模型，再选择服务实际提供的模型，无需 API Key。 |
+| LM Studio | 加载模型并启动 Local Server，默认地址 `http://localhost:1234/v1`。          |
+
+Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要改为容器可访问的宿主机地址。
+
+[模型配置指南](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [本地模型与容器配置](docs/CLI_AND_MCP.md)
 
 ## 特别感谢 ❤️
 
@@ -75,229 +181,33 @@
   </tr>
 </table>
 
-## 功能特性
-
-点击任意缩略图查看大图。
-
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <h4>多种导入方式</h4>
-      <p>本地视频、YouTube 或 B 站链接，可附带 SRT 字幕；无字幕时可使用本地 Whisper 转写。</p>
-      <a href="docs/images/feature-import.png"><img src="docs/images/feature-import.png" alt="多种导入方式" width="420"></a>
-    </td>
-    <td width="50%" valign="top">
-      <h4>AI 内容分析</h4>
-      <p>基于字幕生成大纲与话题时间线，为片段评分、提取标题。</p>
-      <a href="docs/images/clips-v1.4.0.png"><img src="docs/images/clips-v1.4.0.png" alt="AI 内容分析" width="260"></a>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h4>片段与合集</h4>
-      <p>自动生成切片，预览结果，并按需要调整合集顺序。</p>
-      <a href="docs/images/feature-collections.png"><img src="docs/images/feature-collections.png" alt="片段与合集" width="420"></a>
-    </td>
-    <td width="50%" valign="top">
-      <h4>多平台导出</h4>
-      <p>提供抖音、小红书、YouTube Shorts 和 B 站预设，支持烧录字幕与标题卡。</p>
-      <a href="docs/images/feature-export.png"><img src="docs/images/feature-export.png" alt="多平台导出" width="420"></a>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h4>封面与发布</h4>
-      <p>自 v1.3.2 起支持自动封面、立即发布和定时发布；海外平台通过 Upload-Post 连接，B 站单独配置。</p>
-      <a href="docs/images/feature-publish.png"><img src="docs/images/feature-publish.png" alt="封面与发布" width="200"></a>
-      <a href="docs/images/feature-cover.png"><img src="docs/images/feature-cover.png" alt="封面与发布" width="200"></a>
-      <p><sub>演示环境未连接发布账号；这里展示发布入口和封面设置，并非已发布结果。</sub></p>
-    </td>
-    <td width="50%" valign="top">
-      <h4>发布管理</h4>
-      <p>查看发布记录与月历，管理待发布任务；也可只下载成片。</p>
-      <a href="docs/images/feature-calendar.png"><img src="docs/images/feature-calendar.png" alt="发布管理" width="420"></a>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h4>模型可选</h4>
-      <p>支持通义千问、OpenAI 兼容接口、Gemini 等云端服务，以及 Ollama / LM Studio 本地模型。</p>
-      <a href="docs/images/feature-models.png"><img src="docs/images/feature-models.png" alt="模型可选" width="420"></a>
-    </td>
-    <td width="50%" valign="top">
-      <h4>批量与 Agent 工作流</h4>
-      <p>用 CLI 编排批量任务，或通过 MCP 调用视频处理能力。</p>
-      <a href="docs/images/feature-cli.png"><img src="docs/images/feature-cli.png" alt="批量与 Agent 工作流" width="420"></a>
-      <p><sub>CLI / MCP 无图形界面：此图是实际命令帮助输出的展示页截图。</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center" valign="top">
-      <h4>多语言界面</h4>
-      <p>支持中、英、日、韩、西、葡、俄、法，可在顶栏切换或跟随系统；素材与生成内容保留原文。</p>
-      <a href="docs/images/feature-languages.png"><img src="docs/images/feature-languages.png" alt="多语言界面" width="420"></a>
-      <p><sub>英文界面与语言选择菜单；素材和生成内容保持原语言。</sub></p>
-    </td>
-  </tr>
-</table>
-
-<details>
-<summary>查看发布平台、账号要求与导出细节</summary>
-
-海外发布使用你自己的 Upload-Post 账号，支持平台以账号实际连接情况为准，包括 TikTok、Instagram、YouTube、Facebook、LinkedIn、X、Threads、Pinterest、Bluesky、Discord 和 Google Business。B 站在设置中单独填写 Cookie（包含 SESSDATA、bili_jct、DedeUserID），支持一个账号。
-
-在切片页面打开发布，可立即发布或定时发布。标题和描述可不填，默认使用片段标题；字幕烧录和约 4 秒的片头标题卡默认开启。可见范围在平台支持时默认「仅自己」，其中 TikTok、YouTube、B 站支持 private / 仅自己。封面与标题卡行为以所用版本的 Release 说明为准。
-
-竖屏账号导出为 9:16，不按 60 秒截断；只发 B 站用横屏，只有 LinkedIn、X 这类横屏账号时保留原画。竖屏平台与 B 站同次发布时分别渲染。
-
-项目页提供发布记录和月历，可取消待发布排期。「排这一周」安排在周一、周三、周五 09:00，仅用于海外平台，不包含 B 站。
-
-</details>
-
-
-> 导入视频 → 字幕 / 语音转写 → AI 分析 → 片段与合集 → 导出 / 发布
-
-## 快速开始
-
-| 你的使用场景 | 建议方式 | 准备事项 |
-| --- | --- | --- |
-| 在电脑上剪辑视频 | **桌面版** | macOS Apple Silicon 或 Windows x64 |
-| 自建 Web 服务 / Linux | **Docker** | Docker 与 Compose v2 |
-| 批量处理 / 接入 Agent | **CLI / MCP** | Python 3.10+（建议 3.11）与 FFmpeg |
-
-### 桌面版：第一次出片
-
-1. **下载安装。** 前往 [Releases](https://github.com/zhouxiaoka/autoclip/releases/latest)：macOS Apple Silicon 选 `.dmg`，Windows 10 / 11 x64 选 `-setup.exe`。桌面版内置 Python 和 FFmpeg；Intel Mac / Linux 可使用 Docker 或 CLI。实际系统要求以对应 Release 为准。
-2. **配置模型。** 在设置中选择服务商，填写 API Key 与模型名，测试连接后保存；使用本地模型时，先启动 Ollama 或 LM Studio。
-3. **导入视频。** 建议先用 3–5 分钟短样片，可同时导入 SRT。无字幕时先在设置中准备本地 Whisper 组件与语音模型。
-4. **预览并导出。** 检查片段起止时间、标题和内容完整性，选择导出预设，或连接账号后发布。
-
-[完整安装与首次使用指南](docs/USER_INSTALLATION_GUIDE.md) · [遇到问题？](docs/FAQ.md)
-
-<details>
-<summary><strong>Docker / Web 部署</strong></summary>
-
-需要 Docker 和 Docker Compose v2。以下命令在仓库根目录执行：
-
-```bash
-git clone https://github.com/zhouxiaoka/autoclip.git
-cd autoclip
-```
-
-```bash
-cp env.example .env
-```
-
-启动前编辑 `.env`：选择 `LLM_PROVIDER`，填写对应服务的 API Key 和模型名；也可以启动后在设置页配置。
-
-```bash
-mkdir -p data logs uploads
-docker compose up -d --build
-```
-
-打开 [Web 界面](http://localhost:3000)；[API 文档](http://localhost:8000/docs) 在后端启动后可用。部署细节见 [Docker 指南](DOCKER.md)（中文）。
-
-Linux 上若绑定目录出现权限错误，先执行以下命令修正项目数据目录的归属，再重新启动服务：
-
-```bash
-docker compose run --rm --no-deps --user root --entrypoint sh autoclip -c 'chown -R autoclip:autoclip /app/data /app/logs /app/uploads'
-docker compose up -d
-```
-
-</details>
-
-<details>
-<summary><strong>CLI / MCP 安装与使用</strong></summary>
-
-需要 Python 3.10+（建议 3.11）和 PATH 中可用的 FFmpeg。以下安装示例使用 macOS / Linux shell；Windows PowerShell 用 `venv\Scripts\Activate.ps1` 激活虚拟环境。CLI 本地处理不需要 Redis。
-
-```bash
-git clone https://github.com/zhouxiaoka/autoclip.git
-cd autoclip
-python3 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install -e .
-```
-
-本地模型示例：先安装并启动 Ollama，再下载模型。无字幕视频需要 `faster-whisper`，首次转写会下载语音模型；已有字幕可用 `--srt talk.srt`。
-
-**1.5 一键出片**使用桌面已经保存的模型配置，直接生成平台视频、封面、发布文案和 ZIP 发布包：
-
-```bash
-autoclip --version
-autoclip produce talk.mp4 --srt talk.srt --platform douyin --portrait-style podcast --json
-autoclip outputs PROJECT_ID --export-kits
-```
-
-MCP 对应 `start_quick_output` + `get_quick_output_status`，支持同样的平台和竖版选择。安装与同事测试说明见 [1.5 验收记录](docs/RELEASE_1_5.md)。
-
-```bash
-ollama pull qwen2.5:7b
-python -m pip install faster-whisper
-autoclip doctor --provider ollama
-autoclip run talk.mp4 --provider ollama --json
-```
-
-把 `PROJECT_ID` 替换为处理结果中的项目 ID，即可导出 Shorts 格式；用 `autoclip mcp` 启动 stdio MCP 服务：
-
-```bash
-autoclip export PROJECT_ID --preset shorts
-autoclip mcp
-```
-
-在 MCP 客户端中将 `command` 设为虚拟环境里 `autoclip` 的绝对路径，`args` 设为 `["mcp"]`。opencode 用户一条命令即可接入：`autoclip mcp install opencode`（见 [OpenCode 接入](docs/OPENCODE.md)）。详见 [CLI / MCP 指南](docs/CLI_AND_MCP.md)（中文）和 [Agent skill](skills/autoclip/SKILL.md)（中文）。
-
-</details>
-
-## 模型配置
-
-| 方式 | 配置 |
-| --- | --- |
-| 云端 API | 在设置中选择服务商，填写自己的 API Key 和模型名。OpenAI 兼容服务还可配置 Base URL。 |
-| Ollama | 默认地址 `http://localhost:11434/v1`，默认模型 `qwen2.5:7b`，无需 API Key。 |
-| LM Studio | 加载模型并启动 Local Server，默认地址 `http://localhost:1234/v1`，选择服务实际提供的模型。 |
-
-Docker 访问宿主机模型服务时，`localhost` 指向容器自身，需要改为容器可访问的宿主机地址。视频剪辑在本地进行；云端字幕分析会向所选服务商发送字幕文本，下载视频与模型仍需要网络。
-
-[模型配置指南](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [本地模型与容器配置](docs/CLI_AND_MCP.md) · [Infistar 接入](docs/INFISTAR_SETUP.md)
-
 ## 常见问题
 
 <details>
 <summary>需要付费或 API Key 吗？</summary>
 
-AutoClip 免费、开源（MIT）。云端模型由所选服务商计费，需要自己的 API Key；Ollama / LM Studio 本地预设无需云端 Key，但需要模型和相应硬件。自 **v1.3.2** 起，海外发布需要你自己的 [Upload-Post](https://www.upload-post.com) 账号。免费档、付费档，以及 TikTok、YouTube、Instagram 等的每日额度，以 Upload-Post 自己的页面为准，不是 AutoClip 的承诺。
+软件免费、MIT 开源。云端分析、转写与 AI 生图按所选服务商计费，需自己的凭据；自动设计封面默认不调用付费生图。Ollama / LM Studio 本地分析不需要云端 Key，但需相应硬件。直接投稿还需自己的 B 站或 [Upload-Post](https://www.upload-post.com) 账号。
 
 </details>
 
 <details>
 <summary>我的视频会上传吗？</summary>
 
-剪辑留在你的设备上。使用云端模型时，字幕文本会发送给该服务商。成片只有在你点「发布」之后才会离开这台机器，发到你已连接的平台；也可以只下载、不发布。统计与错误报告取决于版本和设置，详见隐私说明。
+剪辑和渲染在你的电脑上完成。使用云端分析会发送相关字幕与文案；画面理解或参考帧生图会发送所需抽样画面，云端转写会发送音频。使用本地分析与本地转写时不需要对应云端 API。成片只有选择投稿后才上传到已连接的平台；匿名统计与错误报告可在设置中关闭。详见 [隐私说明](docs/PRIVACY.md)。
 
 </details>
 
 <details>
-<summary>没有字幕也能使用吗？</summary>
+<summary>什么视频效果最好？</summary>
 
-可以，需要先准备本地 Whisper 组件和语音模型。已有字幕时可同时导入 SRT；准确字幕通常能减少转写等待和识别错误。
+访谈、播客、课程和口播是主要验证场景，有作者字幕时最快。缺字幕可用本地或云端转写；游戏录屏、口播较少的素材可启用画面识别并选择支持图片的模型，仍需检查实际选段。
 
 </details>
 
 <details>
 <summary>为什么没有生成片段？</summary>
 
-先检查失败阶段：字幕是否为空、模型连接是否成功、评分阈值是否过高，以及 FFmpeg 和磁盘是否正常。可以尝试把评分阈值从 0.7 降到 0.5，但不保证一定有片段。
-
-</details>
-
-<details>
-<summary>什么视频更适合？处理要多久？</summary>
-
-当前分析主要基于字幕，适合访谈、播客、课程和口播。纯视觉动作或音乐类视频效果可能有限。耗时取决于时长、硬件、模型与导出设置，建议先用自备的 3–5 分钟短样片验证。
-
-素材准备和公开链接示例见 [第一次出片指南](docs/USER_INSTALLATION_GUIDE.md#自备短样片)。
+先看具体失败阶段：字幕/转写是否成功、模型连接、FFmpeg 与磁盘是否正常，以及候选是否满足目标平台规则。YouTube 长视频要求完整片段至少 180 秒，短素材可选 Shorts 或 B 站。仍失败请附 1.5.0 版本、系统、素材时长、模型和脱敏日志，见 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)。
 
 </details>
 
@@ -305,33 +215,24 @@ AutoClip 免费、开源（MIT）。云端模型由所选服务商计费，需�
 
 ## 文档
 
-| 你想了解 | 文档 |
-| --- | --- |
-| 安装与首次出片 | [安装指南](docs/USER_INSTALLATION_GUIDE.md) |
-| 自建服务与自动化 | [Docker 部署](DOCKER.md) · [CLI / MCP](docs/CLI_AND_MCP.md) · [Agent skill](skills/autoclip/SKILL.md) · [OpenCode 接入](docs/OPENCODE.md) |
-| 配置模型与排错 | [模型配置](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [常见问题](docs/FAQ.md) |
-| 版本与隐私 | [更新日志](CHANGELOG.md) · [隐私说明](docs/PRIVACY.md) |
-| 参与开发与翻译 | [贡献指南](CONTRIBUTING.md) · [翻译维护](docs/i18n.md) |
+| 你想了解      | 文档                                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 安装与首次出片   | [安装指南](docs/USER_INSTALLATION_GUIDE.md)                                                                                               |
+| 自建服务与自动化  | [Docker 部署](DOCKER.md) · [CLI / MCP](docs/CLI_AND_MCP.md) · [Agent skill](skills/autoclip/SKILL.md) · [OpenCode 接入](docs/OPENCODE.md) |
+| 配置模型与排错   | [模型配置](docs/MULTI_LLM_PROVIDER_GUIDE.md) · [常见问题](docs/FAQ.md)                                                                        |
+| 版本、路线图与隐私 | [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md) · [社区看板](docs/COMMUNITY_BOARD.md) · [隐私说明](docs/PRIVACY.md)                                  |
+| 参与开发与翻译   | [贡献指南](CONTRIBUTING.md) · [翻译维护](docs/i18n.md)                                                                                        |
 
-README 提供八种语言，深入文档以中文为主；安装与排错指南另有英文版本。
+## 参与贡献
 
-## 参与贡献与联系
+欢迎提交修复、出片样例、使用反馈和翻译改进。如果 AutoClip 帮到了你，欢迎给项目一个 Star。
 
-欢迎提交修复、使用反馈和翻译改进。如果 AutoClip 帮到了你，欢迎给项目一个 Star。
+- **提问与交流**：[GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) · [分享想法](https://github.com/zhouxiaoka/autoclip/discussions/129)
+- **报告故障**：使用 [Issue 模板](https://github.com/zhouxiaoka/autoclip/issues/new/choose)，附上系统、版本、所选模型、复现步骤与已脱敏日志
+- **合作联系**：[christine_zhouye@163.com](mailto:christine_zhouye@163.com)
 
-- **提问与交流**：[GitHub Discussions](https://github.com/zhouxiaoka/autoclip/discussions) · [第一次出片问答](https://github.com/zhouxiaoka/autoclip/discussions/128) · [分享想法](https://github.com/zhouxiaoka/autoclip/discussions/129)。
-- **报告故障**：使用 [Issue 模板](https://github.com/zhouxiaoka/autoclip/issues/new/choose)，附上系统、版本、所选模型、复现步骤与已脱敏日志。
-- **合作联系**：[christine_zhouye@163.com](mailto:christine_zhouye@163.com)。
+个人维护，回复时间不固定，不提供即时客服或一对一部署服务。
 
-个人业余维护，回复时间不固定，不提供即时客服或一对一部署服务。提问前请先查看 [FAQ](docs/FAQ.md) 与 [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)；社区分类见 [欢迎说明](https://github.com/zhouxiaoka/autoclip/discussions/127) 和 [社区看板](docs/COMMUNITY_BOARD.md)。
+![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)
 
-感谢 FastAPI、React、Tauri、FFmpeg、yt-dlp、Whisper，以及所有贡献者。项目采用 [MIT License](LICENSE)。
-
-<details>
-<summary>社区成就与 Star History</summary>
-
-以下徽章由 Trendshift 提供，点击可查看 AutoClip 的上榜记录。GitHub Trending 与 Trendshift 是不同榜单；徽章展示平台记录的成就，不代表当前实时排名。
-
-[![Star History](https://api.star-history.com/svg?repos=zhouxiaoka/autoclip&type=Date)](https://star-history.com/#zhouxiaoka/autoclip&Date)
-
-</details>
+感谢 FastAPI、React、Tauri、FFmpeg、yt-dlp、Whisper、FunASR，以及所有贡献者。项目采用 [MIT License](LICENSE)。
