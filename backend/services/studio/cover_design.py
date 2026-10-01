@@ -97,6 +97,25 @@ def _fit_size(draw, lines: list[str], max_width: int, start: int, weight: str) -
     return size
 
 
+def _rewrap(draw, words: list[tuple[str, bool]], max_width: int, start: int, max_lines: int = 4):
+    """Greedy word wrap at the largest size that fits in `max_lines` lines."""
+    size = start
+    while size > 28:
+        font = _font(size, 'Black')
+        rows, current = [], []
+        for word in words:
+            trial = ' '.join(w for w, _ in current + [word])
+            if current and draw.textlength(trial, font=font) > max_width:
+                rows.append(current)
+                current = []
+            current.append(word)
+        rows.append(current)
+        if len(rows) <= max_lines and all(draw.textlength(' '.join(w for w, _ in row), font=font) <= max_width for row in rows):
+            return rows, size
+        size -= 4
+    return [words], size
+
+
 def _shade(width: int, height: int, colour: tuple[int, int, int], *, vertical: bool, reach: float, strength: int):
     from PIL import Image, ImageDraw
     layer = Image.new('RGBA', (width, height), (0, 0, 0, 0))
@@ -123,9 +142,21 @@ def design(frame_jpeg: bytes, *, width: int, height: int, title_lines: list[str]
     title_right = not portrait and crop_centre is not None and crop_centre < 0.45
     source = Image.open(io.BytesIO(frame_jpeg)).convert('RGB')
     lines = [line for line in title_lines if line.strip()][:2]
+    # Lay out the title first: a portrait cover's photo starts below it.
+    draw = ImageDraw.Draw(Image.new('RGB', (width, height)))
+    margin = round(width * (0.07 if portrait else 0.06))
+    max_width = width - 2 * margin if portrait else round(width * 0.52)
+    start = round(width * (0.115 if portrait else 0.075))
+    # Words carry their colour (the accent line keeps its accent when rewrapped).
+    rows = [[(word, i == accent_line and len(lines) > 1) for word in line.split(' ')] for i, line in enumerate(lines)]
+    size = _fit_size(draw, lines, max_width, start, 'Black')
+    if size < start * 0.7 and all(line.isascii() for line in lines):
+        # Long English titles shrink to unreadable in two lines: rewrap into up to four, larger.
+        rows, size = _rewrap(draw, [word for row in rows for word in row], max_width, start)
     if portrait:
         # Faces sit in the upper third of a 16:9 frame: keep the title in its own band above them.
-        band = round(height * TITLE_BAND)
+        title_end = round(height * 0.07) + len(rows) * round(size * 1.22) + round(size * 0.6)
+        band = max(round(height * TITLE_BAND), title_end)
         image = Image.new('RGBA', (width, height), (*canvas, 255))
         image.paste(_crop(source, width, height - band, crop_centre).convert('RGBA'), (0, band))
         fade = _shade(width, height - band, canvas, vertical=True, reach=0.25, strength=255)
@@ -137,19 +168,19 @@ def design(frame_jpeg: bytes, *, width: int, height: int, title_lines: list[str]
         shade = _shade(width, height, canvas, vertical=False, reach=0.68, strength=240)
         image = Image.alpha_composite(image, shade.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if title_right else shade)
     draw = ImageDraw.Draw(image)
-    margin = round(width * (0.07 if portrait else 0.06))
-    max_width = width - 2 * margin if portrait else round(width * 0.52)
-    size = _fit_size(draw, lines, max_width, round(width * (0.115 if portrait else 0.075)), 'Black')
     font = _font(size, 'Black')
     gap = round(size * 0.22)
-    block = len(lines) * size + max(0, len(lines) - 1) * gap
+    block = len(rows) * size + max(0, len(rows) - 1) * gap
     y = round(height * 0.07) if portrait else round((height - block) / 2)
     bottom = y
-    for i, line in enumerate(lines):
-        colour = accent if i == accent_line and len(lines) > 1 else white
-        x = (width - draw.textlength(line, font=font)) / 2 if portrait else (width - margin - max_width if title_right else margin)
-        draw.text((x, y), line, font=font, fill=colour)
-        bottom = draw.textbbox((x, y), line, font=font)[3]
+    space = draw.textlength(' ', font=font)
+    for row in rows:
+        text = ' '.join(word for word, _ in row)
+        x = (width - draw.textlength(text, font=font)) / 2 if portrait else (width - margin - max_width if title_right else margin)
+        for word, accented in row:
+            draw.text((x, y), word, font=font, fill=accent if accented else white)
+            x += draw.textlength(word, font=font) + space
+        bottom = draw.textbbox((0, y), text, font=font)[3]
         y += size + gap
     bar_w = round(width * (0.12 if portrait else 0.08))
     bar_x = (width - bar_w) / 2 if portrait else (width - margin - max_width if title_right else margin)
