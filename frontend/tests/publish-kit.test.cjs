@@ -25,3 +25,15 @@ test('the publish page starts from the output kit: copy, hashtags and the matchi
  assert.match(publish,/setDescription\(\[variant\.post\.description, variant\.post\.tags\.map/)
  assert.match(publish,/coverApi\.get\(projectId, clipId, coverSlot\)/)
 })
+
+test('the kit shows the whole cover, which the 16:9 video thumbnail crops',()=>{
+ assert.match(kit,/className=\{`studio-post-cover/)
+ assert.match(kit,/<img src=\{coverUrl\}/)
+ assert.match(card,/coverStamp=\{coverStamp\}/)
+})
+
+test('automatic projects list their outputs only: raw clips have no video file to preview or download',()=>{
+ const results=read('src/features/studio/StudioResults.tsx')
+ assert.match(results,/\{loaded && !automatic && children\}/)
+ assert.match(read('src/features/studio/useWorkspace.ts'),/setLoaded\(true\)/)
+})

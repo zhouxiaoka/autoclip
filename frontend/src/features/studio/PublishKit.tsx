@@ -16,7 +16,7 @@ export function postCaption(post: PostCopy) {
 }
 
 /** Ready-to-publish copy and cover of one output: read, edit, copy, export as a bundle, redo the cover with AI. */
-export default function PublishKit({ projectId, variant, onCoverChanged }: { projectId: string; variant: OutputVariant; onCoverChanged: () => void }) {
+export default function PublishKit({ projectId, variant, coverStamp, onCoverChanged }: { projectId: string; variant: OutputVariant; coverStamp: number; onCoverChanged: () => void }) {
   const post = variant.post
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<PostCopy | null>(post || null)
@@ -39,6 +39,7 @@ export default function PublishKit({ projectId, variant, onCoverChanged }: { pro
     else message.error(t('复制失败，请稍后重试'))
   }
   const kitPath = `/studio/${projectId}/output-variants/${variant.id}/kit`
+  const coverUrl = studioApi.variantCover(projectId, variant.id, coverStamp)
   const exportKit = async (event: React.MouseEvent) => {
     if (!isDesktopDownload()) return
     event.preventDefault()
@@ -72,9 +73,16 @@ export default function PublishKit({ projectId, variant, onCoverChanged }: { pro
         onChange={event => setDraft({ ...draft, tags: event.target.value.split(/[\s,，#]+/).filter(Boolean) })}/>
       <div className="studio-post-actions"><Btn variant="text" onClick={() => { setDraft(post); setEditing(false) }}>{t('取消')}</Btn><Btn size="sm" loading={saving} onClick={() => void save()}>{t('保存')}</Btn></div>
     </div> : <>
-      <p className="studio-post-title">{post.title}</p>
-      {post.description && <p className="studio-post-desc">{post.description}</p>}
-      {post.tags.length > 0 && <p className="studio-post-tags">{post.tags.map(tag => `#${tag}`).join(' ')}</p>}
+      <div className="studio-post-body">
+        {variant.cover && <a className={`studio-post-cover${LANDSCAPE.has(variant.strategy_id) ? ' studio-post-cover--wide' : ''}`} href={coverUrl} target="_blank" rel="noreferrer" title={t('查看封面')}>
+          <img src={coverUrl} alt={t('封面')}/>
+        </a>}
+        <div className="studio-post-text">
+          <p className="studio-post-title">{post.title}</p>
+          {post.description && <p className="studio-post-desc">{post.description}</p>}
+          {post.tags.length > 0 && <p className="studio-post-tags">{post.tags.map(tag => `#${tag}`).join(' ')}</p>}
+        </div>
+      </div>
       <div className="studio-post-actions">
         <Btn variant="text" onClick={() => void copy()}>{t('复制发布文案')}</Btn>
         <Btn variant="text" onClick={() => setEditing(true)}>{t('编辑文案')}</Btn>

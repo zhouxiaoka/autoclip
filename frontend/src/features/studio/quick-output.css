@@ -119,6 +119,36 @@
   padding-top: 12px;
 }
 
+.studio-post-body {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+}
+
+.studio-post-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The cover at its real ratio: the video thumbnail above crops it to 16:9. */
+.studio-post-cover {
+  border: 1px solid var(--ac-line);
+  border-radius: 10px;
+  flex: none;
+  overflow: hidden;
+  width: 64px;
+}
+
+.studio-post-cover--wide {
+  width: 104px;
+}
+
+.studio-post-cover img {
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
 .studio-post-title {
   color: var(--ac-ink);
   font-size: 13.5px;

@@ -1510,5 +1510,6 @@
   "AI 重新设计封面": "Rediseñar portada con IA",
   "使用百炼专属接入地址时填写，留空用默认地址。": "Solo para un endpoint dedicado de Bailian; déjalo vacío para usar la dirección predeterminada.",
   "自动设计（免费）": "Diseño automático (gratis)",
-  "默认用成片里嘉宾最清晰的画面自动设计封面，免费、秒出。想要更有设计感可以改用 AI 生成，生图服务和模型由你自己选择，按所选服务计费。": "Las portadas se diseñan automáticamente con el fotograma más nítido del invitado: gratis e inmediato. Para más diseño, cambia a generación con IA; tú eliges el servicio y el modelo de imágenes, que cobra ese servicio."
+  "默认用成片里嘉宾最清晰的画面自动设计封面，免费、秒出。想要更有设计感可以改用 AI 生成，生图服务和模型由你自己选择，按所选服务计费。": "Las portadas se diseñan automáticamente con el fotograma más nítido del invitado: gratis e inmediato. Para más diseño, cambia a generación con IA; tú eliges el servicio y el modelo de imágenes, que cobra ese servicio.",
+  "查看封面": "Ver portada"
 }
