@@ -1507,5 +1507,6 @@
   "复制发布文案": "Copiar texto",
   "编辑文案": "Editar texto",
   "导出发布包": "Exportar kit",
-  "AI 重新设计封面": "Refazer capa com IA"
+  "AI 重新设计封面": "Refazer capa com IA",
+  "使用百炼专属接入地址时填写，留空用默认地址。": "Só para um endpoint dedicado do Bailian; deixe vazio para o endereço padrão."
 }

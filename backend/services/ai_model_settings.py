@@ -165,8 +165,13 @@ def chat_endpoint(connection: Connection, model: str) -> dict:
         **{key: preset.base_url for key, preset in CLOUD_PRESETS.items()},
         **{key: preset.base_url for key, preset in LOCAL_PRESETS.items()},
     }
-    return {'base_url': connection.base_url or defaults[connection.provider],
-            'api_key': connection.api_key or '', 'model': model}
+    base = connection.base_url or defaults[connection.provider]
+    if connection.provider == 'dashscope' and connection.base_url:
+        # Dedicated Bailian endpoints are pasted as a host or its native /api/v1 path; text models
+        # use the OpenAI-compatible path on the same host (speech recognition uses /api/v1).
+        host = base.rstrip('/').removesuffix('/compatible-mode/v1').removesuffix('/api/v1')
+        base = host + '/compatible-mode/v1'
+    return {'base_url': base, 'api_key': connection.api_key or '', 'model': model}
 
 
 def image_endpoint(connection: Connection) -> dict:

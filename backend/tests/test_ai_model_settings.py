@@ -375,3 +375,11 @@ def test_api88_gateway_catalog_routes_account_models_and_isolates_keys(monkeypat
     response = ai.save(config)
     assert 'sk-88-only' not in json.dumps(response)
     assert ai.load().connections[0].api_key == 'sk-88-only'
+
+
+def test_a_dedicated_bailian_endpoint_serves_text_models_on_its_compatible_path():
+    host = 'https://llm-x.cn-beijing.maas.aliyuncs.com'
+    for pasted in (host, host + '/api/v1', host + '/api/v1/', host + '/compatible-mode/v1'):
+        connection = ai.Connection(id='b', name='百炼', provider='dashscope', base_url=pasted)
+        assert ai.chat_endpoint(connection, 'qwen-plus')['base_url'] == host + '/compatible-mode/v1'
+    assert ai.chat_endpoint(ai.Connection(id='d', name='d', provider='dashscope'), 'm')['base_url'] == 'https://dashscope.aliyuncs.com/compatible-mode/v1'

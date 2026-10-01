@@ -1507,5 +1507,6 @@
   "复制发布文案": "Copy post text",
   "编辑文案": "Edit copy",
   "导出发布包": "Export publish kit",
-  "AI 重新设计封面": "Redesign cover with AI"
+  "AI 重新设计封面": "Redesign cover with AI",
+  "使用百炼专属接入地址时填写，留空用默认地址。": "Only for a dedicated Bailian endpoint; leave empty for the default address."
 }

@@ -55,8 +55,8 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             placeholder={connection.has_key ? t('已配置；留空保留已有密钥') : preset?.placeholder || 'sk-…'}
             onChange={e => onEdit({ api_key: e.target.value || (connection.has_key ? undefined : '') })} />
         </Row>)}
-    {(key === 'compatible' || preset?.local) && <Row wide label={t('接口地址')} hint={preset?.local ? t('本机服务无需 API Key，保持默认地址即可。') : undefined}>
-      <Input aria-label={label(t('接口地址'))} value={connection.base_url} placeholder={preset?.local?.baseUrl || 'https://example.com/v1'} onChange={e => onEdit({ base_url: e.target.value })} />
+    {(key === 'compatible' || key === 'dashscope' || preset?.local) && <Row wide label={t('接口地址')} hint={preset?.local ? t('本机服务无需 API Key，保持默认地址即可。') : key === 'dashscope' ? t('使用百炼专属接入地址时填写，留空用默认地址。') : undefined}>
+      <Input aria-label={label(t('接口地址'))} value={connection.base_url} placeholder={preset?.local?.baseUrl || (key === 'dashscope' ? 'https://dashscope.aliyuncs.com/api/v1' : 'https://example.com/v1')} onChange={e => onEdit({ base_url: e.target.value })} />
     </Row>}
   </>
 }
