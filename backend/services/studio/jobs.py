@@ -1,5 +1,6 @@
 import json
 import logging
+import shutil
 from time import monotonic, sleep
 from backend.core.sentry_setup import capture_studio_exception, studio_error_code
 from copy import deepcopy
@@ -190,6 +191,9 @@ def download(project_id, url, browser):
     finally:
         info_path.unlink(missing_ok=True)
     meta = {key: str(info.get(field) or '')[:300] for key, field in (('title', 'title'), ('channel', 'channel'))}
+    height = _ensure_source_resolution(url, options, info, folder)
+    if height:
+        meta['source_height'] = height
     if _fetch_platform_subtitles(url, options, info, folder):
         meta['subtitle_source'] = 'platform'
     store.change(project_id, lambda data: data.update(source_meta=meta))
@@ -204,6 +208,62 @@ def download(project_id, url, browser):
         p.video_path = str(video)
         p.thumbnail = generate_project_thumbnail(project_id, video)
         db.commit()
+
+
+MIN_SOURCE_HEIGHT = 720
+# Clients tried when YouTube serves only low-resolution formats to the default one
+# (its SABR streaming experiment drops the URLs of every format above 360p for some sessions).
+RETRY_CLIENTS = (['web_safari'], ['web_embedded'], ['tv'])
+
+
+def _video_height(path):
+    from backend.services.publish_export import _probe
+    try:
+        return int(_probe(path).get('height') or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _ensure_source_resolution(url, options, info, folder):
+    """Re-download with another YouTube client when the file is far below what the video offers.
+
+    A 360p source cropped to 1080×1920 is unusable; the listing usually still offers 1080p.
+    Returns the final source height (0 when unknown).
+    """
+    try:
+        current = source_path = next(p for p in folder.glob('input.*') if p.suffix.lower() in ('.mp4', '.mkv', '.webm', '.mov'))
+    except StopIteration:
+        return 0
+    height = _video_height(current)
+    offered = max((f.get('height') or 0 for f in info.get('formats') or [] if f.get('vcodec') not in (None, 'none')), default=0)
+    want = min(MIN_SOURCE_HEIGHT, offered or MIN_SOURCE_HEIGHT)
+    youtube = 'youtube.com' in url or 'youtu.be' in url
+    if not youtube or not height or height >= want:
+        return height
+    from backend.utils.download_recovery import download_with_recovery
+    retry = folder / 'retry'
+    for client in RETRY_CLIENTS:
+        shutil.rmtree(retry, ignore_errors=True)
+        retry.mkdir()
+        try:
+            download_with_recovery(url, {**{k: v for k, v in options.items() if k != 'progress_hooks'},
+                                         'outtmpl': str(retry / 'input.%(ext)s'), 'extractor_args': {'youtube': {'player_client': client}}})
+            candidate = next(retry.glob('input.*'))
+        except Exception as error:  # noqa: BLE001 - keep the file we have
+            logger.warning('Re-download with %s failed: %s', client[0], type(error).__name__)
+            continue
+        better = _video_height(candidate)
+        if better > height:
+            source_path.unlink(missing_ok=True)
+            source_path = folder / candidate.name
+            candidate.replace(source_path)
+            height = better
+        if height >= want:
+            break
+    shutil.rmtree(retry, ignore_errors=True)
+    if height < want:
+        logger.warning('Source stays at %sp although %sp is offered', height, offered)
+    return height
 
 
 MIN_PLATFORM_CUES = 20
