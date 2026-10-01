@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 OPENAI_ROOT = "https://api.openai.com/v1"
 DASHSCOPE_ROOT = "https://dashscope.aliyuncs.com/api/v1"
+IMAGE_TIMEOUT = 180  # high-quality image models (gpt-image, qwen-image) often take 60–120 s per cover
 SEEDREAM_ROOT = "https://ark.cn-beijing.volces.com/api/v3"
 SEEDREAM_DEFAULT_MODEL = "doubao-seedream-5-0-260128"
 SEEDREAM_DEFAULT_OCR = "doubao-1.5-vision-pro-32k"
@@ -182,7 +183,7 @@ def _post_json(
     *,
     seedream: bool = False,
 ) -> Any:
-    resp = session.post(url, headers={**headers, "Content-Type": "application/json"}, json=body, timeout=90)
+    resp = session.post(url, headers={**headers, "Content-Type": "application/json"}, json=body, timeout=IMAGE_TIMEOUT)
     if int(getattr(resp, "status_code", 200) or 200) == 400:
         message = _error_message(resp).lower()
         retry = dict(body)
@@ -207,7 +208,7 @@ def _post_json(
             retry.pop("watermark", None)
             changed = True
         if changed:
-            resp = session.post(url, headers={**headers, "Content-Type": "application/json"}, json=retry, timeout=90)
+            resp = session.post(url, headers={**headers, "Content-Type": "application/json"}, json=retry, timeout=IMAGE_TIMEOUT)
     return resp
 
 
@@ -248,7 +249,7 @@ def generate_openai(
             headers=headers,
             data={"model": model, "prompt": request.prompt, "size": size, "n": "1"},
             files={"image": ("frame.jpg", request.reference, "image/jpeg")},
-            timeout=90,
+            timeout=IMAGE_TIMEOUT,
         )
         try:
             data = _raise_for_status(resp, edit=True)
@@ -329,13 +330,14 @@ def generate_dashscope(
         if modern_qwen:
             headers.pop('X-DashScope-Async', None)
         route = 'image-generation' if modern_wan else 'multimodal-generation'
-        size = '928*1664' if request.height > request.width else '1664*928'
+        sizes = {'928*1664': 928 / 1664, '1140*1472': 1140 / 1472, '1328*1328': 1.0, '1472*1140': 1472 / 1140, '1664*928': 1664 / 928}
+        size = min(sizes, key=lambda key: abs(sizes[key] - request.width / max(1, request.height)))
         if model.startswith('wan2.6-t2i'):
             size = '960*1696' if request.height > request.width else '1696*960'
         resp = http.post(f'{root}/services/aigc/{route}/generation',
             headers={**headers, 'Content-Type': 'application/json'},
             json={'model': model, 'input': {'messages': [{'role': 'user', 'content': content}]},
-                  'parameters': {'size': size, 'n': 1}}, timeout=90)
+                  'parameters': {'size': size, 'n': 1}}, timeout=IMAGE_TIMEOUT)
     else:
         return _generate_legacy_dashscope(api_key=api_key, base_url=base_url, request=request, session=http,
                                          cancel=cancel, poll_interval=poll_interval)

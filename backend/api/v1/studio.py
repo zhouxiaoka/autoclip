@@ -312,6 +312,18 @@ def output_variant_cover(project_id: str, variant_id: str, db: Session = Depends
     return FileResponse(path, media_type='image/jpeg', headers={'Cache-Control': 'no-store'})
 
 
+@router.post('/{project_id}/output-variants/{variant_id}/cover/ai')
+def redesign_output_variant_cover(project_id: str, variant_id: str, db: Session = Depends(get_db)):
+    from backend.services import cover
+    project_or_404(project_id, db)
+    _variant_job(project_id, variant_id)
+    cfg = cover.load_config()
+    if not (cfg.enabled and cfg.configured):
+        raise HTTPException(409, '请先在设置里开启 AI 封面并选择图像模型')
+    call(jobs.request_ai_cover, project_id, variant_id)
+    return {'ok': True}
+
+
 @router.put('/{project_id}/output-variants/{variant_id}/post')
 def update_output_variant_post(project_id: str, variant_id: str, body: PostCopy, db: Session = Depends(get_db)):
     project_or_404(project_id, db)

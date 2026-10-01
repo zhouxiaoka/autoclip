@@ -647,6 +647,31 @@ def _design_covers(project_id, draft, job_id):
                 if item['id'] in designed and item.get('cover') != 'ai':
                     item['cover'] = 'design'
         store.change(project_id, mark)
+        for variant in targets:
+            if variant['id'] in designed:
+                request_ai_cover(project_id, variant['id'])
+
+
+cover_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix='studio-cover')
+
+
+def request_ai_cover(project_id, variant_id):
+    """Upgrade a variant's designed cover with the AI image model in the background (when one is set up)."""
+    cover_executor.submit(_ai_cover_job, project_id, variant_id)
+
+
+@_tracked('ai_cover')
+def _ai_cover_job(project_id, variant_id):
+    from backend.services.studio import publish_kit
+    try:
+        variant = next(item for item in store.read(project_id).get('output_variants', []) if item['id'] == variant_id)
+        with llm_usage.timed('ai_cover'):
+            made = publish_kit.ai_cover(project_id, variant['render_job_id'], variant['strategy_id'])
+    except Exception as error:  # noqa: BLE001 - the designed cover stays
+        logger.warning('AI cover job failed: %s', type(error).__name__)
+        made = False
+    if made:
+        store.change(project_id, lambda data: next(item for item in data['output_variants'] if item['id'] == variant_id).update(cover='ai'))
 
 
 def update_post(project_id, variant_id, post):

@@ -74,6 +74,186 @@ def cover_speaker(packaging: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
+QUESTION_END = ('?', '？', '吗', '呢', '么')
+CANDIDATE_SHOTS = 3
+
+
+def _question_times(rows: list[dict[str, Any]]) -> list[tuple[float, float]]:
+    """Source intervals of rows that end a question: in an interview, those are the host speaking."""
+    return [(row['start'], row['end']) for row in rows if row['text'].rstrip(' "”」』').endswith(QUESTION_END)]
+
+
+def _face_and_sharpness(frame_jpeg: bytes) -> tuple[float | None, float, bool]:
+    """(face centre x, sharpness of the face area or frame centre, face found). Works without OpenCV."""
+    from PIL import Image, ImageFilter, ImageStat
+    image = Image.open(io.BytesIO(frame_jpeg)).convert('L')
+    box, centre, found = None, None, False
+    try:
+        from backend.services.studio import framing
+        if framing.is_installed():
+            framing.ensure_on_path()
+            import cv2
+            import numpy as np
+            pixels = cv2.imdecode(np.frombuffer(frame_jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
+            height, width = pixels.shape[:2]
+            _, faces = framing._detector(cv2, width, height).detect(pixels)
+            faces = [f for f in (faces if faces is not None else []) if f[2] >= framing.MIN_FACE * width]
+            if faces:
+                x, y, w, h = (float(v) for v in max(faces, key=lambda f: f[2] * f[3])[:4])
+                box, centre, found = (int(x), int(y), int(x + w), int(y + h)), (x + w / 2) / width, True
+    except Exception:  # noqa: BLE001 - no detector: judge the frame centre
+        box = None
+    if box is None:
+        width, height = image.size
+        box = (width // 3, height // 6, width * 2 // 3, height * 2 // 3)
+    edges = image.crop(box).filter(ImageFilter.FIND_EDGES)
+    return centre, ImageStat.Stat(edges).var[0], found
+
+
+def _signature(video, at: float) -> list[float] | None:
+    """Colour profile of a frame (coarse RGB histogram): camera angles of an interview differ clearly."""
+    from PIL import Image
+    from backend.services.cover import extract_frame_jpeg
+    try:
+        image = Image.open(io.BytesIO(extract_frame_jpeg(video, at_sec=at, max_width=320))).convert('RGB').resize((64, 36))
+    except Exception:  # noqa: BLE001
+        return None
+    histogram = image.quantize(colors=64, method=Image.Quantize.FASTOCTREE, kmeans=0).convert('RGB').histogram()
+    bins = [sum(histogram[c * 256 + i * 32:c * 256 + (i + 1) * 32]) for c in range(3) for i in range(8)]
+    total = sum(bins) or 1
+    return [b / total for b in bins]
+
+
+def _similarity(a: list[float], b: list[float]) -> float:
+    return sum(min(x, y) for x, y in zip(a, b))
+
+
+GUEST_SAMPLES = 24
+SAME_LOOK = 0.75
+_guest_looks: dict[str, list[float] | None] = {}
+
+
+def guest_look(video) -> list[float] | None:
+    """Colour profile of the camera the video shows most: in an interview, the guest's.
+
+    Frames across the whole video are grouped by look; the largest group wins. Cached per file.
+    """
+    key = f'{video}:{Path(video).stat().st_size}'
+    if key not in _guest_looks:
+        from backend.services.publish_export import _probe
+        duration = float(_probe(video).get('duration') or 0)
+        looks = [sig for sig in (_signature(video, duration * (i + 0.5) / GUEST_SAMPLES) for i in range(GUEST_SAMPLES)) if sig]
+        groups: list[list[list[float]]] = []
+        for sig in looks:
+            home = next((group for group in groups if _similarity(sig, group[0]) >= SAME_LOOK), None)
+            (home.append(sig) if home else groups.append([sig]))
+        big = max(groups, key=len) if groups else None
+        # A single dominant look only: when no camera holds the screen, there is no guest look.
+        _guest_looks[key] = big[0] if big and len(big) >= max(4, len(looks) * 0.35) else None
+    return _guest_looks[key]
+
+
+def _guest_shots(video, start: float, shots) -> tuple[list, bool]:
+    """Shots that look like the guest's camera, best match first; ([], False) without a guest look."""
+    look = guest_look(video)
+    if look is None:
+        return [], False
+    scored = [(shot, _similarity(sig, look)) for shot in shots
+              if (sig := _signature(video, start + (shot[0] + shot[1]) / 2)) is not None]
+    matches = [shot for shot, score in sorted(scored, key=lambda item: item[1], reverse=True) if score >= SAME_LOOK]
+    return matches, bool(matches)
+
+
+VISION_CANDIDATES = 6
+CHOOSE_PROMPT = (
+    '这是一段访谈视频里的 {n} 张候选画面，编号 1–{n}。{who}'
+    '请选出最适合做短视频封面的一张：必须是受访嘉宾本人（不是主持人、不是观众），正脸或清晰侧脸，'
+    '不模糊、不闭眼、表情自然有感染力。如果没有一张是嘉宾本人，best 返回 0。'
+    '只返回 JSON：{{"best":编号,"guest":[是嘉宾本人的编号]}}'
+)
+
+
+def _thumb(frame_jpeg: bytes, width: int = 384) -> str:
+    import base64
+    from PIL import Image
+    image = Image.open(io.BytesIO(frame_jpeg)).convert('RGB')
+    image.thumbnail((width, width))
+    out = io.BytesIO()
+    image.save(out, format='JPEG', quality=80)
+    return 'data:image/jpeg;base64,' + base64.b64encode(out.getvalue()).decode()
+
+
+def _candidates(video, start: float, shots, limit: int) -> list[tuple[bytes, float | None, float, bool]]:
+    """Sharpest frame of each of the longest shots: (frame, face centre, sharpness, face found)."""
+    from backend.services.cover import extract_frame_jpeg
+    out = []
+    for shot_start, shot_end in sorted(shots, key=lambda shot: shot[1] - shot[0], reverse=True)[:limit]:
+        best = None
+        for share in (0.35, 0.65):
+            try:
+                frame = extract_frame_jpeg(video, at_sec=start + shot_start + (shot_end - shot_start) * share, max_width=1920)
+            except Exception:  # noqa: BLE001
+                continue
+            centre, sharpness, found = _face_and_sharpness(frame)
+            if best is None or (found, sharpness) > (best[3], best[2]):
+                best = (frame, centre, sharpness, found)
+        if best:
+            out.append(best)
+    return out
+
+
+def _choose_with_vision(candidates, guest: str, host: str) -> tuple[int, bool] | None:
+    """(index, is the guest) chosen by the vision model, or None when it is not set up or fails."""
+    from backend.services.studio import intelligence
+    if not intelligence.ready() or not candidates:
+        return None
+    who = (f'受访嘉宾是 {guest}。' if guest else '') + (f'主持人是 {host}。' if host else '')
+    content = [{'type': 'text', 'text': CHOOSE_PROMPT.format(n=len(candidates), who=who)}]
+    for index, (frame, *_rest) in enumerate(candidates, 1):
+        content += [{'type': 'text', 'text': f'画面 {index}'}, {'type': 'image_url', 'image_url': {'url': _thumb(frame)}}]
+    try:
+        from backend.core import llm_usage
+        from backend.services.studio.vision_settings import effective
+        with llm_usage.stage('cover_frame'):
+            answer = intelligence.vision_call(content, {**effective(), 'quick_screening': True}) or {}
+        best = int(answer.get('best') or 0)
+    except Exception:  # noqa: BLE001 - fall back to the local choice
+        return None
+    if 1 <= best <= len(candidates):
+        return best - 1, True
+    return None if not answer else (max(range(len(candidates)), key=lambda i: (candidates[i][3], candidates[i][2])), False)
+
+
+def pick_frame(video, scene: dict[str, Any], rows: list[dict[str, Any]], packaging: dict[str, Any] | None = None,
+               guest_hint: str = '') -> tuple[bytes, float | None, bool]:
+    """(frame, speaker centre, guest on screen) for the cover.
+
+    A fixed point in the clip often caught a hand in motion or the host's camera, labelled with the
+    guest's name. Candidates are the sharpest frame of each of the longest shots. The vision model
+    (when set up) picks the guest's best frame; colour and screen-time rules cannot tell a host's
+    camera from a guest's, so without it the sharpest face is used and no nameplate is drawn.
+    """
+    from backend.services.cover import extract_frame_jpeg
+    from backend.services.studio import framing
+    start, length = scene['start'], scene['end'] - scene['start']
+    shots = framing.split_shots(length, framing.detect_cuts(video, start, length))
+    candidates = _candidates(video, start, shots, VISION_CANDIDATES)
+    if not candidates:
+        at, _ = frame_time(scene)
+        return extract_frame_jpeg(video, at_sec=at, max_width=1920), None, False
+    speakers = (packaging or {}).get('speakers') or []
+    guest = next((sp['name'] for sp in speakers if not any(w in (sp.get('role') or '').lower() for w in HOST)), '') or guest_hint
+    host = next((sp['name'] for sp in speakers if any(w in (sp.get('role') or '').lower() for w in HOST)), '')
+    chosen = _choose_with_vision(candidates, guest, host)
+    if chosen is not None:
+        index, is_guest = chosen
+        frame, centre, _, _ = candidates[index]
+        return frame, centre, is_guest
+    questions = _question_times(rows)
+    frame, centre, _, _ = max(candidates, key=lambda c: (c[3], c[2]))
+    return frame, centre, False
+
+
 def _crop(image, width: int, height: int, centre: float | None):
     from PIL import Image
     src_w, src_h = image.size
@@ -87,7 +267,10 @@ def _crop(image, width: int, height: int, centre: float | None):
         crop_h = round(src_w / aspect)
         top = max(0, min(src_h - crop_h, round((src_h - crop_h) * 0.3)))
         box = (0, top, src_w, top + crop_h)
-    return image.crop(box).resize((width, height), Image.Resampling.LANCZOS)
+    from PIL import ImageFilter
+    scaled = image.crop(box).resize((width, height), Image.Resampling.LANCZOS)
+    upscale = width / max(1, box[2] - box[0])
+    return scaled.filter(ImageFilter.UnsharpMask(radius=2, percent=70, threshold=2)) if upscale > 1.05 else scaled
 
 
 def _fit_size(draw, lines: list[str], max_width: int, start: int, weight: str) -> int:
