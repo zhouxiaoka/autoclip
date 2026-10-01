@@ -29,13 +29,135 @@
 
 ## 실제 완성 클립
 
-![AutoClip 세로 클립: 小红书 인터뷰, TikTok 팟캐스트, 抖音 인터뷰, Shorts 팟캐스트](docs/images/v2/demo-wall.webp)
+이미지나 “재생”을 클릭하면 완성된 영상을 볼 수 있습니다. 언어 표시는 영상의 자막 언어입니다. 추천 영상 6개를 먼저 보여주며, 펼치면 10개를 더 볼 수 있습니다.
 
-AutoClip의 인터뷰식·팟캐스트식 패키징 예시입니다. 전체 영상과 원본 출처는 **[사례 라이브러리 →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**에서 확인하세요.
+### 세로 · 인터뷰형 및 전체 화면 팟캐스트형
 
-플랫폼별 영상·표지·제목·설명·해시태그·ZIP 게시 패키지를 제공합니다. 사례는 계속 추가하며 [완성 클립 제출](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell)을 환영합니다.
+<table width="100%">
+<tr>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="docs/images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
+<strong>Bill Gates</strong><br>
+인터뷰형 · Douyin · 중국어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g">▶ 재생 1:01</a> · <a href="https://www.youtube.com/watch?v=A_156w0aYtU">원본</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="docs/images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
+<strong>AI Experts Debate</strong><br>
+인터뷰형 · Shorts · 영어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g">▶ 재생 1:25</a> · <a href="https://www.youtube.com/watch?v=OhOmLqR5nN4">원본</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="docs/images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
+<strong>Tony Robbins</strong><br>
+전체 화면 팟캐스트형 · Douyin · 중국어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g">▶ 재생 1:45</a> · <a href="https://www.youtube.com/watch?v=DuRcrbP3kag">원본</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="docs/images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
+<strong>Andrew Garfield × Amy Poehler</strong><br>
+전체 화면 팟캐스트형 · Shorts · 영어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g">▶ 재생 1:01</a> · <a href="https://www.youtube.com/watch?v=OJV8AaWCxQQ">원본</a>
+</td>
+</tr>
+</table>
 
-원본 저작권은 원작자에게 있습니다. 효과 시연: [Dwarkesh Patel — Dario Amodei](https://www.youtube.com/watch?v=n1E9IZfvGMA) · [Y Combinator — Sam Altman](https://www.youtube.com/watch?v=ZIaOBAjvc38) · [WIRED — Hideo Kojima](https://www.youtube.com/watch?v=02Ah5VQrzvA)
+### 가로 · 원본 화면 비율 유지
+
+<table width="100%">
+<tr>
+<td align="center" width="50%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
+<strong>佟丽娅 × 鲁豫</strong><br>
+원본 화면 비율 · Bilibili · 중국어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g">▶ 재생 1:41</a> · <a href="https://www.bilibili.com/video/BV1qheu6kEFV/">원본</a>
+</td>
+<td align="center" width="50%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="docs/images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
+<strong>Sam Altman</strong><br>
+원본 화면 비율 · Bilibili · 중국어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g">▶ 재생 2:02</a> · <a href="https://www.youtube.com/watch?v=jZh55CQwSh8">원본</a>
+</td>
+</tr>
+</table>
+
+<details>
+<summary>실제 완성 영상 10개 더 보기</summary>
+
+<table width="100%">
+<tr>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="docs/images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
+<strong>Adam Neumann</strong><br>
+전체 화면 팟캐스트형 · TikTok · 영어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g">▶ 재생 0:59</a> · <a href="https://www.youtube.com/watch?v=IQ4JVWdj4Q0">원본</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
+<strong>小奇 × 鲁豫</strong><br>
+인터뷰형 · Douyin · 중국어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g">▶ 재생 0:50</a> · <a href="https://www.bilibili.com/video/BV1ighy6AEPz/">원본</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
+<strong>郭柯宇 × 鲁豫</strong><br>
+인터뷰형 · Douyin · 중국어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g">▶ 재생 1:11</a> · <a href="https://www.bilibili.com/video/BV1LDYV6HEXR/">원본</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="docs/images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
+<strong>Willem Dafoe</strong><br>
+전체 화면 팟캐스트형 · TikTok · 영어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g">▶ 재생 1:07</a> · <a href="https://www.youtube.com/watch?v=YqugY2zTIoI">원본</a>
+</td>
+</tr>
+<tr>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="docs/images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
+<strong>TIM × 罗永浩</strong><br>
+인터뷰형 · Douyin · 중국어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g">▶ 재생 1:05</a> · <a href="https://www.bilibili.com/video/BV1B5xkzPEhx/">원본</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
+<strong>Jensen Huang</strong><br>
+인터뷰형 · 샤오훙슈 · 중국어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g">▶ 재생 1:17</a> · <a href="https://www.youtube.com/watch?v=Hrbq66XqtCo">원본</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
+<strong>Andrej Karpathy</strong><br>
+인터뷰형 · Douyin · 중국어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g">▶ 재생 0:43</a> · <a href="https://www.youtube.com/watch?v=lXUZvyajciY">원본</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="docs/images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
+<strong>A20 Pro</strong><br>
+인터뷰형 · 샤오훙슈 · 중국어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g">▶ 재생 2:00</a> · <a href="https://www.bilibili.com/video/BV1e4Y96FEaJ/">원본</a>
+</td>
+</tr>
+<tr>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="docs/images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
+<strong>Sylvester Stallone</strong><br>
+인터뷰형 · Douyin · 중국어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g">▶ 재생 1:39</a> · <a href="https://www.youtube.com/watch?v=ccs-B_nTfZs">원본</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="docs/images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
+<strong>MrBeast</strong><br>
+전체 화면 팟캐스트형 · TikTok · 영어<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g">▶ 재생 1:42</a> · <a href="https://www.youtube.com/watch?v=9IQ_ldV9z_A">원본</a>
+</td>
+<td></td>
+<td></td>
+</tr>
+</table>
+
+</details>
+
+영상, 커버와 게시 문구는 **[사례 라이브러리 →](https://zhouxiaoka.github.io/autoclip_intro/cases/?lang=ko)** 에서 확인하고, [직접 만든 영상도 공유해 주세요](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell). 원본 영상의 저작권은 원작자에게 있으며, 이 영상은 효과를 보여주기 위한 예시입니다.
 
 ## 무엇을 하나요
 

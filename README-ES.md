@@ -29,13 +29,135 @@ La app es gratis; los modelos cloud cobran por uso. Puedes ajustar el resultado 
 
 ## Clips reales
 
-![Clips verticales de AutoClip: entrevista Xiaohongshu, pódcast TikTok, entrevista Douyin, pódcast Shorts](docs/images/v2/demo-wall.webp)
+Haz clic en una imagen o en «Reproducir» para ver el clip completo. El idioma indicado es el de los subtítulos del resultado. Mostramos seis ejemplos; despliega la sección para ver otros diez.
 
-Ejemplos del formato entrevista y pódcast de AutoClip. Los vídeos completos y sus fuentes están en la **[biblioteca de casos →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**.
+### Vertical · entrevista y pódcast a pantalla completa
 
-Cada clip incluye vídeo, portada, título, descripción, hashtags y paquete ZIP para la plataforma. La biblioteca se actualiza; [envía tus clips](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell).
+<table width="100%">
+<tr>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="docs/images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
+<strong>Bill Gates</strong><br>
+Entrevista · Douyin · Chino<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g">▶ Reproducir 1:01</a> · <a href="https://www.youtube.com/watch?v=A_156w0aYtU">Original</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="docs/images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
+<strong>AI Experts Debate</strong><br>
+Entrevista · Shorts · Inglés<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g">▶ Reproducir 1:25</a> · <a href="https://www.youtube.com/watch?v=OhOmLqR5nN4">Original</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="docs/images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
+<strong>Tony Robbins</strong><br>
+Pódcast a pantalla completa · Douyin · Chino<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g">▶ Reproducir 1:45</a> · <a href="https://www.youtube.com/watch?v=DuRcrbP3kag">Original</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="docs/images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
+<strong>Andrew Garfield × Amy Poehler</strong><br>
+Pódcast a pantalla completa · Shorts · Inglés<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g">▶ Reproducir 1:01</a> · <a href="https://www.youtube.com/watch?v=OJV8AaWCxQQ">Original</a>
+</td>
+</tr>
+</table>
 
-Los derechos del original pertenecen a sus autores. Ejemplos: [Dwarkesh Patel — Dario Amodei](https://www.youtube.com/watch?v=n1E9IZfvGMA) · [Y Combinator — Sam Altman](https://www.youtube.com/watch?v=ZIaOBAjvc38) · [WIRED — Hideo Kojima](https://www.youtube.com/watch?v=02Ah5VQrzvA)
+### Horizontal · encuadre original
+
+<table width="100%">
+<tr>
+<td align="center" width="50%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
+<strong>佟丽娅 × 鲁豫</strong><br>
+Encuadre original · Bilibili · Chino<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g">▶ Reproducir 1:41</a> · <a href="https://www.bilibili.com/video/BV1qheu6kEFV/">Original</a>
+</td>
+<td align="center" width="50%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="docs/images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
+<strong>Sam Altman</strong><br>
+Encuadre original · Bilibili · Chino<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g">▶ Reproducir 2:02</a> · <a href="https://www.youtube.com/watch?v=jZh55CQwSh8">Original</a>
+</td>
+</tr>
+</table>
+
+<details>
+<summary>Ver otros 10 clips reales</summary>
+
+<table width="100%">
+<tr>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="docs/images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
+<strong>Adam Neumann</strong><br>
+Pódcast a pantalla completa · TikTok · Inglés<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g">▶ Reproducir 0:59</a> · <a href="https://www.youtube.com/watch?v=IQ4JVWdj4Q0">Original</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
+<strong>小奇 × 鲁豫</strong><br>
+Entrevista · Douyin · Chino<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g">▶ Reproducir 0:50</a> · <a href="https://www.bilibili.com/video/BV1ighy6AEPz/">Original</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
+<strong>郭柯宇 × 鲁豫</strong><br>
+Entrevista · Douyin · Chino<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g">▶ Reproducir 1:11</a> · <a href="https://www.bilibili.com/video/BV1LDYV6HEXR/">Original</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="docs/images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
+<strong>Willem Dafoe</strong><br>
+Pódcast a pantalla completa · TikTok · Inglés<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g">▶ Reproducir 1:07</a> · <a href="https://www.youtube.com/watch?v=YqugY2zTIoI">Original</a>
+</td>
+</tr>
+<tr>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="docs/images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
+<strong>TIM × 罗永浩</strong><br>
+Entrevista · Douyin · Chino<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g">▶ Reproducir 1:05</a> · <a href="https://www.bilibili.com/video/BV1B5xkzPEhx/">Original</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
+<strong>Jensen Huang</strong><br>
+Entrevista · Xiaohongshu · Chino<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g">▶ Reproducir 1:17</a> · <a href="https://www.youtube.com/watch?v=Hrbq66XqtCo">Original</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
+<strong>Andrej Karpathy</strong><br>
+Entrevista · Douyin · Chino<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g">▶ Reproducir 0:43</a> · <a href="https://www.youtube.com/watch?v=lXUZvyajciY">Original</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="docs/images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
+<strong>A20 Pro</strong><br>
+Entrevista · Xiaohongshu · Chino<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g">▶ Reproducir 2:00</a> · <a href="https://www.bilibili.com/video/BV1e4Y96FEaJ/">Original</a>
+</td>
+</tr>
+<tr>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="docs/images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
+<strong>Sylvester Stallone</strong><br>
+Entrevista · Douyin · Chino<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g">▶ Reproducir 1:39</a> · <a href="https://www.youtube.com/watch?v=ccs-B_nTfZs">Original</a>
+</td>
+<td align="center" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="docs/images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
+<strong>MrBeast</strong><br>
+Pódcast a pantalla completa · TikTok · Inglés<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g">▶ Reproducir 1:42</a> · <a href="https://www.youtube.com/watch?v=9IQ_ldV9z_A">Original</a>
+</td>
+<td></td>
+<td></td>
+</tr>
+</table>
+
+</details>
+
+Vídeos, portadas y textos de publicación en la **[biblioteca de ejemplos →](https://zhouxiaoka.github.io/autoclip_intro/cases/?lang=es)**. [Comparte tus clips](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell). Los vídeos originales pertenecen a sus autores; estos clips se muestran solo como demostración.
 
 ## Qué hace
 
