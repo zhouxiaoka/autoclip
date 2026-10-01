@@ -29,13 +29,135 @@
 
 ## Настоящие клипы
 
-![Вертикальные клипы AutoClip: интервью Xiaohongshu, подкаст TikTok, интервью Douyin, подкаст Shorts](docs/images/v2/demo-wall.webp)
+Нажмите на изображение или «Смотреть», чтобы открыть полный клип. Указан язык субтитров готового видео. Ниже шесть примеров; раскройте раздел, чтобы посмотреть ещё десять.
 
-Примеры оформления AutoClip для интервью и подкастов. Полные видео и авторы исходников — в **[библиотеке примеров →](https://zhouxiaoka.github.io/autoclip_intro/cases/)**.
+### Вертикальные · интервью и подкаст на весь экран
 
-Каждый клип включает видео, обложку, заголовок, описание, хештеги и ZIP для площадки. Библиотека обновляется; [присылайте клипы](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell).
+<table width="100%">
+<tr>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g"><img src="docs/images/demos/gates-ezra-01.jpg" width="180" alt="Bill Gates — AI测试时竟会装傻？"></a><br>
+<strong>Bill Gates</strong><br>
+Интервью · Douyin · Китайский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/gates-ezra/01.mp4?v=2026-10-01g">▶ Смотреть 1:01</a> · <a href="https://www.youtube.com/watch?v=A_156w0aYtU">Оригинал</a>
+</td>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g"><img src="docs/images/demos/ai-labs-debate-01.jpg" width="180" alt="AI Experts Debate — We&#x27;re Driving Toward a Cliff in the Fog"></a><br>
+<strong>AI Experts Debate</strong><br>
+Интервью · Shorts · Английский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/ai-labs-debate/01.mp4?v=2026-10-01g">▶ Смотреть 1:25</a> · <a href="https://www.youtube.com/watch?v=OhOmLqR5nN4">Оригинал</a>
+</td>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g"><img src="docs/images/demos/robbins-36months-01.jpg" width="180" alt="Tony Robbins — 风险极小，回报极大？"></a><br>
+<strong>Tony Robbins</strong><br>
+Подкаст на весь экран · Douyin · Китайский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/robbins-36months/01.mp4?v=2026-10-01g">▶ Смотреть 1:45</a> · <a href="https://www.youtube.com/watch?v=DuRcrbP3kag">Оригинал</a>
+</td>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g"><img src="docs/images/demos/garfield-poehler-01.jpg" width="180" alt="Andrew Garfield × Amy Poehler — I Love Competition—but Hate Fake Casualness"></a><br>
+<strong>Andrew Garfield × Amy Poehler</strong><br>
+Подкаст на весь экран · Shorts · Английский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/garfield-poehler/01.mp4?v=2026-10-01g">▶ Смотреть 1:01</a> · <a href="https://www.youtube.com/watch?v=OJV8AaWCxQQ">Оригинал</a>
+</td>
+</tr>
+</table>
 
-Права на исходник остаются у авторов. Примеры: [Dwarkesh Patel — Dario Amodei](https://www.youtube.com/watch?v=n1E9IZfvGMA) · [Y Combinator — Sam Altman](https://www.youtube.com/watch?v=ZIaOBAjvc38) · [WIRED — Hideo Kojima](https://www.youtube.com/watch?v=02Ah5VQrzvA)
+### Горизонтальные · исходное кадрирование
+
+<table width="100%">
+<tr>
+<td align="center" valign="top" width="50%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-tongliya-01.jpg" width="360" alt="佟丽娅 × 鲁豫 — 舞蹈是我骨子里的东西"></a><br>
+<strong>佟丽娅 × 鲁豫</strong><br>
+Исходное кадрирование · Bilibili · Китайский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-tongliya/01.mp4?v=2026-10-01g">▶ Смотреть 1:41</a> · <a href="https://www.bilibili.com/video/BV1qheu6kEFV/">Оригинал</a>
+</td>
+<td align="center" valign="top" width="50%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g"><img src="docs/images/demos/altman-uses-ai-01.jpg" width="360" alt="Sam Altman — AI是文艺复兴，还是工业革命？"></a><br>
+<strong>Sam Altman</strong><br>
+Исходное кадрирование · Bilibili · Китайский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/altman-uses-ai/01.mp4?v=2026-10-01g">▶ Смотреть 2:02</a> · <a href="https://www.youtube.com/watch?v=jZh55CQwSh8">Оригинал</a>
+</td>
+</tr>
+</table>
+
+<details>
+<summary>Ещё 10 готовых клипов</summary>
+
+<table width="100%">
+<tr>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g"><img src="docs/images/demos/neumann-doac-01.jpg" width="180" alt="Adam Neumann — Success is how you feel one minute before death—full of love, no regret"></a><br>
+<strong>Adam Neumann</strong><br>
+Подкаст на весь экран · TikTok · Английский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/neumann-doac/01.mp4?v=2026-10-01g">▶ Смотреть 0:59</a> · <a href="https://www.youtube.com/watch?v=IQ4JVWdj4Q0">Оригинал</a>
+</td>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-xiaoqi-02.jpg" width="180" alt="小奇 × 鲁豫 — 想证明自己，又怕被注视"></a><br>
+<strong>小奇 × 鲁豫</strong><br>
+Интервью · Douyin · Китайский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-xiaoqi/02.mp4?v=2026-10-01g">▶ Смотреть 0:50</a> · <a href="https://www.bilibili.com/video/BV1ighy6AEPz/">Оригинал</a>
+</td>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g"><img src="docs/images/demos/luyu-guokeyu-01.jpg" width="180" alt="郭柯宇 × 鲁豫 — 演员的快感在创作过程 不在结果"></a><br>
+<strong>郭柯宇 × 鲁豫</strong><br>
+Интервью · Douyin · Китайский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/luyu-guokeyu/01.mp4?v=2026-10-01g">▶ Смотреть 1:11</a> · <a href="https://www.bilibili.com/video/BV1LDYV6HEXR/">Оригинал</a>
+</td>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g"><img src="docs/images/demos/dafoe-hot-ones-01.jpg" width="180" alt="Willem Dafoe — Fake teeth made him feel lascivious and instantly became the character"></a><br>
+<strong>Willem Dafoe</strong><br>
+Подкаст на весь экран · TikTok · Английский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/dafoe-hot-ones/01.mp4?v=2026-10-01g">▶ Смотреть 1:07</a> · <a href="https://www.youtube.com/watch?v=YqugY2zTIoI">Оригинал</a>
+</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g"><img src="docs/images/demos/tim-luoyonghao-01.jpg" width="180" alt="TIM × 罗永浩 — 红得快的网红 糊得更快"></a><br>
+<strong>TIM × 罗永浩</strong><br>
+Интервью · Douyin · Китайский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/tim-luoyonghao/01.mp4?v=2026-10-01g">▶ Смотреть 1:05</a> · <a href="https://www.bilibili.com/video/BV1B5xkzPEhx/">Оригинал</a>
+</td>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/jensen-dwarkesh-01.jpg" width="180" alt="Jensen Huang — AI是五层蛋糕 能源才是底层"></a><br>
+<strong>Jensen Huang</strong><br>
+Интервью · Xiaohongshu · Китайский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/jensen-dwarkesh/01.mp4?v=2026-10-01g">▶ Смотреть 1:17</a> · <a href="https://www.youtube.com/watch?v=Hrbq66XqtCo">Оригинал</a>
+</td>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g"><img src="docs/images/demos/karpathy-dwarkesh-01.jpg" width="180" alt="Andrej Karpathy — AI还不能当实习生用 因认知能力严重不足"></a><br>
+<strong>Andrej Karpathy</strong><br>
+Интервью · Douyin · Китайский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/karpathy-dwarkesh/01.mp4?v=2026-10-01g">▶ Смотреть 0:43</a> · <a href="https://www.youtube.com/watch?v=lXUZvyajciY">Оригинал</a>
+</td>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g"><img src="docs/images/demos/apple-a20-01.jpg" width="180" alt="A20 Pro — 苹果芯片不是拼乐高"></a><br>
+<strong>A20 Pro</strong><br>
+Интервью · Xiaohongshu · Китайский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/apple-a20/01.mp4?v=2026-10-01g">▶ Смотреть 2:00</a> · <a href="https://www.bilibili.com/video/BV1e4Y96FEaJ/">Оригинал</a>
+</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g"><img src="docs/images/demos/stallone-nyt-01.jpg" width="180" alt="Sylvester Stallone — 60岁写《洛奇》 是向衰老宣战"></a><br>
+<strong>Sylvester Stallone</strong><br>
+Интервью · Douyin · Китайский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/stallone-nyt/01.mp4?v=2026-10-01g">▶ Смотреть 1:39</a> · <a href="https://www.youtube.com/watch?v=ccs-B_nTfZs">Оригинал</a>
+</td>
+<td align="center" valign="top" width="25%">
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g"><img src="docs/images/demos/mrbeast-colin-samir-01.jpg" width="180" alt="MrBeast — YouTube&#x27;s first 5 seconds matter more than thumbnails"></a><br>
+<strong>MrBeast</strong><br>
+Подкаст на весь экран · TikTok · Английский<br>
+<a href="https://pub-3fb92949b9c2480b89feec5ec03f3540.r2.dev/cases/mrbeast-colin-samir/01.mp4?v=2026-10-01g">▶ Смотреть 1:42</a> · <a href="https://www.youtube.com/watch?v=9IQ_ldV9z_A">Оригинал</a>
+</td>
+<td></td>
+<td></td>
+</tr>
+</table>
+
+</details>
+
+Видео, обложки и тексты публикаций доступны в **[библиотеке примеров →](https://zhouxiaoka.github.io/autoclip_intro/cases/?lang=ru)**. [Поделитесь своими клипами](https://github.com/zhouxiaoka/autoclip/discussions/new?category=show-and-tell). Права на исходные видео принадлежат их авторам; клипы показаны только для демонстрации.
 
 ## Что умеет
 

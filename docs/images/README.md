@@ -1,14 +1,33 @@
 # README 界面素材
 
-## 当前 README 成片展示（1.5 迭代）
+## 当前 README 视频展示（2026-10-01）
 
-八语 README 当前使用 [成片墙](v2/demo-wall.webp)，由 [PR #248](https://github.com/zhouxiaoka/autoclip/pull/248) 引入，展示自动包装后的访谈式和播客式效果。图中的素材来自：
+八语 README 共用 16 条官网已有成片：主区精选 6 条（访谈竖版、满屏播客、横版各 2 条），其余 10 条放在折叠区。点击实际画面截图或播放链接即可打开对应 MP4；完整视频继续由官网的 R2 媒体库托管，应用仓库只保存缩略图。
+
+[视频清单](demos/manifest.json) 记录固定的成片链接、原片来源、字幕语言、版式、实际视频时长与尺寸，以及视频和缩略图的 SHA-256。缩略图逐字节复制自官网案例库的实际帧截图，没有改绘画面或添加虚构字幕；播放时长以本地对应视频的 FFprobe 结果取整，而非生成任务的预估时长。
+
+主区精选如下，完整清单含另外 10 条：
+
+| 案例 | 版式 / 平台 | 字幕 | 成片 |
+| --- | --- | --- | --- |
+| Bill Gates | 访谈式 / 抖音 | 中文 | [截图](demos/gates-ezra-01.jpg) |
+| AI Experts Debate | 访谈式 / Shorts | 英文 | [截图](demos/ai-labs-debate-01.jpg) |
+| Tony Robbins | 满屏播客 / 抖音 | 中文 | [截图](demos/robbins-36months-01.jpg) |
+| Andrew Garfield × Amy Poehler | 满屏播客 / Shorts | 英文 | [截图](demos/garfield-poehler-01.jpg) |
+| 佟丽娅 × 鲁豫 | 原画幅 / B 站 | 中文 | [截图](demos/luyu-tongliya-01.jpg) |
+| Sam Altman | 原画幅 / B 站 | 中文 | [截图](demos/altman-uses-ai-01.jpg) |
+
+这些是官网 `2026-10-01g` 批次的公开展示素材，包含开发、验收期间的输出；官网各案例元数据并未统一记录生成时的源码提交，因此不将整个展示清单视为同一个正式安装包的全量验收证明。网站媒体经过展示用转码，清单尺寸为实际托管版本；正式安装包的验收范围见 [1.5.0 验收记录](../RELEASE_1_5.md)。原片版权归原作者，仅作效果展示，README 每张卡片均附原片链接。
+
+更新时先核对公开媒体能访问及实际画面、版式、字幕和时长，再同步清单、缩略图及八语卡片。新增完整视频继续放在媒体库，避免将 MP4 加入应用仓库。赞助区属于独立内容，更新演示区时保持原样。
+
+### 历史成片墙
+
+[PR #248](https://github.com/zhouxiaoka/autoclip/pull/248) 引入的 [成片墙](v2/demo-wall.webp) 保留供历史引用，图中展示以下素材的访谈式与播客式效果：
 
 - [Dwarkesh Patel — Dario Amodei](https://www.youtube.com/watch?v=n1E9IZfvGMA)
 - [Y Combinator — Sam Altman](https://www.youtube.com/watch?v=ZIaOBAjvc38)
 - [WIRED — Hideo Kojima](https://www.youtube.com/watch?v=02Ah5VQrzvA)
-
-2026-10-01 核对时，[官网案例库](https://zhouxiaoka.github.io/autoclip_intro/cases/) 收录了这三组素材的完整成片。展示图属于迭代期间的样式记录；正式安装包的功能验收范围见 [1.5.0 验收记录](../RELEASE_1_5.md)。后续换图应记录生成版本、模型与制作设置，同步八语说明。
 
 下方保留 1.4 界面截图的来源及制作记录，供历史引用。
 
