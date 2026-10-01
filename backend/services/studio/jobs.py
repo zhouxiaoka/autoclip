@@ -368,6 +368,10 @@ def _apply_strategy(draft, strategy_id, *, burned_subtitles=False, layout=None):
         title_style=strategy.title_style,
         title_motion=strategy.title_motion,
     )
+    if strategy.template == 'landscape' and strategy_id != 'original' and value.get('language', 'source') == 'source':
+        # No template packaging here: the legacy captions and hook are translated at render time
+        # (skipped when already in this language), so English YouTube never burns Chinese text.
+        value['language'] = strategy.audience_language
     if burned_subtitles:
         value['subtitles'] = False
     # The template version follows the new title style: a draft derived for one platform (comic, v6)
@@ -609,9 +613,14 @@ def _audience_title(value, strategy_id, post):
     from backend.services.studio.packaging import CJK
     if platform_strategy(strategy_id).audience_language != 'en' or not CJK.search(value.get('title') or ''):
         return value
+    from backend.services.studio.packaging import foreign_for
     lines = (value.get('packaging') or {}).get('title_lines') or []
-    english = ' '.join(lines) if lines and not any(CJK.search(line) for line in lines) else (post or {}).get('title', '')
-    return {**value, 'title': english[:120]} if english else value
+    english = ' '.join(lines) if lines and not any(foreign_for('en', line) for line in lines) else (post or {}).get('title', '')
+    if not english or foreign_for('en', english):
+        # No English title came back: an English caption line beats the Chinese clip title.
+        cues = (value.get('packaging') or {}).get('cues') or []
+        english = next((cue['text'] for cue in cues if cue.get('text') and not foreign_for('en', cue['text'])), '') or 'Untitled clip'
+    return {**value, 'title': english[:120]}
 
 
 def _content_key(value):
@@ -903,9 +912,12 @@ def append_platform_variants(project_id, platforms, branding):
             value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
             now = signature in automatic
             framed = None
+            post = None
             if now:
                 value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
                 value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
+                post = _posts_for(project_id, [(strategy_id, value)], packaging_cache).get((_content_key(value), strategy_id))
+                value = _audience_title(value, strategy_id, post)
             draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
             derived.append(draft.model_dump())
             variants.append({
@@ -914,6 +926,7 @@ def append_platform_variants(project_id, platforms, branding):
                 'status': 'queued' if now else 'on_demand', 'created_at': store.now(),
                 **({'trimmed_to_sec': trimmed} if trimmed else {}),
                 **({'framing': framed} if framed else {}),
+                **({'post': post} if post else {}),
             })
     if not variants:
         raise ValueError('没有可追加的平台版本；已存在或素材不满足所选平台要求')
@@ -1007,8 +1020,9 @@ def _produce_on_demand(project_id, variant_id):
         strategy_id = variant['strategy_id']
         value, framed = _apply_framing(project_id, raw, strategy_id, video, burned, {})
         value = _apply_packaging(project_id, value, strategy_id, burned, {})
-        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None).model_dump()
         posts = _posts_for(project_id, [(strategy_id, value)], {})
+        value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
+        draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None).model_dump()
 
         def ready(data):
             for index, item in enumerate(data['drafts']):
@@ -1084,13 +1098,7 @@ def _sync_variant_status(project_id, job_id, status, error=None):
 
 
 def _finish_generation(data):
-    """Settle the generation once every requested (not backup) variant is completed or failed."""
-    variants = [item for item in data['output_variants'] if item['status'] != 'on_demand']
-    if all(item['status'] in ('completed', 'failed') for item in variants):
-        completed = [item for item in variants if item['status'] == 'completed']
-        outcome = 'completed' if len(completed) == len(variants) else 'partial' if completed else 'failed'
-        data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=store.now())
-        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': store.now()}
+    store.settle_generation(data)
 
 
 def inspect_project(project_id, options, url=None, browser=None):

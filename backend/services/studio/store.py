@@ -33,16 +33,36 @@ def read(project_id: str):
     data.setdefault('events', [])
     data.setdefault('jobs', [])
     data.setdefault('output_variants', [])
+    interrupted = set()
     for job in data['jobs']:
         if job['status'] in ('queued', 'running') and job.get('instance') != INSTANCE:
             job.update(status='failed', error='服务已重启，请重新导出')
+            interrupted.add(job.get('job_id'))
+    settle = False
     for variant in data['output_variants']:
         if variant.get('status') == 'preparing' and variant.get('instance') != INSTANCE:
             variant.update(status='failed', error='服务已重启，请重试这条', needs_prepare=True)
+            settle = True
+        elif variant.get('status') in ('queued', 'running') and variant.get('render_job_id') in interrupted:
+            # The app closed mid-render: the version becomes retryable instead of queued forever.
+            variant.update(status='failed', error='服务已重启，请重试这条')
+            settle = True
+    if settle and data.get('generation'):
+        settle_generation(data)
     analysis = data.get('analysis')
     if analysis and analysis['status'] == 'running' and analysis.get('instance') != INSTANCE:
         analysis.update(status='failed', error='服务已重启，请重试分析')
     return data
+
+def settle_generation(data):
+    """Settle the generation once every requested (not backup) variant is completed or failed."""
+    variants = [item for item in data['output_variants'] if item['status'] != 'on_demand']
+    if all(item['status'] in ('completed', 'failed') for item in variants):
+        completed = [item for item in variants if item['status'] == 'completed']
+        outcome = 'completed' if len(completed) == len(variants) else 'partial' if completed else 'failed'
+        data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now())
+        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now()}
+
 
 def write(project_id, data):
     root = directory(project_id)

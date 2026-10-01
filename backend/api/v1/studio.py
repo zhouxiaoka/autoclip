@@ -342,7 +342,8 @@ def output_variant_kit(project_id: str, variant_id: str, db: Session = Depends(g
         raise HTTPException(404, '成片文件已移除')
     cover, _ = publish_kit.cover_file(project_id, job['job_id'], variant['strategy_id'])
     post = variant.get('post') or {'title': (job.get('result') or {}).get('title', '')}
-    data, name = publish_kit.kit_zip(video, cover, post, platform_strategy(variant['strategy_id']).label)
+    strategy = platform_strategy(variant['strategy_id'])
+    data, name = publish_kit.kit_zip(video, cover, post, strategy.label, english=strategy.audience_language == 'en')
     return Response(data, media_type='application/zip', headers={'Content-Disposition': f"attachment; filename*=UTF-8''{quote(name)}"})
 
 

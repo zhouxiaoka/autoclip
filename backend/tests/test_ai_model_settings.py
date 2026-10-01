@@ -383,6 +383,8 @@ def test_a_dedicated_bailian_endpoint_serves_text_models_on_its_compatible_path(
         connection = ai.Connection(id='b', name='百炼', provider='dashscope', base_url=pasted)
         assert ai.chat_endpoint(connection, 'qwen-plus')['base_url'] == host + '/compatible-mode/v1'
     assert ai.chat_endpoint(ai.Connection(id='d', name='d', provider='dashscope'), 'm')['base_url'] == 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    relay = ai.Connection(id='r', name='relay', provider='dashscope', base_url='https://proxy.example.com/v1')
+    assert ai.chat_endpoint(relay, 'm')['base_url'] == 'https://proxy.example.com/v1', 'a 1.4 relay address is used as entered'
 
 
 def test_fal_image_connections_and_unknown_image_apis_from_newer_versions():

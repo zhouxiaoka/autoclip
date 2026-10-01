@@ -13,7 +13,7 @@ test('share caption credits AutoClip with the repository link and is copied loca
  assert.match(share,/REPO_URL = 'https:\/\/github\.com\/zhouxiaoka\/autoclip'/)
  assert.match(share,/t\('用 AutoClip 剪的'\)\} · \$\{REPO_URL\}/)
  assert.match(share,/navigator\.clipboard\.writeText/)
- assert.match(card,/copyText\(variant\.post \? `\$\{postCaption\(variant\.post\)\}\\n\\n\$\{shareCaption\(''\)\}`\.trim\(\) : shareCaption\(draft\?\.title\)\)/)
+ assert.match(card,/copyText\(variant\.post \? `\$\{postCaption\(variant\.post\)\}\\n\\n\$\{shareCaption\('', english\)\}`\.trim\(\) : shareCaption\(draft\?\.title, english\)\)/)
  assert.match(card,/trackOutputShare\(projectId, \{ share_target: 'copy_caption', \.\.\.analytics \}\)/)
 })
 

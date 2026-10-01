@@ -15,6 +15,8 @@ import { packagingLabel } from './packagingLabel'
 import PublishKit, { postCaption } from './PublishKit'
 import './quick-output.css'
 
+const ENGLISH_PLATFORMS = new Set(['tiktok', 'instagram_reels', 'youtube_shorts', 'youtube_long'])
+
 const framingHints: Record<NonNullable<OutputVariant['framing']>, string> = {
   speaker: '已按说话人重新取景',
   full_frame: '画面里没有可跟随的人物，保留完整画面',
@@ -36,7 +38,8 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const onDemand = variant.status === 'on_demand'
   const duration = job?.result?.duration ?? (draft ? draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) : 0)
   const copyCaption = async () => {
-    const copied = await copyText(variant.post ? `${postCaption(variant.post)}\n\n${shareCaption('')}`.trim() : shareCaption(draft?.title))
+    const english = draft?.packaging?.audience_language === 'en' || ENGLISH_PLATFORMS.has(variant.strategy_id)
+    const copied = await copyText(variant.post ? `${postCaption(variant.post)}\n\n${shareCaption('', english)}`.trim() : shareCaption(draft?.title, english))
     if (copied) {
       trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })
       message.success(t('分享文案已复制，发布视频时粘贴即可'))

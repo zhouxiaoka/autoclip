@@ -244,13 +244,17 @@ def _safe_name(text: str) -> str:
     return re.sub(r'[\\/:*?"<>|\n\r\t]+', ' ', text).strip()[:60] or 'autoclip'
 
 
-def kit_zip(video: Path, cover: Path | None, post: dict[str, Any], platform_label: str) -> tuple[bytes, str]:
-    """(zip bytes, file name): the video, its cover and the post copy for one platform."""
+def kit_zip(video: Path, cover: Path | None, post: dict[str, Any], platform_label: str, *, english: bool = False) -> tuple[bytes, str]:
+    """(zip bytes, file name): the video, its cover and the post copy for one platform.
+
+    An English platform's kit is English throughout, file names included.
+    """
     name = _safe_name(post.get('title') or video.stem)
+    cover_name, copy_name, platform = ('cover', 'post', 'Platform: ') if english else ('封面', '发布文案', '平台：')
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_STORED) as archive:  # mp4/jpg are already compressed
         archive.write(video, f'{name}.mp4')
         if cover is not None:
-            archive.write(cover, f'{name} 封面.jpg')
-        archive.writestr(f'{name} 发布文案.txt', f'平台：{platform_label}\n\n{caption_text(post)}\n')
+            archive.write(cover, f'{name} {cover_name}.jpg')
+        archive.writestr(f'{name} {copy_name}.txt', f'{platform}{platform_label}\n\n{caption_text(post)}\n')
     return buffer.getvalue(), f'{name}.zip'

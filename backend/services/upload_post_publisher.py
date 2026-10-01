@@ -418,6 +418,12 @@ def publish_clip(req: PublishRequest, config: UploadPostConfig | None = None,
     title = (req.title or post.get("title") or clip.get("generated_title") or clip.get("title") or clip.get("outline") or f"切片 {req.clip_id}").strip()
     if not title:
         title = f"切片 {req.clip_id}"
+    if clip.get("strategy_id"):
+        from backend.services.platform_strategy import platform_strategy
+        from backend.services.studio.packaging import foreign_for
+        if platform_strategy(clip["strategy_id"]).audience_language == "en" and foreign_for("en", title):
+            # Never post a Chinese title to an English platform; the publish page asks for one.
+            raise UploadPostError("这个平台的标题需要是英文，请在发布页填写英文标题后再发布")
 
     video_path = Path(export["path"])
     if not video_path.exists() or video_path.stat().st_size == 0:

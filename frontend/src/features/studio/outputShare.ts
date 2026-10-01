@@ -6,8 +6,9 @@ const RATING_KEY = 'autoclip.output-rating.v1'
 const RATING_INTERVAL_MS = 7 * 86400000
 
 /** Caption the user pastes next to the posted video. Nothing is uploaded by AutoClip. */
-export function shareCaption(title: string | undefined): string {
-  const credit = `${t('用 AutoClip 剪的')} · ${REPO_URL}`
+export function shareCaption(title: string | undefined, english = false): string {
+  // The credit is pasted with the post, so it follows the platform's language, not the app's.
+  const credit = `${english ? 'Made with AutoClip' : t('用 AutoClip 剪的')} · ${REPO_URL}`
   return title?.trim() ? `${title.trim()}\n\n${credit}` : credit
 }
 

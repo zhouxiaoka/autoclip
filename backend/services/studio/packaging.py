@@ -18,6 +18,16 @@ logger = logging.getLogger(__name__)
 
 CJK = re.compile(r'[㐀-鿿]')
 KANA = re.compile(r'[぀-ヿ]')
+
+
+def foreign_for(audience: str, text: str) -> bool:
+    """Text an English-platform viewer cannot read: any Chinese or Japanese characters."""
+    return audience == 'en' and bool(CJK.search(text or '') or KANA.search(text or ''))
+
+
+def _items(value) -> list[dict]:
+    # Model lists sometimes hold bare strings or come back as one object: keep only the objects.
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 LATIN = re.compile(r'[A-Za-z]')
 TITLE_LIMIT = {'zh': 12, 'en': 36}
 TAG_LIMIT = 10
@@ -143,9 +153,7 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     translate = captions and src != audience
     base = {'template': template, 'audience_language': audience, 'source_language': src, 'burned_captions': burned}
     # Never mix languages: a fallback shows only what is already in the audience's language.
-    fallback_title = _fallback_title(draft, audience)
-    if audience == 'en':
-        fallback_title = [line for line in fallback_title if not CJK.search(line) and not KANA.search(line)]
+    fallback_title = [line for line in _fallback_title(draft, audience) if not foreign_for(audience, line)]
     fallback = {**base, 'title_lines': fallback_title, 'fallback': True,
                 'cues': [] if not captions or translate else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
     if not lines:
@@ -203,8 +211,9 @@ def _segments(raw, lines, translate):
         raise ValueError('segments missing')
     cues, expected = [], 0
     for item in raw:
-        start, end = (item or {}).get('from'), (item or {}).get('to')
-        text = _clean(str((item or {}).get('text') or ''))
+        item = item if isinstance(item, dict) else {}
+        start, end = item.get('from'), item.get('to')
+        text = _clean(str(item.get('text') or ''))
         if not (isinstance(start, int) and isinstance(end, int)) or start != expected or end < start or end >= len(lines):
             raise ValueError('segments are not contiguous')
         if end - start >= MAX_SEGMENT_LINES:
@@ -224,9 +233,13 @@ def _validated(result, lines, base, translate, burned, known_names, draft, avoid
     if not isinstance(result, dict):
         raise TypeError('packaging response is not an object')
     audience = base['audience_language']
-    titles = [_clean(t) for t in result.get('title_lines') or [] if isinstance(t, str) and _clean(t)][:2]
+    raw_titles = result.get('title_lines')
+    raw_titles = [raw_titles] if isinstance(raw_titles, str) else raw_titles if isinstance(raw_titles, list) else []
+    titles = [_clean(t) for t in raw_titles if isinstance(t, str) and _clean(t)][:2]
     if audience == 'zh' and any(KANA.search(t) for t in titles):
         titles = []  # a Japanese title on a Chinese platform: use the draft title instead
+    if any(foreign_for(audience, t) for t in titles):
+        titles = []  # a Chinese title on an English platform: never shown; the fallback below is filtered too
     limit = TITLE_LIMIT[audience]
     if titles and any(len(t) > limit + 2 for t in titles):
         # Models often return one long line: keep their wording when it fits two lines, breaking
@@ -239,38 +252,45 @@ def _validated(result, lines, base, translate, burned, known_names, draft, avoid
         rewrapped = lines_for(joined, chars if audience == 'zh' else chars * 0.55)
         titles = rewrapped if 0 < len(rewrapped) <= 2 and all(len(t) <= cap for t in rewrapped) else []
     if not titles:
-        titles = _fallback_title(draft, audience)
+        titles = [line for line in _fallback_title(draft, audience) if not foreign_for(audience, line)]
     accent = result.get('accent_line') if result.get('accent_line') in (0, 1) else len(titles) - 1
     cues = []
     if captions if captions is not None else (not burned or translate):
         if translate:
             cues = _segments(result.get('segments'), lines, translate)  # invalid translation: whole package falls back
+            if any(foreign_for(audience, cue['text']) for cue in cues):
+                raise ValueError('English captions contain Chinese or Japanese text')
         else:
             # Same language: the source rows are what is actually said and carry the tightest timing.
             # Merged sentence segments spread word timing over 20 s+ and drift from the audio.
             cues = [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': '', 'lines': (i, i)}
                     for i, l in enumerate(lines)]
-        if burned:
+        if burned or audience == 'en':
             for cue in cues:
-                cue['original'] = ''  # the picture already carries a caption; never stack a third line
+                # Burned: the picture already carries a caption, never stack a third line.
+                # English: its templates show English only, so the source text is not kept either.
+                cue['original'] = ''
     haystack = (' '.join(line['text'] for line in lines) + ' ' + known_names + ' ' + draft.get('title', '')).lower()
     speakers, seen = [], set()
-    for item in result.get('speakers') or []:
-        index, name = _line(item, lines), str((item or {}).get('name') or '').strip()
+    for item in _items(result.get('speakers')):
+        index, name = _line(item, lines), str(item.get('name') or '').strip()
         if index is None or not name or len(name) > 40 or name.lower() in seen or not _names_allowed(name, haystack):
             continue
+        if foreign_for(audience, name):
+            continue  # a nameplate the audience cannot read is worse than none
+        role = str(item.get('role') or '').strip()[:60]
         seen.add(name.lower())
-        speakers.append({'at': lines[index]['start'], 'name': name, 'role': str(item.get('role') or '').strip()[:60]})
+        speakers.append({'at': lines[index]['start'], 'name': name, 'role': '' if foreign_for(audience, role) else role})
     tags = []
     if base['template'] == 'interview_zh':
-        for item in (result.get('tags') or [])[:MAX_TAGS]:
-            index, text = _line(item, lines), str((item or {}).get('text') or '').strip()
+        for item in _items(result.get('tags'))[:MAX_TAGS]:
+            index, text = _line(item, lines), str(item.get('text') or '').strip()
             if index is not None and 0 < len(text) <= TAG_LIMIT:
                 tags.append({'at': lines[index]['start'] + .2, 'text': text})
     highlights = []
     if base['template'] == 'podcast_en':
-        for item in result.get('highlights') or []:
-            index, word = _line(item, lines), str((item or {}).get('word') or '').strip()
+        for item in _items(result.get('highlights')):
+            index, word = _line(item, lines), str(item.get('word') or '').strip()
             cue = next((c for c in cues if index is not None and c['lines'][0] <= index <= c['lines'][1]), None)
             if cue and word and len(word) <= 30 and word.lower() in cue['text'].lower():
                 highlights.append({'at': cue['start'], 'text': word})

@@ -74,10 +74,13 @@ def _tags(raw: Any, rules: PostRules) -> list[str]:
     return tags[:rules.tags[1]]
 
 
+FOREIGN_FOR_EN = re.compile(r'[\u3040-\u30ff\u3400-\u9fff]')
+
+
 def fallback(title: str, platform: str) -> dict[str, Any]:
     rules = RULES.get(platform, RULES['original'])
     text = _clean(title)
-    if rules.language == 'en' and re.search(r'[\u3040-\u30ff\u4e00-\u9fff]', text):
+    if rules.language == 'en' and FOREIGN_FOR_EN.search(text):
         text = ''  # never a Chinese title on an English platform; the user fills it in
     return {'title': _fit(text, rules.title_max), 'description': '', 'tags': []}
 
@@ -101,13 +104,24 @@ def build_posts(title: str, lines: list[str], platforms: list[str], *, source: s
             raw = (result or {}).get('posts') if isinstance(result, dict) else None
             if not isinstance(raw, dict):
                 raise ValueError('posts missing')
+            mixed = []
             for platform in platforms:
                 item = raw.get(platform) if isinstance(raw.get(platform), dict) else {}
                 rules = RULES[platform]
                 post_title = _fit(_clean(item.get('title')), rules.title_max)
+                description = _fit(_clean(item.get('description')), rules.description_max)
+                tags = _tags(item.get('tags'), rules)
+                if rules.language == 'en':
+                    # English platforms are English only: a Chinese title is retried, never posted.
+                    if FOREIGN_FOR_EN.search(post_title):
+                        mixed.append(platform)
+                        continue
+                    description = '' if FOREIGN_FOR_EN.search(description) else description
+                    tags = [tag for tag in tags if not FOREIGN_FOR_EN.search(tag)]
                 if post_title:
-                    posts[platform] = {'title': post_title, 'description': _fit(_clean(item.get('description')), rules.description_max),
-                                       'tags': _tags(item.get('tags'), rules)}
+                    posts[platform] = {'title': post_title, 'description': description, 'tags': tags}
+            if mixed and attempt == 0:
+                raise ValueError(f'{"、".join(mixed)} 的标题必须是英文，不能有中文')
             return posts
         except Exception as error:  # noqa: BLE001 - copy falls back to the clip title
             logger.warning('Post copy rejected (attempt %d): %s', attempt + 1, type(error).__name__)

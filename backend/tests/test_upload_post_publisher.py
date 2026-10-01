@@ -539,8 +539,8 @@ def test_api_router_is_mounted():
 
 
 # --------------------------------------------------------- output variants ---
-def _variant_meta(path, strategy_id):
-    return {"id": "studio-" + "a" * 32, "title": "自动版本", "generated_title": "自动版本", "source_type": "studio",
+def _variant_meta(path, strategy_id, title="Auto version"):
+    return {"id": "studio-" + "a" * 32, "title": title, "generated_title": title, "source_type": "studio",
             "studio_job_id": "a" * 32, "revision": 1, "video_path": str(path), "warnings": [],
             "output_variant_id": "v1", "strategy_id": strategy_id, "branding": {"outro_enabled": True}}
 
@@ -562,6 +562,20 @@ def test_publish_variant_uses_completed_file_without_reexport(data_dir, monkeypa
     assert r["path"] == str(video)
     record = up.list_records("p1")[0]
     assert record["output_variant_id"] == "v1" and record["strategy_id"] == "tiktok"
+
+
+def test_an_english_platform_version_is_never_posted_with_a_chinese_title(data_dir, monkeypatch):
+    from backend.services import upload_post_publisher as up
+
+    video = _fake_clip(data_dir)
+    monkeypatch.setattr("backend.services.studio.publishing.output_variant_meta",
+                        lambda _p, _v: _variant_meta(video, "tiktok", title="自动版本"))
+    session = _Session([])
+    cfg = up.UploadPostConfig(api_key="k-1234567890", user="me", base_url="https://api.example.test")
+    with pytest.raises(up.UploadPostError, match="英文"):
+        up.publish_clip(up.PublishRequest("p1", "studio-" + "a" * 32, ["tiktok"], output_variant_id="v1"),
+                        config=cfg, session=session)
+    assert not session.calls
 
 
 def test_publish_landscape_variant_refuses_vertical_only_targets(data_dir, monkeypatch):

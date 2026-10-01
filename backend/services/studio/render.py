@@ -17,6 +17,18 @@ from backend.utils.ffmpeg_utils import get_ffmpeg_path
 PORTRAIT_LINE = 15
 
 
+def _needs_translation(language, hook, entries):
+    """Skip the model call when the hook and captions are already in the target language."""
+    from backend.services.studio.packaging import CJK, foreign_for, source_language
+    if language not in ('zh', 'en'):
+        return True
+    if entries and source_language([e.get('text', '') for e in entries]) != language:
+        return True
+    if hook and (foreign_for('en', hook) if language == 'en' else not CJK.search(hook)):
+        return True
+    return False
+
+
 def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
@@ -35,7 +47,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     from backend.pipeline.quality import to_seconds
     entries = [e.copy() for e in entries if any(to_seconds(e['start_time']) < s.end and to_seconds(e['end_time']) > s.start for s in draft.scenes)]
     hook = '' if packaged else draft.hook
-    if draft.language != 'source' and (hook or entries):
+    if draft.language != 'source' and (hook or entries) and _needs_translation(draft.language, hook, entries):
         translated = text_json('将 title 和 subtitles 翻译成指定语言；保持 subtitles 的数量与顺序，不添加事实。返回 {"title":"...","subtitles":["..."]}。', {'language': draft.language, 'title': hook, 'subtitles': [e.get('text', '') for e in entries]})
         rows = translated.get('subtitles', [])
         if len(rows) != len(entries) or not all(isinstance(t, str) for t in rows) or not isinstance(translated.get('title'), str):
