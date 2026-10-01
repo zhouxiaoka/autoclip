@@ -8,12 +8,15 @@ product UI; the default palette matches DESIGN.md's accent.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 from backend.services.studio.models import Draft, Packaging, Scene
 
 FONT_DIR = Path(__file__).resolve().parents[2] / 'assets' / 'fonts'
-FONT = 'Noto Sans SC'  # bundled (OFL); covers CJK and Latin on every platform
+# CoreText resolves this variable font by its legacy family (name ID 1),
+# not the preferred family used by Fontconfig / DirectWrite (name ID 16).
+FONT = 'Noto Sans SC Thin' if sys.platform == 'darwin' else 'Noto Sans SC'
 W, H = 1080, 1920
 WIN_Y, WIN_H = 560, 810
 WHITE, SUB, INK, INK_SOFT = '&H00E6EAEC', '&H009BA2A6', '&H00191A1A', '&H26191A1A'

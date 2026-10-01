@@ -136,3 +136,28 @@ def test_the_palette_colours_accents_and_keeps_pill_text_readable():
     draft = Draft(id='d', title='T', scenes=SCENES[:1], aspect='portrait', layout='window', packaging=_packaging(palette='mint'))
     graph, _ = pr.scene_video_graph(draft, SCENES[0], 0, pr.FONT_DIR / 'x.ass', 1080, 1920)
     assert 'color=c=0x111917' in graph and 'color=c=0x46D3A6' in graph
+def test_packaged_cjk_loads_bundled_font_in_real_ffmpeg(tmp_path):
+    """A successful encode can still draw tofu when the font provider rejects a family."""
+    import shutil
+
+    from backend.services.publish_export import _escape_filter_path
+    from backend.utils.ffmpeg_utils import get_ffmpeg_path
+
+    ffmpeg = get_ffmpeg_path()
+    if not shutil.which(ffmpeg):
+        pytest.skip('ffmpeg unavailable')
+    scene = Scene(id='font', start=0, end=1)
+    value = Packaging(template='podcast_en', audience_language='zh',
+                      title_lines=['中文字体测试'],
+                      cues=[{'start':0, 'end':1, 'text':'字幕应显示中文'}])
+    ass = tmp_path / 'cjk.ass'
+    ass.write_text(pr.scene_ass(value, [scene], 0), encoding='utf-8')
+    graph = f"ass='{_escape_filter_path(ass)}':fontsdir='{_escape_filter_path(pr.FONT_DIR)}'"
+    result = subprocess.run([ffmpeg, '-v', 'verbose', '-f', 'lavfi', '-i',
+                             'color=black:s=1080x1920:d=1', '-vf', graph,
+                             '-frames:v', '1', '-f', 'null', '-'],
+                            capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stderr
+    selections = '\n'.join(line for line in result.stderr.splitlines() if 'fontselect:' in line)
+    assert 'NotoSansSC' in selections, selections
+    assert 'failed to find any fallback' not in selections, selections

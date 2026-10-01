@@ -49,6 +49,22 @@ MCP 成片时长约 45.8 / 17.7 / 87.8 秒（各两种语言），两边实际�
 
 ## 同事拿到测试包后
 
+### wheel 人物取景发布阻塞项（2026-10-01）
+
+同事发现旧测试 wheel 漏打包 `face_detection_yunet_2023mar.onnx`，访谈 / 播客式因此回退到完整横画面。
+源码与桌面包包含该文件；此前真实模型验收从源码运行，旧 wheel 检查只覆盖入口、字体和片尾，漏掉了新安装后的人物检测。
+已修 `pyproject.toml`，同时打包 ONNX 和 MIT 许可证；CI 新增安装 wheel 后从真实访谈视频抽帧、生成两种裁切轨迹的检查。
+
+原包保留在 `dist/rejected-cli-mcp-e23dc999/`，ZIP SHA256 为 `543c7f1f819a7d5c3981e2daa9c0b2b7a39a4b4dce3245737e0bcd5c80b2f418`，明确不可作为通过验收的版本。
+同一安装包检查对原 wheel 报模型缺失，对修复后的 wheel 通过。另用 DevDay 已有素材与包装，清除所有旧取景轨迹后，从安装后的模型重新检测并渲染中文播客、英文播客、英文访谈三条短样片：1080×1920、实际片尾成功、无警告。
+补测未调用付费模型，新增模型费用为零；原模型验收的记录与成本保留。复测证据在 `dist/acceptance-1.5/wheel-framing-report.json`、`wheel-portrait/report.json`。
+
+实际成片抽查还发现 macOS CoreText 按旧字体家族名匹配随包可变字体，原 `Noto Sans SC` 在该环境回退为西文字体、中文显示方框。
+macOS 已改用文件中的家族名 `Noto Sans SC Thin`；其他平台保持原名称。源码回归与安装 wheel 校验都增加真实 ASS 渲染，确认匹配随包字体且没有缺字。
+
+桌面候选构建 `36860101368` 的 macOS / Windows 打包已通过；Windows 1.4→1.5 覆盖升级也已成功。
+其安装后视频检查因测试脚本把文本连接测试的 `success` 字段错写为 `ok` 而中断，已修脚本，仍须重跑整个安装冒烟，不能计为通过。
+
 本机文件在 `dist/acceptance-1.5/`；CLI / MCP 安装包为 `dist/autoclip-1.5.0-cli-mcp-test.zip`。
 包内有 Python wheel、固定依赖的 `requirements.txt`、本说明、CLI / MCP 使用指南和不含真实密钥的模型配置示例。
 包不含开发者的模型配置、数据库、`node_modules` 或 benchmark 报告。测试包的哈希记录在旁边的 SHA256 文件。
