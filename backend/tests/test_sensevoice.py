@@ -125,16 +125,43 @@ def test_state_ignores_stale_readonly_temporary_file(tmp_path, monkeypatch):
 def test_concurrent_state_updates_are_atomic(tmp_path, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     import threading
+    import time
     monkeypatch.setattr(runtime, 'root', lambda: tmp_path)
     barrier = threading.Barrier(2)
     replace = runtime.os.replace
+    active = False
+    guard = threading.Lock()
     def synchronized_replace(source, target):
+        nonlocal active
+        with guard:
+            if active:
+                raise PermissionError('Windows can reject concurrent replacements')
+            active = True
+        try:
+            time.sleep(.05)
+            replace(source, target)
+        finally:
+            with guard:
+                active = False
+    def update(state):
         barrier.wait(timeout=5)
-        replace(source, target)
+        runtime._state(state)
     monkeypatch.setattr(runtime.os, 'replace', synchronized_replace)
     with ThreadPoolExecutor(max_workers=2) as executor:
-        list(executor.map(runtime._state, ['installing', 'ready']))
+        list(executor.map(update, ['installing', 'ready']))
     assert json.loads((tmp_path / 'status.json').read_text())['status'] in {'installing', 'ready'}
+    assert not list(tmp_path.glob('*.tmp'))
+
+
+def test_real_concurrent_status_readers_and_writers(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    monkeypatch.setattr(runtime, 'root', lambda: tmp_path)
+    def update(index):
+        runtime._state('error' if index % 2 else 'ready')
+        assert runtime.status()['status'] in {'error', 'not_installed'}
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        list(executor.map(update, range(100)))
+    assert json.loads((tmp_path / 'status.json').read_text())['status'] in {'ready', 'error'}
     assert not list(tmp_path.glob('*.tmp'))
 
 

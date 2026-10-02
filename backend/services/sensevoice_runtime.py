@@ -17,6 +17,7 @@ from backend.utils.ffmpeg_utils import get_ffmpeg_path
 logger = logging.getLogger(__name__)
 MODEL = 'SenseVoiceSmall'
 VERSION = 1
+_status_lock = threading.RLock()
 
 
 def root():
@@ -31,7 +32,8 @@ def packages():
 
 def status():
     try:
-        value = json.loads((root() / 'status.json').read_text(encoding='utf-8'))
+        with _status_lock:
+            value = json.loads((root() / 'status.json').read_text(encoding='utf-8'))
     except (OSError, ValueError):
         value = {'status': 'not_installed', 'message': ''}
     if not isinstance(value, dict) or value.get('status') not in {'not_installed', 'installing', 'ready', 'error'}:
@@ -60,6 +62,14 @@ def status():
 
 
 def _state(state, message=''):
+    # Windows can reject simultaneous replacements, and also replacing an open
+    # status reader. Share this lock with status(), in addition to the operation
+    # lock that excludes another process's installer/inference.
+    with _status_lock:
+        _write_state(state, message)
+
+
+def _write_state(state, message):
     base = root()
     base.mkdir(parents=True, exist_ok=True)
     # Never reuse an interrupted writer's file (which can be read-only on Windows).
