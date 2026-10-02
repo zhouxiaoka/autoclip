@@ -300,3 +300,38 @@ def test_visual_analysis_dispatch_rejection_is_retryable(monkeypatch):
     assert state['analysis']['status'] == 'failed'
     assert state['drafts'] == [{'id': 'prior'}]
     assert 'private' not in state['analysis']['error']
+
+
+@pytest.mark.parametrize('claimed_status', ['queued', 'running', 'completed'])
+def test_stale_failed_retry_preserves_a_concurrent_claim(tmp_path, monkeypatch, claimed_status):
+    monkeypatch.setattr(store, 'get_projects_directory', lambda: tmp_path)
+    (tmp_path / 'p1').mkdir()
+    initial = _on_demand_state()
+    initial['output_variants'][0]['status'] = 'failed'
+    initial['generation']['status'] = 'failed'
+    store.write('p1', initial)
+    read = store.read
+    intervened = False
+
+    def read_then_other_request(project_id, **kwargs):
+        nonlocal intervened
+        snapshot = read(project_id, **kwargs)
+        if not intervened:
+            intervened = True
+            # Another retry wins after this request reads 'failed', before it writes.
+            def claim(data):
+                data['output_variants'][0].update(status=claimed_status, render_job_id='other-job')
+                data['jobs'] = [{'job_id': 'other-job', 'status': claimed_status, 'instance': store.INSTANCE}]
+                data['generation']['status'] = 'completed' if claimed_status == 'completed' else 'rendering'
+            store.change(project_id, claim)
+        return snapshot
+
+    monkeypatch.setattr(store, 'read', read_then_other_request)
+    dispatched = []
+    monkeypatch.setattr(jobs, '_dispatch_pending_variants', lambda pid: dispatched.append(pid))
+    with pytest.raises(ValueError, match='只有失败'):
+        jobs.retry_variant('p1', 'v1')
+    saved = read('p1')
+    assert saved['output_variants'][0]['status'] == claimed_status
+    assert saved['output_variants'][0]['render_job_id'] == 'other-job'
+    assert not dispatched

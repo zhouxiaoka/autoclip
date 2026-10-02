@@ -1203,6 +1203,8 @@ def retry_variant(project_id, variant_id):
         return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)
     def update(data):
         item = next(value for value in data['output_variants'] if value['id'] == variant_id)
+        if item.get('status') != 'failed':
+            raise ValueError('只有失败的成片版本可以重试')
         item.update(status='queued')
         item.pop('render_job_id', None)
         item.pop('error', None)
