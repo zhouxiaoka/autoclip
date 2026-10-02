@@ -533,7 +533,7 @@ def _burned_caption_language(video, found, title=''):
     from backend.services.studio.packaging import source_language
     guess = source_language([title]) if title else None
     guess = guess if guess in ('zh', 'en') else None
-    if not intelligence.ready():
+    if not intelligence.source_frame_analysis_allowed():
         return guess
     import base64
     import subprocess
