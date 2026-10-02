@@ -51,7 +51,7 @@ def test_visual_refinement_uses_valid_source_timestamps(root,monkeypatch):
     monkeypatch.setattr(intelligence,'_probe',lambda _: {'duration':30})
     monkeypatch.setattr(intelligence,'sample',lambda video,times,folder: calls.append(times) or [])
     responses=iter([{'events':[{'id':'e1','label':'避障','start':5,'end':20,'evidence':'障碍密集'}]}, {'events':[{'id':'r','label':'连续避障','start':6,'end':19,'evidence':'复核'}]}])
-    monkeypatch.setattr(intelligence,'vision_call',lambda _: next(responses))
+    monkeypatch.setattr(intelligence,'vision_call',lambda _, **_kwargs: next(responses))
     stages=[]
     events, coverage=intelligence.analyze(Path('unused'),Preferences(goal='highlight'),stages.append)
     assert stages==['扫描画面，寻找候选高光','复核首选高光的起止边界']
@@ -62,7 +62,7 @@ def test_visual_refinement_uses_valid_source_timestamps(root,monkeypatch):
 def test_visual_empty_evidence_is_not_fabricated(root,monkeypatch):
     monkeypatch.setattr(intelligence,'_probe',lambda _: {'duration':30})
     monkeypatch.setattr(intelligence,'sample',lambda *args: [])
-    monkeypatch.setattr(intelligence,'vision_call',lambda _: {'events':[]})
+    monkeypatch.setattr(intelligence,'vision_call',lambda _, **_kwargs: {'events':[]})
     with pytest.raises(ValueError,match='没有找到'): intelligence.analyze(Path('unused'),Preferences(goal='promo'))
 
 def test_settings_mask_key_preserve_and_clear(root,monkeypatch):

@@ -25,6 +25,20 @@ def ready():
     _, base, model = visual_config()
     return bool(base and model)
 
+
+def source_frame_analysis_allowed():
+    """Automatic frame helpers require current consent as well as a model.
+
+    A legacy vision binding can remain configured while the user turns frame
+    analysis off. Invalid saved settings must never authorize transmission.
+    """
+    from backend.services.studio import analysis_preferences
+    try:
+        return analysis_preferences.visual_screening_allowed(
+            analysis_preferences.load(), vision_configured=ready())
+    except ValueError:
+        return False
+
 def decode_json(raw):
     raw = raw.strip()
     if raw.startswith('```'):
@@ -57,13 +71,15 @@ class VisionRequestError(RuntimeError):
 
 def vision_call_at(phase, content):
     try:
+        if phase in ('scan', 'refine'):
+            return vision_call(content, allow_event_list=True)
         return vision_call(content)
     except VisionRequestError as error:
         error.phase = phase
         raise
 
 
-def vision_call(content, config=None):
+def vision_call(content, config=None, *, allow_event_list=False):
     from backend.services.studio.vision_settings import effective
     config = config or effective()
     key, base, model = config.get('api_key', ''), config['base_url'], config['model']
@@ -111,6 +127,10 @@ def vision_call(content, config=None):
         if choice.get('finish_reason') == 'content_filter' or choice.get('message', {}).get('refusal'):
             raise failure('refused', '视觉模型未处理这段素材，请检查素材或更换模型')
         value = decode_json(choice['message']['content'])
+        # Some compatible models return the requested events as a bare array.
+        # Only scan/refinement declare that meaning; other stages remain strict.
+        if allow_event_list and isinstance(value, list) and all(isinstance(item, dict) for item in value):
+            value = {'events': value}
         if not isinstance(value, dict):
             raise ValueError('Expected a JSON object')
         return value
@@ -188,7 +208,7 @@ def analyze(video: Path, prefs: Preferences, on_stage=None, instruction=""):
               '优先寻找后半段玩法，不要让开头菜单或奖励占满候选名额。watch_score为0至100的整数，按可见动作/挑战、结果反馈、独立观看完整度综合排序；高分必须有可见依据，不是广告效果预测。selection_reason说明排序依据及缺失证据；不能确认时降低评分。'
               '不要编造帧间动作、胜负、游戏名称或广告效果；不确定时说明。'
               f'原片总长 {duration:.2f} 秒，采样间隔 {interval:.2f} 秒，期望成片 {prefs.duration} 秒。'
-              '返回 {"events":[{"id":"event-1","label":"简短的高光标题","start":秒,"end":秒,"evidence":"具体画面依据与不确定性","event_type":"gameplay","watch_score":75,"selection_reason":"观看价值与缺失证据"}]}。'
+              '只返回一个 JSON 对象，不要列表或说明；返回 {"events":[{"id":"event-1","label":"简短的高光标题","start":秒,"end":秒,"evidence":"具体画面依据与不确定性","event_type":"gameplay","watch_score":75,"selection_reason":"观看价值与缺失证据"}]}。'
               '边界必须在原片范围内；每段不超过期望成片时长；无可用证据则返回空列表。')
     if instruction:
         prompt += '\n用户制作要求（仅在可见证据支持时遵循）：' + instruction

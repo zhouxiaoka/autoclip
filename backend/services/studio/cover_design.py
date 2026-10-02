@@ -1,7 +1,8 @@
 """Local cover design for an output variant: the speaker's frame, the clip's title, its palette.
 
-No image model, no cost, under a second, and it matches the video it belongs to: the same title
-lines, accent line and palette as the packaging. Sizes follow each platform's cover slot.
+The local layout matches the video: title lines, accent line and palette follow the packaging.
+Frame selection may use the configured vision service only with frame-analysis consent.
+Sizes follow each platform's cover slot.
 An AI cover (services/cover.py) can still replace it from the output card.
 """
 from __future__ import annotations
@@ -205,7 +206,7 @@ def _candidates(video, start: float, shots, limit: int) -> list[tuple[bytes, flo
 def _choose_with_vision(candidates, guest: str, host: str) -> tuple[int, bool] | None:
     """(index, is the guest) chosen by the vision model, or None when it is not set up or fails."""
     from backend.services.studio import intelligence
-    if not intelligence.ready() or not candidates:
+    if not candidates or not intelligence.source_frame_analysis_allowed():
         return None
     who = (f'受访嘉宾是 {guest}。' if guest else '') + (f'主持人是 {host}。' if host else '')
     content = [{'type': 'text', 'text': CHOOSE_PROMPT.format(n=len(candidates), who=who)}]
