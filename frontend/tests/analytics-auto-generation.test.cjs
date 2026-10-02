@@ -99,3 +99,13 @@ test('old automatic failures use the analysis code and reject unrecognized codes
   assert.equal(finished.props.error_code,code==='subtitle_setup'?'subtitle_setup':undefined)
  }
 })
+
+test('partial output reports its failed variant code and completed output clears stale failures',()=>{
+ for(const status of ['partial','completed']){
+  const {t,events}=tracker();t.watch('studio-generation','p1')
+  t.observeStudio(t.list()[0],{...SNAPSHOT,generation:{...SNAPSHOT.generation,status,error_code:'timeout',error:'private path'}})
+  const finished=events.find(e=>e.name==='studio_generation_finished')
+  assert.equal(finished.props.error_code,status==='partial'?'timeout':undefined)
+  assert.equal(JSON.stringify(finished).includes('private'),false)
+ }
+})

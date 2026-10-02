@@ -283,7 +283,7 @@ export class WorkflowTracker {
       }
     } else if (w.kind === 'studio-generation' && ['completed', 'partial', 'failed'].includes(snapshot.generation?.status || '')) {
       event = 'studio_generation_finished'; outcome = snapshot.generation!.status
-      details = { ...generationSummary(snapshot), error_code: outcome === 'failed' ? snapshot.generation?.error_code || snapshot.analysis?.error_code : undefined }
+      details = { ...generationSummary(snapshot), error_code: ['failed', 'partial'].includes(outcome || '') ? snapshot.generation?.error_code || snapshot.analysis?.error_code : undefined }
     } else if (w.kind === 'studio-production' && snapshot.plan?.id === w.id &&
                ['completed', 'failed'].includes(snapshot.analysis?.status || '')) {
       event = 'studio_production_finished'; outcome = snapshot.analysis!.outcome || snapshot.analysis!.status

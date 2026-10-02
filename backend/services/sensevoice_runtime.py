@@ -40,7 +40,8 @@ def status():
         value = {'status': 'not_installed', 'message': ''}
     # Validate paths without importing a large optional runtime on every poll.
     try:
-        ready = json.loads((root() / 'ready.json').read_text(encoding='utf-8'))
+        with _status_lock:
+            ready = json.loads((root() / 'ready.json').read_text(encoding='utf-8'))
         valid = (isinstance(ready, dict) and isinstance(ready.get('paths'), dict)
                  and ready['version'] == VERSION and (root() / 'runtime' / 'funasr' / '__init__.py').exists()
                  and all(Path(p).resolve().is_relative_to((root() / 'models').resolve())
@@ -70,6 +71,15 @@ def _state(state, message=''):
 
 
 def _write_state(state, message):
+    _write_document('status.json', {'status': state, 'message': message})
+
+
+def _write_document(name, value):
+    with _status_lock:
+        _replace_document(name, value)
+
+
+def _replace_document(name, value):
     base = root()
     base.mkdir(parents=True, exist_ok=True)
     # Never reuse an interrupted writer's file (which can be read-only on Windows).
@@ -77,10 +87,10 @@ def _write_state(state, message):
     pending = None
     try:
         with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=base,
-                                         prefix='status-', suffix='.tmp', delete=False) as stream:
+                                         prefix=Path(name).stem + '-', suffix='.tmp', delete=False) as stream:
             pending = Path(stream.name)
-            json.dump({'status': state, 'message': message}, stream, ensure_ascii=False)
-        os.replace(pending, base / 'status.json')
+            json.dump(value, stream, ensure_ascii=False)
+        os.replace(pending, base / name)
     finally:
         if pending is not None:
             pending.unlink(missing_ok=True)
@@ -136,7 +146,8 @@ def worker(action, result, audio=None, language='auto', timeout=None, deny_netwo
 def _prepare():
     _state('installing', '正在安装组件，首次下载可能需要几分钟')
     try:
-        (root() / 'ready.json').unlink(missing_ok=True)
+        with _status_lock:
+            (root() / 'ready.json').unlink(missing_ok=True)
         runtime = root() / 'runtime'
         shutil.rmtree(runtime, ignore_errors=True)
         command = [sys.executable, '-m', 'pip', 'install', '--target', str(runtime),
@@ -155,10 +166,7 @@ def _prepare():
         worker('prepare', result, timeout=1800)
         value = json.loads(result.read_text(encoding='utf-8'))
         value['version'] = VERSION
-        ready = root() / 'ready.json'
-        pending = ready.with_suffix('.tmp')
-        pending.write_text(json.dumps(value), encoding='utf-8')
-        os.replace(pending, ready)
+        _write_document('ready.json', value)
         result.unlink(missing_ok=True)
         _state('ready')
     except Exception as exc:

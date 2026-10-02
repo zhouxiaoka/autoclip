@@ -66,12 +66,26 @@ def settle_generation(data):
     if all(item['status'] in ('completed', 'failed') for item in variants):
         completed = [item for item in variants if item['status'] == 'completed']
         outcome = 'completed' if completed and len(completed) == len(variants) else 'partial' if completed else 'failed'
+        from backend.core.sentry_setup import STUDIO_ERROR_CODES
+        jobs = {job['job_id']: job for job in data.get('jobs', [])}
+        codes = set()
+        for item in variants:
+            if item['status'] == 'failed':
+                code = item.get('error_code') or jobs.get(item.get('render_job_id'), {}).get('error_code')
+                codes.add(code if isinstance(code, str) and code in STUDIO_ERROR_CODES else 'unexpected')
+        if not variants:
+            codes.add('validation')
+        code = 'multiple' if len(codes) > 1 else next(iter(codes), None)
+        if code:
+            data['generation']['error_code'] = code
+        else:
+            data['generation'].pop('error_code', None)
         if not variants:
             data['generation']['error'] = '没有自动生成的成片，可选择备选片段继续生成'
         elif completed:
             data['generation'].pop('error', None)
         data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now())
-        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now()}
+        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code} if code else {})}
 
 
 def write(project_id, data):

@@ -122,6 +122,34 @@ def test_state_ignores_stale_readonly_temporary_file(tmp_path, monkeypatch):
         stale.chmod(0o600)
 
 
+def test_prepare_ignores_stale_readonly_ready_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(runtime, 'root', lambda: tmp_path)
+    stale = tmp_path / 'ready.tmp'
+    stale.write_text('interrupted model preparation')
+    stale.chmod(0o444)
+    monkeypatch.setattr(runtime.subprocess, 'run', lambda *_a, **_k: SimpleNamespace(returncode=0))
+    def prepare_worker(action, result, **kwargs):
+        assert action == 'prepare'
+        package = tmp_path / 'runtime' / 'funasr'
+        package.mkdir(parents=True)
+        (package / '__init__.py').touch()
+        paths = {}
+        for name in ('model', 'vad_model'):
+            folder = tmp_path / 'models' / name
+            folder.mkdir(parents=True)
+            (folder / 'model.pt').touch()
+            paths[name] = str(folder)
+        result.write_text(json.dumps({'paths': paths}))
+    monkeypatch.setattr(runtime, 'worker', prepare_worker)
+    try:
+        runtime.prepare()
+        assert runtime.status()['status'] == 'ready'
+        assert stale.read_text() == 'interrupted model preparation'
+        assert not list(tmp_path.glob('ready-*.tmp'))
+    finally:
+        stale.chmod(0o600)
+
+
 def test_concurrent_state_updates_are_atomic(tmp_path, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     import threading
@@ -153,11 +181,14 @@ def test_concurrent_state_updates_are_atomic(tmp_path, monkeypatch):
     assert not list(tmp_path.glob('*.tmp'))
 
 
-def test_real_concurrent_status_readers_and_writers(tmp_path, monkeypatch):
+@pytest.mark.parametrize('document', ['status', 'ready'])
+def test_real_concurrent_status_readers_and_writers(tmp_path, monkeypatch, document):
     from concurrent.futures import ThreadPoolExecutor
     monkeypatch.setattr(runtime, 'root', lambda: tmp_path)
     def update(index):
         runtime._state('error' if index % 2 else 'ready')
+        if document == 'ready':
+            runtime._write_document('ready.json', {'version': runtime.VERSION, 'paths': {}})
         assert runtime.status()['status'] in {'error', 'not_installed'}
     with ThreadPoolExecutor(max_workers=8) as executor:
         list(executor.map(update, range(100)))
