@@ -5,12 +5,36 @@ import re
 import threading
 import uuid
 from datetime import datetime, timezone
+from functools import wraps
+from time import sleep
 from pathlib import Path
 
 from backend.core.path_utils import get_projects_directory
 
 lock = threading.RLock()
 INSTANCE = uuid.uuid4().hex
+
+
+def _serialized(fn):
+    @wraps(fn)
+    def run(*args, **kwargs):
+        with lock:
+            return fn(*args, **kwargs)
+    return run
+
+
+def _replace_state(temporary, destination):
+    # Windows readers (including external observers/virus scanners) can briefly
+    # deny atomic replacement. Retry the same complete snapshot, never mutate twice.
+    delays = (.02, .05, .1, .2)
+    for attempt in range(len(delays) + 1):
+        try:
+            os.replace(temporary, destination)
+            return
+        except PermissionError as error:
+            if getattr(error, 'winerror', None) not in (5, 32, 33) or attempt == len(delays):
+                raise
+            sleep(delays[attempt])
 
 class ConflictError(ValueError):
     pass
@@ -23,6 +47,7 @@ def directory(project_id: str) -> Path:
         raise ValueError('无效项目 ID')
     return get_projects_directory() / project_id
 
+@_serialized
 def read(project_id: str, *, recover: bool = True):
     path = directory(project_id) / 'metadata' / 'studio.json'
     if not path.exists():
@@ -88,6 +113,7 @@ def settle_generation(data):
         data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code} if code else {})}
 
 
+@_serialized
 def write(project_id, data):
     root = directory(project_id)
     if not root.is_dir():
@@ -118,7 +144,7 @@ def write(project_id, data):
     tmp = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
-        os.replace(tmp, path)
+        _replace_state(tmp, path)
     finally:
         tmp.unlink(missing_ok=True)
 
