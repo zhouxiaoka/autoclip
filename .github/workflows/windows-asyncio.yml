@@ -46,6 +46,22 @@ jobs:
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-media-regression
           SENTRY_DSN: ""
         run: python -m pytest backend/tests/test_framing_concurrency.py backend/tests/test_sensevoice.py backend/tests/test_studio_store_recovery.py scripts/windows_tests/test_studio_store.py -q
+      - name: Prepare FFmpeg for real interview-window rendering
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'FFmpeg installation failed' }
+            $env:PATH = "$env:ChocolateyInstall\bin;$env:PATH"
+          }
+          ffmpeg -version
+          if ($LASTEXITCODE -ne 0) { throw 'FFmpeg unavailable' }
+      - name: Quote-card edges and shot-mode transitions on Windows
+        env:
+          AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-window-render-regression
+          AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-window-render-regression
+          SENTRY_DSN: ""
+        run: python -m pytest backend/tests/test_packaging_render.py -k preserves_slide_edges -q
 
   windows-asyncio:
     name: Windows Proactor cleanup
