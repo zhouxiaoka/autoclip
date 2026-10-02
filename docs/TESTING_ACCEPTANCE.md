@@ -72,6 +72,8 @@ Desktop Build 除统一源码 CI 外，还必须通过 Windows Whisper 恢复/�
 
 Privacy/telemetry 使用独立 validation 构建和隔离数据目录（前端 `VITE_TELEMETRY_VALIDATION=true`；受控后端进程使用 `AUTOCLIP_BUILD_ENVIRONMENT=validation` 并明确标记测试 scope，见 [监控说明](analytics/STUDIO_MONITORING.md)）；它是同一提交的补充证据，**不替代最终生产安装包**。桌面启动器会注入 production/development，验收时需核查实际事件标签。生产包检查版本标记与关闭采集，validation 检查最终收数。不要把验收事件塞入生产成功率。
 
+自动制作在生成版本前失败的恢复验收，还需从真实结果页确认重试入口，修正前置条件后沿用原素材和所选平台完成出片；validation 收数应保留同一 flow、不同 attempt 的失败与成功，各尝试重复观察只入库一次。
+
 每条修复和新功能还需列入 `regressions`，写明 issue/变更 ID、触发条件、实际平台、预期与结果；一个 happy path 不代表整个发布说明通过。首次出片时间、费用、画幅、语种、字幕同步、切点与包装质量须按素材记录，性能声明需要与上一版同条件对照。
 
 自动出片的 validation 查询模板见 [release_validation.sql](analytics/release_validation.sql)，逐条运行并替换版本；缺 flow 或失败码需要调查。上线新流程时同步更新实际看板，不能只在仓库增加 SQL 就宣布线上监控已覆盖。
