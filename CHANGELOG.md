@@ -7,6 +7,10 @@
 
 ## [未发布]
 
+_（本周尚无改动）_
+
+## [1.5.1] - 2026-10-02
+
 - 修复部分升级用户的 AI 模型设置一直加载：无效旧封面配置会单独提示修正，原配置保留。
 - 修复服务持续失败时请求反复重试的问题，失败后能及时结束并提示。
 - 修复旧数据库被占用时，启动阶段可选检查导致连接失败的问题。
@@ -329,7 +333,8 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.0...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.1...HEAD
+- [1.5.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.0...v1.5.1
 - [1.5.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.4.0...v1.5.0
 - [1.4.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.5...v1.4.0
 - [1.3.5]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.4...v1.3.5
