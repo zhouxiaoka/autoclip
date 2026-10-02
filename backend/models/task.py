@@ -4,6 +4,7 @@
 """
 
 import enum
+from datetime import datetime
 from sqlalchemy import Column, String, Integer, Float, ForeignKey, Enum, JSON, DateTime, Text
 from sqlalchemy.orm import relationship
 from .base import BaseModel, TimestampMixin

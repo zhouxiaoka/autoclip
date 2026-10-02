@@ -4,10 +4,13 @@
 """
 
 from typing import List, Optional
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func
 from .base import BaseRepository
 from ..models.task import Task, TaskStatus, TaskType
+
+logger = logging.getLogger(__name__)
 
 class TaskRepository(BaseRepository[Task]):
     """任务Repository类"""

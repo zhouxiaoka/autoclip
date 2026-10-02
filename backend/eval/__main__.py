@@ -17,7 +17,7 @@ from backend.eval.metrics import compute_metrics
 CASES = Path(__file__).resolve().parent / "cases"
 
 
-def _run_case(case_dir: Path) -> Dict:
+def _run_case(case_dir: Path) -> dict:
     expect = json.loads((case_dir / "expect.json").read_text(encoding="utf-8"))
     srt = TextProcessor.parse_srt(case_dir / "input.srt")
     timeline = json.loads((case_dir / "timeline.json").read_text(encoding="utf-8"))

@@ -954,10 +954,11 @@ def _auto_generate(project_id, plan):
     except Exception as error:
         capture_studio_exception(error, 'production')
         code = studio_error_code(error)
+        error_text = str(error)[:700]
         def fail(data):
             if data.get('generation'):
-                data['generation'].update(status='failed', error=str(error)[:700], error_code=code, skipped=skipped, finished_at=store.now())
-            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': str(error)[:700], 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000)}
+                data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now())
+            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000)}
         store.change(project_id, fail)
         mark_project(project_id, 'failed')
 
@@ -1274,8 +1275,9 @@ def _inspect(project_id, options, url, browser):
     except Exception as error:
         logger.warning('Studio screening failed: %s', type(error).__name__)
         capture_studio_exception(error, 'screening')
+        failure = {'status':'failed','phase':'screening','error':str(error)[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
         try:
-            store.change(project_id, lambda data:data.update(analysis={'status':'failed','phase':'screening','error':str(error)[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}))
+            store.change(project_id, lambda data:data.update(analysis=failure))
             mark_project(project_id, 'failed')
         except FileNotFoundError:
             pass
@@ -1416,11 +1418,12 @@ def _produce_selected(project_id, plan):
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
         capture_studio_exception(error, 'production', analysis_mode=plan.get('confirmed_analysis', 'subtitle'))
+        failure = {'status':'failed','error':str(error)[:700], 'error_code':studio_error_code(error),
+            'outcome':'partial' if succeeded_goals else 'failed', 'requested_goals':plan['selected_goals'],
+            'succeeded_goals':succeeded_goals, 'failed_goals':[g for g in plan['selected_goals'] if g not in succeeded_goals],
+            'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000)}
         try:
-            store.change(project_id, lambda data:data.update(analysis={'status':'failed','error':str(error)[:700],
-                'error_code':studio_error_code(error), 'outcome':'partial' if succeeded_goals else 'failed', 'requested_goals':plan['selected_goals'],
-                'succeeded_goals':succeeded_goals, 'failed_goals':[g for g in plan['selected_goals'] if g not in succeeded_goals],
-                'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000)}))
+            store.change(project_id, lambda data:data.update(analysis=failure))
             mark_project(project_id,'failed')
         except FileNotFoundError:
             pass
