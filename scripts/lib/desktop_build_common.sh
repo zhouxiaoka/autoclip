@@ -152,6 +152,33 @@ PY
     echo "OK"
 }
 
+# Build native optional dependencies on the release machine, not on end users'
+# desktops. CPython 3.13 has no upstream editdistance wheel (required by FunASR).
+# Keep it next to the backend so both desktop packaging routes include it.
+prepare_optional_runtime_wheels() {
+    echo "==> Building optional runtime wheels for the portable interpreter"
+    local wheels="$BACKEND_DEST/services/runtime_wheels"
+    local pip_index="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+    mkdir -p "$wheels"
+    "$PORTABLE_PY" -m pip wheel --no-deps --wheel-dir "$wheels" \
+        --index-url "$pip_index" 'editdistance==0.8.1'
+    "$PORTABLE_PY" - "$wheels" <<'PY'
+import os, subprocess, sys, tempfile
+from pathlib import Path
+with tempfile.TemporaryDirectory(prefix='autoclip-runtime-wheel-check-') as target:
+    subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-index', '--no-deps',
+                    '--only-binary', ':all:', '--find-links', str(Path(sys.argv[1]).resolve()),
+                    '--target', target, 'editdistance==0.8.1'], check=True)
+    # A fresh process loads the actual wheel under the exact portable ABI.
+    subprocess.run([sys.executable, '-S', '-c',
+                    "import sys; sys.path.insert(0,sys.argv[1]); import editdistance; "
+                    "assert editdistance.eval('banana','bahama')==2; "
+                    "assert editdistance.eval(['a','b'],['a','c'])==1", target],
+                   check=True, env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+PY
+    echo "OK (optional native wheel resolves and loads without compiler access)"
+}
+
 # Guard against the classic "works in dev, broken in the bundle" trap: the dev
 # venv accumulates packages that requirements.txt never listed, so the portable
 # runtime ships without them and the backend 500s at runtime (e.g. pytz, the

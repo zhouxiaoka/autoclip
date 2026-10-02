@@ -27,7 +27,7 @@ def root():
 def packages():
     cpu = '+cpu' if sys.platform != 'darwin' else ''
     return ['funasr==1.3.14', f'torch==2.8.0{cpu}', f'torchaudio==2.8.0{cpu}',
-            'setuptools==80.9.0', 'huggingface-hub<1', 'numpy<3']
+            'setuptools==80.9.0', 'huggingface-hub<1', 'numpy<3', 'editdistance==0.8.1']
 
 
 def status():
@@ -143,17 +143,32 @@ def worker(action, result, audio=None, language='auto', timeout=None, deny_netwo
             raise RuntimeError('SenseVoice 模型运行失败，请到「设置 → 转写」重新准备模型；仍失败时附上脱敏日志')
 
 
+def _installation_command(runtime):
+    command = [sys.executable, '-m', 'pip', 'install', '--target', str(runtime)]
+    wheels = Path(__file__).with_name('runtime_wheels')
+    bundled = Path(sys.executable).resolve().is_relative_to(Path(__file__).resolve().parents[2] / 'python')
+    binary = 'torch,torchaudio'
+    if bundled:
+        if not list(wheels.glob('editdistance-0.8.1-*.whl')):
+            raise RuntimeError('SenseVoice 本地组件缺失，请重新安装 AutoClip 后重试')
+        # CPython 3.13 has no upstream editdistance wheel. The release builder
+        # supplies one for this portable interpreter; never compile on a user's machine.
+        binary += ',editdistance'
+        command += ['--find-links', str(wheels)]
+    command += ['--only-binary', binary, *packages()]
+    if sys.platform != 'darwin':
+        command += ['--extra-index-url', 'https://download.pytorch.org/whl/cpu']
+    return command
+
+
 def _prepare():
     _state('installing', '正在安装组件，首次下载可能需要几分钟')
     try:
+        runtime = root() / 'runtime'
+        command = _installation_command(runtime)
         with _status_lock:
             (root() / 'ready.json').unlink(missing_ok=True)
-        runtime = root() / 'runtime'
         shutil.rmtree(runtime, ignore_errors=True)
-        command = [sys.executable, '-m', 'pip', 'install', '--target', str(runtime),
-                   '--only-binary', 'torch,torchaudio', *packages()]
-        if sys.platform != 'darwin':
-            command += ['--extra-index-url', 'https://download.pytorch.org/whl/cpu']
         with tempfile.TemporaryFile() as log:
             completed = subprocess.run(command, stdout=log, stderr=log, timeout=1800,
                                        env={**os.environ, 'PIP_PROGRESS_BAR': 'off', 'PYTHONIOENCODING': 'utf-8'})

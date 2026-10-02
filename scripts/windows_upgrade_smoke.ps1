@@ -61,3 +61,7 @@ $env:PYTHONUTF8 = '1'
 $env:PYTHONIOENCODING = 'utf-8'
 & (Join-Path $res 'python\python.exe') -B scripts\verify_windows_install.py --resources $res --report $Report --launch-desktop
 if ($LASTEXITCODE -ne 0) { throw "安装后冒烟失败: $LASTEXITCODE" }
+
+Write-Host '==> 验证安装包内 SenseVoice 组件及真实离线转写'
+& (Join-Path $res 'python\python.exe') -B scripts\verify_sensevoice.py --resources $res --report windows-sensevoice-installed.json
+if ($LASTEXITCODE -ne 0) { throw "安装包 SenseVoice 验证失败: $LASTEXITCODE" }

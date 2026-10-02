@@ -49,6 +49,8 @@ runner 创建临时数据库、配置、日志和隐私关闭文件，清空继�
 
 Desktop Build 除统一源码 CI 外，还必须通过 Windows Whisper 恢复/真实离线转写，以及三平台 SenseVoice 实际安装、模型下载与离线转写。原有这两套工作流只有 PR 路径触发，不能当成 tag 已验证；现在复用为构建的依赖，校验器核对目标构建中的实际 job。开发 Python 上的真实转写仍须由最终安装包产品矩阵补验。
 
+终端用户不应为可选 ASR 安装编译工具。Python 3.13 下 editdistance 缺少上游 wheel，开发 CI 曾因自带编译器而掩盖安装包失败。桌面构建现用同一 portable Python 预编译、离线安装并加载原生 wheel，随 backend 提供；两平台的安装包阶段还运行真实 SenseVoice 准备、模型下载和离线转写，防止仅源码环境可用。模型网络下载失败仍是红灯，不以 wheel 检查代替完整准备。
+
 ## 4. 最终安装包的必测矩阵
 
 以下 **Windows x64、macOS arm64 均必测**。Windows ARM 虚拟机运行 x64 包时明确记录仿真；不能把它写成原生 x64 真机。CI 的 Windows 安装脚本补充内置运行时与协议证据，仍需真实桌面 UI 和真实模型验收。没有可用 Windows 环境时保留 NO-GO，先补环境或取得经授权的测试者证据。

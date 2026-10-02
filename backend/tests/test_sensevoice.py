@@ -150,6 +150,50 @@ def test_prepare_ignores_stale_readonly_ready_file(tmp_path, monkeypatch):
         stale.chmod(0o600)
 
 
+def test_bundled_prepare_does_not_require_an_end_user_compiler(tmp_path, monkeypatch):
+    resources = tmp_path / 'resources'
+    service = resources / 'backend' / 'services'
+    wheels = service / 'runtime_wheels'
+    wheels.mkdir(parents=True)
+    (wheels / 'editdistance-0.8.1-cp313-cp313-test.whl').touch()
+    monkeypatch.setattr(runtime, '__file__', str(service / 'sensevoice_runtime.py'))
+    monkeypatch.setattr(runtime.sys, 'executable', str(resources / 'python' / 'python.exe'))
+    monkeypatch.setattr(runtime, 'root', lambda: tmp_path / 'data')
+    def compiler_unavailable(command, **kwargs):
+        binary = command[command.index('--only-binary') + 1]
+        uses_wheel = '--find-links' in command and command[command.index('--find-links') + 1] == str(wheels)
+        return SimpleNamespace(returncode=0 if uses_wheel and 'editdistance' in binary.split(',') else 1)
+    monkeypatch.setattr(runtime.subprocess, 'run', compiler_unavailable)
+    def prepare_worker(action, result, **kwargs):
+        package = runtime.root() / 'runtime' / 'funasr'
+        package.mkdir(parents=True)
+        (package / '__init__.py').touch()
+        paths = {}
+        for name in ('model', 'vad_model'):
+            folder = runtime.root() / 'models' / name
+            folder.mkdir(parents=True)
+            (folder / 'model.pt').touch()
+            paths[name] = str(folder)
+        result.write_text(json.dumps({'paths': paths}))
+    monkeypatch.setattr(runtime, 'worker', prepare_worker)
+    runtime.prepare()
+    assert runtime.status()['status'] == 'ready'
+
+
+def test_missing_bundled_wheel_does_not_compile_or_destroy_ready_data(tmp_path, monkeypatch):
+    service = tmp_path / 'resources' / 'backend' / 'services'
+    monkeypatch.setattr(runtime, '__file__', str(service / 'sensevoice_runtime.py'))
+    monkeypatch.setattr(runtime.sys, 'executable', str(tmp_path / 'resources' / 'python' / 'python.exe'))
+    monkeypatch.setattr(runtime, 'root', lambda: tmp_path / 'data')
+    runtime.root().mkdir()
+    ready = runtime.root() / 'ready.json'
+    ready.write_text('preserve previous model reference')
+    monkeypatch.setattr(runtime.subprocess, 'run', lambda *_a, **_k: pytest.fail('must not invoke a compiler or pip'))
+    with pytest.raises(RuntimeError, match='本地组件缺失'):
+        runtime.prepare()
+    assert ready.read_text() == 'preserve previous model reference'
+
+
 def test_concurrent_state_updates_are_atomic(tmp_path, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     import threading

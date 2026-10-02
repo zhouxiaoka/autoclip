@@ -121,7 +121,16 @@ jobs:
           RESOURCES="$PWD/$APP/Contents/Resources/resources"
           codesign --verify --deep --strict "$APP"
           "$RESOURCES/python/bin/python3" -B scripts/verify_macos_bundle.py --resources "$RESOURCES" --output-parent "$RUNNER_TEMP/autoclip-release-validation"
+          "$RESOURCES/python/bin/python3" -B scripts/verify_sensevoice.py --resources "$RESOURCES" --report "$RUNNER_TEMP/macos-sensevoice-installed.json"
           codesign --verify --deep --strict "$APP"
+
+      - name: Preserve installed macOS ASR evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-installed-sensevoice
+          path: ${{ runner.temp }}/macos-sensevoice-installed.json
+          if-no-files-found: ignore
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
@@ -240,7 +249,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-smoke-report
-          path: windows-smoke.json
+          path: |
+            windows-smoke.json
+            windows-sensevoice-installed.json
           if-no-files-found: ignore
 
   # Publish only after both platforms succeed; never advertise a partial release.
