@@ -48,8 +48,14 @@ jobs:
   source-quality:
     uses: ./.github/workflows/ci.yml
 
+  sensevoice-runtime:
+    uses: ./.github/workflows/sensevoice.yml
+
+  whisper-runtime:
+    uses: ./.github/workflows/issue-recovery.yml
+
   build-macos-arm64:
-    needs: source-quality
+    needs: [source-quality, sensevoice-runtime, whisper-runtime]
     if: github.event_name == 'push' || inputs.build_macos
     runs-on: macos-14  # Apple Silicon runner
     steps:
@@ -128,7 +134,7 @@ jobs:
           retention-days: 30
 
   build-windows-x64:
-    needs: source-quality
+    needs: [source-quality, sensevoice-runtime, whisper-runtime]
     if: github.event_name == 'push' || inputs.build_windows
     runs-on: windows-latest
     defaults:

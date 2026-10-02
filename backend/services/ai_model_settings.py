@@ -345,10 +345,12 @@ def migrate_legacy() -> ModelSettings:
                     raise ValueError('invalid legacy analysis')
                 cover_assignment = Assignment(connection_id='legacy-analysis', model=cfg.model)
             else:
-                kind = {'dashscope': 'dashscope', 'seedream': 'seed'}.get(cfg.provider, 'openai')
+                kind = {'dashscope': 'dashscope', 'seedream': 'seed',
+                        'gemini': 'gemini', 'grok': 'grok', 'glm': 'glm'}.get(cfg.provider, 'openai')
                 connection = Connection(id='legacy-cover', name='封面服务', provider=kind,
-                                        api_key=cfg.api_key, image_api=cfg.provider,
-                                        base_url=cfg.base_url if kind in {'openai', 'seed'} else '',
+                                        api_key=cfg.api_key,
+                                        image_api='auto' if kind in {'gemini', 'grok', 'glm'} else cfg.provider,
+                                        base_url=cfg.base_url if kind != 'dashscope' else '',
                                         image_base_url=cfg.base_url)
                 cover_assignment = Assignment(connection_id='legacy-cover', model=cfg.model)
                 connections.append(connection)

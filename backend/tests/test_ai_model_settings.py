@@ -195,7 +195,8 @@ def test_failed_refresh_preserves_last_live_list(monkeypatch):
     assert result['source'] == 'cache' and result['warning']
 
 
-def test_migration_keeps_legacy_endpoints_without_writing(monkeypatch):
+@pytest.mark.parametrize('cover_provider', ['openai', 'gemini', 'grok', 'glm'])
+def test_migration_keeps_legacy_endpoints_without_writing(monkeypatch, cover_provider):
     # Retrieve the real function, replaced in the fixture only to isolate saves.
     from backend.services import cover
     from backend.services.studio import vision_settings, analysis_preferences
@@ -205,12 +206,14 @@ def test_migration_keeps_legacy_endpoints_without_writing(monkeypatch):
                               openai_compatible_endpoint=lambda: {'base_url': 'https://main.example/v1', 'api_key': 'main-key'})
     monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: manager)
     monkeypatch.setattr(vision_settings, 'effective', lambda: {'mode': 'custom', 'base_url': 'https://vision.example/v1', 'api_key': 'vision-key', 'model': 'vision-model'})
-    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(enabled=True, model='image-model', api_key='image-key', base_url='https://image.example/v1'))
+    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(provider=cover_provider, enabled=True, model='image-model', api_key='image-key', base_url='https://image.example/v1'))
     monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(analysis_mode='subtitle'))
     config = legacy_migrate()
     assert len(config.connections) == 3
     assert ai.connection_for(config, config.vision).api_key == 'vision-key'
     assert ai.connection_for(config, config.cover).api_key == 'image-key'
+    assert ai.image_endpoint(ai.connection_for(config, config.cover)) == {
+        'provider': cover_provider, 'api_key': 'image-key', 'base_url': 'https://image.example/v1'}
     assert config.analysis_mode == 'subtitle'
     assert not ai.path().exists()
 
