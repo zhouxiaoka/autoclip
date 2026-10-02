@@ -269,10 +269,11 @@ def _grab_pair(video: Path, at: float, folder: Path, key: str) -> tuple[Path, Pa
 
 
 _detectors: dict[tuple[int, int], Any] = {}
+_detector_lock = threading.Lock()
 
 
 def _detector(cv2: Any, width: int, height: int) -> Any:
-    """One YuNet instance per frame size; every sampled frame in a run has the same size."""
+    """One YuNet instance per frame size. Caller holds _detector_lock during inference."""
     key = (width, height)
     if key not in _detectors:
         _detectors[key] = cv2.FaceDetectorYN.create(str(MODEL), "", key, score_threshold=0.6, nms_threshold=0.3, top_k=50)
@@ -290,7 +291,11 @@ def _speaker_center(pair: tuple[Path, Path]) -> float | None:
     if first is None:
         return None
     height, width = first.shape[:2]
-    _, faces = _detector(cv2, width, height).detect(first)
+    # The DNN holds mutable input/output buffers. Concurrent renders must not
+    # overwrite another video's input while its inference is still running.
+    with _detector_lock:
+        _, faces = _detector(cv2, width, height).detect(first)
+        faces = faces.copy() if faces is not None else None
     if faces is None or len(faces) == 0:
         return None
     # Audience shots and far wide shots have faces too small to frame on; treat them as none.

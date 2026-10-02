@@ -60,6 +60,14 @@ test('setup is not needed once credentials exist, even before the new document i
   assert.equal(logic.needsSetup(custom), false)
 })
 
+test('repairing an invalid legacy analysis keeps valid cover and vision assignments', () => {
+  const cover = { connection_id: 'image', model: 'image-model', capability: 'auto' }
+  const vision = { connection_id: 'vision', model: 'vision-model', capability: 'multimodal' }
+  const value = { ...fresh(), analysis: null, cover, vision, cover_enabled: true,
+    migration_warnings: ['analysis_configuration_invalid'] }
+  assert.deepEqual(plain(logic.prepareLoaded(value)), plain(value))
+})
+
 test('text-only models stay eligible in smart mode; only the explicit visual route needs multimodal', () => {
   assert.deepEqual(defaults.analysisModels(models, 'auto').map(m => m.id), ['qwen3.8-flash', 'qwen-plus'])
   assert.deepEqual(defaults.analysisModels(models, 'subtitle').map(m => m.id), ['qwen3.8-flash', 'qwen-plus'])

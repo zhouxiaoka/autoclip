@@ -20,28 +20,28 @@ def setup_periodic_tasks(sender, **kwargs):
     # 每天凌晨2点执行数据清理
     sender.add_periodic_task(
         crontab(hour=2, minute=0),
-        cleanup_expired_data.s(days=30),
+        sender.signature('backend.tasks.data_cleanup.cleanup_expired_data', kwargs={'days': 30}),
         name='daily_data_cleanup'
     )
     
     # 每小时执行数据一致性检查
     sender.add_periodic_task(
         crontab(minute=0),
-        check_data_consistency.s(),
+        sender.signature('backend.tasks.data_cleanup.check_data_consistency'),
         name='hourly_consistency_check'
     )
     
     # 每周日凌晨3点执行孤立数据清理
     sender.add_periodic_task(
         crontab(hour=3, minute=0, day_of_week=0),
-        cleanup_orphaned_data.s(),
+        sender.signature('backend.tasks.data_cleanup.cleanup_orphaned_data'),
         name='weekly_orphaned_cleanup'
     )
     
     # 每天凌晨1点执行系统健康检查
     sender.add_periodic_task(
         crontab(hour=1, minute=0),
-        health_check.s(),
+        sender.signature('backend.tasks.maintenance.health_check'),
         name='daily_health_check'
     )
     

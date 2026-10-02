@@ -1,13 +1,37 @@
 name: CI
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches:
       - main
       - master
 
+permissions:
+  contents: read
+
 jobs:
+  windows-runtime:
+    uses: ./.github/workflows/windows-asyncio.yml
+
+  contracts:
+    name: Release contract checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Versions, translations and acceptance gate regressions
+        run: python scripts/quality_gate.py --group contracts --report quality/contracts.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-contracts
+          path: quality/contracts.json
+          if-no-files-found: error
+
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
@@ -32,17 +56,24 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff
+          pip install -r requirements-test.txt
 
-      - name: Lint backend (ruff)
+      - name: Report existing Python style debt (advisory)
         continue-on-error: true
         run: ruff check backend
 
-      - name: Run tests
+      - name: Blocking correctness lint, all backend tests and editorial fixtures
         env:
           DASHSCOPE_API_KEY: test_api_key
           LOG_FORMAT: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        run: python -m pytest backend/tests -q
+        run: python scripts/quality_gate.py --group backend --report quality/backend.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-backend
+          path: quality/backend.json
+          if-no-files-found: error
 
       - name: Installed wheel portrait framing smoke
         run: |
@@ -102,18 +133,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Frontend tests (analytics, desktop, i18n, publish and Studio)
-        run: npm test
-
-
-      - name: Build
-        run: npm run build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Blocking lint, types, tests and production build
+        working-directory: .
+        run: python scripts/quality_gate.py --group frontend --report quality/frontend.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-frontend
+          path: quality/frontend.json
+          if-no-files-found: error
 
   # Guards the README's recommended `docker compose` path, which was broken for months
   # without anything in CI noticing (issue #88): the image failed to build, the worker

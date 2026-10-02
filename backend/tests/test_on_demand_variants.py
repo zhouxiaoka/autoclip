@@ -181,6 +181,19 @@ def test_no_eligible_long_clip_fails_explicitly_without_any_queued_task(monkeypa
     assert '没有可生成' in state['generation']['error']
 
 
+def test_automatic_production_preserves_structured_subtitle_failure(monkeypatch):
+    from backend.pipeline.failures import PipelineFailure
+    state, exports = _auto_fixture(monkeypatch, [], ['tiktok'])
+    def fail(*args):
+        raise PipelineFailure('SUBTITLE', 'Synthetic missing local runtime', code='whisper_not_installed')
+    monkeypatch.setattr(jobs, '_content_drafts', fail)
+    jobs._auto_generate('p1', {})
+    assert not exports
+    assert state['generation']['status'] == state['analysis']['status'] == 'failed'
+    assert state['generation']['error_code'] == state['analysis']['error_code'] == 'whisper_not_installed'
+    assert state['analysis']['phase'] == 'production'
+
+
 def test_backup_only_dispatch_settles_instead_of_waiting_forever(monkeypatch):
     state = _on_demand_state()
     state['generation']['status'] = 'rendering'
@@ -202,3 +215,123 @@ def test_dispatch_missing_draft_is_terminal_without_render_callback(monkeypatch)
     jobs._dispatch_pending_variants('p1')
     assert state['output_variants'][0]['status'] == 'failed'
     assert state['generation']['status'] == 'failed'
+
+
+@pytest.mark.parametrize('codes,expected', [(['timeout'], 'timeout'), (['rate_limited', 'timeout'], 'multiple'), (['private/path'], 'unexpected'), ([{'private': 'path'}], 'unexpected')])
+def test_render_failures_keep_controlled_generation_codes(codes, expected):
+    state = {'generation': {'status': 'rendering'}, 'analysis': {'run_id': 'run'},
+             'jobs': [{'job_id': f'j{i}', 'error_code': code} for i, code in enumerate(codes)],
+             'output_variants': [{'id': f'v{i}', 'render_job_id': f'j{i}', 'status': 'failed'} for i in range(len(codes))]}
+    store.settle_generation(state)
+    assert state['generation']['error_code'] == state['analysis']['error_code'] == expected
+    state['output_variants'][0]['status'] = 'completed'
+    store.settle_generation(state)
+    if len(codes) == 1:
+        assert 'error_code' not in state['generation'] and 'error_code' not in state['analysis']
+
+
+def test_screening_failure_settles_automatic_generation(monkeypatch):
+    from backend.services.studio.models import ImportOptions
+    from backend.services.studio import planning
+    state = {'generation': {'status': 'screening', 'auto_start': True},
+             'analysis': {'status': 'running', 'phase': 'screening', 'run_id': 'screen'}}
+    monkeypatch.setattr(store, 'change', lambda _pid, fn: fn(state))
+    monkeypatch.setattr(jobs, 'mark_project', lambda *_a, **_k: None)
+    monkeypatch.setattr(jobs, 'source', lambda *_a: 'missing.mp4')
+    monkeypatch.setattr(jobs, 'capture_studio_exception', lambda *_a: None)
+    def fail(*args):
+        raise FileNotFoundError('private local path')
+    monkeypatch.setattr(planning, 'recommend', fail)
+    jobs._inspect('p1', ImportOptions(auto_start=True), None, None)
+    assert state['analysis']['status'] == state['generation']['status'] == 'failed'
+    assert state['generation']['error_code'] == 'missing_resource'
+    assert state['generation']['finished_at']
+
+
+@pytest.mark.parametrize('retry', [False, True])
+def test_on_demand_dispatch_failure_remains_retryable(monkeypatch, retry):
+    state = _on_demand_state()
+    if retry:
+        state['output_variants'][0].update(status='failed', needs_prepare=True)
+    _patch_store(monkeypatch, state)
+    def reject(*args):
+        raise RuntimeError('private executor details')
+    monkeypatch.setattr(jobs.executor, 'submit', reject)
+    with pytest.raises(ValueError, match='未能启动'):
+        (jobs.retry_variant if retry else jobs.produce_variant)('p1', 'v1')
+    variant = state['output_variants'][0]
+    assert variant['status'] == 'failed' and variant['needs_prepare']
+    assert state['generation']['status'] == 'failed'
+    assert 'private' not in variant['error']
+
+
+def test_render_dispatch_rejection_settles_and_can_retry(monkeypatch):
+    state = _on_demand_state()
+    state['output_variants'][0]['status'] = 'queued'
+    state['generation']['status'] = 'rendering'
+    _patch_store(monkeypatch, state)
+    calls = []
+    def export(*args, **kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            raise RuntimeError('private executor details')
+        return {'job_id': 'retry-job'}
+    monkeypatch.setattr(jobs, 'export', export)
+    monkeypatch.setattr(jobs, 'capture_studio_exception', lambda *_a: None)
+    jobs._dispatch_pending_variants('p1')
+    assert state['generation']['status'] == 'failed'
+    assert state['output_variants'][0]['status'] == 'failed'
+    assert 'private' not in state['output_variants'][0]['error']
+    jobs.retry_variant('p1', 'v1')
+    assert state['output_variants'][0]['render_job_id'] == 'retry-job'
+    assert len(calls) == 2
+
+
+def test_visual_analysis_dispatch_rejection_is_retryable(monkeypatch):
+    from backend.services.studio.models import Preferences
+    state = {'drafts': [{'id': 'prior'}], 'analysis': None}
+    monkeypatch.setattr(store, 'change', lambda _pid, fn: fn(state))
+    monkeypatch.setattr(jobs, 'capture_studio_exception', lambda *_a: None)
+    def reject(*args):
+        raise RuntimeError('private executor details')
+    monkeypatch.setattr(jobs.executor, 'submit', reject)
+    with pytest.raises(ValueError, match='未能启动'):
+        jobs.analyze_project('p1', Preferences())
+    assert state['analysis']['status'] == 'failed'
+    assert state['drafts'] == [{'id': 'prior'}]
+    assert 'private' not in state['analysis']['error']
+
+
+@pytest.mark.parametrize('claimed_status', ['queued', 'running', 'completed'])
+def test_stale_failed_retry_preserves_a_concurrent_claim(tmp_path, monkeypatch, claimed_status):
+    monkeypatch.setattr(store, 'get_projects_directory', lambda: tmp_path)
+    (tmp_path / 'p1').mkdir()
+    initial = _on_demand_state()
+    initial['output_variants'][0]['status'] = 'failed'
+    initial['generation']['status'] = 'failed'
+    store.write('p1', initial)
+    read = store.read
+    intervened = False
+
+    def read_then_other_request(project_id, **kwargs):
+        nonlocal intervened
+        snapshot = read(project_id, **kwargs)
+        if not intervened:
+            intervened = True
+            # Another retry wins after this request reads 'failed', before it writes.
+            def claim(data):
+                data['output_variants'][0].update(status=claimed_status, render_job_id='other-job')
+                data['jobs'] = [{'job_id': 'other-job', 'status': claimed_status, 'instance': store.INSTANCE}]
+                data['generation']['status'] = 'completed' if claimed_status == 'completed' else 'rendering'
+            store.change(project_id, claim)
+        return snapshot
+
+    monkeypatch.setattr(store, 'read', read_then_other_request)
+    dispatched = []
+    monkeypatch.setattr(jobs, '_dispatch_pending_variants', lambda pid: dispatched.append(pid))
+    with pytest.raises(ValueError, match='只有失败'):
+        jobs.retry_variant('p1', 'v1')
+    saved = read('p1')
+    assert saved['output_variants'][0]['status'] == claimed_status
+    assert saved['output_variants'][0]['render_job_id'] == 'other-job'
+    assert not dispatched

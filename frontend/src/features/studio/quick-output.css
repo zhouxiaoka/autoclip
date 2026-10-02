@@ -68,12 +68,12 @@
 
 .studio-variant-thumb {
   align-items: center;
-  aspect-ratio: 16 / 9;
   background: var(--ac-thumb);
   border-radius: 12px 12px 0 0;
   color: var(--ac-sub);
   display: flex;
   justify-content: center;
+  height: clamp(240px, 25vw, 300px);
   position: relative;
 }
 
@@ -85,7 +85,7 @@
 .studio-variant-video {
   height: 100%;
   inset: 0;
-  object-fit: cover;
+  object-fit: contain;
   position: absolute;
   width: 100%;
 }
@@ -130,7 +130,7 @@
   min-width: 0;
 }
 
-/* The cover at its real ratio: the video thumbnail above crops it to 16:9. */
+/* Keep the publish cover at its original ratio too. */
 .studio-post-cover {
   border: 1px solid var(--ac-line);
   border-radius: 10px;
@@ -185,4 +185,147 @@
   flex-wrap: wrap;
   gap: 4px 8px;
   margin-top: 6px;
+}
+
+/* Output cards share row heights, while long copy stays available in the editor. */
+.studio-output-card .ac-card-body {
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+.studio-output-card .ac-card-title {
+  margin: 0;
+}
+
+.studio-output-progress {
+  max-width: calc(100% - 80px);
+  right: 10px;
+  top: 10px;
+  text-align: right;
+}
+
+.studio-output-card .studio-post {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.studio-output-card .studio-post-body {
+  gap: 10px;
+  min-height: 132px;
+}
+
+.studio-output-card .studio-post-cover {
+  border-radius: 8px;
+  width: 56px;
+}
+
+.studio-output-card .studio-post-cover--wide {
+  width: 88px;
+}
+
+.studio-output-card .studio-post-title,
+.studio-output-card .studio-post-tags {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  display: -webkit-box;
+  line-height: 1.45;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.studio-output-card .studio-post-desc {
+  -webkit-line-clamp: 2;
+}
+
+.studio-output-card .studio-post-actions {
+  display: grid;
+  gap: 2px 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+.studio-output-card .studio-post-actions > * {
+  border-radius: 6px;
+  font-size: 12px;
+  justify-content: flex-start;
+  line-height: 1.4;
+  min-height: 30px;
+  padding: 5px 0;
+  text-align: left;
+}
+
+.studio-output-card .ac-card-foot {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.studio-output-card .ac-card-actions {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  width: 100%;
+}
+
+.studio-output-card .ac-card-actions > * {
+  border: 1px solid var(--ac-line);
+  border-radius: 8px;
+  font-size: 12px;
+  height: auto;
+  line-height: 1.4;
+  min-height: 34px;
+  padding: 7px 6px;
+  text-align: center;
+}
+
+.studio-output-download {
+  align-items: center;
+  background: var(--ac-cta-bg);
+  color: var(--ac-cta-fg);
+  display: flex;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.studio-output-download:hover {
+  color: var(--ac-cta-fg);
+  opacity: .88;
+}
+
+.studio-output-download[aria-disabled='true'] {
+  cursor: wait;
+  opacity: .5;
+}
+
+.studio-results > .ac-section:first-of-type {
+  margin-top: 24px;
+}
+
+.studio-results .ac-section-head {
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.studio-results .ac-section-head > div,
+.studio-results .ac-section-head .studio-actions {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.studio-results .ac-section-head .ac-btn {
+  max-width: 100%;
+}
+
+.studio-results .studio-source-details {
+  margin-top: 20px;
+  padding-top: 12px;
+}
+
+@media (max-width: 700px) {
+  .studio-output-card .ac-card-title,
+  .studio-output-card .studio-post-title,
+  .studio-output-card .studio-post-body {
+    min-height: 0;
+  }
 }

@@ -113,3 +113,38 @@ def test_failed_disk_kit_removes_its_temporary_file(tmp_path, monkeypatch):
     with pytest.raises(FileNotFoundError):
         publish_kit.kit_file(tmp_path / 'missing.mp4', None, {}, 'YouTube')
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize('description', [
+    '坦诚分享，出自【】。你怎么看？',
+    '浏览器与 Sora 分散了聚焦——出自《Hard Fork》播客。',
+    '团队新领导正在加入。出自节目：《》',
+    'A frank discussion from the Hard Fork podcast.',
+])
+def test_unknown_source_cannot_ship_invented_or_empty_attribution(description):
+    calls=[]
+    def call(prompt, data):
+        calls.append(data)
+        return {'posts': {'douyin': {'title':'重新聚焦核心能力','description':description,'tags':['AI战略']}}}
+    result=post_copy.build_posts('重新聚焦', ['We over-diversified on the product side.'], ['douyin'], source=' ', call=call)
+    assert result['douyin']['description']=='', 'missing provenance must not become an invented programme or placeholder'
+    assert result['douyin']['title']=='重新聚焦核心能力'
+    assert calls[0]['source']==''
+
+
+def test_unknown_source_keeps_description_without_attribution():
+    def call(*_):
+        return {'posts': {'douyin': {'title':'重新聚焦核心能力','description':'重新聚焦核心能力，避免目标过多。','tags':['AI战略']}}}
+    assert post_copy.build_posts('重新聚焦', LINES, ['douyin'], call=call)['douyin']['description']=='重新聚焦核心能力，避免目标过多。'
+
+
+@pytest.mark.parametrize(('lines', 'tags', 'expected'), [
+    (['We built a browser and Sora.'], ['Meta', '扎克伯格', 'Sora'], ['Sora']),
+    (['Metaphors matter. Greg and Fiji helped.'], ['Meta', 'Greg', 'Fiji'], ['Greg', 'Fiji']),
+    (['Sora helps. 公司管理需要聚焦。'], ['a', 'b', 'c', 'd', 'e', 'Sora', '公司管理'], ['Sora', '公司管理']),
+])
+def test_unknown_source_tags_use_literal_subtitle_evidence(lines, tags, expected):
+    def call(*_):
+        return {'posts': {'douyin': {'title': '聚焦核心能力', 'description': '', 'tags': tags}}}
+    result = post_copy.build_posts('参考标题里的 Meta 不是事实依据', lines, ['douyin'], call=call)
+    assert result['douyin']['tags'] == expected

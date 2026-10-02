@@ -17,6 +17,7 @@ from backend.utils.ffmpeg_utils import get_ffmpeg_path
 logger = logging.getLogger(__name__)
 MODEL = 'SenseVoiceSmall'
 VERSION = 1
+_status_lock = threading.RLock()
 
 
 def root():
@@ -26,18 +27,23 @@ def root():
 def packages():
     cpu = '+cpu' if sys.platform != 'darwin' else ''
     return ['funasr==1.3.14', f'torch==2.8.0{cpu}', f'torchaudio==2.8.0{cpu}',
-            'setuptools==80.9.0', 'huggingface-hub<1', 'numpy<3']
+            'setuptools==80.9.0', 'huggingface-hub<1', 'numpy<3', 'editdistance==0.8.1']
 
 
 def status():
     try:
-        value = json.loads((root() / 'status.json').read_text(encoding='utf-8'))
+        with _status_lock:
+            value = json.loads((root() / 'status.json').read_text(encoding='utf-8'))
     except (OSError, ValueError):
+        value = {'status': 'not_installed', 'message': ''}
+    if not isinstance(value, dict) or value.get('status') not in {'not_installed', 'installing', 'ready', 'error'}:
         value = {'status': 'not_installed', 'message': ''}
     # Validate paths without importing a large optional runtime on every poll.
     try:
-        ready = json.loads((root() / 'ready.json').read_text(encoding='utf-8'))
-        valid = (ready['version'] == VERSION and (root() / 'runtime' / 'funasr' / '__init__.py').exists()
+        with _status_lock:
+            ready = json.loads((root() / 'ready.json').read_text(encoding='utf-8'))
+        valid = (isinstance(ready, dict) and isinstance(ready.get('paths'), dict)
+                 and ready['version'] == VERSION and (root() / 'runtime' / 'funasr' / '__init__.py').exists()
                  and all(Path(p).resolve().is_relative_to((root() / 'models').resolve())
                          and (Path(p) / 'model.pt').exists() for p in ready['paths'].values())
                  and set(ready['paths']) == {'model', 'vad_model'})
@@ -57,11 +63,37 @@ def status():
 
 
 def _state(state, message=''):
-    root().mkdir(parents=True, exist_ok=True)
-    target = root() / 'status.json'
-    pending = target.with_suffix('.tmp')
-    pending.write_text(json.dumps({'status': state, 'message': message}, ensure_ascii=False), encoding='utf-8')
-    os.replace(pending, target)
+    # Windows can reject simultaneous replacements, and also replacing an open
+    # status reader. Share this lock with status(), in addition to the operation
+    # lock that excludes another process's installer/inference.
+    with _status_lock:
+        _write_state(state, message)
+
+
+def _write_state(state, message):
+    _write_document('status.json', {'status': state, 'message': message})
+
+
+def _write_document(name, value):
+    with _status_lock:
+        _replace_document(name, value)
+
+
+def _replace_document(name, value):
+    base = root()
+    base.mkdir(parents=True, exist_ok=True)
+    # Never reuse an interrupted writer's file (which can be read-only on Windows).
+    # Close the unique file before replacing: Windows cannot rename open files.
+    pending = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=base,
+                                         prefix=Path(name).stem + '-', suffix='.tmp', delete=False) as stream:
+            pending = Path(stream.name)
+            json.dump(value, stream, ensure_ascii=False)
+        os.replace(pending, base / name)
+    finally:
+        if pending is not None:
+            pending.unlink(missing_ok=True)
 
 
 @contextmanager
@@ -111,16 +143,32 @@ def worker(action, result, audio=None, language='auto', timeout=None, deny_netwo
             raise RuntimeError('SenseVoice 模型运行失败，请到「设置 → 转写」重新准备模型；仍失败时附上脱敏日志')
 
 
+def _installation_command(runtime):
+    command = [sys.executable, '-m', 'pip', 'install', '--target', str(runtime)]
+    wheels = Path(__file__).with_name('runtime_wheels')
+    bundled = Path(sys.executable).resolve().is_relative_to(Path(__file__).resolve().parents[2] / 'python')
+    binary = 'torch,torchaudio'
+    if bundled:
+        if not list(wheels.glob('editdistance-0.8.1-*.whl')):
+            raise RuntimeError('SenseVoice 本地组件缺失，请重新安装 AutoClip 后重试')
+        # CPython 3.13 has no upstream editdistance wheel. The release builder
+        # supplies one for this portable interpreter; never compile on a user's machine.
+        binary += ',editdistance'
+        command += ['--find-links', str(wheels)]
+    command += ['--only-binary', binary, *packages()]
+    if sys.platform != 'darwin':
+        command += ['--extra-index-url', 'https://download.pytorch.org/whl/cpu']
+    return command
+
+
 def _prepare():
     _state('installing', '正在安装组件，首次下载可能需要几分钟')
     try:
-        (root() / 'ready.json').unlink(missing_ok=True)
         runtime = root() / 'runtime'
+        command = _installation_command(runtime)
+        with _status_lock:
+            (root() / 'ready.json').unlink(missing_ok=True)
         shutil.rmtree(runtime, ignore_errors=True)
-        command = [sys.executable, '-m', 'pip', 'install', '--target', str(runtime),
-                   '--only-binary', 'torch,torchaudio', *packages()]
-        if sys.platform != 'darwin':
-            command += ['--extra-index-url', 'https://download.pytorch.org/whl/cpu']
         with tempfile.TemporaryFile() as log:
             completed = subprocess.run(command, stdout=log, stderr=log, timeout=1800,
                                        env={**os.environ, 'PIP_PROGRESS_BAR': 'off', 'PYTHONIOENCODING': 'utf-8'})
@@ -133,10 +181,7 @@ def _prepare():
         worker('prepare', result, timeout=1800)
         value = json.loads(result.read_text(encoding='utf-8'))
         value['version'] = VERSION
-        ready = root() / 'ready.json'
-        pending = ready.with_suffix('.tmp')
-        pending.write_text(json.dumps(value), encoding='utf-8')
-        os.replace(pending, ready)
+        _write_document('ready.json', value)
         result.unlink(missing_ok=True)
         _state('ready')
     except Exception as exc:

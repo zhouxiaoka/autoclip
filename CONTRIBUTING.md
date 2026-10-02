@@ -40,6 +40,14 @@ Web 开发需要 Redis，准备后用 `./start_autoclip.sh`；管理命令和手
 
 保持改动聚焦，遵循相关模块已有的结构和命名。说明解决了什么问题，以及哪些条件会触发它。UI 修改遵循 [DESIGN.md](DESIGN.md)，涉及行为变化时附截图或操作说明。翻译修改遵循 [翻译维护](docs/i18n.md)。
 
+完整质量与安装包验收要求见 [测试验收工作流](docs/TESTING_ACCEPTANCE.md)。提交前安装 `requirements-test.txt`，在隔离数据目录运行统一入口；报告写到仓库外，避免把测试记录混入源码：
+
+```bash
+python scripts/quality_gate.py --report /absolute/local/evidence/quality.json
+```
+
+生产 bug 的回归需要证明旧代码失败、修复后通过。CI 全绿还需要最终安装包验收，才能作为可发布版本；局部验证命令如下。
+
 后端测试从仓库根目录运行：
 
 ```bash

@@ -771,3 +771,26 @@ def test_render_ffmpeg_threads_are_bounded_and_low_priority():
     cmd, kwargs = render_limits.low_priority(['ffmpeg', '-version'])
     assert cmd[-2:] == ['ffmpeg', '-version']
     assert 'preexec_fn' not in kwargs
+
+
+@pytest.mark.parametrize('automatic', [True, False])
+def test_import_staging_matches_confirmation_before_worker_starts(client, source, monkeypatch, automatic):
+    from backend.services.project_service import ProjectService
+    created = []
+    original = ProjectService.create_project
+    def capture(self, body):
+        project = original(self, body)
+        created.append(project.processing_config)
+        return project
+    class PausedExecutor:
+        def submit(self, *_):
+            return None  # Hold screening exactly at the startup boundary seen by the UI.
+    monkeypatch.setattr(ProjectService, 'create_project', capture)
+    monkeypatch.setattr(jobs, 'executor', PausedExecutor())
+    monkeypatch.setattr(jobs, '_prepare_speaker_framing', lambda *_: None)
+    response = client.post('/studio/import', data={'auto_start': str(automatic).lower()},
+                           files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')})
+    assert response.status_code == 200, response.text
+    state = client.get('/studio/' + response.json()['project_id']).json()
+    assert state['generation']['status'] == 'screening'
+    assert created[0]['import_staging'] is (not automatic), 'automatic output must remain on its progress page before the worker runs'

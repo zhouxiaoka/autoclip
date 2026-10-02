@@ -195,7 +195,8 @@ def test_failed_refresh_preserves_last_live_list(monkeypatch):
     assert result['source'] == 'cache' and result['warning']
 
 
-def test_migration_keeps_legacy_endpoints_without_writing(monkeypatch):
+@pytest.mark.parametrize('cover_provider', ['openai', 'gemini', 'grok', 'glm'])
+def test_migration_keeps_legacy_endpoints_without_writing(monkeypatch, cover_provider):
     # Retrieve the real function, replaced in the fixture only to isolate saves.
     from backend.services import cover
     from backend.services.studio import vision_settings, analysis_preferences
@@ -205,14 +206,112 @@ def test_migration_keeps_legacy_endpoints_without_writing(monkeypatch):
                               openai_compatible_endpoint=lambda: {'base_url': 'https://main.example/v1', 'api_key': 'main-key'})
     monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: manager)
     monkeypatch.setattr(vision_settings, 'effective', lambda: {'mode': 'custom', 'base_url': 'https://vision.example/v1', 'api_key': 'vision-key', 'model': 'vision-model'})
-    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(enabled=True, model='image-model', api_key='image-key', base_url='https://image.example/v1'))
+    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(provider=cover_provider, enabled=True, model='image-model', api_key='image-key', base_url='https://image.example/v1'))
     monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(analysis_mode='subtitle'))
     config = legacy_migrate()
     assert len(config.connections) == 3
     assert ai.connection_for(config, config.vision).api_key == 'vision-key'
     assert ai.connection_for(config, config.cover).api_key == 'image-key'
+    assert ai.image_endpoint(ai.connection_for(config, config.cover)) == {
+        'provider': cover_provider, 'api_key': 'image-key', 'base_url': 'https://image.example/v1'}
     assert config.analysis_mode == 'subtitle'
     assert not ai.path().exists()
+
+
+@pytest.mark.parametrize('invalid', [
+    {'base_url': 'https://image.example/v1?api_key=synthetic-secret'},
+    {'base_url': 'not-an-endpoint'},
+    {'api_key': 'x' * 2001},
+    {'model': 'm' * 201},
+])
+def test_invalid_legacy_cover_does_not_block_settings_or_overwrite_files(monkeypatch, invalid):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    from backend.services import cover
+    from backend.services.studio import vision_settings, analysis_preferences
+    from backend.core import llm_manager
+    manager = SimpleNamespace(settings={'llm_provider': 'openai', 'model_name': 'main-model'},
+                              _reload_if_settings_changed=lambda: None,
+                              openai_compatible_endpoint=lambda: {'base_url': 'https://main.example/v1', 'api_key': 'main-key'})
+    monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: manager)
+    monkeypatch.setattr(vision_settings, 'effective', lambda: {})
+    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(**{'enabled': True, 'model': 'image-model', **invalid}))
+    monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(analysis_mode='subtitle'))
+    monkeypatch.setattr(ai, 'migrate_legacy', legacy_migrate)
+    legacy_path = cover.config_path()
+    legacy_path.write_text('{"legacy": "preserved"}')
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.get('/settings/ai-models')
+        assert response.status_code == 200
+        value = response.json()
+        assert value['analysis']['model'] == 'main-model'
+        assert value['connections'][0]['has_key']
+        assert value['cover'] is None and not value['cover_enabled']
+        assert value['migration_warnings'] == ['cover_configuration_invalid']
+        assert 'synthetic-secret' not in response.text and 'main-key' not in response.text
+    assert legacy_path.read_text() == '{"legacy": "preserved"}'
+    assert not ai.path().exists()
+
+
+@pytest.mark.parametrize('role', ['analysis', 'vision'])
+def test_invalid_legacy_role_preserves_other_connections(monkeypatch, role):
+    from backend.core import llm_manager
+    from backend.services import cover
+    from backend.services.studio import vision_settings, analysis_preferences
+    endpoint = {'base_url': 'https://main.example/v1', 'api_key': 'main-key'}
+    vision = {'mode': 'custom', 'base_url': 'https://vision.example/v1', 'api_key': 'vision-key', 'model': 'vision-model'}
+    (endpoint if role == 'analysis' else vision)['base_url'] = 'https://invalid.example/v1?key=synthetic-secret'
+    manager = SimpleNamespace(settings={'llm_provider': 'openai', 'model_name': 'main-model'},
+                              _reload_if_settings_changed=lambda: None,
+                              openai_compatible_endpoint=lambda: endpoint)
+    monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: manager)
+    monkeypatch.setattr(vision_settings, 'effective', lambda: vision)
+    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(model='image-model', api_key='image-key', base_url='https://image.example/v1'))
+    monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences())
+    config = legacy_migrate()
+    assert getattr(config, role) is None
+    assert config.cover.model == 'image-model'
+    assert config._migration_warnings == [role + '_configuration_invalid']
+    assert 'synthetic-secret' not in json.dumps(ai.public(config))
+    assert not ai.path().exists()
+
+
+@pytest.mark.parametrize('raw', ['{"version":', '{"version":99}', '[]'])
+def test_corrupt_saved_settings_can_be_repaired_without_reusing_keys(raw):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    target = ai.path()
+    target.write_text(raw)
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get('/settings/ai-models')
+        assert response.status_code == 200
+        assert response.json()['connections'] == []
+        assert response.json()['migration_warnings'] == ['settings_configuration_invalid']
+        assert response.json()['saved'] is False, 'a damaged file must not hide first-run repair or claim saved settings'
+        assert target.read_text() == raw
+        # Runtime readers still reject invalid files; only the editor offers recovery.
+        with pytest.raises(ValidationError):
+            ai.load()
+        result = client.put('/settings/ai-models', json=example().model_dump())
+        assert result.status_code == 200
+        assert ai.load().analysis.model == 'custom-vision'
+    backups = list(target.parent.glob('ai-model-settings.invalid.*.json'))
+    assert len(backups) == 1 and backups[0].read_text() == raw
+
+
+def test_unrecognized_legacy_transcription_model_does_not_break_settings(monkeypatch):
+    from backend.core import desktop_config
+    previous = SimpleNamespace(speech_recognition=SimpleNamespace(whisper_config=SimpleNamespace(model_name='invalid-model')))
+    monkeypatch.setattr(desktop_config, 'get_desktop_config', lambda: previous)
+    value = ai.public(ai.ModelSettings())
+    assert value['transcription']['model'] == 'base'
+    assert value['migration_warnings'] == ['transcription_configuration_invalid']
 
 
 def test_infistar_public_preview_and_exact_account_intersection(monkeypatch):

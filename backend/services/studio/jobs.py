@@ -49,8 +49,9 @@ def export(project_id, draft, *, brand_outro=False):
                 logger.warning('Studio export dispatch failed: %s', type(error).__name__)
                 capture_studio_exception(error, 'dispatch')
                 message = '导出任务未能启动，请重试；已有成片已保留'
+                code = studio_error_code(error)
                 def failed(data):
-                    next(j for j in data['jobs'] if j['job_id'] == job['job_id']).update(status='failed', error=message)
+                    next(j for j in data['jobs'] if j['job_id'] == job['job_id']).update(status='failed', error=message, error_code=code)
                 store.change(project_id, failed)
                 raise ValueError(message) from None
         return {k: v for k, v in added.items() if k not in ('instance', 'snapshot')}
@@ -98,7 +99,14 @@ def analyze_project(project_id, prefs, url=None, browser=None):
             raise ValueError('视觉分析正在运行')
         data['analysis'] = {'status': 'running', 'message': '下载素材' if url else '理解画面', 'instance': store.INSTANCE, 'created_at': store.now()}
     store.change(project_id, begin)
-    executor.submit(_analyze, project_id, prefs, url, browser)
+    try:
+        executor.submit(_analyze, project_id, prefs, url, browser)
+    except Exception as error:
+        capture_studio_exception(error, 'dispatch')
+        message = '分析任务未能启动，请重试；原素材与已有成片已保留'
+        failure = {'status': 'failed', 'error': message, 'error_code': studio_error_code(error)}
+        store.change(project_id, lambda data: data.update(analysis=failure))
+        raise ValueError(message) from None
 
 def mark_project(project_id, status, **config):
     from backend.core.database import SessionLocal
@@ -953,10 +961,12 @@ def _auto_generate(project_id, plan):
         _dispatch_pending_variants(project_id)
     except Exception as error:
         capture_studio_exception(error, 'production')
+        code = studio_error_code(error)
+        error_text = str(error)[:700]
         def fail(data):
             if data.get('generation'):
-                data['generation'].update(status='failed', error=str(error)[:700], skipped=skipped, finished_at=store.now())
-            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': str(error)[:700], 'duration_ms': round((monotonic() - started) * 1000)}
+                data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now())
+            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000)}
         store.change(project_id, fail)
         mark_project(project_id, 'failed')
 
@@ -1039,9 +1049,18 @@ def _dispatch_pending_variants(project_id):
     for variant in pending:
         raw = drafts.get(variant['draft_id'])
         if not raw:
-            store.change(project_id, lambda data, variant_id=variant['id']: next(item for item in data['output_variants'] if item['id'] == variant_id).update(status='failed', error='来源草稿不存在'))
+            store.change(project_id, lambda data, variant_id=variant['id']: next(item for item in data['output_variants'] if item['id'] == variant_id).update(status='failed', error='来源草稿不存在', error_code='missing_resource'))
             continue
-        job = export(project_id, Draft.model_validate(raw), brand_outro=bool(variant['branding'].get('outro_enabled', True)))
+        try:
+            job = export(project_id, Draft.model_validate(raw), brand_outro=bool(variant['branding'].get('outro_enabled', True)))
+        except Exception as error:
+            capture_studio_exception(error, 'dispatch')
+            code = studio_error_code(error)
+            def rejected(data, variant_id=variant['id']):
+                next(item for item in data['output_variants'] if item['id'] == variant_id).update(
+                    status='failed', error='这条成片任务未能启动，请重试；已有成片已保留', error_code=code)
+            store.change(project_id, rejected)
+            continue
         store.change(project_id, lambda data, variant_id=variant['id'], job_id=job['job_id']: next(item for item in data['output_variants'] if item['id'] == variant_id).update(render_job_id=job_id))
     # Failed dispatch prerequisites or a backup-only batch have no render callback to
     # settle them. Queued/running/preparing variants still keep generation open.
@@ -1090,7 +1109,7 @@ def produce_variant(project_id, variant_id):
         _start_preparing(data, item)
     # One locked change checks and claims: a double click must not prepare (and pay for) it twice.
     store.change(project_id, start)
-    executor.submit(_produce_on_demand, project_id, variant_id)
+    _submit_on_demand(project_id, variant_id)
     return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)
 
 
@@ -1098,9 +1117,25 @@ def _start_preparing(data, item):
     # 'preparing' is invisible to _dispatch_pending_variants: rendering the stored draft now would
     # ship it without speaker framing, packaging or captions.
     item.update(status='preparing', instance=store.INSTANCE)
-    for key in ('error', 'needs_prepare', 'render_job_id'):
+    for key in ('error', 'error_code', 'needs_prepare', 'render_job_id'):
         item.pop(key, None)
     data['generation'].update(status='rendering')
+
+
+def _submit_on_demand(project_id, variant_id):
+    try:
+        executor.submit(_produce_on_demand, project_id, variant_id)
+    except Exception as error:
+        capture_studio_exception(error, 'dispatch')
+        message = '这条成片任务未能启动，请重试；已有成片已保留'
+        code = studio_error_code(error)
+        def failed(data):
+            target = next(item for item in data['output_variants'] if item['id'] == variant_id)
+            target.update(status='failed', error=message, error_code=code, needs_prepare=True)
+            target.pop('instance', None)
+            _finish_generation(data)
+        store.change(project_id, failed)
+        raise ValueError(message) from None
 
 
 @_tracked('production')
@@ -1134,10 +1169,11 @@ def _produce_on_demand(project_id, variant_id):
     except Exception as error:  # noqa: BLE001 - the variant shows the failure and can be retried
         logger.warning('On-demand variant failed: %s', type(error).__name__)
         capture_studio_exception(error, 'production')
+        code = studio_error_code(error)
 
         def failed(data):
             target = next(item for item in data['output_variants'] if item['id'] == variant_id)
-            target.update(status='failed', error='这条成片准备失败，请重试', needs_prepare=True)
+            target.update(status='failed', error='这条成片准备失败，请重试', error_code=code, needs_prepare=True)
             target.pop('instance', None)
             _finish_generation(data)
         try:
@@ -1163,13 +1199,16 @@ def retry_variant(project_id, variant_id):
                 raise ValueError('只有失败的成片版本可以重试')
             _start_preparing(data, item)
         store.change(project_id, prepare)
-        executor.submit(_produce_on_demand, project_id, variant_id)
+        _submit_on_demand(project_id, variant_id)
         return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)
     def update(data):
         item = next(value for value in data['output_variants'] if value['id'] == variant_id)
+        if item.get('status') != 'failed':
+            raise ValueError('只有失败的成片版本可以重试')
         item.update(status='queued')
         item.pop('render_job_id', None)
         item.pop('error', None)
+        item.pop('error_code', None)
         data['generation'].update(status='rendering')
         data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
     store.change(project_id, update)
@@ -1258,9 +1297,10 @@ def _inspect(project_id, options, url, browser):
             except Exception as error:
                 capture_studio_exception(error, 'dispatch')
                 message = '自动制作任务未能启动，请重试；原素材已保留'
+                code = studio_error_code(error)
                 def fail_automatic(data):
-                    data['generation'].update(status='failed', error=message, finished_at=store.now())
-                    data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': message}
+                    data['generation'].update(status='failed', error=message, error_code=code, finished_at=store.now())
+                    data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': message, 'error_code': code}
                 store.change(project_id, fail_automatic)
                 mark_project(project_id, 'failed')
             return
@@ -1273,8 +1313,13 @@ def _inspect(project_id, options, url, browser):
     except Exception as error:
         logger.warning('Studio screening failed: %s', type(error).__name__)
         capture_studio_exception(error, 'screening')
+        failure = {'status':'failed','phase':'screening','error':str(error)[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
         try:
-            store.change(project_id, lambda data:data.update(analysis={'status':'failed','phase':'screening','error':str(error)[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}))
+            def fail_screening(data):
+                data['analysis'] = failure
+                if (data.get('generation') or {}).get('auto_start'):
+                    data['generation'].update(status='failed', error=failure['error'], error_code=failure['error_code'], finished_at=store.now())
+            store.change(project_id, fail_screening)
             mark_project(project_id, 'failed')
         except FileNotFoundError:
             pass
@@ -1415,11 +1460,12 @@ def _produce_selected(project_id, plan):
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
         capture_studio_exception(error, 'production', analysis_mode=plan.get('confirmed_analysis', 'subtitle'))
+        failure = {'status':'failed','error':str(error)[:700], 'error_code':studio_error_code(error),
+            'outcome':'partial' if succeeded_goals else 'failed', 'requested_goals':plan['selected_goals'],
+            'succeeded_goals':succeeded_goals, 'failed_goals':[g for g in plan['selected_goals'] if g not in succeeded_goals],
+            'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000)}
         try:
-            store.change(project_id, lambda data:data.update(analysis={'status':'failed','error':str(error)[:700],
-                'error_code':studio_error_code(error), 'outcome':'partial' if succeeded_goals else 'failed', 'requested_goals':plan['selected_goals'],
-                'succeeded_goals':succeeded_goals, 'failed_goals':[g for g in plan['selected_goals'] if g not in succeeded_goals],
-                'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000)}))
+            store.change(project_id, lambda data:data.update(analysis=failure))
             mark_project(project_id,'failed')
         except FileNotFoundError:
             pass

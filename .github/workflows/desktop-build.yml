@@ -44,7 +44,18 @@ env:
   SENTRY_PROJECT: autoclip-frontend
 
 jobs:
+  # The exact candidate must pass source checks, including hotfix tag builds.
+  source-quality:
+    uses: ./.github/workflows/ci.yml
+
+  sensevoice-runtime:
+    uses: ./.github/workflows/sensevoice.yml
+
+  whisper-runtime:
+    uses: ./.github/workflows/issue-recovery.yml
+
   build-macos-arm64:
+    needs: [source-quality, sensevoice-runtime, whisper-runtime]
     if: github.event_name == 'push' || inputs.build_macos
     runs-on: macos-14  # Apple Silicon runner
     steps:
@@ -110,7 +121,16 @@ jobs:
           RESOURCES="$PWD/$APP/Contents/Resources/resources"
           codesign --verify --deep --strict "$APP"
           "$RESOURCES/python/bin/python3" -B scripts/verify_macos_bundle.py --resources "$RESOURCES" --output-parent "$RUNNER_TEMP/autoclip-release-validation"
+          "$RESOURCES/python/bin/python3" -B scripts/verify_sensevoice.py --resources "$RESOURCES" --report "$RUNNER_TEMP/macos-sensevoice-installed.json"
           codesign --verify --deep --strict "$APP"
+
+      - name: Preserve installed macOS ASR evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-installed-sensevoice
+          path: ${{ runner.temp }}/macos-sensevoice-installed.json
+          if-no-files-found: ignore
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
@@ -123,6 +143,7 @@ jobs:
           retention-days: 30
 
   build-windows-x64:
+    needs: [source-quality, sensevoice-runtime, whisper-runtime]
     if: github.event_name == 'push' || inputs.build_windows
     runs-on: windows-latest
     defaults:
@@ -228,7 +249,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-smoke-report
-          path: windows-smoke.json
+          path: |
+            windows-smoke.json
+            windows-sensevoice-installed.json
           if-no-files-found: ignore
 
   # Publish only after both platforms succeed; never advertise a partial release.
@@ -289,6 +312,11 @@ jobs:
       # 先以 Pre-release 发出：应用内更新读的是 releases/latest/download/latest.json，
       # Pre-release 不算 latest，所以这时只有手动下载的人拿得到。
       # 真机冒烟 + 观察期通过后，跑 promote-release.yml 转正，才推给所有用户。见 RELEASE_CHECKLIST.md。
+      - name: Bind final release assets to this source and build run
+        run: |
+          python3 scripts/release_acceptance.py provenance --tag "$GITHUB_REF_NAME" \
+            --commit "$(git rev-parse HEAD)" --build-run-id "$GITHUB_RUN_ID" --assets dist
+
       - name: Create / update GitHub Release (pre-release)
         uses: softprops/action-gh-release@v2
         with:

@@ -1,0 +1,14 @@
+# AutoClip quality and release requirements
+
+Read [docs/TESTING_ACCEPTANCE.md](docs/TESTING_ACCEPTANCE.md) before changing code or preparing a release. Use [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) for release operations.
+
+- Diagnose the latest report using its version, platform and build. Preserve unrelated work, user data and secrets. Use isolated data directories for every test.
+- For a production defect, reproduce the triggering conditions and show the regression fails before the fix and passes afterward. Test boundaries between configuration, requests, persistence, runtime and UI; test count alone is not acceptance.
+- Run `python scripts/quality_gate.py --report /absolute/local/path/quality.json` before claiming a candidate passes source checks. Install dependencies first. The report identifies the commit and tracked changes. A targeted run is useful during development; a release requires all groups and the exact tag's CI.
+- Python correctness lint, frontend lint/types/tests/build, backend tests, version/readme contracts and release-gate regressions are blocking. Existing general Python style warnings remain debt; never waive new runtime errors. Add corresponding checks when changing provider routing, migrations, retries, SQLite, optional runtimes, downloads or telemetry.
+- Keep all eight UI locales consistent. Change the event producer, query/measurement contract and validation acceptance together.
+- Use the final installed package on Windows x64 and macOS arm64 for the required acceptance cases. Record OS, VM/emulation status, portable runtime, package SHA-256, source commit and outcomes. A source checkout, loopback model fixture, wheel test or successful CI does not replace desktop UI/real-model acceptance.
+- A candidate with pending/failed/skipped required cases, unresolved blockers, no observation samples or mismatched evidence is **NO-GO**. Do not bypass this by extending an observation period or merely disclosing the gap. Fix and re-test first.
+- `scripts/release_acceptance.py` and the **Release Acceptance** workflow must pass before **Promote / Halt Release**. Never promote directly with `gh release edit`, change an existing tag, claim a local fix is shipped, or close an issue before release and report-specific verification.
+- Hotfixes start from the affected tag and contain only necessary repairs and regression tests. Keep unrelated quality cleanup and new features separate; bring the fixes back to main.
+- Paid calls, contacting testers, publishing, release promotion and rollback need authorization from the user's request/session. Prepare concrete evidence before asking for any missing authorization. Never upload raw PostHog/Sentry exports, credentials, personal paths or user media to the public repository; only reviewed sanitized acceptance summaries belong there.
