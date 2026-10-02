@@ -51,9 +51,11 @@ def test_post_copy_retries_a_chinese_title_for_an_english_platform_and_never_pos
         {'posts': {'tiktok': {'title': 'Good investors teach you to fly', 'description': '中文简介', 'tags': ['investing', '投资']},
                    'douyin': {'title': '好的投资人', 'description': '简介', 'tags': ['投资']}}},
     ])
-    posts = post_copy.build_posts('好的投资人', ['line'], ['tiktok', 'douyin'], call=lambda *_: next(answers))
+    # Keep valid tags grounded while independently rejecting Chinese on TikTok.
+    posts = post_copy.build_posts('好的投资人', ['Investing helps investors learn. 投资需要练习。'], ['tiktok', 'douyin'], call=lambda *_: next(answers))
     assert posts['tiktok'] == {'title': 'Good investors teach you to fly', 'description': '', 'tags': ['investing']}
     assert posts['douyin']['title'] == '好的投资人'
+    assert posts['douyin']['tags'] == ['投资']
     stubborn = post_copy.build_posts('好的投资人', ['line'], ['tiktok'], call=lambda *_: {'posts': {'tiktok': {'title': '中文', 'description': '', 'tags': []}}})
     assert stubborn['tiktok']['title'] == ''
 
