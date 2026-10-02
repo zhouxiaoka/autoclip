@@ -44,7 +44,12 @@ env:
   SENTRY_PROJECT: autoclip-frontend
 
 jobs:
+  # The exact candidate must pass source checks, including hotfix tag builds.
+  source-quality:
+    uses: ./.github/workflows/ci.yml
+
   build-macos-arm64:
+    needs: source-quality
     if: github.event_name == 'push' || inputs.build_macos
     runs-on: macos-14  # Apple Silicon runner
     steps:
@@ -123,6 +128,7 @@ jobs:
           retention-days: 30
 
   build-windows-x64:
+    needs: source-quality
     if: github.event_name == 'push' || inputs.build_windows
     runs-on: windows-latest
     defaults:
@@ -289,6 +295,11 @@ jobs:
       # 先以 Pre-release 发出：应用内更新读的是 releases/latest/download/latest.json，
       # Pre-release 不算 latest，所以这时只有手动下载的人拿得到。
       # 真机冒烟 + 观察期通过后，跑 promote-release.yml 转正，才推给所有用户。见 RELEASE_CHECKLIST.md。
+      - name: Bind final release assets to this source and build run
+        run: |
+          python3 scripts/release_acceptance.py provenance --tag "$GITHUB_REF_NAME" \
+            --commit "$(git rev-parse HEAD)" --build-run-id "$GITHUB_RUN_ID" --assets dist
+
       - name: Create / update GitHub Release (pre-release)
         uses: softprops/action-gh-release@v2
         with:

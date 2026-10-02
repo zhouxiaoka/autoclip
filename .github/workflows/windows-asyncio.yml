@@ -1,6 +1,7 @@
 name: Windows asyncio regression
 
 on:
+  workflow_call:
   push:
     paths:
       - 'backend/core/windows_asyncio.py'

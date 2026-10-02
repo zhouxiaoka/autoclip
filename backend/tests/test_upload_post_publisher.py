@@ -409,6 +409,8 @@ def test_real_http_client_against_local_upload_post(data_dir, monkeypatch):
         server.shutdown()
 
 
+@pytest.mark.skipif(os.environ.get('AUTOCLIP_LIVE_NETWORK_TESTS') != '1',
+                    reason='External Upload-Post smoke is opt-in; offline source gate uses loopback fixtures')
 def test_live_upload_post_rejects_unknown_key():
     import requests
     from backend.services import upload_post_publisher as up

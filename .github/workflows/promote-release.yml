@@ -19,9 +19,18 @@ on:
         description: "halt 时恢复为最新的好版本，例如 v1.4.0（promote 时忽略）"
         required: false
         type: string
+      acceptance_run_id:
+        description: "promote 必填：通过的 Release Acceptance run ID（halt 忽略）"
+        required: false
+        type: string
 
 permissions:
   contents: write
+  actions: read
+
+concurrency:
+  group: release-promotion
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -31,8 +40,45 @@ jobs:
       GH_REPO: ${{ github.repository }}
       TAG: ${{ inputs.tag }}
       FALLBACK: ${{ inputs.fallback_tag }}
+      ACCEPTANCE_RUN_ID: ${{ inputs.acceptance_run_id }}
       WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Require verified acceptance before promotion
+        if: inputs.action == 'promote'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, re
+          assert re.fullmatch(r'v\d+\.\d+\.\d+', os.environ['TAG']), 'invalid tag'
+          assert re.fullmatch(r'[1-9]\d*', os.environ['ACCEPTANCE_RUN_ID']), 'promote requires a Release Acceptance run ID'
+          PY
+          gh api "repos/$GH_REPO/actions/runs/$ACCEPTANCE_RUN_ID" > acceptance-run.json
+          python - <<'PY'
+          import json
+          run = json.load(open('acceptance-run.json'))
+          assert run['path'] == '.github/workflows/release-acceptance.yml', 'wrong evidence workflow'
+          assert run['status'] == 'completed' and run['conclusion'] == 'success', 'acceptance did not pass'
+          PY
+          gh run download "$ACCEPTANCE_RUN_ID" --name release-acceptance --dir accepted
+          BUILD_RUN_ID=$(python - <<'PY'
+          import json
+          value = json.load(open('accepted/acceptance.json'))['build_run_id']
+          assert type(value) is int and value > 0, 'invalid build run ID'
+          print(value)
+          PY
+          )
+          git fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+          TARGET_COMMIT=$(git rev-parse "$TAG^{commit}")
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > build-run.json
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID/jobs?per_page=100" > build-jobs.json
+          gh release download "$TAG" --dir release-assets
+          python scripts/release_acceptance.py validate --tag "$TAG" --commit "$TARGET_COMMIT" \
+            --assets release-assets --manifest accepted/acceptance.json --repository "$GH_REPO" \
+            --build-run build-run.json --build-jobs build-jobs.json
       - name: Check release assets
         run: |
           set -e
