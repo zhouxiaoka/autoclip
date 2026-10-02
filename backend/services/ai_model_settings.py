@@ -252,7 +252,7 @@ def public(settings: ModelSettings) -> dict:
         except ValidationError:
             value['transcription'] = Transcription().model_dump()
             value.setdefault('migration_warnings', []).append('transcription_configuration_invalid')
-    value['saved'] = path().exists()
+    value['saved'] = path().exists() and 'settings_configuration_invalid' not in settings._migration_warnings
     for c in value['connections']:
         key = c.pop('api_key') or ''
         c['has_key'] = bool(key)

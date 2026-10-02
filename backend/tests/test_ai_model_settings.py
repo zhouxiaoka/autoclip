@@ -293,6 +293,7 @@ def test_corrupt_saved_settings_can_be_repaired_without_reusing_keys(raw):
         assert response.status_code == 200
         assert response.json()['connections'] == []
         assert response.json()['migration_warnings'] == ['settings_configuration_invalid']
+        assert response.json()['saved'] is False, 'a damaged file must not hide first-run repair or claim saved settings'
         assert target.read_text() == raw
         # Runtime readers still reject invalid files; only the editor offers recovery.
         with pytest.raises(ValidationError):
