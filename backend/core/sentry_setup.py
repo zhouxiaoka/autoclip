@@ -15,6 +15,7 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty"}
+PIPELINE_STAGES = {"INGEST", "SUBTITLE", "ANALYZE", "HIGHLIGHT", "EXPORT", "DONE"}
 
 
 def studio_error_code(error: Exception) -> str:
@@ -136,6 +137,7 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         "runtime": {"python"}, "app_mode": {"web", "desktop"},
         "build_environment": {"production", "development", "validation", "unknown"},
         "telemetry_test": {"true"},
+        "pipeline_stage": PIPELINE_STAGES,
     }
     clean_tags = {key: value for key, value in tags.items()
                   if key in allowed and isinstance(value, str) and value in allowed[key]}
@@ -211,6 +213,9 @@ def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None
             scope.set_tag("area", "studio")
             scope.set_tag("phase", phase)
             scope.set_tag("error_code", studio_error_code(error))
+            stage = getattr(error, "stage", None)
+            if isinstance(stage, str) and stage in PIPELINE_STAGES:
+                scope.set_tag("pipeline_stage", stage)
             if analysis_mode:
                 scope.set_tag("analysis_mode", analysis_mode)
             if goal:
