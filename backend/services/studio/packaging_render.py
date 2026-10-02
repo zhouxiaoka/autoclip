@@ -296,7 +296,7 @@ def scene_video_graph(draft: Draft, scene: Scene, index: int, ass_path: Path, w:
     """
     from backend.services.publish_export import _escape_filter_path, _layout_filters
     from backend.services.studio.audio import scene_duration
-    from backend.services.studio.framing import crop_expression, layout_filter
+    from backend.services.studio.framing import crop_expression, fit_spans, layout_filter
     rows = timeline(draft.scenes)
     total = rows[-1][2] + scene_duration(draft.scenes[-1])
     offset, length = rows[index][2], scene_duration(scene)
@@ -304,13 +304,24 @@ def scene_video_graph(draft: Draft, scene: Scene, index: int, ass_path: Path, w:
     look = colours(draft.packaging.palette if draft.packaging else None)
     BG, ACCENT_HEX = look['bg'], look['accent_hex']  # noqa: N806
     if draft.layout == 'window':
+        fitted = (f"scale={W}:{WIN_H}:force_original_aspect_ratio=decrease,"
+                  f"pad={W}:{WIN_H}:(ow-iw)/2:(oh-ih)/2:color={BG},setsar=1")
         if scene.crop_track or scene.crop_x is not None:
             x = crop_expression(scene, draft.crop_x)
-            window = (f"[0:v]crop=w='min(iw,ih*4/3)':h='min(ih,iw*3/4)':x='(iw-ow)*({x})':y='(ih-oh)/2',"
-                      f"scale={W}:{WIN_H},setsar=1[win]")
+            cropped = (f"crop=w='min(iw,ih*4/3)':h='min(ih,iw*3/4)':x='(iw-ow)*({x})':y='(ih-oh)/2',"
+                       f"scale={W}:{WIN_H},setsar=1")
+            spans = fit_spans(scene)
+            if spans:
+                # Follow the shot mode as well as its speaker centre: quote cards
+                # and slides need their edges, while talking shots stay cropped.
+                enable = '+'.join(f'gte(t,{start})*lt(t,{end})' for start, end in spans)
+                window = (f"[0:v]split=2[crop][fit];[crop]{cropped}[cropped];"
+                          f"[fit]{fitted}[fitted];"
+                          f"[cropped][fitted]overlay=0:0:enable='{enable}':shortest=1[win]")
+            else:
+                window = f"[0:v]{cropped}[win]"
         else:
-            window = (f"[0:v]scale={W}:{WIN_H}:force_original_aspect_ratio=decrease,"
-                      f"pad={W}:{WIN_H}:(ow-iw)/2:(oh-ih)/2:color={BG},setsar=1[win]")
+            window = f"[0:v]{fitted}[win]"
         graph = (f"{window};color=c={BG}:s={W}x{H}:r=30:d={length:.3f}[bg];[bg][win]overlay=0:{WIN_Y}:shortest=1[canvas];"
                  f"color=c={ACCENT_HEX}:s={W}x6:r=30:d={length:.3f}[bar];"
                  f"[canvas][bar]overlay=x='-w+w*(t+{offset:.3f})/{total:.3f}':y={WIN_Y + WIN_H}:shortest=1[framed];"

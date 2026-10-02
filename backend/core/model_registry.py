@@ -26,6 +26,10 @@ _MODEL_PROVIDER = {'dashscope': 'alibaba', 'seed': 'volcengine', 'gemini': 'goog
 # Verified against Alibaba's official text-generation documentation, 2026-09-29.
 # https://www.alibabacloud.com/help/en/model-studio/text-generation
 _VERIFIED = {('dashscope', name): 'multimodal' for name in ('qwen3.8-max', 'qwen3.8-flash')}
+# Official model input modalities verified 2026-10-03; account lists may omit them.
+# https://help.aliyun.com/zh/model-studio/qwen3-vl-flash
+_VERIFIED.update({('dashscope', name): 'multimodal'
+                  for name in ('qwen3-vl-flash', 'qwen3-vl-flash-2026-01-22')})
 
 
 def _path():

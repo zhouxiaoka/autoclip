@@ -505,3 +505,21 @@ def test_ai_covers_switched_on_by_1_4_are_off_after_upgrade_until_chosen_again()
     loaded.cover_enabled = True  # the user picks AI generation in 1.5
     ai.save(loaded)
     assert ai.load().cover_enabled is True and cover.load_config().enabled is True
+
+
+@pytest.mark.parametrize('model', ['qwen3-vl-flash', 'qwen3-vl-flash-2026-01-22'])
+def test_official_qwen_vision_route_survives_unavailable_capability_catalog(monkeypatch, model):
+    monkeypatch.setattr(registry, '_read', lambda: {})
+    config = ai.ModelSettings(
+        connections=[ai.Connection(id='dashscope', name='DashScope', provider='dashscope', api_key='test-key')],
+        analysis=ai.Assignment(connection_id='dashscope', model=model),
+        analysis_mode='auto', allow_visual_screening=True,
+    )
+    ai.save(config)
+    from backend.services.studio import intelligence, vision_settings
+    assert intelligence.ready(), 'enabled frame analysis silently fell back to subtitles'
+    assert vision_settings.effective()['model'] == model
+    # Do not infer an arbitrary gateway alias or a future model by its prefix.
+    config.connections[0].provider = 'compatible'
+    config.connections[0].base_url = 'https://gateway.example/v1'
+    assert ai.vision_endpoint(config) is None
