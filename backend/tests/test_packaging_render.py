@@ -161,3 +161,37 @@ def test_packaged_cjk_loads_bundled_font_in_real_ffmpeg(tmp_path):
     selections = '\n'.join(line for line in result.stderr.splitlines() if 'fontselect:' in line)
     assert 'NotoSansSC' in selections, selections
     assert 'failed to find any fallback' not in selections, selections
+
+
+@pytest.mark.parametrize('at,fit', [(0.25, False), (0.75, True), (1.25, False)])
+def test_interview_window_preserves_slide_edges_only_during_fit_shots(tmp_path, at, fit):
+    # Side markers stand for text at the edges of an inserted quote card.
+    # This track is scene-relative even when the source scene starts later.
+    source = tmp_path / 'edge-markers.png'
+    image = Image.new('RGB', (1920, 1080), (128, 128, 128))
+    image.paste((255, 0, 0), (0, 0, 200, 1080))
+    image.paste((0, 255, 0), (1720, 0, 1920, 1080))
+    image.save(source)
+    scene = Scene(id='slide', start=10, end=12, crop_x=.5, crop_track=[
+        {'start': 0, 'crop_x': .5, 'mode': 'crop'},
+        {'start': .5, 'crop_x': .5, 'mode': 'fit'},
+        {'start': 1, 'crop_x': .5, 'mode': 'crop'},
+    ])
+    draft = Draft(id='d', title='T', scenes=[scene], aspect='portrait', layout='window',
+                  packaging=_packaging(title_lines=[], cues=[], speakers=[], tags=[]))
+    ass = tmp_path / 'scene.ass'
+    ass.write_text(pr.scene_ass(draft.packaging, draft.scenes, 0), encoding='utf-8')
+    graph, label = pr.scene_video_graph(draft, scene, 0, ass, 1080, 1920)
+    frame = tmp_path / 'frame.png'
+    subprocess.run(['ffmpeg', '-v', 'error', '-threads', '1', '-loop', '1', '-i', str(source),
+                    '-filter_complex_threads', '1', '-filter_complex', graph, '-map', f'[{label}]',
+                    '-ss', str(at), '-frames:v', '1', '-threads', '1', '-y', str(frame)],
+                   check=True, timeout=30)
+    rendered = Image.open(frame).convert('RGB')
+    left = rendered.getpixel((40, pr.WIN_Y + pr.WIN_H // 2))
+    right = rendered.getpixel((1040, pr.WIN_Y + pr.WIN_H // 2))
+    if fit:
+        assert left[0] > 200 and left[1] < 40, 'left edge of quote card was cropped'
+        assert right[1] > 200 and right[0] < 40, 'right edge of quote card was cropped'
+    else:
+        assert all(abs(channel - 128) < 5 for pixel in (left, right) for channel in pixel)
