@@ -953,10 +953,11 @@ def _auto_generate(project_id, plan):
         _dispatch_pending_variants(project_id)
     except Exception as error:
         capture_studio_exception(error, 'production')
+        code = studio_error_code(error)
         def fail(data):
             if data.get('generation'):
-                data['generation'].update(status='failed', error=str(error)[:700], skipped=skipped, finished_at=store.now())
-            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': str(error)[:700], 'duration_ms': round((monotonic() - started) * 1000)}
+                data['generation'].update(status='failed', error=str(error)[:700], error_code=code, skipped=skipped, finished_at=store.now())
+            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': str(error)[:700], 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000)}
         store.change(project_id, fail)
         mark_project(project_id, 'failed')
 

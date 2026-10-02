@@ -1,4 +1,5 @@
 {
+  "旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。": "The previous cover configuration is invalid. Select a service again in cover settings. The original configuration file has been preserved.",
   "加载项目失败": "Could not load projects",
   "项目删除成功": "Project deleted",
   "删除项目失败": "Could not delete project",

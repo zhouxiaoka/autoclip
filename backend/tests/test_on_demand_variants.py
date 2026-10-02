@@ -181,6 +181,19 @@ def test_no_eligible_long_clip_fails_explicitly_without_any_queued_task(monkeypa
     assert '没有可生成' in state['generation']['error']
 
 
+def test_automatic_production_preserves_structured_subtitle_failure(monkeypatch):
+    from backend.pipeline.failures import PipelineFailure
+    state, exports = _auto_fixture(monkeypatch, [], ['tiktok'])
+    def fail(*args):
+        raise PipelineFailure('SUBTITLE', 'Synthetic missing local runtime', code='whisper_not_installed')
+    monkeypatch.setattr(jobs, '_content_drafts', fail)
+    jobs._auto_generate('p1', {})
+    assert not exports
+    assert state['generation']['status'] == state['analysis']['status'] == 'failed'
+    assert state['generation']['error_code'] == state['analysis']['error_code'] == 'whisper_not_installed'
+    assert state['analysis']['phase'] == 'production'
+
+
 def test_backup_only_dispatch_settles_instead_of_waiting_forever(monkeypatch):
     state = _on_demand_state()
     state['generation']['status'] = 'rendering'

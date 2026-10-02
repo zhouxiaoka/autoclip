@@ -12,7 +12,7 @@ import uuid
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, field_validator, model_validator
 
 from backend.core.path_utils import get_data_directory
 
@@ -106,6 +106,7 @@ class Transcription(BaseModel):
 
 
 class ModelSettings(BaseModel):
+    _migration_warnings: list[str] = PrivateAttr(default_factory=list)
     version: Literal[1] = 1
     connections: list[Connection] = Field(default_factory=list, max_length=100)
     analysis: Assignment | None = None
@@ -228,6 +229,8 @@ def vision_endpoint(settings: ModelSettings) -> dict | None:
 
 def public(settings: ModelSettings) -> dict:
     value = settings.model_dump()
+    if settings._migration_warnings:
+        value['migration_warnings'] = list(settings._migration_warnings)
     if settings.transcription is None:
         from backend.core.desktop_config import get_desktop_config
         previous = get_desktop_config().speech_recognition.whisper_config.model_name
@@ -299,23 +302,33 @@ def migrate_legacy() -> ModelSettings:
         vision = Assignment(connection_id='legacy-vision', model=v['model'], capability='multimodal')
     cfg = cover.load_config()
     cover_assignment = None
+    migration_warnings = []
     if cfg.model:
         # Even formerly-following covers become explicit references, so changing
         # the analysis assignment never silently re-routes image generation.
-        if cfg.mode == 'text_model':
-            cover_assignment = Assignment(connection_id='legacy-analysis', model=cfg.model)
-        else:
-            kind = {'dashscope': 'dashscope', 'seedream': 'seed'}.get(cfg.provider, 'openai')
-            connections.append(Connection(id='legacy-cover', name='封面服务', provider=kind,
-                                          api_key=cfg.api_key, image_api=cfg.provider,
-                                          base_url=cfg.base_url if kind in {'openai', 'seed'} else '',
-                                          image_base_url=cfg.base_url))
-            cover_assignment = Assignment(connection_id='legacy-cover', model=cfg.model)
+        try:
+            if cfg.mode == 'text_model':
+                cover_assignment = Assignment(connection_id='legacy-analysis', model=cfg.model)
+            else:
+                kind = {'dashscope': 'dashscope', 'seedream': 'seed'}.get(cfg.provider, 'openai')
+                connection = Connection(id='legacy-cover', name='封面服务', provider=kind,
+                                        api_key=cfg.api_key, image_api=cfg.provider,
+                                        base_url=cfg.base_url if kind in {'openai', 'seed'} else '',
+                                        image_base_url=cfg.base_url)
+                cover_assignment = Assignment(connection_id='legacy-cover', model=cfg.model)
+                connections.append(connection)
+        except ValidationError:
+            # An optional legacy cover must not block loading or repairing the AI settings.
+            # Keep the old file untouched and never send its values in the warning.
+            cover_assignment = None
+            migration_warnings.append('cover_configuration_invalid')
     prefs = analysis_preferences.load()
-    return ModelSettings(connections=connections, analysis=analysis, vision=vision,
+    settings = ModelSettings(connections=connections, analysis=analysis, vision=vision,
                          cover=cover_assignment, cover_enabled=cfg.enabled and cover_assignment is not None,
                          allow_send_frame=cfg.allow_send_frame, analysis_mode=prefs.analysis_mode,
                          cover_ocr_model=cfg.ocr_model, vision_timeout=v.get('timeout', 180),
                          allow_visual_screening=prefs.allow_visual_screening,
                          chunk_size=s.get('chunk_size', 5000), min_score_threshold=s.get('min_score_threshold', .7),
                          max_clips_per_collection=s.get('max_clips_per_collection', 5))
+    settings._migration_warnings = migration_warnings
+    return settings

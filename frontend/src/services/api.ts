@@ -119,8 +119,8 @@ api.interceptors.request.use(
     }
 
     config.baseURL = apiConfigManager.getBaseUrl()
-    // 添加请求ID用于追踪
-    config.metadata = { startTime: Date.now() }
+    // Refresh timing while preserving the retry budget across api.request(config).
+    config.metadata = { ...config.metadata, startTime: Date.now() }
     return config
   },
   (error) => {

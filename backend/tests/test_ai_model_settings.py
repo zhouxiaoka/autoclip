@@ -215,6 +215,44 @@ def test_migration_keeps_legacy_endpoints_without_writing(monkeypatch):
     assert not ai.path().exists()
 
 
+@pytest.mark.parametrize('invalid', [
+    {'base_url': 'https://image.example/v1?api_key=synthetic-secret'},
+    {'base_url': 'not-an-endpoint'},
+    {'api_key': 'x' * 2001},
+    {'model': 'm' * 201},
+])
+def test_invalid_legacy_cover_does_not_block_settings_or_overwrite_files(monkeypatch, invalid):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    from backend.services import cover
+    from backend.services.studio import vision_settings, analysis_preferences
+    from backend.core import llm_manager
+    manager = SimpleNamespace(settings={'llm_provider': 'openai', 'model_name': 'main-model'},
+                              _reload_if_settings_changed=lambda: None,
+                              openai_compatible_endpoint=lambda: {'base_url': 'https://main.example/v1', 'api_key': 'main-key'})
+    monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: manager)
+    monkeypatch.setattr(vision_settings, 'effective', lambda: {})
+    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(**{'enabled': True, 'model': 'image-model', **invalid}))
+    monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(analysis_mode='subtitle'))
+    monkeypatch.setattr(ai, 'migrate_legacy', legacy_migrate)
+    legacy_path = cover.config_path()
+    legacy_path.write_text('{"legacy": "preserved"}')
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.get('/settings/ai-models')
+        assert response.status_code == 200
+        value = response.json()
+        assert value['analysis']['model'] == 'main-model'
+        assert value['connections'][0]['has_key']
+        assert value['cover'] is None and not value['cover_enabled']
+        assert value['migration_warnings'] == ['cover_configuration_invalid']
+        assert 'synthetic-secret' not in response.text and 'main-key' not in response.text
+    assert legacy_path.read_text() == '{"legacy": "preserved"}'
+    assert not ai.path().exists()
+
+
 def test_infistar_public_preview_and_exact_account_intersection(monkeypatch):
     calls = []
     async def fetch(url, **kwargs):
