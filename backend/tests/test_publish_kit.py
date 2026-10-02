@@ -136,3 +136,15 @@ def test_unknown_source_keeps_description_without_attribution():
     def call(*_):
         return {'posts': {'douyin': {'title':'重新聚焦核心能力','description':'重新聚焦核心能力，避免目标过多。','tags':['AI战略']}}}
     assert post_copy.build_posts('重新聚焦', LINES, ['douyin'], call=call)['douyin']['description']=='重新聚焦核心能力，避免目标过多。'
+
+
+@pytest.mark.parametrize(('lines', 'tags', 'expected'), [
+    (['We built a browser and Sora.'], ['Meta', '扎克伯格', 'Sora'], ['Sora']),
+    (['Metaphors matter. Greg and Fiji helped.'], ['Meta', 'Greg', 'Fiji'], ['Greg', 'Fiji']),
+    (['Sora helps. 公司管理需要聚焦。'], ['a', 'b', 'c', 'd', 'e', 'Sora', '公司管理'], ['Sora', '公司管理']),
+])
+def test_unknown_source_tags_use_literal_subtitle_evidence(lines, tags, expected):
+    def call(*_):
+        return {'posts': {'douyin': {'title': '聚焦核心能力', 'description': '', 'tags': tags}}}
+    result = post_copy.build_posts('参考标题里的 Meta 不是事实依据', lines, ['douyin'], call=call)
+    assert result['douyin']['tags'] == expected

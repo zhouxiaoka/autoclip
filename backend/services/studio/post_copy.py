@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -47,6 +48,7 @@ PROMPT = (
     '不要「干货」「必看」这类泛词；source 是已知素材出处（节目或频道名）。'
     'source 为空时不写出处、节目名、频道名，不用空括号占位，也不根据人物或话题猜测；'
     '人物身份和经历只用 lines 中明确给出的事实，不根据 title_hint 补充身份。'
+    'source 为空时 tags 只使用 lines 中出现的原词，不翻译或猜测人物、公司名称；可以少于建议数量。'
     '只返回 JSON：{"posts":{"平台id":{"title":"...","description":"...","tags":["..."]}}}'
 )
 
@@ -66,10 +68,21 @@ def _fit(text: str, limit: int) -> str:
     return (cut[:best + 1] if best >= limit * 0.6 else cut).rstrip('，,;； ')
 
 
-def _tags(raw: Any, rules: PostRules) -> list[str]:
+def _tags(raw: Any, rules: PostRules, *, evidence: str | None = None) -> list[str]:
     tags, seen = [], set()
+    evidence = unicodedata.normalize('NFKC', evidence).casefold() if evidence is not None else None
     for item in raw if isinstance(raw, list) else []:
         tag = re.sub(r'[#\s]+', '', _clean(item))[:TAG_CHARS]
+        if evidence is not None:
+            literal = unicodedata.normalize('NFKC', tag).casefold()
+            # Local uploads have no verified identity metadata. A model-generated
+            # reference title cannot justify a person or company hashtag.
+            if not literal or (re.search(r'[\u3400-\u9fff]', literal) is not None
+                               and literal not in evidence):
+                continue
+            if not re.search(r'[\u3400-\u9fff]', literal) and not re.search(
+                    rf'(?<!\w){re.escape(literal)}(?!\w)', evidence):
+                continue
         if tag and tag.lower() not in seen:
             seen.add(tag.lower())
             tags.append(tag)
@@ -122,7 +135,7 @@ def build_posts(title: str, lines: list[str], platforms: list[str], *, source: s
                     # Local uploads have no listing provenance. Keep the useful title,
                     # but never ship a guessed programme or an empty source placeholder.
                     description = ''
-                tags = _tags(item.get('tags'), rules)
+                tags = _tags(item.get('tags'), rules, evidence=text if not source else None)
                 if rules.language == 'en':
                     # English platforms are English only: a Chinese title is retried, never posted.
                     if FOREIGN_FOR_EN.search(post_title):
