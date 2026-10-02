@@ -1,0 +1,12 @@
+{
+  "version": "1.5.0",
+  "kind": "regular",
+  "windows_ui": false,
+  "macos_ui": true,
+  "captioned_path": true,
+  "no_subtitle_path": false,
+  "observation_hours": 0,
+  "windows_machine": "CI windows-latest, no UI",
+  "macos_machine": "maintainer Mac, source and packaged backend",
+  "notes": "2026-10-01 按尽快正式发布要求转为 latest。Windows 仅 CI 冒烟，无字幕转写和观察期未完成。转正后 Sentry PYTHON-FASTAPI-2C（migrate_legacy ValidationError，约 1 万次）与 #257/#258（设置页 AI 模型一直 Loading）在数小时内出现；PYTHON-FASTAPI-1T 为 whisper_not_installed。此文件用于证明门禁会拒绝 1.5.0，不是通过样板。"
+}

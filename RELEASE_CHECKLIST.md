@@ -77,8 +77,10 @@ Windows 验收分三层，前两层必须过，第三层补上界面和真实网
 - [ ] 手动下载 Pre-release 的用户没有报 S1
 
 ### 3.5 转正：推给所有人
+- [ ] 把 `docs/acceptance/TEMPLATE.json` 复制成 `docs/acceptance/vX.Y.Z.json`，按 `docs/QUALITY.md` 的 G1–G3 如实填写。`windows_ui` 必须包含：设置页 AI 模型能从 Loading 变成可编辑。
 - [ ] Actions → **Promote / Halt Release** → `tag=vX.Y.Z`，`action=promote`
-  → 该版本变成 latest，应用内更新开始推送，官网同步
+  → workflow 会先跑 `scripts/check_release_gate.py`，过不了不会改 latest。没有「尽快发布」开关。
+  → 通过后该版本变成 latest，应用内更新开始推送，官网同步
 - [ ] 更新置顶帖 #96 的版本号和「这版修了什么」
 - [ ] 本版修复的 issue：回复「已在 vX.Y.Z 修复，请升级」后关闭；重复的 issue 合并到一个跟踪 issue 再一起关
 - [ ] `HANDOFF.md` 头部状态同步
@@ -119,7 +121,8 @@ Windows 验收分三层，前两层必须过，第三层补上界面和真实网
 | 版本号统一 + CHANGELOG 滚动 | `scripts/bump_version.py` |
 | Release 正文生成 | `scripts/release_notes.py`（`desktop-build.yml` 的 `release` job 调用） |
 | 构建并发 Pre-release | `.github/workflows/desktop-build.yml`（tag `v*` 触发；`workflow_dispatch` 可只勾一个平台试构建，不会发布） |
-| 转正 / 撤回 | `.github/workflows/promote-release.yml` |
+| 转正 / 撤回 | `.github/workflows/promote-release.yml`（promote 时跑 `scripts/check_release_gate.py`） |
+| 黄金路径与门禁 | `docs/QUALITY.md`、`docs/acceptance/vX.Y.Z.json` |
 | 应用内更新地址 | `src-tauri/tauri.conf.json` → `plugins.updater.endpoints`（`releases/latest/download/latest.json`） |
 | 打包脚本 | `scripts/build_macos_arm.sh`、`scripts/build_windows_x64.sh` |
 | 每周反馈周报 | `scripts/weekly_digest.py` |

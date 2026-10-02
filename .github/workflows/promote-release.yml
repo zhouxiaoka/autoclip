@@ -33,6 +33,21 @@ jobs:
       FALLBACK: ${{ inputs.fallback_tag }}
       WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enforce acceptance gate
+        if: inputs.action == 'promote'
+        run: |
+          set -e
+          VERSION="${TAG#v}"
+          record="docs/acceptance/v${VERSION}.json"
+          if [ ! -f "$record" ]; then
+            echo "::error::$record 不存在。观察期结束并亲手跑完黄金路径后，把 TEMPLATE.json 复制过去再转正。见 docs/QUALITY.md"
+            exit 1
+          fi
+          python3 scripts/check_release_gate.py --from-json "$record"
+
       - name: Check release assets
         run: |
           set -e
