@@ -162,18 +162,34 @@ prepare_optional_runtime_wheels() {
     local pip_index="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
     mkdir -p "$wheels"
     "$PORTABLE_PY" - "$wheels" "$pip_index" <<'PY'
-import os, subprocess, sys, tempfile
+import os, re, subprocess, sys, tempfile, zipfile
 from pathlib import Path
 wheel_dir = Path(sys.argv[1]).resolve()
 build_env = os.environ.copy()
+build_options = []
 if sys.platform == 'darwin':
     build_env['MACOSX_DEPLOYMENT_TARGET'] = '11.0'
+    # PDM derives its wheel tag from the host, independently of the compiler target.
+    build_options = ['--config-settings=--plat-name=macosx_11_0_arm64']
 # Don't reuse a wheel built on a newer macOS release under the same CPython ABI.
 subprocess.run([sys.executable, '-m', 'pip', 'wheel', '--no-cache-dir', '--no-deps',
-                '--wheel-dir', str(wheel_dir), '--index-url', sys.argv[2], 'editdistance==0.8.1'],
+                '--wheel-dir', str(wheel_dir), '--index-url', sys.argv[2],
+                *build_options, 'editdistance==0.8.1'],
                check=True, env=build_env)
 if sys.platform == 'darwin':
-    assert list(wheel_dir.glob('editdistance-0.8.1-*-macosx_11_0_arm64.whl')), 'macOS 11-compatible wheel required'
+    compatible = list(wheel_dir.glob('editdistance-0.8.1-*-macosx_11_0_arm64.whl'))
+    assert len(compatible) == 1, 'macOS 11-compatible wheel required'
+    # Check the compiled binary too: changing a tag alone cannot lower its OS requirement.
+    with tempfile.TemporaryDirectory(prefix='autoclip-wheel-macho-check-') as target:
+        with zipfile.ZipFile(compatible[0]) as archive:
+            extensions = [name for name in archive.namelist() if name.endswith('.so')]
+            assert extensions, 'native extension missing'
+            for name in extensions:
+                binary = Path(target) / Path(name).name
+                binary.write_bytes(archive.read(name))
+                headers = subprocess.check_output(['otool', '-arch', 'arm64', '-l', str(binary)], text=True)
+                minimum = re.findall(r'cmd LC_(?:BUILD_VERSION|VERSION_MIN_MACOSX).*?(?:minos|version)\s+(\d+(?:\.\d+)*)', headers, re.S)
+                assert minimum and all(tuple(map(int, value.split('.'))) <= (11, 0, 0) for value in minimum), 'native extension requires newer macOS'
 with tempfile.TemporaryDirectory(prefix='autoclip-runtime-wheel-check-') as target:
     subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-index', '--no-deps',
                     '--only-binary', ':all:', '--find-links', str(wheel_dir),
