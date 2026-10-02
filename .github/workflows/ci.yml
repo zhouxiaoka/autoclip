@@ -50,10 +50,11 @@ jobs:
           pip wheel --no-deps --wheel-dir /tmp/autoclip-wheel .
           python scripts/verify_python_wheel.py /tmp/autoclip-wheel/autoclip-*-py3-none-any.whl --video backend/assets/example/source.mp4 --report /tmp/autoclip-wheel/portrait-report.json
 
-      - name: Community board and feedback ingest checks
+      - name: Community board, feedback ingest, and release gate
         run: |
           python3 scripts/test_community_board.py
           python3 scripts/test_ingest_feedback.py
+          python3 scripts/test_release_gate.py
 
       - name: Set up Node for source launcher
         uses: actions/setup-node@v4

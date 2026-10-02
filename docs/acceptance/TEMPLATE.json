@@ -1,0 +1,12 @@
+{
+  "version": "X.Y.Z",
+  "kind": "regular",
+  "windows_ui": false,
+  "macos_ui": false,
+  "captioned_path": false,
+  "no_subtitle_path": false,
+  "observation_hours": 0,
+  "windows_machine": "",
+  "macos_machine": "",
+  "notes": "复制为 docs/acceptance/vX.Y.Z.json。四条黄金路径见 docs/QUALITY.md。false 不能转正。"
+}

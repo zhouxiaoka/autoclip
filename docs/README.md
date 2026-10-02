@@ -29,6 +29,7 @@
 - [贡献指南](../CONTRIBUTING.md)（中文）
 - [构建指南](../BUILD_GUIDE.md)（中文）
 - [README 翻译与徽章维护](i18n.md)（中文）
+- [测试验收与转正门禁](QUALITY.md)（中文）
 - [更新日志](../CHANGELOG.md) · [发布版本](https://github.com/zhouxiaoka/autoclip/releases)
 - [已知问题](https://github.com/zhouxiaoka/autoclip/issues/96)
 - [社区看板](COMMUNITY_BOARD.md)（Discussions 收想法，Projects 放已确认的路线图）
