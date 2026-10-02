@@ -44,6 +44,10 @@
 
 保留固定标签 area=studio、phase、analysis_mode、goal、error_code、runtime、app_mode、build_environment。后端保留 desktop/web 的 environment，桌面启动器显式注入 production/development 的 build_environment，其他部署可设置 `AUTOCLIP_BUILD_ENVIRONMENT`，未设置时 unknown。前端 environment 延续 production/development。
 
+1.5.2 候选的告警补充修复增加后端 `pipeline_stage` 标签，只允许 INGEST、SUBTITLE、ANALYZE、HIGHLIGHT、EXPORT、DONE。内容任务返回有阶段但没有错误码的结构化失败时保留该阶段；仍按原有异常规则上报，不隐藏未知故障。大纲模型请求失败使用已有的受控失败码，无法解析的回答归为 invalid_response；不增加请求重放。快速视觉推荐的抽帧进程失败、超时或文件错误会保留 screening 告警并降级到字幕方案，不能阻止导入。此补充尚未发布，已存在的 1.5.1 安装包不会自动获得这些改动。
+
+验证查询按 `release` 与 `build_environment` 筛选，并分组查看 `phase`、`error_code`、`pipeline_stage` 和事件数。生产事件可能没有 `telemetry_test` 标签，不能通过 `-telemetry_test:true` 查询为空认定没有生产故障；需用 `build_environment:production` 正向筛选。新增阶段只用于定位失败边界，不推断具体模型回答或素材内容。回归应覆盖抽帧失败不调用视觉服务、字幕降级、无错误码的阶段传递以及脱敏白名单，且用新安装包验证正常制作与失败后恢复。
+
 ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其他工程异常保留 error。此分类依据异常类型及受控代码，不解析或上传异常正文。内容管线保留 llm_not_configured、字幕/转写、timeline_empty 等结构化失败码并按 warning 分类，不再包装成无分类的 RuntimeError。普通 ValueError 只能归为 validation；旧导入的 typed failure 分类继续保留。没有屏蔽 ConnectionResetError，也没有调整现有通知接收人或阈值。
 
 - [Studio 工程异常](https://autoclip-ts.sentry.io/issues/views/226393/)

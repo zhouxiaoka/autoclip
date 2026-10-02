@@ -86,6 +86,24 @@ def test_step1_unparseable_response_is_a_failure_not_empty_list(tmp_path, prompt
 
     assert exc.value.stage == "ANALYZE"
     assert "无法解析" in exc.value.message
+    assert exc.value.code == "invalid_response"
+
+
+@pytest.mark.parametrize('error, expected_code', [
+    (RuntimeError('HTTP 429'), 'rate_limited'),
+    (RuntimeError('HTTP 500'), 'provider_error'),
+    (TimeoutError('synthetic timeout'), 'timeout'),
+    (ConnectionError('synthetic offline'), 'connection'),
+])
+def test_outline_provider_failure_retains_recoverable_code(tmp_path, prompt_files, monkeypatch, error, expected_code):
+    srt = tmp_path / 'input.srt'
+    srt.write_text(SRT, encoding='utf-8')
+    extractor = _extractor(tmp_path, prompt_files, monkeypatch, [error])
+    with pytest.raises(PipelineFailure) as caught:
+        extractor.extract_outline(srt)
+    assert caught.value.stage == 'ANALYZE'
+    assert caught.value.code == expected_code
+    assert caught.value.__cause__ is error
 
 
 def test_step1_partial_chunk_failure_still_returns_outline(tmp_path, prompt_files, monkeypatch):

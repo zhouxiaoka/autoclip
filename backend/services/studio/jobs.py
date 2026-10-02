@@ -348,9 +348,9 @@ def run_content(project_id, video):
     if not result or not result.get('success'):
         message = (result or {}).get('error') or '内容切片未完成，请检查语音与文字模型设置后重试'
         failure = (result or {}).get('result') or {}
-        if failure.get('error_code'):
+        if failure.get('error_code') or failure.get('stage'):
             from backend.pipeline.failures import PipelineFailure
-            raise PipelineFailure(failure.get('stage', ''), message, code=failure['error_code'])
+            raise PipelineFailure(failure.get('stage', ''), message, code=failure.get('error_code') or '')
         raise RuntimeError(message)
 
     clips = result.get('result', {}).get('result', {}).get('titled_clips')

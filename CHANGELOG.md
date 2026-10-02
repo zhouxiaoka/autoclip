@@ -9,6 +9,11 @@
 
 _（本周尚无改动）_
 
+## [1.5.2] - 2026-10-03
+
+- 快速视觉判断抽帧失败或超时时，继续使用字幕方案，保留原素材与重试入口。
+- 内容分析失败时保留具体阶段；模型限流、断网、超时和无法解析的回答提供对应提示，避免统一显示为未知错误。
+
 ## [1.5.1] - 2026-10-02
 
 - 修复部分升级用户的 AI 模型设置一直加载：无效旧封面配置会单独提示修正，原配置保留。
@@ -346,7 +351,8 @@ _（本周尚无改动）_
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.1...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.2...HEAD
+- [1.5.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.1...v1.5.2
 - [1.5.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.0...v1.5.1
 - [1.5.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.4.0...v1.5.0
 - [1.4.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.3.5...v1.4.0

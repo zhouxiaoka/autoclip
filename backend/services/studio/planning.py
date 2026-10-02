@@ -1,5 +1,6 @@
 """Recommend a workflow from bounded visual evidence; explicit preferences always win."""
 from pathlib import Path
+import subprocess
 import tempfile
 from typing import Literal
 from pydantic import BaseModel, Field
@@ -77,7 +78,7 @@ def recommend(video: Path, options: ImportOptions):
             with tempfile.TemporaryDirectory(prefix='ac-plan-') as tmp:
                 response = intelligence.vision_call([{'type':'text', 'text':prompt}] + intelligence.sample(video, times, Path(tmp), width=384), config=config)
             result = Recommendation.model_validate(response)
-        except (RuntimeError, ValueError, KeyError, TypeError) as error:
+        except (RuntimeError, ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
             from backend.core.sentry_setup import capture_studio_exception
             capture_studio_exception(error, 'screening', analysis_mode='visual')
             if isinstance(error, intelligence.VisionRequestError):

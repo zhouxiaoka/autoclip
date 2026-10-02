@@ -13,6 +13,7 @@ from ..utils.text_processor import TextProcessor
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR
 from .failures import (
     PipelineFailure, HINT_CHECK_LLM, HINT_SUBTITLE, looks_like_llm_setup_error, llm_key_failure,
+    model_call_error_code,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,7 +123,13 @@ class OutlineExtractor:
             )
             if looks_like_llm_setup_error(str(last_error)):
                 raise llm_key_failure("ANALYZE", detail) from last_error
-            raise PipelineFailure("ANALYZE", detail, HINT_CHECK_LLM) from last_error
+            code = model_call_error_code(last_error)
+            hint = {
+                'rate_limited': '提供商限制了请求频率或额度，请检查配额并稍后重试。',
+                'timeout': '模型响应超时，请检查服务和网络后重试。',
+                'connection': '无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务。',
+            }.get(code, HINT_CHECK_LLM)
+            raise PipelineFailure("ANALYZE", detail, hint, code=code) from last_error
         if failed_chunks:
             logger.warning(f"{failed_chunks}/{total_chunks} 个文本块失败，用其余块继续。最后一次错误：{last_error}")
         
@@ -133,6 +140,7 @@ class OutlineExtractor:
                 "ANALYZE",
                 f"模型返回的内容无法解析为大纲（{total_chunks} 个文本块均未得到有效话题）。",
                 "换一个更强或更稳定的模型（如 qwen-plus / gpt-4o-mini）后重试；若用本地模型，确认它支持中文长文本。",
+                code="invalid_response",
             )
         
         logger.info(f"大纲提取完成，共{len(final_outlines)}个话题")
