@@ -18,7 +18,9 @@ function render(automatic, phase, status = 'running') {
     if (name === 'react-i18next') return { useTranslation() {} }
     if (name === 'react-router-dom') return { useNavigate: () => () => {} }
     if (name === '../../i18n') return { t: value => value }
-    if (name === '../../ui') return { Btn: children, Section: children, Dialog: empty, fmtDuration: String }
+    if (name === '../../ui') return { Btn: children,
+      Section: ({ children, description, right }) => React.createElement('section', null, description, right, children),
+      Dialog: empty, fmtDuration: String }
     if (name === './useWorkspace') return { useWorkspace: () => ({ workspace, loaded: true, loading: false, refresh() {} }) }
     if (name === './api') return { studioApi: { source: () => '/test.mp4' }, errorText: String }
     if (name === './platformLabel') return { platformLabel: String }
