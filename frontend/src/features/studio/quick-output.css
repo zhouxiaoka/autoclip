@@ -68,12 +68,12 @@
 
 .studio-variant-thumb {
   align-items: center;
-  aspect-ratio: 16 / 9;
   background: var(--ac-thumb);
   border-radius: 12px 12px 0 0;
   color: var(--ac-sub);
   display: flex;
   justify-content: center;
+  height: clamp(240px, 25vw, 300px);
   position: relative;
 }
 
@@ -85,7 +85,7 @@
 .studio-variant-video {
   height: 100%;
   inset: 0;
-  object-fit: cover;
+  object-fit: contain;
   position: absolute;
   width: 100%;
 }
@@ -130,7 +130,7 @@
   min-width: 0;
 }
 
-/* The cover at its real ratio: the video thumbnail above crops it to 16:9. */
+/* Keep the publish cover at its original ratio too. */
 .studio-post-cover {
   border: 1px solid var(--ac-line);
   border-radius: 10px;
@@ -197,45 +197,17 @@
   margin: 0;
 }
 
-.studio-output-summary,
-.studio-output-details {
-  align-items: baseline;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-}
-
-.studio-output-card .studio-output-state {
-  margin: 0;
-}
-
-.studio-output-format,
-.studio-output-details {
-  color: var(--ac-sub);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.studio-output-details {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.studio-output-details li {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.studio-output-details li::before {
-  content: '·';
-  color: var(--ac-muted);
-  margin-right: 6px;
+.studio-output-progress {
+  max-width: calc(100% - 80px);
+  right: 10px;
+  top: 10px;
+  text-align: right;
 }
 
 .studio-output-card .studio-post {
-  margin-top: 2px;
-  padding-top: 12px;
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .studio-output-card .studio-post-body {
@@ -260,10 +232,6 @@
   line-height: 1.45;
   overflow: hidden;
   overflow-wrap: anywhere;
-}
-
-.studio-output-card .studio-post-title {
-  min-height: calc(13.5px * 1.45 * 2);
 }
 
 .studio-output-card .studio-post-desc {

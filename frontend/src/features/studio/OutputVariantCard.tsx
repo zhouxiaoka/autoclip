@@ -36,22 +36,16 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const failed = variant.status === 'failed'
   const onDemand = variant.status === 'on_demand'
   const duration = job?.result?.duration ?? (draft ? draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) : 0)
+  const productionDetails = [outroEnabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾'), packaging && packagingLabel(packaging), variant.framing && t(framingHints[variant.framing])].filter(Boolean).join(' · ')
   const downloaded = () => {
     if (!shouldAskRating(projectId)) return
     markRatingAsked(projectId)
     setAsking(true)
   }
-  return <article className="ac-card studio-output-card">
-    <div className="studio-variant-thumb">{completed && variant.render_job_id ? <video className="studio-variant-video" controls preload="metadata" poster={variant.cover ? studioApi.variantCover(projectId, variant.id, coverStamp) : undefined} src={studioApi.video(projectId, variant.render_job_id)}/> : <span className="play">▷</span>}<span className="ac-tag ac-tag--tl">{platformLabel(variant.strategy_id)}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}</div>
+  return <article className="ac-card studio-output-card" aria-label={variant.post?.title || draft?.title || t('正在准备成片')}>
+    <div className="studio-variant-thumb" title={productionDetails}>{completed && variant.render_job_id ? <video className="studio-variant-video" controls preload="metadata" poster={variant.cover ? studioApi.variantCover(projectId, variant.id, coverStamp) : undefined} src={studioApi.video(projectId, variant.render_job_id)}/> : <span className="play">▷</span>}<span className="ac-tag ac-tag--tl">{platformLabel(variant.strategy_id)}</span>{duration > 0 && <span className="ac-tag ac-tag--br">{fmtDuration(duration)}</span>}{!completed && <span className="ac-tag studio-output-progress" role="status">{failed ? t('生成失败') : onDemand ? t('备选片段 · 需要时再生成') : variant.status === 'preparing' ? t('正在准备取景与包装') : job?.status === 'running' ? t('正在生成') : t('排队生成中')}</span>}</div>
     <div className="ac-card-body">
-      <h2 className="ac-card-title">{draft?.title || t('正在准备成片')}</h2>
-      <div className="studio-output-summary"><span className={`studio-output-state studio-output-state--${failed ? 'failed' : completed ? 'ready' : onDemand ? 'backup' : 'rendering'}`} role="status">
-        {completed ? t('已生成 · 可下载') : failed ? t('生成失败') : onDemand ? t('备选片段 · 需要时再生成') : variant.status === 'preparing' ? t('正在准备取景与包装') : job?.status === 'running' ? t('正在生成') : t('排队生成中')}
-      </span><span className="studio-output-format">{outroEnabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾')}</span></div>
-      <ul className="studio-output-details">
-        {packaging && <li>{packagingLabel(packaging)}</li>}
-        {variant.framing && framingHints[variant.framing] && <li>{t(framingHints[variant.framing])}</li>}
-      </ul>
+      {!variant.post && <h2 className="ac-card-title">{draft?.title || t('正在准备成片')}</h2>}
       {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}
       {packaging?.fallback && <p className="studio-output-hint">{t('包装未能完整生成，已使用原字幕')}</p>}
       <PublishKit projectId={projectId} variant={variant} analytics={analytics} coverStamp={coverStamp} onCoverChanged={() => setCoverStamp(Date.now())} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })}/>
