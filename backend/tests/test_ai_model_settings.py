@@ -122,6 +122,9 @@ def test_runtime_manager_reloads_connection_document(tmp_path, monkeypatch):
     config = example()
     config.analysis = ai.Assignment(connection_id='two', model='new-analysis')
     ai.save(config)
+    # Two writes in the same filesystem tick share an mtime; bump so reload sees the second save.
+    stamp = ai.path().stat()
+    os.utime(ai.path(), ns=(stamp.st_atime_ns, stamp.st_mtime_ns + 1))
     manager._reload_if_settings_changed()
     assert manager.settings['openai_api_key'] == 'sk-second-secret'
     assert manager.settings['model_name'] == 'new-analysis'
@@ -406,3 +409,78 @@ def test_ai_covers_switched_on_by_1_4_are_off_after_upgrade_until_chosen_again()
     loaded.cover_enabled = True  # the user picks AI generation in 1.5
     ai.save(loaded)
     assert ai.load().cover_enabled is True and cover.load_config().enabled is True
+
+
+def _legacy_manager(monkeypatch, provider='openai', model='main-model', base_url='https://main.example/v1'):
+    from backend.core import llm_manager
+    from backend.services.studio import vision_settings, analysis_preferences
+    manager = SimpleNamespace(
+        settings={'llm_provider': provider, 'model_name': model},
+        _reload_if_settings_changed=lambda: None,
+        openai_compatible_endpoint=lambda: {'base_url': base_url, 'api_key': 'main-key'},
+    )
+    monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: manager)
+    monkeypatch.setattr(vision_settings, 'effective', lambda: {})
+    monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(analysis_mode='subtitle'))
+    return manager
+
+
+def test_v150_cover_url_with_query_rejected_the_whole_connection():
+    # 1.5.0 passed cover.json through unchanged; a query or userinfo URL 500'd GET /settings/ai-models.
+    with pytest.raises(ValidationError):
+        ai.Connection(
+            id='legacy-cover', name='封面服务', provider='openai', api_key='image-key',
+            image_api='seedream', base_url='https://ark.example/v1?api_key=secret',
+            image_base_url='https://ark.example/v1?api_key=secret',
+        )
+
+
+def test_legacy_cover_with_invalid_url_still_opens_settings(monkeypatch):
+    from backend.services import cover
+    _legacy_manager(monkeypatch)
+    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(
+        enabled=True, provider='seedream', model='doubao-seedream-4-0',
+        api_key='image-key', base_url='https://ark.example/v1?api_key=secret',
+    ))
+    config = legacy_migrate()
+    assert config.analysis.model == 'main-model'
+    for connection in config.connections:
+        assert '?' not in connection.base_url
+        assert '?' not in connection.image_base_url
+    if config.cover:
+        assert '?' not in ai.connection_for(config, config.cover).image_base_url
+
+
+def test_legacy_seedream_cover_still_migrates(monkeypatch):
+    from backend.services import cover
+    _legacy_manager(monkeypatch)
+    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(
+        enabled=True, provider='seedream', model='doubao-seedream-4-0',
+        api_key='image-key', base_url='https://ark.example/v1',
+    ))
+    config = legacy_migrate()
+    assert config.cover.model == 'doubao-seedream-4-0'
+    assert ai.connection_for(config, config.cover).provider == 'seed'
+    assert ai.connection_for(config, config.cover).image_api == 'seedream'
+
+
+def test_get_ai_models_survives_broken_legacy_cover(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    from backend.services import cover
+    monkeypatch.setattr(ai, 'migrate_legacy', legacy_migrate)
+    _legacy_manager(monkeypatch, provider='not-a-real-vendor', base_url='https://user:pass@main.example/v1')
+    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(
+        enabled=True, provider='seedream', model='cover-model',
+        api_key='image-key', base_url='https://ark.example/v1#token',
+    ))
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.get('/settings/ai-models')
+    assert response.status_code == 200
+    body = response.json()
+    assert body['connections']
+    assert body['analysis']['model'] == 'main-model'
+    assert all('?' not in c.get('base_url', '') for c in body['connections'])

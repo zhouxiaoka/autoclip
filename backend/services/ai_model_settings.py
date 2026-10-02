@@ -6,18 +6,21 @@ use it when present, otherwise retain their original settings/environment behavi
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import uuid
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from backend.core.path_utils import get_data_directory
 
+logger = logging.getLogger(__name__)
 _lock = threading.RLock()
 Capability = Literal['auto', 'multimodal', 'text']
+_IMAGE_APIS = {'auto', 'openai', 'seedream', 'dashscope', 'fal'}
 
 
 class Connection(BaseModel):
@@ -167,6 +170,71 @@ def load() -> ModelSettings | None:
         return settings
 
 
+def load_or_migrate() -> ModelSettings:
+    """Settings readers must not 500. 1.5.0 did: a 1.4 cover.json raised in migrate_legacy."""
+    try:
+        loaded = load()
+        if loaded is not None:
+            return loaded
+    except Exception:
+        logger.exception('saved model settings are unreadable')
+    try:
+        return migrate_legacy()
+    except Exception:
+        logger.exception('legacy model settings could not be migrated')
+        return ModelSettings()
+
+
+def _supported_provider(value: object) -> str:
+    text = str(value or '').strip() or 'dashscope'
+    try:
+        Connection(id='probe', name='probe', provider=text)
+        return text
+    except ValidationError:
+        return 'openai'
+
+
+def _safe_http_url(value: object) -> str:
+    text = str(value or '').strip()
+    if not text:
+        return ''
+    try:
+        return Connection(id='probe', name='probe', base_url=text).base_url
+    except ValidationError:
+        return ''
+
+
+def _try_connection(**kwargs) -> Connection | None:
+    try:
+        return Connection(**kwargs)
+    except ValidationError:
+        logger.warning('skipping unreadable legacy connection %s', kwargs.get('id'))
+        return None
+
+
+def _legacy_cover(cfg) -> tuple[Connection, Assignment] | None:
+    model = str(getattr(cfg, 'model', '') or '').strip()
+    if not model:
+        return None
+    provider_name = str(getattr(cfg, 'provider', '') or '').strip().lower()
+    kind = {'dashscope': 'dashscope', 'seedream': 'seed', 'seed': 'seed'}.get(provider_name, 'openai')
+    image_api = provider_name if provider_name in _IMAGE_APIS else ('seedream' if kind == 'seed' else 'auto')
+    url = _safe_http_url(getattr(cfg, 'base_url', ''))
+    connection = _try_connection(
+        id='legacy-cover', name='封面服务', provider=kind,
+        api_key=str(getattr(cfg, 'api_key', '') or '')[:2000],
+        image_api=image_api,
+        base_url=url if kind in {'openai', 'seed'} else '',
+        image_base_url=url,
+    )
+    if connection is None:
+        return None
+    try:
+        return connection, Assignment(connection_id='legacy-cover', model=model[:200])
+    except ValidationError:
+        return None
+
+
 def connection_for(settings: ModelSettings, assignment: Assignment) -> Connection:
     return next(c for c in settings.connections if c.id == assignment.connection_id)
 
@@ -253,7 +321,7 @@ def resolve_secret(connection: Connection, previous: ModelSettings | None = None
 def save(settings: ModelSettings) -> dict:
     with _lock:
         settings = ModelSettings.model_validate(settings.model_dump())
-        previous = load() or migrate_legacy()
+        previous = load_or_migrate()
         resolved = settings.model_copy(update={'connections': [resolve_secret(c, previous) for c in settings.connections],
                                                'cover_choice_version': COVER_CHOICE_VERSION})
         if not resolved.analysis:
@@ -281,41 +349,59 @@ def migrate_legacy() -> ModelSettings:
     manager = get_llm_manager()
     manager._reload_if_settings_changed()
     s = manager.settings
-    provider = s.get('cloud_preset') or s.get('llm_provider_preset') or s.get('llm_provider', 'dashscope')
+    provider = _supported_provider(s.get('cloud_preset') or s.get('llm_provider_preset') or s.get('llm_provider', 'dashscope'))
     endpoint = manager.openai_compatible_endpoint() or {}
-    base = endpoint.get('base_url', '')
+    base = _safe_http_url(endpoint.get('base_url', ''))
     if provider == 'gemini':
         base = ''  # native listing API, compatible base derived by chat_endpoint
-    connections = [Connection(id='legacy-analysis', name=provider, provider=provider,
-                              base_url=base, api_key=endpoint.get('api_key', ''))]
-    analysis = Assignment(connection_id='legacy-analysis', model=s.get('model_name') or 'qwen-plus')
+    analysis_conn = _try_connection(
+        id='legacy-analysis', name=provider, provider=provider,
+        base_url=base, api_key=str(endpoint.get('api_key', '') or '')[:2000],
+    ) or Connection(id='legacy-analysis', name='openai', provider='openai')
+    connections = [analysis_conn]
+    try:
+        analysis = Assignment(connection_id=analysis_conn.id, model=str(s.get('model_name') or 'qwen-plus')[:200])
+    except ValidationError:
+        analysis = Assignment(connection_id=analysis_conn.id, model='qwen-plus')
     v = vision_settings.effective()
     if v.get('mode') == 'text_model' and v.get('model'):
         # Preserve the already working legacy choice until refreshed metadata is available.
         analysis.capability = 'multimodal'
     vision = None
-    if v.get('mode') == 'custom' and v.get('base_url') and v.get('model'):
-        connections.append(Connection(id='legacy-vision', name='视觉服务', base_url=v['base_url'], api_key=v.get('api_key', '')))
-        vision = Assignment(connection_id='legacy-vision', model=v['model'], capability='multimodal')
+    vision_url = _safe_http_url(v.get('base_url', ''))
+    if v.get('mode') == 'custom' and vision_url and v.get('model'):
+        vision_conn = _try_connection(
+            id='legacy-vision', name='视觉服务', base_url=vision_url,
+            api_key=str(v.get('api_key', '') or '')[:2000],
+        )
+        if vision_conn:
+            connections.append(vision_conn)
+            try:
+                vision = Assignment(connection_id='legacy-vision', model=str(v['model'])[:200], capability='multimodal')
+            except ValidationError:
+                vision = None
+                connections = [c for c in connections if c.id != 'legacy-vision']
     cfg = cover.load_config()
     cover_assignment = None
     if cfg.model:
         # Even formerly-following covers become explicit references, so changing
         # the analysis assignment never silently re-routes image generation.
         if cfg.mode == 'text_model':
-            cover_assignment = Assignment(connection_id='legacy-analysis', model=cfg.model)
+            try:
+                cover_assignment = Assignment(connection_id=analysis_conn.id, model=str(cfg.model)[:200])
+            except ValidationError:
+                cover_assignment = None
         else:
-            kind = {'dashscope': 'dashscope', 'seedream': 'seed'}.get(cfg.provider, 'openai')
-            connections.append(Connection(id='legacy-cover', name='封面服务', provider=kind,
-                                          api_key=cfg.api_key, image_api=cfg.provider,
-                                          base_url=cfg.base_url if kind in {'openai', 'seed'} else '',
-                                          image_base_url=cfg.base_url))
-            cover_assignment = Assignment(connection_id='legacy-cover', model=cfg.model)
+            migrated = _legacy_cover(cfg)
+            if migrated:
+                cover_conn, cover_assignment = migrated
+                connections.append(cover_conn)
     prefs = analysis_preferences.load()
+    mode = prefs.analysis_mode if prefs.analysis_mode in {'auto', 'subtitle', 'visual'} else 'auto'
     return ModelSettings(connections=connections, analysis=analysis, vision=vision,
-                         cover=cover_assignment, cover_enabled=cfg.enabled and cover_assignment is not None,
-                         allow_send_frame=cfg.allow_send_frame, analysis_mode=prefs.analysis_mode,
-                         cover_ocr_model=cfg.ocr_model, vision_timeout=v.get('timeout', 180),
+                         cover=cover_assignment, cover_enabled=bool(cfg.enabled) and cover_assignment is not None,
+                         allow_send_frame=bool(cfg.allow_send_frame), analysis_mode=mode,
+                         cover_ocr_model=str(cfg.ocr_model or ''), vision_timeout=v.get('timeout', 180),
                          allow_visual_screening=prefs.allow_visual_screening,
                          chunk_size=s.get('chunk_size', 5000), min_score_threshold=s.get('min_score_threshold', .7),
                          max_clips_per_collection=s.get('max_clips_per_collection', 5))
