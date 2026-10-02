@@ -109,6 +109,51 @@ def test_interrupted_install_is_retryable_after_restart(tmp_path, monkeypatch):
         assert runtime.status()['status'] == 'installing'
 
 
+def test_state_ignores_stale_readonly_temporary_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(runtime, 'root', lambda: tmp_path)
+    stale = tmp_path / 'status.tmp'
+    stale.write_text('interrupted writer')
+    stale.chmod(0o444)
+    try:
+        runtime._state('ready')
+        assert json.loads((tmp_path / 'status.json').read_text())['status'] == 'ready'
+        assert stale.read_text() == 'interrupted writer'
+    finally:
+        stale.chmod(0o600)
+
+
+def test_concurrent_state_updates_are_atomic(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    monkeypatch.setattr(runtime, 'root', lambda: tmp_path)
+    barrier = threading.Barrier(2)
+    replace = runtime.os.replace
+    def synchronized_replace(source, target):
+        barrier.wait(timeout=5)
+        replace(source, target)
+    monkeypatch.setattr(runtime.os, 'replace', synchronized_replace)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(runtime._state, ['installing', 'ready']))
+    assert json.loads((tmp_path / 'status.json').read_text())['status'] in {'installing', 'ready'}
+    assert not list(tmp_path.glob('*.tmp'))
+
+
+@pytest.mark.parametrize('value', [{}, [], None, {'status': 'unknown'}])
+def test_malformed_status_is_recoverable(tmp_path, monkeypatch, value):
+    monkeypatch.setattr(runtime, 'root', lambda: tmp_path)
+    (tmp_path / 'status.json').write_text(json.dumps(value))
+    assert runtime.status()['status'] == 'not_installed'
+
+
+@pytest.mark.parametrize('paths', [[], None, 'invalid'])
+def test_malformed_ready_paths_do_not_break_status(tmp_path, monkeypatch, paths):
+    monkeypatch.setattr(runtime, 'root', lambda: tmp_path)
+    (tmp_path / 'runtime' / 'funasr').mkdir(parents=True)
+    (tmp_path / 'runtime' / 'funasr' / '__init__.py').touch()
+    (tmp_path / 'ready.json').write_text(json.dumps({'version': runtime.VERSION, 'paths': paths}))
+    assert runtime.status()['status'] == 'not_installed'
+
+
 def test_status_api_is_lightweight_and_install_conflict_is_explicit(tmp_path, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

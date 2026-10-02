@@ -168,6 +168,19 @@ def load() -> ModelSettings | None:
         return settings
 
 
+def for_editing() -> ModelSettings:
+    """Offer repair in the UI without silently changing runtime routing or keys."""
+    try:
+        loaded = load()
+        if loaded is not None:
+            return loaded
+        return migrate_legacy()
+    except (ValidationError, ValueError, TypeError, OSError):
+        settings = ModelSettings()
+        settings._migration_warnings = ['settings_configuration_invalid']
+        return settings
+
+
 def connection_for(settings: ModelSettings, assignment: Assignment) -> Connection:
     return next(c for c in settings.connections if c.id == assignment.connection_id)
 
@@ -234,7 +247,11 @@ def public(settings: ModelSettings) -> dict:
     if settings.transcription is None:
         from backend.core.desktop_config import get_desktop_config
         previous = get_desktop_config().speech_recognition.whisper_config.model_name
-        value['transcription'] = Transcription(model=previous).model_dump()
+        try:
+            value['transcription'] = Transcription(model=previous).model_dump()
+        except ValidationError:
+            value['transcription'] = Transcription().model_dump()
+            value.setdefault('migration_warnings', []).append('transcription_configuration_invalid')
     value['saved'] = path().exists()
     for c in value['connections']:
         key = c.pop('api_key') or ''
@@ -256,7 +273,7 @@ def resolve_secret(connection: Connection, previous: ModelSettings | None = None
 def save(settings: ModelSettings) -> dict:
     with _lock:
         settings = ModelSettings.model_validate(settings.model_dump())
-        previous = load() or migrate_legacy()
+        previous = for_editing()
         resolved = settings.model_copy(update={'connections': [resolve_secret(c, previous) for c in settings.connections],
                                                'cover_choice_version': COVER_CHOICE_VERSION})
         if not resolved.analysis:
@@ -265,6 +282,12 @@ def save(settings: ModelSettings) -> dict:
             raise ValueError('画面分析需要多模态模型，请选择模型或在高级设置中确认自定义模型能力')
         target = path()
         target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists() and 'settings_configuration_invalid' in previous._migration_warnings:
+            # Only an explicit valid save may replace a damaged document. Keep
+            # its exact bytes privately so omitted connections/keys are recoverable.
+            backup = target.with_name('ai-model-settings.invalid.' + uuid.uuid4().hex + '.json')
+            with os.fdopen(os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
+                stream.write(target.read_bytes())
         temp = target.with_suffix('.' + uuid.uuid4().hex + '.tmp')
         try:
             fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -289,25 +312,37 @@ def migrate_legacy() -> ModelSettings:
     base = endpoint.get('base_url', '')
     if provider == 'gemini':
         base = ''  # native listing API, compatible base derived by chat_endpoint
-    connections = [Connection(id='legacy-analysis', name=provider, provider=provider,
-                              base_url=base, api_key=endpoint.get('api_key', ''))]
-    analysis = Assignment(connection_id='legacy-analysis', model=s.get('model_name') or 'qwen-plus')
+    connections = []
+    migration_warnings = []
+    analysis = None
+    try:
+        connection = Connection(id='legacy-analysis', name=provider, provider=provider,
+                                base_url=base, api_key=endpoint.get('api_key', ''))
+        analysis = Assignment(connection_id='legacy-analysis', model=s.get('model_name') or 'qwen-plus')
+        connections.append(connection)
+    except ValidationError:
+        migration_warnings.append('analysis_configuration_invalid')
     v = vision_settings.effective()
-    if v.get('mode') == 'text_model' and v.get('model'):
+    if analysis and v.get('mode') == 'text_model' and v.get('model'):
         # Preserve the already working legacy choice until refreshed metadata is available.
         analysis.capability = 'multimodal'
     vision = None
     if v.get('mode') == 'custom' and v.get('base_url') and v.get('model'):
-        connections.append(Connection(id='legacy-vision', name='视觉服务', base_url=v['base_url'], api_key=v.get('api_key', '')))
-        vision = Assignment(connection_id='legacy-vision', model=v['model'], capability='multimodal')
+        try:
+            connection = Connection(id='legacy-vision', name='视觉服务', base_url=v['base_url'], api_key=v.get('api_key', ''))
+            vision = Assignment(connection_id='legacy-vision', model=v['model'], capability='multimodal')
+            connections.append(connection)
+        except ValidationError:
+            migration_warnings.append('vision_configuration_invalid')
     cfg = cover.load_config()
     cover_assignment = None
-    migration_warnings = []
     if cfg.model:
         # Even formerly-following covers become explicit references, so changing
         # the analysis assignment never silently re-routes image generation.
         try:
             if cfg.mode == 'text_model':
+                if analysis is None:
+                    raise ValueError('invalid legacy analysis')
                 cover_assignment = Assignment(connection_id='legacy-analysis', model=cfg.model)
             else:
                 kind = {'dashscope': 'dashscope', 'seedream': 'seed'}.get(cfg.provider, 'openai')
@@ -317,7 +352,7 @@ def migrate_legacy() -> ModelSettings:
                                         image_base_url=cfg.base_url)
                 cover_assignment = Assignment(connection_id='legacy-cover', model=cfg.model)
                 connections.append(connection)
-        except ValidationError:
+        except (ValidationError, ValueError):
             # An optional legacy cover must not block loading or repairing the AI settings.
             # Keep the old file untouched and never send its values in the warning.
             cover_assignment = None

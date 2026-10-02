@@ -34,10 +34,13 @@ def status():
         value = json.loads((root() / 'status.json').read_text(encoding='utf-8'))
     except (OSError, ValueError):
         value = {'status': 'not_installed', 'message': ''}
+    if not isinstance(value, dict) or value.get('status') not in {'not_installed', 'installing', 'ready', 'error'}:
+        value = {'status': 'not_installed', 'message': ''}
     # Validate paths without importing a large optional runtime on every poll.
     try:
         ready = json.loads((root() / 'ready.json').read_text(encoding='utf-8'))
-        valid = (ready['version'] == VERSION and (root() / 'runtime' / 'funasr' / '__init__.py').exists()
+        valid = (isinstance(ready, dict) and isinstance(ready.get('paths'), dict)
+                 and ready['version'] == VERSION and (root() / 'runtime' / 'funasr' / '__init__.py').exists()
                  and all(Path(p).resolve().is_relative_to((root() / 'models').resolve())
                          and (Path(p) / 'model.pt').exists() for p in ready['paths'].values())
                  and set(ready['paths']) == {'model', 'vad_model'})
@@ -57,11 +60,20 @@ def status():
 
 
 def _state(state, message=''):
-    root().mkdir(parents=True, exist_ok=True)
-    target = root() / 'status.json'
-    pending = target.with_suffix('.tmp')
-    pending.write_text(json.dumps({'status': state, 'message': message}, ensure_ascii=False), encoding='utf-8')
-    os.replace(pending, target)
+    base = root()
+    base.mkdir(parents=True, exist_ok=True)
+    # Never reuse an interrupted writer's file (which can be read-only on Windows).
+    # Close the unique file before replacing: Windows cannot rename open files.
+    pending = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=base,
+                                         prefix='status-', suffix='.tmp', delete=False) as stream:
+            pending = Path(stream.name)
+            json.dump({'status': state, 'message': message}, stream, ensure_ascii=False)
+        os.replace(pending, base / 'status.json')
+    finally:
+        if pending is not None:
+            pending.unlink(missing_ok=True)
 
 
 @contextmanager

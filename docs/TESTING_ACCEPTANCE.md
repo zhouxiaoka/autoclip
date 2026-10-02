@@ -39,11 +39,11 @@ python scripts/quality_gate.py --report /absolute/local/evidence/quality.json
 | contracts | 版本一致、八语 README/链接、发布验收校验器的负例回归 |
 | backend | 媒体测试依赖就绪、Python 正确性 lint（E9/F63/F7/F82）、全部后端 pytest、离线剪辑质量约束 |
 | frontend | ESLint、TypeScript、全部前端测试、生产构建（禁止测试时上传 sourcemap） |
-| CI 额外项 | Windows IOCP/进程树/桌面编译、安装 wheel 的取景/字体、源码启动与停止、Docker 生产/开发链路 |
+| CI 额外项 | Windows IOCP/进程树/桌面编译、真实 YuNet 并发检测与 SenseVoice 状态文件、安装 wheel 的取景/字体、源码启动与停止、Docker 生产/开发链路 |
 
 runner 创建临时数据库、配置、日志和隐私关闭文件，清空继承的供应商凭据与监控 DSN/公开采集 key，并隔离 Redis 地址。测试须使用 mock 或本机协议 fixture，禁止调用付费模型；真实模型调用移到产品验收，先明确素材、供应商、模型和费用预算。runner 会保留失败状态，不会被后续成功覆盖。缺依赖也算失败；退出码非零就不能宣称通过。
 
-外部 Upload-Post HTTP 探测默认跳过（仅验证无效 key 的只读响应，不投稿）；需要时单独用 `AUTOCLIP_LIVE_NETWORK_TESTS=1` 运行并记录网络结果。源码门槛固定关闭该探测，使用 loopback 测试；Windows IOCP 在其他平台的 skip 由 Windows job 补验，不能当成通过。runner 读取本次 pytest 的 JUnit 结果，只允许这两类跳过；缺 NumPy、ffmpeg、字体等导致其他用例跳过时，整个检查失败。
+外部 Upload-Post HTTP 探测默认跳过（仅验证无效 key 的只读响应，不投稿）；需要时单独用 `AUTOCLIP_LIVE_NETWORK_TESTS=1` 运行并记录网络结果。源码门槛固定关闭该探测，使用 loopback 测试；Windows IOCP 在其他平台的 skip 由 Windows job 补验，不能当成通过。runner 读取本次 pytest 的 JUnit 结果，只允许这两类跳过；缺 NumPy、OpenCV、ffmpeg、字体等导致其他用例跳过时，整个检查失败。OpenCV 仅加入测试依赖，真实 YuNet 回归交替检测示例人物和空画面；共享检测器曾在并发时把不同素材的结果混在一起，不能用 mock 替代该回归。
 
 当前通用 Ruff 的格式/未使用导入等存量问题仍以 advisory 报告；会造成运行错误的正确性规则已独立阻断。处理存量风格问题应分批提交，不在紧急补丁里混入大范围整理。
 

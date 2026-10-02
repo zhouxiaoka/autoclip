@@ -253,6 +253,63 @@ def test_invalid_legacy_cover_does_not_block_settings_or_overwrite_files(monkeyp
     assert not ai.path().exists()
 
 
+@pytest.mark.parametrize('role', ['analysis', 'vision'])
+def test_invalid_legacy_role_preserves_other_connections(monkeypatch, role):
+    from backend.core import llm_manager
+    from backend.services import cover
+    from backend.services.studio import vision_settings, analysis_preferences
+    endpoint = {'base_url': 'https://main.example/v1', 'api_key': 'main-key'}
+    vision = {'mode': 'custom', 'base_url': 'https://vision.example/v1', 'api_key': 'vision-key', 'model': 'vision-model'}
+    (endpoint if role == 'analysis' else vision)['base_url'] = 'https://invalid.example/v1?key=synthetic-secret'
+    manager = SimpleNamespace(settings={'llm_provider': 'openai', 'model_name': 'main-model'},
+                              _reload_if_settings_changed=lambda: None,
+                              openai_compatible_endpoint=lambda: endpoint)
+    monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: manager)
+    monkeypatch.setattr(vision_settings, 'effective', lambda: vision)
+    monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(model='image-model', api_key='image-key', base_url='https://image.example/v1'))
+    monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences())
+    config = legacy_migrate()
+    assert getattr(config, role) is None
+    assert config.cover.model == 'image-model'
+    assert config._migration_warnings == [role + '_configuration_invalid']
+    assert 'synthetic-secret' not in json.dumps(ai.public(config))
+    assert not ai.path().exists()
+
+
+@pytest.mark.parametrize('raw', ['{"version":', '{"version":99}', '[]'])
+def test_corrupt_saved_settings_can_be_repaired_without_reusing_keys(raw):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    target = ai.path()
+    target.write_text(raw)
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get('/settings/ai-models')
+        assert response.status_code == 200
+        assert response.json()['connections'] == []
+        assert response.json()['migration_warnings'] == ['settings_configuration_invalid']
+        assert target.read_text() == raw
+        # Runtime readers still reject invalid files; only the editor offers recovery.
+        with pytest.raises(ValidationError):
+            ai.load()
+        result = client.put('/settings/ai-models', json=example().model_dump())
+        assert result.status_code == 200
+        assert ai.load().analysis.model == 'custom-vision'
+    backups = list(target.parent.glob('ai-model-settings.invalid.*.json'))
+    assert len(backups) == 1 and backups[0].read_text() == raw
+
+
+def test_unrecognized_legacy_transcription_model_does_not_break_settings(monkeypatch):
+    from backend.core import desktop_config
+    previous = SimpleNamespace(speech_recognition=SimpleNamespace(whisper_config=SimpleNamespace(model_name='invalid-model')))
+    monkeypatch.setattr(desktop_config, 'get_desktop_config', lambda: previous)
+    value = ai.public(ai.ModelSettings())
+    assert value['transcription']['model'] == 'base'
+    assert value['migration_warnings'] == ['transcription_configuration_invalid']
+
+
 def test_infistar_public_preview_and_exact_account_intersection(monkeypatch):
     calls = []
     async def fetch(url, **kwargs):

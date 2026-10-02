@@ -23,7 +23,7 @@ def checks(group: str, python: str):
             ('release_gate_tests', [python, '-m', 'unittest', 'discover', '-s', 'scripts/tests', '-p', 'test_*.py'], ROOT),
         ],
         'backend': [
-            ('media_test_dependencies', [python, '-c', "import numpy, shutil; assert shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg/ffprobe required'"], ROOT),
+            ('media_test_dependencies', [python, '-c', "import cv2, numpy, shutil; assert shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg/ffprobe required'"], ROOT),
             # Correctness rules are blocking; existing style debt is reported separately in CI.
             ('python_correctness', [python, '-m', 'ruff', 'check', '--no-cache', '--select', 'E9,F63,F7,F82', 'backend', 'scripts/quality_gate.py', 'scripts/release_acceptance.py', 'scripts/tests'], ROOT),
             ('backend_tests', [python, '-m', 'pytest', 'backend/tests', '-q', '-r', 's'], ROOT),

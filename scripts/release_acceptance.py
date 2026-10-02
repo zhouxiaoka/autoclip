@@ -17,6 +17,7 @@ CASES = ('clean_install', 'upgrade_legacy', 'model_settings', 'local_with_subtit
          'failure_recovery', 'output_delivery', 'privacy_telemetry')
 BUILD_JOBS = ('Backend tests', 'Frontend checks', 'Release contract checks',
               'Windows Proactor cleanup',
+              'Windows media runtime regressions',
               'Docker compose smoke', 'Docker development compose smoke',
               'build-macos-arm64', 'build-windows-x64', 'smoke-windows-x64', 'release')
 

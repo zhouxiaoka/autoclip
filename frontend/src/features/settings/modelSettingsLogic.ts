@@ -38,6 +38,7 @@ export const needsSetup = (s: ModelSettings) => {
  * model themselves: no account with any image service is assumed.
  */
 export function prepareLoaded(value: ModelSettings): ModelSettings {
+  if (value.migration_warnings?.length) return value
   if (!needsSetup(value)) return value
   return { ...value, analysis: null, cover: null, vision: null, cover_enabled: false, allow_send_frame: true }
 }
