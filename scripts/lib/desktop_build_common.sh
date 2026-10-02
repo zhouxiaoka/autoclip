@@ -59,7 +59,8 @@ download_with_mirrors() {
     local url tmp_size
     for url in "$@"; do
         echo "  Trying: $url"
-        if curl -L --fail --connect-timeout 15 --max-time 600 -o "$dest.tmp" "$url"; then
+        if curl -L --fail --http1.1 --retry 2 --retry-all-errors --retry-delay 2 \
+            --connect-timeout 15 --max-time 600 -o "$dest.tmp" "$url"; then
             tmp_size=$(file_size "$dest.tmp")
             if [ "$tmp_size" -ge "$min_bytes" ]; then
                 mv "$dest.tmp" "$dest"
@@ -160,14 +161,22 @@ prepare_optional_runtime_wheels() {
     local wheels="$BACKEND_DEST/services/runtime_wheels"
     local pip_index="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
     mkdir -p "$wheels"
-    "$PORTABLE_PY" -m pip wheel --no-deps --wheel-dir "$wheels" \
-        --index-url "$pip_index" 'editdistance==0.8.1'
-    "$PORTABLE_PY" - "$wheels" <<'PY'
+    "$PORTABLE_PY" - "$wheels" "$pip_index" <<'PY'
 import os, subprocess, sys, tempfile
 from pathlib import Path
+wheel_dir = Path(sys.argv[1]).resolve()
+build_env = os.environ.copy()
+if sys.platform == 'darwin':
+    build_env['MACOSX_DEPLOYMENT_TARGET'] = '11.0'
+# Don't reuse a wheel built on a newer macOS release under the same CPython ABI.
+subprocess.run([sys.executable, '-m', 'pip', 'wheel', '--no-cache-dir', '--no-deps',
+                '--wheel-dir', str(wheel_dir), '--index-url', sys.argv[2], 'editdistance==0.8.1'],
+               check=True, env=build_env)
+if sys.platform == 'darwin':
+    assert list(wheel_dir.glob('editdistance-0.8.1-*-macosx_11_0_arm64.whl')), 'macOS 11-compatible wheel required'
 with tempfile.TemporaryDirectory(prefix='autoclip-runtime-wheel-check-') as target:
     subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-index', '--no-deps',
-                    '--only-binary', ':all:', '--find-links', str(Path(sys.argv[1]).resolve()),
+                    '--only-binary', ':all:', '--find-links', str(wheel_dir),
                     '--target', target, 'editdistance==0.8.1'], check=True)
     # A fresh process loads the actual wheel under the exact portable ABI.
     subprocess.run([sys.executable, '-S', '-c',
