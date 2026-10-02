@@ -47,9 +47,9 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       <h2 className="ac-card-title">{draft?.title || t('正在准备成片')}</h2>
       <div className="studio-output-summary"><span className={`studio-output-state studio-output-state--${failed ? 'failed' : completed ? 'ready' : onDemand ? 'backup' : 'rendering'}`} role="status">
         {completed ? t('已生成 · 可下载') : failed ? t('生成失败') : onDemand ? t('备选片段 · 需要时再生成') : variant.status === 'preparing' ? t('正在准备取景与包装') : job?.status === 'running' ? t('正在生成') : t('排队生成中')}
-      </span>{packaging && <span className="studio-output-format">{packagingLabel(packaging)}</span>}</div>
+      </span><span className="studio-output-format">{outroEnabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾')}</span></div>
       <ul className="studio-output-details">
-        <li>{outroEnabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾')}</li>
+        {packaging && <li>{packagingLabel(packaging)}</li>}
         {variant.framing && framingHints[variant.framing] && <li>{t(framingHints[variant.framing])}</li>}
       </ul>
       {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}
