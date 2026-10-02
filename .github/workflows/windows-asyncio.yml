@@ -6,6 +6,9 @@ on:
     paths:
       - 'backend/core/windows_asyncio.py'
       - 'backend/tests/test_windows_asyncio.py'
+      - 'backend/services/studio/store.py'
+      - 'backend/tests/test_studio_store_recovery.py'
+      - 'scripts/windows_tests/test_studio_store.py'
       - 'backend/app_factory.py'
       - 'scripts/lib/desktop_build_common.sh'
       - '.github/workflows/windows-asyncio.yml'
@@ -14,6 +17,9 @@ on:
     paths:
       - 'backend/core/windows_asyncio.py'
       - 'backend/tests/test_windows_asyncio.py'
+      - 'backend/services/studio/store.py'
+      - 'backend/tests/test_studio_store_recovery.py'
+      - 'scripts/windows_tests/test_studio_store.py'
       - 'backend/app_factory.py'
       - 'scripts/lib/desktop_build_common.sh'
       - '.github/workflows/windows-asyncio.yml'
@@ -34,12 +40,12 @@ jobs:
         with:
           python-version: "3.13.13"
       - run: python -m pip install -r requirements.txt -r requirements-test.txt
-      - name: Real YuNet concurrent inference and SenseVoice status recovery
+      - name: Real media inference, SenseVoice recovery and Windows state replacement
         env:
           AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-media-regression
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-media-regression
           SENTRY_DSN: ""
-        run: python -m pytest backend/tests/test_framing_concurrency.py backend/tests/test_sensevoice.py -q
+        run: python -m pytest backend/tests/test_framing_concurrency.py backend/tests/test_sensevoice.py backend/tests/test_studio_store_recovery.py scripts/windows_tests/test_studio_store.py -q
 
   windows-asyncio:
     name: Windows Proactor cleanup
