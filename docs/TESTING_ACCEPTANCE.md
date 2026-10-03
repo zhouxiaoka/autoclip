@@ -8,7 +8,7 @@
 
 本流程以用户能完成的任务作为验收单位。绿色 CI 是源码检查证据；成功启动是安装证据；完整链路的可播放文件才是交付证据。模拟供应商验证协议与恢复，真实供应商验证服务兼容性与内容结果，分别记录。
 
-流程的自动部分已在候选分支实现，合入后成为 main 的发布入口。远端 main 已要求源码合同、后端、前端、两种 Docker 链路、Windows IOCP 与 Windows 媒体回归七项检查，管理员同样受约束；禁止强推和删除 main。手工点击 GitHub 的转正按钮仍可绕过发布工作流，因此发布负责人和仓库代理必须遵循最终安装包验收要求。
+先完成未打标签的内部安装包产品验收，再创建公开候选；内部发现缺陷继续修复同一个未公开编号。Internal Acceptance 的不可变回执绑定源码 SHA 和包哈希，tag 构建缺少回执或源码不符就阻断。标签后的最终包验收与观察仍保留。远端 main 已要求源码合同、后端、前端、两种 Docker 链路、Windows IOCP 与 Windows 媒体回归七项检查，管理员同样受约束；禁止强推和删除 main。手工点击 GitHub 的转正按钮仍可绕过发布工作流，因此发布负责人和仓库代理必须遵循最终安装包验收要求。
 
 ## 2. 从问题到修改
 
@@ -18,8 +18,9 @@
 | 复现 | 在临时数据目录构造触发条件；避免使用真实密钥/用户素材 | 修复前回归失败，或真实安装包明确复现 |
 | 修复 | 最小修改；检查相邻失败路径；用户可恢复；保存旧数据 | 修复后同一用例通过，相关回归通过 |
 | 源码验收 | 完整统一检查；review diff；更新八语文案/事件契约/CHANGELOG | 命令、提交、未提交改动、检查结果 |
-| 候选安装包 | exact tag CI + 双平台构建、签名、安装/升级和内置运行时检查 | 成功的 Desktop Build run；完整 Release assets |
-| 产品验收 | 下表所有必测场景；每条发布变更有对应结果 | 匹配提交/包哈希的记录与脱敏证据 |
+| 内部安装包 | 未打标签分支的 Desktop Build；双平台构建、签名、安装/升级和内置运行时检查 | 成功 build run；双平台 Actions artifacts + internal provenance |
+| 标签前产品验收 | 下表所有必测场景；每条发布变更有对应结果；失败就继续内部修复 | 匹配提交/包哈希的记录；Internal Acceptance 成功 run |
+| 公开候选及最终包验收 | 被验收源码才可打标签；exact tag CI；最终包核对和受影响场景复验 | tag 中的内部验收 run；完整 Release assets 与最终证据 |
 | 观察、转正 | 有样本的 Pre-release 观察；确认无阻断；实名复核 | Release Acceptance 成功 run；转正后线上核对 |
 
 高风险修改包括配置迁移、API 重试、模型路由、任务状态、数据库、运行时安装、文件保存和监控。review 必须追踪到真实调用方，覆盖成功、失败、恢复与数据保留。普通文案/样式改动按影响范围检查；不要求为每个可逆小改动堆砌单测。
@@ -82,6 +83,25 @@ Privacy/telemetry 使用独立 validation 构建和隔离数据目录（前端 `
 
 ## 5. 可校验的验收记录
 
+### 标签前的内部验收
+
+先在未打标签的候选分支准备拟发布的版本号，再运行双平台 Desktop Build。现有公开编号不能用于新内部构建，防止把另一份代码混入已公开版本的监控/包身份。Actions 下载目录应含两个平台的包和签名，以及 `internal-desktop-provenance` artifact 内的 `internal-build-provenance.json`。此时不创建 Release。
+
+```bash
+python scripts/internal_acceptance.py init \
+  --version X.Y.Z --commit FULL_40_CHAR_SHA --build-run-id BUILD_RUN_ID \
+  --assets /absolute/local/internal-assets \
+  --manifest /absolute/local/internal-acceptance/internal-acceptance.json
+```
+
+记录初始全部 pending。两个平台完成全部必测矩阵与每条修复后，填写场景、回归的实际完成时间、证据、环境、blockers 和实名复核；回归还需记录具体平台。时间须晚于该内部构建完成。未知主流程失败、缺失场景、CI 代替产品验收或包/源码不符，都不能通过。
+
+人工审阅脱敏后，把内部 manifest 与摘要提交到独立证据分支，例如 `docs/internal-builds/COMMIT/`。不要为了提交报告改变被验收源码 SHA。运行 **Internal Acceptance**，输入源码 SHA、内部 build run ID 和 manifest 路径；它重新下载 Actions 包并校验全部哈希、provenance、构建 checks、双平台场景、回归与复核，生成不可变的 `internal-acceptance` artifact。它不打标签、不发布。
+
+获授权的版本只有在上述 workflow 成功后才可创建 annotated tag。标签必须指向被验收的源码提交，注解有独立一行 `Internal-Acceptance-Run: RUN_ID`。tag 的 Desktop Build 会检查回执来自成功的 Internal Acceptance，版本和完整源码 SHA 完全一致；缺失/失败/不符就阻断构建发布。代码、依赖声明或版本变化后要重新内部构建和验收，不能复用旧回执。
+
+### 标签后的最终包与观察
+
 完成候选构建后，从 Release 下载全部 assets 到本地目录。生成空模板：
 
 ```bash
@@ -115,7 +135,7 @@ Desktop Build 发布前自动生成 `build-provenance.json`，记录源提交、
 
 - 仓库执行约束：[AGENTS.md](../AGENTS.md)
 - 统一源码检查：[quality_gate.py](../scripts/quality_gate.py)，[CI](../.github/workflows/ci.yml)
-- 候选构建：[Desktop Build](../.github/workflows/desktop-build.yml)
+- 内部构建与标签前验收：[Desktop Build](../.github/workflows/desktop-build.yml)、[internal_acceptance.py](../scripts/internal_acceptance.py)、[Internal Acceptance](../.github/workflows/internal-acceptance.yml)
 - 验收校验器：[release_acceptance.py](../scripts/release_acceptance.py)，[Release Acceptance](../.github/workflows/release-acceptance.yml)
 - 转正/撤回：[Promote / Halt Release](../.github/workflows/promote-release.yml)
 - 本轮候选与缺口：[1.5.3 验收记录](RELEASE_1_5_3.md)；历史候选：[1.5.2](RELEASE_1_5_2.md)、[1.5.1](RELEASE_1_5_1.md)

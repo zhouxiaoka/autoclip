@@ -175,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         files = [str(p.relative_to(ROOT)) for p in (TAURI_CONF, CARGO_TOML, CARGO_LOCK, PYPROJECT, DESKTOP_CONFIG, PACKAGE_INIT, CHANGELOG)]
         subprocess.run(["git", "add", *files], cwd=ROOT, check=True)
         subprocess.run(["git", "commit", "-m", f"chore: release v{new}"], cwd=ROOT, check=True)
-        print(f"已提交。下一步：git tag v{new} && git push origin main v{new}")
+        print("已提交未公开候选源码。下一步：推送候选分支，运行未打标签的 Desktop Build；双平台产品验收和 Internal Acceptance 通过后，才在被验收提交创建带验收回执的标签。")
     return 0
 
 

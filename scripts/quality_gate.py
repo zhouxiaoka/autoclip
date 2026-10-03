@@ -25,7 +25,7 @@ def checks(group: str, python: str):
         'backend': [
             ('media_test_dependencies', [python, '-c', "import cv2, numpy, shutil; assert shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg/ffprobe required'"], ROOT),
             # Correctness rules are blocking; existing style debt is reported separately in CI.
-            ('python_correctness', [python, '-m', 'ruff', 'check', '--no-cache', '--select', 'E9,F63,F7,F82', 'backend', 'scripts/quality_gate.py', 'scripts/release_acceptance.py', 'scripts/tests'], ROOT),
+            ('python_correctness', [python, '-m', 'ruff', 'check', '--no-cache', '--select', 'E9,F63,F7,F82', 'backend', 'scripts/quality_gate.py', 'scripts/release_acceptance.py', 'scripts/internal_acceptance.py', 'scripts/tests'], ROOT),
             ('backend_tests', [python, '-m', 'pytest', 'backend/tests', '-q', '-r', 's'], ROOT),
             ('editorial_fixtures', [python, '-m', 'backend.eval'], ROOT),
         ],

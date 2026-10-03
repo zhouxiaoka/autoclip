@@ -15,7 +15,7 @@ PLATFORMS = ('windows-x64', 'macos-arm64')
 CASES = ('clean_install', 'upgrade_legacy', 'model_settings', 'local_with_subtitles',
          'local_without_subtitles', 'link_import', 'visual_generation',
          'failure_recovery', 'output_delivery', 'privacy_telemetry')
-BUILD_JOBS = ('Backend tests', 'Frontend checks', 'Release contract checks',
+BUILD_JOBS = ('candidate-gate', 'Backend tests', 'Frontend checks', 'Release contract checks',
               'Windows Proactor cleanup',
               'Windows media runtime regressions',
               'windows-recovery', 'real-transcription (ubuntu-latest)',
