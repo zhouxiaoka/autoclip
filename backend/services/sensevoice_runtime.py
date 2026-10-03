@@ -147,12 +147,13 @@ def worker(action, result, audio=None, language='auto', timeout=None, deny_netwo
     with tempfile.TemporaryFile() as log:
         try:
             completed = subprocess.run(command, stdout=log, stderr=log, timeout=timeout,
-                                       env={**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8'})
+                                       env={**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8',
+                                            'PYTHONFAULTHANDLER': '1'})
         except subprocess.TimeoutExpired:
             _log_subprocess_failure('worker timeout', log)
             raise  # Preserve the transcription timeout classification.
         if completed.returncode:
-            _log_subprocess_failure('worker', log)
+            _log_subprocess_failure(f'worker (exit={completed.returncode})', log)
             raise RuntimeError('SenseVoice 模型运行失败，请到「设置 → 转写」重新准备模型；仍失败时附上脱敏日志')
 
 
