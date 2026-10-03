@@ -35,6 +35,7 @@ on:
 # step fails with "Resource not accessible by integration" (403).
 permissions:
   contents: write
+  actions: read
 
 env:
   # GitHub runners are in the US; the default tsinghua mirror in the build
@@ -44,6 +45,47 @@ env:
   SENTRY_PROJECT: autoclip-frontend
 
 jobs:
+  # Internal product acceptance must precede creation of a public release tag.
+  # Manual builds stay untagged; tagged builds require an immutable receipt for
+  # the exact source SHA. A green CI run alone cannot satisfy this gate.
+  candidate-gate:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Reject manual builds of already public version numbers
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          case "$GITHUB_REF" in refs/heads/*) ;; *) echo "Internal builds require an untagged branch"; exit 1 ;; esac
+          VERSION=$(python -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
+          gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[].tag_name' > known-release-tags.txt
+          git ls-remote --tags origin "refs/tags/v$VERSION" > existing-candidate-tag.txt
+          python - "$VERSION" <<'PY'
+          import pathlib, re, sys
+          version = sys.argv[1]
+          assert re.fullmatch(r'\d+\.\d+\.\d+', version), 'invalid internal candidate version'
+          assert 'v' + version not in pathlib.Path('known-release-tags.txt').read_text().splitlines(), 'candidate version is already public; choose the next patch only after authorization'
+          assert not pathlib.Path('existing-candidate-tag.txt').read_text().strip(), 'candidate tag already exists'
+          PY
+      - name: Require successful internal desktop acceptance before tagged builds
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          ACCEPTANCE_RUN_ID=$(python scripts/internal_acceptance.py tag-run --tag "$TAG")
+          gh api "repos/$GH_REPO/actions/runs/$ACCEPTANCE_RUN_ID" > internal-acceptance-run.json
+          gh run download "$ACCEPTANCE_RUN_ID" -n internal-acceptance -D internal-accepted
+          python scripts/internal_acceptance.py check-receipt --version "${TAG#v}" --commit "$GITHUB_SHA" \
+            --receipt internal-accepted/receipt.json --acceptance-run internal-acceptance-run.json
+
   # The exact candidate must pass source checks, including hotfix tag builds.
   source-quality:
     uses: ./.github/workflows/ci.yml
@@ -55,7 +97,7 @@ jobs:
     uses: ./.github/workflows/issue-recovery.yml
 
   build-macos-arm64:
-    needs: [source-quality, sensevoice-runtime, whisper-runtime]
+    needs: [candidate-gate, source-quality, sensevoice-runtime, whisper-runtime]
     if: github.event_name == 'push' || inputs.build_macos
     runs-on: macos-14  # Apple Silicon runner
     steps:
@@ -143,7 +185,7 @@ jobs:
           retention-days: 30
 
   build-windows-x64:
-    needs: [source-quality, sensevoice-runtime, whisper-runtime]
+    needs: [candidate-gate, source-quality, sensevoice-runtime, whisper-runtime]
     if: github.event_name == 'push' || inputs.build_windows
     runs-on: windows-latest
     defaults:
@@ -253,6 +295,31 @@ jobs:
             windows-smoke.json
             windows-sensevoice-installed.json
           if-no-files-found: ignore
+
+  # Bind untagged installers to their source/run without creating a Release.
+  internal-provenance:
+    if: github.event_name == 'workflow_dispatch' && needs.build-macos-arm64.result == 'success' && needs.build-windows-x64.result == 'success' && needs.smoke-windows-x64.result == 'success'
+    needs: [build-macos-arm64, build-windows-x64, smoke-windows-x64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: autoclip-desktop-*
+          path: internal-assets
+          merge-multiple: true
+      - name: Record untagged package hashes and source identity
+        run: |
+          set -euo pipefail
+          VERSION=$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')
+          python3 scripts/internal_acceptance.py provenance --version "$VERSION" --commit "$GITHUB_SHA" \
+            --build-run-id "$GITHUB_RUN_ID" --assets internal-assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: internal-desktop-provenance
+          path: internal-assets/internal-build-provenance.json
+          if-no-files-found: error
+          retention-days: 30
 
   # Publish only after both platforms succeed; never advertise a partial release.
   release:
