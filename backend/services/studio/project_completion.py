@@ -25,9 +25,12 @@ def sync_project_completion(project_id, db=None):
             generation = data.get('generation') or {}
             analysis = data.get('analysis') or {}
             raw_variants = data.get('output_variants') or []
+            drafts = data.get('drafts') or []
             if not isinstance(generation, dict) or not isinstance(analysis, dict) or not isinstance(raw_variants, list):
                 return False
             if any(not isinstance(item, dict) for item in raw_variants):
+                return False
+            if not isinstance(drafts, list) or any(not isinstance(item, dict) for item in drafts):
                 return False
             outcome = generation.get('status')
             variants = [item for item in raw_variants if item.get('status') != 'on_demand']
@@ -41,10 +44,10 @@ def sync_project_completion(project_id, db=None):
             if outcome == 'completed' and (not variants or completed != len(variants)):
                 return False
             if db is not None:
-                return _update_index(project_id, db, outcome, completed)
+                return _update_index(project_id, db, outcome, completed, len(drafts))
             from backend.core.database import SessionLocal
             with SessionLocal() as session:
-                return _update_index(project_id, session, outcome, completed)
+                return _update_index(project_id, session, outcome, completed, len(drafts))
         except (OSError, ValueError, SQLAlchemyError) as error:
             if db is not None and isinstance(error, SQLAlchemyError):
                 db.rollback()
@@ -52,13 +55,14 @@ def sync_project_completion(project_id, db=None):
             return False
 
 
-def _update_index(project_id, db, outcome, completed):
+def _update_index(project_id, db, outcome, completed, draft_count):
     from backend.models.project import Project, ProjectStatus
     project = db.get(Project, project_id)
     if project is None or not (project.processing_config or {}).get('smart_import'):
         return False
     status = ProjectStatus.COMPLETED if outcome == 'completed' else ProjectStatus.FAILED
-    config = {**(project.processing_config or {}), 'studio_completed_variant_count': completed}
+    config = {**(project.processing_config or {}), 'studio_completed_variant_count': completed,
+              'studio_draft_count': draft_count}
     if project.status == status and project.processing_config == config:
         return False
     project.status = status

@@ -22,7 +22,7 @@ def project(tmp_path, monkeypatch):
     monkeypatch.setattr('backend.core.database.SessionLocal', sessions)
     with sessions() as db:
         db.add(Project(id='visual', name='公开 游戏', status=ProjectStatus.PROCESSING,
-                       processing_config={'smart_import': {'auto_start': True}, 'kept': 'original'},
+                       processing_config={'smart_import': {'auto_start': True}, 'creative': {'goal': 'highlight'}, 'kept': 'original'},
                        project_metadata={'kept': 'original'}))
         db.commit()
     yield sessions
@@ -49,6 +49,19 @@ def test_last_visual_render_finishes_database_and_home(project):
         response = ProjectService(db).get_projects_paginated(PaginationParams())
         assert response.items[0].status is ResponseStatus.COMPLETED
         assert response.items[0].total_clips == 2
+        assert response.items[0].settings.get('studio_draft_count', 0) == 3
+
+
+def test_visual_home_counts_drafts_separately_from_multiple_platform_outputs(project):
+    data = state(['completed'] * 4)
+    data['drafts'] = [{'id': 'first'}, {'id': 'second'}]
+    store.settle_generation(data)
+    store.write('visual', data)
+    with project() as db:
+        response = ProjectService(db).get_project_with_stats('visual')
+        assert response.status is ResponseStatus.COMPLETED
+        assert response.total_clips == 4
+        assert response.settings.get('studio_draft_count', 0) == 2
 
 
 @pytest.mark.parametrize('statuses, expected', [
@@ -110,7 +123,7 @@ def test_busy_index_does_not_fail_saved_video_and_next_list_recovers(project, mo
     assert path.read_bytes() == original
 
 
-@pytest.mark.parametrize('bad', ['[]', '{"generation": []}', '{"generation": {"auto_start": true, "status": "completed"}, "analysis": 1}', '{"generation": {"auto_start": true, "status": "completed"}, "analysis": {"status": "completed"}, "output_variants": [1]}'])
+@pytest.mark.parametrize('bad', ['[]', '{"generation": []}', '{"generation": {"auto_start": true, "status": "completed"}, "analysis": 1}', '{"generation": {"auto_start": true, "status": "completed"}, "analysis": {"status": "completed"}, "output_variants": [1]}', '{"generation": {"auto_start": true, "status": "completed"}, "analysis": {"status": "completed"}, "drafts": [1]}'])
 def test_malformed_receipt_never_breaks_the_project_list(project, bad):
     path = store.directory('visual') / 'metadata' / 'studio.json'; path.write_text(bad)
     with project() as db:
