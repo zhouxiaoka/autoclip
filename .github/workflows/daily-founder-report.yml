@@ -1,0 +1,63 @@
+# 每天把三个创始人数打出来。邮件由 PostHog 看板订阅发送。
+# 这里只在已配置飞书 webhook 时再推一条；没有 webhook 就打印，不写公开 Issue。
+name: Daily founder report
+
+on:
+  schedule:
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: UTC 日期 YYYY-MM-DD，默认昨天
+        required: false
+        type: string
+      dry_run:
+        description: 只打印，不发飞书
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-founder-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Require PostHog read access
+        env:
+          POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+        run: |
+          if [ -z "$POSTHOG_PERSONAL_API_KEY" ]; then
+            echo "缺少 secret POSTHOG_PERSONAL_API_KEY。日报算不出三个数。"
+            exit 1
+          fi
+
+      - name: Build report
+        env:
+          POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ secrets.POSTHOG_PROJECT_ID }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          FEISHU_WEBHOOK_SECRET: ${{ secrets.FEISHU_WEBHOOK_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          args=()
+          if [ -n "${{ inputs.date }}" ]; then
+            args+=(--date "${{ inputs.date }}")
+          fi
+          if [ "${{ inputs.dry_run }}" != "true" ] && [ -n "$FEISHU_WEBHOOK_URL" ]; then
+            args+=(--post)
+          fi
+          python3 scripts/daily_founder_report.py "${args[@]}"

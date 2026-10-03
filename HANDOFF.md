@@ -205,6 +205,7 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
   - 事件：`feedback_opened` / `feedback_submitted` / `feedback_dismissed`（PostHog）。若 PostHog 项目里存在名为 **「AutoClip 应用内反馈」**（`FEEDBACK_SURVEY_NAME`，或 `VITE_PUBLIC_POSTHOG_FEEDBACK_SURVEY_ID` 指定 id）的 API 型 Survey（无 UI，第一题自由文本、第二题单选分类），会同时按 PostHog 约定发 `survey shown / sent / dismissed`，结果进 Surveys 面板。**Survey 尚未在 PostHog 后台创建**（不创建也不影响事件采集）。
   - 点「发送」不看匿名统计开关。句子进入 PostHog 的 `feedback_submitted`（带反馈编号）。每小时 `.github/workflows/ingest-feedback.yml` 把它写进 GitHub：故障开 Issue（`bug` / `needs-triage` / `from-app`），想法开 Ideas，其他开 Q&A。同一编号只写一次。邮箱不进公开帖。没有 PostHog key 或网络失败时，打开预填好的 GitHub 页面。收件需要仓库 secret `POSTHOG_PERSONAL_API_KEY`（`POSTHOG_PROJECT_ID` 可省略，默认 450605）。
 - **每周反馈周报**：`scripts/weekly_digest.py`（仅标准库）。合并 GitHub 新 issue（`gh`，或 `GH_TOKEN` REST）+ Discussions + PostHog `feedback_submitted`（`POSTHOG_PERSONAL_API_KEY` + `POSTHOG_PROJECT_ID`，HogQL）→ markdown。可选发到飞书群机器人 webhook（`FEISHU_WEBHOOK_URL`，可选 `FEISHU_WEBHOOK_SECRET`），这只是把周报推给维护者，不再从飞书表格读反馈。`--json` 给 agent 做主题归纳，`--post --message-file` 发归纳后的版本。Cursor Automation（每周一 09:00 跑该脚本并归纳主题）的草稿已备好，待在 Automations 编辑器里配 secrets 后保存。
+- **创始人三数日报**（2026-10-01）：每天只看 1.5 应用内故障、真实首次出片（对照示例）、1.5.0 Windows/Mac 日活。口径和“哪些旧图不能用”见 [docs/analytics/DAILY_FOUNDER_REPORT.md](docs/analytics/DAILY_FOUNDER_REPORT.md)。PostHog 看板 https://us.posthog.com/project/450605/dashboard/2158541 每天 00:30 UTC 发邮件。脚本 `scripts/daily_founder_report.py` 由 `.github/workflows/daily-founder-report.yml` 同一时间跑；有 `FEISHU_WEBHOOK_URL` 才发飞书。Sentry 事件量不并进这三个数。
 
 ### 社区看板（2026-09-21）
 
@@ -290,6 +291,7 @@ label 体系：默认 9 个 + 新增 `docker` / `windows` / `feature`。**置顶
 - 浏览器翻译守卫 / 错误边界：`frontend/src/utils/domTranslationGuard.ts`（`main.tsx` 挂载前调用）、`components/ErrorBoundary.tsx`；
   Web 模式设置端点回归：`backend/tests/test_settings_web_mode.py`
 - 周报：`scripts/weekly_digest.py`
+- 创始人日报：`scripts/daily_founder_report.py` · [口径](docs/analytics/DAILY_FOUNDER_REPORT.md)
 - 本地联调（后端随机端口时）：`BACKEND_URL=http://127.0.0.1:PORT npm run dev`（`vite.config.ts` 代理可被覆盖）
 - Docker：`Dockerfile`、`docker-compose.yml`（四服务共用 `autoclip:local`）、`docker-entrypoint.sh`
 - CI：`.github/workflows/ci.yml`（backend / frontend / docker-smoke）、`desktop-build.yml`（tag 触发）

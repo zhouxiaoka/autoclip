@@ -85,6 +85,7 @@ jobs:
         run: |
           python3 scripts/test_community_board.py
           python3 scripts/test_ingest_feedback.py
+          python3 scripts/test_daily_founder_report.py
 
       - name: Set up Node for source launcher
         uses: actions/setup-node@v4
