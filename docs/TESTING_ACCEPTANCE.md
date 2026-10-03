@@ -118,4 +118,4 @@ Desktop Build 发布前自动生成 `build-provenance.json`，记录源提交、
 - 候选构建：[Desktop Build](../.github/workflows/desktop-build.yml)
 - 验收校验器：[release_acceptance.py](../scripts/release_acceptance.py)，[Release Acceptance](../.github/workflows/release-acceptance.yml)
 - 转正/撤回：[Promote / Halt Release](../.github/workflows/promote-release.yml)
-- 本轮候选与缺口：[1.5.2 验收记录](RELEASE_1_5_2.md)；[1.5.1 历史候选](RELEASE_1_5_1.md)
+- 本轮候选与缺口：[1.5.3 验收记录](RELEASE_1_5_3.md)；历史候选：[1.5.2](RELEASE_1_5_2.md)、[1.5.1](RELEASE_1_5_1.md)
