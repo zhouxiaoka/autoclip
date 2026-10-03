@@ -342,3 +342,73 @@ def test_optional_speech_runtime_rejects_incompatible_transformers_major():
     assert not requirements["transformers"].specifier.contains("5.16.0")
     assert requirements["huggingface-hub"].specifier.contains("0.36.2")
     assert not requirements["huggingface-hub"].specifier.contains("1.5.0")
+
+
+@pytest.mark.parametrize("raises", [False, True])
+def test_windows_worker_keeps_bundled_openmp_directory_for_entire_inference(tmp_path, monkeypatch, raises):
+    from backend.services import sensevoice_worker as worker
+    optional = tmp_path / "runtime"
+    dll_dir = optional / "sklearn" / ".libs"
+    dll_dir.mkdir(parents=True)
+    (dll_dir / "vcomp140.dll").touch()
+    handles = []
+    class Handle:
+        def __init__(self, directory):
+            self.directory, self.closed = directory, False
+        def __enter__(self): return self
+        def __exit__(self, *_): self.closed = True
+    def add(directory):
+        handle = Handle(directory)
+        handles.append(handle)
+        return handle
+    monkeypatch.setattr(worker, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(worker.os, "add_dll_directory", add, raising=False)
+    class InferenceFailure(Exception): pass
+    try:
+        with worker.native_library_context(optional):
+            assert len(handles) == 1
+            assert Path(handles[0].directory) == dll_dir.resolve()
+            assert not handles[0].closed
+            if raises: raise InferenceFailure()
+    except InferenceFailure:
+        assert raises
+    assert handles[0].closed
+
+
+def test_windows_native_directory_does_not_search_outside_optional_runtime(tmp_path, monkeypatch):
+    from backend.services import sensevoice_worker as worker
+    optional = tmp_path / "runtime"
+    (optional / "sklearn").mkdir(parents=True)
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "vcomp140.dll").touch()
+    (optional / "sklearn" / ".libs").symlink_to(external, target_is_directory=True)
+    monkeypatch.setattr(worker, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(worker.os, "add_dll_directory", lambda *_: pytest.fail("external DLL path"), raising=False)
+    with worker.native_library_context(optional): pass
+
+
+def test_non_windows_worker_does_not_change_native_search_paths(tmp_path, monkeypatch):
+    from backend.services import sensevoice_worker as worker
+    monkeypatch.setattr(worker, "sys", SimpleNamespace(platform="darwin"))
+    monkeypatch.setattr(worker.os, "add_dll_directory", lambda *_: pytest.fail("non-Windows native path"), raising=False)
+    with worker.native_library_context(tmp_path / "not-installed"): pass
+
+
+def test_model_worker_enables_native_crash_trace_in_real_child(monkeypatch, tmp_path):
+    monkeypatch.delenv("PYTHONFAULTHANDLER", raising=False)
+    real_run = subprocess.run
+    def check_runtime_flag(command, **kwargs):
+        return real_run([sys.executable, "-S", "-c", "import faulthandler;raise SystemExit(0 if faulthandler.is_enabled() else 43)"], **kwargs)
+    monkeypatch.setattr(runtime.subprocess, "run", check_runtime_flag)
+    runtime.worker("prepare", tmp_path / "result.json", timeout=5)
+
+
+def test_worker_silent_crash_records_exit_code_locally(monkeypatch, tmp_path, caplog):
+    def failed(command, **kwargs):
+        return SimpleNamespace(returncode=3221225477)
+    monkeypatch.setattr(runtime.subprocess, "run", failed)
+    caplog.set_level("ERROR", logger=runtime.__name__)
+    with pytest.raises(RuntimeError, match="SenseVoice"):
+        runtime.worker("prepare", tmp_path / "result.json", timeout=5)
+    assert "exit=3221225477" in caplog.text
