@@ -3,7 +3,7 @@ import re
 import subprocess
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 
 from backend.services.studio import packaging_render as pr
 from backend.services.studio.models import Draft, Packaging, Scene
@@ -49,6 +49,38 @@ def test_tags_can_be_switched_off_and_burned_sources_have_no_caption_layer():
     assert not any('Tag' in line.split(',')[3] for line in _dialogues(doc))
     burned = pr.scene_ass(_packaging(cues=[], burned_captions=True), SCENES, 0)
     assert not any(line.split(',')[3] in ('Caption', 'Original') for line in _dialogues(burned))
+
+
+@pytest.mark.parametrize('style', ['classic', 'boxed'])
+@pytest.mark.parametrize('translated', [False, True])
+def test_burned_picture_is_not_obscured_by_tags_or_nameplates(tmp_path, style, translated):
+    """Decorative overlays must preserve every pixel of a hard-subtitled picture."""
+    source = tmp_path / 'hard-subtitled.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+                    'testsrc2=s=640x480:d=3:r=30', '-vf',
+                    'drawbox=x=0:y=ih*0.75:w=iw:h=ih*0.25:color=white:t=fill',
+                    '-pix_fmt', 'yuv420p', '-y', str(source)], check=True)
+    scene = Scene(id='a', label='a', start=0, end=3)
+    cues = [{'start': 0.2, 'end': 2.8, 'text': '翻译字幕放在画面之外，保留原视频的字幕和内容', 'original': ''}] if translated else []
+    packaging = _packaging(style=style, burned_captions=True, cues=cues,
+                           speakers=[{'at': 0.2, 'name': 'Sam Altman', 'role': 'OpenAI CEO'}],
+                           tags=[{'at': 0.5, 'text': '原字幕需要完整保留'}])
+    pictures = []
+    for name, config in [('plain', packaging.model_copy(update={'speakers': [], 'tags': []})),
+                         ('decorated', packaging)]:
+        ass = tmp_path / f'{name}.ass'
+        ass.write_text(pr.scene_ass(config, [scene], 0), encoding='utf-8')
+        draft = Draft(id=name, title='T', scenes=[scene], aspect='portrait',
+                      layout='window', packaging=config)
+        graph, label = pr.scene_video_graph(draft, scene, 0, ass, 1080, 1920)
+        frame = tmp_path / f'{name}.png'
+        subprocess.run(['ffmpeg', '-v', 'error', '-threads', '1', '-i', str(source),
+                        '-filter_complex_threads', '1', '-filter_complex', graph,
+                        '-map', f'[{label}]', '-ss', '1', '-frames:v', '1', '-y', str(frame)], check=True)
+        pictures.append(Image.open(frame).convert('RGB'))
+    difference = ImageChops.difference(*pictures)
+    assert difference.crop((0, pr.WIN_Y, pr.W, pr.WIN_Y + pr.WIN_H)).getbbox() is None
+    assert difference.crop((0, pr.WIN_Y + pr.WIN_H, pr.W, pr.H)).getbbox() is not None
 
 
 def test_podcast_captions_show_at_most_three_words_with_the_active_word_highlighted():
