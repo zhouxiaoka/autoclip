@@ -23,6 +23,15 @@ def studio_error_code(error: Exception) -> str:
     from backend.pipeline.failures import PipelineFailure
     if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:
         return error.code
+    # Text rewrite/translation call the SDK directly, without a pipeline wrapper.
+    # Recognize its typed failures; unrelated filesystem/programming errors stay unexpected.
+    try:
+        from openai import APIError
+    except ImportError:
+        APIError = ()
+    if isinstance(error, APIError):
+        from backend.pipeline.failures import model_call_error_code
+        return model_call_error_code(error)
     if isinstance(error, FileNotFoundError):
         return "missing_resource"
     if isinstance(error, ValueError):
