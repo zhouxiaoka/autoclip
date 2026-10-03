@@ -7,6 +7,15 @@
 
 ## [未发布]
 
+_（本周尚无改动）_
+
+## [1.5.4] - 2026-10-03
+
+> 内部验收候选，尚未打标签或正式发布；验收通过前不对外分发。
+
+- 汇总此前未转正补丁中的必要修复：升级后模型设置加载、限流和断网后的有限重试与恢复、数据库占用恢复、SenseVoice 准备与安装依赖、成片卡片竖版预览和紧凑排版。
+- 保留引用卡与幻灯片两侧内容，补齐百炼视觉模型能力，兼容视觉事件列表；关闭画面识别后不再通过自动封面或字幕判断发送素材画面。
+
 - 发布前增加双平台内部安装包验收；场景未通过或验收提交不匹配时，阻断公开候选构建，避免用连续补丁号代替内部回归。
 
 - 修复项目状态持续无法保存时，制作任务卡在等待或进行中、无法重试的问题；保留已有成片。
@@ -364,7 +373,8 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.3...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.4...HEAD
+- [1.5.4]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.3...v1.5.4
 - [1.5.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.2...v1.5.3
 - [1.5.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.1...v1.5.2
 - [1.5.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.0...v1.5.1
