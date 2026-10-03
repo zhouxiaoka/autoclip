@@ -1480,6 +1480,8 @@
   "访谈式 · 中英字幕": "Style interview · sous-titres chinois et anglais",
   "模板": "Modèle",
   "字幕、名牌和版式由模板按发布平台自动生成。": "Le modèle génère les sous-titres, les bandeaux de nom et la mise en page selon la plateforme choisie.",
+  "包装未能完整生成，已保留可用字幕": "L’habillage est incomplet ; les sous-titres disponibles sont conservés",
+  "包装未能完整生成，字幕暂不可用": "L’habillage est incomplet ; les sous-titres sont indisponibles pour le moment",
   "包装未能完整生成，已使用原字幕": "L’habillage est incomplet : les sous-titres d’origine sont utilisés",
   "整条视频顶部显示，第二行为强调色。": "Affiché en haut pendant toute la vidéo ; la seconde ligne prend la couleur d’accent.",
   "开头约 3 秒显示。": "Affiché environ 3 secondes au début.",

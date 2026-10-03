@@ -119,7 +119,9 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
             pages = timed_screens(text, start, end, 24) if len(text) > 600 or (end - start > 8 and width(text) > 48) else [(start, end, text, '')]
             for a, b, page, _ in pages:
                 a, b = max(a, scene['start']), min(b, scene['end'])
-                if b > a:
+                # Silence-snapped cuts can overlap only the last few milliseconds of the
+                # previous question. Do not replay that entire row in captions or translation.
+                if b - a >= min(.15, (end - start) * .2):
                     lines.append({'start': a, 'end': b, 'text': page.replace('\\N', ' ')})
     return lines
 
@@ -129,7 +131,8 @@ def _fallback_title(draft: dict[str, Any], language: str) -> list[str]:
     text = _clean(draft.get('hook') or draft.get('title') or '')
     # Width follows the title's own language: an English title on a Chinese platform is not cut at 12.
     own = 'zh' if source_language([text]) == 'zh' else 'en'
-    wrap = lambda t: textwrap.wrap(t, width=TITLE_LIMIT[own], break_long_words=True)  # noqa: E731
+    from backend.services.studio.caption_layout import lines_for
+    wrap = lambda t: lines_for(t, TITLE_LIMIT[own]) if own == 'zh' else textwrap.wrap(t, width=TITLE_LIMIT[own], break_long_words=True)  # noqa: E731
     # Keep whole clauses: two lines of the first clauses read better than a line cut mid-phrase.
     clauses = [c for c in re.split(r'(?<=[，。：；！？、,:;!?—])', text) if c.strip()]
     kept = ''
@@ -159,7 +162,8 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     captions = not burned or (burned_language or src) != audience
     translate = captions and src != audience
     base = {'template': template, 'audience_language': audience, 'source_language': src, 'burned_captions': burned}
-    # Never mix languages: a fallback shows only what is already in the audience's language.
+    # Foreign titles on English platforms stay hidden; a rejected translation later preserves
+    # readable source captions rather than silently removing the subtitle track.
     fallback_title = [line for line in _fallback_title(draft, audience) if not foreign_for(audience, line)]
     fallback = {**base, 'title_lines': fallback_title, 'fallback': True,
                 'cues': [] if not captions or translate else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
@@ -169,6 +173,7 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
         from backend.services.studio.intelligence import text_json as call
     payload = {'template': template, 'audience_language': audience, 'translate': translate,
                'title_limit': TITLE_LIMIT[audience], 'title_hint': draft.get('title', ''),
+               'line_count': len(lines), 'last_line_id': len(lines) - 1,
                'known_names': known_names[:300], 'lines': [{'id': i, 'text': l['text']} for i, l in enumerate(lines)]}
     # Short ASR rows make the segment contract easy to break once; a second try with the reason
     # usually fixes it, and losing the whole package (captions included) costs far more.
@@ -185,19 +190,40 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     if translate:
         # Last resort for foreign-language audiences: plain line-by-line translation, so the
         # version still gets captions in its own language instead of none (or the source's).
-        fallback['cues'] = _translated_rows(lines, audience, call)
+        fallback['cues'] = _translated_rows(lines, audience, call, keep_original=template == 'interview_zh' and not burned)
+        if not fallback['cues'] and not burned:
+            # A rejected model response must not turn an English interview into a captionless
+            # video. Keep readable source rows and disclose the loss of translation in the UI.
+            fallback['cues'] = source_cues(lines, audience)
     return Packaging.model_validate(fallback).model_dump()
 
 
-def _translated_rows(lines: list[dict[str, Any]], audience: str, call) -> list[dict[str, Any]]:
+def source_cues(lines: list[dict[str, Any]], audience: str) -> list[dict[str, Any]]:
+    return [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''}
+            for l in lines if not foreign_for(audience, l['text'])]
+
+
+def _translated_rows(lines: list[dict[str, Any]], audience: str, call, *, keep_original=False) -> list[dict[str, Any]]:
     language = {'zh': '简体中文', 'en': 'English'}[audience]
     try:
-        result = call(f'把 lines 逐条翻译成{language}，口语自然，保持条数与顺序，不添加事实。返回 {{"lines":["..."]}}',
-                      {'lines': [line['text'] for line in lines]})
+        result = call(f'把 lines 逐条翻译成{language}，口语自然，不合并、不遗漏，不添加事实。'
+                      '每个输入 id 必须恰好返回一次。返回 {"lines":[{"id":0,"text":"..."}]}',
+                      {'lines': [{'id': i, 'text': line['text']} for i, line in enumerate(lines)]})
         rows = (result or {}).get('lines') if isinstance(result, dict) else None
-        if not isinstance(rows, list) or len(rows) != len(lines) or not all(isinstance(r, str) and r.strip() for r in rows):
+        if not isinstance(rows, list) or len(rows) != len(lines):
             return []
-        return [{'start': l['start'], 'end': l['end'], 'text': _clean(r)[:600], 'original': ''} for l, r in zip(lines, rows)]
+        if all(isinstance(r, dict) for r in rows):
+            ids = [r.get('id') for r in rows]
+            if any(type(i) is not int for i in ids) or set(ids) != set(range(len(lines))):
+                return []
+            rows = [r.get('text') for r in sorted(rows, key=lambda r: r['id'])]
+        # Accept the earlier ordered-string contract too; never silently zip a short result.
+        if not all(isinstance(r, str) and _clean(r) and not foreign_for(audience, r) for r in rows):
+            return []
+        if audience == 'zh' and not any(CJK.search(r) for r in rows):
+            return []
+        return [{'start': l['start'], 'end': l['end'], 'text': _clean(r)[:600],
+                 'original': l['text'][:900] if keep_original else ''} for l, r in zip(lines, rows)]
     except Exception as error:  # noqa: BLE001
         logger.warning('Row translation failed: %s', type(error).__name__)
         return []
@@ -232,7 +258,7 @@ def _segments(raw, lines, translate):
                      'original': original[:900] if translate else '', 'lines': (start, end)})
         expected = end + 1
     if expected != len(lines):
-        raise ValueError('segments do not cover every line')
+        raise ValueError(f'segments do not cover every line: expected ids 0..{len(lines) - 1}, stopped at {expected - 1}')
     return cues
 
 
@@ -265,6 +291,8 @@ def _validated(result, lines, base, translate, burned, known_names, draft, avoid
     if captions if captions is not None else (not burned or translate):
         if translate:
             cues = _segments(result.get('segments'), lines, translate)  # invalid translation: whole package falls back
+            if audience == 'zh' and not any(CJK.search(cue['text']) for cue in cues):
+                raise ValueError('Chinese translation contains no Chinese captions')
             if any(foreign_for(audience, cue['text']) for cue in cues):
                 raise ValueError('English captions contain Chinese or Japanese text')
         else:

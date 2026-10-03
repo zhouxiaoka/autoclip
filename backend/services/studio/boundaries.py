@@ -56,6 +56,8 @@ def punctuated(rows: list[Row]) -> bool:
 
 def ends_sentence(rows: list[Row], index: int, has_punct: bool | None = None) -> bool:
     text = rows[index][2]
+    if index + 1 < len(rows) and rows[index + 1][2].lstrip().startswith('>>'):
+        return True  # an explicit speaker turn ends even an unpunctuated ASR answer
     if TERMINAL.search(text) or (JA_END.search(text) and not QUESTION.search(text)):
         return True
     if has_punct is None:
@@ -100,6 +102,21 @@ def _end_cut(rows: list[Row], last: int, end: float, has_punct: bool) -> tuple[i
 
 def _drop_trailing_question(rows: list[Row], i: int, offset: int, first: int, has_punct: bool, end_time: float) -> tuple[int, int]:
     """End before the next topic: a question near the end followed by only the opening of its answer."""
+    # A host often introduces the next question with declarative sentences. Looking only
+    # for a question mark near the selected end leaves that unfinished introduction behind.
+    for j in range(i, first, -1):
+        if rows[j][0] < end_time - TRAILING_QUESTION_SEC:
+            break
+        if not rows[j][2].lstrip().startswith('>>'):
+            continue
+        turn = []
+        for k in range(j, len(rows)):
+            if rows[k][0] > end_time + MAX_TAIL_SEC or (k > j and rows[k][2].lstrip().startswith('>>')):
+                break
+            turn.append(rows[k])
+        questions = [r for r in turn if QUESTION.search(r[2]) or re.search(r'[?？]', r[2])]
+        if questions and end_time - questions[-1][1] <= ANSWER_STUB_SEC:
+            return j - 1, len(rows[j - 1][2])
     for j in range(i, first, -1):
         if rows[j][1] < end_time - TRAILING_QUESTION_SEC:
             break
@@ -204,7 +221,8 @@ def _cut_window(rows: list[Row], row: int, offset: int, estimate: float) -> tupl
     s, e, text = rows[row]
     if offset >= len(text):
         nxt = rows[row + 1][0] if row + 1 < len(rows) else e + 0.9
-        return e - 0.4, max(e, nxt) + 0.5
+        next_turn = row + 1 < len(rows) and rows[row + 1][2].lstrip().startswith('>>')
+        return e - 0.4, max(e, nxt) + (0 if next_turn else .5)
     before, after = len(text[:offset].replace(' ', '')), len(text[offset:].replace(' ', ''))
     return max(s + before * MIN_CHAR_SEC, estimate - MATCH_SEC), min(e - after * MIN_CHAR_SEC, estimate + MATCH_SEC)
 
@@ -215,6 +233,8 @@ def _later_ends(rows: list[Row], row: int, offset: int, limit: float):
         if rows[i][0] > limit:
             return
         text = rows[i][2]
+        if i > row and text.lstrip().startswith('>>'):
+            return
         offsets = [o for o in _inner_ends(text) if i > row or o > offset]
         if ends_sentence(rows, i, None) and (i > row or offset < len(text)):
             offsets.append(len(text))
@@ -256,7 +276,7 @@ def _snap_end(rows: list[Row], row: int, offset: int, estimate: float, min_end: 
     for s, e in gaps:  # the passage ends in a long pause just after: keep it whole
         if pause[0] < s <= pause[0] + PARAGRAPH_REACH and e - s >= PARAGRAPH_SEC:
             rows_before = [r for r in rows[end_row:] if r[0] < s]
-            if rows_before and abs(rows_before[-1][1] - s) <= 0.6 and not any(QUESTION.search(r[2]) or re.search(r'[?？]', r[2]) for r in rows_before[1:]):
+            if rows_before and abs(rows_before[-1][1] - s) <= 0.6 and not any(r[2].lstrip().startswith('>>') or QUESTION.search(r[2]) or re.search(r'[?？]', r[2]) for r in rows_before[1:]):
                 pause = (s, e)
             break
     return pause[0] + min(0.3, (pause[1] - pause[0]) / 2)

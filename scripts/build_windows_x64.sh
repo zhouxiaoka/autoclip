@@ -72,6 +72,10 @@ build_frontend
 echo "==> Building Tauri application (this takes a few minutes)"
 (cd src-tauri && cargo tauri build --bundles nsis)
 
+# CI has Visual C++ installed; inspect the actual exe before it can hide missing DLLs.
+"$PORTABLE_PY" -B scripts/windows_desktop_crt.py --exe src-tauri/target/release/autoclip-desktop.exe \
+    --report src-tauri/target/release/desktop-crt.json
+
 APP_VERSION="$(app_version)"
 NSIS_DIR="src-tauri/target/release/bundle/nsis"
 INSTALLER="$(ls "$NSIS_DIR"/*.exe 2>/dev/null | head -1)"

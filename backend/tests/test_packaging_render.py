@@ -195,3 +195,19 @@ def test_interview_window_preserves_slide_edges_only_during_fit_shots(tmp_path, 
         assert right[1] > 200 and right[0] < 40, 'right edge of quote card was cropped'
     else:
         assert all(abs(channel - 128) < 5 for pixel in (left, right) for channel in pixel)
+
+
+def test_re_render_of_an_old_empty_fallback_recovers_source_without_mutating_draft(monkeypatch):
+    from backend.services.studio import render
+    from backend.services.studio.models import Draft
+    draft = Draft(id='old', title='Old output', scenes=[{'id': 's', 'start': 0, 'end': 3}],
+                  packaging=_packaging(cues=[], fallback=True, burned_captions=False))
+    monkeypatch.setattr(render, '_load_srt_entries', lambda _: [
+        {'start_time': '00:00:00,000', 'end_time': '00:00:03,000', 'text': 'The original source words.'}])
+    warnings = []
+    recovered = render.recover_empty_packaging('project', draft, warnings)
+    assert [c.text for c in recovered.packaging.cues] == ['The original source words.']
+    assert draft.packaging.cues == []
+    assert warnings == ['包装未能完整生成，已使用原字幕']
+    burned = draft.model_copy(update={'packaging': draft.packaging.model_copy(update={'burned_captions': True})})
+    assert render.recover_empty_packaging('project', burned, []) is burned
