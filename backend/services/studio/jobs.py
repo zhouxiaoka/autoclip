@@ -10,6 +10,7 @@ from pathlib import Path
 from backend.core import llm_usage
 from backend.services.studio import audio, intelligence, store
 from backend.services.studio.models import Draft, Preferences, Scene
+from backend.services.studio.project_completion import sync_project_completion
 from backend.services.studio.intelligence import analyze, make_drafts, VisionRequestError
 from backend.services.studio.render import render_draft
 
@@ -1065,6 +1066,7 @@ def _dispatch_pending_variants(project_id):
     # Failed dispatch prerequisites or a backup-only batch have no render callback to
     # settle them. Queued/running/preparing variants still keep generation open.
     store.change(project_id, lambda data: _finish_generation(data) if data.get('generation') and data.get('output_variants') else None)
+    sync_project_completion(project_id)
 
 
 SCORE_KEY = '_auto_score'
@@ -1135,6 +1137,7 @@ def _submit_on_demand(project_id, variant_id):
             target.pop('instance', None)
             _finish_generation(data)
         store.change(project_id, failed)
+        sync_project_completion(project_id)
         raise ValueError(message) from None
 
 
@@ -1178,6 +1181,7 @@ def _produce_on_demand(project_id, variant_id):
             _finish_generation(data)
         try:
             store.change(project_id, failed)
+            sync_project_completion(project_id)
         except Exception:  # noqa: BLE001 - never lose the failure silently inside the executor
             logger.exception('Could not record the on-demand failure')
 
@@ -1228,6 +1232,7 @@ def _sync_variant_status(project_id, job_id, status, error=None):
         if changed:
             _finish_generation(data)
     store.change(project_id, update)
+    sync_project_completion(project_id)
 
 
 def _finish_generation(data):
