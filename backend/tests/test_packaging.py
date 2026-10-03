@@ -262,3 +262,54 @@ def test_unchanged_english_response_cannot_be_claimed_as_a_chinese_translation()
     result = packaging.build_packaging(DRAFT, LINES, platform_strategy('douyin'), call=call)
     assert result['fallback'] and all(not c['original'] for c in result['cues'])
     assert [c['text'] for c in result['cues']] == [line['text'] for line in LINES]
+
+
+def test_person_names_from_mixed_title_survive_malformed_group_and_row_translation():
+    draft = {'title': 'Fiji离开后，我和Greg配合很好', 'hook': ''}
+    lines = [{'start': 0., 'end': 2., 'text': 'Fiji is very hard to replace.'},
+             {'start': 2., 'end': 4., 'text': 'Greg and I work well together.'}]
+    wrong = ['斐济很难被替代。', '我和格雷格配合很好。']
+    calls = []
+    def call(prompt, data):
+        calls.append(data)
+        if '逐条翻译' in prompt:
+            return {'lines': [{'id': i, 'text': text} for i, text in enumerate(wrong)]}
+        return good_response(title_lines=['斐济离开后', '新搭档配合很好'],
+                             segments=[{'from': i, 'to': i, 'text': text} for i, text in enumerate(wrong)])
+    result = packaging.build_packaging(draft, lines, platform_strategy('douyin'), call=call)
+    assert result['fallback'] and len(calls) == 3
+    assert [cue['text'] for cue in result['cues']] == [line['text'] for line in lines]
+    assert all(not cue['original'] for cue in result['cues'])
+    assert all(name in ''.join(result['title_lines']) for name in ('Fiji', 'Greg'))
+
+
+def test_correct_captions_keep_original_names_when_model_rewrites_title_entities():
+    draft = {'title': 'Fiji离开后，我和Greg配合很好', 'hook': ''}
+    lines = [{'start': 0., 'end': 2., 'text': 'Fiji and Greg worked here.'}]
+    result = packaging.build_packaging(draft, lines, platform_strategy('douyin'),
+        call=lambda *_: good_response(title_lines=['斐济离开后', '格雷格配合很好'],
+                                      segments=[{'from': 0, 'to': 0, 'text': 'Fiji 和 Greg 在这里共事。'}]))
+    assert not result['fallback'] and result['cues'][0]['text'] == 'Fiji 和 Greg 在这里共事。'
+    assert all(name in ''.join(result['title_lines']) for name in ('Fiji', 'Greg'))
+    assert '斐济' not in ''.join(result['title_lines'])
+
+
+def test_name_translation_can_recover_with_one_bounded_packaging_retry():
+    draft = {'title': 'Fiji离开后，我和Greg配合很好', 'hook': ''}
+    lines = [{'start': 0., 'end': 2., 'text': 'Fiji and Greg worked here.'}]
+    replies = iter([good_response(segments=[{'from': 0, 'to': 0, 'text': '斐济和格雷格在这里共事。'}]),
+                    good_response(title_lines=['Fiji离开后', '我和Greg配合很好'],
+                                  segments=[{'from': 0, 'to': 0, 'text': 'Fiji 和 Greg 在这里共事。'}])])
+    calls = []
+    result = packaging.build_packaging(draft, lines, platform_strategy('douyin'),
+                                      call=lambda _, data: calls.append(data) or next(replies))
+    assert len(calls) == 2 and not result['fallback']
+    assert result['cues'][0]['text'] == 'Fiji 和 Greg 在这里共事。'
+
+
+def test_title_term_is_not_inferred_from_an_unrelated_source_word():
+    result = packaging.build_packaging({'title': 'Greg谈合作', 'hook': ''},
+        [{'start': 0., 'end': 2., 'text': 'We are gregarious and cooperative.'}], platform_strategy('douyin'),
+        call=lambda *_: good_response(title_lines=['友善与合作'],
+                                      segments=[{'from': 0, 'to': 0, 'text': '我们很友善，也乐于合作。'}]))
+    assert not result['fallback'] and result['title_lines'] == ['友善与合作']
