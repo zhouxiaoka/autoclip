@@ -109,3 +109,29 @@ test('partial output reports its failed variant code and completed output clears
   assert.equal(JSON.stringify(finished).includes('private'),false)
  }
 })
+
+
+test('local render timeout retains a safe code for export and automatic partial output once',()=>{
+ const snapshot={
+  jobs:[{job_id:'private-render-job',status:'failed',error_code:'timeout',error:'private-command'}],
+  generation:{auto_start:true,status:'partial',error_code:'timeout'},
+  analysis:{status:'completed',phase:'rendering'},
+  output_variants:[
+   {draft_id:'kept',strategy_id:'douyin',status:'completed'},
+   {draft_id:'failed',strategy_id:'douyin',status:'failed',render_job_id:'private-render-job'},
+  ],
+ }
+ for(const [kind,id,event,outcome] of [
+  ['studio-export','private-render-job','studio_export_finished','failed'],
+  ['studio-generation','private-project','studio_generation_finished','partial'],
+ ]){
+  const {t,events}=tracker();t.watch(kind,id,'private-project')
+  const watch=t.list()[0]
+  t.observeStudio(watch,snapshot);t.observeStudio(watch,snapshot)
+  const finished=events.filter(e=>e.name===event)
+  assert.equal(finished.length,1)
+  assert.equal(finished[0].props.error_code,'timeout')
+  assert.equal(finished[0].props.outcome,outcome)
+  assert.equal(JSON.stringify(finished).includes('private'),false)
+ }
+})
