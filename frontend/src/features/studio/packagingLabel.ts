@@ -9,8 +9,10 @@ export function packagingLabel(packaging: Packaging): string {
 }
 
 /** Describe actual retained captions, including old drafts with an empty fallback. */
-export function packagingFallbackHint(packaging: Packaging, warnings: string[] = []): string {
+export function packagingFallbackHint(packaging: Packaging, warnings: string[] = [], subtitlesRequested = true): string {
   if (!packaging.fallback) return ''
-  return packaging.cues.length || packaging.burned_captions || warnings.includes('包装未能完整生成，已使用原字幕')
-    ? t('包装未能完整生成，已保留可用字幕') : t('包装未能完整生成，字幕暂不可用')
+  const hasCaptions = packaging.cues.length > 0 || packaging.burned_captions || warnings.includes('包装未能完整生成，已使用原字幕')
+  // Caption-free visual highlights use local title packaging normally; absent cues are expected.
+  if (!subtitlesRequested && !hasCaptions) return ''
+  return hasCaptions ? t('包装未能完整生成，已保留可用字幕') : t('包装未能完整生成，字幕暂不可用')
 }

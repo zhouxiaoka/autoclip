@@ -17,3 +17,13 @@ test('fallback hint distinguishes usable captions from an empty old package',()=
  assert.equal(m.exports.packagingFallbackHint({...pack,cues:[{text:'字幕',original:''}]}),'包装未能完整生成，已保留可用字幕')
  assert.equal(m.exports.packagingFallbackHint({...pack,fallback:false}),'')
 })
+
+test('caption-free visual highlights do not claim missing requested subtitles',()=>{
+ assert.equal(m.exports.packagingFallbackHint({...pack,source_language:'other'},[],false),'')
+ assert.equal(m.exports.packagingFallbackHint(pack,[],true),'包装未能完整生成，字幕暂不可用')
+})
+test('caption-free request still describes actually recovered or burned fallback captions',()=>{
+ assert.equal(m.exports.packagingFallbackHint(pack,['包装未能完整生成，已使用原字幕'],false),'包装未能完整生成，已保留可用字幕')
+ assert.equal(m.exports.packagingFallbackHint({...pack,burned_captions:true},[],false),'包装未能完整生成，已保留可用字幕')
+ assert.equal(m.exports.packagingFallbackHint({...pack,cues:[{text:'字幕',original:''}]},[],false),'包装未能完整生成，已保留可用字幕')
+})
