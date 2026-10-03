@@ -19,7 +19,7 @@
 
 <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
 
-**[데스크톱 받기](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [사례](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [빠른 시작](#빠른-시작) · [문서](#문서) · [이슈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+**[웹사이트](https://zhouxiaoka.github.io/autoclip_intro/)** · **[데스크톱 받기](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [사례](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [빠른 시작](#빠른-시작) · [문서](#문서) · [이슈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
 [简体中文](README.md) · [English](README-EN.md) · [日本語](README-JA.md) · **한국어** · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md)
 

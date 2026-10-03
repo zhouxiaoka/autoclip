@@ -19,7 +19,7 @@
 
 <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
 
-**[デスクトップ版を入手](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [事例](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [クイックスタート](#クイックスタート) · [ドキュメント](#ドキュメント) · [不具合報告](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+**[公式サイト](https://zhouxiaoka.github.io/autoclip_intro/)** · **[デスクトップ版を入手](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [事例](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [クイックスタート](#クイックスタート) · [ドキュメント](#ドキュメント) · [不具合報告](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
 [简体中文](README.md) · [English](README-EN.md) · **日本語** · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md)
 
