@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
@@ -23,6 +24,9 @@ def studio_error_code(error: Exception) -> str:
     from backend.pipeline.failures import PipelineFailure
     if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:
         return error.code
+    # Local render, frame sampling and optional-runtime preparation use typed subprocess timeouts.
+    if isinstance(error, subprocess.TimeoutExpired):
+        return "timeout"
     # Text rewrite/translation call the SDK directly, without a pipeline wrapper.
     # Recognize its typed failures; unrelated filesystem/programming errors stay unexpected.
     try:
