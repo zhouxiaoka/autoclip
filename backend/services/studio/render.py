@@ -45,6 +45,20 @@ def _needs_translation(language, hook, entries):
     return False
 
 
+def recover_empty_packaging(project_id, draft: Draft, warnings: list[str]) -> Draft:
+    pack = draft.packaging
+    if not (draft.subtitles and pack and pack.fallback and not pack.cues and not pack.burned_captions):
+        return draft
+    # Previously saved fallbacks have no cues. Re-rendering them must recover the source
+    # track too; changing only new packaging would leave upgraded projects captionless.
+    from backend.services.studio.packaging import draft_lines, source_cues
+    from backend.services.studio.models import Packaging
+    lines = draft_lines(_load_srt_entries(project_id), [scene.model_dump() for scene in draft.scenes])
+    cues = source_cues(lines, pack.audience_language)
+    warnings.append('包装未能完整生成，已使用原字幕' if cues else '包装未能完整生成，字幕暂不可用')
+    return draft.model_copy(update={'packaging': Packaging.model_validate({**pack.model_dump(), 'cues': cues})})
+
+
 def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
@@ -53,6 +67,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         raise ValueError('无法读取原视频尺寸')
     w, h = int(w) // 2 * 2, int(h) // 2 * 2
     warnings = []
+    draft = recover_empty_packaging(project_id, draft, warnings)
     keep_audio = draft.original_audio and audio.has_audio(video)
     if draft.original_audio and not keep_audio:
         warnings.append('原素材没有音轨，本次导出无声')

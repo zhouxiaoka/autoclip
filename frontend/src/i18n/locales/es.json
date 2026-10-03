@@ -1480,6 +1480,8 @@
   "访谈式 · 中英字幕": "Estilo entrevista · subtítulos en chino e inglés",
   "模板": "Plantilla",
   "字幕、名牌和版式由模板按发布平台自动生成。": "La plantilla genera los subtítulos, los rótulos de nombre y el diseño según la plataforma elegida.",
+  "包装未能完整生成，已保留可用字幕": "La edición está incompleta; se han conservado los subtítulos disponibles",
+  "包装未能完整生成，字幕暂不可用": "La edición está incompleta; los subtítulos no están disponibles por ahora",
   "包装未能完整生成，已使用原字幕": "La edición no se completó; se usan los subtítulos originales",
   "整条视频顶部显示，第二行为强调色。": "Se muestra arriba durante todo el video; la segunda línea usa el color de acento.",
   "开头约 3 秒显示。": "Se muestra unos 3 segundos al inicio.",
