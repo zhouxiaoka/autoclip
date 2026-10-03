@@ -106,12 +106,18 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         if not project:
             return None
         
+        from backend.services.studio.project_completion import sync_project_completion
+        sync_project_completion(project_id, self.db)
+
         # Get actual statistics from database
         from ..models.clip import Clip
         from ..models.collection import Collection
         from ..models.task import Task
         
         total_clips = self.db.query(Clip).filter(Clip.project_id == project_id).count()
+        completed_variants = (project.processing_config or {}).get('studio_completed_variant_count', 0)
+        if isinstance(completed_variants, int):
+            total_clips = max(total_clips, completed_variants)
         total_collections = self.db.query(Collection).filter(Collection.project_id == project_id).count()
         total_tasks = self.db.query(Task).filter(Task.project_id == project_id).count()
         
@@ -144,6 +150,12 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         filters: Optional[ProjectFilter] = None
     ) -> ProjectListResponse:
         """Get paginated projects with filtering."""
+        # Recover completed visual imports from older releases before filtering.
+        from backend.services.studio.project_completion import sync_project_completion
+        for active in self.repository.get_processing_projects():
+            if (active.processing_config or {}).get('smart_import'):
+                sync_project_completion(str(active.id), self.db)
+
         # Convert filters to dict
         filter_dict = {}
         if filters:
@@ -162,6 +174,9 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
             
             project_id = str(project.id)
             total_clips = self.db.query(Clip).filter(Clip.project_id == project_id).count()
+            completed_variants = (project.processing_config or {}).get('studio_completed_variant_count', 0)
+            if isinstance(completed_variants, int):
+                total_clips = max(total_clips, completed_variants)
             total_collections = self.db.query(Collection).filter(Collection.project_id == project_id).count()
             total_tasks = self.db.query(Task).filter(Task.project_id == project_id).count()
             
