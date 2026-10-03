@@ -36,6 +36,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const failed = variant.status === 'failed'
   const onDemand = variant.status === 'on_demand'
   const duration = job?.result?.duration ?? (draft ? draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) : 0)
+  const packagingHint = packaging ? packagingFallbackHint(packaging, job?.result?.warnings, draft?.subtitles !== false) : ''
   const productionDetails = [outroEnabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾'), packaging && packagingLabel(packaging), variant.framing && t(framingHints[variant.framing])].filter(Boolean).join(' · ')
   const downloaded = () => {
     if (!shouldAskRating(projectId)) return
@@ -47,7 +48,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
     <div className="ac-card-body">
       {!variant.post && <h2 className="ac-card-title">{draft?.title || t('正在准备成片')}</h2>}
       {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}
-      {packaging?.fallback && <p className="studio-output-hint">{packagingFallbackHint(packaging, job?.result?.warnings)}</p>}
+      {packagingHint && <p className="studio-output-hint">{packagingHint}</p>}
       <PublishKit projectId={projectId} variant={variant} analytics={analytics} coverStamp={coverStamp} onCoverChanged={() => setCoverStamp(Date.now())} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })}/>
       {failed && <p className="studio-output-hint studio-error">{t(variant.error || job?.error || '这条版本未完成，其他成片不受影响。')}</p>}
       <div className="ac-card-foot"><div className="ac-card-actions">
