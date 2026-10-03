@@ -269,22 +269,26 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
                 pop = '{\\fscx86\\fscy86\\t(0,110,\\fscx100\\fscy100)}' if j == 0 else ''
                 add_caption(2, w0, stop, 'Words', f'{{\\an2\\fs{size}\\pos(540,1400)}}{pop}' + ' '.join(parts))
 
-    plate_y = WIN_Y + WIN_H - 250 if interview else 1180
+    # A preserved hard-subtitled picture can contain text throughout its lower
+    # region. Keep decorations on the canvas, below translated captions, rather
+    # than covering the source's own subtitles or lower thirds.
+    plate_y = (WIN_Y + WIN_H + 370 if packaging.burned_captions else WIN_Y + WIN_H - 250) if interview else 1180
     for speaker in packaging.speakers:
         at = to_output(speaker.at, rows)
         if at is not None:
             _nameplate(out, at, speaker.name, speaker.role, plate_y)
 
     if interview and packaging.tags_enabled and style != 'spotlight':
+        tag_y = WIN_Y + WIN_H + 260 if packaging.burned_captions else WIN_Y + WIN_H - (130 if style == 'boxed' else 120)
         for tag in packaging.tags:
             at = to_output(tag.at, rows)
             if at is None:
                 continue
             if style == 'boxed':
-                out.add(4, at, at + 1.8, 'TagPill', f'{{\\an5\\pos(540,{WIN_Y + WIN_H - 130})\\fscx80\\fscy80\\t(0,160,\\fscx100\\fscy100)\\fad(120,200)}}{_esc(tag.text)}', carry=False)
+                out.add(4, at, at + 1.8, 'TagPill', f'{{\\an5\\pos(540,{tag_y})\\fscx80\\fscy80\\t(0,160,\\fscx100\\fscy100)\\fad(120,200)}}{_esc(tag.text)}', carry=False)
                 continue
             motion = '\\fscx50\\fscy50\\t(0,140,\\fscx112\\fscy112)\\t(140,260,\\fscx100\\fscy100)\\fad(0,240)'
-            out.add(4, at, at + 1.8, 'Tag', f'{{\\an5\\pos(540,{WIN_Y + WIN_H - 120}){motion}}}{_esc(tag.text)}', carry=False)
+            out.add(4, at, at + 1.8, 'Tag', f'{{\\an5\\pos(540,{tag_y}){motion}}}{_esc(tag.text)}', carry=False)
     return _header(look) + '\n'.join(out.lines) + '\n'
 
 
