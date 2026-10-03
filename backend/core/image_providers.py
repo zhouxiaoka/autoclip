@@ -16,6 +16,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
+from functools import wraps
 from typing import Any
 from urllib.parse import quote, urljoin, urlparse
 
@@ -40,6 +41,25 @@ class ImageError(RuntimeError):
     def __init__(self, message: str, *, unsupported_edit: bool = False):
         super().__init__(message)
         self.unsupported_edit = unsupported_edit
+
+
+def _image_transport_errors(function):
+    """Keep provider transport failures inside the local-cover recovery boundary."""
+    @wraps(function)
+    def call(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except requests.exceptions.RequestException as error:
+            if isinstance(error, (requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL,
+                                  requests.exceptions.MissingSchema)):
+                message = '封面服务接口地址无效，请检查模型设置中的 HTTP(S) 地址'
+            elif isinstance(error, requests.exceptions.Timeout):
+                message = '封面服务请求超时，请检查服务和网络后重试'
+            else:
+                message = '封面服务连接失败，请检查接口地址与网络后重试'
+            # Request exceptions can include credentials, URLs and response bodies.
+            raise ImageError(message) from None
+    return call
 
 
 @dataclass
@@ -516,6 +536,7 @@ def generate_fal(*, api_key: str, base_url: str, request: ImageRequest, session:
     return _download(http, url)
 
 
+@_image_transport_errors
 def generate_image(
     *,
     provider: str,
@@ -561,6 +582,7 @@ def default_ocr_model(provider: str, model: str = "", base_url: str = "") -> str
     return "gpt-4o-mini"
 
 
+@_image_transport_errors
 def read_image_text(
     *,
     provider: str,
