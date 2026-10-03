@@ -25,9 +25,12 @@ def root():
 
 
 def packages():
+    # FunASR leaves transformers unbounded; 5.x needs hub>=1, but this runtime
+    # intentionally uses hub<1. Keep the version verified with real speech.
     cpu = '+cpu' if sys.platform != 'darwin' else ''
     return ['funasr==1.3.14', f'torch==2.8.0{cpu}', f'torchaudio==2.8.0{cpu}',
-            'setuptools==80.9.0', 'huggingface-hub<1', 'numpy<3', 'editdistance==0.8.1']
+            'setuptools==80.9.0', 'huggingface-hub<1', 'transformers==4.57.6',
+            'numpy<3', 'editdistance==0.8.1']
 
 
 def status():
@@ -126,6 +129,13 @@ def operation():
                 fcntl.flock(handle, fcntl.LOCK_UN)
 
 
+def _log_subprocess_failure(stage, log):
+    # Dependency/model logs stay in the local diagnostic log, including timeouts.
+    log.seek(0, os.SEEK_END)
+    log.seek(max(0, log.tell() - 12000))
+    logger.error('SenseVoice %s failed: %s', stage, log.read().decode('utf-8', errors='replace'))
+
+
 def worker(action, result, audio=None, language='auto', timeout=None, deny_network=False):
     command = [sys.executable, '-S', str(Path(__file__).with_name('sensevoice_worker.py')),
                action, '--root', str(root()), '--result', str(result), '--language', language]
@@ -135,11 +145,14 @@ def worker(action, result, audio=None, language='auto', timeout=None, deny_netwo
         command += ['--deny-network']
     # Logs can contain private text. Keep them in the local diagnostic log only.
     with tempfile.TemporaryFile() as log:
-        completed = subprocess.run(command, stdout=log, stderr=log, timeout=timeout,
-                                   env={**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8'})
+        try:
+            completed = subprocess.run(command, stdout=log, stderr=log, timeout=timeout,
+                                       env={**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8'})
+        except subprocess.TimeoutExpired:
+            _log_subprocess_failure('worker timeout', log)
+            raise  # Preserve the transcription timeout classification.
         if completed.returncode:
-            log.seek(max(0, log.tell() - 12000))
-            logger.error('SenseVoice worker failed: %s', log.read().decode('utf-8', errors='replace'))
+            _log_subprocess_failure('worker', log)
             raise RuntimeError('SenseVoice 模型运行失败，请到「设置 → 转写」重新准备模型；仍失败时附上脱敏日志')
 
 
@@ -170,11 +183,14 @@ def _prepare():
             (root() / 'ready.json').unlink(missing_ok=True)
         shutil.rmtree(runtime, ignore_errors=True)
         with tempfile.TemporaryFile() as log:
-            completed = subprocess.run(command, stdout=log, stderr=log, timeout=1800,
-                                       env={**os.environ, 'PIP_PROGRESS_BAR': 'off', 'PYTHONIOENCODING': 'utf-8'})
+            try:
+                completed = subprocess.run(command, stdout=log, stderr=log, timeout=1800,
+                                           env={**os.environ, 'PIP_PROGRESS_BAR': 'off', 'PYTHONIOENCODING': 'utf-8'})
+            except subprocess.TimeoutExpired as exc:
+                _log_subprocess_failure('pip timeout', log)
+                raise RuntimeError('SenseVoice 组件安装失败，请检查网络和磁盘空间后重试') from exc
             if completed.returncode:
-                log.seek(max(0, log.tell() - 12000))
-                logger.error('SenseVoice pip failed: %s', log.read().decode('utf-8', errors='replace'))
+                _log_subprocess_failure('pip', log)
                 raise RuntimeError('SenseVoice 组件安装失败，请检查网络和磁盘空间后重试')
         _state('installing', '正在下载并检查 SenseVoiceSmall 模型')
         result = root() / 'prepare-result.json'

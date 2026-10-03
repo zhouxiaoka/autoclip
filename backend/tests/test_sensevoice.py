@@ -302,3 +302,43 @@ def test_sensevoice_error_does_not_point_to_whisper(monkeypatch):
     failure = failure_from_speech_error('SenseVoice 词与时间戳未完整配对')
     assert failure.code == 'subtitle_setup' and 'SenseVoice' in failure.hint
     assert 'Whisper' not in failure.user_message()
+
+
+@pytest.mark.parametrize("stage", ["pip", "worker"])
+def test_timeout_keeps_bounded_local_dependency_log_and_releases_state(tmp_path, monkeypatch, caplog, stage):
+    monkeypatch.setattr(runtime, "root", lambda: tmp_path / "sensevoice")
+    marker = "LAST_DEPENDENCY_PHASE_FOR_TIMEOUT_DIAGNOSIS"
+    child = [sys.executable, "-c", "import sys,time;print('DISCARDED_PREFIX'+'x'*16000+'" + marker + "',flush=True);time.sleep(60)"]
+    real_run = subprocess.run
+    calls = []
+    def bounded_child(command, **kwargs):
+        calls.append(command)
+        kwargs["timeout"] = 3  # Allow interpreter startup on cold Windows CI.
+        return real_run(child, **kwargs)
+    monkeypatch.setattr(runtime.subprocess, "run", bounded_child)
+    caplog.set_level("ERROR", logger=runtime.__name__)
+    expected = RuntimeError if stage == "pip" else subprocess.TimeoutExpired
+    with pytest.raises(expected):
+        if stage == "pip": runtime.prepare()
+        else: runtime.worker("prepare", tmp_path / "result.json", timeout=1800)
+    assert len(calls) == 1
+    assert marker in caplog.text
+    assert "DISCARDED_PREFIX" not in caplog.text
+    assert len(caplog.text) < 12500
+    assert not (runtime.root() / "ready.json").exists()
+    if stage == "pip":
+        state = json.loads((runtime.root() / "status.json").read_text(encoding="utf-8"))
+        assert state["status"] == "error"
+        assert "组件安装失败" in state["message"]
+    with runtime.operation():
+        pass
+
+
+def test_optional_speech_runtime_rejects_incompatible_transformers_major():
+    from packaging.requirements import Requirement
+    requirements = {Requirement(value).name.replace("_", "-"): Requirement(value) for value in runtime.packages()}
+    assert "transformers" in requirements, "Unbounded transitive dependency explores incompatible major releases"
+    assert requirements["transformers"].specifier.contains("4.57.6")
+    assert not requirements["transformers"].specifier.contains("5.16.0")
+    assert requirements["huggingface-hub"].specifier.contains("0.36.2")
+    assert not requirements["huggingface-hub"].specifier.contains("1.5.0")
