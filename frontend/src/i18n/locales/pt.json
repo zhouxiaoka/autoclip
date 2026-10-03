@@ -1523,5 +1523,6 @@
   "访谈式（人物窗口）": "Entrevista (janela do participante)",
   "播客式（满屏）": "Podcast (tela cheia)",
   "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Altera apenas o layout vertical. O idioma das legendas e publicações segue o da plataforma.",
-  "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "Não foi possível salvar o estado do projeto. Verifique o espaço em disco e as permissões da pasta e tente novamente. O original e os vídeos existentes foram preservados."
+  "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "Não foi possível salvar o estado do projeto. Verifique o espaço em disco e as permissões da pasta e tente novamente. O original e os vídeos existentes foram preservados.",
+  "无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。": "Não foi possível ler os dados de login do navegador. Feche o navegador e tente novamente, ou baixe vídeos públicos sem selecionar um navegador. A mídia original foi preservada."
 }
