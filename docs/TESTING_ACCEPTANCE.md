@@ -85,7 +85,7 @@ Privacy/telemetry 使用独立 validation 构建和隔离数据目录（前端 `
 
 ### 标签前的内部验收
 
-先在未打标签的候选分支准备已获授权的版本号，再运行双平台 Desktop Build。现有公开编号不能用于新内部构建，防止把另一份代码混入已公开版本的监控/包身份。Actions 下载目录应含两个平台的包和签名，以及 `internal-desktop-provenance` artifact 内的 `internal-build-provenance.json`。此时不创建 Release。
+先在未打标签的候选分支准备拟发布的版本号，再运行双平台 Desktop Build。现有公开编号不能用于新内部构建，防止把另一份代码混入已公开版本的监控/包身份。Actions 下载目录应含两个平台的包和签名，以及 `internal-desktop-provenance` artifact 内的 `internal-build-provenance.json`。此时不创建 Release。
 
 ```bash
 python scripts/internal_acceptance.py init \
