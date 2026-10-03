@@ -1523,5 +1523,6 @@
   "访谈式（人物窗口）": "Interview (speaker window)",
   "播客式（满屏）": "Podcast (full screen)",
   "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Changes portrait layout only. Caption and post language still follow the platform.",
-  "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "Project status could not be saved. Check disk space and folder permissions, then retry. Your source and existing videos are preserved."
+  "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "Project status could not be saved. Check disk space and folder permissions, then retry. Your source and existing videos are preserved.",
+  "无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。": "Browser sign-in information could not be read. Close the browser and retry, or download public videos without selecting a browser. Your source media is preserved."
 }
