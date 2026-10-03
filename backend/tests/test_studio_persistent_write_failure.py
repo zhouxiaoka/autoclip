@@ -51,7 +51,7 @@ def test_worker_does_not_remain_queued_and_can_retry_after_permission_returns(pr
     monkeypatch.setattr(jobs, 'render_draft', lambda *a, **k: {'path': 'retried.mp4'})
     monkeypatch.setattr(jobs, '_design_covers', lambda *a, **k: None)
     jobs._render('p1', object(), 'retry')
-    durable = json.loads(project.read_text())
+    durable = json.loads(project.read_text(encoding='utf-8'))
     assert durable['jobs'][0]['status'] == 'failed'
     assert durable['jobs'][-1]['status'] == 'completed'
     assert durable['jobs'][-1]['result']['path'] == 'retried.mp4'
@@ -144,3 +144,24 @@ def test_failure_patch_does_not_cross_data_roots(project, monkeypatch, tmp_path)
     store.directory('p1').mkdir(parents=True)
     store.write('p1', {'jobs': [{'job_id': 'active', 'status': 'queued', 'instance': store.INSTANCE}]})
     assert store.read('p1')['jobs'][0]['status'] == 'queued'
+
+
+def test_one_failed_render_does_not_finish_generation_with_another_worker_pending(project, monkeypatch):
+    def prepare(data):
+        data.update(generation={'status': 'rendering'}, analysis=None)
+        data['jobs'].append({'job_id': 'other', 'status': 'queued', 'instance': store.INSTANCE})
+        data['output_variants'] = [
+            {'id': 'active', 'status': 'queued', 'render_job_id': 'active'},
+            {'id': 'other', 'status': 'queued', 'render_job_id': 'other'},
+        ]
+    store.change('p1', prepare)
+    deny_state(monkeypatch)
+    with pytest.raises(PermissionError):
+        store.change('p1', lambda data: data['jobs'][0].update(status='running'))
+    live = store.read('p1')
+    assert live['output_variants'][0]['status'] == 'failed'
+    assert live['output_variants'][1]['status'] == 'queued'
+    assert live['jobs'][-1]['status'] == 'queued'
+    assert live['generation']['status'] == 'rendering'
+    assert 'finished_at' not in live['generation']
+    assert live['analysis'] is None

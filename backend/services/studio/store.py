@@ -71,10 +71,11 @@ def _apply_io_failure(path, data):
             settle = True
     if settle and data.get('generation'):
         settle_generation(data)
-        data['generation']['finished_at'] = patch['at']
-        data['analysis']['created_at'] = patch['at']
-        if data['analysis']['status'] == 'failed':
-            data['analysis']['error'] = IO_FAILURE_MESSAGE
+        if data['generation']['status'] in ('completed', 'partial', 'failed'):
+            data['generation']['finished_at'] = patch['at']
+            data['analysis']['created_at'] = patch['at']
+            if data['analysis']['status'] == 'failed':
+                data['analysis']['error'] = IO_FAILURE_MESSAGE
     analysis = data.get('analysis') or {}
     if 'analysis_run_id' in patch and analysis.get('status') == 'running' and analysis.get('run_id') == patch['analysis_run_id']:
         analysis.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected')

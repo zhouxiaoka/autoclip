@@ -44,7 +44,7 @@ def test_native_windows_external_reader_releases_and_render_state_commits(state_
         release.set()
         reader.join(2)
     assert observed and all(code in (5, 32, 33) for code in observed)
-    assert json.loads(state_path.read_text())['jobs'] == [{'job_id': 'j1', 'status': 'completed'}]
+    assert json.loads(state_path.read_text(encoding='utf-8'))['jobs'] == [{'job_id': 'j1', 'status': 'completed'}]
     assert not list(state_path.parent.glob('*.tmp'))
 
 
@@ -81,7 +81,7 @@ def test_native_windows_reader_leaves_failed_worker_retryable(state_path, monkey
     # the failed attempt is retained rather than silently repeated.
     store.change('p1', lambda data: data['jobs'].append(
         {'job_id': 'retry', 'status': 'queued', 'percent': 0, 'instance': store.INSTANCE}))
-    durable = json.loads(state_path.read_text())
+    durable = json.loads(state_path.read_text(encoding='utf-8'))
     assert durable['jobs'][0]['status'] == 'failed'
     assert durable['jobs'][1]['status'] == 'queued'
     assert not list(state_path.parent.glob('*.tmp'))
