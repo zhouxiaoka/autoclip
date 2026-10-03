@@ -1522,5 +1522,6 @@
   "按平台默认": "Par défaut pour la plateforme",
   "访谈式（人物窗口）": "Entretien (fenêtre de l’intervenant)",
   "播客式（满屏）": "Podcast (plein écran)",
-  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Seule la mise en page verticale change. La langue des sous-titres et du texte suit la plateforme."
+  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Seule la mise en page verticale change. La langue des sous-titres et du texte suit la plateforme.",
+  "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "Impossible d’enregistrer l’état du projet. Vérifiez l’espace disque et les permissions du dossier, puis réessayez. La source et les vidéos existantes sont conservées."
 }

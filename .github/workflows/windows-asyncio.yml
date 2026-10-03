@@ -8,6 +8,7 @@ on:
       - 'backend/tests/test_windows_asyncio.py'
       - 'backend/services/studio/store.py'
       - 'backend/tests/test_studio_store_recovery.py'
+      - 'backend/tests/test_studio_persistent_write_failure.py'
       - 'scripts/windows_tests/test_studio_store.py'
       - 'backend/app_factory.py'
       - 'scripts/lib/desktop_build_common.sh'
@@ -19,6 +20,7 @@ on:
       - 'backend/tests/test_windows_asyncio.py'
       - 'backend/services/studio/store.py'
       - 'backend/tests/test_studio_store_recovery.py'
+      - 'backend/tests/test_studio_persistent_write_failure.py'
       - 'scripts/windows_tests/test_studio_store.py'
       - 'backend/app_factory.py'
       - 'scripts/lib/desktop_build_common.sh'
@@ -45,7 +47,7 @@ jobs:
           AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-media-regression
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-media-regression
           SENTRY_DSN: ""
-        run: python -m pytest backend/tests/test_framing_concurrency.py backend/tests/test_sensevoice.py backend/tests/test_studio_store_recovery.py scripts/windows_tests/test_studio_store.py -q
+        run: python -m pytest backend/tests/test_framing_concurrency.py backend/tests/test_sensevoice.py backend/tests/test_studio_store_recovery.py backend/tests/test_studio_persistent_write_failure.py scripts/windows_tests/test_studio_store.py -q
       - name: Prepare FFmpeg for real interview-window rendering
         shell: pwsh
         run: |

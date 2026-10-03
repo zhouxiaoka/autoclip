@@ -1,5 +1,6 @@
 """Atomic project-local JSON storage; no migration of legacy clips/collections."""
 import json
+import logging
 import os
 import re
 import threading
@@ -13,6 +14,73 @@ from backend.core.path_utils import get_projects_directory
 
 lock = threading.RLock()
 INSTANCE = uuid.uuid4().hex
+
+logger = logging.getLogger(__name__)
+IO_FAILURE_MESSAGE = '无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留'
+# Content-free terminal patches, scoped to the exact project path. A worker
+# must remain retryable even when persisting its failure is also denied.
+_io_failures = {}
+
+
+def _changed_active_ids(previous, attempted, key, id_key, active):
+    latest = {row[id_key]: row for row in attempted.get(key, []) if row.get(id_key)}
+    return {row[id_key] for row in previous.get(key, [])
+            if row.get(id_key) in latest and row != latest[row[id_key]]
+            and (row.get('status') in active or latest[row[id_key]].get('status') in active)}
+
+
+def _remember_io_failure(path, previous, attempted):
+    failed_jobs = _changed_active_ids(previous, attempted, 'jobs', 'job_id', {'queued', 'running'})
+    failed_variants = _changed_active_ids(previous, attempted, 'output_variants', 'id', {'queued', 'running', 'preparing'})
+    latest_variants = {row['id']: row for row in attempted.get('output_variants', []) if row.get('id')}
+    failed_covers = set()
+    for variant in previous.get('output_variants', []):
+        cover = variant.get('cover_job') or {}
+        current = latest_variants.get(variant.get('id'), {}).get('cover_job') or {}
+        if variant.get('id') and cover.get('status') in ('queued', 'running') and cover != current:
+            failed_covers.add((variant['id'], cover.get('job_id')))
+    analysis = previous.get('analysis') or {}
+    failed_analysis = analysis.get('status') == 'running' and analysis != (attempted.get('analysis') or {})
+    if not (failed_jobs or failed_variants or failed_covers or failed_analysis):
+        return  # An unaccepted new operation must not create a phantom job.
+    patch = _io_failures.setdefault(path, {'jobs': set(), 'variants': set(), 'covers': set(), 'at': now()})
+    patch['jobs'].update(failed_jobs)
+    patch['variants'].update(failed_variants)
+    patch['covers'].update(failed_covers)
+    if failed_analysis:
+        patch['analysis_run_id'] = analysis.get('run_id')
+
+
+def _apply_io_failure(path, data):
+    patch = _io_failures.get(path)
+    if not patch:
+        return
+    for job in data['jobs']:
+        if job['job_id'] in patch['jobs'] and job.get('status') in ('queued', 'running'):
+            job.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected')
+    settle = False
+    for variant in data['output_variants']:
+        cover = variant.get('cover_job') or {}
+        if (variant.get('id'), cover.get('job_id')) in patch['covers'] and cover.get('status') in ('queued', 'running'):
+            cover.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected')
+        if (variant.get('id') in patch['variants'] or variant.get('render_job_id') in patch['jobs']) and variant.get('status') in ('queued', 'running', 'preparing'):
+            preparing = variant.get('status') == 'preparing'
+            variant.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected')
+            if preparing:
+                variant['needs_prepare'] = True
+            settle = True
+    if settle and data.get('generation'):
+        settle_generation(data)
+        data['generation']['finished_at'] = patch['at']
+        data['analysis']['created_at'] = patch['at']
+        if data['analysis']['status'] == 'failed':
+            data['analysis']['error'] = IO_FAILURE_MESSAGE
+    analysis = data.get('analysis') or {}
+    if 'analysis_run_id' in patch and analysis.get('status') == 'running' and analysis.get('run_id') == patch['analysis_run_id']:
+        analysis.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected')
+        generation = data.get('generation') or {}
+        if generation.get('status') in ('screening', 'production', 'rendering'):
+            generation.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected', finished_at=patch['at'])
 
 
 def _serialized(fn):
@@ -51,6 +119,7 @@ def directory(project_id: str) -> Path:
 def read(project_id: str, *, recover: bool = True):
     path = directory(project_id) / 'metadata' / 'studio.json'
     if not path.exists():
+        _io_failures.pop(path, None)
         return {'schema_version': 2, 'drafts': [], 'events': [], 'jobs': [], 'analysis': None, 'output_variants': []}
     data = json.loads(path.read_text(encoding='utf-8'))
     data.setdefault('schema_version', 1)
@@ -80,6 +149,7 @@ def read(project_id: str, *, recover: bool = True):
             settle = True
     if settle and data.get('generation'):
         settle_generation(data)
+    _apply_io_failure(path, data)
     analysis = data.get('analysis')
     if analysis and analysis['status'] == 'running' and analysis.get('instance') != INSTANCE:
         analysis.update(status='failed', error='服务已重启，请重试分析')
@@ -145,8 +215,15 @@ def write(project_id, data):
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
         _replace_state(tmp, path)
+        _io_failures.pop(path, None)
+    except OSError:
+        _remember_io_failure(path, previous, data)
+        raise
     finally:
-        tmp.unlink(missing_ok=True)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            logger.warning('Could not remove interrupted project-state temporary file')
 
 def change(project_id, mutate):
     with lock:
