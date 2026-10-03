@@ -132,3 +132,25 @@ def test_real_silence_detection_finds_the_pause(tmp_path):
                     '-f', 'lavfi', '-i', 'sine=f=300:d=2', '-filter_complex', '[0][1][2]concat=n=3:v=0:a=1', '-y', str(wav)], check=True)
     gaps = b.audio_silences(wav)(0, 4.8)
     assert any(1.9 < s < 2.1 and 2.7 < e < 2.9 for s, e in gaps)
+
+
+
+def test_speaker_turn_prevents_extending_a_finished_answer_into_the_next_question():
+    rows = [(0., 5., '>> We tried a lot of things'), (5., 10., 'and now we have one clear focus'),
+            (10.01, 14., '>> Looking at the leadership changes last year.'),
+            (14.01, 18., 'You changed responsibilities. Will this continue'),
+            (18.01, 22., 'or is this temporary?'), (22.01, 26., '>> It is going well.')]
+    assert b.sentence_bounds(rows, 0., 10.)[1] <= 10.01
+    assert b.sentence_bounds(rows, 0., 16.)[1] <= 10.01
+
+
+def test_a_new_speaker_statement_is_not_discarded_as_a_question():
+    rows = [(0., 6., '>> This is the first point.'), (6.01, 12., '>> I agree and here is another point.')]
+    assert b.sentence_bounds(rows, 0., 12.)[1] >= 12.
+
+
+def test_audio_pause_search_cannot_extend_across_the_next_speaker_turn():
+    rows = [(0., 5., '>> This is our answer.'), (5.01, 9., '>> Next question introduction.'),
+            (9.01, 13., 'What happens next?')]
+    pauses = lambda *_: [(9., 9.9)]
+    assert b.sentence_bounds(rows, 0., 5., pauses)[1] <= 5.01

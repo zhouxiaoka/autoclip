@@ -96,6 +96,9 @@ step("桌面应用启动" if args.launch_desktop else "桌面后端启动")
 if args.launch_desktop:
     apps = [p for p in resources.parent.glob('*.exe') if 'uninstall' not in p.name.lower()]
     assert len(apps) == 1, f"无法唯一定位安装后的应用: {apps}"
+    from windows_desktop_crt import verify
+    report['desktop_crt'] = verify(apps[0])
+    assert report['desktop_crt']['status'] == 'passed', report['desktop_crt']
     command = [str(apps[0])]
     report['desktop_executable'] = apps[0].name
 else:
