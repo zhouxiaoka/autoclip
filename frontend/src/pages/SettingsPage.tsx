@@ -125,11 +125,13 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   const [busy, setBusy] = useState(false)
   const [desktop, setDesktop] = useState(false)
   const [crashOn, setCrashOn] = useState(isCrashReportsEnabled())
+  const crashPreferenceChanged = useRef(false)
   const [version, setVersion] = useState('')
   const appUpdate = useAppUpdate()
 
   useEffect(() => {
-    (async () => {
+    let active = true
+    ;(async () => {
       try {
         const isDesktop = await isDesktopMode()
         setDesktop(isDesktop)
@@ -140,7 +142,8 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         }
         try {
           const privacy = await settingsApi.getPrivacy()
-          if (typeof privacy?.crash_reports === 'boolean') {
+          // A delayed snapshot must not undo a newer choice or an unmounted page.
+          if (active && !crashPreferenceChanged.current && typeof privacy?.crash_reports === 'boolean') {
             setCrashReportsEnabled(privacy.crash_reports)
             setCrashOn(privacy.crash_reports)
           }
@@ -151,6 +154,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         console.error('检查自动启动状态失败:', err)
       }
     })()
+    return () => { active = false }
   }, [])
 
   const toggleAutostart = async (enabled: boolean) => {
@@ -169,6 +173,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
   }
 
   const toggleCrashReports = async (enabled: boolean) => {
+    crashPreferenceChanged.current = true
     setCrashReportsEnabled(enabled)
     setCrashOn(enabled)
     try {
