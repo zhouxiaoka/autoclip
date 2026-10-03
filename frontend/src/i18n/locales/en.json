@@ -1522,5 +1522,6 @@
   "按平台默认": "Platform default",
   "访谈式（人物窗口）": "Interview (speaker window)",
   "播客式（满屏）": "Podcast (full screen)",
-  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Changes portrait layout only. Caption and post language still follow the platform."
+  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Changes portrait layout only. Caption and post language still follow the platform.",
+  "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "Project status could not be saved. Check disk space and folder permissions, then retry. Your source and existing videos are preserved."
 }

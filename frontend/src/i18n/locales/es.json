@@ -1522,5 +1522,6 @@
   "按平台默认": "Predeterminado de la plataforma",
   "访谈式（人物窗口）": "Entrevista (ventana del hablante)",
   "播客式（满屏）": "Pódcast (pantalla completa)",
-  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Solo cambia el diseño vertical. El idioma de subtítulos y publicaciones sigue el de la plataforma."
+  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Solo cambia el diseño vertical. El idioma de subtítulos y publicaciones sigue el de la plataforma.",
+  "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "No se pudo guardar el estado del proyecto. Comprueba el espacio en disco y los permisos de la carpeta y vuelve a intentarlo. El original y los vídeos existentes se conservan."
 }
