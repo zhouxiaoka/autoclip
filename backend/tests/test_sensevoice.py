@@ -327,7 +327,7 @@ def test_timeout_keeps_bounded_local_dependency_log_and_releases_state(tmp_path,
     assert len(caplog.text) < 12500
     assert not (runtime.root() / "ready.json").exists()
     if stage == "pip":
-        state = json.loads((runtime.root() / "status.json").read_text())
+        state = json.loads((runtime.root() / "status.json").read_text(encoding="utf-8"))
         assert state["status"] == "error"
         assert "组件安装失败" in state["message"]
     with runtime.operation():
