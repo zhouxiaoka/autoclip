@@ -7,6 +7,10 @@
 
 ## [未发布]
 
+_（本周尚无改动）_
+
+## [1.5.3] - 2026-10-03
+
 - 修复访谈式竖屏成片裁掉引用卡、幻灯片两侧文字的问题。
 - 百炼视觉模型缺少能力信息时可正确使用画面分析；未知模型能力可在设置中确认。
 - 关闭画面识别后，自动封面选帧和硬字幕语言判断不再向视觉服务发送素材画面。
@@ -356,7 +360,8 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.2...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.3...HEAD
+- [1.5.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.2...v1.5.3
 - [1.5.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.1...v1.5.2
 - [1.5.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.0...v1.5.1
 - [1.5.0]: https://github.com/zhouxiaoka/autoclip/compare/v1.4.0...v1.5.0
