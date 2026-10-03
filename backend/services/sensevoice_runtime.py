@@ -160,7 +160,14 @@ def worker(action, result, audio=None, language='auto', timeout=None, deny_netwo
 def _installation_command(runtime):
     command = [sys.executable, '-m', 'pip', 'install', '--target', str(runtime)]
     wheels = Path(__file__).with_name('runtime_wheels')
-    bundled = Path(sys.executable).resolve().is_relative_to(Path(__file__).resolve().parents[2] / 'python')
+    # The native Windows launcher can retain \\?\ on sys.executable while
+    # module paths have no prefix. Compare directories by filesystem identity.
+    try:
+        python_root = Path(__file__).resolve().parents[2] / 'python'
+        bundled = any(parent.samefile(python_root) for parent in Path(sys.executable).resolve().parents)
+    except OSError:
+        # A source checkout does not contain the packaged Python directory.
+        bundled = False
     binary = 'torch,torchaudio'
     if bundled:
         if not list(wheels.glob('editdistance-0.8.1-*.whl')):

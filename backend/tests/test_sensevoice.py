@@ -1,6 +1,7 @@
 """CTC timing, complete text, route selection, dependency isolation and locking."""
 import json
-from pathlib import Path
+import os
+from pathlib import Path, PureWindowsPath
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -156,6 +157,7 @@ def test_bundled_prepare_does_not_require_an_end_user_compiler(tmp_path, monkeyp
     wheels = service / 'runtime_wheels'
     wheels.mkdir(parents=True)
     (wheels / 'editdistance-0.8.1-cp313-cp313-test.whl').touch()
+    (resources / 'python').mkdir()
     monkeypatch.setattr(runtime, '__file__', str(service / 'sensevoice_runtime.py'))
     monkeypatch.setattr(runtime.sys, 'executable', str(resources / 'python' / 'python.exe'))
     monkeypatch.setattr(runtime, 'root', lambda: tmp_path / 'data')
@@ -180,8 +182,59 @@ def test_bundled_prepare_does_not_require_an_end_user_compiler(tmp_path, monkeyp
     assert runtime.status()['status'] == 'ready'
 
 
+@pytest.mark.parametrize('extended', [False, True])
+@pytest.mark.parametrize('layout', ['root', 'bin'])
+def test_bundled_install_uses_wheel_with_native_executable_path(tmp_path, monkeypatch, extended, layout):
+    resources = tmp_path / 'resources'
+    service = resources / 'backend' / 'services'
+    wheels = service / 'runtime_wheels'
+    wheels.mkdir(parents=True)
+    (wheels / 'editdistance-0.8.1-cp313-cp313-test.whl').touch()
+    executable = resources / 'python' / ('bin/python.exe' if layout == 'bin' else 'python.exe')
+    executable.parent.mkdir(parents=True)
+    executable.touch()
+    value = str(executable)
+    if extended:
+        if os.name == 'nt':
+            value = '\\\\?\\' + str(executable.resolve())
+        else:
+            # Reproduce the namespace retained by the native Windows launcher;
+            # Windows itself uses the real filesystem path in this regression.
+            value = str(PureWindowsPath(r'\\?\C:\portable\python') /
+                        ('bin/python.exe' if layout == 'bin' else 'python.exe'))
+            resolved = SimpleNamespace(parents=executable.resolve().parents,
+                                       is_relative_to=PureWindowsPath(value).is_relative_to)
+            native_path = SimpleNamespace(parent=executable.parent,
+                                          resolve=lambda: resolved)
+            monkeypatch.setattr(runtime, 'Path', lambda path: native_path if path == value else Path(path))
+    monkeypatch.setattr(runtime, '__file__', str(service / 'sensevoice_runtime.py'))
+    monkeypatch.setattr(runtime.sys, 'executable', value)
+    command = runtime._installation_command(tmp_path / 'data' / 'runtime')
+    assert command[0] == value
+    assert command[command.index('--find-links') + 1] == str(wheels)
+    assert 'editdistance' in command[command.index('--only-binary') + 1].split(',')
+
+
+@pytest.mark.parametrize('portable_directory_exists', [False, True])
+def test_source_interpreter_does_not_require_packaged_wheel(tmp_path, monkeypatch, portable_directory_exists):
+    resources = tmp_path / 'resources'
+    service = resources / 'backend' / 'services'
+    service.mkdir(parents=True)
+    if portable_directory_exists:
+        (resources / 'python').mkdir()
+    executable = tmp_path / 'source-python' / 'python.exe'
+    executable.parent.mkdir()
+    executable.touch()
+    monkeypatch.setattr(runtime, '__file__', str(service / 'sensevoice_runtime.py'))
+    monkeypatch.setattr(runtime.sys, 'executable', str(executable))
+    command = runtime._installation_command(tmp_path / 'data' / 'runtime')
+    assert '--find-links' not in command
+    assert 'editdistance' not in command[command.index('--only-binary') + 1].split(',')
+
+
 def test_missing_bundled_wheel_does_not_compile_or_destroy_ready_data(tmp_path, monkeypatch):
     service = tmp_path / 'resources' / 'backend' / 'services'
+    (tmp_path / 'resources' / 'python').mkdir(parents=True)
     monkeypatch.setattr(runtime, '__file__', str(service / 'sensevoice_runtime.py'))
     monkeypatch.setattr(runtime.sys, 'executable', str(tmp_path / 'resources' / 'python' / 'python.exe'))
     monkeypatch.setattr(runtime, 'root', lambda: tmp_path / 'data')
