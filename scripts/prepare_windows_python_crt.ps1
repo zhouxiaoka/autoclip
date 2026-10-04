@@ -2,6 +2,26 @@
 # machine-wide redistributable or copy DLLs from System32 / developer PATH.
 param([Parameter(Mandatory = $true)][string]$PythonDir)
 $ErrorActionPreference = 'Stop'
+
+function Test-OfficialMicrosoftCrtSignature($Signature) {
+    if (-not $Signature -or $Signature.Status -ne 'Valid' -or -not $Signature.SignerCertificate) {
+        return $false
+    }
+    # These two identities were verified on the official VS release CRTs.
+    # Keep Authenticode trust mandatory and require Microsoft's organization
+    # in the real certificate subject and issuer, not a manifest declaration.
+    $subject = $Signature.SignerCertificate.Subject
+    $issuer = $Signature.SignerCertificate.Issuer
+    if ($subject -notmatch '(^|,\s*)O=Microsoft Corporation(,|$)' -or
+        $issuer -notmatch '(^|,\s*)O=Microsoft Corporation(,|$)') { return $false }
+    return [bool](
+        ($subject -match '(^|,\s*)CN=Microsoft Corporation(,|$)' -and
+         $issuer -match '(^|,\s*)CN=Microsoft Code Signing PCA 2011(,|$)') -or
+        ($subject -match '(^|,\s*)CN=Microsoft Windows Software Compatibility Publisher(,|$)' -and
+         $issuer -match '(^|,\s*)CN=Microsoft Windows Third Party Component CA 2013(,|$)')
+    )
+}
+
 $destination = (Resolve-Path $PythonDir).Path
 if (-not (Test-Path (Join-Path $destination 'python.exe'))) { throw 'Portable python.exe missing' }
 $required = @('concrt140.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll',
@@ -50,9 +70,12 @@ foreach ($folder in $candidates) {
             $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($dll.FullName)
             $fileVersion = [version]::new($info.FileMajorPart, $info.FileMinorPart, $info.FileBuildPart, $info.FilePrivatePart)
             if ($fileVersion -ne $version) { throw 'Mixed Visual C++ runtime versions' }
-            $signature = Get-AuthenticodeSignature $dll.FullName
-            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(^|,\s*)CN=Microsoft Corporation(,|$)') {
-                throw "Official CRT signature invalid: $($dll.Name)"
+            $signature = Get-AuthenticodeSignature -LiteralPath $dll.FullName
+            if (-not (Test-OfficialMicrosoftCrtSignature $signature)) {
+                $subject = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { 'missing' }
+                $issuer = if ($signature.SignerCertificate) { $signature.SignerCertificate.Issuer } else { 'missing' }
+                $detail = $signature.StatusMessage.Replace($dll.FullName, $dll.Name)
+                throw "Official CRT signature rejected: $($dll.Name); status=$($signature.Status); subject=$subject; issuer=$issuer; detail=$detail"
             }
             # Check the PE machine before copying: x64 redist paths alone are insufficient.
             $bytes = [IO.File]::ReadAllBytes($dll.FullName)
@@ -62,7 +85,9 @@ foreach ($folder in $candidates) {
                 [BitConverter]::ToUInt16($bytes, $pe + 4) -ne 0x8664) { throw 'CRT DLL is not Windows x64' }
             @{ name = $dll.Name.ToLowerInvariant(); sha256 = (Get-FileHash $dll.FullName -Algorithm SHA256).Hash.ToLowerInvariant();
                size = $dll.Length; file_version = $fileVersion.ToString(); architecture = 'x64';
-               signature_status = 'Valid'; signer = 'Microsoft Corporation' }
+               signature_status = $signature.Status.ToString(); signer = 'Microsoft Corporation';
+               signer_subject = $signature.SignerCertificate.Subject; signer_issuer = $signature.SignerCertificate.Issuer;
+               signature_type = $signature.SignatureType.ToString() }
         }
     )
     $selected = @{ Folder = $folder; Version = $version }

@@ -65,7 +65,11 @@ def verify(directory: Path) -> dict:
     if not REQUIRED <= names:
         raise ValueError('incomplete application-local CRT set')
     for path in (directory / 'python.exe', *directory.glob('python3*.dll')):
-        checked.append({'name': path.name, 'imports': imported_dlls(path.read_bytes())})
+        # PBS python3.dll is the stable-ABI forwarding shim: its real ordinary
+        # and delayed import directories are both zero. Keep every other image
+        # on the default nonempty-import rule.
+        checked.append({'name': path.name, 'imports': imported_dlls(
+            path.read_bytes(), allow_no_imports=path.name.lower() == 'python3.dll')})
     for image in checked:
         missing = [name for name in image['imports']
                    if (name.startswith(('vcruntime', 'msvcp', 'concrt', 'vccorlib')) or name == 'msvcrtd.dll')

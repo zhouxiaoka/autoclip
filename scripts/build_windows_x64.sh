@@ -42,6 +42,8 @@ prepare_portable_python
 # Ship a complete signed Microsoft release set locally before importing wheels.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare_windows_python_crt.ps1 \
     -PythonDir "$PYTHON_DIR"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/test_prepare_windows_python_crt.ps1 \
+    -OfficialDll "$PYTHON_DIR/concrt140.dll" -Report build/python-crt-signature-tests.json
 "$PORTABLE_PY" -B scripts/windows_python_crt.py --python-dir "$PYTHON_DIR" \
     --report build/python-crt.json
 install_backend_deps
