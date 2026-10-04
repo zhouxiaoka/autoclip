@@ -1,15 +1,15 @@
-name: Temporary CRT preparation regression
+name: Temporary CRT default invocation regression
 on:
   workflow_dispatch:
     inputs:
       source_ref:
-        description: Original frozen candidate before signature repair
+        description: Frozen source whose production default invocation failed
         required: true
-        default: b49f353847c59ccdf8f13f06ca21385a77dd904e
+        default: 4f457f766319d95e140960b474ac096259311592
 permissions:
   contents: read
 jobs:
-  verify-crt:
+  verify-crt-default:
     runs-on: windows-latest
     timeout-minutes: 10
     env:
@@ -24,14 +24,14 @@ jobs:
         with:
           ref: ${{ inputs.source_ref }}
           path: source
-      - name: Actual original/fixed CRT preparation and negative checks
-        shell: powershell
-        run: |
-          & ./diagnostics/scripts/crt_preparation_regression.ps1 -SourceDir ./source -FixedScript ./diagnostics/scripts/prepare_windows_python_crt.fixed.ps1 -SignatureTests ./diagnostics/scripts/tests/test_prepare_windows_python_crt.ps1 -OutputDir "$env:RUNNER_TEMP/crt-preparation-evidence"
+      - name: Exact Git Bash production invocation before and after
+        shell: bash
+        working-directory: diagnostics
+        run: bash scripts/crt_default_invocation_regression.sh ../source
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: crt-preparation-regression
-          path: ${{ runner.temp }}/crt-preparation-evidence/*
+          name: crt-default-invocation-regression
+          path: ${{ runner.temp }}/crt-default-invocation-evidence/*
           if-no-files-found: error
           retention-days: 3
