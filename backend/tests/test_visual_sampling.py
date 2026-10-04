@@ -90,8 +90,8 @@ def test_automatic_screening_failure_stops_before_speech_production(client, sour
         raise error
     monkeypatch.setattr(intelligence, 'vision_call', fail)
     class Immediate:
-        def submit(self, fn, *args):
-            return fn(*args)
+        def submit(self, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
     monkeypatch.setattr(jobs, 'executor', Immediate())
     content_calls = []
     monkeypatch.setattr(jobs, 'run_content', lambda *a: content_calls.append(a) or [])
@@ -109,7 +109,7 @@ def test_automatic_screening_failure_stops_before_speech_production(client, sour
         'content_type': 'gameplay', 'goal': 'highlight', 'reason': 'Visible game action',
         'confidence': .8, 'duration': 30})
     submitted = []
-    monkeypatch.setattr(jobs, '_auto_generate', lambda project_id, plan: submitted.append((project_id, plan)))
+    monkeypatch.setattr(jobs, '_auto_generate', jobs._tracked('production')(lambda project_id, plan: submitted.append((project_id, plan))))
     retried = client.post('/studio/' + pid + '/analyze')
     assert retried.status_code == 200, retried.text
     assert submitted[0][0] == pid and submitted[0][1]['recommended_analysis'] == 'visual'
