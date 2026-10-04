@@ -67,6 +67,8 @@ os.environ.update(
 os.chdir(resources)
 sys.path.insert(0, str(resources))
 report = {"python": sys.version.split()[0], "resources": str(resources)}
+from windows_python_crt import verify as verify_python_crt
+report['python_crt'] = verify_python_crt(resources / 'python')
 
 
 def step(name):

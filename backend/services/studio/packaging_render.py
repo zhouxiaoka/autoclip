@@ -269,17 +269,17 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
                 pop = '{\\fscx86\\fscy86\\t(0,110,\\fscx100\\fscy100)}' if j == 0 else ''
                 add_caption(2, w0, stop, 'Words', f'{{\\an2\\fs{size}\\pos(540,1400)}}{pop}' + ' '.join(parts))
 
-    # A preserved hard-subtitled picture can contain text throughout its lower
-    # region. Keep decorations on the canvas, below translated captions, rather
-    # than covering the source's own subtitles or lower thirds.
-    plate_y = (WIN_Y + WIN_H + 370 if packaging.burned_captions else WIN_Y + WIN_H - 250) if interview else 1180
+    # Both preserved source captions and our two-line captions use the lower
+    # picture. Keep decorations below the caption/original lanes in every
+    # interview; a missed burned-caption detection must not cause an overlap.
+    plate_y = WIN_Y + WIN_H + 370 if interview else 1180
     for speaker in packaging.speakers:
         at = to_output(speaker.at, rows)
         if at is not None:
             _nameplate(out, at, speaker.name, speaker.role, plate_y)
 
     if interview and packaging.tags_enabled and style != 'spotlight':
-        tag_y = WIN_Y + WIN_H + 260 if packaging.burned_captions else WIN_Y + WIN_H - (130 if style == 'boxed' else 120)
+        tag_y = WIN_Y + WIN_H + 260
         for tag in packaging.tags:
             at = to_output(tag.at, rows)
             if at is None:

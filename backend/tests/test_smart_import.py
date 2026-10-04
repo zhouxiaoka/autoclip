@@ -103,6 +103,8 @@ def test_variant_terminal_states_preserve_partial_success(root):
 
 
 def test_auto_start_skips_ineligible_long_output_without_faking_duration(client, source, monkeypatch):
+    from backend.services.studio import analysis_preferences as ap
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto'))
     class ImmediateAuto:
         def submit(self, fn, *args):
             return fn(*args)
@@ -126,6 +128,8 @@ def test_auto_start_skips_ineligible_long_output_without_faking_duration(client,
 
 
 def test_auto_start_creates_platform_variants_without_confirmation(client, source, monkeypatch):
+    from backend.services.studio import analysis_preferences as ap
+    monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto'))
     class ImmediateAuto:
         def submit(self, fn, *args):
             return fn(*args)

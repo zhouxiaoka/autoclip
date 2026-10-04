@@ -294,6 +294,7 @@ jobs:
           path: |
             windows-smoke.json
             windows-sensevoice-installed.json
+            windows-whisper-installed.json
           if-no-files-found: ignore
 
   # Bind untagged installers to their source/run without creating a Release.

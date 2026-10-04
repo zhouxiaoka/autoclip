@@ -143,6 +143,21 @@ def test_complete_cached_model_can_be_resolved_without_hub(monkeypatch, tmp_path
     assert manager.get_model_info("base").status == ModelStatus.DOWNLOADED
 
 
+def test_retry_clears_failed_download_when_complete_snapshot_now_exists(monkeypatch, tmp_path):
+    import asyncio
+    manager = _manager(monkeypatch, tmp_path)
+    manager._download_state["base"] = {"status": "error", "progress": 0, "error": "connect timeout"}
+    _snapshot(tmp_path)
+    assert manager.get_model_info("base").status == ModelStatus.ERROR
+
+    assert asyncio.run(manager.download_model("base"))
+
+    info = manager.get_model_info("base")
+    assert info.status == ModelStatus.DOWNLOADED
+    assert info.error_message is None
+    assert manager.get_download_progress("base") == 100
+
+
 def test_cached_main_revision_is_preferred_and_large_alias_is_supported(monkeypatch, tmp_path):
     manager = _manager(monkeypatch, tmp_path)
     main = _snapshot(tmp_path, "main-revision")

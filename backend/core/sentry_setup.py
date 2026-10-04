@@ -204,9 +204,15 @@ def init_sentry(mode: str = "web") -> bool:
             LoggingIntegration(level=logging.ERROR, event_level=logging.ERROR),
         ],
     )
-    sentry_sdk.set_tag("runtime", "python")
-    sentry_sdk.set_tag("app_mode", mode)
-    sentry_sdk.set_tag("build_environment", os.getenv("AUTOCLIP_BUILD_ENVIRONMENT", "unknown"))
+    # Consent can first enable the SDK inside a settings request. Request-local
+    # tags disappear when that request exits; process identity belongs globally.
+    scope = sentry_sdk.get_global_scope()
+    scope.set_tag("runtime", "python")
+    scope.set_tag("app_mode", mode)
+    build_environment = os.getenv("AUTOCLIP_BUILD_ENVIRONMENT", "unknown")
+    scope.set_tag("build_environment", build_environment)
+    if build_environment == "validation":
+        scope.set_tag("telemetry_test", "true")
     _initialized = True
     logger.info("Sentry 已启用（backend）")
     return True
