@@ -58,6 +58,14 @@ def save(directory, manifest):
     (directory / 'windows-crt.json').write_text(json.dumps(manifest), encoding='utf-8-sig')
 
 
+def abi_shim():
+    data = bytearray(image())
+    struct.pack_into('<H', data, 0x96, 0x2022)  # IMAGE_FILE_DLL, as in actual PBS python3.dll.
+    for index in (1, 13):
+        struct.pack_into('<II', data, 0x98 + 112 + index * 8, 0, 0)
+    return data
+
+
 class WindowsPythonCRTTests(unittest.TestCase):
     def test_complete_official_set_and_dependency_closure(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -67,6 +75,69 @@ class WindowsPythonCRTTests(unittest.TestCase):
             self.assertEqual(result['status'], 'passed')
             self.assertEqual(result['version'], '14.44.35211.0')
             self.assertIn('msvcp140.dll', [row['name'] for row in result['files']])
+
+    def test_python_abi_shim_can_have_no_import_directories(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            bundle(root)
+            (root / 'python3.dll').write_bytes(abi_shim())
+            result = crt.verify(root)
+            shim = next(row for row in result['files'] if row['name'] == 'python3.dll')
+            self.assertEqual(shim['imports'], [])
+            self.assertEqual(result['status'], 'passed')
+
+    def test_empty_abi_shim_requires_real_dll_and_complete_bounded_pe(self):
+        modes = ('not-dll', 'x86', 'normal-rva-only', 'normal-size-only',
+                 'delay-rva-only', 'delay-size-only', 'empty-table', 'outside-table',
+                 'zero-sections', 'raw-outside-file', 'raw-overlaps-header',
+                 'oversized-headers', 'undersized-headers', 'truncated-optional',
+                 'truncated-section')
+        for mode in modes:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                bundle(root)
+                data = abi_shim()
+                optional = 0x98
+                if mode == 'not-dll':
+                    struct.pack_into('<H', data, 0x96, 0x22)
+                elif mode == 'x86':
+                    struct.pack_into('<H', data, 0x84, 0x14c)
+                elif mode.endswith('rva-only') or mode.endswith('size-only'):
+                    index = 13 if mode.startswith('delay') else 1
+                    rva, size = (0x1000, 0) if mode.endswith('rva-only') else (0, 40)
+                    struct.pack_into('<II', data, optional + 112 + index * 8, rva, size)
+                elif mode in ('empty-table', 'outside-table'):
+                    struct.pack_into('<II', data, optional + 120,
+                                     0x900000 if mode == 'outside-table' else 0x1000, 40)
+                    data[512:552] = bytes(40)
+                elif mode == 'zero-sections':
+                    struct.pack_into('<H', data, 0x86, 0)
+                elif mode in ('raw-outside-file', 'raw-overlaps-header'):
+                    struct.pack_into('<I', data, optional + 240 + 20,
+                                     4096 if mode == 'raw-outside-file' else 0)
+                elif mode in ('oversized-headers', 'undersized-headers'):
+                    struct.pack_into('<I', data, optional + 60,
+                                     4096 if mode == 'oversized-headers' else 400)
+                elif mode == 'truncated-optional':
+                    data = data[:optional + 239]
+                else:
+                    data = data[:optional + 240 + 39]
+                (root / 'python3.dll').write_bytes(data)
+                with self.assertRaises(ValueError):
+                    crt.verify(root)
+
+    def test_no_import_exception_is_limited_to_python3_dll(self):
+        for name in ('python.exe', 'python313.dll', 'msvcp140.dll'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                value = bundle(root)
+                data = bytes(abi_shim())
+                (root / name).write_bytes(data)
+                if name == 'msvcp140.dll':
+                    next(row for row in value['files'] if row['name'] == name)['sha256'] = hashlib.sha256(data).hexdigest()
+                    save(root, value)
+                with self.assertRaisesRegex(ValueError, 'no identifiable imported DLLs'):
+                    crt.verify(root)
 
     def test_old_package_with_vcruntime_but_no_msvcp_cannot_pass(self):
         with tempfile.TemporaryDirectory() as folder:
