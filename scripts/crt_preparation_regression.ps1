@@ -29,9 +29,31 @@ try {
 if (-not $beforeFailed) { throw "Original failure was not reproduced: $beforeError" }
 & $FixedScript -PythonDir $pythonDir *>&1 | Out-File (Join-Path $OutputDir 'after-fixed.log')
 Copy-Item (Join-Path $pythonDir 'windows-crt.json') (Join-Path $OutputDir 'windows-crt.json')
+& $SignatureTests -PrepareScript $FixedScript -OfficialDll (Join-Path $pythonDir 'concrt140.dll') -Report (Join-Path $OutputDir 'actual-signature-regressions.json')
+$probe = @'
+import hashlib,json,struct,sys
+from pathlib import Path
+sys.path.insert(0,str(Path(sys.argv[1])/'scripts'))
+from windows_desktop_crt import imported_dlls
+root=Path(sys.argv[2]); rows=[]
+names=[entry['name'] for entry in json.loads((root/'windows-crt.json').read_text(encoding='utf-8-sig'))['files']]
+for name in names:
+ data=(root/name).read_bytes(); pe=struct.unpack_from('<I',data,0x3c)[0]; optional=pe+24
+ row={'name':name,'sha256':hashlib.sha256(data).hexdigest(),'machine':hex(struct.unpack_from('<H',data,pe+4)[0])}
+ for index,label in [(1,'imports'),(13,'delay_imports')]:
+  rva,size=struct.unpack_from('<II',data,optional+112+index*8);row[label+'_rva']=rva;row[label+'_size']=size
+ try: row['parsed_imports']=imported_dlls(data)
+ except ValueError as e: row['parser_error']=str(e)
+ rows.append(row)
+Path(sys.argv[3]).write_text(json.dumps(rows,indent=2)+'\n')
+print(json.dumps(rows))
+'@
+$probeScript = Join-Path $env:RUNNER_TEMP 'crt-pe-directory-probe.py'
+$probe | Set-Content -LiteralPath $probeScript -Encoding utf8
+& (Join-Path $pythonDir 'python.exe') -B $probeScript $SourceDir $pythonDir (Join-Path $OutputDir 'actual-pe-imports.json')
+if ($LASTEXITCODE -ne 0) { throw 'Read-only actual PE directory probe failed' }
 & (Join-Path $pythonDir 'python.exe') -B (Join-Path $SourceDir 'scripts/windows_python_crt.py') --python-dir $pythonDir --report (Join-Path $OutputDir 'actual-crt-verify.json')
 if ($LASTEXITCODE -ne 0) { throw 'Actual bundled CRT version/hash/x64/import verification failed' }
-& $SignatureTests -PrepareScript $FixedScript -OfficialDll (Join-Path $pythonDir 'concrt140.dll') -Report (Join-Path $OutputDir 'actual-signature-regressions.json')
 & (Join-Path $pythonDir 'python.exe') -B -m unittest discover -s (Join-Path $SourceDir 'scripts/tests') -p 'test_windows_python_crt.py' *>&1 |
     Out-File (Join-Path $OutputDir 'python-crt-negative-tests.log')
 if ($LASTEXITCODE -ne 0) { throw 'CRT manifest negative regressions failed' }
