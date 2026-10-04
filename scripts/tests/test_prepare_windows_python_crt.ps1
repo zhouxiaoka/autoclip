@@ -1,9 +1,14 @@
 # Exercise the actual production signature predicate plus a real tampered DLL.
 # No system changes, test certificate installs or execution of mutated images.
-param([string]$PrepareScript = (Join-Path $PSScriptRoot '..\prepare_windows_python_crt.ps1'),
+param([string]$PrepareScript,
       [Parameter(Mandatory=$true)][string]$OfficialDll,
       [Parameter(Mandatory=$true)][string]$Report)
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 has no PSScriptRoot while parameter defaults bind.
+# Resolve the optional production script only after entering the script body.
+if (-not $PrepareScript) {
+    $PrepareScript = Join-Path $PSScriptRoot '..\prepare_windows_python_crt.ps1'
+}
 $tokens = $null
 $parseErrors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Resolve-Path $PrepareScript).Path, [ref]$tokens, [ref]$parseErrors)
