@@ -37,9 +37,16 @@ sys.path.insert(0,str(Path(sys.argv[1])/'scripts'))
 from windows_desktop_crt import imported_dlls
 root=Path(sys.argv[2]); rows=[]
 names=[entry['name'] for entry in json.loads((root/'windows-crt.json').read_text(encoding='utf-8-sig'))['files']]
+names += ['python.exe',*[path.name for path in root.glob('python3*.dll')]]
 for name in names:
  data=(root/name).read_bytes(); pe=struct.unpack_from('<I',data,0x3c)[0]; optional=pe+24
- row={'name':name,'sha256':hashlib.sha256(data).hexdigest(),'machine':hex(struct.unpack_from('<H',data,pe+4)[0])}
+ section_count=struct.unpack_from('<H',data,pe+6)[0]; optional_size=struct.unpack_from('<H',data,pe+20)[0]
+ header_size=struct.unpack_from('<I',data,optional+60)[0]
+ sections=[struct.unpack_from('<IIII',data,optional+optional_size+i*40+8) for i in range(section_count)]
+ row={'name':name,'sha256':hashlib.sha256(data).hexdigest(),'machine':hex(struct.unpack_from('<H',data,pe+4)[0]),
+      'characteristics':hex(struct.unpack_from('<H',data,pe+22)[0]),'section_count':section_count,
+      'header_size':header_size,'optional_size':optional_size,'file_size':len(data),
+      'raw_sections_in_bounds':all(not size or (raw>=header_size and raw+size<=len(data)) for _,_,size,raw in sections)}
  for index,label in [(1,'imports'),(13,'delay_imports')]:
   rva,size=struct.unpack_from('<II',data,optional+112+index*8);row[label+'_rva']=rva;row[label+'_size']=size
  try: row['parsed_imports']=imported_dlls(data)
