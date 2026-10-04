@@ -1,17 +1,21 @@
-name: Temporary CRT signature diagnosis
+name: Temporary CRT preparation regression
 on:
   workflow_dispatch:
     inputs:
       source_ref:
-        description: Frozen candidate source to inspect
+        description: Original frozen candidate before signature repair
         required: true
         default: b49f353847c59ccdf8f13f06ca21385a77dd904e
 permissions:
   contents: read
 jobs:
-  diagnose:
+  verify-crt:
     runs-on: windows-latest
     timeout-minutes: 10
+    env:
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,19 +24,14 @@ jobs:
         with:
           ref: ${{ inputs.source_ref }}
           path: source
-      - name: Inspect actual release CRT signatures in PowerShell 7
-        shell: pwsh
-        run: |
-          & ./diagnostics/scripts/crt_signature_diagnostic.ps1 -SourceDir ./source -OutputFile "$env:RUNNER_TEMP/crt-signatures-pwsh.json"
-      - name: Inspect same files in Windows PowerShell 5.1
-        if: always()
+      - name: Actual original/fixed CRT preparation and negative checks
         shell: powershell
         run: |
-          & ./diagnostics/scripts/crt_signature_diagnostic.ps1 -SourceDir ./source -OutputFile "$env:RUNNER_TEMP/crt-signatures-windows-powershell.json"
+          & ./diagnostics/scripts/crt_preparation_regression.ps1 -SourceDir ./source -FixedScript ./diagnostics/scripts/prepare_windows_python_crt.fixed.ps1 -SignatureTests ./diagnostics/scripts/tests/test_prepare_windows_python_crt.ps1 -OutputDir "$env:RUNNER_TEMP/crt-preparation-evidence"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: crt-signature-diagnostic
-          path: ${{ runner.temp }}/crt-signatures-*.json
+          name: crt-preparation-regression
+          path: ${{ runner.temp }}/crt-preparation-evidence/*
           if-no-files-found: error
           retention-days: 3
