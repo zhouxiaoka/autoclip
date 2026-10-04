@@ -30,10 +30,11 @@ if (-not $beforeFailed) { throw "Original failure was not reproduced: $beforeErr
 & $FixedScript -PythonDir $pythonDir *>&1 | Out-File (Join-Path $OutputDir 'after-fixed.log')
 Copy-Item (Join-Path $pythonDir 'windows-crt.json') (Join-Path $OutputDir 'windows-crt.json')
 & $SignatureTests -PrepareScript $FixedScript -OfficialDll (Join-Path $pythonDir 'concrt140.dll') -Report (Join-Path $OutputDir 'actual-signature-regressions.json')
+$verifierDir = Split-Path (Resolve-Path $FixedScript).Path -Parent
 $probe = @'
 import hashlib,json,struct,sys
 from pathlib import Path
-sys.path.insert(0,str(Path(sys.argv[1])/'scripts'))
+sys.path.insert(0,sys.argv[1])
 from windows_desktop_crt import imported_dlls
 root=Path(sys.argv[2]); rows=[]
 names=[entry['name'] for entry in json.loads((root/'windows-crt.json').read_text(encoding='utf-8-sig'))['files']]
@@ -49,7 +50,7 @@ for name in names:
       'raw_sections_in_bounds':all(not size or (raw>=header_size and raw+size<=len(data)) for _,_,size,raw in sections)}
  for index,label in [(1,'imports'),(13,'delay_imports')]:
   rva,size=struct.unpack_from('<II',data,optional+112+index*8);row[label+'_rva']=rva;row[label+'_size']=size
- try: row['parsed_imports']=imported_dlls(data)
+ try: row['parsed_imports']=imported_dlls(data,allow_no_imports=name.lower()=='python3.dll')
  except ValueError as e: row['parser_error']=str(e)
  rows.append(row)
 Path(sys.argv[3]).write_text(json.dumps(rows,indent=2)+'\n')
@@ -57,18 +58,37 @@ print(json.dumps(rows))
 '@
 $probeScript = Join-Path $env:RUNNER_TEMP 'crt-pe-directory-probe.py'
 $probe | Set-Content -LiteralPath $probeScript -Encoding utf8
-& (Join-Path $pythonDir 'python.exe') -B $probeScript $SourceDir $pythonDir (Join-Path $OutputDir 'actual-pe-imports.json')
+& (Join-Path $pythonDir 'python.exe') -B $probeScript $verifierDir $pythonDir (Join-Path $OutputDir 'actual-pe-imports.json')
 if ($LASTEXITCODE -ne 0) { throw 'Read-only actual PE directory probe failed' }
-& (Join-Path $pythonDir 'python.exe') -B (Join-Path $SourceDir 'scripts/windows_python_crt.py') --python-dir $pythonDir --report (Join-Path $OutputDir 'actual-crt-verify.json')
+& (Join-Path $pythonDir 'python.exe') -B (Join-Path $SourceDir 'scripts/windows_python_crt.py') --python-dir $pythonDir --report (Join-Path $OutputDir 'original-pe-verify.json')
+$originalVerifierFailed = $LASTEXITCODE -eq 1
+$originalVerification = Get-Content (Join-Path $OutputDir 'original-pe-verify.json') -Raw | ConvertFrom-Json
+if (-not $originalVerifierFailed -or $originalVerification.error -ne 'desktop image has no identifiable imported DLLs') {
+    throw 'Original Python ABI shim rejection was not reproduced'
+}
+& (Join-Path $pythonDir 'python.exe') -B (Join-Path $verifierDir 'windows_python_crt.py') --python-dir $pythonDir --report (Join-Path $OutputDir 'actual-crt-verify.json')
 if ($LASTEXITCODE -ne 0) { throw 'Actual bundled CRT version/hash/x64/import verification failed' }
-& (Join-Path $pythonDir 'python.exe') -B -m unittest discover -s (Join-Path $SourceDir 'scripts/tests') -p 'test_windows_python_crt.py' *>&1 |
-    Out-File (Join-Path $OutputDir 'python-crt-negative-tests.log')
-if ($LASTEXITCODE -ne 0) { throw 'CRT manifest negative regressions failed' }
+$testsDir = Join-Path $verifierDir 'tests'
+$testProcess = Start-Process -FilePath (Join-Path $pythonDir 'python.exe') -ArgumentList @('-B', '-m', 'unittest', 'discover', '-s', "`"$testsDir`"", '-p', '"test_windows*crt.py"') -Wait -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $OutputDir 'python-crt-negative-tests-stdout.log') -RedirectStandardError (Join-Path $OutputDir 'python-crt-negative-tests.log')
+if ($testProcess.ExitCode -ne 0) { throw 'CRT manifest negative regressions failed' }
+function NormalizedHash($Path) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [Text.Encoding]::UTF8.GetBytes([IO.File]::ReadAllText((Resolve-Path $Path).Path).Replace("`r`n", "`n"))
+        return [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
+    } finally { $sha.Dispose() }
+}
 @{schema_version=1; source_commit=(& git -C $SourceDir rev-parse HEAD);
   fixed_script_sha256=(Get-FileHash -LiteralPath $FixedScript -Algorithm SHA256).Hash.ToLowerInvariant();
   portable_archive_sha256=(Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant();
   portable_download_bytes=(Get-Item -LiteralPath $archive).Length;
   before_failed=$beforeFailed; before_error=$beforeError; after_passed=$true;
+  original_verifier_failed=$originalVerifierFailed;
+  fixed_script_lf_sha256=(NormalizedHash $FixedScript);
+  python_verifier_lf_sha256=(NormalizedHash (Join-Path $verifierDir 'windows_python_crt.py'));
+  pe_parser_lf_sha256=(NormalizedHash (Join-Path $verifierDir 'windows_desktop_crt.py'));
+  python_tests_lf_sha256=(NormalizedHash (Join-Path $verifierDir 'tests/test_windows_python_crt.py'));
+  signature_tests_lf_sha256=(NormalizedHash $SignatureTests);
   powershell=$PSVersionTable.PSVersion.ToString();
   scope='Official actual Windows CRT deployment/signature/PE/hash checks; not Whisper inference or native product acceptance'} |
     ConvertTo-Json -Depth 5 | Set-Content (Join-Path $OutputDir 'preparation-regression-summary.json') -Encoding utf8

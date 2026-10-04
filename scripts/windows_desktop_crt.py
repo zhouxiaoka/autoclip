@@ -15,7 +15,7 @@ import re
 import struct
 
 
-def imported_dlls(data: bytes) -> list[str]:
+def imported_dlls(data: bytes, *, allow_no_imports: bool = False) -> list[str]:
     def unpack(fmt, offset):
         if offset < 0 or offset + struct.calcsize(fmt) > len(data):
             raise ValueError('truncated PE image')
@@ -27,6 +27,7 @@ def imported_dlls(data: bytes) -> list[str]:
     if data[pe:pe + 4] != b'PE\0\0':
         raise ValueError('invalid PE signature')
     machine, section_count = unpack('<HH', pe + 4)
+    characteristics, = unpack('<H', pe + 22)
     if machine != 0x8664:
         raise ValueError('desktop image must be Windows x64')
     optional_size, = unpack('<H', pe + 20)
@@ -58,12 +59,14 @@ def imported_dlls(data: bytes) -> list[str]:
         raise ValueError('PE directory points outside file-backed data')
 
     imports = set()
+    has_import_directory = False
     for directory_index, descriptor_size in ((1, 20), (13, 32)):
         if directory_index >= directory_count:
             continue
         rva, size = unpack('<II', optional + 112 + directory_index * 8)
         if not rva and not size:
             continue
+        has_import_directory = True
         if not rva or size < descriptor_size:
             raise ValueError('invalid PE import directory')
         offset = file_offset(rva, size)
@@ -87,7 +90,16 @@ def imported_dlls(data: bytes) -> list[str]:
         if not terminated:
             raise ValueError('unterminated PE import descriptors')
     if not imports:
-        raise ValueError('desktop image has no identifiable imported DLLs')
+        if not (allow_no_imports and characteristics & 0x2000 and not has_import_directory):
+            raise ValueError('desktop image has no identifiable imported DLLs')
+        # An import-free data DLL never visits file_offset. Validate its complete
+        # headers/section table and raw section bounds explicitly instead.
+        section_end = optional + optional_size + section_count * 40
+        if not section_count or not (section_end <= header_size <= len(data)):
+            raise ValueError('invalid PE headers for import-free DLL')
+        if any(raw_size and (raw < header_size or raw + raw_size > len(data))
+               for _virtual, raw_size, raw in sections):
+            raise ValueError('import-free DLL section points outside file-backed data')
     return sorted(imports)
 
 
