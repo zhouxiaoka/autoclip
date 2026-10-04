@@ -83,6 +83,38 @@ def test_burned_picture_is_not_obscured_by_tags_or_nameplates(tmp_path, style, t
     assert difference.crop((0, pr.WIN_Y + pr.WIN_H, pr.W, pr.H)).getbbox() is not None
 
 
+@pytest.mark.parametrize('style', ['classic', 'boxed'])
+@pytest.mark.parametrize('original', ['', 'and Sora and we now have a very relentless focus on being this intelligent service'])
+def test_interview_decorations_preserve_our_two_line_captions(tmp_path, style, original):
+    """A normal subtitle-free source still needs room for generated caption lines."""
+    source = tmp_path / 'interview.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-threads', '1', '-f', 'lavfi', '-i',
+                    'color=c=0x6E7F8F:s=640x480:d=3:r=10', '-threads', '1',
+                    '-pix_fmt', 'yuv420p', '-y', str(source)], check=True)
+    scene = Scene(id='a', label='a', start=0, end=3)
+    packaging = _packaging(style=style, burned_captions=False,
+                           cues=[{'start': 0.2, 'end': 2.8, 'text': '现在只专注于面向用户的高度智能服务。', 'original': original}],
+                           speakers=[{'at': 0.2, 'name': 'Sam Altman', 'role': 'OpenAI CEO'}],
+                           tags=[{'at': 0.5, 'text': '唯一专注的事'}])
+    assert any('\\N' in line and ',Caption' in line for line in _dialogues(pr.scene_ass(packaging, [scene], 0)))
+    pictures = []
+    for name, config in [('plain', packaging.model_copy(update={'speakers': [], 'tags': []})),
+                         ('decorated', packaging)]:
+        ass = tmp_path / f'{name}.ass'
+        ass.write_text(pr.scene_ass(config, [scene], 0), encoding='utf-8')
+        draft = Draft(id=name, title='T', scenes=[scene], aspect='portrait', layout='window', packaging=config)
+        graph, label = pr.scene_video_graph(draft, scene, 0, ass, 1080, 1920)
+        frame = tmp_path / f'{name}.png'
+        subprocess.run(['ffmpeg', '-v', 'error', '-threads', '1', '-i', str(source),
+                        '-filter_complex_threads', '1', '-filter_complex', graph,
+                        '-map', f'[{label}]', '-ss', '1', '-frames:v', '1', '-threads', '1', '-y', str(frame)], check=True)
+        pictures.append(Image.open(frame).convert('RGB'))
+    difference = ImageChops.difference(*pictures)
+    # Include the picture, the two caption lines and the bilingual original below it.
+    assert difference.crop((0, pr.WIN_Y, pr.W, pr.WIN_Y + pr.WIN_H + 200)).getbbox() is None
+    assert difference.crop((0, pr.WIN_Y + pr.WIN_H + 200, pr.W, pr.H)).getbbox() is not None
+
+
 def test_podcast_captions_show_at_most_three_words_with_the_active_word_highlighted():
     podcast = _packaging(template='podcast_en', audience_language='en', title_lines=['Great investors'],
                          cues=[{'start': 10.0, 'end': 12.0, 'text': 'a good investor is a flight instructor', 'original': ''}], tags=[])

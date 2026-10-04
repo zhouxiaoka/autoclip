@@ -52,6 +52,8 @@ def recommend(video: Path, options: ImportOptions):
         result = Recommendation(content_type='other', goal='content', confidence=0,
             suggested_goals=suggested, reason=reason)
     elif not configured:
+        if options.auto_start and consent.analysis_mode == 'visual':
+            raise ValueError('视觉模型尚未配置，请在设置中配置后重试；原素材已保留')
         mode = 'fallback'
         result = Recommendation(content_type='other', goal='content',
             reason='尚未配置视觉模型，无法自动判断；请手动选择制作类型，或在设置中配置后重新识别。', confidence=0, suggested_goals=[])
@@ -79,6 +81,10 @@ def recommend(video: Path, options: ImportOptions):
                 response = intelligence.vision_call([{'type':'text', 'text':prompt}] + intelligence.sample(video, times, Path(tmp), width=384), config=config)
             result = Recommendation.model_validate(response)
         except (RuntimeError, ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
+            # An automatic run cannot turn failed visual evidence into guessed
+            # speech content. The import worker persists failure and offers retry.
+            if options.auto_start:
+                raise
             from backend.core.sentry_setup import capture_studio_exception
             capture_studio_exception(error, 'screening', analysis_mode='visual')
             if isinstance(error, intelligence.VisionRequestError):

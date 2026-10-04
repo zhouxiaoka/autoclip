@@ -8,12 +8,13 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from fractions import Fraction
 from http.client import HTTPException
 from typing import Literal
 from pydantic import Field
 from backend.services.studio.models import Scene, Draft, Preferences
 from backend.services.publish_export import _probe
-from backend.utils.ffmpeg_utils import get_ffmpeg_path
+from backend.utils.ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
 
 
 def visual_config():
@@ -148,12 +149,69 @@ def validate_scenes(scenes, duration):
     if sum(s.end - s.start for s in scenes) > 1800:
         raise ValueError('单条成片不能超过 30 分钟')
 
+def _sampling_bounds(video):
+    """Container/audio duration can outlive the last decodable video frame."""
+    try:
+        result = subprocess.run([get_ffprobe_path(), '-v', 'error', '-select_streams', 'v:0',
+            '-show_entries', 'stream=duration,avg_frame_rate:format=duration', '-of', 'json', str(video)],
+            check=True, capture_output=True, timeout=30)
+        info = json.loads(result.stdout)
+        stream = info['streams'][0]
+        try:
+            duration = float(stream.get('duration', ''))
+        except (ValueError, TypeError):
+            duration = float(info.get('format', {}).get('duration', 0))
+        if not math.isfinite(duration) or duration <= 0:
+            raise ValueError('Invalid video duration')
+        try:
+            fps = float(Fraction(stream.get('avg_frame_rate', '0/0')))
+            frame_seconds = 1 / fps if math.isfinite(fps) and fps > 0 else 1
+        except (ValueError, TypeError, ZeroDivisionError):
+            frame_seconds = 1
+        return max(0, duration - max(.1, frame_seconds) - .001), max(.5, frame_seconds)
+    except subprocess.TimeoutExpired:
+        raise VisionRequestError('timeout', '读取素材画面超时，请检查视频后重试；原素材已保留') from None
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError):
+        raise VisionRequestError('missing_resource', '无法读取素材画面，请检查视频后重试；原素材已保留') from None
+
+
 def sample(video, times, folder, width=640):
+    last_seek, retry_step = _sampling_bounds(video)
     content = []
     for index, timestamp in enumerate(times):
+        if not math.isfinite(timestamp) or timestamp < 0:
+            raise ValueError('画面采样时间必须在原素材范围内')
+        timestamp = min(timestamp, last_seek)
         frame = folder / f'{index}.jpg'
-        subprocess.run([get_ffmpeg_path(), '-v', 'error', '-ss', str(timestamp), '-i', str(video), '-frames:v', '1', '-vf', f'scale={width}:-2', '-y', str(frame)], check=True, capture_output=True, timeout=30)
-        content.extend([{'type': 'text', 'text': f'原片时间 {timestamp:.2f} 秒'}, {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(frame.read_bytes()).decode()}}])
+        # VFR or rounded metadata may still put a tail seek past the final frame.
+        # Retry that one frame once earlier; never send a partial/stale frame set.
+        seeks = [timestamp]
+        if timestamp >= last_seek - retry_step and timestamp > 0:
+            seeks.append(max(0, timestamp - retry_step))
+        for seek in seeks:
+            try:
+                frame.unlink(missing_ok=True)
+                subprocess.run([get_ffmpeg_path(), '-v', 'error', '-threads', '1', '-ss', str(seek),
+                    '-i', str(video), '-frames:v', '1', '-vf', f'scale={width}:-2',
+                    '-threads', '1', '-filter_threads', '1', '-y', str(frame)],
+                    check=True, capture_output=True, timeout=30)
+                image = frame.read_bytes()
+                if not image:
+                    raise FileNotFoundError('Empty sampled frame')
+                timestamp = seek
+                break
+            except subprocess.TimeoutExpired:
+                raise VisionRequestError('timeout', '读取素材画面超时，请检查视频后重试；原素材已保留') from None
+            except (OSError, subprocess.SubprocessError):
+                try:
+                    frame.unlink(missing_ok=True)
+                except OSError:
+                    pass  # A denied output directory must still produce a safe diagnostic.
+        else:
+            raise VisionRequestError('missing_resource', '无法读取素材画面，请检查视频后重试；原素材已保留') from None
+        content.extend([{'type': 'text', 'text': f'原片时间 {timestamp:.2f} 秒'}, {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(image).decode()}}])
+    if not content:
+        raise VisionRequestError('missing_resource', '没有可用素材画面，请检查视频后重试；原素材已保留')
     return content
 
 

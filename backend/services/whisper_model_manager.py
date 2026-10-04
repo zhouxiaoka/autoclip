@@ -181,6 +181,14 @@ class WhisperModelManager:
         if not whisper_runtime.is_installed():
             raise RuntimeError("请先安装 Whisper 运行时")
         if self._is_downloaded(model_name):
+            # A complete resumed cache must recover a previous download error
+            # immediately, without requiring an application restart.
+            with self._lock:
+                st = self._download_state.get(model_name, {})
+                if st.get("status") != "downloading":
+                    self._download_state[model_name] = {
+                        "status": "downloaded", "progress": 100, "error": None,
+                    }
             return True
         with self._lock:
             st = self._download_state.get(model_name)
