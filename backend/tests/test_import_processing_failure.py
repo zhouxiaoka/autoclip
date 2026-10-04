@@ -356,7 +356,7 @@ def test_import_blank_whisper_result_is_transcription_empty(tmp_path, monkeypatc
     module = types.ModuleType("faster_whisper")
 
     class FakeModel:
-        def __init__(self, model, device="auto", compute_type="int8", download_root=None):
+        def __init__(self, model, device="auto", compute_type="int8", download_root=None, **kwargs):
             pass
 
         def transcribe(self, path, language=None, vad_filter=False, word_timestamps=False):

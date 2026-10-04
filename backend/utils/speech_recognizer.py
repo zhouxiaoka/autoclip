@@ -488,6 +488,8 @@ class SpeechRecognizer:
                     device=use_device,
                     compute_type=use_compute,
                     download_root=models_dir,
+                    cpu_threads=min(2, os.cpu_count() or 1),
+                    num_workers=1,
                 )
 
             audio_input = str(video_path)
