@@ -1,9 +1,10 @@
 /**
  * Calm Premium app primitives — see DESIGN.md → App Layer.
- * Tiny, dependency-free building blocks used by the redone screens.
+ * Small building blocks used by the redone screens.
  */
 import React from 'react'
 import { createPortal } from 'react-dom'
+import { ConfigProvider } from 'antd'
 import './ac.css'
 
 /* ---------- Segmented ---------- */
@@ -141,15 +142,18 @@ export const Dialog: React.FC<{
   if (!open || typeof document === 'undefined') return null
   // Portal to <body>: callers often live inside transformed / hover-lifted cards,
   // which would otherwise trap the fixed backdrop in their stacking context.
+  // AntD popups also portal to body; keep this dialog's menus above its 1200 backdrop.
   return createPortal(
-    <div className="ac-dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div ref={dialogRef} className="ac-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
-        <h3 id={titleId}>{title}</h3>
-        {description && <p>{description}</p>}
-        <div style={{ marginTop: 18 }}>{children}</div>
-        {footer && <div className="ac-dialog-foot">{footer}</div>}
+    <ConfigProvider theme={{ token: { zIndexPopupBase: 1300 } }}>
+      <div className="ac-dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+        <div ref={dialogRef} className="ac-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
+          <h3 id={titleId}>{title}</h3>
+          {description && <p>{description}</p>}
+          <div style={{ marginTop: 18 }}>{children}</div>
+          {footer && <div className="ac-dialog-foot">{footer}</div>}
+        </div>
       </div>
-    </div>,
+    </ConfigProvider>,
     document.body
   )
 }
