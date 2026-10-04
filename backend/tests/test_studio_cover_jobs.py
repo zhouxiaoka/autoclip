@@ -10,7 +10,10 @@ from backend.tests.test_studio import client, root, source  # noqa: F401 - share
 
 
 @pytest.fixture
-def cover_state(monkeypatch):
+def cover_state(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    (tmp_path / 'privacy.json').write_text('{"crash_reports":false}')
     state = {'drafts': [], 'jobs': [], 'output_variants': [
         {'id': 'v', 'strategy_id': 'xiaohongshu', 'render_job_id': 'render', 'cover': 'design'}]}
     monkeypatch.setattr(store, 'read', lambda _: deepcopy(state))
@@ -21,7 +24,7 @@ def cover_state(monkeypatch):
 
 def test_double_click_and_automatic_request_share_one_paid_task(cover_state, monkeypatch):
     submitted = []
-    monkeypatch.setattr(jobs.cover_executor, 'submit', lambda *args: submitted.append(args))
+    monkeypatch.setattr(jobs.cover_executor, 'submit', lambda *args, **kwargs: submitted.append(args))
     first = jobs.request_ai_cover('p', 'v')
     assert jobs.request_ai_cover('p', 'v') == first
     assert len(submitted) == 1 and first['status'] == 'queued'
@@ -31,7 +34,7 @@ def test_double_click_and_automatic_request_share_one_paid_task(cover_state, mon
 @pytest.mark.parametrize('made', [True, False])
 def test_the_task_uses_the_exact_platform_and_reports_failure_without_losing_the_cover(cover_state, monkeypatch, made):
     received = []
-    monkeypatch.setattr(jobs.cover_executor, 'submit', lambda fn, *args: fn(*args))
+    monkeypatch.setattr(jobs.cover_executor, 'submit', lambda fn, *args, **kwargs: fn(*args, **kwargs))
     monkeypatch.setattr(publish_kit, 'ai_cover', lambda *args: received.append(args) or made)
     result = jobs.request_ai_cover('p', 'v')
     assert received == [('p', 'render', 'xiaohongshu')]
@@ -40,12 +43,12 @@ def test_the_task_uses_the_exact_platform_and_reports_failure_without_losing_the
 
 
 def test_dispatch_failure_preserves_the_video_and_allows_retry(cover_state, monkeypatch):
-    def rejected(*_):
+    def rejected(*_, **kwargs):
         raise RuntimeError('shutting down')
     monkeypatch.setattr(jobs.cover_executor, 'submit', rejected)
     result = jobs.request_ai_cover('p', 'v')
     assert result['status'] == 'failed' and cover_state['output_variants'][0]['cover'] == 'design'
-    monkeypatch.setattr(jobs.cover_executor, 'submit', lambda *_: None)
+    monkeypatch.setattr(jobs.cover_executor, 'submit', lambda *_, **kwargs: None)
     assert jobs.request_ai_cover('p', 'v')['job_id'] != result['job_id']
 
 
@@ -87,7 +90,7 @@ def test_card_api_returns_and_polls_the_same_platform_cover_task(client, monkeyp
     store.write('p1', _completed_output())
     monkeypatch.setattr(cover, 'load_config', lambda: SimpleNamespace(enabled=True, configured=True, allow_send_frame=True))
     submitted = []
-    monkeypatch.setattr(jobs.cover_executor, 'submit', lambda *args: submitted.append(args))
+    monkeypatch.setattr(jobs.cover_executor, 'submit', lambda *args, **kwargs: submitted.append(args))
     started = client.post('/studio/p1/output-variants/v/cover/ai')
     assert started.status_code == 200
     assert client.post('/studio/p1/output-variants/v/cover/ai').json() == started.json()

@@ -50,7 +50,7 @@ def test_subtitle_highlight_confirmation_reaches_shared_editor(client,source,mon
     monkeypatch.setattr(intelligence,'vision_call',lambda *a,**k:pytest.fail('vision forbidden'))
     monkeypatch.setattr(jobs,'run_content',lambda *a:[clip(0,1)])
     class Immediate:
-        def submit(self,fn,*args): fn(*args)
+        def submit(self, fn, *args, **kwargs): fn(*args, **kwargs)
     monkeypatch.setattr(jobs,'executor',Immediate())
     imported=client.post('/studio/import',files={'video':('test.mp4',source.read_bytes(),'video/mp4')})
     assert imported.status_code==200

@@ -32,6 +32,29 @@ def sync_project_completion(project_id, db=None):
                 return False
             if not isinstance(drafts, list) or any(not isinstance(item, dict) for item in drafts):
                 return False
+            if store.has_pending_receipts(project_id):
+                # Preserve the raw observer's shape guards before attempting the
+                # owned receipt recovery needed by a list-first refresh.
+                raw_jobs = data.get('jobs', [])
+                if not isinstance(raw_jobs, list) or any(not isinstance(row, dict) or not row.get('job_id') or not row.get('status') for row in raw_jobs):
+                    return False
+                actual_variants = data.get('output_variants', [])
+                if not isinstance(actual_variants, list) or any(not isinstance(row, dict) or not row.get('id') or not row.get('status') or (row.get('cover_job') and not isinstance(row['cover_job'], dict)) for row in actual_variants):
+                    return False
+                if analysis and not analysis.get('status'):
+                    return False
+                store.read(project_id)
+                data = json.loads(path.read_text(encoding='utf-8'))
+                if not isinstance(data, dict):
+                    return False
+                generation = data.get('generation') or {}
+                analysis = data.get('analysis') or {}
+                raw_variants = data.get('output_variants') or []
+                drafts = data.get('drafts') or []
+                if not isinstance(generation, dict) or not isinstance(analysis, dict) or not isinstance(raw_variants, list) or not isinstance(drafts, list):
+                    return False
+                if any(not isinstance(row, dict) for row in [*raw_variants, *drafts]):
+                    return False
             outcome = generation.get('status')
             variants = [item for item in raw_variants if item.get('status') != 'on_demand']
             if not generation.get('auto_start') or outcome not in ('completed', 'partial', 'failed'):

@@ -206,7 +206,7 @@ def test_visual_import_worker_persists_project_status(client,root,source,monkeyp
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     monkeypatch.setattr(jobs,'analyze',lambda *a: ([Scene(id='e1',label='真实事件',start=0,end=1)],{}))
     class Immediate:
-        def submit(self,fn,*args): fn(*args)
+        def submit(self,fn,*args,**kwargs): fn(*args,**kwargs)
     monkeypatch.setattr(jobs,'executor',Immediate())
     response=client.post('/studio/import',data={'goal':'highlight','name':'Visual upload'},files={'video':('game.mp4',source.read_bytes(),'video/mp4')})
     assert response.status_code==200,response.text
@@ -751,7 +751,7 @@ def test_export_dispatch_failure_is_retryable_and_preserves_success(root, monkey
     store.change('p1', lambda data: data['jobs'].append(previous))
     calls = []
     class Executor:
-        def submit(self, *args):
+        def submit(self, *args, **kwargs):
             calls.append(args)
             if len(calls) == 1:
                 raise RuntimeError('executor unavailable: private runtime details')

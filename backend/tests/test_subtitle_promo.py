@@ -43,7 +43,7 @@ def test_subtitle_promo_import_confirmation_and_edit(client,source,evidence,monk
     monkeypatch.setattr(jobs,'run_content',lambda *a:analyses.append(a) or [clip(0,1)])
     monkeypatch.setattr(intelligence,'text_json',lambda *a:requests.append(a) or {'drafts':[{'candidate':0,'title':'Topic','hook':'Supported opening'}]})
     class Immediate:
-        def submit(self,fn,*args):fn(*args)
+        def submit(self, fn, *args, **kwargs):fn(*args, **kwargs)
     monkeypatch.setattr(jobs,'executor',Immediate())
     r=client.post('/studio/import',files={'video':('test.mp4',source.read_bytes(),'video/mp4')})
     assert r.status_code==200

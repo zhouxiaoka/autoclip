@@ -14,7 +14,19 @@ def explicit_visual_preferences(monkeypatch):
     monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='visual', allow_visual_screening=True))
 
 class Immediate:
-    def submit(self, fn, *args): fn(*args)
+    def submit(self, fn, *args, **kwargs): fn(*args, **kwargs)
+
+
+def queue_export_record(project_id, draft, job_id, expected):
+    def add(data):
+        variant = next(row for row in data['output_variants'] if row['id'] == expected[0])
+        assert expected == store.variant_identity(variant)
+        assert expected[1] == draft.id and expected[2] == draft.revision and expected[4]
+        data['jobs'].append({'job_id': job_id, 'status': 'queued', 'instance': store.INSTANCE,
+                             'draft_id': draft.id, 'revision': draft.revision,
+                             'variant_links': [list(expected)]})
+    store.change(project_id, add)
+    return {'job_id': job_id, 'status': 'queued'}
 
 def recommendation(goal='highlight'):
     return {'content_type':'gameplay' if goal!='content' else 'talk', 'goal':goal, 'reason':'测试证据', 'confidence':.8, 'aspect':'original', 'duration':30}
@@ -31,7 +43,10 @@ def test_append_platforms_reuses_saved_drafts_without_reanalysis(client, root, m
     calls = []
     monkeypatch.setattr(jobs, 'run_content', lambda *_: pytest.fail('must not rerun content analysis'))
     monkeypatch.setattr(jobs, 'analyze', lambda *_: pytest.fail('must not rerun visual analysis'))
-    monkeypatch.setattr(jobs, 'export', lambda _pid, draft, **kwargs: calls.append((draft, kwargs)) or {'job_id': 'new-job', 'status': 'queued'})
+    def export(pid, draft, *, _variant_identity, **kwargs):
+        calls.append((draft, kwargs))
+        return queue_export_record(pid, draft, 'new-job', _variant_identity)
+    monkeypatch.setattr(jobs, 'export', export)
 
     response = client.post('/studio/p1/platforms', json={'platforms': ['tiktok']})
     assert response.status_code == 200, response.text
@@ -54,7 +69,10 @@ def test_retry_variant_only_requeues_failed_output(client, root, monkeypatch):
         ],
     })
     calls = []
-    monkeypatch.setattr(jobs, 'export', lambda _pid, value, **kwargs: calls.append((value, kwargs)) or {'job_id': 'retry-job', 'status': 'queued'})
+    def export(pid, value, *, _variant_identity, **kwargs):
+        calls.append((value, kwargs))
+        return queue_export_record(pid, value, 'retry-job', _variant_identity)
+    monkeypatch.setattr(jobs, 'export', export)
 
     response = client.post('/studio/p1/output-variants/failed/retry')
     assert response.status_code == 200, response.text
@@ -77,7 +95,9 @@ def test_auto_variant_passes_branding_to_render_job(client, source, monkeypatch)
     draft = jobs.Draft(id='brand-draft', title='Brand', scenes=[jobs.Scene(id='scene', label='Scene', start=0, end=1)], subtitles=False)
     job = jobs.export('p1', draft, brand_outro=True)
     assert job['brand_outro'] is True
-    assert submitted[0][2] == {'brand_outro': True}
+    worker_kwargs = dict(submitted[0][2])
+    assert worker_kwargs.pop('_io_receipt') == ('render', job['job_id'])
+    assert worker_kwargs == {'brand_outro': True}
     assert submitted[0][1][-1] == job['job_id']
 
 
@@ -106,15 +126,15 @@ def test_auto_start_skips_ineligible_long_output_without_faking_duration(client,
     from backend.services.studio import analysis_preferences as ap
     monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto'))
     class ImmediateAuto:
-        def submit(self, fn, *args):
-            return fn(*args)
+        def submit(self, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
 
     monkeypatch.setattr(jobs, 'executor', ImmediateAuto())
     monkeypatch.setattr(intelligence, 'ready', lambda: False)
     monkeypatch.setattr(jobs, 'run_content', lambda *args: [
         {'generated_title': '短观点', 'start_time': '00:00:00,000', 'end_time': '00:00:01,000'},
     ])
-    monkeypatch.setattr(jobs, 'export', lambda *_: (_ for _ in ()).throw(AssertionError('long form must not render')))
+    monkeypatch.setattr(jobs, 'export', lambda *_, **kwargs: (_ for _ in ()).throw(AssertionError('long form must not render')))
 
     response = client.post(
         '/studio/import',
@@ -131,8 +151,8 @@ def test_auto_start_creates_platform_variants_without_confirmation(client, sourc
     from backend.services.studio import analysis_preferences as ap
     monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto'))
     class ImmediateAuto:
-        def submit(self, fn, *args):
-            return fn(*args)
+        def submit(self, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
 
     monkeypatch.setattr(jobs, 'executor', ImmediateAuto())
     monkeypatch.setattr(intelligence, 'ready', lambda: False)
@@ -140,10 +160,10 @@ def test_auto_start_creates_platform_variants_without_confirmation(client, sourc
         {'generated_title': '完整观点', 'start_time': '00:00:00,000', 'end_time': '00:00:01,000'},
     ])
     exports = []
-    def fake_export(project_id, draft, **kwargs):
+    def fake_export(project_id, draft, *, _variant_identity, **kwargs):
         assert kwargs == {'brand_outro': True}
         exports.append(draft)
-        return {'job_id': f'job-{draft.id}', 'status': 'queued'}
+        return queue_export_record(project_id, draft, f'job-{draft.id}', _variant_identity)
     monkeypatch.setattr(jobs, 'export', fake_export)
 
     response = client.post(
@@ -548,7 +568,7 @@ def test_confirmation_dispatch_failure_preserves_staging_and_allows_explicit_ret
         original_config, original_status = dict(p.processing_config), p.status
     calls = []
     class Reject:
-        def submit(self, *args):
+        def submit(self, *args, **kwargs):
             calls.append(args)
             raise RuntimeError('private executor failure')
     monkeypatch.setattr(jobs, 'executor', Reject())
@@ -558,6 +578,7 @@ def test_confirmation_dispatch_failure_preserves_staging_and_allows_explicit_ret
     assert '重试确认' in failed.json()['detail']
     assert 'private executor' not in failed.text
     assert store.read(pid) == before
+    assert not store.has_pending_receipts(pid)
     assert output.read_bytes() == b'previous export'
     assert (store.directory(pid)/'raw/input.mp4').read_bytes() == source.read_bytes()
     with SessionLocal() as db:
@@ -622,7 +643,7 @@ def test_confirm_matches_each_output_aspect_without_extra_analysis(
 
 
 class RejectSubmission:
-    def submit(self, *args):
+    def submit(self, *args, **kwargs):
         raise RuntimeError('private executor failure')
 
 
@@ -669,6 +690,7 @@ def test_rescreen_dispatch_failure_preserves_plan_and_exports(client, source, mo
     with SessionLocal() as db:
         assert db.get(Project, pid).processing_config == config
     assert store.read(pid) == before
+    assert not store.has_pending_receipts(pid)
     monkeypatch.setattr(jobs, 'executor', Immediate())
     assert rescreen().status_code == 200
     after = store.read(pid)
@@ -787,7 +809,7 @@ def test_import_staging_matches_confirmation_before_worker_starts(client, source
         created.append(project.processing_config)
         return project
     class PausedExecutor:
-        def submit(self, *_):
+        def submit(self, *_, **kwargs):
             return None  # Hold screening exactly at the startup boundary seen by the UI.
     monkeypatch.setattr(ProjectService, 'create_project', capture)
     monkeypatch.setattr(jobs, 'executor', PausedExecutor())
@@ -798,3 +820,77 @@ def test_import_staging_matches_confirmation_before_worker_starts(client, source
     state = client.get('/studio/' + response.json()['project_id']).json()
     assert state['generation']['status'] == 'screening'
     assert created[0]['import_staging'] is (not automatic), 'automatic output must remain on its progress page before the worker runs'
+
+
+@pytest.mark.parametrize('public', ['inspect', 'confirm'])
+@pytest.mark.parametrize('fault', ['read', 'replace'])
+def test_rejected_reservation_survives_a_denied_exact_rollback(client, source, monkeypatch, public, fault):
+    import json
+    from pathlib import Path
+    from backend.services.studio.models import ConfirmPlan
+    from backend.tests.test_studio import draft
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    pid = client.post('/studio/import', files={'video': ('input.mp4', source.read_bytes(), 'video/mp4')}).json()['project_id']
+    saved = store.save_draft(pid, draft(), create=True)
+    store.change(pid, lambda data: data['jobs'].append({'job_id': 'completed-before', 'status': 'completed',
+                                                     'draft_id': saved['id'], 'revision': saved['revision']}))
+    output = store.directory(pid) / 'output-before.mp4'
+    output.write_bytes(b'completed before rejected submission')
+    before = store.read(pid)
+    metadata = store.directory(pid) / 'metadata/studio.json'
+    original_read, original_replace = Path.read_text, store._replace_state
+    blocked = {'active': False}
+    accepted = []
+    captures = []
+    def read(path, *args, **kwargs):
+        if blocked['active'] and fault == 'read' and path == metadata:
+            raise PermissionError('synthetic owned metadata read denial')
+        return original_read(path, *args, **kwargs)
+    def replace(temporary, destination):
+        if blocked['active'] and fault == 'replace' and destination == metadata:
+            raise PermissionError('synthetic owned atomic replacement denial')
+        return original_replace(temporary, destination)
+    class Reject:
+        def submit(self, fn, *args, **kwargs):
+            # The real caller has durably saved this reservation, but no Future exists.
+            accepted.append(kwargs['_io_receipt'])
+            blocked['active'] = True
+            raise RuntimeError('private unaccepted submission detail')
+    monkeypatch.setattr(Path, 'read_text', read)
+    monkeypatch.setattr(store, '_replace_state', replace)
+    monkeypatch.setattr(jobs, 'executor', Reject())
+    monkeypatch.setattr(jobs, 'capture_studio_exception', lambda error, phase: captures.append((type(error).__name__, phase)))
+    try:
+        with pytest.raises(PermissionError):
+            if public == 'inspect':
+                jobs.inspect_project(pid, ImportOptions(auto_start=False, platforms=['original']))
+            else:
+                jobs.confirm_project(pid, ConfirmPlan(plan_id=before['plan']['id'], goals=['content'], analysis_mode='subtitle'))
+        assert len(accepted) == 1
+        identity = accepted[0]
+        assert identity[0] == 'analysis' and identity[1] != before['analysis']['run_id']
+        assert identity[2] == ('screening' if public == 'inspect' else 'production')
+        assert captures == [('RuntimeError', 'dispatch')]
+        assert store.has_pending_receipts(pid)
+        persisted = json.loads(metadata.read_bytes())
+        assert persisted['analysis']['status'] == 'running'
+        assert persisted['analysis']['run_id'] == identity[1]
+        blocked['active'] = False
+        state = store.read(pid)
+        assert state['analysis']['status'] == 'failed'
+        assert state['analysis']['run_id'] == identity[1] and state['analysis']['phase'] == identity[2]
+        assert state['analysis']['error_code'] == 'unexpected'
+        assert 'private unaccepted' not in state['analysis']['error']
+        assert state['plan']['id'] == before['plan']['id']
+        assert state['drafts'] == before['drafts'] and state['jobs'] == before['jobs']
+        assert json.loads(metadata.read_bytes()) == state
+        assert not store.has_pending_receipts(pid)
+        assert output.read_bytes() == b'completed before rejected submission'
+        assert (store.directory(pid) / 'raw/input.mp4').read_bytes() == source.read_bytes()
+        monkeypatch.setattr(jobs, 'executor', Immediate())
+        monkeypatch.setattr(jobs, 'run_content', lambda *args: [])
+        jobs.inspect_project(pid, ImportOptions(auto_start=False, platforms=['original']))
+        assert store.read(pid)['analysis']['status'] == 'awaiting_confirmation'
+    finally:
+        blocked['active'] = False
