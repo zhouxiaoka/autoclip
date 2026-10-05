@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -44,6 +45,7 @@ def validate(manifest, folder, assets, version, commit, build, jobs, now=None):
     release.require(manifest.get('schema_version') == 1 and manifest.get('stage') == 'internal', 'internal acceptance required')
     release.require(manifest.get('version') == version and manifest.get('commit') == commit, 'internal version/commit mismatch')
     release.require(manifest.get('blockers') == [], 'unresolved blockers prohibit tagging')
+    release.require(manifest.get('evidence_contract') in (None, release.EVIDENCE_CONTRACT), 'unknown evidence contract')
     release.require(manifest.get('assets') == release.assets_in(assets), 'internal asset hashes do not match')
     built = json.loads((assets / PROVENANCE).read_text(encoding='utf-8'))
     release.require(built == provenance(version, commit, assets, manifest.get('build_run_id')), 'internal build provenance mismatch')
@@ -59,26 +61,23 @@ def validate(manifest, folder, assets, version, commit, build, jobs, now=None):
     built_at = release.timestamp(build.get('updated_at'))
     files, completed = set(), []
 
-    def passed(row, label):
-        release.require(isinstance(row, dict) and row.get('status') == 'passed', f'{label} not passed')
-        files.add(release.evidence_file(folder, row.get('evidence')))
-        at = release.timestamp(row.get('completed_at'))
-        release.require(built_at <= at <= now, f'{label} evidence predates build or is in the future')
-        completed.append(at)
+    def passed(row, label, platforms):
+        completed.append(release.row_evidence(row, label, platforms, manifest, folder,
+                                             built_at, now, files))
 
     for platform in release.PLATFORMS:
         row = manifest.get('platforms', {}).get(platform, {})
         for field in ('os', 'machine', 'runtime'):
             release.require(isinstance(row.get(field), str) and row[field].strip(), f'{platform} missing {field}')
         for case in release.CASES:
-            passed(row.get('checks', {}).get(case), f'{platform}/{case}')
+            passed(row.get('checks', {}).get(case), f'{platform}/{case}', [platform])
     regressions = manifest.get('regressions')
     release.require(isinstance(regressions, list) and regressions, 'explicit regression acceptance required')
     for row in regressions:
         release.require(isinstance(row, dict) and isinstance(row.get('id'), str) and row['id'].strip(), 'regression id required')
         platforms = row.get('platforms')
         release.require(isinstance(platforms, list) and platforms and all(p in release.PLATFORMS for p in platforms), 'regression platforms required')
-        passed(row, 'regression ' + row['id'])
+        passed(row, 'regression ' + row['id'], platforms)
     approval = manifest.get('approval', {})
     release.require(isinstance(approval.get('name'), str) and approval['name'].strip(), 'named reviewer required')
     release.require(max(completed) <= release.timestamp(approval.get('approved_at')) <= now, 'approval must follow internal acceptance')
@@ -170,6 +169,13 @@ def main():
                  'version': args.version, 'commit': args.commit, 'build_run_id': value['build_run_id'],
                  'assets': value['assets'], 'acceptance_run_id': args.acceptance_run_id,
                  'reviewer': value['approval']['name'], 'approved_at': value['approval']['approved_at']}
+        proof.update(evidence_contract=value.get('evidence_contract', 'execution/v1'),
+                     manifest_sha256=release.digest(args.bundle / 'acceptance.json'),
+                     validator_sha256={name: release.digest(Path(__file__).with_name(name))
+                                       for name in ('internal_acceptance.py', 'release_acceptance.py')})
+        if os.environ.get('GITHUB_SHA'):
+            release.identity('v0.0.0', os.environ['GITHUB_SHA'])
+            proof['validator_commit'] = os.environ['GITHUB_SHA']
         (args.bundle / 'receipt.json').write_text(json.dumps(proof, indent=2) + '\n', encoding='utf-8')
         print('PASS: internal desktop acceptance complete. No tag or release was created.')
         return 0
