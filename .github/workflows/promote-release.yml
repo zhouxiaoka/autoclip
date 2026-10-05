@@ -44,6 +44,8 @@ jobs:
       WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -76,6 +78,10 @@ jobs:
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > build-run.json
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID/jobs?per_page=100" > build-jobs.json
           gh release download "$TAG" --dir release-assets
+          python scripts/release_acceptance.py source-commits --manifest accepted/acceptance.json > evidence-source-commits.txt
+          while IFS= read -r source; do
+            git fetch --no-tags origin "$source"
+          done < evidence-source-commits.txt
           python scripts/release_acceptance.py validate --tag "$TAG" --commit "$TARGET_COMMIT" \
             --assets release-assets --manifest accepted/acceptance.json --repository "$GH_REPO" \
             --build-run build-run.json --build-jobs build-jobs.json

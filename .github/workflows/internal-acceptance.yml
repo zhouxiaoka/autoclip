@@ -31,6 +31,8 @@ jobs:
       MANIFEST: ${{ inputs.manifest_path }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -51,6 +53,13 @@ jobs:
           gh run download "$BUILD_RUN_ID" -n autoclip-desktop-macos-arm64 -D internal-assets
           gh run download "$BUILD_RUN_ID" -n autoclip-desktop-windows-x64 -D internal-assets
           gh run download "$BUILD_RUN_ID" -n internal-desktop-provenance -D internal-assets
+      - name: Fetch every hash-bound original and current source
+        run: |
+          set -euo pipefail
+          python scripts/release_acceptance.py source-commits --manifest "$MANIFEST" > evidence-source-commits.txt
+          while IFS= read -r source; do
+            git fetch --no-tags origin "$source"
+          done < evidence-source-commits.txt
       - name: Validate installed desktop cases and every repair before tagging
         run: |
           python scripts/internal_acceptance.py validate --version "$VERSION" --commit "$SOURCE_COMMIT" \
