@@ -44,10 +44,32 @@ def worker_read_scope(project_id, identity):
                 raise
     finally:
         _worker.reset(token)
-        if receipt['denied']:
+        if receipt['denied'] or receipt.get('cover_finished_instance'):
             with lock:
                 receipt.pop('read_error', None)
                 _read_failures.setdefault(path, []).append(receipt)
+
+
+def mark_render_finished(project_id, job_id):
+    # An accepted render has left its optional cover step. If that terminal
+    # write was denied, its own receipt releases the fence when reading recovers.
+    scope = _worker.get()
+    if scope and scope[0] == directory(project_id) / 'metadata' / 'studio.json' and scope[1]['identity'] == ('render', job_id):
+        scope[1]['cover_finished_instance'] = INSTANCE
+
+
+def _apply_finished_covers(path, data):
+    changed = False
+    for receipt in _read_failures.get(path, []):
+        identity = receipt['identity']
+        instance = receipt.get('cover_finished_instance')
+        if identity[0] != 'render' or not instance:
+            continue
+        job = next((row for row in data['jobs'] if row['job_id'] == identity[1]), None)
+        if job and job.get('status') == 'completed' and job.get('instance') == instance and job.get('cover_pending'):
+            job['cover_pending'] = False
+            changed = True
+    return changed
 
 
 def owned_read_error(error):
@@ -97,6 +119,8 @@ def claim_render(data, expected):
 
 def _reflect_render(variant, job):
     if variant.get('status') not in ('preparing', 'queued', 'running') or job.get('status') not in ('completed', 'failed'):
+        return False
+    if job['status'] == 'completed' and job.get('cover_pending') and job.get('instance') == INSTANCE:
         return False
     variant['status'] = job['status']
     if job['status'] == 'failed':
@@ -167,7 +191,8 @@ def _observe_worker_write(path, previous, data):
 
 
 def _apply_read_receipts(path, data):
-    changed = settle = False
+    changed = _apply_finished_covers(path, data)
+    settle = False
     for expected, job_id in _pending_links.get(path, {}).items():
         linked = bind_render(data, expected, job_id)
         changed = changed or linked
@@ -354,7 +379,12 @@ def read(project_id: str, *, recover: bool = True):
         # CLI status commands are observers in another process, not a server restart.
         return data
     interrupted = set()
+    cover_finished = _apply_finished_covers(path, data)
     for job in data['jobs']:
+        if job['status'] == 'completed' and job.get('cover_pending') and job.get('instance') != INSTANCE:
+            # Restarted optional work cannot revoke a video already committed.
+            job['cover_pending'] = False
+            cover_finished = True
         if job['status'] in ('queued', 'running') and job.get('instance') != INSTANCE:
             job.update(status='failed', error='服务已重启，请重新导出')
             interrupted.add(job.get('job_id'))
@@ -380,7 +410,7 @@ def read(project_id: str, *, recover: bool = True):
             settle = True
     if settle and data.get('generation'):
         settle_generation(data)
-    patched = _apply_io_failure(path, data) or linked or abandoned_claim
+    patched = _apply_io_failure(path, data) or linked or abandoned_claim or cover_finished
     patched = _apply_read_receipts(path, data) or patched
     analysis = data.get('analysis')
     if analysis and analysis['status'] == 'running' and analysis.get('instance') != INSTANCE:
