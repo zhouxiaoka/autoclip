@@ -31,6 +31,8 @@ jobs:
       MANIFEST: ${{ inputs.manifest_path }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -48,6 +50,13 @@ jobs:
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > build-run.json
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID/jobs?per_page=100" > build-jobs.json
           gh release download "$TAG" --dir release-assets
+      - name: Fetch every hash-bound original and current source
+        run: |
+          set -euo pipefail
+          python scripts/release_acceptance.py source-commits --manifest "$MANIFEST" > evidence-source-commits.txt
+          while IFS= read -r source; do
+            git fetch --no-tags origin "$source"
+          done < evidence-source-commits.txt
       - name: Validate both platforms, regressions, observation and reviewer
         run: |
           python scripts/release_acceptance.py validate --tag "$TAG" --commit "$TARGET_COMMIT" \

@@ -45,7 +45,7 @@ def validate(manifest, folder, assets, version, commit, build, jobs, now=None):
     release.require(manifest.get('schema_version') == 1 and manifest.get('stage') == 'internal', 'internal acceptance required')
     release.require(manifest.get('version') == version and manifest.get('commit') == commit, 'internal version/commit mismatch')
     release.require(manifest.get('blockers') == [], 'unresolved blockers prohibit tagging')
-    release.require(manifest.get('evidence_contract') in (None, release.EVIDENCE_CONTRACT), 'unknown evidence contract')
+    release.require(manifest.get('evidence_contract') in release.EVIDENCE_CONTRACTS, 'unknown evidence contract')
     release.require(manifest.get('assets') == release.assets_in(assets), 'internal asset hashes do not match')
     built = json.loads((assets / PROVENANCE).read_text(encoding='utf-8'))
     release.require(built == provenance(version, commit, assets, manifest.get('build_run_id')), 'internal build provenance mismatch')
