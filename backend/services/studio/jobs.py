@@ -95,9 +95,12 @@ def _render(project_id, draft, job_id, *, brand_outro=False):
         update(status='running', percent=5)
         with llm_usage.timed('render'):
             result = render_draft(project_id, source(project_id), draft, job_id, lambda p: update(percent=p), brand_outro=brand_outro)
-        update(status='completed', percent=100, result=result, duration_ms=round((monotonic() - started) * 1000))
+        update(status='completed', percent=100, result=result, cover_pending=True, duration_ms=round((monotonic() - started) * 1000))
         render_saved = True
-        _design_covers(project_id, draft, job_id)
+        try:
+            _design_covers(project_id, draft, job_id)
+        finally:
+            update(cover_pending=False)
         _sync_variant_status(project_id, job_id, 'completed')
     except Exception as error:
         logger.warning('Studio render failed: %s', type(error).__name__)
@@ -113,6 +116,9 @@ def _render(project_id, draft, job_id, *, brand_outro=False):
             _sync_variant_status(project_id, job_id, 'failed', message)
         except FileNotFoundError:
             pass
+    finally:
+        if render_saved:
+            store.mark_render_finished(project_id, job_id)
 
 def analyze_project(project_id, prefs, url=None, browser=None):
     def begin(data):
