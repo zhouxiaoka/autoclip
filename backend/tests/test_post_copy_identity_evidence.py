@@ -295,5 +295,158 @@ for locale, (role, former) in ALIASES.items():
         )
 
 
+# Actual public Windows 21-cue transcript and persisted description; the wire payload was not captured.
+COMPANY_LEADER_CASE = {
+    "lines": [
+        "You said we did not have our best last 12",
+        "months ever, which is mostly my fault,",
+        "but we were about to have our best 12",
+        "months What did you mean by it best 12",
+        "months yet",
+        "I think we clearly had some missteps as a",
+        "company which will happen periodically I",
+        "mean part of trying to make a portfolio",
+        "of bes is that sometimes more of them",
+        "work can sometimes less of them work, but",
+        "I think both in terms of product",
+        "direction and specifically on pretraining",
+        "in research we fell behind where we",
+        "wanted to be, I think.",
+        "We are now executing not only the best we",
+        "have ever executed, but the best of kind",
+        "of any company in the space and it is",
+        "very fun to like",
+        "the upswing is more fun after the",
+        "downswing, so just looking at the pace of",
+        "model,",
+    ],
+    "description": "公司负责人坦言：过去12个月在预训练研究上未达预期目标，但当前执行已成行业标杆。你认为技术追赶的关键是什么？",
+    "title_hint": "我们曾在预训练研究上掉队",
+}
+
+COMPANY_LEADER_ALIASES = {
+    "zh": ("公司负责人", "前"),
+    "en": ("company leader", "former "),
+    "ja": ("会社の責任者", "元"),
+    "ko": ("회사 책임자", "전 "),
+    "es": ("líder de la empresa", "antiguo "),
+    "pt": ("líder da empresa", "antigo "),
+    "ru": ("руководитель компании", "бывший "),
+    "fr": ("dirigeant d'entreprise", "ancien "),
+}
+
+
+class CompanyLeaderRegression(unittest.TestCase):
+    build = CopyRegression.build
+
+    def test_actual_windows_21cue_description_without_leader_evidence(self):
+        post = self.build(
+            COMPANY_LEADER_CASE["description"],
+            COMPANY_LEADER_CASE["lines"],
+            title_hint=COMPANY_LEADER_CASE["title_hint"],
+            post_title="Research focus",
+        )
+        self.assertEqual(post["description"], "")
+        self.assertEqual(post["title"], "Research focus")
+
+    def test_title_source_and_generic_we_cannot_supply_leader(self):
+        for description in (
+            "公司负责人坦言产品取舍。",
+            "企业负责人坦言产品取舍。",
+            "有限责任公司负责人坦言产品取舍。",
+            "Company leader discusses Sora.",
+        ):
+            with self.subTest(description=description):
+                post = self.build(
+                    description,
+                    ["We discuss Sora as a company."],
+                    title_hint="公司负责人 / company leader",
+                    source="company leader",
+                )
+                self.assertEqual(post["description"], "")
+                self.assertEqual(post["tags"], ["Sora", "invented"])
+
+    def test_company_leader_alone_cannot_support_ceo(self):
+        self.assertEqual(
+            self.build("CEO discusses Sora.", ["Our company leader discusses Sora."])[
+                "description"
+            ],
+            "",
+        )
+
+    def test_ceo_supports_generic_company_leader_in_same_time_scope(self):
+        for former in (False, True):
+            source = (
+                "former " if former else ""
+            ) + "chief executive officer discusses Sora."
+            description = ("前" if former else "") + "公司负责人讨论 Sora。"
+            with self.subTest(former=former):
+                self.assertEqual(
+                    self.build(description, [source])["description"], description
+                )
+                unsupported = ("" if former else "前") + "公司负责人讨论 Sora。"
+                self.assertEqual(self.build(unsupported, [source])["description"], "")
+
+    def test_we_company_and_nonrole_description_preserved(self):
+        description = "We discuss company leadership development and Sora."
+        self.assertEqual(
+            self.build(description, ["We discuss Sora as a company."])["description"],
+            description,
+        )
+
+    def test_local_leader_rejection_keeps_valid_title_tags_and_one_call(self):
+        post = self.build("公司负责人讨论 Sora。", ["We discuss Sora as a company."])
+        self.assertEqual(
+            post, {"title": "Product focus", "description": "", "tags": ["Sora"]}
+        )
+
+    def test_eight_locale_equivalent_leader_claims_and_translation(self):
+        for locale, (role, former) in COMPANY_LEADER_ALIASES.items():
+            with self.subTest(locale=locale, branch="unsupported"):
+                self.assertEqual(
+                    self.build(
+                        role + " discusses Sora.", ["We discuss Sora as a company."]
+                    )["description"],
+                    "",
+                )
+            with self.subTest(locale=locale, branch="supported"):
+                text = role + " discusses Sora."
+                self.assertEqual(
+                    self.build(text, ["Our company leader discusses Sora."])[
+                        "description"
+                    ],
+                    text,
+                )
+            with self.subTest(locale=locale, branch="translated-evidence"):
+                text = "Company leader discusses Sora."
+                self.assertEqual(
+                    self.build(text, [role + " discusses Sora."])["description"], text
+                )
+            with self.subTest(locale=locale, branch="former-supported"):
+                text = former + role + " discusses Sora."
+                self.assertEqual(
+                    self.build(text, ["A former company leader discusses Sora."])[
+                        "description"
+                    ],
+                    text,
+                )
+            with self.subTest(locale=locale, branch="current-does-not-support-former"):
+                self.assertEqual(
+                    self.build(
+                        former + role + " discusses Sora.",
+                        ["Our company leader discusses Sora."],
+                    )["description"],
+                    "",
+                )
+            with self.subTest(locale=locale, branch="former-does-not-support-current"):
+                self.assertEqual(
+                    self.build(
+                        role + " discusses Sora.",
+                        ["A former company leader discusses Sora."],
+                    )["description"],
+                    "",
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

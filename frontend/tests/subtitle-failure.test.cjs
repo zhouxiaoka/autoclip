@@ -49,3 +49,17 @@ test('does not treat unrelated failures as a transcription settings problem', ()
   assert.equal(classifySubtitleFailure(''), null)
   assert.equal(classifySubtitleFailure(null, 'not_a_code'), null)
 })
+
+
+test('safe cloud ASR failures keep the generic failure view and never request Whisper installation', () => {
+  const hint = '到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。'
+  const messages = [
+    '云端转写请求失败（HTTP 409），请检查密钥、额度和模型权限。',
+    '云端转写连接失败或响应格式无效，请稍后重试。',
+    '转写结果为空，音频中可能没有可识别的人声。',
+    '本次未获得可用转写结果。',
+  ]
+  for (const message of messages) {
+    assert.equal(classifySubtitleFailure(`云端转写失败：${message} ${hint}`, 'provider_error'), null)
+  }
+})

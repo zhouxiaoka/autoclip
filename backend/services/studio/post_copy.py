@@ -106,6 +106,18 @@ EXECUTIVE_ROLES = {
         r'\bdiretor executivo\b|\bdiretora executiva\b|\bгенеральный директор\b|'
         r'\bdirecteur général\b|\bdirectrice générale\b', re.IGNORECASE,
     ),
+    'company_leader': re.compile(
+        r'(?:公司|企业|企業)\s*(?:的\s*)?(?:负责人|負責人|主管|掌舵人)|'
+        r'\b(?:company|business|corporate)(?:[\'’]s)?\s+(?:leader|head|manager)\b|'
+        r'\b(?:leader|head|manager)\s+of\s+(?:the\s+)?(?:company|business)\b|'
+        r'(?:会社|企業)(?:の)?(?:責任者|代表|経営者)|'
+        r'(?:회사|기업)(?:의)?\s*(?:책임자|대표|경영자)|'
+        r'\b(?:líder|responsable|director|directora)\s+(?:de\s+)?(?:la\s+)?(?:empresa|compañía)\b|'
+        r'\b(?:líder|responsável|diretor|diretora)\s+(?:de|da)\s+(?:empresa|companhia)\b|'
+        r'\b(?:руководитель|глава)\s+(?:компании|предприятия)\b|'
+        r'\b(?:dirigeant|dirigeante|responsable|chef)\s+(?:d[\'’]|de\s+(?:la\s+|l[\'’])?)'
+        r'(?:entreprise|société)\b', re.IGNORECASE,
+    ),
     'cto': re.compile(r'(?<![a-z])cto(?![a-z])', re.IGNORECASE),
     'cfo': re.compile(r'(?<![a-z])cfo(?![a-z])', re.IGNORECASE),
     'coo': re.compile(r'(?<![a-z])coo(?![a-z])', re.IGNORECASE),
@@ -125,7 +137,11 @@ def _executive_claims(text: str) -> set[tuple[str, bool]]:
 
 
 def _unsupported_executive_role(description: str, evidence: str) -> bool:
-    return bool(_executive_claims(description) - _executive_claims(evidence))
+    supported = _executive_claims(evidence)
+    # An explicit CEO can be described less specifically as a company leader.
+    # Keep current/former evidence separate; a generic leader cannot imply CEO.
+    supported |= {('company_leader', former) for role, former in supported if role == 'ceo'}
+    return bool(_executive_claims(description) - supported)
 
 
 def fallback(title: str, platform: str) -> dict[str, Any]:
