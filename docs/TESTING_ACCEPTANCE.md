@@ -69,7 +69,7 @@ Desktop Build 除统一源码 CI 外，还必须通过 Windows Whisper 恢复/�
 | output_delivery | 预览和原生保存；文件非空，ffprobe 有正确时长/画幅/音视频轨；全文件解码无错；亲眼播放首/中/尾；封面、字幕、片尾、ZIP 发布包和中文/空格路径正确；保存失败无残缺成品 |
 | privacy_telemetry | 关闭统计/崩溃报告无新请求；验证构建的自动出片成功/失败终态、受控错误码、flow 关联与重复观察去重实际入库；对应查询必须包含 studio_generation_finished |
 
-包的 SHA-256 必须来自 Release 下载文件；每个平台记录系统、机器/虚拟化、portable Python、供应商/模型（不含 key）、输入素材类型和费用。离线 loopback 完整流水线不能填写“真实模型通过”。已有 case 可复用方法与合法素材，换包、重打构建或改变代码要重跑受影响场景；转正器会拒绝旧哈希与构建前的记录。
+包的 SHA-256 必须来自 Release 下载文件；每个平台记录系统、机器/虚拟化、portable Python、供应商/模型（不含 key）、输入素材类型和费用。离线 loopback 完整流水线不能填写“真实模型通过”。已有 case 可复用方法与合法素材；换包、重打构建或改变代码，只重跑受影响断言。已经真实通过且未受影响的断言按下面的影响承接合同保留原执行证据。当前安装包、构建与验收回执身份始终重新精确核对；未完成场景不能借复用填成通过。
 
 Privacy/telemetry 使用独立 validation 构建和隔离数据目录（前端 `VITE_TELEMETRY_VALIDATION=true`；受控后端进程使用 `AUTOCLIP_BUILD_ENVIRONMENT=validation` 并明确标记测试 scope，见 [监控说明](analytics/STUDIO_MONITORING.md)）；它是同一提交的补充证据，**不替代最终生产安装包**。桌面启动器会注入 production/development，验收时需核查实际事件标签。生产包检查版本标记与关闭采集，validation 检查最终收数。不要把验收事件塞入生产成功率。
 
@@ -94,11 +94,36 @@ python scripts/internal_acceptance.py init \
   --manifest /absolute/local/internal-acceptance/internal-acceptance.json
 ```
 
-记录初始全部 pending。两个平台完成全部必测矩阵与每条修复后，填写场景、回归的实际完成时间、证据、环境、blockers 和实名复核；回归还需记录具体平台。时间须晚于该内部构建完成。未知主流程失败、缺失场景、CI 代替产品验收或包/源码不符，都不能通过。
+记录初始全部 pending。两个平台完成全部必测矩阵与每条修复后，填写场景、回归的实际完成时间、证据、环境、blockers 和实名复核；回归还需记录具体平台。新执行的时间须晚于该内部构建完成；继承断言保留原执行时间，单独记录晚于当前构建的复核时间。未知主流程失败、缺失场景、CI 代替产品验收或包/源码不符，都不能通过。
 
 人工审阅脱敏后，把内部 manifest 与摘要提交到独立证据分支，例如 `docs/internal-builds/COMMIT/`。不要为了提交报告改变被验收源码 SHA。运行 **Internal Acceptance**，输入源码 SHA、内部 build run ID 和 manifest 路径；它重新下载 Actions 包并校验全部哈希、provenance、构建 checks、双平台场景、回归与复核，生成不可变的 `internal-acceptance` artifact。它不打标签、不发布。
 
-获授权的版本只有在上述 workflow 成功后才可创建 annotated tag。标签必须指向被验收的源码提交，注解有独立一行 `Internal-Acceptance-Run: RUN_ID`。tag 的 Desktop Build 会检查回执来自成功的 Internal Acceptance，版本和完整源码 SHA 完全一致；缺失/失败/不符就阻断构建发布。代码、依赖声明或版本变化后要重新内部构建和验收，不能复用旧回执。
+获授权的版本只有在上述 workflow 成功后才可创建 annotated tag。标签必须指向被验收的源码提交，注解有独立一行 `Internal-Acceptance-Run: RUN_ID`。tag 的 Desktop Build 会检查回执来自成功的 Internal Acceptance，版本和完整源码 SHA 完全一致；缺失/失败/不符就阻断构建发布。代码、依赖声明或版本变化后，当前包与源码须重新构建/绑定，并复验受影响断言；未变且已通过的断言可按影响承接合同复核。旧整体验收回执不能冒充当前源码回执。仅更新独立验收工具/证据分支，不因此修改冻结产品源码、重建产品或清空已通过场景。
+
+### 影响范围与原执行证据承接
+
+默认 `evidence_mode=execution`：保持原来的当前构建后完成时间要求。承接时 manifest 显式声明 `evidence_contract: "impact-inheritance/v1"`，对应已通过行使用 `evidence_mode: "inherited"`；`completed_at` 必须等于原记录的真实完成时间，新增 `reviewed_at` 为当前构建后的实名复核时间。不能把复核时间填到执行时间里。只有未受影响的、已通过断言可以继承；每项必测 case 的全部通过标准仍须覆盖，原 `pending/failed/unknown/skipped` 和首次缺失路径继续阻断。
+
+行的 `evidence` 指向脱敏 JSON 审评记录，字段如下（所有文件仍相对 bundle 根目录，不能使用绝对路径或 `..`）：
+
+| 字段 | 必须保留/校验的内容 |
+|---|---|
+| `contract`, `reviewer`, `reviewed_at`, `reason` | 合同名、实名、与行一致的复核时间、具体影响范围及不重跑的依据 |
+| `target` | 当前 `commit/build_run_id/assets/platforms/label` 精确一致；label 为 `平台/case` 或 `regression ID` |
+| `origin` | `{path,sha256}` 指向真实原执行记录：`status=passed`、原 `commit/build_run_id/assets/platforms/label/completed_at/assertions`，以及 `build/provenance/evidence` 三个哈希引用 |
+| 原 `build/provenance` | 原 successful Desktop Build raw JSON 的 `id/head_sha/path/status/conclusion/updated_at`；原 provenance 的 schema1、commit/run/assets。`origin.assets` 使用原 provenance 内的 leaf assets 映射，不包含 provenance 自身的哈希 |
+| `diff` | 哈希引用 JSON：`from_commit/to_commit/diff_sha256`；后者须匹配实际 `git diff --no-ext-diff --no-textconv --binary OLD CURRENT --` 的原始字节 SHA256，包含全部变更 |
+| `dependencies` | 非空 `{path,sha256}` 列表；继承断言依赖在两个真实 Git source 对象中的字节必须一致，禁止声明改变的模块未受影响 |
+| `runtime_evidence` | 哈希引用具体原/当前安装运行时、依赖与构建参数等价审评记录；源码相同不能替代运行时证明 |
+| `required_assertions/inherited_assertions/affected_assertions/fresh` | 完整 case 通过标准的断言 ID；继承 ID 必须曾通过、与 affected 不重叠；fresh 哈希引用的记录须为当前 target 的真实通过执行及原始证据，完成于当前 build 后、review 前；继承与 fresh 无重复且恰好覆盖 required |
+
+`fresh` 每份 JSON 包含 `status=passed`、与 `target` 相同的五个身份字段、实际 `completed_at/assertions` 和 `{path,sha256}` 原始 `evidence` 引用。受影响断言必须有本轮新证据；新证据可以复用本轮同一真实成片的展示/文案检查，无须为文案过滤再次整段转写编码。原单个场景/断言组确已通过时，即使旧总矩阵仍有别的 pending 也可承接该组；不能将未完成的整条 case 自动改为 passed。真实性、依赖范围完整性、全部 case 通过标准由实名验收者负责；机器校验完整性和一致性，不自动证明任意内容事实。
+
+原证据逐件保持字节与时间，全部 origin/build/provenance/raw/runtime/diff/fresh 文件归档到新 bundle。旧文件可以加来源前缀改文件名但不能改内容/哈希；basename `acceptance.json`、`receipt.json` 保留给当前主记录。原生产私密资料仍只留本地，公开的只能是人工审查后的脱敏真实摘要，不能伪造原执行身份。
+
+Internal 与 Release 使用同一行校验逻辑；当前 whole build、全部包/provenance/更新签名、必测矩阵、blockers、实名批准仍必需。观察期只能是当前 tag 构建后的真实执行和双平台样本，不能继承，hotfix4小时/常规24小时不变。旧 schema1 普通 release regression 摘要保持既有规则；一旦使用 inherited regression，也须满足完整 origin、断言和时间合同。
+
+Internal/Release/Promote 的 `actions/checkout` 使用 **dispatch ref**，并非 source_commit/tag。将经审阅的 gate 改动、自身测试及脱敏证据提交到独立工具/证据分支，三步明确选同一个已审计 ref；输入的产品 source 和包 run 不变。Git 源对象不可用时校验失败，准备该 ref 时须使 origin/current 对象可读。只改变验收工具不重建产品，也不触发所有已通过产品 case 重跑。schema1 内部回执保留当前产品 commit/assets/run，附 manifest 与 gate 文件哈希、Actions 的实际 validator commit；冻结产品的 tag receipt 校验保持兼容。
 
 ### 标签后的最终包与观察
 

@@ -43,6 +43,7 @@
 - [ ] 在该分支运行 **Desktop Build**（`workflow_dispatch`），同时选 macOS / Windows。只生成 Actions artifacts，不创建 Release；已有公开版本号或已有标签会被拒绝
 - [ ] 构建与安装/升级检查全绿；下载双平台包、签名和 `internal-desktop-provenance`，核对源码 SHA、run ID、全部包哈希
 - [ ] 运行 `scripts/internal_acceptance.py init` 生成全 pending 的内部记录；逐项完成以下矩阵和每条修复，真实模型、费用、环境及限制按实际记录
+- [ ] 仅重跑修复影响的断言；已通过未影响断言按 [影响承接合同](docs/TESTING_ACCEPTANCE.md#影响范围与原执行证据承接) 保留原来源/包哈希/执行时间，并另记当前复核时间；独立 gate/证据分支改动不重建冻结产品
 - [ ] 有 pending / failed / skipped 场景或未解释的主流程失败时，继续在内部修复、重建、重新验收，**不得打 tag**
 
 两个平台执行 [必测矩阵](docs/TESTING_ACCEPTANCE.md#4-最终安装包的必测矩阵)，包括下面基础项以及迁移、无字幕/视觉、失败恢复、保存/包装和隐私监控。记录内部包 SHA-256、完整提交、系统与运行时；脱敏结果进入 `docs/internal-builds/COMMIT/internal-acceptance.json` 与摘要，原始截图/日志留本地：
@@ -72,7 +73,7 @@ Windows 验收分三层，前两层必须过，第三层补上界面和真实网
 
 ### 3.3 内部验收通过后：打 tag → Pre-release
 - [ ] 将人工审阅过的脱敏内部 manifest 和摘要提交到独立证据分支；保留被验收的源码提交，不能因提交报告而改变构建身份
-- [ ] 运行 **Internal Acceptance**：源码完整 SHA、内部 Desktop Build run ID、已提交 manifest 路径；它核对双平台全部场景、修复、包哈希、时间及实名复核
+- [ ] 运行 **Internal Acceptance**：源码完整 SHA、内部 Desktop Build run ID、已提交 manifest 路径；它核对双平台全部场景、修复、当前包哈希、新执行或受影响断言的新证据、原执行的影响承接证明、时间及实名复核；Internal/Release/Promote 都从同一已审计 dispatch ref 执行 gate
 - [ ] Internal Acceptance 成功且用户已授权本版本后，在**被验收的原提交**创建带注解标签：注解必须有独立一行 `Internal-Acceptance-Run: RUN_ID`；不要在验收后再 bump / 合入修改
 - [ ] 推送标签。tag 的 Desktop Build 会核对上述不可变验收回执；缺失或提交不符时，阻断打包和 Pre-release
 - [ ] exact tag CI、双平台构建、Windows 安装/升级和运行时全绿；Release 为 Pre-release，全部 DMG / EXE / wheel / ZIP / updater / 签名 / provenance 齐全
