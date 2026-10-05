@@ -307,8 +307,15 @@ def audio_silences(video, noise_db: int = -32, min_sec: float = 0.2) -> SilenceF
                '-i', str(video), '-vn', '-af', f'silencedetect=noise={noise_db}dB:d={min_sec}', '-f', 'null', '-']
         cmd, priority = render_limits.low_priority(cmd)
         try:
-            log = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False, **priority).stderr
+            log = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8',
+                                 errors='replace', timeout=60, check=False, **priority).stderr
         except (OSError, subprocess.SubprocessError):
+            return []
+        # Pause detection is optional. Reader failures must keep text-based cuts usable.
+        # Explicit UTF-8 also avoids Windows locale decoding failures in pipe readers.
+        if isinstance(log, (bytes, bytearray)):
+            log = log.decode('utf-8', errors='replace')
+        if not isinstance(log, str):
             return []
         out, begin = [], None
         for line in log.splitlines():
