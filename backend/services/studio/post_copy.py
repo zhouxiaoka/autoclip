@@ -97,6 +97,37 @@ SOURCE_ATTRIBUTION = re.compile(
 )
 
 
+# A finite check for executive-role claims, not a general fact verifier. Only
+# original subtitles can support an identity; generated titles/source listings cannot.
+EXECUTIVE_ROLES = {
+    'ceo': re.compile(
+        r'(?<![a-z])(?:ceo|chief executive officer)(?![a-z])|首席执行官|首席執行官|'
+        r'最高経営責任者|최고경영자|\bdirector ejecutivo\b|\bdirectora ejecutiva\b|'
+        r'\bdiretor executivo\b|\bdiretora executiva\b|\bгенеральный директор\b|'
+        r'\bdirecteur général\b|\bdirectrice générale\b', re.IGNORECASE,
+    ),
+    'cto': re.compile(r'(?<![a-z])cto(?![a-z])', re.IGNORECASE),
+    'cfo': re.compile(r'(?<![a-z])cfo(?![a-z])', re.IGNORECASE),
+    'coo': re.compile(r'(?<![a-z])coo(?![a-z])', re.IGNORECASE),
+}
+FORMER_ROLE_PREFIX = re.compile(
+    r'(?:\b(?:former|ex|previous|ancien|ancienne|antiguo|antigua|anterior|antigo|antiga|'
+    r'бывший|бывшая)\s*[-–]?\s*|(?:前任?|元|旧|전|이전)\s*)$', re.IGNORECASE,
+)
+
+
+def _executive_claims(text: str) -> set[tuple[str, bool]]:
+    text = unicodedata.normalize('NFKC', text).casefold()
+    return {
+        (role, bool(FORMER_ROLE_PREFIX.search(text[:match.start()])))
+        for role, pattern in EXECUTIVE_ROLES.items() for match in pattern.finditer(text)
+    }
+
+
+def _unsupported_executive_role(description: str, evidence: str) -> bool:
+    return bool(_executive_claims(description) - _executive_claims(evidence))
+
+
 def fallback(title: str, platform: str) -> dict[str, Any]:
     rules = RULES.get(platform, RULES['original'])
     text = _clean(title)
@@ -134,6 +165,9 @@ def build_posts(title: str, lines: list[str], platforms: list[str], *, source: s
                 if not source and SOURCE_ATTRIBUTION.search(description):
                     # Local uploads have no listing provenance. Keep the useful title,
                     # but never ship a guessed programme or an empty source placeholder.
+                    description = ''
+                if _unsupported_executive_role(description, text):
+                    # Keep valid title/tags and do not retry a model just for optional copy.
                     description = ''
                 tags = _tags(item.get('tags'), rules, evidence=text if not source else None)
                 if rules.language == 'en':
