@@ -9,6 +9,7 @@ from typing import NoReturn, Optional
 from celery import Celery
 from backend.core.database import session_scope
 from backend.services.project_service import ProjectService
+from backend.services.cloud_transcription import CloudTranscriptionError
 from backend.utils.thumbnail_generator import generate_project_thumbnail
 from backend.utils.task_submission_utils import submit_video_pipeline_task
 
@@ -165,7 +166,7 @@ def _fail_import(
     raise exc_cls(error)
 
 
-def import_subtitle_failure(speech_error: Optional[str] = None):
+def import_subtitle_failure(speech_error: Optional[str | CloudTranscriptionError] = None):
     """导入关卡没有可用字幕时，沿用流水线同一套失败码和「设置 → 转写」提示。
 
     这只说明下一步该去哪，不表示 Whisper 一定能转写成功。
@@ -174,10 +175,13 @@ def import_subtitle_failure(speech_error: Optional[str] = None):
         HINT_SUBTITLE,
         PipelineFailure,
         failure_from_speech_error,
+        cloud_transcription_failure,
         missing_subtitle_failure,
     )
 
     try:
+        if isinstance(speech_error, CloudTranscriptionError):
+            return cloud_transcription_failure(str(speech_error))
         if speech_error:
             return failure_from_speech_error(speech_error)
         return missing_subtitle_failure()
@@ -267,6 +271,10 @@ def _generate_import_subtitle(task, project_id: str, video_path: str):
 
         srt_path = str(generated_subtitle)
         logger.info(f"语音转写成功: {srt_path}")
+    except CloudTranscriptionError as error:
+        # Keep provider identity across this legacy boundary; do not infer local ASR from text.
+        logger.warning("云端转写失败: %s", error)
+        return None, error
     except Exception as e:
         logger.error(f"语音转写失败: {str(e)}")
         speech_error = str(e)

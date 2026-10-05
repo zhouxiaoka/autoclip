@@ -165,11 +165,22 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
     return empty_timeline_failure(topic_count)
 
 
+def cloud_transcription_failure(message: str) -> PipelineFailure:
+    """CloudTranscriptionError carries only our safe public text, never a provider body."""
+    return PipelineFailure(
+        "SUBTITLE", f"云端转写失败：{message}",
+        "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
+        code="provider_error",
+    )
+
+
 def missing_subtitle_failure() -> PipelineFailure:
-    """视频没有字幕，自动转写也没留下 srt。按当前 Whisper 状态区分下一步。"""
+    """视频没有字幕，自动转写也没留下 srt。按所选转写服务区分下一步。"""
     from backend.services import whisper_runtime
     from backend.services.ai_model_settings import load
     settings = load()
+    if settings and settings.transcription and settings.transcription.provider == 'cloud':
+        return cloud_transcription_failure("本次未获得可用转写结果。")
     if settings and settings.transcription and settings.transcription.provider == 'sensevoice_local':
         return PipelineFailure('SUBTITLE', '没有字幕可分析：SenseVoice 本次没有生成可用字幕。',
                                '到「设置 → 转写」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。',

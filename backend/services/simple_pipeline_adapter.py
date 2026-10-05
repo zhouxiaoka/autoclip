@@ -11,6 +11,7 @@ from backend.services.simple_progress import emit_progress, clear_progress
 from backend.pipeline.failures import (
     PipelineFailure, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG,
     llm_key_failure, failure_from_speech_error, missing_subtitle_failure,
+    cloud_transcription_failure,
     empty_timeline_failure,
 )
 from backend.pipeline.step1_outline import run_step1_outline
@@ -75,6 +76,7 @@ class SimplePipelineAdapter:
             SpeechRecognitionError,
             generate_subtitle_for_video,
         )
+        from backend.services.cloud_transcription import CloudTranscriptionError
         try:
             logger.info(f"开始为视频 {video_path} 自动生成字幕")
             
@@ -82,7 +84,7 @@ class SimplePipelineAdapter:
             from backend.services.simple_progress import emit_progress
             emit_progress(self.project_id, "SUBTITLE", "正在使用AI生成字幕...", subpercent=25)
             
-            # 使用Whisper本地模型生成字幕
+            # 使用当前所选转写服务生成字幕
             try:
                 from pathlib import Path
                 
@@ -91,7 +93,7 @@ class SimplePipelineAdapter:
                     logger.error(f"视频文件不存在: {video_path}")
                     return None
                 
-                logger.info("尝试使用Whisper本地模型生成字幕")
+                logger.info("尝试使用所选转写服务生成字幕")
                 output_path = metadata_dir / f"{video_file_path.stem}.srt"
                 srt_path = generate_subtitle_for_video(
                     video_file_path,
@@ -101,20 +103,20 @@ class SimplePipelineAdapter:
                 )
                 
                 if srt_path and srt_path.exists():
-                    logger.info(f"Whisper生成字幕成功: {srt_path}")
+                    logger.info(f"转写生成字幕成功: {srt_path}")
                     emit_progress(self.project_id, "SUBTITLE", "AI字幕生成完成", subpercent=40)
                     return srt_path
-                logger.warning("Whisper生成字幕失败")
+                logger.warning("转写生成字幕失败")
                     
-            except SpeechRecognitionError:
+            except (SpeechRecognitionError, CloudTranscriptionError):
                 raise
             except Exception as e:
-                logger.warning(f"Whisper生成字幕失败: {e}")
+                logger.warning(f"转写生成字幕失败: {e}")
             
-            logger.error("Whisper字幕生成失败")
+            logger.error("字幕生成失败")
             return None
             
-        except SpeechRecognitionError:
+        except (SpeechRecognitionError, CloudTranscriptionError):
             raise
         except Exception as e:
             logger.error(f"自动生成字幕过程中发生错误: {e}")
@@ -198,10 +200,13 @@ class SimplePipelineAdapter:
                 srt_path = Path(input_srt_path)
             else:
                 from backend.utils.speech_recognizer import SpeechRecognitionError
+                from backend.services.cloud_transcription import CloudTranscriptionError
                 logger.warning("没有SRT文件，尝试自动生成字幕")
                 try:
                     with llm_usage.timed("transcribe"):
                         srt_path = await self._generate_subtitle_automatically(input_video_path, metadata_dir)
+                except CloudTranscriptionError as e:
+                    raise cloud_transcription_failure(str(e)) from e
                 except SpeechRecognitionError as e:
                     raise failure_from_speech_error(str(e)) from e
                 if not (srt_path and srt_path.exists()):
