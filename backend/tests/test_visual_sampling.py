@@ -102,6 +102,8 @@ def test_explicit_visual_screening_failure_stops_before_speech_production(client
     state = client.get('/studio/' + pid).json()
     assert state['generation']['status'] == state['analysis']['status'] == 'failed'
     assert state['analysis']['phase'] == 'screening'
+    assert state['generation']['failure_stage'] == 'screening'
+    assert state['generation'].get('http_status') == getattr(error, 'http_status', None)
     assert not content_calls and state['drafts'] == [] and state['output_variants'] == []
     assert client.get('/studio/' + pid + '/source').content == source.read_bytes()
     # The same import can be screened again after correcting the visual service.
@@ -147,6 +149,7 @@ def test_default_auto_screening_failure_continues_with_the_subtitle_route(client
     assert 'local_evidence' in plan
     state = client.get('/studio/' + pid).json()
     assert state['analysis']['status'] != 'failed' and state['generation']['status'] != 'failed'
+    assert state['generation'].get('route') == 'subtitle'
 
 
 def test_manual_screening_failure_still_offers_an_unselected_plan(monkeypatch):

@@ -59,13 +59,9 @@ def sync_project_completion(project_id, db=None):
             variants = [item for item in raw_variants if item.get('status') != 'on_demand']
             if not generation.get('auto_start') or outcome not in ('completed', 'partial', 'failed'):
                 return False
-            if analysis.get('status') not in ('completed', 'failed'):
-                return False
-            if any(item.get('status') not in ('completed', 'failed') for item in variants):
-                return False
+            # generation.status is the project-index source of truth. A terminal
+            # receipt must leave SQLite even when analysis or variant rows lag.
             completed = sum(item.get('status') == 'completed' for item in variants)
-            if outcome == 'completed' and (not variants or completed != len(variants)):
-                return False
             if db is not None:
                 return _update_index(project_id, db, outcome, completed, len(drafts))
             from backend.core.database import SessionLocal
@@ -85,7 +81,7 @@ def _update_index(project_id, db, outcome, completed, draft_count):
         return False
     status = ProjectStatus.COMPLETED if outcome == 'completed' else ProjectStatus.FAILED
     config = {**(project.processing_config or {}), 'studio_completed_variant_count': completed,
-              'studio_draft_count': draft_count}
+              'studio_draft_count': draft_count, 'studio_generation_status': outcome}
     if project.status == status and project.processing_config == config:
         return False
     project.status = status

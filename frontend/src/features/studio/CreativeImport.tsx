@@ -1,17 +1,38 @@
 import { trackExperience } from '../../analytics/experience'
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Select } from 'antd'
 import { useNavigate } from 'react-router-dom'
-import { Btn, Segmented, Dialog } from '../../ui'
+import { Btn, Segmented, Dialog, StatusDot } from '../../ui'
 import PlatformPicker from './PlatformPicker'
 import { studioApi, errorText } from './api'
 import { trackQuickOutputPlatforms } from '../../analytics/studio'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
+import { speechApi } from '../../services/api'
+import { repairDestination, submissionBlock, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
 import './studio.css'
 import './quick-output.css'
+
+function issueCopy(item: ReadinessIssue) {
+  if (item.key === 'analysis') return t('分析模型还没配好。连接一家 AI 服务后再生成。')
+  if (item.code === 'whisper_installing') return t('正在安装本地转写…')
+  if (item.code === 'whisper_not_installed') return t('本地转写还没安装。已有字幕可以直接继续。')
+  if (item.code === 'sensevoice_not_ready') return t('SenseVoice 还没准备好。已有字幕可以直接继续。')
+  if (item.code === 'cloud_not_configured') return t('云端转写还没配好。已有字幕可以直接继续。')
+  if (item.key === 'visual') return t('画面分析需要可用的视觉模型。')
+  if (item.key === 'ffmpeg') return t('找不到 FFmpeg，暂时无法处理视频。')
+  return t('导入条件还没准备好。')
+}
+
+function repairLabel(item: ReadinessIssue) {
+  if (item.repair === 'settings_ai') return t('连接 AI 服务')
+  if (item.repair === 'install_whisper') return t('安装 Whisper')
+  if (item.repair === 'settings_transcription') return t('转写设置')
+  if (item.repair === 'settings_vision') return t('视觉设置')
+  return ''
+}
 
 export default function CreativeImport({ onImported, blocked = false, onBlocked }: { onImported: () => Promise<void>; blocked?: boolean; onBlocked?: () => void }) {
   useTranslation()
@@ -26,9 +47,49 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const [preferences, setPreferences] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [readiness, setReadiness] = useState<ImportReadiness | null>(null)
+  const [settled, setSettled] = useState(false)
+  const [repairing, setRepairing] = useState(false)
+  useEffect(() => {
+    let cancel = false
+    studioApi.readiness()
+      .then(value => { if (!cancel) setReadiness(value) })
+      .catch(() => { if (!cancel) setReadiness(null) })
+      .finally(() => { if (!cancel) setSettled(true) })
+    return () => { cancel = true }
+  }, [])
+  useEffect(() => {
+    if (readiness?.checks.transcription.code !== 'whisper_installing') return
+    const timer = window.setInterval(() => {
+      studioApi.readiness().then(setReadiness).catch(() => undefined)
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [readiness?.checks.transcription.code])
+  const issues = visibleIssues(readiness, !!subtitle)
+  const repair = async (item: ReadinessIssue) => {
+    if (item.repair === 'install_whisper') {
+      setRepairing(true)
+      setError('')
+      try {
+        await speechApi.installRuntime()
+        setReadiness(await studioApi.readiness())
+        setSettled(true)
+      } catch (e) { setError(t(errorText(e))) } finally { setRepairing(false) }
+      return
+    }
+    if (item.repair === 'settings_ai' && blocked) { onBlocked?.(); return }
+    const destination = repairDestination(item.repair)
+    if (destination) navigate(destination)
+  }
   const submit = async () => {
     if (blocked) { trackExperience('import_blocked', { reason: 'setup_required', placement: 'home_setup' }); setError(t("请先连接 AI 服务，再导入视频。")); onBlocked?.(); return }
     if (source === 'file' ? !file : !url.trim()) { setError(t("请先添加视频文件或链接")); return }
+    const reason = submissionBlock(readiness, !!subtitle, settled)
+    if (reason === 'pending') { setError(t('正在确认导入条件…')); return }
+    if (reason === 'analysis') { setError(t('请先连接 AI 服务，再导入视频。')); return }
+    if (reason === 'transcription') { setError(t('还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。')); return }
+    if (reason === 'visual') { setError(t('请先配好画面分析模型，再生成成片。')); return }
+    if (reason === 'ffmpeg') { setError(t('找不到 FFmpeg，无法生成成片。')); return }
     setBusy(true); setError('')
     try {
       const body = new FormData()
@@ -58,6 +119,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       <PlatformPicker value={platforms} onChange={setPlatforms} disabled={busy}/>
       {platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <div className="studio-field"><span>{t('竖版版式')}</span><Select aria-label={t('竖版版式')} disabled={busy} value={options.portrait_style || 'auto'} options={[{value:'auto',label:t('按平台默认')},{value:'interview',label:t('访谈式（人物窗口）')},{value:'podcast',label:t('播客式（满屏）')}]} onChange={portrait_style=>setOptions({...options,portrait_style})}/><small>{t('仅调整竖版布局，字幕与发布文案语言仍按平台。')}</small></div>}
       <details className="studio-details"><summary>{t("有特别要求？（选填）")}</summary><label className="studio-field"><span className="studio-sr">{t("制作要求")}</span><input aria-label={t("制作要求")} placeholder={t("例如：保留完整观点或挑战过程")} maxLength={1000} value={options.instruction} disabled={busy} onChange={e=>setOptions({...options,instruction:e.target.value})}/></label></details>
+      {issues.length > 0 && <div className="studio-readiness" role="status">
+        {issues.map(item => <div className="studio-readiness-row" key={item.key}>
+          <StatusDot tone={item.code === 'whisper_installing' ? 'accent' : 'muted'} label={issueCopy(item)} />
+          {item.repair !== 'none' && <Btn size="sm" disabled={busy || repairing} loading={repairing && item.repair === 'install_whisper'} onClick={() => void repair(item)}>{repairLabel(item)}</Btn>}
+        </div>)}
+      </div>}
       <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span><button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button></div><Btn variant="cta" loading={busy} onClick={submit}>{busy?t("正在生成"):t("生成成片")}</Btn></div>
       {error&&<p className="studio-error" role="alert">{error}</p>}
     </div>

@@ -3,6 +3,7 @@ import { safeStudioProperties, type Properties } from '../../analytics/workflow'
 import { observeStudioOperation, studioImportProperties, studioGoals, observeStudioWorkspace } from '../../analytics/studio'
 import { workflow } from '../../analytics/observer'
 import api from '../../services/api'
+import type { ImportReadiness } from './importReadiness'
 import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences, SubtitleCue, FramingStatus, AutoFrameResult, PlatformStrategySummary, OutputVariant, PostCopy } from './types'
 export type SourcePreview = { status: 'idle' | 'queued' | 'running' | 'completed' | 'failed'; version?: string; error?: string }
 export function draftProperties(draft?: Partial<Draft>): Properties {
@@ -30,6 +31,7 @@ export const studioApi = {
     const framed = result.scenes.filter(s => s.crop_x !== null).length
     captureBusinessEvent('studio_auto_frame_finished', safeStudioProperties({ ...props, outcome: 'completed', framing_outcome: framed ? 'framed' : 'no_detection', framed_count: framed, scene_count: result.scenes.length, fit_count: result.scenes.reduce((n,s) => n + s.fit_shots, 0) }))
   }, { ...workflow.context(pid), trigger, ...draftProperties(draft) }),
+  readiness: (): Promise<ImportReadiness> => api.get('/studio/readiness'),
   capabilities: (): Promise<{ visual_analysis: boolean; visual_model: string }> => api.get('/studio/capabilities'),
   platformStrategies: (): Promise<{ strategies: PlatformStrategySummary[] }> => api.get('/studio/platform-strategies'),
   appendPlatforms: (pid: string, platforms: string[], outroEnabled: boolean): Promise<{ variants: OutputVariant[] }> => observeStudioOperation('studio_platform_append', () => api.post(`/studio/${pid}/platforms`, { platforms, branding: { outro_enabled: outroEnabled, outro_version: 'v1' } }), undefined, { platform_count: platforms.length, brand_outro_enabled: outroEnabled, reused_content_profile: true }),

@@ -38,6 +38,8 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     template: ['interview_zh', 'podcast_en', 'landscape', 'none'],
     packaging_style: ['classic', 'boxed', 'spotlight', 'pop', 'cinematic'],
     framing: ['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'],
+    failure_stage: ['screening', 'dispatch', 'production', 'ingest', 'subtitle', 'analyze', 'vision', 'render'],
+    route: ['subtitle', 'visual'],
   }
   for (const [key, allowed] of Object.entries(enums)) {
     if (typeof input[key] === 'string' && allowed.includes(input[key] as string)) out[key] = input[key] as string
@@ -56,6 +58,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
       for (const goal of ['content', 'highlight', 'promo']) out[`${prefix}_${goal}`] = valid.includes(goal)
     }
   }
+  if (typeof input.http_status === 'number' && Number.isInteger(input.http_status) && input.http_status >= 400 && input.http_status <= 599) out.http_status = input.http_status
   if (typeof input.error_code === 'string' && /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty)$/.test(input.error_code)) out.error_code = input.error_code
   for (const key of ['flow_id', 'operation_id', 'artifact_id', 'attempt_id']) {
     if (typeof input[key] === 'string' && /^t-[a-z0-9-]{10,100}$/.test(input[key] as string)) out[key] = input[key] as string
@@ -99,7 +102,7 @@ export interface StudioSnapshot {
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; local_evidence?: { subtitle_status?: string } }
   analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
   jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[] } }[]
-  generation?: { auto_start?: boolean; status?: string; error_code?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string } | null
+  generation?: { auto_start?: boolean; status?: string; error_code?: string; failure_stage?: string; http_status?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string } | null
   output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
 }
@@ -283,7 +286,10 @@ export class WorkflowTracker {
       }
     } else if (w.kind === 'studio-generation' && ['completed', 'partial', 'failed'].includes(snapshot.generation?.status || '')) {
       event = 'studio_generation_finished'; outcome = snapshot.generation!.status
-      details = { ...generationSummary(snapshot), error_code: ['failed', 'partial'].includes(outcome || '') ? snapshot.generation?.error_code || snapshot.analysis?.error_code : undefined }
+      const unfinished = ['failed', 'partial'].includes(outcome || '')
+      details = { ...generationSummary(snapshot), error_code: unfinished ? snapshot.generation?.error_code || snapshot.analysis?.error_code : undefined,
+        failure_stage: unfinished ? snapshot.generation?.failure_stage : undefined, http_status: unfinished ? snapshot.generation?.http_status : undefined,
+        route: snapshot.generation?.route || snapshot.plan?.recommended_analysis, recommendation_mode: snapshot.plan?.mode }
     } else if (w.kind === 'studio-production' && snapshot.plan?.id === w.id &&
                ['completed', 'failed'].includes(snapshot.analysis?.status || '')) {
       event = 'studio_production_finished'; outcome = snapshot.analysis!.outcome || snapshot.analysis!.status

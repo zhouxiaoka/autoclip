@@ -35,13 +35,15 @@ from backend.core.desktop_config import (
 )
 
 class DesktopServiceManager:
-    """桌面服务管理器，统一管理FastAPI和Celery服务"""
+    """桌面服务管理器。Studio 在本进程线程池执行，不再拉起 Celery。"""
     
     def __init__(self):
         self.config = get_desktop_config()
         self.app: Optional[FastAPI] = None
         self.celery_app = None
         self.celery_worker = None
+        self.celery_worker_process = None
+        self.celery_worker_thread = None
         self.server_thread: Optional[threading.Thread] = None
         self.is_running = False
         self.start_time: Optional[float] = None
@@ -85,44 +87,10 @@ class DesktopServiceManager:
         return app
     
     def _start_celery_worker(self):
-        """启动Celery Worker"""
-        try:
-            from backend.desktop_celery import celery_app
-            import subprocess
-            import os
-            
-            self.celery_app = celery_app
-
-            if getattr(sys, "frozen", False):
-                def run_worker():
-                    celery_app.worker_main([
-                        "worker",
-                        "--loglevel=" + self.config.log_level.lower(),
-                        "--concurrency=1",
-                        "--pool=solo",
-                    ])
-
-                self.celery_worker_thread = threading.Thread(
-                    target=run_worker,
-                    daemon=True,
-                )
-                self.celery_worker_thread.start()
-                self.logger.info("✅ Celery Worker 以冻结运行时线程模式启动成功")
-                return
-            
-            # 使用subprocess启动Celery Worker，避免信号处理冲突
-            self.celery_worker_process = subprocess.Popen([
-                sys.executable, '-m', 'celery', '-A', 'backend.desktop_celery', 'worker',
-                '--loglevel=' + self.config.log_level.lower(),
-                '--concurrency=' + str(self.config.celery_worker_concurrency),
-                '--quiet=False'
-            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={**os.environ, "AUTOCLIP_DESKTOP_MODE": "true", "AUTOCLIP_MODE": "desktop"})
-            
-            self.logger.info("✅ Celery Worker 启动成功")
-            
-        except Exception as e:
-            self.logger.error(f"❌ Celery Worker 启动失败: {e}")
-            raise
+        """桌面版不启动 Celery。Docker / 脚本模式仍用独立 worker。"""
+        self.celery_app = None
+        self.celery_worker = None
+        self.logger.info("桌面模式不启动 Celery；Studio 任务在本进程线程池执行")
     
     def _start_fastapi_server(self):
         """启动FastAPI服务器"""
@@ -176,10 +144,8 @@ class DesktopServiceManager:
             
             # 创建FastAPI应用
             self.app = self._create_fastapi_app()
-            
-            # 启动Celery Worker
-            self._start_celery_worker()
-            
+
+            # Studio renders in-process. Do not start a desktop Celery worker.
             self.is_running = True
 
             # 启动FastAPI服务器

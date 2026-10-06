@@ -9,6 +9,20 @@
 
 _（本周尚无改动）_
 
+## [1.5.6] - 2026-10-06
+
+- 默认自动预检失败时改走字幕路线继续出片，不再整单失败；只有明确要求视觉分析时才停住。
+
+- 导入前检查分析模型、转写、视觉和 FFmpeg。缺什么直接给出连接、安装或打开设置的入口；没有字幕且转写未就绪时不能开始。
+
+- 自动出片失败事件补齐失败阶段、HTTP 状态和字幕/视觉路线，不再把所有失败都记成笼统的模型错误。
+
+- 安装冒烟改为走 Studio 一键出片，并用 ffprobe 检查成片。
+
+- 桌面版不再启动 Celery。项目列表以 studio.json 的出片终态为准，避免首页一直停在「制作中」。
+
+- 删除已不再使用的旧导入页和未引用的 Celery 试验文件。
+
 ## [1.5.5] - 2026-10-06
 
 - 包含未公开发布的 1.5.4 全部修复（1.5.4 标签的发布构建被验收门禁误拦，未生成安装包），并修复发布构建读取验收标签的问题。
@@ -410,7 +424,8 @@ _（本周尚无改动）_
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.3...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.6...HEAD
+- [1.5.6]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.3...v1.5.6
 - [1.5.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.2...v1.5.3
 - [1.5.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.1...v1.5.2
 - [1.5.1]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.0...v1.5.1

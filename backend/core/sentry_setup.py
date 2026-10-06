@@ -43,6 +43,26 @@ def studio_error_code(error: Exception) -> str:
     return "unexpected"
 
 
+_PIPELINE_FAILURE_STAGES = {"INGEST": "ingest", "SUBTITLE": "subtitle", "ANALYZE": "analyze",
+                            "HIGHLIGHT": "analyze", "EXPORT": "render"}
+
+
+def studio_failure_context(error: Exception, phase: str) -> dict:
+    """Where an automatic run failed and the provider HTTP status, without messages or URLs."""
+    from backend.services.studio.intelligence import VisionRequestError
+    from backend.pipeline.failures import PipelineFailure
+    stage = phase
+    if isinstance(error, PipelineFailure):
+        stage = _PIPELINE_FAILURE_STAGES.get(error.stage, phase)
+    elif isinstance(error, VisionRequestError) and phase != "screening":
+        stage = "vision"
+    result = {"failure_stage": stage}
+    status = getattr(error, "http_status", None) or getattr(error, "status_code", None)
+    if type(status) is int and 400 <= status <= 599:
+        result["http_status"] = status
+    return result
+
+
 PRIVACY_FILE = "privacy.json"
 _initialized = False
 

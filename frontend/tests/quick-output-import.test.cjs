@@ -3,6 +3,12 @@ const assert=require('node:assert/strict')
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript')
 class FormDataMock { constructor(){this.rows=[]} append(key,value){this.rows.push([key,String(value)])} get(key){const row=this.rows.find(item=>item[0]===key);return row&&row[1]} entries(){return this.rows.values()} }
 
+function loadReadiness(){
+ const exports={}
+ const source=fs.readFileSync(path.join(__dirname,'../src/features/studio/importReadiness.ts'),'utf8')
+ vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require(){throw new Error('importReadiness')}})
+ return exports
+}
 function load(mocks){
  const exports={}
  const source=fs.readFileSync(path.join(__dirname,'../src/features/studio/CreativeImport.tsx'),'utf8')
@@ -13,15 +19,17 @@ function nodes(value){return !value||typeof value!=='object'?[]:Array.isArray(va
 
 test('quick import submits platform targets, branding and auto-starts to results',async()=>{
  const calls=[],navigations=[];let index=0
- const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}]]
+ const ready={analysis_mode:'auto',ready:true,checks:{analysis:{ok:true,code:'configured',repair:'none'},transcription:{ok:true,code:'whisper_installed',repair:'none'},visual:{ok:true,code:'optional',repair:'none'},ffmpeg:{ok:true,code:'available',repair:'none'}}}
+ const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}],[ready,()=>{}],[true,()=>{}],[false,()=>{}]]
  const component=load({
   'react-i18next':{useTranslation:()=>{}},'../../i18n':{t:x=>x},
   react:{useState:()=>states[index++],useEffect:()=>{}},antd:{Select:'select'},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
   'react/jsx-runtime':{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'fragment'},
-  '../../ui':{Btn:'button',Segmented:'segmented',Dialog:'dialog'},'./PlatformPicker':{default:'platform-picker'},
-  './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}}},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){}},'../../analytics/experience':{trackExperience(){}},
+  '../../ui':{Btn:'button',Segmented:'segmented',Dialog:'dialog',StatusDot:'status'},'./PlatformPicker':{default:'platform-picker'},
+  './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}},readiness:async()=>ready},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){}},'../../analytics/experience':{trackExperience(){}},
   './types':{defaultImportOptions:{goal:'auto',language:'source',aspect:null,duration:null,instruction:''}},
-  './ImportPreferences':{default:'preferences'},'./studio.css':{},'./quick-output.css':{},
+  './ImportPreferences':{default:'preferences'},'../../services/api':{speechApi:{installRuntime:async()=>({started:true,message:''})}},
+  './importReadiness':loadReadiness(),'./studio.css':{},'./quick-output.css':{},
  })
  const tree=nodes(component({onImported:async()=>{}}))
  await tree.find(node=>node.type==='button'&&node.props?.variant==='cta').props.onClick()
