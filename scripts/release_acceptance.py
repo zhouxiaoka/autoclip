@@ -189,6 +189,28 @@ def composed_originals(row, review, label, platforms, manifest, folder, reviewed
     return inherited
 
 
+def owner_waiver(manifest, built_at, now):
+    """A named owner may ship with unexecuted rows; they stay `waived`, never `passed`."""
+    value = manifest.get('owner_waiver')
+    if value is None:
+        return None
+    require(isinstance(value, dict) and all(isinstance(value.get(k), str) and value[k].strip()
+            for k in ('name', 'reason')), 'owner waiver requires a named owner and reason')
+    require(built_at <= timestamp(value.get('approved_at')) <= now,
+            'owner waiver must follow the build and not be in the future')
+    return value
+
+
+def waived(row, label, manifest, labels):
+    if not (isinstance(row, dict) and row.get('status') == 'waived'):
+        return False
+    require(manifest.get('owner_waiver') is not None, f'{label} waived without a named owner waiver')
+    require(isinstance(row.get('waiver_reason'), str) and row['waiver_reason'].strip(),
+            f'{label} waiver reason required')
+    labels.append(label)
+    return True
+
+
 def row_evidence(row, label, platforms, manifest, folder, built_at, now, files, *, timed=True):
     """Return effective acceptance time; never replace the original execution time."""
     require(manifest.get('evidence_contract') in EVIDENCE_CONTRACTS, 'unknown evidence contract')
@@ -347,8 +369,10 @@ def validate(manifest, folder, assets, tag, commit, repository, build, jobs, now
     validate_build(manifest, build, jobs, commit)
     now = now or dt.datetime.now(dt.timezone.utc)
     built_at = timestamp(build.get('updated_at'))
+    waiver = owner_waiver(manifest, built_at, now)
     evidence = set()
     completed = []
+    skipped = []
 
     def passed(row, label):
         require(isinstance(row, dict) and row.get('status') == 'passed', f'{label} not passed')
@@ -360,12 +384,15 @@ def validate(manifest, folder, assets, tag, commit, repository, build, jobs, now
             require(isinstance(row.get(field), str) and row[field].strip(), f'{platform} missing {field}')
         for case in CASES:
             check = row.get('checks', {}).get(case, {})
-            completed.append(row_evidence(check, f'{platform}/{case}', [platform], manifest,
-                                          folder, built_at, now, evidence))
+            if not waived(check, f'{platform}/{case}', manifest, skipped):
+                completed.append(row_evidence(check, f'{platform}/{case}', [platform], manifest,
+                                              folder, built_at, now, evidence))
     regressions = manifest.get('regressions')
     require(isinstance(regressions, list) and regressions, 'explicit regression acceptance required')
     for row in regressions:
         require(isinstance(row.get('id'), str) and row['id'].strip(), 'regression id required')
+        if waived(row, 'regression ' + row['id'], manifest, skipped):
+            continue
         at = row_evidence(row, 'regression ' + row['id'], row.get('platforms'), manifest,
                           folder, built_at, now, evidence, timed=False)
         if at is not None:
@@ -373,15 +400,18 @@ def validate(manifest, folder, assets, tag, commit, repository, build, jobs, now
     observation = manifest.get('observation', {})
     require(observation.get('evidence_mode', 'execution') == 'execution' and 'reviewed_at' not in observation,
             'current observation cannot be inherited')
-    passed(observation, 'observation')
-    start, end = timestamp(observation.get('started_at')), timestamp(observation.get('ended_at'))
-    hours = 4 if manifest['release_type'] == 'hotfix' else 24
-    require(built_at <= start <= end <= now and end - start >= dt.timedelta(hours=hours), f'observation must cover {hours} hours after build')
-    require(max(completed) <= end, 'acceptance finished after observation')
-    for platform in PLATFORMS:
-        for field in ('devices', 'completed_flows'):
-            number = observation.get(field, {}).get(platform)
-            require(type(number) is int and number > 0, f'no observed {field} for {platform}; silence is not evidence')
+    if waived(observation, 'observation', manifest, skipped):
+        end = timestamp(waiver['approved_at'])
+    else:
+        passed(observation, 'observation')
+        start, end = timestamp(observation.get('started_at')), timestamp(observation.get('ended_at'))
+        hours = 4 if manifest['release_type'] == 'hotfix' else 24
+        require(built_at <= start <= end <= now and end - start >= dt.timedelta(hours=hours), f'observation must cover {hours} hours after build')
+        for platform in PLATFORMS:
+            for field in ('devices', 'completed_flows'):
+                number = observation.get(field, {}).get(platform)
+                require(type(number) is int and number > 0, f'no observed {field} for {platform}; silence is not evidence')
+    require(not completed or max(completed) <= end, 'acceptance finished after observation')
     approval = manifest.get('approval', {})
     require(isinstance(approval.get('name'), str) and approval['name'].strip(), 'named reviewer required')
     require(end <= timestamp(approval.get('approved_at')) <= now, 'approval must follow observation')
