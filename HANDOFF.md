@@ -1,6 +1,7 @@
 # AutoClip — 项目状态 / 进度 / 计划
 
-> 更新：2026-10-01。**1.5.0 已通过 [PR #250](https://github.com/zhouxiaoka/autoclip/pull/250) 合入 main，并正式发布为 latest**；固定 tag `v1.5.0` 指向 `e940f5ae`。桌面与 CLI/MCP 从同一 tag 构建，最终资产见 [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)，应用内更新清单已确认返回 1.5.0。Windows 缺人工界面验收及未完成观察期已在 Release 明确，官网由负责人更新。
+> 更新：2026-10-06。**1.5.5 已正式发布为 latest**（tag `v1.5.5` → `e9aba52e`），包含 1.5.1–1.5.4 的全部修复。负责人豁免了未完成的安装包验收和观察期，出问题往前修；豁免范围和上线后要盯的信号见 [1.5.5 发布记录](docs/RELEASE_1_5_5.md)。1.5.1–1.5.3 保持 Pre-release，`v1.5.4` 标签没有生成 Release。待跟进：#247、#249（Whisper 失败）、#266（Gemini key 保存）已请用户在 1.5.5 上复现。
+> 以下为 2026-10-01 的状态：**1.5.0 已通过 [PR #250](https://github.com/zhouxiaoka/autoclip/pull/250) 合入 main，并正式发布为 latest**；固定 tag `v1.5.0` 指向 `e940f5ae`。桌面与 CLI/MCP 从同一 tag 构建，最终资产见 [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)，应用内更新清单已确认返回 1.5.0。Windows 缺人工界面验收及未完成观察期已在 Release 明确，官网由负责人更新。
 > **验收与同事 CLI / MCP 测试见 [RELEASE_1_5.md](docs/RELEASE_1_5.md)**：竖版选择、片尾开关、字幕修复、完整 headless 出片，以及人物模型漏包 / 长视频队列两个 P1 均已修复并复测。旧候选 wheel 不含最后的长视频修复，同事应以正式 tag 资产为准，同版本候选包须强制重装。
 > **接手 1.5.0 先读 [1.5.0 交接文档](docs/HANDOFF_1_5_FAST_OUTPUT.md)**：现状、负责人决定、迭代过程、代码地图、踩坑和待办都在那里，随进度维护。
 > 下方 2026-09-28 及更早的内容是历史快照。
