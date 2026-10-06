@@ -80,6 +80,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           set -euo pipefail
+          # actions/checkout rewrites refs/tags/$TAG as a lightweight tag; restore the annotated object.
+          git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
           ACCEPTANCE_RUN_ID=$(python scripts/internal_acceptance.py tag-run --tag "$TAG")
           gh api "repos/$GH_REPO/actions/runs/$ACCEPTANCE_RUN_ID" > internal-acceptance-run.json
           gh run download "$ACCEPTANCE_RUN_ID" -n internal-acceptance -D internal-accepted

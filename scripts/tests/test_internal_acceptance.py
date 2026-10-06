@@ -145,6 +145,11 @@ class InternalAcceptanceTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(release.GateError):
                 gate.check_receipt(receipt, self.version, self.commit, value)
 
+    def test_tag_build_restores_annotated_tag_before_reading_trailer(self):
+        workflow = (Path(__file__).resolve().parents[2] / '.github/workflows/desktop-build.yml').read_text(encoding='utf-8')
+        restore = workflow.index('git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"')
+        self.assertLess(restore, workflow.index('internal_acceptance.py tag-run --tag "$TAG"'))
+
     def test_tag_requires_one_numeric_internal_acceptance_trailer(self):
         self.assertEqual(gate.tag_run('v1.6.0', 'Release\n\nInternal-Acceptance-Run: 456\n', 'tag\n'), 456)
         for annotation, kind in (('Release', 'tag'), ('Internal-Acceptance-Run: 0', 'tag'),

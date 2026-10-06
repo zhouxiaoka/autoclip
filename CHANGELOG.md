@@ -9,7 +9,9 @@
 
 _（本周尚无改动）_
 
-## [1.5.4] - 2026-10-03
+## [1.5.5] - 2026-10-06
+
+- 包含未公开发布的 1.5.4 全部修复（1.5.4 标签的发布构建被验收门禁误拦，未生成安装包），并修复发布构建读取验收标签的问题。
 
 - 云端转写失败时保留云端原因和配置提示，不再误报本地 Whisper 未安装；保留原有请求上限。
 
@@ -410,7 +412,8 @@ _（本周尚无改动）_
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.4...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.5...HEAD
+- [1.5.5]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.4...v1.5.5
 - [1.5.4]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.3...v1.5.4
 - [1.5.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.2...v1.5.3
 - [1.5.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.1...v1.5.2
