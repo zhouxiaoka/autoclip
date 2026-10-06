@@ -81,9 +81,9 @@ def test_tail_recovery_is_bounded_and_never_sends_a_partial_or_stale_set(tmp_pat
     intelligence.VisionRequestError('provider_error', '视觉模型请求失败', http_status=500),
     intelligence.VisionRequestError('timeout', '视觉模型请求超时'),
 ])
-def test_automatic_screening_failure_stops_before_speech_production(client, source, monkeypatch, error):
+def test_explicit_visual_screening_failure_stops_before_speech_production(client, source, monkeypatch, error):
     monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(
-        analysis_mode='auto', allow_visual_screening=True))
+        analysis_mode='visual', allow_visual_screening=True))
     monkeypatch.setattr(intelligence, 'ready', lambda: True)
     monkeypatch.setattr(intelligence, 'sample', lambda *a, **k: [])
     def fail(*args, **kwargs):
@@ -115,6 +115,38 @@ def test_automatic_screening_failure_stops_before_speech_production(client, sour
     assert submitted[0][0] == pid and submitted[0][1]['recommended_analysis'] == 'visual'
     assert not content_calls
     assert client.get('/studio/' + pid + '/source').content == source.read_bytes()
+
+
+@pytest.mark.parametrize('error', [
+    intelligence.VisionRequestError('provider_error', '视觉模型请求失败', http_status=400),
+    intelligence.VisionRequestError('timeout', '视觉模型请求超时'),
+    subprocess.CalledProcessError(1, ['ffmpeg', 'private-input']),
+])
+def test_default_auto_screening_failure_continues_with_the_subtitle_route(client, source, monkeypatch, error):
+    monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(
+        analysis_mode='auto', allow_visual_screening=True))
+    monkeypatch.setattr(intelligence, 'ready', lambda: True)
+    monkeypatch.setattr(intelligence, 'sample', lambda *a, **k: [])
+    def fail(*args, **kwargs):
+        raise error
+    monkeypatch.setattr(intelligence, 'vision_call', fail)
+    class Immediate:
+        def submit(self, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    submitted = []
+    monkeypatch.setattr(jobs, '_auto_generate', jobs._tracked('production')(lambda project_id, plan: submitted.append((project_id, plan))))
+    response = client.post('/studio/import', data={'auto_start': 'true', 'platforms': 'douyin'},
+                           files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')})
+    assert response.status_code == 200, response.text
+    pid = response.json()['project_id']
+    assert len(submitted) == 1 and submitted[0][0] == pid
+    plan = submitted[0][1]
+    assert plan['mode'] == 'fallback' and plan['recommended_analysis'] == 'subtitle' and plan['goal'] == 'content'
+    assert plan['reason'].startswith('快速画面判断未完成')
+    assert 'local_evidence' in plan
+    state = client.get('/studio/' + pid).json()
+    assert state['analysis']['status'] != 'failed' and state['generation']['status'] != 'failed'
 
 
 def test_manual_screening_failure_still_offers_an_unselected_plan(monkeypatch):
