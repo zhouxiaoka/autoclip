@@ -16,6 +16,7 @@ export interface Assignment { connection_id: string; model: string; capability: 
 export interface ModelSettings {
   version: 1
   saved?: boolean
+  migration_warnings?: string[]
   connections: Connection[]
   analysis: Assignment | null
   vision: Assignment | null

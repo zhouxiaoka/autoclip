@@ -33,3 +33,12 @@ test('abort interrupts the scheduled delay without another read',async()=>{
  await pollWorkspace(async()=>{calls++;return snapshot('running')},{...c.options,intervalMs:60000,onSettled(){queueMicrotask(()=>c.controller.abort())}})
  assert.equal(calls,1)
 })
+
+test('saved video keeps observing its pending variant until the designed cover is available',async()=>{
+ const c=setup(),pending={...snapshot('running',['completed']),output_variants:[{status:'queued'}]}
+ const finished={...snapshot('completed',['completed']),output_variants:[{status:'completed',cover:'design'}]}
+ const rows=[pending,pending,finished]
+ await pollWorkspace(async()=>rows.shift(),c.options)
+ assert.equal(c.data.length,3);assert.equal(rows.length,0)
+ assert.equal(c.data.at(-1).output_variants[0].cover,'design')
+})

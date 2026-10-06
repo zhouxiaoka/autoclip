@@ -26,6 +26,10 @@ _MODEL_PROVIDER = {'dashscope': 'alibaba', 'seed': 'volcengine', 'gemini': 'goog
 # Verified against Alibaba's official text-generation documentation, 2026-09-29.
 # https://www.alibabacloud.com/help/en/model-studio/text-generation
 _VERIFIED = {('dashscope', name): 'multimodal' for name in ('qwen3.8-max', 'qwen3.8-flash')}
+# Official model input modalities verified 2026-10-03; account lists may omit them.
+# https://help.aliyun.com/zh/model-studio/qwen3-vl-flash
+_VERIFIED.update({('dashscope', name): 'multimodal'
+                  for name in ('qwen3-vl-flash', 'qwen3-vl-flash-2026-01-22')})
 
 
 def _path():
@@ -42,16 +46,26 @@ def _read():
 
 def _update(key, value):
     with _lock:
-        data = _read()
-        data[key] = value
-        target = _path()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        temp = target.with_suffix('.' + uuid.uuid4().hex + '.tmp')
+        temp = None
         try:
+            data = _read()
+            data[key] = value
+            target = _path()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temp = target.with_suffix('.' + uuid.uuid4().hex + '.tmp')
             temp.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
             os.replace(temp, target)
+        except OSError:
+            # This optional cache must not discard a successful provider reply.
+            # Atomic replacement leaves the previous cache intact on write failure.
+            pass
         finally:
-            temp.unlink(missing_ok=True)
+            if temp is not None:
+                try:
+                    temp.unlink(missing_ok=True)
+                except OSError:
+                    # Cleanup must not turn success into failure or mask another error.
+                    pass
 
 
 def _scope(connection):

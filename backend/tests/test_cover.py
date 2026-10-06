@@ -408,3 +408,50 @@ def test_grok_and_glm_use_vendor_image_parameters():
             assert body['aspect_ratio'] == '16:9' and 'size' not in body
         else:
             assert body['size'] == '1728x960' and 'response_format' not in body
+
+
+@pytest.mark.parametrize('failure', ['InvalidSchema', 'InvalidURL', 'MissingSchema', 'ConnectionError', 'Timeout'])
+def test_request_failure_still_produces_local_cover_without_private_error(data_dir, fake_frame, failure):
+    import requests
+    from backend.services import cover
+    _project(data_dir)
+    cover.save_config(enabled=True, provider='openai', api_key='synthetic-key', allow_send_frame=True)
+    calls = []
+    class BrokenSession:
+        def post(self, *args, **kwargs):
+            calls.append(1)
+            raise getattr(requests.exceptions, failure)('private-url synthetic-key private-provider-body')
+    result = cover.generate_cover(project_id='p1', clip_id='1', title='采访观点', session=BrokenSession())
+    assert result['ok'] and result['method'] in ('local_overlay', 'frame')
+    assert Path(result['path']).read_bytes().startswith(b'\xff\xd8')
+    assert len(calls) == 1  # A failed paid request is not replayed automatically.
+    assert result['warning'] and 'private-' not in result['warning'] and 'synthetic-key' not in result['warning']
+
+
+def test_ocr_connection_failure_preserves_already_generated_cover(data_dir, fake_frame):
+    import requests
+    import base64
+    from backend.services import cover
+    _project(data_dir)
+    cover.save_config(enabled=True, provider='openai', api_key='synthetic-key', allow_send_frame=True)
+    calls = []
+    class InterruptedOCR:
+        def post(self, *args, **kwargs):
+            calls.append(1)
+            if len(calls) == 1:
+                return _Resp(200, {'data': [{'b64_json': base64.b64encode(_jpeg()).decode()}]})
+            raise requests.exceptions.ConnectionError('private-url synthetic-key')
+    result = cover.generate_cover(project_id='p1', clip_id='1', title='采访观点', session=InterruptedOCR())
+    assert result['ok'] and result['method'] == 'model'
+    assert len(calls) == 2
+    assert Path(result['path']).read_bytes().startswith(b'\xff\xd8')
+
+
+def test_unexpected_image_programming_failure_is_not_hidden_as_network(data_dir, fake_frame):
+    from backend.core.image_providers import generate_image, ImageRequest
+    class DefectiveSession:
+        def post(self, *args, **kwargs):
+            raise RuntimeError('synthetic programming defect')
+    with pytest.raises(RuntimeError, match='synthetic programming defect'):
+        generate_image(provider='openai', api_key='synthetic-key', base_url='',
+                       request=ImageRequest('cover', 1080, 1920), session=DefectiveSession())

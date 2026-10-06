@@ -25,6 +25,29 @@ def foreign_for(audience: str, text: str) -> bool:
     return audience == 'en' and bool(CJK.search(text or '') or KANA.search(text or ''))
 
 
+
+def _term_present(term: str, text: str) -> bool:
+    return bool(re.search(r'(?<![A-Za-z0-9_])' + re.escape(term) + r'(?![A-Za-z0-9_])', text, re.IGNORECASE))
+
+
+def _protected_terms(draft: dict[str, Any], lines: list[dict[str, Any]], audience: str) -> list[str]:
+    # A mixed Chinese title already retains terms the editor chose not to translate.
+    # Protect only those also present as complete words in the actual source rows;
+    # never infer a person's identity or force an English headline to remain English.
+    title = str(draft.get('title') or '')
+    if audience != 'zh' or not CJK.search(title):
+        return []
+    source = ' '.join(str(line.get('text') or '') for line in lines)
+    return list(dict.fromkeys(term for term in re.findall(r'[A-Z][A-Za-z0-9_+-]{1,39}', title)
+                             if _term_present(term, source)))
+
+
+def _check_preserved_terms(source: str, target: str, terms: list[str]) -> None:
+    if any(_term_present(term, source) and not _term_present(term, target) for term in terms):
+        # Keep source words out of log messages; the model receives the separate term list.
+        raise ValueError('translation changed a protected original name or term')
+
+
 def _items(value) -> list[dict]:
     # Model lists sometimes hold bare strings or come back as one object: keep only the objects.
     return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
@@ -45,6 +68,7 @@ PROMPT = (
     'segments 把 lines 按完整句子重新分段：from/to 是连续的行 id 区间，按顺序首尾相接、覆盖全部行、不重叠；'
     '每段只含 1–2 句话、最多覆盖 4 行，不要把大段内容合成一段；'
     'translate 为 true 时 text 是该段翻译成 audience_language 的口语化译文（去掉口头禅，不添加事实）；'
+    'protected_terms 是已在原字幕和中文标题中出现的专名或术语；标题和译文提到它们时保留原文拼写，不能改成地名或猜测音译。'
     'translate 为 false 时字幕直接用原文，segments 返回空数组 []，不要复述原文。'
     'speakers 只填写在 lines 或 known_names 中明确出现过的人名，role 写其公开身份（不确定就留空），line 是此人第一次说话的行；'
     '不确定就返回空数组，绝不猜测身份。'
@@ -119,7 +143,9 @@ def draft_lines(entries: list[dict[str, Any]], scenes: list[dict[str, Any]]) -> 
             pages = timed_screens(text, start, end, 24) if len(text) > 600 or (end - start > 8 and width(text) > 48) else [(start, end, text, '')]
             for a, b, page, _ in pages:
                 a, b = max(a, scene['start']), min(b, scene['end'])
-                if b > a:
+                # Silence-snapped cuts can overlap only the last few milliseconds of the
+                # previous question. Do not replay that entire row in captions or translation.
+                if b - a >= min(.15, (end - start) * .2):
                     lines.append({'start': a, 'end': b, 'text': page.replace('\\N', ' ')})
     return lines
 
@@ -129,7 +155,8 @@ def _fallback_title(draft: dict[str, Any], language: str) -> list[str]:
     text = _clean(draft.get('hook') or draft.get('title') or '')
     # Width follows the title's own language: an English title on a Chinese platform is not cut at 12.
     own = 'zh' if source_language([text]) == 'zh' else 'en'
-    wrap = lambda t: textwrap.wrap(t, width=TITLE_LIMIT[own], break_long_words=True)  # noqa: E731
+    from backend.services.studio.caption_layout import lines_for
+    wrap = lambda t: lines_for(t, TITLE_LIMIT[own]) if own == 'zh' else textwrap.wrap(t, width=TITLE_LIMIT[own], break_long_words=True)  # noqa: E731
     # Keep whole clauses: two lines of the first clauses read better than a line cut mid-phrase.
     clauses = [c for c in re.split(r'(?<=[，。：；！？、,:;!?—])', text) if c.strip()]
     kept = ''
@@ -159,7 +186,8 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     captions = not burned or (burned_language or src) != audience
     translate = captions and src != audience
     base = {'template': template, 'audience_language': audience, 'source_language': src, 'burned_captions': burned}
-    # Never mix languages: a fallback shows only what is already in the audience's language.
+    # Foreign titles on English platforms stay hidden; a rejected translation later preserves
+    # readable source captions rather than silently removing the subtitle track.
     fallback_title = [line for line in _fallback_title(draft, audience) if not foreign_for(audience, line)]
     fallback = {**base, 'title_lines': fallback_title, 'fallback': True,
                 'cues': [] if not captions or translate else [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''} for l in lines]}
@@ -169,6 +197,8 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
         from backend.services.studio.intelligence import text_json as call
     payload = {'template': template, 'audience_language': audience, 'translate': translate,
                'title_limit': TITLE_LIMIT[audience], 'title_hint': draft.get('title', ''),
+               'line_count': len(lines), 'last_line_id': len(lines) - 1,
+               'protected_terms': _protected_terms(draft, lines, audience),
                'known_names': known_names[:300], 'lines': [{'id': i, 'text': l['text']} for i, l in enumerate(lines)]}
     # Short ASR rows make the segment contract easy to break once; a second try with the reason
     # usually fixes it, and losing the whole package (captions included) costs far more.
@@ -185,19 +215,46 @@ def build_packaging(draft: dict[str, Any], lines: list[dict[str, Any]], strategy
     if translate:
         # Last resort for foreign-language audiences: plain line-by-line translation, so the
         # version still gets captions in its own language instead of none (or the source's).
-        fallback['cues'] = _translated_rows(lines, audience, call)
+        fallback['cues'] = _translated_rows(lines, audience, call, keep_original=template == 'interview_zh' and not burned,
+                                             protected_terms=_protected_terms(draft, lines, audience))
+        if not fallback['cues'] and not burned:
+            # A rejected model response must not turn an English interview into a captionless
+            # video. Keep readable source rows and disclose the loss of translation in the UI.
+            fallback['cues'] = source_cues(lines, audience)
     return Packaging.model_validate(fallback).model_dump()
 
 
-def _translated_rows(lines: list[dict[str, Any]], audience: str, call) -> list[dict[str, Any]]:
+def source_cues(lines: list[dict[str, Any]], audience: str) -> list[dict[str, Any]]:
+    return [{'start': l['start'], 'end': l['end'], 'text': l['text'][:600], 'original': ''}
+            for l in lines if not foreign_for(audience, l['text'])]
+
+
+def _translated_rows(lines: list[dict[str, Any]], audience: str, call, *, keep_original=False,
+                     protected_terms: list[str] | None = None) -> list[dict[str, Any]]:
     language = {'zh': '简体中文', 'en': 'English'}[audience]
     try:
-        result = call(f'把 lines 逐条翻译成{language}，口语自然，保持条数与顺序，不添加事实。返回 {{"lines":["..."]}}',
-                      {'lines': [line['text'] for line in lines]})
+        result = call(f'把 lines 逐条翻译成{language}，口语自然，不合并、不遗漏，不添加事实。'
+                      'protected_terms 中的原文专名和术语在译文中必须保留拼写，不猜测音译或改成地名。'
+                      '每个输入 id 必须恰好返回一次。返回 {"lines":[{"id":0,"text":"..."}]}',
+                      {'protected_terms': protected_terms or [],
+                       'lines': [{'id': i, 'text': line['text']} for i, line in enumerate(lines)]})
         rows = (result or {}).get('lines') if isinstance(result, dict) else None
-        if not isinstance(rows, list) or len(rows) != len(lines) or not all(isinstance(r, str) and r.strip() for r in rows):
+        if not isinstance(rows, list) or len(rows) != len(lines):
             return []
-        return [{'start': l['start'], 'end': l['end'], 'text': _clean(r)[:600], 'original': ''} for l, r in zip(lines, rows)]
+        if all(isinstance(r, dict) for r in rows):
+            ids = [r.get('id') for r in rows]
+            if any(type(i) is not int for i in ids) or set(ids) != set(range(len(lines))):
+                return []
+            rows = [r.get('text') for r in sorted(rows, key=lambda r: r['id'])]
+        # Accept the earlier ordered-string contract too; never silently zip a short result.
+        if not all(isinstance(r, str) and _clean(r) and not foreign_for(audience, r) for r in rows):
+            return []
+        if audience == 'zh' and not any(CJK.search(r) for r in rows):
+            return []
+        for line, row in zip(lines, rows):
+            _check_preserved_terms(line['text'], _clean(row)[:600], protected_terms or [])
+        return [{'start': l['start'], 'end': l['end'], 'text': _clean(r)[:600],
+                 'original': l['text'][:900] if keep_original else ''} for l, r in zip(lines, rows)]
     except Exception as error:  # noqa: BLE001
         logger.warning('Row translation failed: %s', type(error).__name__)
         return []
@@ -232,7 +289,7 @@ def _segments(raw, lines, translate):
                      'original': original[:900] if translate else '', 'lines': (start, end)})
         expected = end + 1
     if expected != len(lines):
-        raise ValueError('segments do not cover every line')
+        raise ValueError(f'segments do not cover every line: expected ids 0..{len(lines) - 1}, stopped at {expected - 1}')
     return cues
 
 
@@ -247,6 +304,9 @@ def _validated(result, lines, base, translate, burned, known_names, draft, avoid
         titles = []  # a Japanese title on a Chinese platform: use the draft title instead
     if any(foreign_for(audience, t) for t in titles):
         titles = []  # a Chinese title on an English platform: never shown; the fallback below is filtered too
+    protected = _protected_terms(draft, lines, audience)
+    if protected and any(not _term_present(term, ' '.join(titles)) for term in protected):
+        titles = []  # The existing mixed title is safer than renaming its people/terms.
     limit = TITLE_LIMIT[audience]
     if titles and any(len(t) > limit + 2 for t in titles):
         # Models often return one long line: keep their wording when it fits two lines, breaking
@@ -265,6 +325,12 @@ def _validated(result, lines, base, translate, burned, known_names, draft, avoid
     if captions if captions is not None else (not burned or translate):
         if translate:
             cues = _segments(result.get('segments'), lines, translate)  # invalid translation: whole package falls back
+            if audience == 'zh' and not any(CJK.search(cue['text']) for cue in cues):
+                raise ValueError('Chinese translation contains no Chinese captions')
+            for cue in cues:
+                start, end = cue['lines']
+                original = ' '.join(line['text'] for line in lines[start:end + 1])
+                _check_preserved_terms(original, cue['text'], protected)
             if any(foreign_for(audience, cue['text']) for cue in cues):
                 raise ValueError('English captions contain Chinese or Japanese text')
         else:

@@ -3,7 +3,7 @@ import re
 import subprocess
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 
 from backend.services.studio import packaging_render as pr
 from backend.services.studio.models import Draft, Packaging, Scene
@@ -49,6 +49,70 @@ def test_tags_can_be_switched_off_and_burned_sources_have_no_caption_layer():
     assert not any('Tag' in line.split(',')[3] for line in _dialogues(doc))
     burned = pr.scene_ass(_packaging(cues=[], burned_captions=True), SCENES, 0)
     assert not any(line.split(',')[3] in ('Caption', 'Original') for line in _dialogues(burned))
+
+
+@pytest.mark.parametrize('style', ['classic', 'boxed'])
+@pytest.mark.parametrize('translated', [False, True])
+def test_burned_picture_is_not_obscured_by_tags_or_nameplates(tmp_path, style, translated):
+    """Decorative overlays must preserve every pixel of a hard-subtitled picture."""
+    source = tmp_path / 'hard-subtitled.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i',
+                    'testsrc2=s=640x480:d=3:r=30', '-vf',
+                    'drawbox=x=0:y=ih*0.75:w=iw:h=ih*0.25:color=white:t=fill',
+                    '-pix_fmt', 'yuv420p', '-y', str(source)], check=True)
+    scene = Scene(id='a', label='a', start=0, end=3)
+    cues = [{'start': 0.2, 'end': 2.8, 'text': '翻译字幕放在画面之外，保留原视频的字幕和内容', 'original': ''}] if translated else []
+    packaging = _packaging(style=style, burned_captions=True, cues=cues,
+                           speakers=[{'at': 0.2, 'name': 'Sam Altman', 'role': 'OpenAI CEO'}],
+                           tags=[{'at': 0.5, 'text': '原字幕需要完整保留'}])
+    pictures = []
+    for name, config in [('plain', packaging.model_copy(update={'speakers': [], 'tags': []})),
+                         ('decorated', packaging)]:
+        ass = tmp_path / f'{name}.ass'
+        ass.write_text(pr.scene_ass(config, [scene], 0), encoding='utf-8')
+        draft = Draft(id=name, title='T', scenes=[scene], aspect='portrait',
+                      layout='window', packaging=config)
+        graph, label = pr.scene_video_graph(draft, scene, 0, ass, 1080, 1920)
+        frame = tmp_path / f'{name}.png'
+        subprocess.run(['ffmpeg', '-v', 'error', '-threads', '1', '-i', str(source),
+                        '-filter_complex_threads', '1', '-filter_complex', graph,
+                        '-map', f'[{label}]', '-ss', '1', '-frames:v', '1', '-y', str(frame)], check=True)
+        pictures.append(Image.open(frame).convert('RGB'))
+    difference = ImageChops.difference(*pictures)
+    assert difference.crop((0, pr.WIN_Y, pr.W, pr.WIN_Y + pr.WIN_H)).getbbox() is None
+    assert difference.crop((0, pr.WIN_Y + pr.WIN_H, pr.W, pr.H)).getbbox() is not None
+
+
+@pytest.mark.parametrize('style', ['classic', 'boxed'])
+@pytest.mark.parametrize('original', ['', 'and Sora and we now have a very relentless focus on being this intelligent service'])
+def test_interview_decorations_preserve_our_two_line_captions(tmp_path, style, original):
+    """A normal subtitle-free source still needs room for generated caption lines."""
+    source = tmp_path / 'interview.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-threads', '1', '-f', 'lavfi', '-i',
+                    'color=c=0x6E7F8F:s=640x480:d=3:r=10', '-threads', '1',
+                    '-pix_fmt', 'yuv420p', '-y', str(source)], check=True)
+    scene = Scene(id='a', label='a', start=0, end=3)
+    packaging = _packaging(style=style, burned_captions=False,
+                           cues=[{'start': 0.2, 'end': 2.8, 'text': '现在只专注于面向用户的高度智能服务。', 'original': original}],
+                           speakers=[{'at': 0.2, 'name': 'Sam Altman', 'role': 'OpenAI CEO'}],
+                           tags=[{'at': 0.5, 'text': '唯一专注的事'}])
+    assert any('\\N' in line and ',Caption' in line for line in _dialogues(pr.scene_ass(packaging, [scene], 0)))
+    pictures = []
+    for name, config in [('plain', packaging.model_copy(update={'speakers': [], 'tags': []})),
+                         ('decorated', packaging)]:
+        ass = tmp_path / f'{name}.ass'
+        ass.write_text(pr.scene_ass(config, [scene], 0), encoding='utf-8')
+        draft = Draft(id=name, title='T', scenes=[scene], aspect='portrait', layout='window', packaging=config)
+        graph, label = pr.scene_video_graph(draft, scene, 0, ass, 1080, 1920)
+        frame = tmp_path / f'{name}.png'
+        subprocess.run(['ffmpeg', '-v', 'error', '-threads', '1', '-i', str(source),
+                        '-filter_complex_threads', '1', '-filter_complex', graph,
+                        '-map', f'[{label}]', '-ss', '1', '-frames:v', '1', '-threads', '1', '-y', str(frame)], check=True)
+        pictures.append(Image.open(frame).convert('RGB'))
+    difference = ImageChops.difference(*pictures)
+    # Include the picture, the two caption lines and the bilingual original below it.
+    assert difference.crop((0, pr.WIN_Y, pr.W, pr.WIN_Y + pr.WIN_H + 200)).getbbox() is None
+    assert difference.crop((0, pr.WIN_Y + pr.WIN_H + 200, pr.W, pr.H)).getbbox() is not None
 
 
 def test_podcast_captions_show_at_most_three_words_with_the_active_word_highlighted():
@@ -161,3 +225,53 @@ def test_packaged_cjk_loads_bundled_font_in_real_ffmpeg(tmp_path):
     selections = '\n'.join(line for line in result.stderr.splitlines() if 'fontselect:' in line)
     assert 'NotoSansSC' in selections, selections
     assert 'failed to find any fallback' not in selections, selections
+
+
+@pytest.mark.parametrize('at,fit', [(0.25, False), (0.75, True), (1.25, False)])
+def test_interview_window_preserves_slide_edges_only_during_fit_shots(tmp_path, at, fit):
+    # Side markers stand for text at the edges of an inserted quote card.
+    # This track is scene-relative even when the source scene starts later.
+    source = tmp_path / 'edge-markers.png'
+    image = Image.new('RGB', (1920, 1080), (128, 128, 128))
+    image.paste((255, 0, 0), (0, 0, 200, 1080))
+    image.paste((0, 255, 0), (1720, 0, 1920, 1080))
+    image.save(source)
+    scene = Scene(id='slide', start=10, end=12, crop_x=.5, crop_track=[
+        {'start': 0, 'crop_x': .5, 'mode': 'crop'},
+        {'start': .5, 'crop_x': .5, 'mode': 'fit'},
+        {'start': 1, 'crop_x': .5, 'mode': 'crop'},
+    ])
+    draft = Draft(id='d', title='T', scenes=[scene], aspect='portrait', layout='window',
+                  packaging=_packaging(title_lines=[], cues=[], speakers=[], tags=[]))
+    ass = tmp_path / 'scene.ass'
+    ass.write_text(pr.scene_ass(draft.packaging, draft.scenes, 0), encoding='utf-8')
+    graph, label = pr.scene_video_graph(draft, scene, 0, ass, 1080, 1920)
+    frame = tmp_path / 'frame.png'
+    subprocess.run(['ffmpeg', '-v', 'error', '-threads', '1', '-loop', '1', '-i', str(source),
+                    '-filter_complex_threads', '1', '-filter_complex', graph, '-map', f'[{label}]',
+                    '-ss', str(at), '-frames:v', '1', '-threads', '1', '-y', str(frame)],
+                   check=True, timeout=30)
+    rendered = Image.open(frame).convert('RGB')
+    left = rendered.getpixel((40, pr.WIN_Y + pr.WIN_H // 2))
+    right = rendered.getpixel((1040, pr.WIN_Y + pr.WIN_H // 2))
+    if fit:
+        assert left[0] > 200 and left[1] < 40, 'left edge of quote card was cropped'
+        assert right[1] > 200 and right[0] < 40, 'right edge of quote card was cropped'
+    else:
+        assert all(abs(channel - 128) < 5 for pixel in (left, right) for channel in pixel)
+
+
+def test_re_render_of_an_old_empty_fallback_recovers_source_without_mutating_draft(monkeypatch):
+    from backend.services.studio import render
+    from backend.services.studio.models import Draft
+    draft = Draft(id='old', title='Old output', scenes=[{'id': 's', 'start': 0, 'end': 3}],
+                  packaging=_packaging(cues=[], fallback=True, burned_captions=False))
+    monkeypatch.setattr(render, '_load_srt_entries', lambda _: [
+        {'start_time': '00:00:00,000', 'end_time': '00:00:03,000', 'text': 'The original source words.'}])
+    warnings = []
+    recovered = render.recover_empty_packaging('project', draft, warnings)
+    assert [c.text for c in recovered.packaging.cues] == ['The original source words.']
+    assert draft.packaging.cues == []
+    assert warnings == ['包装未能完整生成，已使用原字幕']
+    burned = draft.model_copy(update={'packaging': draft.packaging.model_copy(update={'burned_captions': True})})
+    assert render.recover_empty_packaging('project', burned, []) is burned

@@ -21,6 +21,8 @@ if args.resources:
     sys.path.insert(0, str(resources))
     os.environ.update(AUTOCLIP_FFMPEG_PATH=str(resources / 'ffmpeg/ffmpeg.exe'),
                       AUTOCLIP_FFPROBE_PATH=str(resources / 'ffmpeg/ffprobe.exe'))
+    from windows_python_crt import verify as verify_python_crt, loaded_paths
+    python_crt = verify_python_crt(resources / 'python')
 else:
     sys.path.insert(0, str(checkout))
 root = Path(tempfile.mkdtemp(prefix="autoclip-whisper-acceptance-"))
@@ -53,6 +55,8 @@ recognizer = SpeechRecognizer.__new__(SpeechRecognizer)
 recognizer._generate_subtitle_whisper_local(video, subtitle, SpeechRecognitionConfig(model="tiny"))
 body = subtitle.read_text(encoding="utf-8")
 assert "-->" in body and "months" in body.lower(), body
+if args.resources:
+    python_crt['loaded_after_real_transcription'] = loaded_paths(resources / 'python')
 # Also reproduce an already-installed incompatible PyAV in a fresh interpreter.
 # Keep the incompatible version separate: Windows locks loaded .pyd files.
 av19_dir = root / 'av19-runtime'
@@ -80,5 +84,6 @@ report_path.write_text(json.dumps({
     "runtime_source": "installed portable Python and installed backend" if args.resources else "development checkout",
     "runtime_install": "passed", "model_download": "passed",
     "offline_real_transcription": "passed", "pyav19_recovery": "passed", "subtitle_cues": body.count("-->"),
+    **({'python_crt': python_crt} if args.resources else {}),
 }, indent=2), encoding="utf-8")
 print("Runtime install, model download, offline speech transcription passed")

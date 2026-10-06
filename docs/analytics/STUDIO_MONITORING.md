@@ -44,6 +44,12 @@
 
 保留固定标签 area=studio、phase、analysis_mode、goal、error_code、runtime、app_mode、build_environment。后端保留 desktop/web 的 environment，桌面启动器显式注入 production/development 的 build_environment，其他部署可设置 `AUTOCLIP_BUILD_ENVIRONMENT`，未设置时 unknown。前端 environment 延续 production/development。
 
+1.5.2 候选的告警补充修复增加后端 `pipeline_stage` 标签，只允许 INGEST、SUBTITLE、ANALYZE、HIGHLIGHT、EXPORT、DONE。内容任务返回有阶段但没有错误码的结构化失败时保留该阶段；仍按原有异常规则上报，不隐藏未知故障。大纲模型请求失败使用已有的受控失败码，无法解析的回答归为 invalid_response；不增加请求重放。快速视觉推荐的抽帧进程失败、超时或文件错误会保留 screening 告警并降级到字幕方案，不能阻止导入。此补充尚未发布，已存在的 1.5.1 安装包不会自动获得这些改动。
+
+未公开 1.5.4 的补充修复把本地 `subprocess.TimeoutExpired` 归为已有 `timeout` 代码，保留 `render`、`screening` 等实际阶段。模型服务和本地进程都可能超时，因此查询须同时按 `phase` 和 `error_code` 分组，不能把全部 timeout 计为供应商故障；原有枚举及 SQL 不变。普通 I/O/权限错误或仅含 timeout 字样的正文不改类。补充验收用真实本地子进程超时验证分类、渲染终态、原素材/已完成文件保留和重新生成，并核对统计终态只记录受控代码且重复观察去重；原用户的视频合并超时原因仍待确认，不能用这些边界回归宣称消除了全部渲染超时。
+
+验证查询按 `release` 与 `build_environment` 筛选，并分组查看 `phase`、`error_code`、`pipeline_stage` 和事件数。生产事件可能没有 `telemetry_test` 标签，不能通过 `-telemetry_test:true` 查询为空认定没有生产故障；需用 `build_environment:production` 正向筛选。新增阶段只用于定位失败边界，不推断具体模型回答或素材内容。回归应覆盖抽帧失败不调用视觉服务、字幕降级、无错误码的阶段传递以及脱敏白名单，且用新安装包验证正常制作与失败后恢复。
+
 ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其他工程异常保留 error。此分类依据异常类型及受控代码，不解析或上传异常正文。内容管线保留 llm_not_configured、字幕/转写、timeline_empty 等结构化失败码并按 warning 分类，不再包装成无分类的 RuntimeError。普通 ValueError 只能归为 validation；旧导入的 typed failure 分类继续保留。没有屏蔽 ConnectionResetError，也没有调整现有通知接收人或阈值。
 
 - [Studio 工程异常](https://autoclip-ts.sentry.io/issues/views/226393/)
@@ -59,3 +65,5 @@ ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其�
 自动化验证：全量后端 619 项通过；最后目标计数顺序调整另跑相关 58 项通过。前端 136 项通过，typecheck/lint/build 通过。构建仍有原有大 chunk 提示。
 
 没有发布新安装包。原生桌面保存已验证代码与回归桩，未在本轮重打 macOS/Windows 正式包；多目标部分成功、隐私关闭与重复观察通过离线回归。未向真实社交账号投稿，也未进行付费模型验收。Sentry 页面首次加载报错，重试后恢复；已保存工程异常与配置/素材警告两个 Issue View，排除 telemetry_test=true。未创建通知规则。
+
+自动制作在生成任何版本之前失败时，结果页的「重试」重新使用该项目已保存的导入选项和原素材；已有版本失败继续使用单条重试。恢复尝试沿用 flow_id，但重新登记 studio_generation_finished 的 attempt_id，终态按尝试去重。验收必须先看到真实失败码，再修正前置条件、从页面重试成功，并在 validation 查询中看到同一 flow 的失败与成功；不能把两个事件计成两个独立流程。

@@ -2,6 +2,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from backend.core import sentry_setup as sentry_setup
 
 
@@ -161,3 +163,37 @@ def test_auto_frame_phase_survives_scrubbing_without_content(monkeypatch, tmp_pa
     assert clean['tags']['phase'] == 'auto_frame'
     assert 'private' not in clean['tags']
     assert 'private video title' not in str(clean)
+
+
+@pytest.mark.parametrize('kind,code,status', [
+    ('AuthenticationError', 'authentication', 401),
+    ('PermissionDeniedError', 'authentication', 403),
+    ('RateLimitError', 'rate_limited', 429),
+    ('InternalServerError', 'provider_error', 503),
+    ('APITimeoutError', 'timeout', None),
+    ('APIConnectionError', 'connection', None),
+])
+def test_text_sdk_failures_keep_provider_code_in_rewrite_and_render(monkeypatch, tmp_path, kind, code, status):
+    import httpx
+    import openai
+    import sentry_sdk
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(sentry_setup, '_initialized', True)
+    request = httpx.Request('POST', 'https://synthetic.example/v1/chat/completions')
+    cls = getattr(openai, kind)
+    error = cls(request=request) if status is None else cls('private-provider-body synthetic-key',
+        response=httpx.Response(status, request=request), body={'private': 'synthetic-key'})
+    captured = []
+    def capture(exc):
+        captured.append(dict(sentry_sdk.get_current_scope()._tags))
+    monkeypatch.setattr(sentry_sdk, 'capture_exception', capture)
+    for phase in ('rewrite', 'render'):
+        sentry_setup.capture_studio_exception(error, phase)
+        assert captured[-1]['error_code'] == code
+        assert captured[-1]['phase'] == phase
+        clean = sentry_setup.before_send({'level': 'error', 'tags': captured[-1],
+            'exception': {'values': [{'type': kind, 'value': str(error)}]}})
+        assert 'private-provider-body' not in str(clean) and 'synthetic-key' not in str(clean)
+        assert clean['level'] == ('warning' if code in ('authentication', 'rate_limited') else 'error')
+    assert sentry_setup.studio_error_code(RuntimeError('unrelated programming defect')) == 'unexpected'
+    assert sentry_setup.studio_error_code(PermissionError('private-local-file')) == 'unexpected'

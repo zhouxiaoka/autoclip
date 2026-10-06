@@ -170,6 +170,8 @@ export default function AIModelSettings({ requestedSection }: { requestedSection
     if (result.issue) document.getElementById(issueAnchor(result.issue))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
   return <div className="ac-ai-settings">
+    {settings.migration_warnings?.includes('cover_configuration_invalid') && <p role="alert" className="ac-note">{t('旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。')}</p>}
+    {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
     <fieldset className="ac-model-fields" disabled={m.saving}>
       <div id="ai-model" className="ac-model-section">
         <h3 className="ac-model-section-title">{t('AI 服务')}</h3>

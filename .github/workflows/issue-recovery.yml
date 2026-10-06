@@ -1,5 +1,6 @@
 name: Issue recovery acceptance
 on:
+  workflow_call:
   workflow_dispatch:
   pull_request:
     paths:
@@ -27,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.13.13'
           cache: pip
       - name: Install dependencies
         run: |

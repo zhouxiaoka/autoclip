@@ -106,6 +106,30 @@ def test_readonly_legacy_database_can_be_inspected_but_not_written(tmp_path):
         engine.dispose()
 
 
+def test_exclusive_legacy_lock_defers_journal_probe_without_losing_data(tmp_path, monkeypatch):
+    from backend.core import database
+    original_create = database.create_engine
+    def immediate_engine(*args, **kwargs):
+        # A regression must fail immediately instead of blocking the test for 30s.
+        kwargs['connect_args']['timeout'] = 0
+        return original_create(*args, **kwargs)
+    monkeypatch.setattr(database, 'create_engine', immediate_engine)
+    path = tmp_path / 'exclusive.sqlite'
+    owner = legacy_database(path)
+    engine = create_database_engine('sqlite:///' + str(path))
+    try:
+        owner.execute('BEGIN EXCLUSIVE')
+        with engine.connect() as connection:
+            owner.rollback()
+            assert connection.exec_driver_sql('SELECT value FROM items').scalar() == 1
+            assert connection.exec_driver_sql('PRAGMA busy_timeout').scalar() == 30000
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql('PRAGMA journal_mode').scalar() == 'wal'
+    finally:
+        owner.close()
+        engine.dispose()
+
+
 def test_corrupt_database_error_is_not_suppressed(tmp_path):
     path = tmp_path / 'corrupt.sqlite'
     path.write_bytes(b'invalid database fixture')

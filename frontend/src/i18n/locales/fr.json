@@ -1,4 +1,6 @@
 {
+  "部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。": "Certains paramètres d’IA sont illisibles. Sélectionnez à nouveau le service et saisissez la clé. Les paramètres d’origine sont conservés ; une copie des fichiers endommagés est créée lors de l’enregistrement des corrections.",
+  "旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。": "L’ancienne configuration de la couverture est invalide. Sélectionnez à nouveau un service dans les réglages de couverture. Le fichier d’origine a été conservé.",
   "加载项目失败": "Impossible de charger les projets",
   "项目删除成功": "Projet supprimé",
   "删除项目失败": "Impossible de supprimer le projet",
@@ -1478,6 +1480,8 @@
   "访谈式 · 中英字幕": "Style interview · sous-titres chinois et anglais",
   "模板": "Modèle",
   "字幕、名牌和版式由模板按发布平台自动生成。": "Le modèle génère les sous-titres, les bandeaux de nom et la mise en page selon la plateforme choisie.",
+  "包装未能完整生成，已保留可用字幕": "L’habillage est incomplet ; les sous-titres disponibles sont conservés",
+  "包装未能完整生成，字幕暂不可用": "L’habillage est incomplet ; les sous-titres sont indisponibles pour le moment",
   "包装未能完整生成，已使用原字幕": "L’habillage est incomplet : les sous-titres d’origine sont utilisés",
   "整条视频顶部显示，第二行为强调色。": "Affiché en haut pendant toute la vidéo ; la seconde ligne prend la couleur d’accent.",
   "开头约 3 秒显示。": "Affiché environ 3 secondes au début.",
@@ -1520,5 +1524,7 @@
   "按平台默认": "Par défaut pour la plateforme",
   "访谈式（人物窗口）": "Entretien (fenêtre de l’intervenant)",
   "播客式（满屏）": "Podcast (plein écran)",
-  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Seule la mise en page verticale change. La langue des sous-titres et du texte suit la plateforme."
+  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Seule la mise en page verticale change. La langue des sous-titres et du texte suit la plateforme.",
+  "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "Impossible d’enregistrer l’état du projet. Vérifiez l’espace disque et les permissions du dossier, puis réessayez. La source et les vidéos existantes sont conservées.",
+  "无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。": "Impossible de lire les informations de connexion du navigateur. Fermez le navigateur et réessayez, ou téléchargez les vidéos publiques sans sélectionner de navigateur. Le média source est conservé."
 }

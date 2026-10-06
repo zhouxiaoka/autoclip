@@ -25,6 +25,7 @@ check_build_tools
 prepare_portable_python
 install_backend_deps
 copy_backend_source
+prepare_optional_runtime_wheels
 verify_backend_deps
 
 # ---- ffmpeg ----

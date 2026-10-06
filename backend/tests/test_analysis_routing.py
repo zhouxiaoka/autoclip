@@ -5,8 +5,8 @@ from backend.services.studio import analysis_preferences as ap, intelligence, jo
 from backend.services.studio.models import ImportOptions
 
 class Immediate:
-    def submit(self, fn, *args):
-        fn(*args)
+    def submit(self, fn, *args, **kwargs):
+        fn(*args, **kwargs)
 
 @pytest.mark.parametrize('mode', ['subtitle', 'auto', 'visual'])
 @pytest.mark.parametrize('configured', [False, True])

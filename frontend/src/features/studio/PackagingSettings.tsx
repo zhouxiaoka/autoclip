@@ -1,7 +1,7 @@
 import { Switch } from 'antd'
 import { t } from '../../i18n'
 import { Row, Segmented } from '../../ui'
-import { packagingLabel } from './packagingLabel'
+import { packagingLabel, packagingFallbackHint } from './packagingLabel'
 import type { Draft, Packaging } from './types'
 
 const TITLE_MAX = { zh: 12, en: 36 }
@@ -17,6 +17,7 @@ const STYLES: Record<Packaging['template'], { value: NonNullable<Packaging['styl
 export default function PackagingSettings({ draft, patch }: { draft: Draft; patch: (changes: Partial<Draft>) => void }) {
   const packaging = draft.packaging
   if (!packaging) return null
+  const fallbackHint = packagingFallbackHint(packaging, [], draft.subtitles)
   const max = TITLE_MAX[packaging.audience_language]
   const lines = [packaging.title_lines[0] ?? '', packaging.title_lines[1] ?? '']
   const update = (changes: Partial<Packaging>) => patch({ packaging: { ...packaging, ...changes } })
@@ -28,7 +29,7 @@ export default function PackagingSettings({ draft, patch }: { draft: Draft; patc
   }
   return <>
     <Row stack label={t('模板')} hint={t('字幕、名牌和版式由模板按发布平台自动生成。')}>
-      <span className="studio-muted">{packagingLabel(packaging)}{packaging.fallback ? ` · ${t('包装未能完整生成，已使用原字幕')}` : ''}</span>
+      <span className="studio-muted">{packagingLabel(packaging)}{fallbackHint ? ` · ${fallbackHint}` : ''}</span>
     </Row>
     <Row stack label={t('样式')} hint={t('改变字幕与动效的风格，版式和配色保持一致。')}>
       <Segmented size="sm" ariaLabel={t('样式')} value={packaging.style ?? STYLES[packaging.template][0].value}

@@ -59,7 +59,7 @@ def test_refinement_targets_ranked_gameplay_not_first_menu(monkeypatch):
     monkeypatch.setattr(vision,'sample',lambda v,t,p: calls.append(t) or [])
     responses=iter([{'events':[candidate(0,'menu',99),candidate(2,score=40),candidate(5,score=90)]},
                     {'events':[candidate(5,score=90)]}])
-    monkeypatch.setattr(vision,'vision_call',lambda _: next(responses))
+    monkeypatch.setattr(vision,'vision_call',lambda _, **_kwargs: next(responses))
     found,coverage=vision.analyze(Path('unused'),Preferences(goal='highlight'))
     assert [s.id for s in found]==['e5','e2']
     assert min(calls[1])==48 and max(calls[1])==57
@@ -72,7 +72,7 @@ def test_dense_non_play_correction_preserves_other_independent_events(monkeypatc
     monkeypatch.setattr(vision,'sample',lambda *a: [])
     responses=iter([{'events':[candidate(2,score=90),candidate(5,score=60)]},
                     {'events':[candidate(2,'reward_screen',10)]}])
-    monkeypatch.setattr(vision,'vision_call',lambda _: next(responses))
+    monkeypatch.setattr(vision,'vision_call',lambda _, **_kwargs: next(responses))
     found,coverage=vision.analyze(Path('unused'),Preferences(goal='highlight'))
     assert [s.id for s in found]==['e5']
     assert coverage['selection'][0]['disposition']=='refine_filtered'
@@ -83,7 +83,7 @@ def test_dense_rejection_of_only_candidate_reports_no_highlight(monkeypatch):
     monkeypatch.setattr(vision,'_probe',lambda _: {'duration':100})
     monkeypatch.setattr(vision,'sample',lambda *a: [])
     responses=iter([{'events':[candidate(2)]},{'events':[candidate(2,'menu')]}])
-    monkeypatch.setattr(vision,'vision_call',lambda _: next(responses))
+    monkeypatch.setattr(vision,'vision_call',lambda _, **_kwargs: next(responses))
     with pytest.raises(ValueError,match='没有找到可用玩法高光'):
         vision.analyze(Path('unused'),Preferences(goal='highlight'))
 

@@ -86,9 +86,9 @@ export default function PublishKit({ projectId, variant, analytics = {}, coverSt
           <img src={coverUrl} alt={t('封面')}/>
         </a>}
         <div className="studio-post-text">
-          <p className="studio-post-title">{post.title}</p>
+          <h2 className="studio-post-title" title={post.title}>{post.title}</h2>
           {post.description && <p className="studio-post-desc">{post.description}</p>}
-          {post.tags.length > 0 && <p className="studio-post-tags">{post.tags.map(tag => `#${tag}`).join(' ')}</p>}
+          {post.tags.length > 0 && <p className="studio-post-tags" title={post.tags.map(tag => `#${tag}`).join(' ')}>{post.tags.map(tag => `#${tag}`).join(' ')}</p>}
         </div>
       </div>
       <div className="studio-post-actions">

@@ -36,7 +36,7 @@ def set_output_branding(body: output_branding.BrandingSettings):
 
 @router.get('/ai-models')
 def get_ai_models():
-    return ai_models.public(ai_models.load() or ai_models.migrate_legacy())
+    return ai_models.public(ai_models.for_editing())
 
 
 @router.put('/ai-models')
@@ -56,7 +56,7 @@ class ConnectionModelsRequest(BaseModel):
 async def discover_connection_models(body: ConnectionModelsRequest):
     from backend.core.model_registry import discover
     try:
-        connection = ai_models.resolve_secret(body.connection, ai_models.load() or ai_models.migrate_legacy())
+        connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
         return await discover(connection, body.refresh)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -72,7 +72,7 @@ class ConnectionTestRequest(BaseModel):
 def test_connection_assignment(body: ConnectionTestRequest):
     from backend.core.llm_providers import LLMProviderFactory, ProviderType
     try:
-        connection = ai_models.resolve_secret(body.connection, ai_models.load() or ai_models.migrate_legacy())
+        connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
         endpoint = ai_models.chat_endpoint(connection, body.model)
         if body.vision:
             from backend.services.studio.vision_settings import test, VisionSettingsInput

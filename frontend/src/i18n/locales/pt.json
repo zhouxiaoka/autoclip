@@ -1,4 +1,6 @@
 {
+  "部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。": "Não foi possível ler algumas configurações de IA. Selecione o serviço e insira a chave novamente. As configurações originais são preservadas; os arquivos danificados são copiados ao salvar as correções.",
+  "旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。": "A configuração anterior da capa é inválida. Selecione novamente um serviço nas configurações de capa. O arquivo original foi preservado.",
   "加载项目失败": "Não foi possível carregar os projetos",
   "项目删除成功": "Projeto excluído",
   "删除项目失败": "Não foi possível excluir o projeto",
@@ -1478,6 +1480,8 @@
   "访谈式 · 中英字幕": "Estilo entrevista · legendas em chinês e inglês",
   "模板": "Modelo",
   "字幕、名牌和版式由模板按发布平台自动生成。": "O modelo gera legendas, identificação de nomes e layout conforme a plataforma escolhida.",
+  "包装未能完整生成，已保留可用字幕": "A edição está incompleta; as legendas disponíveis foram mantidas",
+  "包装未能完整生成，字幕暂不可用": "A edição está incompleta; as legendas estão indisponíveis no momento",
   "包装未能完整生成，已使用原字幕": "A edição ficou incompleta; as legendas originais foram usadas",
   "整条视频顶部显示，第二行为强调色。": "Aparece no topo durante todo o vídeo; a segunda linha usa a cor de destaque.",
   "开头约 3 秒显示。": "Aparece por cerca de 3 segundos no início.",
@@ -1520,5 +1524,7 @@
   "按平台默认": "Padrão da plataforma",
   "访谈式（人物窗口）": "Entrevista (janela do participante)",
   "播客式（满屏）": "Podcast (tela cheia)",
-  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Altera apenas o layout vertical. O idioma das legendas e publicações segue o da plataforma."
+  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Altera apenas o layout vertical. O idioma das legendas e publicações segue o da plataforma.",
+  "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "Não foi possível salvar o estado do projeto. Verifique o espaço em disco e as permissões da pasta e tente novamente. O original e os vídeos existentes foram preservados.",
+  "无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。": "Não foi possível ler os dados de login do navegador. Feche o navegador e tente novamente, ou baixe vídeos públicos sem selecionar um navegador. A mídia original foi preservada."
 }

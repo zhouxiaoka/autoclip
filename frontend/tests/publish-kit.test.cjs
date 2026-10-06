@@ -28,7 +28,7 @@ test('the publish page starts from the output kit: copy, hashtags and the matchi
  assert.match(publish,/coverApi\.get\(projectId, clipId, coverSlot\)/)
 })
 
-test('the kit shows the whole cover, which the 16:9 video thumbnail crops',()=>{
+test('the kit retains its complete cover preview',()=>{
  assert.match(kit,/className=\{`studio-post-cover/)
  assert.match(kit,/<img src=\{coverUrl\}/)
  assert.match(card,/coverStamp=\{coverStamp\}/)

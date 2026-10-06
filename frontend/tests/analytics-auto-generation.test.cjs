@@ -77,3 +77,61 @@ test('generation watch reports one terminal event with the aggregate summary',()
  assert.equal(finished.length,1)
  assert.equal(finished[0].props.outcome,'partial'); assert.equal(finished[0].props.speaker_framed_count,1)
 })
+
+test('automatic production failures report a safe code once without sending private errors',()=>{
+ const {t,events}=tracker()
+ t.watch('studio-generation','p1')
+ const watch=t.list().find(w=>w.kind==='studio-generation')
+ const state={...SNAPSHOT,generation:{status:'failed',error_code:'whisper_not_installed',error:'private transcript'},
+  analysis:{status:'failed',phase:'production',error_code:'whisper_not_installed',error:'private path'}}
+ t.observeStudio(watch,state); t.observeStudio(watch,state)
+ const finished=events.filter(e=>e.name==='studio_generation_finished')
+ assert.equal(finished.length,1)
+ assert.equal(finished[0].props.error_code,'whisper_not_installed')
+ assert.equal(JSON.stringify(finished).includes('private'),false)
+})
+
+test('old automatic failures use the analysis code and reject unrecognized codes',()=>{
+ for(const code of ['subtitle_setup','private arbitrary message']){
+  const {t,events}=tracker();t.watch('studio-generation','p1')
+  t.observeStudio(t.list()[0],{generation:{status:'failed'},analysis:{status:'failed',phase:'production',error_code:code}})
+  const finished=events.find(e=>e.name==='studio_generation_finished')
+  assert.equal(finished.props.error_code,code==='subtitle_setup'?'subtitle_setup':undefined)
+ }
+})
+
+test('partial output reports its failed variant code and completed output clears stale failures',()=>{
+ for(const status of ['partial','completed']){
+  const {t,events}=tracker();t.watch('studio-generation','p1')
+  t.observeStudio(t.list()[0],{...SNAPSHOT,generation:{...SNAPSHOT.generation,status,error_code:'timeout',error:'private path'}})
+  const finished=events.find(e=>e.name==='studio_generation_finished')
+  assert.equal(finished.props.error_code,status==='partial'?'timeout':undefined)
+  assert.equal(JSON.stringify(finished).includes('private'),false)
+ }
+})
+
+
+test('local render timeout retains a safe code for export and automatic partial output once',()=>{
+ const snapshot={
+  jobs:[{job_id:'private-render-job',status:'failed',error_code:'timeout',error:'private-command'}],
+  generation:{auto_start:true,status:'partial',error_code:'timeout'},
+  analysis:{status:'completed',phase:'rendering'},
+  output_variants:[
+   {draft_id:'kept',strategy_id:'douyin',status:'completed'},
+   {draft_id:'failed',strategy_id:'douyin',status:'failed',render_job_id:'private-render-job'},
+  ],
+ }
+ for(const [kind,id,event,outcome] of [
+  ['studio-export','private-render-job','studio_export_finished','failed'],
+  ['studio-generation','private-project','studio_generation_finished','partial'],
+ ]){
+  const {t,events}=tracker();t.watch(kind,id,'private-project')
+  const watch=t.list()[0]
+  t.observeStudio(watch,snapshot);t.observeStudio(watch,snapshot)
+  const finished=events.filter(e=>e.name===event)
+  assert.equal(finished.length,1)
+  assert.equal(finished[0].props.error_code,'timeout')
+  assert.equal(finished[0].props.outcome,outcome)
+  assert.equal(JSON.stringify(finished).includes('private'),false)
+ }
+})

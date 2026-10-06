@@ -9,12 +9,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty"}
+PIPELINE_STAGES = {"INGEST", "SUBTITLE", "ANALYZE", "HIGHLIGHT", "EXPORT", "DONE"}
 
 
 def studio_error_code(error: Exception) -> str:
@@ -22,6 +24,18 @@ def studio_error_code(error: Exception) -> str:
     from backend.pipeline.failures import PipelineFailure
     if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:
         return error.code
+    # Local render, frame sampling and optional-runtime preparation use typed subprocess timeouts.
+    if isinstance(error, subprocess.TimeoutExpired):
+        return "timeout"
+    # Text rewrite/translation call the SDK directly, without a pipeline wrapper.
+    # Recognize its typed failures; unrelated filesystem/programming errors stay unexpected.
+    try:
+        from openai import APIError
+    except ImportError:
+        APIError = ()
+    if isinstance(error, APIError):
+        from backend.pipeline.failures import model_call_error_code
+        return model_call_error_code(error)
     if isinstance(error, FileNotFoundError):
         return "missing_resource"
     if isinstance(error, ValueError):
@@ -136,6 +150,7 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         "runtime": {"python"}, "app_mode": {"web", "desktop"},
         "build_environment": {"production", "development", "validation", "unknown"},
         "telemetry_test": {"true"},
+        "pipeline_stage": PIPELINE_STAGES,
     }
     clean_tags = {key: value for key, value in tags.items()
                   if key in allowed and isinstance(value, str) and value in allowed[key]}
@@ -189,9 +204,15 @@ def init_sentry(mode: str = "web") -> bool:
             LoggingIntegration(level=logging.ERROR, event_level=logging.ERROR),
         ],
     )
-    sentry_sdk.set_tag("runtime", "python")
-    sentry_sdk.set_tag("app_mode", mode)
-    sentry_sdk.set_tag("build_environment", os.getenv("AUTOCLIP_BUILD_ENVIRONMENT", "unknown"))
+    # Consent can first enable the SDK inside a settings request. Request-local
+    # tags disappear when that request exits; process identity belongs globally.
+    scope = sentry_sdk.get_global_scope()
+    scope.set_tag("runtime", "python")
+    scope.set_tag("app_mode", mode)
+    build_environment = os.getenv("AUTOCLIP_BUILD_ENVIRONMENT", "unknown")
+    scope.set_tag("build_environment", build_environment)
+    if build_environment == "validation":
+        scope.set_tag("telemetry_test", "true")
     _initialized = True
     logger.info("Sentry 已启用（backend）")
     return True
@@ -211,6 +232,9 @@ def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None
             scope.set_tag("area", "studio")
             scope.set_tag("phase", phase)
             scope.set_tag("error_code", studio_error_code(error))
+            stage = getattr(error, "stage", None)
+            if isinstance(stage, str) and stage in PIPELINE_STAGES:
+                scope.set_tag("pipeline_stage", stage)
             if analysis_mode:
                 scope.set_tag("analysis_mode", analysis_mode)
             if goal:

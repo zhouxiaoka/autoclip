@@ -1,0 +1,590 @@
+{
+  "schema_version": 1,
+  "stage": "internal",
+  "version": "1.5.4",
+  "commit": "90edc851b435c4d2bf5bd8fd5a47777183a3c625",
+  "build_run_id": 37330742634,
+  "assets": {
+    "AutoClip Desktop_1.5.4_aarch64.dmg": "ab5d460df62951532bf9988cc825c2425c53da8cee885ba5555010a9f2cb9c14",
+    "AutoClip Desktop_1.5.4_x64-setup.exe": "9101dec6b8cf69b1d85701e9f11bcd3e1d752ef1ac45c21635c420bc76930247",
+    "AutoClip Desktop_1.5.4_x64-setup.exe.sig": "5c5a0452e5a295c35378829135e57aaf4f58afd27c2582cb8b09e61b3a80582f",
+    "AutoClip.Desktop_1.5.4_aarch64.app.tar.gz": "3dcc4d5b342c41374e11898b3071a8cb76aad7c31ba2221679b97fa2d5bf5232",
+    "AutoClip.Desktop_1.5.4_aarch64.app.tar.gz.sig": "175824cdaf018cdf6a1ef73c2bb5c8f73e57aa4338b41837d278056dd363ae8e",
+    "internal-build-provenance.json": "4a271d97c48f5d95c659f9cc5e90b9b54dea9c6d9a2eb5c57b6a2c7148982649"
+  },
+  "platforms": {
+    "windows-x64": {
+      "os": "Windows Server2025 Datacenter26100 x64",
+      "machine": "Tencent Shanghai x64 cloud VM;2CPU/8GB; not Windows11 physical machine or ARM",
+      "runtime": "portable Python3.13.13; installed4CRT/FFprobe byte identities verified; optional CT2/runtime in new profile not prepared",
+      "checks": {
+        "clean_install": {
+          "status": "waived",
+          "waiver_reason": "Installed on Windows Server 2025 x64 cloud VM; 237/237 backend source and runtime identity verified; native start/save/cold restart and two normal quits executed. First-run onboarding not recorded."
+        },
+        "upgrade_legacy": {
+          "status": "waived",
+          "waiver_reason": "1.5.0/1.5.1 overlay upgrades passed on earlier candidate 8f35f8fc/8fc93939; not re-executed or formally bound to 90edc851."
+        },
+        "model_settings": {
+          "status": "waived",
+          "waiver_reason": "Native save and cold restart of preconfigured roles executed; independent four-role selection and invalid key/address recovery not recorded on this package."
+        },
+        "local_with_subtitles": {
+          "status": "waived",
+          "waiver_reason": "Not executed end-to-end with SRT on this package; same-project retry produced a real MP4 after injected 500s."
+        },
+        "local_without_subtitles": {
+          "status": "waived",
+          "waiver_reason": "One real 45-second Cloud ASR 3.1 transcription (HTTP 200, SRT) on this package; SenseVoice output passed on earlier candidate de3a765d; long cross-chunk audio not executed."
+        },
+        "link_import": {
+          "status": "waived",
+          "waiver_reason": "Real YouTube/Bilibili link import not executed on this package."
+        },
+        "visual_generation": {
+          "status": "waived",
+          "waiver_reason": "Frame guard and binding negatives passed offline; real two-stage vision run never started."
+        },
+        "failure_recovery": {
+          "status": "waived",
+          "waiver_reason": "Persistent 500 limited to 15 POSTs, then same project retried to a completed 5.68 MB MP4 on this package; recovery-exit observer timed out, so not recorded as passed."
+        },
+        "output_delivery": {
+          "status": "waived",
+          "waiver_reason": "Native caption edit/save and ZIP CRC/Chinese filename/video SHA matched on this package; clipboard copy and full first/middle/end playback not recorded."
+        },
+        "privacy_telemetry": {
+          "status": "waived",
+          "waiver_reason": "Production privacy OFF process/network capture and validation telemetry not completed on Windows."
+        }
+      }
+    },
+    "macos-arm64": {
+      "os": "macOS arm64; exact OS identity retained in installed identity receipt",
+      "machine": "Apple Silicon Mac; native arm64 installed package; isolated application data",
+      "runtime": "portable Python3.13.13 and packaged FFmpeg/FFprobe; selected byte comparisons verified, optional runtime closures not universally verified",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "completed_at": "2026-10-06T04:09:26.312403+00:00",
+          "evidence": "evidence/macos-clean-install.json"
+        },
+        "upgrade_legacy": {
+          "status": "waived",
+          "waiver_reason": "1.5.0 and 1.5.1 native upgrades, SQLite contention recovery, key/project retention and normal quit executed on candidate de3a765d; inheritance proof contains private paths and is not published."
+        },
+        "model_settings": {
+          "status": "waived",
+          "waiver_reason": "Saved four-role settings survived cold restart; invalid key 401 and unreachable address corrected to 200 on this package; address error toast text not retained."
+        },
+        "local_with_subtitles": {
+          "status": "waived",
+          "waiver_reason": "Native SRT output, decode and save passed on earlier candidates (8f35f8fc/8acfe111); not re-executed on 90edc851."
+        },
+        "local_without_subtitles": {
+          "status": "waived",
+          "waiver_reason": "Cloud ASR 3.1 no-SRT output (46.93 s, 1080x1920) passed on de3a765d; Whisper/SenseVoice on earlier candidates; not re-executed on 90edc851."
+        },
+        "link_import": {
+          "status": "waived",
+          "waiver_reason": "Bilibili and YouTube outputs passed on 8f35f8fc/8acfe111; not re-executed on 90edc851."
+        },
+        "visual_generation": {
+          "status": "waived",
+          "waiver_reason": "Real qwen3-vl-flash vision run (8 HTTP 200, 5 outputs with covers) passed on de3a765d; consent cancel path not recorded."
+        },
+        "failure_recovery": {
+          "status": "waived",
+          "waiver_reason": "Synthetic 401/unreachable address recovery on this package and web 500 same-project retry on 90edc851 source; native installed retry not recorded."
+        },
+        "output_delivery": {
+          "status": "waived",
+          "waiver_reason": "Native result copy, Chinese ZIP and caption restore passed on this package; full playback review of a fresh 90edc851 output not recorded."
+        },
+        "privacy_telemetry": {
+          "status": "waived",
+          "waiver_reason": "Validation telemetry (failed and completed attempts, dedupe, Sentry tags) passed for 90edc851 web/backend; native privacy OFF startup-to-exit capture not completed."
+        }
+      }
+    }
+  },
+  "regressions": [
+    {
+      "id": "154-01",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "隐私设置慢响应覆盖新选择: 延迟GET、离开返回时保留最后一次开关选择. Current evidence: 开关界面已有原生证据；慢响应及实际传输仍须逐断言核证"
+    },
+    {
+      "id": "154-02a",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "生成字幕与标签、名牌重叠: 调整生成字幕下方的重点词和人物名牌位置. Current evidence: 源码/渲染检查；不能代替真实硬字幕场景"
+    },
+    {
+      "id": "154-02b",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "标签覆盖原片硬字幕: 保留真实源字幕像素，不把白色控制图当实拍硬字幕. Current evidence: 真实硬字幕边界证据待逐项核验"
+    },
+    {
+      "id": "154-03",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "账号模型缓存写失败导致列表刷新失败: mkdir、write、replace失败仍返回已取得的实时目录. Current evidence: 源码回归已带入；客户原密钥/目录失败根因未统一确认"
+    },
+    {
+      "id": "154-04a",
+      "platforms": [
+        "windows-x64"
+      ],
+      "status": "waived",
+      "waiver_reason": "Windows旧CRT导致Whisper原生崩溃: 捆绑运行库，核实际CTranslate2加载与转写路径. Current evidence: Windows b3实际Tiny/CRT已验证；承接需运行时等价"
+    },
+    {
+      "id": "154-04b",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "完整模型缓存重试仍留旧错误: 核完整快照、残留error、打断准备与并行上限. Current evidence: 源码回归已带入；中断/重试具体包断言仍需签核"
+    },
+    {
+      "id": "154-05a",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "低帧率视频尾部取帧失败: 保留最后有效帧，检查8fps等EOF边界. Current evidence: 源码回归已带入；不得把普通视频通过当EOF触发通过"
+    },
+    {
+      "id": "154-05b",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "自动视觉失败后静默改成字幕制作: 明确读取、模型、HTTP错误与可重试终态. Current evidence: Mac de3真实视觉成功；失败及恢复断言另验"
+    },
+    {
+      "id": "154-06",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "启动后开启Sentry丢运行环境标签: 保留OS、版本、build、scope并去重. Current evidence: 实际validation收数已有子证据；完整后台边界待签核"
+    },
+    {
+      "id": "154-07",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "本地视频处理超时误记未知错误: 按TimeoutExpired类型归timeout，保留阶段、旧片及重试. Current evidence: 源码失败前后证明；原远端超时原因未确认"
+    },
+    {
+      "id": "154-08a",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "视觉已出片但首页仍制作中: 末任务成功、全失败、部分失败与pending计数同步. Current evidence: de3真实输出存在；各终态断言不由单成功替代"
+    },
+    {
+      "id": "154-08b",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "旧智能导入终态未恢复到首页: 首页先消费持久终态，再筛选和进入详情. Current evidence: 源码回归；需核原生首页首次恢复依赖"
+    },
+    {
+      "id": "154-09",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "统计关闭仍初始化SDK或取远端配置: OFF不初始化、不发配置/flag/事件；ON恢复. Current evidence: 双OFF原生界面已核；实际全进程传输尚未闭环"
+    },
+    {
+      "id": "154-10",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "扩展路径未用内置SenseVoice依赖: 识别Windows便携路径与macOS便携运行时. Current evidence: Windows de3 cache-assisted新runtime真实准备/转写通过；非默认冷下载"
+    },
+    {
+      "id": "154-11",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "无口播视觉片误报字幕不可用: 无字幕视觉不警告；访谈缺字幕仍警告、恢复后清除. Current evidence: 源码回归；不能据此强制给无口播视频造字幕"
+    },
+    {
+      "id": "154-12",
+      "platforms": [
+        "windows-x64"
+      ],
+      "status": "waived",
+      "waiver_reason": "干净Windows桌面程序缺CRT: 检查真实EXE依赖与安装包内运行库. Current evidence: Windows b3实际EXE/CRT已核；新包身份尚待核对"
+    },
+    {
+      "id": "154-13a",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "翻译漏行、重复ID或无效内容: 保留合法译文或原文，维护cue顺序及专名. Current evidence: 源码回归；真实包装缺项需断言签核"
+    },
+    {
+      "id": "154-13b",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "旧空字幕草稿重新导出丢字幕: 从源SRT恢复字幕，不改原稿. Current evidence: 源码回归已带入；旧稿重渲染不是普通新稿通过"
+    },
+    {
+      "id": "154-13c",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "双语/降级标签与实际字幕不符: 按实际输出显示标签. Current evidence: 源码检查；新包UI证据待映射"
+    },
+    {
+      "id": "154-14",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "切入下一问题、重播上句和标题断句: 说话人切换切点、几毫秒重叠排除、自然短语换行. Current evidence: 已有输出/音频对应分析；精细内容与听感仍需审阅"
+    },
+    {
+      "id": "154-15",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "浏览器cookie被占用导致公开视频下载失败: 仅一次匿名重试，仍需登录时明确提示、不改浏览器数据. Current evidence: Mac旧8f真实YouTube已出片；占用条件/Windows站点差集待核"
+    },
+    {
+      "id": "154-16a",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "封面地址/网络故障让出片失败: 安全错误并回退有效本地封面. Current evidence: 源码回归已带入；不等于供应商网络已恢复"
+    },
+    {
+      "id": "154-16b",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "OCR校对失败丢掉已生成封面: 保留已有图片，不额外循环付费生成. Current evidence: 源码回归；真实生成图和故障断言待核证"
+    },
+    {
+      "id": "154-17",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "文字SDK错误均误记unknown: 重写/翻译区分权限、429、超时、连接故障. Current evidence: 源码测试已带入；正确凭据/供应商额度仍外部条件"
+    },
+    {
+      "id": "154-18a",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "无效旧可选配置阻断所有设置: 隔离分析、视觉、封面连接和旧ASR型号. Current evidence: Mac150/151→de3真实恢复保存/重启完成；Windows旧8f子证据待审"
+    },
+    {
+      "id": "154-18b",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "损坏AI设置无修复路径: 明确修复入口，保存备份损坏文件、保留有效连接. Current evidence: 源码回归；原用户字段缺失仍不可统一关闭"
+    },
+    {
+      "id": "154-18c",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "持续500/503/429无界重试: 安全GET有界；写POST不自动重复提交. Current evidence: 源码回归；实际失败→成功链路仍需差集验收"
+    },
+    {
+      "id": "154-18d",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "SQLite占用导致升级/启动失败: 可选journal初始化恢复，保留所有项目. Current evidence: Mac150/151→de3真实12秒锁恢复；Windows150/151→8f真实18秒锁恢复"
+    },
+    {
+      "id": "154-18e",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "SenseVoice损坏/只读临时状态无法恢复: 独立临时文件、同步读写、打断后恢复. Current evidence: Windows de3真实新准备通过；永久ACL拒绝不承诺自动治愈"
+    },
+    {
+      "id": "154-18f",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "横版卡片误显竖屏、冗余文本及操作错位: 完整竖幅，标题简介整合，3/2/1列、8语言换行与底部对齐. Current evidence: 多个真实成片已1080×1920；紧凑UI窄屏/8语逐项仍需核证"
+    },
+    {
+      "id": "154-18g",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "旧Gemini/Grok/GLM生图协议迁移错误: 保留各自原生协议/地址. Current evidence: 源码迁移回归；#266 Gemini反馈原条件未确认闭环"
+    },
+    {
+      "id": "154-18h",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "并发人物检测结果串视频: 按来源隔离YuNet检测状态. Current evidence: 源码真实检测并发回归；不等于封面识别Sam本人问题已修"
+    },
+    {
+      "id": "154-18i",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "本地稿猜节目名、人物/公司话题: 缺出处时去猜测，话题约束为原字幕证据. Current evidence: 源码回归；原生稿/ZIP已有部分证据"
+    },
+    {
+      "id": "154-18j",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "自动制作失败无法继续或重复上报: 同flow分attempt恢复，终态去重，显式重试. Current evidence: 已有validation失败→成功/去重子证据；多错误分支待签核"
+    },
+    {
+      "id": "154-19a",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "竖屏取景裁掉引用卡/PPT两侧: 无人物内容保留整画面，人物镜头恢复取景. Current evidence: 源码回归；真实引用卡边界不能由纯人脸片替代"
+    },
+    {
+      "id": "154-19b",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "百炼VL元数据缺失被当纯文字: 识别已知Qwen VL，未知模型需明确确认. Current evidence: Mac de3实际qwen3-vl-flash成功；未知能力边界待签核"
+    },
+    {
+      "id": "154-19c",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "视觉事件数组被当无效回答: 接受直接列表，仍拒绝截断、坏结构、越界. Current evidence: 源码回归及实际视觉成功子证据"
+    },
+    {
+      "id": "154-19d",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "关视觉后封面/字幕判断仍上传帧: 关闭时不上传，保留已有绑定. Current evidence: 实际取消/未配置/OFF零帧上行尚待独立证明"
+    },
+    {
+      "id": "154-20",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "未验先tag导致连续消耗版本号: Internal Acceptance绑定源码/包/结果；未通过阻断标签. Current evidence: 门槛/负例已落地；本轮正式通过回执尚未产生"
+    },
+    {
+      "id": "154-21",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "状态持续写失败任务卡住: 持久拒绝也可见真实终态，保留旧片与隔离新任务. Current evidence: 源码回归；Windows真实占用与持续拒绝包断言待签核"
+    },
+    {
+      "id": "154-22a",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "状态读拒绝任务永远进行中: 接受任务后身份级终态记录，覆盖分析/制作/封面等入口. Current evidence: 源码回归；安装包触发证据待签核"
+    },
+    {
+      "id": "154-22b",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "读取恢复后首页未消费真实终态: 先恢复首页持久状态，不依赖先点详情. Current evidence: 源码回归；首页恢复实际断言待核"
+    },
+    {
+      "id": "154-22c",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "旧失败回执覆盖新任务: 校验phase/run/project/格式隔离. Current evidence: 源码回归；不同尝试交错边界待逐项签核"
+    },
+    {
+      "id": "154-22d",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "任务提交被拒后留幽灵processing: Future接受前精确回滚，回滚拒写仍可恢复. Current evidence: 源码回归；必须实际触发拒绝条件"
+    },
+    {
+      "id": "154-22e",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "父子渲染终态顺序打架: 读取拒绝/子先完成仍保留真正接受的任务身份. Current evidence: 源码回归；不能由普通顺序完成替代"
+    },
+    {
+      "id": "154-23",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "快速渲染先完成导致卡片永远排队: 接受job绑定一次，消除漏结果/重复编码. Current evidence: 源码回归；快速完成与并发claim断言另核"
+    },
+    {
+      "id": "154-24",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "弹窗下拉菜单被遮挡无法鼠标选: portal层级与关闭卸载一致，8语言/窄窗. Current evidence: 组件及截图回归已有证据；原生所有入口覆盖待核证"
+    },
+    {
+      "id": "154-25",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "Windows静音检测编码/缺stderr崩溃: 兼容中文、希腊文、坏UTF8、缺stderr；可选停顿失败保留字幕切点. Current evidence: 包内模块检查已有；Sentry38原始errno/stderr缺失"
+    },
+    {
+      "id": "154-26",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "发布简介虚构CEO/CTO/CFO/COO经历: 只接受原字幕、区分现任和曾任；省略不实简介. Current evidence: Source regressions plus existing native empty-description evidence; formal source/runtime review remains required."
+    },
+    {
+      "id": "154-27",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "视频完成后最后封面不自动出现: 跟踪当前cover收尾，失败/重启保留已有视频. Current evidence: Dual-platform real de3 same-page scoped pass found; no repeat unless dependency changes."
+    },
+    {
+      "id": "154-28",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "Cloud失败被吞后误报Whisper未安装: 手动/legacy链保留Cloud类型，安全provider_error终态，不加请求. Current evidence: Exact installed Mac30functional assertions pass; original QA control exit1 is preserved. Installed native failed-to-retry gap and Windows required scopes are not claimed passed."
+    },
+    {
+      "id": "154-29",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "waived",
+      "waiver_reason": "发布简介虚构公司负责人身份: 8语言有限角色、原字幕/时间范围、CEO可泛化但不可反推. Current evidence: Both exact90ed package six controls pass; Mac native controlled downstream copy/ZIP and restoration done, Windows native downstream pending."
+    }
+  ],
+  "blockers": [],
+  "approval": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-10-06T07:14:25+00:00"
+  },
+  "owner_waiver": {
+    "name": "zhouxiaoka (product owner)",
+    "approved_at": "2026-10-06T07:14:25+00:00",
+    "reason": "Owner decision on 2026-10-06: v1.5.0 users carry known production defects fixed in this candidate; after three days of acceptance without progress, ship 1.5.4 now and fix forward. Unexecuted rows are waived, not passed; release monitoring follows docs/RELEASE_1_5_4.md."
+  }
+}

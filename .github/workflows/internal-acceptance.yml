@@ -1,0 +1,77 @@
+name: Internal Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: "Full source SHA of the untagged internal desktop build"
+        required: true
+        type: string
+      build_run_id:
+        description: "Successful untagged Desktop Build run, both platforms"
+        required: true
+        type: string
+      manifest_path:
+        description: "Committed sanitized internal acceptance manifest"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      MANIFEST: ${{ inputs.manifest_path }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Collect the untagged source and immutable build artifacts
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, re
+          assert re.fullmatch(r'[0-9a-f]{40}', os.environ['SOURCE_COMMIT']), 'full source SHA required'
+          assert re.fullmatch(r'[1-9]\d*', os.environ['BUILD_RUN_ID']), 'invalid build run'
+          PY
+          git ls-files --error-unmatch -- "$MANIFEST" >/dev/null
+          git fetch --no-tags origin "$SOURCE_COMMIT"
+          VERSION=$(git show "$SOURCE_COMMIT:src-tauri/tauri.conf.json" | python -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > build-run.json
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID/jobs?per_page=100" > build-jobs.json
+          gh run download "$BUILD_RUN_ID" -n autoclip-desktop-macos-arm64 -D internal-assets
+          gh run download "$BUILD_RUN_ID" -n autoclip-desktop-windows-x64 -D internal-assets
+          gh run download "$BUILD_RUN_ID" -n internal-desktop-provenance -D internal-assets
+      - name: Fetch every hash-bound original and current source
+        run: |
+          set -euo pipefail
+          python scripts/release_acceptance.py source-commits --manifest "$MANIFEST" > evidence-source-commits.txt
+          while IFS= read -r source; do
+            git fetch --no-tags origin "$source"
+          done < evidence-source-commits.txt
+      - name: Validate installed desktop cases and every repair before tagging
+        run: |
+          python scripts/internal_acceptance.py validate --version "$VERSION" --commit "$SOURCE_COMMIT" \
+            --assets internal-assets --manifest "$MANIFEST" --build-run build-run.json \
+            --build-jobs build-jobs.json --acceptance-run-id "$GITHUB_RUN_ID" --bundle accepted
+      - name: Preserve only reviewed, sanitized internal evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-acceptance
+          path: accepted/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Summary
+        run: |
+          echo "Internal acceptance passed for $SOURCE_COMMIT. No tag or release was created. An authorized annotated tag must include Internal-Acceptance-Run: $GITHUB_RUN_ID and point to this exact source." >> "$GITHUB_STEP_SUMMARY"

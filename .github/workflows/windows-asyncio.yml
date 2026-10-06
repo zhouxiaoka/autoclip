@@ -1,10 +1,15 @@
 name: Windows asyncio regression
 
 on:
+  workflow_call:
   push:
     paths:
       - 'backend/core/windows_asyncio.py'
       - 'backend/tests/test_windows_asyncio.py'
+      - 'backend/services/studio/store.py'
+      - 'backend/tests/test_studio_store_recovery.py'
+      - 'backend/tests/test_studio_persistent_write_failure.py'
+      - 'scripts/windows_tests/test_studio_store.py'
       - 'backend/app_factory.py'
       - 'scripts/lib/desktop_build_common.sh'
       - '.github/workflows/windows-asyncio.yml'
@@ -13,6 +18,10 @@ on:
     paths:
       - 'backend/core/windows_asyncio.py'
       - 'backend/tests/test_windows_asyncio.py'
+      - 'backend/services/studio/store.py'
+      - 'backend/tests/test_studio_store_recovery.py'
+      - 'backend/tests/test_studio_persistent_write_failure.py'
+      - 'scripts/windows_tests/test_studio_store.py'
       - 'backend/app_factory.py'
       - 'scripts/lib/desktop_build_common.sh'
       - '.github/workflows/windows-asyncio.yml'
@@ -23,6 +32,39 @@ permissions:
   contents: read
 
 jobs:
+  media-runtime:
+    name: Windows media runtime regressions
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.13"
+      - run: python -m pip install -r requirements.txt -r requirements-test.txt
+      - name: Real media inference, SenseVoice recovery and Windows state replacement
+        env:
+          AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-media-regression
+          AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-media-regression
+          SENTRY_DSN: ""
+        run: python -m pytest backend/tests/test_framing_concurrency.py backend/tests/test_sensevoice.py backend/tests/test_studio_store_recovery.py backend/tests/test_studio_persistent_write_failure.py scripts/windows_tests/test_studio_store.py -q
+      - name: Prepare FFmpeg for real interview-window rendering
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'FFmpeg installation failed' }
+            $env:PATH = "$env:ChocolateyInstall\bin;$env:PATH"
+          }
+          ffmpeg -version
+          if ($LASTEXITCODE -ne 0) { throw 'FFmpeg unavailable' }
+      - name: Quote-card edges and shot-mode transitions on Windows
+        env:
+          AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-window-render-regression
+          AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-window-render-regression
+          SENTRY_DSN: ""
+        run: python -m pytest backend/tests/test_packaging_render.py -k preserves_slide_edges -q
+
   windows-asyncio:
     name: Windows Proactor cleanup
     runs-on: windows-latest

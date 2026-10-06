@@ -1,0 +1,6 @@
+# Source quality tooling only; desktop shipping dependencies remain in requirements.txt.
+ruff==0.16.9
+# Whisper word-timing/empty-audio regression fixtures require actual array semantics.
+numpy==2.2.6
+# Exercise the bundled YuNet model with real concurrent inference, never a mock detector.
+opencv-python-headless==4.13.0.92

@@ -68,6 +68,7 @@ export function initAnalytics(): void {
     }
     return
   }
+  if (!isAnalyticsEnabled()) return
 
   try {
     posthog.init(POSTHOG_KEY, {
@@ -81,6 +82,8 @@ export function initAnalytics(): void {
     capture_performance: false,
     // 隐私优先：默认不录屏（PostHog 端也需另行开启）
     disable_session_recording: true,
+    // Feature flags and remote configuration are unused; opt-out must stop all SDK requests.
+    advanced_disable_flags: true,
     // HashRouter 下手动上报 pageview（见 trackPageview）
     capture_pageview: false,
     capture_pageleave: false,
@@ -108,6 +111,7 @@ export function setAnalyticsEnabled(enabled: boolean): void {
     /* localStorage 不可用时忽略 */
   }
   for (const listener of preferenceListeners) { try { listener() } catch { /* isolate observers */ } }
+  if (!initialized && enabled) initAnalytics()
   if (!initialized) return
   try {
     if (enabled) posthog.opt_in_capturing()

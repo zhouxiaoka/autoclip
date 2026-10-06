@@ -116,6 +116,37 @@ test('errors and routes contain no original secrets, paths or search parameters'
   assert.equal(core.errorCode({ message: 'sk-secret /Users/person.mp4', response: { status: 401 } }), 'http_401')
   assert.equal(core.errorCode({ message: 'secret' }), 'unknown')
 })
+test('persisted opt-out skips SDK initialization and can be enabled later without double init', () => {
+  const storage = memory(); storage.setItem('autoclip.analytics.optOut', 'true')
+  const calls = []; let config
+  const sdk = {
+    init(_key, cfg) { calls.push('init'); config = cfg },
+    capture() { calls.push('capture'); return {} },
+    opt_out_capturing() { calls.push('out') }, opt_in_capturing() { calls.push('in') },
+  }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, { localStorage: storage, window: {} })
+  ph.initAnalytics(); ph.initAnalytics(); ph.setAnalyticsEnabled(false)
+  assert.equal(ph.captureBusinessEvent('disabled'), false)
+  assert.deepEqual(calls, [])
+  ph.setAnalyticsEnabled(true)
+  assert.equal(config.advanced_disable_flags, true)
+  assert.equal(ph.captureBusinessEvent('enabled'), true)
+  ph.setAnalyticsEnabled(false)
+  assert.equal(ph.captureBusinessEvent('disabled-again'), false)
+  ph.setAnalyticsEnabled(true); ph.initAnalytics()
+  assert.equal(calls.filter(call => call === 'init').length, 1)
+  assert.equal(calls.filter(call => call === 'capture').length, 1)
+  assert.equal(storage.getItem('autoclip.analytics.optOut'), 'false')
+})
+test('opt-out override prevents SDK initialization even when localStorage is unavailable', () => {
+  let initialized = 0
+  const sdk = { init() { initialized += 1 } }
+  const blocked = { getItem() { throw Error('blocked') }, setItem() { throw Error('blocked') } }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, { localStorage: blocked, window: {} })
+  ph.setAnalyticsEnabled(false); ph.initAnalytics()
+  assert.equal(initialized, 0)
+  assert.equal(ph.captureBusinessEvent('disabled'), false)
+})
 test('SDK exceptions and unavailable storage cannot break business or override opt-out', () => {
   const captured = []; let config
   const sdk = { init(_key, cfg) { config = cfg }, capture(name, props) { captured.push({ name, props }); return {} },

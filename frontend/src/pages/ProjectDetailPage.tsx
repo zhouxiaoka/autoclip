@@ -9,6 +9,7 @@ import dayjs from 'dayjs'
 import { useProjectStore, Collection } from '../store/useProjectStore'
 import { projectApi, speechApi } from '../services/api'
 import StudioResults from '../features/studio/StudioResults'
+import { needsImportConfirmation } from '../features/studio/importRouting'
 import { studioApi, errorText } from '../features/studio/api'
 import LlmKeyFailureEmpty from '../components/LlmKeyFailureEmpty'
 import { classifyLlmKeyFailure } from '../utils/llmFailure'
@@ -276,7 +277,7 @@ const ProjectDetailPage: React.FC = () => {
     )
   }
 
-  if (currentProject.settings?.import_staging || currentProject.processing_config?.import_staging) return <Navigate to={`/import/${id}`} replace />
+  if (needsImportConfirmation(currentProject)) return <Navigate to={`/import/${id}`} replace />
 
   const clips = currentProject.clips || []
   const collections = currentProject.collections || []

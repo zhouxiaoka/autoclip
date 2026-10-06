@@ -16,7 +16,7 @@ def test_legacy_retry_waits_for_explicit_confirmation(client,monkeypatch,goal):
     monkeypatch.setattr(jobs,'analyze_project',lambda *a,**k:pytest.fail('legacy bypass'))
     monkeypatch.setattr(jobs,'run_content',lambda *a,**k:pytest.fail('production before confirmation'))
     class Immediate:
-        def submit(self,fn,*args): fn(*args)
+        def submit(self, fn, *args, **kwargs): fn(*args, **kwargs)
     monkeypatch.setattr(jobs,'executor',Immediate())
     old=client.post('/studio/p1/drafts',json={'clip_ids':['c1'],'title':'Keep existing edit'}).json()
     response=client.post('/studio/p1/analyze')

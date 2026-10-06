@@ -99,7 +99,7 @@ export interface StudioSnapshot {
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; local_evidence?: { subtitle_status?: string } }
   analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
   jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[] } }[]
-  generation?: { auto_start?: boolean; status?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string } | null
+  generation?: { auto_start?: boolean; status?: string; error_code?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string } | null
   output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
 }
@@ -283,7 +283,7 @@ export class WorkflowTracker {
       }
     } else if (w.kind === 'studio-generation' && ['completed', 'partial', 'failed'].includes(snapshot.generation?.status || '')) {
       event = 'studio_generation_finished'; outcome = snapshot.generation!.status
-      details = generationSummary(snapshot)
+      details = { ...generationSummary(snapshot), error_code: ['failed', 'partial'].includes(outcome || '') ? snapshot.generation?.error_code || snapshot.analysis?.error_code : undefined }
     } else if (w.kind === 'studio-production' && snapshot.plan?.id === w.id &&
                ['completed', 'failed'].includes(snapshot.analysis?.status || '')) {
       event = 'studio_production_finished'; outcome = snapshot.analysis!.outcome || snapshot.analysis!.status

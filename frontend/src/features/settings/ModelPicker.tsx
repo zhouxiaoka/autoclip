@@ -4,7 +4,7 @@ import { t } from '../../i18n'
 import { Btn } from '../../ui'
 import type { Capability, Connection, ModelEntry, ModelList, ModelSettings } from './modelSettingsApi'
 import { analysisModels } from './modelDefaults'
-import { connectionReady, presetKey, type Role } from './modelSettingsLogic'
+import { connectionReady, type Role } from './modelSettingsLogic'
 
 export function eligibleModels(role: Role, models: ModelEntry[], mode: ModelSettings['analysis_mode']) {
   if (role === 'cover') return models.filter(m => m.image)
@@ -39,7 +39,7 @@ export default function ModelPicker({ role, model, capability, connection, list,
   const tag = (m: ModelEntry) => role === 'analysis' || role === 'vision'
     ? (m.capability ? ` · ${m.capability === 'multimodal' ? t('多模态') : t('仅文字')}` : '')
     : role === 'transcription' && m.asr_note ? ` · ${t(m.asr_note)}` : ''
-  const unknownCapability = (role === 'analysis' || role === 'vision') && !!model && !!connection && presetKey(connection) === 'compatible' && !list?.models.find(m => m.id === model)?.capability
+  const unknownCapability = (role === 'analysis' || role === 'vision') && !!model && !!connection && !list?.models.find(m => m.id === model)?.capability
   const stale = !!connection && connectionReady(connection) && !busy && (!!listError || !list || list.source !== 'live')
   // The generic preview warning is already covered by the row hint; account-specific warnings stay visible.
   const warning = list?.warning && list.warning !== '公开目录预览，填写 API Key 后确认账号可用模型。' ? t(list.warning) : ''

@@ -1,4 +1,6 @@
 {
+  "部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。": "No se pudieron leer algunos ajustes de IA. Vuelve a seleccionar el servicio e introduce la clave. Los ajustes originales se conservan; los archivos dañados se respaldan al guardar las correcciones.",
+  "旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。": "La configuración anterior de la portada no es válida. Vuelve a seleccionar un servicio en los ajustes de portada. El archivo original se ha conservado.",
   "加载项目失败": "No se pudieron cargar los proyectos",
   "项目删除成功": "Proyecto eliminado",
   "删除项目失败": "No se pudo eliminar el proyecto",
@@ -1478,6 +1480,8 @@
   "访谈式 · 中英字幕": "Estilo entrevista · subtítulos en chino e inglés",
   "模板": "Plantilla",
   "字幕、名牌和版式由模板按发布平台自动生成。": "La plantilla genera los subtítulos, los rótulos de nombre y el diseño según la plataforma elegida.",
+  "包装未能完整生成，已保留可用字幕": "La edición está incompleta; se han conservado los subtítulos disponibles",
+  "包装未能完整生成，字幕暂不可用": "La edición está incompleta; los subtítulos no están disponibles por ahora",
   "包装未能完整生成，已使用原字幕": "La edición no se completó; se usan los subtítulos originales",
   "整条视频顶部显示，第二行为强调色。": "Se muestra arriba durante todo el video; la segunda línea usa el color de acento.",
   "开头约 3 秒显示。": "Se muestra unos 3 segundos al inicio.",
@@ -1520,5 +1524,7 @@
   "按平台默认": "Predeterminado de la plataforma",
   "访谈式（人物窗口）": "Entrevista (ventana del hablante)",
   "播客式（满屏）": "Pódcast (pantalla completa)",
-  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Solo cambia el diseño vertical. El idioma de subtítulos y publicaciones sigue el de la plataforma."
+  "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Solo cambia el diseño vertical. El idioma de subtítulos y publicaciones sigue el de la plataforma.",
+  "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "No se pudo guardar el estado del proyecto. Comprueba el espacio en disco y los permisos de la carpeta y vuelve a intentarlo. El original y los vídeos existentes se conservan.",
+  "无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。": "No se pudo leer la información de inicio de sesión del navegador. Cierra el navegador y reintenta, o descarga videos públicos sin seleccionar un navegador. El material original se conserva."
 }

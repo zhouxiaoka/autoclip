@@ -51,7 +51,7 @@ def test_visual_refinement_uses_valid_source_timestamps(root,monkeypatch):
     monkeypatch.setattr(intelligence,'_probe',lambda _: {'duration':30})
     monkeypatch.setattr(intelligence,'sample',lambda video,times,folder: calls.append(times) or [])
     responses=iter([{'events':[{'id':'e1','label':'避障','start':5,'end':20,'evidence':'障碍密集'}]}, {'events':[{'id':'r','label':'连续避障','start':6,'end':19,'evidence':'复核'}]}])
-    monkeypatch.setattr(intelligence,'vision_call',lambda _: next(responses))
+    monkeypatch.setattr(intelligence,'vision_call',lambda _, **_kwargs: next(responses))
     stages=[]
     events, coverage=intelligence.analyze(Path('unused'),Preferences(goal='highlight'),stages.append)
     assert stages==['扫描画面，寻找候选高光','复核首选高光的起止边界']
@@ -62,7 +62,7 @@ def test_visual_refinement_uses_valid_source_timestamps(root,monkeypatch):
 def test_visual_empty_evidence_is_not_fabricated(root,monkeypatch):
     monkeypatch.setattr(intelligence,'_probe',lambda _: {'duration':30})
     monkeypatch.setattr(intelligence,'sample',lambda *args: [])
-    monkeypatch.setattr(intelligence,'vision_call',lambda _: {'events':[]})
+    monkeypatch.setattr(intelligence,'vision_call',lambda _, **_kwargs: {'events':[]})
     with pytest.raises(ValueError,match='没有找到'): intelligence.analyze(Path('unused'),Preferences(goal='promo'))
 
 def test_settings_mask_key_preserve_and_clear(root,monkeypatch):
@@ -206,7 +206,7 @@ def test_visual_import_worker_persists_project_status(client,root,source,monkeyp
     monkeypatch.setattr(intelligence,'ready',lambda:True)
     monkeypatch.setattr(jobs,'analyze',lambda *a: ([Scene(id='e1',label='真实事件',start=0,end=1)],{}))
     class Immediate:
-        def submit(self,fn,*args): fn(*args)
+        def submit(self,fn,*args,**kwargs): fn(*args,**kwargs)
     monkeypatch.setattr(jobs,'executor',Immediate())
     response=client.post('/studio/import',data={'goal':'highlight','name':'Visual upload'},files={'video':('game.mp4',source.read_bytes(),'video/mp4')})
     assert response.status_code==200,response.text
@@ -751,7 +751,7 @@ def test_export_dispatch_failure_is_retryable_and_preserves_success(root, monkey
     store.change('p1', lambda data: data['jobs'].append(previous))
     calls = []
     class Executor:
-        def submit(self, *args):
+        def submit(self, *args, **kwargs):
             calls.append(args)
             if len(calls) == 1:
                 raise RuntimeError('executor unavailable: private runtime details')

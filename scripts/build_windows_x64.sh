@@ -38,8 +38,17 @@ source "$PROJECT_ROOT/scripts/lib/sign_updater.sh"
 
 check_build_tools
 prepare_portable_python
+# Python wheels use a dynamic C++ runtime even though the Rust GUI is static.
+# Ship a complete signed Microsoft release set locally before importing wheels.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare_windows_python_crt.ps1 \
+    -PythonDir "$PYTHON_DIR"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/test_prepare_windows_python_crt.ps1 \
+    -OfficialDll "$PYTHON_DIR/concrt140.dll" -Report build/python-crt-signature-tests.json
+"$PORTABLE_PY" -B scripts/windows_python_crt.py --python-dir "$PYTHON_DIR" \
+    --report build/python-crt.json
 install_backend_deps
 copy_backend_source
+prepare_optional_runtime_wheels
 verify_backend_deps
 
 # ---- ffmpeg ----
@@ -70,6 +79,10 @@ build_frontend
 # declares resources/{python,backend,ffmpeg} and restricts targets to nsis.
 echo "==> Building Tauri application (this takes a few minutes)"
 (cd src-tauri && cargo tauri build --bundles nsis)
+
+# CI has Visual C++ installed; inspect the actual exe before it can hide missing DLLs.
+"$PORTABLE_PY" -B scripts/windows_desktop_crt.py --exe src-tauri/target/release/autoclip-desktop.exe \
+    --report src-tauri/target/release/desktop-crt.json
 
 APP_VERSION="$(app_version)"
 NSIS_DIR="src-tauri/target/release/bundle/nsis"
