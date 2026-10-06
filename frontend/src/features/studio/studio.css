@@ -85,3 +85,6 @@
 .studio-editor-main{min-width:0;position:sticky;top:84px;max-height:calc(100vh - 100px);overflow:auto;padding-right:2px}
 .studio-editor-main .studio-prompt{margin-top:22px}
 .studio-editor-main .studio-source-details{margin-top:22px}
+.studio-readiness{display:flex;flex-direction:column;gap:10px;margin:16px 0 2px;padding:12px 14px;border:1px solid var(--ac-line);border-radius:12px;background:var(--ac-bg)}
+.studio-readiness-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.studio-readiness-row .ac-status{min-width:0;line-height:1.45}

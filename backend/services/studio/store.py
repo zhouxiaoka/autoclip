@@ -447,8 +447,10 @@ def settle_generation(data):
         code = 'multiple' if len(codes) > 1 else next(iter(codes), None)
         if code:
             data['generation']['error_code'] = code
+            data['generation']['failure_stage'] = 'render'
         else:
             data['generation'].pop('error_code', None)
+            data['generation'].pop('failure_stage', None)
         if not variants:
             data['generation']['error'] = '没有自动生成的成片，可选择备选片段继续生成'
         elif completed:

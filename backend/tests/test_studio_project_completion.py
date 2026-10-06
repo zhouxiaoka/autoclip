@@ -1,4 +1,6 @@
 """A completed automatic visual render must settle the actual project list too."""
+import json
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -121,6 +123,37 @@ def test_busy_index_does_not_fail_saved_video_and_next_list_recovers(project, mo
         assert db.get(Project, 'visual').status is ProjectStatus.PROCESSING
         assert ProjectService(db).get_project_with_stats('visual').status is ResponseStatus.COMPLETED
     assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize('outcome, expected', [
+    ('completed', ProjectStatus.COMPLETED),
+    ('partial', ProjectStatus.FAILED),
+    ('failed', ProjectStatus.FAILED),
+    ('rendering', ProjectStatus.PROCESSING),
+])
+def test_generation_terminal_leaves_sqlite_even_when_analysis_is_still_running(project, outcome, expected):
+    data = state(['completed', 'failed'] if outcome == 'partial' else ['failed'] if outcome == 'failed' else ['completed', 'running'])
+    data['generation']['status'] = outcome
+    data['analysis']['status'] = 'running'
+    path = store.directory('visual') / 'metadata' / 'studio.json'
+    path.write_text(json.dumps(data), encoding='utf-8')
+    with project() as db:
+        listed = ProjectService(db).get_projects_paginated(PaginationParams(), ProjectFilter(status=ResponseStatus.PROCESSING))
+        row = db.get(Project, 'visual')
+        assert row.status is expected
+        assert [item.id for item in listed.items] == ([] if expected is not ProjectStatus.PROCESSING else ['visual'])
+        if expected is ProjectStatus.PROCESSING:
+            assert 'studio_generation_status' not in (row.processing_config or {})
+        else:
+            assert row.processing_config['studio_generation_status'] == outcome
+            assert (row.completed_at is not None) is (expected is ProjectStatus.COMPLETED)
+        row.status = ProjectStatus.PROCESSING
+        row.completed_at = None
+        db.commit()
+    with project() as db:
+        detail = ProjectService(db).get_project_with_stats('visual')
+        assert detail.status is ResponseStatus(expected.value)
+        assert db.get(Project, 'visual').status is expected
 
 
 @pytest.mark.parametrize('bad', ['[]', '{"generation": []}', '{"generation": {"auto_start": true, "status": "completed"}, "analysis": 1}', '{"generation": {"auto_start": true, "status": "completed"}, "analysis": {"status": "completed"}, "output_variants": [1]}', '{"generation": {"auto_start": true, "status": "completed"}, "analysis": {"status": "completed"}, "drafts": [1]}'])

@@ -1,6 +1,6 @@
 """Black-box installed backend acceptance with a loopback OpenAI protocol fixture.
 
-This tests provider persistence and the real import/pipeline/media path, not LLM
+This tests provider persistence and the Studio import/render path, not LLM
 editorial quality. It makes no external model requests and requires no API key.
 """
 import json
@@ -109,24 +109,33 @@ def run(base, root, resources, source_video, source_srt):
         subtitle.write_text('\n'.join(f"{i}\n{e['start_time']} --> {to_srt_time(min(45,to_seconds(e['end_time'])))}\n{e['text']}\n"
                                       for i,e in enumerate(entries,1)),encoding='utf-8')
         with video.open('rb') as v, subtitle.open('rb') as s:
-            uploaded = requests.post(base+'/api/v1/projects/upload',data={'project_name':'Installed Windows real video','video_category':'speech'},
-                                     files={'video_file':(video.name,v,'video/mp4'),'srt_file':(subtitle.name,s,'application/x-subrip')},headers=headers,timeout=60)
+            uploaded = requests.post(base+'/api/v1/studio/import',
+                                     data={'name':'Installed Windows real video','auto_start':'true','platforms':'douyin'},
+                                     files={'video':(video.name,v,'video/mp4'),'subtitle':(subtitle.name,s,'application/x-subrip')},
+                                     headers=headers,timeout=120)
         uploaded.raise_for_status()
-        pid = uploaded.json()['id']
+        pid = uploaded.json()['project_id']
         deadline = time.monotonic()+180
-        project = None
+        workspace = None
+        body = ''
         while time.monotonic()<deadline:
-            response=requests.get(base+f'/api/v1/projects/{pid}',timeout=20)
+            response=requests.get(base+f'/api/v1/studio/{pid}',timeout=20)
+            body=response.text
             response.raise_for_status()
-            project=response.json()
-            if project['status'] in ('completed','failed'):
+            workspace=response.json()
+            status=(workspace.get('generation') or {}).get('status')
+            if status in ('completed','partial','failed'):
                 break
             time.sleep(1)
-        assert project and project['status']=='completed' and project['total_clips']>0, project
-        clips = requests.get(base+'/api/v1/clips/',params={'project_id':pid},timeout=20)
-        clips.raise_for_status()
-        files = [Path(c['video_path']) for c in clips.json()['items']]
-        assert files and all(p.is_file() and p.stat().st_size>0 for p in files), clips.text
+        assert workspace and (workspace.get('generation') or {}).get('status') in ('completed','partial'), body
+        from backend.services.studio import store
+        project_dir = store.directory(pid)
+        files=[]
+        for job in workspace.get('jobs') or []:
+            if job.get('status')!='completed' or not job.get('job_id'):
+                continue
+            files.append(project_dir/'output'/'studio'/f"{job['job_id']}.mp4")
+        assert files and all(p.is_file() and p.stat().st_size>0 for p in files), body
         probes=[]
         for path in files:
             info=json.loads(subprocess.check_output([str(resources/'ffmpeg'/'ffprobe.exe'),'-v','error','-show_streams','-show_format','-of','json',str(path)],encoding='utf-8'))
@@ -136,8 +145,9 @@ def run(base, root, resources, source_video, source_srt):
             assert float(info['format']['duration'])>=20, info
             probes.append({'bytes':path.stat().st_size,'duration_sec':float(info['format']['duration']),'video':'h264','audio':'aac'})
         assert {'connection','outline','timeline','score','title'} <= set(calls), calls
-        return {'status':'passed','settings_api':settings_api,'provider_saved':True,'provider_connection':'passed','project_status':project['status'],
-                'total_clips':project['total_clips'],'outputs':probes,'fixture_stages':calls,
+        generation_status = (workspace.get('generation') or {}).get('status')
+        return {'status':'passed','settings_api':settings_api,'provider_saved':True,'provider_connection':'passed',
+                'generation_status':generation_status,'output_count':len(probes),'outputs':probes,'fixture_stages':calls,
                 'input':'repository public interview, first 45 seconds, supplied real SRT',
                 'model_mode':'loopback OpenAI protocol fixture; no real model-quality claim or paid call'}
     finally:

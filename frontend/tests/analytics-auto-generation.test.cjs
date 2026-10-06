@@ -91,6 +91,26 @@ test('automatic production failures report a safe code once without sending priv
  assert.equal(JSON.stringify(finished).includes('private'),false)
 })
 
+test('automatic failures report the failed stage, HTTP status and route, rejecting unknown values',()=>{
+ const {t,events}=tracker();t.watch('studio-generation','p1')
+ const state={generation:{status:'failed',error_code:'provider_error',failure_stage:'screening',http_status:400,error:'private body'},
+  analysis:{status:'failed',phase:'screening',error_code:'provider_error'},plan:{id:'p',mode:'ai',recommended_analysis:'visual'}}
+ t.observeStudio(t.list()[0],state)
+ const props=events.find(e=>e.name==='studio_generation_finished').props
+ assert.equal(props.failure_stage,'screening');assert.equal(props.http_status,400)
+ assert.equal(props.route,'visual');assert.equal(props.recommendation_mode,'ai')
+ assert.equal(JSON.stringify(props).includes('private'),false)
+ const bad=workflow.safeStudioProperties({failure_stage:'private-stage',http_status:200,route:'private-route'})
+ assert.equal(bad.failure_stage,undefined);assert.equal(bad.http_status,undefined);assert.equal(bad.route,undefined)
+ const {t:t2,events:e2}=tracker();t2.watch('studio-generation','p1')
+  t2.observeStudio(t2.list()[0],{...SNAPSHOT,generation:{...SNAPSHOT.generation,status:'completed',failure_stage:'render',http_status:500}})
+  const done=e2.find(e=>e.name==='studio_generation_finished').props
+  assert.equal(done.failure_stage,undefined);assert.equal(done.http_status,undefined);assert.equal(done.route,'subtitle')
+  const {t:t3,events:e3}=tracker();t3.watch('studio-generation','p1')
+  t3.observeStudio(t3.list()[0],{generation:{status:'failed',error_code:'timeout',failure_stage:'render',route:'subtitle'},analysis:{status:'failed'}})
+  assert.equal(e3.find(e=>e.name==='studio_generation_finished').props.route,'subtitle')
+})
+
 test('old automatic failures use the analysis code and reject unrecognized codes',()=>{
  for(const code of ['subtitle_setup','private arbitrary message']){
   const {t,events}=tracker();t.watch('studio-generation','p1')

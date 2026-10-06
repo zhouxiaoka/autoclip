@@ -21,6 +21,23 @@ class Recommendation(BaseModel):
 VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sources use the subtitle route
 
 
+def _local_recommendation(video: Path, duration: float, prefix: str = ''):
+    from backend.services.studio.local_evidence import inspect_subtitles
+    evidence = inspect_subtitles(video, duration)
+    if evidence['subtitle_status'] == 'available':
+        suggested = ['content']
+        if evidence['valid_cues'] >= 3 and evidence['covered_seconds'] >= 5:
+            suggested.append('highlight')
+        reason = '检测到可用字幕，建议按语义制作；尚未判断内容质量，也未调用模型。'
+    else:
+        suggested = []
+        reason = ('未找到字幕，需要转写或提供字幕；尚未确认素材有可用语音，可手动选择制作类型。'
+                  if evidence['subtitle_status'] == 'missing' else
+                  '字幕未通过快速检查，暂不自动勾选；请检查字幕或手动选择，原素材已保留。')
+    return evidence, Recommendation(content_type='other', goal='content', confidence=0,
+                                    suggested_goals=suggested, reason=(prefix + reason)[:500])
+
+
 def recommend(video: Path, options: ImportOptions):
     info = intelligence._probe(video)
     duration = info.get('duration', 0)
@@ -37,20 +54,7 @@ def recommend(video: Path, options: ImportOptions):
             aspect='portrait' if options.goal == 'promo' else 'original')
     elif consent.analysis_mode == 'subtitle' or (consent.analysis_mode == 'auto' and (not consent.allow_visual_screening or not configured)) or (configured and not analysis_preferences.visual_screening_allowed(consent, vision_configured=configured)):
         mode = 'local'
-        from backend.services.studio.local_evidence import inspect_subtitles
-        local_evidence = inspect_subtitles(video, duration)
-        if local_evidence['subtitle_status'] == 'available':
-            suggested = ['content']
-            if local_evidence['valid_cues'] >= 3 and local_evidence['covered_seconds'] >= 5:
-                suggested.append('highlight')
-            reason = '检测到可用字幕，建议按语义制作；尚未判断内容质量，也未调用模型。'
-        else:
-            suggested = []
-            reason = ('未找到字幕，需要转写或提供字幕；尚未确认素材有可用语音，可手动选择制作类型。'
-                      if local_evidence['subtitle_status'] == 'missing' else
-                      '字幕未通过快速检查，暂不自动勾选；请检查字幕或手动选择，原素材已保留。')
-        result = Recommendation(content_type='other', goal='content', confidence=0,
-            suggested_goals=suggested, reason=reason)
+        local_evidence, result = _local_recommendation(video, duration)
     elif not configured:
         if options.auto_start and consent.analysis_mode == 'visual':
             raise ValueError('视觉模型尚未配置，请在设置中配置后重试；原素材已保留')
@@ -81,17 +85,21 @@ def recommend(video: Path, options: ImportOptions):
                 response = intelligence.vision_call([{'type':'text', 'text':prompt}] + intelligence.sample(video, times, Path(tmp), width=384), config=config)
             result = Recommendation.model_validate(response)
         except (RuntimeError, ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
-            # An automatic run cannot turn failed visual evidence into guessed
-            # speech content. The import worker persists failure and offers retry.
-            if options.auto_start:
+            # Only an explicit visual choice fails the run; the default automatic
+            # screening is optional and falls back to the subtitle route.
+            if options.auto_start and consent.analysis_mode == 'visual':
                 raise
             from backend.core.sentry_setup import capture_studio_exception
             capture_studio_exception(error, 'screening', analysis_mode='visual')
             if isinstance(error, intelligence.VisionRequestError):
                 diagnostics = {**error.diagnostics(), 'phase':'screening'}
             mode = 'fallback'
-            result = Recommendation(content_type='other', goal='highlight', confidence=0, suggested_goals=[],
-                reason='快速判断暂未完成，请按素材内容选择制作类型；尚未启动正式理解与剪辑。')
+            if options.auto_start:
+                local_evidence, result = _local_recommendation(
+                    video, duration, '快速画面判断未完成，已改按字幕制作。')
+            else:
+                result = Recommendation(content_type='other', goal='highlight', confidence=0, suggested_goals=[],
+                    reason='快速判断暂未完成，请按素材内容选择制作类型；尚未启动正式理解与剪辑。')
     prefs = Preferences(goal=result.goal, language=options.language,
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))

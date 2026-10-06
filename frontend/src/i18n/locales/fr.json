@@ -1526,5 +1526,20 @@
   "播客式（满屏）": "Podcast (plein écran)",
   "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Seule la mise en page verticale change. La langue des sous-titres et du texte suit la plateforme.",
   "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "Impossible d’enregistrer l’état du projet. Vérifiez l’espace disque et les permissions du dossier, puis réessayez. La source et les vidéos existantes sont conservées.",
-  "无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。": "Impossible de lire les informations de connexion du navigateur. Fermez le navigateur et réessayez, ou téléchargez les vidéos publiques sans sélectionner de navigateur. Le média source est conservé."
+  "无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。": "Impossible de lire les informations de connexion du navigateur. Fermez le navigateur et réessayez, ou téléchargez les vidéos publiques sans sélectionner de navigateur. Le média source est conservé.",
+  "分析模型还没配好。连接一家 AI 服务后再生成。": "Le modèle d’analyse n’est pas prêt. Connectez un service d’IA avant de générer.",
+  "连接 AI 服务": "Connecter un service d’IA",
+  "本地转写还没安装。已有字幕可以直接继续。": "La transcription locale n’est pas installée. Vous pouvez continuer si vous avez déjà des sous-titres.",
+  "安装 Whisper": "Installer Whisper",
+  "正在安装本地转写…": "Installation de la transcription locale…",
+  "SenseVoice 还没准备好。已有字幕可以直接继续。": "SenseVoice n’est pas prêt. Vous pouvez continuer si vous avez déjà des sous-titres.",
+  "云端转写还没配好。已有字幕可以直接继续。": "La transcription cloud n’est pas configurée. Vous pouvez continuer si vous avez déjà des sous-titres.",
+  "画面分析需要可用的视觉模型。": "L’analyse visuelle nécessite un modèle de vision.",
+  "视觉设置": "Réglages visuels",
+  "找不到 FFmpeg，暂时无法处理视频。": "FFmpeg est introuvable : la vidéo ne peut pas encore être traitée.",
+  "还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。": "Aucune transcription n’est prête. Joignez un SRT, ou préparez d’abord la transcription.",
+  "请先配好画面分析模型，再生成成片。": "Configurez un modèle de vision avant de générer.",
+  "找不到 FFmpeg，无法生成成片。": "FFmpeg est introuvable : impossible de générer la vidéo.",
+  "正在确认导入条件…": "Vérification des conditions d’import…",
+  "导入条件还没准备好。": "Les conditions d’import ne sont pas encore prêtes."
 }

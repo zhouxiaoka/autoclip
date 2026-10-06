@@ -46,6 +46,12 @@ def title_preset_thumbnail(style: Literal['comic', 'neon', 'arena', 'editorial',
     from backend.services.studio.title_art import thumbnail
     return Response(call(thumbnail, style, v), media_type='image/png', headers={'Cache-Control':'public, max-age=86400'})
 
+@router.get('/readiness')
+def import_readiness():
+    from backend.services.studio import readiness
+    return readiness.report()
+
+
 @router.get('/capabilities')
 def capabilities():
     return {'visual_analysis': intelligence.ready(), 'visual_model': intelligence.visual_config()[2], 'languages': ['source', 'zh', 'en', 'ja']}

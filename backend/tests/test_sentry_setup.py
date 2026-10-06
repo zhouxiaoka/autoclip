@@ -143,6 +143,24 @@ def test_studio_capture_uses_isolated_scope_and_never_breaks_worker(monkeypatch,
     assert sentry_sdk.get_current_scope()._tags.get('area') != 'studio'
 
 
+def test_studio_failure_context_keeps_stage_and_http_status_without_messages():
+    from backend.pipeline.failures import PipelineFailure
+    from backend.services.studio.intelligence import VisionRequestError
+
+    pipeline = PipelineFailure('SUBTITLE', 'private whisper path', code='whisper_not_installed')
+    assert sentry_setup.studio_failure_context(pipeline, 'production') == {'failure_stage': 'subtitle'}
+
+    vision = VisionRequestError('provider_error', 'private body', http_status=429)
+    assert sentry_setup.studio_failure_context(vision, 'screening') == {
+        'failure_stage': 'screening', 'http_status': 429}
+    assert sentry_setup.studio_failure_context(vision, 'production') == {
+        'failure_stage': 'vision', 'http_status': 429}
+
+    timeout = sentry_setup.studio_failure_context(TimeoutError('private'), 'render')
+    assert timeout == {'failure_stage': 'render'}
+    assert 'private' not in json.dumps(timeout)
+
+
 def test_studio_expected_pipeline_failure_keeps_code_and_warning(monkeypatch, tmp_path):
     from backend.pipeline.failures import PipelineFailure
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))

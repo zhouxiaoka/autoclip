@@ -1526,5 +1526,20 @@
   "播客式（满屏）": "Podcast (tela cheia)",
   "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Altera apenas o layout vertical. O idioma das legendas e publicações segue o da plataforma.",
   "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "Não foi possível salvar o estado do projeto. Verifique o espaço em disco e as permissões da pasta e tente novamente. O original e os vídeos existentes foram preservados.",
-  "无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。": "Não foi possível ler os dados de login do navegador. Feche o navegador e tente novamente, ou baixe vídeos públicos sem selecionar um navegador. A mídia original foi preservada."
+  "无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。": "Não foi possível ler os dados de login do navegador. Feche o navegador e tente novamente, ou baixe vídeos públicos sem selecionar um navegador. A mídia original foi preservada.",
+  "分析模型还没配好。连接一家 AI 服务后再生成。": "O modelo de análise ainda não está pronto. Ligue um serviço de IA antes de gerar.",
+  "连接 AI 服务": "Ligar serviço de IA",
+  "本地转写还没安装。已有字幕可以直接继续。": "A transcrição local não está instalada. Se já tiver legendas, pode continuar.",
+  "安装 Whisper": "Instalar Whisper",
+  "正在安装本地转写…": "A instalar a transcrição local…",
+  "SenseVoice 还没准备好。已有字幕可以直接继续。": "O SenseVoice ainda não está pronto. Se já tiver legendas, pode continuar.",
+  "云端转写还没配好。已有字幕可以直接继续。": "A transcrição na nuvem não está configurada. Se já tiver legendas, pode continuar.",
+  "画面分析需要可用的视觉模型。": "A análise visual precisa de um modelo de visão.",
+  "视觉设置": "Definições de visão",
+  "找不到 FFmpeg，暂时无法处理视频。": "O FFmpeg não foi encontrado, por isso o vídeo ainda não pode ser processado.",
+  "还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。": "Não há transcrição disponível. Anexe um SRT ou prepare a transcrição primeiro.",
+  "请先配好画面分析模型，再生成成片。": "Configure um modelo de visão antes de gerar.",
+  "找不到 FFmpeg，无法生成成片。": "O FFmpeg não foi encontrado, por isso não é possível gerar o vídeo.",
+  "正在确认导入条件…": "A verificar as condições de importação…",
+  "导入条件还没准备好。": "As condições de importação ainda não estão prontas."
 }

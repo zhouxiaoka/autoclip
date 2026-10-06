@@ -2,7 +2,7 @@ import json
 import logging
 import shutil
 from time import monotonic, sleep
-from backend.core.sentry_setup import capture_studio_exception, studio_error_code
+from backend.core.sentry_setup import capture_studio_exception, studio_error_code, studio_failure_context
 from copy import deepcopy
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -16,6 +16,11 @@ from backend.services.studio.render import render_draft
 
 logger = logging.getLogger(__name__)
 executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='studio')
+
+
+def _generation_route(plan):
+    route = (plan or {}).get('recommended_analysis') or (plan or {}).get('confirmed_analysis')
+    return {'route': route} if route in ('subtitle', 'visual') else {}
 # Local encodes are CPU-bound: run one at a time on its own worker so screening and
 # analysis of other imports never wait behind a render queue.
 render_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='studio-render')
@@ -987,7 +992,7 @@ def _auto_generate(project_id, plan):
             if events:
                 data['events'] = events
             data['output_variants'].extend(variants)
-            data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now())
+            data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **_generation_route(data.get('plan')))
             data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
         store.change(project_id, persist)
         _dispatch_pending_variants(project_id)
@@ -995,10 +1000,11 @@ def _auto_generate(project_id, plan):
         store.raise_owned_read_error(error)
         capture_studio_exception(error, 'production')
         code = studio_error_code(error)
+        context = studio_failure_context(error, 'production')
         error_text = str(error)[:700]
         def fail(data):
             if data.get('generation'):
-                data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now())
+                data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now(), **context)
             data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000)}
         store.change(project_id, fail)
         mark_project(project_id, 'failed')
@@ -1341,7 +1347,7 @@ def _inspect(project_id, options, url, browser):
             def start_automatic(data):
                 run_id = (data.get('analysis') or {}).get('run_id')  # observers match the run across phases
                 data.update(plan=plan, analysis={'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
-                data['generation'].update(status='production', started_at=store.now())
+                data['generation'].update(status='production', started_at=store.now(), **_generation_route(plan))
                 return run_id
             run_id = store.change(project_id, start_automatic)
             mark_project(project_id, 'processing', creative=plan['preferences'], awaiting_confirmation=False, import_staging=False)
@@ -1354,7 +1360,7 @@ def _inspect(project_id, options, url, browser):
                 message = '自动制作任务未能启动，请重试；原素材已保留'
                 code = studio_error_code(error)
                 def fail_automatic(data):
-                    data['generation'].update(status='failed', error=message, error_code=code, finished_at=store.now())
+                    data['generation'].update(status='failed', error=message, error_code=code, finished_at=store.now(), failure_stage='dispatch', **_generation_route(plan))
                     data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': message, 'error_code': code}
                 store.change(project_id, fail_automatic)
                 mark_project(project_id, 'failed')
@@ -1370,11 +1376,12 @@ def _inspect(project_id, options, url, browser):
         logger.warning('Studio screening failed: %s', type(error).__name__)
         capture_studio_exception(error, 'screening')
         failure = {'status':'failed','phase':'screening','error':str(error)[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
+        context = studio_failure_context(error, 'screening')
         try:
             def fail_screening(data):
                 data['analysis'] = failure
                 if (data.get('generation') or {}).get('auto_start'):
-                    data['generation'].update(status='failed', error=failure['error'], error_code=failure['error_code'], finished_at=store.now())
+                    data['generation'].update(status='failed', error=failure['error'], error_code=failure['error_code'], finished_at=store.now(), **context)
             store.change(project_id, fail_screening)
             mark_project(project_id, 'failed')
         except FileNotFoundError:
