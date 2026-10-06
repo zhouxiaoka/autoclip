@@ -1,0 +1,52 @@
+{
+  "status": "passed",
+  "case_id": "clean_install",
+  "platform": "macos-arm64",
+  "commit": "90edc851b435c4d2bf5bd8fd5a47777183a3c625",
+  "build_run_id": 37330742634,
+  "package_sha256": "ab5d460df62951532bf9988cc825c2425c53da8cee885ba5555010a9f2cb9c14",
+  "completed_at": "2026-10-06T04:09:26.312403+00:00",
+  "reviewed_at": "2026-10-06T04:13:31.648485+00:00",
+  "reviewer": "Codex release owner",
+  "covered_required_assertions": [
+    "clean_install.package_identity",
+    "clean_install.first_app_data_onboarding",
+    "clean_install.normal_quit_and_cold_restart"
+  ],
+  "original_execution_times_preserved": true,
+  "completion_time_is_last_actual_required_normal_quit_not_review_time": true,
+  "evidence": [
+    {
+      "label": "current_installed_identity",
+      "sha256": "86a4f9c510794f2ed82fdc29359fa4fee2ca4da0f35c822670245dfb6e95e2be",
+      "actual_execution_time": null,
+      "scope": "Current isolated DMG install/source identity; native product cases not yet performed"
+    },
+    {
+      "label": "clean_application_data_onboarding",
+      "sha256": "a9d766f7a08718fe70c89198a47371b820f85df3c16c6501e308fe42563ad908",
+      "actual_execution_time": "2026-10-05T17:25:27.570795+00:00",
+      "scope": "First missing clean application-data native onboarding/settings usability only. Shared macOS WebKit storage retained; not fresh OS or privacy transport acceptance. Normal quit result separately verified by root command outputs."
+    },
+    {
+      "label": "native_settings_save_cold_restart",
+      "sha256": "60af66a2734eaa3133e3b898da11a1f4ca3a3e47fbe5a7a9c483cd58fbcd5f30",
+      "actual_execution_time": "2026-10-05T17:12:56.233224+00:00",
+      "scope": "visual-off persistence only; no zero-frame transport claim or whole model_settings PASS"
+    },
+    {
+      "label": "current_native_normal_quit_and_children",
+      "sha256": "89cc7d9a3534e6b05f15f6d2793326158bbdcbac97eacff45b17a8e59b7e4b59",
+      "actual_execution_time": "2026-10-06T04:09:26.312403+00:00",
+      "scope": null
+    }
+  ],
+  "limitations": [
+    "fresh application data, shared macOS WebKit store retained; not fresh OS",
+    "does not imply model_settings/privacy_telemetry/whole Mac matrix PASS",
+    "ad-hoc signed package, not notarized"
+  ],
+  "no_new_install_or_onboarding_test_repeated": true,
+  "formal_internal_acceptance_not_dispatched": true,
+  "scope": "Only current-source macOS clean_install package/onboarding/native settings cold restart/normalQuit; not whole platform acceptance"
+}

@@ -125,6 +125,10 @@ Internal 与 Release 使用同一行校验逻辑；当前 whole build、全部�
 
 Internal/Release/Promote 的 `actions/checkout` 使用 **dispatch ref**，并非 source_commit/tag。将经审阅的 gate 改动、自身测试及脱敏证据提交到独立工具/证据分支，三步明确选同一个已审计 ref；输入的产品 source 和包 run 不变。Git 源对象不可用时校验失败，准备该 ref 时须使 origin/current 对象可读。只改变验收工具不重建产品，也不触发所有已通过产品 case 重跑。schema1 内部回执保留当前产品 commit/assets/run，附 manifest 与 gate 文件哈希、Actions 的实际 validator commit；冻结产品的 tag receipt 校验保持兼容。
 
+### 负责人豁免
+
+产品负责人可以明确决定带着未执行的断言发布、出问题往前修。此时 manifest 顶层写 `owner_waiver: {name, reason, approved_at}`（实名、理由、晚于当前构建的时间），未执行的场景、回归或观察写 `status: "waived"` 和逐行 `waiver_reason`。`waived` 永远不等于 `passed`：`pending/failed/skipped` 仍然阻断，已执行的行仍按原规则校验，Internal Acceptance 回执列出全部豁免行。豁免只能由负责人在当次会话中授权，代理不能自行添加；发版记录须写明豁免范围和上线后要盯的信号。
+
 ### 标签后的最终包与观察
 
 完成候选构建后，从 Release 下载全部 assets 到本地目录。生成空模板：

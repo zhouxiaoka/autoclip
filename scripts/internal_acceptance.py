@@ -40,7 +40,7 @@ def template(version, commit, assets, build_run_id):
     return value
 
 
-def validate(manifest, folder, assets, version, commit, build, jobs, now=None):
+def validate(manifest, folder, assets, version, commit, build, jobs, now=None, waived=None):
     identity(version, commit)
     release.require(manifest.get('schema_version') == 1 and manifest.get('stage') == 'internal', 'internal acceptance required')
     release.require(manifest.get('version') == version and manifest.get('commit') == commit, 'internal version/commit mismatch')
@@ -59,9 +59,13 @@ def validate(manifest, folder, assets, version, commit, build, jobs, now=None):
         release.require(rows and all(row.get('conclusion') == 'success' for row in rows), f'required internal check did not pass: {name}')
     now = now or dt.datetime.now(dt.timezone.utc)
     built_at = release.timestamp(build.get('updated_at'))
+    waiver = release.owner_waiver(manifest, built_at, now)
     files, completed = set(), []
+    skipped = [] if waived is None else waived
 
     def passed(row, label, platforms):
+        if release.waived(row, label, manifest, skipped):
+            return
         completed.append(release.row_evidence(row, label, platforms, manifest, folder,
                                              built_at, now, files))
 
@@ -80,7 +84,10 @@ def validate(manifest, folder, assets, version, commit, build, jobs, now=None):
         passed(row, 'regression ' + row['id'], platforms)
     approval = manifest.get('approval', {})
     release.require(isinstance(approval.get('name'), str) and approval['name'].strip(), 'named reviewer required')
-    release.require(max(completed) <= release.timestamp(approval.get('approved_at')) <= now, 'approval must follow internal acceptance')
+    approved = release.timestamp(approval.get('approved_at'))
+    release.require(max(completed + [built_at]) <= approved <= now, 'approval must follow internal acceptance')
+    release.require(waiver is None or release.timestamp(waiver['approved_at']) <= approved,
+                    'approval must follow the owner waiver')
     return files
 
 
@@ -157,7 +164,9 @@ def main():
         build = json.loads(args.build_run.read_text(encoding='utf-8'))
         jobs = json.loads(args.build_jobs.read_text(encoding='utf-8'))
         release.require(args.acceptance_run_id > 0, 'acceptance run ID required')
-        files = validate(value, args.manifest.parent, args.assets, args.version, args.commit, build, jobs)
+        skipped = []
+        files = validate(value, args.manifest.parent, args.assets, args.version, args.commit, build, jobs,
+                         waived=skipped)
         args.bundle.mkdir(parents=True, exist_ok=False)
         for path in files:
             target = args.bundle / path.relative_to(args.manifest.parent.resolve())
@@ -169,6 +178,8 @@ def main():
                  'version': args.version, 'commit': args.commit, 'build_run_id': value['build_run_id'],
                  'assets': value['assets'], 'acceptance_run_id': args.acceptance_run_id,
                  'reviewer': value['approval']['name'], 'approved_at': value['approval']['approved_at']}
+        if skipped:
+            proof.update(owner_waiver=value['owner_waiver'], waived=skipped)
         proof.update(evidence_contract=value.get('evidence_contract', 'execution/v1'),
                      manifest_sha256=release.digest(args.bundle / 'acceptance.json'),
                      validator_sha256={name: release.digest(Path(__file__).with_name(name))

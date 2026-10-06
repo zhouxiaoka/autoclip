@@ -59,6 +59,25 @@ class AcceptanceTests(unittest.TestCase):
     def test_complete_evidence_passes(self):
         self.assertEqual(self.validate(), {(self.root / 'evidence.md').resolve()})
 
+    def test_owner_waiver_can_replace_observation_but_not_pending_rows(self):
+        value = copy.deepcopy(self.manifest)
+        value['observation'] = {'status': 'waived', 'waiver_reason': 'Owner ships without observation'}
+        with self.assertRaisesRegex(gate.GateError, 'without a named owner waiver'):
+            self.validate(value)
+        value['owner_waiver'] = {'name': 'Owner', 'reason': 'Ship and fix forward',
+                                 'approved_at': (self.now - dt.timedelta(minutes=5)).isoformat()}
+        self.assertEqual(self.validate(value), {(self.root / 'evidence.md').resolve()})
+        late = copy.deepcopy(value)
+        late['approval']['approved_at'] = (self.now - dt.timedelta(minutes=10)).isoformat()
+        with self.assertRaisesRegex(gate.GateError, 'approval must follow observation'):
+            self.validate(late)
+        value['platforms']['windows-x64']['checks']['link_import']['status'] = 'pending'
+        with self.assertRaises(gate.GateError):
+            self.validate(value)
+        value['platforms']['windows-x64']['checks']['link_import'] = {
+            'status': 'waived', 'waiver_reason': 'No real link import run'}
+        self.validate(value)
+
     def test_pending_template_cannot_promote(self):
         value = gate.template(self.tag, self.commit, self.assets, 'hotfix', 123)
         with self.assertRaises(gate.GateError):

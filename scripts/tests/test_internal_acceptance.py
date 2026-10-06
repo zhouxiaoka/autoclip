@@ -145,6 +145,11 @@ class InternalAcceptanceTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(release.GateError):
                 gate.check_receipt(receipt, self.version, self.commit, value)
 
+    def test_tag_build_restores_annotated_tag_before_reading_trailer(self):
+        workflow = (Path(__file__).resolve().parents[2] / '.github/workflows/desktop-build.yml').read_text(encoding='utf-8')
+        restore = workflow.index('git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"')
+        self.assertLess(restore, workflow.index('internal_acceptance.py tag-run --tag "$TAG"'))
+
     def test_tag_requires_one_numeric_internal_acceptance_trailer(self):
         self.assertEqual(gate.tag_run('v1.6.0', 'Release\n\nInternal-Acceptance-Run: 456\n', 'tag\n'), 456)
         for annotation, kind in (('Release', 'tag'), ('Internal-Acceptance-Run: 0', 'tag'),
@@ -173,6 +178,56 @@ class InternalAcceptanceTests(unittest.TestCase):
         result = subprocess.run(command, capture_output=True, text=True, check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root / 'blocked/receipt.json').exists())
+
+    def test_waived_rows_require_named_owner_and_reason_and_are_recorded(self):
+        value = copy.deepcopy(self.manifest)
+        value['platforms']['windows-x64']['checks']['link_import'] = {
+            'status': 'waived', 'waiver_reason': 'Owner ships without a real link import run'}
+        value['regressions'][0] = {'id': '#265', 'platforms': ['macos-arm64'], 'status': 'waived',
+                                   'waiver_reason': 'Covered only by source CI'}
+        with self.assertRaisesRegex(release.GateError, 'without a named owner waiver'):
+            self.validate(value)
+        value['owner_waiver'] = {'name': 'Owner', 'reason': 'Ship and fix forward',
+                                 'approved_at': (self.now - dt.timedelta(minutes=5)).isoformat()}
+        waived = []
+        gate.validate(value, self.root, self.assets, self.version, self.commit, self.build, self.jobs,
+                      self.now, waived=waived)
+        self.assertEqual(waived, ['windows-x64/link_import', 'regression #265'])
+        for broken in ({'name': ' ', 'reason': 'x', 'approved_at': self.now.isoformat()},
+                       {'name': 'Owner', 'reason': 'x', 'approved_at': (self.built - dt.timedelta(hours=1)).isoformat()},
+                       {'name': 'Owner', 'reason': 'x', 'approved_at': (self.now + dt.timedelta(hours=1)).isoformat()}):
+            with self.subTest(waiver=broken), self.assertRaises(release.GateError):
+                self.validate(dict(value, owner_waiver=broken))
+        value['regressions'][0]['waiver_reason'] = ''
+        with self.assertRaisesRegex(release.GateError, 'waiver reason required'):
+            self.validate(value)
+
+    def test_owner_waiver_does_not_turn_pending_or_failed_into_passed(self):
+        value = copy.deepcopy(self.manifest)
+        value['owner_waiver'] = {'name': 'Owner', 'reason': 'Ship and fix forward',
+                                 'approved_at': (self.now - dt.timedelta(minutes=5)).isoformat()}
+        for status in ('pending', 'failed', 'skipped'):
+            value['platforms']['macos-arm64']['checks']['visual_generation']['status'] = status
+            with self.subTest(status=status), self.assertRaises(release.GateError):
+                self.validate(value)
+
+    def test_cli_receipt_lists_every_waived_row(self):
+        self.manifest['platforms']['windows-x64']['checks']['visual_generation'] = {
+            'status': 'waived', 'waiver_reason': 'No real Windows vision run'}
+        self.manifest['owner_waiver'] = {'name': 'Owner', 'reason': 'Ship and fix forward',
+                                         'approved_at': (self.now - dt.timedelta(minutes=5)).isoformat()}
+        for name, value in (('manifest.json', self.manifest), ('build.json', self.build), ('jobs.json', self.jobs)):
+            (self.root / name).write_text(json.dumps(value), encoding='utf-8')
+        result = subprocess.run([sys.executable, gate.__file__, 'validate', '--version', self.version,
+                                 '--commit', self.commit, '--assets', str(self.assets),
+                                 '--manifest', str(self.root / 'manifest.json'),
+                                 '--build-run', str(self.root / 'build.json'), '--build-jobs', str(self.root / 'jobs.json'),
+                                 '--acceptance-run-id', '456', '--bundle', str(self.root / 'accepted')],
+                                capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        receipt = json.loads((self.root / 'accepted/receipt.json').read_text(encoding='utf-8'))
+        self.assertEqual(receipt['waived'], ['windows-x64/visual_generation'])
+        self.assertEqual(receipt['owner_waiver']['name'], 'Owner')
 
 
 if __name__ == '__main__':
