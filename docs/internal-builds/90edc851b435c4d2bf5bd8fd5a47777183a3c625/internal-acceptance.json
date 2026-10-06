@@ -9,7 +9,8 @@
     "AutoClip Desktop_1.5.4_x64-setup.exe": "9101dec6b8cf69b1d85701e9f11bcd3e1d752ef1ac45c21635c420bc76930247",
     "AutoClip Desktop_1.5.4_x64-setup.exe.sig": "5c5a0452e5a295c35378829135e57aaf4f58afd27c2582cb8b09e61b3a80582f",
     "AutoClip.Desktop_1.5.4_aarch64.app.tar.gz": "3dcc4d5b342c41374e11898b3071a8cb76aad7c31ba2221679b97fa2d5bf5232",
-    "AutoClip.Desktop_1.5.4_aarch64.app.tar.gz.sig": "175824cdaf018cdf6a1ef73c2bb5c8f73e57aa4338b41837d278056dd363ae8e"
+    "AutoClip.Desktop_1.5.4_aarch64.app.tar.gz.sig": "175824cdaf018cdf6a1ef73c2bb5c8f73e57aa4338b41837d278056dd363ae8e",
+    "internal-build-provenance.json": "4a271d97c48f5d95c659f9cc5e90b9b54dea9c6d9a2eb5c57b6a2c7148982649"
   },
   "platforms": {
     "windows-x64": {
