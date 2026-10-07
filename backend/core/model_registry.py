@@ -198,6 +198,32 @@ async def _ensure_metadata():
     await asyncio.shield(_remote_task)
 
 
+# AI/ML API lists one row per endpoint family a model serves, and the family is in `type`
+# -- never in the id. Without this, `_records` would fall back to guessing from the name and
+# the picker would offer video, speech and embedding rows that fail on first use. Rows are
+# merged by id so a model that serves both chat and the Responses API keeps its chat route.
+_AIMLAPI_ENDPOINTS = {
+    'openai/chat-completions': 'openai',
+    'anthropic/messages': 'openai',
+    'openai/image-generations': 'image-generation',
+}
+
+
+def _aimlapi_records(raw):
+    merged = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = item.get('id') or item.get('name')
+        endpoint = _AIMLAPI_ENDPOINTS.get(item.get('type'))
+        if not name:
+            continue
+        entry = merged.setdefault(str(name), {'id': str(name), 'supported_endpoint_types': []})
+        if endpoint and endpoint not in entry['supported_endpoint_types']:
+            entry['supported_endpoint_types'].append(endpoint)
+    return list(merged.values())
+
+
 def _records(connection, raw, data):
     result = []
     seen = set()
@@ -315,6 +341,8 @@ async def discover(connection, refresh=False):
         fallback = public['models'] if public else model_catalog.CURATED_MODELS.get(connection.provider, []) + image_catalog.MODELS.get(connection.provider, []) + asr_catalog.MODELS.get(connection.provider, [])
         return {'models': _records(connection, fallback, _read()), 'source': 'catalog', 'updated_at': None,
                 'preview': True, 'warning': '账号模型列表获取失败，当前为参考目录；请检查密钥后刷新。'}
+    if connection.provider == 'aimlapi':
+        raw = _aimlapi_records(raw)
     if connection.provider == 'dashscope':
         # The OpenAI-compatible /models endpoint does not enumerate all native ASR APIs.
         # Keep native ASR references visibly unverified, rather than calling them account-entitled.

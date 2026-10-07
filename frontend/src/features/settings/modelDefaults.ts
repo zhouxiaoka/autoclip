@@ -3,6 +3,7 @@ import type { Connection, ModelEntry, ModelSettings } from './modelSettingsApi'
 // Preference order only: select a recommendation from the provider's actual list.
 // Never substitute an existing explicit choice when a catalog refreshes.
 const PREFERRED: Record<string, string[]> = {
+  aimlapi: ['openai/gpt-6-luna', 'openai/gpt-6.1-sol', 'anthropic/claude-sonnet-5.5'],
   dashscope: ['qwen3.8-flash', 'qwen3.8-max', 'qwen-vl-plus', 'qwen-plus'],
   openai: ['gpt-5-mini', 'gpt-4o-mini'],
   gemini: ['gemini-3.8-flash', 'gemini-2.5-flash'],
@@ -12,6 +13,7 @@ const PREFERRED: Record<string, string[]> = {
   glm: ['glm-5.3'], grok: ['grok-4.6'],
 }
 const IMAGE_PREFERRED: Record<string, string[]> = {
+  aimlapi: ['openai/gpt-image-2', 'openai/gpt-image-1', 'alibaba/qwen-image-3'],
   dashscope: ['qwen-image-2.0', 'wan2.7-image', 'wanx2.1-t2i-turbo', 'wanx2.1-t2i-plus'],
   openai: ['gpt-image-2.5-flare', 'gpt-image-2', 'gpt-image-1', 'dall-e-3'],
   seed: ['doubao-seedream-5-0-flash-260915', 'doubao-seedream-5-0-pro-260628', 'doubao-seedream-4-0-20260415', 'doubao-seedream-5-0-260128'],

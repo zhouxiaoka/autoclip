@@ -229,3 +229,28 @@ def test_settings_file_provider_wins_over_env(manager_env, monkeypatch):
     manager = LLMManager(settings_file=manager_env)
     assert manager.settings["llm_provider"] == "dashscope"
     assert manager.settings["model_name"] == "qwen-max"
+
+
+def test_connection_probe_leaves_room_for_reasoning_models(fake_openai):
+    """探针以前只给 1 个 token，推理型模型（gpt-6-luna 等）必定 400，key 好的也报连接失败。"""
+    import types as _types
+
+    from backend.core.llm_providers import CONNECTION_PROBE_MAX_TOKENS, OpenAIProvider
+
+    captured = {}
+
+    class _Completions:
+        def create(self, **params):
+            captured.update(params)
+            message = _types.SimpleNamespace(content="ok")
+            choice = _types.SimpleNamespace(message=message, finish_reason="stop")
+            return _types.SimpleNamespace(choices=[choice], usage=None)
+
+    provider = OpenAIProvider(api_key="aimlapi-key", model_name="openai/gpt-6-luna",
+                              base_url="https://api.aimlapi.com/v1")
+    provider.client.chat = _types.SimpleNamespace(completions=_Completions())
+
+    assert provider.test_connection() is True
+    # 实测 2026-09-23：gpt-6-luna 给 1 个 token 必 400，16 才够；这里守住「不是 1」这条线
+    assert captured["max_tokens"] == CONNECTION_PROBE_MAX_TOKENS
+    assert CONNECTION_PROBE_MAX_TOKENS >= 16

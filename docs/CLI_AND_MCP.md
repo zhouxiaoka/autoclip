@@ -113,6 +113,7 @@ autoclip run talk.mp4                                  # 用桌面应用设置�
 autoclip run talk.mp4 --provider ollama                # 本地 Ollama（默认 qwen2.5:7b，无需 key）
 autoclip run talk.mp4 --provider lmstudio --model qwen2.5-7b-instruct
 # 模型密钥只放在环境变量 AUTOCLIP_API_KEY 里（先在 shell 里设置），不要写进命令
+autoclip run talk.mp4 --provider aimlapi               # AI/ML API：一个 key 300+ 模型；--model 可换成 anthropic/claude-sonnet-5.5 等
 autoclip run talk.mp4 --provider openai --base-url https://api.deepseek.com/v1 --model deepseek-chat
 autoclip run talk.mp4 --srt talk.srt --category knowledge --min-score 0.6
 autoclip run talk.mp4 --json                           # 给脚本 / agent：stdout 只有一个 JSON

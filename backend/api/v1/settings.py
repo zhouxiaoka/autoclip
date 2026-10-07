@@ -116,6 +116,7 @@ class ServiceSettings(BaseModel):
 
 class ApiKeys(BaseModel):
     """API密钥设置"""
+    aimlapi: str = Field(default="", description="AI/ML API 密钥")
     dashscope: str = Field(default="", description="通义千问API密钥")
     openai: str = Field(default="", description="OpenAI API密钥")
     gemini: str = Field(default="", description="Gemini API密钥")
@@ -134,7 +135,7 @@ class ApiKeys(BaseModel):
 class ApiSettings(BaseModel):
     """API设置"""
     api_keys: ApiKeys = Field(default_factory=ApiKeys, description="API密钥")
-    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88，或本地预设 ollama / lmstudio）")
+    api_provider: str = Field(default="dashscope", description="当前 LLM 提供商（dashscope / openai / gemini / aimlapi / deepseek / seed / kimi / glm / grok / infistar / api88，或本地预设 ollama / lmstudio）")
     api_base_url: str = Field(default="", description="OpenAI 兼容接口地址；provider=openai 时空为官方地址，本地预设为空时用预设默认地址")
     api_model: str = Field(default="qwen-plus", description="默认模型")
     api_max_tokens: int = Field(default=4096, description="最大Token数")
@@ -331,6 +332,7 @@ async def get_settings():
             ),
             api=ApiSettings(
                 api_keys=ApiKeys(
+                    aimlapi="",
                     dashscope=config.dashscope_api_key,
                     openai=config.openai_api_key,
                     gemini=config.gemini_api_key,
@@ -767,6 +769,7 @@ async def list_backups():
 def _saved_provider_api_key(settings: DesktopSettings, provider: str) -> str:
     keys = settings.api.api_keys
     return {
+        "aimlapi": keys.aimlapi,
         "dashscope": keys.dashscope,
         "openai": keys.openai,
         "gemini": keys.gemini,
