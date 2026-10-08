@@ -76,9 +76,12 @@ def _tracked(stage):
         @wraps(fn)
         def run(project_id, *args, **kwargs):
             identity = kwargs.pop('_io_receipt', None)
-            with store.worker_read_scope(project_id, identity), llm_usage.tracking(project_id), llm_usage.stage(stage):
+            from backend.core.project_cancellation import ProjectDeleted, bind
+            with bind(project_id), store.worker_read_scope(project_id, identity), llm_usage.tracking(project_id), llm_usage.stage(stage):
                 try:
                     return fn(project_id, *args, **kwargs)
+                except ProjectDeleted:
+                    return None  # deleted: the binder removes leftover files; nothing to record
                 except PermissionError as error:
                     if store.read_error_needs_report(error):
                         phase = {'visual_analysis': 'analysis', 'ai_cover': 'production'}.get(stage, stage)

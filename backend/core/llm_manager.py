@@ -417,6 +417,8 @@ class LLMManager:
     
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> str:
         """调用LLM。设了 AUTOCLIP_LLM_CACHE_DIR 时按 sha1(prompt+input) 录制 / 回放，给回归集用。"""
+        from backend.core.project_cancellation import checkpoint
+        checkpoint()  # 项目已删除：不再为它花钱（RC156 #12）
         self._reload_if_settings_changed()
         cache_path = _llm_cache_path(prompt, input_data)
         if cache_path is not None and cache_path.exists():

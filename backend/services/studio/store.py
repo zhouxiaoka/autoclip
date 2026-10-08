@@ -461,6 +461,8 @@ def settle_generation(data):
 
 @_serialized
 def write(project_id, data, *, _recover_previous=True):
+    from backend.core.project_cancellation import checkpoint
+    checkpoint(project_id)
     root = directory(project_id)
     if not root.is_dir():
         raise FileNotFoundError('项目目录不存在')
@@ -504,6 +506,8 @@ def write(project_id, data, *, _recover_previous=True):
             logger.warning('Could not remove interrupted project-state temporary file')
 
 def change(project_id, mutate):
+    from backend.core.project_cancellation import checkpoint
+    checkpoint(project_id)  # deleted mid-run: stop before mutating a state that no longer exists
     with lock:
         data = read(project_id)
         result = mutate(data)

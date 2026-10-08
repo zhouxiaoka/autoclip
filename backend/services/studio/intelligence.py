@@ -81,6 +81,8 @@ def vision_call_at(phase, content):
 
 
 def vision_call(content, config=None, *, allow_event_list=False):
+    from backend.core.project_cancellation import checkpoint
+    checkpoint()  # the project was deleted: no more paid calls for it (RC156 #12)
     from backend.services.studio.vision_settings import effective
     config = config or effective()
     key, base, model = config.get('api_key', ''), config['base_url'], config['model']

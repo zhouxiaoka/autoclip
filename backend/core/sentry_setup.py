@@ -256,6 +256,9 @@ def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None
     """
     if not _initialized or not crash_reports_enabled():
         return None
+    from backend.core.project_cancellation import ProjectDeleted
+    if isinstance(error, ProjectDeleted):
+        return None  # the user deleted the project mid-run: expected, not a crash (RC156 #12)
     try:
         code = studio_error_code(error)
         if code in UNREPORTED_STUDIO_ERROR_CODES:
