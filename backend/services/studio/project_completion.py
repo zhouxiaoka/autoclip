@@ -32,7 +32,9 @@ def sync_project_completion(project_id, db=None):
                 return False
             if not isinstance(drafts, list) or any(not isinstance(item, dict) for item in drafts):
                 return False
-            if store.has_pending_receipts(project_id):
+            if store.has_pending_receipts(project_id) or store.interrupted_run(data):
+                # A run left by a previous process (RC156 #13) is closed by the owned
+                # recovery read, which persists the failed terminal before mirroring.
                 # Preserve the raw observer's shape guards before attempting the
                 # owned receipt recovery needed by a list-first refresh.
                 raw_jobs = data.get('jobs', [])
@@ -62,11 +64,12 @@ def sync_project_completion(project_id, db=None):
             # generation.status is the project-index source of truth. A terminal
             # receipt must leave SQLite even when analysis or variant rows lag.
             completed = sum(item.get('status') == 'completed' for item in variants)
+            failure = _failure(generation, analysis) if outcome != 'completed' else (None, None)
             if db is not None:
-                return _update_index(project_id, db, outcome, completed, len(drafts))
+                return _update_index(project_id, db, outcome, completed, len(drafts), failure)
             from backend.core.database import SessionLocal
             with SessionLocal() as session:
-                return _update_index(project_id, session, outcome, completed, len(drafts))
+                return _update_index(project_id, session, outcome, completed, len(drafts), failure)
         except (OSError, ValueError, SQLAlchemyError) as error:
             if db is not None and isinstance(error, SQLAlchemyError):
                 db.rollback()
@@ -74,14 +77,28 @@ def sync_project_completion(project_id, db=None):
             return False
 
 
-def _update_index(project_id, db, outcome, completed, draft_count):
+def _failure(generation, analysis):
+    """The generation's own reason; Task rows can be stale or empty for a Studio run (RC156 #13 4b)."""
+    message = generation.get('error') or analysis.get('error')
+    code = generation.get('error_code') or analysis.get('error_code')
+    return (message[:700] if isinstance(message, str) and message else None,
+            code if isinstance(code, str) and code else None)
+
+
+def _update_index(project_id, db, outcome, completed, draft_count, failure=(None, None)):
     from backend.models.project import Project, ProjectStatus
     project = db.get(Project, project_id)
     if project is None or not (project.processing_config or {}).get('smart_import'):
         return False
     status = ProjectStatus.COMPLETED if outcome == 'completed' else ProjectStatus.FAILED
-    config = {**(project.processing_config or {}), 'studio_completed_variant_count': completed,
-              'studio_draft_count': draft_count, 'studio_generation_status': outcome}
+    config = {key: value for key, value in (project.processing_config or {}).items()
+              if key not in ('studio_generation_error', 'studio_generation_error_code')}
+    config.update(studio_completed_variant_count=completed, studio_draft_count=draft_count, studio_generation_status=outcome)
+    message, code = failure
+    if message:
+        config['studio_generation_error'] = message
+    if code:
+        config['studio_generation_error_code'] = code
     if project.status == status and project.processing_config == config:
         return False
     project.status = status

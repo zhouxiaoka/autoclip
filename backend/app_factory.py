@@ -93,6 +93,12 @@ def create_app(mode: str = "web") -> FastAPI:
                 logger.info("已将 %s 条项目记录中的旧枚举值改写为当前版本可识别的值", changed)
         except Exception:
             logger.exception("清洗项目枚举旧值失败，列表读取会使用降级值")
+        try:
+            # 上次进程被结束时还在跑的 Studio 任务不会再继续：标为失败并写明原因（RC156 #13）
+            from backend.services.studio.restart_recovery import reconcile_interrupted_projects
+            reconcile_interrupted_projects()
+        except Exception:
+            logger.exception("Studio 重启恢复失败，打开项目时会再次尝试")
         
         # 加载 API 密钥到环境变量
         api_key = get_api_key()

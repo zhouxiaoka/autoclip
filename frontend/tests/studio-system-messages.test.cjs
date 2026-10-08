@@ -48,5 +48,13 @@ test('source_too_short / source_no_audio messages match the backend constants an
  const messages=['TOO_SHORT_MESSAGE','NO_AUDIO_MESSAGE','NO_AUDIO_AFTER_SCREENING_MESSAGE'].map(literal)
  assert.equal(messages.length,3)
  for(const message of messages){assert.ok(message.length>20,message);for(const lang of langs){assert.ok(catalogs[lang][message],lang+message);if(lang!=='zh')assert.notEqual(catalogs[lang][message],message,lang)}}
- for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|source_too_short|source_no_audio)$/'),file)
+ for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|source_too_short|source_no_audio|'),file)
+})
+test('restart recovery messages match the backend constants and are translated in eight catalogs (RC156 #13)',()=>{
+ const src=fs.readFileSync(path.resolve(__dirname,'../../backend/services/studio/store.py'),'utf8')
+ const restart=src.match(/^RESTART_MESSAGE = '([^']+)'$/m)[1]
+ const keys=[restart,'服务已重启，请重试这条','服务已重启，请重新生成封面','服务已重启，请重新导出','服务已重启，请重试分析','重新生成']
+ for(const key of keys)assert.ok(src.includes(key)||key==='重新生成',key)
+ for(const lang of langs)for(const key of keys){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key)}
+ for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts','../../scripts/ingest_app_feedback.py'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|service_restarted)'),file)
 })

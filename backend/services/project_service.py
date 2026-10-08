@@ -76,6 +76,14 @@ class ProjectService(BaseService[Project, ProjectCreate, ProjectUpdate, ProjectR
         status_value = getattr(status, "value", status)
         if str(status_value).lower() != "failed":
             return None, None
+        config = getattr(project, 'processing_config', None) or {}
+        if config.get('smart_import') and config.get('studio_generation_status') in ('failed', 'partial'):
+            # Studio-managed runs mirror their own reason; a Task row may be from an older run
+            # or carry nothing when the render (not the pipeline) failed (RC156 #13).
+            message = config.get('studio_generation_error')
+            if isinstance(message, str) and message:
+                code = config.get('studio_generation_error_code')
+                return message, code if isinstance(code, str) and code else None
         from ..models.task import Task
         project_id = str(getattr(project, 'id', ''))
         task = (

@@ -1549,5 +1549,9 @@
   "导入条件还没准备好。": "Los requisitos de importación aún no están listos.",
   "视频太短：不到 20 秒，按字幕切不出完整片段。请换一段 20 秒以上的视频。": "El vídeo es demasiado corto: con menos de 20 segundos no se puede cortar un clip completo a partir de los subtítulos. Usa un vídeo de al menos 20 segundos.",
   "这个视频没有声音，无法生成字幕。请附上 SRT 字幕后重新导入；想按画面剪辑，可在「设置 → AI 模型」选用支持图片的模型并开启「画面识别」。": "Este vídeo no tiene sonido, así que no se pueden generar subtítulos. Adjunta un SRT y vuelve a importarlo; para editar por imagen, elige en Ajustes → AI models un modelo que acepte imágenes y activa Análisis de imagen.",
-  "这个视频没有声音，无法生成字幕，画面判断也没有选出可按画面剪辑的内容。请附上 SRT 字幕后重新导入。": "Este vídeo no tiene sonido, así que no se pueden generar subtítulos, y la revisión de imagen no encontró contenido para editar por imagen. Adjunta un SRT y vuelve a importarlo."
+  "这个视频没有声音，无法生成字幕，画面判断也没有选出可按画面剪辑的内容。请附上 SRT 字幕后重新导入。": "Este vídeo no tiene sonido, así que no se pueden generar subtítulos, y la revisión de imagen no encontró contenido para editar por imagen. Adjunta un SRT y vuelve a importarlo.",
+  "服务已重启，请重新生成": "El servicio se reinició. Vuelve a generar.",
+  "服务已重启，请重试这条": "El servicio se reinició. Reintenta esta versión.",
+  "服务已重启，请重新生成封面": "El servicio se reinició. Vuelve a generar la portada.",
+  "重新生成": "Regenerar"
 }

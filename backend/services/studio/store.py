@@ -19,6 +19,10 @@ INSTANCE = uuid.uuid4().hex
 
 logger = logging.getLogger(__name__)
 IO_FAILURE_MESSAGE = '无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留'
+# A worker owned by a previous process can never finish (RC156 Win QA #13). The project
+# must end failed with a readable reason, retryable through the existing analyze path.
+RESTART_MESSAGE = '服务已重启，请重新生成'
+RESTART_CODE = 'service_restarted'
 # Content-free terminal patches, scoped to the exact project path. A worker
 # must remain retryable even when persisting its failure is also denied.
 _io_failures = {}
@@ -375,8 +379,9 @@ def read(project_id: str, *, recover: bool = True):
     data.setdefault('events', [])
     data.setdefault('jobs', [])
     data.setdefault('output_variants', [])
-    if not recover:
+    if not recover or producer_alive(data.get('generation')):
         # CLI status commands are observers in another process, not a server restart.
+        # A live CLI / MCP producer owns its run: the desktop list must not fail it.
         return data
     interrupted = set()
     cover_finished = _apply_finished_covers(path, data)
@@ -386,7 +391,7 @@ def read(project_id: str, *, recover: bool = True):
             job['cover_pending'] = False
             cover_finished = True
         if job['status'] in ('queued', 'running') and job.get('instance') != INSTANCE:
-            job.update(status='failed', error='服务已重启，请重新导出')
+            job.update(status='failed', error='服务已重启，请重新导出', error_code=RESTART_CODE)
             interrupted.add(job.get('job_id'))
     linked = _apply_saved_render_links(data)
     abandoned_claim = False
@@ -395,25 +400,27 @@ def read(project_id: str, *, recover: bool = True):
         cover_job = variant.get('cover_job') or {}
         if cover_job.get('status') in ('queued', 'running') and cover_job.get('instance') != INSTANCE:
             cover_job.update(status='failed', error='服务已重启，请重新生成封面')
+            settle = True
         if variant.get('status') == 'queued' and not variant.get('render_job_id') and variant.get('render_dispatch_claimed') and variant.get('render_dispatch_instance') != INSTANCE:
-            variant.update(status='failed', error='服务已重启，请重试这条')
+            variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE)
             variant.pop('render_dispatch_claimed', None)
             variant.pop('render_dispatch_instance', None)
             abandoned_claim = True
             settle = True
         elif variant.get('status') == 'preparing' and variant.get('instance') != INSTANCE:
-            variant.update(status='failed', error='服务已重启，请重试这条', needs_prepare=True)
+            variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE, needs_prepare=True)
             settle = True
         elif variant.get('status') in ('queued', 'running') and variant.get('render_job_id') in interrupted:
             # The app closed mid-render: the version becomes retryable instead of queued forever.
-            variant.update(status='failed', error='服务已重启，请重试这条')
+            variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE)
             settle = True
     if settle and data.get('generation'):
         settle_generation(data)
-    patched = _apply_io_failure(path, data) or linked or abandoned_claim or cover_finished
+    patched = _apply_io_failure(path, data) or linked or abandoned_claim or cover_finished or settle or bool(interrupted)
     patched = _apply_read_receipts(path, data) or patched
+    patched = _recover_interrupted_run(data) or patched
     analysis = data.get('analysis')
-    if analysis and analysis['status'] == 'running' and analysis.get('instance') != INSTANCE:
+    if isinstance(analysis, dict) and analysis.get('status') == 'running' and not analysis.get('instance'):
         analysis.update(status='failed', error='服务已重启，请重试分析')
     if patched:
         try:
@@ -428,6 +435,82 @@ def read(project_id: str, *, recover: bool = True):
         _read_failures.pop(path, None)
         _pending_links.pop(path, None)
     return data
+
+def producer_alive(generation):
+    """A CLI / MCP producer process (quick_output_runner) that is still running owns the run."""
+    producer = generation.get('producer') if isinstance(generation, dict) else None
+    if not isinstance(producer, dict) or not isinstance(producer.get('pid'), int):
+        return False
+    if producer.get('pid') == os.getpid():
+        return False  # this process: INSTANCE decides
+    try:
+        import psutil
+        created = psutil.Process(producer['pid']).create_time()
+    except Exception as error:  # noqa: BLE001 - NoSuchProcess / AccessDenied / missing psutil
+        return type(error).__name__ == 'AccessDenied'  # inaccessible is not proof it stopped
+    return abs(created - float(producer.get('created_at') or 0)) <= .01
+
+
+def _stale_analysis(analysis):
+    # Every running analysis records its owning process; one without an owner is not
+    # provably abandoned and keeps the previous in-memory-only handling below.
+    return (isinstance(analysis, dict) and analysis.get('status') == 'running'
+            and bool(analysis.get('instance')) and analysis.get('instance') != INSTANCE)
+
+
+def interrupted_run(data):
+    """True when a previous process left this project mid-run; reading it with recover persists the terminal."""
+    generation = data.get('generation') if isinstance(data, dict) else None
+    analysis = data.get('analysis') if isinstance(data, dict) else None
+    if producer_alive(generation):
+        return False
+    if _stale_analysis(analysis):
+        return True
+    # A finished screening/production always replaces the running analysis, so only a
+    # render whose last variant settled without settling the generation is left here.
+    if not isinstance(generation, dict) or generation.get('status') != 'rendering' or not generation.get('auto_start'):
+        return False
+    if isinstance(analysis, dict) and analysis.get('status') == 'running':
+        return False  # owned by this process: still running
+    variants = [row for row in data.get('output_variants') or [] if isinstance(row, dict) and row.get('status') != 'on_demand']
+    return bool(variants) and all(row.get('status') in ('completed', 'failed') for row in variants)
+
+
+def _recover_interrupted_run(data):
+    """Close a screening/production/rendering run whose worker died with the previous process.
+
+    Before RC156 #13 only the analysis flag flipped (in memory, never persisted), so the
+    generation stayed in production and the project index showed processing (or completed)
+    with no reason forever.
+    """
+    if not interrupted_run(data):
+        return False
+    analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
+    generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
+    variants = [row for row in data.get('output_variants') or [] if isinstance(row, dict) and row.get('status') != 'on_demand']
+    if generation and generation.get('status') == 'rendering' and variants:
+        if _stale_analysis(analysis):
+            for variant in variants:
+                # Created but never handed to a render worker before the process ended.
+                if variant.get('status') == 'queued' and not variant.get('render_job_id'):
+                    variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE)
+        settle_generation(data)
+        if generation.get('status') != 'rendering':
+            return True
+    if generation and generation.get('status') in ('screening', 'production', 'rendering') and not (generation['status'] == 'rendering' and variants) and _stale_analysis(analysis):
+        stage = generation['status']
+        generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now())
+        data['analysis'] = {'status': 'failed', 'phase': stage, 'run_id': (analysis or {}).get('run_id'),
+                            'error': RESTART_MESSAGE, 'error_code': RESTART_CODE, 'outcome': 'failed', 'created_at': now()}
+        return True
+    if analysis and _stale_analysis(analysis):
+        # Manual (confirmation) flows and visual analysis keep their wording; the flag is now persisted.
+        for key in ('message', 'percent', 'instance'):
+            analysis.pop(key, None)
+        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE)
+        return True
+    return False
+
 
 def settle_generation(data):
     """Settle the generation once every requested (not backup) variant is completed or failed."""
@@ -455,8 +538,17 @@ def settle_generation(data):
             data['generation']['error'] = '没有自动生成的成片，可选择备选片段继续生成'
         elif completed:
             data['generation'].pop('error', None)
+        elif code == RESTART_CODE:
+            # Killed mid-render (RC156 #13 case 4b): the project index needs a reason, not an empty string.
+            data['generation']['error'] = RESTART_MESSAGE
+        elif not data['generation'].get('error'):
+            reasons = [item.get('error') or jobs.get(item.get('render_job_id'), {}).get('error') for item in variants]
+            reason = next((text for text in reasons if isinstance(text, str) and text), None)
+            if reason:
+                data['generation']['error'] = reason
         data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now())
-        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code} if code else {})}
+        error = data['generation'].get('error') if outcome == 'failed' else None
+        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code} if code else {}), **({'error': error} if error else {})}
 
 
 @_serialized
