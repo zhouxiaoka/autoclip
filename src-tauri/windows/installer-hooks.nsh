@@ -46,3 +46,49 @@
   !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
   !insertmacro AUTOCLIP_KILL_BUNDLED_PROCESSES
 !macroend
+
+; 卸载时删除用户数据（RC156 Win QA #15）。模板的「删除应用数据」勾选框只删
+; $APPDATA\com.autoclip.desktop 和 $LOCALAPPDATA\com.autoclip.desktop（WebView 数据），
+; 项目、设置、API 密钥所在的 %APPDATA%\AutoClip 一直留着，与隐私说明不符。
+; 破坏性操作，条件全部满足才删，而且只删这一个目录（不用通配符，不碰上级目录）：
+;   - 不是更新：模板的 /UPDATE（$UpdateMode = 1）一律不删；
+;   - 不是安装器发起的「安装前卸载」：用户自己运行的卸载程序会先把自己复制到 %TEMP% 再运行，
+;     安装器则带 _?= 原地运行（$EXEDIR = $INSTDIR），这种升级卸载一律不删；
+;   - 图形界面：只看用户是否勾选（默认不勾选，不勾选就保留数据）；
+;   - 静默（/S）或被动（/P）卸载：勾选框不出现，只有显式传入 /DELETEAPPDATA 才删。
+!macro AUTOCLIP_DELETE_USER_DATA
+  Push $R8
+  Push $R9
+  StrCpy $R9 0
+  ${If} $UpdateMode <> 1
+  ${AndIf} "$EXEDIR" != "$INSTDIR"
+    ${If} ${Silent}
+    ${OrIf} $PassiveMode = 1
+      ClearErrors
+      ${GetOptions} $CMDLINE "/DELETEAPPDATA" $R8
+      ${IfNot} ${Errors}
+        StrCpy $R9 1
+      ${EndIf}
+    ${ElseIf} $DeleteAppDataCheckboxState = 1
+      StrCpy $R9 1
+    ${EndIf}
+  ${EndIf}
+  ${If} $R9 = 1
+    SetShellVarContext current
+    ${If} "$APPDATA" != ""
+    ${AndIf} ${FileExists} "$APPDATA\AutoClip\*.*"
+      DetailPrint "Deleting AutoClip data: $APPDATA\AutoClip"
+      RMDir /r "$APPDATA\AutoClip"
+    ${EndIf}
+  ${EndIf}
+  Pop $R9
+  Pop $R8
+!macroend
+
+!macro NSIS_HOOK_POSTUNINSTALL
+  !insertmacro AUTOCLIP_DELETE_USER_DATA
+!macroend
+
+; 卸载确认页顶部说明：默认保留数据，勾选才会永久删除（文字在 windows/lang/*.nsh）。
+; 钩子在模板的页面定义之前被 include，MUI_UNPAGE_CONFIRM 插入时读取并清除这个定义。
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "$(autoclipUninstallNote)"

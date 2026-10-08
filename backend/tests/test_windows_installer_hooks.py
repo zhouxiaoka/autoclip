@@ -1,4 +1,4 @@
-"""Windows NSIS hooks (RC156 Win QA #2, #4): static checks, no Windows needed.
+"""Windows NSIS hooks (RC156 Win QA #2, #4, #15): static checks, no Windows needed.
 
 The Tauri 2 template runs NSIS_HOOK_PREINSTALL / PREUNINSTALL *before* its own
 CheckIfAppIsRunning. The hooks must therefore confirm the app has exited before they
@@ -51,10 +51,11 @@ def test_only_the_installed_backend_sources_are_removed():
     removals = [line for line in body if line.startswith(('RMDir', 'Delete'))]
     assert removals == ['RMDir /r "$INSTDIR\\resources\\backend"']
     assert '${If} "$INSTDIR" != ""' in body
-    code = _code(HOOKS.read_text(encoding='utf-8'))
+    install_side = '\n'.join(
+        _macro('AUTOCLIP_REMOVE_OLD_BACKEND') + _macro('AUTOCLIP_KILL_BUNDLED_PROCESSES') + _macro('NSIS_HOOK_PREINSTALL')
+    )
     for user_location in ('$APPDATA', '$LOCALAPPDATA', '$PROFILE', '$DOCUMENTS', 'resources\\python"'):
-        assert user_location not in code
-    assert code.count('RMDir') == 1
+        assert user_location not in install_side
 
 
 def test_upgrade_smoke_asserts_stale_backend_removed_and_user_data_kept():
@@ -62,3 +63,111 @@ def test_upgrade_smoke_asserts_stale_backend_removed_and_user_data_kept():
     assert 'resources\\backend\\stale_marker.py' in smoke
     assert "Join-Path $env:APPDATA 'AutoClip'" in smoke
     assert smoke.index('stale_marker') < smoke.index("Write-Host '==> 静默覆盖安装新包'") < smoke.index('仍有旧版残留文件')
+
+
+# ---- #15: uninstall may delete %APPDATA%\AutoClip, but only on an explicit request ----
+
+LANG_DIR = ROOT / 'src-tauri' / 'windows' / 'lang'
+# Keys of tauri-bundler 2.10.1 languages/*.nsh. A custom language file replaces the built-in
+# one, so a missing key would show an empty string in the installer.
+TAURI_LANG_KEYS = {
+    'addOrReinstall', 'alreadyInstalled', 'alreadyInstalledLong', 'appRunning', 'appRunningOkKill',
+    'chooseMaintenanceOption', 'choowHowToInstall', 'createDesktop', 'dontUninstall',
+    'dontUninstallDowngrade', 'failedToKillApp', 'installingWebview2', 'newerVersionInstalled', 'older',
+    'olderOrUnknownVersionInstalled', 'silentDowngrades', 'unableToUninstall', 'uninstallApp',
+    'uninstallBeforeInstalling', 'unknown', 'webview2AbortError', 'webview2DownloadError',
+    'webview2DownloadSuccess', 'webview2Downloading', 'webview2InstallError', 'webview2InstallSuccess',
+    'deleteAppData',
+}
+LANGS = {'SimpChinese': 'LANG_SIMPCHINESE', 'English': 'LANG_ENGLISH'}
+CHECKBOX = {
+    'SimpChinese': '同时删除 AutoClip 数据（项目、设置、API 密钥）',
+    'English': 'Also delete my AutoClip data (projects, settings, API keys)',
+}
+
+
+def _lang_strings(lang):
+    strings = {}
+    for line in (LANG_DIR / f'{lang}.nsh').read_text(encoding='utf-8').splitlines():
+        match = re.match(r'^LangString (\w+) \$\{(\w+)\} "(.*)"$', line)
+        if match:
+            assert match.group(2) == LANGS[lang], line
+            strings[match.group(1)] = match.group(3)
+    return strings
+
+
+def test_post_uninstall_hook_only_runs_the_guarded_user_data_removal():
+    assert _macro('NSIS_HOOK_POSTUNINSTALL') == ['!insertmacro AUTOCLIP_DELETE_USER_DATA']
+
+
+def test_user_data_removal_deletes_exactly_appdata_autoclip():
+    body = _macro('AUTOCLIP_DELETE_USER_DATA')
+    removals = [line for line in body if line.startswith(('RMDir', 'RmDir', 'Delete'))]
+    assert removals == ['RMDir /r "$APPDATA\\AutoClip"']
+    code = _code(HOOKS.read_text(encoding='utf-8'))
+    assert re.findall(r'(?im)^\s*(?:RMDir|Delete)\b.*$', code) == [
+        '    RMDir /r "$INSTDIR\\resources\\backend"',
+        '      RMDir /r "$APPDATA\\AutoClip"',
+    ]
+    for forbidden in ('*', '..', '$LOCALAPPDATA', '$PROFILE', '$DOCUMENTS', '$TEMP', 'SetShellVarContext all'):
+        assert not any(forbidden in line for line in removals), forbidden
+    # Guarded by: AppData resolved for the current user, non-empty, and the dir exists.
+    rmdir = body.index('RMDir /r "$APPDATA\\AutoClip"')
+    for guard in ('SetShellVarContext current', '${If} "$APPDATA" != ""', '${AndIf} ${FileExists} "$APPDATA\\AutoClip\\*.*"'):
+        assert body.index(guard) < rmdir, guard
+
+
+def test_user_data_removal_is_never_done_on_update_or_installer_driven_uninstall():
+    body = _macro('AUTOCLIP_DELETE_USER_DATA')
+    # The outer guard wraps every way of setting the decision flag.
+    assert body[:5] == ['Push $R8', 'Push $R9', 'StrCpy $R9 0', '${If} $UpdateMode <> 1', '${AndIf} "$EXEDIR" != "$INSTDIR"']
+    decision = body[body.index('${AndIf} "$EXEDIR" != "$INSTDIR"'):body.index('${If} $R9 = 1')]
+    assert decision[-1] == '${EndIf}'
+    assert [line for line in body if line == 'StrCpy $R9 1'] == [line for line in decision if line == 'StrCpy $R9 1']
+    assert len([line for line in decision if line == 'StrCpy $R9 1']) == 2
+    assert body[-2:] == ['Pop $R9', 'Pop $R8']
+
+
+def test_silent_or_passive_uninstall_needs_the_explicit_flag_and_gui_needs_the_checkbox():
+    body = _macro('AUTOCLIP_DELETE_USER_DATA')
+    start = body.index('${If} ${Silent}')
+    assert body[start:start + 9] == [
+        '${If} ${Silent}',
+        '${OrIf} $PassiveMode = 1',
+        'ClearErrors',
+        '${GetOptions} $CMDLINE "/DELETEAPPDATA" $R8',
+        '${IfNot} ${Errors}',
+        'StrCpy $R9 1',
+        '${EndIf}',
+        '${ElseIf} $DeleteAppDataCheckboxState = 1',
+        'StrCpy $R9 1',
+    ]
+    # The checkbox state is never consulted on the silent/passive branch.
+    assert body.count('${ElseIf} $DeleteAppDataCheckboxState = 1') == 1
+    assert sum('DeleteAppDataCheckboxState' in line for line in body) == 1
+
+
+def test_custom_language_files_keep_every_tauri_key_and_name_what_is_deleted():
+    config = json.loads((ROOT / 'src-tauri' / 'tauri.windows.conf.json').read_text(encoding='utf-8'))
+    nsis = config['bundle']['windows']['nsis']
+    assert nsis['customLanguageFiles'] == {lang: f'windows/lang/{lang}.nsh' for lang in nsis['languages']}
+    assert set(nsis['languages']) == set(LANGS)
+    for lang in LANGS:
+        text = (LANG_DIR / f'{lang}.nsh').read_text(encoding='utf-8')
+        assert '{{' not in text.split('\n', 5)[-1]  # the bundler never renders language files
+        strings = _lang_strings(lang)
+        assert set(strings) == TAURI_LANG_KEYS | {'autoclipUninstallNote'}
+        assert strings['deleteAppData'] == CHECKBOX[lang]
+        assert '%APPDATA%\\AutoClip' in strings['autoclipUninstallNote']
+    assert '!define MUI_UNCONFIRMPAGE_TEXT_TOP "$(autoclipUninstallNote)"' in _code(HOOKS.read_text(encoding='utf-8'))
+
+
+def test_privacy_docs_match_the_uninstaller():
+    zh = (ROOT / 'docs' / 'PRIVACY.md').read_text(encoding='utf-8')
+    en = (ROOT / 'docs' / 'PRIVACY.en.md').read_text(encoding='utf-8')
+    for doc, lang in ((zh, 'SimpChinese'), (en, 'English')):
+        assert CHECKBOX[lang] in doc
+        assert '`%APPDATA%\\AutoClip`' in doc
+        assert '`/DELETEAPPDATA`' in doc
+    assert '卸载软件或删除项目即清除' not in zh
+    assert 'uninstalling the Software or deleting a project removes it' not in en

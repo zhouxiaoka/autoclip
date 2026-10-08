@@ -75,7 +75,7 @@ Default desktop data directories:
 | Windows | `%APPDATA%\AutoClip` |
 | Linux / CLI | `~/.local/share/AutoClip` |
 
-If you set `--data-dir` / `AUTOCLIP_DATA_DIR`, use that directory instead. Logs are usually in its `logs` subdirectory. Back up the project files, database, and settings together. Settings may contain API keys, so protect your backups. Do not uninstall, delete the database, or clear your data directory as a routine troubleshooting step. Do not assume an automatic backup exists.
+If you set `--data-dir` / `AUTOCLIP_DATA_DIR`, use that directory instead. Logs are usually in its `logs` subdirectory. Back up the project files, database, and settings together. Settings may contain API keys, so protect your backups. Do not uninstall, delete the database, or clear your data directory as a routine troubleshooting step. Do not assume an automatic backup exists. Uninstalling on Windows keeps the data directory by default; `%APPDATA%\AutoClip` is deleted only if you tick "Also delete my AutoClip data (projects, settings, API keys)" in the uninstaller, and upgrades never delete it.
 
 ## Help
 

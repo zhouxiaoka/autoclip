@@ -13,7 +13,11 @@
         "installMode": "currentUser",
         "languages": ["SimpChinese", "English"],
         "displayLanguageSelector": true,
-        "installerHooks": "windows/installer-hooks.nsh"
+        "installerHooks": "windows/installer-hooks.nsh",
+        "customLanguageFiles": {
+          "SimpChinese": "windows/lang/SimpChinese.nsh",
+          "English": "windows/lang/English.nsh"
+        }
       }
     }
   }
