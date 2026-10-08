@@ -69,7 +69,7 @@ def test_step1_all_chunks_failing_surfaces_llm_error(tmp_path, prompt_files, mon
 
     assert exc.value.stage == "ANALYZE"
     assert "1/1" in exc.value.message
-    assert "未配置LLM提供商" in exc.value.message
+    assert "未配置LLM提供商" not in exc.value.message  # provider/raw text is logged, never shown (RC156 c5)
     assert exc.value.code == "llm_not_configured"
     assert "自备" in exc.value.hint
     assert "设置 → 模型" in exc.value.hint
@@ -537,3 +537,22 @@ def test_timeline_call_failure_report_carries_http_status():
         {"outcome": "call_failed", "error_code": "connection"},
     ]})
     assert studio_failure_context(no_status, "production") == {"failure_stage": "analyze"}
+
+
+@pytest.mark.parametrize('error, code', [
+    (ConnectionError('Connection error.'), 'connection'),
+    (TimeoutError('Request timed out.'), 'timeout'),
+    (type('RateLimitError', (Exception,), {'status_code': 429})('Error code: 429 - rate limit'), 'rate_limited'),
+])
+def test_offline_failure_shows_one_fixed_translatable_sentence(tmp_path, prompt_files, monkeypatch, caplog, error, code):
+    """RC156 Win QA c5: 「无法连接模型服务…」 used to end with the provider's English 「Connection error.」."""
+    from backend.pipeline.failures import MODEL_CALL_MESSAGES
+    srt = tmp_path / 'input.srt'
+    srt.write_text(SRT, encoding='utf-8')
+    extractor = _extractor(tmp_path, prompt_files, monkeypatch, [error])
+    with pytest.raises(PipelineFailure) as caught:
+        extractor.extract_outline(srt)
+    assert caught.value.code == code
+    assert caught.value.user_message() == MODEL_CALL_MESSAGES[code]
+    assert str(error) not in caught.value.user_message()
+    assert str(error) in caplog.text  # detail kept in the log

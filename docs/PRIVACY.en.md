@@ -3,7 +3,7 @@
 *[中文版 →](./PRIVACY.md)*
 
 **Effective Date: June 3, 2026**
-**Last Updated: September 30, 2026**
+**Last Updated: October 9, 2026**
 
 > ⚠️ This is a draft template. Please have legal counsel review it before publishing (see "Clauses Requiring Legal Review" at the end).
 
@@ -97,7 +97,9 @@ To exercise these rights or file a complaint, contact us using the details below
 
 ## 5. Data Storage and Retention
 
-- **Local data** (projects, videos, subtitles, settings, keys): stored on your device and fully under your control; uninstalling the Software or deleting a project removes it.
+- **Local data** (projects, videos, subtitles, settings, keys): stored on your device and fully under your control; deleting a project removes its data. Uninstalling keeps this data by default so a reinstall can pick it up:
+  - Windows: tick "Also delete my AutoClip data (projects, settings, API keys)" in the uninstaller to also delete `%APPDATA%\AutoClip`; it is unticked by default. A silent uninstall deletes it only when `/DELETEAPPDATA` is passed explicitly; upgrades never delete it.
+  - macOS / Linux: delete the data directory `~/Library/Application Support/AutoClip` or `~/.local/share/AutoClip` manually.
 - **Anonymous analytics data**: stored by PostHog, retained according to our retention policy (by default no longer than **12 months**), after which it is automatically deleted or anonymized.
 
 ---

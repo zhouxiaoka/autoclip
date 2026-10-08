@@ -75,7 +75,7 @@ AutoClip 不托管官方样片。Release 里没有样片压缩包，也不提供
 | Windows | `%APPDATA%\AutoClip` |
 | Linux / CLI | `~/.local/share/AutoClip` |
 
-使用 CLI 自定义 `--data-dir` / `AUTOCLIP_DATA_DIR` 时，以实际配置目录为准。日志通常在数据目录的 `logs` 中。备份应同时包含项目文件、数据库和配置；这些配置可能含 API Key，应妥善保存。不要把卸载、删除数据库或清空数据目录作为常规排错步骤，也不要假设已有自动备份。
+使用 CLI 自定义 `--data-dir` / `AUTOCLIP_DATA_DIR` 时，以实际配置目录为准。日志通常在数据目录的 `logs` 中。备份应同时包含项目文件、数据库和配置；这些配置可能含 API Key，应妥善保存。不要把卸载、删除数据库或清空数据目录作为常规排错步骤，也不要假设已有自动备份。Windows 卸载默认保留数据目录；只有在卸载界面勾选「同时删除 AutoClip 数据（项目、设置、API 密钥）」才会删除 `%APPDATA%\AutoClip`，升级安装从不删除。
 
 ## 获取帮助
 

@@ -56,6 +56,8 @@ ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其�
 
 源视频本身走不了字幕路线时，在任何模型调用之前就失败（`backend/pipeline/media_precheck.py`，导入初筛、确认制作、内容管线入口与旧版导入任务共用）：比最短片段（短视频档 20 秒）还短归为 `source_too_short`，没有音轨且没有附带 SRT 归为 `source_no_audio`。能走画面路线时（画面识别已开启且模型支持图片）无声视频仍交给画面初筛，只有初筛仍选字幕路线才失败。两者都是用户素材问题，不是故障：本地失败记录保留错误码与失败阶段，界面显示可翻译的固定文案，**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`；旧版导入任务用 `ImportSourceUnusable`，`before_send` 按 `import_failure=source-input` 丢弃）。转写失败文案不再带内部异常名（如 `IndexError`），异常类型只进本地日志。
 
+进程被结束时还在跑的 Studio 任务（初筛 / 内容制作 / 渲染）不会再继续。启动时（`backend/services/studio/restart_recovery.py`）以及首页列表、打开项目读取 `studio.json` 时，恢复逻辑把这类 generation / analysis 持久化为失败：错误码 `service_restarted`，文案「服务已重启，请重新生成」（渲染中被结束的单条版本为「服务已重启，请重试这条」），并同步到项目索引，首页显示失败原因与「重新生成」入口（进入项目，走现有 `/studio/{id}/analyze` 或单条重试）。仍在运行的 CLI / MCP 制作进程（`generation.producer`）不受影响。`service_restarted` 是环境事件，不发送 Sentry（`UNREPORTED_STUDIO_ERROR_CODES`）。
+
 - [Studio 工程异常](https://autoclip-ts.sentry.io/issues/views/226393/)
 - [Studio 配置/素材警告](https://autoclip-ts.sentry.io/issues/views/226394/)
 - [本轮验收异常](https://autoclip-ts.sentry.io/issues/PYTHON-FASTAPI-17)
