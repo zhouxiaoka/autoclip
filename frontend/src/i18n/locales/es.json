@@ -1558,5 +1558,8 @@
   "正在制作可发布成片": "Produciendo vídeos listos para publicar",
   "正在生成可发布成片": "Renderizando vídeos listos para publicar",
   "正在追加平台版本": "Añadiendo versiones por plataforma",
-  "正在重试成片版本": "Reintentando la versión del vídeo"
+  "正在重试成片版本": "Reintentando la versión del vídeo",
+  "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。": "No se pudo conectar con el servicio del modelo. Revisa la URL del endpoint y la red; si es un modelo local, inicia antes su servicio y vuelve a intentarlo.",
+  "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。": "El modelo tardó demasiado en responder. Revisa el servicio y la red y vuelve a intentarlo; si es un modelo local, comprueba que su servicio sigue en marcha.",
+  "提供商限制了请求频率或额度，请检查配额并稍后重试。": "El proveedor limitó la frecuencia de solicitudes o la cuota. Revisa tu cuota y vuelve a intentarlo más tarde."
 }

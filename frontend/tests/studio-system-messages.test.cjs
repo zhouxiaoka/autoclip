@@ -67,3 +67,10 @@ test('Studio progress messages, including transcription progress, are translated
  for(const key of keys.slice(1))assert.ok(jobs.includes(`'${key}'`),key)
  for(const lang of langs)for(const key of keys){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key)}
 })
+test('model-call environment failures are one fixed sentence translated in eight catalogs (RC156 c5)',()=>{
+ const src=fs.readFileSync(path.resolve(__dirname,'../../backend/pipeline/failures.py'),'utf8')
+ const block=src.match(/MODEL_CALL_MESSAGES = \{([\s\S]*?)\n\}/)[1]
+ const messages=[...block.matchAll(/"[a-z_]+": "([^"]+)"/g)].map(m=>m[1])
+ assert.equal(messages.length,3)
+ for(const lang of langs)for(const key of messages){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key);assert.ok(!/Connection error|timed out/i.test(catalogs[lang][key]),lang)}
+})
