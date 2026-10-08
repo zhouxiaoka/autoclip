@@ -1553,5 +1553,10 @@
   "服务已重启，请重新生成": "El servicio se reinició. Vuelve a generar.",
   "服务已重启，请重试这条": "El servicio se reinició. Reintenta esta versión.",
   "服务已重启，请重新生成封面": "El servicio se reinició. Vuelve a generar la portada.",
-  "重新生成": "Regenerar"
+  "重新生成": "Regenerar",
+  "正在生成字幕": "Generando subtítulos",
+  "正在制作可发布成片": "Produciendo vídeos listos para publicar",
+  "正在生成可发布成片": "Renderizando vídeos listos para publicar",
+  "正在追加平台版本": "Añadiendo versiones por plataforma",
+  "正在重试成片版本": "Reintentando la versión del vídeo"
 }

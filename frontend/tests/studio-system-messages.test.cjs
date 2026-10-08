@@ -58,3 +58,12 @@ test('restart recovery messages match the backend constants and are translated i
  for(const lang of langs)for(const key of keys){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key)}
  for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts','../../scripts/ingest_app_feedback.py'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|service_restarted)'),file)
 })
+test('Studio progress messages, including transcription progress, are translated in eight catalogs (RC156 #14)',()=>{
+ const src=fs.readFileSync(path.resolve(__dirname,'../../backend/services/simple_pipeline_adapter.py'),'utf8')
+ const transcribing=src.match(/^STUDIO_TRANSCRIBING_MESSAGE = '([^']+)'$/m)[1]
+ const production=src.match(/^STUDIO_PRODUCTION_MESSAGE = '([^']+)'$/m)[1]
+ const jobs=fs.readFileSync(path.resolve(__dirname,'../../backend/services/studio/jobs.py'),'utf8')
+ const keys=[transcribing,production,'正在生成可发布成片','正在追加平台版本','正在重试成片版本']
+ for(const key of keys.slice(1))assert.ok(jobs.includes(`'${key}'`),key)
+ for(const lang of langs)for(const key of keys){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key)}
+})

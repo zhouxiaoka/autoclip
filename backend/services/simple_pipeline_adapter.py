@@ -26,6 +26,68 @@ from backend.pipeline.step6_video import run_step6_video
 logger = logging.getLogger(__name__)
 
 
+
+STUDIO_TRANSCRIBING_MESSAGE = '正在生成字幕'
+STUDIO_PRODUCTION_MESSAGE = '正在制作可发布成片'
+
+
+class TranscriptionProgress:
+    """Show transcription progress as the share of audio already processed (RC156 Win QA #14).
+
+    - Project progress bar: SUBTITLE advances smoothly between its 25% and 40% sub-steps
+      instead of sitting on fixed checkpoints.
+    - Studio (managed import): analysis shows 「正在生成字幕 · N%」 with N = processed / total audio.
+    Writes are throttled to whole-percent steps at most every `interval` seconds.
+    """
+
+    def __init__(self, project_id: str, interval: float = 2.0):
+        self.project_id = project_id
+        self.interval = interval
+        self.last_percent = -1
+        self.last_at = None
+
+    def __call__(self, fraction: float) -> None:
+        import time
+        from backend.core.project_cancellation import checkpoint
+        checkpoint(self.project_id)  # deleted mid-transcription: stop Whisper (RC156 #12)
+        percent = int(fraction * 100)
+        now = time.monotonic()
+        if percent <= self.last_percent or (percent < 100 and self.last_at is not None and now - self.last_at < self.interval):
+            return
+        self.last_percent, self.last_at = percent, now
+        emit_progress(self.project_id, "SUBTITLE", "正在使用AI生成字幕...", subpercent=25 + 15 * fraction)
+        self._studio(lambda analysis: analysis.update(message=STUDIO_TRANSCRIBING_MESSAGE, percent=percent))
+
+    def _studio(self, update) -> None:
+        self.studio_update(self.project_id, update)
+
+    @staticmethod
+    def studio_update(project_id: str, update) -> None:
+        from backend.services.studio import store
+        try:
+            if not (store.directory(project_id) / 'metadata' / 'studio.json').is_file():
+                return  # legacy project: never create Studio state
+            def mutate(data):
+                analysis = data.get('analysis')
+                if isinstance(analysis, dict) and analysis.get('status') == 'running' and analysis.get('phase') == 'production':
+                    update(analysis)
+            store.change(project_id, mutate)
+        except FileNotFoundError:
+            raise
+        except Exception as error:  # noqa: BLE001 - progress display never fails the pipeline
+            logger.debug('Studio transcription progress skipped: %s', type(error).__name__)
+
+    @classmethod
+    def finish_studio(cls, project_id: str) -> None:
+        def restore(analysis):
+            if analysis.get('message') == STUDIO_TRANSCRIBING_MESSAGE:
+                analysis['message'] = STUDIO_PRODUCTION_MESSAGE
+                analysis.pop('percent', None)
+        try:
+            cls.studio_update(project_id, restore)
+        except FileNotFoundError:
+            pass
+
 class SimplePipelineAdapter:
     """简化的流水线适配器，使用固定阶段进度系统"""
     
@@ -96,12 +158,17 @@ class SimplePipelineAdapter:
                 
                 logger.info("尝试使用所选转写服务生成字幕")
                 output_path = metadata_dir / f"{video_file_path.stem}.srt"
-                srt_path = generate_subtitle_for_video(
-                    video_file_path,
-                    output_path=output_path,
-                    method="auto",
-                    language="auto"
-                )
+                from backend.utils.transcription_progress import reporting
+                try:
+                    with reporting(TranscriptionProgress(self.project_id)):
+                        srt_path = generate_subtitle_for_video(
+                            video_file_path,
+                            output_path=output_path,
+                            method="auto",
+                            language="auto"
+                        )
+                finally:
+                    TranscriptionProgress.finish_studio(self.project_id)
                 
                 if srt_path and srt_path.exists():
                     logger.info(f"转写生成字幕成功: {srt_path}")

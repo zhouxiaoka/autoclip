@@ -1553,5 +1553,10 @@
   "服务已重启，请重新生成": "The service restarted. Please generate again.",
   "服务已重启，请重试这条": "The service restarted. Please retry this version.",
   "服务已重启，请重新生成封面": "The service restarted. Please generate the cover again.",
-  "重新生成": "Regenerate"
+  "重新生成": "Regenerate",
+  "正在生成字幕": "Generating subtitles",
+  "正在制作可发布成片": "Producing ready-to-post videos",
+  "正在生成可发布成片": "Rendering ready-to-post videos",
+  "正在追加平台版本": "Adding platform versions",
+  "正在重试成片版本": "Retrying the video version"
 }
