@@ -144,7 +144,7 @@ def process_video_pipeline(
                         task.current_step = f"失败于 {result['stage']}"
                     task.result_data = result
 
-                if project:
+                if project and not clips_only:
                     project.status = ProjectStatus.FAILED
                     project.updated_at = datetime.utcnow()
                     logger.info(f"项目状态已更新为失败: {project_id}")
@@ -173,7 +173,10 @@ def process_video_pipeline(
                     task.current_step = "处理完成"
                     task.result_data = result
 
-                if project:
+                # clips_only 是 Studio 托管的子运行：片段出来后还要渲染成片。项目终态由 Studio
+                # （mark_project / sync_project_completion）按 generation 写，这里写 completed
+                # 会让首页在成片出来前就显示「已完成」并停止轮询（RC156 Win QA #8）。
+                if project and not clips_only:
                     project.status = ProjectStatus.COMPLETED
                     project.completed_at = datetime.utcnow()
                     project.updated_at = datetime.utcnow()
@@ -210,9 +213,9 @@ def process_video_pipeline(
                     task.status = TaskStatus.FAILED
                     task.error_message = error_msg
 
-                    # 更新项目状态为失败
+                    # 更新项目状态为失败（Studio 子运行由 Studio 自己写终态）
                     project = db.query(Project).filter(Project.id == project_id).first()
-                    if project:
+                    if project and not clips_only:
                         project.status = ProjectStatus.FAILED
                         project.updated_at = datetime.utcnow()
                         logger.info(f"项目状态已更新为失败: {project_id}")
