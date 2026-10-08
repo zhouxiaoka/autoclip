@@ -76,6 +76,19 @@
 
 新手流程：没有任何可用连接时，首页弹出一次性的「连接 AI 服务」对话框（`FirstRunSetup.tsx`，本会话内「稍后再说」后不再弹），内容与设置页 AI 服务一节完全相同，也可点「更多选项」进入设置页。首次空白配置默认：画面识别开、封面「AI 生成」且「参考视频画面」开，供应商分组把赞助伙伴放在「推荐」并保留合作说明；已有配置不强制改动。未连接 AI 服务时导入视频会被拦下并提示先连接。封面模型缺失时回落到视频截帧。模型使用单选，搜索无匹配时允许显式选择自定义型号。关闭画面识别后的连接测试也不发送图片。
 
+## 本地 Whisper 模型下载源
+
+Whisper 模型（Systran/faster-whisper-*）由 `whisper_model_manager.py` 下载到数据目录 `whisper-models/hub`，转写只加载已下载的本地快照，不再让 faster-whisper 按模型名自行联网。
+
+- 下载源由环境变量 `AUTOCLIP_WHISPER_MODEL_SOURCE` 决定，暂无界面选项：
+  - `auto`（默认）：先连 `https://huggingface.co`；失败（超时、连不上、xet 401 等）后**自动改用第三方镜像 `https://hf-mirror.com`**。hf-mirror 不是 HuggingFace 官方服务，只用于下载公开的模型文件，不发送音频、API Key 或其它用户数据。
+  - `huggingface`：只用官方源，失败不回退。
+  - `hf-mirror`：只用镜像。
+- 用户已设置 `HF_ENDPOINT` 时按该地址下载，不再自动切换。
+- 非官方地址都会关闭 hf_xet（`HF_HUB_DISABLE_XET=1`，并同步 `huggingface_hub.constants`）：xet 传输直连 `cas-server.xethub.hf.co`，不经过 `HF_ENDPOINT`。
+- 实际使用的源会出现在 `GET /api/v1/whisper-models` 和 `/whisper-models/{name}/status` 的 `source` 字段（`huggingface` / `hf-mirror` / `custom`）；两个源都失败时，`errorMessage` 会写明两边的错误。
+- `POST /api/v1/whisper-models/download` 只负责开始下载：已在本地返回 200 `installed`，开始或正在下载返回 202 `downloading`，结果以状态接口为准。导入前的就绪检查会检查所选模型是否已下载（`whisper_model_missing` / `whisper_model_downloading` / `whisper_model_failed`）。
+
 ## 本地 SenseVoice（#67）
 
 设置 → 字幕转写 → 转写方式选择 **SenseVoice · 本地**，点击“准备模型”，就绪后保存设置。首次需联网下载 FunASR/PyTorch 组件和 SenseVoiceSmall/FSMN-VAD 模型，请预留至少 8 GB 磁盘空间（Windows 的真实安装验收约 5.8 GB，另需安装临时空间）。转写时使用已下载的本地路径，不上传音频、不请求云端转写、不需要 API Key。默认 Whisper 和已有选择保持原样。
