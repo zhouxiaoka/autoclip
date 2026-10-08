@@ -241,7 +241,8 @@ def cmd_providers(args: argparse.Namespace) -> int:
         ("api88", "88API Token聚合平台（赞助）", "需要 key，新用户注册赠送体验额度"),
         ("infistar", "Infistar 无限星河（赞助）", "需要 key，专属链接注册可领体验额度"),
     ] + [
-        (p.key, p.display_name, f"无需 key；默认 {p.base_url}" + (f"，默认模型 {p.default_model}" if p.default_model else ""))
+        (p.key, p.display_name, f"无需 key；默认 {p.base_url}" + (f"，默认模型 {p.default_model}" if p.default_model else "")
+         + (f"。{p.context_hint}" if p.context_hint else ""))
         for p in LOCAL_PRESETS.values()
     ]
     info = get_llm_manager().get_current_provider_info()
@@ -279,6 +280,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     llm = rep["llm"]
     llm_desc = f"{llm.get('provider')} · {llm.get('model')}" + (f" · {llm['base_url']}" if llm.get("base_url") else "")
     line(llm["ok"], "模型", llm_desc + ("" if llm["ok"] else f"  {_dim(llm.get('error') or '')}"))
+    if llm.get("context_hint"):
+        print(_dim(f"    {llm['context_hint']}"))
     return 0 if rep["ffmpeg"]["ok"] and llm["ok"] else 1
 
 
