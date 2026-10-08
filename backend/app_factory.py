@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from backend import __version__
 from backend.api.v1 import api_router
 from backend.api.v1.health import router as health_router
 from backend.core.database import engine
@@ -53,7 +54,7 @@ def create_app(mode: str = "web") -> FastAPI:
     app = FastAPI(
         title="AutoClip API",
         description="AI视频切片处理API",
-        version="1.0.0",
+        version=__version__,
         docs_url="/docs",
         redoc_url="/redoc"
     )
@@ -185,7 +186,7 @@ def create_app(mode: str = "web") -> FastAPI:
             return {
                 "status": "ok",
                 "mode": mode,
-                "version": "1.0.0"
+                "version": __version__
             }
         except Exception as e:
             return JSONResponse(
