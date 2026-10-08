@@ -190,6 +190,12 @@ class SimplePipelineAdapter:
             
             # 阶段1: 素材准备。先确认 LLM 可用，否则后面每一步都是白跑
             emit_progress(self.project_id, "INGEST", "素材准备完成")
+            # 源视频比最短片段还短、或没有音轨又没带字幕：字幕路线注定失败，先拦下，不调用任何模型（RC156 #10/#11）
+            from backend.pipeline import media_precheck
+            blocked = media_precheck.subtitle_route_failure(
+                input_video_path, srt_available=bool(input_srt_path and Path(input_srt_path).exists()))
+            if blocked:
+                raise blocked
             self._preflight_llm()
             
             # 阶段2: 字幕处理

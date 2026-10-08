@@ -204,8 +204,9 @@ def describe_whisper_failure(exc: BaseException) -> str:
         )
     if "n_fft" in low or "no speech" in low or ("audio" in low and "empty" in low):
         return "没有从这段视频里识别到可用语音。请确认视频包含清晰人声，或直接导入 SRT 字幕。"
+    # 不把内部异常名（IndexError 之类）放进界面文案；类型和原文只进日志（RC156 #11）。
     return (
-        f"本地 Whisper 生成字幕失败（{type(exc).__name__}）。"
+        "本地 Whisper 生成字幕失败。"
         "请到「设置 → 转写」确认模型已下载，并检查视频有可播放的音轨；"
         "若仍失败，请通过反馈附上本次错误和脱敏日志。"
     )
@@ -484,9 +485,11 @@ class SpeechRecognizer:
                 try:
                     cached_model = manager.ensure_downloaded(config.model)
                 except Exception as exc:  # noqa: BLE001
+                    # 每个下载源的失败原因只进日志；界面文案不带异常名和原文（RC156 #11）。
+                    logger.warning("Whisper 模型 %s 下载失败: %s: %s", config.model, type(exc).__name__, exc)
                     raise SpeechRecognitionError(
-                        f"Whisper 模型 {config.model} 下载失败：{type(exc).__name__}: {exc}。"
-                        "请到「设置 → 转写」重新下载模型，或重新导入时带上 .srt 字幕。"
+                        f"Whisper 模型 {config.model} 下载失败。"
+                        "请检查网络后到「设置 → 转写」重新下载模型，或重新导入时带上 .srt 字幕。"
                     ) from exc
             logger.info(
                 "使用 faster-whisper 生成字幕: model=%s lang=%s device=%s compute=%s",
@@ -839,6 +842,10 @@ def generate_subtitle_for_video(video_path: Path, output_path: Optional[Path] = 
     Raises:
         SpeechRecognitionError: 语音识别失败
     """
+    # 没有音轨的视频交给 Whisper 会抛 IndexError（RC156 #11），交给云端是白传。先用 ffprobe 确认。
+    from backend.pipeline.media_precheck import NO_AUDIO_MESSAGE, has_audio
+    if has_audio(video_path) is False:
+        raise SpeechRecognitionError(NO_AUDIO_MESSAGE)
     # 创建配置。本地导入会带上设置里的时间戳 / 超时 / 密钥；缺了这些参数会在进 Whisper 之前 TypeError。
     from backend.services.ai_model_settings import load as load_model_settings
     model_settings = load_model_settings()

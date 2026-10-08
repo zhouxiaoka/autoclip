@@ -40,5 +40,13 @@ test('source_blocked download hint matches the backend constant and is translate
  const src=fs.readFileSync(path.resolve(__dirname,'../../backend/utils/download_recovery.py'),'utf8')
  const hint=src.match(/^SOURCE_BLOCKED_HINT = '([^']+)'$/m)[1]
  for(const lang of langs){assert.ok(catalogs[lang][hint],lang);if(lang!=='zh')assert.notEqual(catalogs[lang][hint],hint,lang)}
- for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|source_blocked)$/'),file)
+ for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|source_blocked|'),file)
+})
+test('source_too_short / source_no_audio messages match the backend constants and are translated in eight catalogs',()=>{
+ const src=fs.readFileSync(path.resolve(__dirname,'../../backend/pipeline/media_precheck.py'),'utf8')
+ const literal=name=>{const body=src.match(new RegExp('^'+name+' = \\(?\\n?([\\s\\S]*?)\\)?\\n(?=\\S)','m'))[1];return [...body.matchAll(/"([^"]+)"/g)].map(m=>m[1]).join('')}
+ const messages=['TOO_SHORT_MESSAGE','NO_AUDIO_MESSAGE','NO_AUDIO_AFTER_SCREENING_MESSAGE'].map(literal)
+ assert.equal(messages.length,3)
+ for(const message of messages){assert.ok(message.length>20,message);for(const lang of langs){assert.ok(catalogs[lang][message],lang+message);if(lang!=='zh')assert.notEqual(catalogs[lang][message],message,lang)}}
+ for(const file of ['../src/analytics/feedbackDraft.ts','../src/analytics/workflow.ts'])assert.ok(fs.readFileSync(path.resolve(__dirname,file),'utf8').includes('|source_too_short|source_no_audio)$/'),file)
 })

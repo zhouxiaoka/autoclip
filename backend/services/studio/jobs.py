@@ -1430,6 +1430,14 @@ def confirm_project(project_id, body):
             from backend.services.studio import intelligence
             if not intelligence.ready():
                 raise ValueError('视觉模型不可用，请配置后重新确认；原素材已保留')
+        if route == 'subtitle' or 'content' in body.goals:
+            # Too short / no audio and no SRT: refuse before production spends any model call (RC156 #10/#11).
+            from backend.pipeline import media_precheck
+            video = source(project_id)
+            blocked = media_precheck.subtitle_route_failure(
+                video, srt_available=(video.parent / 'input.srt').is_file(), duration=plan.get('source_duration'))
+            if blocked:
+                raise ValueError(str(blocked))
         previous = deepcopy(state)
         plan['confirmed_analysis'] = route
         plan['selected_goals'] = body.goals

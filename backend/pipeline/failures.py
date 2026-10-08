@@ -27,6 +27,7 @@ class PipelineFailure(RuntimeError):
         # llm_not_configured：没有可用提供商 / 缺少 API Key / 连接测试没通过
         # whisper_not_installed | whisper_install_failed | transcription_empty | subtitle_setup
         # timeline_empty：有效候选被时长筛选清空（不要再指到「设置 → 模型」）
+        # source_too_short | source_no_audio：源视频本身不能走字幕路线（media_precheck），用户输入，不上报
         self.code = code
 
     @property
@@ -239,6 +240,11 @@ def missing_subtitle_failure() -> PipelineFailure:
 def failure_from_speech_error(message: str) -> PipelineFailure:
     """转写异常收成同一套失败码，不再把「设置 → 语音识别」和「设置 → 转写」叠在一起。"""
     text = (message or "").strip().replace("设置 → 语音识别", "设置 → 转写")
+    from backend.pipeline import media_precheck
+
+    if media_precheck.is_no_audio_text(text):
+        # 视频本身没有音轨：不是转写设置的问题，不要指到「设置 → 转写」。
+        return media_precheck.no_audio_failure("SUBTITLE")
     if 'SenseVoice' in text:
         return PipelineFailure('SUBTITLE', text,
                                '' if '设置 → 转写' in text else '到「设置 → 转写」检查 SenseVoiceSmall，或导入 .srt 字幕。',

@@ -114,12 +114,15 @@ def test_failure_text_has_no_local_path():
     (ConnectionError("https://huggingface.co/model.bin?token=secret"), "下载连接失败"),
     (PermissionError(r"C:\Users\secret\model.bin"), "访问权限"),
     (ValueError("File does not have any audio stream"), "音轨"),
-    (RuntimeError("unknown error secret"), "RuntimeError"),
+    (RuntimeError("unknown error secret"), "本地 Whisper 生成字幕失败。"),
+    (IndexError("tuple index out of range"), "本地 Whisper 生成字幕失败。"),
 ])
 def test_whisper_failure_has_actionable_category_without_raw_details(error, expected):
     message = describe_whisper_failure(error)
     assert expected in message
     assert "secret" not in message
+    # RC156 Win QA #11: internal exception names stay in the log, never in the UI text.
+    assert type(error).__name__ not in message
 
 
 def test_transcription_uses_complete_cached_snapshot_without_downloading(tmp_path, monkeypatch):
