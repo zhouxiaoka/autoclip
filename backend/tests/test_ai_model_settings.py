@@ -122,6 +122,11 @@ def test_runtime_manager_reloads_connection_document(tmp_path, monkeypatch):
     config = example()
     config.analysis = ai.Assignment(connection_id='two', model='new-analysis')
     ai.save(config)
+    # Back-to-back writes can share one mtime on coarse-timestamp filesystems (overlayfs/ext4
+    # tick): make the second save observable, as it is for a real settings save seconds later.
+    import os
+    before = manager._settings_mtime[1] or 0
+    os.utime(ai.path(), ns=(before + 1_000_000_000, before + 1_000_000_000))
     manager._reload_if_settings_changed()
     assert manager.settings['openai_api_key'] == 'sk-second-secret'
     assert manager.settings['model_name'] == 'new-analysis'
