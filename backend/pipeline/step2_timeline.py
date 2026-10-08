@@ -13,7 +13,7 @@ from collections import defaultdict, Counter
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
 from .quality import to_seconds, to_srt_time, save_report
-from .failures import PipelineFailure, model_call_error_code, timeline_failure_from_report
+from .failures import PipelineFailure, http_status_of, model_call_error_code, timeline_failure_from_report
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR
 
 logger = logging.getLogger(__name__)
@@ -149,6 +149,8 @@ class TimelineExtractor:
                                 # The client already retries transport failures. Do not
                                 # multiply its request budget by the JSON repair loop.
                                 chunk_report.update(outcome="call_failed", error_code=model_call_error_code(call_error))
+                                if http_status_of(call_error) is not None:
+                                    chunk_report["http_status"] = http_status_of(call_error)
                                 logger.error("块 %s 模型调用失败: %s", chunk_index, call_error)
                                 break
                             if raw_response:

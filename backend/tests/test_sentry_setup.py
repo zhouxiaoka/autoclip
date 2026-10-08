@@ -161,6 +161,85 @@ def test_studio_failure_context_keeps_stage_and_http_status_without_messages():
     assert 'private' not in json.dumps(timeout)
 
 
+class _ProviderStatusError(Exception):
+    """Mimics openai.APIStatusError: the HTTP status lives on `status_code`."""
+
+    def __init__(self, message, status_code):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def test_studio_failure_context_reads_http_status_from_wrapped_provider_error():
+    # RC156 Win QA #1: step1_outline raises `PipelineFailure("ANALYZE", ...) from last_error`.
+    # The provider 500 is on __cause__, so the top-level-only lookup recorded http_status=None.
+    from backend.pipeline.failures import PipelineFailure
+
+    def wrapped(cause, **kw):
+        try:
+            raise cause
+        except Exception as error:
+            try:
+                raise PipelineFailure('ANALYZE', 'private detail', code='provider_error', **kw) from error
+            except PipelineFailure as failure:
+                return failure
+
+    context = sentry_setup.studio_failure_context(wrapped(_ProviderStatusError('private body', 500)), 'production')
+    assert context == {'failure_stage': 'analyze', 'http_status': 500}
+    assert 'private' not in json.dumps(context)
+
+    # Two levels deep (provider error re-wrapped by a client layer), explicit and implicit chaining.
+    def client_layer():
+        try:
+            raise _ProviderStatusError('private body', 502)
+        except _ProviderStatusError:
+            raise RuntimeError('client wrapper')  # implicit __context__
+    try:
+        client_layer()
+    except RuntimeError as inner:
+        failure = wrapped(inner)
+    assert sentry_setup.studio_failure_context(failure, 'production') == {
+        'failure_stage': 'analyze', 'http_status': 502}
+
+    # The nearest valid status wins; non-HTTP and out-of-range values are ignored.
+    outer = _ProviderStatusError('proxy', 503)
+    outer.__cause__ = _ProviderStatusError('origin', 500)
+    assert sentry_setup.studio_failure_context(outer, 'screening')['http_status'] == 503
+    for bogus in (200, 302, 600, '500', True, None):
+        assert 'http_status' not in sentry_setup.studio_failure_context(
+            wrapped(_ProviderStatusError('x', bogus)), 'production')
+
+    # An explicit status on the failure itself (timeline aggregation has no cause to walk).
+    assert sentry_setup.studio_failure_context(
+        PipelineFailure('ANALYZE', 'x', code='provider_error', http_status=429), 'production') == {
+        'failure_stage': 'analyze', 'http_status': 429}
+
+
+def test_studio_failure_context_without_status_in_chain_and_with_cycles():
+    from backend.pipeline.failures import PipelineFailure
+
+    try:
+        try:
+            raise ConnectionError('private host unreachable')
+        except ConnectionError as error:
+            raise PipelineFailure('ANALYZE', 'private', code='connection') from error
+    except PipelineFailure as failure:
+        assert sentry_setup.studio_failure_context(failure, 'production') == {'failure_stage': 'analyze'}
+
+    # `raise ... from None` suppresses the implicit context, like traceback does.
+    try:
+        try:
+            raise _ProviderStatusError('private', 500)
+        except _ProviderStatusError:
+            raise PipelineFailure('ANALYZE', 'private', code='provider_error') from None
+    except PipelineFailure as failure:
+        assert sentry_setup.studio_failure_context(failure, 'production') == {'failure_stage': 'analyze'}
+
+    # A cyclic chain must terminate.
+    a, b = RuntimeError('a'), RuntimeError('b')
+    a.__cause__, b.__cause__ = b, a
+    assert sentry_setup.studio_failure_context(a, 'render') == {'failure_stage': 'render'}
+
+
 def test_studio_expected_pipeline_failure_keeps_code_and_warning(monkeypatch, tmp_path):
     from backend.pipeline.failures import PipelineFailure
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))

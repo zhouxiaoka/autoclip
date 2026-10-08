@@ -17,10 +17,12 @@ class PipelineFailure(RuntimeError):
     hint:  用户下一步能做什么（去哪个设置项、装什么），追加在错误正文后面。
     """
 
-    def __init__(self, stage: str, message: str, hint: str = "", code: str = ""):
+    def __init__(self, stage: str, message: str, hint: str = "", code: str = "", http_status: int | None = None):
         super().__init__(message)
         self.stage = stage
         self.hint = hint
+        # 上游 HTTP 状态码（仅 400–599 的整数）；没有链上原始异常时（如时间线汇总失败）用它带出状态码。
+        self.http_status = http_status
         # 稳定机器码。前端用来打开对应设置页，或避免打开错误的设置页。
         # llm_not_configured：没有可用提供商 / 缺少 API Key / 连接测试没通过
         # whisper_not_installed | whisper_install_failed | transcription_empty | subtitle_setup
@@ -115,6 +117,29 @@ def model_call_error_code(error: Exception) -> str:
     return "provider_error"
 
 
+def http_status_of(error: BaseException | None) -> int | None:
+    """沿异常链找第一个 400–599 的整数 HTTP 状态码，不读正文、URL 或密钥。
+
+    流水线把提供商异常包成 PipelineFailure(...) from error，状态码在 __cause__ 上；
+    隐式链（处理异常时又抛异常）走 __context__，与 traceback 的展示规则一致。
+    """
+    seen: set[int] = set()
+    current = error
+    while current is not None and id(current) not in seen and len(seen) < 32:
+        seen.add(id(current))
+        for attr in ("http_status", "status_code"):
+            status = getattr(current, attr, None)
+            if type(status) is int and 400 <= status <= 599:
+                return status
+        if current.__cause__ is not None:
+            current = current.__cause__
+        elif not current.__suppress_context__:
+            current = current.__context__
+        else:
+            current = None
+    return None
+
+
 def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFailure:
     """Use current-run observations, not a guess that an empty timeline is short."""
     chunks = report.get("chunks", [])
@@ -141,6 +166,7 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
         return PipelineFailure(
             "ANALYZE", f"时间线模型调用失败：{len(failed_calls)}/{len(chunks)} 个字幕块调用失败，本次没有可用候选。",
             hints[code] + "大纲成功或测试连接成功，不能保证后续长文本请求也成功。", code=code,
+            http_status=failed_calls[-1].get("http_status"),
         )
     if chunks and all(chunk.get("outcome") == "missing_subtitles" for chunk in chunks):
         return PipelineFailure("ANALYZE", "时间线所需的字幕分块无法读取。",
