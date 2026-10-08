@@ -533,9 +533,17 @@ class SpeechRecognizer:
                     seg_iter, _info = model.transcribe(
                         audio_input, language=language, vad_filter=vad_filter, word_timestamps=True,
                     )
-                return ([{"start": s.start, "end": s.end, "text": s.text,
-                         "words": [{"text": w.word, "start": w.start, "end": w.end}
-                                   for w in (getattr(s, "words", None) or [])]} for s in seg_iter], _info)
+                # faster-whisper decodes lazily: each segment is real progress through the audio (RC156 #14).
+                from backend.utils.transcription_progress import report
+                total = getattr(_info, "duration", None)
+                collected = []
+                for s in seg_iter:
+                    collected.append({"start": s.start, "end": s.end, "text": s.text,
+                                      "words": [{"text": w.word, "start": w.start, "end": w.end}
+                                                for w in (getattr(s, "words", None) or [])]})
+                    report(s.end, total)
+                report(total, total)
+                return (collected, _info)
 
             def transcribe_with_vad_fallback(model):
                 try:

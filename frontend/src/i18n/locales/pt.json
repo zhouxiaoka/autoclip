@@ -1552,5 +1552,17 @@
   "导入条件还没准备好。": "As condições de importação ainda não estão prontas.",
   "视频太短：不到 20 秒，按字幕切不出完整片段。请换一段 20 秒以上的视频。": "O vídeo é curto demais: com menos de 20 segundos não é possível cortar um clipe completo a partir das legendas. Use um vídeo de pelo menos 20 segundos.",
   "这个视频没有声音，无法生成字幕。请附上 SRT 字幕后重新导入；想按画面剪辑，可在「设置 → AI 模型」选用支持图片的模型并开启「画面识别」。": "Este vídeo não tem som, então não é possível gerar legendas. Anexe um SRT e importe novamente; para editar pela imagem, escolha em Configurações → AI models um modelo que aceite imagens e ative Análise de imagem.",
-  "这个视频没有声音，无法生成字幕，画面判断也没有选出可按画面剪辑的内容。请附上 SRT 字幕后重新导入。": "Este vídeo não tem som, então não é possível gerar legendas, e a análise de imagem não encontrou conteúdo para editar pela imagem. Anexe um SRT e importe novamente."
+  "这个视频没有声音，无法生成字幕，画面判断也没有选出可按画面剪辑的内容。请附上 SRT 字幕后重新导入。": "Este vídeo não tem som, então não é possível gerar legendas, e a análise de imagem não encontrou conteúdo para editar pela imagem. Anexe um SRT e importe novamente.",
+  "服务已重启，请重新生成": "O serviço foi reiniciado. Gere novamente.",
+  "服务已重启，请重试这条": "O serviço foi reiniciado. Tente esta versão novamente.",
+  "服务已重启，请重新生成封面": "O serviço foi reiniciado. Gere a capa novamente.",
+  "重新生成": "Gerar novamente",
+  "正在生成字幕": "Gerando legendas",
+  "正在制作可发布成片": "Produzindo vídeos prontos para publicar",
+  "正在生成可发布成片": "Renderizando vídeos prontos para publicar",
+  "正在追加平台版本": "Adicionando versões por plataforma",
+  "正在重试成片版本": "Tentando novamente a versão do vídeo",
+  "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。": "Não foi possível conectar ao serviço do modelo. Verifique o endereço do endpoint e a rede; para um modelo local, inicie o serviço primeiro e tente novamente.",
+  "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。": "O modelo demorou demais para responder. Verifique o serviço e a rede e tente novamente; para um modelo local, confirme que o serviço continua em execução.",
+  "提供商限制了请求频率或额度，请检查配额并稍后重试。": "O provedor limitou a frequência de solicitações ou a cota. Verifique sua cota e tente novamente mais tarde."
 }

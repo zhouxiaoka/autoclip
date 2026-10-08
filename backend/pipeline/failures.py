@@ -46,6 +46,14 @@ HINT_BRING_OWN_KEY = (
     "密钥在该提供商的控制台申请，只保存在这台机器上。"
 )
 CODE_LLM_NOT_CONFIGURED = "llm_not_configured"
+# Environment failures of a model call: one fixed, translatable sentence for the user
+# (catalog key in all 8 locales). The provider's own text ("Connection error.",
+# "Request timed out.") stays in the log only (RC156 Win QA c5).
+MODEL_CALL_MESSAGES = {
+    "connection": "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。",
+    "timeout": "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。",
+    "rate_limited": "提供商限制了请求频率或额度，请检查配额并稍后重试。",
+}
 
 
 def looks_like_llm_setup_error(text: str) -> bool:
@@ -159,9 +167,9 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
         code = failed_calls[-1]["error_code"]
         hints = {
             "authentication": "请检查「设置 → 模型」中的密钥、模型权限和提供商配置，再测试连接。",
-            "rate_limited": "提供商限制了请求频率或额度，请检查配额并稍后重试。",
-            "timeout": "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。",
-            "connection": "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。",
+            "rate_limited": MODEL_CALL_MESSAGES["rate_limited"],
+            "timeout": MODEL_CALL_MESSAGES["timeout"],
+            "connection": MODEL_CALL_MESSAGES["connection"],
             "provider_error": "提供商未完成时间线请求，请检查模型可用性和接口兼容性后重试。",
         }
         return PipelineFailure(

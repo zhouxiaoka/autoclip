@@ -208,6 +208,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
   const isDownloading = isSourceDownloading(project)
   const awaitingConfirmation = project.status === 'pending' && !!(project.settings?.awaiting_confirmation || project.processing_config?.awaiting_confirmation)
   const isImporting = project.status === 'pending' && !isDownloading && !awaitingConfirmation
+  // An automatic Studio run that ended failed/partial (including one interrupted by a restart,
+  // RC156 #13) is regenerated from the project page (Studio retry → /studio/{id}/analyze, or
+  // per-version retry), not by re-running the import screening.
+  const studioGeneration = String(project.settings?.studio_generation_status || project.processing_config?.studio_generation_status || '')
+  const regenerateInStudio = isManaged && (studioGeneration === 'failed' || studioGeneration === 'partial')
   
   // 状态标准化处理
   const normalizedStatus = project.status === 'error' ? 'failed' : 
@@ -279,7 +284,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     try {
       // 对于PENDING状态的项目，使用startProcessing；对于其他状态，使用retryProcessing
       if (isManaged) {
-        navigate(`/import/${project.id}`)
+        navigate(regenerateInStudio ? `/project/${project.id}` : `/import/${project.id}`)
         return
       } else if (project.status === 'pending') {
         await projectApi.startProcessing(project.id)
@@ -355,7 +360,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
             <div className="ac-project-recovery">
               {subtitleFailure && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=speech')}>{t("转写设置")}</Btn>}
               {llmKeyFailure && <Btn variant="text" size="sm" onClick={() => navigate('/settings?section=model')}>{t("模型设置")}</Btn>}
-              <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()}>{t("重试")}</Btn>
+              <Btn variant="text" size="sm" loading={isRetrying} onClick={() => handleRetry()}>{regenerateInStudio ? t("重新生成") : t("重试")}</Btn>
               <Btn variant="text" size="sm" onClick={() => setFeedbackOpen(true)}>{t("反馈")}</Btn>
             </div>
           )}

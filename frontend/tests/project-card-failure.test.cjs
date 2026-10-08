@@ -7,11 +7,11 @@ const ts = require('typescript')
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 
-function renderCard(status, error, progressMessage) {
+function renderCard(status, error, progressMessage, extra = {}, navigate = () => {}) {
   const stubs = {
     '../i18n': { t: (key) => key },
     'react-i18next': { useTranslation: () => ({}) },
-    'react-router-dom': { useNavigate: () => () => {} },
+    'react-router-dom': { useNavigate: () => navigate },
     '../services/api': { projectApi: {} },
     '../features/studio/api': { studioApi: {} },
     './UnifiedStatusBar': { UnifiedStatusBar: () => null },
@@ -19,7 +19,7 @@ function renderCard(status, error, progressMessage) {
     '../stores/useSimpleProgressStore': {
       useSimpleProgressStore: (select) => select({ getProgress: () => ({ message: progressMessage }) }),
     },
-    '../ui': { Btn: ({ children }) => React.createElement('button', {}, children), Dialog: () => null, StatusDot: ({ label }) => React.createElement('span', {}, label), Icon: { Play: () => null, Refresh: () => null, Trash: () => null } },
+    '../ui': { Btn: ({ children, onClick }) => { if (extra.onButton) extra.onButton(children, onClick); return React.createElement('button', {}, children) }, Dialog: () => null, StatusDot: ({ label }) => React.createElement('span', {}, label), Icon: { Play: () => null, Refresh: () => null, Trash: () => null } },
   }
   function load(file) {
     const module = { exports: {} }
@@ -38,7 +38,7 @@ function renderCard(status, error, progressMessage) {
   }
   const Card = load(path.join(__dirname, '../src/components/ProjectCard.tsx')).default
   return renderToStaticMarkup(React.createElement(Card, {
-    project: { id: 'test', name: 'Example', status, error_message: error, created_at: '2026-09-30' },
+    project: { id: 'test', name: 'Example', status, error_message: error, created_at: '2026-09-30', ...(extra.project || {}) },
     onDelete() {},
   }))
 }
@@ -58,4 +58,29 @@ test('progress failure remains visible before project refresh and is escaped', (
 test('successful retry does not show a stale failure', () => {
   const html = renderCard('completed', 'stale failure', 'old progress')
   assert.doesNotMatch(html, /stale failure|old progress|role="alert"/)
+})
+
+test('restart-interrupted automatic project shows its reason and regenerates from the project page (RC156 #13)', async () => {
+  const visited = []
+  const buttons = {}
+  const html = renderCard('failed', '服务已重启，请重新生成', null, {
+    project: { error_code: 'service_restarted', settings: { smart_import: { auto_start: true }, studio_generation_status: 'failed' } },
+    onButton: (label, onClick) => { buttons[label] = onClick },
+  }, (to) => visited.push(to))
+  assert.match(html, /role="alert"/)
+  assert.match(html, /服务已重启，请重新生成/)
+  assert.match(html, />重新生成</)
+  await buttons['重新生成']()
+  assert.deepEqual(visited, ['/project/test'])
+})
+
+test('managed project without a finished generation still reopens import review', async () => {
+  const visited = []
+  const buttons = {}
+  renderCard('failed', '导入失败', null, {
+    project: { settings: { smart_import: { auto_start: false } } },
+    onButton: (label, onClick) => { buttons[label] = onClick },
+  }, (to) => visited.push(to))
+  await buttons['重试']()
+  assert.deepEqual(visited, ['/import/test'])
 })
