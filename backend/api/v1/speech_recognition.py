@@ -2,6 +2,7 @@
 语音识别配置API
 """
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import logging
@@ -347,7 +348,8 @@ async def get_whisper_models():
                 "status": model_info.status.value,
                 "downloadProgress": model_info.download_progress,
                 "localPath": model_info.local_path,
-                "errorMessage": model_info.error_message
+                "errorMessage": model_info.error_message,
+                "source": model_info.source,
             })
         
         return models
@@ -391,26 +393,23 @@ async def test_speech_service(request: TestSpeechServiceRequest):
 
 @router.post("/whisper-models/download")
 async def download_whisper_model(request: DownloadModelRequest):
-    """下载Whisper模型"""
+    """开始下载 Whisper 模型（后台）。
+
+    200 status=installed：本地已有完整模型。202 status=downloading：已开始或正在下载，
+    结果看 GET /whisper-models/{name}/status。不能在这里说「下载完成」（RC156 Win QA #5）。
+    """
     try:
         model_manager = get_model_manager()
-        
-        # 检查模型是否已存在
-        model_info = model_manager.get_model_info(request.model)
-        if model_info and model_info.status == ModelStatus.DOWNLOADED:
-            return {"message": f"模型 {request.model} 已存在", "success": True}
-        
-        # 开始下载
-        success = await model_manager.download_model(request.model)
-        
-        if success:
-            return {"message": f"模型 {request.model} 下载完成", "success": True}
-        else:
-            raise HTTPException(status_code=500, detail=f"模型 {request.model} 下载失败")
-        
+        state = await model_manager.download_model(request.model)
     except Exception as e:
         logger.error(f"下载Whisper模型失败: {e}")
         raise HTTPException(status_code=500, detail=f"下载Whisper模型失败: {str(e)}")
+    if state == "installed":
+        return {"status": "installed", "model": request.model, "message": f"模型 {request.model} 已存在", "success": True}
+    return JSONResponse(status_code=202, content={
+        "status": "downloading", "model": request.model,
+        "message": f"已开始下载模型 {request.model}", "success": True,
+    })
 
 @router.delete("/whisper-models/{model_name}")
 async def delete_whisper_model(model_name: str):
@@ -453,7 +452,8 @@ async def get_model_status(model_name: str):
             "status": model_info.status.value,
             "downloadProgress": model_info.download_progress,
             "localPath": model_info.local_path,
-            "errorMessage": model_info.error_message
+            "errorMessage": model_info.error_message,
+            "source": model_info.source,
         }
         
     except HTTPException:

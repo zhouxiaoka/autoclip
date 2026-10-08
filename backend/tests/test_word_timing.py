@@ -67,6 +67,8 @@ def test_whisper_requests_and_saves_word_timing(tmp_path,monkeypatch):
     monkeypatch.setattr(whisper_runtime,'is_installed',lambda:True)
     monkeypatch.setattr(whisper_runtime,'ensure_on_path',lambda:None)
     monkeypatch.setattr(whisper_runtime,'get_models_dir',lambda:tmp_path)
+    snapshot=tmp_path/'hub/models--Systran--faster-whisper-base/snapshots/fixture';snapshot.mkdir(parents=True)
+    for name in ('model.bin','config.json','tokenizer.json','vocabulary.json'):(snapshot/name).write_bytes(b'fixture')
     captured=[]
     class Model:
         def __init__(self,*args,**kwargs):pass

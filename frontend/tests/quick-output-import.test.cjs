@@ -23,7 +23,7 @@ test('quick import submits platform targets, branding and auto-starts to results
  const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}],[ready,()=>{}],[true,()=>{}],[false,()=>{}]]
  const component=load({
   'react-i18next':{useTranslation:()=>{}},'../../i18n':{t:x=>x},
-  react:{useState:()=>states[index++],useEffect:()=>{}},antd:{Select:'select'},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
+  react:{useState:()=>states[index++],useEffect:()=>{},useRef:current=>({current})},antd:{Select:'select'},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
   'react/jsx-runtime':{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'fragment'},
   '../../ui':{Btn:'button',Segmented:'segmented',Dialog:'dialog',StatusDot:'status'},'./PlatformPicker':{default:'platform-picker'},
   './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}},readiness:async()=>ready},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){}},'../../analytics/experience':{trackExperience(){}},

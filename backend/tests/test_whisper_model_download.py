@@ -18,13 +18,24 @@ from backend.services.whisper_model_manager import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _clean_source_env(monkeypatch):
+    for name in ("AUTOCLIP_WHISPER_MODEL_SOURCE", "HF_ENDPOINT", "HF_HUB_DISABLE_XET"):
+        monkeypatch.delenv(name, raising=False)
+
+
 def _install_fake_hub(monkeypatch, snapshot_download):
     hub = types.ModuleType("huggingface_hub")
     hub.snapshot_download = snapshot_download
     utils = types.ModuleType("huggingface_hub.utils")
     utils.disable_progress_bars = lambda: None
+    constants = types.ModuleType("huggingface_hub.constants")
+    constants.HF_HUB_DISABLE_XET = False
+    hub.constants = constants
     monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
     monkeypatch.setitem(sys.modules, "huggingface_hub.utils", utils)
+    monkeypatch.setitem(sys.modules, "huggingface_hub.constants", constants)
+    return hub
 
 
 def _manager(monkeypatch, tmp_path: Path) -> WhisperModelManager:
@@ -150,7 +161,7 @@ def test_retry_clears_failed_download_when_complete_snapshot_now_exists(monkeypa
     _snapshot(tmp_path)
     assert manager.get_model_info("base").status == ModelStatus.ERROR
 
-    assert asyncio.run(manager.download_model("base"))
+    assert asyncio.run(manager.download_model("base")) == "installed"
 
     info = manager.get_model_info("base")
     assert info.status == ModelStatus.DOWNLOADED
@@ -192,7 +203,8 @@ def test_incomplete_cache_can_be_downloaded_again(monkeypatch, tmp_path):
 
     _install_fake_hub(monkeypatch, complete)
     monkeypatch.setattr("backend.services.whisper_model_manager.threading.Thread", ImmediateThread)
-    assert asyncio.run(manager.download_model("base"))
+    # "downloading" even though this fake thread already finished: the call only starts it.
+    assert asyncio.run(manager.download_model("base")) == "downloading"
     assert len(calls) == 1
     assert manager.get_model_info("base").status == ModelStatus.DOWNLOADED
     assert manager.get_download_progress("base") == 100
@@ -209,3 +221,170 @@ def test_ensure_on_path_disables_progress_bars(monkeypatch, tmp_path):
 
     assert os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] == "1"
     assert os.environ["TQDM_DISABLE"] == "1"
+
+
+# ---- RC156 Win QA #6: download source and mirror fallback ----
+
+class ConnectTimeout(OSError):
+    pass
+
+
+def _recording(tmp_path, fail_endpoints=()):
+    calls = []
+
+    def download(**kwargs):
+        import huggingface_hub
+        calls.append({**kwargs, "xet_disabled": huggingface_hub.constants.HF_HUB_DISABLE_XET,
+                      "xet_env": os.environ.get("HF_HUB_DISABLE_XET")})
+        if kwargs.get("endpoint") in fail_endpoints:
+            raise ConnectTimeout("[WinError 10060] connect timed out")
+        return str(_snapshot(tmp_path))
+
+    return calls, download
+
+
+def test_auto_falls_back_to_hf_mirror_without_xet(monkeypatch, tmp_path):
+    calls, download = _recording(tmp_path, fail_endpoints=("https://huggingface.co",))
+    _install_fake_hub(monkeypatch, download)
+    manager = _manager(monkeypatch, tmp_path)
+    manager._download_blocking("base")
+    assert [call["endpoint"] for call in calls] == ["https://huggingface.co", "https://hf-mirror.com"]
+    assert calls[0]["xet_disabled"] is False
+    assert calls[1]["xet_disabled"] is True and calls[1]["xet_env"] == "1"
+    info = manager.get_model_info("base")
+    assert info.status == ModelStatus.DOWNLOADED
+    assert info.source == "hf-mirror"
+
+
+def test_auto_uses_official_source_when_reachable(monkeypatch, tmp_path):
+    calls, download = _recording(tmp_path)
+    _install_fake_hub(monkeypatch, download)
+    manager = _manager(monkeypatch, tmp_path)
+    manager._download_blocking("base")
+    assert [call["endpoint"] for call in calls] == ["https://huggingface.co"]
+    assert manager.get_model_info("base").source == "huggingface"
+
+
+def test_hf_mirror_source_goes_straight_to_the_mirror(monkeypatch, tmp_path):
+    monkeypatch.setenv("AUTOCLIP_WHISPER_MODEL_SOURCE", "hf-mirror")
+    calls, download = _recording(tmp_path)
+    _install_fake_hub(monkeypatch, download)
+    manager = _manager(monkeypatch, tmp_path)
+    manager._download_blocking("base")
+    assert [(call["endpoint"], call["xet_disabled"]) for call in calls] == [("https://hf-mirror.com", True)]
+
+
+def test_huggingface_source_never_falls_back(monkeypatch, tmp_path):
+    monkeypatch.setenv("AUTOCLIP_WHISPER_MODEL_SOURCE", "huggingface")
+    calls, download = _recording(tmp_path, fail_endpoints=("https://huggingface.co",))
+    _install_fake_hub(monkeypatch, download)
+    manager = _manager(monkeypatch, tmp_path)
+    manager._download_blocking("base")
+    assert [call["endpoint"] for call in calls] == ["https://huggingface.co"]
+    info = manager.get_model_info("base")
+    assert info.status == ModelStatus.ERROR
+    assert "10060" in info.error_message
+
+
+def test_user_hf_endpoint_is_respected_without_fallback(monkeypatch, tmp_path):
+    monkeypatch.setenv("HF_ENDPOINT", "https://mirror.example/")
+    calls, download = _recording(tmp_path, fail_endpoints=("https://mirror.example",))
+    _install_fake_hub(monkeypatch, download)
+    manager = _manager(monkeypatch, tmp_path)
+    manager._download_blocking("base")
+    assert [(call["endpoint"], call["xet_disabled"]) for call in calls] == [("https://mirror.example", True)]
+    assert manager.get_model_info("base").status == ModelStatus.ERROR
+
+
+def test_both_sources_failing_reports_both(monkeypatch, tmp_path):
+    calls, download = _recording(tmp_path, fail_endpoints=("https://huggingface.co", "https://hf-mirror.com"))
+    _install_fake_hub(monkeypatch, download)
+    manager = _manager(monkeypatch, tmp_path)
+    manager._download_blocking("base")
+    info = manager.get_model_info("base")
+    assert info.status == ModelStatus.ERROR
+    assert "huggingface" in info.error_message and "hf-mirror" in info.error_message
+
+
+# ---- RC156 Win QA #5: the download endpoint must not claim completion ----
+
+def _client():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.speech_recognition import router
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+def test_download_api_says_started_and_background_failure_is_visible(monkeypatch, tmp_path):
+    import threading
+    release = threading.Event()
+
+    def slow_failure(**kwargs):
+        release.wait(5)
+        raise ConnectTimeout("[WinError 10060] connect timed out")
+
+    _install_fake_hub(monkeypatch, slow_failure)
+    manager = _manager(monkeypatch, tmp_path)
+    monkeypatch.setattr("backend.api.v1.speech_recognition.get_model_manager", lambda: manager)
+    with _client() as client:
+        response = client.post("/whisper-models/download", json={"model": "base"})
+        assert response.status_code == 202
+        body = response.json()
+        assert body["status"] == "downloading" and body["model"] == "base"
+        assert "完成" not in body["message"]
+        again = client.post("/whisper-models/download", json={"model": "base"})
+        assert again.status_code == 202 and again.json()["status"] == "downloading"
+        assert client.get("/whisper-models/base/status").json()["status"] == "downloading"
+        release.set()
+        for thread in threading.enumerate():
+            if thread.name == "whisper-dl-base":
+                thread.join(5)
+        status = client.get("/whisper-models/base/status").json()
+        assert status["status"] == "error"
+        assert "10060" in status["errorMessage"]
+
+
+def test_download_api_reports_an_installed_model(monkeypatch, tmp_path):
+    manager = _manager(monkeypatch, tmp_path)
+    _snapshot(tmp_path)
+    monkeypatch.setattr("backend.api.v1.speech_recognition.get_model_manager", lambda: manager)
+    with _client() as client:
+        response = client.post("/whisper-models/download", json={"model": "base"})
+    assert response.status_code == 200
+    assert response.json()["status"] == "installed"
+
+
+def test_ensure_downloaded_blocks_until_the_snapshot_exists(monkeypatch, tmp_path):
+    calls, download = _recording(tmp_path, fail_endpoints=("https://huggingface.co",))
+    _install_fake_hub(monkeypatch, download)
+    manager = _manager(monkeypatch, tmp_path)
+    assert manager.ensure_downloaded("base") == tmp_path / "hub/models--Systran--faster-whisper-base/snapshots/complete"
+    assert manager.get_model_info("base").source == "hf-mirror"
+    assert len(calls) == 2
+    assert manager.ensure_downloaded("base") and len(calls) == 2  # cached: no second download
+
+
+def test_ensure_downloaded_raises_the_recorded_error(monkeypatch, tmp_path):
+    monkeypatch.setenv("AUTOCLIP_WHISPER_MODEL_SOURCE", "huggingface")
+    _, download = _recording(tmp_path, fail_endpoints=("https://huggingface.co",))
+    _install_fake_hub(monkeypatch, download)
+    manager = _manager(monkeypatch, tmp_path)
+    with pytest.raises(RuntimeError, match="10060"):
+        manager.ensure_downloaded("base")
+
+
+def test_ensure_downloaded_waits_for_a_running_download(monkeypatch, tmp_path):
+    manager = _manager(monkeypatch, tmp_path)
+    manager._download_state["base"] = {"status": "downloading", "progress": 0, "error": None}
+    ticks = []
+
+    def finish(_seconds):
+        ticks.append(True)
+        _snapshot(tmp_path)
+        manager._download_state["base"] = {"status": "downloaded", "progress": 100, "error": None, "source": "hf-mirror"}
+
+    monkeypatch.setattr("backend.services.whisper_model_manager.time.sleep", finish)
+    assert manager.ensure_downloaded("base").name == "complete"
+    assert ticks == [True]

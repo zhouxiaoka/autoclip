@@ -5,6 +5,8 @@ export interface ReadinessCheck {
   ok: boolean
   code: string
   repair: RepairAction
+  /** whisper_model_* checks name the model the import needs. */
+  model?: string
 }
 
 export interface ImportReadiness {
