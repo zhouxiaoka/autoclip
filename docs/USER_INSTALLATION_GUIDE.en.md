@@ -58,8 +58,8 @@ Common sticking points on a first run are in [Discussion #128](https://github.co
 | Option | What you need |
 | --- | --- |
 | Cloud API | A provider account, working API key, access to the selected model, and network access; the provider bills API usage |
-| Ollama | Start Ollama, run `ollama pull qwen2.5:7b`, and select Ollama in AutoClip |
-| LM Studio | Download and load a model, start Local Server, and select an available model in AutoClip |
+| Ollama | Start Ollama, run `ollama pull qwen2.5:7b`, and select Ollama in AutoClip; for long videos raise the context to 16384 or more (`OLLAMA_CONTEXT_LENGTH` or `num_ctx`) |
+| LM Studio | Download and load a model, start Local Server, and select an available model in AutoClip; for long videos set Context Length to 16384 or more when loading the model |
 
 Local presets do not require a cloud API key, but inference uses your hardware. Whisper converts speech to text. The subtitle route uses a language model on subtitles or copy. The visual route needs a multimodal model and sends sampled frames only after you explicitly enable it. Configure each one separately.
 

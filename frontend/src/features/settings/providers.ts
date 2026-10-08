@@ -1,7 +1,7 @@
 import { t } from '../../i18n'
 
 export type ProviderKey = 'dashscope' | 'openai' | 'compatible' | 'infistar' | 'api88' | 'gemini' | 'deepseek' | 'seed' | 'kimi' | 'glm' | 'grok' | 'ollama' | 'lmstudio'
-type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string }
+type LocalPreset = { baseUrl: string; defaultModel: string; docsUrl: string; app: string; contextHint: string }
 type CloudPreset = { baseUrl: string; defaultModel: string }
 export type SponsorId = 'infistar' | 'api88'
 type Sponsor = { id: SponsorId; registerUrl: string; guideUrl: string; offer: string; description: string }
@@ -27,8 +27,8 @@ export const PROVIDERS: Record<ProviderKey, { name: string; short: string; hint:
   glm: { get name() { return t("智谱 GLM") }, get short() { return 'GLM' }, get hint() { return t("智谱开放平台。国内直连，glm-5.3 是当前旗舰。") }, group: 'cloud', apiKeyField: 'glm_api_key', placeholder: '…', keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys', cloud: { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', defaultModel: 'glm-5.3' } },
   grok: { name: 'Grok', short: 'Grok', get hint() { return t("xAI Grok。需要 xAI 账号。") }, group: 'cloud', apiKeyField: 'grok_api_key', placeholder: 'xai-…', keyUrl: 'https://console.x.ai', cloud: { baseUrl: 'https://api.x.ai/v1', defaultModel: 'grok-4.6' } },
   // 本地预设：底层是 openai 兼容 + base_url，后端 core/local_presets.py 负责还原；无需密钥、不花钱、离线可用
-  ollama: { name: 'Ollama', short: 'Ollama', get hint() { return t("本机运行的 Ollama，免费、离线。推荐 ollama pull qwen2.5:7b。") }, group: 'local', apiKeyField: 'openai_api_key', placeholder: '', keyUrl: 'https://ollama.com/download', local: { baseUrl: 'http://localhost:11434/v1', defaultModel: 'qwen2.5:7b', docsUrl: 'https://ollama.com/download', app: 'Ollama' } },
-  lmstudio: { name: 'LM Studio', short: 'LM Studio', get hint() { return t("本机 LM Studio 的 Local Server，免费、离线。在 LM Studio 里加载模型并启动服务。") }, group: 'local', apiKeyField: 'openai_api_key', placeholder: '', keyUrl: 'https://lmstudio.ai', local: { baseUrl: 'http://localhost:1234/v1', defaultModel: '', docsUrl: 'https://lmstudio.ai', app: 'LM Studio' } },
+  ollama: { name: 'Ollama', short: 'Ollama', get hint() { return t("本机运行的 Ollama，免费、离线。推荐 ollama pull qwen2.5:7b。") }, group: 'local', apiKeyField: 'openai_api_key', placeholder: '', keyUrl: 'https://ollama.com/download', local: { baseUrl: 'http://localhost:11434/v1', defaultModel: 'qwen2.5:7b', docsUrl: 'https://ollama.com/download', app: 'Ollama', get contextHint() { return t('长视频请把上下文调到 16384 以上（环境变量 OLLAMA_CONTEXT_LENGTH 或模型参数 num_ctx），否则字幕开头会被截掉。') } } },
+  lmstudio: { name: 'LM Studio', short: 'LM Studio', get hint() { return t("本机 LM Studio 的 Local Server，免费、离线。在 LM Studio 里加载模型并启动服务。") }, group: 'local', apiKeyField: 'openai_api_key', placeholder: '', keyUrl: 'https://lmstudio.ai', local: { baseUrl: 'http://localhost:1234/v1', defaultModel: '', docsUrl: 'https://lmstudio.ai', app: 'LM Studio', get contextHint() { return t('长视频请在 LM Studio 加载模型时把上下文长度（Context Length）调到 16384 以上，否则会报错或截断字幕。') } } },
 }
 export const providerPickerOptions = () => PROVIDER_GROUPS
   .map((group) => ({
@@ -43,3 +43,23 @@ export const providerPickerOptions = () => PROVIDER_GROUPS
       })),
   }))
   .filter((group) => group.options.length)
+
+/** Same rule as backend `is_local_url`: loopback, private / link-local IPs, localhost and *.local hosts. */
+export const isLocalAddress = (url?: string) => {
+  let host = ''
+  try { host = new URL((url || '').trim()).hostname.toLowerCase().replace(/^\[|\]$/g, '') } catch { return false }
+  if (['localhost', '0.0.0.0', 'host.docker.internal', '::1'].includes(host) || host.endsWith('.local') || host.endsWith('.localhost')) return true
+  const v4 = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/)
+  if (!v4) return /^f[cd][0-9a-f]{2}:|^fe80:/.test(host)
+  const [a, b] = [Number(v4[1]), Number(v4[2])]
+  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254)
+}
+
+/** Local servers usually start with a small context; long transcripts need >= 16384 (RC156 Win QA #14b). */
+export const contextHintFor = (key: ProviderKey | undefined, baseUrl?: string) => {
+  if (!key) return ''
+  const local = PROVIDERS[key].local
+  if (local) return local.contextHint
+  if (key === 'compatible' && isLocalAddress(baseUrl)) return t('本机或局域网模型：长视频请把上下文长度调到 16384 以上，否则字幕会被截断。')
+  return ''
+}

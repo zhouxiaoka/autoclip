@@ -8,7 +8,9 @@ from the question's start to the end of its answer, with title, reason and score
 
 Rows go to the model as `id|time|text` lines (no SRT timestamps: ~40 % fewer tokens). Long
 videos are split into ~60-minute windows with overlap, analysed in parallel; overlapping picks
-across windows are deduplicated. Every clip is validated, snapped by `refine_timeline` and
+across windows are deduplicated. Local models (Ollama, LM Studio, a local/LAN compatible server)
+usually run with a much smaller context, so they get ~20-minute / 12K-character windows instead
+(RC156 Win QA #14b); cloud windows are unchanged. Every clip is validated, snapped by `refine_timeline` and
 selected by `select_clips` exactly like the legacy path, and returned in the legacy
 `titled_clips` shape so studio and the clip database are unchanged. Raises `ClipFinderError`
 when nothing valid comes back, so the caller can fall back to the legacy steps.
@@ -48,6 +50,36 @@ class ClipFinderError(RuntimeError):
     pass
 
 
+@dataclasses.dataclass(frozen=True)
+class WindowSize:
+    seconds: float
+    overlap: float
+    chars: int
+    kind: str
+
+
+CLOUD_WINDOW = WindowSize(WINDOW_SEC, OVERLAP_SEC, WINDOW_CHARS, 'cloud')
+# Local servers often default to a 4–8K context (Ollama num_ctx, LM Studio context length) and
+# silently drop the start of a longer prompt. ~12K characters is ~8K tokens of transcript, which
+# with the instructions and the answer fits a 16K context; the UI asks local users for >= 16384.
+# The overlap keeps the cloud ratio (4 min per 60 min).
+LOCAL_WINDOW_SEC = 20 * 60
+LOCAL_WINDOW = WindowSize(LOCAL_WINDOW_SEC, OVERLAP_SEC * LOCAL_WINDOW_SEC / WINDOW_SEC, 12_000, 'local')
+
+
+def window_size() -> WindowSize:
+    """LOCAL_WINDOW while a local model is the analysis model, CLOUD_WINDOW otherwise (or when unsure)."""
+    try:
+        from backend.core.llm_manager import get_llm_manager
+        from backend.core.local_presets import is_local_model
+        manager = get_llm_manager()
+        manager.get_current_provider_info()  # picks up a model switched in settings since the last call
+        return LOCAL_WINDOW if is_local_model(manager.settings) else CLOUD_WINDOW
+    except Exception as error:  # noqa: BLE001 - unknown provider: keep the established cloud windows
+        logger.debug('Clip finder window size falls back to cloud: %s', error)
+        return CLOUD_WINDOW
+
+
 PROMPT = (
     '你是短视频主编，要从一段访谈/播客/演讲的完整字幕里，挑出所有值得单独发布成短视频的片段。\n'
     'rows 每行是「行号|开始时间|文本」，已按时间排序（字幕常被切成半句）。\n'
@@ -68,21 +100,21 @@ def _clock(sec: float) -> str:
     return f'{sec // 3600}:{sec % 3600 // 60:02d}:{sec % 60:02d}' if sec >= 3600 else f'{sec // 60}:{sec % 60:02d}'
 
 
-def windows(rows: list[dict[str, Any]]) -> list[tuple[int, int]]:
-    """[first, last] row index ranges: ~WINDOW_SEC each, OVERLAP_SEC shared, under WINDOW_CHARS."""
+def windows(rows: list[dict[str, Any]], size: WindowSize = CLOUD_WINDOW) -> list[tuple[int, int]]:
+    """[first, last] row index ranges: ~size.seconds each, size.overlap shared, under size.chars."""
     if not rows:
         return []
     out, first = [], 0
     while first < len(rows):
         start, chars, last = rows[first]['start'], 0, first
-        while last + 1 < len(rows) and rows[last + 1]['end'] - start <= WINDOW_SEC and chars + len(rows[last + 1]['text']) <= WINDOW_CHARS:
+        while last + 1 < len(rows) and rows[last + 1]['end'] - start <= size.seconds and chars + len(rows[last + 1]['text']) <= size.chars:
             last += 1
             chars += len(rows[last]['text'])
         out.append((first, last))
         if last + 1 >= len(rows):
             break
         back = last
-        while back > first and rows[last]['end'] - rows[back]['start'] < OVERLAP_SEC:
+        while back > first and rows[last]['end'] - rows[back]['start'] < size.overlap:
             back -= 1
         first = max(back, first + 1)
     return out
@@ -137,8 +169,11 @@ def _window_count(profile: DurationProfile, share: float) -> tuple[int, int]:
     return max(1, round(lo * share)), max(2, round(hi * share))
 
 
-def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, metadata_dir: Path | None = None) -> list[dict[str, Any]]:
-    """Titled clips (legacy `step4_titles.json` shape) from one pass over the transcript."""
+def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, metadata_dir: Path | None = None,
+               window: WindowSize | None = None) -> list[dict[str, Any]]:
+    """Titled clips (legacy `step4_titles.json` shape) from one pass over the transcript.
+
+    `window` defaults to `window_size()` (smaller windows for local models)."""
     from .concurrency import map_chunks
     rows = [{'start': to_seconds(e['start_time']), 'end': to_seconds(e['end_time']), 'text': str(e.get('text') or '').strip()}
             for e in srt_entries if str(e.get('text') or '').strip()]
@@ -146,7 +181,8 @@ def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, met
         raise ClipFinderError('字幕为空')
     profile = short_video_profile(profile_from_srt(srt_entries))
     total = max(rows[-1]['end'] - rows[0]['start'], 1.0)
-    spans = windows(rows)
+    window = window or window_size()
+    spans = windows(rows, window)
 
     def one(span):
         first, last = span
@@ -179,11 +215,11 @@ def find_clips(srt_entries: list[dict[str, Any]], call, *, threshold: float, met
     if metadata_dir is not None:
         metadata_dir = Path(metadata_dir)
         save_profile(profile, metadata_dir)
-        save_report({'clip_finder': {'windows': len(spans), 'failed_windows': sum(r is None for r in results),
+        save_report({'clip_finder': {'windows': len(spans), 'window': window.kind, 'failed_windows': sum(r is None for r in results),
                                      'picked': len(picked), 'refine': report, 'selection': selection}}, metadata_dir)
         for name, data in (('step3_all_scored.json', refined), ('step4_titles.json', chosen)):
             (metadata_dir / name).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
     if not chosen:
         raise ClipFinderError('没有片段通过评分筛选')
-    logger.info('Clip finder: %d windows, %d picked, %d kept', len(spans), len(picked), len(chosen))
+    logger.info('Clip finder: %d %s windows, %d picked, %d kept', len(spans), window.kind, len(picked), len(chosen))
     return chosen
