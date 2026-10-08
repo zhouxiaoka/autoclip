@@ -358,21 +358,47 @@ def refine_with_model(rows: list[Row], start: float, end: float, call: Callable[
     return sentence_bounds(rows, new_start, new_end, silences)
 
 
+def neighbor_limits(clips: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """How far each clip's model refinement may reach: not past its neighbours' original edges.
+
+    Clips are refined one by one in parallel, so each model call only sees its own clip. Without
+    this limit two adjacent clips were both "finished" into the same span (RC156 Win QA #7: two
+    drafts with an identical 0.0-57.8s scene). A clip may still keep its own original range.
+    """
+    order = sorted(range(len(clips)), key=lambda i: clips[i])
+    limits = [(float('-inf'), float('inf'))] * len(clips)
+    for n, i in enumerate(order):
+        start, end = clips[i]
+        lo = min(clips[order[n - 1]][1], start) if n > 0 else float('-inf')
+        hi = max(clips[order[n + 1]][0], end) if n + 1 < len(order) else float('inf')
+        limits[i] = (lo, hi)
+    return limits
+
+
 def refine_clips(rows: list[Row], clips: list[tuple[float, float]], call: Callable[[str, dict], dict] | None = None,
                  silences: SilenceFinder | None = None) -> list[tuple[float, float]]:
-    """Sentence-snapped bounds for every clip; model-refined where the model gives a valid answer."""
+    """Sentence-snapped bounds for every clip; model-refined where the model gives a valid answer.
+
+    A model answer that reaches into a neighbouring clip keeps pass 1 instead.
+    """
     snapped = [sentence_bounds(rows, s, e, silences) for s, e in clips]
     if call is None or not rows:
         return snapped
 
-    def one(pair):
-        (s, e), fallback = pair
+    def one(item):
+        (s, e), fallback, (lo, hi) = item
         try:
-            return refine_with_model(rows, s, e, call, silences) or fallback
+            refined = refine_with_model(rows, s, e, call, silences)
         except Exception as error:  # noqa: BLE001 - boundary polish never blocks output
             logger.warning('Boundary refinement fell back: %s', type(error).__name__)
             return fallback
+        if refined is None:
+            return fallback
+        if refined[0] < lo or refined[1] > hi:
+            logger.info('Boundary refinement crossed a neighbouring clip; keeping sentence bounds')
+            return fallback
+        return refined
 
     from backend.core.llm_usage import run_in_context
     with ThreadPoolExecutor(max_workers=4, thread_name_prefix='studio-bounds') as pool:
-        return list(pool.map(run_in_context(one), zip(clips, snapped)))
+        return list(pool.map(run_in_context(one), zip(clips, snapped, neighbor_limits(clips))))
