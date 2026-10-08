@@ -84,3 +84,66 @@ def test_existing_subtitle_and_format_recovery_remains_bounded(monkeypatch):
     assert all(not call.get('cookiesfrombrowser') for call in calls[1:])
     assert calls[2]['writesubtitles'] is False
     assert 'm3u8' in calls[3]['format']
+
+
+def install_outcomes(monkeypatch, outcomes):
+    calls = []
+    class Downloader:
+        def __init__(self, options): calls.append(dict(options))
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def download(self, urls):
+            outcome = outcomes[len(calls) - 1]
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+    monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Downloader)
+    return calls
+
+
+BILI_412 = ('ERROR: [BiliBili] 1yf8XzmEV8: Unable to download webpage: HTTP Error 412: Precondition Failed '
+            '(caused by <HTTPError 412: Precondition Failed>)')
+
+
+@pytest.mark.parametrize('url,message,status', [
+    ('https://www.bilibili.com/video/BV1yf8XzmEV8/', BILI_412, 412),  # RC156 Win QA #9, datacenter IP
+    ('https://private.invalid/video', 'ERROR: [generic] Unable to download webpage: HTTP Error 403: Forbidden', 403),
+    ('https://b23.tv/synthetic', 'ERROR: Unable to download JSON metadata: HTTP Error 429: Too Many Requests', 429),
+])
+def test_site_refusal_is_source_blocked_with_translated_hint(monkeypatch, url, message, status):
+    from backend.pipeline.failures import PipelineFailure
+    from backend.core.sentry_setup import studio_error_code, studio_failure_context
+    calls = install_outcomes(monkeypatch, [yt_dlp.utils.DownloadError(message)])
+    with pytest.raises(PipelineFailure) as caught:
+        module.download_with_recovery(url, {'quiet': True})
+    error = caught.value
+    assert len(calls) == 1  # no extra request against a site that is refusing this network
+    assert error.code == 'source_blocked' and error.stage == 'INGEST' and error.http_status == status
+    assert str(error) == module.SOURCE_BLOCKED_HINT
+    assert error.__cause__ is None and error.__suppress_context__  # no yt-dlp text, URL or response
+    for leaked in ('BiliBili', 'HTTP Error', 'Precondition', 'Forbidden', 'invalid', 'b23'):
+        assert leaked not in str(error)
+    assert studio_error_code(error) == 'source_blocked'
+    assert studio_failure_context(error, 'screening') == {'failure_stage': 'ingest', 'http_status': status}
+
+
+def test_youtube_403_still_retries_format_once_before_source_blocked(monkeypatch):
+    from backend.pipeline.failures import PipelineFailure
+    calls = install_outcomes(monkeypatch, [yt_dlp.utils.DownloadError('HTTP Error 403: Forbidden'),
+                                           yt_dlp.utils.DownloadError('HTTP Error 403: Forbidden')])
+    with pytest.raises(PipelineFailure) as caught:
+        module.download_with_recovery('https://youtube.com/watch?v=synthetic', {'quiet': True})
+    assert len(calls) == 2 and 'm3u8' in calls[1]['format']
+    assert caught.value.code == 'source_blocked'
+
+    calls = install_outcomes(monkeypatch, [yt_dlp.utils.DownloadError('HTTP Error 403: Forbidden'), 0])
+    assert module.download_with_recovery('https://youtube.com/watch?v=synthetic', {'quiet': True}) == 0
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize('message', ['HTTP Error 404: Not Found', 'Video unavailable', 'HTTP Error 4120: synthetic'])
+def test_other_download_errors_are_not_source_blocked(monkeypatch, message):
+    calls = install_outcomes(monkeypatch, [yt_dlp.utils.DownloadError(message)])
+    with pytest.raises(yt_dlp.utils.DownloadError):
+        module.download_with_recovery('https://www.bilibili.com/video/synthetic', {'quiet': True})
+    assert len(calls) == 1

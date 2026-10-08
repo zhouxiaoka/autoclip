@@ -119,8 +119,12 @@ def test_youtube_permanent_failure_is_not_silently_successful(monkeypatch):
             calls.append(urls)
             raise module.yt_dlp.utils.DownloadError('HTTP Error 403: Forbidden')
     monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Downloader)
-    with pytest.raises(module.yt_dlp.utils.DownloadError):
+    # A persistent 403 after the one format retry is a site refusal (RC156 Win QA #9): still a failure,
+    # now typed as source_blocked with a translated hint instead of yt-dlp's raw DownloadError text.
+    from backend.pipeline.failures import PipelineFailure
+    with pytest.raises(PipelineFailure) as caught:
         module.download_with_recovery('https://youtube.com/watch?v=sample', {})
+    assert caught.value.code == 'source_blocked'
     assert len(calls) == 2
 
 

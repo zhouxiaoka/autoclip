@@ -15,7 +15,9 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty"}
+STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked"}
+# Expected, environment-caused failures that are never sent to Sentry (still recorded locally).
+UNREPORTED_STUDIO_ERROR_CODES = {"source_blocked"}
 PIPELINE_STAGES = {"INGEST", "SUBTITLE", "ANALYZE", "HIGHLIGHT", "EXPORT", "DONE"}
 
 
@@ -50,15 +52,16 @@ _PIPELINE_FAILURE_STAGES = {"INGEST": "ingest", "SUBTITLE": "subtitle", "ANALYZE
 def studio_failure_context(error: Exception, phase: str) -> dict:
     """Where an automatic run failed and the provider HTTP status, without messages or URLs."""
     from backend.services.studio.intelligence import VisionRequestError
-    from backend.pipeline.failures import PipelineFailure
+    from backend.pipeline.failures import PipelineFailure, http_status_of
     stage = phase
     if isinstance(error, PipelineFailure):
         stage = _PIPELINE_FAILURE_STAGES.get(error.stage, phase)
     elif isinstance(error, VisionRequestError) and phase != "screening":
         stage = "vision"
     result = {"failure_stage": stage}
-    status = getattr(error, "http_status", None) or getattr(error, "status_code", None)
-    if type(status) is int and 400 <= status <= 599:
+    # The pipeline wraps provider errors (`PipelineFailure(...) from error`); the status lives on the cause.
+    status = http_status_of(error)
+    if status is not None:
         result["http_status"] = status
     return result
 
@@ -159,6 +162,8 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
                        "stacktrace": {"frames": frames}})
     if not values:
         return None  # Logging-only payloads can contain video text; do not send them.
+    if (event.get("tags") or {}).get("error_code") in UNREPORTED_STUDIO_ERROR_CODES:
+        return None
     clean["exception"] = {"values": values}
     kind, fingerprint = _import_monitoring_fields(event, hint)
     tags = event.get("tags") or {}
@@ -247,11 +252,14 @@ def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None
     if not _initialized or not crash_reports_enabled():
         return None
     try:
+        code = studio_error_code(error)
+        if code in UNREPORTED_STUDIO_ERROR_CODES:
+            return None
         import sentry_sdk
         with sentry_sdk.new_scope() as scope:
             scope.set_tag("area", "studio")
             scope.set_tag("phase", phase)
-            scope.set_tag("error_code", studio_error_code(error))
+            scope.set_tag("error_code", code)
             stage = getattr(error, "stage", None)
             if isinstance(stage, str) and stage in PIPELINE_STAGES:
                 scope.set_tag("pipeline_stage", stage)

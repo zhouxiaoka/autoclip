@@ -52,6 +52,8 @@
 
 ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其他工程异常保留 error。此分类依据异常类型及受控代码，不解析或上传异常正文。内容管线保留 llm_not_configured、字幕/转写、timeline_empty 等结构化失败码并按 warning 分类，不再包装成无分类的 RuntimeError。普通 ValueError 只能归为 validation；旧导入的 typed failure 分类继续保留。没有屏蔽 ConnectionResetError，也没有调整现有通知接收人或阈值。
 
+链接导入被视频网站拒绝（yt-dlp 报 HTTP 403/412/429，如 B 站对机房 IP 的风控）归为 `source_blocked`：本地失败记录保留错误码、`failure_stage=ingest` 和 `http_status`，界面显示可翻译的「换网络或选浏览器 Cookie」提示；这类环境原因的预期失败**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`，`capture_studio_exception` 与 `before_send` 双重过滤）。
+
 - [Studio 工程异常](https://autoclip-ts.sentry.io/issues/views/226393/)
 - [Studio 配置/素材警告](https://autoclip-ts.sentry.io/issues/views/226394/)
 - [本轮验收异常](https://autoclip-ts.sentry.io/issues/PYTHON-FASTAPI-17)
