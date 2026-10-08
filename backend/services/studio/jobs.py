@@ -457,6 +457,35 @@ def _complete_thought_bounds(project_id, clips):
         return boundaries.refine_clips(rows, clips, call, boundaries.audio_silences(source(project_id)) if audio.has_audio(source(project_id)) else None)
 
 
+MAX_DRAFT_OVERLAP = 0.5  # share of the shorter clip two content drafts may have in common
+
+
+def _overlap_share(a, b):
+    shared = min(a[1], b[1]) - max(a[0], b[0])
+    shorter = min(a[1] - a[0], b[1] - b[0])
+    return shared / shorter if shared > 0 and shorter > 0 else 0.0
+
+
+def _distinct_ranges(picked, bounds):
+    """(clip, start, end) without near-duplicate drafts (RC156 Win QA #7).
+
+    Boundary polishing may push two clips onto the same span. Higher-scored clips keep their
+    polished range; a lower-scored one falls back to its original pipeline range, and is
+    dropped only when that still mostly repeats a kept clip. Original order is preserved.
+    """
+    order = sorted(range(len(picked)), key=lambda i: _score(picked[i][0]), reverse=True)
+    kept = {}
+    for i in order:
+        clip, original_start, original_end = picked[i]
+        for candidate in (tuple(bounds[i]), (original_start, original_end)):
+            if all(_overlap_share(candidate, other) <= MAX_DRAFT_OVERLAP for other in kept.values()):
+                kept[i] = candidate
+                break
+        else:
+            logger.info('Dropped a content clip that repeats a higher-scored clip')
+    return [(picked[i][0], *kept[i]) for i in sorted(kept)]
+
+
 def _content_drafts(project_id, plan, video):
     """Create drafts once from the selected content route, before platform derivation."""
     route = plan.get('recommended_analysis', 'subtitle')
@@ -475,7 +504,7 @@ def _content_drafts(project_id, plan, video):
         bounds = _complete_thought_bounds(project_id, [(s, e) for _, s, e in picked])
         source_duration = float(intelligence._probe(video).get('duration') or 0)
         drafts = []
-        for (clip, _, _), (start, end) in zip(picked, bounds):
+        for clip, start, end in _distinct_ranges(picked, bounds):
             # Transcript timestamps can run past the final video frame. Keep valid content
             # from that clip, and never let one invalid range discard the whole batch.
             end = min(end, source_duration)

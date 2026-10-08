@@ -99,7 +99,7 @@ function render(options = {}) {
   const mocks = {
     'react-i18next': { useTranslation() {} },
     '../../i18n': { t: text => text },
-    react: { useState: () => states[index++], useEffect() {} },
+    react: { useState: () => states[index++], useEffect() {}, useRef: current => ({ current }) },
     antd: { Select: 'select' },
     'react-router-dom': { useNavigate: () => destination => navigations.push(destination) },
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'fragment' },
@@ -116,7 +116,10 @@ function render(options = {}) {
     '../../analytics/experience': { trackExperience() {} },
     './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
     './ImportPreferences': { default: 'preferences' },
-    '../../services/api': { speechApi: { installRuntime: async () => { installs.push('whisper'); return { started: true, message: '' } } } },
+    '../../services/api': { speechApi: {
+      installRuntime: async () => { installs.push('whisper'); return { started: true, message: '' } },
+      downloadModel: async model => { installs.push('model:' + model); return { status: 'downloading', model, message: '' } },
+    } },
     './importReadiness': readiness,
     './studio.css': {},
     './quick-output.css': {},
@@ -160,4 +163,20 @@ test('vision repair opens the vision settings section', async () => {
   const view = render({ report: report({ visual: check(false, 'not_configured', 'settings_vision') }) })
   await button(view.tree, '视觉设置').props.onClick()
   assert.deepEqual(view.navigations, ['/settings?section=vision'])
+})
+
+test('an installed runtime without its model offers the model download, not another install', async () => {
+  // RC156 Win QA #5: readiness used to report ready with only the runtime installed.
+  const missing = report({ transcription: { ...check(false, 'whisper_model_missing', 'install_whisper'), model: 'small' } })
+  const view = render({ report: missing })
+  assert.equal(button(view.tree, '安装 Whisper'), undefined)
+  await button(view.tree, '下载转写模型').props.onClick()
+  assert.deepEqual(view.installs, ['model:small'])
+  assert.equal(readiness.submissionBlock(missing, false, true), 'transcription')
+  assert.equal(readiness.submissionBlock(missing, true, true), null)
+  const downloading = render({ report: report({ transcription: { ...check(false, 'whisper_model_downloading', 'none'), model: 'small' } }) })
+  assert.ok(downloading.tree.some(node => node.type === 'status' && node.props?.label === '正在下载转写模型…' && node.props?.tone === 'accent'))
+  const unready = render({ report: missing })
+  await button(unready.tree, '生成成片').props.onClick()
+  assert.equal(unready.calls.length, 0)
 })

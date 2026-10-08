@@ -154,3 +154,35 @@ def test_audio_pause_search_cannot_extend_across_the_next_speaker_turn():
             (9.01, 13., 'What happens next?')]
     pauses = lambda *_: [(9., 9.9)]
     assert b.sentence_bounds(rows, 0., 5., pauses)[1] <= 5.01
+
+
+# RC156 Win QA #7: two neighbouring clips were both "finished" into one identical 0-57.8s span.
+SENTENCES = [(float(t), float(t + 2), f'Sentence {t}.') for t in range(0, 60, 2)]
+
+
+def merge_everything(_prompt, payload):
+    return {'start_line': 0, 'end_line': len(payload['lines']) - 1}
+
+
+def test_model_refinement_cannot_merge_neighbouring_clips():
+    clips = [(0.0, 28.0), (30.0, 58.0)]
+    # Each clip alone accepts the merged span: this is what produced the duplicate drafts.
+    assert b.refine_with_model(SENTENCES, *clips[0], merge_everything) == b.refine_with_model(SENTENCES, *clips[1], merge_everything)
+    (a_start, a_end), (b_start, b_end) = b.refine_clips(SENTENCES, clips, merge_everything)
+    assert a_end <= b_start
+    assert [(a_start, a_end), (b_start, b_end)] == [b.sentence_bounds(SENTENCES, *clip) for clip in clips]
+
+
+def test_model_refinement_inside_the_gap_is_kept_and_order_does_not_matter():
+    clips = [(30.0, 40.0), (0.0, 10.0)]  # unsorted on purpose
+
+    def finish_to_gap(_prompt, payload):
+        texts = [line['text'] for line in payload['lines']]
+        if payload['start_line'] == texts.index('Sentence 0.'):
+            return {'start_line': payload['start_line'], 'end_line': texts.index('Sentence 26.')}
+        return {'start_line': payload['start_line'], 'end_line': payload['end_line']}
+
+    refined = b.refine_clips(SENTENCES, clips, finish_to_gap)
+    assert refined[1] == b.sentence_bounds(SENTENCES, 0.0, 28.0)
+    assert refined[1][1] <= 30.0
+    assert b.neighbor_limits(clips) == [(10.0, float('inf')), (float('-inf'), 30.0)]

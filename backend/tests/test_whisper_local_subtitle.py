@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from backend.services import whisper_runtime
+from backend.services.whisper_model_manager import WhisperModelManager
 from backend.utils.speech_recognizer import (
     SpeechRecognitionConfig,
     SpeechRecognitionError,
@@ -153,6 +154,45 @@ def _install_fake_whisper(monkeypatch, factory):
     monkeypatch.setattr(whisper_runtime, "is_installed", lambda: True)
     monkeypatch.setattr(whisper_runtime, "ensure_on_path", lambda: None)
     monkeypatch.setattr(whisper_runtime, "get_models_dir", lambda: Path("/tmp/autoclip-whisper-models"))
+    # No model on disk in these tests: the manager "downloads" a synthetic snapshot path.
+    monkeypatch.setattr(WhisperModelManager, "ensure_downloaded", lambda self, name: Path("/tmp/autoclip-whisper-models/snapshot"))
+
+
+def test_missing_model_is_downloaded_by_the_manager_not_by_faster_whisper(tmp_path, monkeypatch):
+    # RC156 Win QA #6: faster-whisper's own download ignores the mirror fallback.
+    loaded, ensured = [], []
+    snapshot = tmp_path / "snapshot"
+
+    class FakeModel:
+        def __init__(self, model, **kwargs):
+            loaded.append(model)
+
+        def transcribe(self, path, **kwargs):
+            return [SimpleNamespace(start=0, end=1, text="mirrored")], None
+
+    _install_fake_whisper(monkeypatch, FakeModel)
+    monkeypatch.setattr(whisper_runtime, "get_models_dir", lambda: tmp_path)
+    monkeypatch.setattr(WhisperModelManager, "ensure_downloaded", lambda self, name: ensured.append(name) or snapshot)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"video")
+    _recognizer()._generate_subtitle_whisper_local(video, tmp_path / "clip.srt", SpeechRecognitionConfig())
+    assert ensured == ["base"]
+    assert loaded == [str(snapshot)]
+
+
+def test_failed_model_download_is_a_readable_settings_error(tmp_path, monkeypatch):
+    def fail(self, name):
+        raise RuntimeError("huggingface: ConnectTimeout；hf-mirror: ConnectTimeout")
+
+    _install_fake_whisper(monkeypatch, lambda *a, **k: pytest.fail("faster-whisper must not download by name"))
+    monkeypatch.setattr(whisper_runtime, "get_models_dir", lambda: tmp_path)
+    monkeypatch.setattr(WhisperModelManager, "ensure_downloaded", fail)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"video")
+    with pytest.raises(SpeechRecognitionError) as caught:
+        _recognizer()._generate_subtitle_whisper_local(video, tmp_path / "clip.srt", SpeechRecognitionConfig())
+    assert "设置 → 转写" in str(caught.value)
+    assert "未安装" not in str(caught.value)
 
 
 def _recognizer():

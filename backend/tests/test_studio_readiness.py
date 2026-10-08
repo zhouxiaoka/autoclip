@@ -13,7 +13,19 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr('backend.utils.ffmpeg_utils.get_ffmpeg_path', lambda: str(binary))
     monkeypatch.setattr('backend.services.whisper_runtime.get_status', lambda: {'status': 'installed'})
     monkeypatch.setattr('backend.services.sensevoice_runtime.status', lambda: {'status': 'not_installed', 'message': ''})
+    from backend.services import whisper_model_manager
+    monkeypatch.setattr(whisper_model_manager, '_model_manager', whisper_model_manager.WhisperModelManager())
+    monkeypatch.setattr('backend.services.whisper_runtime.get_models_dir', lambda: tmp_path / 'whisper-models')
+    model_snapshot(tmp_path, 'base')
     return tmp_path
+
+
+def model_snapshot(root, name):
+    snapshot = root / 'whisper-models' / 'hub' / f'models--Systran--faster-whisper-{name}' / 'snapshots' / 'complete'
+    snapshot.mkdir(parents=True, exist_ok=True)
+    for file in ('model.bin', 'config.json', 'tokenizer.json', 'vocabulary.json'):
+        (snapshot / file).write_bytes(b'fixture')
+    return snapshot
 
 
 def document(**overrides):
@@ -109,6 +121,30 @@ def test_missing_whisper_offers_install(monkeypatch):
     assert result['checks']['transcription'] == {'ok': False, 'code': 'whisper_not_installed', 'repair': 'install_whisper'}
     monkeypatch.setattr('backend.services.whisper_runtime.get_status', lambda: {'status': 'installing'})
     assert report_for(monkeypatch, document())['checks']['transcription'] == {'ok': False, 'code': 'whisper_installing', 'repair': 'none'}
+
+
+def test_runtime_without_the_selected_model_is_not_ready(monkeypatch, isolated):
+    # RC156 Win QA #5: an installed runtime alone cannot transcribe.
+    from backend.services.whisper_model_manager import get_model_manager
+    small = document(transcription=Transcription(model='small'))
+    assert report_for(monkeypatch, small)['checks']['transcription'] == {
+        'ok': False, 'code': 'whisper_model_missing', 'repair': 'install_whisper', 'model': 'small'}
+    manager = get_model_manager()
+    manager._download_state['small'] = {'status': 'downloading', 'progress': 0, 'error': None}
+    assert report_for(monkeypatch, small)['checks']['transcription'] == {
+        'ok': False, 'code': 'whisper_model_downloading', 'repair': 'none', 'model': 'small'}
+    manager._download_state['small'] = {'status': 'error', 'progress': 0, 'error': 'timeout'}
+    assert report_for(monkeypatch, small)['checks']['transcription'] == {
+        'ok': False, 'code': 'whisper_model_failed', 'repair': 'install_whisper', 'model': 'small'}
+    model_snapshot(isolated, 'small')
+    assert report_for(monkeypatch, small)['checks']['transcription'] == {'ok': True, 'code': 'whisper_installed', 'repair': 'none'}
+
+
+def test_large_alias_uses_the_large_v3_model(monkeypatch, isolated):
+    large = document(transcription=Transcription(model='large'))
+    assert report_for(monkeypatch, large)['checks']['transcription']['model'] == 'large-v3'
+    model_snapshot(isolated, 'large-v3')
+    assert report_for(monkeypatch, large)['checks']['transcription']['ok'] is True
 
 
 def test_visual_mode_requires_a_multimodal_model_and_auto_does_not(monkeypatch):

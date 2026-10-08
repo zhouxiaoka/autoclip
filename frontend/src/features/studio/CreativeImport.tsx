@@ -1,7 +1,7 @@
 import { trackExperience } from '../../analytics/experience'
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Select } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { Btn, Segmented, Dialog, StatusDot } from '../../ui'
@@ -19,6 +19,9 @@ function issueCopy(item: ReadinessIssue) {
   if (item.key === 'analysis') return t('分析模型还没配好。连接一家 AI 服务后再生成。')
   if (item.code === 'whisper_installing') return t('正在安装本地转写…')
   if (item.code === 'whisper_not_installed') return t('本地转写还没安装。已有字幕可以直接继续。')
+  if (item.code === 'whisper_model_missing') return t('转写模型还没下载。已有字幕可以直接继续。')
+  if (item.code === 'whisper_model_downloading') return t('正在下载转写模型…')
+  if (item.code === 'whisper_model_failed') return t('转写模型下载失败，请重试。已有字幕可以直接继续。')
   if (item.code === 'sensevoice_not_ready') return t('SenseVoice 还没准备好。已有字幕可以直接继续。')
   if (item.code === 'cloud_not_configured') return t('云端转写还没配好。已有字幕可以直接继续。')
   if (item.key === 'visual') return t('画面分析需要可用的视觉模型。')
@@ -28,7 +31,7 @@ function issueCopy(item: ReadinessIssue) {
 
 function repairLabel(item: ReadinessIssue) {
   if (item.repair === 'settings_ai') return t('连接 AI 服务')
-  if (item.repair === 'install_whisper') return t('安装 Whisper')
+  if (item.repair === 'install_whisper') return item.model ? t('下载转写模型') : t('安装 Whisper')
   if (item.repair === 'settings_transcription') return t('转写设置')
   if (item.repair === 'settings_vision') return t('视觉设置')
   return ''
@@ -50,6 +53,8 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const [readiness, setReadiness] = useState<ImportReadiness | null>(null)
   const [settled, setSettled] = useState(false)
   const [repairing, setRepairing] = useState(false)
+  // Installing the runtime is only half of local transcription: download the model right after.
+  const modelAfterRuntime = useRef(false)
   useEffect(() => {
     let cancel = false
     studioApi.readiness()
@@ -59,22 +64,40 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     return () => { cancel = true }
   }, [])
   useEffect(() => {
-    if (readiness?.checks.transcription.code !== 'whisper_installing') return
+    const check = readiness?.checks.transcription
+    if (check?.code === 'whisper_model_missing' && check.model && modelAfterRuntime.current) {
+      modelAfterRuntime.current = false
+      void downloadModel(check.model)
+      return
+    }
+    if (check?.code === 'whisper_install_failed') modelAfterRuntime.current = false
+    if (check?.code !== 'whisper_installing' && check?.code !== 'whisper_model_downloading') return
     const timer = window.setInterval(() => {
       studioApi.readiness().then(setReadiness).catch(() => undefined)
     }, 2000)
     return () => window.clearInterval(timer)
   }, [readiness?.checks.transcription.code])
   const issues = visibleIssues(readiness, !!subtitle)
+  const downloadModel = async (model: string) => {
+    setRepairing(true)
+    setError('')
+    try {
+      await speechApi.downloadModel(model)
+      setReadiness(await studioApi.readiness())
+      setSettled(true)
+    } catch (e) { setError(t(errorText(e))) } finally { setRepairing(false) }
+  }
   const repair = async (item: ReadinessIssue) => {
+    if (item.repair === 'install_whisper' && item.model) { await downloadModel(item.model); return }
     if (item.repair === 'install_whisper') {
+      modelAfterRuntime.current = true
       setRepairing(true)
       setError('')
       try {
         await speechApi.installRuntime()
         setReadiness(await studioApi.readiness())
         setSettled(true)
-      } catch (e) { setError(t(errorText(e))) } finally { setRepairing(false) }
+      } catch (e) { modelAfterRuntime.current = false; setError(t(errorText(e))) } finally { setRepairing(false) }
       return
     }
     if (item.repair === 'settings_ai' && blocked) { onBlocked?.(); return }
@@ -121,7 +144,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       <details className="studio-details"><summary>{t("有特别要求？（选填）")}</summary><label className="studio-field"><span className="studio-sr">{t("制作要求")}</span><input aria-label={t("制作要求")} placeholder={t("例如：保留完整观点或挑战过程")} maxLength={1000} value={options.instruction} disabled={busy} onChange={e=>setOptions({...options,instruction:e.target.value})}/></label></details>
       {issues.length > 0 && <div className="studio-readiness" role="status">
         {issues.map(item => <div className="studio-readiness-row" key={item.key}>
-          <StatusDot tone={item.code === 'whisper_installing' ? 'accent' : 'muted'} label={issueCopy(item)} />
+          <StatusDot tone={item.code === 'whisper_installing' || item.code === 'whisper_model_downloading' ? 'accent' : 'muted'} label={issueCopy(item)} />
           {item.repair !== 'none' && <Btn size="sm" disabled={busy || repairing} loading={repairing && item.repair === 'install_whisper'} onClick={() => void repair(item)}>{repairLabel(item)}</Btn>}
         </div>)}
       </div>}

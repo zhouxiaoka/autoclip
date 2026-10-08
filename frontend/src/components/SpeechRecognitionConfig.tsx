@@ -73,9 +73,11 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = ({ selec
 
   const handleDownload = async (model: string) => {
     try {
-      await speechApi.downloadModel(model)
-      message.info(t("开始下载 {{value1}}", { value1: model }))
-      setModels((prev) => prev.map((m) => (m.name === model ? { ...m, status: 'downloading' } : m)))
+      const result = await speechApi.downloadModel(model)
+      if (result?.status !== 'installed') {
+        message.info(t("开始下载 {{value1}}", { value1: model }))
+        setModels((prev) => prev.map((m) => (m.name === model ? { ...m, status: 'downloading' } : m)))
+      }
       refresh()
     } catch (e: any) {
       message.error(e?.response?.data?.detail || t("下载失败"))

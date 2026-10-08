@@ -475,8 +475,19 @@ class SpeechRecognizer:
             language = None if config.language == LanguageCode.AUTO else config.language.value.split("-")[0]
             models_dir = str(whisper_runtime.get_models_dir() / "hub")
             device, compute_type = resolve_local_whisper_backend()
-            from backend.services.whisper_model_manager import get_model_manager
-            cached_model = get_model_manager().get_local_model_path(config.model)
+            from backend.services.whisper_model_manager import canonical_model_name, get_model_manager
+            manager = get_model_manager()
+            cached_model = manager.get_local_model_path(config.model)
+            if cached_model is None and canonical_model_name(config.model) in manager.model_configs:
+                # Never hand a bare model name to faster-whisper: its own download ignores the
+                # mirror fallback and shows no status (RC156 Win QA #6). Download via the manager.
+                try:
+                    cached_model = manager.ensure_downloaded(config.model)
+                except Exception as exc:  # noqa: BLE001
+                    raise SpeechRecognitionError(
+                        f"Whisper 模型 {config.model} 下载失败：{type(exc).__name__}: {exc}。"
+                        "请到「设置 → 转写」重新下载模型，或重新导入时带上 .srt 字幕。"
+                    ) from exc
             logger.info(
                 "使用 faster-whisper 生成字幕: model=%s lang=%s device=%s compute=%s",
                 config.model, language or "auto", device, compute_type,

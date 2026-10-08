@@ -369,6 +369,11 @@ def test_import_blank_whisper_result_is_transcription_empty(tmp_path, monkeypatc
     monkeypatch.setattr(whisper_runtime, "ensure_on_path", lambda: None)
     monkeypatch.setattr(whisper_runtime, "get_models_dir", lambda: tmp_path / "models")
     monkeypatch.delenv("AUTOCLIP_WHISPER_DEVICE", raising=False)
+    # A downloaded model: transcription never downloads by itself in this test.
+    snapshot = tmp_path / "models/hub/models--Systran--faster-whisper-base/snapshots/fixture"
+    snapshot.mkdir(parents=True)
+    for name in ("model.bin", "config.json", "tokenizer.json", "vocabulary.json"):
+        (snapshot / name).write_bytes(b"fixture")
 
     video = tmp_path / "input.mp4"
     video.write_bytes(b"not-a-real-video")
