@@ -4,7 +4,7 @@
 #
 # 1. 静默安装上一个正式版（GitHub latest release，需要 GH_TOKEN）
 # 2. 用安装目录里的 python.exe 起一个进程占住 _asyncio.pyd，模拟旧版残留后端（#224）
-# 3. 静默覆盖安装新包：安装器必须结束残留进程，并写入新文件
+# 3. 静默覆盖安装新包：安装器必须结束残留进程，清掉旧版 resources\backend，写入新文件，保留用户数据
 # 4. 用安装目录自带的 Python 跑 scripts/verify_windows_install.py
 param(
   [Parameter(Mandatory = $true)][string]$NewInstaller,
@@ -35,6 +35,16 @@ if ($p.ExitCode -ne 0) { throw "旧版 $prev 安装失败: $($p.ExitCode)" }
 $install = Get-InstallDir
 Write-Host "旧版 $prev 安装到 $($install.Dir)（$($install.Version)）"
 
+Write-Host '==> 放哨兵文件：旧版后端里的过时源码，和用户数据目录里的文件'
+# 覆盖安装必须清掉旧版 resources\backend 里本版已删除的源码（RC156 Win QA #2），
+# 但不能碰 %APPDATA%\AutoClip 里的用户数据。
+$staleMarker = Join-Path $install.Dir 'resources\backend\stale_marker.py'
+Set-Content -Path $staleMarker -Value '# stale file from the previous version' -Encoding utf8
+$userData = Join-Path $env:APPDATA 'AutoClip'
+New-Item -ItemType Directory -Force -Path $userData | Out-Null
+$userMarker = Join-Path $userData 'upgrade_smoke_user_marker.txt'
+Set-Content -Path $userMarker -Value 'user data must survive the upgrade' -Encoding utf8
+
 Write-Host '==> 模拟旧版残留后端占住 _asyncio.pyd'
 $py = Join-Path $install.Dir 'resources\python\python.exe'
 $lock = Start-Process $py -ArgumentList '-c', '"import asyncio, time; time.sleep(900)"' -PassThru -WindowStyle Hidden
@@ -52,6 +62,9 @@ if (Get-Process -Id $lock.Id -ErrorAction SilentlyContinue) {
 $install = Get-InstallDir
 $marker = Join-Path $install.Dir 'resources\backend\core\local_origin_guard.py'
 if (-not (Test-Path $marker)) { throw '覆盖安装后仍是旧文件（新版文件没写进去）' }
+if (Test-Path $staleMarker) { throw '覆盖安装后 resources\backend 里仍有旧版残留文件' }
+if (-not (Test-Path $userMarker)) { throw '覆盖安装删掉了 %APPDATA%\AutoClip 里的用户数据' }
+Remove-Item $userMarker -Force
 Write-Host "从 $prev 覆盖升级到 $($install.Version) 成功，残留进程已被安装器结束"
 
 Write-Host '==> 安装后运行时冒烟'

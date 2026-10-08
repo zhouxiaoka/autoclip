@@ -62,7 +62,8 @@
 Windows 验收分三层，前两层必须过，第三层补上界面和真实网络：
 
 1. **CI 自动冒烟（必须，tag 构建自动跑，不过就不会出 Release）**：`desktop-build.yml` 的 `smoke-windows-x64` 在干净的 windows-latest 上
-   装上一个正式版 → 模拟残留后端占住 `_asyncio.pyd` → 静默覆盖安装本次构建 → 用安装目录自带的 Python 跑 `scripts/verify_windows_install.py`
+   装上一个正式版 → 在旧版 `resources\backend` 放一个过时文件、在 `%APPDATA%\AutoClip` 放一个用户数据哨兵 → 模拟残留后端占住 `_asyncio.pyd` → 静默覆盖安装本次构建
+   （过时文件必须被清掉、用户数据哨兵必须还在）→ 用安装目录自带的 Python 跑 `scripts/verify_windows_install.py`
    （内置 ffmpeg 出片、中文文件名、yt-dlp 拿到 ffmpeg、桌面后端启动、来源守卫）。覆盖了近两周 Windows 反馈里的主要故障点，
    但**看不到界面**，也不下载真实链接。
 2. **Mac 上的 Windows 虚拟机或经授权的测试者（产品验收必须）**：Parallels Desktop / VMware Fusion + Windows 11 ARM（x64 安装包可在 ARM 版 Windows 上仿真运行），
