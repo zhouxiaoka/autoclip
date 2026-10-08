@@ -1,10 +1,18 @@
 """Bounded media retries shared by legacy imports and Studio."""
+import re
 from urllib.parse import urlparse
 import yt_dlp
 from yt_dlp.cookies import CookieLoadError
 
+from backend.pipeline.failures import PipelineFailure
+
 
 COOKIE_ACCESS_HINT = '无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。'
+# 也是前端 i18n 的 key（8 个 locale），改动时同步 frontend/src/i18n/locales/*.json。
+SOURCE_BLOCKED_HINT = '视频网站拒绝了这次下载（HTTP 403/412/429），常见于当前网络被网站风控或请求过于频繁。请稍后换个网络（如手机热点）重试，或在导入时选择已登录的浏览器读取 Cookie。'
+SOURCE_BLOCKED_CODE = 'source_blocked'
+# yt-dlp: "Unable to download webpage: HTTP Error 412: Precondition Failed"
+_BLOCKED_HTTP_ERROR = re.compile(r'\bhttp error (403|412|429)\b')
 
 
 def _browser_cookie_permission_failure(error):
@@ -60,4 +68,11 @@ def download_with_recovery(url: str, options: dict):
                 continue
             if retried_cookies:
                 raise RuntimeError(COOKIE_ACCESS_HINT) from None
+            blocked = _BLOCKED_HTTP_ERROR.search(text)
+            if blocked:
+                # The site refused this network/client (e.g. Bilibili 412 risk control on
+                # datacenter IPs). Expected and actionable: a stable code and a translated
+                # hint, never yt-dlp's English text, URL or response.
+                raise PipelineFailure('INGEST', SOURCE_BLOCKED_HINT, code=SOURCE_BLOCKED_CODE,
+                                      http_status=int(blocked[1])) from None
             raise

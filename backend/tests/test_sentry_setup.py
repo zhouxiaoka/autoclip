@@ -294,3 +294,25 @@ def test_text_sdk_failures_keep_provider_code_in_rewrite_and_render(monkeypatch,
         assert clean['level'] == ('warning' if code in ('authentication', 'rate_limited') else 'error')
     assert sentry_setup.studio_error_code(RuntimeError('unrelated programming defect')) == 'unexpected'
     assert sentry_setup.studio_error_code(PermissionError('private-local-file')) == 'unexpected'
+
+
+def test_source_blocked_is_classified_and_never_sent(monkeypatch, tmp_path):
+    # RC156 Win QA #9: a site refusing this network (Bilibili 412) is expected, not a crash.
+    import sentry_sdk
+    from backend.pipeline.failures import PipelineFailure
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    error = PipelineFailure('INGEST', 'hint', code='source_blocked', http_status=412)
+    assert 'source_blocked' in sentry_setup.STUDIO_ERROR_CODES
+    assert sentry_setup.studio_error_code(error) == 'source_blocked'
+
+    monkeypatch.setattr(sentry_setup, '_initialized', True)
+    sent = []
+    monkeypatch.setattr(sentry_sdk, 'capture_exception', lambda e: sent.append(e) or 'event-id')
+    assert sentry_setup.capture_studio_exception(error, 'screening') is None
+    assert sent == []
+    # Other studio failures are still captured.
+    assert sentry_setup.capture_studio_exception(RuntimeError('x'), 'screening') == 'event-id'
+
+    event = {'exception': {'values': [{'type': 'PipelineFailure', 'value': 'hint'}]},
+             'tags': {'area': 'studio', 'phase': 'screening', 'error_code': 'source_blocked'}}
+    assert sentry_setup.before_send(event) is None

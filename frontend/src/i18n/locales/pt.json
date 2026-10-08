@@ -1527,6 +1527,7 @@
   "仅调整竖版布局，字幕与发布文案语言仍按平台。": "Altera apenas o layout vertical. O idioma das legendas e publicações segue o da plataforma.",
   "无法保存项目状态，请检查磁盘空间和目录权限后重试；原素材与已有成片已保留": "Não foi possível salvar o estado do projeto. Verifique o espaço em disco e as permissões da pasta e tente novamente. O original e os vídeos existentes foram preservados.",
   "无法读取浏览器登录信息。请关闭浏览器后重试，或不选浏览器下载公开视频。原素材已保留。": "Não foi possível ler os dados de login do navegador. Feche o navegador e tente novamente, ou baixe vídeos públicos sem selecionar um navegador. A mídia original foi preservada.",
+  "视频网站拒绝了这次下载（HTTP 403/412/429），常见于当前网络被网站风控或请求过于频繁。请稍后换个网络（如手机热点）重试，或在导入时选择已登录的浏览器读取 Cookie。": "O site de vídeo recusou este download (HTTP 403/412/429), geralmente porque está bloqueando esta rede ou recebendo solicitações demais. Aguarde um pouco e tente de novo em outra rede (como o hotspot do celular), ou escolha um navegador com sessão iniciada para usar os cookies ao importar.",
   "分析模型还没配好。连接一家 AI 服务后再生成。": "O modelo de análise ainda não está pronto. Ligue um serviço de IA antes de gerar.",
   "连接 AI 服务": "Ligar serviço de IA",
   "本地转写还没安装。已有字幕可以直接继续。": "A transcrição local não está instalada. Se já tiver legendas, pode continuar.",
