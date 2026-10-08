@@ -2,10 +2,10 @@
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 from pathlib import Path
-import subprocess
 import threading
 import uuid
 
+from backend.core import project_cancellation
 from backend.core.sentry_setup import capture_studio_exception
 from backend.services.studio import jobs, store
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
@@ -44,9 +44,9 @@ def start(project_id):
             raise ValueError('已有兼容预览正在生成，请稍后重试')
         while len(_states) >= 64:
             del _states[next(iter(_states))]
-        _states[token] = {'status': 'queued'}
+        _states[token] = {'status': 'queued', 'project_id': project_id}
         try:
-            _executor.submit(_convert, source, output, token)
+            _executor.submit(_convert, project_id, source, output, token)
         except Exception:
             _states.pop(token, None)
             raise ValueError('兼容预览未能启动，请重试') from None
@@ -60,29 +60,35 @@ def ready_file(project_id):
     return output
 
 
-def _convert(source: Path, output: Path, token: str):
+def _convert(project_id: str, source: Path, output: Path, token: str):
     temporary = output.with_name(f'{output.stem}.{uuid.uuid4().hex}.tmp.mp4')
     with _lock:
-        _states[token] = {'status': 'running'}
+        _states[token] = {'status': 'running', 'project_id': project_id}
     try:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        from backend.services import render_limits
-        cmd, priority = render_limits.low_priority([
-            get_ffmpeg_path(), '-nostdin', '-v', 'error', *render_limits.input_args(), '-i', str(source),
-            '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn',
-            '-vf', "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1",
-            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '25', '-pix_fmt', 'yuv420p',
-            *render_limits.output_args(), '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
-            '-y', str(temporary),
-        ])
-        subprocess.run(cmd, capture_output=True, check=True, timeout=900, **priority)
-        if not temporary.is_file() or not temporary.stat().st_size:
-            raise ValueError('empty preview')
-        if not source.exists() or not output.parent.exists():
-            raise FileNotFoundError('source removed')
-        temporary.replace(output)
+        with project_cancellation.bind(project_id):
+            project_cancellation.checkpoint(project_id)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            from backend.services import render_limits
+            cmd, priority = render_limits.low_priority([
+                get_ffmpeg_path(), '-nostdin', '-v', 'error', *render_limits.input_args(), '-i', str(source),
+                '-map', '0:v:0', '-map', '0:a:0?', '-sn', '-dn',
+                '-vf', "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1",
+                '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '25', '-pix_fmt', 'yuv420p',
+                *render_limits.output_args(), '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
+                '-y', str(temporary),
+            ])
+            project_cancellation.run(cmd, capture_output=True, check=True, timeout=900, **priority)
+            project_cancellation.checkpoint(project_id)
+            if not temporary.is_file() or not temporary.stat().st_size:
+                raise ValueError('empty preview')
+            if not source.exists() or not output.parent.exists():
+                raise FileNotFoundError('source removed')
+            temporary.replace(output)
+            with _lock:
+                _states[token] = {'status': 'completed', 'version': token}
+    except project_cancellation.ProjectDeleted:
         with _lock:
-            _states[token] = {'status': 'completed', 'version': token}
+            _states.pop(token, None)
     except Exception as error:
         capture_studio_exception(error, 'render')
         with _lock:

@@ -99,6 +99,12 @@ def create_app(mode: str = "web") -> FastAPI:
             reconcile_interrupted_projects()
         except Exception:
             logger.exception("Studio 重启恢复失败，打开项目时会再次尝试")
+        try:
+            # 只清 projects 根下、库里没有对应行的残留目录；库读失败则什么都不删（RC156 PR4）
+            from backend.services.project_orphan_cleanup import cleanup_orphan_project_directories
+            cleanup_orphan_project_directories()
+        except Exception:
+            logger.exception("清理无数据库行的残留项目目录失败")
         
         # 加载 API 密钥到环境变量
         api_key = get_api_key()
