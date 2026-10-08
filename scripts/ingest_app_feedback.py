@@ -27,7 +27,7 @@ REPO = os.environ.get("AUTOCLIP_REPO", "zhouxiaoka/autoclip")
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.posthog.com").rstrip("/")
 DEFAULT_PROJECT_ID = "450605"
 MAX_PER_RUN = 20
-ERROR_CODE_RE = re.compile(r"^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked)$")
+ERROR_CODE_RE = re.compile(r"^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio)$")
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     re.I,

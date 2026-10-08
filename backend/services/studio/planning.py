@@ -38,6 +38,38 @@ def _local_recommendation(video: Path, duration: float, prefix: str = ''):
                                     suggested_goals=suggested, reason=(prefix + reason)[:500])
 
 
+def _subtitle_blockers(video: Path, duration: float, options: ImportOptions, consent, configured: bool):
+    """(too_short, no_audio) for the subtitle route; raises before any model call when no route is left.
+
+    RC156 #10/#11: a source shorter than one clip, or without an audio track and without an
+    attached SRT, used to spend screening and clip-finding calls before failing.
+    """
+    from backend.pipeline import media_precheck
+    srt_attached = (video.parent / 'input.srt').is_file()
+    short = media_precheck.too_short(duration)
+    no_audio = not srt_attached and media_precheck.has_audio(video) is False
+    if not (short or no_audio):
+        return False, False
+    vision = duration <= VISUAL_MAX_SOURCE_SEC and configured
+    if options.goal == 'content':
+        visual_possible = False
+    elif not options.auto_start:
+        visual_possible = vision  # the review screen can still confirm the visual route
+    elif options.goal != 'auto':
+        visual_possible = vision and consent.analysis_mode == 'visual'
+    else:
+        visual_possible = duration <= VISUAL_MAX_SOURCE_SEC and analysis_preferences.visual_screening_allowed(
+            consent, vision_configured=configured)
+    # Too short: the automatic route is blocked outright. Screening a talk video picks content,
+    # and a visual pass over less than one clip returns the source itself. Only an explicit
+    # visual choice (visual analysis mode, or the review screen) keeps the visual route open.
+    if short and not (visual_possible and (not options.auto_start or consent.analysis_mode == 'visual')):
+        raise media_precheck.too_short_failure()
+    if no_audio and not visual_possible:
+        raise media_precheck.no_audio_failure()
+    return short, no_audio
+
+
 def recommend(video: Path, options: ImportOptions):
     info = intelligence._probe(video)
     duration = info.get('duration', 0)
@@ -45,6 +77,7 @@ def recommend(video: Path, options: ImportOptions):
         raise ValueError('素材时长无法读取或不足 1 秒')
     consent = analysis_preferences.load()
     configured = intelligence.ready()
+    short, no_audio = _subtitle_blockers(video, duration, options, consent, configured)
     mode = 'manual'
     diagnostics = None
     local_evidence = None
@@ -73,7 +106,9 @@ def recommend(video: Path, options: ImportOptions):
             '返回JSON {"content_type":"...","goal":"...","reason":"简短中文依据与不确定性",'
             '"confidence":0.0,"aspect":"original|portrait|landscape","duration":30,"suggested_goals":["highlight","promo"]}。'
             f'源视频{duration:.2f}秒，尺寸{info.get("width")}×{info.get("height")}。'
-            '以下是用户可选填写的制作要求：' + options.instruction
+            + ('素材没有音轨（无声视频），无法转写字幕：不要选择content，也不要勾选content。' if no_audio else '')
+            + ('素材不足20秒，按字幕切不出完整片段：不要选择content，也不要勾选content。' if short else '')
+            + '以下是用户可选填写的制作要求：' + options.instruction
         )
         times = [round((duration - .1) * i / 3, 3) for i in range(4)]
         try:
@@ -104,5 +139,12 @@ def recommend(video: Path, options: ImportOptions):
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
     route = 'visual' if duration <= VISUAL_MAX_SOURCE_SEC and result.goal != 'content' and (consent.analysis_mode == 'visual' or (consent.analysis_mode == 'auto' and mode == 'ai' and result.goal != 'content')) else 'subtitle'
+    if short or no_audio:
+        from backend.pipeline import media_precheck
+        if route == 'subtitle' and options.auto_start:
+            # Screening kept (or fell back to) the subtitle route, which this source cannot use.
+            raise media_precheck.too_short_failure() if short else media_precheck.no_audio_failure(after_screening=True)
+        # The review screen must not preselect a goal that needs subtitles; confirm_project re-checks.
+        suggested = [goal for goal in suggested if goal != 'content']
     return {**({'local_evidence': local_evidence} if local_evidence else {}), 'analysis_preferences': consent.model_dump(), 'recommended_analysis': route, **({'diagnostics': diagnostics} if diagnostics else {}), 'mode': mode, 'source_duration': duration, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
             'overrides': options.model_dump(exclude_none=True)}

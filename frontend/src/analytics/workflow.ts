@@ -59,7 +59,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     }
   }
   if (typeof input.http_status === 'number' && Number.isInteger(input.http_status) && input.http_status >= 400 && input.http_status <= 599) out.http_status = input.http_status
-  if (typeof input.error_code === 'string' && /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked)$/.test(input.error_code)) out.error_code = input.error_code
+  if (typeof input.error_code === 'string' && /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio)$/.test(input.error_code)) out.error_code = input.error_code
   for (const key of ['flow_id', 'operation_id', 'artifact_id', 'attempt_id']) {
     if (typeof input[key] === 'string' && /^t-[a-z0-9-]{10,100}$/.test(input[key] as string)) out[key] = input[key] as string
   }

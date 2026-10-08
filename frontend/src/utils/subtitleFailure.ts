@@ -24,6 +24,8 @@ function mentionsSubtitle(text: string): boolean {
  */
 export function classifySubtitleFailure(error?: string | null, code?: string | null): SubtitleFailureKind | null {
   if (code && CODES.has(code as SubtitleFailureKind)) return code as SubtitleFailureKind
+  // 源视频太短 / 没有音轨是素材本身的问题，转写设置帮不上忙（RC156 #10 #11）。
+  if (code === 'source_too_short' || code === 'source_no_audio') return null
   const text = error || ''
   // 时间线为空会提到字幕轴，但下一步不是去装 Whisper（#182）。
   if (code === 'timeline_empty' || text.includes('时间线提取为空') || text.includes('时间线为空')) return null

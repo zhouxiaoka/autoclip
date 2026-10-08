@@ -5,6 +5,14 @@ from backend.services.studio.models import Preferences
 from backend.services.studio.subtitle_highlights import make_highlights
 
 
+@pytest.fixture(autouse=True)
+def full_length_synthetic_source(monkeypatch):
+    # The shared `source` fixture is a 3 s clip standing in for a normal-length video. The
+    # too-short precheck (RC156 Win QA #10) has its own tests in test_media_precheck.py.
+    from backend.pipeline import media_precheck
+    monkeypatch.setattr(media_precheck, 'too_short', lambda duration: False)
+
+
 def clip(start, end, score=1):
     return {'start_time':f'00:00:{start:02d},000','end_time':f'00:00:{end:02d},000','generated_title':'Semantic event','final_score':score}
 

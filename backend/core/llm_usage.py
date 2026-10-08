@@ -22,8 +22,9 @@ FILE = 'llm_usage.jsonl'
 
 
 def usage_path(project_id: str) -> Path:
-    from backend.core.path_utils import get_project_directory
-    return get_project_directory(project_id) / 'metadata' / FILE
+    # Never get_project_directory(): it creates the folder and would resurrect a deleted project (RC156 #12).
+    from backend.core.path_utils import get_data_directory
+    return get_data_directory() / 'projects' / project_id / 'metadata' / FILE
 
 
 @contextmanager
@@ -37,6 +38,8 @@ def tracking(project_id: str):
 
 @contextmanager
 def stage(name: str):
+    from backend.core.project_cancellation import checkpoint
+    checkpoint()  # step boundary: a deleted project's worker stops here (RC156 #12)
     token = _stage.set(name)
     try:
         yield
@@ -46,6 +49,8 @@ def stage(name: str):
 
 def set_stage(name: str) -> None:
     """Name the step for the rest of a sequential run (the pipeline steps)."""
+    from backend.core.project_cancellation import checkpoint
+    checkpoint()  # step boundary: a deleted project's worker stops here (RC156 #12)
     _stage.set(name)
 
 
@@ -56,6 +61,9 @@ def _estimate(chars: int) -> int:
 
 def record(model: str | None, usage: dict[str, Any] | None, *, prompt_chars: int, completion_chars: int, kind: str = 'text',
            images: int = 0) -> None:
+    from backend.core.project_cancellation import current_cancelled
+    if current_cancelled():
+        return
     path = _sink.get()
     if path is None:
         return
@@ -108,12 +116,15 @@ def run_in_context(fn):
 @contextmanager
 def timed(stage_name: str):
     """Record how long a step took (wall seconds) next to its token usage, for cost/time reports."""
+    from backend.core.project_cancellation import checkpoint
+    checkpoint()  # step boundary: a deleted project's worker stops here (RC156 #12)
     started = time.monotonic()
     try:
         yield
     finally:
+        from backend.core.project_cancellation import current_cancelled
         path = _sink.get()
-        if path is not None:
+        if path is not None and not current_cancelled():
             row = {'at': round(time.time(), 1), 'kind': 'timing', 'stage': stage_name, 'seconds': round(time.monotonic() - started, 2)}
             try:
                 with _lock:

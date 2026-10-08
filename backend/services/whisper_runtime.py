@@ -111,8 +111,11 @@ def is_installed() -> bool:
         return True
     except Exception as exc:
         missing_package = isinstance(exc, ModuleNotFoundError) and exc.name == WHISPER_IMPORT_NAME
+        if not missing_package and not _runtime_import_error:
+            logger.warning("Whisper 运行时导入失败: %s", type(exc).__name__)  # 状态轮询会反复调用：只记第一次
+        # 异常名只进日志，不进设置页文案（RC156 #11）。
         _runtime_import_error = "" if missing_package else (
-            f"Whisper 运行时依赖加载失败（{type(exc).__name__}）。请重新安装 Whisper 后重启 AutoClip。"
+            "Whisper 运行时依赖加载失败。请重新安装 Whisper 后重启 AutoClip。"
         )
         return False
 

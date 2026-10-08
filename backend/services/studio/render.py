@@ -12,6 +12,7 @@ from backend.services.studio import audio
 from backend.services.studio.store import directory
 from backend.services import render_limits
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
+from backend.core import project_cancellation
 
 
 def _mask_captions(graph, band):
@@ -93,7 +94,10 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         raise ValueError('缺少中文字体，无法烧录开头文字，请安装 Noto Sans CJK')
     if draft.subtitles and not entries and not packaged:
         warnings.append('原素材没有可用字幕，本次未烧录字幕')
+    project_cancellation.checkpoint(project_id)
     out_dir = directory(project_id) / 'output' / 'studio'
+    if not directory(project_id).is_dir():
+        raise project_cancellation.ProjectDeleted(project_id)
     out_dir.mkdir(parents=True, exist_ok=True)
     output = out_dir / f'{job_id}.mp4'
     partial = out_dir / f'{job_id}.part.mp4'
@@ -181,7 +185,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
 
                 def run(full, length=scene.end - scene.start):
                     full, priority = render_limits.low_priority(full)
-                    return subprocess.run(full, capture_output=True, text=True, timeout=max(180, length * 20), **priority)
+                    return project_cancellation.run(full, capture_output=True, text=True, timeout=max(180, length * 20), **priority)
 
                 proc = video_encoder.run_with_fallback(build, run)
                 if proc.returncode:
@@ -199,7 +203,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             else:
                 cmd += ['-an']
             cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]
-            subprocess.run(cmd, check=True, capture_output=True, timeout=max(180, sum(durations)*2))
+            project_cancellation.run(cmd, check=True, capture_output=True, timeout=max(180, sum(durations)*2))
             from backend.services.output_branding import append_outro
             outro_applied = append_outro(partial, output, width=w, height=h, enabled=brand_outro)
             if brand_outro and not outro_applied:

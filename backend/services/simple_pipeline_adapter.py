@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, Callable
 from pathlib import Path
 
 from backend.services.simple_progress import emit_progress, clear_progress
+from backend.core.project_cancellation import ProjectDeleted
 from backend.pipeline.failures import (
     PipelineFailure, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG,
     llm_key_failure, failure_from_speech_error, missing_subtitle_failure,
@@ -151,6 +152,8 @@ class SimplePipelineAdapter:
             entries = TextProcessor.parse_srt(Path(srt_path))
             with llm_usage.timed("clip_finder"):
                 return find_clips(entries, text_json, threshold=resolve_min_score_threshold(), metadata_dir=metadata_dir)
+        except ProjectDeleted:
+            raise
         except Exception as error:  # noqa: BLE001 - the legacy steps still work with any model
             logger.warning("一次挑片不可用，改用分步分析: %s", error)
             return None
@@ -189,9 +192,18 @@ class SimplePipelineAdapter:
             prompt_files = self._prompt_files(project_dir)
             
             # 阶段1: 素材准备。先确认 LLM 可用，否则后面每一步都是白跑
+            from backend.core.project_cancellation import checkpoint
+            checkpoint(self.project_id)
             emit_progress(self.project_id, "INGEST", "素材准备完成")
+            # 源视频比最短片段还短、或没有音轨又没带字幕：字幕路线注定失败，先拦下，不调用任何模型（RC156 #10/#11）
+            from backend.pipeline import media_precheck
+            blocked = media_precheck.subtitle_route_failure(
+                input_video_path, srt_available=bool(input_srt_path and Path(input_srt_path).exists()))
+            if blocked:
+                raise blocked
             self._preflight_llm()
-            
+            checkpoint(self.project_id)
+
             # 阶段2: 字幕处理
             emit_progress(self.project_id, "SUBTITLE", "开始字幕处理")
             
@@ -215,6 +227,7 @@ class SimplePipelineAdapter:
                 logger.info(f"自动生成字幕成功: {srt_path}")
 
             # 快速出片：一次挑片（整段字幕一次给模型）；不可用时回退旧的四步
+            checkpoint(self.project_id)
             titled_clips = self._find_clips_in_one_pass(srt_path, metadata_dir) if clips_only else None
             if titled_clips is not None:
                 outlines, timeline_data, scored_clips = [], [], titled_clips
@@ -345,6 +358,8 @@ class SimplePipelineAdapter:
                 }
             }
             
+        except ProjectDeleted:
+            raise  # 项目已删除：停下，不写失败进度（RC156 #12）
         except PipelineFailure as e:
             # 明确失败：带阶段和下一步提示，前端失败态 / 应用内反馈直接展示
             error_msg = e.user_message()

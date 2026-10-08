@@ -42,6 +42,12 @@ class ImportMissingCredential(ImportProcessingError):
     kind = "missing-key"
 
 
+class ImportSourceUnusable(ImportProcessingError):
+    """源视频本身不能走字幕路线（比最短片段还短 / 没有音轨又没带字幕）。用户输入，不是故障：不上报 Sentry。"""
+
+    kind = "source-input"
+
+
 # 这些码已经带了「设置 → 转写」去向，归到缺字幕，即使用户原文里提过密钥。
 _WHISPER_STATE_CODES = frozenset({
     "whisper_not_installed",
@@ -85,7 +91,11 @@ def classify_import_failure(error: str, error_code: Optional[str] = None) -> typ
     """选出 Sentry / 日志用的异常类型。不改写用户可见文案。"""
     from backend.pipeline.failures import CODE_LLM_NOT_CONFIGURED
 
+    from backend.pipeline.media_precheck import SOURCE_INPUT_CODES
+
     code = (error_code or "").strip()
+    if code in SOURCE_INPUT_CODES:
+        return ImportSourceUnusable
     if code == CODE_LLM_NOT_CONFIGURED or _message_is_missing_credential(error, code):
         return ImportMissingCredential
     if code in _SUBTITLE_FAILURE_CODES:
@@ -101,7 +111,7 @@ def _message_is_missing_credential(error: str, error_code: str) -> bool:
 
 
 def import_failure_kind_for_type(type_name: str) -> Optional[str]:
-    for cls in (ImportSubtitleUnavailable, ImportMissingCredential, ImportProcessingError):
+    for cls in (ImportSubtitleUnavailable, ImportMissingCredential, ImportSourceUnusable, ImportProcessingError):
         if cls.__name__ == type_name:
             return cls.kind
     return None
@@ -366,6 +376,12 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
 
         speech_error = None
         srt_path = srt_file_path
+        # 比最短片段还短、或没有音轨又没带字幕：转写和分析注定白跑，先拦下（RC156 #10/#11）
+        from backend.pipeline.media_precheck import subtitle_route_failure
+        blocked = subtitle_route_failure(video_path, srt_available=bool(srt_path and Path(srt_path).exists()))
+        if blocked:
+            with session_scope() as db:
+                _fail_import(ProjectService(db), project_id, blocked.user_message(), error_code=blocked.code)
         if not srt_path:
             srt_path, speech_error = _generate_import_subtitle(self, project_id, video_path)
 

@@ -14,6 +14,7 @@ from backend.services.websocket_notification_service import notification_service
 from backend.services.processing_service import ProcessingService
 from backend.services.pipeline_adapter import create_pipeline_adapter
 from backend.core.database import SessionLocal, session_scope
+from backend.core.project_cancellation import ProjectDeleted
 from backend.models.project import Project, ProjectStatus
 from backend.models.task import Task, TaskStatus, TaskType
 from datetime import datetime
@@ -128,7 +129,11 @@ def process_video_pipeline(
 
         # 执行Pipeline处理 - 使用异步包装器
         import asyncio
-        result = asyncio.run(pipeline_adapter.process_project_sync(input_video_path, input_srt_path, clips_only=clips_only))
+        from backend.core.project_cancellation import bind, checkpoint
+        with bind(project_id):
+            result = asyncio.run(pipeline_adapter.process_project_sync(input_video_path, input_srt_path, clips_only=clips_only))
+            # 运行中项目被删除（RC156 #12）：无论适配器把它收成了什么结果，都在这里停下，不再写库/写文件
+            checkpoint(project_id)
 
         with session_scope() as db:
             task = db.query(Task).filter(Task.id == task_row_id).first()
@@ -201,6 +206,9 @@ def process_video_pipeline(
                 }
         return outcome
 
+    except ProjectDeleted:
+        logger.info("项目已删除，流水线已停止: %s", project_id)
+        raise
     except Exception as e:
         error_msg = f"视频流水线处理失败: {str(e)}"
         logger.error(error_msg)

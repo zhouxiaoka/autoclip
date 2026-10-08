@@ -4,6 +4,15 @@ from backend.services.studio import subtitle_promo as promo, intelligence, jobs,
 from backend.services.studio.models import Preferences
 from backend.tests.test_subtitle_highlights import clip
 
+
+@pytest.fixture(autouse=True)
+def full_length_synthetic_source(monkeypatch):
+    # The shared `source` fixture is a 3 s clip standing in for a normal-length video. The
+    # too-short precheck (RC156 Win QA #10) has its own tests in test_media_precheck.py.
+    from backend.pipeline import media_precheck
+    monkeypatch.setattr(media_precheck, 'too_short', lambda duration: False)
+
+
 @pytest.fixture
 def evidence(monkeypatch):
     monkeypatch.setattr(promo,'_load_srt_entries',lambda _: [

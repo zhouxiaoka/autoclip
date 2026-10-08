@@ -63,3 +63,11 @@ test('safe cloud ASR failures keep the generic failure view and never request Wh
     assert.equal(classifySubtitleFailure(`云端转写失败：${message} ${hint}`, 'provider_error'), null)
   }
 })
+
+test('source_too_short / source_no_audio never open transcription settings (RC156 #10 #11)', () => {
+  const noAudio = '这个视频没有声音，无法生成字幕。请附上 SRT 字幕后重新导入；想按画面剪辑，可在「设置 → AI 模型」选用支持图片的模型并开启「画面识别」。'
+  assert.equal(classifySubtitleFailure(noAudio, 'source_no_audio'), null)
+  assert.equal(classifySubtitleFailure('视频太短：不到 20 秒，按字幕切不出完整片段。请换一段 20 秒以上的视频。', 'source_too_short'), null)
+  // Even text mentioning transcription settings stays out when the code says it is the source.
+  assert.equal(classifySubtitleFailure('字幕 设置 → 转写', 'source_no_audio'), null)
+})

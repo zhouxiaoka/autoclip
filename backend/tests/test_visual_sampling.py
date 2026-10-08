@@ -10,6 +10,14 @@ from backend.services.studio.models import ImportOptions
 from backend.utils.ffmpeg_utils import get_ffmpeg_path
 
 
+@pytest.fixture(autouse=True)
+def full_length_synthetic_source(monkeypatch):
+    # The shared `source` fixture is a 3 s clip standing in for a normal-length video. The
+    # too-short precheck (RC156 Win QA #10) has its own tests in test_media_precheck.py.
+    from backend.pipeline import media_precheck
+    monkeypatch.setattr(media_precheck, 'too_short', lambda duration: False)
+
+
 def make_video(tmp_path, fps=8, *, audio_duration=None):
     video = tmp_path / '低帧率 游戏.mp4'
     command = [get_ffmpeg_path(), '-v', 'error', '-threads', '1', '-f', 'lavfi', '-i',

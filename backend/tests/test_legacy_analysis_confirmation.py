@@ -2,6 +2,15 @@ import pytest
 from backend.tests.test_studio import root, source, client
 from backend.services.studio import jobs, store, intelligence, analysis_preferences
 
+
+@pytest.fixture(autouse=True)
+def full_length_synthetic_source(monkeypatch):
+    # The shared `source` fixture is a 3 s clip standing in for a normal-length video. The
+    # too-short precheck (RC156 Win QA #10) has its own tests in test_media_precheck.py.
+    from backend.pipeline import media_precheck
+    monkeypatch.setattr(media_precheck, 'too_short', lambda duration: False)
+
+
 @pytest.mark.parametrize('goal',['content','highlight','promo'])
 def test_legacy_retry_waits_for_explicit_confirmation(client,monkeypatch,goal):
     from backend.core.database import SessionLocal
