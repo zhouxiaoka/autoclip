@@ -45,6 +45,7 @@
 - [ ] 运行 `scripts/internal_acceptance.py init` 生成全 pending 的内部记录；逐项完成以下矩阵和每条修复，真实模型、费用、环境及限制按实际记录
 - [ ] 仅重跑修复影响的断言；已通过未影响断言按 [影响承接合同](docs/TESTING_ACCEPTANCE.md#影响范围与原执行证据承接) 保留原来源/包哈希/执行时间，并另记当前复核时间；独立 gate/证据分支改动不重建冻结产品
 - [ ] 有 pending / failed / skipped 场景或未解释的主流程失败时，继续在内部修复、重建、重新验收，**不得打 tag**
+- [ ] **验收发现的问题打 tag 前必须修复并复验**：在新的内部包上按原复现步骤重新验收通过；不能作为「已知问题」带进 tag
 
 两个平台执行 [必测矩阵](docs/TESTING_ACCEPTANCE.md#4-最终安装包的必测矩阵)，包括下面基础项以及迁移、无字幕/视觉、失败恢复、保存/包装和隐私监控。记录内部包 SHA-256、完整提交、系统与运行时；脱敏结果进入 `docs/internal-builds/COMMIT/internal-acceptance.json` 与摘要，原始截图/日志留本地：
 
@@ -67,6 +68,11 @@ Windows 验收分三层，前两层必须过，第三层补上界面和真实网
 2. **Mac 上的 Windows 虚拟机或经授权的测试者（产品验收必须）**：Parallels Desktop / VMware Fusion + Windows 11 ARM（x64 安装包可在 ARM 版 Windows 上仿真运行），
    或 UTM（免费）。做一次快照当「干净机器」，每次发版还原快照后走上面四项。这是界面、WebView2、真实下载唯一能亲眼看的地方。
    仿真环境里性能和个别驱动行为和真机不同，记录时注明「ARM 虚拟机」。
+   也可以用专用 Windows 测试 VM（如云上的 Windows Server / Windows 11，开 SSH）跑 [`scripts/winqa/`](scripts/winqa/README.md) 的验收 harness（`run_winqa.sh`）：
+   步骤 0–9 零费用（环境 → 清理 → 装上一版 → 造数据 → 运行中覆盖升级 → 接口检查 → 失败探针 → CI 同款冒烟 → 日志 → 汇总）；
+   步骤 10–14 加 `--real` 跑真实模型场景（有费用，需授权；key 只走 stdin，证据自动脱敏）；修复后用 `--from-step/--to-step` 只重跑受影响的步骤。
+   输出的 `summary.md` / `windows-rows.draft.json` 作为 internal_acceptance 行的证据来源。主机、账号、key 只用环境变量传，不写进仓库；
+   界面项（WebView2 画面、设置页、导出）仍需人工确认，记录里注明「虚拟机」和系统版本。
 3. **Pre-release 测试者（建议）**：经授权联系测试者，使用合法素材按必测矩阵记录结果和包哈希；一句“能用”不足以替代验收。
 
 第 2 层没有证据时保持 **NO-GO**。延长观察期或写免责声明不能替代 Windows 产品验收；不转正、不推给全部用户。

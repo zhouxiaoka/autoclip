@@ -348,7 +348,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
           )}
           {normalizedStatus === 'failed' && failureText && (
             <div className="ac-empty ac-project-error" role="alert">
-              <span className="ac-mono">{failureText}</span>
+              <span className="ac-mono">{t(failureText)}</span>
             </div>
           )}
           {normalizedStatus === 'failed' && (
