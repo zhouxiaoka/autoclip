@@ -65,7 +65,7 @@ def record(model: str | None, usage: dict[str, Any] | None, *, prompt_chars: int
     if current_cancelled():
         return
     path = _sink.get()
-    if path is None or not path.parent.parent.is_dir():
+    if path is None:
         return
     usage = usage or {}
     prompt = usage.get('prompt_tokens', usage.get('input_tokens'))
@@ -124,7 +124,7 @@ def timed(stage_name: str):
     finally:
         from backend.core.project_cancellation import current_cancelled
         path = _sink.get()
-        if path is not None and not current_cancelled() and path.parent.parent.is_dir():
+        if path is not None and not current_cancelled():
             row = {'at': round(time.time(), 1), 'kind': 'timing', 'stage': stage_name, 'seconds': round(time.monotonic() - started, 2)}
             try:
                 with _lock:
