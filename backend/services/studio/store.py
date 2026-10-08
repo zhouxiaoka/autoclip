@@ -466,11 +466,19 @@ def interrupted_run(data):
         return False
     if _stale_analysis(analysis):
         return True
+    # Long-video kill (RC156 #13 case 3 / c3-long): analysis may already look failed
+    # (previous in-memory recovery) while generation is still in production and the
+    # project index stays processing forever across restarts.
+    if (isinstance(generation, dict) and generation.get('status') in ('screening', 'production')
+            and generation.get('auto_start')
+            and not (isinstance(analysis, dict) and analysis.get('status') == 'running'
+                     and analysis.get('instance') == INSTANCE)):
+        return True
     # A finished screening/production always replaces the running analysis, so only a
     # render whose last variant settled without settling the generation is left here.
     if not isinstance(generation, dict) or generation.get('status') != 'rendering' or not generation.get('auto_start'):
         return False
-    if isinstance(analysis, dict) and analysis.get('status') == 'running':
+    if isinstance(analysis, dict) and analysis.get('status') == 'running' and analysis.get('instance') == INSTANCE:
         return False  # owned by this process: still running
     variants = [row for row in data.get('output_variants') or [] if isinstance(row, dict) and row.get('status') != 'on_demand']
     return bool(variants) and all(row.get('status') in ('completed', 'failed') for row in variants)
@@ -497,7 +505,10 @@ def _recover_interrupted_run(data):
         settle_generation(data)
         if generation.get('status') != 'rendering':
             return True
-    if generation and generation.get('status') in ('screening', 'production', 'rendering') and not (generation['status'] == 'rendering' and variants) and _stale_analysis(analysis):
+    if generation and generation.get('status') in ('screening', 'production', 'rendering') and not (generation['status'] == 'rendering' and variants):
+        owned = isinstance(analysis, dict) and analysis.get('status') == 'running' and analysis.get('instance') == INSTANCE
+        if owned:
+            return False
         stage = generation['status']
         generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now())
         data['analysis'] = {'status': 'failed', 'phase': stage, 'run_id': (analysis or {}).get('run_id'),

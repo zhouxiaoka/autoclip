@@ -186,3 +186,25 @@ def test_restart_code_is_known_and_never_reported():
     from backend.core import sentry_setup
     assert 'service_restarted' in sentry_setup.STUDIO_ERROR_CODES
     assert 'service_restarted' in sentry_setup.UNREPORTED_STUDIO_ERROR_CODES
+
+
+def test_long_video_stuck_in_processing_across_restarts_is_failed(sessions):
+    """RC156 #13 case 3 (c3-long): analysis may already look failed while generation stays in
+    production and the project index stays processing forever. Startup must close it."""
+    # Disk shape after the previous process died mid clip_finder and an in-memory-only
+    # recovery flipped analysis without writing/settling generation.
+    _project(sessions, {
+        'generation': {'status': 'production', 'auto_start': True},
+        'analysis': {'status': 'failed', 'phase': 'production', 'run_id': 'r',
+                     'message': '正在制作可发布成片'},  # stale message, no error
+        'drafts': [], 'jobs': [], 'output_variants': []},
+        status=ProjectStatus.PROCESSING)
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    row = _row(sessions)
+    assert row.status.value == 'failed'
+    assert row.error_message == store.RESTART_MESSAGE and row.error_code == 'service_restarted'
+    disk = _disk()
+    assert disk['generation']['status'] == 'failed'
+    assert disk['analysis']['error'] == store.RESTART_MESSAGE and 'message' not in disk['analysis']
+    # Home card reads studio_generation_status=failed → 「重新生成」 entry.
+    assert (row.settings or {}).get('studio_generation_status') == 'failed'
