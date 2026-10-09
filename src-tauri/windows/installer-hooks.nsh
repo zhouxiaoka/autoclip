@@ -50,7 +50,10 @@
 ; 卸载时删除用户数据（RC156 Win QA #15）。模板的「删除应用数据」勾选框只删
 ; $APPDATA\com.autoclip.desktop 和 $LOCALAPPDATA\com.autoclip.desktop（WebView 数据），
 ; 项目、设置、API 密钥所在的 %APPDATA%\AutoClip 一直留着，与隐私说明不符。
-; 破坏性操作，条件全部满足才删，而且只删这一个目录（不用通配符，不碰上级目录）：
+; 静默 /DELETEAPPDATA 不经过模板的勾选框分支，过去只删 %APPDATA%\AutoClip，WebView 数据留着
+; （RC156 Win QA #24）。所以这里删除与图形界面勾选时相同的三个目录；勾选时模板已删过的两个
+; 目录在这里已不存在，FileExists 不成立，什么也不做。
+; 破坏性操作，条件全部满足才删，而且只删这三个固定目录（不用通配符，不碰上级目录）：
 ;   - 不是更新：模板的 /UPDATE（$UpdateMode = 1）一律不删；
 ;   - 不是安装器发起的「安装前卸载」：用户自己运行的卸载程序会先把自己复制到 %TEMP% 再运行，
 ;     安装器则带 _?= 原地运行（$EXEDIR = $INSTDIR），这种升级卸载一律不删；
@@ -80,13 +83,45 @@
       DetailPrint "Deleting AutoClip data: $APPDATA\AutoClip"
       RMDir /r "$APPDATA\AutoClip"
     ${EndIf}
+    ${If} "$APPDATA" != ""
+    ${AndIf} ${FileExists} "$APPDATA\${BUNDLEID}\*.*"
+      RMDir /r "$APPDATA\${BUNDLEID}"
+    ${EndIf}
+    ${If} "$LOCALAPPDATA" != ""
+    ${AndIf} ${FileExists} "$LOCALAPPDATA\${BUNDLEID}\*.*"
+      DetailPrint "Deleting WebView data: $LOCALAPPDATA\${BUNDLEID}"
+      RMDir /r "$LOCALAPPDATA\${BUNDLEID}"
+    ${EndIf}
   ${EndIf}
   Pop $R9
   Pop $R8
 !macroend
 
+; 卸载后安装目录删不干净（RC156 Win QA #23）：内置 Python 运行时写出的字节码（例如
+; resources\python\Lib\encodings\__pycache__\gbk.cpython-313.pyc）不在安装清单里，模板只按清单
+; Delete 文件、再对每级目录做非递归 RMDir，于是整条 resources\python\... 目录链和安装目录都留下。
+; 模板删完清单里的文件之后，这三个目录里剩下的只可能是运行时生成的文件，整目录删除；
+; 随后只对 resources 和安装目录本身做非递归 RMDir（里面有别的东西就保留）。
+;   - 只动 $INSTDIR\resources 下的三个打包目录（与 tauri.windows.conf.json 的 resources 一致），
+;     不用通配符，不碰 %APPDATA% / %LOCALAPPDATA%；
+;   - 更新（/UPDATE）和安装器发起的「安装前卸载」（$EXEDIR = $INSTDIR）不做：随后就要原地装新版，
+;     resources\python 有 #224 的文件占用风险，PREINSTALL 只清 resources\backend。
+!macro AUTOCLIP_REMOVE_INSTALL_LEFTOVERS
+  ${If} $UpdateMode <> 1
+  ${AndIf} "$EXEDIR" != "$INSTDIR"
+  ${AndIf} "$INSTDIR" != ""
+  ${AndIfNot} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
+    RMDir /r "$INSTDIR\resources\python"
+    RMDir /r "$INSTDIR\resources\backend"
+    RMDir /r "$INSTDIR\resources\ffmpeg"
+    RMDir "$INSTDIR\resources"
+    RMDir "$INSTDIR"
+  ${EndIf}
+!macroend
+
 !macro NSIS_HOOK_POSTUNINSTALL
   !insertmacro AUTOCLIP_DELETE_USER_DATA
+  !insertmacro AUTOCLIP_REMOVE_INSTALL_LEFTOVERS
 !macroend
 
 ; 卸载确认页顶部说明：默认保留数据，勾选才会永久删除（文字在 windows/lang/*.nsh）。

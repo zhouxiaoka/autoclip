@@ -73,7 +73,10 @@ impl BackendManager {
             // Keep signed bundle resources immutable, including Python startup imports.
             .env("PYTHONDONTWRITEBYTECODE", "1")
             // Single source of truth for the version the backend reports in /settings.
-            .env("AUTOCLIP_APP_VERSION", env!("CARGO_PKG_VERSION"));
+            .env("AUTOCLIP_APP_VERSION", env!("CARGO_PKG_VERSION"))
+            // The backend exits when this process is gone, even after kill -9 or a crash
+            // (macOS has no Job Object; on Windows the job already covers it).
+            .env("AUTOCLIP_PARENT_PID", std::process::id().to_string());
 
         // 崩溃上报：构建时若注入了 SENTRY_DSN，传给 Python 后端（未配置则为空，sentry_setup no-op）
         if let Some(dsn) = option_env!("SENTRY_DSN") {

@@ -30,12 +30,24 @@ logger = logging.getLogger(__name__)
 STUDIO_TRANSCRIBING_MESSAGE = '正在生成字幕'
 STUDIO_PRODUCTION_MESSAGE = '正在制作可发布成片'
 
+# Transcription is the slow part of SUBTITLE (minutes for a long talk), so it gets almost the whole
+# stage band: sub-steps 5 → 95 of SUBTITLE, i.e. the project bar moves from 10% to 24% with the audio.
+# #301 used sub-steps 25 → 40, which compute_percent turns into only 13% → 16% of the project bar
+# (SUBTITLE is the 10–25% band), so the home card sat at 14–16% for the whole run (RC156 #22).
+TRANSCRIBE_START_SUBPERCENT = 5
+TRANSCRIBE_DONE_SUBPERCENT = 100
+
+
+def transcription_subpercent(fraction: float) -> float:
+    """SUBTITLE sub-step for `fraction` of the audio transcribed."""
+    return TRANSCRIBE_START_SUBPERCENT + 90 * max(0.0, min(1.0, fraction))
+
 
 class TranscriptionProgress:
     """Show transcription progress as the share of audio already processed (RC156 Win QA #14).
 
-    - Project progress bar: SUBTITLE advances smoothly between its 25% and 40% sub-steps
-      instead of sitting on fixed checkpoints.
+    - Project progress bar (home card, project page): SUBTITLE follows the audio across most of
+      its band (10% → 24% of the whole bar) instead of sitting on fixed checkpoints.
     - Studio (managed import): analysis shows 「正在生成字幕 · N%」 with N = processed / total audio.
     Writes are throttled to whole-percent steps at most every `interval` seconds.
     """
@@ -55,7 +67,7 @@ class TranscriptionProgress:
         if percent <= self.last_percent or (percent < 100 and self.last_at is not None and now - self.last_at < self.interval):
             return
         self.last_percent, self.last_at = percent, now
-        emit_progress(self.project_id, "SUBTITLE", "正在使用AI生成字幕...", subpercent=25 + 15 * fraction)
+        emit_progress(self.project_id, "SUBTITLE", "正在使用AI生成字幕...", subpercent=transcription_subpercent(fraction))
         self._studio(lambda analysis: analysis.update(message=STUDIO_TRANSCRIBING_MESSAGE, percent=percent))
 
     def _studio(self, update) -> None:
@@ -145,7 +157,7 @@ class SimplePipelineAdapter:
             
             # 更新进度
             from backend.services.simple_progress import emit_progress
-            emit_progress(self.project_id, "SUBTITLE", "正在使用AI生成字幕...", subpercent=25)
+            emit_progress(self.project_id, "SUBTITLE", "正在使用AI生成字幕...", subpercent=TRANSCRIBE_START_SUBPERCENT)
             
             # 使用当前所选转写服务生成字幕
             try:
@@ -172,7 +184,7 @@ class SimplePipelineAdapter:
                 
                 if srt_path and srt_path.exists():
                     logger.info(f"转写生成字幕成功: {srt_path}")
-                    emit_progress(self.project_id, "SUBTITLE", "AI字幕生成完成", subpercent=40)
+                    emit_progress(self.project_id, "SUBTITLE", "AI字幕生成完成", subpercent=TRANSCRIBE_DONE_SUBPERCENT)
                     return srt_path
                 logger.warning("转写生成字幕失败")
                     
@@ -304,7 +316,7 @@ class SimplePipelineAdapter:
                 logger.info("执行Step 1: 大纲提取")
                 llm_usage.set_stage("outline")
                 outlines = run_step1_outline(srt_path, metadata_dir=metadata_dir, prompt_files=prompt_files)
-                emit_progress(self.project_id, "SUBTITLE", "字幕处理完成", subpercent=50)
+                emit_progress(self.project_id, "SUBTITLE", "字幕处理完成", subpercent=100)  # never behind the transcription band
             
                 # 阶段3: 内容分析
                 emit_progress(self.project_id, "ANALYZE", "开始内容分析")

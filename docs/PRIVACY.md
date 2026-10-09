@@ -109,7 +109,7 @@ AutoClip（以下简称"本软件""我们"）是一款**本地优先**的桌面�
 ## 五、数据存储与保留
 
 - **本地数据**（项目、视频、字幕、配置、密钥）：存储于你本机，由你完全掌控；删除项目即清除该项目的数据。卸载软件默认保留这些数据，便于重装后继续使用：
-  - Windows：卸载时勾选「同时删除 AutoClip 数据（项目、设置、API 密钥）」会一并删除 `%APPDATA%\AutoClip`；默认不勾选。静默卸载只有显式传入 `/DELETEAPPDATA` 才删除；升级安装从不删除。
+  - Windows：卸载时勾选「同时删除 AutoClip 数据（项目、设置、API 密钥）」会一并删除 `%APPDATA%\AutoClip` 和应用的 WebView 数据（`%APPDATA%\com.autoclip.desktop`、`%LOCALAPPDATA%\com.autoclip.desktop`）；默认不勾选。静默卸载只有显式传入 `/DELETEAPPDATA` 才删除，删除范围与勾选时相同；升级安装从不删除。
   - macOS / Linux：请手动删除数据目录 `~/Library/Application Support/AutoClip` 或 `~/.local/share/AutoClip`。
 - **匿名统计数据**：存储于 PostHog，保留期限遵循我们设定的数据保留策略（默认不超过 **12 个月**），到期自动清理或匿名化。
 - **崩溃报告**：存储于 Sentry，默认保留不超过 **90 天**。
