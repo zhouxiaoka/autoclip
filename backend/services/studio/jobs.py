@@ -386,10 +386,17 @@ def run_content(project_id, video):
     if not result or not result.get('success'):
         message = (result or {}).get('error') or '内容切片未完成，请检查语音与文字模型设置后重试'
         failure = (result or {}).get('result') or {}
+        # The original exception does not survive apply().get(): the adapter records the provider
+        # HTTP status in the result dict and it is carried back here (RC156 Win QA #1).
+        status = failure.get('http_status')
+        status = status if type(status) is int and 400 <= status <= 599 else None
         if failure.get('error_code') or failure.get('stage'):
             from backend.pipeline.failures import PipelineFailure
-            raise PipelineFailure(failure.get('stage', ''), message, code=failure.get('error_code') or '')
-        raise RuntimeError(message)
+            raise PipelineFailure(failure.get('stage', ''), message, code=failure.get('error_code') or '', http_status=status)
+        error = RuntimeError(message)
+        if status is not None:
+            error.http_status = status
+        raise error
 
     clips = result.get('result', {}).get('result', {}).get('titled_clips')
     if not clips:
