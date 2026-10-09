@@ -103,22 +103,41 @@ def test_post_uninstall_hook_only_runs_the_guarded_removals():
     ]
 
 
-def test_user_data_removal_deletes_exactly_appdata_autoclip():
+# The template's GUI checkbox block (tauri-bundler 2.10.1 installer.nsi, Section Uninstall) deletes
+#   RmDir /r "$APPDATA\${BUNDLEID}" and RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
+# and only runs for the ticked checkbox. Silent /DELETEAPPDATA never reaches it (RC156 #24), so the
+# hook deletes the same two plus %APPDATA%\AutoClip for every "delete my data" decision.
+USER_DATA_DIRS = ['$APPDATA\\AutoClip', '$APPDATA\\${BUNDLEID}', '$LOCALAPPDATA\\${BUNDLEID}']
+
+
+def test_user_data_removal_deletes_exactly_the_gui_checkbox_directories():
     body = _macro('AUTOCLIP_DELETE_USER_DATA')
     removals = [line for line in body if line.startswith(('RMDir', 'RmDir', 'Delete'))]
-    assert removals == ['RMDir /r "$APPDATA\\AutoClip"']
+    assert removals == [f'RMDir /r "{path}"' for path in USER_DATA_DIRS]
     code = _code(HOOKS.read_text(encoding='utf-8'))
     assert re.findall(r'(?im)^\s*(?:RMDir|Delete)\b.*$', code) == [
         '    RMDir /r "$INSTDIR\\resources\\backend"',
-        '      RMDir /r "$APPDATA\\AutoClip"',
+        *[f'      RMDir /r "{path}"' for path in USER_DATA_DIRS],
         *[f'    {line}' for line in LEFTOVER_REMOVALS],
     ]
-    for forbidden in ('*', '..', '$LOCALAPPDATA', '$PROFILE', '$DOCUMENTS', '$TEMP', 'SetShellVarContext all'):
+    for forbidden in ('*', '..', '$PROFILE', '$DOCUMENTS', '$TEMP', 'SetShellVarContext all', '$INSTDIR'):
         assert not any(forbidden in line for line in removals), forbidden
-    # Guarded by: AppData resolved for the current user, non-empty, and the dir exists.
-    rmdir = body.index('RMDir /r "$APPDATA\\AutoClip"')
-    for guard in ('SetShellVarContext current', '${If} "$APPDATA" != ""', '${AndIf} ${FileExists} "$APPDATA\\AutoClip\\*.*"'):
-        assert body.index(guard) < rmdir, guard
+    # Each removal is guarded by: shell folders resolved for the current user, non-empty, and the dir exists.
+    context = body.index('SetShellVarContext current')
+    for path in USER_DATA_DIRS:
+        rmdir = body.index(f'RMDir /r "{path}"')
+        root = path.split('\\', 1)[0]
+        assert context < rmdir
+        assert body[rmdir - 2:rmdir] == [f'${{If}} "{root}" != ""', f'${{AndIf}} ${{FileExists}} "{path}\\*.*"'] or \
+            body[rmdir - 3:rmdir - 1] == [f'${{If}} "{root}" != ""', f'${{AndIf}} ${{FileExists}} "{path}\\*.*"'], path
+
+
+def test_silent_delete_appdata_and_gui_checkbox_share_one_removal_block():
+    body = _macro('AUTOCLIP_DELETE_USER_DATA')
+    block = body[body.index('${If} $R9 = 1'):body.index('Pop $R9')]
+    # Both decisions only set $R9; the one removal block (all three directories) follows.
+    assert sum(line == '${If} $R9 = 1' for line in body) == 1
+    assert [line for line in block if line.startswith('RMDir')] == [f'RMDir /r "{path}"' for path in USER_DATA_DIRS]
 
 
 def test_user_data_removal_is_never_done_on_update_or_installer_driven_uninstall():

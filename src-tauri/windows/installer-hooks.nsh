@@ -50,7 +50,10 @@
 ; 卸载时删除用户数据（RC156 Win QA #15）。模板的「删除应用数据」勾选框只删
 ; $APPDATA\com.autoclip.desktop 和 $LOCALAPPDATA\com.autoclip.desktop（WebView 数据），
 ; 项目、设置、API 密钥所在的 %APPDATA%\AutoClip 一直留着，与隐私说明不符。
-; 破坏性操作，条件全部满足才删，而且只删这一个目录（不用通配符，不碰上级目录）：
+; 静默 /DELETEAPPDATA 不经过模板的勾选框分支，过去只删 %APPDATA%\AutoClip，WebView 数据留着
+; （RC156 Win QA #24）。所以这里删除与图形界面勾选时相同的三个目录；勾选时模板已删过的两个
+; 目录在这里已不存在，FileExists 不成立，什么也不做。
+; 破坏性操作，条件全部满足才删，而且只删这三个固定目录（不用通配符，不碰上级目录）：
 ;   - 不是更新：模板的 /UPDATE（$UpdateMode = 1）一律不删；
 ;   - 不是安装器发起的「安装前卸载」：用户自己运行的卸载程序会先把自己复制到 %TEMP% 再运行，
 ;     安装器则带 _?= 原地运行（$EXEDIR = $INSTDIR），这种升级卸载一律不删；
@@ -79,6 +82,15 @@
     ${AndIf} ${FileExists} "$APPDATA\AutoClip\*.*"
       DetailPrint "Deleting AutoClip data: $APPDATA\AutoClip"
       RMDir /r "$APPDATA\AutoClip"
+    ${EndIf}
+    ${If} "$APPDATA" != ""
+    ${AndIf} ${FileExists} "$APPDATA\${BUNDLEID}\*.*"
+      RMDir /r "$APPDATA\${BUNDLEID}"
+    ${EndIf}
+    ${If} "$LOCALAPPDATA" != ""
+    ${AndIf} ${FileExists} "$LOCALAPPDATA\${BUNDLEID}\*.*"
+      DetailPrint "Deleting WebView data: $LOCALAPPDATA\${BUNDLEID}"
+      RMDir /r "$LOCALAPPDATA\${BUNDLEID}"
     ${EndIf}
   ${EndIf}
   Pop $R9
