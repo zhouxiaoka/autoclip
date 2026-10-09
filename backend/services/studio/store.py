@@ -547,11 +547,12 @@ def settle_generation(data):
             data['generation'].pop('failure_stage', None)
         if not variants:
             data['generation']['error'] = '没有自动生成的成片，可选择备选片段继续生成'
+        elif code == RESTART_CODE:
+            # Killed mid-render (RC156 #13 case 4b, #30): the project index needs a reason, also when some
+            # videos were already saved (partial), otherwise the project fails with no reason and no code.
+            data['generation']['error'] = RESTART_MESSAGE
         elif completed:
             data['generation'].pop('error', None)
-        elif code == RESTART_CODE:
-            # Killed mid-render (RC156 #13 case 4b): the project index needs a reason, not an empty string.
-            data['generation']['error'] = RESTART_MESSAGE
         elif not data['generation'].get('error'):
             reasons = [item.get('error') or jobs.get(item.get('render_job_id'), {}).get('error') for item in variants]
             reason = next((text for text in reasons if isinstance(text, str) and text), None)
