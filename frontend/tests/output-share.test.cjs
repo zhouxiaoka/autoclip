@@ -34,7 +34,7 @@ test('use-case invite goes to GitHub Discussions and nothing is uploaded',()=>{
 })
 
 test('share and rating analytics only carry allowlisted enums',()=>{
- assert.match(workflow,/share_target: \['copy_caption', 'use_case_discussion'\]/)
+ assert.match(workflow,/share_target: \['copy_caption', 'use_case_discussion', 'copy_and_save'\]/)
  assert.match(workflow,/output_rating: \['ready', 'needs_edit', 'unusable'\]/)
  assert.match(studio,/captureBusinessEvent\('studio_output_shared', safeStudioProperties\(\{ \.\.\.workflow\.context\(projectId\), \.\.\.properties \}\)\)/)
  assert.match(studio,/captureBusinessEvent\('studio_output_rated', safeStudioProperties\(\{ \.\.\.workflow\.context\(projectId\), \.\.\.properties \}\)\)/)

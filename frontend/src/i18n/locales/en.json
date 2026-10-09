@@ -1575,6 +1575,8 @@
   "链接导入不等待本地转写": "Link import does not wait for local transcription",
   "制作完成时通知": "Notify when a cut is ready",
   "复制文案并保存视频和封面": "Copy the caption and save the video and cover",
+  "文案已复制，视频和封面已保存": "Caption copied. The video and cover are saved.",
+  "按内容完整度选出这段": "Chosen because the moment is complete",
   "先渲染得分最高的几条": "Render the highest-scoring clips first",
   "在卡片上写选片理由": "Show why a clip was chosen",
   "隐藏旧的制作入口": "Hide the legacy entry points",

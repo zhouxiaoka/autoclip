@@ -1,3 +1,4 @@
+import { flagAssigned } from './flags'
 import { captureBusinessEvent } from './posthog'
 import { workflow } from './observer'
 import { errorCode, safeStudioProperties, telemetryId, type Properties, type StudioSnapshot } from './workflow'
@@ -54,10 +55,10 @@ export function trackLegacyEntry(properties: Record<string, unknown>, assigned: 
 }
 
 /** Enum/boolean summary of one output variant for delivery events; never titles, captions or names. */
-export type VariantProperties = { strategy_id?: string; template?: string; packaging_style?: string; framing?: string; artifact_type?: 'video' | 'publish_kit'; outro_applied?: boolean }
+export type VariantProperties = { strategy_id?: string; template?: string; packaging_style?: string; framing?: string; artifact_type?: 'video' | 'publish_kit' | 'combined' | 'cover_3x4'; outro_applied?: boolean }
 
 /** Share intent only: which enum target, never the caption, title or link text. */
-export function trackOutputShare(projectId: string, properties: { share_target: 'copy_caption' | 'use_case_discussion' } & VariantProperties) {
+export function trackOutputShare(projectId: string, properties: { share_target: 'copy_caption' | 'use_case_discussion' | 'copy_and_save' } & VariantProperties) {
   captureBusinessEvent('studio_output_shared', safeStudioProperties({ ...workflow.context(projectId), ...properties }))
 }
 
@@ -136,7 +137,10 @@ export async function observeStudioWorkspace<T extends StudioSnapshot>(projectId
   if (enabled && workflow.active(generation)) workflow.rememberProject(projectId, snapshot as Record<string, unknown>)
   if (enabled && workflow.active(generation)) {
     try {
-      for (const watch of watches) workflow.observeStudio(watch, snapshot)
+      for (const watch of watches) {
+        workflow.noteFirstClip(watch, snapshot, flagAssigned('render_top_first'))
+        workflow.observeStudio(watch, snapshot)
+      }
     } catch { /* telemetry cannot prevent the editor from opening */ }
   }
   return snapshot

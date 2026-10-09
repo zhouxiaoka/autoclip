@@ -282,7 +282,7 @@ test('Studio screening distinguishes recommendations, manual fallback and import
 })
 test('actual Studio API enrolls accepted work and sends aggregate-only telemetry',async()=>{
   const s=setup(memory(),()=>Date.now())
-  const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+  const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const transport={defaults:{},post:async(url)=>url==='/studio/import'?{project_id:'private-project'}:url.endsWith('/export')?{job_id:'private-job'}:{}}
   const file=path.join(__dirname,'../src/features/studio/api.ts')
   const js=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText
@@ -302,7 +302,7 @@ test('actual Studio API enrolls accepted work and sends aggregate-only telemetry
   assert.equal(s.events.length,6)
 })
 test('Studio aggregate requests retain failures and respect consent changes in flight',async()=>{
-  const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+  const s=setup();const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const failure={response:{status:401},message:'private-key'}
   await assert.rejects(aggregate.observeStudioOperation('studio_export',async()=>{throw failure},()=>{}),e=>e===failure)
   assert.equal(s.events[1].props.error_code,'http_401')
@@ -341,7 +341,7 @@ test('immutable export repeated acceptance does not recount its completion',()=>
  assert.equal(s.events.length,1);assert.ok(insert.startsWith('studio-v1:'))
 })
 test('native download emits saved or failed, and opt-out in flight suppresses results',async()=>{
- const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const s=setup();const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
  await aggregate.observeStudioDownload(async()=>42)
  assert.equal(s.events[1].event,'studio_download_saved')
  await assert.rejects(aggregate.observeStudioDownload(async()=>{throw Error('private filename')}))
@@ -351,7 +351,7 @@ test('native download emits saved or failed, and opt-out in flight suppresses re
 })
 
 test('social publishing distinguishes scheduling and inbox acceptance from published content',()=>{
- const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const s=setup();const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
  assert.equal(aggregate.socialPublishOutcome('scheduled',true,[]),'scheduled')
  assert.equal(aggregate.socialPublishOutcome('submitted',false,[{success:true,fallback_to_inbox:true}]),'inbox')
  assert.equal(aggregate.socialPublishOutcome('completed',false,[]),'unknown')
@@ -363,7 +363,7 @@ test('social publishing distinguishes scheduling and inbox acceptance from publi
 })
 
 test('UI workspace snapshots capture fast screening before confirm and never enroll historical projects',async()=>{
- const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const s=setup();const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
  const snapshot={plan:{id:'plan',mode:'local'},analysis:{status:'awaiting_confirmation'}}
  await aggregate.observeStudioWorkspace('p',async()=>snapshot);assert.equal(s.events.length,0)
  s.tracker.watch('studio-screen','p')
@@ -374,7 +374,7 @@ test('UI workspace snapshots capture fast screening before confirm and never enr
 })
 
 test('late workspace response cannot settle a newer rescreen attempt',async()=>{
- const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const s=setup();const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
  s.tracker.watch('studio-screen','p');let finish
  const pending=aggregate.observeStudioWorkspace('p',()=>new Promise(r=>finish=r))
  s.tracker.watch('studio-screen','p',undefined,undefined,{},true)
@@ -465,7 +465,7 @@ test('actual discovery ignores stale completions and distinguishes preview from 
 })
 
 test('sample render and native save share an artifact without exposing backend IDs',async()=>{
- const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const s=setup();const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
  s.tracker.rememberProject('private-sample',{material_origin:'sample',example_version:1})
  const ctx=s.tracker.context('private-sample','private-job')
  s.tracker.watch('studio-export','private-job','private-sample',undefined,ctx)
@@ -488,7 +488,7 @@ test('retrying the same plan retains both execution attempts until independently
 })
 
 test('actual auto-frame API distinguishes automatic zero detection from retained edits',async()=>{
- const s=setup();const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const s=setup();const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
  const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':{post:async()=>({scenes:[{crop_x:null,fit_shots:2}]})},'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}})
  s.tracker.rememberProject('private-project',{material_origin:'user'})
  await api.studioApi.autoFrame('private-project',{layout:'crop',scenes:[]},'auto')
@@ -517,7 +517,7 @@ test('framing installation retries use distinct terminal deduplication keys',()=
 
 test('1.5 API observes cover and retry terminal results across restart without content',async()=>{
  const s=setup()
- const aggregate=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
  const transport={post:async url=>url.endsWith('/cover/ai')?{job_id:'private-cover',status:'queued'}:{job_id:'private-new-render',status:'queued'},get:async()=>({job_id:'private-cover',status:'completed'}),put:async()=>({title:'private-title',description:'private-description',tags:['private-tag']})}
  const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}}).studioApi
  s.tracker.rememberProject('private-project',{material_origin:'user'})
@@ -541,7 +541,7 @@ test('1.5 API observes cover and retry terminal results across restart without c
 })
 
 test('publish kit saving has disk evidence; browser clicks and opt-out never invent success',async()=>{
- const s=setup();const x=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const s=setup();const x=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
  const props={artifact_type:'publish_kit',strategy_id:'douyin'}
  x.studioDownloadRequested('private-project','private-render',props)
  assert.equal(s.events.length,1);assert.equal(s.events[0].props.download_mode,'browser')
@@ -555,7 +555,7 @@ test('publish kit saving has disk evidence; browser clicks and opt-out never inv
 })
 
 test('portrait import and saved outro preference retain explicit enums and confirmed state',()=>{
- const s=setup();const x=load('studio',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+ const s=setup();const x=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
  const body=new FormData();body.set('portrait_style','podcast');body.set('name','private name');body.append('platforms','douyin')
  const props=core.safeStudioProperties(x.studioImportProperties(body))
  assert.equal(props.portrait_style,'podcast');assert.equal(props.brand_outro_enabled,undefined)

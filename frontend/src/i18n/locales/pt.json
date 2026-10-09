@@ -1575,6 +1575,8 @@
   "链接导入不等待本地转写": "Importar um link não espera a transcrição local",
   "制作完成时通知": "Avisar quando um corte ficar pronto",
   "复制文案并保存视频和封面": "Copiar o texto e salvar o vídeo e a capa",
+  "文案已复制，视频和封面已保存": "Texto copiado. O vídeo e a capa foram salvos.",
+  "按内容完整度选出这段": "Escolhido porque o momento está completo",
   "先渲染得分最高的几条": "Renderizar primeiro os clipes com maior pontuação",
   "在卡片上写选片理由": "Mostrar por que o clipe foi escolhido",
   "隐藏旧的制作入口": "Ocultar os acessos antigos",

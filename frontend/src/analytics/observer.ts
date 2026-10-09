@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { apiConfigManager } from '../utils/apiConfig'
+import { flagAssigned } from './flags'
 import { captureBusinessEvent, isAnalyticsEnabled, onAnalyticsPreferenceChange } from './posthog'
 import { WorkflowTracker, type TaskSnapshot } from './workflow'
 
@@ -35,7 +36,10 @@ export function startWorkflowObserver(): () => void {
             }
           } else if (w.kind.startsWith('studio-')) {
             const { data } = await axios.get(`/studio/${encodeURIComponent(w.projectId || w.id)}`, { baseURL, timeout: 5000 })
-            if (!stopped && workflow.active(generation)) workflow.observeStudio(w, data)
+            if (!stopped && workflow.active(generation)) {
+              workflow.noteFirstClip(w, data, flagAssigned('render_top_first'))
+              workflow.observeStudio(w, data)
+            }
           } else if (w.kind === 'project') {
             const { data } = await axios.get<TaskSnapshot[]>(`/tasks/project/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000 })
             if (!stopped && workflow.active(generation) && Array.isArray(data)) workflow.observeTasks(w, data)

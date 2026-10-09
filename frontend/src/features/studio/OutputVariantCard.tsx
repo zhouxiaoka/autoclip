@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { t } from '../../i18n'
 import { Btn, fmtDuration } from '../../ui'
 import { trackOutputShare, type VariantProperties } from '../../analytics/studio'
+import { flagAssigned, useFlag } from '../../analytics/flags'
+import { clipReason } from './clipReason'
 import StudioDownloadLink from './StudioDownloadLink'
 import OutputFeedback from './OutputFeedback'
 import { Draft, OutputVariant, RenderJob } from './types'
@@ -25,6 +27,8 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const navigate = useNavigate()
   const [asking, setAsking] = useState(false)
   const [coverStamp, setCoverStamp] = useState(0)
+  const showReason = useFlag('clip_reasons') === true
+  const reason = showReason ? clipReason({ evidence: draft?.scenes[0]?.evidence, framing: variant.framing }) : null
   const packaging = draft?.packaging
   const analytics: VariantProperties = {
     strategy_id: variant.strategy_id, framing: variant.framing, template: packaging?.template,
@@ -49,7 +53,8 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
       {!variant.post && <h2 className="ac-card-title">{draft?.title || t('正在准备成片')}</h2>}
       {variant.trimmed_to_sec && <p className="studio-output-hint">{t('平台上限 {{seconds}} 秒，已在句子结束处截断', { seconds: variant.trimmed_to_sec })}</p>}
       {packagingHint && <p className="studio-output-hint">{packagingHint}</p>}
-      <PublishKit projectId={projectId} variant={variant} analytics={analytics} coverStamp={coverStamp} onCoverChanged={() => setCoverStamp(Date.now())} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })}/>
+      {reason && <p className="studio-clip-reason">{reason.kind === 'evidence' ? reason.evidence : t(reason.key)}</p>}
+      <PublishKit projectId={projectId} variant={variant} analytics={analytics} coverStamp={coverStamp} onCoverChanged={() => setCoverStamp(Date.now())} onCopied={() => trackOutputShare(projectId, { share_target: 'copy_caption', ...analytics })} onCombined={() => { if (flagAssigned('publish_pack_v2')) trackOutputShare(projectId, { share_target: 'copy_and_save', ...analytics }) }}/>
       {failed && <p className="studio-output-hint studio-error">{t(variant.error || job?.error || '这条版本未完成，其他成片不受影响。')}</p>}
       <div className="ac-card-foot"><div className="ac-card-actions">
         {draft && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/studio/${draft.id}`)}>{t('预览与修改')}</Btn>}
