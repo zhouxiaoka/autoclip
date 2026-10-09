@@ -2,6 +2,10 @@
 
 [项目首页与八语 README](../README.md) · [English README](../README-EN.md)
 
+## 研究
+
+- [研究笔记 #1：选对瞬间，而不是堆特效](research/2026-10-what-drives-views/article-zh.md) · [English](research/2026-10-what-drives-views/article-en.md) · [Sources](research/2026-10-what-drives-views/sources.md)
+
 ## 1.4 成片包装
 
 - [包装使用指南](FINISHING_GUIDE.md)
