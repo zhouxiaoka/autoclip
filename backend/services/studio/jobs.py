@@ -540,8 +540,18 @@ def _content_drafts(project_id, plan, video):
         raise ValueError('没有可用的自动分析路径，请检查模型设置后重试')
     if not intelligence.ready():
         raise ValueError('请先在设置中配置视觉理解模型')
-    events, coverage = analyze(video, prefs)
-    drafts = make_drafts(events, prefs, plan.get('overrides', {}).get('instruction', ''), source_duration=intelligence._probe(video).get('duration'))
+    try:
+        events, coverage = analyze(video, prefs)
+        drafts = make_drafts(events, prefs, plan.get('overrides', {}).get('instruction', ''), source_duration=intelligence._probe(video).get('duration'))
+    except ValueError as error:
+        # A silent source that the visual route could not cut (RC156 Win QA #19): explain the missing
+        # sound and point to an SRT instead of a bare 「没有找到可用镜头」. Model/network errors
+        # (VisionRequestError) keep their own message.
+        from backend.pipeline import media_precheck
+        silent = media_precheck.silent_visual_failure(video, srt_available=(Path(video).parent / 'input.srt').is_file())
+        if silent is None:
+            raise
+        raise silent from error
     return drafts, [event.model_dump() for event in events], coverage
 
 

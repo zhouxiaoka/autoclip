@@ -1553,6 +1553,7 @@
   "视频太短：不到 20 秒，按字幕切不出完整片段。请换一段 20 秒以上的视频。": "La vidéo est trop courte : en dessous de 20 secondes, impossible de découper un extrait complet à partir des sous-titres. Utilisez une vidéo d’au moins 20 secondes.",
   "这个视频没有声音，无法生成字幕。请附上 SRT 字幕后重新导入；想按画面剪辑，可在「设置 → AI 模型」选用支持图片的模型并开启「画面识别」。": "Cette vidéo n’a pas de son : impossible de générer des sous-titres. Joignez un SRT puis importez-la à nouveau ; pour monter à partir de l’image, choisissez dans Paramètres → AI models un modèle qui accepte les images et activez Analyse d’image.",
   "这个视频没有声音，无法生成字幕，画面判断也没有选出可按画面剪辑的内容。请附上 SRT 字幕后重新导入。": "Cette vidéo n’a pas de son : impossible de générer des sous-titres, et l’analyse d’image n’a rien trouvé à monter à partir de l’image. Joignez un SRT puis importez-la à nouveau.",
+  "这个视频没有声音，无法生成字幕；按画面识别也没有找到可用片段。请附上 SRT 字幕后重新导入，改按字幕制作。": "Cette vidéo n’a pas de son : impossible de générer des sous-titres, et l’analyse d’image n’a trouvé aucun extrait exploitable. Joignez un SRT puis importez-la à nouveau pour monter à partir des sous-titres.",
   "服务已重启，请重新生成": "Le service a redémarré. Veuillez relancer la génération.",
   "服务已重启，请重试这条": "Le service a redémarré. Veuillez réessayer cette version.",
   "服务已重启，请重新生成封面": "Le service a redémarré. Veuillez régénérer la couverture.",
