@@ -42,7 +42,7 @@ Local correlation mappings retain up to 500 projects active within 35 days and 1
 - **Anonymity**: We use a randomly generated device identifier and do not build identifiable user profiles.
 - **Recipient**: PostHog Inc., with data stored on its **United States** servers (see Section 6, "International Transfers").
 - **Local buffering**: Events are batched locally before sending; network issues do not affect normal use of the Software.
-- **Feature flags**: The Software requests boolean or enum feature-flag values from PostHog only while Anonymous Usage Analytics is on, to decide whether an interface that is not fully rolled out is shown. Turning analytics off sends no flag request, and every new feature stays at its build-time off default. Flag values do not include video, subtitles, or keys. Experiment overrides under Settings stay on this computer.
+- **Feature flags**: The Software requests boolean or enum feature-flag values from PostHog only while Anonymous Usage Analytics is on, to decide whether an interface that is not fully rolled out is shown. Turning analytics off sends no flag request, and every new feature stays at its build-time off default. Flag values do not include video, subtitles, or keys. Experiment overrides stay on this computer and appear only in a development build's settings. Release builds do not show that section.
 
 ### 2.2 Crash reports (optional, on by default)
 

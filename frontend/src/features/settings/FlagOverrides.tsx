@@ -34,9 +34,15 @@ function choice(override: FlagValue | null): string {
   return String(override)
 }
 
+/** The panel is a developer tool. `vite build` sets DEV to false, so release builds omit it. */
+export function flagOverridesVisible(): boolean {
+  return import.meta.env.DEV === true
+}
+
 /** Local overrides for internal checks. Remote flags are never requested from here. */
 export default function FlagOverrides() {
   useSyncExternalStore(subscribeFlags, () => FLAG_NAMES.map(name => String(flagOverride(name))).join('|'), () => '')
+  if (!flagOverridesVisible()) return null
   return <Section title={t('实验功能')} description={t('只在这台电脑上覆盖功能开关。关闭匿名统计后不会请求远程开关，没有覆盖时新功能保持关闭。')}>
     <div className="ac-rows">
       {FLAG_NAMES.map(name => {
