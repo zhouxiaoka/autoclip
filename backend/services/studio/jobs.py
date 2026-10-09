@@ -386,10 +386,17 @@ def run_content(project_id, video):
     if not result or not result.get('success'):
         message = (result or {}).get('error') or '内容切片未完成，请检查语音与文字模型设置后重试'
         failure = (result or {}).get('result') or {}
+        # The original exception does not survive apply().get(): the adapter records the provider
+        # HTTP status in the result dict and it is carried back here (RC156 Win QA #1).
+        status = failure.get('http_status')
+        status = status if type(status) is int and 400 <= status <= 599 else None
         if failure.get('error_code') or failure.get('stage'):
             from backend.pipeline.failures import PipelineFailure
-            raise PipelineFailure(failure.get('stage', ''), message, code=failure.get('error_code') or '')
-        raise RuntimeError(message)
+            raise PipelineFailure(failure.get('stage', ''), message, code=failure.get('error_code') or '', http_status=status)
+        error = RuntimeError(message)
+        if status is not None:
+            error.http_status = status
+        raise error
 
     clips = result.get('result', {}).get('result', {}).get('titled_clips')
     if not clips:
@@ -533,8 +540,18 @@ def _content_drafts(project_id, plan, video):
         raise ValueError('没有可用的自动分析路径，请检查模型设置后重试')
     if not intelligence.ready():
         raise ValueError('请先在设置中配置视觉理解模型')
-    events, coverage = analyze(video, prefs)
-    drafts = make_drafts(events, prefs, plan.get('overrides', {}).get('instruction', ''), source_duration=intelligence._probe(video).get('duration'))
+    try:
+        events, coverage = analyze(video, prefs)
+        drafts = make_drafts(events, prefs, plan.get('overrides', {}).get('instruction', ''), source_duration=intelligence._probe(video).get('duration'))
+    except ValueError as error:
+        # A silent source that the visual route could not cut (RC156 Win QA #19): explain the missing
+        # sound and point to an SRT instead of a bare 「没有找到可用镜头」. Model/network errors
+        # (VisionRequestError) keep their own message.
+        from backend.pipeline import media_precheck
+        silent = media_precheck.silent_visual_failure(video, srt_available=(Path(video).parent / 'input.srt').is_file())
+        if silent is None:
+            raise
+        raise silent from error
     return drafts, [event.model_dump() for event in events], coverage
 
 

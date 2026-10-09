@@ -140,7 +140,9 @@ def process_video_pipeline(
             project = db.query(Project).filter(Project.id == project_id).first()
             # 检查处理结果
             if result.get("status") == "failed":
-                # 处理失败。adapter 返回的是 error（以前这里只读 message，用户看到的永远是「处理失败」四个字）
+                # 处理失败。adapter 返回的是 error（以前这里只读 message，用户看到的永远是「处理失败」四个字）。
+                # stage / error_code / http_status 原样留在 outcome["result"] 里，Studio 的 run_content 靠它们
+                # 还原 PipelineFailure（apply().get() 拿到的是 dict，异常链已经断了，RC156 Win QA #1）。
                 error_msg = result.get("error") or result.get("message") or "处理失败"
                 if task:
                     task.status = TaskStatus.FAILED

@@ -39,6 +39,11 @@ NO_AUDIO_MESSAGE = (
 NO_AUDIO_AFTER_SCREENING_MESSAGE = (
     "这个视频没有声音，无法生成字幕，画面判断也没有选出可按画面剪辑的内容。请附上 SRT 字幕后重新导入。"
 )
+# The visual route ran on a silent source and found nothing usable (RC156 Win QA #19): say why,
+# instead of the bare validation sentence 「没有找到可用镜头」.
+NO_AUDIO_VISUAL_MESSAGE = (
+    "这个视频没有声音，无法生成字幕；按画面识别也没有找到可用片段。请附上 SRT 字幕后重新导入，改按字幕制作。"
+)
 
 
 def probe(video) -> dict:
@@ -88,9 +93,22 @@ def too_short_failure(stage: str = "INGEST") -> PipelineFailure:
     return PipelineFailure(stage, TOO_SHORT_MESSAGE, code=SOURCE_TOO_SHORT)
 
 
-def no_audio_failure(stage: str = "INGEST", *, after_screening: bool = False) -> PipelineFailure:
-    message = NO_AUDIO_AFTER_SCREENING_MESSAGE if after_screening else NO_AUDIO_MESSAGE
+def no_audio_failure(stage: str = "INGEST", *, after_screening: bool = False,
+                     after_visual: bool = False) -> PipelineFailure:
+    message = (NO_AUDIO_VISUAL_MESSAGE if after_visual
+               else NO_AUDIO_AFTER_SCREENING_MESSAGE if after_screening else NO_AUDIO_MESSAGE)
     return PipelineFailure(stage, message, code=SOURCE_NO_AUDIO)
+
+
+def silent_visual_failure(video, srt_available: bool) -> Optional[PipelineFailure]:
+    """The no-audio failure for a visual route that found nothing usable, or None.
+
+    Only a definite "no audio track" without an attached SRT qualifies; an unknown probe keeps
+    the original error.
+    """
+    if srt_available or has_audio(Path(video)) is not False:
+        return None
+    return no_audio_failure("ANALYZE", after_visual=True)
 
 
 def subtitle_route_failure(video, *, srt_available: bool, duration: Optional[float] = None,

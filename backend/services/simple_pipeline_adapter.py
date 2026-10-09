@@ -10,7 +10,7 @@ from pathlib import Path
 from backend.services.simple_progress import emit_progress, clear_progress
 from backend.core.project_cancellation import ProjectDeleted
 from backend.pipeline.failures import (
-    PipelineFailure, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG,
+    PipelineFailure, HINT_LOWER_THRESHOLD, HINT_CHECK_FFMPEG, http_status_of,
     llm_key_failure, failure_from_speech_error, missing_subtitle_failure,
     cloud_transcription_failure,
     empty_timeline_failure,
@@ -442,6 +442,11 @@ class SimplePipelineAdapter:
             }
             if e.code:
                 failed["error_code"] = e.code
+            # 结果是普通 dict（Studio 经 process_video_pipeline.apply().get() 拿到），异常链到这里就断了：
+            # 把上游 HTTP 状态码写进去，jobs.run_content 再带回 PipelineFailure（RC156 Win QA #1）。
+            status = http_status_of(e)
+            if status is not None:
+                failed["http_status"] = status
             return failed
         except Exception as e:
             error_msg = f"流水线处理失败: {str(e)}"
@@ -449,14 +454,18 @@ class SimplePipelineAdapter:
             
             # 发送失败状态
             emit_progress(self.project_id, "DONE", f"处理失败: {error_msg}")
-            
-            return {
+
+            failed = {
                 "status": "failed",
                 "project_id": self.project_id,
                 "task_id": self.task_id,
                 "error": error_msg,
                 "message": error_msg,
             }
+            status = http_status_of(e)
+            if status is not None:
+                failed["http_status"] = status
+            return failed
 
 
 def create_simple_pipeline_adapter(project_id: str, task_id: str) -> SimplePipelineAdapter:
