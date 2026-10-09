@@ -582,6 +582,12 @@ def default_ocr_model(provider: str, model: str = "", base_url: str = "") -> str
     return "gpt-4o-mini"
 
 
+def _qwen_thinking_off(model: str, root: str) -> bool:
+    """Cover OCR on a Bailian Qwen3.5–3.8 hybrid model: no hidden reasoning (see llm_providers)."""
+    from backend.core.llm_providers import disables_qwen_thinking
+    return disables_qwen_thinking(model, root)
+
+
 @_image_transport_errors
 def read_image_text(
     *,
@@ -608,6 +614,7 @@ def read_image_text(
                     {"image": data_uri},
                     {"text": instruction},
                 ]}]},
+                **({"parameters": {"enable_thinking": False}} if _qwen_thinking_off(model, root) else {}),
             },
             timeout=60,
         )
@@ -639,6 +646,7 @@ def read_image_text(
             {"type": "text", "text": instruction},
             {"type": "image_url", "image_url": {"url": data_uri}},
         ]}],
+        **({"enable_thinking": False} if _qwen_thinking_off(vision, root) else {}),
     }, seedream=seedream or kind == "seedream")
     data = _raise_for_status(resp)
     choices = data.get("choices") if isinstance(data.get("choices"), list) else []
