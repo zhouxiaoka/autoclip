@@ -96,8 +96,11 @@ def _lang_strings(lang):
     return strings
 
 
-def test_post_uninstall_hook_only_runs_the_guarded_user_data_removal():
-    assert _macro('NSIS_HOOK_POSTUNINSTALL') == ['!insertmacro AUTOCLIP_DELETE_USER_DATA']
+def test_post_uninstall_hook_only_runs_the_guarded_removals():
+    assert _macro('NSIS_HOOK_POSTUNINSTALL') == [
+        '!insertmacro AUTOCLIP_DELETE_USER_DATA',
+        '!insertmacro AUTOCLIP_REMOVE_INSTALL_LEFTOVERS',
+    ]
 
 
 def test_user_data_removal_deletes_exactly_appdata_autoclip():
@@ -108,6 +111,7 @@ def test_user_data_removal_deletes_exactly_appdata_autoclip():
     assert re.findall(r'(?im)^\s*(?:RMDir|Delete)\b.*$', code) == [
         '    RMDir /r "$INSTDIR\\resources\\backend"',
         '      RMDir /r "$APPDATA\\AutoClip"',
+        *[f'    {line}' for line in LEFTOVER_REMOVALS],
     ]
     for forbidden in ('*', '..', '$LOCALAPPDATA', '$PROFILE', '$DOCUMENTS', '$TEMP', 'SetShellVarContext all'):
         assert not any(forbidden in line for line in removals), forbidden
@@ -171,3 +175,44 @@ def test_privacy_docs_match_the_uninstaller():
         assert '`/DELETEAPPDATA`' in doc
     assert '卸载软件或删除项目即清除' not in zh
     assert 'uninstalling the Software or deleting a project removes it' not in en
+
+
+# ---- #23: uninstall leaves resources\python\...\__pycache__\*.pyc, so the install dir stays ----
+
+LEFTOVER_REMOVALS = [
+    'RMDir /r "$INSTDIR\\resources\\python"',
+    'RMDir /r "$INSTDIR\\resources\\backend"',
+    'RMDir /r "$INSTDIR\\resources\\ffmpeg"',
+    'RMDir "$INSTDIR\\resources"',
+    'RMDir "$INSTDIR"',
+]
+
+
+def test_uninstall_removes_runtime_leftovers_in_the_bundled_resource_dirs_only():
+    body = _macro('AUTOCLIP_REMOVE_INSTALL_LEFTOVERS')
+    removals = [line for line in body if line.startswith(('RMDir', 'RmDir', 'Delete'))]
+    assert removals == LEFTOVER_REMOVALS
+    # Recursive removal only for the directories the bundle installs (tauri.windows.conf.json),
+    # the resources dir and the install dir itself only when empty (non-recursive).
+    config = json.loads((ROOT / 'src-tauri' / 'tauri.windows.conf.json').read_text(encoding='utf-8'))
+    bundled = {target.replace('/', '\\') for target in config['bundle']['resources'].values()}
+    recursive = {re.match(r'RMDir /r "\$INSTDIR\\(.+)"$', line).group(1) for line in removals if line.startswith('RMDir /r')}
+    assert recursive == bundled
+    for forbidden in ('*', '..', '$APPDATA', '$LOCALAPPDATA', '$PROFILE', '$DOCUMENTS', '$TEMP', 'RMDir /r "$INSTDIR"'):
+        assert not any(forbidden in line for line in removals), forbidden
+
+
+def test_install_leftovers_are_only_removed_on_a_real_uninstall():
+    body = _macro('AUTOCLIP_REMOVE_INSTALL_LEFTOVERS')
+    first_removal = body.index(LEFTOVER_REMOVALS[0])
+    guards = body[:first_removal]
+    assert guards == [
+        '${If} $UpdateMode <> 1',                          # never on /UPDATE
+        '${AndIf} "$EXEDIR" != "$INSTDIR"',                # never in the installer's pre-install uninstall
+        '${AndIf} "$INSTDIR" != ""',
+        '${AndIfNot} ${FileExists} "$INSTDIR\\${MAINBINARYNAME}.exe"',  # the template really removed the app
+    ]
+    assert body[-1] == '${EndIf}' and body.count('${EndIf}') == 1
+    # Runs after the user-data decision, and never from the install side.
+    assert _macro('NSIS_HOOK_POSTUNINSTALL')[-1] == '!insertmacro AUTOCLIP_REMOVE_INSTALL_LEFTOVERS'
+    assert 'AUTOCLIP_REMOVE_INSTALL_LEFTOVERS' not in '\n'.join(_macro('NSIS_HOOK_PREINSTALL') + _macro('NSIS_HOOK_PREUNINSTALL'))

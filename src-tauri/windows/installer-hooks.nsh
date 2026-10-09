@@ -85,8 +85,31 @@
   Pop $R8
 !macroend
 
+; 卸载后安装目录删不干净（RC156 Win QA #23）：内置 Python 运行时写出的字节码（例如
+; resources\python\Lib\encodings\__pycache__\gbk.cpython-313.pyc）不在安装清单里，模板只按清单
+; Delete 文件、再对每级目录做非递归 RMDir，于是整条 resources\python\... 目录链和安装目录都留下。
+; 模板删完清单里的文件之后，这三个目录里剩下的只可能是运行时生成的文件，整目录删除；
+; 随后只对 resources 和安装目录本身做非递归 RMDir（里面有别的东西就保留）。
+;   - 只动 $INSTDIR\resources 下的三个打包目录（与 tauri.windows.conf.json 的 resources 一致），
+;     不用通配符，不碰 %APPDATA% / %LOCALAPPDATA%；
+;   - 更新（/UPDATE）和安装器发起的「安装前卸载」（$EXEDIR = $INSTDIR）不做：随后就要原地装新版，
+;     resources\python 有 #224 的文件占用风险，PREINSTALL 只清 resources\backend。
+!macro AUTOCLIP_REMOVE_INSTALL_LEFTOVERS
+  ${If} $UpdateMode <> 1
+  ${AndIf} "$EXEDIR" != "$INSTDIR"
+  ${AndIf} "$INSTDIR" != ""
+  ${AndIfNot} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
+    RMDir /r "$INSTDIR\resources\python"
+    RMDir /r "$INSTDIR\resources\backend"
+    RMDir /r "$INSTDIR\resources\ffmpeg"
+    RMDir "$INSTDIR\resources"
+    RMDir "$INSTDIR"
+  ${EndIf}
+!macroend
+
 !macro NSIS_HOOK_POSTUNINSTALL
   !insertmacro AUTOCLIP_DELETE_USER_DATA
+  !insertmacro AUTOCLIP_REMOVE_INSTALL_LEFTOVERS
 !macroend
 
 ; 卸载确认页顶部说明：默认保留数据，勾选才会永久删除（文字在 windows/lang/*.nsh）。
