@@ -224,6 +224,35 @@
   width: 88px;
 }
 
+.studio-post-cover--note,
+.studio-output-card .studio-post-cover--note {
+  aspect-ratio: 3 / 4;
+  width: calc(var(--ac-space-3xl) * 2);
+  transition: border-color var(--ac-t-short) var(--ac-ease-out);
+}
+
+.studio-post-cover--note img,
+.studio-output-card .studio-post-cover--note img {
+  height: 100%;
+  object-fit: cover;
+}
+
+.studio-clip-reason {
+  color: var(--ac-sub);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 var(--ac-space-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-output-card .studio-pack-action {
+  grid-column: 1 / -1;
+  justify-content: center;
+  min-height: 36px;
+}
+
 .studio-output-card .studio-post-title,
 .studio-output-card .studio-post-tags {
   -webkit-box-orient: vertical;

@@ -4,9 +4,11 @@ import { t } from '../../i18n'
 import { Btn } from '../../ui'
 import { studioApi } from './api'
 import { copyText } from './outputShare'
-import { isDesktopDownload, saveLocalFile } from './nativeDownload'
+import { isDesktopDownload, saveLocalFile, saveStudioExport } from './nativeDownload'
 import type { OutputVariant, PostCopy } from './types'
 import { studioDownloadRequested, observeStudioDownload, type VariantProperties } from '../../analytics/studio'
+import { useFlag } from '../../analytics/flags'
+import { captionWithCredit, savePublishPack } from './publishPack'
 
 const LANDSCAPE = new Set(['bilibili', 'youtube_long', 'original'])
 
@@ -16,7 +18,7 @@ export function postCaption(post: PostCopy) {
 }
 
 /** Ready-to-publish copy and cover of one output: read, edit, copy, export as a bundle, redo the cover with AI. */
-export default function PublishKit({ projectId, variant, analytics = {}, coverStamp, onCoverChanged, onCopied }: { projectId: string; variant: OutputVariant; analytics?: VariantProperties; coverStamp: number; onCoverChanged: () => void; onCopied: () => void }) {
+export default function PublishKit({ projectId, variant, analytics = {}, coverStamp, onCoverChanged, onCopied, onCombined }: { projectId: string; variant: OutputVariant; analytics?: VariantProperties; coverStamp: number; onCoverChanged: () => void; onCopied: () => void; onCombined?: () => void }) {
   // A saved edit shows right away: the workspace stops polling once every output is done.
   const [saved, setSaved] = useState<PostCopy | null>(null)
   useEffect(() => setSaved(null), [variant.post])
@@ -27,6 +29,8 @@ export default function PublishKit({ projectId, variant, analytics = {}, coverSt
   const [draft, setDraft] = useState<PostCopy | null>(post || null)
   const [saving, setSaving] = useState(false)
   const [redesigning, setRedesigning] = useState(false)
+  const [packing, setPacking] = useState(false)
+  const combined = useFlag('publish_pack_v2') === 'combined'
   useEffect(() => { if (!editing) setDraft(post || null) }, [post, editing])
   if (!post || !draft) return null
   const save = async () => {
@@ -45,6 +49,36 @@ export default function PublishKit({ projectId, variant, analytics = {}, coverSt
   }
   const kitPath = `/studio/${projectId}/output-variants/${variant.id}/kit`
   const coverUrl = studioApi.variantCover(projectId, variant.id, coverStamp)
+  const noteCover = combined && variant.strategy_id === 'xiaohongshu'
+  const saveCombined = async () => {
+    if (!variant.render_job_id || packing) return
+    if (!(await copyText(captionWithCredit(postCaption(post), variant.strategy_id)))) { message.error(t('复制失败，请稍后重试')); return }
+    onCombined?.()
+    setPacking(true)
+    const coverPath = `/studio/${projectId}/output-variants/${variant.id}/cover`
+    try {
+      const mode = await savePublishPack({
+        desktop: isDesktopDownload(),
+        strategyId: variant.strategy_id,
+        hasCover: !!variant.cover,
+        saveVideo: () => saveStudioExport(projectId, variant.render_job_id!),
+        saveCover: () => saveLocalFile(coverPath),
+        requestDownload: artifact => studioDownloadRequested(projectId, variant.render_job_id, { ...analytics, strategy_id: variant.strategy_id, artifact_type: artifact }),
+        observeDownload: (action, artifact) => observeStudioDownload(action, projectId, variant.render_job_id, { ...analytics, strategy_id: variant.strategy_id, artifact_type: artifact }),
+        openBrowser: kind => {
+          const link = document.createElement('a')
+          link.href = kind === 'video' ? studioApi.video(projectId, variant.render_job_id!, true) : coverUrl
+          link.download = ''
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+        },
+      })
+      message.success(t(mode === 'native' ? '文案已复制，视频和封面已保存' : '发布文案已复制'))
+    } catch {
+      message.error(t('下载失败，请稍后重试'))
+    } finally { setPacking(false) }
+  }
   const exportKit = async (event: React.MouseEvent) => {
     const props = { ...analytics, strategy_id: variant.strategy_id, artifact_type: 'publish_kit' as const }
     if (!isDesktopDownload()) { studioDownloadRequested(projectId, variant.render_job_id, props); return }
@@ -82,7 +116,7 @@ export default function PublishKit({ projectId, variant, analytics = {}, coverSt
       <div className="studio-post-actions"><Btn variant="text" onClick={() => { setDraft(post); setEditing(false) }}>{t('取消')}</Btn><Btn size="sm" loading={saving} onClick={() => void save()}>{t('保存')}</Btn></div>
     </div> : <>
       <div className="studio-post-body">
-        {variant.cover && <a className={`studio-post-cover${LANDSCAPE.has(variant.strategy_id) ? ' studio-post-cover--wide' : ''}`} href={coverUrl} target="_blank" rel="noreferrer" title={t('查看封面')}>
+        {variant.cover && <a className={`studio-post-cover${noteCover ? ' studio-post-cover--note' : LANDSCAPE.has(variant.strategy_id) ? ' studio-post-cover--wide' : ''}`} href={coverUrl} target="_blank" rel="noreferrer" title={t('查看封面')}>
           <img src={coverUrl} alt={t('封面')}/>
         </a>}
         <div className="studio-post-text">
@@ -92,9 +126,11 @@ export default function PublishKit({ projectId, variant, analytics = {}, coverSt
         </div>
       </div>
       <div className="studio-post-actions">
-        <Btn variant="text" onClick={() => void copy()}>{t('复制发布文案')}</Btn>
+        {combined && variant.status === 'completed' && variant.render_job_id
+          ? <Btn className="studio-pack-action" loading={packing} onClick={() => saveCombined()}>{t('复制文案并保存视频和封面')}</Btn>
+          : <Btn variant="text" onClick={() => void copy()}>{t('复制发布文案')}</Btn>}
         <Btn variant="text" onClick={() => setEditing(true)}>{t('编辑文案')}</Btn>
-        {variant.status === 'completed' && <a className="studio-link" href={studioApi.variantKit(projectId, variant.id)} download onClick={event => void exportKit(event)}>{t('导出发布包')}</a>}
+        {!combined && variant.status === 'completed' && <a className="studio-link" href={studioApi.variantKit(projectId, variant.id)} download onClick={event => void exportKit(event)}>{t('导出发布包')}</a>}
         {variant.status === 'completed' && <Btn variant="text" loading={redesigning} onClick={() => void redesign()}>{t('AI 重新设计封面')}</Btn>}
       </div>
     </>}
