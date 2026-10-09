@@ -36,7 +36,11 @@ def test_openai_provider_defaults_to_official_endpoint(fake_openai):
 
     assert provider.base_url == ""
     assert provider.is_custom_endpoint is False
-    assert fake_openai.created[-1] == {"api_key": "sk-test"}
+    created = dict(fake_openai.created[-1])
+    # explicit timeout and a single SDK retry (RC156 Win QA #18): outer loops retry by meaning
+    assert created.pop("timeout").read == 600.0
+    assert created.pop("max_retries") == 1
+    assert created == {"api_key": "sk-test"}
 
 
 def test_openai_provider_uses_custom_base_url_and_placeholder_key(fake_openai):
@@ -50,6 +54,7 @@ def test_openai_provider_uses_custom_base_url_and_placeholder_key(fake_openai):
     assert provider.base_url == "http://localhost:11434/v1"
     assert provider.is_custom_endpoint is True
     created = dict(fake_openai.created[-1])
+    created.pop("timeout"), created.pop("max_retries")
     # 本地地址会额外带一个不走系统代理的 httpx.Client（见 is_local_url）
     http_client = created.pop("http_client")
     assert http_client.trust_env is False

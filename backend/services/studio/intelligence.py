@@ -93,6 +93,10 @@ def vision_call(content, config=None, *, allow_event_list=False):
     # Other compatible providers must not receive Seed-specific parameters.
     if model.lower().startswith('doubao-seed'):
         body['thinking'] = {'type': 'disabled'}
+    from backend.core.llm_providers import disables_qwen_thinking
+    if disables_qwen_thinking(model, base):
+        # Qwen3.5–3.8 on Bailian think by default (RC156 Win QA #18); allowlist only, see llm_providers.
+        body['enable_thinking'] = False
     req = urllib.request.Request(base.rstrip('/') + '/chat/completions', data=json.dumps(body).encode(), headers={**({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'})
     started = time.monotonic()
 
