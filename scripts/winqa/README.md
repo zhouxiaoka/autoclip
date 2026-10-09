@@ -63,7 +63,7 @@ scripts/winqa/run_winqa.sh ... --real --model-base-url <接口地址> --model <�
 | 5 | 启动候选；`/health` 版本、设置、升级后数据保留、预检、updater 清单、无 Celery | `launch-candidate.json` `check-candidate.json` |
 | 6 | 失败/回退探针（loopback 假模型，零费用）：初筛 500 回退字幕路线；分析全 500 带 `failure_stage`/`http_status`/`route`；连不上的端口 | `failure.json` |
 | 7 | CI 同款冒烟：包内 Python 跑 `scripts/verify_windows_install.py --launch-desktop` | `smoke.json` `windows-smoke.json` |
-| 8 | 收集应用日志并脱敏 | `app-logs/` |
+| 8 | 收集应用日志（`ps/collect_logs.ps1`：后端与桌面壳日志）并脱敏 | `app-logs/`、`collect-logs-final.json` |
 | 9 | 汇总 | `summary.md` `windows-rows.draft.json` |
 | 10–14（`--real`） | 真实模型连接 + #266；Whisper 安装/模型下载；本地无字幕视频出片；B 站链接导入；项目列表终态 | `real/*.json` |
 

@@ -101,6 +101,8 @@ if rd:
 # ---------------------------------------------------------------- real-model scenarios (steps 10-14, --real)
 RM, WF, WM, WD, LO, LK, FN = (load('real/' + n) or {} for n in ('model.json', 'whisper-firstinstall.json', 'whisper-hfmirror.json',
                                                                  'whisper-hf-direct-timeout.json', 'local.json', 'link.json', 'final.json'))
+# run_winqa.sh step 11 saves real/whisper.json (winqa_real.py --label default); older evidence used whisper-firstinstall.json.
+WF = WF or load('real/whisper.json') or {}
 real_rows = []
 def rrow(name, ok, evidence):
     real_rows.append((name, ok, evidence))
@@ -116,7 +118,7 @@ if WF:
     rrow('A4a 装 Whisper 前无 SRT 导入被预检拦住（前端 submissionBlock 规则）', WF.get('frontend_block_before_install_no_srt') == 'transcription',
          f"无 SRT → {WF.get('frontend_block_before_install_no_srt')}；带 SRT → {WF.get('frontend_block_before_install_with_srt')}；后端 /studio/import 本身不检查预检")
     rrow('A4b 应用自己的路由安装 Whisper 运行时', (WF.get('runtime_status_after') or {}).get('status') == 'installed',
-         f"{WF.get('install_seconds')}s，{(WF.get('runtime_status_after') or {}).get('packages')}；装后 transcription={((WF.get('readiness_after') or {}).get('checks') or {}).get('transcription')}")
+         f"{WF.get('install_seconds')}s，{(WF.get('runtime_status_after') or {}).get('packages')}；装后（模型下载前）transcription={WF.get('transcription_after_install')}；模型下载后 transcription={((WF.get('readiness_after') or {}).get('checks') or {}).get('transcription')}")
 if WD or WM:
     rrow('A4c Whisper 模型下载（应用默认 huggingface.co）', False if WD else None,
          f"直连：{(WD.get('model_download') or {}).get('status')}（{((WD.get('model_download') or {}).get('error') or '')[:60]}…）；下载接口却立即回「{((WD.get('model_download_post') or {}).get('body') or {}).get('message')}」")

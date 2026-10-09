@@ -196,9 +196,11 @@ def whisper(a):
     out['runtime_status_after'] = {k: v for k, v in st.items() if k != 'log_tail'} if isinstance(st, dict) else st
     if isinstance(st, dict) and st.get('status') == 'error':
         out['install_log_tail'] = str(st.get('log_tail'))[-1500:]
-    rd2 = readiness()
-    out['readiness_after'] = rd2
-    out['frontend_block_after_install_no_srt'] = submission_block(rd2, False)
+    # The runtime alone is not "ready": readiness reports whisper_model_missing until the model is on
+    # disk (RC156 #5). Record that state, download the model, and only then check readiness (Win QA #17).
+    rd_runtime = readiness()
+    out['readiness_after_install'] = rd_runtime
+    out['transcription_after_install'] = (rd_runtime.get('checks') or {}).get('transcription') if isinstance(rd_runtime, dict) else None
     out['models_before'] = body(get('/api/v1/whisper-models'))
     t1 = time.monotonic()
     try:
@@ -213,6 +215,9 @@ def whisper(a):
         time.sleep(5)
     out['model_download'] = {'status': ms.get('status') if isinstance(ms, dict) else ms, 'error': (ms.get('errorMessage') or '')[:300] if isinstance(ms, dict) else None,
                              'seconds': round(time.monotonic() - t1, 1), 'hf_endpoint_env_of_probe': os.environ.get('HF_ENDPOINT')}
+    rd2 = readiness()
+    out['readiness_after'] = rd2
+    out['frontend_block_after_install_no_srt'] = submission_block(rd2, False)
     A = out['assertions']
     if (out['runtime_status_before'] or {}).get('status') != 'installed':  # only meaningful on the first install
         A['import_blocked_before_whisper_without_srt'] = out['frontend_block_before_install_no_srt'] == 'transcription'

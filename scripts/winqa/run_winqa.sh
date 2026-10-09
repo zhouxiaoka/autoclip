@@ -85,6 +85,9 @@ remote 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force C:\w
 "${SCP[@]}" "$HERE"/ps/*.ps1 "$USER_@$HOST:C:/winqa/ps/"
 "${SCP[@]}" "$HERE"/py/*.py "$USER_@$HOST:C:/winqa/py/"
 remote_hash() { remote "powershell -NoProfile -Command \"if (Test-Path C:\\winqa\\inst\\$1) { (Get-FileHash C:\\winqa\\inst\\$1).Hash.ToLower() }\"" | tr -d '\r'; }
+# copy /b 的分片列表：C:\winqa\inst\parts-<dst>\p00+...。以前用 sed "s|^|...\\|"，结尾的 \| 把分隔符转义掉了
+# （unterminated s command），列表为空，拼接后的哈希永远对不上（RC156 Win QA #16）。printf 不经过 sed 的转义。
+windows_parts() { ls "$1" | while IFS= read -r n; do printf 'C:\\winqa\\inst\\parts-%s\\%s\n' "$2" "$n"; done | paste -sd+; }
 upload_installer() { # 已在机器上且哈希一致就不重传；否则分 12 片、3 路并发、sftp reput 可续传，再在验收机上拼接
   local src="$1" dst="$2" sha="$3"
   if [ "$(remote_hash "$dst")" = "$sha" ]; then echo "$dst already on VM (hash ok)"; return 0; fi
@@ -97,7 +100,7 @@ foreach (\$n in '$(ls "$tmp" | paste -sd,)'.Split(',')) { \$f = 'C:\\winqa\\inst
 PS
   export IDENTITY USER_ HOST dst
   ls "$tmp" | xargs -P 3 -I{} bash -c 'for t in 1 2 3 4 5 6; do echo "reput '"$tmp"'/{} /C:/winqa/inst/parts-$dst/{}" | sftp -q ${IDENTITY:+-i "$IDENTITY"} -o BatchMode=yes -o ServerAliveInterval=15 -b - "$USER_@$HOST" >/dev/null && exit 0; sleep 5; done; exit 1'
-  local parts; parts=$(ls "$tmp" | sed "s|^|C:\\winqa\\inst\\parts-$dst\\|" | paste -sd+)
+  local parts; parts=$(windows_parts "$tmp" "$dst")
   remote "cmd /c copy /y /b $parts C:\\winqa\\inst\\$dst"
   [ "$(remote_hash "$dst")" = "$sha" ] || { echo "upload of $dst failed hash check"; exit 4; }
   remote "powershell -NoProfile -Command \"Remove-Item -Recurse -Force C:\\winqa\\inst\\parts-$dst\""
@@ -203,14 +206,16 @@ fi
 
 step "8. 收集日志（脱敏）"
 remote "powershell -NoProfile -Command \"Remove-Item -Recurse -Force C:\\winqa\\out\\media,C:\\winqa\\out\\real\\media -ErrorAction SilentlyContinue\""
-rps <<'PS'
-$d = Join-Path $env:APPDATA 'AutoClip\logs'
-if (Test-Path $d) { $t = Join-Path $env:TEMP 'winqa-logs'; Remove-Item -Recurse -Force $t -ErrorAction SilentlyContinue; New-Item -ItemType Directory $t | Out-Null
-  Get-ChildItem $d -File | ForEach-Object { try { $i = [IO.File]::Open($_.FullName, 'Open', 'Read', 'ReadWrite,Delete'); $o = [IO.File]::Create((Join-Path $t $_.Name)); $i.CopyTo($o); $o.Close(); $i.Close() } catch { } }
-  Compress-Archive -Force -Path "$t\*" -DestinationPath C:\winqa\out\app-logs.zip }  # 应用运行中日志被占用：先以共享读方式复制再打包
-PS
+# 以前这里用 `powershell -Command -` 从 stdin 跑跨多行的 if 块：结尾没有空行时 PowerShell 不会执行它（stdin 模式的已知行为，
+# 最可能的原因），错误又被 catch/2>/dev/null 吞掉，app-logs 回来是空的。
+# 改成 -File 跑 ps/collect_logs.ps1（共享读方式复制后端与桌面壳日志，打包成 app-logs.zip，并写 collect-logs-final.json）
+remote "$PS C:\\winqa\\ps\\collect_logs.ps1 -Label final" || echo "WARN: collect_logs.ps1 failed"
 pull_all
-mkdir -p "$OUT/app-logs" && (cd "$OUT/app-logs" && unzip -oq ../app-logs.zip 2>/dev/null; rm -f ../app-logs.zip)
+mkdir -p "$OUT/app-logs"
+if [ -f "$OUT/app-logs.zip" ]; then
+  python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$OUT/app-logs.zip" "$OUT/app-logs" && rm -f "$OUT/app-logs.zip"
+fi
+[ -n "$(ls -A "$OUT/app-logs")" ] || echo "WARN: app-logs is empty; see $OUT/collect-logs-final.json"
 # 脱敏：密钥、Bearer、用户目录
 find "$OUT" -type f \( -name '*.log' -o -name '*.json' -o -name '*.err' -o -name '*.txt' \) -print0 | xargs -0 -r sed -i -E \
   -e 's/(^|[^A-Za-z0-9])sk-[A-Za-z0-9_-]{6,}/\1sk-***/g' -e 's/(Bearer )[A-Za-z0-9._-]+/\1***/g'
