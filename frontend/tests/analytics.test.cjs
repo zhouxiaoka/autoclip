@@ -129,7 +129,7 @@ test('persisted opt-out skips SDK initialization and can be enabled later withou
   assert.equal(ph.captureBusinessEvent('disabled'), false)
   assert.deepEqual(calls, [])
   ph.setAnalyticsEnabled(true)
-  assert.equal(config.advanced_disable_flags, true)
+  assert.equal(config.advanced_disable_flags, false)
   assert.equal(ph.captureBusinessEvent('enabled'), true)
   ph.setAnalyticsEnabled(false)
   assert.equal(ph.captureBusinessEvent('disabled-again'), false)
@@ -137,6 +137,32 @@ test('persisted opt-out skips SDK initialization and can be enabled later withou
   assert.equal(calls.filter(call => call === 'init').length, 1)
   assert.equal(calls.filter(call => call === 'capture').length, 1)
   assert.equal(storage.getItem('autoclip.analytics.optOut'), 'false')
+})
+test('turning analytics off pauses flag reloads and never asks for flags while opted out', () => {
+  const storage = memory()
+  const calls = []
+  const sdk = {
+    init(_key, cfg) { calls.push(['init', cfg.advanced_disable_flags]) },
+    capture() { return {} },
+    opt_out_capturing() { calls.push(['out']) },
+    opt_in_capturing() { calls.push(['in']) },
+    set_config(cfg) { calls.push(['config', cfg.advanced_disable_flags]) },
+    reloadFeatureFlags() { calls.push(['reload']) },
+    featureFlags: { setReloadingPaused(paused) { calls.push(['pause', paused]) }, getFlagVariants() { calls.push(['variants']); return { remember_platforms: true } } },
+    onFeatureFlags() { calls.push(['listen']) },
+  }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, { localStorage: storage, window: {} })
+  assert.equal(ph.readLoadedFlag('remember_platforms'), undefined)
+  ph.initAnalytics()
+  assert.equal(ph.readLoadedFlag('remember_platforms'), true)
+  ph.setAnalyticsEnabled(false)
+  assert.equal(ph.readLoadedFlag('remember_platforms'), undefined)
+  assert.equal(calls.some(call => call[0] === 'reload'), false)
+  assert.deepEqual(calls.filter(call => call[0] === 'config'), [['config', true]])
+  assert.deepEqual(calls.filter(call => call[0] === 'pause'), [['pause', true]])
+  ph.setAnalyticsEnabled(true)
+  assert.equal(calls.filter(call => call[0] === 'reload').length, 1)
+  assert.equal(ph.readLoadedFlag('remember_platforms'), true)
 })
 test('opt-out override prevents SDK initialization even when localStorage is unavailable', () => {
   let initialized = 0

@@ -1,4 +1,5 @@
 """Unified creative workspace. Legacy projects are adapted, never overwritten."""
+import json
 import uuid
 from pathlib import Path
 from typing import Optional, Literal
@@ -106,6 +107,7 @@ async def import_visual(
     url: Optional[str] = Form(None),
     browser: Optional[Literal['chrome', 'edge', 'firefox', 'safari']] = Form(None),
     video: Optional[UploadFile] = File(None),
+    features: str = Form(''),
     db: Session = Depends(get_db),
 ):
     if bool(url) == bool(video):
@@ -151,7 +153,15 @@ async def import_visual(
                     target.write(chunk)
             project.video_path = str(path)
             db.commit()
-        run_id = call(jobs.inspect_project, pid, prefs, url, browser)
+        snapshot = None
+        if features and len(features) <= 4000:
+            try:
+                parsed = json.loads(features)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                snapshot = parsed
+        run_id = call(jobs.inspect_project, pid, prefs, url, browser, features=snapshot)
     except Exception:
         project.status = 'failed'
         db.commit()

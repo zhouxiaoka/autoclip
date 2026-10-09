@@ -19,6 +19,7 @@ import { useAppUpdate } from '../desktop/UpdatePrompt'
 import { FEEDBACK_DISCUSSIONS_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented } from '../ui'
+import FlagOverrides from '../features/settings/FlagOverrides'
 
 type SectionKey = 'ai' | 'publish' | 'app' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
@@ -238,6 +239,9 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         <Row label={t("崩溃报告")} hint={t("把崩溃栈发到 Sentry，便于修复。不含视频内容、字幕或 API 密钥。未配置上报地址时不会发送。")}>
           <Switch checked={crashOn} onChange={toggleCrashReports} />
         </Row>
+      </div>
+      <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
+        <FlagOverrides />
       </div>
     </Section>
   )

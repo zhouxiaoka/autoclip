@@ -21,11 +21,57 @@ export const POSTHOG_HOST =
 const OPT_OUT_STORAGE_KEY = 'autoclip.analytics.optOut'
 
 let initialized = false
+let flagsNetworkEnabled = false
 let preferenceOverride: boolean | undefined
 const preferenceListeners = new Set<() => void>()
+const remoteFlagListeners = new Set<() => void>()
 export function onAnalyticsPreferenceChange(listener: () => void): () => void {
   preferenceListeners.add(listener)
   return () => { preferenceListeners.delete(listener) }
+}
+export function subscribeRemoteFlags(listener: () => void): () => void {
+  remoteFlagListeners.add(listener)
+  return () => { remoteFlagListeners.delete(listener) }
+}
+function notifyRemoteFlags() {
+  for (const listener of remoteFlagListeners) {
+    try { listener() } catch { /* flag subscribers cannot break analytics */ }
+  }
+}
+
+/**
+ * Already-loaded flag value. Never calls the network.
+ * Returns undefined unless analytics is on and flag requests were enabled at init.
+ */
+export function readLoadedFlag(name: string): unknown {
+  if (!initialized || !flagsNetworkEnabled || !isAnalyticsEnabled()) return undefined
+  try {
+    const variants = posthog.featureFlags?.getFlagVariants?.()
+    if (!variants || typeof variants !== 'object' || !Object.prototype.hasOwnProperty.call(variants, name)) return undefined
+    const value = variants[name]
+    return typeof value === 'boolean' || typeof value === 'string' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function enableFlagNetwork() {
+  flagsNetworkEnabled = true
+  try {
+    posthog.set_config?.({ advanced_disable_flags: false })
+    posthog.featureFlags?.setReloadingPaused?.(false)
+    posthog.reloadFeatureFlags?.()
+  } catch { /* analytics cannot break settings */ }
+  notifyRemoteFlags()
+}
+
+function disableFlagNetwork() {
+  flagsNetworkEnabled = false
+  try {
+    posthog.set_config?.({ advanced_disable_flags: true })
+    posthog.featureFlags?.setReloadingPaused?.(true)
+  } catch { /* analytics cannot break settings */ }
+  notifyRemoteFlags()
 }
 
 /** Never let analytics failures change a successful product operation. */
@@ -82,8 +128,9 @@ export function initAnalytics(): void {
     capture_performance: false,
     // 隐私优先：默认不录屏（PostHog 端也需另行开启）
     disable_session_recording: true,
-    // Feature flags and remote configuration are unused; opt-out must stop all SDK requests.
-    advanced_disable_flags: true,
+    // Flag requests exist only while analytics is on. Opt-out never initializes the SDK,
+    // and turning analytics off pauses any reload that was already started.
+    advanced_disable_flags: false,
     // HashRouter 下手动上报 pageview（见 trackPageview）
     capture_pageview: false,
     capture_pageleave: false,
@@ -91,9 +138,11 @@ export function initAnalytics(): void {
     // 尊重用户在本机的关闭偏好
     opt_out_capturing_by_default: !isAnalyticsEnabled(),
     loaded: (ph) => {
+      try { ph.onFeatureFlags?.(() => notifyRemoteFlags()) } catch { /* flags are optional */ }
       if (import.meta.env.DEV) ph.debug()
     },
     })
+    flagsNetworkEnabled = true
     initialized = true
   } catch {
     initialized = false
@@ -114,8 +163,13 @@ export function setAnalyticsEnabled(enabled: boolean): void {
   if (!initialized && enabled) initAnalytics()
   if (!initialized) return
   try {
-    if (enabled) posthog.opt_in_capturing()
-    else posthog.opt_out_capturing()
+    if (enabled) {
+      posthog.opt_in_capturing()
+      if (!flagsNetworkEnabled) enableFlagNetwork()
+    } else {
+      posthog.opt_out_capturing()
+      disableFlagNetwork()
+    }
   } catch { /* analytics cannot break settings */ }
 }
 
