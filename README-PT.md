@@ -19,7 +19,7 @@ O app é grátis; modelos cloud cobram por uso. Ajuste no editor quando precisar
 
 <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
 
-**[Site](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Baixar desktop](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Casos](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Início rápido](#início-rápido) · [Documentação](#documentação) · [Problema](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+**[Site](https://zhouxiaoka.github.io/autoclip_intro/)** · **[Baixar desktop](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [Casos](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [Pesquisa](docs/research/2026-10-what-drives-views/article-en.md) · [Início rápido](#início-rápido) · [Documentação](#documentação) · [Problema](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
 [简体中文](README.md) · [English](README-EN.md) · [日本語](README-JA.md) · [한국어](README-KO.md) · [Español](README-ES.md) · **Português** · [Русский](README-RU.md) · [Français](README-FR.md)
 
@@ -343,6 +343,7 @@ Confira transcrição, modelo, FFmpeg, disco e regras da plataforma. YouTube lon
 | Hospedar e automatizar | [Docker](docs/DOCKER.en.md) · [CLI / MCP](docs/CLI_AND_MCP.md) (chinês) · [Agent skill](skills/autoclip/SKILL.md) (chinês) · [OpenCode](docs/OPENCODE.en.md) |
 | Modelos e falhas | [Modelos](docs/MULTI_LLM_PROVIDER_GUIDE.md) (chinês) · [FAQ](docs/FAQ.en.md) |
 | Versões, roteiro, privacidade | [Changelog](CHANGELOG.md) · [Roteiro](ROADMAP.md) (chinês) · [Quadro](docs/COMMUNITY_BOARD.md) (chinês) · [Privacidade](docs/PRIVACY.en.md) |
+| Pesquisa | [Nota de pesquisa nº 1](docs/research/2026-10-what-drives-views/article-en.md) · [中文](docs/research/2026-10-what-drives-views/article-zh.md) |
 | Contribuir e traduzir | [Contribuir](CONTRIBUTING.md) (chinês) · [Traduções](docs/i18n.md) (chinês) |
 
 ## Contribuir

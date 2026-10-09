@@ -39,6 +39,7 @@
 ## 文档与历史
 
 - 当前操作入口：根目录 README、STARTUP_GUIDE、DOCKER、BUILD_GUIDE、RELEASE_CHECKLIST，以及 `docs/README.md` 索引。
+- 研究笔记在 `docs/research/`。2026-10-09 的短视频播放笔记见 `docs/research/2026-10-what-drives-views/`。
 - QUICK_START_GUIDE、QUICK_REFERENCE、MULTI_LLM_PROVIDER_GUIDE 保留原链接，指向现行指南，避免维护冲突的副本。
 - DEVELOPER_GUIDE 删除模板仓库地址和不存在的构建路线，引用实际维护入口。
 - SYSTEM_REBUILD_GUIDE 标记为历史排障记录；HANDOFF 下方旧快照、CHANGELOG 和既有验收记录保留为可追溯证据，不作为当前操作步骤。

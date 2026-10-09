@@ -19,7 +19,7 @@
 
 <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
 
-**[公式サイト](https://zhouxiaoka.github.io/autoclip_intro/)** · **[デスクトップ版を入手](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [事例](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [クイックスタート](#クイックスタート) · [ドキュメント](#ドキュメント) · [不具合報告](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+**[公式サイト](https://zhouxiaoka.github.io/autoclip_intro/)** · **[デスクトップ版を入手](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [事例](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [研究](docs/research/2026-10-what-drives-views/article-en.md) · [クイックスタート](#クイックスタート) · [ドキュメント](#ドキュメント) · [不具合報告](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
 [简体中文](README.md) · [English](README-EN.md) · **日本語** · [한국어](README-KO.md) · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md)
 
@@ -343,6 +343,7 @@ Docker 内の `localhost` はコンテナ自身です。ホストのモデルに
 | 自前運用と自動化 | [Docker](docs/DOCKER.en.md) · [CLI / MCP](docs/CLI_AND_MCP.md)（中国語） · [Agent skill](skills/autoclip/SKILL.md)（中国語） · [OpenCode](docs/OPENCODE.en.md) |
 | モデルと障害 | [モデル設定](docs/MULTI_LLM_PROVIDER_GUIDE.md)（中国語） · [FAQ](docs/FAQ.en.md) |
 | 版・ロードマップ・プライバシー | [更新履歴](CHANGELOG.md) · [ロードマップ](ROADMAP.md)（中国語） · [コミュニティ掲示板](docs/COMMUNITY_BOARD.md)（中国語） · [プライバシー](docs/PRIVACY.en.md) |
+| 研究 | [研究ノート #1](docs/research/2026-10-what-drives-views/article-en.md) · [中文](docs/research/2026-10-what-drives-views/article-zh.md) |
 | 開発と翻訳 | [貢献](CONTRIBUTING.md)（中国語） · [翻訳の管理](docs/i18n.md)（中国語） |
 
 ## 参加する

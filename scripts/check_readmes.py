@@ -19,6 +19,10 @@ GUIDES = (
     "CONTRIBUTING.md", "docs/MULTI_LLM_PROVIDER_GUIDE.md",
     "docs/INFISTAR_SETUP.md", "docs/INFISTAR_SETUP.en.md",
     "docs/88API_SETUP.md", "docs/88API_SETUP.en.md",
+    "docs/research/2026-10-what-drives-views/README.md",
+    "docs/research/2026-10-what-drives-views/article-zh.md",
+    "docs/research/2026-10-what-drives-views/article-en.md",
+    "docs/research/2026-10-what-drives-views/sources.md",
 )
 FENCES = re.compile(r"^```[^\n]*\n(.*?)^```\s*$", re.MULTILINE | re.DOTALL)
 LINKS = re.compile(r'\]\(([^\s)]+)\)|(?:href|src)="([^"]+)"')

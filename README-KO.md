@@ -19,7 +19,7 @@
 
 <a href="https://trendshift.io/repositories/25801"><img src="https://trendshift.io/api/badge/repositories/25801" alt="AutoClip — GitHub Trending" width="250" height="55"></a>
 
-**[웹사이트](https://zhouxiaoka.github.io/autoclip_intro/)** · **[데스크톱 받기](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [사례](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [빠른 시작](#빠른-시작) · [문서](#문서) · [이슈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
+**[웹사이트](https://zhouxiaoka.github.io/autoclip_intro/)** · **[데스크톱 받기](https://github.com/zhouxiaoka/autoclip/releases/latest)** · [사례](https://zhouxiaoka.github.io/autoclip_intro/cases/) · [연구](docs/research/2026-10-what-drives-views/article-en.md) · [빠른 시작](#빠른-시작) · [문서](#문서) · [이슈](https://github.com/zhouxiaoka/autoclip/issues/new/choose)
 
 [简体中文](README.md) · [English](README-EN.md) · [日本語](README-JA.md) · **한국어** · [Español](README-ES.md) · [Português](README-PT.md) · [Русский](README-RU.md) · [Français](README-FR.md)
 
@@ -343,6 +343,7 @@ Docker 안 `localhost`는 컨테이너입니다. 호스트 모델은 컨테이�
 | 자체 운영과 자동화 | [Docker](docs/DOCKER.en.md) · [CLI / MCP](docs/CLI_AND_MCP.md)(중국어) · [Agent skill](skills/autoclip/SKILL.md)(중국어) · [OpenCode](docs/OPENCODE.en.md) |
 | 모델과 장애 | [모델 설정](docs/MULTI_LLM_PROVIDER_GUIDE.md)(중국어) · [FAQ](docs/FAQ.en.md) |
 | 버전·로드맵·개인정보 | [변경 기록](CHANGELOG.md) · [로드맵](ROADMAP.md)(중국어) · [커뮤니티 보드](docs/COMMUNITY_BOARD.md)(중국어) · [개인정보](docs/PRIVACY.en.md) |
+| 연구 | [연구 노트 #1](docs/research/2026-10-what-drives-views/article-en.md) · [中文](docs/research/2026-10-what-drives-views/article-zh.md) |
 | 개발과 번역 | [기여](CONTRIBUTING.md)(중국어) · [번역 관리](docs/i18n.md)(중국어) |
 
 ## 참여
