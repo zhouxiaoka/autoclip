@@ -82,7 +82,9 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     code: ['whisper_installed', 'whisper_installing', 'whisper_install_failed', 'whisper_not_installed', 'whisper_model_downloading', 'whisper_model_failed', 'whisper_model_missing', 'sensevoice_ready', 'sensevoice_not_ready', 'cloud_configured', 'cloud_not_configured'],
     platform_source: ['remembered', 'accounts', 'locale', 'user'],
     transcription_route: ['platform_subs', 'whisper', 'cloud', 'srt'],
-    field: ['platform', 'clip_count', 'duration', 'clip_swap', 'title'],
+    field: ['platform', 'clip_count', 'duration', 'clip_swap', 'clip_delete', 'title', 'layout', 'not_exported'],
+    kind: ['first_clip', 'all_done', 'failed'],
+    permission: ['granted', 'denied', 'default'],
     legacy_action: ['start_processing', 'collection', 'export_confirm', 'plan_adjust', 'preferences'],
   }
   for (const [key, allowed] of Object.entries(enums)) {

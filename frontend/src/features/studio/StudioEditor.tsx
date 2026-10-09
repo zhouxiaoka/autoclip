@@ -14,6 +14,9 @@ import DraftVariantDialog from './DraftVariantDialog'
 import { titlePresets, isArtworkStyle } from './titlePresets'
 import DraftSettingsPanel, { type FramingState } from './DraftSettingsPanel'
 import { draftExportState } from './draftExportState'
+import { savedDraftOverrides } from './overrides'
+import { flagAssigned } from '../../analytics/flags'
+import { trackAutoChoiceOverridden } from '../../analytics/studio'
 import './studio.css'
 
 export default function StudioEditor() {
@@ -160,7 +163,12 @@ function Editor({ projectId, draftId }: { projectId: string; draftId: string }) 
     const invalid = draftError(draft, sourceDuration)
     if (invalid) throw new Error(t(invalid))
     if (!dirty) return draft
+    let fields: ReturnType<typeof savedDraftOverrides> = []
+    if (flagAssigned('track_overrides')) {
+      try { fields = savedDraftOverrides(JSON.parse(saved) as Draft, draft) } catch { fields = [] }
+    }
     const result = await studioApi.save(projectId, draft)
+    for (const field of fields) trackAutoChoiceOverridden({ field, stage: 'editor' }, true)
     setDraft(result); setSaved(JSON.stringify(result)); setNotice("草稿已保存"); refresh()
     return result
   }
