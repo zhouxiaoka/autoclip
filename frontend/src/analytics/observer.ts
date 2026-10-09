@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { apiConfigManager } from '../utils/apiConfig'
 import { flagAssigned } from './flags'
+import { noteWorkspaceCompletion } from '../features/studio/noticeRuntime'
 import { captureBusinessEvent, isAnalyticsEnabled, onAnalyticsPreferenceChange } from './posthog'
 import { WorkflowTracker, type TaskSnapshot } from './workflow'
 
@@ -39,6 +40,7 @@ export function startWorkflowObserver(): () => void {
             if (!stopped && workflow.active(generation)) {
               workflow.noteFirstClip(w, data, flagAssigned('render_top_first'))
               workflow.observeStudio(w, data)
+              noteWorkspaceCompletion(w.projectId || w.id, data)
             }
           } else if (w.kind === 'project') {
             const { data } = await axios.get<TaskSnapshot[]>(`/tasks/project/${encodeURIComponent(w.id)}`, { baseURL, timeout: 5000 })

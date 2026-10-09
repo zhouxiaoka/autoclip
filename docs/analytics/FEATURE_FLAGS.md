@@ -39,7 +39,7 @@
 
 导入请求可以带 `features` JSON。后端只保留已知键，非法值丢弃，结果写进 `generation.features`。CLI、MCP 和 Docker 没有 PostHog SDK，读环境变量 `AUTOCLIP_FLAGS`（同样的 `name=value` 列表），它覆盖请求里的同名键。`autoclip_safe_mode` 打开后，其余键回到默认值，除非 `AUTOCLIP_FLAGS` 明确设置了那一项。
 
-成片卡片（Q5–Q7）的行为和事件见 [UX_RESULTS.md](UX_RESULTS.md)。
+成片卡片（Q5–Q7）的行为和事件见 [UX_RESULTS.md](UX_RESULTS.md)。完成通知和修改记录（Q4、Q9）见 [UX_NOTIFY.md](UX_NOTIFY.md)。
 
 ## 还没做
 

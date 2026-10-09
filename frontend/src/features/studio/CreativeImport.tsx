@@ -173,13 +173,15 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   }
   const changePlatforms = (next: string[]) => {
     setPlatforms(next)
-    if (!remembered) { platformSource.current = 'user'; return }
-    writeRememberedPlatforms(next)
+    if (remembered) writeRememberedPlatforms(next)
+    else platformSource.current = 'user'
     if (samePlatforms(next, initialPlatforms.current.platforms)) return
     platformSource.current = 'user'
     if (overridden.current) return
+    // One event if either flag is assigned, so remembering and override tracking do not double count.
+    if (!(flagAssigned('remember_platforms') || flagAssigned('track_overrides'))) return
     overridden.current = true
-    trackAutoChoiceOverridden({ field: 'platform', stage: 'pre_import' }, flagAssigned('remember_platforms'))
+    trackAutoChoiceOverridden({ field: 'platform', stage: 'pre_import' }, true)
   }
   const readyToStart = (trigger: 'paste' | 'drop' | 'button', next?: { url?: string; file?: File | null }) => {
     if (blocked) { trackExperience('import_blocked', { reason: 'setup_required', placement: 'home_setup' }); setError(t("请先连接 AI 服务，再导入视频。")); onBlocked?.(); return false }
