@@ -1878,5 +1878,13 @@
   "settings.providers.fetch_list_updated": "Lista actualizada con los modelos disponibles en esta cuenta.",
   "settings.providers.fetch_list_no_overlap": "Ningún candidato recomendado está en la lista de esta cuenta. Elige uno a mano o actualiza la lista.",
   "settings.providers.fetch_list_truncated": "La lista de modelos es demasiado larga; solo se conservan los primeros 2000. Introduce el resto a mano.",
-  "API Key 无效或已过期，请检查后重试": "La clave API no es válida o ha caducado. Revísala e inténtalo de nuevo."
+  "API Key 无效或已过期，请检查后重试": "La clave API no es válida o ha caducado. Revísala e inténtalo de nuevo.",
+  "把链接或视频放在这里": "Suelta aquí un enlace o un video",
+  "粘贴链接，或拖入一个视频文件。": "Pega un enlace o suelta un archivo de video.",
+  "选择一个视频文件": "Elegir un archivo de video",
+  "即将开始制作。": "La producción empieza enseguida.",
+  "撤销": "Deshacer",
+  "为 {{names}} 制作": "Preparando esto para {{names}}",
+  "改": "Cambiar",
+  "这些偏好会用在下一次导入。首页不再单独展开。": "Estas preferencias se usan en la próxima importación. La página de inicio ya no las abre aparte."
 }

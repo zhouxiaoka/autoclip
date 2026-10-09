@@ -38,7 +38,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     strategy_id: ['douyin', 'tiktok', 'instagram_reels', 'youtube_shorts', 'youtube_long', 'bilibili', 'xiaohongshu', 'original'],
     material_origin: ['sample', 'user', 'unknown'], layout: ['crop', 'fit', 'blur', 'window'],
     generation_reason: ['content_complete', 'platform_append', 'platform_ineligible'],
-    trigger: ['auto', 'manual', 'portrait_preset', 'hover', 'focus', 'keyboard', 'button', 'select'], framing_outcome: ['framed', 'no_detection'],
+    trigger: ['auto', 'manual', 'portrait_preset', 'hover', 'focus', 'keyboard', 'button', 'select', 'paste', 'drop', 'radar', 'watch'], framing_outcome: ['framed', 'no_detection'],
     framing_status: ['installed', 'installing', 'failed', 'missing', 'not_installed', 'error'],
     source_type: ['file', 'youtube', 'bilibili', 'other_url', 'visual_event', 'content_clip', 'studio', 'legacy'],
     analysis_mode: ['subtitle', 'visual', 'auto'], goal: ['content', 'highlight', 'promo', 'auto'],
@@ -80,6 +80,10 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     provider: ['dashscope', 'openai', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok', 'infistar', 'api88', 'compatible', 'ollama', 'lmstudio', 'other', 'whisper_local', 'sensevoice_local', 'cloud'],
     upstream_error_type: ['invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint', 'rate_limited', 'upstream_unavailable', 'timeout', 'connection', 'output_truncated', 'unknown'],
     code: ['whisper_installed', 'whisper_installing', 'whisper_install_failed', 'whisper_not_installed', 'whisper_model_downloading', 'whisper_model_failed', 'whisper_model_missing', 'sensevoice_ready', 'sensevoice_not_ready', 'cloud_configured', 'cloud_not_configured'],
+    platform_source: ['remembered', 'accounts', 'locale', 'user'],
+    transcription_route: ['platform_subs', 'whisper', 'cloud', 'srt'],
+    field: ['platform', 'clip_count', 'duration', 'clip_swap', 'title'],
+    legacy_action: ['start_processing', 'collection', 'export_confirm', 'plan_adjust', 'preferences'],
   }
   for (const [key, allowed] of Object.entries(enums)) {
     let raw: unknown = input[key]
