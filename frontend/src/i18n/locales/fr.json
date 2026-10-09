@@ -1586,5 +1586,13 @@
   "分开复制和导出": "Copier et exporter séparément",
   "合成一个动作": "Une seule action",
   "自动渲染前 10 条": "Rendre automatiquement les 10 meilleurs",
-  "自动渲染前 3 条": "Rendre automatiquement les 3 meilleurs"
+  "自动渲染前 3 条": "Rendre automatiquement les 3 meilleurs",
+  "把链接或视频放在这里": "Déposez un lien ou une vidéo ici",
+  "粘贴链接，或拖入一个视频文件。": "Collez un lien, ou déposez un fichier vidéo.",
+  "选择一个视频文件": "Choisir un fichier vidéo",
+  "即将开始制作。": "La fabrication commence dans un instant.",
+  "撤销": "Annuler",
+  "为 {{names}} 制作": "Préparation pour {{names}}",
+  "改": "Modifier",
+  "这些偏好会用在下一次导入。首页不再单独展开。": "Ces préférences servent au prochain import. La page d’accueil ne les ouvre plus à part."
 }

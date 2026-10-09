@@ -1586,5 +1586,13 @@
   "分开复制和导出": "Copy and export separately",
   "合成一个动作": "One combined action",
   "自动渲染前 10 条": "Render the top 10 automatically",
-  "自动渲染前 3 条": "Render the top 3 automatically"
+  "自动渲染前 3 条": "Render the top 3 automatically",
+  "把链接或视频放在这里": "Drop a link or a video here",
+  "粘贴链接，或拖入一个视频文件。": "Paste a link, or drop a video file.",
+  "选择一个视频文件": "Choose a video file",
+  "即将开始制作。": "Starting shortly.",
+  "撤销": "Undo",
+  "为 {{names}} 制作": "Making this for {{names}}",
+  "改": "Change",
+  "这些偏好会用在下一次导入。首页不再单独展开。": "These preferences apply to the next import. The home page no longer opens them on its own."
 }

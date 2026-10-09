@@ -20,6 +20,7 @@ import { FEEDBACK_DISCUSSIONS_URL, FEEDBACK_ISSUES_URL } from '../analytics/feed
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented } from '../ui'
 import FlagOverrides from '../features/settings/FlagOverrides'
+import ImportPreferenceSettings from '../features/settings/ImportPreferenceSettings'
 
 type SectionKey = 'ai' | 'publish' | 'app' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
@@ -241,6 +242,7 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         </Row>
       </div>
       <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
+        <ImportPreferenceSettings />
         <FlagOverrides />
       </div>
     </Section>

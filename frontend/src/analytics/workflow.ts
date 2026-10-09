@@ -22,7 +22,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     strategy_id: ['douyin', 'tiktok', 'instagram_reels', 'youtube_shorts', 'youtube_long', 'bilibili', 'xiaohongshu', 'original'],
     material_origin: ['sample', 'user', 'unknown'], layout: ['crop', 'fit', 'blur', 'window'],
     generation_reason: ['content_complete', 'platform_append', 'platform_ineligible'],
-    trigger: ['auto', 'manual', 'portrait_preset'], framing_outcome: ['framed', 'no_detection'],
+    trigger: ['auto', 'manual', 'portrait_preset', 'paste', 'drop', 'button', 'radar', 'watch'], framing_outcome: ['framed', 'no_detection'],
     framing_status: ['installed', 'installing', 'failed', 'missing', 'not_installed', 'error'],
     source_type: ['file', 'youtube', 'bilibili', 'other_url', 'visual_event', 'content_clip', 'studio', 'legacy'],
     analysis_mode: ['subtitle', 'visual', 'auto'], goal: ['content', 'highlight', 'promo', 'auto'],
@@ -40,6 +40,11 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     framing: ['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'],
     failure_stage: ['screening', 'dispatch', 'production', 'ingest', 'subtitle', 'analyze', 'vision', 'render'],
     route: ['subtitle', 'visual'],
+    platform_source: ['remembered', 'accounts', 'locale', 'user'],
+    transcription_route: ['platform_subs', 'whisper', 'cloud', 'srt'],
+    field: ['platform', 'clip_count', 'duration', 'clip_swap', 'title'],
+    stage: ['pre_import', 'results_chip', 'editor'],
+    legacy_action: ['start_processing', 'collection', 'export_confirm', 'plan_adjust', 'preferences'],
   }
   for (const [key, allowed] of Object.entries(enums)) {
     if (typeof input[key] === 'string' && allowed.includes(input[key] as string)) out[key] = input[key] as string
