@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from backend.core import llm_usage
 from backend.services.studio import audio, intelligence, store
+from backend.services.studio.features import resolve_features
 from backend.services.studio.models import Draft, Preferences, Scene
 from backend.services.studio.project_completion import sync_project_completion
 from backend.services.studio.intelligence import analyze, make_drafts, VisionRequestError
@@ -1339,7 +1340,7 @@ def _finish_generation(data):
     store.settle_generation(data)
 
 
-def inspect_project(project_id, options, url=None, browser=None, *, producer=None):
+def inspect_project(project_id, options, url=None, browser=None, *, producer=None, features=None):
     """Only ingest and screen. Expensive production requires an explicit confirmation."""
     # Reserve and dispatch together so another request cannot observe an
     # accepted task before submission succeeds. Preserve existing exports/plan.
@@ -1354,6 +1355,7 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             'branding': options.branding.model_dump(),
             'auto_start': options.auto_start,
             'portrait_style': options.portrait_style,
+            'features': resolve_features(features),
             **({'producer': producer} if producer else {}),
             'status': 'screening',
             'created_at': store.now(),

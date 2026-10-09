@@ -20,6 +20,7 @@ function loadAppSection(initial = true, saveMode = 'success') {
     '../desktop/updater': { getAppVersion: async () => '1.5.4' },
     '../desktop/UpdatePrompt': { useAppUpdate: () => ({ phase: 'idle' }) },
     '../context/ThemeContext': { useTheme: () => ({ theme: 'light', setTheme() {} }) },
+    '../features/settings/FlagOverrides': { default: () => null, flagOverridesVisible: () => false },
     '../desktop/sentry': { isCrashReportsEnabled: () => enabled, setCrashReportsEnabled: value => { enabled = value; applied.push(value) } },
     '../services/api': { settingsApi: { getPrivacy: () => read, updatePrivacy: async value => {
       saved.push(value.crash_reports)

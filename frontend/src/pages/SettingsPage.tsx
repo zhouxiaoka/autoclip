@@ -19,6 +19,7 @@ import { useAppUpdate } from '../desktop/UpdatePrompt'
 import { FEEDBACK_DISCUSSIONS_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented } from '../ui'
+import FlagOverrides, { flagOverridesVisible } from '../features/settings/FlagOverrides'
 
 type SectionKey = 'ai' | 'publish' | 'app' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
@@ -239,6 +240,11 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
           <Switch checked={crashOn} onChange={toggleCrashReports} />
         </Row>
       </div>
+      {flagOverridesVisible() && (
+        <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
+          <FlagOverrides />
+        </div>
+      )}
     </Section>
   )
 }

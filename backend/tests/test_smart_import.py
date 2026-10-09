@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 from backend.tests.test_studio import root, source, client
 from backend.services.studio import intelligence, jobs, store, planning
+from backend.services.studio.features import resolve_features
 from backend.services.studio.models import ImportOptions
 
 
@@ -222,6 +223,7 @@ def test_import_persists_platform_and_branding_contract_without_auto_start(clien
         'branding': {'outro_enabled': False, 'outro_version': 'v1'},
         'auto_start': False,
         'portrait_style': 'auto',
+        'features': resolve_features(None),
         'status': 'awaiting_confirmation',
         'created_at': state['generation']['created_at'],
     }

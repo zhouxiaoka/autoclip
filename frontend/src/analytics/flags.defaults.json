@@ -1,0 +1,13 @@
+{
+  "autoclip_safe_mode": false,
+  "remember_platforms": false,
+  "one_click_paste_start": "button",
+  "link_import_without_whisper": false,
+  "notify_on_done": false,
+  "publish_pack_v2": "separate",
+  "render_top_first": "limit10",
+  "clip_reasons": false,
+  "hide_legacy_entrypoints": false,
+  "import_drop_zone": false,
+  "track_overrides": false
+}

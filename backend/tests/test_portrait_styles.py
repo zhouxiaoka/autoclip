@@ -25,7 +25,7 @@ def test_choice_changes_only_vertical_template(root, style, platform, template, 
 
 
 def test_import_endpoint_persists_the_user_choice(client, source, monkeypatch):
-    def inspect(pid, options, *args):
+    def inspect(pid, options, *args, **kwargs):
         store.write(pid, {'generation':{'portrait_style':options.portrait_style,'status':'screening'},'jobs':[],'drafts':[]})
     monkeypatch.setattr(jobs,'inspect_project',inspect)
     response=client.post('/studio/import',data={'auto_start':'true','platforms':'douyin','portrait_style':'podcast'},

@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_PUBLIC_SENTRY_DSN?: string
   /** 打包时注入的应用版本，给 Sentry release 用。 */
   readonly VITE_APP_VERSION?: string
+  /** Dev-only flag overrides, `name=value` comma separated. Ignored in production builds. */
+  readonly VITE_FLAGS?: string
 }
 
 interface ImportMeta {

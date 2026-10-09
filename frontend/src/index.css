@@ -11,6 +11,9 @@
   --ac-font-mono:"Geist Mono",ui-monospace,monospace;
   --ac-shadow:0 1px 2px rgba(26,26,25,.03), 0 8px 24px rgba(26,26,25,.05);
   --ac-ease-out:cubic-bezier(.2,.7,.2,1); --ac-t-micro:100ms; --ac-t-short:200ms;
+  --ac-space-2:2px; --ac-space-xs:4px; --ac-space-sm:8px; --ac-space-md:16px;
+  --ac-space-lg:24px; --ac-space-xl:32px; --ac-space-2xl:40px; --ac-space-3xl:56px;
+  --ac-radius:16px; --ac-radius-sm:10px; --ac-radius-pill:999px;
 }
 [data-theme="dark"]{
   --ac-bg:#19181A; --ac-card:#211F22; --ac-ink:#ECEAE6; --ac-sub:#A6A29B; --ac-muted:#76726C;
@@ -20,6 +23,7 @@
 }
 html,body,#root{background:var(--ac-bg);color:var(--ac-ink);}
 body{font-family:var(--ac-font-sans);-webkit-font-smoothing:antialiased;}
+.ac-flag-select{width:280px;max-width:100%;height:32px;padding:0 var(--ac-space-sm);font-size:13px}
 .ac-serif{font-family:var(--ac-font-serif);}
 .ac-mono{font-family:var(--ac-font-mono);}
 
