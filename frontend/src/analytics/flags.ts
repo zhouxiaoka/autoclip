@@ -162,6 +162,23 @@ function remoteValue(name: FlagName): FlagValue | undefined {
   return value
 }
 
+export type FlagOrigin = 'local' | 'safe_mode' | 'remote' | 'vite' | 'cache' | 'default'
+
+/** Where the current value came from. Later PRs emit experiment events only after a real assignment. */
+export function flagOrigin(name: FlagName): FlagOrigin {
+  if (readOverride(name) !== undefined) return 'local'
+  if (name !== 'autoclip_safe_mode' && flagValue('autoclip_safe_mode') === true) return 'safe_mode'
+  if (remoteValue(name) !== undefined) return 'remote'
+  if (viteValue(name) !== undefined) return 'vite'
+  if (isAnalyticsEnabled() && readCache(name) !== undefined) return 'cache'
+  return 'default'
+}
+
+export function flagAssigned(name: FlagName): boolean {
+  const origin = flagOrigin(name)
+  return origin === 'local' || origin === 'remote' || origin === 'vite' || origin === 'cache'
+}
+
 export function flagValue(name: FlagName): FlagValue {
   const local = readOverride(name)
   if (local !== undefined) return local

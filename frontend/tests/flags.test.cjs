@@ -118,6 +118,19 @@ test('dev VITE_FLAGS applies when remote has no value and is ignored in producti
   assert.equal(remote.flags.flagEnabled('notify_on_done'), false)
 })
 
+test('an unassigned default does not count as an experiment assignment', () => {
+  const silent = load()
+  assert.equal(silent.flags.flagOrigin('one_click_paste_start'), 'default')
+  assert.equal(silent.flags.flagAssigned('one_click_paste_start'), false)
+  const remote = load({ analytics: true, remote: { one_click_paste_start: 'button', remember_platforms: true } })
+  assert.equal(remote.flags.flagOrigin('one_click_paste_start'), 'remote')
+  assert.equal(remote.flags.flagAssigned('one_click_paste_start'), true)
+  assert.equal(remote.flags.flagEnabled('one_click_paste_start'), false)
+  assert.equal(remote.flags.flagAssigned('remember_platforms'), true)
+  const safe = load({ analytics: true, remote: { autoclip_safe_mode: true, remember_platforms: true } })
+  assert.equal(safe.flags.flagOrigin('remember_platforms'), 'safe_mode')
+  assert.equal(safe.flags.flagAssigned('remember_platforms'), false)
+})
 test('invalid overrides are dropped and the snapshot stays enumerable', () => {
   const { flags, storage } = load()
   flags.setFlagOverride('publish_pack_v2', 'combined')
