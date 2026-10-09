@@ -239,10 +239,14 @@ def watch(pid, timeout, t0):
         except requests.RequestException: time.sleep(5); continue
         if not isinstance(ws, dict): time.sleep(5); continue
         an, g = ws.get('analysis') or {}, ws.get('generation') or {}
-        sig = (an.get('status'), an.get('phase'), an.get('progress'), an.get('message'), g.get('status'), g.get('progress'), g.get('stage'),
-               len(ws.get('drafts') or []), sum(1 for j in ws.get('jobs') or [] if j.get('status') == 'completed'))
+        # Studio shows `analysis.percent` after the message (「正在生成字幕 · N%」); the project bar
+        # (home card) reads the simple-progress snapshot. Record both (RC156 #22: `progress` never existed).
+        try: bar = (body(get('/api/v1/simple-progress/snapshot', params={'project_ids': pid}, timeout=30)) or [{}])[0].get('percent')
+        except (requests.RequestException, IndexError, AttributeError, TypeError): bar = None
+        sig = (an.get('status'), an.get('phase'), an.get('percent'), an.get('message'), g.get('status'), g.get('progress'), g.get('stage'),
+               len(ws.get('drafts') or []), sum(1 for j in ws.get('jobs') or [] if j.get('status') == 'completed'), bar)
         if sig != last:
-            samples.append({'t': round(time.monotonic() - t0), 'analysis': sig[:4], 'generation': sig[4:7], 'drafts': sig[7], 'jobs_done': sig[8]})
+            samples.append({'t': round(time.monotonic() - t0), 'analysis': sig[:4], 'generation': sig[4:7], 'drafts': sig[7], 'jobs_done': sig[8], 'bar': sig[9]})
             last = sig
         if g.get('status') in ('completed', 'partial', 'failed') or an.get('status') == 'failed':
             break

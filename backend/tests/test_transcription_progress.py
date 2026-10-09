@@ -81,10 +81,10 @@ def test_studio_shows_percent_of_audio_processed_and_restores_the_stage_message(
         analysis = store.read('p')['analysis']
         seen.append((analysis['message'], analysis['percent']))
     assert seen == [('正在生成字幕', 0), ('正在生成字幕', 14), ('正在生成字幕', 42), ('正在生成字幕', 70), ('正在生成字幕', 100)]
-    # The project progress bar moves smoothly inside SUBTITLE (25% → 40% sub-steps), monotonic.
+    # The project progress bar moves smoothly across most of SUBTITLE (5 → 95 sub-steps), monotonic.
     subs = [sub for stage, sub in studio_project]
     assert all(stage == 'SUBTITLE' for stage, _ in studio_project)
-    assert subs == sorted(subs) and subs[0] == 25 and subs[-1] == 40 and len(set(subs)) == 5
+    assert subs == sorted(subs) and subs[0] == 5 and subs[-1] == 95 and len(set(subs)) == 5
     adapter.TranscriptionProgress.finish_studio('p')
     analysis = store.read('p')['analysis']
     assert analysis['message'] == adapter.STUDIO_PRODUCTION_MESSAGE and 'percent' not in analysis
@@ -102,7 +102,7 @@ def test_updates_are_throttled_to_whole_percent_steps(studio_project, monkeypatc
     progress(0.205)  # repeated percent: skipped
     now[0] = 3.1
     progress(1.0)    # completion always shows
-    assert [sub for _, sub in studio_project] == pytest.approx([25 + 1.5, 25 + 15 * 0.205, 40])
+    assert [sub for _, sub in studio_project] == pytest.approx([5 + 9.0, 5 + 90 * 0.205, 95])
 
 
 def test_legacy_project_without_studio_state_is_never_given_one(tmp_path, monkeypatch):
