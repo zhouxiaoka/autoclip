@@ -14,6 +14,8 @@ def test_ytdlp_ffmpeg_options_uses_bundled_binary(tmp_path, monkeypatch):
 def test_ytdlp_options_enable_every_js_runtime_found(monkeypatch):
     monkeypatch.delenv("AUTOCLIP_FFMPEG_PATH", raising=False)
     monkeypatch.delenv("FFMPEG_PATH", raising=False)
+    monkeypatch.setattr(ffmpeg_utils, "bundled_candidates", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(ffmpeg_utils, "_report_missing", lambda _name: None)
     found = {"node": "/usr/local/bin/node", "bun": "/opt/bun"}
     monkeypatch.setattr(ffmpeg_utils.shutil, "which", lambda name: found.get(name))
     assert ffmpeg_utils.ytdlp_ffmpeg_options() == {
@@ -31,6 +33,8 @@ def test_ytdlp_js_runtimes_are_valid_for_yt_dlp(monkeypatch):
 def test_ytdlp_ffmpeg_options_empty_when_unresolved(monkeypatch):
     monkeypatch.delenv("AUTOCLIP_FFMPEG_PATH", raising=False)
     monkeypatch.delenv("FFMPEG_PATH", raising=False)
+    monkeypatch.setattr(ffmpeg_utils, "bundled_candidates", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(ffmpeg_utils, "_report_missing", lambda _name: None)
     monkeypatch.setattr(ffmpeg_utils.shutil, "which", lambda _name: None)
     assert ffmpeg_utils.ytdlp_ffmpeg_options() == {}
 

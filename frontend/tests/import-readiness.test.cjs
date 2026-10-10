@@ -113,6 +113,8 @@ function render(options = {}) {
       errorText: String,
     },
     '../../analytics/studio': { trackQuickOutputPlatforms() {} },
+    '../../analytics/flags': { useFlag: () => false, featureSnapshot: () => ({ pkg_templates_v1: false }) },
+    './TemplatePicker': { default: 'template-picker', templateImportFields: () => ({}) },
     '../../analytics/experience': { trackExperience() {} },
     './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
     './ImportPreferences': { default: 'preferences' },

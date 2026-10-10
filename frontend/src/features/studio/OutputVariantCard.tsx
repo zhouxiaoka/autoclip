@@ -26,8 +26,10 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const [asking, setAsking] = useState(false)
   const [coverStamp, setCoverStamp] = useState(0)
   const packaging = draft?.packaging
+  const rendered = job?.result?.template_render?.template
+  const template = rendered === 'editorial' || rendered === 'street' || rendered === 'classic' ? rendered : packaging?.template
   const analytics: VariantProperties = {
-    strategy_id: variant.strategy_id, framing: variant.framing, template: packaging?.template,
+    strategy_id: variant.strategy_id, framing: variant.framing, template,
     packaging_style: packaging ? packaging.style || (packaging.template === 'podcast_en' ? 'pop' : 'classic') : undefined,
     outro_applied: job?.result?.outro_applied,
   }

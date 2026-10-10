@@ -30,12 +30,20 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     portrait_style: ['auto', 'interview', 'podcast'], artifact_type: ['video', 'publish_kit'],
     recommendation_mode: ['ai', 'local', 'manual', 'fallback'],
     subtitle_status: ['available', 'missing', 'invalid', 'unreadable', 'too_large'],
-    outcome: ['completed', 'failed', 'partial', 'recommended', 'manual', 'fallback', 'scheduled', 'inbox', 'unknown', 'auto_started'],
+    outcome: ['completed', 'failed', 'partial', 'downgraded', 'skipped', 'recommended', 'manual', 'fallback', 'scheduled', 'inbox', 'unknown', 'auto_started'],
     download_mode: ['native', 'browser'], gateway: ['bilibili', 'upload-post'],
     title_style: ['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'],
     share_target: ['copy_caption', 'use_case_discussion'],
     output_rating: ['ready', 'needs_edit', 'unusable'],
-    template: ['interview_zh', 'podcast_en', 'landscape', 'none'],
+    template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
+    requested_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
+    from_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
+    to_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
+    encoder: ['libx264', 'h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox'],
+    downgrade_reason: ['none', 'over_budget', 'missing_runtime', 'intel_mac_unverified', 'rank', 'flag_off', 'capture', 'encode'],
+    failure_reason: ['none', 'capture', 'encode', 'runtime', 'timeout', 'unknown'],
+    os: ['darwin', 'win32', 'linux'],
+    stage: ['pre_import', 'results_chip', 'editor'],
     packaging_style: ['classic', 'boxed', 'spotlight', 'pop', 'cinematic'],
     framing: ['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'],
     qa_checker: ['avsync', 'face', 'loudness', 'jitter', 'ending'],
@@ -52,7 +60,8 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
   for (const key of ['outro_applied', 'brand_outro_enabled', 'reused_content_profile', 'has_crop_track', 'has_manual_adjustment', 'auto_frame_retained', 'tags_enabled', 'packaging_fallback', 'burned_captions', 'subtitle_enabled', 'has_subtitle', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean
   }
-  for (const key of ['warning_count', 'outro_applied_count', 'outro_fallback_count', 'outro_unknown_count', 'full_frame_count', 'framing_pending_count', 'framing_captions_count', 'example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'on_demand_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count']) {
+  if (typeof input.downgraded === 'boolean') out.downgraded = input.downgraded
+  for (const key of ['warning_count', 'outro_applied_count', 'outro_fallback_count', 'outro_unknown_count', 'full_frame_count', 'framing_pending_count', 'framing_captions_count', 'example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'on_demand_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'editorial_count', 'street_count', 'classic_count', 'html_downgrade_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count', 'cpu_count']) {
     if (typeof input[key] === 'number' && Number.isFinite(input[key]) && (input[key] as number) >= 0) out[key] = input[key] as number
   }
   for (const prefix of ['requested', 'succeeded', 'failed']) {
@@ -109,7 +118,7 @@ export interface StudioSnapshot {
   analysis_history?: { run_id: string; plan?: StudioSnapshot['plan']; analysis: StudioSnapshot['analysis'] }[]
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; local_evidence?: { subtitle_status?: string } }
   analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
-  jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[] }; qa?: StudioQa | null }[]
+  jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[]; template_render?: { template?: string; requested_template?: string; downgraded?: boolean; downgrade_reason?: string; encoder?: string; duration_ms?: number; failure_reason?: string; outcome?: string; os?: string; cpu_count?: number } }; qa?: StudioQa | null }[]
   generation?: { auto_start?: boolean; status?: string; error_code?: string; failure_stage?: string; http_status?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string } | null
   output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null; qa?: StudioQa | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
@@ -136,6 +145,15 @@ export function generationSummary(snapshot: StudioSnapshot): Record<string, unkn
     interview_count: packaged.filter(p => p?.template === 'interview_zh').length,
     podcast_count: packaged.filter(p => p?.template === 'podcast_en').length,
     landscape_count: variants.length - packaged.length,
+    editorial_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.template === 'editorial' && jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded !== true).length,
+    street_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.template === 'street' && jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded !== true).length,
+    classic_count: variants.filter(v => {
+      const report = jobs.get(v.render_job_id || '')?.result?.template_render
+      if (report) return report.downgraded === true || report.template === 'classic'
+      const packaging = templates.get(v.draft_id)
+      return packaging?.template === 'interview_zh' || packaging?.template === 'podcast_en'
+    }).length,
+    html_downgrade_count: variants.filter(v => jobs.get(v.render_job_id || '')?.result?.template_render?.downgraded === true).length,
     speaker_framed_count: count(v => v.framing === 'speaker'),
     full_frame_count: count(v => v.framing === 'full_frame'),
     framing_pending_count: count(v => v.framing === 'full_frame_pending'),
@@ -273,6 +291,8 @@ export class WorkflowTracker {
       if (variant && ['completed', 'failed'].includes(variant.status)) {
         event = 'studio_variant_finished'; outcome = variant.status
         details = { strategy_id: variant.strategy_id, framing: variant.framing, error_code: job?.error_code, outro_applied: job?.result?.outro_applied, warning_count: job?.result?.warnings?.length }
+        const report = job?.result?.template_render
+        if (report) this.emitOnce(w, 'template', 'studio_template_render_finished', safeStudioProperties({ ...this.context(w.projectId || w.id), ...report, strategy_id: variant.strategy_id }))
       }
     } else if (w.kind === 'studio-export') {
       const job = snapshot.jobs?.find(j => j.job_id === w.id)

@@ -19,6 +19,7 @@ const LABELS: Record<FlagName, string> = {
   import_drop_zone: '首页使用居中的拖放区',
   track_overrides: '记录对自动决定的修改',
   qa_gate_blocking: '成片质检',
+  pkg_templates_v1: 'HTML 包装模板',
 }
 
 const VARIANT_LABELS: Record<string, string> = {

@@ -25,6 +25,7 @@ DEFAULTS: dict[str, bool | str] = {
     'track_overrides': False,
     # Plan §10.2 starts this gate at full shadow. block is accepted and not enforced.
     'qa_gate_blocking': 'shadow',
+    'pkg_templates_v1': False,
 }
 
 VARIANTS = {

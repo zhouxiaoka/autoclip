@@ -1589,5 +1589,14 @@
   "自动渲染前 3 条": "Render the top 3 automatically",
   "成片质检": "Export quality check",
   "只记录，不拦截": "Record only, do not block",
-  "拦截（当前仍只记录）": "Block (still records only)"
+  "拦截（当前仍只记录）": "Block (still records only)",
+  "HTML 包装模板": "HTML packaging templates",
+  "包装模板": "Template",
+  "杂志风": "Editorial",
+  "坐姿访谈、演讲，衬线标题。": "Interviews and talks, with a serif title.",
+  "街头快剪": "Street",
+  "街访、快问快答，短字幕。": "Street interviews, with short captions.",
+  "经典包装": "Classic",
+  "沿用现在的字幕包装。": "Keep the current caption packaging.",
+  "导入时选定。得分靠前的成片用这个模板，其余用经典包装。": "Chosen at import. The highest-scored clips use it; the rest stay classic."
 }
