@@ -1,8 +1,13 @@
 """MCP and CLI events stay anonymous and follow the analytics switch."""
 import asyncio
 import json
+import os
+import subprocess
+import sys
 import threading
 import time
+import urllib.error
+from pathlib import Path
 
 import pytest
 
@@ -154,3 +159,113 @@ def test_job_finished_duration_is_the_task_and_restart_does_not_resend(monkeypat
     mcp_telemetry.flush()
     assert [row['event'] for row in captured].count('mcp_job_finished') == 1
     assert [row['event'] for row in captured].count('mcp_tool_called') == 2
+
+
+def test_a_failed_post_is_not_marked_sent(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    monkeypatch.delenv('VITE_PUBLIC_POSTHOG_KEY', raising=False)
+    (tmp_path / 'privacy.json').write_text(json.dumps({'analytics': True, 'crash_reports': False}))
+    (tmp_path / 'analytics.json').write_text('{"distinct_id":"018f6b2a-7c3d-7b2a-8c11-111111111111"}')
+
+    def fail(req, timeout=0):
+        raise urllib.error.URLError('down')
+
+    monkeypatch.setattr(mcp_telemetry.urllib.request, 'urlopen', fail)
+    mcp_telemetry.record('get_quick_output_status', 'cli', time.perf_counter(), ok=False, error_code='failed',
+                         job_id='job-fail', terminal=True)
+    mcp_telemetry.flush()
+    marker = tmp_path / 'mcp-events-seen.json'
+    assert not marker.exists()
+
+    captured = []
+
+    class Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def succeed(req, timeout=0):
+        captured.append(json.loads(req.data.decode()))
+        return Resp()
+
+    monkeypatch.setattr(mcp_telemetry.urllib.request, 'urlopen', succeed)
+    mcp_telemetry.record('get_quick_output_status', 'cli', time.perf_counter(), ok=False, error_code='failed',
+                         job_id='job-fail', terminal=True)
+    mcp_telemetry.flush()
+    assert [row['event'] for row in captured].count('mcp_job_finished') == 1
+    assert marker.is_file()
+    assert 'job-fail' not in marker.read_text(encoding='utf-8')
+
+
+def test_flush_returns_when_the_timeout_expires(monkeypatch, tmp_path):
+    _capture(monkeypatch, tmp_path)
+    release = threading.Event()
+
+    def urlopen(req, timeout=0):
+        release.wait(5)
+        return type('Resp', (), {'__enter__': lambda self: self, '__exit__': lambda self, *_args: False})()
+
+    monkeypatch.setattr(mcp_telemetry.urllib.request, 'urlopen', urlopen)
+    mcp_telemetry.record('get_version', 'cli', time.perf_counter(), ok=True, error_code='none')
+    started = time.monotonic()
+    mcp_telemetry.flush(0.2)
+    elapsed = time.monotonic() - started
+    release.set()
+    mcp_telemetry.flush(2)
+    assert 0.15 <= elapsed < 1.0
+
+
+def _exit_script(body: str) -> str:
+    return (
+        'import json, os, time\n'
+        'from pathlib import Path\n'
+        'app = Path(os.environ["APP"])\n'
+        '(app / "privacy.json").write_text(json.dumps({"analytics": True, "crash_reports": False}))\n'
+        '(app / "analytics.json").write_text(\'{"distinct_id":"018f6b2a-7c3d-7b2a-8c11-111111111111"}\')\n'
+        'from backend.services import mcp_telemetry\n'
+        + body
+        + 'mcp_telemetry.record("get_version", "cli", mcp_telemetry.time.perf_counter(), ok=True, error_code="none")\n'
+    )
+
+
+def test_process_exit_flushes_the_queue(tmp_path):
+    out = tmp_path / 'posted.json'
+    script = _exit_script(
+        'out = Path(os.environ["OUT"])\n'
+        'def urlopen(req, timeout=0):\n'
+        '    out.write_text(req.data.decode())\n'
+        '    class R:\n'
+        '        def __enter__(self): return self\n'
+        '        def __exit__(self, *a): return False\n'
+        '    return R()\n'
+        'mcp_telemetry.urllib.request.urlopen = urlopen\n'
+    )
+    env = os.environ.copy()
+    env.update(APP=str(tmp_path), OUT=str(out), AUTOCLIP_APP_DIR=str(tmp_path), AUTOCLIP_POSTHOG_KEY='phc_test')
+    env['PYTHONPATH'] = str(Path(__file__).resolve().parents[2]) + os.pathsep + env.get('PYTHONPATH', '')
+    completed = subprocess.run([sys.executable, '-c', script], env=env, capture_output=True, text=True, timeout=10)
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(out.read_text(encoding='utf-8'))['event'] == 'mcp_tool_called'
+
+
+def test_process_exit_stops_waiting_after_two_seconds(tmp_path):
+    script = _exit_script(
+        'def urlopen(req, timeout=0):\n'
+        '    time.sleep(30)\n'
+        '    class R:\n'
+        '        def __enter__(self): return self\n'
+        '        def __exit__(self, *a): return False\n'
+        '    return R()\n'
+        'mcp_telemetry.urllib.request.urlopen = urlopen\n'
+    )
+    env = os.environ.copy()
+    env.update(APP=str(tmp_path), AUTOCLIP_APP_DIR=str(tmp_path), AUTOCLIP_POSTHOG_KEY='phc_test')
+    env['PYTHONPATH'] = str(Path(__file__).resolve().parents[2]) + os.pathsep + env.get('PYTHONPATH', '')
+    started = time.monotonic()
+    completed = subprocess.run([sys.executable, '-c', script], env=env, capture_output=True, text=True, timeout=10)
+    elapsed = time.monotonic() - started
+    assert completed.returncode == 0, completed.stderr
+    assert elapsed < 4

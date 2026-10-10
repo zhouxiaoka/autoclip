@@ -6,6 +6,7 @@ and error_code. Paths, secrets and free text are not properties.
 """
 from __future__ import annotations
 
+import atexit
 import hashlib
 import json
 import logging
@@ -37,14 +38,16 @@ TERMINAL = frozenset({'completed', 'partial', 'failed', 'interrupted', 'cancelle
 _CLIENT = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')
 _JOB_ID = re.compile(r'^[A-Za-z0-9_-]{1,100}$')
 _seen: set[tuple[str, str, bool]] = set()
+_pending: set[tuple[str, str, bool]] = set()
 _seen_lock = threading.Lock()
 _posts: queue.Queue = queue.Queue()
 _worker: threading.Thread | None = None
 _worker_lock = threading.Lock()
+_EXIT_FLUSH_SECONDS = 2.0
 
 
 def reset_seen() -> None:
-    """Clear the in-memory dedup set. The on-disk marker stays, so a restart still will not resend."""
+    """Clear the in-memory dedup set. A marker written after a successful send stays on disk."""
     _seen.clear()
 
 
@@ -131,10 +134,27 @@ def _properties(tool: str, client: str | None, duration_ms: int, ok: bool, error
 
 
 def flush(timeout: float = 5) -> None:
-    """Wait until queued posts have been attempted. Callers that emit do not wait."""
+    """Wait until queued posts have been attempted, but no longer than `timeout` seconds.
+
+    Callers that emit do not wait. The process exit hook uses two seconds.
+    """
     if timeout <= 0:
         return
-    _posts.join()
+    deadline = time.monotonic() + float(timeout)
+    while True:
+        if _posts.unfinished_tasks <= 0:
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(0.02, remaining))
+
+
+def _flush_on_exit() -> None:
+    flush(_EXIT_FLUSH_SECONDS)
+
+
+atexit.register(_flush_on_exit)
 
 
 def _cap_ms(value: float) -> int:
@@ -183,26 +203,40 @@ def _load_seen() -> list[str]:
     return [item for item in data if isinstance(item, str)]
 
 
-def _claim(key: tuple[str, str, bool]) -> bool:
-    """True when this process should send the event. The marker is a hash, not the job id."""
+def _reserve(key: tuple[str, str, bool]) -> bool:
+    """True when this process should send. Does not mark the event as sent."""
     digest = _digest(key)
     with _seen_lock:
-        if key in _seen:
+        if key in _seen or key in _pending:
             return False
-        current = _load_seen()
-        if digest in current:
+        if digest in _load_seen():
             _seen.add(key)
             return False
+        _pending.add(key)
+        return True
+
+
+def _release(key: tuple[str, str, bool]) -> None:
+    with _seen_lock:
+        _pending.discard(key)
+
+
+def _remember(key: tuple[str, str, bool]) -> None:
+    """Record a successful send. A failed post never reaches this, so a later try can send."""
+    digest = _digest(key)
+    with _seen_lock:
         _seen.add(key)
         path = _seen_path()
         if path is None:
-            return True
+            return
+        current = _load_seen()
+        if digest in current:
+            return
         current.append(digest)
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix('.tmp')
         temporary.write_text(json.dumps(current[-2000:]), encoding='utf-8')
         temporary.replace(path)
-        return True
 
 
 def _ensure_worker() -> None:
@@ -217,9 +251,13 @@ def _ensure_worker() -> None:
 def _drain() -> None:
     while True:
         item = _posts.get()
+        dedup = item.get('dedup')
         try:
-            _post(item['event'], item['properties'])
+            if _post(item['event'], item['properties']) and dedup is not None:
+                _remember(dedup)
         finally:
+            if dedup is not None:
+                _release(dedup)
             _posts.task_done()
 
 
@@ -227,17 +265,17 @@ def _emit(event: str, properties: dict, dedup: tuple[str, str, bool] | None = No
     key = qa_telemetry._key()
     if not key or not qa_telemetry._analytics_allowed():
         return
-    if dedup is not None and not _claim(dedup):
+    if dedup is not None and not _reserve(dedup):
         return
     _ensure_worker()
-    _posts.put({'event': event, 'properties': properties})
+    _posts.put({'event': event, 'properties': properties, 'dedup': dedup})
 
 
-def _post(event: str, properties: dict) -> None:
+def _post(event: str, properties: dict) -> bool:
     try:
         key = qa_telemetry._key()
         if not key or not qa_telemetry._analytics_allowed():
-            return
+            return False
         body = json.dumps({
             'api_key': key,
             'event': event,
@@ -248,6 +286,7 @@ def _post(event: str, properties: dict) -> None:
             f'{qa_telemetry._HOST}/capture/', data=body, headers={'Content-Type': 'application/json'}, method='POST',
         )
         with urllib.request.urlopen(request, timeout=1.5):
-            return
+            return True
     except (OSError, TypeError, ValueError, urllib.error.URLError):
         logger.warning('MCP event was not delivered')
+        return False
