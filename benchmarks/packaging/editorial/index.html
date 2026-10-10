@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>editorial fixture</title>
+<style>
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+  }
+  #root { position: relative; width: 100%; height: 100%; }
+  #scrim {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 48%;
+    background: linear-gradient(to top, rgba(26, 26, 25, 0.78), rgba(26, 26, 25, 0));
+  }
+  #kicker {
+    position: absolute;
+    top: 4.5%;
+    left: 8%;
+    color: #F6F5F3;
+    font: 500 13px/1 "WenQuanYi Micro Hei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
+    letter-spacing: 0.22em;
+  }
+  #kicker i {
+    display: inline-block;
+    width: 18px;
+    height: 2px;
+    margin-right: 10px;
+    background: #2D6BFF;
+    vertical-align: middle;
+  }
+  #hook {
+    position: absolute;
+    top: 9%;
+    left: 8%;
+    right: 10%;
+    color: #F6F5F3;
+    font: 400 58px/1.05 "DejaVu Serif", "WenQuanYi Micro Hei", "Noto Sans SC", serif;
+  }
+  #num {
+    position: absolute;
+    top: 34%;
+    right: 8%;
+    color: #F6F5F3;
+    font: 400 84px/1 "DejaVu Serif", Georgia, serif;
+    font-variant-numeric: tabular-nums;
+  }
+  #num small {
+    display: block;
+    margin-top: 4px;
+    font: 500 14px/1 "WenQuanYi Micro Hei", "Noto Sans SC", sans-serif;
+    letter-spacing: 0.14em;
+  }
+  #gloss {
+    position: absolute;
+    left: 8%;
+    top: 56%;
+    width: 42%;
+    padding-top: 8px;
+    border-top: 1px solid rgba(246, 245, 243, 0.72);
+    color: #F6F5F3;
+    font: 500 16px/1.35 "WenQuanYi Micro Hei", "Noto Sans SC", sans-serif;
+  }
+  #gloss b {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+  }
+  #sub {
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    bottom: 10%;
+    color: #F6F5F3;
+    font: 500 32px/1.35 "WenQuanYi Micro Hei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
+  }
+  #sub em {
+    font-family: "DejaVu Serif", "WenQuanYi Micro Hei", serif;
+    font-style: italic;
+    font-weight: 400;
+  }
+</style>
+</head>
+<body>
+  <div id="root">
+    <div id="scrim"></div>
+    <div id="kicker"></div>
+    <div id="hook"></div>
+    <div id="num"></div>
+    <div id="gloss"></div>
+    <div id="sub"></div>
+  </div>
+  <script src="template.js"></script>
+</body>
+</html>
