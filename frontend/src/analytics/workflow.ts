@@ -53,6 +53,11 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     stage: ['pre_import', 'results_chip', 'editor'],
     packaging_style: ['classic', 'boxed', 'spotlight', 'pop', 'cinematic'],
     framing: ['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'],
+    qa_checker: ['avsync', 'face', 'loudness', 'jitter', 'ending'],
+    qa_outcome: ['pass', 'fail', 'skip'],
+    qa_bucket: ['lt40', '40_80', '80_200', 'gt200', 'start_only', 'none', 'lt10', '10_40', 'gt40', 'in_target', 'quiet_1_3', 'quiet_gt3', 'loud_1_3', 'loud_gt3', 'peak', 'peak_and_level', 'calm', 'flash', 'rms', 'flash_and_rms', 'complete', 'mid_word', 'mid_sentence', 'timeout', 'budget', 'no_audio', 'no_detector', 'no_words', 'unreadable', 'error'],
+    qa_avsync: ['pass', 'fail', 'skip'], qa_face: ['pass', 'fail', 'skip'], qa_loudness: ['pass', 'fail', 'skip'], qa_jitter: ['pass', 'fail', 'skip'], qa_ending: ['pass', 'fail', 'skip'],
+    qa_mode: ['shadow'],
     failure_stage: ['screening', 'dispatch', 'production', 'ingest', 'subtitle', 'analyze', 'vision', 'render'],
     route: ['subtitle', 'visual'],
   }
@@ -106,6 +111,9 @@ export function routeName(path: string): string {
   return ['/', '/settings'].includes(p) ? p : '/other'
 }
 
+export interface StudioQaCheck { checker?: string; outcome?: string; bucket?: string; duration_ms?: number }
+export interface StudioQa { mode?: string; checks?: StudioQaCheck[] }
+
 export interface TaskSnapshot {
   id: string; task_type: string; status: string; created_at: string
   started_at?: string | null; completed_at?: string | null
@@ -117,9 +125,9 @@ export interface StudioSnapshot {
   analysis_history?: { run_id: string; plan?: StudioSnapshot['plan']; analysis: StudioSnapshot['analysis'] }[]
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; local_evidence?: { subtitle_status?: string } }
   analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
-  jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[]; template_render?: { template?: string; requested_template?: string; downgraded?: boolean; downgrade_reason?: string; encoder?: string; duration_ms?: number; failure_reason?: string; outcome?: string; os?: string; cpu_count?: number } } }[]
+  jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[]; template_render?: { template?: string; requested_template?: string; downgraded?: boolean; downgrade_reason?: string; encoder?: string; duration_ms?: number; failure_reason?: string; outcome?: string; os?: string; cpu_count?: number } }; qa?: StudioQa | null }[]
   generation?: { auto_start?: boolean; status?: string; error_code?: string; failure_stage?: string; http_status?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
-  output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null }[]
+  output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null; qa?: StudioQa | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
 }
 
@@ -313,7 +321,9 @@ export class WorkflowTracker {
         outcome = ['ai', 'local'].includes(snapshot.plan.mode || '') ? 'recommended' : snapshot.plan.mode
         details = { ...details, recommendation_mode: snapshot.plan.mode, analysis_mode: snapshot.plan.recommended_analysis, subtitle_status: snapshot.plan.local_evidence?.subtitle_status }
       }
-    } else if (w.kind === 'studio-generation' && ['completed', 'partial', 'failed'].includes(snapshot.generation?.status || '')) {
+    } else if (w.kind === 'studio-generation') {
+      if (!['completed', 'partial', 'failed'].includes(snapshot.generation?.status || '')) return
+
       event = 'studio_generation_finished'; outcome = snapshot.generation!.status
       const unfinished = ['failed', 'partial'].includes(outcome || '')
       details = { ...generationSummary(snapshot), error_code: unfinished ? snapshot.generation?.error_code || snapshot.analysis?.error_code : undefined,

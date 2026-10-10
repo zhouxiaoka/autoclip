@@ -17,6 +17,9 @@ function load(name, mocks = {}, globals = {}) {
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key' },
     require: (id) => {
       if (id in mocks) return mocks[id]
+      if (id === '../utils/apiConfig') {
+        return { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener: () => () => {} } }
+      }
       throw new Error(`Unexpected dependency: ${id}`)
     }, ...globals }, { filename: file })
   return module.exports
@@ -137,6 +140,34 @@ test('persisted opt-out skips SDK initialization and can be enabled later withou
   assert.equal(calls.filter(call => call === 'init').length, 1)
   assert.equal(calls.filter(call => call === 'capture').length, 1)
   assert.equal(storage.getItem('autoclip.analytics.optOut'), 'false')
+})
+test('the anonymous distinct id is stored once for backend events', async () => {
+  const storage = memory()
+  const puts = []
+  const id = '018f6b2a-7c3d-7b2a-8c11-111111111111'
+  const sdk = {
+    init(_key, cfg) { cfg.loaded?.({ onFeatureFlags() {} }) },
+    capture() { return {} },
+    get_distinct_id: () => id,
+    opt_in_capturing() {},
+    opt_out_capturing() {},
+  }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, {
+    localStorage: storage,
+    window: {},
+    fetch: (url, opts) => {
+      puts.push({ url, body: opts.body })
+      return Promise.resolve({ ok: true })
+    },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(puts.length, 1)
+  assert.equal(puts[0].url, '/api/v1/settings/analytics-identity')
+  assert.equal(JSON.parse(puts[0].body).distinct_id, id)
+  ph.setAnalyticsEnabled(true)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(puts.length, 1)
 })
 test('turning analytics off pauses flag reloads and never asks for flags while opted out', () => {
   const storage = memory()
@@ -333,6 +364,23 @@ test('rescreen ignores an old plan while running and replaces the old local watc
  assert.equal(core.routeName('/import/private?token=secret'),'/import/:id')
  assert.equal(core.routeName('/project/private/studio/secret'),'/project/:id/studio/:draftId')
 })
+test('the UI does not emit studio_qa_checked; the backend owns that event', () => {
+  const s = setup()
+  s.tracker.watch('studio-variant', 'variant-1', 'project', undefined, {}, false, 'job-1')
+  const qa = { mode: 'shadow', checks: [
+    { checker: 'avsync', outcome: 'fail', bucket: '80_200', duration_ms: 12 },
+    { checker: 'ending', outcome: 'fail', bucket: 'mid_word', duration_ms: 3, text: 'private caption' },
+    { checker: 'loudness', outcome: 'pass', bucket: 'in_target', duration_ms: 40 },
+  ] }
+  const snapshot = { output_variants: [{ id: 'variant-1', draft_id: 'd', render_job_id: 'job-1', strategy_id: 'douyin', status: 'completed', qa }] }
+  const watch = s.tracker.list()[0]
+  s.tracker.observeStudio(watch, snapshot)
+  s.tracker.observeStudio(watch, snapshot)
+  assert.equal(s.events.filter(item => item.event === 'studio_qa_checked').length, 0)
+  assert.equal(JSON.stringify(s.events).includes('private'), false)
+  assert.equal(s.events.some(item => item.event === 'studio_variant_finished'), true)
+})
+
 test('immutable export repeated acceptance does not recount its completion',()=>{
  const s=setup();s.tracker.watch('studio-export','j','p');const w=s.tracker.list()[0]
  s.tracker.observeStudio(w,{jobs:[{job_id:'j',status:'completed',duration_ms:20}]})

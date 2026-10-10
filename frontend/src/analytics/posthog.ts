@@ -10,6 +10,7 @@
  * 因此 dev 环境（无 key）不会污染线上数据。
  */
 import posthog from 'posthog-js'
+import { apiConfigManager } from '../utils/apiConfig'
 import { routeName, type Properties } from './workflow'
 
 export const POSTHOG_KEY = import.meta.env.VITE_PUBLIC_POSTHOG_KEY as string | undefined
@@ -23,6 +24,51 @@ const OPT_OUT_STORAGE_KEY = 'autoclip.analytics.optOut'
 let initialized = false
 let flagsNetworkEnabled = false
 let preferenceOverride: boolean | undefined
+let publishedDistinctId = ''
+let pendingDistinctId = ''
+let retryIdentity = false
+let watchingIdentity = false
+const ANONYMOUS_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,199}$/
+
+/** Persist the SDK's anonymous id so backend events join the same person and experiment. */
+function publishAnonymousId(): void {
+  if (!initialized || !isAnalyticsEnabled() || typeof fetch !== 'function') return
+  let id = ''
+  try { id = String(posthog.get_distinct_id?.() || '') } catch { return }
+  if (!ANONYMOUS_ID.test(id) || id === publishedDistinctId) return
+  // The desktop API port often arrives while the first attempt is still in flight.
+  if (id === pendingDistinctId) {
+    retryIdentity = true
+    return
+  }
+  pendingDistinctId = id
+  retryIdentity = false
+  const finish = (ok: boolean) => {
+    if (pendingDistinctId === id) pendingDistinctId = ''
+    if (ok) publishedDistinctId = id
+    else if (retryIdentity) {
+      retryIdentity = false
+      publishAnonymousId()
+    }
+  }
+  try {
+    const base = String(apiConfigManager.getBaseUrl() || '/api/v1').replace(/\/$/, '')
+    void fetch(`${base}/settings/analytics-identity`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ distinct_id: id }),
+    }).then((response) => finish(Boolean(response?.ok))).catch(() => finish(false))
+  } catch {
+    finish(false)
+  }
+}
+
+function watchAnonymousId(): void {
+  if (watchingIdentity) return
+  watchingIdentity = true
+  try { apiConfigManager.addListener(() => publishAnonymousId()) } catch { /* backend port can arrive later */ }
+}
+
 const preferenceListeners = new Set<() => void>()
 const remoteFlagListeners = new Set<() => void>()
 export function onAnalyticsPreferenceChange(listener: () => void): () => void {
@@ -139,11 +185,14 @@ export function initAnalytics(): void {
     opt_out_capturing_by_default: !isAnalyticsEnabled(),
     loaded: (ph) => {
       try { ph.onFeatureFlags?.(() => notifyRemoteFlags()) } catch { /* flags are optional */ }
+      publishAnonymousId()
       if (import.meta.env.DEV) ph.debug()
     },
     })
     flagsNetworkEnabled = true
     initialized = true
+    publishAnonymousId()
+    watchAnonymousId()
   } catch {
     initialized = false
   }
@@ -165,6 +214,7 @@ export function setAnalyticsEnabled(enabled: boolean): void {
   try {
     if (enabled) {
       posthog.opt_in_capturing()
+      publishAnonymousId()
       if (!flagsNetworkEnabled) enableFlagNetwork()
     } else {
       posthog.opt_out_capturing()

@@ -10,6 +10,7 @@
   "hide_legacy_entrypoints": false,
   "import_drop_zone": false,
   "track_overrides": false,
+  "qa_gate_blocking": "shadow",
   "pkg_templates_v1": false,
   "pkg_template_picker_visual": false
 }
