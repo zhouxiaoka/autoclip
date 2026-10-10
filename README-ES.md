@@ -247,6 +247,23 @@ python -m pip install -r requirements.txt
 python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 ```
 
+Sin el ZIP, los comandos `uvx` y `npx` estarán disponibles cuando se publique el paquete. Mientras tanto, instala desde el código:
+
+```bash
+# 即将提供：发布到 PyPI 和 npm 之后才能用
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
+```
+
+```bash
+# 现在就能用：在已克隆的仓库根目录从源码安装
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --no-deps .
+autoclip --version
+```
+
 Los comandos anteriores son para macOS / Linux. En Windows, crea con `py -m venv venv` y activa con `.\venv\Scripts\Activate.ps1`; después usa los mismos comandos `python -m pip`.
 
 Guarda primero la configuración del modelo: reutiliza la del escritorio o configura tu directorio con el ejemplo sin claves del ZIP. [Guía CLI / MCP](docs/CLI_AND_MCP.md) (chino). `produce` no usa la modificación temporal de `run --provider`. `--srt` evita transcribir.

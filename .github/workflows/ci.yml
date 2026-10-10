@@ -79,7 +79,7 @@ jobs:
         run: |
           pip install 'opencv-python-headless>=4.10'
           pip wheel --no-deps --wheel-dir /tmp/autoclip-wheel .
-          python scripts/verify_python_wheel.py /tmp/autoclip-wheel/autoclip-*-py3-none-any.whl --video backend/assets/example/source.mp4 --report /tmp/autoclip-wheel/portrait-report.json
+          python scripts/verify_python_wheel.py /tmp/autoclip-wheel/autoclip_mcp-*-py3-none-any.whl --video backend/assets/example/source.mp4 --report /tmp/autoclip-wheel/portrait-report.json
 
       - name: Community board and feedback ingest checks
         run: |

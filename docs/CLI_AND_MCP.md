@@ -63,9 +63,18 @@ MCP 不再接收 `api_key` 参数。模型密钥用环境变量 `AUTOCLIP_API_KE
 ```bash
 git clone https://github.com/zhouxiaoka/autoclip.git && cd autoclip
 python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-pip install -e .            # 得到 autoclip / autoclip-mcp 两个命令
+python -m pip install -r requirements.txt
+python -m pip install --no-deps .    # 现在就能用，得到 autoclip 和 autoclip-mcp
+autoclip --version
 ```
+
+```bash
+# 即将提供：发布到 PyPI 和 npm 之后才能用
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
+```
+
+PyPI 发行名是 `autoclip-mcp`。`uvx autoclip-mcp` 会安装这个包并运行 MCP 入口，包里的 CLI 命令仍是 `autoclip`。wheel 文件名是 `autoclip_mcp-<version>-py3-none-any.whl`。这两条一行命令即将提供：包还没发布到 PyPI，`uvx` 不能从公共索引装到它。已发布的 ZIP 里用 `autoclip_mcp-*-py3-none-any.whl`；现在从源码安装用上面的 `python -m pip install --no-deps .`。
 
 不装包也能用：`python -m backend.cli ...`（在仓库根目录）。
 

@@ -355,8 +355,8 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install 'opencv-python-headless>=4.10'
           python -m pip wheel --no-deps --wheel-dir dist .
-          python scripts/verify_python_wheel.py dist/autoclip-*-py3-none-any.whl --video backend/assets/example/source.mp4 --report "$RUNNER_TEMP/wheel-portrait-report.json"
-          python scripts/build_python_release.py dist/autoclip-*-py3-none-any.whl --out "dist/autoclip-${GITHUB_REF_NAME#v}-cli-mcp.zip"
+          python scripts/verify_python_wheel.py dist/autoclip_mcp-*-py3-none-any.whl --video backend/assets/example/source.mp4 --report "$RUNNER_TEMP/wheel-portrait-report.json"
+          python scripts/build_python_release.py dist/autoclip_mcp-*-py3-none-any.whl --out "dist/autoclip-${GITHUB_REF_NAME#v}-cli-mcp.zip"
           (cd dist && sha256sum *.whl *-cli-mcp.zip > python-release-sha256.txt)
 
       # Release 正文 = CHANGELOG.md 里该版本的段落 + 平台安装说明（scripts/release_notes.py，仅标准库）
