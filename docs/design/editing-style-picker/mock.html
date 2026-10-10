@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset=utf-8><style>
+:root{--bg:#f6f5f2;--panel:#fff;--ink:#16161a;--mut:#6b6b74;--line:#e6e4df;--acc:#ff5a36;--sel:#16161a}
+.dark{--bg:#0e0e11;--panel:#17171c;--ink:#f2f1ee;--mut:#9a9aa3;--line:#2a2a31;--sel:#f2f1ee}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans CJK SC","PingFang SC",sans-serif;width:1280px;height:800px}
+.wrap{padding:44px 64px}.top{display:flex;justify-content:space-between;align-items:end}
+h1{font-size:26px;margin:0 0 6px;font-weight:700}.sub{color:var(--mut);font-size:14px}
+.src{margin-top:24px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 20px;font-size:14px;color:var(--mut)}
+.sec{margin-top:28px;display:flex;justify-content:space-between;align-items:center}.sec b{font-size:16px}
+.chip{font-size:12px;color:var(--mut)}
+.row{display:flex;gap:22px;margin-top:16px}
+.card{width:200px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:10px;transition:all .18s ease;position:relative}
+.th{width:200px;height:356px;border-radius:10px;overflow:hidden;position:relative;background:#000}
+.th img{width:100%;height:100%;object-fit:cover;display:block}
+.card.sel{border:2px solid var(--sel);padding:9px;box-shadow:0 10px 30px rgba(0,0,0,.14)}
+.card.hov{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.badge{position:absolute;top:18px;left:18px;background:var(--acc);color:#fff;font-size:12px;padding:3px 8px;border-radius:99px;font-weight:600}
+.play{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;padding:2px 7px;border-radius:99px}
+.prog{position:absolute;left:0;bottom:0;height:3px;background:var(--acc)}
+.nm{margin-top:10px;font-weight:700;font-size:15px;display:flex;justify-content:space-between}
+.ck{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line)}.sel .ck{background:var(--sel);border-color:var(--sel);box-shadow:inset 0 0 0 4px var(--panel)}
+.ds{color:var(--mut);font-size:12.5px;margin-top:4px}
+.why{margin-top:22px;font-size:13px;color:var(--mut);background:var(--panel);border:1px dashed var(--line);border-radius:10px;padding:10px 14px;width:fit-content}
+.why b{color:var(--acc)}.btn{background:var(--ink);color:var(--bg);padding:12px 26px;border-radius:99px;font-weight:600;font-size:15px}
+</style></head><body><div class=wrap>
+<div class=top><div><h1>一键出片</h1><div class=sub>粘贴链接或拖入视频，剩下的交给 AutoClip</div></div><div class=btn>开始出片 →</div></div>
+<div class=src>🎬 dwarkesh_jensen_huang_ep.mp4 · 1:12:40 · 坐姿访谈 · 中英字幕</div>
+<div class=sec><b>包装模板</b><span class=chip>得分前 3 的成片使用所选模板，其余用经典 · 方向键切换</span></div>
+<div class=row>
+ <div class="card C1"><div class=th><img id=i1 src=assets/editorial.jpg><span class=badge>✦ 推荐</span><span class=play>▶ 2.5s</span><div class=prog id=p1></div></div><div class=nm>杂志风<span class=ck></span></div><div class=ds>衬线大标题 · 坐姿访谈、演讲</div></div>
+ <div class="card C2"><div class=th><img id=i2 src=assets/street.jpg><span class=play>▶ 2.5s</span><div class=prog id=p2></div></div><div class=nm>街头快剪<span class=ck></span></div><div class=ds>短字幕快切 · 街访、快问快答</div></div>
+ <div class="card C3"><div class=th><img src=assets/classic.jpg><span class=play>▶ 2.5s</span></div><div class=nm>经典<span class=ck></span></div><div class=ds>沿用现有字幕包装</div></div>
+</div>
+<div class=why><b>为什么推荐杂志风：</b>检测到坐姿双人访谈、语速平稳，长句金句多，衬线标题更显质感。</div>
+</div><script>
+const q=new URLSearchParams(location.search);if(q.get('dark'))document.body.className='dark';
+const s=q.get('s')||'0',h=q.get('h'),f=q.get('f');document.querySelector('.C'+(+s+1)).classList.add('sel');
+if(h){document.querySelector('.C'+h).classList.add('hov');document.getElementById('i'+h).src=`assets/${h==1?'editorial':'street'}${f>0.5?'_b':''}.jpg`;document.getElementById('p'+h).style.width=(f*100)+'%'}
+if(s=='1')document.querySelector('.why').innerHTML='<b>已改为街头快剪</b> · 推荐是杂志风，<u>恢复推荐</u>';
+</script></body></html>

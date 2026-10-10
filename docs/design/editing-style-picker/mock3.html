@@ -1,0 +1,53 @@
+<!doctype html><html><head><meta charset=utf-8><style>
+:root{--page:#f5f5f4;--box:#fff;--ink:#1b1b1b;--mut:#6f6f6f;--line:#e4e4e2;--blue:#3b73f6;--seg:#ecebe8;--segon:#fff;--cta:#1b1b1b;--ctai:#fff;--glass:rgba(255,255,255,.55);--hl:rgba(255,255,255,.95);--sh:rgba(0,0,0,.10)}
+.dark{--page:#141416;--box:#1e1e21;--ink:#eeeeec;--mut:#9b9b9f;--line:#333338;--seg:#26262a;--segon:#26262a;--cta:#ecebe7;--ctai:#1b1b1b;--glass:rgba(255,255,255,.07);--hl:rgba(255,255,255,.28);--sh:rgba(0,0,0,.55)}
+*{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);font-family:"Inter","Noto Sans CJK SC",sans-serif;width:1120px;-webkit-font-smoothing:antialiased}
+.pg{padding:40px 48px 48px}h1{font-size:28px;margin:0;letter-spacing:-.01em}.m{color:var(--mut);font-size:14px}.pg>.m{margin:8px 0 20px}
+.box{background:var(--box);border:1px solid var(--line);border-radius:18px;padding:28px 28px 24px}
+.seg{display:inline-flex;background:var(--seg);border-radius:99px;padding:4px}.seg span{padding:8px 18px;border-radius:99px;font-size:15px;color:var(--mut)}.seg .on{background:var(--segon);color:var(--ink);font-weight:600;box-shadow:0 1px 3px var(--sh)}
+.ta{margin-top:22px;border:1px solid var(--line);border-radius:12px;height:104px;padding:14px 16px;font-size:15px;color:var(--mut)}.ta.f{color:var(--ink)}
+.probe{margin-top:10px;font-size:13px;color:var(--mut);display:flex;gap:8px;align-items:center}.probe i{width:7px;height:7px;border-radius:9px;background:#34c759;display:inline-block}
+.h{font-weight:600;font-size:15px;margin-top:24px}.h+.m{margin-top:6px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:14px}.opt{border:1px solid var(--line);border-radius:12px;padding:13px 15px}.opt b{font-weight:600;font-size:15px}.opt div{font-size:13px;color:var(--mut);margin-top:4px}.opt.on{border:2px solid var(--blue);padding:12px 14px}
+.hint{margin-top:10px;font-size:13px;color:var(--mut);border:1px dashed var(--line);border-radius:12px;padding:14px 16px}
+.row{position:relative;display:flex;gap:22px;margin-top:6px;padding:12px}
+.lens{position:absolute;top:0;bottom:0;left:0;width:174px;border-radius:24px;
+ background:linear-gradient(160deg,var(--hl) 0%,var(--glass) 30%,var(--glass) 72%,rgba(255,255,255,.15) 100%);backdrop-filter:blur(24px) saturate(180%);
+ box-shadow:inset 0 1px 0 var(--hl),inset 0 0 0 .5px rgba(255,255,255,.4),0 16px 34px -12px var(--sh),0 0 34px -8px rgba(59,115,246,.45)}
+.lens:after{content:"";position:absolute;inset:0;border-radius:24px;background:radial-gradient(90px 40px at 30% 4%,rgba(255,255,255,.55),transparent 70%);opacity:.7}
+.card{position:relative;width:150px}.card.sel{transform:scale(1.02)}
+.th{width:150px;height:267px;border-radius:14px;overflow:hidden;position:relative;background:#111;box-shadow:0 2px 8px var(--sh)}.th img{width:100%;height:100%;object-fit:cover;display:block}
+.badge{position:absolute;top:8px;left:8px;color:#fff;font-size:11px;padding:3px 8px;border-radius:99px;font-weight:600;background:rgba(30,30,32,.38);backdrop-filter:blur(12px);box-shadow:inset 0 .5px 0 rgba(255,255,255,.5)}
+.radio{position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:99px;background:rgba(255,255,255,.2);backdrop-filter:blur(12px);box-shadow:inset 0 .5px 0 rgba(255,255,255,.6),inset 0 0 0 1px rgba(255,255,255,.35);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.sel .radio{background:linear-gradient(180deg,#5b8cff,#3b73f6);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 2px 8px rgba(59,115,246,.5)}
+.nm{margin:11px 4px 0;font-weight:600;font-size:14.5px}.ds{margin:2px 4px 0;font-size:12px;color:var(--mut)}
+.pr{display:flex;align-items:flex-start;gap:28px}.side{flex:1;padding-top:18px}
+.why{margin-top:14px;border-radius:14px;padding:13px 16px;font-size:13.5px;line-height:1.6;color:var(--ink);
+ background:linear-gradient(160deg,var(--hl),var(--glass) 40%);backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 var(--hl),inset 0 0 0 .5px var(--line),0 6px 20px -12px var(--sh)}
+.why b{font-weight:600}.why .k{color:var(--mut)}
+.sel2{border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-top:10px;display:flex;justify-content:space-between;font-size:15px}
+.bot{display:flex;justify-content:space-between;align-items:center;margin-top:26px}.lnk{color:var(--blue);margin-left:18px}
+.cta{background:var(--cta);color:var(--ctai);padding:13px 32px;border-radius:99px;font-weight:600;font-size:16px}
+.det{margin-top:22px;font-size:15px}
+</style></head><body><div class=pg>
+<h1>放入视频，直接生成可发布成片。</h1><div class=m>选择发布平台，AI 会自动挑选内容、完成剪辑与渲染。生成后可直接下载或继续编辑。</div>
+<div class=box>
+<div class=seg><span class=on>链接导入</span><span>文件导入</span></div>
+<div class="ta" id=ta>粘贴 B 站或 YouTube 视频链接</div><div id=probe></div>
+<div class=h>准备发布到哪里？</div><div class=m>默认选一个平台；多选时会复用同一次内容分析。</div>
+<div class=grid><div class="opt on"><b>抖音</b><div>短视频</div></div><div class=opt><b>TikTok</b><div>短视频</div></div><div class=opt><b>YouTube Shorts</b><div>短视频</div></div><div class=opt><b>YouTube 视频</b><div>完整横版内容</div></div><div class=opt><b>B站</b><div>自适应成片</div></div><div class=opt><b>小红书</b><div>短视频</div></div></div>
+<div class=h>剪辑风格</div><div class=m id=sm>放入视频后，会按画面和语速自动推荐。</div><div id=pk></div>
+<div class=det>▸ 有特别要求？（选填）</div>
+<div class=bot><div class=m>会按所选平台自动制作，数量由素材内容决定。<span class=lnk>高级偏好</span></div><div class=cta>生成成片</div></div>
+</div></div><script>
+const q=new URLSearchParams(location.search);if(q.get('dark'))document.body.className='dark';
+const pk=document.getElementById('pk');
+if(q.get('a')){const ta=document.getElementById('ta');ta.className='ta f';ta.textContent='https://www.youtube.com/watch?v=8Pj2hXq4W1o';
+document.getElementById('probe').innerHTML='<div class=probe><i></i>已识别：Dwarkesh Podcast × 黄仁勋 · 1:12:40 · 坐姿双人访谈 · 中英字幕</div>';
+document.getElementById('sm').textContent='得分前 3 的成片用所选风格，其余用经典。← → 切换';
+const c=(id,img,n,d,b)=>`<div class="card ${id}"><div class=th><img src=assets/${img}>${b?'<span class=badge>✦ 推荐</span>':''}<span class=radio></span></div><div class=nm>${n}</div><div class=ds>${d}</div></div>`;
+pk.innerHTML=`<div class=row><div class=lens></div>${c('sel','editorial.jpg','杂志风','衬线大标题 · 访谈、演讲',1)}${c('','street.jpg','街头快剪','短字幕快切 · 街访')}${c('','classic9x16.jpg','经典','沿用现有字幕样式')}</div>
+<div class=why><b>推荐理由：</b>检测到坐姿双人访谈、语速平稳、长句金句多，衬线标题更显质感。<span class=k>　不满意可直接点选其他风格。</span></div>`;
+document.querySelector('.sel .radio').textContent='✓';
+} else pk.innerHTML='<div class=hint>✦ 放入链接或文件后，这里会出现三种剪辑风格的预览，并自动选好最合适的一种。</div>';
+</script></body></html>

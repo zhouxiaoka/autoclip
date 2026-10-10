@@ -1,0 +1,47 @@
+<!doctype html><html><head><meta charset=utf-8><style>
+:root{--bg:#f5f5f7;--ink:#1d1d1f;--mut:#86868b;--acc:#0a84ff;--glass:rgba(255,255,255,.55);--hl:rgba(255,255,255,.9);--sh:rgba(0,0,0,.10);--field:#fff}
+.dark{--bg:#000;--ink:#f5f5f7;--mut:#8e8e93;--glass:rgba(255,255,255,.08);--hl:rgba(255,255,255,.28);--sh:rgba(0,0,0,.6);--field:#1c1c1e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:"Inter","Noto Sans CJK SC","PingFang SC",sans-serif;width:1280px;height:820px;-webkit-font-smoothing:antialiased;overflow:hidden}
+.bgglow{position:absolute;inset:0;background:radial-gradient(600px 300px at 30% 70%,rgba(10,132,255,.10),transparent 70%),radial-gradient(500px 260px at 75% 60%,rgba(255,120,80,.08),transparent 70%)}
+.wrap{position:relative;padding:56px 96px}
+h1{font-size:34px;letter-spacing:-.02em;margin:0;font-weight:700}.sub{color:var(--mut);font-size:15px;margin-top:6px}
+.top{display:flex;justify-content:space-between;align-items:flex-end}
+.btn{background:var(--acc);color:#fff;padding:11px 24px;border-radius:99px;font-weight:600;font-size:15px}
+.src{margin-top:28px;background:var(--field);border-radius:14px;padding:15px 20px;font-size:14px;color:var(--mut);box-shadow:0 1px 2px var(--sh)}
+.src b{color:var(--ink);font-weight:600}
+.sec{margin-top:34px;display:flex;align-items:baseline;gap:14px}.sec b{font-size:20px;letter-spacing:-.01em}.chip{font-size:13px;color:var(--mut)}
+.row{position:relative;display:flex;gap:28px;margin-top:16px;padding:14px;height:500px}
+.lens{position:absolute;top:0;width:236px;height:470px;border-radius:30px;transition:left .32s cubic-bezier(.3,1.3,.5,1);
+ background:linear-gradient(160deg,var(--hl) 0%,var(--glass) 28%,var(--glass) 70%,rgba(255,255,255,.18) 100%);
+ backdrop-filter:blur(24px) saturate(180%);
+ box-shadow:inset 0 1px 0 var(--hl),inset 0 -1px 0 rgba(255,255,255,.12),inset 0 0 0 .5px rgba(255,255,255,.35),0 18px 40px -10px var(--sh),0 0 40px -6px rgba(10,132,255,.35)}
+.lens:after{content:"";position:absolute;inset:0;border-radius:30px;background:radial-gradient(120px 50px at 30% 4%,rgba(255,255,255,.55),transparent 70%);mix-blend-mode:screen;opacity:.7}
+.card{position:relative;width:208px;padding:0;transition:transform .2s ease}
+.th{width:208px;height:370px;border-radius:20px;overflow:hidden;position:relative;background:#111;box-shadow:0 2px 10px var(--sh)}
+.th img{width:100%;height:100%;object-fit:cover;display:block}
+.card.sel{transform:scale(1.02)}.card.hov{transform:translateY(-4px)}
+.card:not(.sel) .th{opacity:.92}
+.badge{position:absolute;top:10px;left:10px;color:#fff;font-size:11.5px;padding:4px 9px;border-radius:99px;font-weight:600;background:rgba(30,30,32,.35);backdrop-filter:blur(14px);box-shadow:inset 0 .5px 0 rgba(255,255,255,.5)}
+.radio{position:absolute;top:10px;right:10px;width:24px;height:24px;border-radius:99px;background:rgba(255,255,255,.18);backdrop-filter:blur(14px);box-shadow:inset 0 .5px 0 rgba(255,255,255,.6),inset 0 0 0 1px rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700}
+.sel .radio{background:linear-gradient(180deg,#4aa3ff,#0a84ff);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 2px 8px rgba(10,132,255,.5)}
+.prog{position:absolute;left:12px;right:12px;bottom:10px;height:3px;border-radius:2px;background:rgba(255,255,255,.25);overflow:hidden}.prog i{display:block;height:100%;background:#fff}
+.nm{margin:14px 6px 0;font-weight:600;font-size:16px;letter-spacing:-.01em}.ds{margin:3px 6px 0;color:var(--mut);font-size:13px}
+.why{margin-top:30px;font-size:13.5px;color:var(--mut);padding-left:14px}.why b{color:var(--ink);font-weight:600}.why u{color:var(--acc);text-decoration:none}
+</style></head><body><div class=bgglow></div><div class=wrap>
+<div class=top><div><h1>一键出片</h1><div class=sub>粘贴链接或拖入视频，剩下的交给 AutoClip。</div></div><div class=btn>开始出片</div></div>
+<div class=src><b>dwarkesh_jensen_huang_ep.mp4</b>　1:12:40 · 坐姿访谈 · 中英字幕</div>
+<div class=sec><b>剪辑风格</b><span class=chip>得分前 3 的成片使用该风格 · ← → 切换</span></div>
+<div class=row><div class=lens id=lens></div>
+ <div class="card C1"><div class=th><img id=i1 src=assets/editorial.jpg><span class=badge>✦ 推荐</span><span class=radio>✓</span><div class=prog id=p1 hidden><i></i></div></div><div class=nm>杂志风</div><div class=ds>衬线大标题 · 访谈、演讲</div></div>
+ <div class="card C2"><div class=th><img id=i2 src=assets/street.jpg><span class=radio></span><div class=prog id=p2 hidden><i></i></div></div><div class=nm>街头快剪</div><div class=ds>短字幕快切 · 街访、快问快答</div></div>
+ <div class="card C3"><div class=th><img src=assets/classic.jpg><span class=radio></span></div><div class=nm>经典</div><div class=ds>沿用现有字幕样式</div></div>
+</div>
+<div class=why><b>推荐杂志风</b> · 坐姿双人访谈、语速平稳、长句金句多。</div>
+</div><script>
+const q=new URLSearchParams(location.search);if(q.get('dark'))document.body.className='dark';
+const s=+(q.get('s')||0),h=q.get('h'),f=+q.get('f');
+document.querySelectorAll('.card').forEach((c,i)=>{const r=c.querySelector('.radio');if(i==s){c.classList.add('sel');r.textContent='✓'}else r.textContent=''});
+document.getElementById('lens').style.left=(s*236)+'px';
+if(h){document.querySelector('.C'+h).classList.add('hov');const p=document.getElementById('p'+h);p.hidden=false;p.firstChild.style.width=f*100+'%';document.getElementById('i'+h).src=`assets/${h==1?'editorial':'street'}${f>.5?'_b':''}.jpg`}
+if(s==1)document.querySelector('.why').innerHTML='<b>已选街头快剪</b> · 推荐的是杂志风　<u>恢复推荐</u>';
+</script></body></html>
