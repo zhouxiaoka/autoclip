@@ -276,8 +276,9 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                     overlay_retried = True
             concat = folder / 'parts.txt'
             durations = [audio.scene_duration(scene) for scene in draft.scenes]
+            # One listing for classic and HTML overlay. Surrounding quotes break paths that contain '.
             from backend.services.studio.packaging_html import concat_quote
-            concat.write_text(''.join(f"file {concat_quote(p)}\nduration {duration:.9f}\n" for p, duration in zip(parts, durations)), encoding='utf-8')
+            concat.write_text(''.join(f"file {concat_quote(part)}\nduration {duration:.9f}\n" for part, duration in zip(parts, durations)), encoding='utf-8')
             # Encode AAC only once. Per-cut AAC packets add encoder delay and can
             # leave mismatched stream layouts when a selected interval is silent.
             cmd = [get_ffmpeg_path(), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-c:v', 'copy']
