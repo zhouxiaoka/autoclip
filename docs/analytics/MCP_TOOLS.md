@@ -1,6 +1,6 @@
 # MCP / CLI 工具调用
 
-`mcp_tool_called` 在每次工具调用结束时发一条。任务进入终态时再发一条 `mcp_job_finished`。同一次终态（同一个任务 id、成败和错误码）只发一次。
+`mcp_tool_called` 在每次工具调用结束时发一条。任务进入终态时再发一条 `mcp_job_finished`。同一次终态（同一个任务 id、成败和错误码）只发一次。去重标记写在应用目录的 `mcp-events-seen.json`，内容是哈希，不含任务 id。进程重启后不会把同一次终态再发一遍。发送放进后台队列，调用方不等待网络返回。
 
 没有 PostHog 项目 key，或数据目录 `privacy.json` 里 `analytics` 为 false 时，两条都不发。`distinct_id` 用本机已经记下的匿名 ID（`analytics.json`；还没有时才生成一次）。这和成片质检用的是同一个开关。
 
@@ -13,7 +13,7 @@
 | `tool` | 已知工具名，不认识的记 `other` |
 | `client` | 客户端名字，只保留短 token；路径和空值记 `unknown`。CLI 记 `cli` |
 | `version` | 当前安装的包版本 |
-| `duration_ms` | 这次调用的毫秒数，最大 3600000 |
+| `duration_ms` | `mcp_tool_called` 是这次调用的毫秒数。`mcp_job_finished` 是任务从开始到结束的毫秒数。最大 3600000 |
 | `ok` | 成败 |
 | `error_code` | `none` / `unknown` / `interrupted` / `failed` / `cancelled` / `invalid_input` / `disabled` / `timeout` |
 | `$feature/mcp_v2_tools` | 这次进程读到的开关，默认 false |
