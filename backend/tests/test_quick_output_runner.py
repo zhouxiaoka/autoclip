@@ -63,8 +63,11 @@ def test_status_in_another_process_reports_live_jobs_without_restart_recovery(da
              'output_variants': [{'id':'v1','strategy_id':'youtube_long','status':'running','render_job_id':'j1'}]}
     store.write('p1', state)
     path = root / 'metadata' / 'studio.json'; before = path.read_bytes()
-    assert quick.status('p1')['status'] == 'running'
-    assert quick.status('p1')['outputs'][0]['status'] == 'running'
+    running = quick.status('p1')
+    assert running['status'] == 'running'
+    assert running['outputs'][0]['status'] == 'running'
+    assert running['progress'] == 0 and running['stage'] == 'rendering'
+    assert running['eta'] is None and running['poll_after_sec'] == 10
     assert path.read_bytes() == before
     assert store.read('p1')['jobs'][0]['status'] == 'failed'  # server recovery still works
 
@@ -150,5 +153,22 @@ def test_stopped_producer_is_reported_without_erasing_completed_outputs(data_dir
     monkeypatch.setattr(psutil,'Process',lambda pid:(_ for _ in ()).throw(psutil.NoSuchProcess(pid)))
     result=quick.status('p1')
     assert result['status']=='failed' and result['phase']=='interrupted'
+    assert result['stage']=='interrupted' and result['poll_after_sec']==0 and result['eta']==0
     assert result['outputs'][0]['status']=='failed'
     assert store.read('p1',recover=False)['generation']['status']=='rendering'
+
+
+def test_template_is_stored_and_unknown_styles_are_rejected(imported, monkeypatch):
+    from backend import cli, mcp_server
+    source, srt, calls = imported
+    monkeypatch.setattr(quick, 'wait', lambda pid, **kw: {'status': 'completed', 'outputs': []})
+    args = cli.build_parser().parse_args(
+        ['produce', str(source), '--platform', 'youtube_long', '--srt', str(srt), '--template', 'street', '--json'])
+    assert cli.cmd_produce(args) == 0
+    assert calls[0][1].html_template == 'street'
+    started = mcp_server.start_quick_output(str(source), ['youtube_long'], srt_path=str(srt), template='editorial')
+    assert started['ok'] is True and calls[1][1].html_template == 'editorial'
+    with pytest.raises(ValueError):
+        quick.start(str(source), ['youtube_long'], srt_path=str(srt), template='magazine')
+    rejected = mcp_server.start_quick_output(str(source), ['youtube_long'], srt_path=str(srt), template='magazine')
+    assert rejected['ok'] is False and rejected['error_code'] == 'invalid_input'

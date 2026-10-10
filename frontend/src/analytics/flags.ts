@@ -25,6 +25,7 @@ export const FLAG_NAMES = [
   'qa_gate_blocking',
   'pkg_templates_v1',
   'pkg_template_picker_visual',
+  'mcp_v2_tools',
 ] as const
 
 export type FlagName = (typeof FLAG_NAMES)[number]
@@ -47,6 +48,7 @@ export const FLAG_SPEC: Record<FlagName, FlagSpec> = {
   qa_gate_blocking: { kind: 'variant', variants: ['off', 'shadow', 'block'], treatment: 'block' },
   pkg_templates_v1: { kind: 'boolean' },
   pkg_template_picker_visual: { kind: 'boolean' },
+  mcp_v2_tools: { kind: 'boolean' },
 }
 
 export const FLAG_DEFAULTS = defaultsJson as { [K in FlagName]: FlagValue }

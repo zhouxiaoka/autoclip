@@ -50,7 +50,13 @@ MCP 使用 `start_quick_output`（立即返回 ID）和 `get_quick_output_status
 模型、AI 封面和自动片尾共用桌面设置。制作时保持一个入口运行；新 CLI / MCP demo 建议用独立数据目录，
 通过 `autoclip --data-dir /path/to/demo-data produce ...` 或 MCP 环境变量 `AUTOCLIP_DATA_DIR` 指定。
 独立目录需要自己的模型配置，不会读取另一个数据目录的密钥；新入口不使用旧 `run --provider` 的临时覆盖。
-旧 `run` / `clip_video` / `start_clip_job` 继续提供原始切片与合集。
+旧 `run` / `clip_video` / `start_clip_job` 继续提供原始切片与合集。这几个 MCP 工具在工具列表里标为 deprecated。
+
+`produce` 和 `start_quick_output` 接受剪辑风格 `--template` / `template`：`editorial`（杂志风）、`street`（街头快剪）、`classic`（经典）。不要传这三项以外的名字。MCP 在 `AUTOCLIP_FLAGS=mcp_v2_tools=on` 时额外提供 `list_styles` 和 `cancel_job`；默认关闭，工具列表里看不到。
+
+任务状态一律带 `progress`、`stage`、`eta`、`poll_after_sec`。按 `poll_after_sec` 再查。没有任务记录时状态是 `unknown`，工作进程已经不在时是 `interrupted`，不会因为项目目录还在就报 `completed`。状态写在数据目录的 `mcp-jobs/`。`cancel_job` 只把任务标成取消，不删除成片。
+
+MCP 不再接收 `api_key` 参数。模型密钥用环境变量 `AUTOCLIP_API_KEY`，或桌面应用里已经保存的配置。
 
 ## 1. 安装
 

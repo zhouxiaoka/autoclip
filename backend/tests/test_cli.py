@@ -202,11 +202,14 @@ def test_mcp_server_registers_tools(data_dir):
     assert {"clip_video", "start_clip_job", "get_job_status", "get_project", "list_projects", "list_providers", "check_environment", "export_clip", "get_version", "start_quick_output", "get_quick_output_status"} <= names
 
 
-def test_mcp_get_project_falls_back_to_disk(data_dir):
+def test_mcp_missing_job_is_unknown_not_completed(data_dir):
     pytest.importorskip("mcp")
     from backend import mcp_server
 
     _fake_project(data_dir, "p9", "磁盘项目")
     r = mcp_server.get_job_status("p9")
-    assert r["ok"] is True and r["status"] == "completed" and r["result"]["name"] == "磁盘项目"
-    assert mcp_server.get_job_status("missing")["ok"] is False
+    assert r["ok"] is False and r["status"] == "unknown" and r["error_code"] == "unknown"
+    assert "result" not in r
+    for key in ("progress", "stage", "eta", "poll_after_sec"):
+        assert key in r
+    assert mcp_server.get_job_status("missing")["status"] == "unknown"

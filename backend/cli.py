@@ -85,7 +85,8 @@ def cmd_produce(args: argparse.Namespace) -> int:
         # for scripts, just as the MCP stdio entry point keeps its protocol stream clean.
         with contextlib.redirect_stdout(sys.stderr):
             project_id = quick.start(args.source, args.platform or ['douyin'], name=args.name, srt_path=args.srt,
-                                     instruction=args.instruction, browser=args.browser, portrait_style=args.portrait_style)
+                                     instruction=args.instruction, browser=args.browser, portrait_style=args.portrait_style,
+                                     template=args.template)
             if not args.json:
                 print(f'1.5 一键出片 · {project_id} · 进度写入项目目录', file=sys.stderr)
             result = quick.wait(project_id, timeout=args.timeout)
@@ -551,6 +552,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument('--srt', help='本地 SRT 字幕文件')
     q.add_argument('--instruction', default='')
     q.add_argument('--portrait-style', choices=['auto', 'interview', 'podcast'], default='auto', help='竖版版式；画幅和文字语言仍按平台')
+    q.add_argument('--template', choices=['editorial', 'street', 'classic'], help='剪辑风格：editorial 杂志风 / street 街头快剪 / classic 经典')
     q.add_argument('--browser', choices=['chrome', 'edge', 'firefox', 'safari'])
     q.add_argument('--timeout', type=float, default=7200, help='等待秒数；超时不会取消项目')
     q.add_argument('--json', action='store_true', help='只在 stdout 输出 JSON 结果')
