@@ -36,7 +36,7 @@ AutoClip 在本机把一条素材做成可发布的成片。产物和桌面应�
 
 1. **有 AutoClip MCP 工具** → 用工具，不要自己拼命令。
 2. **没有 MCP，但能跑 shell** → `autoclip produce <source> --json`。
-3. **两者都没有** → 一行安装：`uvx autoclip-mcp`，skill 用 `npx skills add zhouxiaoka/autoclip`。备选是在仓库根目录执行 `python -m pip install -r requirements.txt`，再执行 `python -m pip install --no-deps .`。详见 `docs/CLI_AND_MCP.md`。
+3. **两者都没有** → 现在就能用：在仓库根目录执行 `python -m pip install -r requirements.txt`，再执行 `python -m pip install --no-deps .`。`uvx autoclip-mcp` 和 `npx skills add zhouxiaoka/autoclip` 即将提供，包发布前不要用。详见 `docs/CLI_AND_MCP.md`。
 
 模型密钥放在桌面应用的设置里，或环境变量 `AUTOCLIP_API_KEY`。不要把 key 写进工具参数或对话。
 

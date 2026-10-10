@@ -249,16 +249,16 @@ python -m pip install -r requirements.txt
 python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 ```
 
-Without the ZIP, install with one command. Installing from a cloned source checkout remains available:
+Without the ZIP, the `uvx` and `npx` commands are coming soon and will not work until the package is published. Install from source for now:
 
 ```bash
-# 一行安装
+# 即将提供：发布到 PyPI 和 npm 之后才能用
 uvx autoclip-mcp
 npx skills add zhouxiaoka/autoclip
 ```
 
 ```bash
-# 备选：在已克隆的仓库根目录从源码安装
+# 现在就能用：在已克隆的仓库根目录从源码安装
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt

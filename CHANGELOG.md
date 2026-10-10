@@ -25,7 +25,7 @@ _（本周尚无改动）_
 
 - 给助手用的说明改为按成片、封面、文案和发布包来使用；只要旧切片时改读参考说明。文档里的版本号改为读取已安装的包，不再写死。（#321 #322）
 
-- 可以用 `uvx autoclip-mcp` 安装并启动 MCP，用 `npx skills add zhouxiaoka/autoclip` 安装 skill。从源码安装仍然可用。（#324）
+- autoclip-mcp 随 1.5.7 发布到 PyPI，发布后可用 uvx。（#324）
 
 - 本版四个开关的默认值没有打开：`pkg_templates_v1`、`pkg_template_picker_visual`、`mcp_v2_tools` 默认关闭；`qa_gate_blocking` 默认 shadow，只记录、不拦截。
 
