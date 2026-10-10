@@ -65,11 +65,41 @@ class PackagingMark(BaseModel):
     text: str = Field(min_length=1, max_length=30)
 
 
+class PackagingNumber(BaseModel):
+    """A figure the speaker actually said. The overlay may count up to `value`."""
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    at: float = Field(ge=0)
+    value: float = Field(allow_inf_nan=False)
+    unit: str = Field(default='', max_length=12)
+    text: str = Field(default='', max_length=40)
+
+
+class PackagingGloss(BaseModel):
+    """A numbered footnote card. Title and body stay inside the template's length caps."""
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    at: float = Field(ge=0)
+    title: str = Field(min_length=1, max_length=24)
+    body: str = Field(default='', max_length=80)
+
+
+_CLASSIC_TEMPLATES = {'interview_zh', 'podcast_en'}
+_HTML_TEMPLATES = {'editorial', 'street'}
+_CLASSIC_STYLES = {
+    'interview_zh': ('classic', 'boxed', 'spotlight'),
+    'podcast_en': ('pop', 'boxed', 'cinematic'),
+}
+
+
 class Packaging(BaseModel):
-    """Automatic template packaging, generated once per content and audience language."""
+    """Automatic template packaging, generated once per content and audience language.
+
+    Version 1 is the classic ASS family (`interview_zh`, `podcast_en`) and stays readable.
+    Version 2 adds the HTML templates and the optional editorial/street fields. A version 1
+    payload that carries those fields is rejected, so old projects do not silently change shape.
+    """
     model_config = ConfigDict(extra='forbid')
-    version: Literal[1] = 1
-    template: Literal['interview_zh', 'podcast_en']
+    version: Literal[1, 2] = 1
+    template: str
     audience_language: Literal['zh', 'en']
     source_language: Literal['zh', 'en', 'other'] = 'other'
     title_lines: list[str] = Field(default_factory=list, max_length=2)
@@ -81,19 +111,38 @@ class Packaging(BaseModel):
     highlights: list[PackagingMark] = Field(default_factory=list, max_length=40)
     burned_captions: bool = False
     fallback: bool = False
-    # Visual style inside the template; None = the golden default (classic / pop).
+    # Visual style inside the classic templates; None = the golden default (classic / pop).
     style: Literal['classic', 'boxed', 'spotlight', 'pop', 'cinematic'] | None = None
     # Content mood chosen by the model; it picks the palette and style (packaging.choose_look).
     mood: Literal['calm', 'serious', 'bold', 'warm', 'playful'] | None = None
     palette: Literal['azure', 'amber', 'coral', 'mint', 'lemon', 'rose', 'lilac'] | None = None
+    kicker: str = Field(default='', max_length=16)
+    emphasis: list[PackagingMark] = Field(default_factory=list, max_length=12)
+    numbers: list[PackagingNumber] = Field(default_factory=list, max_length=6)
+    gloss: list[PackagingGloss] = Field(default_factory=list, max_length=6)
 
     @model_validator(mode='after')
     def short_title_lines(self):
         self.title_lines = [line.strip() for line in self.title_lines if line.strip()]
         if any(len(line) > 40 for line in self.title_lines):
             raise ValueError('标题每行最多 40 个字符')
-        allowed = {'interview_zh': ('classic', 'boxed', 'spotlight'), 'podcast_en': ('pop', 'boxed', 'cinematic')}[self.template]
-        if self.style is not None and self.style not in allowed:
+        classic = self.template in _CLASSIC_TEMPLATES
+        html = self.template in _HTML_TEMPLATES
+        if not classic and not html:
+            raise ValueError('未知包装模板')
+        if html and self.version != 2:
+            raise ValueError('HTML 模板需要 packaging version 2')
+        if html:
+            from backend.services.studio.templates.registry import get
+            get(self.template)
+        extended = bool(self.kicker or self.emphasis or self.numbers or self.gloss)
+        if self.version == 1 and extended:
+            raise ValueError('version 1 不包含扩展包装字段')
+        if classic:
+            allowed = _CLASSIC_STYLES[self.template]
+            if self.style is not None and self.style not in allowed:
+                raise ValueError('这个模板不支持所选样式')
+        elif self.style is not None:
             raise ValueError('这个模板不支持所选样式')
         return self
 

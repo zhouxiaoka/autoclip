@@ -22,6 +22,7 @@ DEFAULTS: dict[str, bool | str] = {
     'hide_legacy_entrypoints': False,
     'import_drop_zone': False,
     'track_overrides': False,
+    'pkg_templates_v1': False,
 }
 
 VARIANTS = {

@@ -1586,5 +1586,6 @@
   "分开复制和导出": "Copiar y exportar por separado",
   "合成一个动作": "Una sola acción",
   "自动渲染前 10 条": "Renderizar automáticamente las 10 mejores",
-  "自动渲染前 3 条": "Renderizar automáticamente las 3 mejores"
+  "自动渲染前 3 条": "Renderizar automáticamente las 3 mejores",
+  "HTML 包装模板": "Plantillas HTML"
 }

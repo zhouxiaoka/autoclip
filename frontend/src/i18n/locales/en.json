@@ -1586,5 +1586,6 @@
   "分开复制和导出": "Copy and export separately",
   "合成一个动作": "One combined action",
   "自动渲染前 10 条": "Render the top 10 automatically",
-  "自动渲染前 3 条": "Render the top 3 automatically"
+  "自动渲染前 3 条": "Render the top 3 automatically",
+  "HTML 包装模板": "HTML packaging templates"
 }
