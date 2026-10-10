@@ -247,6 +247,23 @@ python -m pip install -r requirements.txt
 python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 ```
 
+Без ZIP команды `uvx` и `npx` заработают после публикации пакета. Сейчас ставьте из исходников:
+
+```bash
+# 即将提供：发布到 PyPI 和 npm 之后才能用
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
+```
+
+```bash
+# 现在就能用：在已克隆的仓库根目录从源码安装
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --no-deps .
+autoclip --version
+```
+
 Команды выше для macOS / Linux. В Windows создайте среду через `py -m venv venv`, активируйте `.\venv\Scripts\Activate.ps1`, затем выполните те же команды `python -m pip`.
 
 Сначала сохраните настройки модели: используйте desktop или свой каталог по примеру без ключей из ZIP. [CLI / MCP](docs/CLI_AND_MCP.md) (кит.). `produce` не использует временную настройку `run --provider`. `--srt` пропускает транскрипцию.

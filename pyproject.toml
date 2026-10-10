@@ -3,15 +3,45 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "autoclip"
+name = "autoclip-mcp"
 version = "1.5.6"
 description = "AutoClip — AI 长视频自动切片：CLI 与 MCP server 入口"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-# 运行依赖以 requirements.txt 为准（桌面端 / Docker / CI 都用它）；这里不重复声明，
-# 开发者按 README：pip install -r requirements.txt && pip install -e .
-dependencies = []
+# 发行名 autoclip-mcp 让 `uvx autoclip-mcp` 安装本包并运行同名入口。
+# 这些 pin 与 requirements.txt 的运行依赖一致；pytest 只留在 requirements.txt。
+# 桌面端、Docker 和 CI 仍安装 requirements.txt。
+dependencies = [
+  "fastapi==0.141.1",
+  "uvicorn[standard]==0.52.4",
+  "starlette==1.6.0",
+  "python-multipart==0.0.32",
+  "websockets==16.1.1",
+  "aiofiles==25.1.0",
+  "sqlalchemy==2.0.52",
+  "alembic==1.19.2",
+  "pydantic==2.13.5",
+  "pydantic-settings==2.15.0",
+  "celery[redis]==5.6.3",
+  "redis==6.4.0",
+  "requests==2.34.2",
+  "aiohttp==3.14.3",
+  "python-jose[cryptography]==3.5.0",
+  "passlib[bcrypt]==1.7.4",
+  "cryptography==50.0.1",
+  "qrcode[pil]==8.2",
+  "Pillow==11.3.0",
+  "yt-dlp[default]==2026.8.19",
+  "pysrt==1.1.2",
+  "psutil==7.2.2",
+  "pytz==2026.3.post1",
+  "openai==3.8.0",
+  "google-genai==2.22.0",
+  "dashscope==1.27.4",
+  "mcp==2.1.1",
+  "sentry-sdk==2.69.2",
+]
 
 [project.scripts]
 autoclip = "backend.cli:main"

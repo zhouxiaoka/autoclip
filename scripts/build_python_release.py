@@ -10,9 +10,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def expected_wheel_name(version: str) -> str:
+    """PEP 427 filename for the autoclip-mcp distribution."""
+    return f'autoclip_mcp-{version}-py3-none-any.whl'
+
+
 def build(wheel: Path, out: Path):
     version = tomllib.loads((ROOT / 'pyproject.toml').read_text())['project']['version']
-    if wheel.name != f'autoclip-{version}-py3-none-any.whl':
+    if wheel.name != expected_wheel_name(version):
         raise ValueError('wheel does not match the source release version')
     with zipfile.ZipFile(wheel) as archive:
         for name in ('backend/assets/models/face_detection_yunet_2023mar.onnx',

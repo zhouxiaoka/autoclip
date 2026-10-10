@@ -93,7 +93,7 @@ Python wheel 的资源和人物取景校验：安装基础依赖与 `opencv-pyth
 先构建 wheel，再执行：
 
 ```bash
-python scripts/verify_python_wheel.py dist/autoclip-1.5.0-py3-none-any.whl --video backend/assets/example/source.mp4 --report /tmp/wheel-portrait.json
+python scripts/verify_python_wheel.py dist/autoclip_mcp-*-py3-none-any.whl --video backend/assets/example/source.mp4 --report /tmp/wheel-portrait.json
 ```
 
 脚本把 wheel 安装到源码目录外，核对 ONNX 与 MIT 许可证，并从真实视频抽帧生成访谈 / 播客两种裁切轨迹。

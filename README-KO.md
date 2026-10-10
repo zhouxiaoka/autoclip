@@ -247,6 +247,23 @@ python -m pip install -r requirements.txt
 python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 ```
 
+ZIP 없이 설치할 때 `uvx`와 `npx`는 패키지 게시 전까지 사용할 수 없습니다. 지금은 소스에서 설치합니다:
+
+```bash
+# 即将提供：发布到 PyPI 和 npm 之后才能用
+uvx autoclip-mcp
+npx skills add zhouxiaoka/autoclip
+```
+
+```bash
+# 现在就能用：在已克隆的仓库根目录从源码安装
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --no-deps .
+autoclip --version
+```
+
 위 명령은 macOS / Linux용입니다. Windows는 `py -m venv venv`로 만들고 `.\venv\Scripts\Activate.ps1`로 활성화한 뒤 같은 `python -m pip` 설치 명령을 실행하세요.
 
 먼저 모델 설정을 저장하세요. 데스크톱 설정을 공유하거나 ZIP의 키 없는 예제로 전용 데이터 디렉터리를 설정합니다. [CLI / MCP](docs/CLI_AND_MCP.md)(중국어). `produce`는 이전 `run --provider` 임시 설정을 쓰지 않습니다. `--srt`로 전사를 생략할 수 있습니다.
