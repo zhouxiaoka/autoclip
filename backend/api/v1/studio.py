@@ -102,6 +102,7 @@ async def import_visual(
     auto_start: bool = Form(False),
     portrait_style: Literal['auto', 'interview', 'podcast'] = Form('auto'),
     html_template: Optional[Literal['editorial', 'street', 'classic']] = Form(None),
+    recommended_template: Optional[Literal['editorial', 'street', 'classic']] = Form(None),
     brand_outro_enabled: bool = Form(True),
     subtitle: Optional[UploadFile] = File(None),
     name: str = Form('智能剪辑', max_length=200),
@@ -138,6 +139,7 @@ async def import_visual(
     prefs = ImportOptions(
         goal=goal, language=language, aspect=aspect, duration=duration, instruction=instruction,
         platforms=platforms, auto_start=auto_start, portrait_style=portrait_style, html_template=html_template,
+        recommended_template=recommended_template,
         branding={'outro_enabled': brand_outro_enabled},
     )
     project = ProjectService(db).create_project(ProjectCreate(name=name.strip() or '智能剪辑', project_type=ProjectType.DEFAULT, source_url=url, settings={'creative': {'goal': goal}, 'smart_import': prefs.model_dump(), 'import_staging': not prefs.auto_start, 'creative_browser': browser, 'platforms': prefs.platforms, 'brand_outro_enabled': prefs.branding.outro_enabled}))
@@ -172,6 +174,30 @@ async def import_visual(
         if video:
             await video.close()
     return {'project_id': pid, 'analysis_run_id': run_id}
+
+
+@router.post('/template-recommend')
+async def template_recommend(
+    url: Optional[str] = Form(None),
+    header: Optional[UploadFile] = File(None),
+):
+    """Recommend an editing style from a link or a file header. No download."""
+    if url:
+        parsed = urlparse(url)
+        host = (parsed.hostname or '').lower()
+        if parsed.scheme != 'https' or parsed.username or parsed.password or not any(host == domain or host.endswith('.' + domain) for domain in ('youtube.com', 'youtu.be', 'bilibili.com', 'b23.tv')):
+            raise HTTPException(422, '仅支持 HTTPS 的 B 站或 YouTube 视频链接')
+    blob = None
+    if header is not None:
+        try:
+            blob = await header.read(1024 * 1024)
+        finally:
+            await header.close()
+    if not url and not blob:
+        raise HTTPException(422, '请提供一个视频链接或文件')
+    from backend.services.studio.template_recommend import recommend_template
+    return recommend_template(url=url, header=blob)
+
 
 @router.get('/{project_id}')
 def workspace(project_id: str, db: Session = Depends(get_db)):

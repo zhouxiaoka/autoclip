@@ -301,6 +301,7 @@ class ImportOptions(BaseModel):
     auto_start: bool = False
     portrait_style: Literal['auto', 'interview', 'podcast'] = 'auto'
     html_template: Literal['editorial', 'street', 'classic'] | None = None
+    recommended_template: Literal['editorial', 'street', 'classic'] | None = None
     branding: BrandingOptions = Field(default_factory=BrandingOptions)
 
     @model_validator(mode='after')

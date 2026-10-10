@@ -31,13 +31,14 @@
 | `import_drop_zone` | `false` | 首页居中拖放区 |
 | `track_overrides` | `false` | 记录用户对自动决定的修改 |
 | `qa_gate_blocking` | `shadow` | `off` 不跑；`shadow` 和 `block` 都只记录。1.5.7 不拦截成片 |
-| `pkg_templates_v1` | `false` | HTML 包装模板（杂志风、街头快剪） |
+| `pkg_templates_v1` | `false` | 剪辑风格（杂志风、街头快剪、经典） |
+| `pkg_template_picker_visual` | `false` | 导入页用三张卡片预览剪辑风格。关闭时仍是文字选择器 |
 
 `import_drop_zone` 和 `track_overrides` 不在产品方案的开关表里。方案写 Q9 不需要开关；这次任务要求每一项都有默认关闭的开关，所以修改埋点也先关着。拖放区是导入页改版，单独一个开关，避免和「粘贴即开始」绑死。
 
 `qa_gate_blocking` 按方案第 10.2 节先全量 shadow。构建默认值是 `shadow`，不是关闭。`block` 会被收下，但这一版和 `shadow` 一样只写报告。打开 `autoclip_safe_mode` 时，这一项一律变成 `off`，并且压过本地覆盖，也压过 `AUTOCLIP_FLAGS`：环境变量写了 `qa_gate_blocking=shadow` 或 `block` 仍然是 `off`。前端其他开关仍是本地覆盖优先；只有这一项，安全模式压过本地覆盖。
 
-`pkg_templates_v1` 默认关闭（`false` / off）。打开 `autoclip_safe_mode` 后它回到关闭，除非 `AUTOCLIP_FLAGS` 明确写了 `pkg_templates_v1=on`。本地覆盖仍然优先于安全模式；统计关闭时不会向 PostHog 请求这个开关。
+`pkg_templates_v1` 和 `pkg_template_picker_visual` 默认关闭（`false` / off）。打开 `autoclip_safe_mode` 后它们回到关闭，除非 `AUTOCLIP_FLAGS` 明确写了对应的 `=on`。本地覆盖仍然优先于安全模式；统计关闭时不会向 PostHog 请求这些开关。
 
 推荐、雷达、关注频道、手机交接这些开关还没有对应实现，没有放进默认表。
 

@@ -33,6 +33,30 @@ WHERE timestamp >= now() - INTERVAL 7 DAY
 GROUP BY from_template, to_template, stage
 ORDER BY events DESC;
 
+-- Recommendation adoption. accepted_recommendation is true when the chosen style matches recommended_template.
+SELECT properties.accepted_recommendation AS accepted_recommendation,
+       properties.recommended_template AS recommended_template,
+       count() AS events
+FROM events
+WHERE timestamp >= now() - INTERVAL 7 DAY
+  AND event = 'studio_generation_finished'
+  AND properties.studio_schema_version = 2
+  AND properties.recommended_template IN ('editorial', 'street', 'classic')
+GROUP BY accepted_recommendation, recommended_template
+ORDER BY events DESC;
+
+-- Preview plays, split by how the card started.
+SELECT properties.template AS template, properties.trigger AS trigger,
+       properties.is_recommended AS is_recommended,
+       quantile(0.95)(properties.first_frame_ms) AS first_frame_p95_ms, count() AS events
+FROM events
+WHERE timestamp >= now() - INTERVAL 7 DAY
+  AND event = 'studio_template_preview_played'
+  AND properties.studio_schema_version = 2
+GROUP BY template, trigger, is_recommended
+ORDER BY events DESC
+LIMIT 100;
+
 -- Download and copy, split by template.
 SELECT event, properties.template AS template, properties.artifact_type AS artifact_type,
        properties.share_target AS share_target, count() AS events

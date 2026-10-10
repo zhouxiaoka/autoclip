@@ -14,6 +14,7 @@ FAILURE_REASONS = ('none', 'capture', 'encode', 'runtime', 'timeout', 'unknown')
 OPERATING_SYSTEMS = ('darwin', 'win32', 'linux')
 OUTCOMES = ('completed', 'downgraded', 'failed', 'skipped')
 OVERRIDE_STAGES = ('pre_import', 'results_chip', 'editor')
+OVERRIDE_INPUTS = ('mouse', 'keyboard')
 _TOKEN = re.compile(r'^t-[a-z0-9-]{10,100}$')
 
 
@@ -81,7 +82,9 @@ def override_event(payload: dict | None) -> dict:
     event = {
         'from_template': _enum(raw.get('from_template'), TEMPLATES),
         'to_template': _enum(raw.get('to_template'), TEMPLATES),
+        'recommended': _enum(raw.get('recommended'), TEMPLATES),
         'stage': _enum(raw.get('stage'), OVERRIDE_STAGES),
+        'input': _enum(raw.get('input'), OVERRIDE_INPUTS),
     }
     flow_id = raw.get('flow_id')
     if isinstance(flow_id, str) and _TOKEN.match(flow_id):
