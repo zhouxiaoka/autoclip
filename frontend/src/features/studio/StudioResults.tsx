@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { t } from '../../i18n'
-import { ReactNode, useEffect, useState } from 'react'
+import { ReactNode, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Project, Clip } from '../../store/useProjectStore'
 import { Btn, Section, Dialog, fmtDuration } from '../../ui'
@@ -15,8 +15,12 @@ import { platformLabel } from './platformLabel'
 import { flagAssigned, flagEnabled } from '../../analytics/flags'
 import { trackLegacyEntry } from '../../analytics/studio'
 import { legacyEntrypointsHidden } from './legacyEntrypoints'
+import { clearCompletionBadge, subscribeCompletionNotice, type NoticeKind } from './noticeRuntime'
+import { noticeCopy } from './completionNotice'
+import { followOutputLeave } from './overrides'
 
 import './studio.css'
+import './quick-output.css'
 
 export default function StudioResults({ project, children, onCreateCollection, onReload }: { project: Project; children: ReactNode; onCreateCollection: () => void; onReload: () => void }) {
   useTranslation()
@@ -41,6 +45,30 @@ export default function StudioResults({ project, children, onCreateCollection, o
       : workspace.generation?.status === 'failed' ? t('这次制作未完成') : t('AI 正在按所选平台制作成片。')
   const variantDraft = (draftId: string) => workspace.drafts.find(draft => draft.id === draftId)
   const variantJob = (jobId?: string) => workspace.jobs.find(job => job.job_id === jobId)
+  const latest = useRef(workspace)
+  latest.current = workspace
+  const [doneNote, setDoneNote] = useState<NoticeKind | null>(null)
+  useEffect(() => subscribeCompletionNotice((key, kind) => {
+    if (key === project.id) setDoneNote(kind)
+  }), [project.id])
+  useEffect(() => {
+    const clear = () => { if (document.visibilityState === 'visible') void clearCompletionBadge() }
+    window.addEventListener('focus', clear)
+    document.addEventListener('visibilitychange', clear)
+    const stopLeave = followOutputLeave(project.id, () => {
+      const current = latest.current
+      return {
+        createdAt: current.generation?.created_at,
+        status: current.generation?.status,
+        completed: (current.output_variants || []).filter(item => item.status === 'completed').length,
+      }
+    })
+    return () => {
+      window.removeEventListener('focus', clear)
+      document.removeEventListener('visibilitychange', clear)
+      stopLeave()
+    }
+  }, [project.id])
   useEffect(()=>{if(workspace.analysis && workspace.analysis.status!=='running' && project.status!=='completed') onReload()},[workspace.analysis?.status])
   // The generation terminal event comes from the persisted `studio-generation` watch registered at
   // import, so it is reported once even when the user leaves this page before rendering ends.
@@ -48,6 +76,7 @@ export default function StudioResults({ project, children, onCreateCollection, o
   const appendPlatforms = () => act('append-platforms', async () => { await studioApi.appendPlatforms(project.id, platforms, workspace.generation?.branding.outro_enabled ?? true); setAddingPlatforms(false) })
   const createLegacy = (clip: Clip) => act(clip.id, async()=>{const draft=await studioApi.create(project.id,[clip.id],clip.generated_title||clip.title||t("新成片"));navigate(`/project/${project.id}/studio/${draft.id}`)})
   return <div className="studio-results">
+    {doneNote && <p className="studio-done-note" role="status">{t(noticeCopy(doneNote))}</p>}
     {managed && !automatic && !hideLegacy && <div className="studio-row"><span className="studio-muted">{sourceDuration!=null?`${t('原素材 {{duration}}', { duration: fmtDuration(sourceDuration) })} · `:''}{workspace.analysis?.status==='awaiting_confirmation'?t("新制作方案待确认，已有结果保留。"):t("制作结果与编辑")}</span><Btn size="sm" disabled={workspace.analysis?.status==='running'} onClick={()=>{ noteLegacy('plan_adjust'); navigate(`/import/${project.id}`) }}>{workspace.analysis?.status==='awaiting_confirmation'?t("继续确认方案"):t("调整制作方案")}</Btn></div>}
     {automatic && <>{workspace.generation?.skipped?.map(item=><p key={item.strategy_id} className="studio-output-hint">{t('未生成 {{platform}}：{{reason}}', { platform: platformLabel(item.strategy_id), reason: t(item.reason) })}</p>)}{addingPlatforms && <div className="studio-import-box"><PlatformPicker value={platforms} onChange={setPlatforms} disabled={!!busy}/><div className="studio-actions"><Btn size="sm" onClick={()=>setAddingPlatforms(false)}>{t('关闭')}</Btn><Btn variant="cta" size="sm" disabled={!platforms.length} loading={busy==='append-platforms'} onClick={appendPlatforms}>{t('生成追加版本')}</Btn></div></div>}</>}
     {!(workspace.analysis?.status==='awaiting_confirmation' && !workspace.drafts.length && !project.clips?.length && !project.collections?.length) && <Section title={t("剪辑与成片")} count={automatic ? (workspace.output_variants?.length || 0) : workspace.drafts.length+(project.clips?.length||0)+(project.collections?.length||0)} description={automatic ? generationDescription : visual?t("候选已整理为可编辑草稿；导出完成后，才能下载带包装的视频。"):t("切片与合集都在这里，可以直接下载，也可以另存为成片草稿。")} right={<div className="studio-actions">{automatic && <Btn size="sm" disabled={!!busy} onClick={()=>{setPlatforms([]);setAddingPlatforms(value=>!value)}}>{t('追加平台版本')}</Btn>}<Btn size="sm" onClick={()=>setHistory(true)}>{t("导出记录")}</Btn>{!managed && !hideLegacy && <Btn size="sm" onClick={()=>{ noteLegacy('collection'); onCreateCollection() }}>{t("新建合集")}</Btn>}</div>}>

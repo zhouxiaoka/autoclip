@@ -7,7 +7,9 @@ import { copyText } from './outputShare'
 import { isDesktopDownload, saveLocalFile, saveStudioExport } from './nativeDownload'
 import type { OutputVariant, PostCopy } from './types'
 import { studioDownloadRequested, observeStudioDownload, type VariantProperties } from '../../analytics/studio'
-import { useFlag } from '../../analytics/flags'
+import { flagAssigned, useFlag } from '../../analytics/flags'
+import { trackAutoChoiceOverridden } from '../../analytics/studio'
+import { markOutputTaken } from './overrides'
 import { captionWithCredit, savePublishPack } from './publishPack'
 
 const LANDSCAPE = new Set(['bilibili', 'youtube_long', 'original'])
@@ -37,6 +39,7 @@ export default function PublishKit({ projectId, variant, analytics = {}, coverSt
     setSaving(true)
     try {
       setSaved(await studioApi.updateVariantPost(projectId, variant.id, draft))
+      if (draft.title !== post.title) trackAutoChoiceOverridden({ field: 'title', stage: 'results_chip' }, flagAssigned('track_overrides'))
       setEditing(false)
       message.success(t('文案已保存'))
     } catch {
@@ -44,7 +47,7 @@ export default function PublishKit({ projectId, variant, analytics = {}, coverSt
     } finally { setSaving(false) }
   }
   const copy = async () => {
-    if (await copyText(postCaption(post))) { onCopied(); message.success(t('发布文案已复制')) }
+    if (await copyText(postCaption(post))) { markOutputTaken(projectId); onCopied(); message.success(t('发布文案已复制')) }
     else message.error(t('复制失败，请稍后重试'))
   }
   const kitPath = `/studio/${projectId}/output-variants/${variant.id}/kit`
@@ -53,6 +56,7 @@ export default function PublishKit({ projectId, variant, analytics = {}, coverSt
   const saveCombined = async () => {
     if (!variant.render_job_id || packing) return
     if (!(await copyText(captionWithCredit(postCaption(post), variant.strategy_id)))) { message.error(t('复制失败，请稍后重试')); return }
+    markOutputTaken(projectId)
     onCombined?.()
     setPacking(true)
     const coverPath = `/studio/${projectId}/output-variants/${variant.id}/cover`
@@ -80,6 +84,7 @@ export default function PublishKit({ projectId, variant, analytics = {}, coverSt
     } finally { setPacking(false) }
   }
   const exportKit = async (event: React.MouseEvent) => {
+    markOutputTaken(projectId)
     const props = { ...analytics, strategy_id: variant.strategy_id, artifact_type: 'publish_kit' as const }
     if (!isDesktopDownload()) { studioDownloadRequested(projectId, variant.render_job_id, props); return }
     event.preventDefault()

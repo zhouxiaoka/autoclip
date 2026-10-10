@@ -537,7 +537,7 @@ test('retrying the same plan retains both execution attempts until independently
 
 test('actual auto-frame API distinguishes automatic zero detection from retained edits',async()=>{
  const s=setup();const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
- const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':{post:async()=>({scenes:[{crop_x:null,fit_shots:2}]})},'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}})
+ const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':{post:async()=>({scenes:[{crop_x:null,fit_shots:2}]})},'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker},'./noticeRuntime':{noteWorkspaceCompletion(){}}})
  s.tracker.rememberProject('private-project',{material_origin:'user'})
  await api.studioApi.autoFrame('private-project',{layout:'crop',scenes:[]},'auto')
  const event=s.events.find(e=>e.event==='studio_auto_frame_finished')
@@ -567,7 +567,7 @@ test('1.5 API observes cover and retry terminal results across restart without c
  const s=setup()
  const aggregate=load('studio',{'./flags':{flagAssigned:()=>false},'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
  const transport={post:async url=>url.endsWith('/cover/ai')?{job_id:'private-cover',status:'queued'}:{job_id:'private-new-render',status:'queued'},get:async()=>({job_id:'private-cover',status:'completed'}),put:async()=>({title:'private-title',description:'private-description',tags:['private-tag']})}
- const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}}).studioApi
+ const api=load('../features/studio/api',{'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker},'./noticeRuntime':{noteWorkspaceCompletion(){}}}).studioApi
  s.tracker.rememberProject('private-project',{material_origin:'user'})
  await api.redesignVariantCover('private-project','private-variant')
  await api.variantCoverJob('private-project','private-variant') // terminal before the global poll

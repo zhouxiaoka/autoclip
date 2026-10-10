@@ -62,7 +62,9 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     route: ['subtitle', 'visual'],
     platform_source: ['remembered', 'accounts', 'locale', 'user'],
     transcription_route: ['platform_subs', 'whisper', 'cloud', 'srt'],
-    field: ['platform', 'clip_count', 'duration', 'clip_swap', 'title'],
+    field: ['platform', 'clip_count', 'duration', 'clip_swap', 'clip_delete', 'title', 'layout', 'not_exported'],
+    kind: ['first_clip', 'all_done', 'failed'],
+    permission: ['granted', 'denied', 'default'],
     legacy_action: ['start_processing', 'collection', 'export_confirm', 'plan_adjust', 'preferences'],
   }
   for (const [key, allowed] of Object.entries(enums)) {

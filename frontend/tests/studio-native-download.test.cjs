@@ -39,6 +39,7 @@ function link({ desktop = true, save } = {}) {
   '../../desktop/sentry': { captureStudioException:()=>{} },
   './api': { studioApi:{video:()=>'/immutable.mp4?download=true'} },
   './nativeDownload': { isDesktopDownload:()=>desktop,saveStudioExport:save|| (async()=>{}) },
+  './overrides': { markOutputTaken() {} },
  }
  const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX}}).outputText
  vm.runInNewContext(code,{exports,require:id=>{assert.ok(mocks[id],id);return mocks[id]}})
