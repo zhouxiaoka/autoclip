@@ -70,3 +70,24 @@ def test_framing_runtime_precedes_whisper_runtime(monkeypatch, tmp_path):
     whisper_runtime.ensure_on_path()
     framing.ensure_on_path()
     assert sys.path.index(str(framing_dir)) < sys.path.index(str(whisper_dir))
+
+
+def test_failed_cv2_import_keeps_already_loaded_numpy(monkeypatch, tmp_path):
+    """1.5.7 Mac acceptance: framebreak purged numpy, the next Whisper run hit RecursionError."""
+    import numpy
+    runtime = tmp_path / "framing-runtime"
+    (runtime / "cv2").mkdir(parents=True)
+    (runtime / "cv2" / "__init__.py").write_text("import numpy\nraise ImportError('broken cv2')\n")
+    monkeypatch.setattr(framing, "get_install_dir", lambda: runtime)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    for name in [n for n in sys.modules if n.split(".")[0] == "cv2"]:
+        monkeypatch.delitem(sys.modules, name)
+    framing.reset_cv2_cache()
+    try:
+        assert framing.load_cv2() is None
+        assert sys.modules["numpy"] is numpy
+        import numpy as again
+        assert again is numpy and float(again.zeros(3).sum()) == 0.0
+        assert "cv2" not in sys.modules
+    finally:
+        framing.reset_cv2_cache()
