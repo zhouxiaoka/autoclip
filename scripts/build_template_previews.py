@@ -34,7 +34,7 @@ TOTAL_MAX = 500 * 1024
 WIDTH, HEIGHT, FPS, DURATION = 216, 384, 24, 2.5
 POSTER_W, POSTER_H = 270, 480
 # Representative windows inside the supplied renders, after the title has settled.
-CLIP_START = {'editorial': 8.0, 'street': 6.0, 'classic': 8.0}
+CLIP_START = {'editorial': 1.8, 'street': 6.0, 'classic': 8.0}
 
 
 def ffmpeg() -> str:
