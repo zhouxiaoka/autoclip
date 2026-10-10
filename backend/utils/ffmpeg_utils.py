@@ -3,14 +3,22 @@ FFmpeg 可执行路径解析工具
 
 优先顺序：
 1) 环境变量 AUTOCLIP_FFMPEG_PATH / AUTOCLIP_FFPROBE_PATH / FFMPEG_PATH / FFPROBE_PATH
-2) 系统 PATH 中的 ffmpeg/ffprobe
+2) 安装包或仓库里的 resources/ffmpeg（桌面应用没把环境变量传出来时）
+3) 系统 PATH 中的 ffmpeg/ffprobe
 
 用途：统一为后端所有调用点提供 ffmpeg/ffprobe 路径，便于在桌面安装包内置二进制并实现零依赖。
+应用外直接跑脚本时，桌面壳不会设置 AUTOCLIP_FFMPEG_PATH，所以要自己找到安装目录里的二进制。
 """
 
+import logging
 import os
 import shutil
+import sys
+from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+_reported_missing: set[str] = set()
 
 
 def _resolve_from_env(var_names: list[str]) -> Optional[str]:
@@ -21,41 +29,93 @@ def _resolve_from_env(var_names: list[str]) -> Optional[str]:
     return None
 
 
-def get_ffmpeg_path() -> str:
-    """返回 ffmpeg 可执行文件路径（或命令名）。"""
-    # 1) 环境变量优先
-    env_path = _resolve_from_env([
-        "AUTOCLIP_FFMPEG_PATH",
-        "FFMPEG_PATH",
-    ])
+def tool_filename(base: str, platform_name: str | None = None) -> str:
+    system = os.name if platform_name is None else platform_name
+    return f"{base}.exe" if system == "nt" else base
+
+
+def bundled_candidates(base: str, executable: str | None = None, platform_name: str | None = None) -> list[Path]:
+    """安装包 resources/ffmpeg，以及源码仓库里的同一位置。
+
+    便携 Python 在 resources/python/（Windows）或 resources/python/bin/（macOS / Linux），
+    ffmpeg 在旁边的 resources/ffmpeg/。桌面壳启动时会把这个路径写进环境变量；
+    应用外跑测速脚本时没有这个变量。
+    """
+    filename = tool_filename(base, platform_name)
+    exe = Path(executable or sys.executable)
+    try:
+        exe = exe.resolve()
+    except OSError:
+        pass
+    found: list[Path] = []
+    seen: set[str] = set()
+
+    def add(path: Path) -> None:
+        key = os.path.normcase(str(path))
+        if key in seen:
+            return
+        seen.add(key)
+        found.append(path)
+
+    for parent in exe.parents:
+        if parent.name == "python":
+            add(parent.parent / "ffmpeg" / filename)
+        if parent.name == "resources":
+            add(parent / "ffmpeg" / filename)
+            break
+    here = Path(__file__).resolve()
+    if len(here.parents) >= 3:
+        add(here.parents[2] / "resources" / "ffmpeg" / filename)
+    return found
+
+
+def missing_ffmpeg_message(name: str = "ffmpeg") -> str:
+    env = f"AUTOCLIP_{name.upper()}_PATH / {name.upper()}_PATH"
+    return (
+        f"找不到 {name}。查找顺序是：环境变量 {env}，"
+        "安装目录或仓库里的 resources/ffmpeg，然后是系统 PATH。"
+        f"这些位置都没有可用的 {name}。"
+        "请安装 ffmpeg（含 ffprobe），或设置 AUTOCLIP_FFMPEG_PATH 和 AUTOCLIP_FFPROBE_PATH。"
+    )
+
+
+def _report_missing(name: str) -> None:
+    if name in _reported_missing:
+        return
+    _reported_missing.add(name)
+    message = missing_ffmpeg_message(name)
+    logger.warning("%s", message)
+    print(message, file=sys.stderr, flush=True)
+
+
+def _locate(base: str, env_names: list[str]) -> Optional[str]:
+    env_path = _resolve_from_env(env_names)
     if env_path:
         return env_path
-
-    # 2) 系统 PATH
-    which = shutil.which("ffmpeg")
+    for candidate in bundled_candidates(base):
+        if candidate.is_file():
+            return str(candidate)
+    which = shutil.which(base)
     if which:
         return which
+    return None
 
-    # 3) 兜底返回命令名（可能仍会失败，但保留兼容性）
+
+def get_ffmpeg_path() -> str:
+    """返回 ffmpeg 可执行文件路径（或命令名）。"""
+    found = _locate("ffmpeg", ["AUTOCLIP_FFMPEG_PATH", "FFMPEG_PATH"])
+    if found:
+        return found
+    _report_missing("ffmpeg")
     return "ffmpeg"
 
 
 def get_ffprobe_path() -> str:
     """返回 ffprobe 可执行文件路径（或命令名）。"""
-    # 1) 环境变量优先
-    env_path = _resolve_from_env([
-        "AUTOCLIP_FFPROBE_PATH",
-        "FFPROBE_PATH",
-    ])
-    if env_path:
-        return env_path
-
-    # 2) 系统 PATH
-    which = shutil.which("ffprobe")
-    if which:
-        return which
-
-    # 3) 兜底返回命令名
+    found = _locate("ffprobe", ["AUTOCLIP_FFPROBE_PATH", "FFPROBE_PATH"])
+    if found:
+        return found
+    _report_missing("ffprobe")
     return "ffprobe"
 
 

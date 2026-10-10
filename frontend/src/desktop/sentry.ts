@@ -54,7 +54,7 @@ export function initSentry(): void {
         type: event.type, event_id: event.event_id, timestamp: event.timestamp, platform: event.platform,
         level: event.level, release: event.release, environment: event.environment,
         sdk: event.sdk, debug_meta: event.debug_meta,
-        tags: { ...(event.tags?.area === 'studio' && event.tags?.phase === 'native_download' ? { area: 'studio', phase: 'native_download' } : {}), app_locale: typeof document !== "undefined" ? document.documentElement.lang : "unknown" },
+        tags: { ...(event.tags?.area === 'studio' && (event.tags?.phase === 'native_download' || event.tags?.phase === 'template_picker') ? { area: 'studio', phase: event.tags.phase } : {}), app_locale: typeof document !== "undefined" ? document.documentElement.lang : "unknown" },
         exception: { values: event.exception?.values?.map(value => ({
           type: value.type, value: '[message omitted for privacy]',
           stacktrace: { frames: value.stacktrace?.frames?.map(frame => ({
@@ -86,7 +86,7 @@ export function captureException(error: unknown): void {
 }
 
 /** Native disk failures have no backend exception; report them once here. */
-export function captureStudioException(error: unknown, phase: 'native_download'): void {
+export function captureStudioException(error: unknown, phase: 'native_download' | 'template_picker'): void {
   if (!initialized || !isCrashReportsEnabled()) return
   try {
     Sentry.withScope(scope => {

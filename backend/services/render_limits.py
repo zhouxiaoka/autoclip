@@ -31,6 +31,8 @@ def low_priority(cmd: list[str]) -> tuple[list[str], dict]:
     threaded processes. Windows uses the below-normal priority class.
     """
     if sys.platform == 'win32':
-        return cmd, {'creationflags': getattr(subprocess, 'BELOW_NORMAL_PRIORITY_CLASS', 0)}
+        below = int(getattr(subprocess, 'BELOW_NORMAL_PRIORITY_CLASS', 0x00004000))
+        hidden = int(getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000))
+        return cmd, {'creationflags': below | hidden}
     nice = shutil.which('nice')
     return ([nice, '-n', '10', *cmd] if nice else cmd), {}

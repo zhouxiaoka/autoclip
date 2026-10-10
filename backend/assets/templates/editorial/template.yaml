@@ -1,0 +1,33 @@
+id: editorial
+version: 1
+name: {zh: 杂志风, en: Editorial}
+fit:
+  formats: {sit_down_interview: 1.0, keynote_stage: 0.7, podcast_studio: 0.6, street_interview: 0.2}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [720, 1280], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.38
+  head_zone: [280, 820]
+  zoom:
+    mode: creep
+    creep: 0.07
+    key_punch: 0.035
+    intro: {from: 1.18, dur: 0.9}
+    end_push: 0.035
+  transitions: {broll: zoomblur, max: 2}
+  grade: "curves=all='0/0.02 0.5/0.52 1/0.97',eq=saturation=1.0:contrast=1.04,noise=alls=4:allf=u"
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 96, alt_top: 980}
+    subtitle: {top: 1040, max_rows: 2}
+    gloss: [{top: 860, left: 48, width: 420}]
+  safe_area: xiaohongshu
+  limits: {effect_text_max: 6, emphasis_gap_s: 3.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, numbers, gloss, speakers]
+audio: {bgm: none}
+cover: {layout: editorial_3x4, from_overlay: true}
+qa: {}

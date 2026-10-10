@@ -17,6 +17,9 @@ function load(name, mocks = {}, globals = {}) {
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key' },
     require: (id) => {
       if (id in mocks) return mocks[id]
+      if (id === '../utils/apiConfig') {
+        return { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener: () => () => {} } }
+      }
       throw new Error(`Unexpected dependency: ${id}`)
     }, ...globals }, { filename: file })
   return module.exports
@@ -137,6 +140,34 @@ test('persisted opt-out skips SDK initialization and can be enabled later withou
   assert.equal(calls.filter(call => call === 'init').length, 1)
   assert.equal(calls.filter(call => call === 'capture').length, 1)
   assert.equal(storage.getItem('autoclip.analytics.optOut'), 'false')
+})
+test('the anonymous distinct id is stored once for backend events', async () => {
+  const storage = memory()
+  const puts = []
+  const id = '018f6b2a-7c3d-7b2a-8c11-111111111111'
+  const sdk = {
+    init(_key, cfg) { cfg.loaded?.({ onFeatureFlags() {} }) },
+    capture() { return {} },
+    get_distinct_id: () => id,
+    opt_in_capturing() {},
+    opt_out_capturing() {},
+  }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, {
+    localStorage: storage,
+    window: {},
+    fetch: (url, opts) => {
+      puts.push({ url, body: opts.body })
+      return Promise.resolve({ ok: true })
+    },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(puts.length, 1)
+  assert.equal(puts[0].url, '/api/v1/settings/analytics-identity')
+  assert.equal(JSON.parse(puts[0].body).distinct_id, id)
+  ph.setAnalyticsEnabled(true)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(puts.length, 1)
 })
 test('turning analytics off pauses flag reloads and never asks for flags while opted out', () => {
   const storage = memory()
@@ -333,6 +364,23 @@ test('rescreen ignores an old plan while running and replaces the old local watc
  assert.equal(core.routeName('/import/private?token=secret'),'/import/:id')
  assert.equal(core.routeName('/project/private/studio/secret'),'/project/:id/studio/:draftId')
 })
+test('the UI does not emit studio_qa_checked; the backend owns that event', () => {
+  const s = setup()
+  s.tracker.watch('studio-variant', 'variant-1', 'project', undefined, {}, false, 'job-1')
+  const qa = { mode: 'shadow', checks: [
+    { checker: 'avsync', outcome: 'fail', bucket: '80_200', duration_ms: 12 },
+    { checker: 'ending', outcome: 'fail', bucket: 'mid_word', duration_ms: 3, text: 'private caption' },
+    { checker: 'loudness', outcome: 'pass', bucket: 'in_target', duration_ms: 40 },
+  ] }
+  const snapshot = { output_variants: [{ id: 'variant-1', draft_id: 'd', render_job_id: 'job-1', strategy_id: 'douyin', status: 'completed', qa }] }
+  const watch = s.tracker.list()[0]
+  s.tracker.observeStudio(watch, snapshot)
+  s.tracker.observeStudio(watch, snapshot)
+  assert.equal(s.events.filter(item => item.event === 'studio_qa_checked').length, 0)
+  assert.equal(JSON.stringify(s.events).includes('private'), false)
+  assert.equal(s.events.some(item => item.event === 'studio_variant_finished'), true)
+})
+
 test('immutable export repeated acceptance does not recount its completion',()=>{
  const s=setup();s.tracker.watch('studio-export','j','p');const w=s.tracker.list()[0]
  s.tracker.observeStudio(w,{jobs:[{job_id:'j',status:'completed',duration_ms:20}]})
@@ -566,4 +614,65 @@ test('portrait import and saved outro preference retain explicit enums and confi
  assert.equal(s.events.length,2);assert.equal(s.events[1].props.brand_outro_enabled,false)
  const late=experience.beginExperience('output_branding_save',{brand_outro_enabled:true});const n=s.events.length;s.tracker.clear();late('completed')
  assert.equal(s.events.length,n);assert.equal(JSON.stringify(props).includes('private'),false)
+})
+
+test('accepting a recommendation and the import use the same flow id', async () => {
+  async function enroll(body) {
+    const s = setup(memory(), () => Date.now())
+    const aggregate = load('studio', { './flags': { flagAssigned: () => false }, './posthog': { captureBusinessEvent: s.capture }, './observer': { workflow: s.tracker }, './workflow': core })
+    const transport = { defaults: {}, post: async () => ({ project_id: 'project-accepted' }) }
+    const file = path.join(__dirname, '../src/features/studio/api.ts')
+    const js = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
+    const module = { exports: {} }
+    vm.runInNewContext(js, { module, exports: module.exports, require: id => ({
+      '../../analytics/workflow': core,
+      '../../analytics/posthog': { captureBusinessEvent: s.capture },
+      '../../services/api': transport,
+      '../../analytics/studio': aggregate,
+      '../../analytics/observer': { workflow: s.tracker },
+    }[id]) })
+    await module.exports.studioApi.import(body)
+    const watch = s.tracker.list().find(item => item.kind === 'studio-generation')
+    s.tracker.observeStudio(watch, {
+      generation: {
+        auto_start: true, status: 'completed', recommended_template: 'editorial', accepted_recommendation: true,
+        created_at: '2026-10-10T00:00:00Z', finished_at: '2026-10-10T00:01:00Z',
+      },
+      output_variants: [], jobs: [], drafts: [], analysis: { status: 'completed' },
+    })
+    return {
+      imported: s.events.find(event => event.event === 'studio_import_requested').props,
+      finished: s.events.find(event => event.event === 'studio_generation_finished').props,
+    }
+  }
+  const supplied = new FormData()
+  supplied.set('flow_id', 't-sharedflow-aaaa')
+  supplied.set('html_template', 'editorial')
+  supplied.set('recommended_template', 'editorial')
+  supplied.set('auto_start', 'true')
+  supplied.append('platforms', 'douyin')
+  const accepted = await enroll(supplied)
+  assert.equal(accepted.imported.flow_id, 't-sharedflow-aaaa')
+  assert.equal(accepted.imported.template, 'editorial')
+  assert.equal(accepted.imported.recommended_template, 'editorial')
+  assert.equal(accepted.imported.accepted_recommendation, true)
+  assert.equal(accepted.finished.flow_id, accepted.imported.flow_id)
+  assert.equal(accepted.finished.accepted_recommendation, true)
+  const bare = new FormData()
+  bare.set('html_template', 'street')
+  bare.set('recommended_template', 'editorial')
+  bare.set('auto_start', 'true')
+  const generated = await enroll(bare)
+  assert.match(generated.imported.flow_id, /^t-[a-z0-9-]{10,100}$/)
+  assert.notEqual(generated.imported.flow_id, 't-sharedflow-aaaa')
+  assert.equal(generated.imported.accepted_recommendation, false)
+  assert.equal(generated.imported.template, 'street')
+  assert.equal(generated.imported.recommended_template, 'editorial')
+  assert.equal(generated.finished.flow_id, generated.imported.flow_id)
+  const invalid = new FormData()
+  invalid.set('flow_id', 'not-a-flow')
+  invalid.set('auto_start', 'true')
+  const replaced = await enroll(invalid)
+  assert.notEqual(replaced.imported.flow_id, 'not-a-flow')
+  assert.equal(replaced.finished.flow_id, replaced.imported.flow_id)
 })
