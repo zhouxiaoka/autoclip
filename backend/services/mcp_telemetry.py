@@ -254,7 +254,10 @@ def _drain() -> None:
         dedup = item.get('dedup')
         try:
             if _post(item['event'], item['properties']) and dedup is not None:
-                _remember(dedup)
+                try:
+                    _remember(dedup)
+                except OSError:
+                    logger.warning('MCP event was sent but not marked')
         finally:
             if dedup is not None:
                 _release(dedup)

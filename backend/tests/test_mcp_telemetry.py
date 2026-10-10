@@ -200,6 +200,26 @@ def test_a_failed_post_is_not_marked_sent(monkeypatch, tmp_path):
     assert 'job-fail' not in marker.read_text(encoding='utf-8')
 
 
+def test_remember_oserror_does_not_kill_the_sender(monkeypatch, tmp_path):
+    captured = _capture(monkeypatch, tmp_path)
+
+    def boom(key):
+        raise OSError('disk full')
+
+    monkeypatch.setattr(mcp_telemetry, '_remember', boom)
+    mcp_telemetry.record('get_quick_output_status', 'cli', time.perf_counter(), ok=True, error_code='none',
+                         job_id='job-disk', terminal=True)
+    mcp_telemetry.flush()
+    worker = mcp_telemetry._worker
+    assert worker is not None and worker.is_alive()
+    assert any(row['event'] == 'mcp_job_finished' for row in captured)
+    monkeypatch.setattr(mcp_telemetry, '_remember', lambda key: None)
+    mcp_telemetry.record('get_version', 'cli', time.perf_counter(), ok=True, error_code='none')
+    mcp_telemetry.flush()
+    assert mcp_telemetry._worker is worker and worker.is_alive()
+    assert captured[-1]['event'] == 'mcp_tool_called'
+
+
 def test_flush_returns_when_the_timeout_expires(monkeypatch, tmp_path):
     _capture(monkeypatch, tmp_path)
     release = threading.Event()
