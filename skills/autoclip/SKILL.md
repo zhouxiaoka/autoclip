@@ -62,7 +62,7 @@ autoclip outputs PROJECT_ID --export-kits
 
 风格 id 只有三个：`editorial`（杂志风）、`street`（街头快剪）、`classic`（经典）。竖版版式 `portrait_style`（`auto` / `interview` / `podcast`）只改竖版布局，不代替剪辑风格。`template` / `--template` 只在 `mcp_v2_tools` 打开时接受。不支持的值返回 `invalid_input`。
 
-1. 如果工具列表里有 `list_styles`，先调用它，把 id 和名称给用户选。没有这个工具时，直接使用上面三个 id。
+1. 如果工具列表里有 `list_styles`，先调用它，把 id 和名称给用户选。没有 list_styles 就不要传 template。
 2. 用户选定后，MCP 在 `start_quick_output` 上传 `template`。命令行用 `--template`。开关关闭时不要传；不传则按经典制作。
 3. 以返回结果里的风格为准。`template` 是实际用的风格，`requested_template` 是请求值。`pkg_templates_v1` 关闭时，即使请求了杂志风或街头快剪，实际风格也是 `classic`。
 4. 其余步骤与示例 1 相同：轮询到终态，再 `export_kits=true`。

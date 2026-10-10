@@ -26,6 +26,7 @@ def test_skill_triggers_on_publish_kits_and_keeps_three_flows():
     for style in ('editorial', 'street', 'classic'):
         assert style in text
     assert '--template' in text and 'list_styles' in text
+    assert '没有 list_styles 就不要传 template' in text
     assert '以返回结果里的风格为准' in text
     assert 'poll_after_sec' in text and 'unknown' in text
     assert 'sources' in text and '不要自造' in text
