@@ -45,12 +45,16 @@ def _process_gone(pid: int) -> bool:
     import psutil
     try:
         proc = psutil.Process(pid)
+        status = proc.status()
     except psutil.NoSuchProcess:
         return True
-    return proc.status() == psutil.STATUS_ZOMBIE
+    except psutil.Error:
+        # Windows can deny a query while taskkill is still tearing the tree down.
+        return False
+    return status == psutil.STATUS_ZOMBIE
 
 
-def _wait_until_gone(pid: int, timeout: float = 5) -> bool:
+def _wait_until_gone(pid: int, timeout: float = 15) -> bool:
     import time
     deadline = time.time() + timeout
     while True:
@@ -136,7 +140,7 @@ def test_cancel_kills_the_process_group_and_clears_temporary_files(data_dir, tmp
         assert len(pids) >= 2, errors
         parent_pid, grand_pid = pids
         cancelled = mcp_jobs.cancel('pstop')
-        thread.join(timeout=10)
+        thread.join(timeout=20)
         assert not thread.is_alive()
         assert errors == []
         assert cancelled['status'] == 'cancelled' and cancelled['error_code'] == 'cancelled' and cancelled['ok'] is False

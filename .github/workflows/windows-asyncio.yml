@@ -91,6 +91,24 @@ jobs:
             Get-Content "$env:RUNNER_TEMP\qa-windows-benchmark.json"
           }
 
+  cancel-process-tree:
+    name: Windows cancel_job process tree
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.13"
+      - name: Install runtime
+        run: python -m pip install -r requirements.txt
+      - name: cancel_job kills the parent and grandchild with taskkill /T
+        env:
+          AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-cancel-tree
+          AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-cancel-tree
+          SENTRY_DSN: ""
+        run: python -m pytest backend/tests/test_mcp_jobs.py::test_cancel_kills_the_process_group_and_clears_temporary_files -q -s
+
   windows-asyncio:
     name: Windows Proactor cleanup
     runs-on: windows-latest
