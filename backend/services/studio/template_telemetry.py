@@ -37,6 +37,19 @@ def _millis(value: object) -> int | None:
     return value
 
 
+def host_facts() -> dict:
+    """Platform and core count. Nothing else about the machine."""
+    import os
+    import sys
+    facts: dict = {}
+    if sys.platform in OPERATING_SYSTEMS:
+        facts['os'] = sys.platform
+    count = os.cpu_count()
+    if isinstance(count, int) and 1 <= count <= 1024:
+        facts['cpu_count'] = count
+    return facts
+
+
 def render_event(payload: dict | None) -> dict:
     """`studio_template_render_finished` properties. Unknown keys never pass through."""
     raw = payload or {}
