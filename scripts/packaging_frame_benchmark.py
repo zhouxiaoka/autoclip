@@ -18,6 +18,11 @@ record arm64 or x86_64, then the same command.
 
 Windows (Tencent Cloud acceptance machine, run by AutoClip PM): the same command from a
 checkout of this branch. Do not treat a missing local number as a result.
+`--install-runtime` tries the official PyPI index, then the Tsinghua mirror if that index
+goes silent (`AUTOCLIP_PIP_INDEX=auto|pypi|mirror`, `PIP_INDEX_URL` pins one index).
+The browser download does the same (`AUTOCLIP_PLAYWRIGHT_DOWNLOAD_SOURCE`); a system
+Edge or Chrome skips that download. ffmpeg is resolved from AUTOCLIP_FFMPEG_PATH, then
+resources/ffmpeg next to the portable Python, then PATH.
 """
 from __future__ import annotations
 
@@ -328,9 +333,21 @@ def platform_notes(docker_status: str) -> list[dict]:
     return notes
 
 
-def _ffmpeg() -> str:
+def require_ffmpeg() -> str | None:
+    """应用外没有桌面壳注入的路径时，仍按安装包 resources、再 PATH 查找。"""
     from backend.utils.ffmpeg_utils import get_ffmpeg_path
-    return get_ffmpeg_path()
+    path = get_ffmpeg_path()
+    if path and os.path.exists(path):
+        return path
+    return None
+
+
+def _ffmpeg() -> str:
+    from backend.utils.ffmpeg_utils import missing_ffmpeg_message
+    path = require_ffmpeg()
+    if path:
+        return path
+    raise RuntimeError(missing_ffmpeg_message())
 
 
 def _run_ffmpeg(command: list[str], cwd: Path) -> subprocess.CompletedProcess:
@@ -682,6 +699,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--docker-image", default=DOCKER_IMAGE)
     parser.add_argument("--keep-workdir", action="store_true")
     args = parser.parse_args(argv)
+    located = require_ffmpeg()
+    if located is None:
+        from backend.utils.ffmpeg_utils import missing_ffmpeg_message
+        message = missing_ffmpeg_message()
+        _write(args.out, {"schema": 1, "status": "error", "error": message, "label": args.label})
+        return 1
     if args.install_runtime:
         from backend.services.packaging_runtime import install_blocking
         status = install_blocking()

@@ -9,20 +9,24 @@
 - 装到用户可写目录 `<data_dir>/packaging-runtime`，不写进 .app（避免只读和破坏签名）。
 - 用当前后端的 Python（`sys.executable`）做 `pip install --target`。
 - 浏览器二进制放在该目录下的 `browsers/`，并设置 `PLAYWRIGHT_BROWSERS_PATH`。
-- 国内镜像用 `PLAYWRIGHT_DOWNLOAD_HOST`。已经把 pip 指到国内源时，安装浏览器会
-  自动改用 npmmirror，不必再配一次。
-- 系统里已有 Chrome 或 Edge 就用 `channel='chrome'/'msedge'`，不再下载
-  chromium-headless-shell。Windows 优先 Edge（系统自带），其他系统优先 Chrome。
+- pip 源看 `AUTOCLIP_PIP_INDEX`（默认 `auto`）：先连官方 PyPI，静默超时再改清华镜像。
+  `pypi` 只用官方，`mirror` 只用镜像。已经设置 `PIP_INDEX_URL` 时尊重它，不再自动切换。
+- 浏览器下载看 `AUTOCLIP_PLAYWRIGHT_DOWNLOAD_SOURCE`（默认 `auto`）：先官方 CDN，超时再改
+  npmmirror。`PLAYWRIGHT_DOWNLOAD_HOST` 或 `AUTOCLIP_PLAYWRIGHT_DOWNLOAD_HOST` 钉死地址时
+  不再切换。系统里已有 Chrome 或 Edge 就用 `channel='chrome'/'msedge'`，不再下载
+  chromium-headless-shell，也不会访问下载镜像。Windows 优先 Edge，其他系统优先 Chrome。
 """
 from __future__ import annotations
 
 import importlib
 import logging
 import os
+import queue
 import shutil
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -33,15 +37,24 @@ IMPORT_NAME = "playwright"
 BROWSER_PACKAGE = "chromium-headless-shell"
 # Playwright 文档里的下载根。npmmirror 按 `<host>/<revision>/<browser>` 提供同一套构建。
 CN_DOWNLOAD_HOST = "https://npmmirror.com/mirrors/playwright"
-_CN_PIP_MARKERS = (
-    "tuna.tsinghua.edu.cn",
-    "mirrors.aliyun.com",
-    "mirrors.cloud.tencent.com",
-    "pypi.mirrors.ustc.edu.cn",
-    "npmmirror.com",
-    "mirrors.huaweicloud.com",
-    "pypi.douban.com",
-)
+OFFICIAL_PIP_INDEX = "https://pypi.org/simple"
+# 桌面构建脚本的默认 pip 源。大陆机器连不上 pypi.org 时用它做回退。
+CN_PIP_INDEX = "https://pypi.tuna.tsinghua.edu.cn/simple"
+PIP_INDEX_MODES = ("auto", "pypi", "mirror")
+PLAYWRIGHT_DOWNLOAD_MODES = ("auto", "official", "mirror")
+# 大陆到官方源的路由会黑洞。pip 自己的重试可以空转十几分钟且没有任何输出。
+# 官方源一旦静默就改走镜像；镜像侧留出真正下载的时间。
+PIP_OFFICIAL_STALL_SECONDS = 40
+PIP_OFFICIAL_TIMEOUT_SECONDS = 90
+PIP_MIRROR_STALL_SECONDS = 120
+PIP_MIRROR_TIMEOUT_SECONDS = 600
+BROWSER_OFFICIAL_STALL_SECONDS = 45
+BROWSER_OFFICIAL_TIMEOUT_SECONDS = 180
+BROWSER_MIRROR_STALL_SECONDS = 180
+BROWSER_MIRROR_TIMEOUT_SECONDS = 600
+PIP_SOCKET_TIMEOUT = "15"
+PIP_RETRIES = "1"
+TIMEOUT_EXIT = 124
 HTML_TEMPLATES = frozenset({"editorial", "street", "podcast"})
 CLASSIC = "classic"
 # 旧版式仍然是 ASS，读到它们时不要误当成 HTML 模板。
@@ -118,22 +131,74 @@ def _clear_install_error() -> None:
         pass
 
 
-def download_host() -> str | None:
-    """浏览器下载根。显式环境变量优先；桌面构建已改用国内 pip 源时跟随 npmmirror。"""
-    explicit = (os.getenv("PLAYWRIGHT_DOWNLOAD_HOST") or "").strip()
-    if explicit:
-        return explicit
-    override = (os.getenv("AUTOCLIP_PLAYWRIGHT_DOWNLOAD_HOST") or "").strip()
-    if override:
-        return override
+def _named_mode(value: str, allowed: tuple[str, ...], aliases: dict[str, str]) -> str | None:
+    text = aliases.get(value, value)
+    return text if text in allowed else None
+
+
+def pip_index_mode() -> str:
+    raw = (os.getenv("AUTOCLIP_PIP_INDEX") or "auto").strip().lower()
+    return _named_mode(raw, PIP_INDEX_MODES, {
+        "official": "pypi", "pypi.org": "pypi",
+        "cn": "mirror", "china": "mirror", "tuna": "mirror", "tsinghua": "mirror",
+    }) or "auto"
+
+
+def pip_index_plan(explicit: str | None = None) -> list[tuple[str, str]]:
+    """[(label, index url)]，按尝试顺序。
+
+    和 Whisper 的下载计划同一形状：显式模式优先；用户设置了 PIP_INDEX_URL 时只用它；
+    auto 先官方索引，再清华镜像。
+    """
+    if explicit and explicit.strip():
+        return [("custom", explicit.strip())]
+    mode = pip_index_mode()
+    if mode == "pypi":
+        return [("pypi", OFFICIAL_PIP_INDEX)]
+    if mode == "mirror":
+        return [("mirror", CN_PIP_INDEX)]
+    custom = (os.getenv("PIP_INDEX_URL") or "").strip()
+    if custom:
+        return [("custom", custom)]
+    return [("pypi", OFFICIAL_PIP_INDEX), ("mirror", CN_PIP_INDEX)]
+
+
+def playwright_download_mode() -> str:
+    raw = (os.getenv("AUTOCLIP_PLAYWRIGHT_DOWNLOAD_SOURCE") or "").strip().lower()
+    chosen = _named_mode(raw, PLAYWRIGHT_DOWNLOAD_MODES, {
+        "cdn": "official", "playwright": "official",
+        "npmmirror": "mirror", "cn": "mirror", "china": "mirror",
+    })
+    if chosen:
+        return chosen
     switch = (os.getenv("AUTOCLIP_PLAYWRIGHT_MIRROR") or "").strip().lower()
     if switch in {"0", "off", "false", "no"}:
-        return None
+        return "official"
     if switch in {"1", "on", "true", "yes", "cn"}:
-        return CN_DOWNLOAD_HOST
-    index = os.getenv("PIP_INDEX_URL") or ""
-    if any(marker in index for marker in _CN_PIP_MARKERS):
-        return CN_DOWNLOAD_HOST
+        return "mirror"
+    return "auto"
+
+
+def browser_download_plan() -> list[tuple[str, str | None]]:
+    """[(label, PLAYWRIGHT_DOWNLOAD_HOST)]。官方 CDN 的 host 是 None。"""
+    explicit = (os.getenv("PLAYWRIGHT_DOWNLOAD_HOST") or "").strip()
+    override = (os.getenv("AUTOCLIP_PLAYWRIGHT_DOWNLOAD_HOST") or "").strip()
+    pinned = explicit or override
+    if pinned:
+        return [("custom", pinned)]
+    mode = playwright_download_mode()
+    if mode == "official":
+        return [("official", None)]
+    if mode == "mirror":
+        return [("mirror", CN_DOWNLOAD_HOST)]
+    return [("official", None), ("mirror", CN_DOWNLOAD_HOST)]
+
+
+def download_host() -> str | None:
+    """钉死的浏览器下载根。auto 会逐个尝试，这里返回 None，避免还没试官方源就写上镜像。"""
+    plan = browser_download_plan()
+    if len(plan) == 1:
+        return plan[0][1]
     return None
 
 
@@ -394,6 +459,8 @@ def _child_env() -> dict[str, str]:
 def pip_command(index_url: str | None) -> list[str]:
     command = [
         sys.executable, "-m", "pip", "install", "--upgrade", "--disable-pip-version-check",
+        # 套接字超时挡不住被黑洞的 DNS / TCP。进程级静默超时在 _stream 里兜底。
+        "--timeout", PIP_SOCKET_TIMEOUT, "--retries", PIP_RETRIES,
         "--target", str(get_install_dir()), *PACKAGES,
     ]
     if index_url:
@@ -412,16 +479,96 @@ def _bump(min_value: int, max_value: int, message: str) -> None:
         _state["message"] = message
 
 
-def _stream(command: list[str], env: dict[str, str], progress: tuple[int, int]) -> int:
+def _attempt_limits(kind: str, label: str) -> tuple[float, float]:
+    short = label in {"pypi", "official"}
+    if kind == "browser":
+        if short:
+            return (BROWSER_OFFICIAL_TIMEOUT_SECONDS, BROWSER_OFFICIAL_STALL_SECONDS)
+        return (BROWSER_MIRROR_TIMEOUT_SECONDS, BROWSER_MIRROR_STALL_SECONDS)
+    if short:
+        return (PIP_OFFICIAL_TIMEOUT_SECONDS, PIP_OFFICIAL_STALL_SECONDS)
+    return (PIP_MIRROR_TIMEOUT_SECONDS, PIP_MIRROR_STALL_SECONDS)
+
+
+def _with_download_host(env: dict[str, str], host: str | None) -> dict[str, str]:
+    copied = dict(env)
+    if host:
+        copied["PLAYWRIGHT_DOWNLOAD_HOST"] = host
+    else:
+        copied.pop("PLAYWRIGHT_DOWNLOAD_HOST", None)
+    return copied
+
+
+def _stop_process(proc: subprocess.Popen) -> None:
+    if proc.poll() is None:
+        proc.kill()
+    stdout = getattr(proc, "stdout", None)
+    if stdout is not None:
+        try:
+            stdout.close()
+        except Exception:
+            pass
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        pass
+
+
+def _stream(
+    command: list[str],
+    env: dict[str, str],
+    progress: tuple[int, int],
+    timeout: float | None = None,
+    stall_timeout: float | None = None,
+) -> int:
+    # 没传超时也要停。大陆网络上一次没有输出的 pip 可以空转到十几分钟。
+    if timeout is None:
+        timeout = PIP_MIRROR_TIMEOUT_SECONDS
+    if stall_timeout is None:
+        stall_timeout = PIP_MIRROR_STALL_SECONDS
     logger.info("包装组件: %s", " ".join(command))
     proc = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
     )
-    lines: list[str] = []
     assert proc.stdout is not None
-    for line in iter(proc.stdout.readline, ""):
-        line = line.rstrip()
+    lines_out: queue.Queue[str | None] = queue.Queue()
+
+    def _read() -> None:
+        try:
+            for line in iter(proc.stdout.readline, ""):
+                lines_out.put(line)
+        except Exception:
+            logger.debug("包装组件输出读取中断", exc_info=True)
+        finally:
+            lines_out.put(None)
+
+    threading.Thread(target=_read, name="packaging-install-output", daemon=True).start()
+    started = time.monotonic()
+    last_output = started
+    lines: list[str] = []
+    while True:
+        now = time.monotonic()
+        waits: list[float] = []
+        if timeout is not None:
+            waits.append(started + timeout - now)
+        if stall_timeout is not None:
+            waits.append(last_output + stall_timeout - now)
+        wait = min(waits) if waits else None
+        if wait is not None and wait <= 0:
+            logger.warning("包装组件命令静默超时，已终止")
+            _stop_process(proc)
+            return TIMEOUT_EXIT
+        try:
+            item = lines_out.get(timeout=wait)
+        except queue.Empty:
+            logger.warning("包装组件命令静默超时，已终止")
+            _stop_process(proc)
+            return TIMEOUT_EXIT
+        if item is None:
+            break
+        last_output = time.monotonic()
+        line = item.rstrip()
         if not line:
             continue
         lines.append(line)
@@ -433,27 +580,65 @@ def _stream(command: list[str], env: dict[str, str], progress: tuple[int, int]) 
     return proc.wait()
 
 
+def _run_plan(
+    kind: str,
+    plan: list[tuple[str, str | None]],
+    env: dict[str, str],
+    progress: tuple[int, int],
+) -> tuple[int, list[str]]:
+    code = 1
+    failures: list[str] = []
+    for index, (label, value) in enumerate(plan):
+        hard, stall = _attempt_limits(kind, label)
+        if kind == "browser":
+            command = browser_install_command()
+            attempt_env = _with_download_host(env, value)
+        else:
+            command = pip_command(value if isinstance(value, str) else None)
+            attempt_env = env
+        if index and failures:
+            logger.warning("包装组件 %s 从 %s 失败（%s），改用 %s", kind, plan[index - 1][0], failures[-1], label)
+            _set_state(message="官方源无响应，改用国内镜像…")
+        code = _stream(command, attempt_env, progress, timeout=hard, stall_timeout=stall)
+        if code == 0:
+            return 0, failures
+        reason = "超时" if code == TIMEOUT_EXIT else f"退出码 {code}"
+        failures.append(f"{label}: {reason}")
+    return code, failures
+
+
+def _failure_message(kind: str, code: int, failures: list[str]) -> str:
+    timed_out = code == TIMEOUT_EXIT
+    if len(failures) > 1:
+        if kind == "browser":
+            return "浏览器下载失败（官方源无响应，国内镜像也失败）"
+        return "安装失败（官方 PyPI 无响应，国内镜像也失败）"
+    if kind == "browser":
+        return "浏览器下载失败（超时）" if timed_out else f"浏览器下载失败（退出码 {code}）"
+    return "安装失败（pip 超时）" if timed_out else f"安装失败（pip 退出码 {code}）"
+
+
 def _do_install(index_url: str | None) -> None:
     _set_state(status="installing", progress=5, message="正在准备高级包装组件…", log_tail="")
     try:
         env = _child_env()
         if not package_present() or not _playwright_importable():
-            code = _stream(pip_command(index_url), env, (10, 60))
+            code, failures = _run_plan("pip", pip_index_plan(index_url), env, (10, 60))
             if code != 0:
-                message = _public_failure(f"安装失败（pip 退出码 {code}）")
+                message = _public_failure(_failure_message("pip", code, failures))
                 _write_install_error(message)
                 _set_state(status="error", message=message)
-                logger.error("包装组件 pip 安装失败，退出码 %s", code)
+                logger.error("包装组件 pip 安装失败: %s", "; ".join(failures) or code)
                 return
         plan = browser_plan()
         if plan["needs_download"]:
             _set_state(progress=65, message="正在下载无头浏览器…")
-            code = _stream(browser_install_command(), env, (65, 95))
+            code, failures = _run_plan("browser", browser_download_plan(), env, (65, 95))
             if code != 0:
-                message = _public_failure(f"浏览器下载失败（退出码 {code}）")
+                message = _public_failure(_failure_message("browser", code, failures))
                 _write_install_error(message)
                 _set_state(status="error", message=message)
-                logger.error("chromium-headless-shell 安装失败，退出码 %s", code)
+                logger.error("chromium-headless-shell 安装失败: %s", "; ".join(failures) or code)
                 return
         if is_installed():
             _clear_install_error()
@@ -478,8 +663,8 @@ def start_install(index_url: str | None = None) -> dict[str, Any]:
     if is_installed():
         _set_state(status="installed", progress=100, message="已安装")
         return {"started": False, "message": "已安装"}
-    index = index_url or os.getenv("PIP_INDEX_URL")
-    threading.Thread(target=_do_install, args=(index,), name="packaging-install", daemon=True).start()
+    # None 交给 pip_index_plan：auto 先官方再镜像，PIP_INDEX_URL 则只用用户指定的源。
+    threading.Thread(target=_do_install, args=(index_url,), name="packaging-install", daemon=True).start()
     return {"started": True, "message": "已开始安装"}
 
 
@@ -488,7 +673,7 @@ def install_blocking(index_url: str | None = None) -> dict[str, Any]:
     if is_installed():
         _set_state(status="installed", progress=100, message="已安装")
         return get_status()
-    _do_install(index_url or os.getenv("PIP_INDEX_URL"))
+    _do_install(index_url)
     return get_status()
 
 

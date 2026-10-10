@@ -22,7 +22,10 @@ class _Proc:
 @pytest.fixture(autouse=True)
 def isolate_runtime(tmp_path, monkeypatch):
     monkeypatch.setattr(runtime, "_data_dir", lambda: tmp_path)
-    for key in ("PLAYWRIGHT_DOWNLOAD_HOST", "AUTOCLIP_PLAYWRIGHT_DOWNLOAD_HOST", "AUTOCLIP_PLAYWRIGHT_MIRROR", "PIP_INDEX_URL", "PLAYWRIGHT_BROWSERS_PATH"):
+    for key in (
+        "PLAYWRIGHT_DOWNLOAD_HOST", "AUTOCLIP_PLAYWRIGHT_DOWNLOAD_HOST", "AUTOCLIP_PLAYWRIGHT_MIRROR",
+        "AUTOCLIP_PLAYWRIGHT_DOWNLOAD_SOURCE", "AUTOCLIP_PIP_INDEX", "PIP_INDEX_URL", "PLAYWRIGHT_BROWSERS_PATH",
+    ):
         monkeypatch.delenv(key, raising=False)
     runtime._runtime_import_error = ""
     runtime._set_state(status="unknown", progress=0, message="", log_tail="")
@@ -66,20 +69,25 @@ def test_autoclip_download_host_is_used_when_playwright_host_is_unset(monkeypatc
     assert os.environ["PLAYWRIGHT_DOWNLOAD_HOST"] == "https://mirror.example/pw"
 
 
-def test_china_pip_index_selects_the_playwright_mirror(monkeypatch):
+def test_china_pip_index_is_used_alone_and_does_not_pin_the_browser_host(monkeypatch):
     monkeypatch.setenv("PIP_INDEX_URL", "https://pypi.tuna.tsinghua.edu.cn/simple")
-    assert runtime.download_host() == runtime.CN_DOWNLOAD_HOST
-
-
-def test_public_pypi_does_not_force_a_china_mirror(monkeypatch):
-    monkeypatch.setenv("PIP_INDEX_URL", "https://pypi.org/simple")
+    assert runtime.pip_index_plan() == [("custom", "https://pypi.tuna.tsinghua.edu.cn/simple")]
     assert runtime.download_host() is None
+    assert runtime.browser_download_plan() == [("official", None), ("mirror", runtime.CN_DOWNLOAD_HOST)]
 
 
-def test_mirror_switch_off_ignores_a_china_pip_index(monkeypatch):
+def test_public_pypi_does_not_pin_a_china_mirror(monkeypatch):
+    monkeypatch.setenv("PIP_INDEX_URL", "https://pypi.org/simple")
+    assert runtime.pip_index_plan() == [("custom", "https://pypi.org/simple")]
+    assert runtime.download_host() is None
+    assert runtime.browser_download_plan() == [("official", None), ("mirror", runtime.CN_DOWNLOAD_HOST)]
+
+
+def test_mirror_switch_off_keeps_the_official_browser_cdn(monkeypatch):
     monkeypatch.setenv("PIP_INDEX_URL", "https://mirrors.aliyun.com/pypi/simple")
     monkeypatch.setenv("AUTOCLIP_PLAYWRIGHT_MIRROR", "0")
     assert runtime.download_host() is None
+    assert runtime.browser_download_plan() == [("official", None)]
 
 
 def test_windows_prefers_edge_when_chrome_is_also_installed(monkeypatch):
@@ -243,8 +251,10 @@ def test_pip_install_skips_the_browser_download_when_chrome_exists(monkeypatch):
     assert "--target" in command
     assert command[command.index("--target") + 1].endswith(os.path.join("packaging-runtime"))
     assert "playwright>=1.49,<2" in command
+    assert "--timeout" in command and "--retries" in command
+    assert command[-2:] == ["--index-url", "https://pypi.tuna.tsinghua.edu.cn/simple"]
     assert "chromium-headless-shell" not in command
-    assert env["PLAYWRIGHT_DOWNLOAD_HOST"] == runtime.CN_DOWNLOAD_HOST
+    assert "PLAYWRIGHT_DOWNLOAD_HOST" not in env
     assert env["PLAYWRIGHT_BROWSERS_PATH"].endswith(os.path.join("packaging-runtime", "browsers"))
     assert runtime.get_status()["status"] == "installed"
 
@@ -292,3 +302,172 @@ def test_uninstall_removes_the_runtime_and_refuses_while_installing(tmp_path):
     assert str(root) not in runtime.sys.path
     assert runtime._read_install_error() == ""
     assert runtime.get_status()["status"] == "not_installed"
+
+
+def test_auto_pip_plan_tries_pypi_then_the_tsinghua_mirror():
+    assert runtime.pip_index_plan() == [
+        ("pypi", runtime.OFFICIAL_PIP_INDEX),
+        ("mirror", runtime.CN_PIP_INDEX),
+    ]
+    assert runtime.browser_download_plan() == [("official", None), ("mirror", runtime.CN_DOWNLOAD_HOST)]
+
+
+def test_auto_pip_timeout_falls_back_to_the_china_mirror(monkeypatch):
+    seen = []
+
+    def stream(command, _env, _progress, timeout=None, stall_timeout=None):
+        seen.append((command[-1], timeout, stall_timeout))
+        if "pypi.org" in command[-1]:
+            return runtime.TIMEOUT_EXIT
+        return 0
+
+    monkeypatch.setattr(runtime, "_stream", stream)
+    monkeypatch.setattr(runtime, "is_installed", lambda: True)
+    monkeypatch.setattr(runtime, "browser_plan", lambda: {
+        "ready": True, "mode": "channel", "channel": "msedge", "executable": "edge", "needs_download": False,
+    })
+    runtime._do_install(None)
+    assert [item[0] for item in seen] == [runtime.OFFICIAL_PIP_INDEX, runtime.CN_PIP_INDEX]
+    assert seen[0][1:] == (runtime.PIP_OFFICIAL_TIMEOUT_SECONDS, runtime.PIP_OFFICIAL_STALL_SECONDS)
+    assert seen[1][1:] == (runtime.PIP_MIRROR_TIMEOUT_SECONDS, runtime.PIP_MIRROR_STALL_SECONDS)
+    assert runtime.get_status()["status"] == "installed"
+
+
+def test_pypi_mode_does_not_fall_back_after_a_timeout(monkeypatch):
+    monkeypatch.setenv("AUTOCLIP_PIP_INDEX", "pypi")
+    seen = []
+    monkeypatch.setattr(
+        runtime, "_stream",
+        lambda command, _env, _progress, timeout=None, stall_timeout=None: seen.append(command[-1]) or runtime.TIMEOUT_EXIT,
+    )
+    monkeypatch.setattr(runtime, "browser_plan", lambda: {
+        "ready": False, "mode": "chromium-headless-shell", "channel": None, "executable": None, "needs_download": True,
+    })
+    runtime._do_install(None)
+    assert seen == [runtime.OFFICIAL_PIP_INDEX]
+    assert "超时" in runtime.get_status()["message"]
+
+
+def test_mirror_mode_skips_the_official_index(monkeypatch):
+    monkeypatch.setenv("AUTOCLIP_PIP_INDEX", "tuna")
+    seen = []
+    monkeypatch.setattr(
+        runtime, "_stream",
+        lambda command, _env, _progress, timeout=None, stall_timeout=None: seen.append(command[-1]) or 0,
+    )
+    monkeypatch.setattr(runtime, "is_installed", lambda: True)
+    monkeypatch.setattr(runtime, "browser_plan", lambda: {
+        "ready": True, "mode": "channel", "channel": "chrome", "executable": "chrome", "needs_download": False,
+    })
+    runtime._do_install(None)
+    assert seen == [runtime.CN_PIP_INDEX]
+
+
+def test_both_pip_sources_failing_stays_generic(monkeypatch, tmp_path):
+    monkeypatch.setattr(runtime, "_stream", lambda *_args, **_kwargs: runtime.TIMEOUT_EXIT)
+    monkeypatch.setattr(runtime, "browser_plan", lambda: {
+        "ready": False, "mode": "chromium-headless-shell", "channel": None, "executable": None, "needs_download": True,
+    })
+    runtime._do_install(None)
+    message = runtime.get_status()["message"]
+    assert runtime.get_status()["status"] == "error"
+    assert "国内镜像" in message
+    assert str(tmp_path) not in message
+
+
+def test_browser_download_timeout_falls_back_to_npmmirror(monkeypatch):
+    seen = []
+
+    def stream(command, env, _progress, timeout=None, stall_timeout=None):
+        seen.append((command[-2:], env.get("PLAYWRIGHT_DOWNLOAD_HOST"), timeout, stall_timeout))
+        if env.get("PLAYWRIGHT_DOWNLOAD_HOST") is None:
+            return runtime.TIMEOUT_EXIT
+        return 0
+
+    monkeypatch.setattr(runtime, "_stream", stream)
+    monkeypatch.setattr(runtime, "package_present", lambda: True)
+    monkeypatch.setattr(runtime, "_playwright_importable", lambda: True)
+    monkeypatch.setattr(runtime, "is_installed", lambda: True)
+    monkeypatch.setattr(runtime, "browser_plan", lambda: {
+        "ready": False, "mode": "chromium-headless-shell", "channel": None, "executable": None, "needs_download": True,
+    })
+    runtime._do_install(None)
+    assert [item[0] for item in seen] == [["install", "chromium-headless-shell"], ["install", "chromium-headless-shell"]]
+    assert seen[0][1:] == (None, runtime.BROWSER_OFFICIAL_TIMEOUT_SECONDS, runtime.BROWSER_OFFICIAL_STALL_SECONDS)
+    assert seen[1][1] == runtime.CN_DOWNLOAD_HOST
+    assert seen[1][2:] == (runtime.BROWSER_MIRROR_TIMEOUT_SECONDS, runtime.BROWSER_MIRROR_STALL_SECONDS)
+
+
+def test_explicit_playwright_host_is_not_retried(monkeypatch):
+    monkeypatch.setenv("AUTOCLIP_PLAYWRIGHT_DOWNLOAD_HOST", "https://mirror.example/pw")
+    seen = []
+
+    def stream(_command, env, _progress, timeout=None, stall_timeout=None):
+        seen.append(env.get("PLAYWRIGHT_DOWNLOAD_HOST"))
+        return runtime.TIMEOUT_EXIT
+
+    monkeypatch.setattr(runtime, "_stream", stream)
+    monkeypatch.setattr(runtime, "package_present", lambda: True)
+    monkeypatch.setattr(runtime, "_playwright_importable", lambda: True)
+    monkeypatch.setattr(runtime, "browser_plan", lambda: {
+        "ready": False, "mode": "chromium-headless-shell", "channel": None, "executable": None, "needs_download": True,
+    })
+    runtime._do_install(None)
+    assert seen == ["https://mirror.example/pw"]
+    assert "超时" in runtime.get_status()["message"]
+
+
+def test_playwright_download_source_mirror_uses_npmmirror_only(monkeypatch):
+    monkeypatch.setenv("AUTOCLIP_PLAYWRIGHT_DOWNLOAD_SOURCE", "npmmirror")
+    assert runtime.playwright_download_mode() == "mirror"
+    assert runtime.browser_download_plan() == [("mirror", runtime.CN_DOWNLOAD_HOST)]
+    assert runtime.download_host() == runtime.CN_DOWNLOAD_HOST
+
+
+def test_system_edge_skips_the_browser_download_entirely(monkeypatch):
+    commands = []
+    monkeypatch.setattr(runtime, "_stream", lambda command, *_args, **_kwargs: commands.append(command) or 0)
+    monkeypatch.setattr(runtime, "is_installed", lambda: True)
+    monkeypatch.setattr(runtime, "browser_plan", lambda: {
+        "ready": True, "mode": "channel", "channel": "msedge", "executable": r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        "needs_download": False,
+    })
+    assert runtime.browser_download_plan()[1][1] == runtime.CN_DOWNLOAD_HOST
+    runtime._do_install(None)
+    assert len(commands) == 1
+    assert commands[0][2] == "pip"
+    assert "chromium-headless-shell" not in commands[0]
+
+
+def test_stream_kills_a_silent_process(monkeypatch):
+    import threading
+    import time
+
+    class _Hang:
+        def __init__(self):
+            self.returncode = None
+            self.stdout = self
+            self._stop = threading.Event()
+
+        def readline(self):
+            self._stop.wait(30)
+            return ""
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            self.returncode = -9
+            self._stop.set()
+
+        def wait(self, timeout=None):
+            return self.returncode if self.returncode is not None else 0
+
+        def close(self):
+            self._stop.set()
+
+    monkeypatch.setattr(runtime.subprocess, "Popen", lambda *_args, **_kwargs: _Hang())
+    started = time.monotonic()
+    code = runtime._stream(["python", "-m", "pip"], {}, (0, 10), timeout=5, stall_timeout=0.2)
+    assert code == runtime.TIMEOUT_EXIT
+    assert time.monotonic() - started < 2

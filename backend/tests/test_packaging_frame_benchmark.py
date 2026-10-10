@@ -1,5 +1,6 @@
 """70 秒杂志风测速脚本的纯计算：帧哈希、两遍编码参数、对比表。"""
 import importlib.util
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -101,3 +102,27 @@ def test_unmeasured_platforms_stay_explicit():
     assert by_name["Windows"]["status"] == "未测"
     assert "腾讯云" in by_name["Windows"]["machine"]
     assert by_name["Docker"]["status"] == "未测"
+
+
+def test_main_records_the_ffmpeg_lookup_order_when_it_is_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(bench, "require_ffmpeg", lambda: None)
+    out = tmp_path / "windows.json"
+    assert bench.main(["--out", str(out), "--seconds", "1", "--skip-1080"]) == 1
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["status"] == "error"
+    assert "AUTOCLIP_FFMPEG_PATH" in payload["error"]
+    assert "resources/ffmpeg" in payload["error"]
+    assert "PATH" in payload["error"]
+    assert "AUTOCLIP_FFPROBE_PATH" in payload["error"]
+
+
+def test_require_ffmpeg_rejects_a_path_that_is_not_on_disk(monkeypatch):
+    monkeypatch.setattr("backend.utils.ffmpeg_utils.get_ffmpeg_path", lambda: "/missing/ffmpeg")
+    assert bench.require_ffmpeg() is None
+
+
+def test_require_ffmpeg_accepts_a_real_binary(monkeypatch, tmp_path):
+    binary = tmp_path / "ffmpeg"
+    binary.write_bytes(b"")
+    monkeypatch.setattr("backend.utils.ffmpeg_utils.get_ffmpeg_path", lambda: str(binary))
+    assert bench.require_ffmpeg() == str(binary)
