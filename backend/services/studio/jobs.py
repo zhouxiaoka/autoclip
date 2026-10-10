@@ -31,10 +31,17 @@ def source(project_id):
     from backend.services.publish_export import find_source_video
     return find_source_video(project_id)
 
-def export(project_id, draft, *, brand_outro=False, _variant_identity=None):
+def export(project_id, draft, *, brand_outro=False, _variant_identity=None, html_template=None, html_fallback=None, safe_area='xiaohongshu', requested_template=None):
     from backend.services.output_branding import load_settings
     brand_outro = bool(brand_outro and load_settings().enabled)
     job = {'job_id': uuid.uuid4().hex, 'status': 'queued', 'percent': 0, 'draft_id': draft.id, 'title': draft.title, 'revision': draft.revision, 'brand_outro': brand_outro, 'created_at': store.now(), 'instance': store.INSTANCE, 'snapshot': draft.model_dump()}
+    if html_template in ('editorial', 'street'):
+        job['html_template'] = html_template
+        job['html_safe_area'] = safe_area
+    elif html_fallback == 'rank':
+        job['html_fallback'] = 'rank'
+        if requested_template in ('editorial', 'street'):
+            job['requested_template'] = requested_template
     if _variant_identity is not None:
         job['variant_links'] = [list(_variant_identity)]
     def add(data):
@@ -52,10 +59,18 @@ def export(project_id, draft, *, brand_outro=False, _variant_identity=None):
         added = store.change(project_id, add)
         if added['job_id'] == job['job_id']:
             try:
-                if brand_outro:
-                    render_executor.submit(_render, project_id, draft, job['job_id'], brand_outro=True, _io_receipt=('render', job['job_id']))
-                else:
-                    render_executor.submit(_render, project_id, draft, job['job_id'], _io_receipt=('render', job['job_id']))
+                render_kwargs = {'brand_outro': brand_outro}
+                if job.get('html_template'):
+                    render_kwargs['html_template'] = job['html_template']
+                    render_kwargs['safe_area'] = job.get('html_safe_area') or 'xiaohongshu'
+                elif job.get('html_fallback'):
+                    render_kwargs['html_fallback'] = job['html_fallback']
+                    if job.get('requested_template'):
+                        render_kwargs['requested_template'] = job['requested_template']
+                render_executor.submit(
+                    _render, project_id, draft, job['job_id'],
+                    _io_receipt=('render', job['job_id']), **render_kwargs,
+                )
             except Exception as error:
                 logger.warning('Studio export dispatch failed: %s', type(error).__name__)
                 capture_studio_exception(error, 'dispatch')
@@ -93,24 +108,65 @@ def _tracked(stage):
 
 
 @_tracked('render')
-def _render(project_id, draft, job_id, *, brand_outro=False):
+def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None, html_fallback=None, safe_area='xiaohongshu', requested_template=None):
     started = monotonic()
     render_saved = False
+    result = None
+    qa_scheduled = False
+
     def update(**values):
         def mutate(data):
             next(j for j in data['jobs'] if j['job_id'] == job_id).update(values)
         store.change(project_id, mutate)
+
+    def _schedule_qa():
+        """Enqueue shadow checks only after the export is already completed."""
+        nonlocal qa_scheduled
+        if qa_scheduled or not render_saved:
+            return
+        qa_scheduled = True
+        try:
+            from backend.services.studio.qa.schedule import schedule_after_render
+        except Exception as error:
+            logger.warning('QA import failed: %s', type(error).__name__)
+            return
+        try:
+            schedule_after_render(project_id, draft, job_id, result)
+        except Exception as error:
+            logger.warning('QA schedule failed: %s', type(error).__name__)
+
     try:
         update(status='running', percent=5)
+        features = None
+        try:
+            features = (store.read(project_id).get('generation') or {}).get('features')
+        except Exception:
+            features = None
         with llm_usage.timed('render'):
-            result = render_draft(project_id, source(project_id), draft, job_id, lambda p: update(percent=p), brand_outro=brand_outro)
-        update(status='completed', percent=100, result=result, cover_pending=True, duration_ms=round((monotonic() - started) * 1000))
+            render_kwargs = {'brand_outro': brand_outro}
+            if html_template:
+                render_kwargs.update(html_template=html_template, features=features, safe_area=safe_area)
+            elif html_fallback:
+                render_kwargs.update(html_fallback=html_fallback, features=features)
+                if requested_template in ('editorial', 'street'):
+                    render_kwargs['requested_template'] = requested_template
+            result = render_draft(
+                project_id, source(project_id), draft, job_id, lambda p: update(percent=p),
+                **render_kwargs,
+            )
+        elapsed = round((monotonic() - started) * 1000)
+        if isinstance(result, dict) and result.get('template_render'):
+            from backend.services.studio.template_telemetry import host_facts, render_event
+            # duration_ms on the event is the overlay's own time. The job record keeps the whole render.
+            result = {**result, 'template_render': render_event({**host_facts(), **result['template_render']})}
+        update(status='completed', percent=100, result=result, cover_pending=True, duration_ms=elapsed)
         render_saved = True
         try:
             _design_covers(project_id, draft, job_id)
         finally:
             update(cover_pending=False)
         _sync_variant_status(project_id, job_id, 'completed')
+        _schedule_qa()
     except Exception as error:
         logger.warning('Studio render failed: %s', type(error).__name__)
         capture_studio_exception(error, 'render')
@@ -118,6 +174,7 @@ def _render(project_id, draft, job_id, *, brand_outro=False):
         if render_saved:
             # Optional cover/index work cannot revoke an already committed video.
             _sync_variant_status(project_id, job_id, 'completed')
+            _schedule_qa()
             return
         try:
             message = str(error)[:700]
@@ -1002,8 +1059,12 @@ def _auto_generate(project_id, plan):
                 if _eligible_for_platform(base, platform_strategy(strategy_id))])
             for strategy_id in platforms
         }
+        from backend.services.studio.template_choice import html_candidate_ids, selected_template
+        chosen = selected_template(generation)
+        html_ids = html_candidate_ids(base_drafts) if chosen else set()
         planned = []
         for base in base_drafts:
+            source_id = base['id']
             base = {key: item for key, item in base.items() if key != SCORE_KEY}
             for strategy_id in platforms:
                 strategy = platform_strategy(strategy_id)
@@ -1011,21 +1072,24 @@ def _auto_generate(project_id, plan):
                     skipped.append({'strategy_id': strategy_id, 'reason': '素材没有足够完整的长内容'})
                     continue
                 value, trimmed = _fit_platform_limit(project_id, {**base, 'id': uuid.uuid4().hex, 'revision': 1}, strategy)
-                now = base['id'] in automatic[strategy_id]
+                now = source_id in automatic[strategy_id]
+                use_html = bool(chosen) and now and strategy.aspect == 'portrait' and source_id in html_ids
+                rank_fallback = bool(chosen) and now and strategy.aspect == 'portrait' and source_id not in html_ids
                 framed = None  # on-demand versions are framed and packaged when the user asks (produce_variant)
                 if now:
                     with llm_usage.timed('framing'):
                         value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
-                planned.append((strategy_id, value, trimmed, framed, now))
+                planned.append((strategy_id, value, trimmed, framed, now, use_html, rank_fallback))
         with llm_usage.timed('packaging'):
-            _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now in planned if now], burned, packaging_cache)
+            _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _ in planned if now], burned, packaging_cache)
         with llm_usage.timed('post_copy'):
-            posts = _posts_for(project_id, [(strategy_id, value) for strategy_id, value, _, _, now in planned if now], packaging_cache)
-        for strategy_id, value, trimmed, framed, now in planned:
+            posts = _posts_for(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _ in planned if now], packaging_cache)
+        for strategy_id, value, trimmed, framed, now, use_html, rank_fallback in planned:
             if now:
                 value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
                 value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
-            draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
+            layout = 'crop' if use_html and framed != 'full_frame_captions' else (value.get('layout') if framed else None)
+            draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout)
             derived_drafts.append(draft.model_dump())
             variants.append({
                 'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': draft.revision,
@@ -1034,6 +1098,8 @@ def _auto_generate(project_id, plan):
                 **({'trimmed_to_sec': trimmed} if trimmed else {}),
                 **({'framing': framed} if framed else {}),
                 **({'post': posts[_content_key(value), strategy_id]} if (_content_key(value), strategy_id) in posts else {}),
+                **({'html_template': chosen} if use_html else {}),
+                **({'html_fallback': 'rank', 'requested_template': chosen} if rank_fallback else {}),
             })
         if not variants:
             raise ValueError('所选平台没有可生成的完整内容版本')
@@ -1078,6 +1144,23 @@ def append_platform_variants(project_id, platforms, branding):
         tuple((scene['start'], scene['end']) for scene in draft_by_id.get(item['draft_id'], {}).get('scenes', []))
         for item in state.get('output_variants', []) if item.get('status') != 'on_demand'
     }
+    html_by_signature = {}
+    requested_by_signature = {}
+    rank_signatures = set()
+    for item in state.get('output_variants', []):
+        origin = draft_by_id.get(item.get('draft_id')) or {}
+        signature = tuple((scene['start'], scene['end']) for scene in origin.get('scenes', []))
+        if item.get('html_template'):
+            html_by_signature[signature] = item['html_template']
+            requested_by_signature.setdefault(signature, item['html_template'])
+        if item.get('html_fallback') == 'rank':
+            rank_signatures.add(signature)
+            if item.get('requested_template') in ('editorial', 'street'):
+                requested_by_signature.setdefault(signature, item['requested_template'])
+    chosen = (state.get('generation') or {}).get('html_template')
+    if chosen in ('editorial', 'street'):
+        for signature in rank_signatures:
+            requested_by_signature.setdefault(signature, chosen)
     seen_scenes, variants, derived = set(), [], []
     burned = _source_has_burned_subtitles(project_id)
     video = source(project_id)
@@ -1103,7 +1186,10 @@ def append_platform_variants(project_id, platforms, branding):
                 value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
                 post = _posts_for(project_id, [(strategy_id, value)], packaging_cache).get((_content_key(value), strategy_id))
                 value = _audience_title(value, strategy_id, post)
-            draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=value.get('layout') if framed else None)
+            inherited = html_by_signature.get(signature) if now and strategy.aspect == 'portrait' else None
+            rank_fallback = signature in rank_signatures and now and strategy.aspect == 'portrait' and not inherited
+            layout = 'crop' if inherited and framed != 'full_frame_captions' else (value.get('layout') if framed else None)
+            draft = _apply_strategy(value, strategy_id, burned_subtitles=burned, layout=layout)
             derived.append(draft.model_dump())
             variants.append({
                 'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': 1,
@@ -1112,6 +1198,8 @@ def append_platform_variants(project_id, platforms, branding):
                 **({'trimmed_to_sec': trimmed} if trimmed else {}),
                 **({'framing': framed} if framed else {}),
                 **({'post': post} if post else {}),
+                **({'html_template': inherited} if inherited else {}),
+                **({'html_fallback': 'rank', 'requested_template': requested_by_signature.get(signature)} if rank_fallback and requested_by_signature.get(signature) else {'html_fallback': 'rank'} if rank_fallback else {}),
             })
     if not variants:
         raise ValueError('没有可追加的平台版本；已存在或素材不满足所选平台要求')
@@ -1150,7 +1238,20 @@ def _dispatch_pending_variants(project_id):
             store.change(project_id, lambda data: reject(data, '来源草稿不存在', 'missing_resource'))
             continue
         try:
-            job = export(project_id, Draft.model_validate(raw), brand_outro=bool(variant['branding'].get('outro_enabled', True)), _variant_identity=expected)
+            from backend.services.studio.overlay_fill import SAFE_AREAS
+            export_kwargs = {}
+            if variant.get('html_template'):
+                export_kwargs['html_template'] = variant['html_template']
+                export_kwargs['safe_area'] = variant.get('strategy_id') if variant.get('strategy_id') in SAFE_AREAS else 'xiaohongshu'
+            elif variant.get('html_fallback'):
+                export_kwargs['html_fallback'] = variant['html_fallback']
+                if variant.get('requested_template') in ('editorial', 'street'):
+                    export_kwargs['requested_template'] = variant['requested_template']
+            job = export(
+                project_id, Draft.model_validate(raw),
+                brand_outro=bool(variant['branding'].get('outro_enabled', True)),
+                _variant_identity=expected, **export_kwargs,
+            )
         except Exception as error:
             store.raise_owned_read_error(error)
             capture_studio_exception(error, 'dispatch')
@@ -1355,6 +1456,9 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             'branding': options.branding.model_dump(),
             'auto_start': options.auto_start,
             'portrait_style': options.portrait_style,
+            **({'html_template': options.html_template} if getattr(options, 'html_template', None) else {}),
+            **({'recommended_template': options.recommended_template} if getattr(options, 'recommended_template', None) else {}),
+            **({'accepted_recommendation': options.html_template == options.recommended_template} if getattr(options, 'recommended_template', None) and getattr(options, 'html_template', None) else {}),
             'features': resolve_features(features),
             **({'producer': producer} if producer else {}),
             'status': 'screening',

@@ -234,6 +234,19 @@ async def get_privacy():
     return PrivacySettings(crash_reports=crash_reports_enabled())
 
 
+class AnalyticsIdentity(BaseModel):
+    distinct_id: str = Field(min_length=8, max_length=200)
+
+
+@router.put("/analytics-identity")
+async def put_analytics_identity(body: AnalyticsIdentity):
+    """Remember the UI's anonymous PostHog id. Backend QA events reuse it."""
+    from backend.services.studio.qa.telemetry import remember_distinct_id
+    if not remember_distinct_id(body.distinct_id):
+        raise HTTPException(status_code=422, detail="invalid distinct_id")
+    return {"ok": True}
+
+
 @router.put("/privacy")
 async def put_privacy(body: PrivacySettings):
     from backend.core.sentry_setup import write_privacy, crash_reports_enabled, init_sentry

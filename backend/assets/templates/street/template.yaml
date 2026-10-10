@@ -1,0 +1,31 @@
+id: street
+version: 1
+name: {zh: 街头快剪, en: Street}
+fit:
+  formats: {street_interview: 1.0, vlog: 0.55, sit_down_interview: 0.25, podcast_studio: 0.15}
+  needs_face: true
+canvas: {aspects: [portrait], overlay_px: [720, 1280], fps: 30}
+base:
+  framing: full_face
+  face_y: 0.42
+  head_zone: [240, 860]
+  zoom:
+    mode: step
+    step: [1.00, 1.22]
+    key_punch: 0.04
+  transitions: {broll: cut, max: 2}
+  grade: "eq=saturation=1.06:contrast=1.06"
+overlay:
+  entry: index.html
+  slots:
+    hook: {top: 64, alt_top: 220}
+    subtitle: {top: 1060, max_rows: 2}
+    number: {top: 480, left: 48, width: 360}
+  safe_area: xiaohongshu
+  limits: {sticker_max: 2, subtitle_words: 3, emphasis_gap_s: 3.0}
+fields:
+  required: [title_lines, cues]
+  optional: [kicker, emphasis, numbers, stickers]
+audio: {bgm: none, optional_bed: true}
+cover: {layout: street_3x4, from_overlay: true}
+qa: {}

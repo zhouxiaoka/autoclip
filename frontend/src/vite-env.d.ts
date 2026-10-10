@@ -22,6 +22,16 @@ declare module '*.svg' {
   export default content
 }
 
+declare module '*.webm?url' {
+  const src: string
+  export default src
+}
+
+declare module '*.mp4?url' {
+  const src: string
+  export default src
+}
+
 declare module '*.svg?react' {
   import React from 'react'
   const ReactComponent: React.FunctionComponent<React.SVGProps<SVGSVGElement>>

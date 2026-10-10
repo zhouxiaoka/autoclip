@@ -149,6 +149,57 @@ def test_render_killed_after_one_saved_video_is_partial_and_keeps_it(sessions):
     assert disk['output_variants'][0]['status'] == 'completed'
 
 
+def _render_run(jobs, variants):
+    return {'generation': {'status': 'rendering', 'auto_start': True},
+            'analysis': {'status': 'running', 'phase': 'rendering', 'run_id': 'r', 'instance': OLD},
+            'drafts': [{'id': f'd{i}'} for i in range(1, len(variants) + 1)], 'jobs': jobs, 'output_variants': variants}
+
+
+def _linked(index, status, **job):
+    identity = [f'v{index}', f'd{index}', 1, None, f'a{index}']
+    return ({'job_id': f'j{index}', 'status': status, 'instance': OLD, 'variant_links': [identity], **job},
+            {'id': f'v{index}', 'draft_id': f'd{index}', 'draft_revision': 1, 'render_attempt_id': f'a{index}',
+             'render_job_id': f'j{index}', 'status': 'running'})
+
+
+def test_render_killed_after_one_saved_video_tells_the_project_why(sessions):
+    # RC156 #30: one video saved, the next one killed mid-render. The project failed with no reason and no code.
+    done_job, done = _linked(1, 'completed', cover_pending=True)
+    cut_job, cut = _linked(2, 'running')
+    _project(sessions, _render_run([done_job, cut_job], [done, cut]))
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    disk = _disk()
+    assert disk['generation']['status'] == 'partial' and disk['generation']['completed_variant_count'] == 1
+    assert disk['generation']['error'] == store.RESTART_MESSAGE and disk['generation']['error_code'] == 'service_restarted'
+    first, second = disk['output_variants']
+    assert first['status'] == 'completed'
+    assert second['status'] == 'failed' and second['error_code'] == 'service_restarted'  # the card's retry finishes it
+    row = _row(sessions)
+    assert row.status.value == 'failed'
+    assert row.error_message == store.RESTART_MESSAGE and row.error_code == 'service_restarted'
+
+
+def test_render_killed_after_every_video_was_saved_stays_completed(sessions):
+    # Killed while the last cover was pending: every video exists, so nothing is lost and nothing is retried.
+    jobs, variants = zip(*(_linked(1, 'completed'), _linked(2, 'completed', cover_pending=True)))
+    _project(sessions, _render_run(list(jobs), list(variants)))
+    reconcile_interrupted_projects(sessions)
+    disk = _disk()
+    assert disk['generation']['status'] == 'completed' and disk['generation']['completed_variant_count'] == 2
+    assert 'error' not in disk['generation'] and 'error_code' not in disk['generation']
+    row = _row(sessions)
+    assert row.status.value == 'completed' and row.error_message is None and row.error_code is None
+
+
+def test_retrying_the_restarted_video_clears_the_reason():
+    data = {'generation': {'status': 'rendering', 'error': store.RESTART_MESSAGE, 'error_code': 'service_restarted'},
+            'analysis': {'run_id': 'r'}, 'jobs': [],
+            'output_variants': [{'id': 'v1', 'status': 'completed'}, {'id': 'v2', 'status': 'completed'}]}
+    store.settle_generation(data)
+    assert data['generation']['status'] == 'completed'
+    assert 'error' not in data['generation'] and 'error_code' not in data['generation']
+
+
 def test_project_reason_prefers_the_generation_over_a_stale_task_error(sessions):
     from backend.models.task import Task, TaskStatus, TaskType
     _project(sessions, _production())
