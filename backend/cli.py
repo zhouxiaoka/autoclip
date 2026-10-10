@@ -82,7 +82,10 @@ def _llm_override(args: argparse.Namespace) -> LLMOverride:
 
 # ---------------------------------------------------------------- run ---
 def cmd_produce(args: argparse.Namespace) -> int:
+    from backend.services import mcp_telemetry
     from backend.services import quick_output_runner as quick
+    started = time.perf_counter()
+    outcome = {'ok': False, 'error_code': 'failed', 'job_id': None, 'terminal': False}
     try:
         # Providers and ASR may print progress from worker threads. Keep stdout parseable
         # for scripts, just as the MCP stdio entry point keeps its protocol stream clean.
@@ -93,34 +96,68 @@ def cmd_produce(args: argparse.Namespace) -> int:
             if not args.json:
                 print(f'1.5 一键出片 · {project_id} · 进度写入项目目录', file=sys.stderr)
             result = quick.wait(project_id, timeout=args.timeout)
-        result['ok'] = result['status'] in ('completed', 'partial') and not result.get('timed_out')
+        ok = result['status'] in ('completed', 'partial') and not result.get('timed_out')
+        if result.get('timed_out'):
+            error_code = 'timeout'
+        elif ok:
+            error_code = 'none'
+        else:
+            error_code = mcp_telemetry.normalize_error(result.get('status'), ok=False)
+        outcome = {'ok': ok, 'error_code': error_code, 'job_id': project_id, 'terminal': True}
+        result['ok'] = ok
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 0 if result['ok'] else 1
+        return 0 if ok else 1
     except quick.StyleDisabled as error:
+        outcome = {'ok': False, 'error_code': 'disabled', 'job_id': None, 'terminal': False}
         print(json.dumps({'ok': False, 'error_code': 'disabled', 'error': str(error)}, ensure_ascii=False))
         return 2
     except (ValueError, FileNotFoundError) as error:
+        outcome = {'ok': False, 'error_code': 'invalid_input', 'job_id': None, 'terminal': False}
         print(json.dumps({'ok': False, 'error_code': 'invalid_input', 'error': str(error)}, ensure_ascii=False))
         return 2
+    finally:
+        mcp_telemetry.record('produce', 'cli', started, **outcome)
 
 
 def cmd_outputs(args: argparse.Namespace) -> int:
+    from backend.services import mcp_telemetry
     from backend.services import quick_output_runner as quick
+    started = time.perf_counter()
+    outcome = {'ok': False, 'error_code': 'invalid_input', 'job_id': None, 'terminal': False}
     try:
-        print(json.dumps(quick.status(args.project_id, export_kits=args.export_kits), ensure_ascii=False, indent=2))
+        result = quick.status(args.project_id, export_kits=args.export_kits)
+        status = result.get('status')
+        ok = status in ('completed', 'partial', 'running', 'queued')
+        terminal = status in ('completed', 'partial', 'failed', 'interrupted', 'cancelled')
+        error_code = 'none' if ok else mcp_telemetry.normalize_error(status, ok=False)
+        outcome = {'ok': ok, 'error_code': error_code, 'job_id': args.project_id, 'terminal': terminal}
+        print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except (ValueError, FileNotFoundError) as error:
         print(json.dumps({'ok': False, 'error': str(error)}, ensure_ascii=False))
         return 2
+    finally:
+        mcp_telemetry.record('outputs', 'cli', started, **outcome)
 
 
 def cmd_run(args: argparse.Namespace) -> int:
+    from backend.services import mcp_telemetry
     from backend.services.local_runner import configure_llm, prepare_project, run_pipeline, summarize_project
 
+    started = time.perf_counter()
+    outcome = {'ok': False, 'error_code': 'failed', 'job_id': None, 'terminal': False}
     t0 = time.time()
+    try:
+        return _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, summarize_project, t0)
+    finally:
+        mcp_telemetry.record('run', 'cli', started, **outcome)
+
+
+def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, summarize_project, t0) -> int:
     try:
         info = configure_llm(_llm_override(args))
     except Exception as e:  # noqa: BLE001
+        outcome.update(ok=False, error_code='invalid_input')
         _err(str(e))
         return 2
 
@@ -135,6 +172,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     try:
         video_in_raw = prepare_project(req, link=not args.copy)
     except FileNotFoundError as e:
+        outcome.update(ok=False, error_code='invalid_input', job_id=req.project_id)
         _err(str(e))
         return 2
 
@@ -162,6 +200,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     elapsed = time.time() - t0
 
     if result.get("status") != "succeeded":
+        from backend.services.mcp_telemetry import normalize_error
+        outcome.update(ok=False, error_code=normalize_error(result.get('error_code') or result.get('status'), ok=False),
+                       job_id=req.project_id, terminal=True)
         if args.json:
             print(json.dumps({"ok": False, "project_id": req.project_id, "error": result.get("error")}, ensure_ascii=False))
         else:
@@ -169,6 +210,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             print(_dim(f"日志：{os.getenv('LOG_FILE')}"), file=sys.stderr)
         return 1
 
+    outcome.update(ok=True, error_code='none', job_id=req.project_id, terminal=True)
     summary = summarize_project(req.project_id)
     summary["elapsed_sec"] = round(elapsed, 1)
     summary["llm"] = {k: info.get(k) for k in ("provider", "model", "base_url") if info.get(k)}
