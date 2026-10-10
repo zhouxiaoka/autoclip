@@ -35,6 +35,7 @@ import inspect
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from backend import __version__
@@ -476,6 +477,26 @@ _V2_SPECS = (
     (cancel_job, 'cancel_job', '取消一条仍在进行的出片或切片任务，停掉它的 ffmpeg。不删除已写出的成片。查不到返回 unknown。'),
     (list_styles, 'list_styles', '列出剪辑风格 id：editorial（杂志风）、street（街头快剪）、classic（经典）。传给 start_quick_output 的 template 或 CLI 的 --template。'),
 )
+
+from backend.services import mcp_telemetry
+
+_original_call_tool = server.call_tool
+
+
+async def _call_tool(name, arguments, context=None):
+    started = time.perf_counter()
+    client = mcp_telemetry.client_from_context(context)
+    try:
+        result = await _original_call_tool(name, arguments, context)
+    except Exception:
+        mcp_telemetry.record(name, client, started, ok=False, error_code='failed')
+        raise
+    ok, error_code, job_id, terminal = mcp_telemetry.outcome_from_result(result)
+    mcp_telemetry.record(name, client, started, ok=ok, error_code=error_code, job_id=job_id, terminal=terminal)
+    return result
+
+
+server.call_tool = _call_tool  # type: ignore[method-assign]
 
 
 # ---------------------------------------------------------------- entry ---
