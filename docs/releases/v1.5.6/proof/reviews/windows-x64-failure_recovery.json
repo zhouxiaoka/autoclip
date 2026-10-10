@@ -1,0 +1,64 @@
+{
+  "contract": "impact-inheritance/v1",
+  "reviewed_at": "2026-10-10T08:27:00Z",
+  "reviewer": "Grok Bot (release PM agent) for Charlie Zhou (product owner)",
+  "reason": "Tag v1.5.6 is the identical commit 80bf1d6c accepted on internal Desktop Build 37937536440 (Internal Acceptance run 37964412362). The source diff is empty and no dependency changed; the tag build only rebuilt the same source. No assertion is affected, so this row is inherited, not re-executed on the tag binaries. Original execution time is preserved.",
+  "target": {
+    "commit": "80bf1d6c41b97b45aa965d670f6f955299d5899c",
+    "build_run_id": 37964501522,
+    "assets": {
+      "AutoClip.Desktop_1.5.6_aarch64.app.tar.gz": "40e1927b619d0f5f8885635668119f3ac49b2dfe921f8fe58c58e602e2efece7",
+      "AutoClip.Desktop_1.5.6_aarch64.app.tar.gz.sig": "e82323d187a4f3698e2b344fdaefde9089624f994c9c5b64e2b1015c938dbadb",
+      "AutoClip.Desktop_1.5.6_aarch64.dmg": "a39b0c1c9c5ccb521b842aabeb713a5df7b425263edcbd20beb96df975f0f317",
+      "AutoClip.Desktop_1.5.6_x64-setup.exe": "6dab9b99114ea0205d506739a974fe999a4cddef0e6e549f6810159a43e836a5",
+      "AutoClip.Desktop_1.5.6_x64-setup.exe.sig": "424d88ad7c871ba2606d33f9b640621fbd8fd97bd62cf82563ac40062c631f14",
+      "autoclip-1.5.6-cli-mcp.zip": "5a4e2911b6505be331c773ce088cff31584a667ee877cc535c930f028c8828a8",
+      "autoclip-1.5.6-py3-none-any.whl": "12d42b2daf424a6417c94b89fb30ab8ae5103e0860ac6794369b64e6bb416a38",
+      "build-provenance.json": "07f3624295d1d3d6a340eb415df91a91a322f3a03301c6c6ab263acbf980bd69",
+      "latest.json": "f3454d26f2554131b8eb10e4da70c9d988e9b19ac2e3ee9e132af23c1e27a6fc",
+      "python-release-sha256.txt": "fb367ff944bdcb9180f69c61400ba3995e6d901ae76793196ca2c909a286bc1c"
+    },
+    "platforms": [
+      "windows-x64"
+    ],
+    "label": "windows-x64/failure_recovery"
+  },
+  "origin": {
+    "path": "proof/origins/windows-x64-failure_recovery.json",
+    "sha256": "1888e498fad88a6150d970002ecc290c94cc067c99a274422fea667970b072d9"
+  },
+  "diff": {
+    "path": "proof/impact-diff.json",
+    "sha256": "c2d38f322b397625b5950a1ddd7d549ed0b78aa752e82a7a5fd1896b2c2fc5de"
+  },
+  "dependencies": [
+    {
+      "path": "src-tauri/tauri.conf.json",
+      "sha256": "91b3fcd96a99b1c95adedfb0e232af60b2db4cc9bafff073c865f85d5ce5730b"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "250894da82a646b8d9ee6f0e6aa49acc5015c5595388e93c59c361102f03b727"
+    },
+    {
+      "path": "frontend/package.json",
+      "sha256": "4f4a23868fd9d926c7709c0c41040b56890cddcbd88d2998b4544216b02dafc2"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "4fb0157dbcd6c627046ed55adace9ed6c1073bd355e7107647aef678bf9f26fc"
+    }
+  ],
+  "runtime_evidence": {
+    "path": "evidence/tag-rebuild-runtime.md",
+    "sha256": "8251229c965abe0b2930ad2b5084291f6b438030ad2d63cdfb4d3c7c6f750d6e"
+  },
+  "inherited_assertions": [
+    "windows-x64/failure_recovery"
+  ],
+  "required_assertions": [
+    "windows-x64/failure_recovery"
+  ],
+  "affected_assertions": [],
+  "fresh": []
+}

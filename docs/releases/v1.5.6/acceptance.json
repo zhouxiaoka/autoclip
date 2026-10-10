@@ -1,0 +1,425 @@
+{
+  "schema_version": 1,
+  "evidence_contract": "impact-inheritance/v1",
+  "tag": "v1.5.6",
+  "commit": "80bf1d6c41b97b45aa965d670f6f955299d5899c",
+  "release_type": "routine",
+  "build_run_id": 37964501522,
+  "assets": {
+    "AutoClip.Desktop_1.5.6_aarch64.app.tar.gz": "40e1927b619d0f5f8885635668119f3ac49b2dfe921f8fe58c58e602e2efece7",
+    "AutoClip.Desktop_1.5.6_aarch64.app.tar.gz.sig": "e82323d187a4f3698e2b344fdaefde9089624f994c9c5b64e2b1015c938dbadb",
+    "AutoClip.Desktop_1.5.6_aarch64.dmg": "a39b0c1c9c5ccb521b842aabeb713a5df7b425263edcbd20beb96df975f0f317",
+    "AutoClip.Desktop_1.5.6_x64-setup.exe": "6dab9b99114ea0205d506739a974fe999a4cddef0e6e549f6810159a43e836a5",
+    "AutoClip.Desktop_1.5.6_x64-setup.exe.sig": "424d88ad7c871ba2606d33f9b640621fbd8fd97bd62cf82563ac40062c631f14",
+    "autoclip-1.5.6-cli-mcp.zip": "5a4e2911b6505be331c773ce088cff31584a667ee877cc535c930f028c8828a8",
+    "autoclip-1.5.6-py3-none-any.whl": "12d42b2daf424a6417c94b89fb30ab8ae5103e0860ac6794369b64e6bb416a38",
+    "build-provenance.json": "07f3624295d1d3d6a340eb415df91a91a322f3a03301c6c6ab263acbf980bd69",
+    "latest.json": "f3454d26f2554131b8eb10e4da70c9d988e9b19ac2e3ee9e132af23c1e27a6fc",
+    "python-release-sha256.txt": "fb367ff944bdcb9180f69c61400ba3995e6d901ae76793196ca2c909a286bc1c"
+  },
+  "internal_acceptance_run_id": 37964412362,
+  "platforms": {
+    "windows-x64": {
+      "os": "Windows Server 2025 Datacenter 24H2 (build 26100) x64",
+      "machine": "Tencent Cloud CVM 2 vCPU / 8 GB; cloud VM, not physical Windows 11 or ARM",
+      "runtime": "bundled portable Python 3.13.13; bundled FFmpeg/FFprobe; WebView2; CRT identities verified on smoke",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:50:10Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/windows-x64-clean_install.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:50:20Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/windows-x64-upgrade_legacy.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:50:30Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/windows-x64-model_settings.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:50:40Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/windows-x64-local_with_subtitles.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:50:50Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/windows-x64-local_without_subtitles.json"
+        },
+        "link_import": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:51:00Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/windows-x64-link_import.json"
+        },
+        "visual_generation": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:51:10Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/windows-x64-visual_generation.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:51:20Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/windows-x64-failure_recovery.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:51:30Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/windows-x64-output_delivery.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:51:40Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/windows-x64-privacy_telemetry.json"
+        }
+      }
+    },
+    "macos-arm64": {
+      "os": "macOS 26.6.2 (25G83) arm64",
+      "machine": "Apple M4 MacBook Pro 24 GB; native arm64 physical machine; isolated app data dirs",
+      "runtime": "bundled Python 3.13.13 and FFmpeg 7.1.1; adhoc-signed 1.5.6 desktop app",
+      "checks": {
+        "clean_install": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:52:10Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/macos-arm64-clean_install.json"
+        },
+        "upgrade_legacy": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:52:20Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/macos-arm64-upgrade_legacy.json"
+        },
+        "model_settings": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:52:30Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/macos-arm64-model_settings.json"
+        },
+        "local_with_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:52:40Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/macos-arm64-local_with_subtitles.json"
+        },
+        "local_without_subtitles": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:52:50Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/macos-arm64-local_without_subtitles.json"
+        },
+        "link_import": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:53:00Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/macos-arm64-link_import.json"
+        },
+        "visual_generation": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:53:10Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/macos-arm64-visual_generation.json"
+        },
+        "failure_recovery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:53:20Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/macos-arm64-failure_recovery.json"
+        },
+        "output_delivery": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:53:30Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/macos-arm64-output_delivery.json"
+        },
+        "privacy_telemetry": {
+          "status": "passed",
+          "evidence_mode": "inherited",
+          "completed_at": "2026-10-09T15:53:40Z",
+          "reviewed_at": "2026-10-10T08:27:00Z",
+          "evidence": "proof/reviews/macos-arm64-privacy_telemetry.json"
+        }
+      }
+    }
+  },
+  "regressions": [
+    {
+      "id": "1.5.6-auto-screening-fallback",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:01Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-auto-screening-fallback.json"
+    },
+    {
+      "id": "1.5.6-import-readiness",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:02Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-import-readiness.json"
+    },
+    {
+      "id": "1.5.6-failure-taxonomy",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:03Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-failure-taxonomy.json"
+    },
+    {
+      "id": "1.5.6-installer-smoke-studio",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:04Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-installer-smoke-studio.json"
+    },
+    {
+      "id": "1.5.6-desktop-no-celery",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:05Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-desktop-no-celery.json"
+    },
+    {
+      "id": "1.5.6-remove-legacy-import",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:06Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-remove-legacy-import.json"
+    },
+    {
+      "id": "1.5.6-297-http-health-source-blocked",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:07Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-297-http-health-source-blocked.json"
+    },
+    {
+      "id": "1.5.6-298-whisper-drafts-status",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:08Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-298-whisper-drafts-status.json"
+    },
+    {
+      "id": "1.5.6-299-windows-overwrite",
+      "platforms": [
+        "windows-x64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:09Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-299-windows-overwrite.json"
+    },
+    {
+      "id": "1.5.6-300-short-noaudio-delete",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:10Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-300-short-noaudio-delete.json"
+    },
+    {
+      "id": "1.5.6-301-restart-progress-uninstall",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:11Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-301-restart-progress-uninstall.json"
+    },
+    {
+      "id": "1.5.6-302-ollama-chunking",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:12Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-302-ollama-chunking.json"
+    },
+    {
+      "id": "1.5.6-305-http-status-source-no-audio",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:13Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-305-http-status-source-no-audio.json"
+    },
+    {
+      "id": "1.5.6-306-qwen-thinking-off",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:14Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-306-qwen-thinking-off.json"
+    },
+    {
+      "id": "1.5.6-307-progress-orphan-uninstall",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:15Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-307-progress-orphan-uninstall.json"
+    },
+    {
+      "id": "1.5.6-311-render-kill-partial",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:16Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-311-render-kill-partial.json"
+    },
+    {
+      "id": "1.5.6-308-feature-flags",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:17Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-308-feature-flags.json"
+    },
+    {
+      "id": "1.5.6-27-analytics-on-usage-accepted",
+      "platforms": [
+        "windows-x64",
+        "macos-arm64"
+      ],
+      "status": "passed",
+      "evidence_mode": "inherited",
+      "completed_at": "2026-10-09T15:54:18Z",
+      "reviewed_at": "2026-10-10T08:27:00Z",
+      "evidence": "proof/reviews/reg-1.5.6-27-analytics-on-usage-accepted.json"
+    }
+  ],
+  "blockers": [],
+  "observation": {
+    "status": "waived",
+    "waiver_reason": "Owner decision by Charlie Zhou (zhouxiaoka, product owner), given in chat on 2026-10-10 16:24 CST (08:24Z) and recorded when this manifest was signed: end the 24h Pre-release observation early and promote v1.5.6 now, to take the known-buggy v1.5.5 off latest/in-app update. Observed ~14h45m since the tag build (17:41Z -> ~08:24Z): no new Sentry issue groups for 1.5.6 (open groups all pre-date it), no GitHub issue/S1 reports for 1.5.6. Sample is tiny: Pre-release downloads Windows 5 / macOS 2 including our own acceptance machines; real external devices and completed flows are effectively zero, so zero events is NOT evidence of no problems. Promotion is justified by the full dual-platform internal acceptance of the identical commit, not by observation. Observation is waived, not passed; post-promotion Sentry watch with halt to v1.5.5 fallback if a 1.5.6-specific error group appears.",
+    "started_at": "2026-10-09T17:41:00Z",
+    "ended_at": null,
+    "pre_release_downloads": {
+      "windows-x64": 5,
+      "macos-arm64": 2
+    },
+    "devices": {
+      "windows-x64": 0,
+      "macos-arm64": 0
+    },
+    "completed_flows": {
+      "windows-x64": 0,
+      "macos-arm64": 0
+    },
+    "sentry_new_groups_1_5_6": 0,
+    "github_1_5_6_reports": 0,
+    "evidence": ""
+  },
+  "owner_waiver": {
+    "name": "Charlie Zhou (zhouxiaoka, product owner)",
+    "approved_at": "2026-10-10T08:27:00Z",
+    "reason": "Owner decision by Charlie Zhou (zhouxiaoka, product owner), given in chat on 2026-10-10 16:24 CST (08:24Z) and recorded when this manifest was signed: end the 24h Pre-release observation early and promote v1.5.6 now, to take the known-buggy v1.5.5 off latest/in-app update. Observed ~14h45m since the tag build (17:41Z -> ~08:24Z): no new Sentry issue groups for 1.5.6 (open groups all pre-date it), no GitHub issue/S1 reports for 1.5.6. Sample is tiny: Pre-release downloads Windows 5 / macOS 2 including our own acceptance machines; real external devices and completed flows are effectively zero, so zero events is NOT evidence of no problems. Promotion is justified by the full dual-platform internal acceptance of the identical commit, not by observation. Observation is waived, not passed; post-promotion Sentry watch with halt to v1.5.5 fallback if a 1.5.6-specific error group appears."
+  },
+  "approval": {
+    "name": "Charlie Zhou (zhouxiaoka, product owner)",
+    "approved_at": "2026-10-10T08:27:00Z"
+  }
+}

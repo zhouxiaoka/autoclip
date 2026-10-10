@@ -1,0 +1,32 @@
+{
+  "status": "passed",
+  "label": "macos-arm64/failure_recovery",
+  "platforms": [
+    "macos-arm64"
+  ],
+  "commit": "80bf1d6c41b97b45aa965d670f6f955299d5899c",
+  "build_run_id": 37937536440,
+  "assets": {
+    "AutoClip Desktop_1.5.6_aarch64.dmg": "3af84c6240592f8feecd4d36a6c3b88720a6eb55766c699b967aa08ab2653533",
+    "AutoClip Desktop_1.5.6_x64-setup.exe": "aa03dd906296bb964ce7d4adc0bec6504de938f92d592a1ba6b9ca5a41467143",
+    "AutoClip Desktop_1.5.6_x64-setup.exe.sig": "1a36c938289d144e7ac4a8423be74e4715128fa30a887f34deb62a344f8b6c7e",
+    "AutoClip.Desktop_1.5.6_aarch64.app.tar.gz": "e3c1fe0c29d42b2f52678df7bfdad1cbc6c09a6131b20d5b133bb2e66bfd5604",
+    "AutoClip.Desktop_1.5.6_aarch64.app.tar.gz.sig": "f3570906f7ac6a9a71d72f237bf48a5843e7431d642819705e69f9f9a5199da2"
+  },
+  "completed_at": "2026-10-09T15:53:20Z",
+  "assertions": [
+    "macos-arm64/failure_recovery"
+  ],
+  "build": {
+    "path": "proof/internal-build-run.json",
+    "sha256": "74a60bece1ba30dc88c6e9ab67ce1bffc3f9fe5ee0e14c7360546ebb9500efaf"
+  },
+  "provenance": {
+    "path": "proof/internal-build-provenance.json",
+    "sha256": "ed1b94a4348c5ee12c8381b7d0a7bec43acd4c9bfb80af7e216e9196a76b908b"
+  },
+  "evidence": {
+    "path": "evidence/internal/mac-failure_recovery.md",
+    "sha256": "7fa7c5ab3105d66e9df0a19e79bf16436666681aba6fc940b5e2f07f7cd7747b"
+  }
+}

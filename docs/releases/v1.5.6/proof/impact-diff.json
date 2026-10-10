@@ -1,0 +1,6 @@
+{
+  "from_commit": "80bf1d6c41b97b45aa965d670f6f955299d5899c",
+  "to_commit": "80bf1d6c41b97b45aa965d670f6f955299d5899c",
+  "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "note": "Tag v1.5.6 points at the exact commit accepted internally; source diff is empty. Only the binaries were rebuilt by the tag Desktop Build."
+}

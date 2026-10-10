@@ -1,0 +1,13 @@
+{
+  "id": 37937536440,
+  "name": "Desktop Build",
+  "path": ".github/workflows/desktop-build.yml",
+  "event": "workflow_dispatch",
+  "head_branch": "main",
+  "head_sha": "80bf1d6c41b97b45aa965d670f6f955299d5899c",
+  "status": "completed",
+  "conclusion": "success",
+  "created_at": "2026-10-09T13:32:11Z",
+  "updated_at": "2026-10-09T14:01:19Z",
+  "html_url": "https://github.com/zhouxiaoka/autoclip/actions/runs/37937536440"
+}
