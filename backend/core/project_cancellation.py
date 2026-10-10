@@ -92,7 +92,13 @@ def stop(project_id: str) -> None:
 
 
 def is_stopped(project_id: Optional[str]) -> bool:
-    return bool(project_id) and project_id in _stopped
+    """True only for the worker currently bound to this project.
+
+    `stop()` keeps the id so that worker can exit. MCP can cancel a desktop job
+    without entering `bind`; the leftover record must not fail a later edit,
+    export, or publish in this process.
+    """
+    return bool(project_id) and project_id in _stopped and _current.get() == project_id
 
 
 def has_running(project_id: str) -> bool:

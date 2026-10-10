@@ -47,7 +47,7 @@ def _project(path: Path, project_id='p-del'):
     return folder
 
 
-def test_stop_keeps_finished_video_and_raises_job_stopped(tmp_path):
+def test_stop_keeps_finished_video(tmp_path):
     folder = _project(tmp_path, 'p-stop')
     finished = folder / 'output' / 'studio' / 'done.mp4'
     partial = folder / 'output' / 'studio' / 'done.part.mp4'
@@ -56,10 +56,7 @@ def test_stop_keeps_finished_video_and_raises_job_stopped(tmp_path):
     cancel.note_temporary(folder / 'scratch.tmp', 'p-stop')
     (folder / 'scratch.tmp').write_text('temp', encoding='utf-8')
     cancel.stop('p-stop')
-    with pytest.raises(cancel.JobStopped) as caught:
-        cancel.checkpoint('p-stop')
-    assert caught.value.project_id == 'p-stop'
-    assert not isinstance(caught.value, cancel.ProjectDeleted)
+    cancel.checkpoint('p-stop')
     assert finished.read_bytes() == b'keep'
     assert not partial.exists()
     assert not (folder / 'scratch.tmp').exists()
@@ -361,12 +358,25 @@ def test_edit_after_a_cancelled_round_ends(tmp_path):
     assert store.read('p-edit')['drafts'][0]['id'] == 'next'
 
 
+def test_stop_without_bind_does_not_block_a_later_change(tmp_path):
+    """MCP can cancel a desktop job without binding; the same process must still edit it."""
+    from backend.services.studio import store
+
+    _project(tmp_path, 'p-same')
+    store.write('p-same', {
+        'schema_version': 2, 'drafts': [], 'jobs': [], 'analysis': None, 'output_variants': [], 'events': [],
+    })
+    cancel.stop('p-same')
+    assert 'p-same' in cancel._stopped
+    store.change('p-same', lambda data: data['drafts'].append({'id': 'again'}))
+    assert store.read('p-same')['drafts'][0]['id'] == 'again'
+
+
 def test_a_new_round_after_cancel_is_not_already_stopped(tmp_path):
     import sys
     _project(tmp_path, 'p-redo')
     cancel.stop('p-redo')
-    with pytest.raises(cancel.JobStopped):
-        cancel.checkpoint('p-redo')
+    cancel.checkpoint('p-redo')
     with cancel.bind('p-redo'):
         cancel.checkpoint()
         result = cancel.run([sys.executable, '-c', 'print(1)'], capture_output=True, text=True, timeout=15)
