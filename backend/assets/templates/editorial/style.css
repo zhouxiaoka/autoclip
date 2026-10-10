@@ -1,0 +1,87 @@
+html, body {
+  margin: 0;
+  width: 720px;
+  height: 1280px;
+  background: transparent;
+  overflow: hidden;
+  color: #1a1a19;
+  font-family: "Geist", "PingFang SC", "Noto Sans SC", sans-serif;
+}
+#kicker {
+  position: absolute;
+  top: 72px;
+  left: 48px;
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.18em;
+  color: #6e6b66;
+}
+#kicker i {
+  display: inline-block;
+  width: 18px;
+  height: 1px;
+  margin-right: 10px;
+  background: #1a1a19;
+  vertical-align: middle;
+}
+#hook {
+  position: absolute;
+  top: 108px;
+  left: 48px;
+  right: 48px;
+  margin: 0;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-weight: 400;
+  font-size: 64px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+#gloss {
+  position: absolute;
+  top: 860px;
+  left: 48px;
+  width: 420px;
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.45;
+  color: #1a1a19;
+}
+#gloss b {
+  display: block;
+  margin-bottom: 4px;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-weight: 400;
+  font-size: 22px;
+}
+#num {
+  position: absolute;
+  top: 420px;
+  right: 48px;
+  margin: 0;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 84px;
+  line-height: 1;
+}
+#num small {
+  display: block;
+  font-family: "Geist", "PingFang SC", sans-serif;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+}
+#sub {
+  position: absolute;
+  top: 1040px;
+  left: 48px;
+  right: 48px;
+  margin: 0;
+  font-size: 32px;
+  line-height: 1.35;
+  max-height: 2.7em;
+  overflow: hidden;
+}
+#sub em {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+}
+#sub strong { font-weight: 600; }

@@ -1,0 +1,65 @@
+html, body {
+  margin: 0;
+  width: 720px;
+  height: 1280px;
+  background: transparent;
+  overflow: hidden;
+  color: #1a1a19;
+  font-family: "Geist", "PingFang SC", "Noto Sans SC", sans-serif;
+}
+#frame { position: absolute; inset: 0; }
+#titlebar {
+  position: absolute;
+  left: 36px;
+  right: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#titlebar b {
+  display: block;
+  padding: 8px 14px;
+  background: #1a1a19;
+  color: #f6f5f3;
+  font-weight: 600;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+#line-b { align-self: flex-start; background: #f6f5f3; color: #1a1a19; border: 1px solid #1a1a19; }
+#num {
+  position: absolute;
+  left: 48px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 72px;
+  font-weight: 600;
+  line-height: 1;
+}
+#num small { font-size: 18px; font-weight: 500; margin-left: 8px; }
+#stickers { position: absolute; inset: 0; pointer-events: none; }
+.sticker {
+  position: absolute;
+  width: 120px;
+  height: 72px;
+  border: 2px solid #1a1a19;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 600;
+  background: transparent;
+}
+#sub {
+  position: absolute;
+  left: 36px;
+  right: 36px;
+  margin: 0;
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.2;
+  max-height: 2.4em;
+  overflow: hidden;
+}
+#sub em { font-style: normal; box-shadow: inset 0 -0.35em 0 #5a8bff; }

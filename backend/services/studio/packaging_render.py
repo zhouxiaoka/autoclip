@@ -292,6 +292,16 @@ def scene_ass(packaging: Packaging, scenes: list[Scene], index: int, word_timing
     return _header(look) + '\n'.join(out.lines) + '\n'
 
 
+def picture_only(draft: Draft, scene: Scene, w: int, h: int) -> tuple[str, str]:
+    """The base picture without ASS. The HTML overlay is a later input."""
+    from backend.services.publish_export import _layout_filters
+    from backend.services.studio.framing import layout_filter
+    if draft.layout == 'crop':
+        return layout_filter(scene, draft.crop_x, w, h), 'base'
+    chain = ';'.join(_layout_filters(draft.layout if draft.layout in ('blur', 'fit') else 'fit', w, h))
+    return chain, 'base'
+
+
 def scene_video_graph(draft: Draft, scene: Scene, index: int, ass_path: Path, w: int, h: int) -> tuple[str, str]:
     """(filter graph, output label) drawing the template layout plus the ASS overlay for one scene.
 

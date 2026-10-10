@@ -18,6 +18,9 @@ const LABELS: Record<FlagName, string> = {
   hide_legacy_entrypoints: '隐藏旧的制作入口',
   import_drop_zone: '首页使用居中的拖放区',
   track_overrides: '记录对自动决定的修改',
+  qa_gate_blocking: '成片质检',
+  pkg_templates_v1: 'editing_style.flag_templates',
+  pkg_template_picker_visual: 'editing_style.flag_visual',
 }
 
 const VARIANT_LABELS: Record<string, string> = {
@@ -27,6 +30,9 @@ const VARIANT_LABELS: Record<string, string> = {
   combined: '合成一个动作',
   limit10: '自动渲染前 10 条',
   top3: '自动渲染前 3 条',
+  off: '关闭',
+  shadow: '只记录，不拦截',
+  block: '拦截（当前仍只记录）',
 }
 
 function choice(override: FlagValue | null): string {
@@ -34,9 +40,15 @@ function choice(override: FlagValue | null): string {
   return String(override)
 }
 
+/** The panel is a developer tool. `vite build` sets DEV to false, so release builds omit it. */
+export function flagOverridesVisible(): boolean {
+  return import.meta.env.DEV === true
+}
+
 /** Local overrides for internal checks. Remote flags are never requested from here. */
 export default function FlagOverrides() {
   useSyncExternalStore(subscribeFlags, () => FLAG_NAMES.map(name => String(flagOverride(name))).join('|'), () => '')
+  if (!flagOverridesVisible()) return null
   return <Section title={t('实验功能')} description={t('只在这台电脑上覆盖功能开关。关闭匿名统计后不会请求远程开关，没有覆盖时新功能保持关闭。')}>
     <div className="ac-rows">
       {FLAG_NAMES.map(name => {

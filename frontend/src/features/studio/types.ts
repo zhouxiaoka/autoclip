@@ -60,11 +60,14 @@ export interface Draft {
   /** Automatic template packaging; kept as-is on save so edits never drop it. */
   packaging?: Packaging | null
 }
+export interface QaCheck { checker: 'avsync' | 'face' | 'loudness' | 'jitter' | 'ending'; outcome: 'pass' | 'fail' | 'skip'; bucket: string; duration_ms: number }
+export interface QaReport { schema_version: 1; mode: 'shadow'; duration_ms: number; checks: QaCheck[] }
 export interface RenderJob {
   job_id: string; draft_id: string; title: string; revision: number
   status: 'queued' | 'running' | 'completed' | 'failed'; percent: number; created_at: string; error?: string
   brand_outro?: boolean
-  result?: { width: number; height: number; duration: number; warnings: string[]; outro_applied?: boolean }
+  result?: { width: number; height: number; duration: number; warnings: string[]; outro_applied?: boolean; template_render?: { template?: string } }
+  qa?: QaReport | null
 }
 export interface OutputVariant {
   id: string; draft_id: string; draft_revision: number; strategy_id: string; strategy_version: number
@@ -76,12 +79,16 @@ export interface OutputVariant {
   post?: PostCopy | null
   cover?: 'design' | 'ai' | null
   cover_job?: { job_id: string; status: 'queued' | 'running' | 'completed' | 'failed'; error?: string } | null
+  qa?: QaReport | null
 }
 export interface PostCopy { title: string; description: string; tags: string[] }
 export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
   auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'
   created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; completed_variant_count?: number
+  html_template?: 'editorial' | 'street' | 'classic'
+  recommended_template?: 'editorial' | 'street' | 'classic'
+  accepted_recommendation?: boolean
 }
 export interface PlatformStrategySummary {
   id: string; label: string; aspect: 'portrait' | 'landscape' | 'original'; duration_policy: 'short' | 'long' | 'adaptive'
@@ -134,6 +141,7 @@ export interface ImportOptions {
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
   portrait_style?: 'auto' | 'interview' | 'podcast'
+  html_template?: 'editorial' | 'street' | 'classic'
 }
 export type AnalysisMode = 'subtitle' | 'visual'
 export interface AnalysisPreferences { analysis_mode: AnalysisMode | 'auto'; allow_visual_screening: boolean }

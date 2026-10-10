@@ -17,6 +17,30 @@ def test_frontend_and_backend_defaults_match_and_are_off():
     assert flag_enabled(DEFAULTS, 'one_click_paste_start') is False
     assert flag_enabled(DEFAULTS, 'render_top_first') is False
     assert flag_enabled(DEFAULTS, 'publish_pack_v2') is False
+    assert flag_enabled(DEFAULTS, 'pkg_templates_v1') is False
+    assert flag_enabled(DEFAULTS, 'pkg_template_picker_visual') is False
+    assert resolve_features({'pkg_template_picker_visual': True, 'autoclip_safe_mode': True}, env='')['pkg_template_picker_visual'] is False
+
+
+def test_qa_and_template_defaults_and_safe_mode():
+    """qa_gate_blocking stays shadow and is forced off; pkg_templates_v1 stays off unless the operator names it."""
+    assert DEFAULTS['qa_gate_blocking'] == 'shadow'
+    assert DEFAULTS['pkg_templates_v1'] is False
+    assert FRONTEND_DEFAULTS['qa_gate_blocking'] == 'shadow'
+    assert FRONTEND_DEFAULTS['pkg_templates_v1'] is False
+    killed = resolve_features({
+        'autoclip_safe_mode': True,
+        'qa_gate_blocking': 'block',
+        'pkg_templates_v1': True,
+    })
+    assert killed['qa_gate_blocking'] == 'off'
+    assert killed['pkg_templates_v1'] is False
+    operator = resolve_features(
+        {'autoclip_safe_mode': True, 'qa_gate_blocking': 'shadow', 'pkg_templates_v1': True},
+        env='qa_gate_blocking=block,pkg_templates_v1=on',
+    )
+    assert operator['qa_gate_blocking'] == 'off'
+    assert operator['pkg_templates_v1'] is True
 
 
 def test_unknown_values_are_dropped_and_safe_mode_forces_the_safe_off_value():
@@ -46,6 +70,13 @@ def test_operator_env_overrides_the_client_snapshot(monkeypatch):
     assert forced['autoclip_safe_mode'] is True
     assert forced['remember_platforms'] is False
     assert forced['clip_reasons'] is True
+    monkeypatch.setenv('AUTOCLIP_FLAGS', 'pkg_templates_v1=on')
+    enabled = resolve_features({'pkg_templates_v1': False})
+    assert enabled['pkg_templates_v1'] is True
+    killed = resolve_features({'pkg_templates_v1': True, 'autoclip_safe_mode': True}, env='')
+    assert killed['pkg_templates_v1'] is False
+    operator = resolve_features({'autoclip_safe_mode': True}, env='pkg_templates_v1=on')
+    assert operator['pkg_templates_v1'] is True
 
 
 def test_import_records_the_resolved_snapshot_and_drops_text(monkeypatch):

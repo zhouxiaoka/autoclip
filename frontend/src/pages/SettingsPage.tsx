@@ -19,7 +19,7 @@ import { useAppUpdate } from '../desktop/UpdatePrompt'
 import { FEEDBACK_DISCUSSIONS_URL, FEEDBACK_ISSUES_URL } from '../analytics/feedback'
 import { useTheme } from '../context/ThemeContext'
 import { Btn, Icon, Row, Section, Segmented } from '../ui'
-import FlagOverrides from '../features/settings/FlagOverrides'
+import FlagOverrides, { flagOverridesVisible } from '../features/settings/FlagOverrides'
 import ImportPreferenceSettings from '../features/settings/ImportPreferenceSettings'
 
 type SectionKey = 'ai' | 'publish' | 'app' | 'feedback'
@@ -241,10 +241,12 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
           <Switch checked={crashOn} onChange={toggleCrashReports} />
         </Row>
       </div>
-      <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
-        <ImportPreferenceSettings />
-        <FlagOverrides />
-      </div>
+      <ImportPreferenceSettings />
+      {flagOverridesVisible() && (
+        <div style={{ marginTop: 'var(--ac-space-3xl)' }}>
+          <FlagOverrides />
+        </div>
+      )}
     </Section>
   )
 }

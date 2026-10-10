@@ -48,6 +48,21 @@ def _studio_render_follows_executor(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _qa_stays_off_for_unrelated_renders(monkeypatch, request):
+    # Shadow QA is queued after every completed render. Other suites must not
+    # spawn that worker; test_studio_qa covers the real path.
+    if request.node.get_closest_marker("stdlib_only"):
+        yield
+        return
+    name = getattr(request.node.module, "__name__", "")
+    if name.endswith("test_studio_qa"):
+        yield
+        return
+    monkeypatch.setenv("AUTOCLIP_QA_DISABLED", "1")
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _isolated_branding_settings(tmp_path, monkeypatch, request):
     if request.node.get_closest_marker("stdlib_only"):
         return
