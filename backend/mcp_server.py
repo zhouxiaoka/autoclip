@@ -76,21 +76,26 @@ def get_version() -> Dict[str, Any]:
     return {'version': __version__}
 
 
-@server.tool(name='start_quick_output', description='一键出片：本地视频或 HTTPS 的 YouTube / B 站链接，按 platforms 自动制作视频、封面和发布文案。template 可选 editorial / street / classic。共用桌面 AI 与片尾设置，立即返回 project_id；之后用 get_quick_output_status 查询。')
+@server.tool(name='start_quick_output', description='一键出片：本地视频或 HTTPS 的 YouTube / B 站链接，按 platforms 自动制作视频、封面和发布文案。template 可选 editorial / street / classic，且只在 mcp_v2_tools 打开时接受；关闭时传了风格返回 disabled。返回的 template 是实际用的风格，requested_template 是请求值。共用桌面 AI 与片尾设置，立即返回 project_id；之后用 get_quick_output_status 查询。')
 def start_quick_output(source: str, platforms: Optional[List[str]] = None, name: Optional[str] = None,
                        srt_path: Optional[str] = None, instruction: str = '', browser: Optional[str] = None,
                        portrait_style: str = 'auto', template: Optional[str] = None) -> Dict[str, Any]:
     from backend.services import mcp_jobs
     from backend.services import quick_output_runner as quick
+    from backend.services.studio.template_choice import style_for_request
     try:
         project_id = quick.start(source, platforms or ['douyin'], name=name, srt_path=srt_path, instruction=instruction,
                                  browser=browser, portrait_style=portrait_style, template=template)
+    except quick.StyleDisabled as error:
+        return {'ok': False, 'error_code': 'disabled', 'error': str(error),
+                **mcp_jobs.progress_fields(status='failed')}
     except (ValueError, FileNotFoundError) as error:
         return {'ok': False, 'error_code': 'invalid_input', 'error': str(error),
                 **mcp_jobs.progress_fields(status='failed')}
     mcp_jobs.write_job(project_id, status='running', progress=0, stage='screening', kind='quick', error_code='none')
     record = mcp_jobs.read_job(project_id) or {}
     return {'ok': True, 'version': __version__, 'project_id': project_id,
+            **style_for_request(template),
             **mcp_jobs.progress_fields(status='running', progress=0, stage='screening', started_at=record.get('started_at'))}
 
 

@@ -26,6 +26,15 @@ def test_only_the_top_three_scored_clips_are_eligible():
     assert selected_template({'html_template': 'editorial', 'features': {'pkg_templates_v1': False}}) is None
     assert selected_template({'html_template': 'classic', 'features': {'pkg_templates_v1': True}}) is None
     assert selected_template({'html_template': 'editorial', 'features': {'pkg_templates_v1': True, 'autoclip_safe_mode': True}}) is None
+    from backend.services.studio.template_choice import recorded_style, style_for_request, style_from_generation
+    assert style_for_request('editorial', {'pkg_templates_v1': False}) == {'template': 'classic', 'requested_template': 'editorial'}
+    assert style_for_request('street', {'pkg_templates_v1': True})['template'] == 'street'
+    assert style_for_request(None) == {'template': 'classic', 'requested_template': 'classic'}
+    with pytest.raises(ValueError):
+        style_for_request('magazine')
+    assert recorded_style('street', features={'pkg_templates_v1': False}) == {'template': 'classic', 'requested_template': 'street'}
+    assert style_from_generation({'html_template': 'editorial', 'features': {'pkg_templates_v1': False}}) == {
+        'template': 'classic', 'requested_template': 'editorial'}
 
 
 def test_intel_mac_is_unverified_and_stays_classic():
@@ -255,6 +264,7 @@ def test_flag_off_ffmpeg_command_has_no_overlay_input(tmp_path, monkeypatch):
     assert result['template_render']['downgraded'] is False
     assert result['template_render']['template'] == 'classic'
     assert result['template_render']['requested_template'] == 'editorial'
+    assert result['template'] == 'classic' and result['requested_template'] == 'editorial'
     command = commands[0]
     inputs = [command[index + 1] for index, token in enumerate(command) if token == '-i']
     assert inputs == [str(source)]

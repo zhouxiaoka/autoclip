@@ -16,6 +16,7 @@ and re-created files in the deleted project's directory.
 from __future__ import annotations
 
 import contextvars
+import json
 import logging
 import os
 import shutil
@@ -35,6 +36,8 @@ _stopped: set[str] = set()
 _processes: dict[str, set[subprocess.Popen]] = {}
 _leaders: set[int] = set()
 _temporary: dict[str, set[Path]] = {}
+_binds: dict[str, int] = {}
+_round_ignored: dict[str, int] = {}
 _current: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar('autoclip_project', default=None)
 _recording_stop: contextvars.ContextVar[bool] = contextvars.ContextVar('autoclip_recording_stop', default=False)
 MESSAGE = '项目已删除，已停止生成'
@@ -77,7 +80,9 @@ def stop(project_id: str) -> None:
     """Stop this project's render. Kills the ffmpeg process group and temporary files.
 
     Finished videos are left in place. Deleting the project still goes through `cancel`.
+    The on-disk marker is what a render in another process sees at its next checkpoint.
     """
+    write_stop_marker(project_id)
     with _lock:
         _stopped.add(project_id)
         running = list(_processes.get(project_id, ()))
@@ -148,15 +153,57 @@ def record_stop():
 def checkpoint(project_id: Optional[str] = None) -> None:
     project_id = project_id or _current.get()
     if is_cancelled(project_id):
-        raise ProjectDeleted(project_id)
-    if is_stopped(project_id) and not _recording_stop.get():
-        raise JobStopped(project_id)
+        raise ProjectDeleted(project_id or '')
+    if _recording_stop.get():
+        return
+    if is_stopped(project_id) or _marker_requests_stop(project_id):
+        raise JobStopped(project_id or '')
 
 
 def project_directory(project_id: str) -> Path:
     # Never get_project_directory(): it creates the directory it returns.
     from backend.core.path_utils import get_data_directory
     return get_data_directory() / 'projects' / project_id
+
+
+def _marker_path(project_id: str) -> Path:
+    return project_directory(project_id) / 'metadata' / 'cancel.marker'
+
+
+def _marker_seq(project_id: Optional[str]) -> int:
+    if not project_id:
+        return 0
+    try:
+        data = json.loads(_marker_path(project_id).read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return 0
+    seq = data.get('seq') if isinstance(data, dict) else None
+    if isinstance(seq, bool) or not isinstance(seq, int) or seq <= 0:
+        return 0
+    return seq
+
+
+def write_stop_marker(project_id: str) -> None:
+    """Tell every process working on this project to stop at its next checkpoint."""
+    folder = project_directory(project_id)
+    if not folder.is_dir():
+        return
+    try:
+        meta = folder / 'metadata'
+        meta.mkdir(exist_ok=True)
+        _marker_path(project_id).write_text(json.dumps({'seq': _marker_seq(project_id) + 1}), encoding='utf-8')
+    except OSError as error:
+        logger.warning('Could not record the cancel marker: %s', type(error).__name__)
+
+
+def _marker_requests_stop(project_id: Optional[str]) -> bool:
+    seq = _marker_seq(project_id)
+    if seq <= 0:
+        return False
+    ignored = _round_ignored.get(project_id or '')
+    if ignored is None:
+        return True
+    return seq > ignored
 
 
 def remove_files(project_id: str, attempts: int = 5) -> bool:
@@ -179,17 +226,31 @@ def remove_files(project_id: str, attempts: int = 5) -> bool:
 
 @contextmanager
 def bind(project_id: str):
-    """Run a worker for `project_id`: checkpoints see it, and its leftovers go if it was deleted."""
+    """Run a worker for `project_id`: checkpoints see it, and its leftovers go if it was deleted.
+
+    The first bind of a round clears a previous stop, so the same project can be produced
+    again in this process. A stop that lands after this snapshot still wins.
+    """
+    with _lock:
+        depth = _binds.get(project_id, 0)
+        if depth == 0:
+            _round_ignored[project_id] = _marker_seq(project_id)
+            _stopped.discard(project_id)
+        _binds[project_id] = depth + 1
     token = _current.set(project_id)
     try:
         yield
     finally:
         _current.reset(token)
-        if is_cancelled(project_id):
-            with _lock:
-                busy = bool(_processes.get(project_id))
-            if not busy:
-                remove_files(project_id)
+        with _lock:
+            depth = _binds.get(project_id, 1) - 1
+            if depth <= 0:
+                _binds.pop(project_id, None)
+            else:
+                _binds[project_id] = depth
+            busy = bool(_processes.get(project_id))
+        if is_cancelled(project_id) and not busy:
+            remove_files(project_id)
 
 
 def _finished_video(path: Path) -> bool:
@@ -210,24 +271,32 @@ def _spawn_kwargs(kwargs: dict) -> dict:
 
 
 def _kill(proc: subprocess.Popen) -> None:
-    if proc.poll() is not None:
+    pid = proc.pid
+    leader = pid in _leaders
+    exited = proc.poll() is not None
+    # A dead session leader must still take its grandchildren with it.
+    if exited and not leader:
         return
     try:
         if os.name == 'nt':
-            subprocess.run(
-                ['taskkill', '/F', '/T', '/PID', str(proc.pid)],
-                capture_output=True, timeout=5, check=False,
-                creationflags=int(getattr(subprocess, 'CREATE_NO_WINDOW', _CREATE_NO_WINDOW)),
-            )
-        elif proc.pid in _leaders:
-            os.killpg(proc.pid, signal.SIGKILL)
-        else:
+            if not exited:
+                subprocess.run(
+                    ['taskkill', '/F', '/T', '/PID', str(pid)],
+                    capture_output=True, timeout=5, check=False,
+                    creationflags=int(getattr(subprocess, 'CREATE_NO_WINDOW', _CREATE_NO_WINDOW)),
+                )
+        elif leader:
+            os.killpg(pid, signal.SIGKILL)
+        elif not exited:
             proc.kill()
     except (OSError, subprocess.TimeoutExpired):
-        try:
-            proc.kill()
-        except OSError:
-            pass
+        if not exited:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+    if proc.poll() is not None:
+        return
     try:
         proc.wait(timeout=3)
     except subprocess.TimeoutExpired:
@@ -235,6 +304,26 @@ def _kill(proc: subprocess.Popen) -> None:
             proc.kill()
         except OSError:
             pass
+
+
+def _stop_requested(project_id: Optional[str]) -> bool:
+    return is_cancelled(project_id) or is_stopped(project_id) or _marker_requests_stop(project_id)
+
+
+def _wait_child(proc: subprocess.Popen, timeout: Optional[float], project_id: str):
+    """Poll the child so a cancel marker written by another process stops this render."""
+    deadline = None if timeout is None else time.monotonic() + float(timeout)
+    while True:
+        slice_timeout = 0.5
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(proc.args, timeout)
+            slice_timeout = min(0.5, remaining)
+        try:
+            return proc.communicate(timeout=slice_timeout)
+        except subprocess.TimeoutExpired:
+            checkpoint(project_id)
 
 
 def run(cmd, *, check: bool = False, timeout: Optional[float] = None, capture_output: bool = False, **kwargs):
@@ -253,10 +342,10 @@ def run(cmd, *, check: bool = False, timeout: Optional[float] = None, capture_ou
             if os.name != 'nt':
                 _leaders.add(proc.pid)
         try:
-            if is_cancelled(project_id) or is_stopped(project_id):
+            if _stop_requested(project_id):
                 _kill(proc)  # cancelled between the checkpoint and the registration
             try:
-                stdout, stderr = proc.communicate(timeout=timeout)
+                stdout, stderr = _wait_child(proc, timeout, project_id)
             except subprocess.TimeoutExpired:
                 _kill(proc)
                 stdout, stderr = proc.communicate()
@@ -265,6 +354,8 @@ def run(cmd, *, check: bool = False, timeout: Optional[float] = None, capture_ou
                 _kill(proc)
                 raise
         finally:
+            if _stop_requested(project_id):
+                _kill(proc)  # the leader may already have exited; the group is still in _leaders
             with _lock:
                 _leaders.discard(proc.pid)
                 running = _processes.get(project_id)

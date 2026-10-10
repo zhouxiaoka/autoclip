@@ -8,13 +8,18 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import time
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 SAFE_ID = re.compile(r'^[A-Za-z0-9_-]{1,100}$')
 RUNNING = frozenset({'queued', 'running'})
 TERMINAL = frozenset({'completed', 'partial', 'failed', 'interrupted', 'cancelled', 'unknown'})
 _FIELDS = ('status', 'progress', 'stage', 'started_at', 'pid', 'pid_created_at', 'error_code', 'kind', 'result')
+_guards_lock = threading.Lock()
+_guards: dict[str, threading.Lock] = {}
 
 
 def valid_id(project_id: str | None) -> bool:
@@ -117,36 +122,81 @@ def _settle_studio(project_id: str) -> None:
         return
 
 
+def _guard(project_id: str) -> threading.Lock:
+    with _guards_lock:
+        return _guards.setdefault(project_id, threading.Lock())
+
+
+@contextmanager
+def _exclusive(path: Path):
+    """Cross-process lock. Callers also hold the per-id thread lock; flock does not."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + '.lock')
+    handle = open(lock_path, 'a+b')
+    locked = False
+    try:
+        if os.name == 'nt':
+            import msvcrt
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b'\0')
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        locked = True
+        yield
+    finally:
+        if locked:
+            try:
+                if os.name == 'nt':
+                    import msvcrt
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+        handle.close()
+
+
 def write_job(project_id: str, **fields: Any) -> dict[str, Any] | None:
     if not valid_id(project_id):
         return None
-    current = read_job(project_id) or {
-        'project_id': project_id,
-        'started_at': time.time(),
-        'pid': os.getpid(),
-        'pid_created_at': _own_create_time(),
-    }
-    if current.get('status') == 'cancelled':
-        fields['status'] = 'cancelled'
-        fields['stage'] = 'cancelled'
-        fields['error_code'] = 'cancelled'
-    for key in _FIELDS:
-        if key in fields and fields[key] is not None:
-            current[key] = fields[key]
-    current['project_id'] = project_id
-    current.pop('api_key', None)
-    current.pop('video', None)
-    current.pop('error', None)
-    result = current.get('result')
-    if isinstance(result, dict):
-        result.pop('api_key', None)
-        result.pop('apiKey', None)
-    folder = _directory()
-    path = folder / f'{project_id}.json'
-    temporary = path.with_suffix(f'.{os.getpid()}.tmp')
-    temporary.write_text(json.dumps(current, ensure_ascii=False), encoding='utf-8')
-    temporary.replace(path)
-    return current
+    path = _directory() / f'{project_id}.json'
+    with _guard(project_id), _exclusive(path):
+        current = read_job(project_id) or {
+            'project_id': project_id,
+            'started_at': time.time(),
+            'pid': os.getpid(),
+            'pid_created_at': _own_create_time(),
+        }
+        status = current.get('status')
+        incoming = fields.get('status')
+        if status == 'cancelled':
+            fields['status'] = 'cancelled'
+            fields['stage'] = 'cancelled'
+            fields['error_code'] = 'cancelled'
+        elif status == 'completed' and incoming == 'cancelled':
+            return current
+        for key in _FIELDS:
+            if key in fields and fields[key] is not None:
+                current[key] = fields[key]
+        current['project_id'] = project_id
+        current.pop('api_key', None)
+        current.pop('video', None)
+        current.pop('error', None)
+        result = current.get('result')
+        if isinstance(result, dict):
+            result.pop('api_key', None)
+            result.pop('apiKey', None)
+        temporary = path.with_suffix(f'.{os.getpid()}.tmp')
+        temporary.write_text(json.dumps(current, ensure_ascii=False), encoding='utf-8')
+        temporary.replace(path)
+        return current
 
 
 def read_job(project_id: str) -> dict[str, Any] | None:

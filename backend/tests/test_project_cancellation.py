@@ -25,12 +25,16 @@ def _isolation(monkeypatch, tmp_path):
     cancel._processes.clear()
     cancel._leaders.clear()
     cancel._temporary.clear()
+    cancel._binds.clear()
+    cancel._round_ignored.clear()
     yield
     cancel._cancelled.clear()
     cancel._stopped.clear()
     cancel._processes.clear()
     cancel._leaders.clear()
     cancel._temporary.clear()
+    cancel._binds.clear()
+    cancel._round_ignored.clear()
 
 
 def _project(path: Path, project_id='p-del'):
@@ -311,3 +315,108 @@ def test_delete_during_render_stops_the_job_and_removes_the_directory(tmp_path, 
     worker.join(10)
     engine.dispose()
     assert wrote == [] and not folder.exists()
+
+
+def test_a_new_round_after_cancel_is_not_already_stopped(tmp_path):
+    import sys
+    _project(tmp_path, 'p-redo')
+    cancel.stop('p-redo')
+    with pytest.raises(cancel.JobStopped):
+        cancel.checkpoint('p-redo')
+    with cancel.bind('p-redo'):
+        cancel.checkpoint()
+        result = cancel.run([sys.executable, '-c', 'print(1)'], capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0
+    assert '1' in result.stdout
+
+
+def test_disk_marker_stops_the_render_without_a_local_stop(tmp_path):
+    import sys
+    _project(tmp_path, 'p-mark')
+    started = threading.Event()
+    finished = []
+
+    def worker():
+        with cancel.bind('p-mark'):
+            started.set()
+            try:
+                cancel.run([sys.executable, '-c', 'import time; time.sleep(30)'], timeout=40)
+                finished.append('ok')
+            except cancel.JobStopped:
+                finished.append('stopped')
+            except Exception as error:  # noqa: BLE001 - reported by the assertion
+                finished.append(type(error).__name__)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    assert started.wait(5)
+    time.sleep(0.3)
+    assert 'p-mark' not in cancel._stopped
+    cancel.write_stop_marker('p-mark')
+    thread.join(10)
+    assert not thread.is_alive()
+    assert finished == ['stopped']
+
+
+def test_kill_reaches_grandchildren_after_the_leader_exits(tmp_path):
+    import os
+    import sys
+    if os.name == 'nt':
+        pytest.skip('killpg is the POSIX path; Windows uses taskkill /T on a live tree')
+    marker = tmp_path / 'grand.pid'
+    code = (
+        'import pathlib, subprocess, sys, time\n'
+        'path = pathlib.Path(sys.argv[1])\n'
+        'child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])\n'
+        'path.write_text(str(child.pid))\n'
+        'time.sleep(0.2)\n'
+    )
+    proc = subprocess.Popen([sys.executable, '-c', code, str(marker)], start_new_session=True)
+    with cancel._lock:
+        cancel._leaders.add(proc.pid)
+        cancel._processes.setdefault('p-exit', set()).add(proc)
+    try:
+        deadline = time.time() + 5
+        while proc.poll() is None or not marker.exists():
+            assert time.time() < deadline
+            time.sleep(0.05)
+        grand = int(marker.read_text())
+        import psutil
+        assert psutil.Process(grand).is_running()
+        cancel.stop('p-exit')
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            try:
+                psutil.Process(grand)
+            except psutil.NoSuchProcess:
+                break
+            time.sleep(0.05)
+        else:
+            raise AssertionError('grandchild still running')
+    finally:
+        cancel._leaders.discard(proc.pid)
+        cancel._processes.pop('p-exit', None)
+        if proc.poll() is None:
+            proc.kill()
+
+
+def test_disk_marker_keeps_a_finished_render_from_being_completed(tmp_path, monkeypatch):
+    from backend.services.studio import jobs, store
+    from backend.services.studio.models import Draft, Scene
+    folder = _project(tmp_path, 'p-mark')
+    draft = Draft(id='d1', title='t', scenes=[Scene(id='s', start=0, end=1)], subtitles=False)
+
+    def fake_render(project_id, video, draft, job_id, progress, **kwargs):
+        cancel.write_stop_marker(project_id)
+        return {'title': 'x', 'duration': 1, 'width': 64, 'height': 36, 'warnings': [], 'outro_applied': False}
+
+    monkeypatch.setattr(jobs, 'render_draft', fake_render)
+    monkeypatch.setattr(jobs, 'source', lambda pid: folder / 'raw' / 'input.mp4')
+    monkeypatch.setattr(jobs, '_design_covers', lambda *a, **k: None)
+    store.write('p-mark', {'schema_version': 2, 'drafts': [], 'jobs': [
+        {'job_id': 'j1', 'status': 'queued', 'percent': 0, 'draft_id': 'd1', 'title': 't', 'revision': 1,
+         'brand_outro': False, 'created_at': store.now(), 'instance': store.INSTANCE,
+         'snapshot': draft.model_dump()}
+    ], 'analysis': None, 'output_variants': [], 'events': []})
+    assert jobs._render('p-mark', draft, 'j1') is None
+    assert store.read('p-mark', recover=False)['jobs'][0]['status'] == 'cancelled'

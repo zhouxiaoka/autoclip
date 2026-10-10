@@ -96,8 +96,11 @@ def cmd_produce(args: argparse.Namespace) -> int:
         result['ok'] = result['status'] in ('completed', 'partial') and not result.get('timed_out')
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result['ok'] else 1
+    except quick.StyleDisabled as error:
+        print(json.dumps({'ok': False, 'error_code': 'disabled', 'error': str(error)}, ensure_ascii=False))
+        return 2
     except (ValueError, FileNotFoundError) as error:
-        print(json.dumps({'ok': False, 'error': str(error)}, ensure_ascii=False))
+        print(json.dumps({'ok': False, 'error_code': 'invalid_input', 'error': str(error)}, ensure_ascii=False))
         return 2
 
 
@@ -555,7 +558,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument('--srt', help='本地 SRT 字幕文件')
     q.add_argument('--instruction', default='')
     q.add_argument('--portrait-style', choices=['auto', 'interview', 'podcast'], default='auto', help='竖版版式；画幅和文字语言仍按平台')
-    q.add_argument('--template', choices=['editorial', 'street', 'classic'], help='剪辑风格：editorial 杂志风 / street 街头快剪 / classic 经典')
+    q.add_argument('--template', choices=['editorial', 'street', 'classic'], help='剪辑风格（需要 AUTOCLIP_FLAGS=mcp_v2_tools=on）：editorial 杂志风 / street 街头快剪 / classic 经典。结果里的 template 是实际用的风格')
     q.add_argument('--browser', choices=['chrome', 'edge', 'firefox', 'safari'])
     q.add_argument('--timeout', type=float, default=7200, help='等待秒数；超时不会取消项目')
     q.add_argument('--json', action='store_true', help='只在 stdout 输出 JSON 结果')

@@ -176,6 +176,55 @@ def test_cancel_sticks_and_does_not_delete_files(data_dir):
     assert (project / 'keep.txt').read_text(encoding='utf-8') == 'stay'
 
 
+def test_completed_is_not_rewritten_as_cancelled(data_dir):
+    from backend.services import mcp_jobs
+
+    mcp_jobs.write_job('done', status='completed', progress=100, error_code='none', result={'ok': True})
+    assert mcp_jobs.cancel('done')['status'] == 'completed'
+    mcp_jobs.write_job('done', status='cancelled', stage='cancelled', error_code='cancelled')
+    again = mcp_jobs.lookup('done')
+    assert again['status'] == 'completed' and again['ok'] is True and again['result'] == {'ok': True}
+
+
+def test_write_job_file_lock_blocks_another_process(data_dir):
+    import os
+    import subprocess
+    import sys
+    import time
+    from pathlib import Path
+    from backend.services import mcp_jobs
+
+    target = data_dir / 'mcp-jobs' / 'locked.json'
+    target.parent.mkdir(parents=True, exist_ok=True)
+    held = data_dir / 'held'
+    script = (
+        'import os, time\n'
+        'from pathlib import Path\n'
+        'from backend.services.mcp_jobs import _exclusive\n'
+        'path = Path(os.environ["LOCK_TARGET"])\n'
+        'with _exclusive(path):\n'
+        '    Path(os.environ["HELD"]).write_text("1")\n'
+        '    time.sleep(1.0)\n'
+    )
+    env = os.environ.copy()
+    env['LOCK_TARGET'] = str(target)
+    env['HELD'] = str(held)
+    env['PYTHONPATH'] = os.getcwd()
+    env['AUTOCLIP_DATA_DIR'] = str(data_dir)
+    proc = subprocess.Popen([sys.executable, '-c', script], env=env)
+    try:
+        deadline = time.time() + 10
+        while not held.exists():
+            assert proc.poll() is None and time.time() < deadline
+            time.sleep(0.05)
+        started = time.monotonic()
+        mcp_jobs.write_job('locked', status='running', progress=1, error_code='none')
+        assert time.monotonic() - started >= 0.4
+        assert mcp_jobs.read_job('locked')['status'] == 'running'
+    finally:
+        proc.wait(timeout=5)
+
+
 def test_job_file_strips_secrets_and_paths(data_dir):
     from backend.services import mcp_jobs
 
