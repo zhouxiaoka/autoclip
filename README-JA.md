@@ -25,7 +25,7 @@
 
 </div>
 
-**[1.5.0 正式リリース](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)**。デスクトップ・CLI・MCP を同時更新。自動制作、字幕のページ分割、人物構図、長尺キューの修正は [変更履歴](CHANGELOG.md) を参照し、旧版から更新してください。
+**[最新リリース](https://github.com/zhouxiaoka/autoclip/releases/latest)**。バージョンは `autoclip --version` の表示です。デスクトップ・CLI・MCP を同時更新。自動制作、字幕のページ分割、人物構図、長尺キューの修正は [変更履歴](CHANGELOG.md) を参照し、旧版から更新してください。
 
 ## 実際の完成クリップ
 
@@ -211,7 +211,7 @@
 3. **リンクと投稿先を選ぶ。** 字幕付きの対談やポッドキャストで試し、縦型レイアウトを選択。字幕がなければ設定で Whisper / SenseVoice を準備、またはクラウド文字起こしを設定。
 4. **確認して保存。** 字幕・構図・内容の完全性を確認し、投稿パックを保存または接続済みアカウントへ投稿。必要に応じて追加候補を生成。
 
-Intel Mac / Linux は Docker または CLI を利用できます。必要環境・初回起動・検証範囲は [インストールガイド](docs/USER_INSTALLATION_GUIDE.en.md) と [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0) を参照。
+Intel Mac / Linux は Docker または CLI を利用できます。必要環境・初回起動・検証範囲は [インストールガイド](docs/USER_INSTALLATION_GUIDE.en.md) と [最新 Release](https://github.com/zhouxiaoka/autoclip/releases/latest) を参照。
 
 [インストールガイド](docs/USER_INSTALLATION_GUIDE.en.md) · [トラブルシュート](docs/FAQ.en.md)
 
@@ -238,13 +238,13 @@ LAN IP や独自ドメインから開く場合、`.env` の `AUTOCLIP_ALLOWED_OR
 
 **CLI / MCP**
 
-Python 3.10+（3.11 推奨）、PATH 上の FFmpeg と FFprobe が必要。Redis は不要です。[正式 CLI / MCP ZIP](https://github.com/zhouxiaoka/autoclip/releases/download/v1.5.0/autoclip-1.5.0-cli-mcp.zip) を解凍し、そのディレクトリで実行：
+Python 3.10+（3.11 推奨）、PATH 上の FFmpeg と FFprobe が必要。Redis は不要です。[正式 CLI / MCP ZIP](https://github.com/zhouxiaoka/autoclip/releases/latest) を解凍し、そのディレクトリで実行：
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 ```
 
 上記は macOS / Linux 用。Windows は `py -m venv venv` で作成し、`.\venv\Scripts\Activate.ps1` で有効化。その後は同じ `python -m pip` コマンドでインストールします。

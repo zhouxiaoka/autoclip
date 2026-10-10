@@ -22,7 +22,7 @@ AutoClip 是本地运行的 AI 切片工具：字幕（自带 SRT 或本地 Whis
 
 ### 1.5 平台成片（优先）
 
-先 `get_version` 核对为 1.5.0。使用 `start_quick_output`，传 `source`（本地视频绝对路径或 HTTPS 的 B站 / YouTube 链接）、
+先 `get_version`（或 `autoclip --version`）读取当前安装的版本，不要对照文档里写死的版本号。使用 `start_quick_output`，传 `source`（本地视频绝对路径或 HTTPS 的 B站 / YouTube 链接）、
 `platforms`（douyin / xiaohongshu / bilibili / tiktok / instagram_reels / youtube_shorts / youtube_long）、已有字幕的 `srt_path`。
 `portrait_style` 可选 `auto` / `interview` / `podcast`，只改竖版布局，语言仍按平台。
 返回 ID 后每 10 秒调用 `get_quick_output_status`；完成时加 `export_kits=true` 获取视频、封面、发布文案与 ZIP 路径。
