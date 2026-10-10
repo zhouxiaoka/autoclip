@@ -170,6 +170,11 @@ def _marker_path(project_id: str) -> Path:
     return project_directory(project_id) / 'metadata' / 'cancel.marker'
 
 
+def _seq_path(project_id: str) -> Path:
+    """High-water seq. Survives deletion of the marker so the next cancel still increments."""
+    return project_directory(project_id) / 'metadata' / 'cancel.seq'
+
+
 def _marker_seq(project_id: Optional[str]) -> int:
     if not project_id:
         return 0
@@ -183,24 +188,114 @@ def _marker_seq(project_id: Optional[str]) -> int:
     return seq
 
 
+def _stored_high(project_id: str) -> int:
+    try:
+        value = int(_seq_path(project_id).read_text(encoding='utf-8').strip())
+    except (OSError, ValueError):
+        return 0
+    if value <= 0:
+        return 0
+    return value
+
+
+def _high_water(project_id: str) -> int:
+    return max(_marker_seq(project_id), _stored_high(project_id))
+
+
+@contextmanager
+def _marker_exclusive(project_id: str):
+    """Cross-process lock for the cancel marker. Does not create a missing project."""
+    folder = project_directory(project_id)
+    if not folder.is_dir():
+        yield
+        return
+    meta = folder / 'metadata'
+    try:
+        meta.mkdir(exist_ok=True)
+        handle = open(meta / 'cancel.lock', 'a+b')
+    except OSError:
+        yield
+        return
+    locked = False
+    try:
+        if os.name == 'nt':
+            import msvcrt
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b'\0')
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        locked = True
+        yield
+    finally:
+        if locked:
+            try:
+                if os.name == 'nt':
+                    import msvcrt
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+        handle.close()
+
+
+def _write_high(project_id: str, seq: int) -> None:
+    if seq <= 0:
+        return
+    _seq_path(project_id).write_text(str(seq), encoding='utf-8')
+
+
 def write_stop_marker(project_id: str) -> None:
     """Tell every process working on this project to stop at its next checkpoint."""
     folder = project_directory(project_id)
     if not folder.is_dir():
         return
     try:
-        meta = folder / 'metadata'
-        meta.mkdir(exist_ok=True)
-        _marker_path(project_id).write_text(json.dumps({'seq': _marker_seq(project_id) + 1}), encoding='utf-8')
+        with _marker_exclusive(project_id):
+            if not folder.is_dir():
+                return
+            nxt = _high_water(project_id) + 1
+            meta = folder / 'metadata'
+            meta.mkdir(exist_ok=True)
+            _marker_path(project_id).write_text(json.dumps({'seq': nxt}), encoding='utf-8')
+            _write_high(project_id, nxt)
     except OSError as error:
         logger.warning('Could not record the cancel marker: %s', type(error).__name__)
 
 
+def _retire_marker(project_id: str, expected: int) -> None:
+    """Drop a marker this round already observed. A newer seq is a live cancel and stays."""
+    if expected <= 0 or not project_directory(project_id).is_dir():
+        return
+    try:
+        with _marker_exclusive(project_id):
+            if _marker_seq(project_id) != expected:
+                return
+            _marker_path(project_id).unlink(missing_ok=True)
+            _write_high(project_id, max(expected, _stored_high(project_id)))
+    except OSError as error:
+        logger.warning('Could not remove the cancel marker: %s', type(error).__name__)
+
+
 def _marker_requests_stop(project_id: Optional[str]) -> bool:
+    """A marker stops only the worker bound to this project.
+
+    `store.write` / `store.change` checkpoint on the desktop and in other MCP
+    processes that never entered `bind`. A leftover marker must not fail those.
+    """
+    if not project_id or _current.get() != project_id:
+        return False
     seq = _marker_seq(project_id)
     if seq <= 0:
         return False
-    ignored = _round_ignored.get(project_id or '')
+    ignored = _round_ignored.get(project_id)
     if ignored is None:
         return True
     return seq > ignored
@@ -228,15 +323,29 @@ def remove_files(project_id: str, attempts: int = 5) -> bool:
 def bind(project_id: str):
     """Run a worker for `project_id`: checkpoints see it, and its leftovers go if it was deleted.
 
-    The first bind of a round clears a previous stop, so the same project can be produced
-    again in this process. A stop that lands after this snapshot still wins.
+    The first bind of a round clears a previous stop and retires that round's marker,
+    so the same project can be edited and produced again. A stop that lands after this
+    snapshot still wins. When the round ends, that marker is removed too.
     """
     with _lock:
         depth = _binds.get(project_id, 0)
+        starting = depth == 0
+    if starting:
+        observed = _high_water(project_id)
+        live = _marker_seq(project_id)
+    else:
+        observed = 0
+        live = 0
+    with _lock:
+        depth = _binds.get(project_id, 0)
         if depth == 0:
-            _round_ignored[project_id] = _marker_seq(project_id)
+            _round_ignored[project_id] = observed
             _stopped.discard(project_id)
+        else:
+            live = 0
         _binds[project_id] = depth + 1
+    if live:
+        _retire_marker(project_id, live)
     token = _current.set(project_id)
     try:
         yield
@@ -246,9 +355,14 @@ def bind(project_id: str):
             depth = _binds.get(project_id, 1) - 1
             if depth <= 0:
                 _binds.pop(project_id, None)
+                _stopped.discard(project_id)
+                finished = _marker_seq(project_id)
             else:
                 _binds[project_id] = depth
+                finished = 0
             busy = bool(_processes.get(project_id))
+        if finished:
+            _retire_marker(project_id, finished)
         if is_cancelled(project_id) and not busy:
             remove_files(project_id)
 
@@ -270,6 +384,31 @@ def _spawn_kwargs(kwargs: dict) -> dict:
     return kwargs
 
 
+def _group_owned(pid: int, leader_reaped: bool) -> bool:
+    """Whether `killpg` still names the group `run()` started.
+
+    `poll`/`communicate` already reap the leader. The pid can be recycled before
+    the `finally` block signals it. A live `getpgid` after the reap belongs to
+    someone else. A dead pid is signaled only when group members remain
+    (grandchildren whose leader has exited).
+    """
+    try:
+        pgid = os.getpgid(pid)
+    except ProcessLookupError:
+        if not leader_reaped:
+            return False
+        try:
+            os.killpg(pid, 0)
+        except OSError:
+            return False
+        return True
+    except OSError:
+        return False
+    if pgid != pid or leader_reaped:
+        return False
+    return True
+
+
 def _kill(proc: subprocess.Popen) -> None:
     pid = proc.pid
     leader = pid in _leaders
@@ -286,7 +425,8 @@ def _kill(proc: subprocess.Popen) -> None:
                     creationflags=int(getattr(subprocess, 'CREATE_NO_WINDOW', _CREATE_NO_WINDOW)),
                 )
         elif leader:
-            os.killpg(pid, signal.SIGKILL)
+            if _group_owned(pid, exited):
+                os.killpg(pid, signal.SIGKILL)
         elif not exited:
             proc.kill()
     except (OSError, subprocess.TimeoutExpired):

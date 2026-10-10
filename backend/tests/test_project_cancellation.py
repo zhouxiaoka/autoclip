@@ -317,6 +317,50 @@ def test_delete_during_render_stops_the_job_and_removes_the_directory(tmp_path, 
     assert wrote == [] and not folder.exists()
 
 
+def test_another_process_can_change_state_after_cancel(tmp_path):
+    """A leftover cancel marker must not fail edits in a process that never bound."""
+    import os
+    import sys
+    from backend.services.studio import store
+
+    _project(tmp_path, 'p-other')
+    store.write('p-other', {
+        'schema_version': 2, 'drafts': [], 'jobs': [], 'analysis': None, 'output_variants': [], 'events': [],
+    })
+    cancel.stop('p-other')
+    assert cancel._marker_path('p-other').is_file()
+    script = (
+        'from backend.services.studio import store\n'
+        'store.change("p-other", lambda data: data["drafts"].append({"id": "edited"}))\n'
+        'print(store.read("p-other")["drafts"][0]["id"])\n'
+    )
+    env = os.environ.copy()
+    env['AUTOCLIP_DATA_DIR'] = str(tmp_path / 'data')
+    root = str(Path(__file__).resolve().parents[2])
+    env['PYTHONPATH'] = root + os.pathsep + env.get('PYTHONPATH', '')
+    completed = subprocess.run(
+        [sys.executable, '-c', script], env=env, capture_output=True, text=True, cwd=root, timeout=60,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == 'edited'
+
+
+def test_edit_after_a_cancelled_round_ends(tmp_path):
+    from backend.services.studio import store
+
+    _project(tmp_path, 'p-edit')
+    store.write('p-edit', {
+        'schema_version': 2, 'drafts': [], 'jobs': [], 'analysis': None, 'output_variants': [], 'events': [],
+    })
+    with cancel.bind('p-edit'):
+        cancel.stop('p-edit')
+        with pytest.raises(cancel.JobStopped):
+            cancel.checkpoint()
+    assert not cancel._marker_path('p-edit').exists()
+    store.change('p-edit', lambda data: data['drafts'].append({'id': 'next'}))
+    assert store.read('p-edit')['drafts'][0]['id'] == 'next'
+
+
 def test_a_new_round_after_cancel_is_not_already_stopped(tmp_path):
     import sys
     _project(tmp_path, 'p-redo')
@@ -356,6 +400,65 @@ def test_disk_marker_stops_the_render_without_a_local_stop(tmp_path):
     thread.join(10)
     assert not thread.is_alive()
     assert finished == ['stopped']
+
+
+def test_reaped_leader_does_not_signal_a_recycled_pid(monkeypatch):
+    import os
+    import signal
+    if os.name == 'nt':
+        pytest.skip('killpg is the POSIX path')
+    signals = []
+    pid = 424242
+    proc = SimpleNamespace(pid=pid, poll=lambda: 0, kill=lambda: None, wait=lambda timeout=None: 0)
+    cancel._leaders.add(pid)
+
+    def getpgid(target):
+        return target  # pid was reused by a new process group leader
+
+    def killpg(target, sig):
+        signals.append(sig)
+
+    monkeypatch.setattr(cancel.os, 'getpgid', getpgid)
+    monkeypatch.setattr(cancel.os, 'killpg', killpg)
+    cancel._kill(proc)
+    assert signals == []
+    assert signal.SIGKILL not in signals
+
+
+def test_reaped_leader_still_kills_a_leftover_group(monkeypatch):
+    import os
+    import signal
+    if os.name == 'nt':
+        pytest.skip('killpg is the POSIX path')
+    signals = []
+    pid = 424243
+    proc = SimpleNamespace(pid=pid, poll=lambda: 0, kill=lambda: None, wait=lambda timeout=None: 0)
+    cancel._leaders.add(pid)
+    monkeypatch.setattr(cancel.os, 'getpgid', lambda target: (_ for _ in ()).throw(ProcessLookupError))
+    monkeypatch.setattr(cancel.os, 'killpg', lambda target, sig: signals.append(sig))
+    cancel._kill(proc)
+    assert signals == [0, signal.SIGKILL]
+
+
+def test_reaped_leader_with_an_empty_group_is_not_killed(monkeypatch):
+    import os
+    import signal
+    if os.name == 'nt':
+        pytest.skip('killpg is the POSIX path')
+    signals = []
+    pid = 424244
+    proc = SimpleNamespace(pid=pid, poll=lambda: 0, kill=lambda: None, wait=lambda timeout=None: 0)
+    cancel._leaders.add(pid)
+
+    def killpg(target, sig):
+        signals.append(sig)
+        raise ProcessLookupError
+
+    monkeypatch.setattr(cancel.os, 'getpgid', lambda target: (_ for _ in ()).throw(ProcessLookupError))
+    monkeypatch.setattr(cancel.os, 'killpg', killpg)
+    cancel._kill(proc)
+    assert signals == [0]
+    assert signal.SIGKILL not in signals
 
 
 def test_kill_reaches_grandchildren_after_the_leader_exits(tmp_path):
