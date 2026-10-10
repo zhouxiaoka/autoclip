@@ -1586,5 +1586,8 @@
   "分开复制和导出": "Copy and export separately",
   "合成一个动作": "One combined action",
   "自动渲染前 10 条": "Render the top 10 automatically",
-  "自动渲染前 3 条": "Render the top 3 automatically"
+  "自动渲染前 3 条": "Render the top 3 automatically",
+  "成片质检": "Export quality check",
+  "只记录，不拦截": "Record only, do not block",
+  "拦截（当前仍只记录）": "Block (still records only)"
 }

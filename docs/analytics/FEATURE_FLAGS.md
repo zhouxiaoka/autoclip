@@ -30,14 +30,17 @@
 | `hide_legacy_entrypoints` | `false` | 隐藏旧流程入口 |
 | `import_drop_zone` | `false` | 首页居中拖放区 |
 | `track_overrides` | `false` | 记录用户对自动决定的修改 |
+| `qa_gate_blocking` | `shadow` | `off` 不跑；`shadow` 和 `block` 都只记录。1.5.7 不拦截成片 |
 
 `import_drop_zone` 和 `track_overrides` 不在产品方案的开关表里。方案写 Q9 不需要开关；这次任务要求每一项都有默认关闭的开关，所以修改埋点也先关着。拖放区是导入页改版，单独一个开关，避免和「粘贴即开始」绑死。
 
-模板、质检、雷达、关注频道、手机交接这些开关还没有对应实现，没有放进默认表。
+`qa_gate_blocking` 按方案第 10.2 节先全量 shadow。构建默认值是 `shadow`，不是关闭。`block` 会被收下，但这一版和 `shadow` 一样只写报告。打开 `autoclip_safe_mode` 时，这一项一律变成 `off`，`AUTOCLIP_FLAGS` 也不能把它留在 `shadow` 或 `block`。
+
+模板、雷达、关注频道、手机交接这些开关还没有对应实现，没有放进默认表。
 
 ## 后端
 
-导入请求可以带 `features` JSON。后端只保留已知键，非法值丢弃，结果写进 `generation.features`。CLI、MCP 和 Docker 没有 PostHog SDK，读环境变量 `AUTOCLIP_FLAGS`（同样的 `name=value` 列表），它覆盖请求里的同名键。`autoclip_safe_mode` 打开后，其余键回到默认值，除非 `AUTOCLIP_FLAGS` 明确设置了那一项。
+导入请求可以带 `features` JSON。后端只保留已知键，非法值丢弃，结果写进 `generation.features`。CLI、MCP 和 Docker 没有 PostHog SDK，读环境变量 `AUTOCLIP_FLAGS`（同样的 `name=value` 列表），它覆盖请求里的同名键。`autoclip_safe_mode` 打开后，其余键回到默认值，除非 `AUTOCLIP_FLAGS` 明确设置了那一项。`qa_gate_blocking` 例外：安全模式一律写成 `off`。
 
 ## 还没做
 

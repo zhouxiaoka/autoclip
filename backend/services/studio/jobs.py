@@ -106,6 +106,9 @@ def _render(project_id, draft, job_id, *, brand_outro=False):
             result = render_draft(project_id, source(project_id), draft, job_id, lambda p: update(percent=p), brand_outro=brand_outro)
         update(status='completed', percent=100, result=result, cover_pending=True, duration_ms=round((monotonic() - started) * 1000))
         render_saved = True
+        # The file and completed status are already saved. Shadow checks only attach a report.
+        from backend.services.studio.qa import record_after_render
+        record_after_render(project_id, draft, job_id, result)
         try:
             _design_covers(project_id, draft, job_id)
         finally:

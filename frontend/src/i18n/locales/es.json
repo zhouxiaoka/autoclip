@@ -1586,5 +1586,8 @@
   "分开复制和导出": "Copiar y exportar por separado",
   "合成一个动作": "Una sola acción",
   "自动渲染前 10 条": "Renderizar automáticamente las 10 mejores",
-  "自动渲染前 3 条": "Renderizar automáticamente las 3 mejores"
+  "自动渲染前 3 条": "Renderizar automáticamente las 3 mejores",
+  "成片质检": "Control de calidad del corte",
+  "只记录，不拦截": "Solo registrar, sin bloquear",
+  "拦截（当前仍只记录）": "Bloquear (aún solo registra)"
 }

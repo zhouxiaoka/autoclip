@@ -187,6 +187,23 @@ class CoverJob(BaseModel):
     instance: str | None = None
 
 
+class QaCheck(BaseModel):
+    """One shadow checker. Buckets only: no paths, captions, or measurements."""
+    model_config = ConfigDict(extra='forbid')
+    checker: Literal['avsync', 'face', 'loudness', 'jitter', 'ending']
+    outcome: Literal['pass', 'fail', 'skip']
+    bucket: str = Field(pattern=r'^[a-z0-9_]{1,32}$')
+    duration_ms: int = Field(ge=0, le=60_000)
+
+
+class QaReport(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    schema_version: Literal[1] = 1
+    mode: Literal['shadow'] = 'shadow'
+    duration_ms: int = Field(ge=0, le=60_000)
+    checks: list[QaCheck] = Field(max_length=8)
+
+
 class OutputVariant(BaseModel):
     """One immutable rendered delivery version derived from a draft revision."""
     model_config = ConfigDict(extra='forbid')
@@ -214,6 +231,8 @@ class OutputVariant(BaseModel):
     # rendering the unpackaged draft. `instance` marks which server run is preparing it.
     needs_prepare: bool = False
     instance: str | None = None
+    # Shadow quality report. Absent when the gate is off. Never changes the file.
+    qa: QaReport | None = None
 
 
 class ImportOptions(BaseModel):

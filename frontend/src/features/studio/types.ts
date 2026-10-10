@@ -60,11 +60,14 @@ export interface Draft {
   /** Automatic template packaging; kept as-is on save so edits never drop it. */
   packaging?: Packaging | null
 }
+export interface QaCheck { checker: 'avsync' | 'face' | 'loudness' | 'jitter' | 'ending'; outcome: 'pass' | 'fail' | 'skip'; bucket: string; duration_ms: number }
+export interface QaReport { schema_version: 1; mode: 'shadow'; duration_ms: number; checks: QaCheck[] }
 export interface RenderJob {
   job_id: string; draft_id: string; title: string; revision: number
   status: 'queued' | 'running' | 'completed' | 'failed'; percent: number; created_at: string; error?: string
   brand_outro?: boolean
   result?: { width: number; height: number; duration: number; warnings: string[]; outro_applied?: boolean }
+  qa?: QaReport | null
 }
 export interface OutputVariant {
   id: string; draft_id: string; draft_revision: number; strategy_id: string; strategy_version: number
@@ -76,6 +79,7 @@ export interface OutputVariant {
   post?: PostCopy | null
   cover?: 'design' | 'ai' | null
   cover_job?: { job_id: string; status: 'queued' | 'running' | 'completed' | 'failed'; error?: string } | null
+  qa?: QaReport | null
 }
 export interface PostCopy { title: string; description: string; tags: string[] }
 export interface GenerationState {

@@ -101,9 +101,10 @@ test('local override beats remote values and safe mode, and safe mode forces the
 })
 
 test('remote safe mode closes every flag that has no local override', () => {
-  const { flags, calls } = load({ analytics: true, remote: { autoclip_safe_mode: true, remember_platforms: true } })
+  const { flags, calls } = load({ analytics: true, remote: { autoclip_safe_mode: true, remember_platforms: true, qa_gate_blocking: 'block' } })
   assert.equal(flags.flagEnabled('autoclip_safe_mode'), true)
   assert.equal(flags.flagEnabled('remember_platforms'), false)
+  assert.equal(flags.flagValue('qa_gate_blocking'), 'off')
   assert.equal(calls.includes('remember_platforms'), false)
 })
 
@@ -131,6 +132,18 @@ test('an unassigned default does not count as an experiment assignment', () => {
   assert.equal(safe.flags.flagOrigin('remember_platforms'), 'safe_mode')
   assert.equal(safe.flags.flagAssigned('remember_platforms'), false)
 })
+test('quality gate defaults to shadow and block is not the safe value', () => {
+  const { flags } = load()
+  assert.equal(flags.flagValue('qa_gate_blocking'), 'shadow')
+  assert.equal(flags.flagEnabled('qa_gate_blocking'), false)
+  flags.setFlagOverride('qa_gate_blocking', 'block')
+  assert.equal(flags.flagValue('qa_gate_blocking'), 'block')
+  flags.setFlagOverride('autoclip_safe_mode', true)
+  assert.equal(flags.flagValue('qa_gate_blocking'), 'block')
+  flags.setFlagOverride('qa_gate_blocking', null)
+  assert.equal(flags.flagValue('qa_gate_blocking'), 'off')
+})
+
 test('invalid overrides are dropped and the snapshot stays enumerable', () => {
   const { flags, storage } = load()
   flags.setFlagOverride('publish_pack_v2', 'combined')

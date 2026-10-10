@@ -9,5 +9,6 @@
   "clip_reasons": false,
   "hide_legacy_entrypoints": false,
   "import_drop_zone": false,
-  "track_overrides": false
+  "track_overrides": false,
+  "qa_gate_blocking": "shadow"
 }

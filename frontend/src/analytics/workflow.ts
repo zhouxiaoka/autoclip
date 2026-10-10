@@ -38,6 +38,10 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     template: ['interview_zh', 'podcast_en', 'landscape', 'none'],
     packaging_style: ['classic', 'boxed', 'spotlight', 'pop', 'cinematic'],
     framing: ['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'],
+    qa_checker: ['avsync', 'face', 'loudness', 'jitter', 'ending'],
+    qa_outcome: ['pass', 'fail', 'skip'],
+    qa_bucket: ['lt40', '40_80', '80_200', 'gt200', 'none', 'lt10', '10_40', 'gt40', 'in_target', 'quiet_1_3', 'quiet_gt3', 'loud_1_3', 'loud_gt3', 'peak', 'peak_and_level', 'calm', 'flash', 'rms', 'flash_and_rms', 'complete', 'mid_word', 'mid_sentence', 'timeout', 'budget', 'no_audio', 'no_detector', 'no_words', 'unreadable', 'error'],
+    qa_mode: ['shadow'],
     failure_stage: ['screening', 'dispatch', 'production', 'ingest', 'subtitle', 'analyze', 'vision', 'render'],
     route: ['subtitle', 'visual'],
   }
@@ -90,6 +94,9 @@ export function routeName(path: string): string {
   return ['/', '/settings'].includes(p) ? p : '/other'
 }
 
+export interface StudioQaCheck { checker?: string; outcome?: string; bucket?: string; duration_ms?: number }
+export interface StudioQa { mode?: string; checks?: StudioQaCheck[] }
+
 export interface TaskSnapshot {
   id: string; task_type: string; status: string; created_at: string
   started_at?: string | null; completed_at?: string | null
@@ -101,9 +108,9 @@ export interface StudioSnapshot {
   analysis_history?: { run_id: string; plan?: StudioSnapshot['plan']; analysis: StudioSnapshot['analysis'] }[]
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; local_evidence?: { subtitle_status?: string } }
   analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
-  jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[] } }[]
+  jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[] }; qa?: StudioQa | null }[]
   generation?: { auto_start?: boolean; status?: string; error_code?: string; failure_stage?: string; http_status?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string } | null
-  output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null }[]
+  output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null; qa?: StudioQa | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
 }
 
@@ -236,6 +243,17 @@ export class WorkflowTracker {
       this.persist()
     }
   }
+  /** Checker results already on the workspace. The dedup key stays in the local watch. */
+  private observeQa(w: Watch, qa: StudioQa | null | undefined, strategyId?: string, dedup = 'job'): void {
+    for (const check of qa?.checks || []) {
+      const props = safeStudioProperties({
+        ...this.context(w.projectId), qa_checker: check.checker, qa_outcome: check.outcome,
+        qa_bucket: check.bucket, qa_mode: qa?.mode, duration_ms: check.duration_ms, strategy_id: strategyId,
+      })
+      if (typeof props.qa_checker !== 'string' || typeof props.qa_outcome !== 'string') continue
+      this.emitOnce(w, `qa:${dedup}:${props.qa_checker}`, 'studio_qa_checked', props)
+    }
+  }
   observeCoverJob(w: Watch, job?: { job_id: string; status: string } | null): void {
     if (w.kind !== 'studio-cover' || w.settled || job?.job_id !== w.id || !['completed', 'failed'].includes(job.status)) return
     this.emitOnce(w, 'finished', 'studio_cover_redesign_finished', safeStudioProperties({ ...this.context(w.projectId), outcome: job.status }))
@@ -263,12 +281,14 @@ export class WorkflowTracker {
       const variant = snapshot.output_variants?.find(v => v.id === w.id && (!w.runId || v.render_job_id === w.runId))
       const job = snapshot.jobs?.find(j => j.job_id === variant?.render_job_id)
       if (variant && ['completed', 'failed'].includes(variant.status)) {
+        this.observeQa(w, variant.qa, variant.strategy_id, variant.id || 'variant')
         event = 'studio_variant_finished'; outcome = variant.status
         details = { strategy_id: variant.strategy_id, framing: variant.framing, error_code: job?.error_code, outro_applied: job?.result?.outro_applied, warning_count: job?.result?.warnings?.length }
       }
     } else if (w.kind === 'studio-export') {
       const job = snapshot.jobs?.find(j => j.job_id === w.id)
       if (job && ['completed', 'failed'].includes(job.status)) {
+        this.observeQa(w, job.qa, typeof w.properties?.strategy_id === 'string' ? w.properties.strategy_id : undefined)
         event = 'studio_export_finished'; outcome = job.status; details = { duration_ms: job.duration_ms, error_code: job.error_code, outro_applied: job.result?.outro_applied, warning_count: job.result?.warnings?.length }
       }
     } else if (w.kind === 'studio-screen') {
@@ -284,7 +304,10 @@ export class WorkflowTracker {
         outcome = ['ai', 'local'].includes(snapshot.plan.mode || '') ? 'recommended' : snapshot.plan.mode
         details = { ...details, recommendation_mode: snapshot.plan.mode, analysis_mode: snapshot.plan.recommended_analysis, subtitle_status: snapshot.plan.local_evidence?.subtitle_status }
       }
-    } else if (w.kind === 'studio-generation' && ['completed', 'partial', 'failed'].includes(snapshot.generation?.status || '')) {
+    } else if (w.kind === 'studio-generation') {
+      snapshot.output_variants?.forEach((variant, index) => this.observeQa(w, variant.qa, variant.strategy_id, variant.id || String(index)))
+      if (!['completed', 'partial', 'failed'].includes(snapshot.generation?.status || '')) return
+
       event = 'studio_generation_finished'; outcome = snapshot.generation!.status
       const unfinished = ['failed', 'partial'].includes(outcome || '')
       details = { ...generationSummary(snapshot), error_code: unfinished ? snapshot.generation?.error_code || snapshot.analysis?.error_code : undefined,
