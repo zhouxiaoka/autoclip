@@ -72,6 +72,13 @@ jobs:
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-window-render-regression
           SENTRY_DSN: ""
         run: python -m pytest backend/tests/test_packaging_render.py -k preserves_slide_edges -q
+      - name: Concat paths with spaces, CJK and apostrophes
+        env:
+          AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-concat-paths
+          AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-concat-paths
+          AUTOCLIP_VIDEO_ENCODER: libx264
+          SENTRY_DSN: ""
+        run: python -m pytest backend/tests/test_render_concat_paths.py -q
       - name: Packaged Python QA spawn and 60s portrait benchmark
         shell: pwsh
         env:

@@ -163,7 +163,7 @@
       "/tmp/autoclip-render-golden/project/output/studio/job.part.mp4"
     ]
   ],
-  "concat_script": "file '/tmp/autoclip-render-golden/studio/0.mkv'\nduration 1.000000000\nfile '/tmp/autoclip-render-golden/studio/1.mkv'\nduration 1.500000000\n",
+  "concat_script": "file /tmp/autoclip-render-golden/studio/0.mkv\nduration 1.000000000\nfile /tmp/autoclip-render-golden/studio/1.mkv\nduration 1.500000000\n",
   "encoder": "libx264",
   "outro": [],
   "outro_script": "",

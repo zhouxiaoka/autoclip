@@ -1,7 +1,8 @@
-"""pkg_templates_v1 off: Studio render ffmpeg commands match c5a72281 byte for byte.
+"""pkg_templates_v1 off: Studio render ffmpeg argv matches c5a72281 byte for byte.
 
-Fixtures were recorded from that commit (main after #314, before #315/#316/#317).
-Regenerate them only by running ``render_ffmpeg_golden.py`` against that tree.
+Shot, concat, audio and outro argument lists were recorded from that commit.
+``concat_script`` is the listing body, not the ffmpeg argv. It uses
+``concat_quote`` and therefore has no surrounding quotes on a plain path.
 """
 from pathlib import Path
 

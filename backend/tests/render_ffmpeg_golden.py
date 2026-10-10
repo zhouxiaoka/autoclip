@@ -1,8 +1,9 @@
 """Capture Studio render ffmpeg commands with pinned inputs.
 
-The golden files under ``fixtures/render_ffmpeg_c5a72281`` were produced by running
-this harness against commit c5a72281 (main after #314, before #315/#316/#317).
-Do not regenerate them from a later tree to silence a mismatch.
+The argv in ``fixtures/render_ffmpeg_c5a72281`` was recorded from c5a72281
+(main after #314, before #315/#316/#317). ``concat_script`` is the one field
+updated later: both render paths use ``concat_quote``, which does not wrap a
+plain path in single quotes. Do not regenerate the argv from a later tree.
 """
 from __future__ import annotations
 
