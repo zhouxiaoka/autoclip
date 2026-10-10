@@ -504,7 +504,7 @@ def auto_frame(project_id: str, body: Draft, db: Session = Depends(get_db)):
     from backend.services.studio import framing
     project_or_404(project_id, db)
     if not framing.is_installed():
-        raise HTTPException(409, '人物识别组件未安装')
+        raise HTTPException(409, framing.unavailable_reason())
     video = call(jobs.source, project_id)
     info = _probe(video)
     if not info.get('width') or not info.get('height'):
