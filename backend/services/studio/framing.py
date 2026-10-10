@@ -80,9 +80,14 @@ _cv2_error = ""
 _cv2_lock = threading.Lock()
 
 
-def _purge_modules() -> None:
-    """Drop half-imported cv2/numpy so a later attempt starts clean."""
-    for name in list(sys.modules):
+def _purge_modules(before: set[str]) -> None:
+    """Drop cv2/numpy modules that this failed attempt added, so a later attempt starts clean.
+
+    Modules that were already loaded stay: other components (faster-whisper, PyAV) hold
+    references to that numpy, and re-importing numpy in the same process corrupts it
+    (sentinel identity breaks; faster-whisper then dies with RecursionError).
+    """
+    for name in set(sys.modules) - before:
         if name.split(".", 1)[0] in ("cv2", "numpy"):
             sys.modules.pop(name, None)
 
@@ -101,6 +106,7 @@ def load_cv2() -> Any | None:
             return _cv2
         ensure_on_path()
         os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")  # the DNN backend prints a harmless warning per detector
+        before = set(sys.modules)
         try:
             if importlib.util.find_spec(IMPORT_NAME) is None:
                 return None  # not installed yet: do not cache, an install may follow
@@ -108,7 +114,7 @@ def load_cv2() -> Any | None:
             import numpy  # noqa: F401  # cv2 needs a working numpy; fail here, not mid-detection
             _cv2, _cv2_error = cv2, ""
         except Exception as error:  # noqa: BLE001 - ImportError, OSError from a broken wheel, ...
-            _purge_modules()
+            _purge_modules(before)
             _cv2, _cv2_error = None, f"{type(error).__name__}: {error}"[:300]
             logger.warning("人物识别组件无法加载: %s", _cv2_error)
         return _cv2
