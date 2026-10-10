@@ -91,9 +91,8 @@ def _face_and_sharpness(frame_jpeg: bytes) -> tuple[float | None, float, bool]:
     box, centre, found = None, None, False
     try:
         from backend.services.studio import framing
-        if framing.is_installed():
-            framing.ensure_on_path()
-            import cv2
+        cv2 = framing.load_cv2() if framing.MODEL.exists() else None
+        if cv2 is not None:
             import numpy as np
             pixels = cv2.imdecode(np.frombuffer(frame_jpeg, dtype=np.uint8), cv2.IMREAD_COLOR)
             height, width = pixels.shape[:2]

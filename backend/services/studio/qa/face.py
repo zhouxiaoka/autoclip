@@ -105,8 +105,9 @@ def detect_faces(path, at: float, out_w: int, out_h: int, timeout: float) -> lis
     ], timeout)
     if proc.returncode != 0 or not proc.stdout:
         raise ProbeError('unreadable')
-    framing.ensure_on_path()
-    import cv2
+    cv2 = framing.load_cv2()
+    if cv2 is None:
+        return None
     import numpy as np
     image = cv2.imdecode(np.frombuffer(proc.stdout, dtype=np.uint8), cv2.IMREAD_COLOR)
     if image is None:

@@ -17,6 +17,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import os
+import shutil
 import statistics
 import subprocess
 import sys
@@ -60,15 +61,70 @@ def get_install_dir() -> Path:
 
 
 def ensure_on_path() -> None:
+    """Put framing-runtime first on sys.path, ahead of whisper-runtime.
+
+    Both runtimes ship their own numpy (opencv and faster-whisper pull different versions).
+    If the whisper copy wins, cv2 loads a mixed numpy tree and fails with ImportError
+    (PYTHON-FASTAPI-40), so framing always moves itself to the front.
+    """
     install_dir = str(get_install_dir())
-    if install_dir not in sys.path:
+    if sys.path[:1] != [install_dir]:
+        while install_dir in sys.path:
+            sys.path.remove(install_dir)
         sys.path.insert(0, install_dir)
 
 
+_UNSET = object()
+_cv2: Any = _UNSET
+_cv2_error = ""
+_cv2_lock = threading.Lock()
+
+
+def _purge_modules() -> None:
+    """Drop half-imported cv2/numpy so a later attempt starts clean."""
+    for name in list(sys.modules):
+        if name.split(".", 1)[0] in ("cv2", "numpy"):
+            sys.modules.pop(name, None)
+
+
+def reset_cv2_cache() -> None:
+    global _cv2, _cv2_error
+    with _cv2_lock:
+        _cv2, _cv2_error = _UNSET, ""
+
+
+def load_cv2() -> Any | None:
+    """Import cv2 once; None when the on-demand component is missing or broken. Never raises."""
+    global _cv2, _cv2_error
+    with _cv2_lock:
+        if _cv2 is not _UNSET:
+            return _cv2
+        ensure_on_path()
+        os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")  # the DNN backend prints a harmless warning per detector
+        try:
+            if importlib.util.find_spec(IMPORT_NAME) is None:
+                return None  # not installed yet: do not cache, an install may follow
+            import cv2  # installed on demand
+            import numpy  # noqa: F401  # cv2 needs a working numpy; fail here, not mid-detection
+            _cv2, _cv2_error = cv2, ""
+        except Exception as error:  # noqa: BLE001 - ImportError, OSError from a broken wheel, ...
+            _purge_modules()
+            _cv2, _cv2_error = None, f"{type(error).__name__}: {error}"[:300]
+            logger.warning("人物识别组件无法加载: %s", _cv2_error)
+        return _cv2
+
+
+def unavailable_reason() -> str:
+    """User-facing reason for a 409: broken install gets a reinstall hint."""
+    if _cv2 is None and _cv2_error:
+        return "人物识别组件加载失败，请在设置中重新安装人物识别组件"
+    return "人物识别组件未安装"
+
+
 def is_installed() -> bool:
-    ensure_on_path()
+    """True only when cv2 actually imports (cached) and the YuNet model is present."""
     try:
-        return importlib.util.find_spec(IMPORT_NAME) is not None and MODEL.exists()
+        return MODEL.exists() and load_cv2() is not None
     except (ImportError, ValueError):
         return False
 
@@ -92,12 +148,21 @@ def get_status() -> dict[str, Any]:
 
 
 def _do_install(index_url: str | None) -> None:
-    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "--target", str(get_install_dir()), *PACKAGES]
+    # Fresh target dir instead of --upgrade: pip --target leaves stale numpy files behind
+    # and a mixed tree is exactly what broke cv2 in PYTHON-FASTAPI-40.
+    try:
+        shutil.rmtree(get_install_dir())
+    except OSError as error:
+        _set_state(status="error", message=f"无法清理旧的人物识别组件，请重启后重试: {error}")
+        return
+    reset_cv2_cache()
+    cmd = [sys.executable, "-m", "pip", "install", "--target", str(get_install_dir()), *PACKAGES]
     if index_url:
         cmd += ["--index-url", index_url]
     _set_state(status="installing", progress=5, message="正在下载人物识别组件…")
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900, check=False)
+        reset_cv2_cache()
         if proc.returncode == 0 and is_installed():
             _set_state(status="installed", progress=100, message="安装完成")
         else:
@@ -282,9 +347,9 @@ def _detector(cv2: Any, width: int, height: int) -> Any:
 
 def _speaker_center(pair: tuple[Path, Path]) -> float | None:
     """Normalised x-centre of the talking face; the largest face when nobody's mouth moves."""
-    ensure_on_path()
-    os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")  # the DNN backend prints a harmless warning per detector
-    import cv2  # installed on demand
+    cv2 = load_cv2()
+    if cv2 is None:
+        return None  # broken/missing component: keep the default framing, no Sentry noise
 
     first = cv2.imread(str(pair[0]))
     second = cv2.imread(str(pair[1]))
