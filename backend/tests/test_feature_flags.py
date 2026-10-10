@@ -20,6 +20,27 @@ def test_frontend_and_backend_defaults_match_and_are_off():
     assert flag_enabled(DEFAULTS, 'pkg_templates_v1') is False
 
 
+def test_qa_and_template_defaults_and_safe_mode():
+    """qa_gate_blocking stays shadow and is forced off; pkg_templates_v1 stays off unless the operator names it."""
+    assert DEFAULTS['qa_gate_blocking'] == 'shadow'
+    assert DEFAULTS['pkg_templates_v1'] is False
+    assert FRONTEND_DEFAULTS['qa_gate_blocking'] == 'shadow'
+    assert FRONTEND_DEFAULTS['pkg_templates_v1'] is False
+    killed = resolve_features({
+        'autoclip_safe_mode': True,
+        'qa_gate_blocking': 'block',
+        'pkg_templates_v1': True,
+    })
+    assert killed['qa_gate_blocking'] == 'off'
+    assert killed['pkg_templates_v1'] is False
+    operator = resolve_features(
+        {'autoclip_safe_mode': True, 'qa_gate_blocking': 'shadow', 'pkg_templates_v1': True},
+        env='qa_gate_blocking=block,pkg_templates_v1=on',
+    )
+    assert operator['qa_gate_blocking'] == 'off'
+    assert operator['pkg_templates_v1'] is True
+
+
 def test_unknown_values_are_dropped_and_safe_mode_forces_the_safe_off_value():
     resolved = resolve_features({
         'remember_platforms': True,

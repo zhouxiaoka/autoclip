@@ -18,6 +18,7 @@ const LABELS: Record<FlagName, string> = {
   hide_legacy_entrypoints: '隐藏旧的制作入口',
   import_drop_zone: '首页使用居中的拖放区',
   track_overrides: '记录对自动决定的修改',
+  qa_gate_blocking: '成片质检',
   pkg_templates_v1: 'HTML 包装模板',
 }
 
@@ -28,6 +29,9 @@ const VARIANT_LABELS: Record<string, string> = {
   combined: '合成一个动作',
   limit10: '自动渲染前 10 条',
   top3: '自动渲染前 3 条',
+  off: '关闭',
+  shadow: '只记录，不拦截',
+  block: '拦截（当前仍只记录）',
 }
 
 function choice(override: FlagValue | null): string {

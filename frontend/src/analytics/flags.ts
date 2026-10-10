@@ -22,6 +22,7 @@ export const FLAG_NAMES = [
   'hide_legacy_entrypoints',
   'import_drop_zone',
   'track_overrides',
+  'qa_gate_blocking',
   'pkg_templates_v1',
 ] as const
 
@@ -42,6 +43,7 @@ export const FLAG_SPEC: Record<FlagName, FlagSpec> = {
   hide_legacy_entrypoints: { kind: 'boolean' },
   import_drop_zone: { kind: 'boolean' },
   track_overrides: { kind: 'boolean' },
+  qa_gate_blocking: { kind: 'variant', variants: ['off', 'shadow', 'block'], treatment: 'block' },
   pkg_templates_v1: { kind: 'boolean' },
 }
 
@@ -94,7 +96,12 @@ export function isFlagName(value: string): value is FlagName {
   return (FLAG_NAMES as readonly string[]).includes(value)
 }
 
+function safeOff(name: FlagName): FlagValue {
+  return name === 'qa_gate_blocking' ? 'off' : FLAG_DEFAULTS[name]
+}
+
 export function normalizeFlag(name: FlagName, raw: unknown): FlagValue | undefined {
+  if (name === 'qa_gate_blocking' && raw === 'blocking') raw = 'block'
   const spec = FLAG_SPEC[name]
   if (spec.kind === 'boolean') {
     if (raw === true || raw === 'true' || raw === 'on' || raw === 1 || raw === '1') return true
@@ -168,6 +175,8 @@ export type FlagOrigin = 'local' | 'safe_mode' | 'remote' | 'vite' | 'cache' | '
 
 /** Where the current value came from. Later PRs emit experiment events only after a real assignment. */
 export function flagOrigin(name: FlagName): FlagOrigin {
+  // The quality gate's local override must not keep running during safe mode.
+  if (name === 'qa_gate_blocking' && flagValue('autoclip_safe_mode') === true) return 'safe_mode'
   if (readOverride(name) !== undefined) return 'local'
   if (name !== 'autoclip_safe_mode' && flagValue('autoclip_safe_mode') === true) return 'safe_mode'
   if (remoteValue(name) !== undefined) return 'remote'
@@ -182,9 +191,10 @@ export function flagAssigned(name: FlagName): boolean {
 }
 
 export function flagValue(name: FlagName): FlagValue {
+  if (name === 'qa_gate_blocking' && flagValue('autoclip_safe_mode') === true) return 'off'
   const local = readOverride(name)
   if (local !== undefined) return local
-  if (name !== 'autoclip_safe_mode' && flagValue('autoclip_safe_mode') === true) return FLAG_DEFAULTS[name]
+  if (name !== 'autoclip_safe_mode' && flagValue('autoclip_safe_mode') === true) return safeOff(name)
   const remote = remoteValue(name)
   if (remote !== undefined) return remote
   const vite = viteValue(name)

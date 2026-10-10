@@ -111,10 +111,30 @@ def _tracked(stage):
 def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None, html_fallback=None, safe_area='xiaohongshu', requested_template=None):
     started = monotonic()
     render_saved = False
+    result = None
+    qa_scheduled = False
+
     def update(**values):
         def mutate(data):
             next(j for j in data['jobs'] if j['job_id'] == job_id).update(values)
         store.change(project_id, mutate)
+
+    def _schedule_qa():
+        """Enqueue shadow checks only after the export is already completed."""
+        nonlocal qa_scheduled
+        if qa_scheduled or not render_saved:
+            return
+        qa_scheduled = True
+        try:
+            from backend.services.studio.qa.schedule import schedule_after_render
+        except Exception as error:
+            logger.warning('QA import failed: %s', type(error).__name__)
+            return
+        try:
+            schedule_after_render(project_id, draft, job_id, result)
+        except Exception as error:
+            logger.warning('QA schedule failed: %s', type(error).__name__)
+
     try:
         update(status='running', percent=5)
         features = None
@@ -146,6 +166,7 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
         finally:
             update(cover_pending=False)
         _sync_variant_status(project_id, job_id, 'completed')
+        _schedule_qa()
     except Exception as error:
         logger.warning('Studio render failed: %s', type(error).__name__)
         capture_studio_exception(error, 'render')
@@ -153,6 +174,7 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
         if render_saved:
             # Optional cover/index work cannot revoke an already committed video.
             _sync_variant_status(project_id, job_id, 'completed')
+            _schedule_qa()
             return
         try:
             message = str(error)[:700]

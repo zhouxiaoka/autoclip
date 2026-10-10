@@ -4,6 +4,7 @@ The desktop client sends the resolved snapshot with an import. CLI, MCP and
 Docker have no PostHog SDK: they read AUTOCLIP_FLAGS, then these defaults.
 Unknown keys and values are dropped. autoclip_safe_mode forces every other
 flag back to its safe off value unless AUTOCLIP_FLAGS sets that flag explicitly.
+qa_gate_blocking is the exception: safe mode always forces it to off.
 """
 from __future__ import annotations
 
@@ -22,6 +23,8 @@ DEFAULTS: dict[str, bool | str] = {
     'hide_legacy_entrypoints': False,
     'import_drop_zone': False,
     'track_overrides': False,
+    # Plan §10.2 starts this gate at full shadow. block is accepted and not enforced.
+    'qa_gate_blocking': 'shadow',
     'pkg_templates_v1': False,
 }
 
@@ -29,12 +32,15 @@ VARIANTS = {
     'one_click_paste_start': ('button', 'autostart'),
     'publish_pack_v2': ('separate', 'combined'),
     'render_top_first': ('limit10', 'top3'),
+    'qa_gate_blocking': ('off', 'shadow', 'block'),
 }
 
 
 def normalize_flag(name: str, raw: object) -> bool | str | None:
     if name not in DEFAULTS:
         return None
+    if name == 'qa_gate_blocking' and raw == 'blocking':
+        raw = 'block'
     if name in VARIANTS:
         return raw if isinstance(raw, str) and raw in VARIANTS[name] else None
     if raw is True or raw in ('true', 'on', '1', 1):
@@ -70,12 +76,14 @@ def resolve_features(snapshot: dict | None = None, env: str | None = None) -> di
     if resolved.get('autoclip_safe_mode') is True:
         for key, default in DEFAULTS.items():
             if key != 'autoclip_safe_mode':
-                resolved[key] = default
+                resolved[key] = 'off' if key == 'qa_gate_blocking' else default
     resolved.update(operator)
     if resolved.get('autoclip_safe_mode') is True:
         for key, default in DEFAULTS.items():
             if key != 'autoclip_safe_mode' and key not in operator:
-                resolved[key] = default
+                resolved[key] = 'off' if key == 'qa_gate_blocking' else default
+        # The kill switch wins even when AUTOCLIP_FLAGS names this gate.
+        resolved['qa_gate_blocking'] = 'off'
     return resolved
 
 
@@ -83,6 +91,6 @@ def flag_enabled(features: dict | None, name: str) -> bool:
     """True only for the treatment. Missing flags stay off."""
     value = (features or {}).get(name, DEFAULTS.get(name))
     if name in VARIANTS:
-        treatments = {'one_click_paste_start': 'autostart', 'publish_pack_v2': 'combined', 'render_top_first': 'top3'}
+        treatments = {'one_click_paste_start': 'autostart', 'publish_pack_v2': 'combined', 'render_top_first': 'top3', 'qa_gate_blocking': 'block'}
         return value == treatments[name]
     return value is True
