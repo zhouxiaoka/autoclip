@@ -407,17 +407,17 @@ def _host_info() -> dict:
 
 
 async def _launch(playwright, options: dict) -> tuple[object, dict]:
-    note = {"sandbox": "--no-sandbox" in options.get("args", []), "retried_without_sandbox": False}
+    note = {"no_sandbox": "--no-sandbox" in options.get("args", []), "retried_without_sandbox": False}
     try:
         browser = await playwright.chromium.launch(**options)
         return browser, note
     except Exception:
-        if note["sandbox"]:
+        if note["no_sandbox"]:
             raise
         retried = {**options, "args": [*options.get("args", []), "--no-sandbox", "--disable-gpu"]}
         browser = await playwright.chromium.launch(**retried)
         note["retried_without_sandbox"] = True
-        note["sandbox"] = False
+        note["no_sandbox"] = True
         return browser, note
 
 
