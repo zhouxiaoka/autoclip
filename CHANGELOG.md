@@ -9,6 +9,26 @@
 
 _（本周尚无改动）_
 
+## [1.5.7] - 2026-10-10
+
+- 新增杂志风和街头快剪两种 HTML 剪辑风格。得分靠前的竖版成片可以用所选风格，其余仍走经典包装；风格组件没装好或叠加失败时回到经典，不挡住出片。硬件编码不可用时改用原来的软件编码。开关 `pkg_templates_v1` 默认关闭，关闭时出片方式与上一版相同。（#314 #315 #316 #317）
+
+- 导入页可以改用剪辑风格卡片选择杂志风、街头快剪或经典，悬停时播放一段无声预览。开关 `pkg_template_picker_visual` 默认关闭，关闭时仍是原来的文字选项。（#319）
+
+- 成片质检默认只记录、不拦截。开关 `qa_gate_blocking` 默认 shadow。（#318）
+
+- 拼接成片时转义路径里的空格和特殊字符，避免拼错片段。`pkg_templates_v1` 关闭时，经典渲染的 ffmpeg 命令与上一版保持一致。（#320）
+
+- MCP 把任务状态写到数据目录。没有记录时状态是 unknown，工作进程已经不在时是 interrupted，不再把还在的项目目录当成已完成。可以取消正在进行的任务：停掉这条渲染，清掉临时文件，已完成的成片保留。可以列出剪辑风格。CLI 的 `--template` 和 MCP 的 `template` 接受杂志风、街头快剪或经典。取消、风格列表和 `--template` 默认关在 `mcp_v2_tools` 后面，该开关默认关闭。（#323）
+
+- 打开匿名使用统计后，CLI 和 MCP 会记录调用了哪个工具、是否成功和耗时，不包含路径、文件名或密钥。统计关闭时不发送。（#325）
+
+- 给助手用的说明改为按成片、封面、文案和发布包来使用；只要旧切片时改读参考说明。文档里的版本号改为读取已安装的包，不再写死。（#321 #322）
+
+- autoclip-mcp 随 1.5.7 发布到 PyPI，发布后可用 uvx。（#324）
+
+- 本版四个开关的默认值没有打开：`pkg_templates_v1`、`pkg_template_picker_visual`、`mcp_v2_tools` 默认关闭；`qa_gate_blocking` 默认 shadow，只记录、不拦截。
+
 ## [1.5.6] - 2026-10-09
 
 - 默认自动预检失败时改走字幕路线继续出片，不再整单失败；只有明确要求视觉分析时才停住。
@@ -446,7 +466,8 @@ _（本周尚无改动）_
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.6...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.7...HEAD
+- [1.5.7]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.6...v1.5.7
 - [1.5.6]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.3...v1.5.6
 - [1.5.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.2...v1.5.3
 - [1.5.2]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.1...v1.5.2
