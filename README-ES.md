@@ -25,7 +25,7 @@ La app es gratis; los modelos cloud cobran por uso. Puedes ajustar el resultado 
 
 </div>
 
-**[1.5.0 ya está publicado](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)**, con escritorio, CLI y MCP actualizados. El [registro de cambios](CHANGELOG.md) detalla la producción automática, paginación de subtítulos, encuadre y cola de vídeos largos. Actualiza versiones anteriores.
+**[La última versión](https://github.com/zhouxiaoka/autoclip/releases/latest)** es la que muestra `autoclip --version`, con escritorio, CLI y MCP actualizados. El [registro de cambios](CHANGELOG.md) detalla la producción automática, paginación de subtítulos, encuadre y cola de vídeos largos. Actualiza versiones anteriores.
 
 ## Clips reales
 
@@ -211,7 +211,7 @@ Corte y render se realizan en tu ordenador. El análisis cloud envía subtítulo
 3. **Enlace y plataforma.** Empieza con una entrevista o pódcast con subtítulos y elige diseño vertical. Sin subtítulos, prepara Whisper / SenseVoice o configura transcripción cloud en Ajustes.
 4. **Revisa y descarga.** Comprueba subtítulos, encuadre y contenido, y guarda el paquete o conecta una cuenta para publicar. Genera alternativas si necesitas más clips.
 
-Intel Mac / Linux pueden usar Docker o CLI. Consulta [instalación](docs/USER_INSTALLATION_GUIDE.en.md) y [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0) para requisitos, primer inicio y alcance de validación.
+Intel Mac / Linux pueden usar Docker o CLI. Consulta [instalación](docs/USER_INSTALLATION_GUIDE.en.md) y [última Release](https://github.com/zhouxiaoka/autoclip/releases/latest) para requisitos, primer inicio y alcance de validación.
 
 [Guía de instalación](docs/USER_INSTALLATION_GUIDE.en.md) · [Problemas](docs/FAQ.en.md)
 
@@ -238,13 +238,13 @@ Para IP LAN o dominio propio, añade la dirección del frontend a `AUTOCLIP_ALLO
 
 **CLI / MCP**
 
-Python 3.10+ (3.11 recomendado), FFmpeg y FFprobe en PATH; no hace falta Redis. Descarga el [ZIP oficial CLI / MCP](https://github.com/zhouxiaoka/autoclip/releases/download/v1.5.0/autoclip-1.5.0-cli-mcp.zip), descomprímelo y ejecuta desde ese directorio:
+Python 3.10+ (3.11 recomendado), FFmpeg y FFprobe en PATH; no hace falta Redis. Descarga el [ZIP oficial CLI / MCP](https://github.com/zhouxiaoka/autoclip/releases/latest), descomprímelo y ejecuta desde ese directorio:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
+python -m pip install --force-reinstall --no-deps autoclip-*-py3-none-any.whl
 ```
 
 Los comandos anteriores son para macOS / Linux. En Windows, crea con `py -m venv venv` y activa con `.\venv\Scripts\Activate.ps1`; después usa los mismos comandos `python -m pip`.
@@ -329,7 +329,7 @@ Entrevistas, pódcast, cursos y vídeos hablados son los casos más validados. L
 <details>
 <summary>¿Por qué no se generaron clips?</summary>
 
-Revisa transcripción, conexión del modelo, FFmpeg, disco y reglas de plataforma. YouTube largo exige fragmentos completos de al menos 180 segundos; usa Shorts/Bilibili para fuentes cortas. Si falla, adjunta versión 1.5.0, OS, duración, modelo y logs sin secretos en [problemas conocidos](https://github.com/zhouxiaoka/autoclip/issues/96).
+Revisa transcripción, conexión del modelo, FFmpeg, disco y reglas de plataforma. YouTube largo exige fragmentos completos de al menos 180 segundos; usa Shorts/Bilibili para fuentes cortas. Si falla, adjunta la versión de `autoclip --version`, OS, duración, modelo y logs sin secretos en [problemas conocidos](https://github.com/zhouxiaoka/autoclip/issues/96).
 
 </details>
 

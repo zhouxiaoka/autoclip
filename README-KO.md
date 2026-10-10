@@ -25,7 +25,7 @@
 
 </div>
 
-**[1.5.0 정식 출시](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)**. 데스크톱·CLI·MCP를 함께 업데이트했습니다. 자동 제작, 자막 페이지 분할, 인물 구도, 긴 영상 대기열 수정은 [변경 기록](CHANGELOG.md)을 확인하고 이전 버전에서 업그레이드하세요.
+**[최신 정식 릴리스](https://github.com/zhouxiaoka/autoclip/releases/latest)**. 버전은 `autoclip --version`이 보여 주는 값입니다. 데스크톱·CLI·MCP를 함께 업데이트했습니다. 자동 제작, 자막 페이지 분할, 인물 구도, 긴 영상 대기열 수정은 [변경 기록](CHANGELOG.md)을 확인하고 이전 버전에서 업그레이드하세요.
 
 ## 실제 완성 클립
 
@@ -211,7 +211,7 @@
 3. **링크와 플랫폼 선택.** 자막이 있는 인터뷰나 팟캐스트로 시작하고 세로 레이아웃을 고르세요. 자막이 없으면 설정에서 Whisper / SenseVoice를 준비하거나 클라우드 전사를 설정하세요.
 4. **확인 후 저장.** 자막·구도·내용의 완결성을 확인하고 게시 패키지를 저장하거나 계정을 연결해 게시하세요. 더 필요하면 대체 후보를 제작하세요.
 
-Intel Mac / Linux는 Docker 또는 CLI를 이용할 수 있습니다. 요구 사항, 첫 실행 안내, 검증 범위는 [설치 가이드](docs/USER_INSTALLATION_GUIDE.en.md)와 [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)를 참고하세요.
+Intel Mac / Linux는 Docker 또는 CLI를 이용할 수 있습니다. 요구 사항, 첫 실행 안내, 검증 범위는 [설치 가이드](docs/USER_INSTALLATION_GUIDE.en.md)와 [최신 Release](https://github.com/zhouxiaoka/autoclip/releases/latest)를 참고하세요.
 
 [설치 가이드](docs/USER_INSTALLATION_GUIDE.en.md) · [문제 해결](docs/FAQ.en.md)
 
@@ -238,13 +238,13 @@ LAN IP나 자체 도메인으로 접속하면 `.env`의 `AUTOCLIP_ALLOWED_ORIGIN
 
 **CLI / MCP**
 
-Python 3.10+(3.11 권장), PATH의 FFmpeg와 FFprobe가 필요합니다. Redis는 필요 없습니다. [정식 CLI / MCP ZIP](https://github.com/zhouxiaoka/autoclip/releases/download/v1.5.0/autoclip-1.5.0-cli-mcp.zip)을 풀고 해당 디렉터리에서 실행하세요:
+Python 3.10+(3.11 권장), PATH의 FFmpeg와 FFprobe가 필요합니다. Redis는 필요 없습니다. [정식 CLI / MCP ZIP](https://github.com/zhouxiaoka/autoclip/releases/latest)을 풀고 해당 디렉터리에서 실행하세요:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
+python -m pip install --force-reinstall --no-deps autoclip-*-py3-none-any.whl
 ```
 
 위 명령은 macOS / Linux용입니다. Windows는 `py -m venv venv`로 만들고 `.\venv\Scripts\Activate.ps1`로 활성화한 뒤 같은 `python -m pip` 설치 명령을 실행하세요.

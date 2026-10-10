@@ -15,7 +15,7 @@
 
 ## 1.5 一键出片（推荐）
 
-CLI / MCP 与桌面统一为 1.5.0。先核对 `autoclip --version`；MCP 可调用 `get_version`。
+CLI / MCP 与桌面使用同一安装包里的版本。先核对 `autoclip --version`；MCP 可调用 `get_version`。两边都读已安装的包，文档不写死版本号。
 本轮验收及同事测试步骤见 [1.5 验收与测试包](RELEASE_1_5.md)。
 
 ```bash
@@ -37,7 +37,7 @@ MCP 使用 `start_quick_output`（立即返回 ID）和 `get_quick_output_status
 ```
 
 然后调用 `get_quick_output_status`，参数为 `{"project_id":"返回的ID","export_kits":true}`。
-终态为 `completed` / `partial` / `failed`。MCP 握手版本和 `get_version` 都为 1.5.0。
+终态为 `completed` / `partial` / `failed`。MCP 握手版本和 `get_version` 都等于当前安装的包版本。
 保持 MCP 服务运行至制作完成；制作进程提前退出时查询会显示 `interrupted`，已完成的视频仍可取回。
 
 竖版版式参数为 `auto` / `interview` / `podcast`。默认抖音、小红书用访谈式，TikTok、Reels、Shorts 用播客式；

@@ -25,7 +25,7 @@
 
 </div>
 
-**[1.5.0 официально выпущен](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0)**, вместе с desktop, CLI и MCP. Автовыпуск, разбивка субтитров, кадрирование и очередь длинных видео описаны в [истории изменений](CHANGELOG.md). Обновите старые версии.
+**[Актуальный релиз](https://github.com/zhouxiaoka/autoclip/releases/latest)** — это то, что показывает `autoclip --version`, вместе с desktop, CLI и MCP. Автовыпуск, разбивка субтитров, кадрирование и очередь длинных видео описаны в [истории изменений](CHANGELOG.md). Обновите старые версии.
 
 ## Настоящие клипы
 
@@ -211,7 +211,7 @@ Douyin / Xiaohongshu — интервью по умолчанию; TikTok / Reel
 3. **Ссылка и площадка.** Начните с интервью/подкаста с субтитрами и выберите вертикальный макет. Без субтитров подготовьте Whisper / SenseVoice или облачную транскрипцию в настройках.
 4. **Проверьте и сохраните.** Проверьте субтитры, кадр и полноту содержания, затем скачайте комплект или подключите аккаунт для публикации. При необходимости создавайте резервные клипы.
 
-Intel Mac / Linux могут использовать Docker или CLI. Требования, первый запуск и объём проверки — в [руководстве](docs/USER_INSTALLATION_GUIDE.en.md) и [1.5.0 Release](https://github.com/zhouxiaoka/autoclip/releases/tag/v1.5.0).
+Intel Mac / Linux могут использовать Docker или CLI. Требования, первый запуск и объём проверки — в [руководстве](docs/USER_INSTALLATION_GUIDE.en.md) и [актуальный Release](https://github.com/zhouxiaoka/autoclip/releases/latest).
 
 [Установка](docs/USER_INSTALLATION_GUIDE.en.md) · [Неполадки](docs/FAQ.en.md)
 
@@ -238,13 +238,13 @@ docker compose up -d
 
 **CLI / MCP**
 
-Python 3.10+ (лучше 3.11), FFmpeg и FFprobe в PATH; Redis не нужен. Скачайте [официальный ZIP CLI / MCP](https://github.com/zhouxiaoka/autoclip/releases/download/v1.5.0/autoclip-1.5.0-cli-mcp.zip), распакуйте и выполните в этом каталоге:
+Python 3.10+ (лучше 3.11), FFmpeg и FFprobe в PATH; Redis не нужен. Скачайте [официальный ZIP CLI / MCP](https://github.com/zhouxiaoka/autoclip/releases/latest), распакуйте и выполните в этом каталоге:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip-1.5.0-py3-none-any.whl
+python -m pip install --force-reinstall --no-deps autoclip-*-py3-none-any.whl
 ```
 
 Команды выше для macOS / Linux. В Windows создайте среду через `py -m venv venv`, активируйте `.\venv\Scripts\Activate.ps1`, затем выполните те же команды `python -m pip`.
@@ -329,7 +329,7 @@ autoclip outputs PROJECT_ID --export-kits
 <details>
 <summary>Почему нет клипов?</summary>
 
-Проверьте транскрипцию, соединение с моделью, FFmpeg, диск и условия площадки. Длинный YouTube требует цельных клипов от 180 секунд; для короткого источника выберите Shorts/Bilibili. Если ошибка остаётся, приложите версию 1.5.0, OS, длительность, модель и очищенные логи в [известные проблемы](https://github.com/zhouxiaoka/autoclip/issues/96).
+Проверьте транскрипцию, соединение с моделью, FFmpeg, диск и условия площадки. Длинный YouTube требует цельных клипов от 180 секунд; для короткого источника выберите Shorts/Bilibili. Если ошибка остаётся, приложите версию из `autoclip --version`, OS, длительность, модель и очищенные логи в [известные проблемы](https://github.com/zhouxiaoka/autoclip/issues/96).
 
 </details>
 
