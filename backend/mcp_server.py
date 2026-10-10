@@ -413,7 +413,7 @@ def _disabled(project_id: str = '') -> Dict[str, Any]:
 
 
 def cancel_job(project_id: str) -> Dict[str, Any]:
-    """Stop reporting a job as running. Does not delete project files."""
+    """Stop a running render. Finished videos stay; the job is marked cancelled."""
     if not _v2_enabled():
         return _disabled(project_id)
     from backend.services import mcp_jobs
@@ -468,7 +468,7 @@ async def _list_tools():
 
 server.list_tools = _list_tools  # type: ignore[method-assign]
 _V2_SPECS = (
-    (cancel_job, 'cancel_job', '取消一条仍在进行的出片或切片任务。不删除已写出的成片。查不到返回 unknown。'),
+    (cancel_job, 'cancel_job', '取消一条仍在进行的出片或切片任务，停掉它的 ffmpeg。不删除已写出的成片。查不到返回 unknown。'),
     (list_styles, 'list_styles', '列出剪辑风格 id：editorial（杂志风）、street（街头快剪）、classic（经典）。传给 start_quick_output 的 template 或 CLI 的 --template。'),
 )
 
