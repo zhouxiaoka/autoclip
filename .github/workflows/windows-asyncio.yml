@@ -17,7 +17,7 @@ on:
       - 'backend/services/render_limits.py'
       - 'backend/services/studio/qa/**'
       - 'backend/tests/test_studio_qa.py'
-      - 'backend/tests/test_studio_qa_windows.py'
+      - 'scripts/windows_tests/test_studio_qa_windows.py'
   pull_request:
     paths:
       - 'backend/core/windows_asyncio.py'
@@ -33,7 +33,7 @@ on:
       - 'backend/services/render_limits.py'
       - 'backend/services/studio/qa/**'
       - 'backend/tests/test_studio_qa.py'
-      - 'backend/tests/test_studio_qa_windows.py'
+      - 'scripts/windows_tests/test_studio_qa_windows.py'
   workflow_dispatch:
 
 permissions:
@@ -77,7 +77,7 @@ jobs:
           AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-qa-spawn
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-qa-spawn
           SENTRY_DSN: ""
-        run: python -m pytest backend/tests/test_studio_qa_windows.py -q
+        run: python -m pytest scripts/windows_tests/test_studio_qa_windows.py -q
 
   windows-asyncio:
     name: Windows Proactor cleanup
