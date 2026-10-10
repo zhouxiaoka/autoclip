@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from backend.core import llm_usage
 from backend.services.studio import audio, intelligence, store
-from backend.services.studio.features import resolve_features
+from backend.services.studio.features import flag_enabled, resolve_features
 from backend.services.studio.models import Draft, Preferences, Scene
 from backend.services.studio.project_completion import sync_project_completion
 from backend.services.studio.intelligence import analyze, make_drafts, VisionRequestError
@@ -582,6 +582,7 @@ def _content_drafts(project_id, plan, video):
                     label=str(clip.get('generated_title') or clip.get('outline') or '内容片段')[:120],
                     start=start,
                     end=end,
+                    evidence=str(clip.get('recommend_reason') or clip.get('recommendation_reason') or '')[:1000],
                 )
                 intelligence.validate_scenes([scene], source_duration)
             except (KeyError, TypeError, ValueError):
@@ -1054,9 +1055,11 @@ def _auto_generate(project_id, plan):
         packaging_cache = {}
         # Platform eligibility must precede the score limit: otherwise ten short clips
         # can exclude the only valid YouTube long clip and leave nothing to render.
+        limit = _render_limit(generation.get('features'))
+        scores = {draft['id']: draft[SCORE_KEY] for draft in base_drafts if SCORE_KEY in draft}
         automatic = {
             strategy_id: _automatic_drafts([base for base in base_drafts
-                if _eligible_for_platform(base, platform_strategy(strategy_id))])
+                if _eligible_for_platform(base, platform_strategy(strategy_id))], limit)
             for strategy_id in platforms
         }
         from backend.services.studio.template_choice import html_candidate_ids, selected_template
@@ -1079,12 +1082,12 @@ def _auto_generate(project_id, plan):
                 if now:
                     with llm_usage.timed('framing'):
                         value, framed = _apply_framing(project_id, value, strategy_id, video, burned, framing_cache)
-                planned.append((strategy_id, value, trimmed, framed, now, use_html, rank_fallback))
+                planned.append((strategy_id, value, trimmed, framed, now, source_id, use_html, rank_fallback))
         with llm_usage.timed('packaging'):
-            _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _ in planned if now], burned, packaging_cache)
+            _prefetch_packaging(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _source, _, _ in planned if now], burned, packaging_cache)
         with llm_usage.timed('post_copy'):
-            posts = _posts_for(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _, _ in planned if now], packaging_cache)
-        for strategy_id, value, trimmed, framed, now, use_html, rank_fallback in planned:
+            posts = _posts_for(project_id, [(strategy_id, value) for strategy_id, value, _, _, now, _source, _, _ in planned if now], packaging_cache)
+        for strategy_id, value, trimmed, framed, now, source_id, use_html, rank_fallback in planned:
             if now:
                 value = _apply_packaging(project_id, value, strategy_id, burned, packaging_cache)
                 value = _audience_title(value, strategy_id, posts.get((_content_key(value), strategy_id)))
@@ -1095,12 +1098,14 @@ def _auto_generate(project_id, plan):
                 'id': uuid.uuid4().hex, 'draft_id': draft.id, 'draft_revision': draft.revision,
                 'strategy_id': strategy_id, 'strategy_version': 1, 'branding': branding,
                 'status': 'queued' if now else 'on_demand', 'created_at': store.now(),
+                **({SCORE_KEY: scores[source_id]} if source_id in scores else {}),
                 **({'trimmed_to_sec': trimmed} if trimmed else {}),
                 **({'framing': framed} if framed else {}),
                 **({'post': posts[_content_key(value), strategy_id]} if (_content_key(value), strategy_id) in posts else {}),
                 **({'html_template': chosen} if use_html else {}),
                 **({'html_fallback': 'rank', 'requested_template': chosen} if rank_fallback else {}),
             })
+        _queue_best_first(variants)
         if not variants:
             raise ValueError('所选平台没有可生成的完整内容版本')
         def persist(data):
@@ -1282,16 +1287,37 @@ def _score(clip):
         return 0.0
 
 
-def _automatic_drafts(base_drafts):
-    """Ids of the drafts rendered without asking: the highest-scored AUTO_RENDER_LIMIT.
+def _render_limit(features):
+    """Automatic cap for one import. The default stays at AUTO_RENDER_LIMIT."""
+    return 3 if flag_enabled(features, 'render_top_first') else AUTO_RENDER_LIMIT
+
+
+def _queue_best_first(variants):
+    """Render the highest score first. The score is not stored on the variant."""
+    def key(item):
+        try:
+            score = float(item[SCORE_KEY]) if SCORE_KEY in item else None
+        except (TypeError, ValueError):
+            score = None
+        return (item.get('status') == 'on_demand', score is None, -(score or 0))
+    variants.sort(key=key)
+    for item in variants:
+        item.pop(SCORE_KEY, None)
+    return variants
+
+
+def _automatic_drafts(base_drafts, limit=None):
+    """Ids of the drafts rendered without asking: the highest-scored `limit`.
 
     A two-hour talk yields 30+ clips; rendering all of them up front cost most of the run, while
     people publish a handful. Drafts without a score (visual highlights, at most a few) all render.
+    The default cap stays AUTO_RENDER_LIMIT so older callers keep the top ten.
     """
+    cap = AUTO_RENDER_LIMIT if limit is None else limit
     scored = [draft for draft in base_drafts if SCORE_KEY in draft]
-    if len(scored) <= AUTO_RENDER_LIMIT:
+    if len(scored) <= cap:
         return {draft['id'] for draft in base_drafts}
-    top = sorted(scored, key=lambda draft: draft[SCORE_KEY], reverse=True)[:AUTO_RENDER_LIMIT]
+    top = sorted(scored, key=lambda draft: draft[SCORE_KEY], reverse=True)[:cap]
     return {draft['id'] for draft in top} | {draft['id'] for draft in base_drafts if SCORE_KEY not in draft}
 
 
@@ -1425,6 +1451,10 @@ def retry_variant(project_id, variant_id):
 def _sync_variant_status(project_id, job_id, status, error=None):
     def update(data):
         changed = False
+        if status in ('completed', 'failed'):
+            for job in data.get('jobs', []):
+                if job.get('job_id') == job_id and not job.get('finished_at'):
+                    job['finished_at'] = store.now()
         for variant in data.get('output_variants', []):
             if variant.get('render_job_id') == job_id:
                 variant.update(status=status)

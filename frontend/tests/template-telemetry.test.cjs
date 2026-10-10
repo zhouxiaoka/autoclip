@@ -61,6 +61,7 @@ test('override event helper keeps enums and drops free text', () => {
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, {
     exports, console,
     require: (id) => {
+      if (id === './flags') return { flagAssigned: () => false }
       if (id === './posthog') return { captureBusinessEvent: (name, props) => { events.push({ name, props }); return false } }
       if (id === './observer') return { workflow: { context: () => ({ flow_id: 't-abc123def456' }), active: () => false } }
       if (id === './workflow') return workflow

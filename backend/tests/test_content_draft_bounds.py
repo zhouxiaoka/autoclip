@@ -15,6 +15,17 @@ def test_clamp_the_tail_and_skip_invalid_ranges_without_losing_other_clips(monke
     assert [draft['scenes'][0]['end'] for draft in result] == [70, 100]
 
 
+def test_content_drafts_keep_the_existing_reason_on_the_scene(monkeypatch):
+    monkeypatch.setattr(jobs, 'run_content', lambda *_: [
+        {'generated_title': 'kept', 'start_time_seconds': 1, 'end_time_seconds': 20, 'recommend_reason': '完整讲完一个例子' + '。' * 2000},
+    ])
+    monkeypatch.setattr(jobs, '_complete_thought_bounds', lambda _, bounds: bounds)
+    monkeypatch.setattr(jobs.intelligence, '_probe', lambda _: {'duration': 100})
+    result = jobs._content_drafts('p', {'preferences': {'goal': 'content'}}, 'video.mp4')
+    assert result[0]['scenes'][0]['evidence'].startswith('完整讲完一个例子')
+    assert len(result[0]['scenes'][0]['evidence']) == 1000
+
+
 def _content(monkeypatch, clips, bounds):
     monkeypatch.setattr(jobs, 'run_content', lambda *_: clips)
     monkeypatch.setattr(jobs, '_complete_thought_bounds', lambda _, picked: bounds)
