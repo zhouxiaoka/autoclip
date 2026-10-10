@@ -54,9 +54,12 @@ def parse_summary(text: str) -> tuple[float, float]:
 
 
 def measure(path, timeout: float) -> tuple[float, float]:
+    """Audio only. Video, subtitles and data streams are not decoded."""
+    from backend.services.render_limits import input_args
     from backend.utils.ffmpeg_utils import get_ffmpeg_path
     proc = run([
-        get_ffmpeg_path(), '-hide_banner', '-i', str(path), '-af', 'ebur128=peak=true', '-f', 'null', '-',
+        get_ffmpeg_path(), '-hide_banner', *input_args(), '-i', str(path),
+        '-map', '0:a:0', '-vn', '-sn', '-dn', '-af', 'ebur128=peak=true', '-f', 'null', '-',
     ], timeout, text=True)
     text = f'{proc.stderr or ""}\n{proc.stdout or ""}'
     if proc.returncode != 0 and 'LUFS' not in text:
@@ -69,10 +72,12 @@ def check(ctx, timeout: float) -> tuple[str, str]:
         return 'skip', 'unreadable'
     try:
         from backend.services.studio.qa.media import probe_json
-        streams = probe_json(ctx.output, min(0.3, timeout)).get('streams') or []
+        # A 0.3 s probe expired on ordinary files and skipped the measurement.
+        probe_s = min(1.5, max(0.4, timeout * 0.3))
+        streams = probe_json(ctx.output, probe_s).get('streams') or []
         if not any(isinstance(row, dict) and row.get('codec_type') == 'audio' for row in streams):
             return 'skip', 'no_audio'
-        lufs, peak = measure(ctx.output, timeout)
+        lufs, peak = measure(ctx.output, max(0.5, timeout - probe_s))
     except ProbeError as error:
         return 'skip', error.reason
     return judge_levels(lufs, peak, ctx.strategy_id)

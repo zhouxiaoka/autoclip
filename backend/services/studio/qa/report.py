@@ -9,14 +9,16 @@ from backend.core.sentry_setup import capture_studio_exception
 
 logger = logging.getLogger(__name__)
 
-# A render may wait this long in total. One slow checker is skipped, not fatal.
+# Loudness reads the whole soundtrack and gets its own 3–5 s. The other checkers stay short.
+# The parent process kills the worker at HARD_CAP_S, so this total must finish before that.
 PER_CHECKER_S = 1.0
-TOTAL_BUDGET_S = 3.0
+TOTAL_BUDGET_S = 11.5
+HARD_CAP_S = 12.0
 
 CHECKERS = ('avsync', 'face', 'loudness', 'jitter', 'ending')
 
 BUCKETS = frozenset({
-    'lt40', '40_80', '80_200', 'gt200',
+    'lt40', '40_80', '80_200', 'gt200', 'start_only',
     'none', 'lt10', '10_40', 'gt40',
     'in_target', 'quiet_1_3', 'quiet_gt3', 'loud_1_3', 'loud_gt3', 'peak', 'peak_and_level',
     'calm', 'flash', 'rms', 'flash_and_rms',
@@ -70,8 +72,30 @@ def _item(checker: str, outcome: str, bucket: str, duration_ms: int) -> dict:
     }
 
 
+def checker_limits(duration_s: float) -> dict[str, float]:
+    """Per-checker seconds. Loudness scales with the cut, and never leaves the 3–5 s band."""
+    span = duration_s if duration_s > 0 else 1.0
+    loud = min(5.0, max(3.0, span * 0.08))
+    return {'avsync': 2.5, 'face': 2.0, 'loudness': loud, 'jitter': 2.0, 'ending': 0.4}
+
+
+def total_budget(limits: dict[str, float]) -> float:
+    return min(TOTAL_BUDGET_S, sum(limits.values()) + 0.3)
+
+
+def skipped_report(bucket: str, duration_ms: int) -> dict:
+    """Every checker skipped. Used when the worker is killed or never starts."""
+    item_ms = 0 if bucket != 'timeout' else max(0, min(60_000, int(duration_ms)))
+    return {
+        'schema_version': 1,
+        'mode': 'shadow',
+        'duration_ms': max(0, min(60_000, int(duration_ms))),
+        'checks': [_item(name, 'skip', bucket if bucket in BUCKETS else 'error', item_ms) for name in CHECKERS],
+    }
+
+
 def run_checks(ctx: Context, runners, *, total_s: float = TOTAL_BUDGET_S, per_s: float = PER_CHECKER_S,
-               clock=monotonic) -> dict:
+               limits: dict | None = None, clock=monotonic) -> dict:
     """Run each checker until the budget is gone. A late checker is recorded as skipped."""
     started = clock()
     deadline = started + total_s
@@ -81,7 +105,8 @@ def run_checks(ctx: Context, runners, *, total_s: float = TOTAL_BUDGET_S, per_s:
         if deadline - now <= 0.02:
             checks.append(_item(name, 'skip', 'budget', 0))
             continue
-        limit = min(per_s, max(0.05, deadline - now))
+        allowance = float((limits or {}).get(name, per_s))
+        limit = min(allowance, max(0.05, deadline - now))
         t0 = clock()
         try:
             outcome, bucket = fn(ctx, limit)

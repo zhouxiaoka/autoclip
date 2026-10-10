@@ -44,7 +44,7 @@ def test_avsync_media_fixtures(tmp_path):
             '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=1', '-shortest')
     _encode(late, '-f', 'lavfi', '-i', 'color=c=black:s=64x64:r=25:d=1',
             '-itsoffset', '0.12', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=1', '-shortest')
-    assert avsync.check(_ctx(output=synced), 5) == ('pass', 'lt40')
+    assert avsync.check(_ctx(output=synced), 5) == ('skip', 'start_only')
     outcome, bucket = avsync.check(_ctx(output=late), 5)
     assert outcome == 'fail'
     assert bucket in {'80_200', 'gt200'}
@@ -104,16 +104,21 @@ def test_jitter_track_and_sampled_motion(monkeypatch):
 
 
 def test_shift_estimator_sees_a_two_pixel_move():
-    width, height = 16, 8
+    width, height = 32, 32
 
     def frame(column):
-        raw = bytearray([20]) * (width * height)
-        for y in range(height):
-            raw[y * width + column] = 240
+        raw = bytearray([30]) * (width * height)
+        for y in range(8, 24):
+            for x in range(column, column + 6):
+                raw[y * width + x] = 220
         return bytes(raw)
 
-    assert jitter.estimate_shift(frame(4), frame(6), width, height) == (2.0, 0.0)
-    assert jitter.estimate_shift(frame(4), frame(4), width, height) == (0.0, 0.0)
+    dx, dy = jitter.estimate_shift(frame(8), frame(10), width, height)
+    assert abs(dx - 2.0) < 0.75
+    assert abs(dy) < 0.75
+    still_x, still_y = jitter.estimate_shift(frame(8), frame(8), width, height)
+    assert abs(still_x) < 0.5
+    assert abs(still_y) < 0.5
 
 
 def test_ending_word_and_sentence_boundaries():
@@ -203,7 +208,7 @@ def test_budget_skips_a_slow_checker_and_keeps_going():
         return ticks[0]
 
     def slow(_ctx, _limit):
-        ticks[0] = 5.0
+        ticks[0] = 20.0
         return 'fail', 'flash'
 
     def fine(_ctx, _limit):
@@ -307,7 +312,21 @@ def test_shadow_render_writes_qa_and_leaves_the_export_bytes(tmp_path, monkeypat
 
     monkeypatch.setattr(jobs, 'render_draft', fake_render)
     before = hashlib.sha256(source.read_bytes()).hexdigest()
+    seen = {}
+    from backend.services.studio.qa import schedule as qa_schedule
+    real_schedule = qa_schedule.schedule_after_render
+
+    def spy(project_id, draft, job_id, result):
+        saved = store.read(project_id)
+        seen['status'] = saved['output_variants'][0]['status']
+        seen['cover_pending'] = saved['jobs'][0].get('cover_pending')
+        return real_schedule(project_id, draft, job_id, result)
+
+    monkeypatch.setattr(qa_schedule, 'schedule_after_render', spy)
     jobs._render('qa-shadow', object(), 'job-1')
+    assert seen == {'status': 'completed', 'cover_pending': False}
+    from backend.services.studio.qa.schedule import drain
+    drain(40)
     assert output.read_bytes() == payload
     assert hashlib.sha256(source.read_bytes()).hexdigest() == before
     saved = store.read('qa-shadow')
@@ -322,6 +341,7 @@ def test_shadow_render_writes_qa_and_leaves_the_export_bytes(tmp_path, monkeypat
     sidecar = json.loads(output.with_suffix('.qa.json').read_text(encoding='utf-8'))
     assert sidecar['mode'] == 'shadow'
     assert 'rendered-bytes' not in json.dumps(sidecar)
+    assert all(item['bucket'] != 'error' for item in sidecar['checks'])
     assert output.read_bytes() == payload
 
 
@@ -340,9 +360,14 @@ def test_block_is_recorded_as_shadow_and_a_checker_crash_cannot_fail_the_export(
         raise RuntimeError(r'C:\secret\clip.mp4')
 
     monkeypatch.setattr(jobs, 'render_draft', fake_render)
-    monkeypatch.setattr(record, '_record', boom)
-    monkeypatch.setattr(record, 'capture_studio_exception', lambda error, phase: captured.append((str(error), phase)))
+    monkeypatch.setattr('backend.services.studio.qa.schedule._spawn', boom)
+    monkeypatch.setattr(
+        'backend.services.studio.qa.schedule.capture_studio_exception',
+        lambda error, phase: captured.append((str(error), phase)),
+    )
     jobs._render('qa-shadow', object(), 'job-1')
+    from backend.services.studio.qa.schedule import drain
+    drain(10)
     saved = store.read('qa-shadow')
     assert saved['jobs'][0]['status'] == 'completed'
     assert saved['output_variants'][0]['status'] == 'completed'
@@ -392,3 +417,153 @@ def test_off_and_safe_mode_do_not_write_a_report(tmp_path, monkeypatch):
     assert again['jobs'][-1]['status'] == 'completed'
     assert 'qa' not in again['jobs'][-1]
     assert not second.with_suffix('.qa.json').exists()
+
+
+def test_correlation_lag_on_a_shifted_noise():
+    import numpy as np
+    rate = avsync.RATE
+    rng = np.random.default_rng(7)
+    margin = int(0.25 * rate)
+    src = rng.standard_normal(rate + margin * 2).astype(np.float32)
+    shift = int(0.08 * rate)
+    matched = src[margin:margin + rate]
+    late = src[margin + shift:margin + shift + rate]
+    assert abs(avsync._lag_ms(matched.tobytes(), src.tobytes(), 0.25)) < 5
+    assert abs(avsync._lag_ms(late.tobytes(), src.tobytes(), 0.25) - 80) < 5
+    assert avsync._lag_ms(np.zeros(rate, dtype=np.float32).tobytes(), src.tobytes(), 0.25) is None
+
+
+def test_avsync_correlates_the_source_segment(tmp_path):
+    src = tmp_path / 'src.mp4'
+    late = tmp_path / 'late.mp4'
+    noise = 'anoisesrc=color=white:sample_rate=48000:duration=4:amplitude=0.4'
+    _encode(src, '-f', 'lavfi', '-i', 'color=c=black:s=64x64:r=25:d=4',
+            '-f', 'lavfi', '-i', noise, '-shortest', '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac')
+    _encode(late, '-f', 'lavfi', '-i', 'color=c=black:s=64x64:r=25:d=4',
+            '-itsoffset', '0.08', '-f', 'lavfi', '-i', noise, '-shortest',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac')
+    scenes = [report.SceneSpan(0, 4)]
+    assert avsync.check(_ctx(output=src, source=src, scenes=scenes), 8) == ('pass', 'lt40')
+    outcome, bucket = avsync.check(_ctx(output=late, source=src, scenes=scenes), 8)
+    assert outcome == 'fail'
+    assert bucket in {'40_80', '80_200'}
+
+
+def test_loudness_does_not_decode_video(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_run(cmd, timeout, text=False):
+        seen['cmd'] = cmd
+
+        class Proc:
+            returncode = 0
+            stderr = 'I: -14.0 LUFS\nPeak: -2.0 dBFS\n'
+            stdout = ''
+
+        return Proc()
+
+    monkeypatch.setattr(loudness, 'run', fake_run)
+    assert loudness.measure(tmp_path / 'clip.mp4', 4) == (-14.0, -2.0)
+    cmd = seen['cmd']
+    assert cmd.index('-vn') > cmd.index('-i')
+    assert '-sn' in cmd and '-dn' in cmd and '-map' in cmd
+    limits = report.checker_limits(60)
+    assert 3 <= limits['loudness'] <= 5
+
+
+def test_hard_cap_kills_the_child(monkeypatch):
+    import sys
+    from backend.services.studio.qa import schedule as qa_schedule
+    monkeypatch.setattr(qa_schedule, 'HARD_CAP_S', 0.6)
+    monkeypatch.setattr(qa_schedule, '_command', lambda: ([sys.executable, '-c', 'import time; time.sleep(30)'], {}))
+    body = qa_schedule._spawn({})
+    assert [row['bucket'] for row in body['checks']] == ['timeout'] * len(report.CHECKERS)
+
+
+def test_backend_emits_one_qa_event(monkeypatch, tmp_path):
+    from backend.services.studio.qa import telemetry
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_POSTHOG_KEY', 'phc_test')
+    monkeypatch.delenv('VITE_PUBLIC_POSTHOG_KEY', raising=False)
+    (tmp_path / 'privacy.json').write_text('{"analytics":false,"crash_reports":false}')
+    called = []
+    monkeypatch.setattr(telemetry.urllib.request, 'urlopen', lambda *args, **kwargs: called.append(args))
+    report_body = {
+        'schema_version': 1, 'mode': 'shadow', 'duration_ms': 900,
+        'checks': [
+            {'checker': name, 'outcome': 'pass', 'bucket': 'lt40' if name == 'avsync' else 'none', 'duration_ms': 10}
+            for name in report.CHECKERS
+        ],
+    }
+    telemetry.emit_checked(report_body, 'original')
+    assert called == []
+    (tmp_path / 'privacy.json').write_text('{"analytics":true,"crash_reports":false}')
+    captured = {}
+
+    class Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b''
+
+    def urlopen(req, timeout=0):
+        captured['timeout'] = timeout
+        captured['body'] = json.loads(req.data.decode())
+        return Resp()
+
+    monkeypatch.setattr(telemetry.urllib.request, 'urlopen', urlopen)
+    telemetry.emit_checked(report_body, 'original')
+    body = captured['body']
+    assert body['event'] == 'studio_qa_checked'
+    assert body['properties']['studio_schema_version'] == 2
+    assert body['properties']['qa_mode'] == 'shadow'
+    assert body['properties']['runtime'] == 'python'
+    for name in report.CHECKERS:
+        assert body['properties'][f'qa_{name}'] == 'pass'
+    assert 'lt40' == body['properties']['qa_avsync_bucket']
+    assert 'api_key' not in body['properties']
+    assert 'private' not in json.dumps(body['properties'])
+    assert captured['timeout'] <= 2
+
+
+def test_portrait_minute_finishes_under_the_cap_and_skips_under_30_percent(tmp_path):
+    import time
+    from pathlib import Path
+    video = tmp_path / 'portrait.mp4'
+    subprocess.run([
+        get_ffmpeg_path(), '-y', '-v', 'error',
+        '-f', 'lavfi', '-i', 'color=c=0x202020:s=1080x1920:r=8:d=60',
+        '-f', 'lavfi', '-i', 'anoisesrc=color=white:sample_rate=48000:duration=60:amplitude=0.2',
+        '-shortest', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '36', '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-ac', '1', str(video),
+    ], check=True, timeout=180)
+    from backend.services.studio.qa import schedule as qa_schedule
+    limits = report.checker_limits(60)
+    payload = {
+        'output': str(video), 'source': str(video),
+        'scenes': [{'start': 0.0, 'end': 60.0, 'points': []}],
+        'width': 1080, 'height': 1920, 'strategy_id': 'original',
+        'words': [{'start': 58.0, 'end': 59.2, 'text': 'done.'}],
+        'captions': True, 'title': False, 'packaged': False, 'title_y': 0.12,
+        'limits': limits,
+    }
+    started = time.monotonic()
+    body = qa_schedule._spawn(payload)
+    elapsed = time.monotonic() - started
+    skips = [row for row in body['checks'] if row['outcome'] == 'skip']
+    summary = {
+        'elapsed_s': round(elapsed, 3),
+        'duration_ms': body['duration_ms'],
+        'skip_rate': len(skips) / len(body['checks']),
+        'checks': [
+            {key: row[key] for key in ('checker', 'outcome', 'bucket', 'duration_ms')}
+            for row in body['checks']
+        ],
+    }
+    Path('/tmp/qa-benchmark.json').write_text(json.dumps(summary), encoding='utf-8')
+    assert elapsed < 12.5, summary
+    assert len(skips) / len(body['checks']) < 0.30, summary

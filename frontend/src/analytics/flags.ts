@@ -173,6 +173,8 @@ export type FlagOrigin = 'local' | 'safe_mode' | 'remote' | 'vite' | 'cache' | '
 
 /** Where the current value came from. Later PRs emit experiment events only after a real assignment. */
 export function flagOrigin(name: FlagName): FlagOrigin {
+  // The quality gate's local override must not keep running during safe mode.
+  if (name === 'qa_gate_blocking' && flagValue('autoclip_safe_mode') === true) return 'safe_mode'
   if (readOverride(name) !== undefined) return 'local'
   if (name !== 'autoclip_safe_mode' && flagValue('autoclip_safe_mode') === true) return 'safe_mode'
   if (remoteValue(name) !== undefined) return 'remote'
@@ -187,6 +189,7 @@ export function flagAssigned(name: FlagName): boolean {
 }
 
 export function flagValue(name: FlagName): FlagValue {
+  if (name === 'qa_gate_blocking' && flagValue('autoclip_safe_mode') === true) return 'off'
   const local = readOverride(name)
   if (local !== undefined) return local
   if (name !== 'autoclip_safe_mode' && flagValue('autoclip_safe_mode') === true) return safeOff(name)

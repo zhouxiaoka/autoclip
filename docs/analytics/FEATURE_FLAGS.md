@@ -34,7 +34,7 @@
 
 `import_drop_zone` 和 `track_overrides` 不在产品方案的开关表里。方案写 Q9 不需要开关；这次任务要求每一项都有默认关闭的开关，所以修改埋点也先关着。拖放区是导入页改版，单独一个开关，避免和「粘贴即开始」绑死。
 
-`qa_gate_blocking` 按方案第 10.2 节先全量 shadow。构建默认值是 `shadow`，不是关闭。`block` 会被收下，但这一版和 `shadow` 一样只写报告。打开 `autoclip_safe_mode` 时，这一项一律变成 `off`，`AUTOCLIP_FLAGS` 也不能把它留在 `shadow` 或 `block`。
+`qa_gate_blocking` 按方案第 10.2 节先全量 shadow。构建默认值是 `shadow`，不是关闭。`block` 会被收下，但这一版和 `shadow` 一样只写报告。打开 `autoclip_safe_mode` 时，这一项一律变成 `off`，`AUTOCLIP_FLAGS` 也不能把它留在 `shadow` 或 `block`。前端其他开关仍是本地覆盖优先；只有这一项，安全模式压过本地覆盖。
 
 模板、雷达、关注频道、手机交接这些开关还没有对应实现，没有放进默认表。
 

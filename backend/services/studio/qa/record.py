@@ -118,17 +118,13 @@ def _context(project_id: str, draft, result, strategy_id: str) -> Context:
     )
 
 
-def record_after_render(project_id: str, draft, job_id: str, result) -> dict | None:
-    """Write OutputVariant.qa when the mode is shadow. Return the report, or None when off."""
-    try:
-        return _record(project_id, draft, job_id, result)
-    except Exception as error:  # noqa: BLE001 - the video is already saved
-        logger.warning('QA record failed: %s', type(error).__name__)
-        capture_studio_exception(QaCheckerError('runner'), 'qa')
-        return None
+def _duration(scenes) -> float:
+    return sum(max(0.0, scene.end - scene.start) for scene in scenes)
 
 
-def _record(project_id: str, draft, job_id: str, result) -> dict | None:
+def prepare(project_id: str, draft, job_id: str, result) -> dict | None:
+    """JSON the worker can run. None when the gate is off. No report is written here."""
+    from backend.services.studio.qa.report import checker_limits
     state = read(project_id)
     features = (state.get('generation') or {}).get('features')
     if effective_mode(features) != 'shadow':
@@ -141,12 +137,62 @@ def _record(project_id: str, draft, job_id: str, result) -> dict | None:
             break
     ctx = _context(project_id, draft, result, strategy)
     output = directory(project_id) / 'output' / 'studio' / f'{job_id}.mp4'
-    ctx.output = output if output.is_file() else None
     if ctx.width <= 0 or ctx.height <= 0:
         ctx.width = ctx.width or 1080
         ctx.height = ctx.height or 1920
-    report = run_checks(ctx, RUNNERS)
+    span = _duration(ctx.scenes)
+    return {
+        'output': str(output) if output.is_file() else None,
+        'source': str(ctx.source) if ctx.source is not None else None,
+        'scenes': [
+            {'start': scene.start, 'end': scene.end, 'points': [list(point) for point in scene.points]}
+            for scene in ctx.scenes
+        ],
+        'width': ctx.width,
+        'height': ctx.height,
+        'strategy_id': ctx.strategy_id,
+        'words': ctx.words,
+        'captions': ctx.captions,
+        'title': ctx.title,
+        'packaged': ctx.packaged,
+        'title_y': ctx.title_y,
+        'limits': checker_limits(span),
+        'strategy_for_event': strategy,
+    }
+
+
+def context_from_payload(payload: dict) -> Context:
+    scenes = []
+    for row in payload.get('scenes') or []:
+        if not isinstance(row, dict):
+            continue
+        points = []
+        for point in row.get('points') or []:
+            if isinstance(point, (list, tuple)) and len(point) >= 2:
+                points.append((_num(point[0]), _num(point[1], 0.5)))
+        scenes.append(SceneSpan(_num(row.get('start')), _num(row.get('end')), points))
+    output = Path(payload['output']) if payload.get('output') else None
+    source = Path(payload['source']) if payload.get('source') else None
+    words = payload.get('words') if isinstance(payload.get('words'), list) else None
+    return Context(
+        output=output if output is not None and output.is_file() else None,
+        source=source if source is not None and source.is_file() else None,
+        scenes=scenes,
+        width=int(_num(payload.get('width'), 1080)) or 1080,
+        height=int(_num(payload.get('height'), 1920)) or 1920,
+        strategy_id=payload.get('strategy_id') if isinstance(payload.get('strategy_id'), str) else 'original',
+        words=words,
+        captions=bool(payload.get('captions')),
+        title=bool(payload.get('title')),
+        packaged=bool(payload.get('packaged')),
+        title_y=_num(payload.get('title_y'), 0.12),
+    )
+
+
+def store_report(project_id: str, job_id: str, report: dict, strategy_id: str) -> dict:
+    """Validate and attach a report the worker already finished. Does not re-run checkers."""
     from backend.services.studio.models import QaReport
+    from backend.services.studio.qa.telemetry import emit_checked
     clean = QaReport.model_validate(report).model_dump()
     if [row['checker'] for row in clean['checks']] != list(CHECKERS):
         raise RuntimeError('qa report shape')
@@ -160,8 +206,31 @@ def _record(project_id: str, draft, job_id: str, result) -> dict | None:
                 job['qa'] = clean
 
     change(project_id, attach)
+    output = directory(project_id) / 'output' / 'studio' / f'{job_id}.mp4'
     _write_sidecar(output, clean)
+    emit_checked(clean, strategy_id)
     return clean
+
+
+def record_after_render(project_id: str, draft, job_id: str, result) -> dict | None:
+    """In-process shadow report. The render path uses schedule.schedule_after_render instead."""
+    try:
+        return _record(project_id, draft, job_id, result)
+    except Exception as error:  # noqa: BLE001 - the video is already saved
+        logger.warning('QA record failed: %s', type(error).__name__)
+        capture_studio_exception(QaCheckerError('runner'), 'qa')
+        return None
+
+
+def _record(project_id: str, draft, job_id: str, result) -> dict | None:
+    from backend.services.studio.qa.report import total_budget
+    payload = prepare(project_id, draft, job_id, result)
+    if payload is None:
+        return None
+    ctx = context_from_payload(payload)
+    limits = payload['limits']
+    report = run_checks(ctx, RUNNERS, total_s=total_budget(limits), limits=limits)
+    return store_report(project_id, job_id, report, payload['strategy_for_event'])
 
 
 def _write_sidecar(output: Path, report: dict) -> None:

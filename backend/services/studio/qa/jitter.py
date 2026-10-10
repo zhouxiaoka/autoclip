@@ -2,9 +2,9 @@
 
 A flash is a reversal of at least the framing jump (12% of the width) inside
 0.8 s, more than once a minute. On a shot that is not panning, RMS motion above
-0.30 px also fails. The live frame sample is 96 px wide, so it cannot see
-motion finer than one sample pixel; the 0.30 px rule still applies to any
-shift series the checker is given.
+0.30 px also fails. The live frame sample is 96 px wide, so one sample pixel is
+about 11 px on a 1080-wide frame: this sample cannot see a 0.30 px wobble.
+Shifts come from phase correlation, not a pixel search.
 """
 from __future__ import annotations
 
@@ -73,31 +73,27 @@ def judge_motion(flash_count: int, duration_s: float, rms_px: float, mean_abs_px
     return 'pass', 'calm'
 
 
-def estimate_shift(prev: bytes, curr: bytes, width: int, height: int, radius: int = 2) -> tuple[float, float]:
-    """Integer pixel shift of curr relative to prev, by mean absolute difference.
+def estimate_shift(prev: bytes, curr: bytes, width: int, height: int) -> tuple[float, float]:
+    """Sub-pixel shift of curr relative to prev, via phase correlation.
 
-    The score is a mean so a smaller overlap cannot win on a lower raw sum.
-    Equal scores keep the shorter shift, which leaves a static frame at zero.
+    A pure Python search cannot be killed mid-loop. This returns as soon as
+    the FFT finishes. Missing numpy or OpenCV is a skip, not a slow fallback.
     """
-    best = (0, 0, None)
-    for dy in range(-radius, radius + 1):
-        y0, y1 = max(0, dy), min(height, height + dy)
-        for dx in range(-radius, radius + 1):
-            x0, x1 = max(0, dx), min(width, width + dx)
-            count = (y1 - y0) * (x1 - x0)
-            if count <= 0:
-                continue
-            total = 0
-            for y in range(y0, y1):
-                src = y * width
-                ref = (y - dy) * width
-                for x in range(x0, x1):
-                    total += abs(curr[src + x] - prev[ref + x - dx])
-            score = total / count
-            shorter = abs(dx) + abs(dy) < abs(best[0]) + abs(best[1])
-            if best[2] is None or score < best[2] or (score == best[2] and shorter):
-                best = (dx, dy, score)
-    return float(best[0]), float(best[1])
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        raise ProbeError('unreadable') from None
+    if len(prev) != width * height or len(curr) != width * height or width < 8 or height < 8:
+        raise ProbeError('unreadable')
+    previous = np.frombuffer(prev, dtype=np.uint8).reshape(height, width).astype(np.float32)
+    current = np.frombuffer(curr, dtype=np.uint8).reshape(height, width).astype(np.float32)
+    try:
+        window = cv2.createHanningWindow((width, height), cv2.CV_32F)
+        (shift_x, shift_y), _response = cv2.phaseCorrelate(previous, current, window)
+    except cv2.error:
+        (shift_x, shift_y), _response = cv2.phaseCorrelate(previous, current)
+    return float(shift_x), float(shift_y)
 
 
 def _sample_shifts(path, at: float, timeout: float) -> list[tuple[float, float]]:

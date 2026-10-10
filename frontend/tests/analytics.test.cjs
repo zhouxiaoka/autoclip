@@ -333,33 +333,20 @@ test('rescreen ignores an old plan while running and replaces the old local watc
  assert.equal(core.routeName('/import/private?token=secret'),'/import/:id')
  assert.equal(core.routeName('/project/private/studio/secret'),'/project/:id/studio/:draftId')
 })
-test('shadow quality checks emit once and drop raw measurements', () => {
+test('the UI does not emit studio_qa_checked; the backend owns that event', () => {
   const s = setup()
   s.tracker.watch('studio-variant', 'variant-1', 'project', undefined, {}, false, 'job-1')
   const qa = { mode: 'shadow', checks: [
     { checker: 'avsync', outcome: 'fail', bucket: '80_200', duration_ms: 12 },
     { checker: 'ending', outcome: 'fail', bucket: 'mid_word', duration_ms: 3, text: 'private caption' },
-    { checker: 'loudness', outcome: 'pass', bucket: '-14.2 LUFS', duration_ms: 40 },
+    { checker: 'loudness', outcome: 'pass', bucket: 'in_target', duration_ms: 40 },
   ] }
   const snapshot = { output_variants: [{ id: 'variant-1', draft_id: 'd', render_job_id: 'job-1', strategy_id: 'douyin', status: 'completed', qa }] }
   const watch = s.tracker.list()[0]
   s.tracker.observeStudio(watch, snapshot)
   s.tracker.observeStudio(watch, snapshot)
-  const checks = s.events.filter(item => item.event === 'studio_qa_checked')
-  assert.equal(checks.length, 3)
-  assert.equal(checks[0].props.qa_checker, 'avsync')
-  assert.equal(checks[0].props.qa_outcome, 'fail')
-  assert.equal(checks[0].props.qa_bucket, '80_200')
-  assert.equal(checks[0].props.qa_mode, 'shadow')
-  assert.equal(checks[0].props.duration_ms, 12)
-  assert.equal(checks[0].props.strategy_id, 'douyin')
-  assert.equal(checks[1].props.qa_checker, 'ending')
-  assert.equal(checks[1].props.qa_bucket, 'mid_word')
-  assert.equal(checks[2].props.qa_checker, 'loudness')
-  assert.equal(checks[2].props.qa_outcome, 'pass')
-  assert.equal(checks[2].props.qa_bucket, undefined)
+  assert.equal(s.events.filter(item => item.event === 'studio_qa_checked').length, 0)
   assert.equal(JSON.stringify(s.events).includes('private'), false)
-  assert.equal(JSON.stringify(s.events).includes('LUFS'), false)
   assert.equal(s.events.some(item => item.event === 'studio_variant_finished'), true)
 })
 

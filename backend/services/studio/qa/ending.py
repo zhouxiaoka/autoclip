@@ -1,4 +1,5 @@
-"""The clip ends inside a word or a sentence. Word timings are the only source.
+"""The clip's outer edges only. Internal cuts, the breath after the last word,
+and a fade are not checked in this version. Word timings are the only source.
 
 A word that still has more than 80 ms left is cut mid-word. A following word
 that starts within 0.6 s, when the last spoken word is not sentence-final, is

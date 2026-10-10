@@ -1,11 +1,19 @@
 """Caption or title covering a detected face. Any overlap above 0 px fails.
 
 YuNet from the framing runtime is reused when it is already installed. A few
-frames are sampled. Missing the optional detector is a skip, not a failure.
+frames are sampled. The detector is a private net: it does not take
+framing._detector_lock, so a check cannot stall framing. Missing the optional
+detector is a skip, not a failure. Three frames and the caption box are an
+estimate, not a magazine or street-cut layout.
 """
 from __future__ import annotations
 
+import threading
+
 from backend.services.studio.qa.media import ProbeError, run
+
+_nets: dict[tuple[int, int], object] = {}
+_net_lock = threading.Lock()
 
 # Packaging caption is about two 62 px lines on a 1920 px frame.
 _CAPTION_PX = 170
@@ -70,6 +78,21 @@ def _duration(ctx) -> float:
     return sum(max(0.0, scene.end - scene.start) for scene in ctx.scenes)
 
 
+def _detect(cv2, image):
+    """Run YuNet while holding QA's lock only. Framing's detector lock stays free."""
+    height, width = image.shape[:2]
+    key = (width, height)
+    with _net_lock:
+        net = _nets.get(key)
+        if net is None:
+            from backend.services.studio import framing
+            net = cv2.FaceDetectorYN.create(
+                str(framing.MODEL), '', key, score_threshold=0.6, nms_threshold=0.3, top_k=50,
+            )
+            _nets[key] = net
+        return net.detect(image)
+
+
 def detect_faces(path, at: float, out_w: int, out_h: int, timeout: float) -> list[tuple[float, float, float, float]] | None:
     """Face boxes in output pixels, or None when YuNet is not installed."""
     from backend.services.studio import framing
@@ -89,8 +112,7 @@ def detect_faces(path, at: float, out_w: int, out_h: int, timeout: float) -> lis
     if image is None:
         raise ProbeError('unreadable')
     height, width = image.shape[:2]
-    with framing._detector_lock:
-        _scores, faces = framing._detector(cv2, width, height).detect(image)
+    _scores, faces = _detect(cv2, image)
     if faces is None or len(faces) == 0:
         return []
     sx, sy = out_w / width, out_h / height

@@ -96,24 +96,42 @@ def _tracked(stage):
 def _render(project_id, draft, job_id, *, brand_outro=False):
     started = monotonic()
     render_saved = False
+    result = None
+    qa_scheduled = False
+
     def update(**values):
         def mutate(data):
             next(j for j in data['jobs'] if j['job_id'] == job_id).update(values)
         store.change(project_id, mutate)
+
+    def _schedule_qa():
+        """Enqueue shadow checks only after the export is already completed."""
+        nonlocal qa_scheduled
+        if qa_scheduled or not render_saved:
+            return
+        qa_scheduled = True
+        try:
+            from backend.services.studio.qa.schedule import schedule_after_render
+        except Exception as error:
+            logger.warning('QA import failed: %s', type(error).__name__)
+            return
+        try:
+            schedule_after_render(project_id, draft, job_id, result)
+        except Exception as error:
+            logger.warning('QA schedule failed: %s', type(error).__name__)
+
     try:
         update(status='running', percent=5)
         with llm_usage.timed('render'):
             result = render_draft(project_id, source(project_id), draft, job_id, lambda p: update(percent=p), brand_outro=brand_outro)
         update(status='completed', percent=100, result=result, cover_pending=True, duration_ms=round((monotonic() - started) * 1000))
         render_saved = True
-        # The file and completed status are already saved. Shadow checks only attach a report.
-        from backend.services.studio.qa import record_after_render
-        record_after_render(project_id, draft, job_id, result)
         try:
             _design_covers(project_id, draft, job_id)
         finally:
             update(cover_pending=False)
         _sync_variant_status(project_id, job_id, 'completed')
+        _schedule_qa()
     except Exception as error:
         logger.warning('Studio render failed: %s', type(error).__name__)
         capture_studio_exception(error, 'render')
@@ -121,6 +139,7 @@ def _render(project_id, draft, job_id, *, brand_outro=False):
         if render_saved:
             # Optional cover/index work cannot revoke an already committed video.
             _sync_variant_status(project_id, job_id, 'completed')
+            _schedule_qa()
             return
         try:
             message = str(error)[:700]
