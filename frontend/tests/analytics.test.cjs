@@ -17,6 +17,9 @@ function load(name, mocks = {}, globals = {}) {
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key' },
     require: (id) => {
       if (id in mocks) return mocks[id]
+      if (id === '../utils/apiConfig') {
+        return { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener: () => () => {} } }
+      }
       throw new Error(`Unexpected dependency: ${id}`)
     }, ...globals }, { filename: file })
   return module.exports
@@ -137,6 +140,34 @@ test('persisted opt-out skips SDK initialization and can be enabled later withou
   assert.equal(calls.filter(call => call === 'init').length, 1)
   assert.equal(calls.filter(call => call === 'capture').length, 1)
   assert.equal(storage.getItem('autoclip.analytics.optOut'), 'false')
+})
+test('the anonymous distinct id is stored once for backend events', async () => {
+  const storage = memory()
+  const puts = []
+  const id = '018f6b2a-7c3d-7b2a-8c11-111111111111'
+  const sdk = {
+    init(_key, cfg) { cfg.loaded?.({ onFeatureFlags() {} }) },
+    capture() { return {} },
+    get_distinct_id: () => id,
+    opt_in_capturing() {},
+    opt_out_capturing() {},
+  }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, {
+    localStorage: storage,
+    window: {},
+    fetch: (url, opts) => {
+      puts.push({ url, body: opts.body })
+      return Promise.resolve({ ok: true })
+    },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(puts.length, 1)
+  assert.equal(puts[0].url, '/api/v1/settings/analytics-identity')
+  assert.equal(JSON.parse(puts[0].body).distinct_id, id)
+  ph.setAnalyticsEnabled(true)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(puts.length, 1)
 })
 test('turning analytics off pauses flag reloads and never asks for flags while opted out', () => {
   const storage = memory()

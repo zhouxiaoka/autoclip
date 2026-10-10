@@ -471,6 +471,86 @@ def test_loudness_does_not_decode_video(monkeypatch, tmp_path):
     assert 3 <= limits['loudness'] <= 5
 
 
+def test_non_python_host_uses_the_packaged_runtime(tmp_path, monkeypatch):
+    import os
+    from pathlib import Path
+    from backend.services.studio.qa import schedule as qa_schedule
+    resources = tmp_path / 'resources'
+    if os.name == 'nt':
+        runtime = resources / 'python' / 'python.exe'
+    else:
+        runtime = resources / 'python' / 'bin' / 'python3'
+    runtime.parent.mkdir(parents=True)
+    runtime.write_bytes(b'')
+    host = resources / 'autoclip-backend.exe'
+    host.write_bytes(b'')
+    monkeypatch.setattr(qa_schedule.sys, 'executable', str(host))
+    cmd, kwargs = qa_schedule._command()
+    assert Path(cmd[-3]) == runtime
+    assert cmd[-2:] == ['-m', 'backend.services.studio.qa.worker']
+    flags = qa_schedule._windows_creation_flags(0x00004000)
+    assert flags & 0x08000000
+    assert flags & 0x00000200
+    assert flags & 0x00004000
+    if os.name == 'nt':
+        assert kwargs['creationflags'] & 0x08000000
+    else:
+        assert kwargs.get('start_new_session') is True
+
+
+def test_windows_taskkill_hides_the_console(monkeypatch):
+    from backend.services.studio.qa import schedule as qa_schedule
+    monkeypatch.setattr(qa_schedule.os, 'name', 'nt')
+    seen = {}
+
+    def run(command, **run_kwargs):
+        seen['command'] = command
+        seen['flags'] = run_kwargs.get('creationflags')
+        return None
+
+    monkeypatch.setattr(qa_schedule.subprocess, 'run', run)
+    proc = type('Proc', (), {
+        'pid': 4321,
+        'poll': lambda self: None,
+        'wait': lambda self, timeout=0: 0,
+        'kill': lambda self: None,
+    })()
+    qa_schedule._kill(proc)
+    assert seen['command'][:4] == ['taskkill', '/F', '/T', '/PID']
+    assert seen['flags'] & 0x08000000
+
+
+def test_windows_low_priority_hides_the_console(monkeypatch):
+    from backend.services import render_limits
+    monkeypatch.setattr(render_limits.sys, 'platform', 'win32')
+    cmd, kwargs = render_limits.low_priority(['ffmpeg', '-version'])
+    assert cmd[-2:] == ['ffmpeg', '-version']
+    assert kwargs['creationflags'] & 0x08000000
+    assert kwargs['creationflags'] & 0x00004000
+
+
+def test_analytics_identity_rejects_paths_and_stores_anonymous_ids(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    rejected = client.put('/settings/analytics-identity', json={'distinct_id': '../private/path'})
+    assert rejected.status_code == 422
+    assert not (tmp_path / 'analytics.json').exists()
+    accepted = client.put('/settings/analytics-identity', json={'distinct_id': '018f6b2a-7c3d-7b2a-8c11-111111111111'})
+    assert accepted.status_code == 200
+    stored = json.loads((tmp_path / 'analytics.json').read_text(encoding='utf-8'))
+    assert stored == {'distinct_id': '018f6b2a-7c3d-7b2a-8c11-111111111111'}
+
+
+def test_event_variant_comes_from_the_generation(tmp_path, monkeypatch):
+    _project(tmp_path, monkeypatch, {'qa_gate_blocking': 'block'})
+    assert record._assigned_variant('qa-shadow') == 'block'
+
+
 def test_hard_cap_kills_the_child(monkeypatch):
     import sys
     from backend.services.studio.qa import schedule as qa_schedule
@@ -498,7 +578,7 @@ def test_backend_emits_one_qa_event(monkeypatch, tmp_path):
     telemetry.emit_checked(report_body, 'original')
     assert called == []
     (tmp_path / 'privacy.json').write_text('{"analytics":true,"crash_reports":false}')
-    captured = {}
+    captured = {'bodies': []}
 
     class Resp:
         def __enter__(self):
@@ -512,22 +592,37 @@ def test_backend_emits_one_qa_event(monkeypatch, tmp_path):
 
     def urlopen(req, timeout=0):
         captured['timeout'] = timeout
-        captured['body'] = json.loads(req.data.decode())
+        captured['bodies'].append(json.loads(req.data.decode()))
         return Resp()
 
     monkeypatch.setattr(telemetry.urllib.request, 'urlopen', urlopen)
-    telemetry.emit_checked(report_body, 'original')
-    body = captured['body']
+    (tmp_path / 'analytics.json').write_text('{"distinct_id":"018f6b2a-7c3d-7b2a-8c11-111111111111"}')
+    telemetry.emit_checked(report_body, 'original', variant='block')
+    telemetry.emit_checked(report_body, 'original', variant='block')
+    bodies = captured['bodies']
+    assert len(bodies) == 2
+    assert bodies[0]['distinct_id'] == bodies[1]['distinct_id'] == '018f6b2a-7c3d-7b2a-8c11-111111111111'
+    body = bodies[0]
     assert body['event'] == 'studio_qa_checked'
     assert body['properties']['studio_schema_version'] == 2
     assert body['properties']['qa_mode'] == 'shadow'
     assert body['properties']['runtime'] == 'python'
+    assert body['properties']['$feature/qa_gate_blocking'] == 'block'
     for name in report.CHECKERS:
         assert body['properties'][f'qa_{name}'] == 'pass'
     assert 'lt40' == body['properties']['qa_avsync_bucket']
     assert 'api_key' not in body['properties']
     assert 'private' not in json.dumps(body['properties'])
     assert captured['timeout'] <= 2
+    (tmp_path / 'analytics.json').unlink()
+    telemetry.emit_checked(report_body, 'original')
+    telemetry.emit_checked(report_body, 'original')
+    minted = captured['bodies'][-2:]
+    assert minted[0]['distinct_id'] == minted[1]['distinct_id']
+    assert minted[0]['distinct_id'] != body['distinct_id']
+    assert minted[0]['properties']['$feature/qa_gate_blocking'] == 'shadow'
+    stored = json.loads((tmp_path / 'analytics.json').read_text(encoding='utf-8'))
+    assert stored['distinct_id'] == minted[0]['distinct_id']
 
 
 def test_portrait_minute_finishes_under_the_cap_and_skips_under_30_percent(tmp_path):

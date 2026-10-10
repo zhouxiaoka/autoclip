@@ -22,6 +22,11 @@ logger = logging.getLogger(__name__)
 
 _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='studio-qa')
 _ROOT = str(Path(__file__).resolve().parents[4])
+_PYTHON_NAMES = frozenset({
+    'python', 'python.exe', 'python3', 'python3.exe', 'pythonw', 'pythonw.exe',
+})
+_CREATE_NO_WINDOW = 0x08000000
+_CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 
 def schedule_after_render(project_id: str, draft, job_id: str, result):
@@ -46,12 +51,58 @@ def drain(timeout: float = 30) -> None:
     _pool.submit(lambda: None).result(timeout=timeout)
 
 
-def _command() -> tuple[list[str], dict]:
-    cmd, kwargs = low_priority([sys.executable, '-m', 'backend.services.studio.qa.worker'])
+def _host_path() -> Path:
+    raw = sys.executable
+    if raw.startswith('\\\\?\\'):
+        raw = raw[4:]
+    return Path(raw)
+
+
+def _packaged_runtime() -> Path | None:
+    """Python shipped beside the backend, matching the desktop launcher layout.
+
+    Windows: resources/python/python.exe or resources/venv/Scripts/python.exe.
+    Unix: resources/python/bin/python3 or resources/venv/bin/python.
+    """
+    host = _host_path()
+    roots: list[Path] = []
+    for root in (host.parent, host.parent.parent, Path(__file__).resolve().parents[4]):
+        if root not in roots:
+            roots.append(root)
     if os.name == 'nt':
-        flags = int(kwargs.get('creationflags') or 0)
-        flags |= int(getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x00000200))
-        return cmd, {**kwargs, 'creationflags': flags}
+        relative = (Path('venv') / 'Scripts' / 'python.exe', Path('python') / 'python.exe')
+    else:
+        relative = (Path('venv') / 'bin' / 'python', Path('python') / 'bin' / 'python3')
+    for root in roots:
+        for rel in relative:
+            candidate = root / rel
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def _interpreter() -> str:
+    """Packaged runtime when this process is not itself Python (autoclip-backend.exe)."""
+    host = _host_path()
+    if host.name.lower() in _PYTHON_NAMES:
+        return sys.executable
+    packaged = _packaged_runtime()
+    if packaged is not None:
+        return str(packaged)
+    return sys.executable
+
+
+def _windows_creation_flags(existing: int) -> int:
+    flags = int(existing)
+    flags |= int(getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', _CREATE_NEW_PROCESS_GROUP))
+    flags |= int(getattr(subprocess, 'CREATE_NO_WINDOW', _CREATE_NO_WINDOW))
+    return flags
+
+
+def _command() -> tuple[list[str], dict]:
+    cmd, kwargs = low_priority([_interpreter(), '-m', 'backend.services.studio.qa.worker'])
+    if os.name == 'nt':
+        return cmd, {**kwargs, 'creationflags': _windows_creation_flags(int(kwargs.get('creationflags') or 0))}
     return cmd, {**kwargs, 'start_new_session': True}
 
 
@@ -63,6 +114,7 @@ def _kill(proc: subprocess.Popen) -> None:
             subprocess.run(
                 ['taskkill', '/F', '/T', '/PID', str(proc.pid)],
                 capture_output=True, timeout=5, check=False,
+                creationflags=int(getattr(subprocess, 'CREATE_NO_WINDOW', _CREATE_NO_WINDOW)),
             )
         else:
             os.killpg(proc.pid, signal.SIGKILL)
@@ -80,7 +132,7 @@ def _popen() -> subprocess.Popen:
     env['PYTHONPATH'] = _ROOT + os.pathsep + env.get('PYTHONPATH', '')
     return subprocess.Popen(
         cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        env=env, **kwargs,
+        env=env, cwd=_ROOT, **kwargs,
     )
 
 

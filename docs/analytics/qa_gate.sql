@@ -1,6 +1,8 @@
 -- Shadow QA outcomes. One studio_qa_checked event carries all five checkers.
 -- Counts are checker results, not delivered videos.
 -- Buckets stay inside the event contract; raw measurements are not stored.
+-- distinct_id is the anonymous id already stored for this machine.
+-- properties.`$feature/qa_gate_blocking` is the variant assigned to that generation.
 SELECT checker, outcome, bucket, count() AS checks
 FROM (
   SELECT 'avsync' AS checker, properties.qa_avsync AS outcome, properties.qa_avsync_bucket AS bucket

@@ -14,6 +14,10 @@ on:
       - 'scripts/lib/desktop_build_common.sh'
       - '.github/workflows/windows-asyncio.yml'
       - 'src-tauri/**'
+      - 'backend/services/render_limits.py'
+      - 'backend/services/studio/qa/**'
+      - 'backend/tests/test_studio_qa.py'
+      - 'backend/tests/test_studio_qa_windows.py'
   pull_request:
     paths:
       - 'backend/core/windows_asyncio.py'
@@ -26,6 +30,10 @@ on:
       - 'scripts/lib/desktop_build_common.sh'
       - '.github/workflows/windows-asyncio.yml'
       - 'src-tauri/**'
+      - 'backend/services/render_limits.py'
+      - 'backend/services/studio/qa/**'
+      - 'backend/tests/test_studio_qa.py'
+      - 'backend/tests/test_studio_qa_windows.py'
   workflow_dispatch:
 
 permissions:
@@ -64,6 +72,12 @@ jobs:
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-window-render-regression
           SENTRY_DSN: ""
         run: python -m pytest backend/tests/test_packaging_render.py -k preserves_slide_edges -q
+      - name: Packaged Python QA spawn stays under the skip budget
+        env:
+          AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-qa-spawn
+          AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-qa-spawn
+          SENTRY_DSN: ""
+        run: python -m pytest backend/tests/test_studio_qa_windows.py -q
 
   windows-asyncio:
     name: Windows Proactor cleanup

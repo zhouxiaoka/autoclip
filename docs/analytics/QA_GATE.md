@@ -1,6 +1,6 @@
 # 成片质检（shadow）
 
-1.5.7 只记录，不拦截。成片状态写成 `completed`、封面收尾之后，渲染线程才把检查放进后台队列。子进程以低优先级运行（Windows `BELOW_NORMAL`，其他系统 `nice -n 10`），硬上限约 12 秒，超时会杀掉整个进程组。检查失败、超时或抛错都不改文件、不改任务状态。
+1.5.7 只记录，不拦截。成片状态写成 `completed`、封面收尾之后，渲染线程才把检查放进后台队列。子进程用打包进来的 Python（Windows `resources/python/python.exe`，Unix `resources/python/bin/python3`；开发时仍用当前解释器），以低优先级运行（Windows `BELOW_NORMAL`，其他系统 `nice -n 10`）。Windows 上子进程和 `taskkill` 都带 `CREATE_NO_WINDOW`。硬上限约 12 秒，超时会杀掉整个进程组。检查失败、超时或抛错都不改文件、不改任务状态。
 
 ## 开关
 
@@ -11,7 +11,7 @@
 
 ## 事件
 
-后端在写完报告后发一条 `studio_qa_checked`。关着窗口、Docker、CLI、MCP 也会发。没有项目 key，或 `privacy.json` 里 `analytics` 为 false 时不发。属性是五项结果，不是五条事件：
+后端在写完报告后发一条 `studio_qa_checked`。关着窗口、Docker、CLI、MCP 也会发。没有项目 key，或 `privacy.json` 里 `analytics` 为 false 时不发。`distinct_id` 用本机已经记下的匿名 ID（界面里的 PostHog ID 写在数据目录的 `analytics.json`；还没有时才生成一次并留下）。同一条事件带 `$feature/qa_gate_blocking`，值是这一次生成记下的 `off` / `shadow` / `block`。属性是五项结果，不是五条事件：
 
 | 属性 | 取值 |
 |---|---|
@@ -22,6 +22,7 @@
 | `strategy_id` | 已有平台枚举 |
 | `runtime` | `python` |
 | `studio_schema_version` | `2` |
+| `$feature/qa_gate_blocking` | 这次生成实际记下的 `off` / `shadow` / `block` |
 
 检查器抛错时，Sentry 用 `phase=qa`。上报前只留检查器名，`before_send` 去掉路径和原文。
 

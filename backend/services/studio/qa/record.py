@@ -208,8 +208,20 @@ def store_report(project_id: str, job_id: str, report: dict, strategy_id: str) -
     change(project_id, attach)
     output = directory(project_id) / 'output' / 'studio' / f'{job_id}.mp4'
     _write_sidecar(output, clean)
-    emit_checked(clean, strategy_id)
+    emit_checked(clean, strategy_id, variant=_assigned_variant(project_id))
     return clean
+
+
+def _assigned_variant(project_id: str) -> str | None:
+    """The variant stored for this generation, not a freshly resolved default."""
+    try:
+        features = (read(project_id).get('generation') or {}).get('features')
+    except Exception:  # noqa: BLE001 - the report is already stored
+        return None
+    if not isinstance(features, dict):
+        return None
+    value = features.get('qa_gate_blocking')
+    return value if isinstance(value, str) else None
 
 
 def record_after_render(project_id: str, draft, job_id: str, result) -> dict | None:
