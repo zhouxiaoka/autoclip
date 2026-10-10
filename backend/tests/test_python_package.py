@@ -64,5 +64,11 @@ def test_docs_advertise_the_one_line_install_commands():
         text = path.read_text(encoding='utf-8')
         for command in INSTALL_COMMANDS:
             assert command in text, path.name
-        assert '即将提供' in text, path.name
+        assert '即将提供' not in text, path.name
+        assert 'coming soon' not in text.lower(), path.name
         assert 'python -m pip install --no-deps .' in text, path.name
+    notes = (ROOT / 'scripts' / 'release_notes.py').read_text(encoding='utf-8')
+    for command in INSTALL_COMMANDS:
+        assert command in notes
+    assert '即将提供' not in notes
+    assert 'python -m pip install --no-deps .' in notes
