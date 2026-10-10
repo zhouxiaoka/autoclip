@@ -267,6 +267,8 @@ class OutputVariant(BaseModel):
     html_template: Literal['editorial', 'street'] | None = None
     # The other automatic portrait clips record why they stayed on classic.
     html_fallback: Literal['rank'] | None = None
+    # The import choice, kept when this clip renders classic because it was not in the top three.
+    requested_template: Literal['editorial', 'street'] | None = None
 
 
 class ImportOptions(BaseModel):

@@ -1,14 +1,13 @@
-"""HTML overlay capture and the one encode that follows it.
+"""HTML overlay capture and the ffv1 movie that follows it.
 
 The page contract is ``setData`` / ``renderFrame`` / ``occupiedRects``. ``renderFrame``
 returns a state hash. A frame whose hash matches the previous one is not captured
 again. Two pages run at once, each owning a contiguous range of frames.
 
-The overlay is ffv1 with alpha. The picture encode probes NVENC, QSV, AMF and
-VideoToolbox. A failed probe or a failed hardware encode retries libx264 veryfast.
-This module does not fail an export because the encoder was unavailable: the
-caller receives ``ok: false`` and a ``failure_reason`` enum, with no path and no
-caption in the message.
+The overlay is ffv1 with alpha. The picture encode is ``video_encoder.run_with_fallback``:
+it probes NVENC, QSV, AMF or VideoToolbox and retries libx264 veryfast. This module
+does not choose that encoder. Capture and the ffv1 encode share one clip budget.
+A failed encode deletes its partial file. The caller downgrades to classic.
 """
 from __future__ import annotations
 
@@ -23,22 +22,20 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from backend.core.project_cancellation import ProjectDeleted
 from backend.services.studio.features import flag_enabled
 from backend.services.studio.template_telemetry import host_facts, render_event
-from backend.services.video_encoder import SOFTWARE, h264_args
+from backend.services.video_encoder import SOFTWARE
 
 logger = logging.getLogger(__name__)
 
 PAGES = 2
-PROBE_ORDER = ('h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox')
-_lock = __import__('threading').Lock()
-_chosen: str | None = None
-_broken: set[str] = set()
+OVERLAY_CACHE_BYTES = 512 * 1024 * 1024
 
 
 @dataclass
 class OverlayJob:
-    """A captured overlay, or a classic downgrade. ``path`` is local and never logged."""
+    """A captured overlay, or a classic result. ``path`` is local and never logged."""
 
     path: Path | None
     template: str
@@ -46,6 +43,8 @@ class OverlayJob:
     downgrade_reason: str
     failure_reason: str
     outcome: str
+    requested_template: str = 'classic'
+    duration_ms: int = 0
 
 
 class OverlayEncodeError(RuntimeError):
@@ -56,12 +55,8 @@ class OverlayEncodeError(RuntimeError):
         super().__init__(self.reason)
 
 
-def reset_encoder_cache() -> None:
-    """Tests start from an unprobed process."""
-    global _chosen
-    with _lock:
-        _chosen = None
-        _broken.clear()
+class HtmlRetry(Exception):
+    """The overlay picture failed. Retry the clip once as classic packaging."""
 
 
 def templates_requested(features: dict | None) -> bool:
@@ -142,6 +137,20 @@ def budget_seconds() -> float:
     return value
 
 
+def overlay_cache_limit() -> int:
+    """Bytes kept under one project's overlay folder. The file just written stays."""
+    raw = os.getenv('AUTOCLIP_OVERLAY_CACHE_BYTES', '').strip()
+    if not raw:
+        return OVERLAY_CACHE_BYTES
+    try:
+        value = int(raw)
+    except ValueError:
+        return OVERLAY_CACHE_BYTES
+    if value < 1:
+        return OVERLAY_CACHE_BYTES
+    return value
+
+
 def composite_tail(base_label: str, overlay_index: int, width: int, height: int, grade: str) -> tuple[str, str]:
     """Grade the base, then place the transparent overlay on top. Label is ``html``."""
     graph = (
@@ -162,9 +171,16 @@ def overlay_cache_path(project_id: str, template: str, fill: dict) -> Path:
     return folder / f'{digest}.mkv'
 
 
-def _downgrade(reason: str, *, failure: str = 'none') -> OverlayJob:
+def _stamp(job: OverlayJob, started: float) -> OverlayJob:
+    job.duration_ms = max(0, int((time.monotonic() - started) * 1000))
+    return job
+
+
+def _downgrade(reason: str, *, failure: str = 'none', requested: str = 'classic') -> OverlayJob:
     if reason == 'none' and failure in {'capture', 'encode'}:
         reason = failure
+    if reason == 'rank':
+        return OverlayJob(None, 'classic', False, 'rank', 'none', 'skipped', requested_template=requested)
     downgraded = reason not in {'none', 'flag_off'}
     if reason == 'flag_off':
         outcome = 'completed'
@@ -172,7 +188,67 @@ def _downgrade(reason: str, *, failure: str = 'none') -> OverlayJob:
         outcome = 'downgraded'
     else:
         outcome = 'failed' if failure != 'none' else 'completed'
-    return OverlayJob(None, 'classic', downgraded, reason, failure, outcome)
+    return OverlayJob(None, 'classic', downgraded, reason, failure, outcome, requested_template=requested)
+
+
+def _enforce_overlay_cap(folder: Path, keep: Path | None = None) -> None:
+    """Drop concat leftovers and the oldest movies until the folder is under the cap."""
+    if not folder.is_dir():
+        return
+    keep_resolved = None
+    if keep is not None:
+        try:
+            keep_resolved = keep.resolve()
+        except OSError:
+            keep_resolved = None
+    for path in list(folder.iterdir()):
+        if not path.is_file():
+            continue
+        if path.suffix == '.ffconcat' or path.name.endswith('.partial'):
+            if keep_resolved is None or path.resolve() != keep_resolved:
+                path.unlink(missing_ok=True)
+    sized: list[tuple[Path, int]] = []
+    total = 0
+    for path in folder.glob('*.mkv'):
+        if not path.is_file():
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        sized.append((path, size))
+        total += size
+    limit = overlay_cache_limit()
+    if total <= limit:
+        return
+    for path, size in sorted(sized, key=lambda item: item[0].stat().st_mtime):
+        try:
+            if keep_resolved is not None and path.resolve() == keep_resolved:
+                continue
+        except OSError:
+            continue
+        path.unlink(missing_ok=True)
+        total -= size
+        if total <= limit:
+            break
+
+
+def _cache_usable(path: Path) -> bool:
+    """A reusable overlay is a finished ffv1 movie with alpha, not a partial write."""
+    if not path.is_file():
+        return False
+    try:
+        if path.stat().st_size <= 0:
+            return False
+        from backend.utils.ffmpeg_utils import get_ffprobe_path
+        probe = subprocess.run(
+            [get_ffprobe_path(), '-v', 'error', '-select_streams', 'v:0',
+             '-show_entries', 'stream=codec_name,pix_fmt', '-of', 'csv=p=0', str(path)],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0 and probe.stdout.strip() == 'ffv1,yuva444p'
 
 
 def report_overlay_failure(error: BaseException) -> None:
@@ -190,130 +266,73 @@ def ffv1_args() -> list[str]:
     return ['-c:v', 'ffv1', '-level', '3', '-pix_fmt', 'yuva444p']
 
 
+def concat_quote(path: Path | str) -> str:
+    """Concat-demuxer path. Quotes, spaces and backslashes are backslash-escaped."""
+    escaped: list[str] = []
+    for char in Path(path).as_posix():
+        if char in "\\' \t\"#":
+            escaped.append('\\')
+        escaped.append(char)
+    return ''.join(escaped)
+
+
 def _concat_listing(holds: list[tuple[Path, int]], fps: int, listing: Path) -> None:
     lines: list[str] = []
     for path, count in holds:
-        lines.append(f"file '{path.as_posix()}'\n")
+        lines.append(f"file {concat_quote(path)}\n")
         lines.append(f"duration {count / fps:.6f}\n")
     if holds:
-        lines.append(f"file '{holds[-1][0].as_posix()}'\n")
+        lines.append(f"file {concat_quote(holds[-1][0])}\n")
     listing.write_text(''.join(lines), encoding='utf-8')
 
 
-def encode_ffv1(holds: list[tuple[Path, int]], dest: Path, fps: int = 30, run=None) -> None:
-    """Write an ffv1 movie with alpha. ``holds`` is ``(png, frame count)`` in order."""
+def _run(cmd: list[str], timeout: float):
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+
+def encode_ffv1(holds: list[tuple[Path, int]], dest: Path, fps: int = 30, *, timeout: float, run=None) -> None:
+    """Write an ffv1 movie with alpha. ``holds`` is ``(png, frame count)`` in order.
+
+    ``timeout`` is the seconds left in the clip budget. The listing lives in a
+    temporary directory. Bytes land in a sibling partial file and replace ``dest``
+    only after ffmpeg exits 0. A failure deletes the partial and leaves ``dest`` alone.
+    """
     if not holds or fps <= 0:
         raise OverlayEncodeError('capture')
-    listing = dest.with_suffix('.ffconcat')
-    _concat_listing(holds, fps, listing)
-    from backend.utils.ffmpeg_utils import get_ffmpeg_path
-    cmd = [get_ffmpeg_path(), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing), *ffv1_args(), '-y', str(dest)]
+    if timeout <= 0:
+        raise OverlayEncodeError('timeout')
+    partial = dest.with_name(dest.name + '.partial')
+    partial.unlink(missing_ok=True)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    replaced = False
     try:
-        proc = (run or _run)(cmd)
-    except subprocess.TimeoutExpired as error:
-        report_overlay_failure(error)
-        raise OverlayEncodeError('timeout') from None
-    except OSError as error:
-        report_overlay_failure(error)
-        raise OverlayEncodeError('runtime') from None
-    if proc.returncode:
-        report_overlay_failure(RuntimeError('encode'))
-        raise OverlayEncodeError('encode')
+        with tempfile.TemporaryDirectory(prefix='ac-ffconcat-') as temp:
+            listing = Path(temp) / 'list.ffconcat'
+            _concat_listing(holds, fps, listing)
+            from backend.utils.ffmpeg_utils import get_ffmpeg_path
+            cmd = [get_ffmpeg_path(), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(listing), *ffv1_args(), '-f', 'matroska', '-y', str(partial)]
+            try:
+                proc = _run(cmd, timeout) if run is None else run(cmd)
+            except subprocess.TimeoutExpired as error:
+                report_overlay_failure(error)
+                raise OverlayEncodeError('timeout') from None
+            except OSError as error:
+                report_overlay_failure(error)
+                raise OverlayEncodeError('runtime') from None
+            if proc.returncode:
+                report_overlay_failure(RuntimeError('encode'))
+                raise OverlayEncodeError('encode')
+        os.replace(partial, dest)
+        replaced = True
+    finally:
+        if not replaced:
+            partial.unlink(missing_ok=True)
 
 
 def _grade_prefix(grade: str) -> str:
     if not grade or any(token in grade for token in (';', '[', ']', '\\', '\n')):
         return ''
     return grade if grade.endswith(',') else grade + ','
-
-
-def composite_command(base: Path, overlay: Path, dest: Path, width: int, height: int, grade: str, encoder_name: str) -> list[str]:
-    from backend.utils.ffmpeg_utils import get_ffmpeg_path
-    graph = (
-        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1,"
-        f"{_grade_prefix(grade)}format=yuv420p[base];"
-        f"[1:v]scale={width}:{height}:flags=lanczos,format=yuva444p[ov];"
-        f"[base][ov]overlay=0:0:format=auto:shortest=1[out]"
-    )
-    return [
-        get_ffmpeg_path(), '-v', 'error', '-i', str(base), '-i', str(overlay),
-        '-filter_complex', graph, '-map', '[out]', *h264_args(width, height, encoder_name),
-        '-an', '-y', str(dest),
-    ]
-
-
-def choose_encoder() -> str:
-    """Probe NVENC, QSV, AMF and VideoToolbox once. Any probe failure falls through to libx264."""
-    global _chosen
-    forced = os.getenv('AUTOCLIP_VIDEO_ENCODER', '').strip().lower()
-    if forced in {'x264', 'libx264', 'software'}:
-        return SOFTWARE
-    with _lock:
-        if _chosen and _chosen not in _broken:
-            return _chosen
-        from backend.services.video_encoder import _works
-        from backend.utils.ffmpeg_utils import get_ffmpeg_path
-        ffmpeg = get_ffmpeg_path()
-        picked = SOFTWARE
-        for name in PROBE_ORDER:
-            if name in _broken:
-                continue
-            try:
-                works = _works(ffmpeg, name)
-            except Exception as error:  # noqa: BLE001 - a probe must not fail the export
-                logger.warning('Hardware encoder probe failed: %s', type(error).__name__)
-                works = False
-            if works:
-                picked = name
-                break
-        _chosen = picked
-        logger.info('Overlay encoder: %s', picked)
-        return picked
-
-
-def _run(cmd: list[str]):
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-
-
-def encode_picture(base: Path, overlay: Path, dest: Path, width: int, height: int, grade: str = '', run=None) -> dict:
-    """Encode the composited picture. Hardware failure retries libx264 and still returns ok.
-
-    When libx264 also fails, ``ok`` is false and ``failure_reason`` is ``encode``.
-    The return value never contains a path or a caption.
-    """
-    runner = run or _run
-    started = time.perf_counter()
-    first = choose_encoder()
-
-    def attempt(name: str):
-        try:
-            return runner(composite_command(base, overlay, dest, width, height, grade, name))
-        except subprocess.TimeoutExpired:
-            return None
-        except OSError:
-            return None
-
-    proc = attempt(first)
-    encoder = first
-    if first != SOFTWARE and (proc is None or proc.returncode):
-        with _lock:
-            _broken.add(first)
-            global _chosen
-            _chosen = SOFTWARE
-        proc = attempt(SOFTWARE)
-        encoder = SOFTWARE
-    ok = proc is not None and proc.returncode == 0
-    if not ok:
-        report_overlay_failure(OverlayEncodeError('encode'))
-    return render_event({
-        'encoder': encoder,
-        'downgraded': False,
-        'downgrade_reason': 'none',
-        'failure_reason': 'none' if ok else 'encode',
-        'outcome': 'completed' if ok else 'failed',
-        'duration_ms': int((time.perf_counter() - started) * 1000),
-        **host_facts(),
-    }) | {'ok': ok, 'encoder': encoder}
 
 
 def _write_holds(frames: list[dict], folder: Path) -> list[tuple[Path, int]]:
@@ -331,7 +350,7 @@ def _write_holds(frames: list[dict], folder: Path) -> list[tuple[Path, int]]:
     return holds
 
 
-async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: int, stop) -> list[dict]:
+async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: int) -> list[dict]:
     from playwright.async_api import async_playwright
 
     from backend.services.packaging_runtime import launch_kwargs
@@ -350,8 +369,6 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
                 pages.append(page)
 
             async def render(ordinal, seconds):
-                if stop():
-                    raise OverlayEncodeError('timeout')
                 digest = await pages[ordinal].evaluate('(t) => window.renderFrame(t)', seconds)
                 return digest
 
@@ -363,53 +380,79 @@ async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: i
             await browser.close()
 
 
+async def _bounded_capture(template: str, fill: dict, frames: int, fps: int, capture):
+    if capture is not None:
+        produced = capture(frames, fps)
+        if asyncio.iscoroutine(produced):
+            produced = await produced
+        return produced
+    return await _playwright_frames(template, fill, frames, fps)
+
+
 def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None) -> OverlayJob:
-    """Capture the overlay, or return a classic downgrade. This does not raise.
+    """Capture the overlay, or return a classic result. This does not raise.
 
     ``capture(frame_count, fps)`` is the test seam. Without it, Playwright runs
-    only when the packaging runtime is installed.
+    only when the packaging runtime is installed. The whole capture, including
+    browser startup, and the ffv1 encode share ``budget_seconds()``. ``duration_ms``
+    is that overlay work, not the rest of the render.
     """
     from backend.services.studio.overlay_fill import build_fill
     from backend.services.studio.template_choice import blocking_reason
 
+    started_wall = time.monotonic()
+    requested = template if template in {'editorial', 'street'} else 'classic'
+
+    def finish(job: OverlayJob) -> OverlayJob:
+        return _stamp(job, started_wall)
+
     reason = blocking_reason(features, runtime_ready=True if capture else None)
     if reason:
-        return _downgrade(reason)
+        return finish(_downgrade(reason, requested=requested))
     if template not in {'editorial', 'street'}:
-        return _downgrade('flag_off')
+        return finish(_downgrade('flag_off', requested=requested))
     fps = 30
     frames = max(1, int(round(max(0.1, float(duration)) * fps)))
     fill = build_fill(packaging, duration, fps=fps, safe_area=safe_area)
     dest = overlay_cache_path(project_id, template, fill)
-    if dest.is_file() and dest.stat().st_size > 0:
-        return OverlayJob(dest, template, False, 'none', 'none', 'completed')
+    _enforce_overlay_cap(dest.parent)
+    if _cache_usable(dest):
+        return finish(OverlayJob(dest, template, False, 'none', 'none', 'completed', requested_template=template))
+    dest.unlink(missing_ok=True)
     now = clock or time.monotonic
-    started = now()
+    budget_started = now()
     budget = budget_seconds()
 
-    def stop() -> bool:
-        return now() - started > budget
+    def remaining() -> float:
+        return budget - (now() - budget_started)
 
     try:
-        if capture is not None:
-            produced = capture(frames, fps)
-            if asyncio.iscoroutine(produced):
-                produced = asyncio.run(produced)
-        else:
-            produced = asyncio.run(_playwright_frames(template, fill, frames, fps, stop))
-        if stop():
-            return _downgrade('over_budget')
+        if remaining() <= 0:
+            return finish(_downgrade('over_budget', requested=template))
+        produced = asyncio.run(asyncio.wait_for(
+            _bounded_capture(template, fill, frames, fps, capture),
+            timeout=remaining(),
+        ))
+        left = remaining()
+        if left <= 0:
+            return finish(_downgrade('over_budget', requested=template))
         with tempfile.TemporaryDirectory(prefix='ac-overlay-') as temp:
             holds = _write_holds(produced, Path(temp))
-            encode_ffv1(holds, dest, fps=fps)
+            encode_ffv1(holds, dest, fps=fps, timeout=left)
+    except ProjectDeleted:
+        raise
+    except (TimeoutError, asyncio.TimeoutError):
+        return finish(_downgrade('over_budget', requested=template))
     except OverlayEncodeError as error:
-        if error.reason == 'timeout' or stop():
-            return _downgrade('over_budget')
+        if error.reason == 'timeout' or remaining() <= 0:
+            return finish(_downgrade('over_budget', requested=template))
         report_overlay_failure(error)
-        return _downgrade('missing_runtime' if error.reason == 'runtime' else 'none', failure=error.reason)
+        return finish(_downgrade('missing_runtime' if error.reason == 'runtime' else 'none', failure=error.reason, requested=template))
     except Exception as error:  # noqa: BLE001 - a capture failure must not fail the export
         report_overlay_failure(error)
-        return _downgrade('none', failure='capture')
-    if not dest.is_file():
-        return _downgrade('none', failure='capture')
-    return OverlayJob(dest, template, False, 'none', 'none', 'completed')
+        return finish(_downgrade('none', failure='capture', requested=template))
+    if not _cache_usable(dest):
+        dest.unlink(missing_ok=True)
+        return finish(_downgrade('none', failure='encode', requested=template))
+    _enforce_overlay_cap(dest.parent, keep=dest)
+    return finish(OverlayJob(dest, template, False, 'none', 'none', 'completed', requested_template=template))

@@ -30,12 +30,13 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     portrait_style: ['auto', 'interview', 'podcast'], artifact_type: ['video', 'publish_kit'],
     recommendation_mode: ['ai', 'local', 'manual', 'fallback'],
     subtitle_status: ['available', 'missing', 'invalid', 'unreadable', 'too_large'],
-    outcome: ['completed', 'failed', 'partial', 'downgraded', 'recommended', 'manual', 'fallback', 'scheduled', 'inbox', 'unknown', 'auto_started'],
+    outcome: ['completed', 'failed', 'partial', 'downgraded', 'skipped', 'recommended', 'manual', 'fallback', 'scheduled', 'inbox', 'unknown', 'auto_started'],
     download_mode: ['native', 'browser'], gateway: ['bilibili', 'upload-post'],
     title_style: ['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'],
     share_target: ['copy_caption', 'use_case_discussion'],
     output_rating: ['ready', 'needs_edit', 'unusable'],
     template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
+    requested_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
     from_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
     to_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
     encoder: ['libx264', 'h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox'],
@@ -109,7 +110,7 @@ export interface StudioSnapshot {
   analysis_history?: { run_id: string; plan?: StudioSnapshot['plan']; analysis: StudioSnapshot['analysis'] }[]
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; local_evidence?: { subtitle_status?: string } }
   analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
-  jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[]; template_render?: { template?: string; downgraded?: boolean; downgrade_reason?: string; encoder?: string; duration_ms?: number; failure_reason?: string; outcome?: string; os?: string; cpu_count?: number } } }[]
+  jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[]; template_render?: { template?: string; requested_template?: string; downgraded?: boolean; downgrade_reason?: string; encoder?: string; duration_ms?: number; failure_reason?: string; outcome?: string; os?: string; cpu_count?: number } } }[]
   generation?: { auto_start?: boolean; status?: string; error_code?: string; failure_stage?: string; http_status?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string } | null
   output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]

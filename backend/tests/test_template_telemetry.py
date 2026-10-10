@@ -5,6 +5,7 @@ from backend.services.studio.template_telemetry import override_event, render_ev
 def test_render_event_keeps_enums_and_drops_paths_titles_and_free_text():
     props = render_event({
         'template': 'editorial',
+        'requested_template': 'street',
         'encoder': 'h264_nvenc',
         'downgraded': True,
         'downgrade_reason': 'over_budget',
@@ -22,6 +23,8 @@ def test_render_event_keeps_enums_and_drops_paths_titles_and_free_text():
         'cpu_count_raw': 8.5,
     })
     assert props['template'] == 'editorial'
+    assert props['requested_template'] == 'street'
+    assert render_event({'template': 'classic', 'requested_template': 'editorial', 'downgraded': False, 'downgrade_reason': 'rank', 'outcome': 'skipped'})['outcome'] == 'skipped'
     assert props['encoder'] == 'h264_nvenc'
     assert props['downgraded'] is True
     assert props['downgrade_reason'] == 'over_budget'

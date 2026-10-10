@@ -23,7 +23,6 @@ def _frames(seconds: float, fps: int) -> int:
 
 def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiaohongshu') -> dict:
     """A JSON-safe fill. Times are frame indexes, not source timestamps."""
-    fps = 30 if fps != 30 else fps
     duration = max(0.0, float(duration))
     total = max(1, _frames(duration, fps))
     lines = [str(line).strip() for line in (_get(packaging, 'title_lines', []) or []) if str(line).strip()]

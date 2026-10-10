@@ -1,4 +1,4 @@
-"""Changed-frame capture, ffv1 alpha, and an encoder fallback that cannot fail the export."""
+"""Changed-frame capture and an ffv1 overlay that is replaced only after a full encode."""
 import asyncio
 import subprocess
 from pathlib import Path
@@ -7,7 +7,6 @@ import pytest
 
 from backend.core.sentry_setup import before_send
 from backend.services.studio import packaging_html as html
-from backend.services.video_encoder import SOFTWARE
 
 
 def test_only_changed_frames_are_captured_and_pages_run_together():
@@ -45,105 +44,87 @@ def test_flag_off_skips_the_overlay_without_calling_it_a_failure():
     assert html.templates_requested(None) is False
 
 
-def test_probe_tries_every_hardware_encoder_and_a_failed_probe_uses_libx264(monkeypatch):
-    html.reset_encoder_cache()
-    seen = []
-
-    def works(_ffmpeg, name):
-        seen.append(name)
-        return name == 'h264_qsv'
-
-    monkeypatch.setattr('backend.services.video_encoder._works', works)
-    assert html.choose_encoder() == 'h264_qsv'
-    assert seen == ['h264_nvenc', 'h264_qsv']
-
-    html.reset_encoder_cache()
-    monkeypatch.setattr('backend.services.video_encoder._works', lambda *_args: False)
-    assert html.choose_encoder() == SOFTWARE
-
-    html.reset_encoder_cache()
-    def boom(*_args):
-        raise OSError('device node /dev/dri/secret')
-
-    monkeypatch.setattr('backend.services.video_encoder._works', boom)
-    assert html.choose_encoder() == SOFTWARE
-
-
-def test_hardware_encode_failure_falls_back_to_libx264_veryfast(monkeypatch, tmp_path):
-    html.reset_encoder_cache()
-    monkeypatch.setattr(html, 'choose_encoder', lambda: 'h264_nvenc')
-    calls = []
-
-    class Proc:
-        def __init__(self, code):
-            self.returncode = code
-            self.stderr = 'nvenc failed on /tmp/private.mp4'
-
-    def run(cmd):
-        calls.append(cmd)
-        return Proc(0 if SOFTWARE in cmd else 1)
-
-    result = html.encode_picture(tmp_path / 'base.mp4', tmp_path / 'overlay.mkv', tmp_path / 'out.mp4', 320, 568, grade="eq=contrast=1.04", run=run)
-    assert result['ok'] is True
-    assert result['encoder'] == SOFTWARE
-    assert result['failure_reason'] == 'none'
-    assert result['os'] == 'linux'
-    assert isinstance(result['cpu_count'], int) and result['cpu_count'] >= 1
-    assert 'private' not in str(result)
-    software = calls[-1]
-    assert SOFTWARE in software and 'veryfast' in software
-    assert 'h264_nvenc' in calls[0]
-
-
-def test_a_timeout_on_hardware_still_retries_software(monkeypatch, tmp_path):
-    html.reset_encoder_cache()
-    monkeypatch.setattr(html, 'choose_encoder', lambda: 'h264_videotoolbox')
-
-    class Proc:
-        returncode = 0
-        stderr = ''
-
-    def run(cmd):
-        if 'h264_videotoolbox' in cmd:
-            raise subprocess.TimeoutExpired(cmd, 1)
-        return Proc()
-
-    result = html.encode_picture(tmp_path / 'a.mp4', tmp_path / 'b.mkv', tmp_path / 'c.mp4', 64, 64, run=run)
-    assert result['ok'] is True and result['encoder'] == SOFTWARE
-
-
-def test_software_encode_failure_is_reported_without_failing_closed_on_the_encoder_name(monkeypatch, tmp_path):
-    html.reset_encoder_cache()
-    monkeypatch.setattr(html, 'choose_encoder', lambda: SOFTWARE)
-
-    class Proc:
-        returncode = 1
-        stderr = 'filter error /home/user/secret.mp4'
-
-    result = html.encode_picture(tmp_path / 'a.mp4', tmp_path / 'b.mkv', tmp_path / 'c.mp4', 64, 64, run=lambda _cmd: Proc())
-    assert result['ok'] is False
-    assert result['failure_reason'] == 'encode'
-    assert result['encoder'] == SOFTWARE
-    assert 'secret' not in str(result)
-    with pytest.raises(html.OverlayEncodeError) as caught:
-        raise html.OverlayEncodeError('encode')
-    assert str(caught.value) == 'encode'
-
-
-def test_ffv1_overlay_keeps_alpha(tmp_path):
-    png = tmp_path / 'frame.png'
+def _png(folder: Path) -> Path:
+    png = folder / 'frame.png'
     subprocess.run([
         'ffmpeg', '-hide_banner', '-y', '-f', 'lavfi', '-i', 'color=c=red@0.5:s=16x16:d=0.04,format=rgba',
         '-frames:v', '1', '-update', '1', str(png),
     ], check=True, capture_output=True)
+    return png
+
+
+def test_ffv1_overlay_keeps_alpha_and_drops_the_listing(tmp_path):
+    if subprocess.run(['ffmpeg', '-version'], capture_output=True).returncode != 0:
+        pytest.skip('ffmpeg unavailable')
+    png = _png(tmp_path)
     dest = tmp_path / 'overlay.mkv'
-    html.encode_ffv1([(png, 2), (png, 1)], dest, fps=30)
+    html.encode_ffv1([(png, 2), (png, 1)], dest, fps=30, timeout=30)
     probe = subprocess.run([
         'ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name,pix_fmt',
         '-of', 'csv=p=0', str(dest),
     ], check=True, capture_output=True, text=True)
     assert probe.stdout.strip() == 'ffv1,yuva444p'
     assert 'ffv1' in html.ffv1_args() and 'yuva444p' in html.ffv1_args()
+    assert list(tmp_path.glob('*.ffconcat')) == []
+    assert list(tmp_path.glob('*.partial')) == []
+
+
+def test_a_quoted_frame_path_round_trips_through_concat(tmp_path):
+    if subprocess.run(['ffmpeg', '-version'], capture_output=True).returncode != 0:
+        pytest.skip('ffmpeg unavailable')
+    folder = tmp_path / "it's a"
+    folder.mkdir()
+    png = _png(folder)
+    quoted = html.concat_quote(png)
+    assert "\\'" in quoted
+    dest = tmp_path / 'quoted.mkv'
+    html.encode_ffv1([(png, 1)], dest, fps=30, timeout=30)
+    assert dest.is_file() and dest.stat().st_size > 0
+
+
+def test_encode_failure_deletes_the_partial_and_leaves_dest_absent(tmp_path):
+    dest = tmp_path / 'overlay.mkv'
+    png = tmp_path / 'frame.png'
+    png.write_bytes(b'png')
+
+    class Proc:
+        returncode = 1
+        stderr = 'encode failed /home/user/secret.mkv'
+
+    def run(cmd):
+        Path(cmd[-1]).write_bytes(b'partial-bytes')
+        return Proc()
+
+    with pytest.raises(html.OverlayEncodeError) as caught:
+        html.encode_ffv1([(png, 1)], dest, fps=30, timeout=5, run=run)
+    assert str(caught.value) == 'encode'
+    assert not dest.exists()
+    assert not dest.with_name(dest.name + '.partial').exists()
+    assert list(tmp_path.glob('*.ffconcat')) == []
+
+
+def test_encode_timeout_deletes_the_partial(tmp_path):
+    dest = tmp_path / 'overlay.mkv'
+    png = tmp_path / 'frame.png'
+    png.write_bytes(b'png')
+
+    def run(cmd):
+        Path(cmd[-1]).write_bytes(b'partial-bytes')
+        raise subprocess.TimeoutExpired(cmd, 1)
+
+    with pytest.raises(html.OverlayEncodeError) as caught:
+        html.encode_ffv1([(png, 1)], dest, fps=30, timeout=1, run=run)
+    assert str(caught.value) == 'timeout'
+    assert not dest.exists()
+    assert not dest.with_name(dest.name + '.partial').exists()
+
+
+def test_a_non_positive_budget_does_not_start_ffmpeg(tmp_path):
+    dest = tmp_path / 'overlay.mkv'
+    with pytest.raises(html.OverlayEncodeError) as caught:
+        html.encode_ffv1([(tmp_path / 'frame.png', 1)], dest, fps=30, timeout=0, run=lambda _cmd: (_ for _ in ()).throw(AssertionError('ffmpeg')))
+    assert str(caught.value) == 'timeout'
+    assert not dest.exists()
 
 
 def test_packaging_html_sentry_phase_drops_paths_and_captions(tmp_path, monkeypatch):

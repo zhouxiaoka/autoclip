@@ -12,7 +12,7 @@ ENCODERS = ('libx264', 'h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox'
 DOWNGRADE_REASONS = ('none', 'over_budget', 'missing_runtime', 'intel_mac_unverified', 'rank', 'flag_off', 'capture', 'encode')
 FAILURE_REASONS = ('none', 'capture', 'encode', 'runtime', 'timeout', 'unknown')
 OPERATING_SYSTEMS = ('darwin', 'win32', 'linux')
-OUTCOMES = ('completed', 'downgraded', 'failed')
+OUTCOMES = ('completed', 'downgraded', 'failed', 'skipped')
 OVERRIDE_STAGES = ('pre_import', 'results_chip', 'editor')
 _TOKEN = re.compile(r'^t-[a-z0-9-]{10,100}$')
 
@@ -55,6 +55,7 @@ def render_event(payload: dict | None) -> dict:
     raw = payload or {}
     event = {
         'template': _enum(raw.get('template'), TEMPLATES),
+        'requested_template': _enum(raw.get('requested_template'), TEMPLATES),
         'encoder': _enum(raw.get('encoder'), ENCODERS),
         'downgraded': raw.get('downgraded') if isinstance(raw.get('downgraded'), bool) else None,
         'downgrade_reason': _enum(raw.get('downgrade_reason'), DOWNGRADE_REASONS),

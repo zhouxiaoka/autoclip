@@ -70,15 +70,17 @@ def _template_report(job, encoder: str) -> dict | None:
         return None
     return {
         'template': job.template,
+        'requested_template': job.requested_template,
         'encoder': encoder,
         'downgraded': job.downgraded,
         'downgrade_reason': job.downgrade_reason,
         'failure_reason': job.failure_reason,
         'outcome': job.outcome,
+        'duration_ms': job.duration_ms,
     }
 
 
-def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False, html_template=None, html_fallback=None, features=None, safe_area='xiaohongshu'):
+def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False, html_template=None, html_fallback=None, features=None, safe_area='xiaohongshu', requested_template=None):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
     w, h = {'portrait': (1080, 1920), 'landscape': (1920, 1080)}.get(draft.aspect, (info.get('width'), info.get('height')))
@@ -126,13 +128,16 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                 sum(audio.scene_duration(scene) for scene in draft.scenes),
                 features=features, safe_area=safe_area,
             )
+        except project_cancellation.ProjectDeleted:
+            raise
         except (TemplateRegistryError, OSError) as error:
             packaging_html.report_overlay_failure(error)
-            overlay_job = packaging_html.OverlayJob(None, 'classic', True, 'capture', 'capture', 'downgraded')
+            overlay_job = packaging_html.OverlayJob(None, 'classic', True, 'capture', 'capture', 'downgraded', requested_template=html_template)
         overlay_path = overlay_job.path if overlay_job else None
     elif html_fallback == 'rank':
         from backend.services.studio.packaging_html import OverlayJob
-        overlay_job = OverlayJob(None, 'classic', True, 'rank', 'none', 'downgraded')
+        requested = requested_template if requested_template in ('editorial', 'street') else 'classic'
+        overlay_job = OverlayJob(None, 'classic', False, 'rank', 'none', 'skipped', requested_template=requested)
     out_dir = directory(project_id) / 'output' / 'studio'
     if not directory(project_id).is_dir():
         raise project_cancellation.ProjectDeleted(project_id)
@@ -144,6 +149,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             folder = Path(temp)
             offsets = _output_offsets(draft)
             overlay_retried = False
+            from backend.services.studio.packaging_html import HtmlRetry
             while True:
                 parts = []
                 try:
@@ -245,22 +251,33 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                             # One classic retry for the whole clip. An encoder miss must not fail the export.
                             from backend.services.studio.packaging_html import OverlayJob
                             overlay_path = None
-                            overlay_job = OverlayJob(None, 'classic', True, 'encode', 'encode', 'downgraded')
-                            raise RuntimeError('__html_retry__')
+                            overlay_job = OverlayJob(None, 'classic', True, 'encode', 'encode', 'downgraded', requested_template=html_template or 'classic')
+                            raise HtmlRetry()
                         if proc.returncode:
                             raise RuntimeError('渲染镜头失败：' + proc.stderr[-600:])
                         parts.append(clip_path)
                         progress(round(10 + (i+1) / len(draft.scenes) * 80))
                     break
-                except RuntimeError as error:
-                    if str(error) != '__html_retry__' or overlay_retried:
-                        if str(error) == '__html_retry__':
-                            raise RuntimeError('渲染镜头失败') from None
+                except project_cancellation.ProjectDeleted:
+                    raise
+                except HtmlRetry:
+                    if overlay_retried:
+                        raise RuntimeError('渲染镜头失败') from None
+                    overlay_retried = True
+                except Exception as error:
+                    # A hang, filter error or encode error on the HTML path becomes classic.
+                    # The classic retry, and a deleted project, still fail the export.
+                    if overlay_path is None or overlay_retried:
                         raise
+                    from backend.services.studio.packaging_html import OverlayJob
+                    packaging_html.report_overlay_failure(error)
+                    overlay_path = None
+                    overlay_job = OverlayJob(None, 'classic', True, 'capture', 'capture', 'downgraded', requested_template=html_template or 'classic')
                     overlay_retried = True
             concat = folder / 'parts.txt'
             durations = [audio.scene_duration(scene) for scene in draft.scenes]
-            concat.write_text(''.join(f"file '{p}'\nduration {duration:.9f}\n" for p, duration in zip(parts, durations)), encoding='utf-8')
+            from backend.services.studio.packaging_html import concat_quote
+            concat.write_text(''.join(f"file {concat_quote(p)}\nduration {duration:.9f}\n" for p, duration in zip(parts, durations)), encoding='utf-8')
             # Encode AAC only once. Per-cut AAC packets add encoder delay and can
             # leave mismatched stream layouts when a selected interval is silent.
             cmd = [get_ffmpeg_path(), '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-c:v', 'copy']
