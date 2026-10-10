@@ -82,6 +82,9 @@ export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
   auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'
   created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; completed_variant_count?: number
+  html_template?: 'editorial' | 'street' | 'classic'
+  recommended_template?: 'editorial' | 'street' | 'classic'
+  accepted_recommendation?: boolean
 }
 export interface PlatformStrategySummary {
   id: string; label: string; aspect: 'portrait' | 'landscape' | 'original'; duration_policy: 'short' | 'long' | 'adaptive'

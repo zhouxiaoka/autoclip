@@ -1435,6 +1435,8 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             'auto_start': options.auto_start,
             'portrait_style': options.portrait_style,
             **({'html_template': options.html_template} if getattr(options, 'html_template', None) else {}),
+            **({'recommended_template': options.recommended_template} if getattr(options, 'recommended_template', None) else {}),
+            **({'accepted_recommendation': options.html_template == options.recommended_template} if getattr(options, 'recommended_template', None) and getattr(options, 'html_template', None) else {}),
             'features': resolve_features(features),
             **({'producer': producer} if producer else {}),
             'status': 'screening',

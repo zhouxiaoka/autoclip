@@ -18,7 +18,8 @@ const LABELS: Record<FlagName, string> = {
   hide_legacy_entrypoints: '隐藏旧的制作入口',
   import_drop_zone: '首页使用居中的拖放区',
   track_overrides: '记录对自动决定的修改',
-  pkg_templates_v1: 'HTML 包装模板',
+  pkg_templates_v1: 'editing_style.flag_templates',
+  pkg_template_picker_visual: 'editing_style.flag_visual',
 }
 
 const VARIANT_LABELS: Record<string, string> = {

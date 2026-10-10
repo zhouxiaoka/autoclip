@@ -10,6 +10,8 @@ import { studioApi, errorText } from './api'
 import { trackQuickOutputPlatforms } from '../../analytics/studio'
 import { featureSnapshot, useFlag } from '../../analytics/flags'
 import TemplatePicker, { templateImportFields, type HtmlTemplateChoice } from './TemplatePicker'
+import StyleProbeLine from './StyleProbeLine'
+import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
@@ -48,6 +50,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   const [subtitle, setSubtitle] = useState<File | null>(null)
   const [options, setOptions] = useState<ImportOptions>({...defaultImportOptions})
   const templatesOn = useFlag('pkg_templates_v1') === true
+  const visualOn = useFlag('pkg_template_picker_visual') === true
   const [browser, setBrowser] = useState('')
   const [platforms, setPlatforms] = useState<string[]>(['douyin'])
   const [preferences, setPreferences] = useState(false)
@@ -123,8 +126,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       platforms.forEach(platform => body.append('platforms', platform))
       body.append('auto_start', 'true')
       body.append('portrait_style', options.portrait_style || 'auto')
-      const templateFields = templateImportFields(templatesOn, options.html_template)
+      const portraitChosen = platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform))
+      const styleKey = templatesOn && visualOn && portraitChosen ? (source === 'file' ? (file ? `file:${file.name}:${file.size}:${file.lastModified}` : null) : (url.trim() ? `url:${url.trim()}` : null)) : null
+      const recommendation = visualOn && styleKey && readStyle().key === styleKey ? readStyle().result?.template : undefined
+      const templateFields = templateImportFields(templatesOn, options.html_template, recommendation)
       if (templateFields.html_template) body.append('html_template', templateFields.html_template)
+      if (templateFields.recommended_template) body.append('recommended_template', templateFields.recommended_template)
       body.append('features', JSON.stringify(featureSnapshot()))
       if (options.aspect) body.append('aspect', options.aspect)
       if (options.duration) body.append('duration', String(options.duration))
@@ -145,8 +152,9 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     <div className="studio-import-box">
       <div className="studio-row"><Segmented ariaLabel={t("导入来源")} value={source} onChange={v=>!busy&&setSource(v)} options={[{value:'link',label:t("链接导入")},{value:'file',label:t("文件导入")}]}/></div>
       {source==='link'?<label className="studio-field"><span className="studio-sr">{t("视频链接")}</span><textarea placeholder={t("粘贴 B 站或 YouTube 视频链接")} value={url} onChange={e=>setUrl(e.target.value)} disabled={busy}/></label>:<label className="studio-file"><span>{file?.name || t("选择一段视频")}</span><input type="file" aria-label={t("视频文件")} accept="video/mp4,video/webm,video/quicktime,.mkv,.avi" disabled={busy} onChange={e=>setFile(e.target.files?.[0] || null)}/><small>MP4 / MOV / MKV / WEBM / AVI</small></label>}
+      {templatesOn && visualOn && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <StyleProbeLine sourceKey={source === 'file' ? (file ? `file:${file.name}:${file.size}:${file.lastModified}` : null) : (url.trim() ? `url:${url.trim()}` : null)} />}
       <PlatformPicker value={platforms} onChange={setPlatforms} disabled={busy}/>
-      {templatesOn && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <TemplatePicker disabled={busy} value={options.html_template} onChange={(html_template: HtmlTemplateChoice) => setOptions({...options, html_template})}/>}
+      {templatesOn && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <TemplatePicker visual={visualOn} disabled={busy} value={options.html_template} sourceKey={source === 'file' ? (file ? `file:${file.name}:${file.size}:${file.lastModified}` : null) : (url.trim() ? `url:${url.trim()}` : null)} url={url} file={file} sourceKind={source === 'file' ? (file ? 'file' : 'none') : (url.trim() ? 'link' : 'none')} onChange={(html_template: HtmlTemplateChoice) => setOptions({...options, html_template})}/>}
       {!templatesOn && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <div className="studio-field"><span>{t('竖版版式')}</span><Select aria-label={t('竖版版式')} disabled={busy} value={options.portrait_style || 'auto'} options={[{value:'auto',label:t('按平台默认')},{value:'interview',label:t('访谈式（人物窗口）')},{value:'podcast',label:t('播客式（满屏）')}]} onChange={portrait_style=>setOptions({...options,portrait_style})}/><small>{t('仅调整竖版布局，字幕与发布文案语言仍按平台。')}</small></div>}
       {templatesOn && options.html_template === 'classic' && platforms.some(platform => !['bilibili', 'youtube_long', 'original'].includes(platform)) && <div className="studio-field"><span>{t('竖版版式')}</span><Select aria-label={t('竖版版式')} disabled={busy} value={options.portrait_style || 'auto'} options={[{value:'auto',label:t('按平台默认')},{value:'interview',label:t('访谈式（人物窗口）')},{value:'podcast',label:t('播客式（满屏）')}]} onChange={portrait_style=>setOptions({...options,portrait_style})}/><small>{t('仅调整竖版布局，字幕与发布文案语言仍按平台。')}</small></div>}
       <details className="studio-details"><summary>{t("有特别要求？（选填）")}</summary><label className="studio-field"><span className="studio-sr">{t("制作要求")}</span><input aria-label={t("制作要求")} placeholder={t("例如：保留完整观点或挑战过程")} maxLength={1000} value={options.instruction} disabled={busy} onChange={e=>setOptions({...options,instruction:e.target.value})}/></label></details>

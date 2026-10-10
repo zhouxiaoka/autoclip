@@ -23,6 +23,7 @@ DEFAULTS: dict[str, bool | str] = {
     'import_drop_zone': False,
     'track_overrides': False,
     'pkg_templates_v1': False,
+    'pkg_template_picker_visual': False,
 }
 
 VARIANTS = {

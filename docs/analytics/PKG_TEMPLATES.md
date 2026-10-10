@@ -11,9 +11,13 @@
 | 事件 | 时机 | 属性 |
 |---|---|---|
 | `studio_template_render_finished` | 一条成片的模板渲染结束（含降级和跳过） | `template`，`requested_template`，`encoder`，`downgraded`，`downgrade_reason`，`os`，`cpu_count`，`duration_ms`，`failure_reason`，`outcome`，`strategy_id`，`flow_id` |
-| `studio_template_overridden` | 导入前把默认模板改成另一个 | `from_template`，`to_template`，`stage=pre_import`，`flow_id` |
-| `studio_generation_finished` | 整次生成结束 | 沿用 `outcome`。另有 `editorial_count` / `street_count` / `classic_count` / `html_downgrade_count`，用来算生成成功和降级率 |
-| `studio_output_shared` / `studio_download_*` | 复制文案或下载 | 沿用现有事件，`template` 增加 `editorial` / `street` / `classic` |
+| `studio_template_overridden` | 导入前把当前风格改成另一个 | `from_template`，`to_template`，`stage=pre_import`，`flow_id`。已知推荐时另有 `recommended`，操作来源 `input=mouse\|keyboard` |
+| `studio_template_picker_shown` | 文字或卡片选择器在一次素材上给出推荐 | `recommended`，`reason_code`，`flag_variant=visual\|text`，`source_kind=link\|file\|none`，`latency_ms` |
+| `studio_template_preview_played` | 一张卡片开始播放 2.5 秒静音预览 | `template`，`trigger=hover\|focus\|keyboard\|button\|select`，`first_frame_ms`，`is_recommended` |
+| `studio_template_preview_failed` | 预览解码或加载失败 | `template`，`error_kind=decode\|stalled\|unsupported\|unknown` |
+| `studio_template_restore_recommended` | 用户点了恢复推荐 | `from_template`，`recommended` |
+| `studio_generation_finished` | 整次生成结束 | 沿用 `outcome`。另有 `editorial_count` / `street_count` / `classic_count` / `html_downgrade_count`。导入时记下推荐后，还有 `recommended_template` 和 `accepted_recommendation`（所选风格等于推荐时为 true） |
+| `studio_output_shared` / `studio_download_*` | 复制文案或下载 | 沿用现有事件，`template` 增加 `editorial` / `street` / `classic`。同一条成片带上 `recommended_template` 和 `accepted_recommendation` |
 
 `downgrade_reason`：`none` / `over_budget` / `missing_runtime` / `intel_mac_unverified` / `rank` / `flag_off` / `capture` / `encode`。
 
@@ -29,7 +33,7 @@
 
 ## 看板
 
-查询在 `pkg_templates.sql`。生成成功率看 `studio_generation_finished` 的 `outcome`。渲染 p90 看 `studio_template_render_finished.duration_ms`。改选率是 `studio_template_overridden` 除以带模板的生成。下载和复制沿用 `studio_download_saved` 与 `studio_output_shared`，按 `template` 拆开。
+查询在 `pkg_templates.sql`。生成成功率看 `studio_generation_finished` 的 `outcome`。渲染 p90 看 `studio_template_render_finished.duration_ms`。改选率是 `studio_template_overridden` 除以带模板的生成。推荐采纳率是带 `recommended_template` 的生成里 `accepted_recommendation = true` 的比例。下载和复制沿用 `studio_download_saved` 与 `studio_output_shared`，按 `template` 拆开。
 
 护栏（`pkg_templates_v1`）：生成失败率增加不超过 2 个百分点；渲染 p90 不超过 classic 的 2 倍；包装降级率不超过 10%。
 
@@ -43,4 +47,4 @@
 
 ## 这一版不做
 
-没有播客 HTML 模板。没有智能推荐、`publish_pack_v2`、阻断式质检。贴纸不生成。CLI / MCP 还没有 `--template`。HTML 填充用现有包装字段（标题、字幕，以及已经有的 kicker / emphasis / numbers / gloss）。PostHog 项目里还没有创建这个开关，validation 环境也还没有截图。全量之前默认值保持关闭。
+`pkg_template_picker_visual` 打开后，导入页用三张 9:16 卡片代替文字选择器，并调用 `POST /studio/template-recommend`。这个接口只看文件头或接受链接但不下载，2 秒内没结果就停在杂志风。两个开关都默认关闭。没有播客 HTML 模板，没有 `publish_pack_v2`、阻断式质检。贴纸不生成。CLI / MCP 还没有 `--template`。HTML 填充用现有包装字段（标题、字幕，以及已经有的 kicker / emphasis / numbers / gloss）。PostHog 项目里还没有创建这些开关，validation 环境也还没有截图。全量之前默认值保持关闭。

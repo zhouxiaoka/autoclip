@@ -23,6 +23,7 @@ export const FLAG_NAMES = [
   'import_drop_zone',
   'track_overrides',
   'pkg_templates_v1',
+  'pkg_template_picker_visual',
 ] as const
 
 export type FlagName = (typeof FLAG_NAMES)[number]
@@ -43,6 +44,7 @@ export const FLAG_SPEC: Record<FlagName, FlagSpec> = {
   import_drop_zone: { kind: 'boolean' },
   track_overrides: { kind: 'boolean' },
   pkg_templates_v1: { kind: 'boolean' },
+  pkg_template_picker_visual: { kind: 'boolean' },
 }
 
 export const FLAG_DEFAULTS = defaultsJson as { [K in FlagName]: FlagValue }

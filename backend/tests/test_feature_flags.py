@@ -18,6 +18,8 @@ def test_frontend_and_backend_defaults_match_and_are_off():
     assert flag_enabled(DEFAULTS, 'render_top_first') is False
     assert flag_enabled(DEFAULTS, 'publish_pack_v2') is False
     assert flag_enabled(DEFAULTS, 'pkg_templates_v1') is False
+    assert flag_enabled(DEFAULTS, 'pkg_template_picker_visual') is False
+    assert resolve_features({'pkg_template_picker_visual': True, 'autoclip_safe_mode': True}, env='')['pkg_template_picker_visual'] is False
 
 
 def test_unknown_values_are_dropped_and_safe_mode_forces_the_safe_off_value():

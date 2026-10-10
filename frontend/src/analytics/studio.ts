@@ -36,8 +36,26 @@ export function trackTemplateOverride(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_template_overridden', safeStudioProperties({ ...properties, stage: properties.stage || 'pre_import' }))
 }
 
+/** Visual or text picker became visible. `recommended` is the style adoption is measured against. */
+export function trackTemplatePickerShown(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_template_picker_shown', safeStudioProperties(properties))
+}
+
+/** One preview started. Loops do not emit again until the card is entered again. */
+export function trackTemplatePreviewPlayed(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_template_preview_played', safeStudioProperties(properties))
+}
+
+export function trackTemplatePreviewFailed(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_template_preview_failed', safeStudioProperties(properties))
+}
+
+export function trackTemplateRestore(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_template_restore_recommended', safeStudioProperties(properties))
+}
+
 /** Enum/boolean summary of one output variant for delivery events; never titles, captions or names. */
-export type VariantProperties = { strategy_id?: string; template?: string; packaging_style?: string; framing?: string; artifact_type?: 'video' | 'publish_kit'; outro_applied?: boolean }
+export type VariantProperties = { strategy_id?: string; template?: string; packaging_style?: string; framing?: string; artifact_type?: 'video' | 'publish_kit'; outro_applied?: boolean; recommended_template?: string; accepted_recommendation?: boolean }
 
 /** Share intent only: which enum target, never the caption, title or link text. */
 export function trackOutputShare(projectId: string, properties: { share_target: 'copy_caption' | 'use_case_discussion' } & VariantProperties) {
@@ -85,7 +103,9 @@ export function studioImportProperties(body: FormData): Record<string, unknown> 
   }
   const chosen = body.get?.('html_template')
   const template = chosen === 'editorial' || chosen === 'street' || chosen === 'classic' ? chosen : undefined
-  return { material_origin: 'user', flow_id: telemetryId(), source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', template, platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,
+  const recommendedRaw = body.get?.('recommended_template')
+  const recommended_template = recommendedRaw === 'editorial' || recommendedRaw === 'street' || recommendedRaw === 'classic' ? recommendedRaw : undefined
+  return { material_origin: 'user', flow_id: telemetryId(), source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', template, recommended_template, accepted_recommendation: template && recommended_template ? template === recommended_template : undefined, platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,
     // Omitted means the backend's saved preference: do not claim it is enabled.
     brand_outro_enabled: body.get?.('brand_outro_enabled') === 'true' ? true : body.get?.('brand_outro_enabled') === 'false' ? false : undefined }
 }
