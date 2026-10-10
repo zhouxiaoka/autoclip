@@ -50,7 +50,7 @@ def test_operator_env_overrides_the_client_snapshot(monkeypatch):
     monkeypatch.setenv('AUTOCLIP_FLAGS', 'pkg_templates_v1=on')
     enabled = resolve_features({'pkg_templates_v1': False})
     assert enabled['pkg_templates_v1'] is True
-    killed = resolve_features({'pkg_templates_v1': True, 'autoclip_safe_mode': True})
+    killed = resolve_features({'pkg_templates_v1': True, 'autoclip_safe_mode': True}, env='')
     assert killed['pkg_templates_v1'] is False
     operator = resolve_features({'autoclip_safe_mode': True}, env='pkg_templates_v1=on')
     assert operator['pkg_templates_v1'] is True
