@@ -40,6 +40,8 @@ venv_*/
 # 剪辑风格卡片的静音预览（2.5 秒，无音轨）
 !frontend/src/assets/editing-style/*.mp4
 !frontend/src/assets/editing-style/*.webm
+# 导入页剪辑风格选择器的验收截图和交互录屏
+!docs/images/editing-style-picker/*.mp4
 *.mp3
 *.wav
 *.flac
