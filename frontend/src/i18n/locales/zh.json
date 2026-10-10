@@ -1598,7 +1598,7 @@
   "导入时选定。得分靠前的成片用这个模板，其余用经典包装。": "导入时选定。得分靠前的成片用这个模板，其余用经典包装。",
   "editing_style.title": "剪辑风格",
   "editing_style.lead": "放入素材后，这里会预览三种风格并选好最合适的一种。",
-  "editing_style.lead_ready": "悬停可看 2.5 秒静音预览。",
+  "editing_style.lead_ready": "得分前 3 的成片用所选风格，其余用经典。",
   "editing_style.empty": "放入链接或文件后，这里会出现三种剪辑风格的预览，并自动选好最合适的一种。",
   "editing_style.text_hint": "导入时选定。得分靠前的成片用这个风格，其余用经典。",
   "editing_style.editorial.name": "杂志风",

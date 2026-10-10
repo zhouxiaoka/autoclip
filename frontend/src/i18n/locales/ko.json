@@ -1598,7 +1598,7 @@
   "导入时选定。得分靠前的成片用这个模板，其余用经典包装。": "가져올 때 고릅니다. 점수가 높은 영상만 이 템플릿을 쓰고 나머지는 클래식입니다.",
   "editing_style.title": "편집 스타일",
   "editing_style.lead": "영상을 넣으면 세 가지 스타일을 미리 보고, 가장 알맞은 하나를 골라 둡니다.",
-  "editing_style.lead_ready": "마우스를 올리면 2.5초 무음 미리보기가 재생됩니다.",
+  "editing_style.lead_ready": "점수 상위 3편은 선택한 스타일, 나머지는 클래식입니다.",
   "editing_style.empty": "링크나 파일을 넣으면 세 가지 편집 스타일 미리보기가 나타나고, 가장 알맞은 하나가 선택됩니다.",
   "editing_style.text_hint": "가져올 때 고릅니다. 점수가 높은 결과만 이 스타일을 쓰고, 나머지는 클래식입니다.",
   "editing_style.editorial.name": "매거진",

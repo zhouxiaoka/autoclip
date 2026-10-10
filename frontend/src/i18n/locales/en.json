@@ -1598,7 +1598,7 @@
   "导入时选定。得分靠前的成片用这个模板，其余用经典包装。": "Chosen at import. The highest-scored clips use it; the rest stay classic.",
   "editing_style.title": "Editing style",
   "editing_style.lead": "After you add media, three styles appear here and one is selected for you.",
-  "editing_style.lead_ready": "Hover for a silent 2.5-second preview.",
+  "editing_style.lead_ready": "The top 3 scored cuts use the selected style. The rest use Classic.",
   "editing_style.empty": "Add a link or a file to preview three editing styles. The closest match is selected for you.",
   "editing_style.text_hint": "Chosen at import. The highest-scored clips use it; the rest stay classic.",
   "editing_style.editorial.name": "Editorial",

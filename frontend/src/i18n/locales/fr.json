@@ -1598,7 +1598,7 @@
   "导入时选定。得分靠前的成片用这个模板，其余用经典包装。": "Choisi à l’import. Les extraits les mieux notés l’utilisent ; les autres restent classiques.",
   "editing_style.title": "Style de montage",
   "editing_style.lead": "Après l’ajout de la vidéo, trois styles s’affichent ici et le plus adapté est déjà choisi.",
-  "editing_style.lead_ready": "Survolez pour une prévisualisation muette de 2,5 secondes.",
+  "editing_style.lead_ready": "Les 3 montages les mieux notés utilisent le style choisi, le reste le classique.",
   "editing_style.empty": "Ajoutez un lien ou un fichier pour voir trois styles. Le plus adapté est sélectionné.",
   "editing_style.text_hint": "Choisi à l’import. Les meilleurs extraits l’utilisent ; les autres restent classiques.",
   "editing_style.editorial.name": "Magazine",

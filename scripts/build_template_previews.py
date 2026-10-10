@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Build silent 2.5s editing-style previews from packaged stills.
+"""Build silent 2.5s editing-style previews.
 
 Each style writes three files under frontend/src/assets/editing-style/:
 
-  <id>.poster.webp   270x480, at most 30KB
+  <id>.poster.webp   270x480, a frame from the same clip, at most 30KB
   <id>.preview.webm  VP9, 216x384, 24fps, 2.5s, no audio, at most 120KB
   <id>.preview.mp4   H.264, same picture, at most 120KB
 
 The nine files together stay at or under 500KB, and every file stays under
-300KB. Stills ship in scripts/fixtures/editing-style/. A real render can
-replace a still via --video <id>=/path/to.mp4.
+300KB. Pass a real render with --video <id>=/path/to.mp4. Square footage is
+centered on a darkened blur so the frame is 9:16. Without --video the script
+falls back to the stills in scripts/fixtures/editing-style/.
 
-  python scripts/build_template_previews.py
+  python scripts/build_template_previews.py --video editorial=/path.mp4
   python scripts/build_template_previews.py --check
 """
 from __future__ import annotations
@@ -32,6 +33,8 @@ FILE_MAX = 300 * 1024
 TOTAL_MAX = 500 * 1024
 WIDTH, HEIGHT, FPS, DURATION = 216, 384, 24, 2.5
 POSTER_W, POSTER_H = 270, 480
+# Representative windows inside the supplied renders, after the title has settled.
+CLIP_START = {'editorial': 8.0, 'street': 6.0, 'classic': 8.0}
 
 
 def ffmpeg() -> str:
@@ -88,18 +91,59 @@ def encode_pair(ff: str, frames: list[Path], dest: Path, codec: str, quality: in
     run([ff, '-y', *inputs, '-filter_complex', graph, '-map', '[v]', *encode, '-t', str(DURATION), str(dest)])
 
 
-def encode_video(ff: str, source: Path | None, frames: list[Path], dest: Path, codec: str) -> None:
+def source_size(path: Path) -> tuple[int, int]:
+    probe = shutil.which('ffprobe')
+    if not probe:
+        raise SystemExit('ffprobe is required')
+    completed = subprocess.run(
+        [probe, '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x', str(path)],
+        capture_output=True, text=True,
+    )
+    if completed.returncode != 0 or 'x' not in completed.stdout:
+        raise SystemExit(completed.stderr[-500:] or f'could not read {path}')
+    width, height = completed.stdout.strip().split('x', 1)
+    return int(width), int(height)
+
+
+def needs_portrait_pad(width: int, height: int) -> bool:
+    if height <= 0:
+        return False
+    return abs((width / height) - (9 / 16)) > 0.04
+
+
+def render_graph(pad: bool) -> str:
+    """Fill 9:16, or center a non-portrait frame on a darkened blur."""
+    if not pad:
+        return (
+            f'scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,crop={WIDTH}:{HEIGHT},'
+            f'fps={FPS},format=yuv420p,setsar=1'
+        )
+    return (
+        '[0:v]split[fg0][bg0];'
+        f'[bg0]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,crop={WIDTH}:{HEIGHT},'
+        'boxblur=16:2,eq=brightness=-0.22:saturation=0.5,setsar=1[bg];'
+        f'[fg0]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=decrease,setsar=1[fg];'
+        f'[bg][fg]overlay=x=(W-w)/2:y=(H-h)/2,fps={FPS},format=yuv420p,tpad=stop_mode=clone:stop_duration=0.08,trim=duration={DURATION},setpts=PTS-STARTPTS[v]'
+    )
+
+
+def encode_video(ff: str, source: Path | None, frames: list[Path], dest: Path, codec: str, style: str) -> None:
     """Prefer a real render when one is passed. Otherwise build from stills."""
     if source and source.exists():
-        graph = (
-            f'scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,crop={WIDTH}:{HEIGHT},'
-            f'fps={FPS},format=yuv420p,trim=duration={DURATION},setpts=PTS-STARTPTS'
-        )
+        width, height = source_size(source)
+        pad = needs_portrait_pad(width, height)
+        graph = render_graph(pad)
         qualities = (36, 42, 48, 52) if codec == 'webm' else (28, 32, 36, 40)
-        encode_base = ['-c:v', 'libvpx-vp9', '-b:v', '0', '-deadline', 'good', '-cpu-used', '1', '-an'] if codec == 'webm' else ['-c:v', 'libx264', '-preset', 'slow', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an']
+        encode_base = ['-c:v', 'libvpx-vp9', '-b:v', '0', '-deadline', 'good', '-cpu-used', '2', '-row-mt', '1', '-an'] if codec == 'webm' else ['-c:v', 'libx264', '-preset', 'slow', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an']
+        start = str(CLIP_START.get(style, 0))
         for quality in qualities:
-            crf = ['-crf', str(quality)]
-            run([ff, '-y', '-i', str(source), '-vf', graph, *encode_base, *crf, '-t', str(DURATION), str(dest)])
+            command = [ff, '-y', '-ss', start, '-t', str(DURATION), '-i', str(source)]
+            if pad:
+                command.extend(['-filter_complex', graph, '-map', '[v]'])
+            else:
+                command.extend(['-vf', graph, '-map', '0:v:0'])
+            command.extend([*encode_base, '-crf', str(quality), '-an', str(dest)])
+            run(command)
             if fit(dest, VIDEO_MAX):
                 return
         raise SystemExit(f'{dest.name} is still over {VIDEO_MAX} bytes')
@@ -108,6 +152,15 @@ def encode_video(ff: str, source: Path | None, frames: list[Path], dest: Path, c
         if fit(dest, VIDEO_MAX):
             return
     raise SystemExit(f'{dest.name} is still over {VIDEO_MAX} bytes')
+
+
+def poster_from_clip(ff: str, clip: Path, dest: Path) -> None:
+    """Poster is one frame of the silent clip, not a separate still."""
+    for quality in (68, 58, 48, 38, 28):
+        run([ff, '-y', '-ss', '0.6', '-i', str(clip), '-frames:v', '1', '-vf', f'scale={POSTER_W}:{POSTER_H}', '-c:v', 'libwebp', '-quality', str(quality), str(dest)])
+        if fit(dest, POSTER_MAX):
+            return
+    raise SystemExit(f'{dest.name} is still over {POSTER_MAX} bytes')
 
 
 def poster(ff: str, frame: Path, dest: Path) -> None:
@@ -151,12 +204,19 @@ def build(videos: dict[str, Path]) -> None:
     ff = ffmpeg()
     OUT.mkdir(parents=True, exist_ok=True)
     for style in STYLES:
+        source = videos.get(style)
         frames = stills_for(style)
-        if not frames[0].exists():
+        if source is None and not frames[0].exists():
             raise SystemExit(f'missing still {frames[0]}')
-        encode_video(ff, videos.get(style), frames, OUT / f'{style}.preview.webm', 'webm')
-        encode_video(ff, videos.get(style), frames, OUT / f'{style}.preview.mp4', 'mp4')
-        poster(ff, frames[0], OUT / f'{style}.poster.webp')
+        if source is not None and not source.exists():
+            raise SystemExit(f'missing render {source}')
+        webm = OUT / f'{style}.preview.webm'
+        encode_video(ff, source, frames, webm, 'webm', style)
+        encode_video(ff, source, frames, OUT / f'{style}.preview.mp4', 'mp4', style)
+        if source is not None:
+            poster_from_clip(ff, webm, OUT / f'{style}.poster.webp')
+        else:
+            poster(ff, frames[0], OUT / f'{style}.poster.webp')
     if check() != 0:
         raise SystemExit('preview budget check failed')
 

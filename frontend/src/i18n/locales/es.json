@@ -1598,7 +1598,7 @@
   "导入时选定。得分靠前的成片用这个模板，其余用经典包装。": "Se elige al importar. Los clips con mejor puntuación la usan; el resto sigue en clásica.",
   "editing_style.title": "Estilo de edición",
   "editing_style.lead": "Al añadir el vídeo, aquí verás tres estilos y se elegirá el más adecuado.",
-  "editing_style.lead_ready": "Pasa el cursor para ver una vista previa muda de 2,5 segundos.",
+  "editing_style.lead_ready": "Las 3 piezas con mejor puntuación usan el estilo elegido; el resto usa el clásico.",
   "editing_style.empty": "Añade un enlace o un archivo para ver tres estilos y dejar elegido el más adecuado.",
   "editing_style.text_hint": "Se elige al importar. Los clips mejor puntuados lo usan; el resto queda en clásico.",
   "editing_style.editorial.name": "Editorial",

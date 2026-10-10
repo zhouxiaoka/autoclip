@@ -20,6 +20,18 @@ const COPY: Record<EditingStyle, { name: string; desc: string }> = {
   classic: { name: 'editing_style.classic.name', desc: 'editing_style.classic.desc' },
 }
 
+function previewUrl(node: HTMLVideoElement, urls: { webm: string; mp4: string }): string {
+  return node.canPlayType('video/webm; codecs="vp9"') !== '' ? urls.webm : urls.mp4
+}
+
+function assignPreview(node: HTMLVideoElement, src: string) {
+  if (node.getAttribute('data-src') === src) return
+  node.preload = 'auto'
+  node.muted = true
+  node.setAttribute('data-src', src)
+  node.src = src
+}
+
 function useMedia(query: string): boolean {
   const [matches, setMatches] = useState(false)
   useEffect(() => {
@@ -50,6 +62,7 @@ export default function EditingStylePicker({
   const [focus, setFocus] = useState<EditingStyle | null>(null)
   const [pinned, setPinned] = useState<EditingStyle | null>(null)
   const [hidden, setHidden] = useState(false)
+  const [viewTick, setViewTick] = useState(0)
   const [intelMac, setIntelMac] = useState(false)
   const [degraded, setDegraded] = useState(() => degradeFromEnvironment(
     typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency,
@@ -59,6 +72,7 @@ export default function EditingStylePicker({
   const reducedMotion = useMedia('(prefers-reduced-motion: reduce)')
   const reducedTransparency = useMedia('(prefers-reduced-transparency: reduce)')
   const videos = useRef<Partial<Record<EditingStyle, HTMLVideoElement | null>>>({})
+  const visible = useRef<Partial<Record<EditingStyle, boolean>>>({})
   const bars = useRef<Partial<Record<EditingStyle, HTMLElement | null>>>({})
   const cards = useRef<Partial<Record<EditingStyle, HTMLDivElement | null>>>({})
   const started = useRef(new Set<string>())
@@ -146,36 +160,78 @@ export default function EditingStylePicker({
     const tick = (now: number) => {
       if (now - last > 50) slow += 1
       last = now
-      if (now - startedAt < 320) raf = requestAnimationFrame(tick)
+      if (now - startedAt < 180) raf = requestAnimationFrame(tick)
       else if (slow >= 2) setDegraded(true)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
   }, [index, reducedMotion, degraded])
 
+  const onScreen = (id: EditingStyle | null): id is EditingStyle => id !== null && visible.current[id] !== false
   const playing: EditingStyle[] = []
   if (!disabled && !hidden && sourceKey) {
     if (reducedMotion) {
-      if (pinned) playing.push(pinned)
+      if (onScreen(pinned)) playing.push(pinned)
     } else {
-      if (hover && hover !== selected) playing.push(hover)
-      if (focus && focus !== selected && focus !== hover) playing.push(focus)
-      playing.push(selected)
+      if (onScreen(hover) && hover !== selected) playing.push(hover)
+      if (onScreen(focus) && focus !== selected && focus !== hover) playing.push(focus)
+      if (onScreen(selected)) playing.push(selected)
     }
   }
-  const playKey = playing.slice(0, 2).join(',')
+  const screenKey = HTML_TEMPLATE_CHOICES.map(id => visible.current[id] === false ? '0' : '1').join('')
+  const playKey = `${playing.slice(0, 2).join(',')}|${screenKey}|${viewTick}`
+
+  useEffect(() => {
+    if (!sourceKey || typeof IntersectionObserver !== 'function') return
+    const observer = new IntersectionObserver(entries => {
+      let changed = false
+      for (const entry of entries) {
+        const id = entry.target.getAttribute('data-style') as EditingStyle | null
+        if (!id) continue
+        const next = entry.isIntersecting
+        if (visible.current[id] !== next) {
+          visible.current[id] = next
+          changed = true
+        }
+      }
+      if (changed) setViewTick(value => value + 1)
+    }, { threshold: 0.01 })
+    for (const id of HTML_TEMPLATE_CHOICES) {
+      const node = cards.current[id]
+      if (node) observer.observe(node)
+    }
+    return () => observer.disconnect()
+  }, [sourceKey])
 
   useEffect(() => {
     if (!sourceKey || reducedMotion) return
-    const order = [selected, ...HTML_TEMPLATE_CHOICES.filter(id => id !== selected)]
+    const recommended = recommendation?.template ?? selected
+    const order = [recommended, ...HTML_TEMPLATE_CHOICES.filter(id => id !== recommended && visible.current[id] !== false)]
     let cancel = false
     let cursor = 0
-    const ric = window.requestIdleCallback || ((cb: IdleRequestCallback) => window.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline), 200))
+    const ric = window.requestIdleCallback || ((cb: IdleRequestCallback) => window.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline), 80))
+    const prime = async (id: EditingStyle) => {
+      const urls = await loadStylePreview(id)
+      if (cancel) return
+      const node = videos.current[id]
+      if (!node) return
+      assignPreview(node, previewUrl(node, urls))
+      if (node.dataset.primed === '1' || node.dataset.show === '1') return
+      try {
+        node.muted = true
+        await node.play()
+        if (cancel || node.dataset.show === '1') return
+        node.pause()
+        node.dataset.primed = '1'
+      } catch {
+        /* autoplay can be blocked; the file is still buffered for the hover */
+      }
+    }
     const step = () => {
       if (cancel || cursor >= order.length) return
       const id = order[cursor]
       cursor += 1
-      loadStylePreview(id).finally(() => { if (!cancel) ric(step) })
+      prime(id).finally(() => { if (!cancel) ric(step) })
     }
     const handle = ric(step)
     return () => {
@@ -184,32 +240,30 @@ export default function EditingStylePicker({
       if (window.cancelIdleCallback) window.cancelIdleCallback(handle)
       else window.clearTimeout(handle)
     }
-  }, [sourceKey, reducedMotion, selected])
+  }, [sourceKey, reducedMotion, selected, recommendation?.template, viewTick])
 
   useEffect(() => {
-    const want = new Set(playKey ? playKey.split(',') as EditingStyle[] : [])
+    const want = new Set(playKey.split('|')[0].split(',').filter(Boolean) as EditingStyle[])
     let cancel = false
     for (const id of HTML_TEMPLATE_CHOICES) {
       const node = videos.current[id]
       if (!node) continue
       if (!want.has(id)) {
+        node.dataset.show = '0'
         node.pause()
-        started.current.delete(id)
         continue
       }
       const trigger: Trigger = pinned === id && reducedMotion ? 'button' : hover === id ? 'hover' : focus === id && id !== selected ? 'focus' : lastInput.current === 'keyboard' && id === selected ? 'keyboard' : 'select'
       const mark = `${id}:${trigger}`
+      node.dataset.show = '1'
       void loadStylePreview(id).then(urls => {
         if (cancel || !want.has(id)) return
-        const webm = node.canPlayType('video/webm; codecs="vp9"') !== ''
-        const src = webm ? urls.webm : urls.mp4
-        if (node.getAttribute('data-src') !== src) {
-          node.setAttribute('data-src', src)
-          node.src = src
-        }
+        assignPreview(node, previewUrl(node, urls))
         if (!started.current.has(id)) {
           started.current.add(id)
-          try { node.currentTime = 0 } catch { /* the poster stays until a frame exists */ }
+          if (node.dataset.primed !== '1' && node.readyState >= 2 && node.currentTime > 0.04) {
+            try { node.currentTime = 0 } catch { /* the poster stays until a frame exists */ }
+          }
         }
         const begun = performance.now()
         const played = node.play()
@@ -293,7 +347,6 @@ export default function EditingStylePicker({
     <legend>{t('editing_style.title')}</legend>
     <p className="studio-muted">{t('editing_style.lead_ready')}</p>
     <div className="studio-style-row" role="radiogroup" aria-label={t('editing_style.title')} aria-disabled={disabled || undefined}>
-      <div className="studio-style-lens" style={{ ['--style-index' as string]: String(Math.max(0, index)) }} aria-hidden="true" />
       {HTML_TEMPLATE_CHOICES.map(id => {
         const on = id === selected
         const recommendedCard = recommendation?.template === id
@@ -301,6 +354,7 @@ export default function EditingStylePicker({
         return <div
           key={id}
           ref={node => { cards.current[id] = node }}
+          data-style={id}
           className={`studio-style-card${on ? ' is-selected' : ''}${hover === id ? ' is-hover' : ''}`}
           role="radio"
           aria-checked={on}
@@ -321,10 +375,12 @@ export default function EditingStylePicker({
               muted
               loop
               playsInline
-              preload="none"
+              preload="auto"
               aria-hidden="true"
               poster={STYLE_POSTERS[id]}
-              onPlaying={event => event.currentTarget.classList.add('is-playing')}
+              onPlaying={event => {
+                if (event.currentTarget.dataset.show === '1') event.currentTarget.classList.add('is-playing')
+              }}
               onTimeUpdate={event => {
                 const bar = bars.current[id]
                 if (bar) bar.style.transform = `scaleX(${Math.min(1, event.currentTarget.currentTime / PREVIEW_SECONDS)})`
