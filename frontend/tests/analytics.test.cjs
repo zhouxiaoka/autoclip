@@ -619,7 +619,7 @@ test('portrait import and saved outro preference retain explicit enums and confi
 test('accepting a recommendation and the import use the same flow id', async () => {
   async function enroll(body) {
     const s = setup(memory(), () => Date.now())
-    const aggregate = load('studio', { './posthog': { captureBusinessEvent: s.capture }, './observer': { workflow: s.tracker }, './workflow': core })
+    const aggregate = load('studio', { './flags': { flagAssigned: () => false }, './posthog': { captureBusinessEvent: s.capture }, './observer': { workflow: s.tracker }, './workflow': core })
     const transport = { defaults: {}, post: async () => ({ project_id: 'project-accepted' }) }
     const file = path.join(__dirname, '../src/features/studio/api.ts')
     const js = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
