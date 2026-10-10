@@ -1587,5 +1587,13 @@
   "合成一个动作": "Une seule action",
   "自动渲染前 10 条": "Rendre automatiquement les 10 meilleurs",
   "自动渲染前 3 条": "Rendre automatiquement les 3 meilleurs",
-  "HTML 包装模板": "Modèles HTML"
+  "HTML 包装模板": "Modèles HTML",
+  "包装模板": "Modèle",
+  "杂志风": "Éditorial",
+  "坐姿访谈、演讲，衬线标题。": "Interviews et conférences, titre en serif.",
+  "街头快剪": "Rue",
+  "街访、快问快答，短字幕。": "Micro-trottoir, sous-titres courts.",
+  "经典包装": "Classique",
+  "沿用现在的字幕包装。": "Garder l’habillage de sous-titres actuel.",
+  "导入时选定。得分靠前的成片用这个模板，其余用经典包装。": "Choisi à l’import. Les extraits les mieux notés l’utilisent ; les autres restent classiques."
 }

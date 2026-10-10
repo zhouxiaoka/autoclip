@@ -1587,5 +1587,13 @@
   "合成一个动作": "Uma única ação",
   "自动渲染前 10 条": "Renderizar automaticamente os 10 melhores",
   "自动渲染前 3 条": "Renderizar automaticamente os 3 melhores",
-  "HTML 包装模板": "Modelos HTML"
+  "HTML 包装模板": "Modelos HTML",
+  "包装模板": "Modelo",
+  "杂志风": "Editorial",
+  "坐姿访谈、演讲，衬线标题。": "Entrevistas e palestras, título em serifa.",
+  "街头快剪": "Rua",
+  "街访、快问快答，短字幕。": "Entrevistas de rua, legendas curtas.",
+  "经典包装": "Clássico",
+  "沿用现在的字幕包装。": "Manter a embalagem de legendas atual.",
+  "导入时选定。得分靠前的成片用这个模板，其余用经典包装。": "Escolhido na importação. Os clipes com maior pontuação usam este modelo; o resto fica no clássico."
 }

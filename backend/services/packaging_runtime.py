@@ -1,6 +1,6 @@
 """高级包装组件（桌面模式，按需安装）。
 
-杂志风 / 街头 / 播客模板要用 Playwright 抓 HTML 叠加层。桌面安装包默认不带这份运行时
+杂志风 / 街头模板要用 Playwright 抓 HTML 叠加层。播客模板不在这一版。桌面安装包默认不带这份运行时
 （Python 包约 40 MB，无头 Chromium 再加大约 100 MB）。没装好时成片走 classic（ASS），
 出片不被挡住。
 
@@ -55,7 +55,7 @@ BROWSER_MIRROR_TIMEOUT_SECONDS = 600
 PIP_SOCKET_TIMEOUT = "15"
 PIP_RETRIES = "1"
 TIMEOUT_EXIT = 124
-HTML_TEMPLATES = frozenset({"editorial", "street", "podcast"})
+HTML_TEMPLATES = frozenset({"editorial", "street"})
 CLASSIC = "classic"
 # 旧版式仍然是 ASS，读到它们时不要误当成 HTML 模板。
 _CLASSIC_ALIASES = frozenset({"", CLASSIC, "interview_zh", "podcast_en", "landscape", "none", "auto"})

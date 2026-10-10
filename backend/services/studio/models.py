@@ -263,6 +263,10 @@ class OutputVariant(BaseModel):
     # rendering the unpackaged draft. `instance` marks which server run is preparing it.
     needs_prepare: bool = False
     instance: str | None = None
+    # Set on the top three scored portrait clips when the import chose an HTML template.
+    html_template: Literal['editorial', 'street'] | None = None
+    # The other automatic portrait clips record why they stayed on classic.
+    html_fallback: Literal['rank'] | None = None
 
 
 class ImportOptions(BaseModel):
@@ -275,6 +279,7 @@ class ImportOptions(BaseModel):
     platforms: list[str] = Field(default_factory=lambda: ['douyin'], min_length=1, max_length=8)
     auto_start: bool = False
     portrait_style: Literal['auto', 'interview', 'podcast'] = 'auto'
+    html_template: Literal['editorial', 'street', 'classic'] | None = None
     branding: BrandingOptions = Field(default_factory=BrandingOptions)
 
     @model_validator(mode='after')

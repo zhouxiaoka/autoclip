@@ -12,10 +12,10 @@
 |---|---|---|
 | `studio_template_render_finished` | 一条成片的模板渲染结束（含降级） | `template`，`encoder`，`downgraded`，`downgrade_reason`，`os`，`cpu_count`，`duration_ms`，`failure_reason`，`outcome`，`strategy_id`，`flow_id` |
 | `studio_template_overridden` | 导入前把默认模板改成另一个 | `from_template`，`to_template`，`stage=pre_import`，`flow_id` |
-| `studio_generation_finished` | 整次生成结束 | 沿用 `outcome`。后续接入会补 `editorial_count` / `street_count` / `classic_count` / `html_downgrade_count`，用来算生成成功和降级率 |
+| `studio_generation_finished` | 整次生成结束 | 沿用 `outcome`。另有 `editorial_count` / `street_count` / `classic_count` / `html_downgrade_count`，用来算生成成功和降级率 |
 | `studio_output_shared` / `studio_download_*` | 复制文案或下载 | 沿用现有事件，`template` 增加 `editorial` / `street` / `classic` |
 
-`downgrade_reason`：`none` / `over_budget` / `missing_runtime` / `intel_mac_unverified` / `rank` / `flag_off`。
+`downgrade_reason`：`none` / `over_budget` / `missing_runtime` / `intel_mac_unverified` / `rank` / `flag_off` / `capture` / `encode`。
 
 `failure_reason`：`none` / `capture` / `encode` / `runtime` / `timeout` / `unknown`。不传 ffmpeg 原文、路径或字幕。
 
@@ -29,6 +29,14 @@
 
 护栏（`pkg_templates_v1`）：生成失败率增加不超过 2 个百分点；渲染 p90 不超过 classic 的 2 倍；包装降级率不超过 10%。
 
-## 还没接到界面上的部分
+## 1.5.7 接到成片上的范围
 
-这一层先固定事件形状和开关。渲染耗时、编码器、降级原因要等抓帧和成片接入之后才会真正发出。PostHog 项目里还没有创建这个开关，validation 环境也还没有截图。全量之前默认值保持关闭。
+导入页在开关打开、并且选了竖版平台时，默认杂志风，可以改成街头快剪或经典包装。得分最高的 3 条自动竖版成片用所选 HTML 模板，叠加层是 ffmpeg 的第二路输入。其余自动竖版记 `rank`，走经典包装。超出自动渲染条数的片段仍是 on_demand，不抓 HTML。
+
+每条成片的时间预算默认 90 秒，`AUTOCLIP_TEMPLATE_BUDGET_SEC` 可改（1–600）。超时、运行时缺失、抓帧失败、编码失败都降到经典，导出不会因为编码器失败。Intel（x86_64）Mac 固定经典，原因 `intel_mac_unverified`。这条路径没有在 Intel Mac 上跑过，标成未验证。
+
+下载和复制文案沿用 `studio_download_*` / `studio_output_shared`。成片结果里有 `template_render` 时，`template` 用实际渲染的 `editorial` / `street` / `classic`。
+
+## 这一版不做
+
+没有播客 HTML 模板。没有智能推荐、`publish_pack_v2`、阻断式质检。贴纸不生成。CLI / MCP 还没有 `--template`。HTML 填充用现有包装字段（标题、字幕，以及已经有的 kicker / emphasis / numbers / gloss）。PostHog 项目里还没有创建这个开关，validation 环境也还没有截图。全量之前默认值保持关闭。

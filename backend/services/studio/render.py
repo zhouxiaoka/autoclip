@@ -60,7 +60,25 @@ def recover_empty_packaging(project_id, draft: Draft, warnings: list[str]) -> Dr
     return draft.model_copy(update={'packaging': Packaging.model_validate({**pack.model_dump(), 'cues': cues})})
 
 
-def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False):
+def _output_offsets(draft: Draft) -> list[float]:
+    from backend.services.studio.packaging_render import timeline
+    return [row[2] for row in timeline(draft.scenes)]
+
+
+def _template_report(job, encoder: str) -> dict | None:
+    if job is None:
+        return None
+    return {
+        'template': job.template,
+        'encoder': encoder,
+        'downgraded': job.downgraded,
+        'downgrade_reason': job.downgrade_reason,
+        'failure_reason': job.failure_reason,
+        'outcome': job.outcome,
+    }
+
+
+def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False, html_template=None, html_fallback=None, features=None, safe_area='xiaohongshu'):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
     w, h = {'portrait': (1080, 1920), 'landscape': (1920, 1080)}.get(draft.aspect, (info.get('width'), info.get('height')))
@@ -95,6 +113,26 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     if draft.subtitles and not entries and not packaged:
         warnings.append('原素材没有可用字幕，本次未烧录字幕')
     project_cancellation.checkpoint(project_id)
+    overlay_path = None
+    overlay_grade = ''
+    overlay_job = None
+    if html_template in ('editorial', 'street'):
+        from backend.services.studio import packaging_html
+        from backend.services.studio.templates.registry import TemplateRegistryError, get
+        try:
+            overlay_grade = get(html_template).base.grade or ''
+            overlay_job = packaging_html.prepare_overlay(
+                project_id, html_template, draft.packaging,
+                sum(audio.scene_duration(scene) for scene in draft.scenes),
+                features=features, safe_area=safe_area,
+            )
+        except (TemplateRegistryError, OSError) as error:
+            packaging_html.report_overlay_failure(error)
+            overlay_job = packaging_html.OverlayJob(None, 'classic', True, 'capture', 'capture', 'downgraded')
+        overlay_path = overlay_job.path if overlay_job else None
+    elif html_fallback == 'rank':
+        from backend.services.studio.packaging_html import OverlayJob
+        overlay_job = OverlayJob(None, 'classic', True, 'rank', 'none', 'downgraded')
     out_dir = directory(project_id) / 'output' / 'studio'
     if not directory(project_id).is_dir():
         raise project_cancellation.ProjectDeleted(project_id)
@@ -104,94 +142,122 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     try:
         with tempfile.TemporaryDirectory(prefix='ac-studio-render-') as temp:
             folder = Path(temp)
-            parts = []
-            for i, scene in enumerate(draft.scenes):
-                duration = audio.scene_duration(scene)
-                srt = folder / f'{i}.srt'
-                body = slice_srt(entries, scene.start, scene.end, subtitle_line_limit(w, h, draft.subtitle_style))
-                if body:
-                    srt.write_text(body, encoding='utf-8')
-                title = folder / 'title.txt'
-                if hook and i == 0:
-                    import textwrap
-                    title.write_text('\n'.join(textwrap.wrap(hook, width=14)), encoding='utf-8')
-                spec = {'layout': draft.layout, 'w': w, 'h': h}
-                req = ExportRequest(project_id, draft.id, layout=draft.layout)
-                if packaged:
-                    from backend.services.studio import packaging_render
-                    ass_path = folder / f'{i}.ass'
-                    ass_path.write_text(packaging_render.scene_ass(draft.packaging, draft.scenes, i), encoding='utf-8')
-                    built = packaging_render.scene_video_graph(draft, scene, i, ass_path, w, h)
-                else:
-                    built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font, draft.subtitle_style)
-                clip_path = folder / f'{i}.mkv'
-                artwork = None
-                backdrop = None
-                if hook and i == 0 and draft.title_style in title_art.STYLES:
-                    artwork = folder / 'title-art.png'
-                    artwork.write_bytes(title_art.png_bytes(hook, draft.title_style, w, h, **title_art.options_for(draft)))
-                    if draft.title_style == 'frosted':
-                        from backend.services.studio.title_materials import backdrop_png
-                        backdrop = folder / 'backdrop.png'
-                        backdrop.write_bytes(backdrop_png(hook, draft.title_style, w, h, **title_art.options_for(draft)))
-                cmd = [get_ffmpeg_path(), '-v', 'error', *render_limits.input_args(), '-ss', str(scene.start), '-i', str(video)]
-                if artwork:
-                    cmd += ['-loop', '1', '-i', str(artwork)]
-                if backdrop:
-                    cmd += ['-loop', '1', '-framerate', '30', '-i', str(backdrop)]
-                silence_input = 1 + int(artwork is not None) + int(backdrop is not None)
-                if keep_audio:
-                    cmd += ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000']
-                cmd += ['-t', str(duration)]
-                graph = None
-                if built:
-                    graph, last = built
-                    graph = graph.replace(':reload=0', ':expansion=none:reload=0').replace(':fontsize=42:', f':fontsize={max(18, round(w * .06))}:').replace(f'[fg]scale={w}:-2[fg2]', f'[fg]scale={w}:{h}:force_original_aspect_ratio=decrease[fg2]')
-                    if draft.layout == 'crop':
-                        from backend.services.studio.framing import layout_filter
-                        graph = graph.replace(f'[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[base]', layout_filter(scene, draft.crop_x, w, h))
-                    if backdrop:
-                        # Keep all three inputs on one clock and use RGB masks:
-                        # a gray mask converted to YUV has neutral chroma (128),
-                        # which otherwise blends colors outside the card.
-                        from backend.services.studio.title_materials import blur_sigma
-                        graph += f";[{last}]fps=30,settb=AVTB,setpts=PTS-STARTPTS,format=gbrp,split[sharp][glasssource];[glasssource]gblur=sigma={blur_sigma(w)}[blurred];[2:v]fps=30,settb=AVTB,setpts=PTS-STARTPTS,alphaextract,format=gbrp[glassmask];[sharp][blurred][glassmask]maskedmerge=enable='lt(t,4)'[glassbase]"
-                        last = 'glassbase'
-                    if artwork:
-                        x, y = title_art.overlay_motion(draft.title_style, draft.title_motion, h)
-                        graph += f";[1:v]format=rgba[titleart];[{last}][titleart]overlay=x='{x}':y='{y}':enable='lt(t,4)':shortest=1[styled]"
-                        last = 'styled'
-                    elif hook and i == 0 and draft.title_style != 'plain':
-                        titles, last = template_filters(hook, draft.title_style, w, h, folder, font, last, scene.end-scene.start)
-                        graph += ';' + ';'.join(titles)
-                    cmd += ['-map', f'[{last}]']
-                else:
-                    cmd += ['-map', '0:v:0']
-                if keep_audio:
-                    graph = ';'.join(filter(None, [graph, audio.cut_filters(silence_input, duration)]))
-                    cmd += ['-map', '[audioout]', '-c:a', 'pcm_s16le', '-ar', '48000', '-ac', '2']
-                else:
-                    cmd += ['-an']
-                if draft.caption_mask:
-                    graph, masked_map = _mask_captions(graph, draft.caption_mask)
-                    if masked_map:
-                        cmd[cmd.index('0:v:0') - 1:cmd.index('0:v:0') + 1] = ['-map', masked_map]
-                if graph:
-                    cmd += ['-filter_complex', graph]
-                from backend.services import video_encoder
+            offsets = _output_offsets(draft)
+            overlay_retried = False
+            while True:
+                parts = []
+                try:
+                    for i, scene in enumerate(draft.scenes):
+                        duration = audio.scene_duration(scene)
+                        srt = folder / f'{i}.srt'
+                        body = slice_srt(entries, scene.start, scene.end, subtitle_line_limit(w, h, draft.subtitle_style))
+                        if body:
+                            srt.write_text(body, encoding='utf-8')
+                        title = folder / 'title.txt'
+                        if hook and i == 0:
+                            import textwrap
+                            title.write_text('\n'.join(textwrap.wrap(hook, width=14)), encoding='utf-8')
+                        spec = {'layout': draft.layout, 'w': w, 'h': h}
+                        req = ExportRequest(project_id, draft.id, layout=draft.layout)
+                        scene_overlay = overlay_path
+                        if scene_overlay:
+                            from backend.services.studio import packaging_html, packaging_render
+                            picture, label = packaging_render.picture_only(draft, scene, w, h)
+                            tail, label = packaging_html.composite_tail(label, 1, w, h, overlay_grade)
+                            built = (picture + ';' + tail, label)
+                        elif packaged:
+                            from backend.services.studio import packaging_render
+                            ass_path = folder / f'{i}.ass'
+                            ass_path.write_text(packaging_render.scene_ass(draft.packaging, draft.scenes, i), encoding='utf-8')
+                            built = packaging_render.scene_video_graph(draft, scene, i, ass_path, w, h)
+                        else:
+                            built = _build_filter(req, spec, srt if body else None, title if hook and i == 0 and draft.title_style == 'plain' else None, font, draft.subtitle_style)
+                        clip_path = folder / f'{i}.mkv'
+                        artwork = None
+                        backdrop = None
+                        if scene_overlay:
+                            pass
+                        elif hook and i == 0 and draft.title_style in title_art.STYLES:
+                            artwork = folder / 'title-art.png'
+                            artwork.write_bytes(title_art.png_bytes(hook, draft.title_style, w, h, **title_art.options_for(draft)))
+                            if draft.title_style == 'frosted':
+                                from backend.services.studio.title_materials import backdrop_png
+                                backdrop = folder / 'backdrop.png'
+                                backdrop.write_bytes(backdrop_png(hook, draft.title_style, w, h, **title_art.options_for(draft)))
+                        cmd = [get_ffmpeg_path(), '-v', 'error', *render_limits.input_args(), '-ss', str(scene.start), '-i', str(video)]
+                        if scene_overlay:
+                            # Overlay is the second input. Scene time is the output offset into that movie.
+                            cmd += ['-ss', f'{max(0.0, offsets[i]):.3f}', '-i', str(scene_overlay)]
+                        elif artwork:
+                            cmd += ['-loop', '1', '-i', str(artwork)]
+                        if backdrop:
+                            cmd += ['-loop', '1', '-framerate', '30', '-i', str(backdrop)]
+                        silence_input = 1 + int(scene_overlay is not None) + int(artwork is not None) + int(backdrop is not None)
+                        if keep_audio:
+                            cmd += ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000']
+                        cmd += ['-t', str(duration)]
+                        graph = None
+                        if built:
+                            graph, last = built
+                            graph = graph.replace(':reload=0', ':expansion=none:reload=0').replace(':fontsize=42:', f':fontsize={max(18, round(w * .06))}:').replace(f'[fg]scale={w}:-2[fg2]', f'[fg]scale={w}:{h}:force_original_aspect_ratio=decrease[fg2]')
+                            if draft.layout == 'crop':
+                                from backend.services.studio.framing import layout_filter
+                                graph = graph.replace(f'[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[base]', layout_filter(scene, draft.crop_x, w, h))
+                            if backdrop:
+                                # Keep all three inputs on one clock and use RGB masks:
+                                # a gray mask converted to YUV has neutral chroma (128),
+                                # which otherwise blends colors outside the card.
+                                from backend.services.studio.title_materials import blur_sigma
+                                graph += f";[{last}]fps=30,settb=AVTB,setpts=PTS-STARTPTS,format=gbrp,split[sharp][glasssource];[glasssource]gblur=sigma={blur_sigma(w)}[blurred];[2:v]fps=30,settb=AVTB,setpts=PTS-STARTPTS,alphaextract,format=gbrp[glassmask];[sharp][blurred][glassmask]maskedmerge=enable='lt(t,4)'[glassbase]"
+                                last = 'glassbase'
+                            if artwork:
+                                x, y = title_art.overlay_motion(draft.title_style, draft.title_motion, h)
+                                graph += f";[1:v]format=rgba[titleart];[{last}][titleart]overlay=x='{x}':y='{y}':enable='lt(t,4)':shortest=1[styled]"
+                                last = 'styled'
+                            elif hook and i == 0 and not scene_overlay and draft.title_style != 'plain':
+                                titles, last = template_filters(hook, draft.title_style, w, h, folder, font, last, scene.end-scene.start)
+                                graph += ';' + ';'.join(titles)
+                            cmd += ['-map', f'[{last}]']
+                        else:
+                            cmd += ['-map', '0:v:0']
+                        if keep_audio:
+                            graph = ';'.join(filter(None, [graph, audio.cut_filters(silence_input, duration)]))
+                            cmd += ['-map', '[audioout]', '-c:a', 'pcm_s16le', '-ar', '48000', '-ac', '2']
+                        else:
+                            cmd += ['-an']
+                        if draft.caption_mask:
+                            graph, masked_map = _mask_captions(graph, draft.caption_mask)
+                            if masked_map:
+                                cmd[cmd.index('0:v:0') - 1:cmd.index('0:v:0') + 1] = ['-map', masked_map]
+                        if graph:
+                            cmd += ['-filter_complex', graph]
+                        from backend.services import video_encoder
 
-                def build(name, base=cmd, clip_path=clip_path):
-                    return [*base, *video_encoder.h264_args(w, h, name), '-r', '30', *render_limits.output_args(), '-y', str(clip_path)]
+                        def build(name, base=cmd, clip_path=clip_path):
+                            return [*base, *video_encoder.h264_args(w, h, name), '-r', '30', *render_limits.output_args(), '-y', str(clip_path)]
 
-                def run(full, length=scene.end - scene.start):
-                    full, priority = render_limits.low_priority(full)
-                    return project_cancellation.run(full, capture_output=True, text=True, timeout=max(180, length * 20), **priority)
+                        def run(full, length=scene.end - scene.start):
+                            full, priority = render_limits.low_priority(full)
+                            return project_cancellation.run(full, capture_output=True, text=True, timeout=max(180, length * 20), **priority)
 
-                proc = video_encoder.run_with_fallback(build, run)
-                if proc.returncode:
-                    raise RuntimeError('渲染镜头失败：' + proc.stderr[-600:])
-                parts.append(clip_path)
-                progress(round(10 + (i+1) / len(draft.scenes) * 80))
+                        proc = video_encoder.run_with_fallback(build, run)
+                        if proc.returncode and scene_overlay:
+                            # One classic retry for the whole clip. An encoder miss must not fail the export.
+                            from backend.services.studio.packaging_html import OverlayJob
+                            overlay_path = None
+                            overlay_job = OverlayJob(None, 'classic', True, 'encode', 'encode', 'downgraded')
+                            raise RuntimeError('__html_retry__')
+                        if proc.returncode:
+                            raise RuntimeError('渲染镜头失败：' + proc.stderr[-600:])
+                        parts.append(clip_path)
+                        progress(round(10 + (i+1) / len(draft.scenes) * 80))
+                    break
+                except RuntimeError as error:
+                    if str(error) != '__html_retry__' or overlay_retried:
+                        if str(error) == '__html_retry__':
+                            raise RuntimeError('渲染镜头失败') from None
+                        raise
+                    overlay_retried = True
             concat = folder / 'parts.txt'
             durations = [audio.scene_duration(scene) for scene in draft.scenes]
             concat.write_text(''.join(f"file '{p}'\nduration {duration:.9f}\n" for p, duration in zip(parts, durations)), encoding='utf-8')
@@ -208,6 +274,10 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             outro_applied = append_outro(partial, output, width=w, height=h, enabled=brand_outro)
             if brand_outro and not outro_applied:
                 warnings.append('品牌片尾未能添加，已保留成片')
-        return {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
+        result = {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
+        if overlay_job is not None:
+            from backend.services import video_encoder
+            result['template_render'] = _template_report(overlay_job, video_encoder.encoder())
+        return result
     finally:
         partial.unlink(missing_ok=True)

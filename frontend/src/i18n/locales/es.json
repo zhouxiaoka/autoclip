@@ -1587,5 +1587,13 @@
   "合成一个动作": "Una sola acción",
   "自动渲染前 10 条": "Renderizar automáticamente las 10 mejores",
   "自动渲染前 3 条": "Renderizar automáticamente las 3 mejores",
-  "HTML 包装模板": "Plantillas HTML"
+  "HTML 包装模板": "Plantillas HTML",
+  "包装模板": "Plantilla",
+  "杂志风": "Editorial",
+  "坐姿访谈、演讲，衬线标题。": "Entrevistas y charlas, título en serif.",
+  "街头快剪": "Calle",
+  "街访、快问快答，短字幕。": "Entrevistas en la calle, subtítulos cortos.",
+  "经典包装": "Clásica",
+  "沿用现在的字幕包装。": "Mantener el empaquetado de subtítulos actual.",
+  "导入时选定。得分靠前的成片用这个模板，其余用经典包装。": "Se elige al importar. Los clips con mejor puntuación la usan; el resto sigue en clásica."
 }

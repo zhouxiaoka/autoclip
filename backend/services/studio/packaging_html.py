@@ -13,10 +13,14 @@ caption in the message.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import subprocess
+import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from backend.services.studio.features import flag_enabled
@@ -30,6 +34,18 @@ PROBE_ORDER = ('h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox')
 _lock = __import__('threading').Lock()
 _chosen: str | None = None
 _broken: set[str] = set()
+
+
+@dataclass
+class OverlayJob:
+    """A captured overlay, or a classic downgrade. ``path`` is local and never logged."""
+
+    path: Path | None
+    template: str
+    downgraded: bool
+    downgrade_reason: str
+    failure_reason: str
+    outcome: str
 
 
 class OverlayEncodeError(RuntimeError):
@@ -112,6 +128,51 @@ async def capture_changed(frame_count: int, fps: int, render, shoot, pages: int 
 
     groups = await asyncio.gather(*(one(ordinal, chunk) for ordinal, chunk in enumerate(split_indices(frame_count, pages))))
     return [frame for group in groups for frame in group]
+
+
+def budget_seconds() -> float:
+    """Per-clip overlay budget. ``AUTOCLIP_TEMPLATE_BUDGET_SEC`` overrides the 90s default."""
+    raw = os.getenv('AUTOCLIP_TEMPLATE_BUDGET_SEC', '90').strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return 90.0
+    if value < 1 or value > 600:
+        return 90.0
+    return value
+
+
+def composite_tail(base_label: str, overlay_index: int, width: int, height: int, grade: str) -> tuple[str, str]:
+    """Grade the base, then place the transparent overlay on top. Label is ``html``."""
+    graph = (
+        f"[{base_label}]{_grade_prefix(grade)}format=yuv420p[graded];"
+        f"[{overlay_index}:v]scale={width}:{height}:flags=lanczos,format=yuva444p[ov];"
+        f"[graded][ov]overlay=0:0:format=auto:shortest=1[html]"
+    )
+    return graph, 'html'
+
+
+def overlay_cache_path(project_id: str, template: str, fill: dict) -> Path:
+    """One file per template and fill. The name is a hash, not the caption."""
+    from backend.services.studio.store import directory
+    blob = json.dumps(fill, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    digest = hashlib.sha256(f'{template}|{blob}'.encode()).hexdigest()[:20]
+    folder = directory(project_id) / 'output' / 'studio' / 'overlays'
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / f'{digest}.mkv'
+
+
+def _downgrade(reason: str, *, failure: str = 'none') -> OverlayJob:
+    if reason == 'none' and failure in {'capture', 'encode'}:
+        reason = failure
+    downgraded = reason not in {'none', 'flag_off'}
+    if reason == 'flag_off':
+        outcome = 'completed'
+    elif downgraded:
+        outcome = 'downgraded'
+    else:
+        outcome = 'failed' if failure != 'none' else 'completed'
+    return OverlayJob(None, 'classic', downgraded, reason, failure, outcome)
 
 
 def report_overlay_failure(error: BaseException) -> None:
@@ -253,3 +314,102 @@ def encode_picture(base: Path, overlay: Path, dest: Path, width: int, height: in
         'duration_ms': int((time.perf_counter() - started) * 1000),
         **host_facts(),
     }) | {'ok': ok, 'encoder': encoder}
+
+
+def _write_holds(frames: list[dict], folder: Path) -> list[tuple[Path, int]]:
+    holds: list[tuple[Path, int]] = []
+    for frame in frames:
+        path = folder / f"{int(frame['index']):05d}.png"
+        png = frame.get('png')
+        if isinstance(png, (bytes, bytearray)):
+            path.write_bytes(png)
+        elif isinstance(png, Path):
+            path.write_bytes(png.read_bytes())
+        else:
+            raise OverlayEncodeError('capture')
+        holds.append((path, int(frame['count'])))
+    return holds
+
+
+async def _playwright_frames(template: str, fill: dict, frame_count: int, fps: int, stop) -> list[dict]:
+    from playwright.async_api import async_playwright
+
+    from backend.services.packaging_runtime import launch_kwargs
+    from backend.services.studio.templates.registry import ASSET_ROOT, get
+
+    width, height = get(template).canvas.overlay_px
+    page_url = (ASSET_ROOT / template / 'index.html').as_uri()
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(**launch_kwargs())
+        try:
+            pages = []
+            for _ordinal in range(min(PAGES, max(1, frame_count))):
+                page = await browser.new_page(viewport={'width': width, 'height': height}, device_scale_factor=1)
+                await page.goto(page_url)
+                await page.evaluate('(fill) => window.setData(fill)', fill)
+                pages.append(page)
+
+            async def render(ordinal, seconds):
+                if stop():
+                    raise OverlayEncodeError('timeout')
+                digest = await pages[ordinal].evaluate('(t) => window.renderFrame(t)', seconds)
+                return digest
+
+            async def shoot(ordinal, index):
+                return await pages[ordinal].screenshot(omit_background=True, type='png')
+
+            return await capture_changed(frame_count, fps, render, shoot)
+        finally:
+            await browser.close()
+
+
+def prepare_overlay(project_id: str, template: str, packaging, duration: float, *, features: dict | None, safe_area: str = 'xiaohongshu', capture=None, clock=None) -> OverlayJob:
+    """Capture the overlay, or return a classic downgrade. This does not raise.
+
+    ``capture(frame_count, fps)`` is the test seam. Without it, Playwright runs
+    only when the packaging runtime is installed.
+    """
+    from backend.services.studio.overlay_fill import build_fill
+    from backend.services.studio.template_choice import blocking_reason
+
+    reason = blocking_reason(features, runtime_ready=True if capture else None)
+    if reason:
+        return _downgrade(reason)
+    if template not in {'editorial', 'street'}:
+        return _downgrade('flag_off')
+    fps = 30
+    frames = max(1, int(round(max(0.1, float(duration)) * fps)))
+    fill = build_fill(packaging, duration, fps=fps, safe_area=safe_area)
+    dest = overlay_cache_path(project_id, template, fill)
+    if dest.is_file() and dest.stat().st_size > 0:
+        return OverlayJob(dest, template, False, 'none', 'none', 'completed')
+    now = clock or time.monotonic
+    started = now()
+    budget = budget_seconds()
+
+    def stop() -> bool:
+        return now() - started > budget
+
+    try:
+        if capture is not None:
+            produced = capture(frames, fps)
+            if asyncio.iscoroutine(produced):
+                produced = asyncio.run(produced)
+        else:
+            produced = asyncio.run(_playwright_frames(template, fill, frames, fps, stop))
+        if stop():
+            return _downgrade('over_budget')
+        with tempfile.TemporaryDirectory(prefix='ac-overlay-') as temp:
+            holds = _write_holds(produced, Path(temp))
+            encode_ffv1(holds, dest, fps=fps)
+    except OverlayEncodeError as error:
+        if error.reason == 'timeout' or stop():
+            return _downgrade('over_budget')
+        report_overlay_failure(error)
+        return _downgrade('missing_runtime' if error.reason == 'runtime' else 'none', failure=error.reason)
+    except Exception as error:  # noqa: BLE001 - a capture failure must not fail the export
+        report_overlay_failure(error)
+        return _downgrade('none', failure='capture')
+    if not dest.is_file():
+        return _downgrade('none', failure='capture')
+    return OverlayJob(dest, template, False, 'none', 'none', 'completed')

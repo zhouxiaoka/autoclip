@@ -9,7 +9,7 @@ import re
 
 TEMPLATES = ('editorial', 'street', 'classic', 'interview_zh', 'podcast_en', 'landscape', 'none')
 ENCODERS = ('libx264', 'h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox')
-DOWNGRADE_REASONS = ('none', 'over_budget', 'missing_runtime', 'intel_mac_unverified', 'rank', 'flag_off')
+DOWNGRADE_REASONS = ('none', 'over_budget', 'missing_runtime', 'intel_mac_unverified', 'rank', 'flag_off', 'capture', 'encode')
 FAILURE_REASONS = ('none', 'capture', 'encode', 'runtime', 'timeout', 'unknown')
 OPERATING_SYSTEMS = ('darwin', 'win32', 'linux')
 OUTCOMES = ('completed', 'downgraded', 'failed')

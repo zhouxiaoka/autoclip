@@ -38,6 +38,6 @@ test('share and rating analytics only carry allowlisted enums',()=>{
  assert.match(workflow,/output_rating: \['ready', 'needs_edit', 'unusable'\]/)
  assert.match(studio,/captureBusinessEvent\('studio_output_shared', safeStudioProperties\(\{ \.\.\.workflow\.context\(projectId\), \.\.\.properties \}\)\)/)
  assert.match(studio,/captureBusinessEvent\('studio_output_rated', safeStudioProperties\(\{ \.\.\.workflow\.context\(projectId\), \.\.\.properties \}\)\)/)
- assert.match(workflow,/template: \['interview_zh', 'podcast_en', 'landscape', 'none'\]/)
+ assert.match(workflow,/template: \['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'\]/)
  assert.match(workflow,/packaging_style: \['classic', 'boxed', 'spotlight', 'pop', 'cinematic'\]/)
 })

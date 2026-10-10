@@ -83,7 +83,9 @@ export function studioImportProperties(body: FormData): Record<string, unknown> 
       else if (host === 'b23.tv' || host === 'bilibili.com' || host.endsWith('.bilibili.com')) source_type = 'bilibili'
     } catch { /* invalid input remains an enum; URL is never captured */ }
   }
-  return { material_origin: 'user', flow_id: telemetryId(), source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,
+  const chosen = body.get?.('html_template')
+  const template = chosen === 'editorial' || chosen === 'street' || chosen === 'classic' ? chosen : undefined
+  return { material_origin: 'user', flow_id: telemetryId(), source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', template, platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,
     // Omitted means the backend's saved preference: do not claim it is enabled.
     brand_outro_enabled: body.get?.('brand_outro_enabled') === 'true' ? true : body.get?.('brand_outro_enabled') === 'false' ? false : undefined }
 }
