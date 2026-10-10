@@ -57,11 +57,15 @@ def export(project_id, draft, *, brand_outro=False, _variant_identity=None, html
         added = store.change(project_id, add)
         if added['job_id'] == job['job_id']:
             try:
+                render_kwargs = {'brand_outro': brand_outro}
+                if job.get('html_template'):
+                    render_kwargs['html_template'] = job['html_template']
+                    render_kwargs['safe_area'] = job.get('html_safe_area') or 'xiaohongshu'
+                elif job.get('html_fallback'):
+                    render_kwargs['html_fallback'] = job['html_fallback']
                 render_executor.submit(
                     _render, project_id, draft, job['job_id'],
-                    brand_outro=brand_outro, html_template=job.get('html_template'),
-                    html_fallback=job.get('html_fallback'), safe_area=job.get('html_safe_area') or 'xiaohongshu',
-                    _io_receipt=('render', job['job_id']),
+                    _io_receipt=('render', job['job_id']), **render_kwargs,
                 )
             except Exception as error:
                 logger.warning('Studio export dispatch failed: %s', type(error).__name__)
@@ -115,10 +119,14 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
         except Exception:
             features = None
         with llm_usage.timed('render'):
+            render_kwargs = {'brand_outro': brand_outro}
+            if html_template:
+                render_kwargs.update(html_template=html_template, features=features, safe_area=safe_area)
+            elif html_fallback:
+                render_kwargs.update(html_fallback=html_fallback, features=features)
             result = render_draft(
                 project_id, source(project_id), draft, job_id, lambda p: update(percent=p),
-                brand_outro=brand_outro, html_template=html_template, html_fallback=html_fallback,
-                features=features, safe_area=safe_area,
+                **render_kwargs,
             )
         elapsed = round((monotonic() - started) * 1000)
         if isinstance(result, dict) and result.get('template_render'):
@@ -1194,12 +1202,16 @@ def _dispatch_pending_variants(project_id):
             continue
         try:
             from backend.services.studio.overlay_fill import SAFE_AREAS
-            safe_area = variant.get('strategy_id') if variant.get('strategy_id') in SAFE_AREAS else 'xiaohongshu'
+            export_kwargs = {}
+            if variant.get('html_template'):
+                export_kwargs['html_template'] = variant['html_template']
+                export_kwargs['safe_area'] = variant.get('strategy_id') if variant.get('strategy_id') in SAFE_AREAS else 'xiaohongshu'
+            elif variant.get('html_fallback'):
+                export_kwargs['html_fallback'] = variant['html_fallback']
             job = export(
                 project_id, Draft.model_validate(raw),
                 brand_outro=bool(variant['branding'].get('outro_enabled', True)),
-                _variant_identity=expected, html_template=variant.get('html_template'),
-                html_fallback=variant.get('html_fallback'), safe_area=safe_area,
+                _variant_identity=expected, **export_kwargs,
             )
         except Exception as error:
             store.raise_owned_read_error(error)
