@@ -21,10 +21,16 @@ from backend.core import project_cancellation as cancel
 def _isolation(monkeypatch, tmp_path):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
     cancel._cancelled.clear()
+    cancel._stopped.clear()
     cancel._processes.clear()
+    cancel._leaders.clear()
+    cancel._temporary.clear()
     yield
     cancel._cancelled.clear()
+    cancel._stopped.clear()
     cancel._processes.clear()
+    cancel._leaders.clear()
+    cancel._temporary.clear()
 
 
 def _project(path: Path, project_id='p-del'):
@@ -35,6 +41,25 @@ def _project(path: Path, project_id='p-del'):
     (folder / 'raw' / 'input.mp4').write_bytes(b'x')
     (folder / 'metadata' / 'studio.json').write_text('{"schema_version":2,"drafts":[],"jobs":[],"analysis":null,"output_variants":[]}', encoding='utf-8')
     return folder
+
+
+def test_stop_keeps_finished_video_and_raises_job_stopped(tmp_path):
+    folder = _project(tmp_path, 'p-stop')
+    finished = folder / 'output' / 'studio' / 'done.mp4'
+    partial = folder / 'output' / 'studio' / 'done.part.mp4'
+    finished.write_bytes(b'keep')
+    partial.write_bytes(b'partial')
+    cancel.note_temporary(folder / 'scratch.tmp', 'p-stop')
+    (folder / 'scratch.tmp').write_text('temp', encoding='utf-8')
+    cancel.stop('p-stop')
+    with pytest.raises(cancel.JobStopped) as caught:
+        cancel.checkpoint('p-stop')
+    assert caught.value.project_id == 'p-stop'
+    assert not isinstance(caught.value, cancel.ProjectDeleted)
+    assert finished.read_bytes() == b'keep'
+    assert not partial.exists()
+    assert not (folder / 'scratch.tmp').exists()
+    assert folder.is_dir()
 
 
 def test_cancel_raises_at_checkpoints_and_is_not_a_crash():

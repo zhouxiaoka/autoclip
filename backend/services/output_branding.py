@@ -132,6 +132,14 @@ def append_outro(source: Path, destination: Path, *, width: int, height: int, en
         return False
 
 
+def _ffmpeg(cmd: list[str], timeout: float) -> subprocess.CompletedProcess:
+    """Use the project process group when a studio render is bound, so cancel reaches this ffmpeg."""
+    from backend.core import project_cancellation
+    if project_cancellation.current():
+        return project_cancellation.run(cmd, check=True, capture_output=True, timeout=timeout)
+    return subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
+
+
 def _append(source: Path, partial: Path, width: int, height: int) -> None:
     with tempfile.TemporaryDirectory(prefix='ac-outro-') as tmp:
         concat = Path(tmp) / 'concat.txt'
@@ -148,10 +156,10 @@ def _append(source: Path, partial: Path, width: int, height: int) -> None:
             _text_outro(outro, width, height, params)
         quote = lambda path: str(path).replace("'", "'\\''")  # noqa: E731 - concat list syntax for an apostrophe in a path
         concat.write_text(f"file '{quote(source)}'\nfile '{quote(outro)}'\n", encoding='utf-8')
-        subprocess.run([
+        _ffmpeg([
             ffmpeg, '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat), '-map', '0:v:0', '-map', '0:a:0?',
             '-c', 'copy', '-movflags', '+faststart', '-y', str(partial),
-        ], check=True, capture_output=True, timeout=120)
+        ], timeout=120)
 
 
 def _text_outro(outro: Path, width: int, height: int, params: dict) -> None:
@@ -159,11 +167,11 @@ def _text_outro(outro: Path, width: int, height: int, params: dict) -> None:
     ffmpeg = get_ffmpeg_path()
     layout = 'mono' if params['channels'] == 1 else 'stereo'
     drawtext = f"drawtext={_font_arg()}:text='Made with AutoClip':x=(w-text_w)/2:y=(h-text_h)/2:fontsize={max(22, round(width * .035))}:fontcolor=white"
-    subprocess.run([
+    _ffmpeg([
         ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', f"color=c=0x1A1A19:s={width}x{height}:d=1:r={params['fps']}",
         '-f', 'lavfi', '-i', f"anullsrc=channel_layout={layout}:sample_rate={params['sample_rate']}", '-t', '1',
         '-vf', drawtext, '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-r', params['fps'],
         '-video_track_timescale', params['timescale'],
         '-c:a', 'aac', '-b:a', '160k', '-ar', params['sample_rate'], '-ac', str(params['channels']),
         '-movflags', '+faststart', '-y', str(outro),
-    ], check=True, capture_output=True, timeout=60)
+    ], timeout=60)

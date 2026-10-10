@@ -89,6 +89,9 @@ def _convert(project_id: str, source: Path, output: Path, token: str):
     except project_cancellation.ProjectDeleted:
         with _lock:
             _states.pop(token, None)
+    except project_cancellation.JobStopped:
+        with _lock:
+            _states[token] = {'status': 'cancelled'}
     except Exception as error:
         capture_studio_exception(error, 'render')
         with _lock:

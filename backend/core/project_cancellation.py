@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import contextvars
 import logging
+import os
 import shutil
+import signal
 import subprocess
 import threading
 import time
@@ -29,9 +31,16 @@ logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 _cancelled: set[str] = set()
+_stopped: set[str] = set()
 _processes: dict[str, set[subprocess.Popen]] = {}
+_leaders: set[int] = set()
+_temporary: dict[str, set[Path]] = {}
 _current: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar('autoclip_project', default=None)
+_recording_stop: contextvars.ContextVar[bool] = contextvars.ContextVar('autoclip_recording_stop', default=False)
 MESSAGE = '项目已删除，已停止生成'
+STOP_MESSAGE = '任务已取消'
+_CREATE_NEW_PROCESS_GROUP = 0x00000200
+_CREATE_NO_WINDOW = 0x08000000
 
 
 class ProjectDeleted(FileNotFoundError):
@@ -39,6 +48,14 @@ class ProjectDeleted(FileNotFoundError):
 
     def __init__(self, project_id: str = ''):
         super().__init__(MESSAGE)
+        self.project_id = project_id
+
+
+class JobStopped(Exception):
+    """The user cancelled this generation. Finished videos stay on disk."""
+
+    def __init__(self, project_id: str = ''):
+        super().__init__(STOP_MESSAGE)
         self.project_id = project_id
 
 
@@ -56,6 +73,56 @@ def restore(project_id: str) -> None:
         _cancelled.discard(project_id)
 
 
+def stop(project_id: str) -> None:
+    """Stop this project's render. Kills the ffmpeg process group and temporary files.
+
+    Finished videos are left in place. Deleting the project still goes through `cancel`.
+    """
+    with _lock:
+        _stopped.add(project_id)
+        running = list(_processes.get(project_id, ()))
+    for proc in running:
+        _kill(proc)
+    clean_temporary(project_id)
+
+
+def is_stopped(project_id: Optional[str]) -> bool:
+    return bool(project_id) and project_id in _stopped
+
+
+def has_running(project_id: str) -> bool:
+    with _lock:
+        return bool(_processes.get(project_id))
+
+
+def note_temporary(path: Path, project_id: Optional[str] = None) -> None:
+    project_id = project_id or _current.get()
+    if not project_id:
+        return
+    with _lock:
+        _temporary.setdefault(project_id, set()).add(Path(path))
+
+
+def clean_temporary(project_id: str) -> None:
+    """Remove scratch files for a cancelled render. A finished `.mp4` stays."""
+    with _lock:
+        noted = list(_temporary.pop(project_id, ()))
+    extras: list[Path] = []
+    studio = project_directory(project_id) / 'output' / 'studio'
+    if studio.is_dir():
+        extras.extend(studio.glob('*.part.mp4'))
+    for path in [*noted, *extras]:
+        if _finished_video(path):
+            continue
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink(missing_ok=True)
+        except OSError as error:
+            logger.warning('Could not remove temporary render file: %s', type(error).__name__)
+
+
 def is_cancelled(project_id: Optional[str]) -> bool:
     return bool(project_id) and project_id in _cancelled
 
@@ -68,10 +135,22 @@ def current_cancelled() -> bool:
     return is_cancelled(_current.get())
 
 
+@contextmanager
+def record_stop():
+    """Let the worker write `cancelled` after a stop without raising again."""
+    token = _recording_stop.set(True)
+    try:
+        yield
+    finally:
+        _recording_stop.reset(token)
+
+
 def checkpoint(project_id: Optional[str] = None) -> None:
     project_id = project_id or _current.get()
     if is_cancelled(project_id):
         raise ProjectDeleted(project_id)
+    if is_stopped(project_id) and not _recording_stop.get():
+        raise JobStopped(project_id)
 
 
 def project_directory(project_id: str) -> Path:
@@ -113,12 +192,49 @@ def bind(project_id: str):
                 remove_files(project_id)
 
 
+def _finished_video(path: Path) -> bool:
+    return path.suffix.lower() == '.mp4' and not path.name.endswith('.part.mp4')
+
+
+def _spawn_kwargs(kwargs: dict) -> dict:
+    """Run the child in its own process group so a cancel reaches ffmpeg and its children."""
+    kwargs = dict(kwargs)
+    if os.name == 'nt':
+        flags = int(kwargs.get('creationflags') or 0)
+        flags |= int(getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', _CREATE_NEW_PROCESS_GROUP))
+        flags |= int(getattr(subprocess, 'CREATE_NO_WINDOW', _CREATE_NO_WINDOW))
+        kwargs['creationflags'] = flags
+    else:
+        kwargs['start_new_session'] = True
+    return kwargs
+
+
 def _kill(proc: subprocess.Popen) -> None:
+    if proc.poll() is not None:
+        return
     try:
-        if proc.poll() is None:
+        if os.name == 'nt':
+            subprocess.run(
+                ['taskkill', '/F', '/T', '/PID', str(proc.pid)],
+                capture_output=True, timeout=5, check=False,
+                creationflags=int(getattr(subprocess, 'CREATE_NO_WINDOW', _CREATE_NO_WINDOW)),
+            )
+        elif proc.pid in _leaders:
+            os.killpg(proc.pid, signal.SIGKILL)
+        else:
             proc.kill()
-    except OSError:
-        pass
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+    try:
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except OSError:
+            pass
 
 
 def run(cmd, *, check: bool = False, timeout: Optional[float] = None, capture_output: bool = False, **kwargs):
@@ -130,11 +246,14 @@ def run(cmd, *, check: bool = False, timeout: Optional[float] = None, capture_ou
     if capture_output:
         kwargs['stdout'] = subprocess.PIPE
         kwargs['stderr'] = subprocess.PIPE
+    kwargs = _spawn_kwargs(kwargs)
     with subprocess.Popen(cmd, **kwargs) as proc:
         with _lock:
             _processes.setdefault(project_id, set()).add(proc)
+            if os.name != 'nt':
+                _leaders.add(proc.pid)
         try:
-            if is_cancelled(project_id):
+            if is_cancelled(project_id) or is_stopped(project_id):
                 _kill(proc)  # cancelled between the checkpoint and the registration
             try:
                 stdout, stderr = proc.communicate(timeout=timeout)
@@ -147,6 +266,7 @@ def run(cmd, *, check: bool = False, timeout: Optional[float] = None, capture_ou
                 raise
         finally:
             with _lock:
+                _leaders.discard(proc.pid)
                 running = _processes.get(project_id)
                 if running is not None:
                     running.discard(proc)

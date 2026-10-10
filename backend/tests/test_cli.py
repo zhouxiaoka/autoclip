@@ -52,6 +52,25 @@ def test_cli_and_mcp_report_the_package_version(capsys):
     assert get_version() == {'version': __version__}
 
 
+def test_api_key_flag_warns_and_env_is_the_default(capsys, monkeypatch):
+    from argparse import Namespace
+    from backend.cli import _llm_override, build_parser
+
+    monkeypatch.setenv('AUTOCLIP_API_KEY', 'env-secret')
+    quiet = _llm_override(Namespace(provider=None, model=None, base_url=None, api_key=None))
+    assert quiet.api_key == 'env-secret'
+    assert '弃用' not in capsys.readouterr().err
+    flagged = _llm_override(Namespace(provider=None, model=None, base_url=None, api_key='flag-secret'))
+    err = capsys.readouterr().err
+    assert flagged.api_key == 'flag-secret'
+    assert '弃用' in err and 'AUTOCLIP_API_KEY' in err
+    with pytest.raises(SystemExit) as result:
+        build_parser().parse_args(['run', '--help'])
+    assert result.value.code == 0
+    help_text = capsys.readouterr().out
+    assert '弃用' in help_text and 'AUTOCLIP_API_KEY' in help_text
+
+
 def test_parser_run_accepts_provider_presets():
     from backend.cli import build_parser
 

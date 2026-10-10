@@ -58,19 +58,63 @@ def lookup(project_id: str) -> dict[str, Any]:
 
 
 def cancel(project_id: str) -> dict[str, Any]:
-    """Mark a known job cancelled. Does not delete project files."""
+    """Stop a running render, keep finished videos, and record cancelled."""
     if not valid_id(project_id):
         return _view(project_id, status='unknown', error_code='invalid_input')
+    from backend.core import project_cancellation
+
     record = read_job(project_id)
-    if record is None:
+    busy = project_cancellation.has_running(project_id) or _studio_busy(project_id)
+    if record is None and not busy:
         return _view(project_id, status='unknown', error_code='unknown')
-    status = record.get('status')
-    if status not in RUNNING:
+    status = record.get('status') if record else None
+    if not busy and status not in RUNNING:
         return lookup(project_id)
+    project_cancellation.stop(project_id)
+    _settle_studio(project_id)
     write_job(project_id, status='cancelled', stage='cancelled', error_code='cancelled',
-              progress=record.get('progress'), kind=record.get('kind'), result=record.get('result'),
-              started_at=record.get('started_at'))
+              progress=(record or {}).get('progress'), kind=(record or {}).get('kind'),
+              result=(record or {}).get('result'), started_at=(record or {}).get('started_at'))
     return lookup(project_id)
+
+
+def _studio_busy(project_id: str) -> bool:
+    from backend.core.project_cancellation import project_directory
+    path = project_directory(project_id) / 'metadata' / 'studio.json'
+    if not path.is_file():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    generation = data.get('generation') or {}
+    if isinstance(generation, dict) and generation.get('status') in ('screening', 'rendering', 'running', 'queued'):
+        return True
+    return any(isinstance(job, dict) and job.get('status') in ('queued', 'running', 'preparing') for job in data.get('jobs') or [])
+
+
+def _settle_studio(project_id: str) -> None:
+    """Mark in-progress desktop jobs cancelled. Finished videos stay completed."""
+    from backend.core.project_cancellation import record_stop
+    from backend.services.studio import store
+    try:
+        with record_stop():
+            def mutate(data):
+                generation = data.get('generation')
+                if isinstance(generation, dict) and generation.get('status') in ('screening', 'rendering', 'running', 'queued'):
+                    generation['status'] = 'cancelled'
+                for job in data.get('jobs') or []:
+                    if isinstance(job, dict) and job.get('status') in ('queued', 'running', 'preparing'):
+                        job['status'] = 'cancelled'
+                        job['error_code'] = 'cancelled'
+                for variant in data.get('output_variants') or []:
+                    if isinstance(variant, dict) and variant.get('status') in ('queued', 'running', 'preparing'):
+                        variant['status'] = 'cancelled'
+            store.change(project_id, mutate)
+    except (OSError, FileNotFoundError, LookupError, ValueError):
+        return
 
 
 def write_job(project_id: str, **fields: Any) -> dict[str, Any] | None:

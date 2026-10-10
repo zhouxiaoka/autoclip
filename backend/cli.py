@@ -5,7 +5,7 @@ autoclip — 命令行出片。
     autoclip run video.mp4                         # 用桌面应用里配好的模型
     autoclip run video.mp4 --provider ollama       # 本地 Ollama（默认 qwen2.5:7b，无需 key）
     autoclip run video.mp4 --provider lmstudio --model qwen2.5-7b-instruct
-    autoclip run video.mp4 --provider openai --base-url https://api.deepseek.com/v1 --model deepseek-chat --api-key sk-...
+    AUTOCLIP_API_KEY=sk-... autoclip run video.mp4 --provider openai --base-url https://api.deepseek.com/v1 --model deepseek-chat
     autoclip run video.mp4 --srt video.srt --min-score 0.6 --json
     autoclip list / show <project_id> / providers / doctor
     autoclip publish <project_id> --clip 2 --platform tiktok --platform youtube   # 经 Upload-Post 发到海外平台
@@ -65,15 +65,18 @@ def _add_llm_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--provider", choices=PROVIDER_CHOICES, help="dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88，或本地预设 ollama / lmstudio")
     g.add_argument("--model", help="模型名，如 qwen-plus、gpt-4o-mini、qwen2.5:7b")
     g.add_argument("--base-url", help="OpenAI 兼容接口地址（provider=openai 时用；ollama/lmstudio 有默认值）")
-    g.add_argument("--api-key", help="API Key（本地模型可不填）。也可用环境变量 AUTOCLIP_API_KEY")
+    g.add_argument("--api-key", help="已弃用。请改用环境变量 AUTOCLIP_API_KEY；仍传入时会在 stderr 打印警告")
 
 
 def _llm_override(args: argparse.Namespace) -> LLMOverride:
+    supplied = getattr(args, "api_key", None)
+    if supplied:
+        print("警告：--api-key 已弃用，请改用环境变量 AUTOCLIP_API_KEY。", file=sys.stderr)
     return LLMOverride(
         provider=getattr(args, "provider", None),
         model=getattr(args, "model", None),
         base_url=getattr(args, "base_url", None),
-        api_key=getattr(args, "api_key", None) or os.getenv("AUTOCLIP_API_KEY"),
+        api_key=supplied or os.getenv("AUTOCLIP_API_KEY"),
     )
 
 

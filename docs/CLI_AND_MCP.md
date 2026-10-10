@@ -90,7 +90,8 @@ autoclip doctor
 autoclip run talk.mp4                                  # 用桌面应用设置页里配好的模型
 autoclip run talk.mp4 --provider ollama                # 本地 Ollama（默认 qwen2.5:7b，无需 key）
 autoclip run talk.mp4 --provider lmstudio --model qwen2.5-7b-instruct
-autoclip run talk.mp4 --provider openai --base-url https://api.deepseek.com/v1 --model deepseek-chat --api-key sk-...
+# 模型密钥用环境变量，不要写进命令：AUTOCLIP_API_KEY=sk-...
+autoclip run talk.mp4 --provider openai --base-url https://api.deepseek.com/v1 --model deepseek-chat
 autoclip run talk.mp4 --srt talk.srt --category knowledge --min-score 0.6
 autoclip run talk.mp4 --json                           # 给脚本 / agent：stdout 只有一个 JSON
 
@@ -108,6 +109,7 @@ autoclip publish --list-profiles                        # 已配置的 Upload-Po
 约定：
 - 进度、说明走 **stderr**；**stdout** 只放 `project_id`（或 `--json` 时的 JSON），方便管道。
 - 退出码：`0` 成功 · `1` 流水线失败 · `2` 参数 / 环境错误。
+- 模型密钥推荐用环境变量 `AUTOCLIP_API_KEY`，或桌面应用里已经保存的配置。`--api-key` 仍可临时传入，会在 stderr 打印弃用警告。`autoclip publish --api-key` 是 Upload-Post 的密钥，与 `AUTOCLIP_API_KEY` 无关。
 - `--provider` 等模型参数不改用户的正式设置，只在数据目录写一份 `cli-settings.json`。
 - 视频默认**硬链接**进项目目录（不占双份空间），跨盘时自动复制；`--copy` 强制复制。
 - `--no-db` 不写 SQLite（桌面应用里就看不到这个项目）。

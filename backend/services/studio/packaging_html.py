@@ -287,6 +287,10 @@ def _concat_listing(holds: list[tuple[Path, int]], fps: int, listing: Path) -> N
 
 
 def _run(cmd: list[str], timeout: float):
+    from backend.core import project_cancellation
+    # A bound studio render must be able to kill this ffmpeg with the rest of the task.
+    if project_cancellation.current():
+        return project_cancellation.run(cmd, capture_output=True, text=True, timeout=timeout)
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 

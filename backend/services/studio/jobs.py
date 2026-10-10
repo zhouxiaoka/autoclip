@@ -109,6 +109,7 @@ def _tracked(stage):
 
 @_tracked('render')
 def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None, html_fallback=None, safe_area='xiaohongshu', requested_template=None):
+    from backend.core import project_cancellation
     started = monotonic()
     render_saved = False
     result = None
@@ -167,6 +168,14 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
             update(cover_pending=False)
         _sync_variant_status(project_id, job_id, 'completed')
         _schedule_qa()
+    except project_cancellation.JobStopped:
+        with project_cancellation.record_stop():
+            try:
+                update(status='cancelled', error_code='cancelled', duration_ms=round((monotonic() - started) * 1000))
+                _sync_variant_status(project_id, job_id, 'cancelled')
+            except (FileNotFoundError, project_cancellation.ProjectDeleted):
+                pass
+        return
     except Exception as error:
         logger.warning('Studio render failed: %s', type(error).__name__)
         capture_studio_exception(error, 'render')

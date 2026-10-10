@@ -41,6 +41,122 @@ def test_dead_worker_becomes_interrupted(data_dir):
     assert stored['status'] == 'interrupted'
 
 
+def _process_gone(pid: int) -> bool:
+    import psutil
+    try:
+        proc = psutil.Process(pid)
+    except psutil.NoSuchProcess:
+        return True
+    return proc.status() == psutil.STATUS_ZOMBIE
+
+
+def _wait_until_gone(pid: int, timeout: float = 5) -> bool:
+    import time
+    deadline = time.time() + timeout
+    while True:
+        if _process_gone(pid):
+            # A zombie still occupies the process table. Wait until it is reaped.
+            import psutil
+            try:
+                psutil.Process(pid)
+            except psutil.NoSuchProcess:
+                return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(0.05)
+
+
+def test_cancel_kills_the_process_group_and_clears_temporary_files(data_dir, tmp_path):
+    """Start a real parent and grandchild, then cancel. Same path studio uses for ffmpeg."""
+    import sys
+    import threading
+    import time
+    from backend.core import project_cancellation as cancel
+    from backend.services import mcp_jobs
+    from backend.services.studio import store
+
+    project = data_dir / 'projects' / 'pstop'
+    studio = project / 'output' / 'studio'
+    meta = project / 'metadata'
+    studio.mkdir(parents=True)
+    meta.mkdir(parents=True)
+    finished = studio / 'done.mp4'
+    finished.write_bytes(b'finished-video')
+    partial = studio / 'done.part.mp4'
+    partial.write_bytes(b'partial')
+    scratch = project / 'scratch.tmp'
+    marker = tmp_path / 'pids.txt'
+    child = tmp_path / 'child.py'
+    child.write_text(
+        "import os, subprocess, sys, time\n"
+        "from pathlib import Path\n"
+        "scratch, marker = sys.argv[1:]\n"
+        "Path(scratch).write_text('scratch', encoding='utf-8')\n"
+        "grand = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+        "Path(marker).write_text(f'{os.getpid()}\\n{grand.pid}\\n', encoding='utf-8')\n"
+        "time.sleep(120)\n",
+        encoding='utf-8',
+    )
+    (meta / 'studio.json').write_text(json.dumps({
+        'schema_version': 2,
+        'drafts': [],
+        'jobs': [
+            {'job_id': 'live', 'status': 'running', 'instance': store.INSTANCE},
+            {'job_id': 'saved', 'status': 'completed', 'instance': store.INSTANCE},
+        ],
+        'output_variants': [
+            {'id': 'running-variant', 'status': 'running'},
+            {'id': 'saved-variant', 'status': 'completed'},
+        ],
+        'generation': {'status': 'rendering'},
+        'analysis': None,
+    }), encoding='utf-8')
+    mcp_jobs.write_job('pstop', status='running', progress=30, stage='rendering', error_code='none')
+    errors = []
+
+    def worker():
+        try:
+            with cancel.bind('pstop'):
+                cancel.note_temporary(scratch)
+                cancel.run([sys.executable, str(child), str(scratch), str(marker)], timeout=30)
+        except cancel.JobStopped:
+            pass
+        except Exception as error:  # noqa: BLE001 - the assertion below reports it
+            errors.append(error)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    try:
+        deadline = time.time() + 15
+        pids: list[int] = []
+        while time.time() < deadline and len(pids) < 2:
+            if marker.is_file():
+                pids = [int(line) for line in marker.read_text(encoding='utf-8').split() if line.strip().isdigit()]
+            time.sleep(0.05)
+        assert len(pids) >= 2, errors
+        parent_pid, grand_pid = pids
+        cancelled = mcp_jobs.cancel('pstop')
+        thread.join(timeout=10)
+        assert not thread.is_alive()
+        assert errors == []
+        assert cancelled['status'] == 'cancelled' and cancelled['error_code'] == 'cancelled' and cancelled['ok'] is False
+        assert not scratch.exists()
+        assert not partial.exists()
+        assert finished.read_bytes() == b'finished-video'
+        assert _wait_until_gone(parent_pid)
+        assert _wait_until_gone(grand_pid)
+        saved = json.loads((meta / 'studio.json').read_text(encoding='utf-8'))
+        jobs = {job['job_id']: job['status'] for job in saved['jobs']}
+        variants = {item['id']: item['status'] for item in saved['output_variants']}
+        assert jobs == {'live': 'cancelled', 'saved': 'completed'}
+        assert variants == {'running-variant': 'cancelled', 'saved-variant': 'completed'}
+        assert saved['generation']['status'] == 'cancelled'
+    finally:
+        cancel.stop('pstop')
+        thread.join(timeout=5)
+        cancel._stopped.discard('pstop')
+
+
 def test_cancel_sticks_and_does_not_delete_files(data_dir):
     from backend.services import mcp_jobs
 
