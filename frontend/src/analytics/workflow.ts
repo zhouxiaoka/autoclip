@@ -35,7 +35,14 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     title_style: ['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'],
     share_target: ['copy_caption', 'use_case_discussion'],
     output_rating: ['ready', 'needs_edit', 'unusable'],
-    template: ['interview_zh', 'podcast_en', 'landscape', 'none'],
+    template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
+    from_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
+    to_template: ['interview_zh', 'podcast_en', 'landscape', 'none', 'editorial', 'street', 'classic'],
+    encoder: ['libx264', 'h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox'],
+    downgrade_reason: ['none', 'over_budget', 'missing_runtime', 'intel_mac_unverified', 'rank', 'flag_off'],
+    failure_reason: ['none', 'capture', 'encode', 'runtime', 'timeout', 'unknown'],
+    os: ['darwin', 'win32', 'linux'],
+    stage: ['pre_import', 'results_chip', 'editor'],
     packaging_style: ['classic', 'boxed', 'spotlight', 'pop', 'cinematic'],
     framing: ['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'],
     failure_stage: ['screening', 'dispatch', 'production', 'ingest', 'subtitle', 'analyze', 'vision', 'render'],
@@ -47,7 +54,8 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
   for (const key of ['outro_applied', 'brand_outro_enabled', 'reused_content_profile', 'has_crop_track', 'has_manual_adjustment', 'auto_frame_retained', 'tags_enabled', 'packaging_fallback', 'burned_captions', 'subtitle_enabled', 'has_subtitle', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean
   }
-  for (const key of ['warning_count', 'outro_applied_count', 'outro_fallback_count', 'outro_unknown_count', 'full_frame_count', 'framing_pending_count', 'framing_captions_count', 'example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'on_demand_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count']) {
+  if (typeof input.downgraded === 'boolean') out.downgraded = input.downgraded
+  for (const key of ['warning_count', 'outro_applied_count', 'outro_fallback_count', 'outro_unknown_count', 'full_frame_count', 'framing_pending_count', 'framing_captions_count', 'example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'on_demand_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'editorial_count', 'street_count', 'classic_count', 'html_downgrade_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count', 'cpu_count']) {
     if (typeof input[key] === 'number' && Number.isFinite(input[key]) && (input[key] as number) >= 0) out[key] = input[key] as number
   }
   for (const prefix of ['requested', 'succeeded', 'failed']) {

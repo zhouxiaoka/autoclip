@@ -17,6 +17,7 @@ def test_frontend_and_backend_defaults_match_and_are_off():
     assert flag_enabled(DEFAULTS, 'one_click_paste_start') is False
     assert flag_enabled(DEFAULTS, 'render_top_first') is False
     assert flag_enabled(DEFAULTS, 'publish_pack_v2') is False
+    assert flag_enabled(DEFAULTS, 'pkg_templates_v1') is False
 
 
 def test_unknown_values_are_dropped_and_safe_mode_forces_the_safe_off_value():
@@ -46,6 +47,13 @@ def test_operator_env_overrides_the_client_snapshot(monkeypatch):
     assert forced['autoclip_safe_mode'] is True
     assert forced['remember_platforms'] is False
     assert forced['clip_reasons'] is True
+    monkeypatch.setenv('AUTOCLIP_FLAGS', 'pkg_templates_v1=on')
+    enabled = resolve_features({'pkg_templates_v1': False})
+    assert enabled['pkg_templates_v1'] is True
+    killed = resolve_features({'pkg_templates_v1': True, 'autoclip_safe_mode': True}, env='')
+    assert killed['pkg_templates_v1'] is False
+    operator = resolve_features({'autoclip_safe_mode': True}, env='pkg_templates_v1=on')
+    assert operator['pkg_templates_v1'] is True
 
 
 def test_import_records_the_resolved_snapshot_and_drops_text(monkeypatch):

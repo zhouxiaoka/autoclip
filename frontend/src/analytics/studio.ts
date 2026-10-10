@@ -31,6 +31,11 @@ export function trackQuickOutputPlatforms(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_platforms_selected', safeStudioProperties(properties))
 }
 
+/** User changed the default HTML template before import. Enums and a random flow id only. */
+export function trackTemplateOverride(properties: Record<string, unknown>) {
+  captureBusinessEvent('studio_template_overridden', safeStudioProperties({ ...properties, stage: properties.stage || 'pre_import' }))
+}
+
 /** Enum/boolean summary of one output variant for delivery events; never titles, captions or names. */
 export type VariantProperties = { strategy_id?: string; template?: string; packaging_style?: string; framing?: string; artifact_type?: 'video' | 'publish_kit'; outro_applied?: boolean }
 
