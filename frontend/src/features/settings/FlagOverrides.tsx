@@ -21,6 +21,7 @@ const LABELS: Record<FlagName, string> = {
   qa_gate_blocking: '成片质检',
   pkg_templates_v1: 'editing_style.flag_templates',
   pkg_template_picker_visual: 'editing_style.flag_visual',
+  mcp_v2_tools: 'MCP 新工具（取消任务、剪辑风格列表）',
 }
 
 const VARIANT_LABELS: Record<string, string> = {

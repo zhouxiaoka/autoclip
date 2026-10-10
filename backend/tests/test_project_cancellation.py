@@ -21,10 +21,20 @@ from backend.core import project_cancellation as cancel
 def _isolation(monkeypatch, tmp_path):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path / 'data'))
     cancel._cancelled.clear()
+    cancel._stopped.clear()
     cancel._processes.clear()
+    cancel._leaders.clear()
+    cancel._temporary.clear()
+    cancel._binds.clear()
+    cancel._round_ignored.clear()
     yield
     cancel._cancelled.clear()
+    cancel._stopped.clear()
     cancel._processes.clear()
+    cancel._leaders.clear()
+    cancel._temporary.clear()
+    cancel._binds.clear()
+    cancel._round_ignored.clear()
 
 
 def _project(path: Path, project_id='p-del'):
@@ -35,6 +45,22 @@ def _project(path: Path, project_id='p-del'):
     (folder / 'raw' / 'input.mp4').write_bytes(b'x')
     (folder / 'metadata' / 'studio.json').write_text('{"schema_version":2,"drafts":[],"jobs":[],"analysis":null,"output_variants":[]}', encoding='utf-8')
     return folder
+
+
+def test_stop_keeps_finished_video(tmp_path):
+    folder = _project(tmp_path, 'p-stop')
+    finished = folder / 'output' / 'studio' / 'done.mp4'
+    partial = folder / 'output' / 'studio' / 'done.part.mp4'
+    finished.write_bytes(b'keep')
+    partial.write_bytes(b'partial')
+    cancel.note_temporary(folder / 'scratch.tmp', 'p-stop')
+    (folder / 'scratch.tmp').write_text('temp', encoding='utf-8')
+    cancel.stop('p-stop')
+    cancel.checkpoint('p-stop')
+    assert finished.read_bytes() == b'keep'
+    assert not partial.exists()
+    assert not (folder / 'scratch.tmp').exists()
+    assert folder.is_dir()
 
 
 def test_cancel_raises_at_checkpoints_and_is_not_a_crash():
@@ -286,3 +312,224 @@ def test_delete_during_render_stops_the_job_and_removes_the_directory(tmp_path, 
     worker.join(10)
     engine.dispose()
     assert wrote == [] and not folder.exists()
+
+
+def test_another_process_can_change_state_after_cancel(tmp_path):
+    """A leftover cancel marker must not fail edits in a process that never bound."""
+    import os
+    import sys
+    from backend.services.studio import store
+
+    _project(tmp_path, 'p-other')
+    store.write('p-other', {
+        'schema_version': 2, 'drafts': [], 'jobs': [], 'analysis': None, 'output_variants': [], 'events': [],
+    })
+    cancel.stop('p-other')
+    assert cancel._marker_path('p-other').is_file()
+    script = (
+        'from backend.services.studio import store\n'
+        'store.change("p-other", lambda data: data["drafts"].append({"id": "edited"}))\n'
+        'print(store.read("p-other")["drafts"][0]["id"])\n'
+    )
+    env = os.environ.copy()
+    env['AUTOCLIP_DATA_DIR'] = str(tmp_path / 'data')
+    root = str(Path(__file__).resolve().parents[2])
+    env['PYTHONPATH'] = root + os.pathsep + env.get('PYTHONPATH', '')
+    completed = subprocess.run(
+        [sys.executable, '-c', script], env=env, capture_output=True, text=True, cwd=root, timeout=60,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == 'edited'
+
+
+def test_edit_after_a_cancelled_round_ends(tmp_path):
+    from backend.services.studio import store
+
+    _project(tmp_path, 'p-edit')
+    store.write('p-edit', {
+        'schema_version': 2, 'drafts': [], 'jobs': [], 'analysis': None, 'output_variants': [], 'events': [],
+    })
+    with cancel.bind('p-edit'):
+        cancel.stop('p-edit')
+        with pytest.raises(cancel.JobStopped):
+            cancel.checkpoint()
+    assert not cancel._marker_path('p-edit').exists()
+    store.change('p-edit', lambda data: data['drafts'].append({'id': 'next'}))
+    assert store.read('p-edit')['drafts'][0]['id'] == 'next'
+
+
+def test_stop_without_bind_does_not_block_a_later_change(tmp_path):
+    """MCP can cancel a desktop job without binding; the same process must still edit it."""
+    from backend.services.studio import store
+
+    _project(tmp_path, 'p-same')
+    store.write('p-same', {
+        'schema_version': 2, 'drafts': [], 'jobs': [], 'analysis': None, 'output_variants': [], 'events': [],
+    })
+    cancel.stop('p-same')
+    assert 'p-same' in cancel._stopped
+    store.change('p-same', lambda data: data['drafts'].append({'id': 'again'}))
+    assert store.read('p-same')['drafts'][0]['id'] == 'again'
+
+
+def test_a_new_round_after_cancel_is_not_already_stopped(tmp_path):
+    import sys
+    _project(tmp_path, 'p-redo')
+    cancel.stop('p-redo')
+    cancel.checkpoint('p-redo')
+    with cancel.bind('p-redo'):
+        cancel.checkpoint()
+        result = cancel.run([sys.executable, '-c', 'print(1)'], capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0
+    assert '1' in result.stdout
+
+
+def test_disk_marker_stops_the_render_without_a_local_stop(tmp_path):
+    import sys
+    _project(tmp_path, 'p-mark')
+    started = threading.Event()
+    finished = []
+
+    def worker():
+        with cancel.bind('p-mark'):
+            started.set()
+            try:
+                cancel.run([sys.executable, '-c', 'import time; time.sleep(30)'], timeout=40)
+                finished.append('ok')
+            except cancel.JobStopped:
+                finished.append('stopped')
+            except Exception as error:  # noqa: BLE001 - reported by the assertion
+                finished.append(type(error).__name__)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    assert started.wait(5)
+    time.sleep(0.3)
+    assert 'p-mark' not in cancel._stopped
+    cancel.write_stop_marker('p-mark')
+    thread.join(10)
+    assert not thread.is_alive()
+    assert finished == ['stopped']
+
+
+def test_reaped_leader_does_not_signal_a_recycled_pid(monkeypatch):
+    import os
+    import signal
+    if os.name == 'nt':
+        pytest.skip('killpg is the POSIX path')
+    signals = []
+    pid = 424242
+    proc = SimpleNamespace(pid=pid, poll=lambda: 0, kill=lambda: None, wait=lambda timeout=None: 0)
+    cancel._leaders.add(pid)
+
+    def getpgid(target):
+        return target  # pid was reused by a new process group leader
+
+    def killpg(target, sig):
+        signals.append(sig)
+
+    monkeypatch.setattr(cancel.os, 'getpgid', getpgid)
+    monkeypatch.setattr(cancel.os, 'killpg', killpg)
+    cancel._kill(proc)
+    assert signals == []
+    assert signal.SIGKILL not in signals
+
+
+def test_reaped_leader_still_kills_a_leftover_group(monkeypatch):
+    import os
+    import signal
+    if os.name == 'nt':
+        pytest.skip('killpg is the POSIX path')
+    signals = []
+    pid = 424243
+    proc = SimpleNamespace(pid=pid, poll=lambda: 0, kill=lambda: None, wait=lambda timeout=None: 0)
+    cancel._leaders.add(pid)
+    monkeypatch.setattr(cancel.os, 'getpgid', lambda target: (_ for _ in ()).throw(ProcessLookupError))
+    monkeypatch.setattr(cancel.os, 'killpg', lambda target, sig: signals.append(sig))
+    cancel._kill(proc)
+    assert signals == [0, signal.SIGKILL]
+
+
+def test_reaped_leader_with_an_empty_group_is_not_killed(monkeypatch):
+    import os
+    import signal
+    if os.name == 'nt':
+        pytest.skip('killpg is the POSIX path')
+    signals = []
+    pid = 424244
+    proc = SimpleNamespace(pid=pid, poll=lambda: 0, kill=lambda: None, wait=lambda timeout=None: 0)
+    cancel._leaders.add(pid)
+
+    def killpg(target, sig):
+        signals.append(sig)
+        raise ProcessLookupError
+
+    monkeypatch.setattr(cancel.os, 'getpgid', lambda target: (_ for _ in ()).throw(ProcessLookupError))
+    monkeypatch.setattr(cancel.os, 'killpg', killpg)
+    cancel._kill(proc)
+    assert signals == [0]
+    assert signal.SIGKILL not in signals
+
+
+def test_kill_reaches_grandchildren_after_the_leader_exits(tmp_path):
+    import os
+    import sys
+    if os.name == 'nt':
+        pytest.skip('killpg is the POSIX path; Windows uses taskkill /T on a live tree')
+    marker = tmp_path / 'grand.pid'
+    code = (
+        'import pathlib, subprocess, sys, time\n'
+        'path = pathlib.Path(sys.argv[1])\n'
+        'child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])\n'
+        'path.write_text(str(child.pid))\n'
+        'time.sleep(0.2)\n'
+    )
+    proc = subprocess.Popen([sys.executable, '-c', code, str(marker)], start_new_session=True)
+    with cancel._lock:
+        cancel._leaders.add(proc.pid)
+        cancel._processes.setdefault('p-exit', set()).add(proc)
+    try:
+        deadline = time.time() + 5
+        while proc.poll() is None or not marker.exists():
+            assert time.time() < deadline
+            time.sleep(0.05)
+        grand = int(marker.read_text())
+        import psutil
+        assert psutil.Process(grand).is_running()
+        cancel.stop('p-exit')
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            try:
+                psutil.Process(grand)
+            except psutil.NoSuchProcess:
+                break
+            time.sleep(0.05)
+        else:
+            raise AssertionError('grandchild still running')
+    finally:
+        cancel._leaders.discard(proc.pid)
+        cancel._processes.pop('p-exit', None)
+        if proc.poll() is None:
+            proc.kill()
+
+
+def test_disk_marker_keeps_a_finished_render_from_being_completed(tmp_path, monkeypatch):
+    from backend.services.studio import jobs, store
+    from backend.services.studio.models import Draft, Scene
+    folder = _project(tmp_path, 'p-mark')
+    draft = Draft(id='d1', title='t', scenes=[Scene(id='s', start=0, end=1)], subtitles=False)
+
+    def fake_render(project_id, video, draft, job_id, progress, **kwargs):
+        cancel.write_stop_marker(project_id)
+        return {'title': 'x', 'duration': 1, 'width': 64, 'height': 36, 'warnings': [], 'outro_applied': False}
+
+    monkeypatch.setattr(jobs, 'render_draft', fake_render)
+    monkeypatch.setattr(jobs, 'source', lambda pid: folder / 'raw' / 'input.mp4')
+    monkeypatch.setattr(jobs, '_design_covers', lambda *a, **k: None)
+    store.write('p-mark', {'schema_version': 2, 'drafts': [], 'jobs': [
+        {'job_id': 'j1', 'status': 'queued', 'percent': 0, 'draft_id': 'd1', 'title': 't', 'revision': 1,
+         'brand_outro': False, 'created_at': store.now(), 'instance': store.INSTANCE,
+         'snapshot': draft.model_dump()}
+    ], 'analysis': None, 'output_variants': [], 'events': []})
+    assert jobs._render('p-mark', draft, 'j1') is None
+    assert store.read('p-mark', recover=False)['jobs'][0]['status'] == 'cancelled'

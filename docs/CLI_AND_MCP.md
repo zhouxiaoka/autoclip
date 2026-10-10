@@ -50,7 +50,13 @@ MCP 使用 `start_quick_output`（立即返回 ID）和 `get_quick_output_status
 模型、AI 封面和自动片尾共用桌面设置。制作时保持一个入口运行；新 CLI / MCP demo 建议用独立数据目录，
 通过 `autoclip --data-dir /path/to/demo-data produce ...` 或 MCP 环境变量 `AUTOCLIP_DATA_DIR` 指定。
 独立目录需要自己的模型配置，不会读取另一个数据目录的密钥；新入口不使用旧 `run --provider` 的临时覆盖。
-旧 `run` / `clip_video` / `start_clip_job` 继续提供原始切片与合集。
+旧 `run` / `clip_video` / `start_clip_job` 继续提供原始切片与合集。这几个 MCP 工具在工具列表里标为 deprecated。
+
+`produce` 的 `--template` 和 `start_quick_output` 的 `template` 都在 `mcp_v2_tools` 打开后才接受：`editorial`（杂志风）、`street`（街头快剪）、`classic`（经典）。不支持的值返回 `invalid_input`。开关关闭时传了风格返回 `disabled`，不传则仍按经典制作。返回结果里的 `template` 是实际用的风格，`requested_template` 是请求值。`pkg_templates_v1` 关闭时，即使请求了杂志风或街头快剪，`template` 也是 `classic`。以返回结果里的风格为准。MCP 在 `AUTOCLIP_FLAGS=mcp_v2_tools=on` 时额外提供 `list_styles` 和 `cancel_job`；默认关闭，工具列表里看不到。
+
+任务状态一律带 `progress`、`stage`、`eta`、`poll_after_sec`。按 `poll_after_sec` 再查。没有任务记录时状态是 `unknown`，工作进程已经不在时是 `interrupted`，不会因为项目目录还在就报 `completed`。状态写在数据目录的 `mcp-jobs/`。`cancel_job` 会停掉这条任务的 ffmpeg 和它的子进程，清掉临时文件，已完成的成片保留，状态写成 `cancelled`。
+
+MCP 不再接收 `api_key` 参数。模型密钥用环境变量 `AUTOCLIP_API_KEY`，或桌面应用里已经保存的配置。
 
 ## 1. 安装
 
@@ -84,7 +90,8 @@ autoclip doctor
 autoclip run talk.mp4                                  # 用桌面应用设置页里配好的模型
 autoclip run talk.mp4 --provider ollama                # 本地 Ollama（默认 qwen2.5:7b，无需 key）
 autoclip run talk.mp4 --provider lmstudio --model qwen2.5-7b-instruct
-autoclip run talk.mp4 --provider openai --base-url https://api.deepseek.com/v1 --model deepseek-chat --api-key sk-...
+# 模型密钥用环境变量，不要写进命令：AUTOCLIP_API_KEY=sk-...
+autoclip run talk.mp4 --provider openai --base-url https://api.deepseek.com/v1 --model deepseek-chat
 autoclip run talk.mp4 --srt talk.srt --category knowledge --min-score 0.6
 autoclip run talk.mp4 --json                           # 给脚本 / agent：stdout 只有一个 JSON
 
@@ -102,6 +109,7 @@ autoclip publish --list-profiles                        # 已配置的 Upload-Po
 约定：
 - 进度、说明走 **stderr**；**stdout** 只放 `project_id`（或 `--json` 时的 JSON），方便管道。
 - 退出码：`0` 成功 · `1` 流水线失败 · `2` 参数 / 环境错误。
+- 模型密钥推荐用环境变量 `AUTOCLIP_API_KEY`，或桌面应用里已经保存的配置。`--api-key` 仍可临时传入，会在 stderr 打印弃用警告。`autoclip publish --api-key` 是 Upload-Post 的密钥，与 `AUTOCLIP_API_KEY` 无关。
 - `--provider` 等模型参数不改用户的正式设置，只在数据目录写一份 `cli-settings.json`。
 - 视频默认**硬链接**进项目目录（不占双份空间），跨盘时自动复制；`--copy` 强制复制。
 - `--no-db` 不写 SQLite（桌面应用里就看不到这个项目）。

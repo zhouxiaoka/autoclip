@@ -34,8 +34,10 @@ def source(project_id):
 def export(project_id, draft, *, brand_outro=False, _variant_identity=None, html_template=None, html_fallback=None, safe_area='xiaohongshu', requested_template=None):
     from backend.services.output_branding import load_settings
     brand_outro = bool(brand_outro and load_settings().enabled)
-    job = {'job_id': uuid.uuid4().hex, 'status': 'queued', 'percent': 0, 'draft_id': draft.id, 'title': draft.title, 'revision': draft.revision, 'brand_outro': brand_outro, 'created_at': store.now(), 'instance': store.INSTANCE, 'snapshot': draft.model_dump()}
-    if html_template in ('editorial', 'street'):
+    from backend.services.studio.template_choice import recorded_style
+    style = recorded_style(html_template, requested_template)
+    job = {'job_id': uuid.uuid4().hex, 'status': 'queued', 'percent': 0, 'draft_id': draft.id, 'title': draft.title, 'revision': draft.revision, 'brand_outro': brand_outro, 'created_at': store.now(), 'instance': store.INSTANCE, 'snapshot': draft.model_dump(), **style}
+    if html_template in ('editorial', 'street') and style['template'] in ('editorial', 'street'):
         job['html_template'] = html_template
         job['html_safe_area'] = safe_area
     elif html_fallback == 'rank':
@@ -109,6 +111,7 @@ def _tracked(stage):
 
 @_tracked('render')
 def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None, html_fallback=None, safe_area='xiaohongshu', requested_template=None):
+    from backend.core import project_cancellation
     started = monotonic()
     render_saved = False
     result = None
@@ -116,7 +119,16 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
 
     def update(**values):
         def mutate(data):
-            next(j for j in data['jobs'] if j['job_id'] == job_id).update(values)
+            job = next(j for j in data['jobs'] if j['job_id'] == job_id)
+            incoming = values.get('status')
+            current = job.get('status')
+            # A cancel must not be overwritten by the render finishing, and a finished
+            # video must not be marked cancelled afterwards.
+            if current == 'cancelled' and incoming == 'completed':
+                return
+            if current == 'completed' and incoming == 'cancelled':
+                return
+            job.update(values)
         store.change(project_id, mutate)
 
     def _schedule_qa():
@@ -167,6 +179,14 @@ def _render(project_id, draft, job_id, *, brand_outro=False, html_template=None,
             update(cover_pending=False)
         _sync_variant_status(project_id, job_id, 'completed')
         _schedule_qa()
+    except project_cancellation.JobStopped:
+        with project_cancellation.record_stop():
+            try:
+                update(status='cancelled', error_code='cancelled', duration_ms=round((monotonic() - started) * 1000))
+                _sync_variant_status(project_id, job_id, 'cancelled')
+            except (FileNotFoundError, project_cancellation.ProjectDeleted):
+                pass
+        return
     except Exception as error:
         logger.warning('Studio render failed: %s', type(error).__name__)
         capture_studio_exception(error, 'render')
@@ -1427,6 +1447,11 @@ def _sync_variant_status(project_id, job_id, status, error=None):
         changed = False
         for variant in data.get('output_variants', []):
             if variant.get('render_job_id') == job_id:
+                current = variant.get('status')
+                if current == 'cancelled' and status == 'completed':
+                    continue
+                if current == 'completed' and status == 'cancelled':
+                    continue
                 variant.update(status=status)
                 if error:
                     variant['error'] = error
@@ -1451,6 +1476,8 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             raise ValueError('当前任务正在运行，请稍后再试')
         state = deepcopy(previous)
         state.setdefault('schema_version', 2)
+        from backend.services.studio.template_choice import style_for_request
+        style = style_for_request(getattr(options, 'html_template', None), features)
         state['generation'] = {
             'requested_platforms': list(options.platforms),
             'branding': options.branding.model_dump(),
@@ -1459,6 +1486,7 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             **({'html_template': options.html_template} if getattr(options, 'html_template', None) else {}),
             **({'recommended_template': options.recommended_template} if getattr(options, 'recommended_template', None) else {}),
             **({'accepted_recommendation': options.html_template == options.recommended_template} if getattr(options, 'recommended_template', None) and getattr(options, 'html_template', None) else {}),
+            **style,
             'features': resolve_features(features),
             **({'producer': producer} if producer else {}),
             'status': 'screening',

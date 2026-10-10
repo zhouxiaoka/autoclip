@@ -11,16 +11,27 @@ from urllib.parse import urlparse
 from backend import __version__
 
 
+class StyleDisabled(Exception):
+    """A template was requested while mcp_v2_tools is off."""
+
+
 def start(source: str, platforms: list[str], *, name: str | None = None, srt_path: str | None = None,
-          instruction: str = '', browser: str | None = None, portrait_style: str = 'auto') -> str:
+          instruction: str = '', browser: str | None = None, portrait_style: str = 'auto',
+          template: str | None = None) -> str:
     from backend.core.database import SessionLocal, create_tables
     from backend.schemas.project import ProjectCreate
     from backend.services.project_service import ProjectService
     from backend.services.local_runner import RunRequest, prepare_project
     from backend.services.studio import jobs, store
+    from backend.services.studio.features import flag_enabled, resolve_features
     from backend.services.studio.models import ImportOptions
+    from backend.services.studio.template_choice import style_for_request
 
-    options = ImportOptions(auto_start=True, platforms=platforms, instruction=instruction, portrait_style=portrait_style)
+    style_for_request(template)
+    if template is not None and not flag_enabled(resolve_features(), 'mcp_v2_tools'):
+        raise StyleDisabled('剪辑风格尚未开放，请设置 AUTOCLIP_FLAGS=mcp_v2_tools=on')
+    options = ImportOptions(auto_start=True, platforms=platforms, instruction=instruction, portrait_style=portrait_style,
+                            html_template=template)
     parsed = urlparse(source)
     url = None
     if parsed.scheme in ('http', 'https'):
@@ -121,10 +132,25 @@ def status(project_id: str, *, export_kits: bool = False) -> dict:
         outcome = 'partial' if any(row.get('video_path') for row in outputs) else 'failed'
         phase = 'interrupted'
         error = '制作进程已退出；已完成的视频仍可下载，请保持 CLI / MCP 进程运行至完成后再关闭'
+    from backend.services import mcp_jobs
+    from backend.services.studio.template_choice import style_from_generation
+    analysis = state.get('analysis') or {}
+    record = mcp_jobs.read_job(project_id)
+    if record and record.get('status') == 'cancelled':
+        outcome = 'cancelled'
+        phase = 'cancelled'
+    started = generation.get('created_at')
+    if isinstance(started, str):
+        try:
+            from datetime import datetime
+            started = datetime.fromisoformat(started).timestamp()
+        except ValueError:
+            started = None
+    view = mcp_jobs.progress_fields(status=outcome, progress=analysis.get('percent'), stage=phase, started_at=started)
     return {'version': __version__, 'project_id': project_id, 'status': outcome, 'phase': phase,
             'error': error, 'outputs': outputs,
-            'analysis': {key: (state.get('analysis') or {}).get(key) for key in ('phase', 'message', 'percent', 'error')},
-            'project_dir': str(root)}
+            'analysis': {key: analysis.get(key) for key in ('phase', 'message', 'percent', 'error')},
+            'project_dir': str(root), **style_from_generation(generation), **view, 'status': outcome, 'stage': phase}
 
 
 def wait(project_id: str, *, timeout: float = 7200, interval: float = 1) -> dict:
@@ -132,7 +158,7 @@ def wait(project_id: str, *, timeout: float = 7200, interval: float = 1) -> dict
     while True:
         result = status(project_id)
         covers_pending = any((row.get('cover_job') or {}).get('status') in ('queued', 'running') for row in result['outputs'])
-        if result['status'] in ('completed', 'partial', 'failed') and not covers_pending:
+        if result['status'] == 'cancelled' or (result['status'] in ('completed', 'partial', 'failed') and not covers_pending):
             return status(project_id, export_kits=result['status'] != 'failed')
         if time.monotonic() >= deadline:
             return {**result, 'timed_out': True}

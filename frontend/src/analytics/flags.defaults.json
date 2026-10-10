@@ -12,5 +12,6 @@
   "track_overrides": false,
   "qa_gate_blocking": "shadow",
   "pkg_templates_v1": false,
-  "pkg_template_picker_visual": false
+  "pkg_template_picker_visual": false,
+  "mcp_v2_tools": false
 }

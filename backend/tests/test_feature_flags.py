@@ -19,6 +19,7 @@ def test_frontend_and_backend_defaults_match_and_are_off():
     assert flag_enabled(DEFAULTS, 'publish_pack_v2') is False
     assert flag_enabled(DEFAULTS, 'pkg_templates_v1') is False
     assert flag_enabled(DEFAULTS, 'pkg_template_picker_visual') is False
+    assert flag_enabled(DEFAULTS, 'mcp_v2_tools') is False
     assert resolve_features({'pkg_template_picker_visual': True, 'autoclip_safe_mode': True}, env='')['pkg_template_picker_visual'] is False
 
 
@@ -32,9 +33,12 @@ def test_qa_and_template_defaults_and_safe_mode():
         'autoclip_safe_mode': True,
         'qa_gate_blocking': 'block',
         'pkg_templates_v1': True,
+        'mcp_v2_tools': True,
     })
     assert killed['qa_gate_blocking'] == 'off'
     assert killed['pkg_templates_v1'] is False
+    assert killed['mcp_v2_tools'] is False
+    assert resolve_features({'autoclip_safe_mode': True}, env='mcp_v2_tools=on')['mcp_v2_tools'] is True
     operator = resolve_features(
         {'autoclip_safe_mode': True, 'qa_gate_blocking': 'shadow', 'pkg_templates_v1': True},
         env='qa_gate_blocking=block,pkg_templates_v1=on',

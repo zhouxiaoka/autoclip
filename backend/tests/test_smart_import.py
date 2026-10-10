@@ -223,6 +223,8 @@ def test_import_persists_platform_and_branding_contract_without_auto_start(clien
         'branding': {'outro_enabled': False, 'outro_version': 'v1'},
         'auto_start': False,
         'portrait_style': 'auto',
+        'template': 'classic',
+        'requested_template': 'classic',
         'features': resolve_features(None),
         'status': 'awaiting_confirmation',
         'created_at': state['generation']['created_at'],

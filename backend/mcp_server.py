@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import inspect
+import os
 import sys
 import threading
 from pathlib import Path
@@ -75,26 +76,46 @@ def get_version() -> Dict[str, Any]:
     return {'version': __version__}
 
 
-@server.tool(name='start_quick_output', description='1.5 一键出片：本地视频或 HTTPS 的 YouTube / B 站链接，按 platforms 自动制作视频、封面和发布文案。共用桌面 AI 与片尾设置，立即返回 project_id；之后用 get_quick_output_status 查询。')
+@server.tool(name='start_quick_output', description='一键出片：本地视频或 HTTPS 的 YouTube / B 站链接，按 platforms 自动制作视频、封面和发布文案。template 可选 editorial / street / classic，且只在 mcp_v2_tools 打开时接受；关闭时传了风格返回 disabled。返回的 template 是实际用的风格，requested_template 是请求值。共用桌面 AI 与片尾设置，立即返回 project_id；之后用 get_quick_output_status 查询。')
 def start_quick_output(source: str, platforms: Optional[List[str]] = None, name: Optional[str] = None,
                        srt_path: Optional[str] = None, instruction: str = '', browser: Optional[str] = None,
-                       portrait_style: str = 'auto') -> Dict[str, Any]:
+                       portrait_style: str = 'auto', template: Optional[str] = None) -> Dict[str, Any]:
+    from backend.services import mcp_jobs
     from backend.services import quick_output_runner as quick
+    from backend.services.studio.template_choice import style_for_request
     try:
-        return {'ok': True, 'version': __version__, 'project_id': quick.start(source, platforms or ['douyin'],
-                name=name, srt_path=srt_path, instruction=instruction, browser=browser, portrait_style=portrait_style), 'status': 'running'}
+        project_id = quick.start(source, platforms or ['douyin'], name=name, srt_path=srt_path, instruction=instruction,
+                                 browser=browser, portrait_style=portrait_style, template=template)
+    except quick.StyleDisabled as error:
+        return {'ok': False, 'error_code': 'disabled', 'error': str(error),
+                **mcp_jobs.progress_fields(status='failed')}
     except (ValueError, FileNotFoundError) as error:
-        return {'ok': False, 'error': str(error)}
+        return {'ok': False, 'error_code': 'invalid_input', 'error': str(error),
+                **mcp_jobs.progress_fields(status='failed')}
+    mcp_jobs.write_job(project_id, status='running', progress=0, stage='screening', kind='quick', error_code='none')
+    record = mcp_jobs.read_job(project_id) or {}
+    return {'ok': True, 'version': __version__, 'project_id': project_id,
+            **style_for_request(template),
+            **mcp_jobs.progress_fields(status='running', progress=0, stage='screening', started_at=record.get('started_at'))}
 
 
-@server.tool(name='get_quick_output_status', description='查询 1.5 一键出片状态；返回各平台的视频、封面和文案。完成后用 export_kits=true 获取发布包 ZIP 路径。此工具不调用模型或启动制作。')
+@server.tool(name='get_quick_output_status', description='查询一键出片状态。返回 progress、stage、eta、poll_after_sec，以及各平台的视频、封面和文案。完成后用 export_kits=true 获取发布包 ZIP 路径。查不到的任务是 unknown，进程不在是 interrupted。此工具不调用模型或启动制作。')
 def get_quick_output_status(project_id: str, export_kits: bool = False) -> Dict[str, Any]:
+    from backend.services import mcp_jobs
     from backend.services import quick_output_runner as quick
+    if not mcp_jobs.valid_id(project_id):
+        return mcp_jobs.lookup(project_id)
     try:
         result = quick.status(project_id, export_kits=export_kits)
-        return {'ok': result['status'] != 'failed', **result}
-    except (ValueError, FileNotFoundError) as error:
-        return {'ok': False, 'error': str(error)}
+    except FileNotFoundError:
+        return mcp_jobs.lookup(project_id)
+    except ValueError as error:
+        return {'ok': False, 'project_id': project_id, 'error_code': 'invalid_input', 'error': str(error),
+                **mcp_jobs.progress_fields(status='unknown')}
+    view = mcp_jobs.progress_fields(status=result.get('status') or 'unknown', progress=result.get('progress'),
+                                    stage=result.get('stage') or result.get('phase'))
+    view.update(result)
+    return {'ok': result.get('status') not in ('failed', 'unknown', 'interrupted', 'cancelled'), **view}
 
 # ---------------------------------------------------------------- job registry ---
 _jobs: Dict[str, Dict[str, Any]] = {}
@@ -106,6 +127,17 @@ def _job_update(project_id: str, **fields: Any) -> None:
     with _jobs_lock:
         _jobs.setdefault(project_id, {})
         _jobs[project_id].update(fields)
+        snapshot = dict(_jobs[project_id])
+    from backend.services import mcp_jobs
+    mcp_jobs.write_job(
+        project_id,
+        status=snapshot.get('status'),
+        progress=snapshot.get('percent', snapshot.get('progress')),
+        stage=snapshot.get('stage'),
+        kind=snapshot.get('kind') or 'clip',
+        result=snapshot.get('result'),
+        error_code=snapshot.get('error_code'),
+    )
 
 
 def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, Any]:
@@ -123,14 +155,15 @@ def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, An
 
             result = run_pipeline(req, video_in_raw, on_progress=on_progress)
             if result.get("status") != "succeeded":
-                _job_update(req.project_id, status="failed", error=result.get("error") or "处理失败")
+                _job_update(req.project_id, status="failed", error_code="failed", error=result.get("error") or "处理失败")
                 return _jobs[req.project_id]
             summary = summarize_project(req.project_id)
-            _job_update(req.project_id, status="completed", percent=100, stage="DONE", message="完成", result=summary)
+            _job_update(req.project_id, status="completed", percent=100, stage="DONE", message="完成",
+                        error_code="none", result=summary)
             return _jobs[req.project_id]
         except Exception as e:  # noqa: BLE001
             logger.exception("MCP 任务失败")
-            _job_update(req.project_id, status="failed", error=str(e)[:500])
+            _job_update(req.project_id, status="failed", error_code="failed", error=str(e)[:500])
             return _jobs[req.project_id]
 
 
@@ -145,8 +178,9 @@ def _make_request(video_path: str, srt_path: Optional[str], name: Optional[str],
     )
 
 
-def _make_override(provider: Optional[str], model: Optional[str], base_url: Optional[str], api_key: Optional[str]) -> LLMOverride:
-    return LLMOverride(provider=provider, model=model, base_url=base_url, api_key=api_key)
+def _make_override(provider: Optional[str], model: Optional[str], base_url: Optional[str]) -> LLMOverride:
+    # The key stays in the environment. It is not a tool argument, so it is not copied into the agent transcript.
+    return LLMOverride(provider=provider, model=model, base_url=base_url, api_key=os.getenv("AUTOCLIP_API_KEY"))
 
 
 # ---------------------------------------------------------------- tools ---
@@ -168,10 +202,9 @@ async def clip_video(
     provider: Optional[str] = None,
     model: Optional[str] = None,
     base_url: Optional[str] = None,
-    api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     req = _make_request(video_path, srt_path, name, category, min_score)
-    override = _make_override(provider, model, base_url, api_key)
+    override = _make_override(provider, model, base_url)
     _job_update(req.project_id, status="queued", percent=0, video=str(req.video))
 
     task = asyncio.create_task(asyncio.to_thread(_run_job, req, override, True))
@@ -205,29 +238,25 @@ def start_clip_job(
     provider: Optional[str] = None,
     model: Optional[str] = None,
     base_url: Optional[str] = None,
-    api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
+    from backend.services import mcp_jobs
     req = _make_request(video_path, srt_path, name, category, min_score)
     if not req.video.expanduser().exists():
-        return {"ok": False, "error": f"视频不存在: {req.video}"}
-    override = _make_override(provider, model, base_url, api_key)
-    _job_update(req.project_id, status="queued", percent=0, video=str(req.video))
+        return {"ok": False, "error_code": "invalid_input", "error": f"视频不存在: {req.video}",
+                **mcp_jobs.progress_fields(status="failed")}
+    override = _make_override(provider, model, base_url)
+    _job_update(req.project_id, status="queued", percent=0, stage="queued", video=str(req.video))
+    record = mcp_jobs.read_job(req.project_id) or {}
     t = threading.Thread(target=_run_job, args=(req, override, True), daemon=True, name=f"autoclip-{req.project_id[:8]}")
     t.start()
-    return {"ok": True, "project_id": req.project_id, "status": "queued", "hint": "用 get_job_status 轮询；一般每 10–20 秒查一次即可。"}
+    return {"ok": True, "project_id": req.project_id, "hint": "用 get_job_status 轮询，间隔见 poll_after_sec。",
+            **mcp_jobs.progress_fields(status="queued", progress=0, stage="queued", started_at=record.get("started_at"))}
 
 
-@server.tool(name="get_job_status", description="查询 start_clip_job 开始的任务：status（queued / running / completed / failed）、percent、stage、message；完成后附带 result。")
+@server.tool(name="get_job_status", description="查询 start_clip_job 开始的任务。返回 progress、stage、eta、poll_after_sec。没有记录是 unknown，工作进程不在是 interrupted，不会把查不到的项目报成 completed。")
 def get_job_status(project_id: str) -> Dict[str, Any]:
-    job = _jobs.get(project_id)
-    if not job:
-        # 可能是上次进程里的项目：直接从磁盘读
-        try:
-            from backend.services.local_runner import summarize_project
-            return {"ok": True, "project_id": project_id, "status": "completed", "result": summarize_project(project_id)}
-        except FileNotFoundError:
-            return {"ok": False, "project_id": project_id, "error": "没有这个任务 / 项目"}
-    return {"ok": job.get("status") != "failed", "project_id": project_id, **job}
+    from backend.services import mcp_jobs
+    return mcp_jobs.lookup(project_id)
 
 
 @server.tool(name="get_project", description="读取一个已处理项目的切片（标题 / 时间 / 评分 / 文件）、合集与输出目录。")
@@ -357,11 +386,10 @@ def check_environment(
     provider: Optional[str] = None,
     model: Optional[str] = None,
     base_url: Optional[str] = None,
-    api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     from backend.services.local_runner import configure_llm, environment_report
 
-    override = _make_override(provider, model, base_url, api_key)
+    override = _make_override(provider, model, base_url)
     try:
         configure_llm(override)
     except Exception as e:  # noqa: BLE001
@@ -369,6 +397,85 @@ def check_environment(
     rep = environment_report()
     rep["ok"] = bool(rep["ffmpeg"]["ok"] and rep["llm"]["ok"])
     return rep
+
+
+LEGACY_TOOLS = frozenset({
+    'clip_video', 'start_clip_job', 'get_job_status', 'export_clip',
+    'publish_clip', 'get_publish_status', 'list_publish_profiles',
+})
+_V2_SPECS: tuple = ()
+
+
+def _v2_enabled() -> bool:
+    from backend.services.studio.features import flag_enabled, resolve_features
+    return flag_enabled(resolve_features(), 'mcp_v2_tools')
+
+
+def _disabled(project_id: str = '') -> Dict[str, Any]:
+    from backend.services import mcp_jobs
+    body = mcp_jobs.progress_fields(status='unknown')
+    return {'ok': False, 'project_id': project_id, 'error_code': 'disabled', **body}
+
+
+def cancel_job(project_id: str) -> Dict[str, Any]:
+    """Stop a running render. Finished videos stay; the job is marked cancelled."""
+    if not _v2_enabled():
+        return _disabled(project_id)
+    from backend.services import mcp_jobs
+    return mcp_jobs.cancel(project_id)
+
+
+def list_styles() -> Dict[str, Any]:
+    """Editing styles the produce/template parameter accepts. No extra knobs."""
+    if not _v2_enabled():
+        return _disabled()
+    from backend.services.studio.template_recommend import TEMPLATES
+    catalog = (
+        {'id': 'editorial', 'name': '杂志风'},
+        {'id': 'street', 'name': '街头快剪'},
+        {'id': 'classic', 'name': '经典'},
+    )
+    styles = [row for row in catalog if row['id'] in TEMPLATES]
+    return {'ok': True, 'styles': styles}
+
+
+def _sync_v2_tools() -> None:
+    manager = getattr(server, '_tool_manager', None)
+    if manager is None:
+        return
+    current = {tool.name for tool in manager.list_tools()}
+    enabled = _v2_enabled()
+    for fn, name, description in _V2_SPECS:
+        if enabled and name not in current:
+            server.add_tool(fn, name=name, description=description)
+        elif not enabled and name in current:
+            server.remove_tool(name)
+
+
+def _present_tool(tool):
+    if tool.name not in LEGACY_TOOLS:
+        return tool
+    description = tool.description or ''
+    if not description.startswith('deprecated:'):
+        description = 'deprecated: ' + description
+    meta = dict(tool.meta or {})
+    meta['deprecated'] = True
+    return tool.model_copy(update={'description': description, 'meta': meta})
+
+
+_original_list_tools = server.list_tools
+
+
+async def _list_tools():
+    _sync_v2_tools()
+    return [_present_tool(tool) for tool in await _original_list_tools()]
+
+
+server.list_tools = _list_tools  # type: ignore[method-assign]
+_V2_SPECS = (
+    (cancel_job, 'cancel_job', '取消一条仍在进行的出片或切片任务，停掉它的 ffmpeg。不删除已写出的成片。查不到返回 unknown。'),
+    (list_styles, 'list_styles', '列出剪辑风格 id：editorial（杂志风）、street（街头快剪）、classic（经典）。传给 start_quick_output 的 template 或 CLI 的 --template。'),
+)
 
 
 # ---------------------------------------------------------------- entry ---

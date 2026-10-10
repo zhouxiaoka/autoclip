@@ -128,7 +128,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                 sum(audio.scene_duration(scene) for scene in draft.scenes),
                 features=features, safe_area=safe_area,
             )
-        except project_cancellation.ProjectDeleted:
+        except (project_cancellation.ProjectDeleted, project_cancellation.JobStopped):
             raise
         except (TemplateRegistryError, OSError) as error:
             packaging_html.report_overlay_failure(error)
@@ -258,7 +258,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
                         parts.append(clip_path)
                         progress(round(10 + (i+1) / len(draft.scenes) * 80))
                     break
-                except project_cancellation.ProjectDeleted:
+                except (project_cancellation.ProjectDeleted, project_cancellation.JobStopped):
                     raise
                 except HtmlRetry:
                     if overlay_retried:
@@ -296,6 +296,12 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         if overlay_job is not None:
             from backend.services import video_encoder
             result['template_render'] = _template_report(overlay_job, video_encoder.encoder())
+            result['template'] = overlay_job.template
+            result['requested_template'] = overlay_job.requested_template
+        else:
+            requested = requested_template if requested_template in ('editorial', 'street', 'classic') else 'classic'
+            result['template'] = 'classic'
+            result['requested_template'] = requested
         return result
     finally:
         partial.unlink(missing_ok=True)

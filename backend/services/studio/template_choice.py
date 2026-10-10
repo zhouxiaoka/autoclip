@@ -38,6 +38,39 @@ def selected_template(generation: dict | None) -> str | None:
     return name if name in HTML_TEMPLATES else None
 
 
+def style_for_request(template: str | None, features: dict | None = None) -> dict[str, str]:
+    """The style a request will actually use. Unsupported names raise ValueError."""
+    if template not in (None, 'editorial', 'street', 'classic'):
+        raise ValueError('不支持的剪辑风格')
+    requested = template or 'classic'
+    applied = requested if requested in HTML_TEMPLATES and flag_enabled(_resolved(features), 'pkg_templates_v1') else 'classic'
+    return {'template': applied, 'requested_template': requested}
+
+
+def recorded_style(html_template: str | None, requested_template: str | None = None, features: dict | None = None) -> dict[str, str]:
+    """What an export job should say it used. The flag-off path stays classic."""
+    requested = requested_template if requested_template in ('editorial', 'street', 'classic') else None
+    if requested is None and html_template in ('editorial', 'street', 'classic'):
+        requested = html_template
+    return style_for_request(requested, features)
+
+
+def style_from_generation(generation: dict | None) -> dict[str, str]:
+    """The style already stored for this run, or classic when the flag left the request unused."""
+    if isinstance(generation, dict):
+        stored = generation.get('template')
+        requested = generation.get('requested_template')
+        if stored in ('editorial', 'street', 'classic') and requested in ('editorial', 'street', 'classic'):
+            return {'template': stored, 'requested_template': requested}
+    requested = None
+    if isinstance(generation, dict):
+        raw = generation.get('requested_template') or generation.get('html_template')
+        if raw in ('editorial', 'street', 'classic'):
+            requested = raw
+    applied = selected_template(generation) or 'classic'
+    return {'template': applied, 'requested_template': requested or 'classic'}
+
+
 def _score(draft: dict) -> float:
     try:
         return float(draft.get('_auto_score'))
