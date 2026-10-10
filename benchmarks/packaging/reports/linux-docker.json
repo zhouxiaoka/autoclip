@@ -1,0 +1,240 @@
+{
+  "schema": 1,
+  "status": "measured",
+  "label": "docker",
+  "created": "2026-10-10T02:34:07Z",
+  "host": {
+    "system": "Linux",
+    "machine": "x86_64",
+    "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "cpu_count": 4,
+    "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers"
+  },
+  "browser": {
+    "launch": {
+      "headless": true,
+      "args": [
+        "--disable-dev-shm-usage",
+        "--disable-extensions",
+        "--no-sandbox"
+      ]
+    },
+    "version": "140.0.7339.16",
+    "sandbox_retry": {
+      "no_sandbox": true,
+      "retried_without_sandbox": false
+    }
+  },
+  "fixture": {
+    "template": "editorial",
+    "duration_s": 70.0,
+    "fps": 30,
+    "frames": 2100,
+    "unique_states": 214,
+    "capture_size": [
+      720,
+      1280
+    ],
+    "output_size": [
+      1080,
+      1920
+    ]
+  },
+  "captures": {
+    "serial_all_720": {
+      "seconds": 112.36363245500024,
+      "frames_shot": 2100,
+      "output_frames": 2100,
+      "shoot_s": 112.24232962099995,
+      "pages": 1,
+      "width": 720,
+      "height": 1280,
+      "skip_unchanged": false,
+      "browser_version": "140.0.7339.16"
+    },
+    "changed_720": {
+      "seconds": 16.76614383900005,
+      "frames_shot": 214,
+      "output_frames": 2100,
+      "shoot_s": 16.59035516599988,
+      "pages": 1,
+      "width": 720,
+      "height": 1280,
+      "skip_unchanged": true,
+      "browser_version": "140.0.7339.16"
+    },
+    "parallel_all_720": {
+      "seconds": 77.3843415350002,
+      "frames_shot": 2100,
+      "output_frames": 2100,
+      "shoot_s": 77.206171971,
+      "pages": 2,
+      "width": 720,
+      "height": 1280,
+      "skip_unchanged": false,
+      "browser_version": "140.0.7339.16"
+    },
+    "parallel_changed_720": {
+      "seconds": 9.128782140999647,
+      "frames_shot": 214,
+      "output_frames": 2100,
+      "shoot_s": 8.939959547999933,
+      "pages": 2,
+      "width": 720,
+      "height": 1280,
+      "skip_unchanged": true,
+      "browser_version": "140.0.7339.16"
+    },
+    "serial_all_1080": {
+      "seconds": 171.803809558,
+      "frames_shot": 2100,
+      "output_frames": 2100,
+      "shoot_s": 171.64107758,
+      "pages": 1,
+      "width": 1080,
+      "height": 1920,
+      "skip_unchanged": false,
+      "browser_version": "140.0.7339.16"
+    }
+  },
+  "encodes": {
+    "two_pass": {
+      "seconds": 57.620722934999776,
+      "encoder": "libx264",
+      "passes": 2,
+      "preset": "medium",
+      "bitrate": 8087040
+    },
+    "one_pass": {
+      "seconds": 21.04489718500008,
+      "encoder": "libx264",
+      "attempts": [
+        "libx264"
+      ],
+      "passes": 1,
+      "probe_encoder": "libx264"
+    }
+  },
+  "rows": [
+    {
+      "name": "基线·单条：720p 全帧、单页、两遍 x264",
+      "capture_s": 112.364,
+      "encode_s": 57.621,
+      "total_s": 169.984,
+      "frames": 2100,
+      "capture_runs": 1,
+      "encode_runs": 1,
+      "vs_baseline": 1.0
+    },
+    {
+      "name": "优化1·双平台不复用（对照）",
+      "capture_s": 224.727,
+      "encode_s": 115.241,
+      "total_s": 339.969,
+      "frames": 4200,
+      "capture_runs": 2,
+      "encode_runs": 2,
+      "vs_baseline": 2.0
+    },
+    {
+      "name": "优化1·双平台叠加层复用",
+      "capture_s": 112.364,
+      "encode_s": 115.241,
+      "total_s": 227.605,
+      "frames": 2100,
+      "capture_runs": 1,
+      "encode_runs": 2,
+      "vs_baseline": 1.339
+    },
+    {
+      "name": "优化2·只抓变化帧（单条，两遍编码）",
+      "capture_s": 16.766,
+      "encode_s": 57.621,
+      "total_s": 74.387,
+      "frames": 214,
+      "capture_runs": 1,
+      "encode_runs": 1,
+      "vs_baseline": 0.438
+    },
+    {
+      "name": "优化3·1080p 全帧单页（对照，两遍编码）",
+      "capture_s": 171.804,
+      "encode_s": 57.621,
+      "total_s": 229.425,
+      "frames": 2100,
+      "capture_runs": 1,
+      "encode_runs": 1,
+      "vs_baseline": 1.35
+    },
+    {
+      "name": "优化3·720p 全帧 + 2 页并行（单条，两遍编码）",
+      "capture_s": 77.384,
+      "encode_s": 57.621,
+      "total_s": 135.005,
+      "frames": 2100,
+      "capture_runs": 1,
+      "encode_runs": 1,
+      "vs_baseline": 0.794
+    },
+    {
+      "name": "优化4·单遍 h264_args（单条，全帧抓取）",
+      "capture_s": 112.364,
+      "encode_s": 21.045,
+      "total_s": 133.409,
+      "frames": 2100,
+      "capture_runs": 1,
+      "encode_runs": 1,
+      "vs_baseline": 0.785
+    },
+    {
+      "name": "组合·单条：变化帧 + 2 页并行 + 单遍",
+      "capture_s": 9.129,
+      "encode_s": 21.045,
+      "total_s": 30.174,
+      "frames": 214,
+      "capture_runs": 1,
+      "encode_runs": 1,
+      "vs_baseline": 0.178
+    },
+    {
+      "name": "组合·双平台：复用 + 变化帧并行 + 单遍",
+      "capture_s": 9.129,
+      "encode_s": 42.09,
+      "total_s": 51.219,
+      "frames": 214,
+      "capture_runs": 1,
+      "encode_runs": 2,
+      "vs_baseline": 0.301
+    }
+  ],
+  "markdown": "| 方案 | 抓帧耗时 | 编码耗时 | 总耗时 | 抓帧数 | 相对单条基线 |\n|---|---:|---:|---:|---:|---:|\n| 基线·单条：720p 全帧、单页、两遍 x264 | 112.4s (1:52) | 57.6s (0:58) | 170.0s (2:50) | 2100 | 1.00× |\n| 优化1·双平台不复用（对照） | 224.7s (3:45) | 115.2s (1:55) | 340.0s (5:40) | 4200 | 2.00× |\n| 优化1·双平台叠加层复用 | 112.4s (1:52) | 115.2s (1:55) | 227.6s (3:48) | 2100 | 1.34× |\n| 优化2·只抓变化帧（单条，两遍编码） | 16.8s (0:17) | 57.6s (0:58) | 74.4s (1:14) | 214 | 0.44× |\n| 优化3·1080p 全帧单页（对照，两遍编码） | 171.8s (2:52) | 57.6s (0:58) | 229.4s (3:49) | 2100 | 1.35× |\n| 优化3·720p 全帧 + 2 页并行（单条，两遍编码） | 77.4s (1:17) | 57.6s (0:58) | 135.0s (2:15) | 2100 | 0.79× |\n| 优化4·单遍 h264_args（单条，全帧抓取） | 112.4s (1:52) | 21.0s (0:21) | 133.4s (2:13) | 2100 | 0.79× |\n| 组合·单条：变化帧 + 2 页并行 + 单遍 | 9.1s (0:09) | 21.0s (0:21) | 30.2s (0:30) | 214 | 0.18× |\n| 组合·双平台：复用 + 变化帧并行 + 单遍 | 9.1s (0:09) | 42.1s (0:42) | 51.2s (0:51) | 214 | 0.30× |",
+  "unmeasured_platforms": [
+    {
+      "platform": "macOS",
+      "status": "未测",
+      "owner": "cursor-agent-worker-114e0e00e2",
+      "machine": "Charlie MacBook Pro",
+      "note": "先运行 uname -m，确认 arm64 或 x86_64，再在该机器上执行本脚本。"
+    },
+    {
+      "platform": "Windows",
+      "status": "未测",
+      "owner": "AutoClip PM",
+      "machine": "腾讯云 Windows 验收机",
+      "note": "脚本可直接复跑。本任务没有在 Windows 上执行。"
+    }
+  ],
+  "notes": [
+    "抓帧耗时含浏览器冷启动、renderFrame 和 PNG 截图。全帧方案不把 2100 张图落盘；变化帧方案会把唯一帧写进临时目录供编码使用。",
+    "双平台行的第二次抓帧或第二次编码是同一次实测的倍数：两条中文 9:16 成片内容相同，复用只把抓帧次数从 2 降到 1，编码仍按每条成片各一次计。",
+    "基线编码是两遍 libx264 medium，码率与产品 video_encoder 的像素预算一致。单遍编码调用 h264_args()，硬件不可用时回退 libx264 veryfast crf 20。",
+    "720p 抓取后在编码时放大到 1080x1920。1080p 行只比较抓帧，编码仍使用 720p 变化帧，避免把两套像素混进编码差。",
+    "计划里的 5–5.5 分钟还包含底层成片和质检。本表只有叠加层抓帧和这一次编码，不能直接当成全流程耗时。",
+    "容器以 root 启动 Chromium，参数含 --no-sandbox；浏览器是镜像内 chromium-headless-shell 140.0.7339.16。"
+  ],
+  "docker": {
+    "status": "measured",
+    "note": "本文件就是 Docker 路径的实测，不是宿主机结果。"
+  }
+}

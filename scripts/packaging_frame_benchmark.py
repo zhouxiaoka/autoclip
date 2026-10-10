@@ -631,6 +631,11 @@ def run_docker(args, host_report: Path) -> dict:
     if not binary:
         return {"status": "未测", "reason": "本机没有可用的 Docker 守护进程"}
     output = host_report.resolve().with_name(host_report.stem + "-docker.json")
+    tag = args.docker_image.rsplit(":", 1)[-1]
+    version = tag.split("-", 1)[0].lstrip("v")
+    # The image ships browser builds but not the Python package. Pin the package to that image
+    # so launch uses /ms-playwright instead of downloading another revision.
+    playwright_pin = f"playwright=={version}" if version[:1].isdigit() else "playwright"
     mounts = ["-v", f"{ROOT}:{ROOT}"]
     if output.parent != ROOT and ROOT not in output.parents:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -638,6 +643,8 @@ def run_docker(args, host_report: Path) -> dict:
     script = " ".join([
         "apt-get update",
         "&&", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "--no-install-recommends", "ffmpeg",
+        # services/__init__.py imports SQLAlchemy on any backend.services import, including h264_args.
+        "&&", "python", "-m", "pip", "install", "--no-cache-dir", "-r", "requirements.txt", playwright_pin,
         "&&", "python", "scripts/packaging_frame_benchmark.py",
         "--browser", "shell",
         "--label", "docker",
