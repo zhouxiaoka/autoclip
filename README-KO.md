@@ -244,7 +244,7 @@ Python 3.10+(3.11 권장), PATH의 FFmpeg와 FFprobe가 필요합니다. Redis�
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip-*-py3-none-any.whl
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 ```
 
 위 명령은 macOS / Linux용입니다. Windows는 `py -m venv venv`로 만들고 `.\venv\Scripts\Activate.ps1`로 활성화한 뒤 같은 `python -m pip` 설치 명령을 실행하세요.

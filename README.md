@@ -244,7 +244,7 @@ docker compose up -d
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip-*-py3-none-any.whl
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 ```
 
 以上命令用于 macOS / Linux。Windows 用 `py -m venv venv` 创建环境、`.\venv\Scripts\Activate.ps1` 激活；随后使用相同的 `python -m pip` 安装命令。

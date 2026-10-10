@@ -244,7 +244,7 @@ Python 3.10+（3.11 推奨）、PATH 上の FFmpeg と FFprobe が必要。Redis
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip-*-py3-none-any.whl
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 ```
 
 上記は macOS / Linux 用。Windows は `py -m venv venv` で作成し、`.\venv\Scripts\Activate.ps1` で有効化。その後は同じ `python -m pip` コマンドでインストールします。

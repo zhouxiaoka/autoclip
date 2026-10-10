@@ -244,7 +244,7 @@ Python 3.10+ (лучше 3.11), FFmpeg и FFprobe в PATH; Redis не нужен
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip-*-py3-none-any.whl
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 ```
 
 Команды выше для macOS / Linux. В Windows создайте среду через `py -m venv venv`, активируйте `.\venv\Scripts\Activate.ps1`, затем выполните те же команды `python -m pip`.

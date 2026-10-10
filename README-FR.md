@@ -244,7 +244,7 @@ Python 3.10+ (3.11 conseillé), FFmpeg et FFprobe dans PATH ; Redis inutile. Té
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip-*-py3-none-any.whl
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 ```
 
 Ces commandes sont pour macOS / Linux. Sous Windows, créez avec `py -m venv venv` et activez avec `.\venv\Scripts\Activate.ps1`, puis utilisez les mêmes commandes `python -m pip`.

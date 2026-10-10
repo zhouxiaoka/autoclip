@@ -246,7 +246,7 @@ Requires Python 3.10+ (3.11 recommended), with FFmpeg and FFprobe on PATH; local
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install --force-reinstall --no-deps autoclip-*-py3-none-any.whl
+python -m pip install --force-reinstall --no-deps autoclip_mcp-*-py3-none-any.whl
 ```
 
 Commands above are for macOS / Linux. On Windows, create with `py -m venv venv` and activate with `.\venv\Scripts\Activate.ps1`, then use the same `python -m pip` installation commands.
