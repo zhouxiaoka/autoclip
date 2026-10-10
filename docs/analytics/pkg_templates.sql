@@ -9,7 +9,8 @@ WHERE timestamp >= now() - INTERVAL 7 DAY
 GROUP BY outcome
 ORDER BY events DESC;
 
--- Render duration inputs for p90. Bucket in the dashboard; do not average titles or paths (they are not on the event).
+-- Render duration inputs for p90. duration_ms is overlay time. Rank skips are outcome = 'skipped' and are not downgrades.
+-- Downgrade rate uses outcome = 'downgraded' (or downgraded = true). requested_template is the import choice.
 SELECT properties.template AS template, properties.encoder AS encoder,
        properties.downgrade_reason AS downgrade_reason, properties.os AS os,
        properties.outcome AS outcome, properties.failure_reason AS failure_reason,

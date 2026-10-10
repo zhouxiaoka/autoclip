@@ -64,7 +64,7 @@ export interface RenderJob {
   job_id: string; draft_id: string; title: string; revision: number
   status: 'queued' | 'running' | 'completed' | 'failed'; percent: number; created_at: string; error?: string
   brand_outro?: boolean
-  result?: { width: number; height: number; duration: number; warnings: string[]; outro_applied?: boolean }
+  result?: { width: number; height: number; duration: number; warnings: string[]; outro_applied?: boolean; template_render?: { template?: string } }
 }
 export interface OutputVariant {
   id: string; draft_id: string; draft_revision: number; strategy_id: string; strategy_version: number
@@ -134,6 +134,7 @@ export interface ImportOptions {
   goal: 'auto' | Goal; language: Language; aspect: Draft['aspect'] | null
   duration: number | null; instruction: string
   portrait_style?: 'auto' | 'interview' | 'podcast'
+  html_template?: 'editorial' | 'street' | 'classic'
 }
 export type AnalysisMode = 'subtitle' | 'visual'
 export interface AnalysisPreferences { analysis_mode: AnalysisMode | 'auto'; allow_visual_screening: boolean }

@@ -52,6 +52,8 @@ OUTPUT_HEIGHT = 1920
 DOCKER_IMAGE = "mcr.microsoft.com/playwright/python:v1.55.0-noble"
 
 # 抓帧次数、编码次数。编码次数大于 1 表示两条平台成片各编一次；复用只省抓帧。
+COMBINED_ROW = ("组合·单条：变化帧 + 2 页并行 + 单遍", "parallel_changed_720", "one_pass", 1, 1)
+
 ROW_SPECS = (
     ("基线·单条：720p 全帧、单页、两遍 x264", "serial_all_720", "two_pass", 1, 1),
     ("优化1·双平台不复用（对照）", "serial_all_720", "two_pass", 2, 2),
@@ -60,7 +62,7 @@ ROW_SPECS = (
     ("优化3·1080p 全帧单页（对照，两遍编码）", "serial_all_1080", "two_pass", 1, 1),
     ("优化3·720p 全帧 + 2 页并行（单条，两遍编码）", "parallel_all_720", "two_pass", 1, 1),
     ("优化4·单遍 h264_args（单条，全帧抓取）", "serial_all_720", "one_pass", 1, 1),
-    ("组合·单条：变化帧 + 2 页并行 + 单遍", "parallel_changed_720", "one_pass", 1, 1),
+    COMBINED_ROW,
     ("组合·双平台：复用 + 变化帧并行 + 单遍", "parallel_changed_720", "one_pass", 1, 2),
 )
 
@@ -276,13 +278,13 @@ def single_pass_command(ffmpeg: str, concat: Path, output: Path, width: int, hei
     ]
 
 
-def comparison_rows(captures: dict, encodes: dict) -> list[dict]:
-    baseline_key = ROW_SPECS[0]
+def comparison_rows(captures: dict, encodes: dict, specs=ROW_SPECS) -> list[dict]:
+    baseline_key = specs[0]
     base_capture = captures[baseline_key[1]]["seconds"] * baseline_key[3]
     base_encode = encodes[baseline_key[2]]["seconds"] * baseline_key[4]
     baseline_total = base_capture + base_encode
     rows = []
-    for title, capture_key, encode_key, capture_times, encode_times in ROW_SPECS:
+    for title, capture_key, encode_key, capture_times, encode_times in specs:
         if capture_key not in captures or encode_key not in encodes:
             continue
         capture = captures[capture_key]
@@ -354,7 +356,7 @@ def _run_ffmpeg(command: list[str], cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=1800, check=False)
 
 
-def encode_outputs(fill: dict, frames: list[dict], work: Path) -> dict:
+def encode_outputs(fill: dict, frames: list[dict], work: Path, *, two_pass: bool = True) -> dict:
     from backend.services.video_encoder import encoder, h264_args, run_with_fallback
 
     ffmpeg = _ffmpeg()
@@ -363,17 +365,19 @@ def encode_outputs(fill: dict, frames: list[dict], work: Path) -> dict:
     concat = work / "overlay.ffconcat"
     concat.write_text(ffconcat_text(frames, fps), encoding="utf-8")
     chosen = encoder()
-    passes = two_pass_commands(
-        ffmpeg, concat, work / "baseline-two-pass.mp4", OUTPUT_WIDTH, OUTPUT_HEIGHT, fps, duration, work / "x264pass",
-    )
-    started = time.perf_counter()
-    logs = []
-    for command in passes:
-        proc = _run_ffmpeg(command, work)
-        logs.append((proc.stderr or "")[-1500:])
-        if proc.returncode != 0:
-            raise RuntimeError(f"two-pass x264 failed: {logs[-1]}")
-    two_pass_s = time.perf_counter() - started
+    two_pass_s = None
+    if two_pass:
+        passes = two_pass_commands(
+            ffmpeg, concat, work / "baseline-two-pass.mp4", OUTPUT_WIDTH, OUTPUT_HEIGHT, fps, duration, work / "x264pass",
+        )
+        started = time.perf_counter()
+        logs = []
+        for command in passes:
+            proc = _run_ffmpeg(command, work)
+            logs.append((proc.stderr or "")[-1500:])
+            if proc.returncode != 0:
+                raise RuntimeError(f"two-pass x264 failed: {logs[-1]}")
+        two_pass_s = time.perf_counter() - started
 
     attempts: list[str] = []
 
@@ -389,14 +393,7 @@ def encode_outputs(fill: dict, frames: list[dict], work: Path) -> dict:
     one_pass_s = time.perf_counter() - started
     if proc.returncode != 0:
         raise RuntimeError(f"single-pass encode failed: {(proc.stderr or '')[-1500:]}")
-    return {
-        "two_pass": {
-            "seconds": two_pass_s,
-            "encoder": "libx264",
-            "passes": 2,
-            "preset": "medium",
-            "bitrate": baseline_bitrate(OUTPUT_WIDTH, OUTPUT_HEIGHT, fps),
-        },
+    result = {
         "one_pass": {
             "seconds": one_pass_s,
             "encoder": attempts[-1] if attempts else chosen,
@@ -405,6 +402,15 @@ def encode_outputs(fill: dict, frames: list[dict], work: Path) -> dict:
             "probe_encoder": chosen,
         },
     }
+    if two_pass_s is not None:
+        result["two_pass"] = {
+            "seconds": two_pass_s,
+            "encoder": "libx264",
+            "passes": 2,
+            "preset": "medium",
+            "bitrate": baseline_bitrate(OUTPUT_WIDTH, OUTPUT_HEIGHT, fps),
+        }
+    return result
 
 
 def _host_info() -> dict:
@@ -549,13 +555,14 @@ async def measure(args, work: Path) -> dict:
         await _check_hashes(page, fill)
         browser_version = browser.version
         await browser.close()
-        jobs = [
+        combined = getattr(args, "preset", "full") == "combined"
+        jobs = [("parallel_changed_720", 720, 1280, 2, True, work / "frames")] if combined else [
             ("serial_all_720", 720, 1280, 1, False, None),
             ("changed_720", 720, 1280, 1, True, work / "frames"),
             ("parallel_all_720", 720, 1280, 2, False, None),
             ("parallel_changed_720", 720, 1280, 2, True, None),
         ]
-        if not args.skip_1080 and frame_count >= FRAME_COUNT:
+        if not combined and not args.skip_1080 and frame_count >= FRAME_COUNT:
             jobs.append(("serial_all_1080", 1080, 1920, 1, False, None))
         for name, width, height, pages, skip, save in jobs:
             if save is not None:
@@ -563,17 +570,18 @@ async def measure(args, work: Path) -> dict:
             print(f"capture {name}", flush=True)
             result = await _capture(playwright, html, fill, options, width, height, pages, skip, save)
             saved = result.pop("frames")
-            if name == "changed_720":
+            if name in {"changed_720", "parallel_changed_720"} and saved:
                 result["saved_frames"] = saved
             captures[name] = result
             print(f"  {result['frames_shot']} frames in {result['seconds']:.1f}s", flush=True)
         print("encode", flush=True)
-        encodes = await asyncio.to_thread(encode_outputs, fill, captures["changed_720"].pop("saved_frames"), work)
+        frame_key = "parallel_changed_720" if combined else "changed_720"
+        encodes = await asyncio.to_thread(encode_outputs, fill, captures[frame_key].pop("saved_frames"), work, two_pass=not combined)
     summary = {
         key: {field: value[field] for field in ("seconds", "frames_shot", "output_frames", "shoot_s", "pages", "width", "height", "skip_unchanged", "browser_version")}
         for key, value in captures.items()
     }
-    rows = comparison_rows(summary, encodes)
+    rows = comparison_rows(summary, encodes, (COMBINED_ROW,) if combined else ROW_SPECS)
     return {
         "schema": 1,
         "status": "measured",
@@ -688,6 +696,7 @@ def run_docker(args, host_report: Path) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--preset", choices=("full", "combined"), default="full", help="combined runs only the single-clip changed-frame, two-page, one-pass pipeline")
     parser.add_argument("--out", type=Path, default=ROOT / "benchmarks" / "packaging" / "reports" / "latest.json")
     parser.add_argument("--seconds", type=float, default=DURATION_S)
     parser.add_argument("--fps", type=int, default=FPS)

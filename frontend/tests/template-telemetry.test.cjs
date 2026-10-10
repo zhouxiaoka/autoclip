@@ -16,14 +16,16 @@ const workflow = loadWorkflow()
 
 test('template render facts stay enumerable and drop captions and paths', () => {
   const props = workflow.safeStudioProperties({
-    template: 'editorial', encoder: 'h264_nvenc', downgraded: true, downgrade_reason: 'missing_runtime',
-    os: 'darwin', cpu_count: 8, duration_ms: 90000, failure_reason: 'none', outcome: 'downgraded',
+    template: 'classic', requested_template: 'editorial', encoder: 'h264_nvenc', downgraded: false, downgrade_reason: 'rank',
+    os: 'darwin', cpu_count: 8, duration_ms: 90000, failure_reason: 'none', outcome: 'skipped',
     strategy_id: 'douyin', flow_id: 't-abc123def456', title: '秘密标题', caption: '原话', path: '/Users/a/v.mp4',
   })
-  assert.equal(props.template, 'editorial')
+  assert.equal(props.template, 'classic')
+  assert.equal(props.requested_template, 'editorial')
   assert.equal(props.encoder, 'h264_nvenc')
-  assert.equal(props.downgraded, true)
-  assert.equal(props.downgrade_reason, 'missing_runtime')
+  assert.equal(props.downgraded, false)
+  assert.equal(props.downgrade_reason, 'rank')
+  assert.equal(props.outcome, 'skipped')
   assert.equal(props.os, 'darwin')
   assert.equal(props.cpu_count, 8)
   assert.equal(props.duration_ms, 90000)
@@ -31,6 +33,23 @@ test('template render facts stay enumerable and drop captions and paths', () => 
   assert.equal(blob.includes('秘密'), false)
   assert.equal(blob.includes('原话'), false)
   assert.equal(blob.includes('/Users'), false)
+})
+
+test('a rank skip is classic and is not a downgrade', () => {
+  const summary = workflow.generationSummary({
+    output_variants: [
+      { draft_id: 'a', render_job_id: 'j1', strategy_id: 'douyin', status: 'completed' },
+      { draft_id: 'b', render_job_id: 'j2', strategy_id: 'douyin', status: 'completed' },
+    ],
+    jobs: [
+      { job_id: 'j1', status: 'completed', result: { template_render: { template: 'classic', requested_template: 'editorial', downgraded: false, downgrade_reason: 'rank', outcome: 'skipped' } } },
+      { job_id: 'j2', status: 'completed', result: { template_render: { template: 'classic', requested_template: 'editorial', downgraded: true, downgrade_reason: 'over_budget', outcome: 'downgraded' } } },
+    ],
+    drafts: [],
+  })
+  assert.equal(summary.html_downgrade_count, 1)
+  assert.equal(summary.classic_count, 2)
+  assert.equal(summary.editorial_count, 0)
 })
 
 test('override event helper keeps enums and drops free text', () => {

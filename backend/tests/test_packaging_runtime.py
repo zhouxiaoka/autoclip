@@ -167,7 +167,7 @@ def test_missing_component_falls_back_to_classic_without_blocking(monkeypatch):
 
 def test_classic_family_stays_classic_even_when_the_runtime_is_ready(monkeypatch):
     monkeypatch.setattr(runtime, "is_installed", lambda: True)
-    for requested in (None, "", "classic", "auto", "interview_zh", "podcast_en", "landscape", "unknown"):
+    for requested in (None, "", "classic", "auto", "interview_zh", "podcast_en", "podcast", "landscape", "unknown"):
         assert runtime.effective_template(requested) == "classic"
     assert runtime.effective_template("editorial") == "editorial"
     assert runtime.effective_template("street") == "street"
