@@ -25,6 +25,8 @@ import { ProjectTaskManager } from '../components/ProjectTaskManager'
 import FeedbackDialog from '../components/FeedbackDialog'
 import { Btn, Icon, parseTimecode, fmtDuration } from '../ui'
 import { openExternalLink } from '../utils/externalLinks'
+import { flagAssigned } from '../analytics/flags'
+import { trackLegacyEntry } from '../analytics/studio'
 
 const ProjectDetailPage: React.FC = () => {
   useTranslation()
@@ -351,7 +353,7 @@ const ProjectDetailPage: React.FC = () => {
             <Btn onClick={() => navigate(`/project/${currentProject.id}/publish`)}>{t("发布")}</Btn>
           )}
           {!isVisual && currentProject.status === 'pending' && (
-            <Btn variant="cta" onClick={handleStartProcessing} loading={statusLoading}>{t("开始处理")}</Btn>
+            <Btn variant="cta" onClick={() => { trackLegacyEntry({ legacy_action: 'start_processing' }, flagAssigned('hide_legacy_entrypoints')); void handleStartProcessing() }} loading={statusLoading}>{t("开始处理")}</Btn>
           )}
           {!isVisual && isFailed && (
             <div style={{ display: 'flex', gap: 8, flex: '0 0 auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>

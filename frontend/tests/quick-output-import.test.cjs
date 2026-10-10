@@ -20,16 +20,17 @@ function nodes(value){return !value||typeof value!=='object'?[]:Array.isArray(va
 test('quick import submits platform targets, branding and auto-starts to results',async()=>{
  const calls=[],navigations=[];let index=0
  const ready={analysis_mode:'auto',ready:true,checks:{analysis:{ok:true,code:'configured',repair:'none'},transcription:{ok:true,code:'whisper_installed',repair:'none'},visual:{ok:true,code:'optional',repair:'none'},ffmpeg:{ok:true,code:'available',repair:'none'}}}
- const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}],[ready,()=>{}],[true,()=>{}],[false,()=>{}]]
+ const states=[['link',()=>{}],['https://youtube.com/watch?v=video',()=>{}],[null,()=>{}],[null,()=>{}],[{goal:'auto',language:'source',aspect:null,duration:null,instruction:''},()=>{}],['',()=>{}],[['douyin'],()=>{}],[false,()=>{}],[false,()=>{}],['',()=>{}],[ready,()=>{}],[true,()=>{}],[false,()=>{}],[false,()=>{}],[null,()=>{}],[false,()=>{}]]
  const component=load({
   'react-i18next':{useTranslation:()=>{}},'../../i18n':{t:x=>x},
   react:{useState:()=>states[index++],useEffect:()=>{},useRef:current=>({current})},antd:{Select:'select'},'react-router-dom':{useNavigate:()=>path=>navigations.push(path)},
   'react/jsx-runtime':{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'fragment'},
   '../../ui':{Btn:'button',Segmented:'segmented',Dialog:'dialog',StatusDot:'status'},'./PlatformPicker':{default:'platform-picker'},
-  './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}},readiness:async()=>ready},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){}},'../../analytics/experience':{trackExperience(){}},
-  '../../analytics/flags':{useFlag:()=>false,featureSnapshot:()=>({pkg_templates_v1:false})},
+  './api':{studioApi:{import:async body=>{calls.push(body);return {project_id:'project-1'}},readiness:async()=>ready},errorText:String},'../../analytics/studio':{trackQuickOutputPlatforms(){},trackOneClickStarted(){},trackOneClickUndone(){},trackAutoChoiceOverridden(){}},'../../analytics/workflow':{telemetryId:()=>'t-importflow-aaaaaaaa'},'../../analytics/flags':{flagEnabled:()=>false,flagValue:()=>'button',flagAssigned:()=>false,featureSnapshot:()=>({}),useFlag:()=>false},'../../analytics/experience':{trackExperience(){}},
+  './platformLabel':{platformLabel:id=>id},'./platformMemory':{readRememberedPlatforms:()=>null,resolvePlatforms:()=>({platforms:['douyin'],source:'user'}),samePlatforms:()=>true,writeRememberedPlatforms(){}},
+  './pasteStart':{claimBackgroundWhisperInstall:()=>false,importUrlKind:()=>null,isVideoFile:()=>false,shouldAutoStart:()=>false,shouldBackgroundInstallWhisper:()=>false,UNDO_MS:3000},
+  './importPreferencesStore':{readImportPreferences:()=>null},
   './TemplatePicker':{default:'template-picker',templateImportFields:()=>({})},
-  './StyleProbeLine':{default:'style-probe'},
   './editingStyleSession':{readStyle:()=>({key:'',status:'idle',result:null,latencyMs:0})},
   './types':{defaultImportOptions:{goal:'auto',language:'source',aspect:null,duration:null,instruction:''}},
   './ImportPreferences':{default:'preferences'},'../../services/api':{speechApi:{installRuntime:async()=>({started:true,message:''})}},

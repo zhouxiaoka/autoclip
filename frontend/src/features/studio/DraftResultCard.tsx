@@ -12,9 +12,9 @@ const statusLabels: Record<ExportStatus, string> = {
   ready: '已导出 · 可下载', failed: '导出失败', updated: '已修改 · 需重新导出',
 }
 
-export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExport, onHistory }: {
+export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExport, onHistory, allowExport = true }: {
   projectId: string; draft: Draft; jobs: RenderJob[]
-  onEdit: () => void; onExport: () => void; onHistory: () => void
+  onEdit: () => void; onExport: () => void; onHistory: () => void; allowExport?: boolean
 }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -47,7 +47,7 @@ export default function DraftResultCard({ projectId, draft, jobs, onEdit, onExpo
           {completed && <Btn variant="text" onClick={() => navigate(`/project/${projectId}/publish/studio-${completed.job_id}`)}>{t('发布')}</Btn>}
           {completed ? <StudioDownloadLink className="studio-link" projectId={projectId} jobId={completed.job_id}/>
             : state.active ? <Btn variant="text" onClick={onHistory}>{t('查看进度')}</Btn>
-            : <Btn variant="text" onClick={onExport}>{t(state.status==='failed'?'重试导出':'导出成片')}</Btn>}
+            : allowExport ? <Btn variant="text" onClick={onExport}>{t(state.status==='failed'?'重试导出':'导出成片')}</Btn> : null}
         </div>
       </div>
     </div>
