@@ -478,10 +478,14 @@ def test_non_python_host_uses_the_packaged_runtime(tmp_path, monkeypatch):
     resources = tmp_path / 'resources'
     if os.name == 'nt':
         runtime = resources / 'python' / 'python.exe'
+        venv_runtime = resources / 'venv' / 'Scripts' / 'python.exe'
     else:
         runtime = resources / 'python' / 'bin' / 'python3'
+        venv_runtime = resources / 'venv' / 'bin' / 'python'
     runtime.parent.mkdir(parents=True)
-    runtime.write_bytes(b'')
+    venv_runtime.parent.mkdir(parents=True)
+    runtime.write_bytes(b'portable')
+    venv_runtime.write_bytes(b'venv')
     host = resources / 'autoclip-backend.exe'
     host.write_bytes(b'')
     monkeypatch.setattr(qa_schedule.sys, 'executable', str(host))
@@ -544,6 +548,28 @@ def test_analytics_identity_rejects_paths_and_stores_anonymous_ids(tmp_path, mon
     assert accepted.status_code == 200
     stored = json.loads((tmp_path / 'analytics.json').read_text(encoding='utf-8'))
     assert stored == {'distinct_id': '018f6b2a-7c3d-7b2a-8c11-111111111111'}
+    assert not list(tmp_path.glob('analytics.json.*.tmp'))
+
+
+def test_identity_temp_file_includes_the_pid(tmp_path, monkeypatch):
+    import os
+    from pathlib import Path
+    from backend.services.studio.qa import telemetry
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    names = []
+    original = Path.replace
+
+    def spy(self, target):
+        if self.name.endswith('.tmp'):
+            names.append(self.name)
+        return original(self, target)
+
+    monkeypatch.setattr(Path, 'replace', spy)
+    assert telemetry.remember_distinct_id('018f6b2a-7c3d-7b2a-8c11-111111111111')
+    assert len(names) == 1
+    assert names[0].startswith(f'analytics.json.{os.getpid()}.')
+    assert names[0].endswith('.tmp')
+    assert names[0] != 'analytics.json.tmp'
 
 
 def test_event_variant_comes_from_the_generation(tmp_path, monkeypatch):

@@ -72,12 +72,17 @@ jobs:
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-window-render-regression
           SENTRY_DSN: ""
         run: python -m pytest backend/tests/test_packaging_render.py -k preserves_slide_edges -q
-      - name: Packaged Python QA spawn stays under the skip budget
+      - name: Packaged Python QA spawn and 60s portrait benchmark
+        shell: pwsh
         env:
           AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-qa-spawn
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-qa-spawn
           SENTRY_DSN: ""
-        run: python -m pytest scripts/windows_tests/test_studio_qa_windows.py -q
+        run: |
+          python -m pytest scripts/windows_tests/test_studio_qa_windows.py -q -s
+          if (Test-Path "$env:RUNNER_TEMP\qa-windows-benchmark.json") {
+            Get-Content "$env:RUNNER_TEMP\qa-windows-benchmark.json"
+          }
 
   windows-asyncio:
     name: Windows Proactor cleanup

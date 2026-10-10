@@ -1,6 +1,6 @@
 # 成片质检（shadow）
 
-1.5.7 只记录，不拦截。成片状态写成 `completed`、封面收尾之后，渲染线程才把检查放进后台队列。子进程用打包进来的 Python（Windows `resources/python/python.exe`，Unix `resources/python/bin/python3`；开发时仍用当前解释器），以低优先级运行（Windows `BELOW_NORMAL`，其他系统 `nice -n 10`）。Windows 上子进程和 `taskkill` 都带 `CREATE_NO_WINDOW`。硬上限约 12 秒，超时会杀掉整个进程组。检查失败、超时或抛错都不改文件、不改任务状态。
+1.5.7 只记录，不拦截。成片状态写成 `completed`、封面收尾之后，渲染线程才把检查放进后台队列。子进程优先用打包进来的 Python（Windows 先 `resources/python/python.exe`，没有再找 `resources/venv/Scripts/python.exe`；Unix 先 `resources/python/bin/python3`，没有再找 `resources/venv/bin/python`。开发时当前进程本身就是解释器，仍用它），以低优先级运行（Windows `BELOW_NORMAL`，其他系统 `nice -n 10`）。Windows 上子进程和 `taskkill` 都带 `CREATE_NO_WINDOW`。硬上限约 12 秒，超时会杀掉整个进程组。检查失败、超时或抛错都不改文件、不改任务状态。
 
 ## 开关
 

@@ -88,9 +88,13 @@ def remember_distinct_id(value: str) -> bool:
         if _read_id(path) == value:
             return True
         path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix('.json.tmp')
-        temporary.write_text(json.dumps({'distinct_id': value}), encoding='utf-8')
-        temporary.replace(path)
+        temporary = path.with_name(f'{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp')
+        try:
+            temporary.write_text(json.dumps({'distinct_id': value}), encoding='utf-8')
+            temporary.replace(path)
+        except OSError:
+            temporary.unlink(missing_ok=True)
+            return False
     except OSError:
         return False
     return _read_id(path) == value

@@ -59,10 +59,11 @@ def _host_path() -> Path:
 
 
 def _packaged_runtime() -> Path | None:
-    """Python shipped beside the backend, matching the desktop launcher layout.
+    """Python shipped beside the backend.
 
-    Windows: resources/python/python.exe or resources/venv/Scripts/python.exe.
-    Unix: resources/python/bin/python3 or resources/venv/bin/python.
+    The portable runtime comes first. A venv next to the bundle is only the fallback.
+    Windows: resources/python/python.exe, then resources/venv/Scripts/python.exe.
+    Unix: resources/python/bin/python3, then resources/venv/bin/python.
     """
     host = _host_path()
     roots: list[Path] = []
@@ -70,9 +71,9 @@ def _packaged_runtime() -> Path | None:
         if root not in roots:
             roots.append(root)
     if os.name == 'nt':
-        relative = (Path('venv') / 'Scripts' / 'python.exe', Path('python') / 'python.exe')
+        relative = (Path('python') / 'python.exe', Path('venv') / 'Scripts' / 'python.exe')
     else:
-        relative = (Path('venv') / 'bin' / 'python', Path('python') / 'bin' / 'python3')
+        relative = (Path('python') / 'bin' / 'python3', Path('venv') / 'bin' / 'python')
     for root in roots:
         for rel in relative:
             candidate = root / rel
