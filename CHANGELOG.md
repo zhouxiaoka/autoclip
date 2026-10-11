@@ -7,7 +7,7 @@
 
 ## [未发布]
 
-_（本周尚无改动）_
+- 发布 autoclip-mcp 时推送标签 `mcp-v<version>`。该标签走 pypi environment，只允许从 `mcp-v*` 部署。
 
 ## [1.5.7] - 2026-10-10
 
