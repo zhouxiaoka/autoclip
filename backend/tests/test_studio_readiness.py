@@ -188,3 +188,41 @@ def test_http_readiness_is_registered_before_project_routes(isolated, monkeypatc
         assert set(check) == {'ok', 'code', 'repair'}
         assert check['repair'] in {'settings_ai', 'install_whisper', 'settings_transcription', 'settings_vision', 'none'}
     assert 'sk-test-key' not in response.text
+
+
+# 1.5.7 Windows acceptance (b4) S3: capability=auto must resolve like the pipeline.
+@pytest.mark.parametrize('model, capability, ok', [
+    ('gpt-6.1-sol', 'auto', True),
+    ('gpt-4o-mini', 'auto', True),
+    ('o3-mini', 'auto', False),
+    ('gpt-6.1-sol', 'text', False),
+    ('o3-mini', 'multimodal', True),
+])
+def test_visual_check_uses_the_pipeline_capability(monkeypatch, model, capability, ok):
+    from backend.services import ai_model_settings as ai
+    gateway = Connection(id='ai', name='88API', provider='api88', api_key='sk-test-key', base_url='https://api.88api.ai/v1')
+    settings = document(connections=[gateway], analysis_mode='visual',
+                        analysis=Assignment(connection_id='ai', model=model, capability=capability))
+    visual = report_for(monkeypatch, settings)['checks']['visual']
+    assert visual['ok'] is ok
+    assert visual['code'] == ('configured' if ok else 'not_configured')
+    # The pipeline gives the same answer: a vision endpoint exists exactly when readiness is ok.
+    assert (ai.vision_endpoint(settings) is not None) is ok
+    assert ai.sees_images(settings, settings.analysis) is ok
+
+
+def test_auto_capability_resolution(monkeypatch):
+    from backend.services import ai_model_settings as ai
+    settings = document()
+    pick = lambda model, cap='auto': ai.capability(settings, Assignment(connection_id='ai', model=model, capability=cap))
+    assert pick('gpt-6.1-sol') == 'multimodal'
+    assert pick('gpt-4o-mini') == 'multimodal'
+    assert pick('o3-mini') is None  # not confirmed to see images; never guessed as text
+    assert pick('gpt-6.1-sol', 'text') == 'text'
+
+
+def test_generic_compatible_gateway_still_needs_an_explicit_choice(monkeypatch):
+    gateway = Connection(id='ai', name='Gateway', provider='compatible', api_key='k', base_url='https://gateway.example/v1')
+    settings = document(connections=[gateway], analysis_mode='visual',
+                        analysis=Assignment(connection_id='ai', model='gpt-6.1-sol', capability='auto'))
+    assert report_for(monkeypatch, settings)['checks']['visual']['code'] == 'not_configured'

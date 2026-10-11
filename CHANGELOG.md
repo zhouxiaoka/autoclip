@@ -29,6 +29,8 @@
 
 - 分析模式为自动时，gpt-6.x 能被认出是能看图的模型，不再按仅文字处理；gpt-5.x 照旧。o 系列按 OpenAI 文档区分：o1、o1-pro、o3、o3-pro、o4-mini 能看图，o1-mini、o1-preview、o3-mini 只收文字；语音、实时、转写、搜索型号也不再被当成视觉模型（1.5.7 Windows 验收，#340）。
 
+- 导入前检查的「画面分析」一项和制作流程用同一套能力判断。模型能力选「自动识别」时，gpt-6.x、gpt-4o-mini 这类能看图的模型不再显示「未配置画面理解模型」；o3-mini 这类只收文字的模型仍提示去设置。设置页的模型列表和 `autoclip doctor` / MCP `check_environment` 也按同样的规则标注。通用 OpenAI 兼容网关仍需在设置里明确选择能力（1.5.7 Windows 验收）。
+
 - 自动安装人物识别组件时，同一时间只装一次。此前每条竖屏任务都会启动安装，两个线程会互相清掉对方正在写的目录。安装超时或旧文件被占用时，只记一条带原因的警告，不再打异常堆栈（1.5.7 Windows 验收，#340）。
 
 - Windows 新装后在应用里安装本地 Whisper，不再因为 pip 回溯到只有源码包的旧版本、现场编译一个多小时后失败（1.5.7 Windows 验收）。现在只装预编译包，Windows 上 faster-whisper、av、ctranslate2、onnxruntime、tokenizers 钉在有 cp313 win_amd64 wheel 的版本；先连官方 PyPI，失败或超时再换清华镜像；碰到要编译、没有可用预编译包或超时就马上停，并写清原因。（#339）

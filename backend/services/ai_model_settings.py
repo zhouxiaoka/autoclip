@@ -227,15 +227,34 @@ def image_endpoint(connection: Connection) -> dict:
 
 
 def capability(settings: ModelSettings, assignment: Assignment) -> str | None:
+    """The one capability answer for a binding: readiness, the pipeline, save checks and
+    the settings list all use this. Explicit multimodal/text wins; auto asks the provider
+    and catalog metadata first, then (for named providers, not a generic compatible
+    gateway) the model-name rules in supports_vision (gpt-5.x,
+    gpt-6.x, o1/o3/o4-mini ...). auto never turns an unknown name into "text": it stays None,
+    which simply means "not confirmed to see images"."""
     if assignment.capability != 'auto':
         return assignment.capability
     from backend.core.model_registry import lookup_capability
-    return lookup_capability(connection_for(settings, assignment), assignment.model)
+    known = lookup_capability(connection_for(settings, assignment), assignment.model)
+    if known:
+        return known
+    connection = connection_for(settings, assignment)
+    if connection is None or connection.provider == 'compatible':
+        # A self-hosted "compatible" gateway can alias any name; keep requiring
+        # provider metadata or an explicit choice there.
+        return None
+    from backend.core.model_catalog import supports_vision
+    return 'multimodal' if supports_vision(assignment.model) else None
+
+
+def sees_images(settings: ModelSettings, assignment: Assignment | None) -> bool:
+    return bool(assignment and assignment.model and capability(settings, assignment) == 'multimodal')
 
 
 def vision_endpoint(settings: ModelSettings) -> dict | None:
     binding = settings.vision or settings.analysis
-    if not binding or capability(settings, binding) != 'multimodal':
+    if not sees_images(settings, binding):
         return None
     return chat_endpoint(connection_for(settings, binding), binding.model)
 

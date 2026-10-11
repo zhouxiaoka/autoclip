@@ -217,6 +217,10 @@ def _records(connection, raw, data):
         capability = _cap(inputs) or item.get('capability')
         source = 'provider' if capability else 'catalog'
         capability = capability or _catalog_capability(connection.provider, name, data)
+        if not capability and connection.provider != 'compatible' and model_catalog.supports_vision(name):
+            # Same name rules the pipeline uses for capability=auto. Only ever "multimodal":
+            # an unfamiliar ID is never labelled text-only.
+            capability, source = 'multimodal', 'name'
         catalog = _catalog_record(connection.provider, name, data)
         image = ('image' in outputs if outputs is not None else
                  catalog.get('image_output', False) or name in image_catalog.MODELS.get(connection.provider, []) or name in model_catalog.IMAGE_MODELS.get(connection.provider, []))

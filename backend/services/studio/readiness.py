@@ -78,8 +78,9 @@ def _visual(settings: ai_models.ModelSettings) -> dict:
         return _check(True, 'not_required')
     if mode != 'visual':
         return _check(True, 'optional')
-    binding = settings.analysis
-    if binding and binding.model and binding.capability == 'multimodal':
+    # Same answer as the pipeline (vision_endpoint): capability=auto resolves through
+    # provider metadata and supports_vision, not only a literal 'multimodal'.
+    if ai_models.vision_endpoint(settings) is not None:
         return _check(True, 'configured')
     return _check(False, 'not_configured', 'settings_vision')
 
