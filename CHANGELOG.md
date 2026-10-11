@@ -39,6 +39,8 @@
 
 - pip 安装子进程不再比后端活得久：Windows 上放进后端自己的 Job Object（关闭即杀）；Linux 上设 PDEATHSIG；POSIX 上退出或收到 SIGTERM 时杀掉整个进程组。另外维护一份在跑子进程的登记表，取消安装和后端关闭（shutdown、atexit）时都会结束 pip。取消安装不进入自动重试冷却。修复后端不由桌面壳启动时 pip 成为孤儿进程约 5 分钟的问题（1.5.7 Windows S3，#344）。
 
+- 组件安装失败原因分类更准确：连不上 pip 源（连接被拒、连接重置、超时、代理或证书错误、DNS 解析失败等）不再被说成“没有可用的预编译包，请更新 AutoClip”，改为提示检查网络或代理，或设置 PIP_INDEX_URL。只有在没有网络错误、确实没有可用 wheel 时，才提示没有预编译包。Whisper 和人物识别组件都适用，界面按 8 种语言显示（`error_code`）。换到清华镜像后，每个阶段的进度文案都带上当前源名（1.5.7 W157-F2 / W157-F3，#344）。
+
 - Windows 新装后在应用里安装本地 Whisper，不再因为 pip 回溯到只有源码包的旧版本、现场编译一个多小时后失败（1.5.7 Windows 验收）。现在只装预编译包，Windows 上 faster-whisper、av、ctranslate2、onnxruntime、tokenizers 钉在有 cp313 win_amd64 wheel 的版本；先连官方 PyPI，失败或超时再换清华镜像；碰到要编译、没有可用预编译包或超时就马上停，并写清原因。（#339）
 
 - MCP 把任务状态写到数据目录。没有记录时状态是 unknown，工作进程已经不在时是 interrupted，不再把还在的项目目录当成已完成。可以取消正在进行的任务：停掉这条渲染，清掉临时文件，已完成的成片保留。可以列出剪辑风格。CLI 的 `--template` 和 MCP 的 `template` 接受杂志风、街头快剪或经典。取消、风格列表和 `--template` 由 `mcp_v2_tools` 控制，该开关默认打开（#335）。（#323）

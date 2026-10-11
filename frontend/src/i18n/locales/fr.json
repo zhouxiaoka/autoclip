@@ -1642,5 +1642,9 @@
   "editing_style.duration.short": "Court",
   "editing_style.duration.medium": "Durée moyenne",
   "editing_style.duration.long": "Long",
-  "editing_style.duration.unknown": "Durée indéterminée"
+  "editing_style.duration.unknown": "Durée indéterminée",
+  "安装失败：网络连不上 pip 源。请检查网络或代理后重试；也可以设置环境变量 PIP_INDEX_URL 指定可用的源。": "Échec de l'installation : impossible de joindre l'index pip. Vérifiez votre réseau ou votre proxy et réessayez, ou définissez la variable d'environnement PIP_INDEX_URL vers un index accessible.",
+  "安装失败：下载超时。请检查网络后重试。": "Échec de l'installation : le téléchargement a expiré. Vérifiez votre réseau et réessayez.",
+  "安装失败：没有拿到预编译包，已停止从源码编译。请检查网络后重试。": "Échec de l'installation : aucun paquet précompilé n'a été obtenu, la compilation depuis les sources a été arrêtée. Vérifiez votre réseau et réessayez.",
+  "安装已取消": "Installation annulée"
 }

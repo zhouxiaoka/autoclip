@@ -33,6 +33,7 @@ PIP_STALL_SECONDS = 180
 TIMEOUT_EXIT = 124
 SOURCE_BUILD_EXIT = 125
 NO_WHEEL_EXIT = 126
+NETWORK_EXIT = 127
 SOURCE_BUILD_MARKERS = (
     "building wheel for",
     "getting requirements to build wheel",
@@ -40,10 +41,42 @@ SOURCE_BUILD_MARKERS = (
     "installing build dependencies",
     "running setup.py",
 )
-NO_WHEEL_MARKERS = (
+# pip could not reach the index (W157-F2). A later "No matching distribution" after one of these
+# means "nothing could be fetched", not "no wheel exists".
+NETWORK_MARKERS = (
+    "could not fetch url",
+    "failed to establish a new connection",
+    "newconnectionerror",
+    "connecttimeouterror",
+    "readtimeouterror",
+    "connection refused",
+    "connectionrefusederror",
+    "connection reset",
+    "connectionreseterror",
+    "connection aborted",
+    "connection broken",
+    "remotedisconnected",
+    "max retries exceeded",
+    "timed out",
+    "proxyerror",
+    "cannot connect to proxy",
+    "sslerror",
+    "ssl: certificate_verify_failed",
+    "temporary failure in name resolution",
+    "name or service not known",
+    "nodename nor servname provided",
+    "getaddrinfo failed",
+    "network is unreachable",
+    "no route to host",
+)
+# --only-binary rejected every candidate: genuinely no wheel for this platform.
+ONLY_BINARY_MARKERS = (
+    "only-binary",
     "no matching distribution found",
     "could not find a version that satisfies",
 )
+NO_WHEEL_MARKERS = ONLY_BINARY_MARKERS
+NETWORK_MESSAGE = "安装失败：网络连不上 pip 源。请检查网络或代理后重试；也可以设置环境变量 PIP_INDEX_URL 指定可用的源。"
 SOURCE_NAMES = {"pypi": "官方 PyPI", "mirror": "清华镜像", "custom": "指定的 pip 源"}
 
 Plan = list[tuple[str, Optional[str]]]
@@ -88,6 +121,9 @@ class PipProgress:
     def _where(self) -> str:
         return f"从{self.source}" if self.source else ""
 
+    def _paren(self) -> str:
+        return f"（{self.source}）" if self.source else ""
+
     def feed(self, line: str) -> Optional[tuple[int, str]]:
         text = line.strip()
         low = text.lower()
@@ -111,10 +147,10 @@ class PipProgress:
             message = f"正在{self._where()}下载 {name}{size}… 已下载 {self.downloaded}/{total} 个包，共 {self.megabytes:.1f} MB"
         elif low.startswith("installing collected packages"):
             percent = max(percent, 88)
-            message = "正在安装依赖…"
+            message = f"正在安装依赖{self._paren()}…"
         elif low.startswith("successfully installed"):
             percent = max(percent, 98)
-            message = "正在完成安装…"
+            message = f"正在完成安装{self._paren()}…"
         if message is None:
             return None
         self.percent = min(98, percent)
@@ -217,6 +253,7 @@ def _pump(proc: subprocess.Popen, timeout: float, stall_timeout: float,
     started = last = time.monotonic()
     lines: list[str] = []
     no_wheel = False
+    network = False
     while True:
         now = time.monotonic()
         wait = min(started + timeout - now, last + stall_timeout - now)
@@ -241,19 +278,39 @@ def _pump(proc: subprocess.Popen, timeout: float, stall_timeout: float,
             logger.warning("pip 要从源码编译，已停止: %s", line[:200])
             _stop(proc)
             return SOURCE_BUILD_EXIT, lines
-        if any(marker in low for marker in NO_WHEEL_MARKERS):
+        if any(marker in low for marker in NETWORK_MARKERS):
+            network = True
+        elif any(marker in low for marker in NO_WHEEL_MARKERS):
             no_wheel = True
         if on_line:
             on_line(line, lines)
     code = proc.wait()
-    if code != 0 and no_wheel:
-        return NO_WHEEL_EXIT, lines
+    if code != 0:
+        return classify(code, lines, network=network, no_wheel=no_wheel), lines
     return code, lines
+
+
+def classify(code: int, lines: list[str], *, network: Optional[bool] = None,
+             no_wheel: Optional[bool] = None) -> int:
+    """Exit code -> NETWORK_EXIT / NO_WHEEL_EXIT / code. Network errors win over "no matching
+    distribution": when nothing could be fetched pip reports that too."""
+    if code == 0:
+        return 0
+    lows = [line.lower() for line in lines]
+    if network is None:
+        network = any(m in low for low in lows for m in NETWORK_MARKERS)
+    if no_wheel is None:
+        no_wheel = any(m in low for low in lows for m in NO_WHEEL_MARKERS)
+    if network:
+        return NETWORK_EXIT
+    if no_wheel:
+        return NO_WHEEL_EXIT
+    return code
 
 
 def reason(code: int) -> str:
     return {TIMEOUT_EXIT: "超时", SOURCE_BUILD_EXIT: "需要源码编译", NO_WHEEL_EXIT: "没有可用 wheel",
-            CANCEL_EXIT: "已取消"}.get(code, f"退出码 {code}")
+            CANCEL_EXIT: "已取消", NETWORK_EXIT: "网络不通"}.get(code, f"退出码 {code}")
 
 
 def run_plan(plan: Plan, command_for: Callable[[Optional[str]], list[str]],
@@ -280,9 +337,27 @@ def run_plan(plan: Plan, command_for: Callable[[Optional[str]], list[str]],
     return code, failures
 
 
+def error_code(code: int, failures: list[str]) -> str:
+    """Stable code for the UI (translated there): pip_network | pip_no_wheel | pip_source_build |
+    pip_timeout | pip_cancelled | pip_failed."""
+    if code == CANCEL_EXIT:
+        return "pip_cancelled"
+    if code == NETWORK_EXIT or (code == TIMEOUT_EXIT and any(f.endswith("网络不通") for f in failures)):
+        return "pip_network"
+    if code == NO_WHEEL_EXIT:
+        return "pip_no_wheel"
+    if code == SOURCE_BUILD_EXIT:
+        return "pip_source_build"
+    if code == TIMEOUT_EXIT:
+        return "pip_timeout"
+    return "pip_failed"
+
+
 def failure_message(code: int, failures: list[str], what: str) -> str:
     if code == CANCEL_EXIT:
         return "安装已取消"
+    if error_code(code, failures) == "pip_network":
+        return NETWORK_MESSAGE
     if code == NO_WHEEL_EXIT:
         return f"安装失败：当前系统没有可用的{what}预编译包。请把 AutoClip 更新到最新版。"
     if code == SOURCE_BUILD_EXIT:

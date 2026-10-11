@@ -767,6 +767,7 @@ export interface WhisperRuntimeStatus {
   status: 'unknown' | 'not_installed' | 'installing' | 'installed' | 'error'
   progress: number
   message: string
+  error_code?: string
   log_tail?: string
   platform_supported: boolean
   packages: string[]

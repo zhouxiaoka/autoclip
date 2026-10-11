@@ -223,7 +223,7 @@ def _do_install(index_url: str | None) -> None:
         _fail(f"无法清理旧的人物识别组件，请重启后重试: {error}")
         return
     reset_cv2_cache()
-    _set_state(status="installing", progress=5, message="正在准备人物识别组件…")
+    _set_state(status="installing", progress=5, message="正在准备人物识别组件…", error_code="")
     try:
         # Same sources, budgets and stall detection as the Whisper runtime (#339):
         # PyPI first, then the Tsinghua mirror; PIP_INDEX_URL pins one index.
@@ -245,6 +245,7 @@ def _do_install(index_url: str | None) -> None:
             logger.info("人物识别组件安装已取消")
             return
         message = pip_install.failure_message(code, failures, "人物识别组件") if code else "安装结束，但人物识别组件仍不可用"
+        _set_state(error_code=pip_install.error_code(code, failures) if code else "not_usable")
         # Network trouble is expected here: one warning with the reason, no traceback.
         logger.warning("人物识别组件安装失败（%s），竖屏成片先用完整画面；%d 分钟内不再自动重试",
                        "; ".join(failures) or message, AUTO_RETRY_COOLDOWN_SECONDS // 60)

@@ -39,3 +39,8 @@ from backend.tests.test_pip_child_guard import (  # noqa: E402,F401
     test_pip_dies_when_backend_is_killed_hard,
     test_shutdown_kills_every_live_pip,
 )
+from backend.tests.test_pip_failure_classes import (  # noqa: E402,F401
+    test_genuine_no_wheel,
+    test_network_errors_are_network_not_no_wheel,
+    test_stream_classifies_real_pip_output,
+)

@@ -193,6 +193,8 @@ def index_plan(index_url: Optional[str]) -> list[tuple[str, Optional[str]]]:
 
 def _stream(cmd: list[str], timeout: float, stall_timeout: float, label: str = "") -> tuple[int, list[str]]:
     progress = pip_install.PipProgress(label)
+    if label:
+        _set_state(message=f"正在连接{pip_install.SOURCE_NAMES.get(label, label)}…")
 
     def on_line(line: str, lines: list[str]) -> None:
         step = progress.feed(line)
@@ -211,7 +213,7 @@ def _failure_message(code: int, failures: list[str]) -> str:
 
 
 def _do_install(index_url: Optional[str]) -> None:
-    _set_state(status="installing", progress=5, message="正在准备安装…", log_tail="")
+    _set_state(status="installing", progress=5, message="正在准备安装…", log_tail="", error_code="")
     try:
         code, failures = pip_install.run_plan(
             index_plan(index_url), pip_command,
@@ -229,6 +231,7 @@ def _do_install(index_url: Optional[str]) -> None:
             logger.info("Whisper 运行时安装已取消")
             return
         message = _failure_message(code, failures) if code != 0 else "安装结束，但 Whisper 运行时仍不可用"
+        _set_state(error_code=pip_install.error_code(code, failures) if code != 0 else "not_usable")
         _write_install_error(message)
         _set_state(status="error", message=message)
         logger.error("Whisper 运行时安装失败: %s", "; ".join(failures) or message)
