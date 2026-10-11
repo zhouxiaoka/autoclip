@@ -132,6 +132,10 @@ Windows 验收分三层，前两层必须过，第三层补上界面和真实网
 - 不直接用 `gh release edit` 或 GitHub 网页按钮绕过 Acceptance；promote 会重新检查当前包哈希与构建，旧记录不能放行新包。
 - 热修分支不合新功能；切版日不合新功能。
 
+## 发布 autoclip-mcp
+
+要发布 autoclip-mcp，推送 `mcp-v<version>`。该标签走 `pypi` environment，只允许从 `mcp-v*` 部署。Desktop Build 与发版工作流的 tag 过滤是 `v*`，只匹配以 `v` 开头的标签，不匹配 `mcp-v*`，因此桌面 `v*` 标签不会发到 PyPI，也不必在那些工作流里再排除 `mcp-v*`。
+
 ## 相关文件
 
 | 用途 | 位置 |
@@ -143,6 +147,7 @@ Windows 验收分三层，前两层必须过，第三层补上界面和真实网
 | Release 正文生成 | `scripts/release_notes.py`（`desktop-build.yml` 的 `release` job 调用） |
 | 标签前产品验收 | `scripts/internal_acceptance.py`、`.github/workflows/internal-acceptance.yml`；成功回执绑定提交和内部包哈希 |
 | 构建并发 Pre-release | `.github/workflows/desktop-build.yml`（tag `v*` 触发；`workflow_dispatch` 可只勾一个平台试构建，不会发布） |
+| 发布 autoclip-mcp 到 PyPI | `.github/workflows/publish-pypi.yml`（tag `mcp-v*` 触发，走 `pypi` environment） |
 | 转正 / 撤回 | `.github/workflows/promote-release.yml` |
 | 应用内更新地址 | `src-tauri/tauri.conf.json` → `plugins.updater.endpoints`（`releases/latest/download/latest.json`） |
 | 打包脚本 | `scripts/build_macos_arm.sh`、`scripts/build_windows_x64.sh` |

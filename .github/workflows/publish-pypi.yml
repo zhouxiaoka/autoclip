@@ -1,0 +1,134 @@
+name: Publish autoclip-mcp to PyPI
+
+# Trusted publishing (OIDC): no API tokens or secrets.
+# - push tag mcp-v*     -> PyPI
+# - workflow_dispatch   -> choose testpypi or pypi
+# Only the publish jobs get id-token: write; the build job does not.
+
+on:
+  push:
+    tags:
+      - 'mcp-v*'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Where to publish"
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      target: ${{ steps.version.outputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Read version and check it against the tag
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          VERSION=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+          NAME=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["name"])')
+          test "$NAME" = "autoclip-mcp" || { echo "unexpected distribution name: $NAME"; exit 1; }
+          if [ "$REF_TYPE" = "tag" ]; then
+            test "$REF_NAME" = "mcp-v$VERSION" || { echo "tag $REF_NAME does not match pyproject version $VERSION"; exit 1; }
+          fi
+          if [ "$EVENT" = "push" ]; then TARGET=pypi; else TARGET="$INPUT_TARGET"; fi
+          if [ "$TARGET" = "pypi" ] && { [ "$REF_TYPE" != "tag" ] || [ "${REF_NAME#mcp-v}" = "$REF_NAME" ]; }; then
+            echo "Publishing to PyPI requires running on an mcp-v* tag"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          python -m twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    needs: build
+    if: needs.build.outputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/autoclip-mcp/${{ needs.build.outputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    needs: build
+    if: needs.build.outputs.target == 'pypi'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/autoclip-mcp/${{ needs.build.outputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+  smoke:
+    needs: [build, publish-testpypi, publish-pypi]
+    if: always() && (needs.publish-testpypi.result == 'success' || needs.publish-pypi.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: astral-sh/setup-uv@v6
+      - name: Install from the index and complete an MCP handshake
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          TARGET: ${{ needs.build.outputs.target }}
+        run: |
+          set -euo pipefail
+          ARGS=()
+          if [ "$TARGET" = "testpypi" ]; then
+            # Dependencies come from PyPI; only autoclip-mcp itself from TestPyPI.
+            ARGS=(--index https://test.pypi.org/simple/ --default-index https://pypi.org/simple/ --index-strategy unsafe-best-match)
+          fi
+          # The index can lag a few minutes behind the upload.
+          for i in 1 2 3 4 5 6; do
+            uvx "${ARGS[@]}" --from "autoclip-mcp==$VERSION" python -c 'import backend.mcp_server' && break
+            [ "$i" = 6 ] && exit 1
+            sleep 30
+          done
+          # `autoclip-mcp` takes no flags: it is the stdio MCP server itself, so --help would just
+          # start it. Send an initialize request on stdin and expect a serverInfo reply.
+          INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci-smoke","version":"0"}}}'
+          OUT=$(printf '%s\n' "$INIT" | timeout 120 uvx "${ARGS[@]}" --from "autoclip-mcp==$VERSION" autoclip-mcp || true)
+          echo "$OUT"
+          echo "$OUT" | grep -q '"serverInfo"'
