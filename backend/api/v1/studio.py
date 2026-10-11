@@ -495,7 +495,7 @@ def framing_status():
 @router.post('/framing/install')
 def framing_install():
     from backend.services.studio import framing
-    return {**framing.start_install(), **framing.get_status()}
+    return {**framing.start_install(manual=True), **framing.get_status()}
 
 @router.post('/{project_id}/auto-frame')
 def auto_frame(project_id: str, body: Draft, db: Session = Depends(get_db)):

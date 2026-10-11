@@ -82,7 +82,7 @@ export default function DraftSettingsPanel({ draft, patch, scene, currentTime, o
       </Row>}
       {cropping && <Row stack label={t("取景")} hint={
         runtime === 'not_installed' ? t("首次使用需下载人物识别组件（约 {{size}} MB），之后按镜头自动对准说话的人；没有人物的画面（引用卡、PPT）会完整显示。", { size: framing.status?.size_mb ?? 45 })
-        : runtime === 'installing' ? t("正在下载人物识别组件…")
+        : runtime === 'installing' ? (framing.status?.message || t("正在下载人物识别组件…"))
         : framing.busy ? t("正在按镜头识别人物位置…")
         : framing.error ? framing.error
         : framing.result ? (framing.result.framed ? t("已按 {{shots}} 个镜头自动取景，{{fit}} 个没有人物的镜头改为完整显示。播放到某个镜头时可单独调整它。", framing.result) : t("没有识别到人物，请手动调整取景位置。"))
@@ -91,6 +91,7 @@ export default function DraftSettingsPanel({ draft, patch, scene, currentTime, o
         {runtime === 'not_installed' && <Btn size="sm" onClick={onInstallFraming}>{t("下载并自动取景")}</Btn>}
         {runtime === 'installing' && <ProgressLine percent={framing.status?.progress ?? 5} />}
         {runtime === 'error' && <StatusDot tone="error" label={framing.status?.message} />}
+        {runtime === 'error' && <Btn size="sm" onClick={onInstallFraming}>{t("重新安装")}</Btn>}
         {runtime === 'installed' && !framing.busy && <Btn size="sm" onClick={onAutoFrame}>{framing.result ? t("重新自动取景") : t("自动取景")}</Btn>}
         {scene && <div className="studio-shot-controls">
           {tracked && <span className="studio-muted ac-mono">{t("镜头 {{n}}/{{total}}", { n: shotIndex + 1, total: scene.crop_track!.length })}</span>}
