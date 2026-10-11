@@ -153,38 +153,54 @@ def get_status() -> dict[str, Any]:
     return state
 
 
+INSTALL_TIMEOUT = 900
+PIP_FLAGS = ["--only-binary=:all:", "--disable-pip-version-check", "--timeout", "30", "--retries", "3"]
+
+
 def _do_install(index_url: str | None) -> None:
+    """Runs on the one thread start_install() claimed; never two at once (see start_install)."""
     # Fresh target dir instead of --upgrade: pip --target leaves stale numpy files behind
     # and a mixed tree is exactly what broke cv2 in PYTHON-FASTAPI-40.
     try:
         shutil.rmtree(get_install_dir())
     except OSError as error:
+        # Windows: a running process still holds cv2*.pyd. Not a code fault; say so and stop.
+        logger.warning("人物识别组件旧文件清理失败，已跳过本次安装: %s", error)
         _set_state(status="error", message=f"无法清理旧的人物识别组件，请重启后重试: {error}")
         return
     reset_cv2_cache()
-    cmd = [sys.executable, "-m", "pip", "install", "--target", str(get_install_dir()), *PACKAGES]
+    cmd = [sys.executable, "-m", "pip", "install", *PIP_FLAGS, "--target", str(get_install_dir()), *PACKAGES]
     if index_url:
         cmd += ["--index-url", index_url]
     _set_state(status="installing", progress=5, message="正在下载人物识别组件…")
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900, check=False)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=INSTALL_TIMEOUT, check=False)
         reset_cv2_cache()
         if proc.returncode == 0 and is_installed():
             _set_state(status="installed", progress=100, message="安装完成")
         else:
-            _set_state(status="error", message=f"安装失败（pip 退出码 {proc.returncode}）：{proc.stdout[-300:]}")
+            logger.warning("人物识别组件安装失败，pip 退出码 %s: %s", proc.returncode, (proc.stdout or "")[-300:])
+            _set_state(status="error", message=f"安装失败（pip 退出码 {proc.returncode}）：{(proc.stdout or '')[-300:]}")
+    except subprocess.TimeoutExpired:
+        # Slow or stalled network (1.5.7 Windows acceptance, auto install during a gpt-5.5 run):
+        # expected, so a warning with the reason, not a traceback.
+        logger.warning("人物识别组件安装超时（%s 秒），竖屏成片先用居中裁切，稍后可在设置里重试", INSTALL_TIMEOUT)
+        _set_state(status="error", message="安装超时，请检查网络后在设置里重试")
     except (OSError, subprocess.SubprocessError) as error:
-        logger.exception("安装人物识别组件异常")
+        logger.warning("人物识别组件安装没有完成: %s: %s", type(error).__name__, error)
         _set_state(status="error", message=f"安装异常: {error}")
 
 
 def start_install(index_url: str | None = None) -> dict[str, Any]:
-    with _state_lock:
-        if _state["status"] == "installing":
-            return {"started": False, "message": "正在安装中"}
     if is_installed():
         _set_state(status="installed", progress=100, message="已安装")
         return {"started": False, "message": "已安装"}
+    # Claim the install under the lock before the thread starts. Every vertical job calls this;
+    # without the claim two threads both cleared framing-runtime while the other's pip wrote into it.
+    with _state_lock:
+        if _state["status"] == "installing":
+            return {"started": False, "message": "正在安装中"}
+        _state.update(status="installing", progress=0, message="正在准备人物识别组件…")
     threading.Thread(target=_do_install, args=(index_url or os.getenv("PIP_INDEX_URL"),), name="framing-install", daemon=True).start()
     return {"started": True, "message": "已开始安装"}
 

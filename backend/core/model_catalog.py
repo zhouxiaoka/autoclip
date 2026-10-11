@@ -113,7 +113,7 @@ CLOUD_PROVIDERS = frozenset(CURATED_MODELS)
 # ---- 模型能力：设置页在下拉里标「多模态 / 仅文字」，视觉分析和封面校对据此决定能不能看画面 ----
 # 只收录能确认支持图片输入的系列；认不出来的按仅文字处理（宁可少用视觉，也不在不支持的模型上白花钱报错）
 _VISION_MARKERS = (
-    "gpt-4o", "gpt-4.1", "gpt-5", "o3", "o4-",
+    "gpt-4o", "gpt-4.1",
     "gemini", "claude",
     "-vl", "vl-", "qvq", "qwen-omni", "qwen3-omni",
     "vision", "doubao-seed", "seed-1.6", "seed-2",
@@ -122,6 +122,30 @@ _VISION_MARKERS = (
     "kimi-k2.6", "kimi-k3", "kimi-vl", "kimi-latest",
 )
 _TEXT_ONLY_MARKERS = ("deepseek", "-code", "coder", "embedding", "-instruct-text")
+# OpenAI：gpt-5 起每一代（gpt-5.x、gpt-6.x 以及以后）都收图片；o 系列里 o1 / o3 / o4-mini 收图片，
+# o1-mini、o1-preview、o3-mini 只收文字。语音、实时、转写、搜索这些专用型号不收图片。
+# 名字前可以带网关前缀，如 openai/gpt-6.1-sol。https://platform.openai.com/docs/models
+_OPENAI_GPT = re.compile(r"(?:^|/)gpt-(\d+)(?:\.\d+)?(?:[-_.:]|$)")
+_OPENAI_NON_VISION = ("audio", "realtime", "transcribe", "tts", "-search", "-image")
+
+
+def _openai_vision(name: str) -> bool | None:
+    """OpenAI 型号能否看图；不是 OpenAI 命名时返回 None。"""
+    gpt = _OPENAI_GPT.search(name)
+    gpt4_vision = re.search(r"(?:^|/)gpt-4(?:o|\.1)(?:[-_.:]|$)", name)
+    o_series = re.search(r"(?:^|/)o([134])(?:-|$)", name)
+    if not gpt and not gpt4_vision and not o_series:
+        return None
+    if any(m in name for m in _OPENAI_NON_VISION):
+        return False
+    if gpt4_vision:
+        return True
+    if gpt:
+        return int(gpt.group(1)) >= 5
+    tail = name[o_series.end():] if name[o_series.end() - 1] == "-" else ""
+    if o_series.group(1) in {"1", "3"} and (tail.startswith("mini") or tail.startswith("preview")):
+        return False
+    return True
 
 
 def supports_vision(model: str) -> bool:
@@ -131,6 +155,9 @@ def supports_vision(model: str) -> bool:
         return True
     if not name or any(m in name for m in _TEXT_ONLY_MARKERS):
         return False
+    openai = _openai_vision(name)
+    if openai is not None:
+        return openai
     return any(m in name for m in _VISION_MARKERS)
 
 
