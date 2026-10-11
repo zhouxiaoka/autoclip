@@ -27,6 +27,8 @@
 
 - OpenAI 的 o 系列、gpt-5 及更新型号（如 gpt-6-luna）连接测试和分析不再报 400「max_tokens 不受支持」：这些型号改发 max_completion_tokens，其它接口收到同样的 400 时自动改用新参数重试一次。DeepSeek、百炼、Ollama 等兼容接口不受影响。Fixes #333（#334）
 
+- Windows 新装后在应用里安装本地 Whisper，不再因为 pip 回溯到只有源码包的旧版本、现场编译一个多小时后失败（1.5.7 Windows 验收）。现在只装预编译包，Windows 上 faster-whisper、av、ctranslate2、onnxruntime、tokenizers 钉在有 cp313 win_amd64 wheel 的版本；先连官方 PyPI，失败或超时再换清华镜像；碰到要编译、没有可用预编译包或超时就马上停，并写清原因。（#339）
+
 - MCP 把任务状态写到数据目录。没有记录时状态是 unknown，工作进程已经不在时是 interrupted，不再把还在的项目目录当成已完成。可以取消正在进行的任务：停掉这条渲染，清掉临时文件，已完成的成片保留。可以列出剪辑风格。CLI 的 `--template` 和 MCP 的 `template` 接受杂志风、街头快剪或经典。取消、风格列表和 `--template` 默认关在 `mcp_v2_tools` 后面，该开关默认关闭。（#323）
 
 - 打开匿名使用统计后，CLI 和 MCP 会记录调用了哪个工具、是否成功和耗时，不包含路径、文件名或密钥。统计关闭时不发送。（#325）
