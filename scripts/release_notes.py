@@ -29,10 +29,12 @@ PLATFORM_NOTES = """\
 | CLI / MCP（Python 3.11+）| `autoclip-{ver}-cli-mcp.zip` / `autoclip_mcp-{ver}-py3-none-any.whl` | ZIP 内含安装与模型配置说明，需 FFmpeg |
 
 两个包都内置便携 Python 与静态 ffmpeg，不需要预装任何东西；Windows 安装包按用户安装，不需要管理员权限，缺 WebView2 会自动下载。
-Intel Mac / Linux 暂无安装包，请用 Docker（`DOCKER.md`）或 `pip install -e .` 跑 `autoclip` CLI。
+不下载 ZIP 时：`uvx autoclip-mcp` 安装并启动 MCP，`npx skills add zhouxiaoka/autoclip` 安装 skill。从源码安装仍可用（在仓库根目录 `python -m pip install --no-deps .`）。
+Intel Mac / Linux 暂无安装包，请用 Docker（`DOCKER.md`）、上面的 `uvx`，或 `pip install -e .` 跑 `autoclip` CLI。
 
 Built-in portable Python + static ffmpeg, nothing to install. macOS build is ad-hoc signed (right-click → Open on first launch);
 Windows build is unsigned (SmartScreen → More info → Run anyway). If a file is missing, that platform's build failed for this tag — see the Desktop Build workflow run.
+Without the ZIP: `uvx autoclip-mcp` installs and starts MCP, and `npx skills add zhouxiaoka/autoclip` installs the skill. Installing from a source checkout still works.
 
 ### 反馈 / Feedback
 - 已知问题与当前状态：#96 · 能复现的故障走 [Issue 模板](https://github.com/zhouxiaoka/autoclip/issues/new/choose) · 想法与用法走 [Discussions](https://github.com/zhouxiaoka/autoclip/discussions)
