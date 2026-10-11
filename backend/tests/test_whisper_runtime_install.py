@@ -59,7 +59,7 @@ def test_silent_pip_times_out():
 def test_falls_back_to_mirror_and_reports_clear_errors(monkeypatch):
     calls = []
 
-    def fake(cmd, timeout, stall):
+    def fake(cmd, timeout, stall, **_):
         calls.append((cmd[cmd.index("--index-url") + 1], timeout))
         return wr.SOURCE_BUILD_EXIT, []
 
@@ -76,7 +76,7 @@ def test_falls_back_to_mirror_and_reports_clear_errors(monkeypatch):
 
 def test_success_on_mirror_clears_error(monkeypatch):
     results = iter([wr.TIMEOUT_EXIT, 0])
-    monkeypatch.setattr(wr, "_stream", lambda cmd, timeout, stall: (next(results), []))
+    monkeypatch.setattr(wr, "_stream", lambda cmd, timeout, stall, **_: (next(results), []))
     monkeypatch.setattr(wr, "is_installed", lambda: True)
     wr._write_install_error("old")
     wr._do_install(None)

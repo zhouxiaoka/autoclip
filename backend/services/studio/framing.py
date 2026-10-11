@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -150,16 +151,68 @@ def get_status() -> dict[str, Any]:
     if state["status"] in ("unknown", "installed", "not_installed"):
         state["status"] = "installed" if is_installed() else "not_installed"
     state["size_mb"] = 45
+    if state["status"] != "installed":
+        left = cooldown_remaining()
+        if left:
+            state["cooldown_seconds"] = int(left)
     return state
 
 
-INSTALL_TIMEOUT = 900
-# Same pip flags as the Whisper runtime (#339): wheels only, short socket timeout, a few retries.
-from backend.services.whisper_runtime import WHISPER_PIP_FLAGS as PIP_FLAGS  # noqa: E402
+# 自动安装失败后的冷却：这段时间里竖屏任务不再自动重装，直接用完整画面；设置页点“重新安装”不受限。
+AUTO_RETRY_COOLDOWN_SECONDS = 30 * 60
+
+
+def _failure_path() -> Path:
+    return _data_dir() / "framing-install-failure.json"
+
+
+def _remember_failure(message: str) -> None:
+    try:
+        import json
+        _failure_path().write_text(json.dumps({"at": time.time(), "message": message}, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _clear_failure() -> None:
+    try:
+        _failure_path().unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def cooldown_remaining(now: float | None = None) -> float:
+    """自动安装还要等多少秒（0 表示可以装）。记录写在数据目录，重启后仍然有效。"""
+    try:
+        import json
+        at = float(json.loads(_failure_path().read_text(encoding="utf-8")).get("at", 0))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return 0.0
+    left = at + AUTO_RETRY_COOLDOWN_SECONDS - (time.time() if now is None else now)
+    return max(0.0, left)
+
+
+def _run(cmd: list[str], timeout: float, stall: float, label: str) -> int:
+    from backend.services import pip_install
+    progress = pip_install.PipProgress(label)
+
+    def on_line(line: str, _lines: list[str]) -> None:
+        step = progress.feed(line)
+        if step:
+            _set_state(progress=step[0], message=step[1])
+
+    _set_state(message=f"正在连接{pip_install.SOURCE_NAMES.get(label, label)}…")
+    return pip_install.stream(cmd, timeout, stall, on_line)[0]
+
+
+def _fail(message: str) -> None:
+    _remember_failure(message)
+    _set_state(status="error", message=message)
 
 
 def _do_install(index_url: str | None) -> None:
     """Runs on the one thread start_install() claimed; never two at once (see start_install)."""
+    from backend.services import pip_install
     # Fresh target dir instead of --upgrade: pip --target leaves stale numpy files behind
     # and a mixed tree is exactly what broke cv2 in PYTHON-FASTAPI-40.
     try:
@@ -167,42 +220,55 @@ def _do_install(index_url: str | None) -> None:
     except OSError as error:
         # Windows: a running process still holds cv2*.pyd. Not a code fault; say so and stop.
         logger.warning("人物识别组件旧文件清理失败，已跳过本次安装: %s", error)
-        _set_state(status="error", message=f"无法清理旧的人物识别组件，请重启后重试: {error}")
+        _fail(f"无法清理旧的人物识别组件，请重启后重试: {error}")
         return
     reset_cv2_cache()
-    cmd = [sys.executable, "-m", "pip", "install", *PIP_FLAGS, "--target", str(get_install_dir()), *PACKAGES]
-    if index_url:
-        cmd += ["--index-url", index_url]
-    _set_state(status="installing", progress=5, message="正在下载人物识别组件…")
+    _set_state(status="installing", progress=5, message="正在准备人物识别组件…")
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=INSTALL_TIMEOUT, check=False)
+        # Same sources, budgets and stall detection as the Whisper runtime (#339):
+        # PyPI first, then the Tsinghua mirror; PIP_INDEX_URL pins one index.
+        code, failures = pip_install.run_plan(
+            pip_install.index_plan(index_url),
+            lambda url: pip_install.command(PACKAGES, str(get_install_dir()), url),
+            _run,
+            on_switch=lambda _old, new, _why: _set_state(message=f"官方源没有响应，改用{pip_install.SOURCE_NAMES.get(new, new)}…"),
+            what="人物识别组件",
+        )
         reset_cv2_cache()
-        if proc.returncode == 0 and is_installed():
+        if code == 0 and is_installed():
+            _clear_failure()
             _set_state(status="installed", progress=100, message="安装完成")
-        else:
-            logger.warning("人物识别组件安装失败，pip 退出码 %s: %s", proc.returncode, (proc.stdout or "")[-300:])
-            _set_state(status="error", message=f"安装失败（pip 退出码 {proc.returncode}）：{(proc.stdout or '')[-300:]}")
-    except subprocess.TimeoutExpired:
-        # Slow or stalled network (1.5.7 Windows acceptance, auto install during a gpt-5.5 run):
-        # expected, so a warning with the reason, not a traceback.
-        logger.warning("人物识别组件安装超时（%s 秒），竖屏成片先用居中裁切，稍后可在设置里重试", INSTALL_TIMEOUT)
-        _set_state(status="error", message="安装超时，请检查网络后在设置里重试")
+            logger.info("人物识别组件安装完成")
+            return
+        message = pip_install.failure_message(code, failures, "人物识别组件") if code else "安装结束，但人物识别组件仍不可用"
+        # Network trouble is expected here: one warning with the reason, no traceback.
+        logger.warning("人物识别组件安装失败（%s），竖屏成片先用完整画面；%d 分钟内不再自动重试",
+                       "; ".join(failures) or message, AUTO_RETRY_COOLDOWN_SECONDS // 60)
+        _fail(message)
     except (OSError, subprocess.SubprocessError) as error:
         logger.warning("人物识别组件安装没有完成: %s: %s", type(error).__name__, error)
-        _set_state(status="error", message=f"安装异常: {error}")
+        _fail(f"安装异常: {error}")
 
 
-def start_install(index_url: str | None = None) -> dict[str, Any]:
+def start_install(index_url: str | None = None, *, manual: bool = False) -> dict[str, Any]:
+    """manual=True：设置页的“安装 / 重新安装”，不看冷却。竖屏任务的自动安装用默认值。"""
     if is_installed():
         _set_state(status="installed", progress=100, message="已安装")
         return {"started": False, "message": "已安装"}
+    if not manual:
+        left = cooldown_remaining()
+        if left > 0:
+            logger.info("人物识别组件上次自动安装失败，%d 分钟内不再自动重试；本次竖屏用完整画面", int(left // 60) + 1)
+            return {"started": False, "message": "上次安装失败，稍后再自动重试", "cooldown_seconds": int(left)}
     # Claim the install under the lock before the thread starts. Every vertical job calls this;
     # without the claim two threads both cleared framing-runtime while the other's pip wrote into it.
     with _state_lock:
         if _state["status"] == "installing":
             return {"started": False, "message": "正在安装中"}
         _state.update(status="installing", progress=0, message="正在准备人物识别组件…")
-    threading.Thread(target=_do_install, args=(index_url or os.getenv("PIP_INDEX_URL"),), name="framing-install", daemon=True).start()
+    if manual:
+        _clear_failure()
+    threading.Thread(target=_do_install, args=(index_url,), name="framing-install", daemon=True).start()
     return {"started": True, "message": "已开始安装"}
 
 

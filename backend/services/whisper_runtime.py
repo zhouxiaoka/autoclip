@@ -45,31 +45,11 @@ WHISPER_PACKAGES = [
     'onnxruntime==1.31.0; sys_platform == "win32"',
     'tokenizers==0.23.3; sys_platform == "win32"',
 ]
-WHISPER_PIP_FLAGS = [
-    "--only-binary=:all:",
-    "--disable-pip-version-check",
-    # 单个套接字的超时和重试；整条命令的总时长和静默超时在 _stream 里兜底。
-    "--timeout", "30",
-    "--retries", "3",
-]
-# 每个源的总时长 / 无输出时长（秒）。官方源在国内常常很慢，给它较短的总时长，再换镜像。
-PIP_OFFICIAL_TIMEOUT_SECONDS = 15 * 60
-PIP_MIRROR_TIMEOUT_SECONDS = 30 * 60
-PIP_STALL_SECONDS = 180
-TIMEOUT_EXIT = 124
-SOURCE_BUILD_EXIT = 125
-NO_WHEEL_EXIT = 126
-# 这些行说明 pip 正要从源码编译。--only-binary 下不该出现；出现就立刻停，不让它编一个小时。
-_SOURCE_BUILD_MARKERS = (
-    "building wheel for",
-    "getting requirements to build wheel",
-    "preparing metadata (pyproject.toml)",
-    "installing build dependencies",
-    "running setup.py",
-)
-_NO_WHEEL_MARKERS = (
-    "no matching distribution found",
-    "could not find a version that satisfies",
+# pip 参数、源顺序、时长和静默超时都在 pip_install 里，和人物识别组件共用。
+from backend.services import pip_install  # noqa: E402
+from backend.services.pip_install import (  # noqa: E402,F401
+    PIP_FLAGS as WHISPER_PIP_FLAGS, PIP_MIRROR_TIMEOUT_SECONDS, PIP_OFFICIAL_TIMEOUT_SECONDS,
+    PIP_STALL_SECONDS, NO_WHEEL_EXIT, SOURCE_BUILD_EXIT, TIMEOUT_EXIT,
 )
 # 运行时核心模块（用于探测是否已装）
 WHISPER_IMPORT_NAME = "faster_whisper"
@@ -204,129 +184,41 @@ def get_status() -> Dict[str, Any]:
 
 
 def pip_command(index_url: Optional[str]) -> list[str]:
-    cmd = [
-        sys.executable, "-m", "pip", "install",
-        "--upgrade",
-        *WHISPER_PIP_FLAGS,
-        "--target", str(get_install_dir()),
-        *WHISPER_PACKAGES,
-    ]
-    if index_url:
-        cmd += ["--index-url", index_url]
-    return cmd
+    return pip_install.command(WHISPER_PACKAGES, str(get_install_dir()), index_url)
 
 
 def index_plan(index_url: Optional[str]) -> list[tuple[str, Optional[str]]]:
-    """[(label, index url)]。和高级包装组件同一套规则：显式参数 > AUTOCLIP_PIP_INDEX >
-    PIP_INDEX_URL > auto（先官方 PyPI，再清华镜像）。"""
-    from backend.services.packaging_runtime import pip_index_plan
-    return list(pip_index_plan(index_url))
+    return pip_install.index_plan(index_url)
 
 
-def _stop(proc: subprocess.Popen) -> None:
-    if proc.poll() is None:
-        proc.kill()
-    try:
-        proc.wait(timeout=5)
-    except Exception:
-        pass
+def _stream(cmd: list[str], timeout: float, stall_timeout: float, label: str = "") -> tuple[int, list[str]]:
+    progress = pip_install.PipProgress(label)
 
-
-def _stream(cmd: list[str], timeout: float, stall_timeout: float) -> tuple[int, list[str]]:
-    """跑一次 pip。返回 (退出码, 最后几行)。超时 124，开始编译 125，没有可用 wheel 126。"""
-    logger.info("开始安装 Whisper 运行时: %s", " ".join(cmd))
-    proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, encoding="utf-8", errors="replace", bufsize=1,
-        env={**os.environ, "PYTHONIOENCODING": "utf-8", "PIP_PROGRESS_BAR": "off"},
-    )
-    assert proc.stdout is not None
-    out: "queue.Queue[Optional[str]]" = queue.Queue()
-
-    def _read() -> None:
-        try:
-            for line in iter(proc.stdout.readline, ""):
-                out.put(line)
-        except Exception:
-            pass
-        finally:
-            out.put(None)
-
-    threading.Thread(target=_read, name="whisper-install-output", daemon=True).start()
-    started = last = time.monotonic()
-    lines: list[str] = []
-    no_wheel = False
-    while True:
-        now = time.monotonic()
-        wait = min(started + timeout - now, last + stall_timeout - now)
-        if wait <= 0:
-            _stop(proc)
-            return TIMEOUT_EXIT, lines
-        try:
-            item = out.get(timeout=wait)
-        except queue.Empty:
-            _stop(proc)
-            return TIMEOUT_EXIT, lines
-        if item is None:
-            break
-        last = time.monotonic()
-        line = item.rstrip()
-        if not line:
-            continue
-        lines.append(line)
-        lines[:] = lines[-40:]
-        low = line.lower()
-        if any(marker in low for marker in _SOURCE_BUILD_MARKERS):
-            logger.warning("Whisper 运行时安装要从源码编译，已停止: %s", line[:200])
-            _stop(proc)
-            return SOURCE_BUILD_EXIT, lines
-        if any(marker in low for marker in _NO_WHEEL_MARKERS):
-            no_wheel = True
-        if low.startswith("collecting") or "downloading" in low:
-            _bump_progress(min_v=10, max_v=70, message=line[:180])
-        elif "installing collected packages" in low:
-            _bump_progress(min_v=70, max_v=95, message="正在安装依赖…")
+    def on_line(line: str, lines: list[str]) -> None:
+        step = progress.feed(line)
+        if step:
+            _set_state(progress=step[0], message=step[1])
         _set_state(log_tail="\n".join(lines[-12:]))
-    code = proc.wait()
-    if code != 0 and no_wheel:
-        return NO_WHEEL_EXIT, lines
-    return code, lines
+
+    return pip_install.stream(cmd, timeout, stall_timeout, on_line)
 
 
 def _failure_message(code: int, failures: list[str]) -> str:
+    message = pip_install.failure_message(code, failures, " Whisper ")
     if code == NO_WHEEL_EXIT:
-        return "安装失败：当前系统没有可用的 Whisper 预编译包。请把 AutoClip 更新到最新版，或改用带字幕的视频。"
-    if code == SOURCE_BUILD_EXIT:
-        return "安装失败：没有拿到预编译包，已停止从源码编译。请检查网络后重试。"
-    if len(failures) > 1:
-        return "安装失败：官方 PyPI 和国内镜像都没有装好。请检查网络后重试。"
-    if code == TIMEOUT_EXIT:
-        return "安装失败：下载超时。请检查网络后重试。"
-    return f"安装失败（pip 退出码 {code}）"
+        message = message.removesuffix("。") + "，或改用带字幕的视频。"
+    return message
 
 
 def _do_install(index_url: Optional[str]) -> None:
     _set_state(status="installing", progress=5, message="正在准备安装…", log_tail="")
     try:
-        plan = index_plan(index_url)
-        failures: list[str] = []
-        code = 1
-        for i, (label, url) in enumerate(plan):
-            if i:
-                logger.warning("Whisper 运行时从 %s 安装失败（%s），改用 %s", plan[i - 1][0], failures[-1], label)
-                _set_state(message="官方源没有装好，改用国内镜像…")
-            official = label == "pypi"
-            code, _ = _stream(
-                pip_command(url),
-                PIP_OFFICIAL_TIMEOUT_SECONDS if official and len(plan) > 1 else PIP_MIRROR_TIMEOUT_SECONDS,
-                PIP_STALL_SECONDS,
-            )
-            if code == 0:
-                break
-            reason = {TIMEOUT_EXIT: "超时", SOURCE_BUILD_EXIT: "需要源码编译", NO_WHEEL_EXIT: "没有可用 wheel"}.get(code, f"退出码 {code}")
-            failures.append(f"{label}: {reason}")
-            if code == NO_WHEEL_EXIT and not official:
-                break
+        code, failures = pip_install.run_plan(
+            index_plan(index_url), pip_command,
+            lambda cmd, timeout, stall, label: _stream(cmd, timeout, stall, label=label)[0],
+            on_switch=lambda _old, new, _why: _set_state(message=f"官方源没有装好，改用{pip_install.SOURCE_NAMES.get(new, new)}…"),
+            what="Whisper 运行时",
+        )
         if code == 0 and is_installed():
             _clear_install_error()
             _set_state(status="installed", progress=100, message="安装完成")
