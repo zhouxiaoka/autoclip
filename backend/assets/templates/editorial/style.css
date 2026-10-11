@@ -55,6 +55,7 @@ body:has(#sub:not(:empty))::after { opacity: 1; }
   font-size: 64px;
   line-height: 1.05;
   letter-spacing: -0.02em;
+  white-space: pre-line;
 }
 #gloss {
   position: absolute;

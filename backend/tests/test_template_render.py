@@ -56,6 +56,9 @@ def test_fill_uses_packaging_fields_and_a_platform_safe_area():
     assert fill['kicker'] == '访谈'
     assert fill['words'][0]['text'] == '原话'
     assert fill['stickers'] == []
+    two = Packaging(version=2, template='editorial', audience_language='en', title_lines=['AI is a five-layer cake.', 'Energy is the bottom layer.'])
+    # Each title line keeps its own line in the editorial headline.
+    assert build_fill(two, 1.0)['hook']['text'] == 'AI is a five-layer cake.\nEnergy is the bottom layer.'
 
 
 def test_missing_runtime_and_over_budget_downgrade_without_raising(tmp_path, monkeypatch):
