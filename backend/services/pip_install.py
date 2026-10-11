@@ -121,6 +121,33 @@ class PipProgress:
         return self.percent, message
 
 
+_CREATE_NO_WINDOW = 0x08000000
+_CREATE_NEW_PROCESS_GROUP = 0x00000200
+
+
+def spawn_kwargs(env: Optional[dict] = None) -> dict:
+    """How pip is started. Same isolation as ffmpeg / the QA worker on Windows.
+
+    - stdin=DEVNULL: pip never reads the backend's stdin (the desktop shell's handle).
+    - one merged stdout pipe, drained by a single reader thread: no two-pipe deadlock.
+    - Windows: CREATE_NO_WINDOW (no console window in the desktop session) and
+      CREATE_NEW_PROCESS_GROUP (console Ctrl events aimed at pip never reach the backend,
+      and the backend's never reach pip). POSIX: its own session for the same reason.
+    """
+    import os
+    kwargs: dict = dict(
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, encoding="utf-8", errors="replace", bufsize=1, close_fds=True,
+        env=env or {**os.environ, "PYTHONIOENCODING": "utf-8", "PIP_PROGRESS_BAR": "off"},
+    )
+    if os.name == "nt":
+        kwargs["creationflags"] = (int(getattr(subprocess, "CREATE_NO_WINDOW", _CREATE_NO_WINDOW))
+                                   | int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", _CREATE_NEW_PROCESS_GROUP)))
+    else:
+        kwargs["start_new_session"] = True
+    return kwargs
+
+
 def _stop(proc: subprocess.Popen) -> None:
     if proc.poll() is None:
         proc.kill()
@@ -128,18 +155,15 @@ def _stop(proc: subprocess.Popen) -> None:
         proc.wait(timeout=5)
     except Exception:
         pass
+    # Do not close proc.stdout here: the reader thread may hold its lock; killing pip closes
+    # the write end, so the reader sees EOF and exits on its own.
 
 
 def stream(cmd: list[str], timeout: float, stall_timeout: float,
            on_line: Optional[Callable[[str, list[str]], None]] = None, env: Optional[dict] = None) -> tuple[int, list[str]]:
     """跑一次 pip。返回 (退出码, 最后几行)。超时 124，开始编译 125，没有可用 wheel 126。"""
     logger.info("pip: %s", " ".join(cmd))
-    import os
-    proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, encoding="utf-8", errors="replace", bufsize=1,
-        env=env or {**os.environ, "PYTHONIOENCODING": "utf-8", "PIP_PROGRESS_BAR": "off"},
-    )
+    proc = subprocess.Popen(cmd, **spawn_kwargs(env))
     assert proc.stdout is not None
     out: "queue.Queue[Optional[str]]" = queue.Queue()
 
