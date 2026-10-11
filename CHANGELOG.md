@@ -27,6 +27,8 @@
 
 - OpenAI 的 o 系列、gpt-5 及更新型号（如 gpt-6-luna）连接测试和分析不再报 400「max_tokens 不受支持」：这些型号改发 max_completion_tokens，其它接口收到同样的 400 时自动改用新参数重试一次。DeepSeek、百炼、Ollama 等兼容接口不受影响。Fixes #333（#334）
 
+- Windows 新装后在应用里安装本地 Whisper，不再因为 pip 回溯到只有源码包的旧版本、现场编译一个多小时后失败（1.5.7 Windows 验收）。现在只装预编译包，Windows 上 faster-whisper、av、ctranslate2、onnxruntime、tokenizers 钉在有 cp313 win_amd64 wheel 的版本；先连官方 PyPI，失败或超时再换清华镜像；碰到要编译、没有可用预编译包或超时就马上停，并写清原因。（#339）
+
 - MCP 把任务状态写到数据目录。没有记录时状态是 unknown，工作进程已经不在时是 interrupted，不再把还在的项目目录当成已完成。可以取消正在进行的任务：停掉这条渲染，清掉临时文件，已完成的成片保留。可以列出剪辑风格。CLI 的 `--template` 和 MCP 的 `template` 接受杂志风、街头快剪或经典。取消、风格列表和 `--template` 由 `mcp_v2_tools` 控制，该开关默认打开（#335）。（#323）
 
 - 打开匿名使用统计后，CLI 和 MCP 会记录调用了哪个工具、是否成功和耗时，不包含路径、文件名或密钥。统计关闭时不发送。（#325）
@@ -37,7 +39,7 @@
 
 - autoclip-mcp 已发布到 PyPI，`uvx autoclip-mcp` 可以直接安装并启动 MCP server。文档补上 Claude Code、Cursor、Codex 的 uvx 配置，模型密钥都从环境变量 `AUTOCLIP_API_KEY` 读取，配置里不写明文。（#328）
 
-- 剪辑风格默认打开：`pkg_templates_v1` 和 `mcp_v2_tools` 默认打开，关闭匿名统计或没拉到远程开关时也是打开；PostHog 远程值、本机覆盖或 `AUTOCLIP_FLAGS=...=off` 可以关回去，安全模式 `autoclip_safe_mode` 会把它们关掉。`pkg_template_picker_visual` 仍默认关闭，导入页用文字选项选风格。`qa_gate_blocking` 默认 shadow，只记录、不拦截。（#335）
+- 剪辑风格默认打开：`pkg_templates_v1` 和 `mcp_v2_tools` 默认打开，关闭匿名统计或没拉到远程开关时也是打开；PostHog 远程值、本机覆盖或 `AUTOCLIP_FLAGS=...=off` 可以关回去，安全模式 `autoclip_safe_mode` 会把它们关掉。`pkg_template_picker_visual` 仍默认关闭，导入页用文字选项选风格。`qa_gate_blocking` 默认 shadow，只记录、不拦截。导入页默认选杂志风；CLI 不带 `--template`、MCP 不传 `template` 时默认经典，两边默认值有意不同，见 docs/CLI_AND_MCP.md。（#335）
 
 - 杂志风和街头快剪的标题、字幕在任何画面上都看得清：文字改成浅色，加细描边和短投影（不发光）；有标题或字幕时，背后垫一层深色渐变。未念到的字幕词保持 0.82 的不透明度，不再发暗。模板金样和对比度测试同步更新。杂志风标题按行换行，不再把两行标题拼成一句。（#335）
 
