@@ -615,3 +615,64 @@ test('portrait import and saved outro preference retain explicit enums and confi
  const late=experience.beginExperience('output_branding_save',{brand_outro_enabled:true});const n=s.events.length;s.tracker.clear();late('completed')
  assert.equal(s.events.length,n);assert.equal(JSON.stringify(props).includes('private'),false)
 })
+
+test('accepting a recommendation and the import use the same flow id', async () => {
+  async function enroll(body) {
+    const s = setup(memory(), () => Date.now())
+    const aggregate = load('studio', { './posthog': { captureBusinessEvent: s.capture }, './observer': { workflow: s.tracker }, './workflow': core })
+    const transport = { defaults: {}, post: async () => ({ project_id: 'project-accepted' }) }
+    const file = path.join(__dirname, '../src/features/studio/api.ts')
+    const js = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
+    const module = { exports: {} }
+    vm.runInNewContext(js, { module, exports: module.exports, require: id => ({
+      '../../analytics/workflow': core,
+      '../../analytics/posthog': { captureBusinessEvent: s.capture },
+      '../../services/api': transport,
+      '../../analytics/studio': aggregate,
+      '../../analytics/observer': { workflow: s.tracker },
+    }[id]) })
+    await module.exports.studioApi.import(body)
+    const watch = s.tracker.list().find(item => item.kind === 'studio-generation')
+    s.tracker.observeStudio(watch, {
+      generation: {
+        auto_start: true, status: 'completed', recommended_template: 'editorial', accepted_recommendation: true,
+        created_at: '2026-10-10T00:00:00Z', finished_at: '2026-10-10T00:01:00Z',
+      },
+      output_variants: [], jobs: [], drafts: [], analysis: { status: 'completed' },
+    })
+    return {
+      imported: s.events.find(event => event.event === 'studio_import_requested').props,
+      finished: s.events.find(event => event.event === 'studio_generation_finished').props,
+    }
+  }
+  const supplied = new FormData()
+  supplied.set('flow_id', 't-sharedflow-aaaa')
+  supplied.set('html_template', 'editorial')
+  supplied.set('recommended_template', 'editorial')
+  supplied.set('auto_start', 'true')
+  supplied.append('platforms', 'douyin')
+  const accepted = await enroll(supplied)
+  assert.equal(accepted.imported.flow_id, 't-sharedflow-aaaa')
+  assert.equal(accepted.imported.template, 'editorial')
+  assert.equal(accepted.imported.recommended_template, 'editorial')
+  assert.equal(accepted.imported.accepted_recommendation, true)
+  assert.equal(accepted.finished.flow_id, accepted.imported.flow_id)
+  assert.equal(accepted.finished.accepted_recommendation, true)
+  const bare = new FormData()
+  bare.set('html_template', 'street')
+  bare.set('recommended_template', 'editorial')
+  bare.set('auto_start', 'true')
+  const generated = await enroll(bare)
+  assert.match(generated.imported.flow_id, /^t-[a-z0-9-]{10,100}$/)
+  assert.notEqual(generated.imported.flow_id, 't-sharedflow-aaaa')
+  assert.equal(generated.imported.accepted_recommendation, false)
+  assert.equal(generated.imported.template, 'street')
+  assert.equal(generated.imported.recommended_template, 'editorial')
+  assert.equal(generated.finished.flow_id, generated.imported.flow_id)
+  const invalid = new FormData()
+  invalid.set('flow_id', 'not-a-flow')
+  invalid.set('auto_start', 'true')
+  const replaced = await enroll(invalid)
+  assert.notEqual(replaced.imported.flow_id, 'not-a-flow')
+  assert.equal(replaced.finished.flow_id, replaced.imported.flow_id)
+})

@@ -24,6 +24,9 @@ function render(automatic, phase, status = 'running', buttons = [], calls = []) 
     if (name === './useWorkspace') return { useWorkspace: () => ({ workspace, loaded: true, loading: false, refresh() {} }) }
     if (name === './api') return { studioApi: { source: () => '/test.mp4', analyze: async (...args) => calls.push(args) }, errorText: String }
     if (name === './platformLabel') return { platformLabel: String }
+    if (name === '../../analytics/flags') return { flagEnabled: () => false, flagAssigned: () => false }
+    if (name === '../../analytics/studio') return { trackLegacyEntry() {} }
+    if (name === './legacyEntrypoints') return { legacyEntrypointsHidden: () => false }
     return { default: empty }
   }
   const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')

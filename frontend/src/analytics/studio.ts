@@ -31,6 +31,28 @@ export function trackQuickOutputPlatforms(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_platforms_selected', safeStudioProperties(properties))
 }
 
+/** New import events stay quiet until the caller confirms a real flag assignment. */
+function trackAssigned(name: string, properties: Record<string, unknown>, assigned: boolean) {
+  if (!assigned) return
+  captureBusinessEvent(name, safeStudioProperties(properties))
+}
+
+export function trackOneClickStarted(properties: Record<string, unknown>, assigned: boolean) {
+  trackAssigned('studio_one_click_started', properties, assigned)
+}
+
+export function trackOneClickUndone(properties: Record<string, unknown>, assigned: boolean) {
+  trackAssigned('studio_one_click_undone', properties, assigned)
+}
+
+export function trackAutoChoiceOverridden(properties: Record<string, unknown>, assigned: boolean) {
+  trackAssigned('studio_auto_choice_overridden', properties, assigned)
+}
+
+export function trackLegacyEntry(properties: Record<string, unknown>, assigned: boolean) {
+  trackAssigned('studio_legacy_entry_used', properties, assigned)
+}
+
 /** User changed the default HTML template before import. Enums and a random flow id only. */
 export function trackTemplateOverride(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_template_overridden', safeStudioProperties({ ...properties, stage: properties.stage || 'pre_import' }))
@@ -101,11 +123,13 @@ export function studioImportProperties(body: FormData): Record<string, unknown> 
       else if (host === 'b23.tv' || host === 'bilibili.com' || host.endsWith('.bilibili.com')) source_type = 'bilibili'
     } catch { /* invalid input remains an enum; URL is never captured */ }
   }
+  const supplied = body.get?.('flow_id')
+  const flow_id = typeof supplied === 'string' && /^t-[a-z0-9-]{10,100}$/.test(supplied) ? supplied : telemetryId()
   const chosen = body.get?.('html_template')
   const template = chosen === 'editorial' || chosen === 'street' || chosen === 'classic' ? chosen : undefined
   const recommendedRaw = body.get?.('recommended_template')
   const recommended_template = recommendedRaw === 'editorial' || recommendedRaw === 'street' || recommendedRaw === 'classic' ? recommendedRaw : undefined
-  return { material_origin: 'user', flow_id: telemetryId(), source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', template, recommended_template, accepted_recommendation: template && recommended_template ? template === recommended_template : undefined, platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,
+  return { material_origin: 'user', flow_id, source_type, has_subtitle: !!body.get?.('subtitle'), goal: body.get?.('goal'), aspect: body.get?.('aspect') || 'auto', portrait_style: body.get?.('portrait_style') || 'auto', template, recommended_template, accepted_recommendation: template && recommended_template ? template === recommended_template : undefined, platform_count: Array.from(body.entries?.() || []).filter(([key]) => key === 'platforms').length,
     // Omitted means the backend's saved preference: do not claim it is enabled.
     brand_outro_enabled: body.get?.('brand_outro_enabled') === 'true' ? true : body.get?.('brand_outro_enabled') === 'false' ? false : undefined }
 }

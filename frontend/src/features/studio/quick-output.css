@@ -617,6 +617,18 @@
   color: var(--ac-sub);
 }
 
+.studio-style-recognition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+}
+
+.studio-style-recognition .studio-style-probe {
+  margin: 0;
+}
+
 [data-theme="dark"] .studio-style-card.is-selected .studio-style-thumb {
   box-shadow: 0 10px 18px -12px rgba(0, 0, 0, .65);
 }

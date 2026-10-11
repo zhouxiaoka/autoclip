@@ -6,6 +6,7 @@ import { captureStudioException } from '../../desktop/sentry'
 import { requestStyleRecommendation } from './editingStyleClient'
 import { STYLE_POSTERS, loadStylePreview } from './editingStyleMedia'
 import { beginStyleRecommendation, readStyle, subscribeStyle, type StyleSnapshot } from './editingStyleSession'
+import StyleProbeLine from './StyleProbeLine'
 import {
   HTML_TEMPLATE_CHOICES, PREVIEW_SECONDS, chosenTemplate, degradeFromEnvironment, intelMacFromHints, selectionAfterRecommendation, supportsBackdrop,
   type EditingStyle, type HtmlTemplateChoice,
@@ -399,10 +400,14 @@ export default function EditingStylePicker({
       })}
     </div>
     <div className="studio-style-why" aria-live="polite">
-      {loading ? <span className="studio-style-why-wait">{t('editing_style.analyzing')}</span> : overridden && recommendation ? <>
-        <b>{t('editing_style.override', { style: t(COPY[manual].name), recommended: t(COPY[recommendation.template].name) })}</b>
-        <button type="button" className="studio-link" onClick={restore}>{t('editing_style.restore')}</button>
-      </> : <span>{t(`editing_style.reason.${recommendation?.reason_code || 'default'}`)}</span>}
+      <span className="studio-style-recognition">
+        <StyleProbeLine sourceKey={sourceKey} />
+        <span aria-hidden="true">·</span>
+        {loading ? <span className="studio-style-why-wait">{t('editing_style.analyzing')}</span> : overridden && recommendation ? <>
+          <b>{t('editing_style.override', { style: t(COPY[manual].name), recommended: t(COPY[recommendation.template].name) })}</b>
+          <button type="button" className="studio-link" onClick={restore}>{t('editing_style.restore')}</button>
+        </> : <span>{t(`editing_style.reason.${recommendation?.reason_code || 'default'}`)}</span>}
+      </span>
     </div>
     {intelMac && <p className="studio-muted studio-style-intel">{t('editing_style.intel_mac')}</p>}
   </fieldset>

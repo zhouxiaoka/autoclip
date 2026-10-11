@@ -94,6 +94,9 @@ function render(options = {}) {
     [value, () => {}],
     [options.settled !== false, () => {}],
     [false, () => {}],
+    [false, () => {}],
+    [null, () => {}],
+    [false, () => {}],
   ]
   const { exports, code } = transpile(path.join(__dirname, '../src/features/studio/CreativeImport.tsx'))
   const mocks = {
@@ -112,12 +115,16 @@ function render(options = {}) {
       },
       errorText: String,
     },
-    '../../analytics/studio': { trackQuickOutputPlatforms() {} },
-    '../../analytics/flags': { useFlag: () => false, featureSnapshot: () => ({ pkg_templates_v1: false }) },
+    '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackOneClickStarted() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
+    '../../analytics/workflow': { telemetryId: () => 't-importflow-aaaaaaaa' },
+    '../../analytics/flags': { flagEnabled: () => false, flagValue: () => 'button', flagAssigned: () => false, featureSnapshot: () => ({}), useFlag: () => false },
     './TemplatePicker': { default: 'template-picker', templateImportFields: () => ({}) },
-    './StyleProbeLine': { default: 'style-probe' },
     './editingStyleSession': { readStyle: () => ({ key: '', status: 'idle', result: null, latencyMs: 0 }) },
     '../../analytics/experience': { trackExperience() {} },
+    './platformLabel': { platformLabel: id => id },
+    './platformMemory': { readRememberedPlatforms: () => null, resolvePlatforms: () => ({ platforms: ['douyin'], source: 'user' }), samePlatforms: () => true, writeRememberedPlatforms() {} },
+    './pasteStart': { claimBackgroundWhisperInstall: () => false, importUrlKind: () => null, isVideoFile: () => false, shouldAutoStart: () => false, shouldBackgroundInstallWhisper: () => false, UNDO_MS: 3000 },
+    './importPreferencesStore': { readImportPreferences: () => null },
     './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
     './ImportPreferences': { default: 'preferences' },
     '../../services/api': { speechApi: {
