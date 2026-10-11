@@ -27,7 +27,7 @@ def _fake_pip(monkeypatch, codes):
     calls = []
     results = iter(codes)
 
-    def stream(cmd, timeout, stall, on_line=None, env=None):
+    def stream(cmd, timeout, stall, on_line=None, env=None, **_):
         calls.append({"url": cmd[cmd.index("--index-url") + 1] if "--index-url" in cmd else None,
                       "timeout": timeout, "stall": stall, "cmd": cmd})
         return next(results), []

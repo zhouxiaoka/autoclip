@@ -143,9 +143,30 @@ def spawn_kwargs(env: Optional[dict] = None) -> dict:
     if os.name == "nt":
         kwargs["creationflags"] = (int(getattr(subprocess, "CREATE_NO_WINDOW", _CREATE_NO_WINDOW))
                                    | int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", _CREATE_NEW_PROCESS_GROUP)))
-    else:
-        kwargs["start_new_session"] = True
+    from backend.services import child_guard
+    kwargs.update(child_guard.popen_kwargs())  # POSIX: own session (+ Linux pdeathsig)
     return kwargs
+
+
+CANCEL_EXIT = 130
+_cancelled: set[str] = set()
+_cancel_lock = threading.Lock()
+
+
+def cancel(owner: str) -> int:
+    """Stop `owner`'s running pip (install cancelled). Returns how many processes were killed."""
+    from backend.services import child_guard
+    with _cancel_lock:
+        _cancelled.add(owner)
+    return child_guard.kill(owner)
+
+
+def _take_cancel(owner: str) -> bool:
+    with _cancel_lock:
+        if owner in _cancelled:
+            _cancelled.discard(owner)
+            return True
+        return False
 
 
 def _stop(proc: subprocess.Popen) -> None:
@@ -160,10 +181,26 @@ def _stop(proc: subprocess.Popen) -> None:
 
 
 def stream(cmd: list[str], timeout: float, stall_timeout: float,
-           on_line: Optional[Callable[[str, list[str]], None]] = None, env: Optional[dict] = None) -> tuple[int, list[str]]:
-    """跑一次 pip。返回 (退出码, 最后几行)。超时 124，开始编译 125，没有可用 wheel 126。"""
+           on_line: Optional[Callable[[str, list[str]], None]] = None, env: Optional[dict] = None,
+           owner: str = "pip") -> tuple[int, list[str]]:
+    """跑一次 pip。返回 (退出码, 最后几行)。超时 124，开始编译 125，没有可用 wheel 126，取消 130。"""
+    from backend.services import child_guard
     logger.info("pip: %s", " ".join(cmd))
-    proc = subprocess.Popen(cmd, **spawn_kwargs(env))
+    _take_cancel(owner)  # a cancel only applies to the run that was live at the time
+    proc = child_guard.track(subprocess.Popen(cmd, **spawn_kwargs(env)), owner)
+    try:
+        code, lines = _pump(proc, timeout, stall_timeout, on_line)
+    finally:
+        if proc.poll() is None:
+            _stop(proc)
+        child_guard.untrack(proc)
+    if _take_cancel(owner):
+        return CANCEL_EXIT, lines
+    return code, lines
+
+
+def _pump(proc: subprocess.Popen, timeout: float, stall_timeout: float,
+          on_line: Optional[Callable[[str, list[str]], None]]) -> tuple[int, list[str]]:
     assert proc.stdout is not None
     out: "queue.Queue[Optional[str]]" = queue.Queue()
 
@@ -215,7 +252,8 @@ def stream(cmd: list[str], timeout: float, stall_timeout: float,
 
 
 def reason(code: int) -> str:
-    return {TIMEOUT_EXIT: "超时", SOURCE_BUILD_EXIT: "需要源码编译", NO_WHEEL_EXIT: "没有可用 wheel"}.get(code, f"退出码 {code}")
+    return {TIMEOUT_EXIT: "超时", SOURCE_BUILD_EXIT: "需要源码编译", NO_WHEEL_EXIT: "没有可用 wheel",
+            CANCEL_EXIT: "已取消"}.get(code, f"退出码 {code}")
 
 
 def run_plan(plan: Plan, command_for: Callable[[Optional[str]], list[str]],
@@ -237,12 +275,14 @@ def run_plan(plan: Plan, command_for: Callable[[Optional[str]], list[str]],
         if code == 0:
             return 0, failures
         failures.append(f"{label}: {reason(code)}")
-        if code == NO_WHEEL_EXIT and label != "pypi":
+        if code == CANCEL_EXIT or (code == NO_WHEEL_EXIT and label != "pypi"):
             break
     return code, failures
 
 
 def failure_message(code: int, failures: list[str], what: str) -> str:
+    if code == CANCEL_EXIT:
+        return "安装已取消"
     if code == NO_WHEEL_EXIT:
         return f"安装失败：当前系统没有可用的{what}预编译包。请把 AutoClip 更新到最新版。"
     if code == SOURCE_BUILD_EXIT:

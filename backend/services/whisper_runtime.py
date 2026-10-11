@@ -200,7 +200,7 @@ def _stream(cmd: list[str], timeout: float, stall_timeout: float, label: str = "
             _set_state(progress=step[0], message=step[1])
         _set_state(log_tail="\n".join(lines[-12:]))
 
-    return pip_install.stream(cmd, timeout, stall_timeout, on_line)
+    return pip_install.stream(cmd, timeout, stall_timeout, on_line, owner="whisper")
 
 
 def _failure_message(code: int, failures: list[str]) -> str:
@@ -223,6 +223,10 @@ def _do_install(index_url: Optional[str]) -> None:
             _clear_install_error()
             _set_state(status="installed", progress=100, message="安装完成")
             logger.info("Whisper 运行时安装完成")
+            return
+        if code == pip_install.CANCEL_EXIT:
+            _set_state(status="not_installed", progress=0, message="安装已取消")
+            logger.info("Whisper 运行时安装已取消")
             return
         message = _failure_message(code, failures) if code != 0 else "安装结束，但 Whisper 运行时仍不可用"
         _write_install_error(message)
@@ -274,3 +278,9 @@ def uninstall() -> Dict[str, Any]:
     except Exception as e:  # noqa: BLE001
         logger.error(f"卸载 Whisper 运行时失败: {e}")
         return {"success": False, "message": str(e)}
+
+
+def cancel_install() -> bool:
+    """Stop a running install (kills pip). The install thread then records "安装已取消"."""
+    from backend.services import pip_install
+    return pip_install.cancel("whisper") > 0

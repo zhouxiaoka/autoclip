@@ -126,6 +126,8 @@ def create_app(mode: str = "web") -> FastAPI:
     @app.on_event("shutdown")
     async def shutdown_event():
         logger.info("正在关闭 AutoClip API 服务...")
+        from backend.services import child_guard
+        child_guard.kill_all()
         logger.info("WebSocket 网关服务已禁用")
     
     # 注册路由

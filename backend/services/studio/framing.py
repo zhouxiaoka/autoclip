@@ -202,7 +202,7 @@ def _run(cmd: list[str], timeout: float, stall: float, label: str) -> int:
             _set_state(progress=step[0], message=step[1])
 
     _set_state(message=f"正在连接{pip_install.SOURCE_NAMES.get(label, label)}…")
-    return pip_install.stream(cmd, timeout, stall, on_line)[0]
+    return pip_install.stream(cmd, timeout, stall, on_line, owner="framing")[0]
 
 
 def _fail(message: str) -> None:
@@ -239,6 +239,10 @@ def _do_install(index_url: str | None) -> None:
             _clear_failure()
             _set_state(status="installed", progress=100, message="安装完成")
             logger.info("人物识别组件安装完成")
+            return
+        if code == pip_install.CANCEL_EXIT:  # user/shutdown cancel: no cooldown
+            _set_state(status="not_installed", progress=0, message="安装已取消")
+            logger.info("人物识别组件安装已取消")
             return
         message = pip_install.failure_message(code, failures, "人物识别组件") if code else "安装结束，但人物识别组件仍不可用"
         # Network trouble is expected here: one warning with the reason, no traceback.
@@ -556,3 +560,9 @@ def auto_frame(video: Path, draft: Draft, source_w: int, source_h: int, *, windo
         for s in scenes:
             s.update(crop_x=None, crop_track=None, fit_shots=0, switches=0)
     return {"scenes": scenes, "window_fraction": round(fraction, 3)}
+
+
+def cancel_install() -> bool:
+    """Stop a running install (kills pip). The install thread then records "安装已取消"."""
+    from backend.services import pip_install
+    return pip_install.cancel("framing") > 0

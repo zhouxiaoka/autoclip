@@ -33,3 +33,9 @@ from backend.tests.test_pip_install_isolation import (  # noqa: E402,F401
     test_pip_child_reads_eof_from_stdin,
     test_pip_does_not_share_stdin_console_or_process_group,
 )
+from backend.tests.test_pip_child_guard import (  # noqa: E402,F401
+    test_cancel_kills_pip_and_reports_cancel,
+    test_cancel_only_hits_its_owner_and_does_not_leak_into_next_run,
+    test_pip_dies_when_backend_is_killed_hard,
+    test_shutdown_kills_every_live_pip,
+)
