@@ -154,7 +154,8 @@ def get_status() -> dict[str, Any]:
 
 
 INSTALL_TIMEOUT = 900
-PIP_FLAGS = ["--only-binary=:all:", "--disable-pip-version-check", "--timeout", "30", "--retries", "3"]
+# Same pip flags as the Whisper runtime (#339): wheels only, short socket timeout, a few retries.
+from backend.services.whisper_runtime import WHISPER_PIP_FLAGS as PIP_FLAGS  # noqa: E402
 
 
 def _do_install(index_url: str | None) -> None:

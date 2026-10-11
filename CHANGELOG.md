@@ -31,6 +31,8 @@
 
 - 自动安装人物识别组件时，同一时间只装一次。此前每条竖屏任务都会启动安装，两个线程会互相清掉对方正在写的目录。安装超时或旧文件被占用时，只记一条带原因的警告，不再打异常堆栈（1.5.7 Windows 验收，#340）。
 
+- Windows 新装后在应用里安装本地 Whisper，不再因为 pip 回溯到只有源码包的旧版本、现场编译一个多小时后失败（1.5.7 Windows 验收）。现在只装预编译包，Windows 上 faster-whisper、av、ctranslate2、onnxruntime、tokenizers 钉在有 cp313 win_amd64 wheel 的版本；先连官方 PyPI，失败或超时再换清华镜像；碰到要编译、没有可用预编译包或超时就马上停，并写清原因。（#339）
+
 - MCP 把任务状态写到数据目录。没有记录时状态是 unknown，工作进程已经不在时是 interrupted，不再把还在的项目目录当成已完成。可以取消正在进行的任务：停掉这条渲染，清掉临时文件，已完成的成片保留。可以列出剪辑风格。CLI 的 `--template` 和 MCP 的 `template` 接受杂志风、街头快剪或经典。取消、风格列表和 `--template` 默认关在 `mcp_v2_tools` 后面，该开关默认关闭。（#323）
 
 - 打开匿名使用统计后，CLI 和 MCP 会记录调用了哪个工具、是否成功和耗时，不包含路径、文件名或密钥。统计关闭时不发送。（#325）
@@ -38,6 +40,8 @@
 - 给助手用的说明改为按成片、封面、文案和发布包来使用；只要旧切片时改读参考说明。文档里的版本号改为读取已安装的包，不再写死。（#321 #322）
 
 - autoclip-mcp 随 1.5.7 发布到 PyPI，发布后可用 uvx。（#324）
+
+- autoclip-mcp 已发布到 PyPI，`uvx autoclip-mcp` 可以直接安装并启动 MCP server。文档补上 Claude Code、Cursor、Codex 的 uvx 配置，模型密钥都从环境变量 `AUTOCLIP_API_KEY` 读取，配置里不写明文。（#328）
 
 - 本版四个开关的默认值没有打开：`pkg_templates_v1`、`pkg_template_picker_visual`、`mcp_v2_tools` 默认关闭；`qa_gate_blocking` 默认 shadow，只记录、不拦截。
 
