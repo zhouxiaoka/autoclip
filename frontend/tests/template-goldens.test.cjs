@@ -69,14 +69,37 @@ function sample(template) {
     t: time,
     hash: page.renderFrame(time),
     rects: page.occupiedRects(time),
+    sub: page.document.getElementById('sub').innerHTML,
   }))
 }
 
 test('editorial and street match the golden frames at fixed timestamps', () => {
   const actual = JSON.parse(JSON.stringify({ editorial: sample('editorial'), street: sample('street') }))
+  // UPDATE_TEMPLATE_GOLDENS=1 rewrites the fixture after an intended template change.
+  if (process.env.UPDATE_TEMPLATE_GOLDENS) fs.writeFileSync(goldenPath, JSON.stringify(actual, null, 2) + '\n')
   const expected = JSON.parse(fs.readFileSync(goldenPath, 'utf8'))
   assert.deepEqual(actual, expected)
   const streetAt = actual.street.find(frame => frame.t === 1.0)
   assert.equal(streetAt.rects.filter(rect => rect.slot === 'sticker').length, 2)
   assert.equal(JSON.stringify(streetAt).includes('不该出现'), false)
+})
+
+test('editorial and street stay readable over any footage', () => {
+  for (const template of ['editorial', 'street']) {
+    const css = fs.readFileSync(path.join(root, template, 'style.css'), 'utf8')
+    // A dark gradient scrim behind the caption band, shown only while a caption is on screen.
+    assert.match(css, /:has\(#sub:not\(:empty\)\)::after\s*\{\s*opacity: 1;/)
+    assert.match(css, /linear-gradient\(to top, rgba\(10,10,9,\.[0-9]+\)/)
+    // Light text with a thin dark stroke and a short offset drop shadow; no glow.
+    assert.match(css, /-webkit-text-stroke: [0-9.]+px rgba\(10,10,9,/)
+    for (const [, shadow] of css.matchAll(/text-shadow:\s*([^;]+);/g)) {
+      const [, y, blur] = shadow.trim().split(/\s+/).map(parseFloat)
+      assert.ok(y > 0 && blur <= 6, `${template}: text-shadow must be a short drop shadow, got ${shadow}`)
+    }
+    assert.doesNotMatch(css, /#sub[^{]*\{[^}]*color:\s*#1a1a19/)
+    // Unspoken words keep most of their opacity.
+    const base = Number(css.match(/#sub \.w \{ opacity: ([0-9.]+); \}/)[1])
+    assert.ok(base >= 0.75, `${template}: unspoken caption words at ${base}`)
+  }
+  assert.match(fs.readFileSync(path.join(root, 'editorial', 'style.css'), 'utf8'), /:has\(#hook:not\(:empty\)\)::before/)
 })

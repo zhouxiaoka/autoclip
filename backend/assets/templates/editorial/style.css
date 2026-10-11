@@ -4,8 +4,28 @@ html, body {
   height: 1280px;
   background: transparent;
   overflow: hidden;
-  color: #1a1a19;
+  color: #f6f5f3;
   font-family: "Geist", "PingFang SC", "Noto Sans SC", sans-serif;
+}
+/* Readable over any footage: a dark gradient behind the text bands plus a thin stroke and a
+   short offset shadow on the letters. No glow. The scrims only appear while their band has text. */
+body::before, body::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+body::before { top: 0; height: 420px; background: linear-gradient(to bottom, rgba(10,10,9,.72) 0%, rgba(10,10,9,.45) 55%, rgba(10,10,9,0) 100%); }
+body::after { bottom: 0; height: 400px; background: linear-gradient(to top, rgba(10,10,9,.78) 0%, rgba(10,10,9,.5) 55%, rgba(10,10,9,0) 100%); }
+body:has(#hook:not(:empty))::before, body:has(#kicker:not(:empty))::before { opacity: 1; }
+body:has(#sub:not(:empty))::after { opacity: 1; }
+#kicker, #hook, #gloss, #num, #sub {
+  z-index: 1;
+  paint-order: stroke fill;
+  -webkit-text-stroke: 1.5px rgba(10,10,9,.55);
+  text-shadow: 0 2px 4px rgba(0,0,0,.6);
 }
 #kicker {
   position: absolute;
@@ -14,14 +34,14 @@ html, body {
   margin: 0;
   font-size: 18px;
   letter-spacing: 0.18em;
-  color: #6e6b66;
+  color: rgba(246,245,243,.88);
 }
 #kicker i {
   display: inline-block;
   width: 18px;
   height: 1px;
   margin-right: 10px;
-  background: #1a1a19;
+  background: #f6f5f3;
   vertical-align: middle;
 }
 #hook {
@@ -44,7 +64,7 @@ html, body {
   margin: 0;
   font-size: 18px;
   line-height: 1.45;
-  color: #1a1a19;
+  color: #f6f5f3;
 }
 #gloss b {
   display: block;
@@ -85,3 +105,5 @@ html, body {
   font-weight: 400;
 }
 #sub strong { font-weight: 600; }
+/* Words not being spoken stay clearly legible; the current word is full white and bold. */
+#sub .w { opacity: .82; }
