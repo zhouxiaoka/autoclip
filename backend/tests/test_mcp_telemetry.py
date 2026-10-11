@@ -71,7 +71,7 @@ def test_properties_are_enums_and_job_finished_is_once(monkeypatch, tmp_path):
     assert body['properties']['client'] == 'unknown'
     assert body['properties']['ok'] is True
     assert body['properties']['error_code'] == 'none'
-    assert body['properties']['$feature/mcp_v2_tools'] is False
+    assert body['properties']['$feature/mcp_v2_tools'] is True
     blob = json.dumps(body['properties'])
     assert 'phc_test' not in blob and 'private' not in blob and 'api_key' not in body['properties']
     assert flag_enabled(resolve_features({'autoclip_safe_mode': True, 'mcp_v2_tools': True}, env=''), 'mcp_v2_tools') is False

@@ -17,18 +17,28 @@ def test_frontend_and_backend_defaults_match_and_are_off():
     assert flag_enabled(DEFAULTS, 'one_click_paste_start') is False
     assert flag_enabled(DEFAULTS, 'render_top_first') is False
     assert flag_enabled(DEFAULTS, 'publish_pack_v2') is False
-    assert flag_enabled(DEFAULTS, 'pkg_templates_v1') is False
+    # 1.5.7: editing styles and MCP v2 ship on; the visual picker stays off.
+    assert flag_enabled(DEFAULTS, 'pkg_templates_v1') is True
     assert flag_enabled(DEFAULTS, 'pkg_template_picker_visual') is False
-    assert flag_enabled(DEFAULTS, 'mcp_v2_tools') is False
+    assert flag_enabled(DEFAULTS, 'mcp_v2_tools') is True
     assert resolve_features({'pkg_template_picker_visual': True, 'autoclip_safe_mode': True}, env='')['pkg_template_picker_visual'] is False
 
 
 def test_qa_and_template_defaults_and_safe_mode():
-    """qa_gate_blocking stays shadow and is forced off; pkg_templates_v1 stays off unless the operator names it."""
+    """qa_gate_blocking stays shadow and is forced off; default-on styles still go off in safe mode."""
     assert DEFAULTS['qa_gate_blocking'] == 'shadow'
-    assert DEFAULTS['pkg_templates_v1'] is False
+    assert DEFAULTS['pkg_templates_v1'] is True
     assert FRONTEND_DEFAULTS['qa_gate_blocking'] == 'shadow'
-    assert FRONTEND_DEFAULTS['pkg_templates_v1'] is False
+    assert FRONTEND_DEFAULTS['pkg_templates_v1'] is True
+    # No snapshot (analytics off / flags never fetched) still means on.
+    assert resolve_features(None, env='')['pkg_templates_v1'] is True
+    assert resolve_features({}, env='')['mcp_v2_tools'] is True
+    # The switches stay: remote / local snapshot or AUTOCLIP_FLAGS can turn them off.
+    assert resolve_features({'pkg_templates_v1': False, 'mcp_v2_tools': False}, env='') == {
+        **resolve_features(None, env=''), 'pkg_templates_v1': False, 'mcp_v2_tools': False}
+    assert resolve_features(None, env='pkg_templates_v1=off,mcp_v2_tools=off')['pkg_templates_v1'] is False
+    assert resolve_features({'autoclip_safe_mode': True}, env='')['pkg_templates_v1'] is False
+    assert resolve_features({'autoclip_safe_mode': True}, env='')['mcp_v2_tools'] is False
     killed = resolve_features({
         'autoclip_safe_mode': True,
         'qa_gate_blocking': 'block',

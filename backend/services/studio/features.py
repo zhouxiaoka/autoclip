@@ -25,11 +25,24 @@ DEFAULTS: dict[str, bool | str] = {
     'track_overrides': False,
     # Plan §10.2 starts this gate at full shadow. block is accepted and not enforced.
     'qa_gate_blocking': 'shadow',
+    # 1.5.7: editing styles ship on. Remote PostHog, a local override or
+    # AUTOCLIP_FLAGS=...=off still turn them off; safe mode forces them off.
+    'pkg_templates_v1': True,
+    'pkg_template_picker_visual': False,
+    'mcp_v2_tools': True,
+}
+
+# Safe mode value when it differs from the build default (default-on features).
+SAFE_OFF: dict[str, bool | str] = {
+    'qa_gate_blocking': 'off',
     'pkg_templates_v1': False,
     'pkg_template_picker_visual': False,
-    # cancel_job and list_styles stay hidden until an operator turns this on.
     'mcp_v2_tools': False,
 }
+
+
+def safe_off(key: str) -> bool | str:
+    return SAFE_OFF.get(key, DEFAULTS[key])
 
 VARIANTS = {
     'one_click_paste_start': ('button', 'autostart'),
@@ -77,14 +90,14 @@ def resolve_features(snapshot: dict | None = None, env: str | None = None) -> di
             if normalized is not None:
                 resolved[str(key)] = normalized
     if resolved.get('autoclip_safe_mode') is True:
-        for key, default in DEFAULTS.items():
+        for key in DEFAULTS:
             if key != 'autoclip_safe_mode':
-                resolved[key] = 'off' if key == 'qa_gate_blocking' else default
+                resolved[key] = safe_off(key)
     resolved.update(operator)
     if resolved.get('autoclip_safe_mode') is True:
-        for key, default in DEFAULTS.items():
+        for key in DEFAULTS:
             if key != 'autoclip_safe_mode' and key not in operator:
-                resolved[key] = 'off' if key == 'qa_gate_blocking' else default
+                resolved[key] = safe_off(key)
         # The kill switch wins even when AUTOCLIP_FLAGS names this gate.
         resolved['qa_gate_blocking'] = 'off'
     return resolved

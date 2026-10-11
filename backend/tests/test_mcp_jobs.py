@@ -246,11 +246,15 @@ def test_running_status_advertises_a_poll_interval(data_dir):
     assert fields == {'status': 'running', 'progress': 0, 'stage': 'screening', 'eta': None, 'poll_after_sec': 10}
 
 
-def test_new_tools_stay_hidden_until_the_flag_is_on(data_dir, monkeypatch):
+def test_new_tools_stay_hidden_when_the_flag_is_off(data_dir, monkeypatch):
     pytest.importorskip('mcp')
     from backend import mcp_server
 
     monkeypatch.delenv('AUTOCLIP_FLAGS', raising=False)
+    default = {tool.name for tool in asyncio.run(mcp_server.server.list_tools())}
+    assert 'list_styles' in default and 'cancel_job' in default  # 1.5.7 default on
+
+    monkeypatch.setenv('AUTOCLIP_FLAGS', 'mcp_v2_tools=off')
     assert mcp_server.list_styles()['error_code'] == 'disabled'
     assert mcp_server.cancel_job('p3')['error_code'] == 'disabled'
     hidden = {tool.name for tool in asyncio.run(mcp_server.server.list_tools())}

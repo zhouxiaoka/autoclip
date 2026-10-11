@@ -41,7 +41,7 @@ def test_flag_off_skips_the_overlay_without_calling_it_a_failure():
     assert event['template'] == 'classic'
     assert html.templates_requested({'pkg_templates_v1': False}) is False
     assert html.templates_requested({'pkg_templates_v1': True}) is True
-    assert html.templates_requested(None) is False
+    assert html.templates_requested(None) is True  # 1.5.7 default on
 
 
 def _png(folder: Path) -> Path:
