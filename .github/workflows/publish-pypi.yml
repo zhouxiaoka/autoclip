@@ -1,14 +1,14 @@
 name: Publish autoclip-mcp to PyPI
 
 # Trusted publishing (OIDC): no API tokens or secrets.
-# - push tag v*         -> PyPI
+# - push tag mcp-v*     -> PyPI
 # - workflow_dispatch   -> choose testpypi or pypi
 # Only the publish jobs get id-token: write; the build job does not.
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'mcp-v*'
   workflow_dispatch:
     inputs:
       target:
@@ -50,11 +50,11 @@ jobs:
           NAME=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["name"])')
           test "$NAME" = "autoclip-mcp" || { echo "unexpected distribution name: $NAME"; exit 1; }
           if [ "$REF_TYPE" = "tag" ]; then
-            test "$REF_NAME" = "v$VERSION" || { echo "tag $REF_NAME does not match pyproject version $VERSION"; exit 1; }
+            test "$REF_NAME" = "mcp-v$VERSION" || { echo "tag $REF_NAME does not match pyproject version $VERSION"; exit 1; }
           fi
           if [ "$EVENT" = "push" ]; then TARGET=pypi; else TARGET="$INPUT_TARGET"; fi
-          if [ "$TARGET" = "pypi" ] && [ "$REF_TYPE" != "tag" ]; then
-            echo "Publishing to PyPI requires running on a v* tag"; exit 1
+          if [ "$TARGET" = "pypi" ] && { [ "$REF_TYPE" != "tag" ] || [ "${REF_NAME#mcp-v}" = "$REF_NAME" ]; }; then
+            echo "Publishing to PyPI requires running on an mcp-v* tag"; exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "target=$TARGET" >> "$GITHUB_OUTPUT"
