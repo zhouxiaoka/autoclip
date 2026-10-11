@@ -97,15 +97,37 @@ def vision_call(content, config=None, *, allow_event_list=False):
     if disables_qwen_thinking(model, base):
         # Qwen3.5–3.8 on Bailian think by default (RC156 Win QA #18); allowlist only, see llm_providers.
         body['enable_thinking'] = False
-    req = urllib.request.Request(base.rstrip('/') + '/chat/completions', data=json.dumps(body).encode(), headers={**({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'})
+    from backend.core.llm_providers import asks_for_max_completion_tokens, to_max_completion_tokens, token_param_kwargs
+    body = token_param_kwargs(model, base, body)  # OpenAI o-series / gpt-5+ reject max_tokens (#333)
+    headers = {**({'Authorization': 'Bearer ' + key} if key else {}), 'Content-Type': 'application/json'}
+
+    def request(payload):
+        return urllib.request.Request(base.rstrip('/') + '/chat/completions', data=json.dumps(payload).encode(), headers=headers)
+
+    req = request(body)
     started = time.monotonic()
 
     def failure(code, message, status=None):
         return VisionRequestError(code, message, elapsed_seconds=time.monotonic()-started, http_status=status)
 
     try:
-        with urllib.request.urlopen(req, timeout=config.get('timeout', 180)) as response:
-            result = json.load(response)
+        try:
+            with urllib.request.urlopen(req, timeout=config.get('timeout', 180)) as response:
+                result = json.load(response)
+        except urllib.error.HTTPError as error:
+            detail = ''
+            if error.code == 400 and 'max_tokens' in body:
+                try:
+                    detail = error.read(4096).decode('utf-8', 'replace')
+                except Exception:  # noqa: BLE001
+                    detail = ''
+            if not asks_for_max_completion_tokens(detail):
+                raise
+            error.close()
+            # One retry with the parameter the provider asked for; never more.
+            body = to_max_completion_tokens(body)
+            with urllib.request.urlopen(request(body), timeout=config.get('timeout', 180)) as response:
+                result = json.load(response)
     except TimeoutError:
         raise failure('timeout', '视觉模型响应超时，请在「设置 → 视觉理解」中提高请求超时后重试；原素材已保留') from None
     except urllib.error.HTTPError as error:

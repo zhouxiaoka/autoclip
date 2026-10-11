@@ -154,6 +154,43 @@ autoclip publish --list-profiles                        # 已配置的 Upload-Po
 
 stdio 传输，依赖 `mcp` Python SDK（`requirements.txt` 已锁定；兼容 1.x `FastMCP` 与 2.x `MCPServer`）。
 
+用 `uvx` 启动（推荐）：`uvx autoclip-mcp` 不带参数就直接启动 stdio MCP server，不需要其他参数。第一次运行会下载依赖，可能要几十秒。模型密钥用环境变量 `AUTOCLIP_API_KEY` 传给 server，不要写进 args。
+
+**Claude Code**（`--env` 写在名字后面、`--` 前面）：
+
+```bash
+claude mcp add autoclip --env AUTOCLIP_API_KEY=sk-... -- uvx autoclip-mcp
+```
+
+**Cursor**（`~/.cursor/mcp.json`，或项目里的 `.cursor/mcp.json`）：
+
+```json
+{
+  "mcpServers": {
+    "autoclip": {
+      "command": "uvx",
+      "args": ["autoclip-mcp"],
+      "env": { "AUTOCLIP_API_KEY": "${env:AUTOCLIP_API_KEY}" }
+    }
+  }
+}
+```
+
+**Codex**（`~/.codex/config.toml`；或 `codex mcp add autoclip --env AUTOCLIP_API_KEY=sk-... -- uvx autoclip-mcp`）：
+
+```toml
+[mcp_servers.autoclip]
+command = "uvx"
+args = ["autoclip-mcp"]
+env_vars = ["AUTOCLIP_API_KEY"]   # 从当前环境转发；也可以用 [mcp_servers.autoclip.env] 直接写值
+startup_timeout_sec = 120         # 默认 10 秒，第一次 uvx 下载依赖不够用
+tool_timeout_sec = 3600           # 默认 60 秒；clip_video 要几分钟，或改用 start_clip_job + get_job_status
+```
+
+已经用桌面应用保存过模型配置时，可以不传 `AUTOCLIP_API_KEY`。
+
+从源码安装时：
+
 **Cursor**（`~/.cursor/mcp.json`）或 **Claude Desktop**（`claude_desktop_config.json`）：
 
 ```json

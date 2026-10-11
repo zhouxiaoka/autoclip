@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Union
 from enum import Enum
@@ -373,6 +374,42 @@ def guarded_chat_kwargs(base_url: Optional[str], request: Dict[str, Any]) -> Dic
     return dashscope_chat_kwargs(base_url, deepseek_chat_kwargs(base_url, request))
 
 
+# OpenAI 官方的推理型号（o 系列、gpt-5 及以后）不认 max_tokens，返回 400 要求改用
+# max_completion_tokens（#333）。官方地址上的已知型号直接改名；其它情况（中转、Azure 等）
+# 等服务端 400 点名这个参数时再改名重试一次。DeepSeek / 百炼 / Ollama 等兼容接口请求体不变。
+_COMPLETION_TOKEN_MODEL = re.compile(r"^(?:o\d+|gpt-(?:[5-9]|\d{2,}))(?:[.\-]|$)")
+
+
+def is_official_openai(base_url: Optional[str]) -> bool:
+    url = normalize_base_url(base_url)
+    return not url or "api.openai.com" in url.lower()
+
+
+def uses_max_completion_tokens(model: Optional[str], base_url: Optional[str]) -> bool:
+    name = (model or "").strip().lower().split("/")[-1]
+    return is_official_openai(base_url) and bool(_COMPLETION_TOKEN_MODEL.match(name))
+
+
+def to_max_completion_tokens(request: Dict[str, Any]) -> Dict[str, Any]:
+    """把请求里的 max_tokens 改名为 max_completion_tokens；没有 max_tokens 时原样返回。"""
+    if request.get("max_tokens") is None:
+        return request
+    renamed = dict(request)
+    value = renamed.pop("max_tokens")
+    renamed.setdefault("max_completion_tokens", value)
+    return renamed
+
+
+def asks_for_max_completion_tokens(message: Any) -> bool:
+    """400 的错误信息是否在说：不支持 max_tokens，请用 max_completion_tokens。"""
+    text = str(message or "")
+    return "max_tokens" in text and "max_completion_tokens" in text
+
+
+def token_param_kwargs(model: Optional[str], base_url: Optional[str], request: Dict[str, Any]) -> Dict[str, Any]:
+    return to_max_completion_tokens(request) if uses_max_completion_tokens(model, base_url) else request
+
+
 # OpenAI SDK 默认读超时 600 秒、自动重试 2 次（超时也重试）。挑片外面还有一次「带原因重试」，
 # 大纲走 call_with_retry 的 3 次，叠起来一个窗口最坏能等一个小时。这里写明超时，并把 SDK 自身的重试降到 1 次
 # （保留对 429 / 5xx / 断线的一次退避重试），其余交给外层按业务语义重试。
@@ -415,12 +452,19 @@ class OpenAIProvider(LLMProvider):
         """调用OpenAI API"""
         try:
             full_input = self._build_full_input(prompt, input_data)
-            payload = guarded_chat_kwargs(self.base_url, {
+            payload = token_param_kwargs(self.model_name, self.base_url, guarded_chat_kwargs(self.base_url, {
                 "model": self.model_name,
                 "messages": [{"role": "user", "content": full_input}],
                 **kwargs,
-            })
-            response = self.client.chat.completions.create(**payload)
+            }))
+            try:
+                response = self.client.chat.completions.create(**payload)
+            except Exception as error:  # noqa: BLE001 - only the max_tokens 400 is retried
+                if payload.get("max_tokens") is None or getattr(error, "status_code", None) != 400 \
+                        or not asks_for_max_completion_tokens(error):
+                    raise
+                logger.info("模型 %s 不支持 max_tokens，改用 max_completion_tokens 重试一次", self.model_name)
+                response = self.client.chat.completions.create(**to_max_completion_tokens(payload))
             
             content = response.choices[0].message.content
             usage = {
@@ -459,8 +503,8 @@ class OpenAIProvider(LLMProvider):
                 if not self.api_key.startswith("sk-"):
                     logger.warning(f"OpenAI API Key格式可能不正确，期望以'sk-'开头，实际: {self.api_key[:10]}...")
             
-            # 使用最简单的测试
-            response = self.call("测试", max_tokens=1)
+            # 使用最简单的测试。推理型号的输出上限也算推理 token，给 1 会因上限截断报错（#333）。
+            response = self.call("测试", max_tokens=256 if uses_max_completion_tokens(self.model_name, self.base_url) else 1)
             return response and response.content is not None
         except Exception as e:
             logger.error(f"OpenAI连接测试失败 (base_url={self.base_url or OPENAI_OFFICIAL_BASE_URL}): {e}")
