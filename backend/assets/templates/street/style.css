@@ -8,6 +8,22 @@ html, body {
   font-family: "Geist", "PingFang SC", "Noto Sans SC", sans-serif;
 }
 #frame { position: absolute; inset: 0; }
+/* Captions sit on a dark gradient with a thin stroke and a short offset shadow, so they read
+   over bright or busy footage. No glow. The scrim only appears while a caption is on screen. */
+#frame::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 460px;
+  background: linear-gradient(to top, rgba(10,10,9,.8) 0%, rgba(10,10,9,.5) 55%, rgba(10,10,9,0) 100%);
+  pointer-events: none;
+  opacity: 0;
+}
+#frame:has(#sub:not(:empty))::after { opacity: 1; }
+#titlebar, #num, #stickers, #sub { z-index: 1; }
+#titlebar b { box-shadow: 0 3px 10px rgba(0,0,0,.35); }
 #titlebar {
   position: absolute;
   left: 36px;
@@ -32,6 +48,10 @@ html, body {
   left: 48px;
   margin: 0;
   font-variant-numeric: tabular-nums;
+  color: #f6f5f3;
+  paint-order: stroke fill;
+  -webkit-text-stroke: 2px rgba(10,10,9,.6);
+  text-shadow: 0 2px 4px rgba(0,0,0,.6);
   font-size: 72px;
   font-weight: 600;
   line-height: 1;
@@ -42,14 +62,15 @@ html, body {
   position: absolute;
   width: 120px;
   height: 72px;
-  border: 2px solid #1a1a19;
+  border: 2px solid #f6f5f3;
   border-radius: 999px;
+  color: #f6f5f3;
+  background: rgba(10,10,9,.45);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   font-weight: 600;
-  background: transparent;
 }
 #sub {
   position: absolute;
@@ -57,9 +78,14 @@ html, body {
   right: 36px;
   margin: 0;
   font-size: 40px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.2;
+  color: #f6f5f3;
+  paint-order: stroke fill;
+  -webkit-text-stroke: 2px rgba(10,10,9,.6);
+  text-shadow: 0 2px 4px rgba(0,0,0,.6);
   max-height: 2.4em;
   overflow: hidden;
 }
 #sub em { font-style: normal; box-shadow: inset 0 -0.35em 0 #5a8bff; }
+#sub .w { opacity: .82; }

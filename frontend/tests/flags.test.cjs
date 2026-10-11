@@ -44,10 +44,12 @@ function load(options = {}) {
   return { flags: module.exports, calls, storage, remote, setAnalytics: value => { enabled = value } }
 }
 
-test('build defaults are the safe off value for every flag', () => {
+const DEFAULT_ON = ['pkg_templates_v1', 'mcp_v2_tools']
+
+test('build defaults: off except the 1.5.7 default-on features', () => {
   const { flags } = load()
   for (const name of flags.FLAG_NAMES) {
-    assert.equal(flags.flagEnabled(name), false, name)
+    assert.equal(flags.flagEnabled(name), DEFAULT_ON.includes(name), name)
     assert.equal(flags.flagValue(name), defaults[name], name)
   }
   assert.equal(JSON.stringify(flags.featureSnapshot()).includes('http'), false)
@@ -155,4 +157,26 @@ test('invalid overrides are dropped and the snapshot stays enumerable', () => {
   assert.deepEqual(Object.keys(stored), ['publish_pack_v2'])
   flags.setFlagOverride('publish_pack_v2', null)
   assert.equal(storage.getItem('autoclip.flags.overrides.v1'), null)
+})
+
+test('default-on styles stay on with analytics off and turn off remotely, locally or in safe mode', () => {
+  const off = load({ analytics: false, remote: { pkg_templates_v1: false } })
+  assert.equal(off.flags.flagEnabled('pkg_templates_v1'), true)
+  assert.equal(off.flags.flagEnabled('mcp_v2_tools'), true)
+  assert.equal(off.flags.flagEnabled('pkg_template_picker_visual'), false)
+  assert.equal(off.calls.length, 0)
+  assert.equal(off.flags.featureSnapshot().pkg_templates_v1, true)
+  const unfetched = load({ analytics: true, remote: {} })
+  assert.equal(unfetched.flags.flagEnabled('pkg_templates_v1'), true)
+  const remote = load({ analytics: true, remote: { pkg_templates_v1: false, mcp_v2_tools: false } })
+  assert.equal(remote.flags.flagEnabled('pkg_templates_v1'), false)
+  assert.equal(remote.flags.flagEnabled('mcp_v2_tools'), false)
+  const local = load({ analytics: false })
+  local.flags.setFlagOverride('pkg_templates_v1', false)
+  assert.equal(local.flags.flagEnabled('pkg_templates_v1'), false)
+  const safe = load({ analytics: false })
+  safe.flags.setFlagOverride('autoclip_safe_mode', true)
+  assert.equal(safe.flags.flagEnabled('pkg_templates_v1'), false)
+  assert.equal(safe.flags.flagEnabled('mcp_v2_tools'), false)
+  assert.equal(safe.flags.flagOrigin('pkg_templates_v1'), 'safe_mode')
 })

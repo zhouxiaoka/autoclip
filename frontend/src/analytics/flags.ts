@@ -1,7 +1,8 @@
 /**
  * Typed feature flags. Remote values are read only while analytics is on.
  * Analytics off, offline-without-consent, and a missing key all resolve to the
- * safe off value in flags.defaults.json (plus an explicit local override).
+ * build default in flags.defaults.json (plus an explicit local override). Most
+ * defaults are off; pkg_templates_v1 and mcp_v2_tools ship on in 1.5.7.
  *
  * Priority: local override → autoclip_safe_mode → PostHog (analytics on) →
  * dev VITE_FLAGS → 7-day cache (analytics on) → build default.
@@ -100,8 +101,16 @@ export function isFlagName(value: string): value is FlagName {
   return (FLAG_NAMES as readonly string[]).includes(value)
 }
 
-function safeOff(name: FlagName): FlagValue {
-  return name === 'qa_gate_blocking' ? 'off' : FLAG_DEFAULTS[name]
+/** Safe mode value. Default-on features (1.5.7 editing styles, MCP v2) still go off. */
+const SAFE_OFF: Partial<Record<FlagName, FlagValue>> = {
+  qa_gate_blocking: 'off',
+  pkg_templates_v1: false,
+  pkg_template_picker_visual: false,
+  mcp_v2_tools: false,
+}
+
+export function safeOff(name: FlagName): FlagValue {
+  return SAFE_OFF[name] ?? FLAG_DEFAULTS[name]
 }
 
 export function normalizeFlag(name: FlagName, raw: unknown): FlagValue | undefined {

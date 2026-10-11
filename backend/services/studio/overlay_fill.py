@@ -68,7 +68,7 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
         }
         break
     area = safe_area if safe_area in SAFE_AREAS else 'xiaohongshu'
-    hook = ' '.join(lines) if lines else str(_get(packaging, 'kicker', '') or '')
+    hook = '\n'.join(lines) if lines else str(_get(packaging, 'kicker', '') or '')
     return {
         'fps': fps,
         'kicker': str(_get(packaging, 'kicker', '') or ''),

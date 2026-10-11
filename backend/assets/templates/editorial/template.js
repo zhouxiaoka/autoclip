@@ -89,7 +89,7 @@
       var text = escapeText(words[w].text);
       if (w === state.word && words[w].emphasis) html += "<em>" + text + "</em> ";
       else if (w === state.word) html += "<strong>" + text + "</strong> ";
-      else html += text + " ";
+      else html += "<span class=\"w\">" + text + "</span> ";
     }
     sub.innerHTML = html;
   }

@@ -110,7 +110,8 @@
     for (var w = start; w < Math.min(words.length, start + 3); w++) {
       var text = escapeText(words[w].text);
       if (w === state.word && words[w].emphasis) html += "<em>" + text + "</em> ";
-      else html += text + " ";
+      else if (w === state.word) html += text + " ";
+      else html += "<span class=\"w\">" + text + "</span> ";
     }
     sub.innerHTML = html;
   }

@@ -52,7 +52,17 @@ MCP 使用 `start_quick_output`（立即返回 ID）和 `get_quick_output_status
 独立目录需要自己的模型配置，不会读取另一个数据目录的密钥；新入口不使用旧 `run --provider` 的临时覆盖。
 旧 `run` / `clip_video` / `start_clip_job` 继续提供原始切片与合集。这几个 MCP 工具在工具列表里标为 deprecated。
 
-`produce` 的 `--template` 和 `start_quick_output` 的 `template` 都在 `mcp_v2_tools` 打开后才接受：`editorial`（杂志风）、`street`（街头快剪）、`classic`（经典）。不支持的值返回 `invalid_input`。开关关闭时传了风格返回 `disabled`，不传则仍按经典制作。返回结果里的 `template` 是实际用的风格，`requested_template` 是请求值。`pkg_templates_v1` 关闭时，即使请求了杂志风或街头快剪，`template` 也是 `classic`。以返回结果里的风格为准。MCP 在 `AUTOCLIP_FLAGS=mcp_v2_tools=on` 时额外提供 `list_styles` 和 `cancel_job`；默认关闭，工具列表里看不到。
+`produce` 的 `--template` 和 `start_quick_output` 的 `template` 都在 `mcp_v2_tools` 打开后才接受：`editorial`（杂志风）、`street`（街头快剪）、`classic`（经典）。不支持的值返回 `invalid_input`。开关关闭时传了风格返回 `disabled`，不传则仍按经典制作。返回结果里的 `template` 是实际用的风格，`requested_template` 是请求值。`pkg_templates_v1` 关闭时，即使请求了杂志风或街头快剪，`template` 也是 `classic`。以返回结果里的风格为准。MCP 在 `mcp_v2_tools` 打开时额外提供 `list_styles` 和 `cancel_job`。该开关默认打开，`AUTOCLIP_FLAGS=mcp_v2_tools=off` 可以关掉，关掉后工具列表里看不到这两个工具。
+
+**默认风格：桌面导入页和 CLI / MCP 不一样，这是有意的。**
+
+| 入口 | 不指定风格时 |
+|---|---|
+| 桌面应用导入页 | 默认选中杂志风（`editorial`），用户可以改成街头快剪或经典 |
+| CLI `produce` 不带 `--template` | 经典（`classic`） |
+| MCP `start_quick_output` 不传 `template` | 经典（`classic`） |
+
+CLI 和 MCP 多半由脚本或助手调用，默认经典可以让同样的调用在升级前后得到同样的成片，也不依赖按需安装的高级包装组件。要杂志风或街头快剪，请显式传 `--template editorial` / `template: "street"`。
 
 任务状态一律带 `progress`、`stage`、`eta`、`poll_after_sec`。按 `poll_after_sec` 再查。没有任务记录时状态是 `unknown`，工作进程已经不在时是 `interrupted`，不会因为项目目录还在就报 `completed`。状态写在数据目录的 `mcp-jobs/`。`cancel_job` 会停掉这条任务的 ffmpeg 和它的子进程，清掉临时文件，已完成的成片保留，状态写成 `cancelled`。
 
