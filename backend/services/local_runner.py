@@ -524,6 +524,13 @@ def environment_report() -> Dict[str, Any]:
     except Exception as e:  # noqa: BLE001
         report["whisper"] = {"ok": False, "error": str(e)}
     report["llm"] = check_llm_connection()
+    try:
+        # Same visual check as the app's readiness (capability=auto resolves like the pipeline).
+        from backend.services import ai_model_settings as ai_models
+        from backend.services.studio.readiness import _visual
+        report["visual"] = _visual(ai_models.for_editing())
+    except Exception as e:  # noqa: BLE001
+        report["visual"] = {"ok": False, "error": type(e).__name__}
     return report
 
 
