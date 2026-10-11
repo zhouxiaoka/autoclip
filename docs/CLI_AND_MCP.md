@@ -60,21 +60,24 @@ MCP 不再接收 `api_key` 参数。模型密钥用环境变量 `AUTOCLIP_API_KE
 
 ## 1. 安装
 
-```bash
-git clone https://github.com/zhouxiaoka/autoclip.git && cd autoclip
-python3 -m venv venv && source venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install --no-deps .    # 现在就能用，得到 autoclip 和 autoclip-mcp
-autoclip --version
-```
+一行安装：
 
 ```bash
-# 即将提供：发布到 PyPI 和 npm 之后才能用
 uvx autoclip-mcp
 npx skills add zhouxiaoka/autoclip
 ```
 
-PyPI 发行名是 `autoclip-mcp`。`uvx autoclip-mcp` 会安装这个包并运行 MCP 入口，包里的 CLI 命令仍是 `autoclip`。wheel 文件名是 `autoclip_mcp-<version>-py3-none-any.whl`。这两条一行命令即将提供：包还没发布到 PyPI，`uvx` 不能从公共索引装到它。已发布的 ZIP 里用 `autoclip_mcp-*-py3-none-any.whl`；现在从源码安装用上面的 `python -m pip install --no-deps .`。
+PyPI 发行名是 `autoclip-mcp`。`uvx autoclip-mcp` 会安装这个包并运行 MCP 入口，包里的 CLI 命令仍是 `autoclip`。wheel 文件名是 `autoclip_mcp-<version>-py3-none-any.whl`。已发布的 ZIP 里用 `autoclip_mcp-*-py3-none-any.whl`。
+
+从源码安装仍可用。在已克隆的仓库根目录执行：
+
+```bash
+git clone https://github.com/zhouxiaoka/autoclip.git && cd autoclip
+python3 -m venv venv && source venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install --no-deps .
+autoclip --version
+```
 
 不装包也能用：`python -m backend.cli ...`（在仓库根目录）。
 
@@ -99,7 +102,7 @@ autoclip doctor
 autoclip run talk.mp4                                  # 用桌面应用设置页里配好的模型
 autoclip run talk.mp4 --provider ollama                # 本地 Ollama（默认 qwen2.5:7b，无需 key）
 autoclip run talk.mp4 --provider lmstudio --model qwen2.5-7b-instruct
-# 模型密钥用环境变量，不要写进命令：AUTOCLIP_API_KEY=sk-...
+# 模型密钥只放在环境变量 AUTOCLIP_API_KEY 里（先在 shell 里设置），不要写进命令
 autoclip run talk.mp4 --provider openai --base-url https://api.deepseek.com/v1 --model deepseek-chat
 autoclip run talk.mp4 --srt talk.srt --category knowledge --min-score 0.6
 autoclip run talk.mp4 --json                           # 给脚本 / agent：stdout 只有一个 JSON
@@ -150,6 +153,45 @@ autoclip publish --list-profiles                        # 已配置的 Upload-Po
 ## 3. MCP server
 
 stdio 传输，依赖 `mcp` Python SDK（`requirements.txt` 已锁定；兼容 1.x `FastMCP` 与 2.x `MCPServer`）。
+
+用 `uvx` 启动（推荐）：`uvx autoclip-mcp` 不带参数就直接启动 stdio MCP server，不需要其他参数，一般写进客户端配置、由客户端启动。第一次运行会下载依赖，可能要几十秒。模型密钥用环境变量 `AUTOCLIP_API_KEY` 传给 server，不要写进 args。
+
+**Claude Code**：
+
+```bash
+claude mcp add-json autoclip '{"command":"uvx","args":["autoclip-mcp"],"env":{"AUTOCLIP_API_KEY":"${AUTOCLIP_API_KEY}"}}'
+```
+
+单引号让 `${AUTOCLIP_API_KEY}` 原样写进配置，Claude Code 启动 server 时再从环境变量展开，配置文件和 shell 历史里都没有明文密钥。不要用 `--env AUTOCLIP_API_KEY=$AUTOCLIP_API_KEY`：shell 会先展开，把密钥明文写进 `~/.claude.json`。也可以不设这个变量，直接在桌面应用的设置里填模型密钥。
+
+**Cursor**（`~/.cursor/mcp.json`，或项目里的 `.cursor/mcp.json`）：
+
+```json
+{
+  "mcpServers": {
+    "autoclip": {
+      "command": "uvx",
+      "args": ["autoclip-mcp"],
+      "env": { "AUTOCLIP_API_KEY": "${env:AUTOCLIP_API_KEY}" }
+    }
+  }
+}
+```
+
+**Codex**（`~/.codex/config.toml`）：
+
+```toml
+[mcp_servers.autoclip]
+command = "uvx"
+args = ["autoclip-mcp"]
+env_vars = ["AUTOCLIP_API_KEY"]   # 从当前环境转发，不在配置文件里写明文密钥
+startup_timeout_sec = 120         # 默认 10 秒，第一次 uvx 下载依赖不够用
+tool_timeout_sec = 3600           # 默认 60 秒；clip_video 要几分钟，或改用 start_clip_job + get_job_status
+```
+
+模型密钥也可以在桌面应用的设置里填；已经用桌面应用保存过模型配置时，可以不传 `AUTOCLIP_API_KEY`。
+
+从源码安装时：
 
 **Cursor**（`~/.cursor/mcp.json`）或 **Claude Desktop**（`claude_desktop_config.json`）：
 

@@ -7,7 +7,7 @@
 
 ## [未发布]
 
-_（本周尚无改动）_
+- 发布 autoclip-mcp 时推送标签 `mcp-v<version>`。该标签走 pypi environment，只允许从 `mcp-v*` 部署。
 
 ## [1.5.7] - 2026-10-10
 
@@ -19,6 +19,14 @@ _（本周尚无改动）_
 
 - 拼接成片时转义路径里的空格和特殊字符，避免拼错片段。`pkg_templates_v1` 关闭时，经典渲染的 ffmpeg 命令与上一版保持一致。（#320）
 
+- 同时装了本地转写和人物识别组件时，自动取景不再因 numpy 版本冲突报错：人物识别组件加载失败时保持默认取景，并提示重新安装，不再返回 502。（#330，PYTHON-FASTAPI-40）
+
+- 人物识别组件加载失败后，不再把已加载的 numpy 一并卸掉。此前同一次运行里接着用本地 Whisper 转写会报 RecursionError，显示为「本地 Whisper 生成字幕失败」（1.5.7 Mac 验收发现，#331）。
+
+- 桌面安装包构建时，打包检查把按需安装的 playwright 列为可选运行时，不再因此中断构建；安装包里不带 playwright。（#329）
+
+- OpenAI 的 o 系列、gpt-5 及更新型号（如 gpt-6-luna）连接测试和分析不再报 400「max_tokens 不受支持」：这些型号改发 max_completion_tokens，其它接口收到同样的 400 时自动改用新参数重试一次。DeepSeek、百炼、Ollama 等兼容接口不受影响。Fixes #333（#334）
+
 - MCP 把任务状态写到数据目录。没有记录时状态是 unknown，工作进程已经不在时是 interrupted，不再把还在的项目目录当成已完成。可以取消正在进行的任务：停掉这条渲染，清掉临时文件，已完成的成片保留。可以列出剪辑风格。CLI 的 `--template` 和 MCP 的 `template` 接受杂志风、街头快剪或经典。取消、风格列表和 `--template` 默认关在 `mcp_v2_tools` 后面，该开关默认关闭。（#323）
 
 - 打开匿名使用统计后，CLI 和 MCP 会记录调用了哪个工具、是否成功和耗时，不包含路径、文件名或密钥。统计关闭时不发送。（#325）
@@ -26,6 +34,8 @@ _（本周尚无改动）_
 - 给助手用的说明改为按成片、封面、文案和发布包来使用；只要旧切片时改读参考说明。文档里的版本号改为读取已安装的包，不再写死。（#321 #322）
 
 - autoclip-mcp 随 1.5.7 发布到 PyPI，发布后可用 uvx。（#324）
+
+- autoclip-mcp 已发布到 PyPI，`uvx autoclip-mcp` 可以直接安装并启动 MCP server。文档补上 Claude Code、Cursor、Codex 的 uvx 配置，模型密钥都从环境变量 `AUTOCLIP_API_KEY` 读取，配置里不写明文。（#328）
 
 - 本版四个开关的默认值没有打开：`pkg_templates_v1`、`pkg_template_picker_visual`、`mcp_v2_tools` 默认关闭；`qa_gate_blocking` 默认 shadow，只记录、不拦截。
 

@@ -86,7 +86,10 @@ def ensure_on_path() -> None:
     """把运行时目录加入 sys.path，并把模型缓存目录收口到 HF_HOME。"""
     install_dir = str(get_install_dir())
     if install_dir not in sys.path:
-        sys.path.insert(0, install_dir)
+        # 人物识别目录（framing-runtime）要排在前面：两边各带一份 numpy，混用会让 cv2 导入失败（PYTHON-FASTAPI-40）。
+        framing_dir = str(_data_dir() / "framing-runtime")
+        index = sys.path.index(framing_dir) + 1 if framing_dir in sys.path else 0
+        sys.path.insert(index, install_dir)
     # 模型统一缓存到数据目录，便于管理/卸载
     os.environ.setdefault("HF_HOME", str(get_models_dir()))
     # 桌面端 stdout 往往不是控制台；tqdm 写 \r 进度条会 OSError / BrokenPipe
