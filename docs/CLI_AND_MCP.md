@@ -102,7 +102,7 @@ autoclip doctor
 autoclip run talk.mp4                                  # 用桌面应用设置页里配好的模型
 autoclip run talk.mp4 --provider ollama                # 本地 Ollama（默认 qwen2.5:7b，无需 key）
 autoclip run talk.mp4 --provider lmstudio --model qwen2.5-7b-instruct
-# 模型密钥用环境变量，不要写进命令：AUTOCLIP_API_KEY=sk-...
+# 模型密钥只放在环境变量 AUTOCLIP_API_KEY 里（先在 shell 里设置），不要写进命令
 autoclip run talk.mp4 --provider openai --base-url https://api.deepseek.com/v1 --model deepseek-chat
 autoclip run talk.mp4 --srt talk.srt --category knowledge --min-score 0.6
 autoclip run talk.mp4 --json                           # 给脚本 / agent：stdout 只有一个 JSON
@@ -154,15 +154,15 @@ autoclip publish --list-profiles                        # 已配置的 Upload-Po
 
 stdio 传输，依赖 `mcp` Python SDK（`requirements.txt` 已锁定；兼容 1.x `FastMCP` 与 2.x `MCPServer`）。
 
-用 `uvx` 启动（推荐）：`uvx autoclip-mcp` 不带参数就直接启动 stdio MCP server，不需要其他参数。第一次运行会下载依赖，可能要几十秒。模型密钥用环境变量 `AUTOCLIP_API_KEY` 传给 server，不要写进 args。
+用 `uvx` 启动（推荐）：`uvx autoclip-mcp` 不带参数就直接启动 stdio MCP server，不需要其他参数，一般写进客户端配置、由客户端启动。第一次运行会下载依赖，可能要几十秒。模型密钥用环境变量 `AUTOCLIP_API_KEY` 传给 server，不要写进 args。
 
-**Claude Code**（`--env` 写在名字后面、`--` 前面）：
+**Claude Code**：
 
 ```bash
-claude mcp add autoclip --env AUTOCLIP_API_KEY=$AUTOCLIP_API_KEY -- uvx autoclip-mcp
+claude mcp add-json autoclip '{"command":"uvx","args":["autoclip-mcp"],"env":{"AUTOCLIP_API_KEY":"${AUTOCLIP_API_KEY}"}}'
 ```
 
-命令里只引用 shell 里的 `$AUTOCLIP_API_KEY`，不要把明文密钥写进命令（会留在 shell 历史和 Claude Code 配置里）。也可以不设这个变量，直接在桌面应用的设置里填模型密钥。
+单引号让 `${AUTOCLIP_API_KEY}` 原样写进配置，Claude Code 启动 server 时再从环境变量展开，配置文件和 shell 历史里都没有明文密钥。不要用 `--env AUTOCLIP_API_KEY=$AUTOCLIP_API_KEY`：shell 会先展开，把密钥明文写进 `~/.claude.json`。也可以不设这个变量，直接在桌面应用的设置里填模型密钥。
 
 **Cursor**（`~/.cursor/mcp.json`，或项目里的 `.cursor/mcp.json`）：
 
@@ -178,7 +178,7 @@ claude mcp add autoclip --env AUTOCLIP_API_KEY=$AUTOCLIP_API_KEY -- uvx autoclip
 }
 ```
 
-**Codex**（`~/.codex/config.toml`；或 `codex mcp add autoclip --env AUTOCLIP_API_KEY=$AUTOCLIP_API_KEY -- uvx autoclip-mcp`）：
+**Codex**（`~/.codex/config.toml`）：
 
 ```toml
 [mcp_servers.autoclip]

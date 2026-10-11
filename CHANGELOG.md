@@ -35,6 +35,8 @@
 
 - autoclip-mcp 随 1.5.7 发布到 PyPI，发布后可用 uvx。（#324）
 
+- autoclip-mcp 已发布到 PyPI，`uvx autoclip-mcp` 可以直接安装并启动 MCP server。文档补上 Claude Code、Cursor、Codex 的 uvx 配置，模型密钥都从环境变量 `AUTOCLIP_API_KEY` 读取，配置里不写明文。（#328）
+
 - 本版四个开关的默认值没有打开：`pkg_templates_v1`、`pkg_template_picker_visual`、`mcp_v2_tools` 默认关闭；`qa_gate_blocking` 默认 shadow，只记录、不拦截。
 
 ## [1.5.6] - 2026-10-09
