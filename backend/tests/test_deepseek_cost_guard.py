@@ -85,7 +85,7 @@ def test_provider_call_leaves_official_openai_alone(monkeypatch):
     calls = _install_fake_openai(monkeypatch)
     from backend.core.llm_providers import OpenAIProvider
 
-    provider = OpenAIProvider(api_key="sk-openai-key", model_name="gpt-5-mini")
+    provider = OpenAIProvider(api_key="sk-openai-key", model_name="gpt-4o-mini")
     provider.call("hi", max_tokens=8)
     assert "extra_body" not in calls[0]
     assert calls[0]["max_tokens"] == 8
