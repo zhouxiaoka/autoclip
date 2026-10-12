@@ -11,6 +11,8 @@
 
 ## [1.5.7] - 2026-10-10
 
+- 来源守卫拒绝写请求时先读完请求体再回 403。此前客户端带 `Connection: close` 时，后端回完就关连接，请求体还没读，Windows 会直接重置连接，客户端拿不到 403，只看到 ConnectionAbortedError 10053；Windows 冒烟脚本因此报错并结束桌面应用，表现为桌面退出码 1（1.5.7 Windows 验收，W157-F5）。
+
 - 读不到素材时长和素材不足 1 秒分成两种提示、两个错误码（`source_unreadable` / `source_too_short`）。ffprobe 读不到时长时先用 ffmpeg 解码再读一次；仍读不到时把去掉路径的 ffprobe 报错写进日志和失败记录，并上报。（#345）
 
 - 导入页读取导入前检查结果时逐层做空值判断，返回值缺少 `checks` 或单项检查时不再报 TypeError。（AUTOCLIP-FRONTEND-C）
