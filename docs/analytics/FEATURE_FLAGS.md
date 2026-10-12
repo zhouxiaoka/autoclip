@@ -39,7 +39,7 @@
 
 `qa_gate_blocking` 按方案第 10.2 节先全量 shadow。构建默认值是 `shadow`，不是关闭。`block` 会被收下，但这一版和 `shadow` 一样只写报告。打开 `autoclip_safe_mode` 时，这一项一律变成 `off`，并且压过本地覆盖，也压过 `AUTOCLIP_FLAGS`：环境变量写了 `qa_gate_blocking=shadow` 或 `block` 仍然是 `off`。前端其他开关仍是本地覆盖优先；只有这一项，安全模式压过本地覆盖。
 
-1.5.7 起 `pkg_templates_v1` 和 `mcp_v2_tools` 默认打开（`true`），剪辑风格和 MCP 新工具对所有用户可用；`pkg_template_picker_visual` 仍默认关闭，此时导入页用文字选择器选风格，风格照样能选，卡片预览只是另一种外观。三个开关都保留：PostHog 远程值为 `false`、本机覆盖为关闭、或 `AUTOCLIP_FLAGS=pkg_templates_v1=off,mcp_v2_tools=off` 都能把它们关回去。统计关闭、没拉到远程开关、缓存过期时用构建默认值，也就是打开。打开 `autoclip_safe_mode` 后它们一律回到关闭（`SAFE_OFF` 表，前后端各一份），不是回到构建默认值，除非 `AUTOCLIP_FLAGS` 明确写了对应的 `=on`。本地覆盖仍然优先于安全模式；统计关闭时不会向 PostHog 请求这些开关。`mcp_v2_tools` 只影响 MCP 工具列表，不改变桌面导入页。事件契约见 [MCP / CLI 工具调用](MCP_TOOLS.md)。
+1.5.7 起 `pkg_templates_v1` 和 `mcp_v2_tools` 默认打开（`true`），剪辑风格和 MCP 新工具对所有用户可用；`pkg_template_picker_visual` 仍默认关闭，此时导入页用文字选择器选风格，风格照样能选，卡片预览只是另一种外观。三个开关都保留。`pkg_templates_v1` 和 `mcp_v2_tools` 这类默认打开的布尔开关，PostHog 远程值或本机缓存里的 `false` 一律不生效（远程只能打开，不能关闭；W157-F6）：远程开关只定向内部测试人群，其他人拿到的 `false` 会把已上线功能关掉。要关闭它们，用本机覆盖、`autoclip_safe_mode`，或 `AUTOCLIP_FLAGS=pkg_templates_v1=off,mcp_v2_tools=off`。统计关闭、没拉到远程开关、缓存过期时用构建默认值，也就是打开。打开 `autoclip_safe_mode` 后它们一律回到关闭（`SAFE_OFF` 表，前后端各一份），不是回到构建默认值，除非 `AUTOCLIP_FLAGS` 明确写了对应的 `=on`。本地覆盖仍然优先于安全模式；统计关闭时不会向 PostHog 请求这些开关。`mcp_v2_tools` 只影响 MCP 工具列表，不改变桌面导入页。事件契约见 [MCP / CLI 工具调用](MCP_TOOLS.md)。
 
 推荐、雷达、关注频道、手机交接这些开关还没有对应实现，没有放进默认表。
 
