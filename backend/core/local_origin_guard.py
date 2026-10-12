@@ -14,6 +14,7 @@ Docker 通过局域网 IP 或自定义域名访问时，用 AUTOCLIP_ALLOWED_ORI
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Iterable
 from urllib.parse import urlsplit
@@ -32,6 +33,9 @@ DEFAULT_ALLOWED_ORIGINS = (
 
 LOCAL_HOSTNAMES = {"127.0.0.1", "localhost", "::1", "[::1]"}
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+# 拒绝前最多读掉多少请求体、等多久（W157-F5）
+DRAIN_LIMIT_BYTES = 1024 * 1024
+DRAIN_TIMEOUT_SEC = 5.0
 
 
 def allowed_origins() -> list[str]:
@@ -97,8 +101,30 @@ class LocalOriginGuard:
         if scope["type"] == "websocket":
             await send({"type": "websocket.close", "code": 1008})
             return
+        # W157-F5：先读完请求体再回 403。客户端带 Connection: close（urllib 默认如此）时，
+        # uvicorn 回完就关连接；请求体还没读（或还在路上）时 Windows 会回 RST，
+        # 客户端拿不到 403，只看到 ConnectionAbortedError 10053 / 10054。
+        await _drain_body(receive)
         response = JSONResponse(
             status_code=403,
             content={"detail": "请求来源不被允许", "error_code": code},
         )
         await response(scope, receive, send)
+
+
+async def _drain_body(receive: Receive) -> None:
+    """读掉请求体（有上限、有超时），让服务端关连接时内核里没有未读数据。"""
+    async def drain() -> None:
+        total = 0
+        while True:
+            message = await receive()
+            if message.get("type") != "http.request":
+                return  # http.disconnect
+            total += len(message.get("body", b""))
+            if not message.get("more_body", False) or total > DRAIN_LIMIT_BYTES:
+                return
+
+    try:
+        await asyncio.wait_for(drain(), timeout=DRAIN_TIMEOUT_SEC)
+    except asyncio.TimeoutError:
+        pass
