@@ -11,6 +11,8 @@
 
 ## [1.5.7] - 2026-10-10
 
+- 打开匿名使用统计、又不在 PostHog 内部测试人群里的用户，导入页看不到剪辑风格选择。原因是远程开关 `pkg_templates_v1` 只给内部人群返回打开，其他人拿到的 `false` 盖过了默认打开的构建值，并写进 7 天缓存。现在默认打开的布尔开关（`pkg_templates_v1`、`mcp_v2_tools`）忽略远程和缓存里的 `false`；本机覆盖和安全模式仍能关闭。（W157-F6）
+
 - 读不到素材时长和素材不足 1 秒分成两种提示、两个错误码（`source_unreadable` / `source_too_short`）。ffprobe 读不到时长时先用 ffmpeg 解码再读一次；仍读不到时把去掉路径的 ffprobe 报错写进日志和失败记录，并上报。（#345）
 
 - 导入页读取导入前检查结果时逐层做空值判断，返回值缺少 `checks` 或单项检查时不再报 TypeError。（AUTOCLIP-FRONTEND-C）
