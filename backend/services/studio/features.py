@@ -25,10 +25,11 @@ DEFAULTS: dict[str, bool | str] = {
     'track_overrides': False,
     # Plan §10.2 starts this gate at full shadow. block is accepted and not enforced.
     'qa_gate_blocking': 'shadow',
-    # 1.5.7: editing styles ship on. Remote PostHog, a local override or
-    # AUTOCLIP_FLAGS=...=off still turn them off; safe mode forces them off.
+    # 1.5.7: editing styles and the visual picker ship on. Remote PostHog, a
+    # local override or AUTOCLIP_FLAGS=...=off still turn them off; safe mode
+    # forces them off.
     'pkg_templates_v1': True,
-    'pkg_template_picker_visual': False,
+    'pkg_template_picker_visual': True,
     'mcp_v2_tools': True,
 }
 

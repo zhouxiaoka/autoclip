@@ -2,16 +2,13 @@
  * Typed feature flags. Remote values are read only while analytics is on.
  * Analytics off, offline-without-consent, and a missing key all resolve to the
  * build default in flags.defaults.json (plus an explicit local override). Most
- * defaults are off; pkg_templates_v1 and mcp_v2_tools ship on in 1.5.7.
+ * defaults are off; pkg_templates_v1, pkg_template_picker_visual and
+ * mcp_v2_tools ship on in 1.5.7. Remote and cached values (including false)
+ * still win over the build default, so PostHog targeting must include >=1.5.7
+ * users (app_version person property) for these to stay on.
  *
  * Priority: local override → autoclip_safe_mode → PostHog (analytics on) →
  * dev VITE_FLAGS → 7-day cache (analytics on) → build default.
- *
- * Boolean flags whose build default is true (pkg_templates_v1, mcp_v2_tools)
- * are "remote may enable, never disable": a PostHog or cached `false` is
- * ignored and the build default wins. Their remote flags only target an
- * internal cohort, so everyone else would get `false` and lose a shipped
- * feature (W157-F6). Turn them off with a local override or safe mode.
  */
 import { useSyncExternalStore } from 'react'
 import defaultsJson from './flags.defaults.json'
@@ -161,24 +158,13 @@ function viteValue(name: FlagName): FlagValue | undefined {
   return undefined
 }
 
-/** Boolean flags that ship on. A remote or cached `false` must not turn them off. */
-export function isShippedOn(name: FlagName): boolean {
-  return FLAG_SPEC[name].kind === 'boolean' && FLAG_DEFAULTS[name] === true
-}
-
-/** Drops values that remote / cache must not apply (false for a shipped-on flag). */
-function remoteAllowed(name: FlagName, value: FlagValue | undefined): FlagValue | undefined {
-  if (value === false && isShippedOn(name)) return undefined
-  return value
-}
-
 function readCache(name: FlagName): FlagValue | undefined {
   const raw = readJson(CACHE_KEY)
   const savedAt = raw?.savedAt
   const values = raw?.values
   if (typeof savedAt !== 'number' || !values || typeof values !== 'object' || Array.isArray(values)) return undefined
   if (clock() - savedAt > CACHE_TTL_MS || savedAt > clock()) return undefined
-  return remoteAllowed(name, normalizeFlag(name, (values as Record<string, unknown>)[name]))
+  return normalizeFlag(name, (values as Record<string, unknown>)[name])
 }
 
 function rememberCache(name: FlagName, value: FlagValue) {
@@ -195,7 +181,7 @@ function rememberCache(name: FlagName, value: FlagValue) {
 
 function remoteValue(name: FlagName): FlagValue | undefined {
   if (!isAnalyticsEnabled()) return undefined
-  const value = remoteAllowed(name, normalizeFlag(name, readLoadedFlag(name)))
+  const value = normalizeFlag(name, readLoadedFlag(name))
   if (value === undefined) return undefined
   rememberCache(name, value)
   return value

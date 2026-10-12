@@ -101,8 +101,35 @@ export function readLoadedFlag(name: string): unknown {
   }
 }
 
+/**
+ * Properties PostHog evaluates flags against. `app_version` is the desktop
+ * version as plain MAJOR.MINOR.PATCH (e.g. "1.5.7") so release conditions can
+ * use the semver operators (`app_version` >= 1.5.7). Sent as flag-only person
+ * properties (no person profile is created; person_profiles stays
+ * identified_only) and registered as a super property for events.
+ */
+export function flagPersonProperties(): { app_version: string } {
+  const raw = String(import.meta.env.VITE_APP_VERSION || '').trim().replace(/^v/i, '')
+  return { app_version: raw || 'unknown' }
+}
+
+type FlagPropsTarget = {
+  register?: (props: Properties) => void
+  setPersonPropertiesForFlags?: (props: Properties, reload?: boolean) => void
+}
+
+function applyFlagProperties(target: FlagPropsTarget) {
+  try {
+    const props = flagPersonProperties()
+    target.register?.(props)
+    // reload=false: callers either run before the first flag request (loaded) or reload right after.
+    target.setPersonPropertiesForFlags?.(props, false)
+  } catch { /* analytics cannot break the app */ }
+}
+
 function enableFlagNetwork() {
   flagsNetworkEnabled = true
+  applyFlagProperties(posthog)
   try {
     posthog.set_config?.({ advanced_disable_flags: false })
     posthog.featureFlags?.setReloadingPaused?.(false)
@@ -184,6 +211,8 @@ export function initAnalytics(): void {
     // 尊重用户在本机的关闭偏好
     opt_out_capturing_by_default: !isAnalyticsEnabled(),
     loaded: (ph) => {
+      // Runs before posthog-js issues its first flag request, so that request already carries app_version.
+      applyFlagProperties(ph)
       try { ph.onFeatureFlags?.(() => notifyRemoteFlags()) } catch { /* flags are optional */ }
       publishAnonymousId()
       if (import.meta.env.DEV) ph.debug()
