@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "source_too_short", "source_no_audio", "service_restarted"}
+STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "source_too_short", "source_no_audio", "source_unreadable", "service_restarted"}
 # Expected failures caused by the environment or by the user's own source (too short,
 # no audio track): never sent to Sentry, still recorded locally with their code.
 UNREPORTED_STUDIO_ERROR_CODES = {"source_blocked", "source_too_short", "source_no_audio", "service_restarted"}
@@ -275,6 +275,9 @@ def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None
                 scope.set_tag("analysis_mode", analysis_mode)
             if goal:
                 scope.set_tag("goal", goal)
+            detail = getattr(error, "probe_detail", None)
+            if isinstance(detail, str) and detail:
+                scope.set_context("source_probe", {"stderr_tail": detail[-600:]})
             return sentry_sdk.capture_exception(error)
     except Exception:
         return None

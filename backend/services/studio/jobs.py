@@ -1559,6 +1559,8 @@ def _inspect(project_id, options, url, browser):
         logger.warning('Studio screening failed: %s', type(error).__name__)
         capture_studio_exception(error, 'screening')
         failure = {'status':'failed','phase':'screening','error':str(error)[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
+        if getattr(error, 'probe_detail', None):
+            failure['probe_detail'] = error.probe_detail
         context = studio_failure_context(error, 'screening')
         try:
             def fail_screening(data):

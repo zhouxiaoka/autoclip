@@ -72,9 +72,11 @@ def _subtitle_blockers(video: Path, duration: float, options: ImportOptions, con
 
 def recommend(video: Path, options: ImportOptions):
     info = intelligence._probe(video)
-    duration = info.get('duration', 0)
-    if duration < 1:
-        raise ValueError('素材时长无法读取或不足 1 秒')
+    from backend.pipeline import media_precheck
+    # #345: "unreadable" and "under 1 s" are different failures with their own codes;
+    # an unreadable probe is retried with an ffmpeg decode before failing.
+    duration = media_precheck.duration_or_fail(video, info.get('duration'))
+    info = {**info, 'duration': duration}
     consent = analysis_preferences.load()
     configured = intelligence.ready()
     short, no_audio = _subtitle_blockers(video, duration, options, consent, configured)

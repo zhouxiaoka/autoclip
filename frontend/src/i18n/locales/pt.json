@@ -1646,5 +1646,7 @@
   "安装失败：网络连不上 pip 源。请检查网络或代理后重试；也可以设置环境变量 PIP_INDEX_URL 指定可用的源。": "Falha na instalação: não foi possível acessar o índice do pip. Verifique sua rede ou proxy e tente novamente, ou defina a variável de ambiente PIP_INDEX_URL com um índice acessível.",
   "安装失败：下载超时。请检查网络后重试。": "Falha na instalação: o download expirou. Verifique sua rede e tente novamente.",
   "安装失败：没有拿到预编译包，已停止从源码编译。请检查网络后重试。": "Falha na instalação: nenhum pacote pré-compilado foi obtido, então a compilação a partir do código-fonte foi interrompida. Verifique sua rede e tente novamente.",
-  "安装已取消": "Instalação cancelada"
+  "安装已取消": "Instalação cancelada",
+  "无法读取这个视频的时长，文件可能已损坏、格式不受支持，或路径里有特殊字符。请换一个文件，或先用其他软件转成 MP4 后重新导入。": "Não foi possível ler a duração deste vídeo. O arquivo pode estar danificado, em um formato não suportado ou o caminho pode conter caracteres especiais. Tente outro arquivo ou converta-o para MP4 em outro aplicativo e importe novamente.",
+  "视频太短：不到 1 秒，无法制作。请换一段更长的视频。": "Este vídeo é curto demais: com menos de 1 segundo, não é possível criar nada. Use um vídeo mais longo."
 }
