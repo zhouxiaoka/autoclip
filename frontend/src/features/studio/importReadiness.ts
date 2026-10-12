@@ -12,12 +12,13 @@ export interface ReadinessCheck {
 export interface ImportReadiness {
   analysis_mode: AnalysisMode
   ready: boolean
-  checks: {
-    analysis: ReadinessCheck
-    transcription: ReadinessCheck
-    visual: ReadinessCheck
-    ffmpeg: ReadinessCheck
-  }
+  /** Older or partial backends may omit the object or single checks (AUTOCLIP-FRONTEND-C). */
+  checks?: {
+    analysis?: ReadinessCheck | null
+    transcription?: ReadinessCheck | null
+    visual?: ReadinessCheck | null
+    ffmpeg?: ReadinessCheck | null
+  } | null
 }
 
 export interface ReadinessIssue extends ReadinessCheck {
@@ -32,18 +33,20 @@ const ORDER = ['analysis', 'transcription', 'visual', 'ffmpeg'] as const
 export function submissionBlock(report: ImportReadiness | null, hasSubtitle: boolean, settled: boolean): BlockReason | null {
   if (!settled) return 'pending'
   if (!report) return null
-  if (!report.checks.analysis.ok) return 'analysis'
-  if (!report.checks.transcription.ok && !hasSubtitle) return 'transcription'
-  if (!report.checks.visual.ok) return 'visual'
-  if (!report.checks.ffmpeg.ok) return 'ffmpeg'
+  // A missing check is unknown, not failed: it never traps the user (same as a failed probe).
+  const checks = report.checks
+  if (checks?.analysis?.ok === false) return 'analysis'
+  if (checks?.transcription?.ok === false && !hasSubtitle) return 'transcription'
+  if (checks?.visual?.ok === false) return 'visual'
+  if (checks?.ffmpeg?.ok === false) return 'ffmpeg'
   return null
 }
 
 export function visibleIssues(report: ImportReadiness | null, hasSubtitle: boolean): ReadinessIssue[] {
   if (!report) return []
   return ORDER.flatMap(key => {
-    const check = report.checks[key]
-    if (check.ok || (key === 'transcription' && hasSubtitle)) return []
+    const check = report.checks?.[key]
+    if (!check || check.ok || (key === 'transcription' && hasSubtitle)) return []
     return [{ key, ...check }]
   })
 }

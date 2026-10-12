@@ -70,7 +70,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     return () => { cancel = true }
   }, [])
   useEffect(() => {
-    const check = readiness?.checks.transcription
+    const check = readiness?.checks?.transcription
     if (check?.code === 'whisper_model_missing' && check.model && modelAfterRuntime.current) {
       modelAfterRuntime.current = false
       void downloadModel(check.model)
@@ -82,7 +82,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       studioApi.readiness().then(setReadiness).catch(() => undefined)
     }, 2000)
     return () => window.clearInterval(timer)
-  }, [readiness?.checks.transcription.code])
+  }, [readiness?.checks?.transcription?.code])
   const issues = visibleIssues(readiness, !!subtitle)
   const downloadModel = async (model: string) => {
     setRepairing(true)

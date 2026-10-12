@@ -1646,5 +1646,7 @@
   "安装失败：网络连不上 pip 源。请检查网络或代理后重试；也可以设置环境变量 PIP_INDEX_URL 指定可用的源。": "Install failed: could not reach the pip index. Check your network or proxy and try again, or set the PIP_INDEX_URL environment variable to an index that works.",
   "安装失败：下载超时。请检查网络后重试。": "Install failed: the download timed out. Check your network and try again.",
   "安装失败：没有拿到预编译包，已停止从源码编译。请检查网络后重试。": "Install failed: no prebuilt package was available, so building from source was stopped. Check your network and try again.",
-  "安装已取消": "Install cancelled"
+  "安装已取消": "Install cancelled",
+  "无法读取这个视频的时长，文件可能已损坏、格式不受支持，或路径里有特殊字符。请换一个文件，或先用其他软件转成 MP4 后重新导入。": "Couldn't read this video's duration. The file may be damaged, in an unsupported format, or its path may contain special characters. Try another file, or convert it to MP4 with another app and import again.",
+  "视频太短：不到 1 秒，无法制作。请换一段更长的视频。": "This video is too short: under 1 second, nothing can be made from it. Please use a longer video."
 }

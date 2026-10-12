@@ -184,3 +184,23 @@ test('an installed runtime without its model offers the model download, not anot
   await button(unready.tree, '生成成片').props.onClick()
   assert.equal(unready.calls.length, 0)
 })
+
+test('AUTOCLIP-FRONTEND-C: a readiness report without checks or transcription does not throw', () => {
+  for (const partial of [
+    { analysis_mode: 'auto', ready: false },
+    { analysis_mode: 'auto', ready: false, checks: null },
+    { analysis_mode: 'auto', ready: false, checks: {} },
+    { analysis_mode: 'auto', ready: false, checks: { analysis: check(true, 'configured', 'none') } },
+  ]) {
+    assert.equal(readiness.visibleIssues(partial, false).length, 0)
+    assert.equal(readiness.submissionBlock(partial, false, true), null)
+  }
+  const onlyFfmpeg = { analysis_mode: 'auto', ready: false, checks: { ffmpeg: check(false, 'ffmpeg_missing', 'none') } }
+  assert.equal(readiness.submissionBlock(onlyFfmpeg, false, true), 'ffmpeg')
+  assert.equal(readiness.visibleIssues(onlyFfmpeg, false).map(item => item.key).join(','), 'ffmpeg')
+})
+
+test('CreativeImport reads readiness transcription with optional chaining at every level', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/CreativeImport.tsx'), 'utf8')
+  assert.doesNotMatch(source, /readiness\?\.checks\.|checks\?\.transcription\.code/)
+})
