@@ -615,3 +615,42 @@ test('portrait import and saved outro preference retain explicit enums and confi
  const late=experience.beginExperience('output_branding_save',{brand_outro_enabled:true});const n=s.events.length;s.tracker.clear();late('completed')
  assert.equal(s.events.length,n);assert.equal(JSON.stringify(props).includes('private'),false)
 })
+
+test('every flag evaluation carries app_version as a semver flag person property', () => {
+  const storage = memory()
+  const calls = []
+  const sdk = {
+    init(_key, cfg) { calls.push(['init']); cfg.loaded?.(sdk) },
+    capture() { return {} },
+    opt_out_capturing() {}, opt_in_capturing() {},
+    set_config() {},
+    register(props) { calls.push(['register', props.app_version]) },
+    setPersonPropertiesForFlags(props, reload) { calls.push(['flagprops', props.app_version, reload]) },
+    reloadFeatureFlags() { calls.push(['reload']) },
+    featureFlags: { setReloadingPaused() {}, getFlagVariants() { return {} } },
+    onFeatureFlags() {},
+  }
+  const file = path.join(__dirname, '../src/analytics/posthog.ts')
+  const source = fs.readFileSync(file, 'utf8').replaceAll('import.meta.env', '__env')
+  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
+  const module = { exports: {} }
+  vm.runInNewContext(js, { exports: module.exports, module, console, localStorage: storage, window: {},
+    __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key', VITE_APP_VERSION: 'v1.5.7' },
+    require: (id) => {
+      if (id === 'posthog-js') return { __esModule: true, default: sdk }
+      if (id === './workflow') return core
+      if (id === '../utils/apiConfig') return { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener: () => () => {} } }
+      throw new Error(`Unexpected dependency: ${id}`)
+    } }, { filename: file })
+  const ph = module.exports
+  assert.equal(JSON.stringify(ph.flagPersonProperties()), '{"app_version":"1.5.7"}')
+  ph.initAnalytics()
+  // Set inside loaded, before the SDK's first flag request, without an extra reload.
+  assert.equal(JSON.stringify(calls.slice(0, 3)), JSON.stringify([['init'], ['register', '1.5.7'], ['flagprops', '1.5.7', false]]))
+  ph.setAnalyticsEnabled(false)
+  calls.length = 0
+  ph.setAnalyticsEnabled(true)
+  const props = calls.findIndex(call => call[0] === 'flagprops')
+  const reload = calls.findIndex(call => call[0] === 'reload')
+  assert.ok(props >= 0 && reload > props, JSON.stringify(calls))
+})

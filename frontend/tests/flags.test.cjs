@@ -44,7 +44,7 @@ function load(options = {}) {
   return { flags: module.exports, calls, storage, remote, setAnalytics: value => { enabled = value } }
 }
 
-const DEFAULT_ON = ['pkg_templates_v1', 'mcp_v2_tools']
+const DEFAULT_ON = ['pkg_templates_v1', 'pkg_template_picker_visual', 'mcp_v2_tools']
 
 test('build defaults: off except the 1.5.7 default-on features', () => {
   const { flags } = load()
@@ -159,18 +159,18 @@ test('invalid overrides are dropped and the snapshot stays enumerable', () => {
   assert.equal(storage.getItem('autoclip.flags.overrides.v1'), null)
 })
 
-test('default-on styles stay on with analytics off and turn off locally or in safe mode', () => {
+test('default-on styles stay on with analytics off and turn off remotely, locally or in safe mode', () => {
   const off = load({ analytics: false, remote: { pkg_templates_v1: false } })
   assert.equal(off.flags.flagEnabled('pkg_templates_v1'), true)
   assert.equal(off.flags.flagEnabled('mcp_v2_tools'), true)
-  assert.equal(off.flags.flagEnabled('pkg_template_picker_visual'), false)
+  assert.equal(off.flags.flagEnabled('pkg_template_picker_visual'), true)
   assert.equal(off.calls.length, 0)
   assert.equal(off.flags.featureSnapshot().pkg_templates_v1, true)
   const unfetched = load({ analytics: true, remote: {} })
   assert.equal(unfetched.flags.flagEnabled('pkg_templates_v1'), true)
   const remote = load({ analytics: true, remote: { pkg_templates_v1: false, mcp_v2_tools: false } })
-  assert.equal(remote.flags.flagEnabled('pkg_templates_v1'), true)
-  assert.equal(remote.flags.flagEnabled('mcp_v2_tools'), true)
+  assert.equal(remote.flags.flagEnabled('pkg_templates_v1'), false)
+  assert.equal(remote.flags.flagEnabled('mcp_v2_tools'), false)
   const local = load({ analytics: false })
   local.flags.setFlagOverride('pkg_templates_v1', false)
   assert.equal(local.flags.flagEnabled('pkg_templates_v1'), false)
@@ -181,43 +181,17 @@ test('default-on styles stay on with analytics off and turn off locally or in sa
   assert.equal(safe.flags.flagOrigin('pkg_templates_v1'), 'safe_mode')
 })
 
-test('W157-F6: remote false from a cohort-only PostHog flag does not hide shipped-on features', () => {
-  const now = () => 1_700_000_000_000
-  const { flags, storage } = load({ analytics: true, now, remote: { pkg_templates_v1: false, mcp_v2_tools: 'false', remember_platforms: false } })
-  assert.equal(flags.flagValue('pkg_templates_v1'), true)
-  assert.equal(flags.flagEnabled('mcp_v2_tools'), true)
-  assert.equal(flags.flagOrigin('pkg_templates_v1'), 'default')
-  assert.equal(flags.flagAssigned('pkg_templates_v1'), false)
-  assert.equal(flags.featureSnapshot().pkg_templates_v1, true)
-  // default-off flags still take a remote false
-  assert.equal(flags.flagOrigin('remember_platforms'), 'remote')
-  const cache = JSON.parse(storage.getItem('autoclip.flags.cache.v1') || '{"values":{}}')
-  assert.equal(cache.values.pkg_templates_v1, undefined)
-  assert.equal(cache.values.mcp_v2_tools, undefined)
-})
-
-test('W157-F6: a stale cached false from 1.5.6 / earlier 1.5.7 builds is ignored', () => {
+test('visual style picker ships on by default and remote, cache, override or safe mode can turn it off', () => {
   const t = 1_700_000_000_000
+  assert.equal(load({ analytics: true, remote: {} }).flags.flagEnabled('pkg_template_picker_visual'), true)
   const storage = memory()
-  storage.setItem('autoclip.flags.cache.v1', JSON.stringify({ savedAt: t - 1000, values: { pkg_templates_v1: false, mcp_v2_tools: false, render_top_first: 'top3' } }))
-  const { flags } = load({ analytics: true, remote: {}, storage, now: () => t })
-  assert.equal(flags.flagEnabled('pkg_templates_v1'), true)
-  assert.equal(flags.flagEnabled('mcp_v2_tools'), true)
-  assert.equal(flags.flagOrigin('pkg_templates_v1'), 'default')
-  assert.equal(flags.flagValue('render_top_first'), 'top3')
-})
-
-test('W157-F6: remote true for a shipped-on flag still counts as an assignment', () => {
-  const { flags } = load({ analytics: true, remote: { pkg_templates_v1: true } })
-  assert.equal(flags.flagEnabled('pkg_templates_v1'), true)
-  assert.equal(flags.flagOrigin('pkg_templates_v1'), 'remote')
-})
-
-test('W157-F6: local override and safe mode can still turn shipped-on flags off with analytics on', () => {
-  const local = load({ analytics: true, remote: { pkg_templates_v1: true } })
-  local.flags.setFlagOverride('pkg_templates_v1', false)
-  assert.equal(local.flags.flagEnabled('pkg_templates_v1'), false)
-  const safe = load({ analytics: true, remote: { autoclip_safe_mode: true, pkg_templates_v1: true } })
-  assert.equal(safe.flags.flagEnabled('pkg_templates_v1'), false)
-  assert.equal(safe.flags.flagEnabled('mcp_v2_tools'), false)
+  storage.setItem('autoclip.flags.cache.v1', JSON.stringify({ savedAt: t - 1000, values: { pkg_template_picker_visual: false } }))
+  assert.equal(load({ analytics: true, remote: {}, storage, now: () => t }).flags.flagEnabled('pkg_template_picker_visual'), false)
+  const remote = load({ analytics: true, remote: { pkg_template_picker_visual: false } })
+  assert.equal(remote.flags.flagEnabled('pkg_template_picker_visual'), false)
+  assert.equal(remote.flags.flagOrigin('pkg_template_picker_visual'), 'remote')
+  assert.equal(load({ analytics: true, remote: { autoclip_safe_mode: true } }).flags.flagEnabled('pkg_template_picker_visual'), false)
+  const local = load({ analytics: false })
+  local.flags.setFlagOverride('pkg_template_picker_visual', false)
+  assert.equal(local.flags.flagEnabled('pkg_template_picker_visual'), false)
 })

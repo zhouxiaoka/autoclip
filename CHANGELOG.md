@@ -13,7 +13,7 @@
 
 - 来源守卫拒绝写请求时先读完请求体再回 403。此前客户端带 `Connection: close` 时，后端回完就关连接，请求体还没读，Windows 会直接重置连接，客户端拿不到 403，只看到 ConnectionAbortedError 10053；Windows 冒烟脚本因此报错并结束桌面应用，表现为桌面退出码 1（1.5.7 Windows 验收，W157-F5）。
 
-- 打开匿名使用统计、又不在 PostHog 内部测试人群里的用户，导入页看不到剪辑风格选择。原因是远程开关 `pkg_templates_v1` 只给内部人群返回打开，其他人拿到的 `false` 盖过了默认打开的构建值，并写进 7 天缓存。现在默认打开的布尔开关（`pkg_templates_v1`、`mcp_v2_tools`）忽略远程和缓存里的 `false`；本机覆盖和安全模式仍能关闭。（W157-F6）
+- 桌面端向 PostHog 请求功能开关时带上 `app_version`（如 `1.5.7`，纯 `主.次.补丁` 格式），远程开关可以按版本定向（例如 `app_version` 大于等于 1.5.7，semver）。远程值和本机缓存仍优先于构建默认值，包括 `false`；1.5.7 默认打开的开关需要在 PostHog 里把 1.5.7 及以上版本定向为打开。（W157-F6，撤回 #348 的“远程不能关闭”规则）
 
 - 读不到素材时长和素材不足 1 秒分成两种提示、两个错误码（`source_unreadable` / `source_too_short`）。ffprobe 读不到时长时先用 ffmpeg 解码再读一次；仍读不到时把去掉路径的 ffprobe 报错写进日志和失败记录，并上报。（#345）
 
@@ -21,7 +21,7 @@
 
 - 新增杂志风和街头快剪两种 HTML 剪辑风格。得分靠前的竖版成片可以用所选风格，其余仍走经典包装；风格组件没装好或叠加失败时回到经典，不挡住出片。硬件编码不可用时改用原来的软件编码。开关 `pkg_templates_v1` 默认打开（#335），关掉后出片方式与上一版相同。（#314 #315 #316 #317）
 
-- 导入页可以改用剪辑风格卡片选择杂志风、街头快剪或经典，悬停时播放一段无声预览。开关 `pkg_template_picker_visual` 默认关闭，关闭时用文字选项选剪辑风格。（#319）
+- 导入页用剪辑风格卡片选择杂志风、街头快剪或经典，悬停时播放一段无声预览。开关 `pkg_template_picker_visual` 默认打开；预览视频和封面图都打包在安装包里，离线可用，预览加载失败时显示静态封面。关掉开关时用文字选项选剪辑风格。（#319）
 
 - 成片质检默认只记录、不拦截。开关 `qa_gate_blocking` 默认 shadow。（#318）
 
@@ -61,7 +61,7 @@
 
 - autoclip-mcp 已发布到 PyPI，`uvx autoclip-mcp` 可以直接安装并启动 MCP server。文档补上 Claude Code、Cursor、Codex 的 uvx 配置，模型密钥都从环境变量 `AUTOCLIP_API_KEY` 读取，配置里不写明文。（#328）
 
-- 剪辑风格默认打开：`pkg_templates_v1` 和 `mcp_v2_tools` 默认打开，关闭匿名统计或没拉到远程开关时也是打开；PostHog 远程值、本机覆盖或 `AUTOCLIP_FLAGS=...=off` 可以关回去，安全模式 `autoclip_safe_mode` 会把它们关掉。`pkg_template_picker_visual` 仍默认关闭，导入页用文字选项选风格。`qa_gate_blocking` 默认 shadow，只记录、不拦截。导入页默认选杂志风；CLI 不带 `--template`、MCP 不传 `template` 时默认经典，两边默认值有意不同，见 docs/CLI_AND_MCP.md。（#335）
+- 剪辑风格默认打开：`pkg_templates_v1`、`pkg_template_picker_visual` 和 `mcp_v2_tools` 默认打开，关闭匿名统计或没拉到远程开关时也是打开。PostHog 远程值（含 `false`）、本机覆盖或 `AUTOCLIP_FLAGS=...=off` 可以关回去，安全模式 `autoclip_safe_mode` 会把它们关掉。导入页默认用风格卡片选风格。`qa_gate_blocking` 默认 shadow，只记录、不拦截。导入页默认选杂志风；CLI 不带 `--template`、MCP 不传 `template` 时默认经典，两边默认值有意不同，见 docs/CLI_AND_MCP.md。（#335）
 
 - 杂志风和街头快剪的标题、字幕在任何画面上都看得清：文字改成浅色，加细描边和短投影（不发光）；有标题或字幕时，背后垫一层深色渐变。未念到的字幕词保持 0.82 的不透明度，不再发暗。模板金样和对比度测试同步更新。杂志风标题按行换行，不再把两行标题拼成一句。（#335）
 

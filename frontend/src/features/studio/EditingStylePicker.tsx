@@ -378,6 +378,15 @@ export default function EditingStylePicker({
               preload="auto"
               aria-hidden="true"
               poster={STYLE_POSTERS[id]}
+              onError={event => {
+                // Missing or undecodable preview: hide the video so the static poster <img> shows.
+                const node = event.currentTarget
+                node.classList.remove('is-playing')
+                node.dataset.show = '0'
+                if (reportedFail.current.has(id)) return
+                reportedFail.current.add(id)
+                trackTemplatePreviewFailed({ template: id, error_kind: node.error?.code === 4 ? 'unsupported' : 'decode' })
+              }}
               onPlaying={event => {
                 if (event.currentTarget.dataset.show === '1') event.currentTarget.classList.add('is-playing')
               }}
