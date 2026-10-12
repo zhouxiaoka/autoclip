@@ -1,5 +1,6 @@
 import { t } from '../i18n'
 import { useTranslation } from 'react-i18next'
+import { pipInstallErrorText } from '../utils/pipInstallError'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Popconfirm, Select, message } from 'antd'
 import { speechApi, WhisperRuntimeStatus, WhisperModel } from '../services/api'
@@ -128,7 +129,7 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = ({ selec
         options={(models.length ? models.map(m => ({ value: m.name, label: `${m.name} · ${m.size}` })) : ['tiny', 'base', 'small', 'medium', 'large-v3'].map(name => ({ value: name, label: name })))}
         onChange={onModelChange} />
     </Row>
-    <Row label={ready ? t('模型已就绪') : t('准备本地模型')} hint={ready ? t('保存设置后，新任务将使用这个模型。') : runtime?.status === 'error' ? runtime.message : selected?.status === 'error' && installed ? selected.errorMessage : t('首次使用需下载模型和必要组件，之后可在本机转写。')}>
+    <Row label={ready ? t('模型已就绪') : t('准备本地模型')} hint={ready ? t('保存设置后，新任务将使用这个模型。') : runtime?.status === 'error' ? pipInstallErrorText(t, runtime) : selected?.status === 'error' && installed ? selected.errorMessage : t('首次使用需下载模型和必要组件，之后可在本机转写。')}>
       {ready ? <StatusDot tone="ok" label={t('已就绪')} /> : installing || downloading || preparing ? <div style={{ width: 220 }}>
         <ProgressLine percent={installing ? runtime?.progress ?? 5 : selected?.downloadProgress ?? 0} />
         <span className="ac-hint">{installing ? t('正在准备组件…') : t('正在下载模型…')}</span>

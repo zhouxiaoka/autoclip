@@ -44,7 +44,7 @@ def test_progress_parses_pip_output():
     assert percents == sorted(percents) and percents[0] > 5 and percents[-1] == 98
     assert "从清华镜像下载 opencv_python_headless（38.9 MB）" in steps[2][1]
     assert "已下载 2/2 个包，共 51.5 MB" in steps[4][1]
-    assert steps[5][1] == "正在安装依赖…"
+    assert steps[5][1] == "正在安装依赖（清华镜像）…"
 
 
 def test_progress_handles_kb_and_unsized_lines():

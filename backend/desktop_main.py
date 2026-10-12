@@ -321,6 +321,9 @@ def main():
     
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+    # pip children never outlive the backend (registry + atexit + chained SIGTERM/SIGINT).
+    from backend.services import child_guard
+    child_guard.install_hooks()
     
     try:
         # 启动服务

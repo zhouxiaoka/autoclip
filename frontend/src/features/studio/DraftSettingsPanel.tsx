@@ -1,5 +1,6 @@
 import { Select, Switch } from 'antd'
 import { t } from '../../i18n'
+import { pipInstallErrorText } from '../../utils/pipInstallError'
 import { Btn, ProgressLine, Row, Segmented, StatusDot } from '../../ui'
 import { CropPoint, Draft, FramingStatus, Scene, cropAt, frameModeAt, languages, shotIndexAt, subtitleStyles } from './types'
 import { titlePresets, titleVersions, isArtworkStyle, titleDesignThumbnails } from './titlePresets'
@@ -90,7 +91,7 @@ export default function DraftSettingsPanel({ draft, patch, scene, currentTime, o
         : t("拖动调整当前镜头的取景位置。")}>
         {runtime === 'not_installed' && <Btn size="sm" onClick={onInstallFraming}>{t("下载并自动取景")}</Btn>}
         {runtime === 'installing' && <ProgressLine percent={framing.status?.progress ?? 5} />}
-        {runtime === 'error' && <StatusDot tone="error" label={framing.status?.message} />}
+        {runtime === 'error' && <StatusDot tone="error" label={pipInstallErrorText(t, framing.status)} />}
         {runtime === 'error' && <Btn size="sm" onClick={onInstallFraming}>{t("重新安装")}</Btn>}
         {runtime === 'installed' && !framing.busy && <Btn size="sm" onClick={onAutoFrame}>{framing.result ? t("重新自动取景") : t("自动取景")}</Btn>}
         {scene && <div className="studio-shot-controls">
