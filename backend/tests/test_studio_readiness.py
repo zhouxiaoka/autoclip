@@ -226,3 +226,16 @@ def test_generic_compatible_gateway_still_needs_an_explicit_choice(monkeypatch):
     settings = document(connections=[gateway], analysis_mode='visual',
                         analysis=Assignment(connection_id='ai', model='gpt-6.1-sol', capability='auto'))
     assert report_for(monkeypatch, settings)['checks']['visual']['code'] == 'not_configured'
+
+
+def test_completed_download_flips_readiness_immediately(monkeypatch, isolated):
+    # W157 IA: right after the download thread reports "downloaded", readiness must say installed.
+    from backend.services.whisper_model_manager import get_model_manager
+    small = document(transcription=Transcription(model='small'))
+    manager = get_model_manager()
+    manager._download_state['small'] = {'status': 'downloaded', 'progress': 100, 'error': None}
+    try:
+        assert report_for(monkeypatch, small)['checks']['transcription'] == {
+            'ok': True, 'code': 'whisper_installed', 'repair': 'none'}
+    finally:
+        manager._download_state.pop('small', None)
