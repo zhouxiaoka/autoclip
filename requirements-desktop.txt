@@ -1,0 +1,4 @@
+# Desktop-only extras installed into the portable Python by scripts/lib/desktop_build_common.sh.
+# W157-F7: HTML packaging templates (editorial/street). Browsers are NOT bundled;
+# backend/services/packaging_runtime.py launches the system Chrome / Edge.
+playwright>=1.49,<2

@@ -22,6 +22,8 @@ class _Proc:
 @pytest.fixture(autouse=True)
 def isolate_runtime(tmp_path, monkeypatch):
     monkeypatch.setattr(runtime, "_data_dir", lambda: tmp_path)
+    # These tests cover the on-demand installer; a dev/CI venv may already have playwright (W157-F7 bundles it).
+    monkeypatch.setattr(runtime, "bundled_package_present", lambda: False)
     for key in (
         "PLAYWRIGHT_DOWNLOAD_HOST", "AUTOCLIP_PLAYWRIGHT_DOWNLOAD_HOST", "AUTOCLIP_PLAYWRIGHT_MIRROR",
         "AUTOCLIP_PLAYWRIGHT_DOWNLOAD_SOURCE", "AUTOCLIP_PIP_INDEX", "PIP_INDEX_URL", "PLAYWRIGHT_BROWSERS_PATH",

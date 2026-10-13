@@ -50,6 +50,7 @@ install_backend_deps
 copy_backend_source
 prepare_optional_runtime_wheels
 verify_backend_deps
+verify_playwright_bundled
 
 # ---- ffmpeg ----
 # Static win64 builds. BtbN's "latest" tag is a moving pointer to the current

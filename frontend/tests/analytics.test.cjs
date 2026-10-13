@@ -185,6 +185,11 @@ test('turning analytics off pauses flag reloads and never asks for flags while o
   const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, { localStorage: storage, window: {} })
   assert.equal(ph.readLoadedFlag('remember_platforms'), undefined)
   ph.initAnalytics()
+  // W157-N3: values persisted by an earlier session are ignored until this session's flags arrive.
+  assert.equal(ph.readLoadedFlag('remember_platforms'), undefined)
+  ph.markRemoteFlagsResponse(true)
+  assert.equal(ph.readLoadedFlag('remember_platforms'), undefined)
+  ph.markRemoteFlagsResponse()
   assert.equal(ph.readLoadedFlag('remember_platforms'), true)
   ph.setAnalyticsEnabled(false)
   assert.equal(ph.readLoadedFlag('remember_platforms'), undefined)
@@ -194,6 +199,23 @@ test('turning analytics off pauses flag reloads and never asks for flags while o
   ph.setAnalyticsEnabled(true)
   assert.equal(calls.filter(call => call[0] === 'reload').length, 1)
   assert.equal(ph.readLoadedFlag('remember_platforms'), true)
+})
+test('W157-N3: flags restored from posthog persistence are not read before the onFeatureFlags response', () => {
+  const storage = memory()
+  let listener = null
+  const sdk = {
+    init(_key, cfg) { cfg.loaded?.(sdk) },
+    capture() { return {} }, opt_out_capturing() {}, opt_in_capturing() {}, set_config() {}, reloadFeatureFlags() {},
+    register_for_session() {}, setPersonPropertiesForFlags() {},
+    featureFlags: { setReloadingPaused() {}, getFlagVariants() { return { pkg_templates_v1: false } } },
+    onFeatureFlags(cb) { listener = cb },
+  }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, { localStorage: storage, window: {} })
+  ph.initAnalytics()
+  assert.equal(ph.readLoadedFlag('pkg_templates_v1'), undefined)
+  assert.equal(typeof listener, 'function')
+  listener({}, {}, { errorsLoading: false })
+  assert.equal(ph.readLoadedFlag('pkg_templates_v1'), false)
 })
 test('opt-out override prevents SDK initialization even when localStorage is unavailable', () => {
   let initialized = 0

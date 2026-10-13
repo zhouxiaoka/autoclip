@@ -219,8 +219,23 @@ def ensure_on_path() -> None:
         sys.path.insert(0, install_dir)
 
 
+def bundled_package_present() -> bool:
+    """1.5.7 起桌面安装包自带 playwright Python 包（不带浏览器，W157-F7）。"""
+    try:
+        import importlib.util
+        spec = importlib.util.find_spec(IMPORT_NAME)
+    except Exception:
+        return False
+    if spec is None or not spec.origin:
+        return False
+    try:
+        return Path(install_root()) not in Path(spec.origin).resolve().parents
+    except Exception:
+        return True
+
+
 def package_present() -> bool:
-    return (install_root() / IMPORT_NAME / "__init__.py").is_file()
+    return bundled_package_present() or (install_root() / IMPORT_NAME / "__init__.py").is_file()
 
 
 def _playwright_importable() -> bool:
@@ -361,7 +376,31 @@ def launch_kwargs() -> dict[str, Any]:
     kwargs: dict[str, Any] = {"headless": True, "args": chromium_args()}
     if plan["mode"] == "channel" and plan.get("channel"):
         kwargs["channel"] = plan["channel"]
+        # Mac 上 Chrome 可能装在 ~/Applications；channel 只认默认位置，所以把探测到的路径一起传。
+        if plan.get("executable"):
+            kwargs["executable_path"] = plan["executable"]
     return kwargs
+
+
+def missing_browser() -> bool:
+    """playwright 可用但本机没有 Chrome / Edge（也没有下载过的 headless shell）。"""
+    try:
+        if not package_present() or not _playwright_importable():
+            return False
+        return not bool(browser_plan()["ready"])
+    except Exception:
+        return False
+
+
+NO_BROWSER_WARNING = "未找到 Chrome 或 Edge 浏览器，杂志风/街头样式已改用经典样式。安装 Google Chrome 后重新导出即可。"
+NO_RUNTIME_WARNING = "高级包装组件不可用，杂志风/街头样式已改用经典样式。"
+
+
+def downgrade_warning(reason: str | None) -> str | None:
+    """missing_runtime 降级时给用户看的提示（前端按中文键翻译成 8 种语言）。"""
+    if reason != "missing_runtime":
+        return None
+    return NO_BROWSER_WARNING if missing_browser() else NO_RUNTIME_WARNING
 
 
 def is_installed() -> bool:

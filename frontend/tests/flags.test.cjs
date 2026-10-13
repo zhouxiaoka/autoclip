@@ -26,7 +26,7 @@ function load(options = {}) {
   const module = { exports: {} }
   vm.runInNewContext(js, {
     exports: module.exports, module, console,
-    __env: { DEV: options.dev === true, VITE_FLAGS: options.vite || '' },
+    __env: { DEV: options.dev === true, VITE_FLAGS: options.vite || '', VITE_APP_VERSION: options.version ?? '1.5.7' },
     require: (id) => {
       if (id === 'react') return { useSyncExternalStore: (_subscribe, get) => get() }
       if (id.endsWith('flags.defaults.json')) return { __esModule: true, default: defaults }
@@ -81,7 +81,7 @@ test('analytics on uses the loaded remote value and writes a cache', () => {
 test('a fresh cache is used only while analytics stays on and expires after seven days', () => {
   let time = 1_700_000_000_000
   const storage = memory()
-  storage.setItem('autoclip.flags.cache.v1', JSON.stringify({ savedAt: time, values: { notify_on_done: true } }))
+  storage.setItem('autoclip.flags.cache.v1', JSON.stringify({ savedAt: time, appVersion: '1.5.7', values: { notify_on_done: true } }))
   const on = load({ analytics: true, storage, now: () => time })
   assert.equal(on.flags.flagEnabled('notify_on_done'), true)
   time += WEEK + 1
@@ -185,7 +185,7 @@ test('visual style picker ships on by default and remote, cache, override or saf
   const t = 1_700_000_000_000
   assert.equal(load({ analytics: true, remote: {} }).flags.flagEnabled('pkg_template_picker_visual'), true)
   const storage = memory()
-  storage.setItem('autoclip.flags.cache.v1', JSON.stringify({ savedAt: t - 1000, values: { pkg_template_picker_visual: false } }))
+  storage.setItem('autoclip.flags.cache.v1', JSON.stringify({ savedAt: t - 1000, appVersion: '1.5.7', values: { pkg_template_picker_visual: false } }))
   assert.equal(load({ analytics: true, remote: {}, storage, now: () => t }).flags.flagEnabled('pkg_template_picker_visual'), false)
   const remote = load({ analytics: true, remote: { pkg_template_picker_visual: false } })
   assert.equal(remote.flags.flagEnabled('pkg_template_picker_visual'), false)
@@ -194,4 +194,30 @@ test('visual style picker ships on by default and remote, cache, override or saf
   const local = load({ analytics: false })
   local.flags.setFlagOverride('pkg_template_picker_visual', false)
   assert.equal(local.flags.flagEnabled('pkg_template_picker_visual'), false)
+})
+
+test('W157-N3: a flag cache written by another app version is ignored after upgrade', () => {
+  const t = 1_700_000_000_000
+  const storage = memory()
+  // 1.5.6 wrote pkg_templates_v1=false (cohort-only targeting) and never knew picker_visual.
+  storage.setItem('autoclip.flags.cache.v1', JSON.stringify({ savedAt: t - 1000, values: { pkg_templates_v1: false } }))
+  const { flags } = load({ analytics: true, storage, now: () => t, version: '1.5.7' })
+  assert.equal(flags.flagEnabled('pkg_templates_v1'), true)
+  assert.equal(flags.flagEnabled('pkg_template_picker_visual'), true)
+  assert.equal(flags.flagOrigin('pkg_templates_v1'), 'default')
+  storage.setItem('autoclip.flags.cache.v1', JSON.stringify({ savedAt: t - 1000, appVersion: '1.5.6', values: { pkg_templates_v1: false } }))
+  assert.equal(flags.flagEnabled('pkg_templates_v1'), true)
+})
+
+test('W157-N3: cache is stamped with the app version and a remote false still wins', () => {
+  const t = 1_700_000_000_000
+  const { flags, storage } = load({ analytics: true, now: () => t, version: '1.5.7', remote: { pkg_templates_v1: false } })
+  assert.equal(flags.flagEnabled('pkg_templates_v1'), false)
+  const cache = JSON.parse(storage.getItem('autoclip.flags.cache.v1'))
+  assert.equal(cache.appVersion, '1.5.7')
+  assert.equal(cache.values.pkg_templates_v1, false)
+  const again = load({ analytics: true, now: () => t + 1000, version: '1.5.7', storage })
+  assert.equal(again.flags.flagEnabled('pkg_templates_v1'), false)
+  const upgraded = load({ analytics: true, now: () => t + 1000, version: '1.5.8', storage })
+  assert.equal(upgraded.flags.flagEnabled('pkg_templates_v1'), true)
 })

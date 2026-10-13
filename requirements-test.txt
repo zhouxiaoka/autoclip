@@ -4,3 +4,5 @@ ruff==0.16.9
 numpy==2.2.6
 # Exercise the bundled YuNet model with real concurrent inference, never a mock detector.
 opencv-python-headless==4.13.0.92
+# W157-F7: the real editorial render test launches the system Chrome / Edge through playwright.
+-r requirements-desktop.txt
