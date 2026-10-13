@@ -131,7 +131,18 @@ install_backend_deps() {
     local pip_index="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
     "$PORTABLE_PY" -m pip install --upgrade pip --quiet --index-url "$pip_index"
     "$PORTABLE_PY" -m pip install -r requirements.txt --quiet --index-url "$pip_index"
+    # W157-F7: playwright Python package ships in the desktop bundle (no browsers;
+    # rendering uses the system Chrome / Edge). Kept out of requirements.txt so
+    # Docker/server installs stay lean. Must match packaging_runtime.PACKAGES.
+    "$PORTABLE_PY" -m pip install -r requirements-desktop.txt --quiet --index-url "$pip_index"
     echo "OK"
+}
+
+# W157-F7: fail the build if playwright did not land in the bundle, or if it
+# pulled browser binaries in (we render with the system Chrome / Edge).
+verify_playwright_bundled() {
+    echo "==> Verifying playwright is bundled (without browsers)"
+    PLAYWRIGHT_BROWSERS_PATH="" "$PORTABLE_PY" -B "$PROJECT_ROOT/scripts/verify_playwright_bundle.py" --python-dir "$PYTHON_DIR"
 }
 
 # Copies backend/ into the bundle, dropping caches, tests and runtime data.
@@ -224,9 +235,8 @@ stdlib = set(sys.stdlib_module_names)
 # cv2: speaker framing (backend/services/studio/framing.py), installed on demand like Whisper.
 # numpy: imported only after loading Whisper, for the PyAV decoding fallback;
 # faster-whisper's runtime installation provides it through its dependencies.
-# playwright: HTML packaging templates (backend/services/packaging_runtime.py), installed on demand;
-# never bundled (~40 MB + browser), so it must not be added to requirements.txt.
-runtime_optional = {"faster_whisper", "ctranslate2", "huggingface_hub", "cv2", "numpy", "funasr", "torch", "playwright"}
+# playwright is bundled since 1.5.7 (requirements-desktop.txt) and checked by verify_playwright_bundled.
+runtime_optional = {"faster_whisper", "ctranslate2", "huggingface_hub", "cv2", "numpy", "funasr", "torch"}
 mods = set()
 for root, _, files in os.walk(backend_dir):
     if '__pycache__' in root:

@@ -292,6 +292,11 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             outro_applied = append_outro(partial, output, width=w, height=h, enabled=brand_outro)
             if brand_outro and not outro_applied:
                 warnings.append('品牌片尾未能添加，已保留成片')
+        if overlay_job is not None and overlay_job.downgraded and getattr(overlay_job, 'requested_template', None) in ('editorial', 'street'):
+            from backend.services.packaging_runtime import downgrade_warning
+            hint = downgrade_warning(overlay_job.downgrade_reason)
+            if hint and hint not in warnings:
+                warnings.append(hint)
         result = {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
         if overlay_job is not None:
             from backend.services import video_encoder

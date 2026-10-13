@@ -1648,5 +1648,7 @@
   "安装失败：没有拿到预编译包，已停止从源码编译。请检查网络后重试。": "Falha na instalação: nenhum pacote pré-compilado foi obtido, então a compilação a partir do código-fonte foi interrompida. Verifique sua rede e tente novamente.",
   "安装已取消": "Instalação cancelada",
   "无法读取这个视频的时长，文件可能已损坏、格式不受支持，或路径里有特殊字符。请换一个文件，或先用其他软件转成 MP4 后重新导入。": "Não foi possível ler a duração deste vídeo. O arquivo pode estar danificado, em um formato não suportado ou o caminho pode conter caracteres especiais. Tente outro arquivo ou converta-o para MP4 em outro aplicativo e importe novamente.",
-  "视频太短：不到 1 秒，无法制作。请换一段更长的视频。": "Este vídeo é curto demais: com menos de 1 segundo, não é possível criar nada. Use um vídeo mais longo."
+  "视频太短：不到 1 秒，无法制作。请换一段更长的视频。": "Este vídeo é curto demais: com menos de 1 segundo, não é possível criar nada. Use um vídeo mais longo.",
+  "未找到 Chrome 或 Edge 浏览器，杂志风/街头样式已改用经典样式。安装 Google Chrome 后重新导出即可。": "Chrome ou Edge não foi encontrado; o estilo Editorial/Urbano voltou para Clássico. Instale o Google Chrome e exporte novamente.",
+  "高级包装组件不可用，杂志风/街头样式已改用经典样式。": "O componente de edição avançada não está disponível; o estilo Editorial/Urbano voltou para Clássico."
 }

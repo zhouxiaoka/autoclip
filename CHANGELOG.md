@@ -11,6 +11,10 @@
 
 ## [1.5.7] - 2026-10-10
 
+- 桌面安装包（macOS、Windows）自带 playwright Python 包，不带浏览器：杂志风和街头快剪用系统浏览器渲染，Windows 用 Edge（`channel=msedge`），macOS 用 Chrome（`channel=chrome`，并传入探测到的路径，装在 `~/Applications` 也能找到）。此前安装包里没有 playwright，也没有任何入口去装它，两端选了这两种风格都会退回经典（`missing_runtime`）。找不到 Chrome 或 Edge 时仍然退回经典，并在导出结果里提示安装 Google Chrome（8 种语言）。构建时检查 playwright 已打进安装包且没有夹带浏览器。（1.5.7 验收，W157-F7）
+
+- 升级后第一次启动不再沿用旧版本的功能开关：本机开关缓存记下写入时的版本号，版本不同就作废；PostHog SDK 从上次会话恢复的开关值，在本次会话的开关响应回来之前也不采用，这段时间按构建默认值走。此前从 1.5.6 升级后首次启动会读到 `pkg_templates_v1=false`，`pkg_template_picker_visual` 缺失，剪辑风格选择不出现。（W157-N3）
+
 - 来源守卫拒绝写请求时先读完请求体再回 403。此前客户端带 `Connection: close` 时，后端回完就关连接，请求体还没读，Windows 会直接重置连接，客户端拿不到 403，只看到 ConnectionAbortedError 10053；Windows 冒烟脚本因此报错并结束桌面应用，表现为桌面退出码 1（1.5.7 Windows 验收，W157-F5）。
 
 - 桌面端向 PostHog 请求功能开关时带上 `app_version`（如 `1.5.7`，纯 `主.次.补丁` 格式），远程开关可以按版本定向（例如 `app_version` 大于等于 1.5.7，semver）。远程值和本机缓存仍优先于构建默认值，包括 `false`；1.5.7 默认打开的开关需要在 PostHog 里把 1.5.7 及以上版本定向为打开。（W157-F6，撤回 #348 的“远程不能关闭”规则）
@@ -31,7 +35,7 @@
 
 - 人物识别组件加载失败后，不再把已加载的 numpy 一并卸掉。此前同一次运行里接着用本地 Whisper 转写会报 RecursionError，显示为「本地 Whisper 生成字幕失败」（1.5.7 Mac 验收发现，#331）。
 
-- 桌面安装包构建时，打包检查把按需安装的 playwright 列为可选运行时，不再因此中断构建；安装包里不带 playwright。（#329）
+- 桌面安装包构建时，打包检查把按需安装的 playwright 列为可选运行时，不再因此中断构建。（#329；1.5.7 起 playwright 改为随安装包提供，见 W157-F7）
 
 - OpenAI 的 o 系列、gpt-5 及更新型号（如 gpt-6-luna）连接测试和分析不再报 400「max_tokens 不受支持」：这些型号改发 max_completion_tokens，其它接口收到同样的 400 时自动改用新参数重试一次。DeepSeek、百炼、Ollama 等兼容接口不受影响。Fixes #333（#334）
 

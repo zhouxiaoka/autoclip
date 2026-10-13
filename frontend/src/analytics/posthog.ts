@@ -79,6 +79,19 @@ export function subscribeRemoteFlags(listener: () => void): () => void {
   remoteFlagListeners.add(listener)
   return () => { remoteFlagListeners.delete(listener) }
 }
+// W157-N3: posthog-js restores the previous session's flags from its own persistence
+// before the network answers. After an upgrade those are the old version's values
+// (e.g. pkg_templates_v1=false from the 1.5.6 cohort), so ignore them until this
+// session's flag response arrives.
+let remoteFlagsFresh = false
+export function markRemoteFlagsResponse(errorsLoading?: boolean): void {
+  if (!errorsLoading) remoteFlagsFresh = true
+  notifyRemoteFlags()
+}
+/** Test seam. */
+export function resetRemoteFlagsFresh(): void {
+  remoteFlagsFresh = false
+}
 function notifyRemoteFlags() {
   for (const listener of remoteFlagListeners) {
     try { listener() } catch { /* flag subscribers cannot break analytics */ }
@@ -90,7 +103,7 @@ function notifyRemoteFlags() {
  * Returns undefined unless analytics is on and flag requests were enabled at init.
  */
 export function readLoadedFlag(name: string): unknown {
-  if (!initialized || !flagsNetworkEnabled || !isAnalyticsEnabled()) return undefined
+  if (!initialized || !flagsNetworkEnabled || !isAnalyticsEnabled() || !remoteFlagsFresh) return undefined
   try {
     const variants = posthog.featureFlags?.getFlagVariants?.()
     if (!variants || typeof variants !== 'object' || !Object.prototype.hasOwnProperty.call(variants, name)) return undefined
@@ -213,7 +226,7 @@ export function initAnalytics(): void {
     loaded: (ph) => {
       // Runs before posthog-js issues its first flag request, so that request already carries app_version.
       applyFlagProperties(ph)
-      try { ph.onFeatureFlags?.(() => notifyRemoteFlags()) } catch { /* flags are optional */ }
+      try { ph.onFeatureFlags?.((_flags: unknown, _variants: unknown, context?: { errorsLoading?: boolean }) => markRemoteFlagsResponse(context?.errorsLoading)) } catch { /* flags are optional */ }
       publishAnonymousId()
       if (import.meta.env.DEV) ph.debug()
     },

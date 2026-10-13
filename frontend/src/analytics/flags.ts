@@ -7,6 +7,10 @@
  * still win over the build default, so PostHog targeting must include >=1.5.7
  * users (app_version person property) for these to stay on.
  *
+ * The 7-day cache is tied to the app version that wrote it, and PostHog values
+ * persisted by an earlier session are ignored until this session's flag response
+ * arrives, so the first launch after an upgrade uses build defaults (W157-N3).
+ *
  * Priority: local override → autoclip_safe_mode → PostHog (analytics on) →
  * dev VITE_FLAGS → 7-day cache (analytics on) → build default.
  */
@@ -60,6 +64,16 @@ export const FLAG_DEFAULTS = defaultsJson as { [K in FlagName]: FlagValue }
 const OVERRIDE_KEY = 'autoclip.flags.overrides.v1'
 const CACHE_KEY = 'autoclip.flags.cache.v1'
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+function currentAppVersion(): string {
+  return String(import.meta.env.VITE_APP_VERSION || '').trim().replace(/^v/i, '') || 'unknown'
+}
+let appVersion: () => string = currentAppVersion
+
+/** Test seam for the version that owns the flag cache. */
+export function bindFlagAppVersion(next: (() => string) | null) {
+  appVersion = next ?? currentAppVersion
+}
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
@@ -164,6 +178,8 @@ function readCache(name: FlagName): FlagValue | undefined {
   const values = raw?.values
   if (typeof savedAt !== 'number' || !values || typeof values !== 'object' || Array.isArray(values)) return undefined
   if (clock() - savedAt > CACHE_TTL_MS || savedAt > clock()) return undefined
+  // Written by another app version (or before 1.5.7, without one): stale after an upgrade.
+  if (raw?.appVersion !== appVersion()) return undefined
   return normalizeFlag(name, (values as Record<string, unknown>)[name])
 }
 
@@ -172,11 +188,11 @@ function rememberCache(name: FlagName, value: FlagValue) {
   const raw = readJson(CACHE_KEY)
   const savedAt = raw?.savedAt
   const previous = raw?.values
-  const fresh = typeof savedAt === 'number' && clock() - savedAt <= CACHE_TTL_MS && previous && typeof previous === 'object' && !Array.isArray(previous)
+  const fresh = typeof savedAt === 'number' && clock() - savedAt <= CACHE_TTL_MS && raw?.appVersion === appVersion() && previous && typeof previous === 'object' && !Array.isArray(previous)
     ? { ...(previous as Record<string, unknown>) }
     : {}
   fresh[name] = value
-  try { storage.setItem(CACHE_KEY, JSON.stringify({ savedAt: clock(), values: fresh })) } catch { /* cache is optional */ }
+  try { storage.setItem(CACHE_KEY, JSON.stringify({ savedAt: clock(), appVersion: appVersion(), values: fresh })) } catch { /* cache is optional */ }
 }
 
 function remoteValue(name: FlagName): FlagValue | undefined {
