@@ -17,6 +17,9 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from updater_manifest import judge_updater_manifest  # noqa: E402
+
 import requests
 
 for stream in (sys.stdout, sys.stderr):
@@ -196,14 +199,23 @@ def check(args):
     t0 = time.monotonic()
     try:
         u = requests.get(args.updater_url, timeout=60, allow_redirects=True)
-        uj = u.json()
+        try:
+            uj = u.json()
+        except ValueError:
+            uj = None
+        verdict = judge_updater_manifest(u.status_code, uj, 'windows-x86_64')
+        uj = uj if isinstance(uj, dict) else {}
+        plats = uj.get('platforms') if isinstance(uj.get('platforms'), dict) else {}
         out['updater_fetch'] = {'status': u.status_code, 'final_url': re.sub(r'\?.*', '', u.url), 'seconds': round(time.monotonic() - t0, 1),
-                                'version': uj.get('version'), 'pub_date': uj.get('pub_date'), 'platforms': sorted((uj.get('platforms') or {}).keys()),
-                                'windows_url': ((uj.get('platforms') or {}).get('windows-x86_64') or {}).get('url')}
-        A['updater_manifest_readable'] = u.status_code == 200 and bool(uj.get('version')) and 'windows-x86_64' in (uj.get('platforms') or {})
-    except Exception as e:  # network from mainland VM to GitHub can be flaky; record exact error
-        out['updater_fetch'] = {'error': f'{type(e).__name__}: {e}'[:400], 'seconds': round(time.monotonic() - t0, 1)}
-        A['updater_manifest_readable'] = False
+                                'version': uj.get('version'), 'pub_date': uj.get('pub_date'), 'platforms': sorted(plats.keys()),
+                                'windows_url': (plats.get('windows-x86_64') or {}).get('url'), 'verdict': verdict}
+        A['updater_manifest_readable'] = verdict == 'ok'
+    except requests.RequestException as e:
+        # The VM cannot reach github.com (ConnectTimeout from mainland IPs): that says nothing about the
+        # manifest. Record it as environment-blocked instead of failing the product assertion (W157 IA).
+        out['updater_fetch'] = {'error': f'{type(e).__name__}: {e}'[:400], 'seconds': round(time.monotonic() - t0, 1),
+                                'verdict': 'network_unreachable'}
+        out['environment_blocked'] = sorted(set(out.get('environment_blocked') or []) | {'updater_manifest_readable'})
     code, items = projects_index()
     out['projects'] = items
     A['no_project_stuck_processing'] = code == 200 and not any(p['status'] == 'processing' for p in items)

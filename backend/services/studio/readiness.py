@@ -65,6 +65,10 @@ def _whisper_model(name: str) -> dict:
     if model not in manager.model_configs or manager.get_local_model_path(model) is not None:
         return _check(True, 'whisper_installed')
     state = manager.download_status(model)
+    if state == 'downloaded':
+        # The download thread verified a complete snapshot under the same cache dir; trust it so
+        # readiness flips right after the download instead of waiting on a disk re-scan (W157 IA).
+        return _check(True, 'whisper_installed')
     if state == 'downloading':
         return {**_check(False, 'whisper_model_downloading'), 'model': model}
     if state == 'error':
