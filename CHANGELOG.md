@@ -11,6 +11,10 @@
 
 ## [1.5.7] - 2026-10-10
 
+- 分析偏好写入画面识别（`analysis_mode=visual`）后能读回来：`PUT /studio/analysis-preferences` 会同步改 `ai-model-settings.json` 里的同名字段。此前该接口只写 `analysis-preferences.json`，而读取优先用模型设置文件，所以返回 200 后立刻再读仍是 `auto`，静音素材指定高光会被当成未开画面识别而在导入阶段拒绝（1.5.7 Mac 验收，画面识别阻塞）。
+
+- 画面识别选片提示不再限定为游戏实况：表演、运动、音乐视频视觉桥段、操作演示等有可见看点的素材也可以提名；`other` 表示非游戏但有观看价值的片段。菜单/领奖/加载画面仍会过滤。（1.5.7 Mac 验收：纯音乐视频走画面识别返回「没有找到可用镜头」）
+
 - 桌面安装包（macOS、Windows）自带 playwright Python 包，不带浏览器：杂志风和街头快剪用系统浏览器渲染，Windows 用 Edge（`channel=msedge`），macOS 用 Chrome（`channel=chrome`，并传入探测到的路径，装在 `~/Applications` 也能找到）。此前安装包里没有 playwright，也没有任何入口去装它，两端选了这两种风格都会退回经典（`missing_runtime`）。找不到 Chrome 或 Edge 时仍然退回经典，并在导出结果里提示安装 Google Chrome（8 种语言）。构建时检查 playwright 已打进安装包且没有夹带浏览器。（1.5.7 验收，W157-F7）
 
 - 升级后第一次启动不再沿用旧版本的功能开关：本机开关缓存记下写入时的版本号，版本不同就作废；PostHog SDK 从上次会话恢复的开关值，在本次会话的开关响应回来之前也不采用，这段时间按构建默认值走。此前从 1.5.6 升级后首次启动会读到 `pkg_templates_v1=false`，`pkg_template_picker_visual` 缺失，剪辑风格选择不出现。（W157-N3）

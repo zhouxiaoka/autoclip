@@ -104,3 +104,22 @@ def test_all_overlong_candidates_still_fail_without_inventing_clips():
     raw['end'] = 46.3
     with pytest.raises(ValueError, match='超出期望时长'):
         vision.select_highlights([raw], 120, max_duration=40)
+
+
+def test_visual_prompt_covers_non_game_footage(monkeypatch):
+    """Music videos and silent non-menu footage must be eligible for visual highlights."""
+    prompts = []
+    monkeypatch.setattr(vision, '_probe', lambda _: {'duration': 60})
+    monkeypatch.setattr(vision, 'sample', lambda *a: [])
+    responses = iter([
+        {'events': [candidate(0, 'other', 70)]},
+        {'events': [candidate(0, 'other', 70)]},
+    ])
+    def capture(content, **kw):
+        prompts.append(content[0]['text'])
+        return next(responses)
+    monkeypatch.setattr(vision, 'vision_call', capture)
+    found, _ = vision.analyze(Path('unused'), Preferences(goal='highlight'))
+    assert found and found[0].id == 'e0'
+    assert '音乐视频' in prompts[0] and '游戏视频剪辑师' not in prompts[0]
+    assert 'other' in prompts[0]

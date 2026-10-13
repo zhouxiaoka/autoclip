@@ -56,6 +56,9 @@ def _subtitle_blockers(video: Path, duration: float, options: ImportOptions, con
     elif not options.auto_start:
         visual_possible = vision  # the review screen can still confirm the visual route
     elif options.goal != 'auto':
+        # Fixed goals (e.g. highlight) only open the visual escape hatch when the user
+        # explicitly chose visual analysis mode. auto + allow_visual_screening is not
+        # enough here: silent/short sources stay on the subtitle refusal (1.5.6 / 1.5.7).
         visual_possible = vision and consent.analysis_mode == 'visual'
     else:
         visual_possible = duration <= VISUAL_MAX_SOURCE_SEC and analysis_preferences.visual_screening_allowed(

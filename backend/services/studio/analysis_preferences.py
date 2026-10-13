@@ -60,20 +60,59 @@ def load() -> AnalysisPreferences:
             raise ValueError('分析偏好无法读取，请重新设置；尚未授权视觉调用') from error
 
 
+def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
+    try:
+        fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            json.dump(payload, stream, ensure_ascii=False, indent=2)
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def _mirror_into_model_settings(validated: AnalysisPreferences) -> None:
+    """Keep ai-model-settings.json in sync when it is the load() source of truth.
+
+    PUT /studio/analysis-preferences used to write only analysis-preferences.json.
+    load() prefers ai-model-settings when that file exists, so a visual write
+    returned 200 then immediately read back as auto (1.5.7 Mac QA / W157 visual).
+    Mirror the two fields without re-running ai_model_settings.save validation
+    (visual mode may be chosen before a multimodal model is bound).
+    """
+    from pydantic import ValidationError
+    from backend.services import ai_model_settings as ai
+    with ai._lock:
+        target = ai.path()
+        if not target.exists():
+            return
+        try:
+            current = ai.load()
+        except (ValueError, TypeError, OSError, UnicodeError, ValidationError):
+            return
+        if current is None:
+            return
+        screening = bool(validated.allow_visual_screening)
+        if (current.analysis_mode == validated.analysis_mode
+                and current.allow_visual_screening == screening):
+            return
+        try:
+            updated = ai.ModelSettings.model_validate(current.model_copy(update={
+                'analysis_mode': validated.analysis_mode,
+                'allow_visual_screening': screening,
+            }).model_dump())
+        except ValidationError:
+            return
+        _write_json(target, updated.model_dump())
+
+
 def save(preferences: AnalysisPreferences) -> AnalysisPreferences:
     # Revalidate even model_construct/model_copy inputs before persisting them.
     validated = AnalysisPreferences.model_validate(preferences.model_dump())
     with _lock:
-        path = settings_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temp = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
-        try:
-            fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-                json.dump(validated.model_dump(), stream, ensure_ascii=False, indent=2)
-            os.replace(temp, path)
-        finally:
-            temp.unlink(missing_ok=True)
+        _write_json(settings_path(), validated.model_dump())
+        _mirror_into_model_settings(validated)
     return validated
 
 
