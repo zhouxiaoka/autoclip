@@ -156,3 +156,25 @@ def test_text_only_model_is_not_used_for_vision(monkeypatch):
     assert public['configured'] is False and public['text_only'] is True
     from backend.services.studio import intelligence
     assert intelligence.ready() is False
+
+
+def test_save_visual_survives_when_model_settings_exist(tmp_path):
+    """1.5.7 Mac QA: PUT visual returned 200 but GET read auto from ai-model-settings."""
+    from backend.services import ai_model_settings as ai
+    ai.save(ai.ModelSettings(
+        connections=[ai.Connection(id='one', name='A', provider='openai',
+                                   base_url='https://example/v1', api_key='sk-test')],
+        analysis=ai.Assignment(connection_id='one', model='vision', capability='multimodal'),
+        analysis_mode='auto', allow_visual_screening=True,
+    ))
+    assert prefs.load().analysis_mode == 'auto'
+    saved = prefs.save(prefs.AnalysisPreferences(analysis_mode='visual', allow_visual_screening=True))
+    assert saved.analysis_mode == 'visual'
+    assert prefs.load().analysis_mode == 'visual'
+    assert ai.load().analysis_mode == 'visual'
+    assert ai.load().allow_visual_screening is True
+    prefs.save(prefs.AnalysisPreferences(analysis_mode='subtitle'))
+    assert prefs.load().analysis_mode == 'subtitle'
+    assert ai.load().analysis_mode == 'subtitle'
+    assert ai.load().allow_visual_screening is False
+

@@ -63,3 +63,20 @@ def test_settings_api_strict_contract(client):
     assert client.put('/studio/analysis-preferences', json={'analysis_mode':'invented'}).status_code == 422
     assert client.put('/studio/analysis-preferences', json={'analysis_mode':'auto','allow_visual_screening':True}).status_code == 200
     assert client.get('/studio/analysis-preferences').json()['allow_visual_screening'] is True
+
+
+def test_analysis_preferences_put_visual_survives_model_settings(client):
+    """Mac QA W157: preferences PUT must update ai-model-settings so GET does not snap back to auto."""
+    from backend.services import ai_model_settings as ai
+    ai.save(ai.ModelSettings(
+        connections=[ai.Connection(id='one', name='A', provider='openai',
+                                   base_url='https://example/v1', api_key='sk-test')],
+        analysis=ai.Assignment(connection_id='one', model='vision', capability='multimodal'),
+        analysis_mode='auto', allow_visual_screening=True,
+    ))
+    assert client.get('/studio/analysis-preferences').json()['analysis_mode'] == 'auto'
+    put = client.put('/studio/analysis-preferences',
+                     json={'analysis_mode': 'visual', 'allow_visual_screening': True})
+    assert put.status_code == 200 and put.json()['analysis_mode'] == 'visual'
+    assert client.get('/studio/analysis-preferences').json()['analysis_mode'] == 'visual'
+    assert ai.load().analysis_mode == 'visual'
