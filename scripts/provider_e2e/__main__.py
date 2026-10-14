@@ -406,7 +406,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             live_report = None
         reports = [item for item in (mock_report, live_report) if item]
-        write_report(args.out / 'report.json', merge_reports(reports), extras)
+        if live_report is not None:
+            live_cases = args.out / 'live' / 'cases.jsonl'
+            if live_cases.is_file():
+                write_cases(args.out / 'cases.jsonl', load_jsonl(live_cases))
+        payload = reports[0] if len(reports) == 1 else merge_reports(reports)
+        write_report(args.out / 'report.json', payload, extras)
         if args.suite == 'live' and live_report and live_report.get('status') == 'skipped':
             return 0
         require_pass(reports, library=load_library(args.library_dir))

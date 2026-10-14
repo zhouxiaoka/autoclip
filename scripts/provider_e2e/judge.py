@@ -81,7 +81,12 @@ def judge_suite(report: dict[str, Any], *, library: list[dict[str, Any]] | None 
     billable_ok = all(billable_calls_before_failure(row) == 0 for row in blocked)
     fault_ok = all(row.get('passed') and _fault_contract_ok(row) for row in faults) if faults else True
     window = report.get('window')
-    if report.get('suite') == 'live':
+    live_like = report.get('suite') == 'live' or (
+        report.get('suite') == 'combined'
+        and bool(report.get('mode') or report.get('case_records'))
+        and not any(str(row.get('id') or '').startswith('mock:') for row in report.get('cases') or [])
+    )
+    if live_like:
         records = list(library or [])
         records.extend(report.get('case_records') or [])
         if window is None:
@@ -100,9 +105,9 @@ def judge_suite(report: dict[str, Any], *, library: list[dict[str, Any]] | None 
         and all(row.get('passed') is True or row.get('passed') is False for row in succeed + blocked + faults)
     )
     reasons = []
-    if report.get('suite') != 'live' and succeed and succeed_rate < SUCCESS_RATE_THRESHOLD:
+    if not live_like and succeed and succeed_rate < SUCCESS_RATE_THRESHOLD:
         reasons.append(f'should-succeed {succeed_rate:.1%} < {SUCCESS_RATE_THRESHOLD:.0%}')
-    if report.get('suite') == 'live' and window and window.get('enforced') and not window.get('passed'):
+    if live_like and window and window.get('enforced') and not window.get('passed'):
         reasons.append(
             f"live rolling-window {window.get('success_rate', 0):.1%} < {SUCCESS_RATE_THRESHOLD:.0%} "
             f"over {window.get('should_succeed_n', 0)} cases"

@@ -98,11 +98,17 @@ def merge_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
         skipped.extend(report.get('skipped_providers') or [])
         if report.get('status') == 'skipped' and report.get('suite') == 'live':
             skipped.append({'id': 'live', 'reason': report.get('reason') or 'live suite skipped'})
-    return {
+    live = next((report for report in reports if report.get('suite') == 'live'), None)
+    merged = {
         'schema_version': SCHEMA_VERSION,
-        'suite': 'combined',
+        'suite': 'combined' if len(reports) > 1 else (reports[0].get('suite') if reports else 'combined'),
         'commit': next((report.get('commit') for report in reports if report.get('commit')), None),
         'cases': cases,
         'skipped_providers': skipped,
         'parts': [{'suite': report.get('suite'), 'status': report.get('status')} for report in reports],
     }
+    if live:
+        for key in ('mode', 'iso_week', 'budget', 'providers', 'window', 'spent_cny', 'run_id', 'case_records'):
+            if live.get(key) is not None:
+                merged[key] = live[key]
+    return merged

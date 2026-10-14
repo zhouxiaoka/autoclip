@@ -80,6 +80,7 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('needs: [candidate-gate]', desktop)
         self.assertIn('needs.provider-e2e.result == \'success\'', desktop)
         self.assertIn('github.event_name == \'schedule\'', workflow)
+        self.assertNotIn('e2e-live-once', workflow)
         self.assertIn('provider-e2e-cases', workflow)
         self.assertIn('live_mode', workflow)
 
@@ -419,6 +420,18 @@ class ProviderE2ECostControlTests(unittest.TestCase):
         verdict = judge.judge_suite(report)
         self.assertTrue(verdict['passed'])
         self.assertFalse((verdict.get('window') or {}).get('enforced'))
+        combined = {
+            'suite': 'combined',
+            'mode': 'verify',
+            'status': 'completed',
+            'cases': [
+                {'id': 'deepseek:talk_zh', 'expect': 'succeed', 'passed': True},
+                {'id': 'gemini:with_srt', 'expect': 'succeed', 'passed': False},
+                {'id': 'deepseek:too_short', 'expect': 'block', 'passed': True, 'billable_calls_before_failure': 0},
+            ],
+            'case_records': [{'run_id': 'v', 'expect': 'succeed', 'passed': True}],
+        }
+        self.assertTrue(judge.judge_suite(combined)['passed'])
         blocked = dict(report)
         blocked['status'] = 'budget_blocked'
         blocked['reason'] = 'monthly live budget cap reached'

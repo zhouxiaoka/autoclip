@@ -111,10 +111,7 @@ jobs:
       && (github.event_name == 'schedule'
           || startsWith(github.ref, 'refs/tags/v')
           || (github.event_name == 'workflow_dispatch' && (inputs.include_live || inputs.full || inputs.live_mode != ''))
-          || (github.event_name == 'workflow_call' && (inputs.include_live || inputs.full || startsWith(github.ref, 'refs/tags/v')))
-          || (github.event_name == 'push'
-              && github.ref == 'refs/heads/cursor/provider-e2e-gate-626f'
-              && contains(github.event.head_commit.message, 'e2e-live-once')))
+          || (github.event_name == 'workflow_call' && (inputs.include_live || inputs.full || startsWith(github.ref, 'refs/tags/v'))))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: provider-e2e
@@ -165,7 +162,7 @@ jobs:
           INPUT_FULL: ${{ inputs.full }}
           INPUT_INCLUDE_LIVE: ${{ inputs.include_live }}
           INPUT_LIVE_MODE: ${{ inputs.live_mode }}
-          PROVIDER_E2E_MODE: ${{ contains(github.event.head_commit.message, 'e2e-live-once') && 'verify' || inputs.live_mode }}
+          PROVIDER_E2E_MODE: ${{ inputs.live_mode }}
         run: |
           PYTHONPATH=scripts python -m provider_e2e --suite live --mode auto \
             --library-dir "$RUNNER_TEMP/provider-e2e-library" \
@@ -186,6 +183,8 @@ jobs:
           path: |
             ${{ runner.temp }}/provider-e2e-live/cases.jsonl
             ${{ runner.temp }}/provider-e2e-live/cases.json
+            ${{ runner.temp }}/provider-e2e-live/live/cases.jsonl
+            ${{ runner.temp }}/provider-e2e-live/live/cases.json
           if-no-files-found: warn
           retention-days: 90
       - name: Archive cases to provider-e2e-cases branch
