@@ -256,5 +256,7 @@ def test_api88_wrong_stored_url_is_forced_to_the_preset(monkeypatch):
         'gpt-4o-mini',
     )
     assert result.ok is True
-    assert seen[0].startswith('https://api.88api.ai/v1/')
+    from backend.core.provider_presets import get_provider
+    official = get_provider('api88').base_url.rstrip('/') + '/'
+    assert seen[0].startswith(official)
     assert result.base_url_host == 'api.88api.ai'

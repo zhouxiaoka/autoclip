@@ -5,6 +5,7 @@ import {
   UPSTREAM_ERROR_TYPES,
 } from '../../analytics/successRateContract'
 import { PROVIDERS, type ProviderKey } from './providers'
+import { cleanupBaseUrl, normalizeProviderBaseUrl } from './providerUrl'
 
 export const ADDRESS_LOCKED: readonly ProviderKey[] = ['api88', 'infistar', 'deepseek', 'gemini', 'dashscope', 'openai']
 
@@ -33,7 +34,6 @@ const KEY_HINTS: Array<[RegExp, ProviderKey]> = [
   [/^sk-ant-/, 'compatible'],
 ]
 
-const VERSIONED = /^\/(?:v\d+(?:beta)?(?:\/openai)?|compatible-mode\/v\d+|api\/v\d+|api\/paas\/v\d+|openai\/v\d+)\/?$/i
 const CHAT_SUFFIXES = ['/v1/chat/completions', '/chat/completions', '/v1/completions', '/completions']
 const CONSOLE_HOSTS = new Set([
   'platform.openai.com', 'chatgpt.com', 'openai.com', 'www.openai.com',
@@ -61,26 +61,30 @@ export function isConsoleHost(host?: string) {
   return CONSOLE_HOSTS.has(value) || value.endsWith('.console.aliyun.com') || value.endsWith('.console.volcengine.com')
 }
 
-export function normalizeCompatibleUrl(raw: string): { url: string; warnings: string[] } {
-  let url = (raw || '').replace(/\s+/g, '').trim().replace(/\/+$/, '')
+export function normalizeCompatibleUrl(raw: string, provider = 'compatible'): { url: string; warnings: string[] } {
   const warnings: string[] = []
+  const cleaned = cleanupBaseUrl(raw)
+  if (!cleaned) return { url: '', warnings }
   let host = ''
-  try { host = new URL(url).hostname.toLowerCase() } catch { return { url, warnings } }
-  if (isConsoleHost(host)) return { url, warnings: ['console_host'] }
-  const lower = url.toLowerCase()
+  try { host = new URL(cleaned).hostname.toLowerCase() } catch { return { url: cleaned, warnings } }
+  if (isConsoleHost(host)) return { url: cleaned, warnings: ['console_host'] }
+  let stripped = cleaned
+  const lower = cleaned.toLowerCase()
   for (const suffix of CHAT_SUFFIXES) {
     if (lower.endsWith(suffix)) {
-      url = url.slice(0, url.length - suffix.length).replace(/\/+$/, '')
+      stripped = cleaned.slice(0, cleaned.length - suffix.length).replace(/\/+$/, '')
       warnings.push('chat_completions')
       break
     }
   }
-  let path = ''
-  try { path = new URL(url).pathname || '' } catch { return { url, warnings } }
-  if (!VERSIONED.test(path)) {
-    url = url.replace(/\/+$/, '') + '/v1'
-    warnings.push('missing_v1')
-  }
+  const url = normalizeProviderBaseUrl(stripped, provider)
+  try {
+    const before = new URL(stripped)
+    const after = new URL(url)
+    const beforePath = (before.pathname || '').replace(/\/+$/, '')
+    const afterPath = (after.pathname || '').replace(/\/+$/, '')
+    if (afterPath === '/v1' && (beforePath === '' || beforePath === '/')) warnings.push('missing_v1')
+  } catch { /* rewrite still returned a string */ }
   return { url, warnings }
 }
 

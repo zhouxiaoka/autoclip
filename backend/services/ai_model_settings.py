@@ -76,12 +76,9 @@ class Connection(BaseModel):
         from backend.core.provider_url import normalize_provider_base_url
         if self.base_url:
             from backend.core.provider_endpoint import normalize_provider_base_url as line_b_normalize
-            # Only reuse line B when it stripped a pasted /chat/completions.
-            # Other rewrites stay in provider_url so dedicated Bailian hosts
-            # and Gemini official paths are not given a stray /v1.
-            info = line_b_normalize(self.base_url)
-            source = info.url if 'chat_completions' in info.warnings else self.base_url
-            self.base_url = normalize_provider_base_url(source, self.provider)
+            # Line B wraps provider_url: strip pasted /chat/completions, then
+            # apply provider conventions. Cleanup only — never rejects.
+            self.base_url = line_b_normalize(self.base_url, self.provider).url
         if self.image_base_url:
             self.image_base_url = normalize_provider_base_url(self.image_base_url, 'image')
         return self
@@ -235,7 +232,7 @@ def chat_endpoint(connection: Connection, model: str) -> dict:
     if locked:
         base = locked
     elif connection.provider == 'compatible' and connection.base_url:
-        base = normalize_provider_base_url(connection.base_url).url
+        base = normalize_provider_base_url(connection.base_url, connection.provider).url
     else:
         base = connection.base_url or defaults[connection.provider]
     if connection.provider == 'dashscope' and connection.base_url and (urlparse(base).hostname or '').endswith('.aliyuncs.com'):

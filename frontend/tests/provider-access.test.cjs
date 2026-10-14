@@ -4,8 +4,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 const ts = require('typescript')
+const { loadTs } = require('./load-ts.cjs')
 
-const file = path.join(__dirname, '../src/features/settings/providerAccess.ts')
 const providers = {
   PROVIDERS: {
     gemini: { name: 'Google Gemini' }, openai: { name: 'OpenAI' }, grok: { name: 'Grok' },
@@ -24,17 +24,10 @@ function loadContract() {
   return module.exports
 }
 const contract = loadContract()
-const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
-const access = {}
-vm.runInNewContext(code, {
-  exports: access,
-  URL,
-  require: id => {
-    if (id === '../../i18n') return { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) }
-    if (id === './providers') return providers
-    if (id === '../../analytics/successRateContract') return contract
-    throw new Error(id)
-  },
+const access = loadTs('providerAccess.ts', {
+  '../../i18n': { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) },
+  './providers': providers,
+  '../../analytics/successRateContract': contract,
 })
 
 test('compatible URLs gain /v1, drop chat completions, and flag console hosts', () => {
@@ -46,11 +39,15 @@ test('compatible URLs gain /v1, drop chat completions, and flag console hosts', 
   assert.ok(pasted.warnings.includes('chat_completions'))
   const consoleHost = access.normalizeCompatibleUrl('https://platform.openai.com/api-keys')
   assert.ok(consoleHost.warnings.includes('console_host'))
+  assert.equal(consoleHost.url, 'https://platform.openai.com/api-keys')
   assert.ok(!access.canEditAddress('api88'))
   assert.ok(!access.canEditAddress('openai'))
   assert.ok(!access.canEditAddress('dashscope'))
   assert.ok(access.canEditAddress('compatible'))
   assert.ok(access.canEditAddress('ollama'))
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/settings/providerAccess.ts'), 'utf8')
+  assert.match(source, /normalizeProviderBaseUrl/)
+  assert.doesNotMatch(source, /VERSIONED/)
 })
 
 test('wrong-provider keys are hinted, never treated as a switch, and hosts stay sanitized', () => {
