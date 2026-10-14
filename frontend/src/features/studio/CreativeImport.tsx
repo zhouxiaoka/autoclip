@@ -20,6 +20,7 @@ import './studio.css'
 import './quick-output.css'
 
 function issueCopy(item: ReadinessIssue) {
+  if (item.key === 'analysis' && item.code === 'validation_failed') return t('模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。')
   if (item.key === 'analysis') return t('分析模型还没配好。连接一家 AI 服务后再生成。')
   if (item.code === 'whisper_installing') return t('正在安装本地转写…')
   if (item.code === 'whisper_not_installed') return t('本地转写还没安装。已有字幕可以直接继续。')
@@ -34,7 +35,7 @@ function issueCopy(item: ReadinessIssue) {
 }
 
 function repairLabel(item: ReadinessIssue) {
-  if (item.repair === 'settings_ai') return t('连接 AI 服务')
+  if (item.repair === 'settings_ai') return item.code === 'validation_failed' ? t('去设置修改') : t('连接 AI 服务')
   if (item.repair === 'install_whisper') return item.model ? t('下载转写模型') : t('安装 Whisper')
   if (item.repair === 'settings_transcription') return t('转写设置')
   if (item.repair === 'settings_vision') return t('视觉设置')
@@ -120,7 +121,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     const reason = submissionBlock(readiness, !!subtitle, settled)
     if (reason === 'pending') { setError(t('正在确认导入条件…')); return }
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
-    if (reason === 'analysis') { setError(t('请先连接 AI 服务，再导入视频。')); return }
+    if (reason === 'analysis') {
+      setError(readiness?.checks?.analysis?.code === 'validation_failed'
+        ? t('模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。')
+        : t('请先连接 AI 服务，再导入视频。'))
+      return
+    }
     if (reason === 'transcription') { setError(t('还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。')); return }
     if (reason === 'visual') { setError(t('请先配好画面分析模型，再生成成片。')); return }
     if (reason === 'ffmpeg') { setError(t('找不到 FFmpeg，无法生成成片。')); return }

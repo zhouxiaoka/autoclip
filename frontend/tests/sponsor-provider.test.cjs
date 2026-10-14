@@ -24,6 +24,14 @@ function flatten(node) {
 
 test('sponsor selection, offer, registration link and attribution follow the chosen provider', () => {
   const events = [], links = []
+  const contractFile = path.join(__dirname, '../src/analytics/successRateContract.ts')
+  const contractMod = { exports: {} }
+  vm.runInNewContext(
+    ts.transpileModule(fs.readFileSync(contractFile, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText,
+    { exports: contractMod.exports, module: contractMod, URL },
+    { filename: contractFile },
+  )
+  const access = load('providerAccess.ts', { '../../i18n': { t: text => text }, './providers': providers, '../../analytics/successRateContract': contractMod.exports })
   const Fields = load('ProviderFields.tsx', {
     react: { useState: () => [false, () => {}] },
     antd: { Input: { Password: 'password' }, Select: 'select' },
@@ -31,6 +39,7 @@ test('sponsor selection, offer, registration link and attribution follow the cho
     '../../utils/externalLinks': { openExternalLink: url => links.push(url) },
     '../../analytics/events': { trackSponsorLinkOpened: event => events.push(plain(event)) },
     './providers': providers, './modelSettingsLogic': { presetKey: c => c.provider },
+    './providerAccess': access,
     './providerUrl': load('providerUrl.ts', {}),
   }).default
   const options = providers.providerPickerOptions()

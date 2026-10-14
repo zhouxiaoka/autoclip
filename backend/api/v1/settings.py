@@ -71,20 +71,31 @@ class ConnectionTestRequest(BaseModel):
 
 @router.post('/ai-models/test')
 def test_connection_assignment(body: ConnectionTestRequest):
-    from backend.core.llm_providers import LLMProviderFactory, ProviderType
+    from backend.services.provider_validation import validate_connection
     try:
         connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
-        endpoint = ai_models.chat_endpoint(connection, body.model)
-        if body.vision:
+        result = validate_connection(connection, body.model)
+        if body.vision and result.ok:
             from backend.services.studio.vision_settings import test, VisionSettingsInput
-            return test(VisionSettingsInput(mode='custom', **endpoint))
-        provider = LLMProviderFactory.create_provider(ProviderType.OPENAI, endpoint['api_key'],
-                                                      body.model, base_url=endpoint['base_url'])
-        return {'success': provider.test_connection()}
+            endpoint = ai_models.chat_endpoint(connection, body.model)
+            vision = test(VisionSettingsInput(mode='custom', **endpoint))
+            if not (vision.get('success') or vision.get('ok')):
+                from backend.core.upstream_errors import hint_key_for
+                payload = result.as_api()
+                payload.update(
+                    success=False, ok=False, result='failed',
+                    error_type='unknown', hint_key=hint_key_for('unknown'),
+                )
+                return payload
+        return result.as_api()
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception:
-        return {'success': False, 'error': '连接测试失败，请检查接口、密钥和模型'}
+        from backend.core.upstream_errors import hint_key_for
+        return {
+            'success': False, 'ok': False, 'result': 'failed',
+            'error_type': 'unknown', 'hint_key': hint_key_for('unknown'), 'models': [],
+        }
 
 
 class BasicSettings(BaseModel):

@@ -13,10 +13,11 @@ function load(name, mocks = {}, globals = {}) {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true,
   } }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(js, { exports: module.exports, module, Blob, Date, Math, console,
+  vm.runInNewContext(js, { exports: module.exports, module, Blob, Date, Math, console, URL,
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key' },
     require: (id) => {
       if (id in mocks) return mocks[id]
+      if (id === './successRateContract' || id === '../../analytics/successRateContract') return load('successRateContract')
       if (id === '../utils/apiConfig') {
         return { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener: () => () => {} } }
       }
@@ -499,28 +500,59 @@ test('experience contract excludes config secrets and results cannot replay acro
   assert.equal(s.events.length,3)
 })
 
+test('provider validation keeps host and error enum only', () => {
+  const s=setup();const x=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+  x.trackProviderValidation({
+    provider:'openai', result:'failed', error_type:'invalid_key',
+    base_url_host:'https://api.openai.com/v1?key=sk-secret', api_key:'sk-secret', model:'gpt-4o',
+  })
+  const leaked=s.events[0].props
+  assert.equal(leaked.base_url_host, 'api.openai.com')
+  assert.equal(leaked.result, 'failed')
+  assert.equal(leaked.upstream_error_type, 'invalid_key')
+  assert.equal(leaked.error_type, undefined)
+  assert.equal(JSON.stringify(leaked).includes('sk-secret'), false)
+  assert.equal(JSON.stringify(leaked).includes('https://'), false)
+  x.trackProviderValidation({provider:'api88', base_url_host:'88api.ai', result:'ok', error_type:'not-a-type', api_key:'sk-secret'})
+  const event=s.events.find(e=>e.event==='provider_validation_finished' && e.props.provider==='api88')
+  assert.equal(event.props.provider,'api88')
+  assert.equal(event.props.base_url_host,'88api.ai')
+  assert.equal(event.props.result,'success')
+  assert.equal(event.props.upstream_error_type, undefined)
+  assert.equal(event.props.error_type, undefined)
+  assert.equal(JSON.stringify(event).includes('sk-secret'), false)
+})
+
 function settingsHook(s, transport, initial) {
   let cursor=0;const slots=[]
   const react={useState(value){const i=cursor++;if(!(i in slots))slots[i]=value;return [slots[i],next=>{slots[i]=typeof next==='function'?next(slots[i]):next}]},useRef(value){const i=cursor++;if(!(i in slots))slots[i]={current:value};return slots[i]},useEffect(){}}
   const providers={PROVIDERS:{openai:{}},}
   const defaults=load('../features/settings/modelDefaults')
+  const access=load('../features/settings/providerAccess',{'../../i18n':{t:x=>x},'./providers':providers})
   const urls=load('../features/settings/providerUrl',{},{URL})
-  const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults,'./providerUrl':urls})
+  const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls})
   const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const hook=load('../features/settings/useModelSettings',{
     react,antd:{message:{success(){},error(){}}},'../../i18n':{t:x=>x},'../studio/api':{errorText:()=> 'redacted'},
-    '../../analytics/experience':experience,'./providers':providers,'./modelSettingsApi':{modelSettingsApi:{get:async()=>structuredClone(initial),...transport},bindingCapability:()=> 'text'},
+    '../../analytics/experience':experience,'./providers':providers,'./providerAccess':access,
+    './modelSettingsApi':{modelSettingsApi:{get:async()=>structuredClone(initial),...transport},bindingCapability:()=> 'text'},
     './modelDefaults':defaults,'./modelSettingsLogic':logic,
   },{window:{setTimeout(){},clearTimeout(){},addEventListener(){},removeEventListener(){}}})
   return ()=>{cursor=0;return hook.useModelSettings('home_setup')}
 }
-const modelFixture=()=>({version:1,saved:false,connections:[{id:'private-id',provider:'openai',api_key:'sk-secret',has_key:true,base_url:'https://private',name:'private'}],analysis:{connection_id:'private-id',model:'private-model',capability:'text'},vision:null,cover:null,cover_enabled:false,allow_send_frame:false,analysis_mode:'subtitle',allow_visual_screening:false,transcription:{provider:'whisper_local',model:'base'},chunk_size:2000,min_score_threshold:.7,max_clips_per_collection:5})
+const modelFixture=()=>({version:1,saved:false,connections:[{id:'private-id',provider:'openai',api_key:'sk-secret',has_key:true,base_url:'https://gw.example/v1',name:'acct'}],analysis:{connection_id:'private-id',model:'private-model',capability:'text'},vision:null,cover:null,cover_enabled:false,allow_send_frame:false,analysis_mode:'subtitle',allow_visual_screening:false,transcription:{provider:'whisper_local',model:'base'},chunk_size:2000,min_score_threshold:.7,max_clips_per_collection:5})
 test('actual unified settings hook records save once and HTTP-200 negative tests as failures',async()=>{
- const s=setup();const render=settingsHook(s,{discover:async()=>({models:[],source:'catalog',preview:true}),save:async value=>({...value,saved:true}),test:async()=>({success:false})},modelFixture())
+ const s=setup();const render=settingsHook(s,{discover:async()=>({models:[],source:'catalog',preview:true}),save:async value=>({...value,saved:true}),test:async()=>({success:false,error_type:'invalid_key',base_url_host:'gw.example'})},modelFixture())
  await render().load();await Promise.resolve();let m=render();await m.save();m=render();await m.test()
  assert.equal(s.events.filter(e=>e.event==='provider_configuration_save_finished').length,1)
  assert.equal(s.events.find(e=>e.event==='provider_configuration_save_finished').props.mode,'initial')
  assert.equal(s.events.find(e=>e.event==='provider_connection_test_finished').props.outcome,'failed')
+ const validation=s.events.filter(e=>e.event==='provider_validation_finished')
+ assert.ok(validation.length>=1)
+ assert.equal(validation[0].props.result,'failed')
+ assert.equal(validation[0].props.upstream_error_type,'invalid_key')
+ assert.equal(validation[0].props.base_url_host,'gw.example')
+ assert.equal(validation[0].props.provider,'openai')
  assert.equal(s.events.some(e=>e.event==='api_key_configured'),false)
  assert.equal(JSON.stringify(s.events).includes('sk-secret'),false);assert.equal(JSON.stringify(s.events).includes('private'),false)
 })

@@ -27,8 +27,28 @@ def _analysis(settings: ai_models.ModelSettings) -> dict:
     binding = settings.analysis
     connection = next((item for item in settings.connections if binding and item.id == binding.connection_id), None)
     if binding and binding.model and _connection_ready(connection):
+        if getattr(connection, 'validation_status', 'unchecked') == 'failed':
+            return _check(False, 'validation_failed', 'settings_ai')
         return _check(True, 'configured')
     return _check(False, 'not_configured', 'settings_ai')
+
+
+def ensure_analysis_usable() -> None:
+    """Block import / generation when the saved analysis connection failed validation.
+
+    Only a persisted document with `validation_status=failed` is a hard stop.
+    Missing, legacy, or unreadable files stay on the existing readiness path so
+    first-run imports and inspect tests are not turned into errors.
+    """
+    try:
+        settings = ai_models.load()
+    except Exception:
+        return
+    if settings is None:
+        return
+    check = _analysis(settings)
+    if check['code'] == 'validation_failed':
+        raise ValueError('当前模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。')
 
 
 def _transcription(settings: ai_models.ModelSettings) -> dict:

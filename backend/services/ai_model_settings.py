@@ -29,6 +29,8 @@ class Connection(BaseModel):
     api_key: str | None = Field(default=None, max_length=2000)
     image_api: Literal['auto', 'openai', 'seedream', 'dashscope', 'fal'] = 'auto'
     image_base_url: str = ''
+    validation_status: Literal['ok', 'failed', 'unchecked'] = 'unchecked'
+    validation_error_type: str = ''
 
     @field_validator('provider')
     @classmethod
@@ -73,7 +75,13 @@ class Connection(BaseModel):
     def normalize_provider_url(self):
         from backend.core.provider_url import normalize_provider_base_url
         if self.base_url:
-            self.base_url = normalize_provider_base_url(self.base_url, self.provider)
+            from backend.core.provider_endpoint import normalize_provider_base_url as line_b_normalize
+            # Only reuse line B when it stripped a pasted /chat/completions.
+            # Other rewrites stay in provider_url so dedicated Bailian hosts
+            # and Gemini official paths are not given a stray /v1.
+            info = line_b_normalize(self.base_url)
+            source = info.url if 'chat_completions' in info.warnings else self.base_url
+            self.base_url = normalize_provider_base_url(source, self.provider)
         if self.image_base_url:
             self.image_base_url = normalize_provider_base_url(self.image_base_url, 'image')
         return self
@@ -84,6 +92,15 @@ class Connection(BaseModel):
         if not value.strip():
             raise ValueError('名称不能为空')
         return value.strip()
+
+    @field_validator('validation_error_type')
+    @classmethod
+    def known_validation_type(cls, value):
+        from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES
+        text = (value or '').strip()
+        if text and text not in UPSTREAM_ERROR_TYPES:
+            return ''
+        return text
 
 
 class Assignment(BaseModel):
@@ -213,7 +230,14 @@ def chat_endpoint(connection: Connection, model: str) -> dict:
         **{key: preset.base_url for key, preset in CLOUD_PRESETS.items()},
         **{key: preset.base_url for key, preset in LOCAL_PRESETS.items()},
     }
-    base = connection.base_url or defaults[connection.provider]
+    from backend.core.provider_endpoint import locked_chat_url, normalize_provider_base_url
+    locked = locked_chat_url(connection.provider, connection.base_url)
+    if locked:
+        base = locked
+    elif connection.provider == 'compatible' and connection.base_url:
+        base = normalize_provider_base_url(connection.base_url).url
+    else:
+        base = connection.base_url or defaults[connection.provider]
     if connection.provider == 'dashscope' and connection.base_url and (urlparse(base).hostname or '').endswith('.aliyuncs.com'):
         # Dedicated Bailian endpoints are pasted as a host or its native /api/v1 path; text models
         # use the OpenAI-compatible path on the same host (speech recognition uses /api/v1).

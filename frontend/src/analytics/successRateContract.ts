@@ -135,13 +135,17 @@ export function sanitizeRunProperties(value: Record<string, unknown> | null | un
   return sanitize(value, 'run')
 }
 
-function sanitize(value: Record<string, unknown> | null | undefined, kind: 'request' | 'run'): SuccessRateProperties {
+export function sanitizeProviderValidationProperties(value: Record<string, unknown> | null | undefined): SuccessRateProperties {
+  return sanitize(value, 'validation')
+}
+
+function sanitize(value: Record<string, unknown> | null | undefined, kind: 'request' | 'run' | 'validation'): SuccessRateProperties {
   const raw = value && typeof value === 'object' ? value : {}
   const out: SuccessRateProperties = { success_rate_schema_version: SUCCESS_RATE_SCHEMA_VERSION }
   const provider = sanitizeProvider(asString(raw.provider))
   if (provider) out.provider = provider
   const model = sanitizeModel(asString(raw.model))
-  if (model) out.model = model
+  if (model && kind !== 'validation') out.model = model
   let host = hostnameOfBaseUrl(asString(raw.base_url) || asString(raw.base_url_host))
   if (!host && typeof raw.base_url_host === 'string') {
     const candidate = raw.base_url_host.trim().toLowerCase()
@@ -161,12 +165,15 @@ function sanitize(value: Record<string, unknown> | null | undefined, kind: 'requ
     for (const key of ['prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'retry_count', 'duration_ms']) {
       putCount(out, raw, key)
     }
-  } else {
+  } else if (kind === 'run') {
     putEnum(out, raw, 'failure_stage', FAILURE_STAGES)
     putHttpStatus(out, raw.http_status, 400)
     for (const key of ['llm_calls', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'retry_count', 'billable_calls_before_failure']) {
       putCount(out, raw, key)
     }
+  } else {
+    const result = raw.result === 'ok' ? 'success' : raw.result
+    putEnum(out, { ...raw, result }, 'result', VALIDATION_RESULTS)
   }
   return out
 }

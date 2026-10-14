@@ -76,7 +76,7 @@ export function AIServiceFields({ m, placement, showVisual = true }: { m: ModelS
     : model && list && !list.preview ? t('已为你选好推荐模型，可随时更换。')
     : t('填写 API Key 后自动选择推荐模型。')
   return <>
-    <ProviderFields connection={main} placement={placement} onChoose={p => m.chooseProvider('analysis', p)} onEdit={patch => m.editConnection(main, patch)} />
+    <ProviderFields connection={main} placement={placement} keyHint={m.keyHints[main.id]} onChoose={p => m.chooseProvider('analysis', p)} onEdit={patch => m.editConnection(main, patch)} />
     <Row wide label={t('模型')} hint={hint}>
       <ModelPicker role="analysis" model={model} capability={settings.analysis?.capability} connection={main} list={list} busy={!!busy[main.id]} listError={listErrors[main.id]} mode={settings.analysis_mode}
         onChange={value => m.update({ analysis: { connection_id: main.id, model: value, capability: 'auto' } })}
@@ -114,6 +114,7 @@ function TranscriptionSection({ m }: { m: ModelSettingsStore }) {
     {cloud && connection ? <>
       <ProviderFields connection={connection} ariaPrefix={t('转写')} hideProvider placement="settings_model"
         sharedKey={connection.id === main?.id && !!(connection.api_key || connection.has_key)}
+        keyHint={m.keyHints[connection.id]}
         onChoose={p => m.chooseProvider('transcription', p)} onEdit={patch => m.editConnection(connection, patch)} />
       <Row wide label={t('转写模型')} hint={t('将音频发送给所选服务转写，按服务商计费。')}>
         <ModelPicker role="transcription" model={settings.transcription?.model || ''} connection={connection} list={lists[connection.id]} busy={!!busy[connection.id]} listError={listErrors[connection.id]} mode={settings.analysis_mode}
@@ -141,7 +142,7 @@ function CoverSection({ m }: { m: ModelSettingsStore }) {
       <Row label={t('封面使用其他服务')} hint={separate || mainHasImage || !lists[main?.id || ''] ? t('默认与 AI 服务共用 API Key，无需重复填写。') : t('{{name}} 没有生图模型，可以为封面单独选一家服务。', { name: PROVIDERS[presetKey(main!)]?.name || main?.provider })}>
         <Switch checked={separate} onChange={m.setCoverSeparate} />
       </Row>
-      {separate && connection && <ProviderFields connection={connection} ariaPrefix={t('封面')} placement="settings_model" onChoose={p => m.chooseProvider('cover', p)} onEdit={patch => m.editConnection(connection, patch)} />}
+      {separate && connection && <ProviderFields connection={connection} ariaPrefix={t('封面')} placement="settings_model" keyHint={m.keyHints[connection.id]} onChoose={p => m.chooseProvider('cover', p)} onEdit={patch => m.editConnection(connection, patch)} />}
       {connection && <Row wide label={t('生图模型')} hint={t('已自动选择推荐的生图模型，可更换。')}>
         <ModelPicker role="cover" model={settings.cover?.model || ''} connection={connection} list={lists[connection.id]} busy={!!busy[connection.id]} listError={listErrors[connection.id]} mode={settings.analysis_mode}
           onChange={model => m.setCoverModel(connection.id, model)} onRefresh={() => void m.discover(connection, true)} />
@@ -168,7 +169,9 @@ export default function AIModelSettings({ requestedSection }: { requestedSection
   const save = async () => {
     const result = await m.save()
     if (result.issue) document.getElementById(issueAnchor(result.issue))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    else if (result.validationFailed) document.getElementById('ai-model')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
+  const failed = !!m.main && m.main.validation_status === 'failed'
   return <div className="ac-ai-settings">
     {settings.migration_warnings?.includes('cover_configuration_invalid') && <p role="alert" className="ac-note">{t('旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。')}</p>}
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
@@ -188,7 +191,7 @@ export default function AIModelSettings({ requestedSection }: { requestedSection
     </fieldset>
     {m.error && <p className="studio-error" role="alert">{m.error}</p>}
     <div className="ac-savebar">
-      <StatusDot tone={m.dirty ? 'muted' : 'ok'} label={m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
+      <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? t('校验未通过。设置已保存，但开始生成前会拦住。') : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
       <Btn variant="cta" loading={m.saving} onClick={() => void save()}>{t('保存设置')}</Btn>
     </div>
   </div>

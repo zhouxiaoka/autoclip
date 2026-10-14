@@ -55,4 +55,4 @@ provider 枚举与现有 experience 契约一致：dashscope / openai / gemini /
 
 ## 明确不做（第 0 步契约本身）
 
-契约模块不改 `model_call_error_code` / `call_with_retry` / 设置页保存，也不自己打点。分类与脱敏只提供能力。
+契约模块不改 `model_call_error_code` / `call_with_retry` / 设置页保存，也不自己打点。分类与脱敏只提供能力。设置页接入校验（#S）引用本分类与 `hint_key`，由线 B 落地 `provider_validation_finished`。

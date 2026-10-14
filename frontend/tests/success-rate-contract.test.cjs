@@ -74,6 +74,24 @@ test('run sanitizer rejects unknown enums and success HTTP statuses', () => {
   assert.equal(props.retry_count, 2)
 })
 
+test('validation sanitizer maps ok to success and never keeps secrets', () => {
+  const props = contract.sanitizeProviderValidationProperties({
+    provider: 'api88',
+    base_url: `https://88api.ai/v1?api_key=${SECRET}`,
+    result: 'ok',
+    error_type: 'not-a-type',
+    api_key: SECRET,
+    model: 'gpt-4o',
+  })
+  const dumped = JSON.stringify(props)
+  assert.equal(props.result, 'success')
+  assert.equal(props.base_url_host, '88api.ai')
+  assert.equal(props.upstream_error_type, undefined)
+  assert.equal(props.model, undefined)
+  assert.equal(dumped.includes(SECRET), false)
+  assert.equal(dumped.includes('/v1'), false)
+})
+
 test('hint keys and retryable set cover every upstream type', () => {
   for (const type of contract.UPSTREAM_ERROR_TYPES) {
     assert.ok(contract.UPSTREAM_HINT_KEYS[type])

@@ -1,6 +1,7 @@
 /** Decision-oriented onboarding/settings events. Never accept raw configuration objects. */
 import { captureBusinessEvent } from './posthog'
 import { workflow } from './observer'
+import { sanitizeProviderValidationProperties, SuccessRateEvent } from './successRateContract'
 import { errorCode, telemetryId, type Properties } from './workflow'
 
 export type Placement = 'home_setup' | 'settings_model'
@@ -36,6 +37,10 @@ export function safeExperience(value: Record<string, unknown>): Properties {
 }
 export function trackExperience(event: ExperienceEvent, properties: Record<string, unknown>) {
   captureBusinessEvent(event, safeExperience(properties))
+}
+/** Settings access check. Never include keys or a full URL. */
+export function trackProviderValidation(properties: Record<string, unknown>) {
+  captureBusinessEvent(SuccessRateEvent.ProviderValidationFinished, sanitizeProviderValidationProperties(properties))
 }
 /** The same token gates request + result, including consent changes while awaiting an API. */
 export function beginExperience(name: 'model_settings_load' | 'model_discovery' | 'provider_configuration_save' | 'provider_connection_test' | 'example_project_open' | 'output_branding_save', properties: Record<string, unknown>) {

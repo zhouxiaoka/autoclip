@@ -37,6 +37,14 @@ test('local presets and local compatible servers get a context hint; cloud provi
 })
 
 test('the address row shows the hint for local setups only', () => {
+  const contractFile = path.join(__dirname, '../src/analytics/successRateContract.ts')
+  const contractMod = { exports: {} }
+  vm.runInNewContext(
+    ts.transpileModule(fs.readFileSync(contractFile, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText,
+    { exports: contractMod.exports, module: contractMod, URL },
+    { filename: contractFile },
+  )
+  const access = load('providerAccess.ts', { '../../i18n': { t: text => text }, './providers': providers, '../../analytics/successRateContract': contractMod.exports })
   const Fields = load('ProviderFields.tsx', {
     react: { useState: () => [false, () => {}] },
     antd: { Input: Object.assign(() => null, { Password: 'password' }), Select: 'select' },
@@ -44,6 +52,7 @@ test('the address row shows the hint for local setups only', () => {
     '../../utils/externalLinks': { openExternalLink() {} },
     '../../analytics/events': { trackSponsorLinkOpened() {} },
     './providers': providers, './modelSettingsLogic': { presetKey: c => c.provider },
+    './providerAccess': access,
     './providerUrl': load('providerUrl.ts', {}),
   }).default
   const hints = connection => flatten(Fields({ connection, placement: 'settings_model', onChoose() {}, onEdit() {} }))

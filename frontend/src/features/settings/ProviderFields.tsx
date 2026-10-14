@@ -7,19 +7,27 @@ import { trackSponsorLinkOpened } from '../../analytics/events'
 import { PROVIDERS, contextHintFor, providerPickerOptions, type ProviderKey } from './providers'
 import type { Connection } from './modelSettingsApi'
 import { presetKey } from './modelSettingsLogic'
+import {
+  canEditAddress, hintProviderForKey, keyHintCopy, normalizeCompatibleUrl,
+  sponsorKeyLink, validationCopy,
+} from './providerAccess'
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
 
+const ENDPOINT_ERRORS = new Set(['bad_endpoint', 'connection', 'timeout'])
+const KEY_ERRORS = new Set(['invalid_key', 'insufficient_quota', 'permission_denied'])
+
 /**
- * Provider picker + credentials for one connection. Local presets need no key; compatible/local expose the address.
- * Without a connection (first run) only the picker renders, with nothing pre-selected.
+ * Provider picker + credentials for one connection. Local presets need no key; only
+ * 自定义兼容 / local expose the address. Locked presets hide the URL.
  */
-export default function ProviderFields({ connection, ariaPrefix = '', hideProvider, sharedKey, placement, onChoose, onEdit }: {
+export default function ProviderFields({ connection, ariaPrefix = '', hideProvider, sharedKey, placement, keyHint, onChoose, onEdit }: {
   connection?: Connection
   ariaPrefix?: string
   hideProvider?: boolean
   /** The key is reused from the main AI service; offer an explicit "edit" instead of a second field. */
   sharedKey?: boolean
   placement: 'settings_model' | 'home_setup'
+  keyHint?: string | null
   onChoose: (provider: ProviderKey) => void
   onEdit: (patch: Partial<Connection>) => void
 }) {
@@ -33,6 +41,14 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
       optionRender={option => { const p = PROVIDERS[option.value as ProviderKey]; return <span>{p.name}{p.sponsor && <small style={{ marginLeft: 8, color: 'var(--sub)', fontWeight: 400 }}>{t('赞助')} · {p.sponsor.offer}</small>}</span> }} />
   </Row>
   if (!connection) return <>{picker}</>
+  const failed = connection.validation_status === 'failed'
+  const errorType = connection.validation_error_type || ''
+  const urlInfo = key === 'compatible' ? normalizeCompatibleUrl(connection.base_url) : null
+  const liveHint = hintProviderForKey(connection.api_key) || (keyHint as ProviderKey | undefined)
+  const showHint = liveHint && liveHint !== key
+  const shownError = (urlInfo?.warnings.includes('console_host') && 'console_host') || (failed && errorType) || ''
+  const keyLink = sponsorKeyLink(key)
+  const addressEditable = canEditAddress(key)
   return <>
     {picker}
     {preset?.sponsor && <div className="ac-sponsor">
@@ -50,20 +66,30 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
           <Btn variant="text" size="sm" onClick={() => setEditShared(true)}>{t('修改密钥')}</Btn>
         </Row>
       : <Row wide label={t('服务密钥（API Key）')} hint={preset?.keyUrl
-          ? <>{t('在供应商网站创建密钥，复制后粘贴到右侧。')} <a className="ac-link" href={preset.keyUrl} onClick={e => { e.preventDefault(); openExternalLink(preset.keyUrl) }}>{t('获取 API Key')} ↗</a></>
+          ? <>{t('在供应商网站创建密钥，复制后粘贴到右侧。')} <a className="ac-link" href={preset.keyUrl} onClick={e => { e.preventDefault(); openExternalLink(preset.keyUrl) }}>{t('获取 API Key')} ↗</a>
+            {keyLink && keyLink.href !== preset.keyUrl && <> · <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a></>}</>
           : t('sk-…（自建服务可留空）')}>
           <Input.Password aria-label={label('API Key')} autoComplete="new-password" value={connection.api_key ?? ''}
+            status={failed && KEY_ERRORS.has(errorType) ? 'error' : undefined}
             placeholder={connection.has_key ? t('已配置；留空保留已有密钥') : preset?.placeholder || 'sk-…'}
             onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
             onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />
         </Row>)}
-    {(key === 'compatible' || key === 'dashscope' || preset?.local) && <Row wide label={t('接口地址')} hint={[preset?.local ? t('本机服务无需 API Key，保持默认地址即可。') : key === 'dashscope' ? t('使用百炼专属接入地址时填写，留空用默认地址。') : '', contextHintFor(key, connection.base_url)].filter(Boolean).join(' ') || undefined}>
-      <Input aria-label={label(t('接口地址'))} value={connection.base_url} placeholder={preset?.local?.baseUrl || (key === 'dashscope' ? 'https://dashscope.aliyuncs.com/api/v1' : 'https://example.com/v1')}
+    {addressEditable && <Row wide label={t('接口地址')} hint={[preset?.local ? t('本机服务无需 API Key，保持默认地址即可。') : key === 'dashscope' ? t('使用百炼专属接入地址时填写，留空用默认地址。') : '', contextHintFor(key, connection.base_url)].filter(Boolean).join(' ') || undefined}>
+      <Input aria-label={label(t('接口地址'))} value={connection.base_url}
+        status={(urlInfo?.warnings.includes('console_host') || (failed && ENDPOINT_ERRORS.has(errorType))) ? 'error' : undefined}
+        placeholder={preset?.local?.baseUrl || (key === 'dashscope' ? 'https://dashscope.aliyuncs.com/api/v1' : 'https://example.com/v1')}
         onChange={e => onEdit({ base_url: collapseSpaces(e.target.value) })}
         onBlur={() => {
-          const url = normalizeProviderBaseUrl(connection.base_url, key)
+          const stripped = key === 'compatible' ? normalizeCompatibleUrl(connection.base_url).url : connection.base_url
+          const url = normalizeProviderBaseUrl(stripped, key)
           if (url !== connection.base_url) onEdit({ base_url: url })
         }} />
     </Row>}
+    {showHint && <p className="ac-note">{keyHintCopy(liveHint)}</p>}
+    {shownError && <p className="ac-note ac-note--error" role="alert">{validationCopy(shownError)}</p>}
+    {failed && keyLink && KEY_ERRORS.has(errorType) && <p className="ac-note">
+      <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a>
+    </p>}
   </>
 }
