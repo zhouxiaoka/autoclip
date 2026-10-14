@@ -161,8 +161,11 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   }
 
   const fetchModels = async (connection: Connection): Promise<FetchListResult> => {
+    const version = (versions.current[connection.id] || 0) + 1
+    versions.current[connection.id] = version
     try {
       const listing = await modelSettingsApi.fetchList(connection)
+      if (!alive.current || versions.current[connection.id] !== version) return listing
       if (listing.ok || listing.success) {
         backfillModels(connection, listing)
         setListErrors(old => { const next = { ...old }; delete next[connection.id]; return next })
@@ -174,7 +177,9 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       }
       return listing
     } catch (e) {
-      setListErrors(old => ({ ...old, [connection.id]: t('settings.providers.fetch_list_failed') }))
+      if (alive.current && versions.current[connection.id] === version) {
+        setListErrors(old => ({ ...old, [connection.id]: t('settings.providers.fetch_list_failed') }))
+      }
       throw e
     }
   }
