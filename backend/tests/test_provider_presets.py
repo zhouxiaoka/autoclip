@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -108,6 +111,68 @@ def test_packaged_layout_finds_json_next_to_backend(tmp_path):
     target.write_bytes(CATALOG_PATH.read_bytes())
     found = provider_presets.find_provider_presets_path(start=tmp_path / "resources" / "backend" / "core")
     assert found == target
+
+
+def test_importlib_resources_finds_the_catalog():
+    found = provider_presets._resource_presets_path()
+    assert found == CATALOG_PATH
+    catalog = provider_presets.load_provider_catalog()
+    assert catalog.path == CATALOG_PATH
+    assert len(catalog.providers) == 38
+
+
+def test_installed_wheel_loads_catalog_outside_the_repo(tmp_path):
+    """A wheel installed away from the checkout must still load 38 providers."""
+    wheel_dir = tmp_path / "wheel"
+    installed = tmp_path / "installed"
+    elsewhere = tmp_path / "elsewhere"
+    wheel_dir.mkdir()
+    elsewhere.mkdir()
+    subprocess.run(
+        [sys.executable, "-m", "pip", "wheel", "--no-deps", "--wheel-dir", str(wheel_dir), str(ROOT)],
+        check=True,
+        cwd=elsewhere,
+    )
+    wheels = list(wheel_dir.glob("autoclip_mcp-*-py3-none-any.whl"))
+    assert wheels, list(wheel_dir.iterdir())
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--no-index", "--no-deps", "--target", str(installed), str(wheels[0])],
+        check=True,
+        cwd=elsewhere,
+    )
+    assert (installed / "presets" / "provider_presets.json").is_file()
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key != "AUTOCLIP_PROVIDER_PRESETS"
+    }
+    env["PYTHONPATH"] = str(installed)
+    probe = r"""
+import os
+from pathlib import Path
+os.environ.pop("AUTOCLIP_PROVIDER_PRESETS", None)
+import backend
+from backend.core import provider_presets
+root = Path(%r).resolve()
+assert Path(backend.__file__).resolve().is_relative_to(root)
+assert Path(provider_presets.__file__).resolve().is_relative_to(root)
+provider_presets.reset_catalog_cache()
+catalog = provider_presets.get_catalog()
+assert len(catalog.providers) == 38
+assert catalog.path.resolve().is_relative_to(root)
+resource = provider_presets._resource_presets_path()
+assert resource is not None and resource.resolve().is_relative_to(root)
+print(catalog.path)
+""" % str(installed)
+    completed = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=elsewhere,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "provider_presets.json" in completed.stdout
 
 
 def test_hardcoded_product_hosts_left_the_six_consumers():

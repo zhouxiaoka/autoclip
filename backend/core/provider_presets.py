@@ -1,13 +1,16 @@
 """Single loader for ``presets/provider_presets.json``.
 
 This is first-party AutoClip data. The JSON is the product catalog; this module
-only finds, validates and projects it. Remote fetch is out of scope.
+only finds, validates and projects it. Installed wheels and the CLI/MCP ZIP
+locate it as a package resource (``importlib.resources``). Remote fetch is
+out of scope.
 """
 from __future__ import annotations
 
 import json
 import os
 from dataclasses import dataclass
+from importlib.resources import files as package_files
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 
@@ -61,26 +64,66 @@ class ProviderCatalog:
 
 
 _cache: Optional[ProviderCatalog] = None
+_RESOURCE_NAME = "provider_presets.json"
+
+
+def _env_presets_path() -> Optional[Path]:
+    env = (os.environ.get("AUTOCLIP_PROVIDER_PRESETS") or "").strip()
+    if not env:
+        return None
+    path = Path(env).expanduser()
+    if path.is_file():
+        return path
+    raise FileNotFoundError(f"AUTOCLIP_PROVIDER_PRESETS not found: {path}")
+
+
+def _resource_presets_path() -> Optional[Path]:
+    """Installed wheel / editable checkout: ``presets/provider_presets.json``."""
+    for package, parts in (
+        ("presets", (_RESOURCE_NAME,)),
+        ("backend", ("presets", _RESOURCE_NAME)),
+    ):
+        try:
+            resource = package_files(package)
+            for part in parts:
+                resource = resource.joinpath(part)
+            if not resource.is_file():
+                continue
+            path = Path(os.fspath(resource))
+            if path.is_file():
+                return path
+        except (ModuleNotFoundError, FileNotFoundError, TypeError, OSError, ValueError):
+            continue
+    return None
+
+
+def _walk_presets(start: Path) -> Optional[Path]:
+    seen: set[Path] = set()
+    for parent in (start.resolve(), *start.resolve().parents):
+        candidate = parent / "presets" / _RESOURCE_NAME
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def find_provider_presets_path(start: Optional[Path] = None) -> Path:
-    """Locate the catalog by env, then walk up from ``start`` or this file, then cwd."""
-    env = (os.environ.get("AUTOCLIP_PROVIDER_PRESETS") or "").strip()
-    if env:
-        path = Path(env).expanduser()
-        if path.is_file():
-            return path
-        raise FileNotFoundError(f"AUTOCLIP_PROVIDER_PRESETS not found: {path}")
-    seen: set[Path] = set()
-    roots = [Path(start).resolve() if start else Path(__file__).resolve().parent, Path.cwd()]
-    for root in roots:
-        for parent in (root, *root.parents):
-            candidate = parent / "presets" / "provider_presets.json"
-            if candidate in seen:
-                continue
-            seen.add(candidate)
-            if candidate.is_file():
-                return candidate
+    """Locate the catalog by env, optional walk-up, packaged resource, then cwd."""
+    found = _env_presets_path()
+    if found:
+        return found
+    if start is not None:
+        found = _walk_presets(Path(start))
+        if found:
+            return found
+    found = _resource_presets_path()
+    if found:
+        return found
+    found = _walk_presets(Path(__file__).resolve().parent) or _walk_presets(Path.cwd())
+    if found:
+        return found
     raise FileNotFoundError("presets/provider_presets.json not found")
 
 
