@@ -293,8 +293,33 @@ def sees_images(settings: ModelSettings, assignment: Assignment | None) -> bool:
     return bool(assignment and assignment.model and capability(settings, assignment) == 'multimodal')
 
 
+def vision_follow_binding(settings: ModelSettings) -> Assignment | None:
+    """The model visual understanding follows: an explicit vision assignment, else analysis."""
+    return settings.vision or settings.analysis
+
+
+def vision_follow_lacks_capability(settings: ModelSettings) -> bool:
+    """True when visual understanding is enabled and the followed model cannot see images.
+
+    Known text-only (explicit or catalog) is always a miss. Unresolved ``auto`` only
+    fails when analysis_mode is ``visual`` — smart mode may still fall back to subtitles.
+    Save stays allowed; readiness and generation read this same answer.
+    """
+    if settings.analysis_mode == 'subtitle':
+        return False
+    binding = vision_follow_binding(settings)
+    if not binding or not binding.model:
+        return settings.analysis_mode == 'visual'
+    known = capability(settings, binding)
+    if known == 'multimodal':
+        return False
+    if known == 'text':
+        return True
+    return settings.analysis_mode == 'visual'
+
+
 def vision_endpoint(settings: ModelSettings) -> dict | None:
-    binding = settings.vision or settings.analysis
+    binding = vision_follow_binding(settings)
     if not sees_images(settings, binding):
         return None
     return chat_endpoint(connection_for(settings, binding), binding.model)
@@ -338,8 +363,7 @@ def save(settings: ModelSettings) -> dict:
                                                'cover_choice_version': COVER_CHOICE_VERSION})
         if not resolved.analysis:
             raise ValueError('请选择高光分析模型')
-        if resolved.analysis_mode == 'visual' and not vision_endpoint(resolved):
-            raise ValueError('画面分析需要多模态模型，请选择模型或在高级设置中确认自定义模型能力')
+        # Visual-follow without vision: persist (marked red) and block at generation.
         target = path()
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists() and 'settings_configuration_invalid' in previous._migration_warnings:

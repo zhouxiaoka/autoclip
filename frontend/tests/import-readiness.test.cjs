@@ -180,6 +180,17 @@ test('vision repair opens the vision settings section', async () => {
   assert.deepEqual(view.navigations, ['/settings?section=vision'])
 })
 
+test('a text-only vision follow blocks generation with a clear message', async () => {
+  const failing = report({ visual: check(false, 'vision_unsupported', 'settings_vision') })
+  assert.equal(readiness.submissionBlock(failing, true, true), 'visual')
+  const view = render({ report: failing })
+  assert.ok(view.tree.some(node => node.type === 'status' && String(node.props?.label || '').includes('不能看图')))
+  await button(view.tree, '视觉设置').props.onClick()
+  assert.deepEqual(view.navigations, ['/settings?section=vision'])
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 0)
+})
+
 test('an installed runtime without its model offers the model download, not another install', async () => {
   // RC156 Win QA #5: readiness used to report ready with only the runtime installed.
   const missing = report({ transcription: { ...check(false, 'whisper_model_missing', 'install_whisper'), model: 'small' } })

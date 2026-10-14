@@ -84,6 +84,44 @@ test('repairing an invalid legacy analysis keeps valid cover and vision assignme
   assert.deepEqual(plain(logic.prepareLoaded(value)), plain(value))
 })
 
+test('vision follow marks a text-only model red without blocking save', () => {
+  const lists = { d: { models: [{ id: 'deepseek-flash', capability: 'text', analysis: true }], source: 'live' } }
+  const text = {
+    ...fresh(),
+    connections: [conn('d', 'deepseek', { api_key: 'k' })],
+    analysis: { connection_id: 'd', model: 'deepseek-flash', capability: 'auto' },
+    analysis_mode: 'auto',
+  }
+  assert.equal(logic.visionFollowLacksCapability(text, lists), true)
+  assert.equal(logic.saveIssue(text), null)
+  const off = logic.setVisual(text, false)
+  assert.equal(logic.visionFollowLacksCapability(off, lists), false)
+  const visualUnknown = {
+    ...fresh(),
+    connections: [conn('a', 'compatible', { api_key: 'k', base_url: 'https://gw.example/v1' })],
+    analysis: { connection_id: 'a', model: 'alias-x', capability: 'auto' },
+    analysis_mode: 'visual',
+  }
+  assert.equal(logic.visionFollowLacksCapability(visualUnknown, {}), true)
+  const multimodal = {
+    ...text,
+    analysis: { connection_id: 'd', model: 'gpt-4o', capability: 'multimodal' },
+  }
+  assert.equal(logic.visionFollowLacksCapability(multimodal, lists), false)
+  const followVision = {
+    ...multimodal,
+    vision: { connection_id: 'd', model: 'deepseek-flash', capability: 'text' },
+  }
+  assert.equal(logic.visionFollowLacksCapability(followVision, lists), true)
+  const unresolvedAuto = {
+    ...fresh(),
+    connections: [conn('o', 'openai', { api_key: 'k' })],
+    analysis: { connection_id: 'o', model: 'o3-mini', capability: 'auto' },
+    analysis_mode: 'auto',
+  }
+  assert.equal(logic.visionFollowLacksCapability(unresolvedAuto, {}), false)
+})
+
 test('text-only models stay eligible in smart mode; only the explicit visual route needs multimodal', () => {
   assert.deepEqual(defaults.analysisModels(models, 'auto').map(m => m.id), ['qwen3.8-flash', 'qwen-plus'])
   assert.deepEqual(defaults.analysisModels(models, 'subtitle').map(m => m.id), ['qwen3.8-flash', 'qwen-plus'])

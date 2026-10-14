@@ -241,6 +241,105 @@ def test_inspect_without_a_saved_document_is_not_blocked():
     readiness.ensure_analysis_usable()
 
 
+def test_text_only_vision_follow_saves_but_blocks_generation(monkeypatch):
+    from backend.services.provider_validation import (
+        VISION_BLOCK_MESSAGE, VISION_HINT_KEY, VISION_UNSUPPORTED, vision_follow_issue,
+    )
+    from backend.services.studio import readiness
+    settings = ai.ModelSettings(
+        connections=[_connection()],
+        analysis=ai.Assignment(connection_id='c1', model='deepseek-flash', capability='text'),
+        analysis_mode='auto',
+    )
+    issue = vision_follow_issue(settings)
+    assert issue is not None
+    assert issue.ok is False
+    assert issue.error_type == VISION_UNSUPPORTED
+    assert issue.hint_key == VISION_HINT_KEY
+    assert issue.as_api()['error_type'] == VISION_UNSUPPORTED
+    assert 'sk-test-key' not in str(issue.as_api())
+    assert 'https://gw.example' not in str(issue.as_api())
+    ai.save(settings)
+    loaded = ai.load()
+    assert loaded.analysis.capability == 'text'
+    assert loaded.connections[0].validation_status == 'unchecked'
+    monkeypatch.setattr(ai, 'for_editing', lambda: loaded)
+    report = readiness.report()
+    assert report['checks']['visual'] == {'ok': False, 'code': 'vision_unsupported', 'repair': 'settings_vision'}
+    assert report['ready'] is False
+    with pytest.raises(ValueError, match='不能看图'):
+        readiness.ensure_analysis_usable()
+    assert VISION_BLOCK_MESSAGE.startswith('画面理解')
+
+
+def test_visual_mode_without_vision_saves_but_blocks_generation(monkeypatch):
+    from backend.services.studio import readiness
+    settings = ai.ModelSettings(
+        connections=[_connection()],
+        analysis=ai.Assignment(connection_id='c1', model='gpt-4o-mini', capability='text'),
+        analysis_mode='visual',
+    )
+    ai.save(settings)
+    loaded = ai.load()
+    monkeypatch.setattr(ai, 'for_editing', lambda: loaded)
+    assert readiness.report()['checks']['visual']['code'] == 'vision_unsupported'
+    with pytest.raises(ValueError, match='设置 → 模型'):
+        readiness.ensure_analysis_usable()
+
+
+def test_subtitle_mode_text_model_does_not_block(monkeypatch):
+    from backend.services.provider_validation import vision_follow_issue
+    from backend.services.studio import readiness
+    settings = ai.ModelSettings(
+        connections=[_connection()],
+        analysis=ai.Assignment(connection_id='c1', model='deepseek-flash', capability='text'),
+        analysis_mode='subtitle',
+        allow_visual_screening=False,
+    )
+    assert vision_follow_issue(settings) is None
+    ai.save(settings)
+    monkeypatch.setattr(ai, 'for_editing', lambda: ai.load())
+    assert readiness.report()['checks']['visual'] == {'ok': True, 'code': 'not_required', 'repair': 'none'}
+    readiness.ensure_analysis_usable()
+
+
+def test_multimodal_follow_and_unresolved_auto_do_not_flag():
+    from backend.services.provider_validation import vision_follow_issue
+    vision_ok = ai.ModelSettings(
+        connections=[_connection(provider='openai', base_url='')],
+        analysis=ai.Assignment(connection_id='c1', model='gpt-4o-mini', capability='auto'),
+        analysis_mode='auto',
+    )
+    assert vision_follow_issue(vision_ok) is None
+    assert ai.vision_follow_lacks_capability(vision_ok) is False
+    unresolved = ai.ModelSettings(
+        connections=[_connection(provider='openai', base_url='')],
+        analysis=ai.Assignment(connection_id='c1', model='o3-mini', capability='auto'),
+        analysis_mode='auto',
+    )
+    assert vision_follow_issue(unresolved) is None
+    visual_unresolved = unresolved.model_copy(update={'analysis_mode': 'visual'})
+    assert vision_follow_issue(visual_unresolved) is not None
+
+
+def test_vision_unsupported_is_not_an_upstream_type():
+    from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES
+    from backend.services.provider_validation import VISION_UNSUPPORTED
+    assert VISION_UNSUPPORTED not in UPSTREAM_ERROR_TYPES
+
+
+def test_dedicated_text_vision_assignment_is_flagged():
+    from backend.services.provider_validation import vision_follow_issue
+    settings = ai.ModelSettings(
+        connections=[_connection()],
+        analysis=ai.Assignment(connection_id='c1', model='gpt-4o', capability='multimodal'),
+        vision=ai.Assignment(connection_id='c1', model='deepseek-flash', capability='text'),
+        analysis_mode='auto',
+    )
+    assert ai.vision_follow_lacks_capability(settings) is True
+    assert vision_follow_issue(settings) is not None
+
+
 def test_api88_wrong_stored_url_is_forced_to_the_preset(monkeypatch):
     seen = []
 

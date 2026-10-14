@@ -5,7 +5,7 @@
 import { PROVIDERS, type ProviderKey } from './providers'
 import type { Assignment, Connection, ModelList, ModelSettings } from './modelSettingsApi'
 import { applyModelDefaults, defaultModel } from './modelDefaults'
-import { normalizeCompatibleUrl, passed, type ValidationResult } from './providerAccess'
+import { normalizeCompatibleUrl, passed, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
 
 export type Role = 'analysis' | 'vision' | 'cover' | 'transcription'
@@ -149,6 +149,27 @@ export const isTextOnly = (s: ModelSettings, lists: Record<string, ModelList>) =
   if (binding.capability !== 'auto') return binding.capability === 'text'
   return lists[binding.connection_id]?.models.find(m => m.id === binding.model)?.capability === 'text'
 }
+
+/** The assignment visual understanding follows (explicit vision, else analysis). */
+export const followedVisionBinding = (s: ModelSettings) => s.vision || s.analysis
+
+/**
+ * Same answer as backend `vision_follow_lacks_capability`: enabled visual understanding
+ * whose followed model is known text-only, or visual mode without confirmed vision.
+ */
+export function visionFollowLacksCapability(s: ModelSettings, lists: Record<string, ModelList>): boolean {
+  if (s.analysis_mode === 'subtitle') return false
+  const binding = followedVisionBinding(s)
+  if (!binding?.model) return s.analysis_mode === 'visual'
+  const cap = binding.capability !== 'auto'
+    ? binding.capability
+    : (lists[binding.connection_id]?.models.find(m => m.id === binding.model)?.capability ?? null)
+  if (cap === 'multimodal') return false
+  if (cap === 'text') return true
+  return s.analysis_mode === 'visual'
+}
+
+export { VISION_HINT_KEY }
 
 /** First blocking problem before save, in page order. */
 export function saveIssue(s: ModelSettings): SaveIssue | null {

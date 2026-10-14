@@ -16,7 +16,7 @@ export function eligibleModels(role: Role, models: ModelEntry[], mode: ModelSett
  * Searchable model list for one role. Custom IDs are allowed where the service cannot enumerate them.
  * Refresh appears only when the list is not the live account list; a discovery error sits next to the field.
  */
-export default function ModelPicker({ role, model, capability, connection, list, busy, listError, mode, actions, onChange, onCapability, onRefresh }: {
+export default function ModelPicker({ role, model, capability, connection, list, busy, listError, mode, actions, invalid, onChange, onCapability, onRefresh }: {
   role: Role
   model: string
   capability?: Capability
@@ -26,6 +26,7 @@ export default function ModelPicker({ role, model, capability, connection, list,
   listError?: string
   mode: ModelSettings['analysis_mode']
   actions?: ReactNode
+  invalid?: boolean
   onChange: (model: string) => void
   onCapability?: (capability: Capability) => void
   onRefresh: () => void
@@ -44,7 +45,7 @@ export default function ModelPicker({ role, model, capability, connection, list,
   // The generic preview warning is already covered by the row hint; account-specific warnings stay visible.
   const warning = list?.warning && list.warning !== '公开目录预览，填写 API Key 后确认账号可用模型。' ? t(list.warning) : ''
   return <div style={{ width: '100%' }}>
-    <Select aria-label={t(role === 'cover' ? '生图模型' : role === 'transcription' ? '转写模型' : '模型')} disabled={!connection} showSearch value={model || undefined} style={{ width: '100%' }}
+    <Select aria-label={t(role === 'cover' ? '生图模型' : role === 'transcription' ? '转写模型' : '模型')} disabled={!connection} showSearch value={model || undefined} status={invalid ? 'error' : undefined} style={{ width: '100%' }}
       open={open} onDropdownVisibleChange={o => { setOpen(o); if (!o) setSearch('') }} onSearch={setSearch}
       placeholder={busy ? t('正在获取可用模型…') : t(role === 'transcription' && connection?.provider !== 'compatible' ? '选择转写模型' : '选择或搜索模型，也可手动输入模型名')}
       loading={busy} optionFilterProp="value"

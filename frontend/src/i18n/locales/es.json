@@ -1669,5 +1669,7 @@
   "去 Infistar 获取密钥": "Obtener una clave de Infistar",
   "校验未通过。设置已保存，但开始生成前会拦住。": "La comprobación falló. Los ajustes se guardan, pero la generación se bloqueará hasta que lo corrijas.",
   "去设置修改": "Corregir en ajustes",
-  "模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。": "La conexión del modelo no pasó la comprobación. Cambia la clave o la dirección en Ajustes → Modelos y luego genera."
+  "模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。": "La conexión del modelo no pasó la comprobación. Cambia la clave o la dirección en Ajustes → Modelos y luego genera.",
+  "画面理解使用的模型不能看图。设置已保存，开始生成前会拦住。请换一个能看图的模型，或关闭画面识别。": "El modelo de comprensión visual no puede ver imágenes. Los ajustes se guardan, pero la generación se bloqueará. Elige un modelo con visión o desactiva el reconocimiento visual.",
+  "画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型，或关闭画面识别后再生成。": "El modelo de comprensión visual no puede ver imágenes. En Ajustes → Modelos, elige un modelo con visión o desactiva el reconocimiento visual y luego genera."
 }
