@@ -1669,5 +1669,10 @@
   "去 Infistar 获取密钥": "Obter uma chave da Infistar",
   "校验未通过。设置已保存，但开始生成前会拦住。": "A verificação falhou. As configurações foram salvas, mas a geração será bloqueada até você corrigir.",
   "去设置修改": "Corrigir nas configurações",
-  "模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。": "A conexão do modelo não passou na verificação. Ajuste a chave ou o endereço em Configurações → Modelos e então gere."
+  "模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。": "A conexão do modelo não passou na verificação. Ajuste a chave ou o endereço em Configurações → Modelos e então gere.",
+  "settings.providers.fetch_list": "Obter lista de modelos",
+  "settings.providers.fetch_list_failed": "Não foi possível obter a lista de modelos. Verifique o endereço e a chave, ou insira um ID manualmente.",
+  "settings.providers.fetch_list_updated": "Lista atualizada com os modelos disponíveis nesta conta.",
+  "settings.providers.fetch_list_no_overlap": "Nenhum candidato recomendado está na lista desta conta. Escolha um manualmente ou atualize a lista.",
+  "settings.providers.fetch_list_truncated": "A lista de modelos é longa demais; só os primeiros 2000 são mantidos. Insira os demais manualmente."
 }

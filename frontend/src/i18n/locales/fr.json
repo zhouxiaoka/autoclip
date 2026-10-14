@@ -1669,5 +1669,10 @@
   "去 Infistar 获取密钥": "Obtenir une clé Infistar",
   "校验未通过。设置已保存，但开始生成前会拦住。": "Le contrôle a échoué. Les réglages sont enregistrés, mais la génération sera bloquée tant que ce n’est pas corrigé.",
   "去设置修改": "Corriger dans les réglages",
-  "模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。": "La connexion au modèle n’a pas passé le contrôle. Modifiez la clé ou l’adresse dans Réglages → Modèles, puis générez."
+  "模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。": "La connexion au modèle n’a pas passé le contrôle. Modifiez la clé ou l’adresse dans Réglages → Modèles, puis générez.",
+  "settings.providers.fetch_list": "Récupérer la liste des modèles",
+  "settings.providers.fetch_list_failed": "Impossible de récupérer la liste des modèles. Vérifiez l’adresse et la clé, ou saisissez un ID manuellement.",
+  "settings.providers.fetch_list_updated": "Liste mise à jour avec les modèles disponibles sur ce compte.",
+  "settings.providers.fetch_list_no_overlap": "Aucun candidat recommandé n’est dans la liste de ce compte. Choisissez-en un manuellement ou actualisez la liste.",
+  "settings.providers.fetch_list_truncated": "La liste des modèles est trop longue ; seuls les 2000 premiers sont conservés. Saisissez les autres manuellement."
 }

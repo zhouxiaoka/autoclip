@@ -22,6 +22,9 @@ export interface ValidationResult {
   normalized_base_url?: string
   base_url_host?: string
   models?: string[]
+  recommended?: Record<string, string[]>
+  truncated?: boolean
+  message_key?: string
 }
 
 const KEY_HINTS: Array<[RegExp, ProviderKey]> = [

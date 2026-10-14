@@ -5,7 +5,7 @@ import { errorText } from '../studio/api'
 import { beginExperience, trackProviderValidation, type Placement } from '../../analytics/experience'
 import { hintKeyForUpstreamError } from '../../analytics/successRateContract'
 import { PROVIDERS, type ProviderKey } from './providers'
-import { bindingCapability, modelSettingsApi, type Connection, type ModelList, type ModelSettings } from './modelSettingsApi'
+import { bindingCapability, modelSettingsApi, type Connection, type FetchListResult, type ModelList, type ModelSettings } from './modelSettingsApi'
 import { applyModelDefaults } from './modelDefaults'
 import * as logic from './modelSettingsLogic'
 import type { Role, SaveIssue } from './modelSettingsLogic'
@@ -140,8 +140,15 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     if (result.key_hint) setKeyHints(old => ({ ...old, [connection.id]: result.key_hint as string }))
   }
 
-  const backfillModels = (connection: Connection, ids?: string[]) => {
-    if (ids?.length) {
+  const orderedIds = (listing?: { models?: string[]; recommended?: Record<string, string[]> }) => {
+    const analysis = listing?.recommended?.analysis || []
+    const live = listing?.models || []
+    return analysis.length ? [...analysis, ...live.filter(id => !analysis.includes(id))] : live
+  }
+
+  const backfillModels = (connection: Connection, listing?: { models?: string[]; recommended?: Record<string, string[]> }) => {
+    const ids = orderedIds(listing)
+    if (ids.length) {
       setLists(old => ({
         ...old,
         [connection.id]: {
@@ -151,6 +158,25 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       }))
     }
     void discover(connection, true, 'manual')
+  }
+
+  const fetchModels = async (connection: Connection): Promise<FetchListResult> => {
+    try {
+      const listing = await modelSettingsApi.fetchList(connection)
+      if (listing.ok || listing.success) {
+        backfillModels(connection, listing)
+        setListErrors(old => { const next = { ...old }; delete next[connection.id]; return next })
+      } else {
+        setListErrors(old => ({
+          ...old,
+          [connection.id]: t(listing.message_key || listing.hint_key || 'settings.providers.fetch_list_failed'),
+        }))
+      }
+      return listing
+    } catch (e) {
+      setListErrors(old => ({ ...old, [connection.id]: t('settings.providers.fetch_list_failed') }))
+      throw e
+    }
   }
 
   const probe = async (connection: Connection, model: string, vision: boolean): Promise<ValidationResult> => {
@@ -181,7 +207,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         const result = await probe(main, next.analysis.model, vision)
         emitValidation(main, result)
         next = logic.applyValidation(next, main.id, result)
-        if (passed(result)) backfillModels({ ...main, base_url: result.normalized_base_url || main.base_url }, result.models)
+        if (passed(result)) backfillModels({ ...main, base_url: result.normalized_base_url || main.base_url }, result)
         else setError(validationCopy(result.error_type, result.hint_key))
         setSettings(next)
       }
@@ -208,7 +234,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       replace(logic.applyValidation(settings, main.id, value))
       finish(passed(value) ? 'completed' : 'failed')
       if (passed(value)) {
-        backfillModels({ ...main, base_url: value.normalized_base_url || main.base_url }, value.models)
+        backfillModels({ ...main, base_url: value.normalized_base_url || main.base_url }, value)
         message.success(t('连接正常'))
         setError('')
       } else {
@@ -223,7 +249,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const main = settings ? logic.mainConnection(settings) : undefined
   return {
     settings, lists, busy, listErrors, dirty, saving, testing, error, setError, main, keyHints,
-    load, discover, update, editConnection, chooseProvider, setTranscriptionLocal,
+    load, discover, fetchModels, update, editConnection, chooseProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test,
   }
 }
