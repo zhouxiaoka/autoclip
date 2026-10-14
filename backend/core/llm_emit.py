@@ -289,7 +289,8 @@ def observe_provider_call(provider: Any, impl: Any, prompt: str, input_data: Any
     """Wrap LLMProvider.call. ``prompt`` / ``input_data`` stay in the callee only."""
     started = time.monotonic()
     base_url = _provider_base_url(provider)
-    model = getattr(provider, "model_name", None)
+    from backend.core.llm_degrade import bound_request_model
+    model = bound_request_model(getattr(provider, "model_name", None))
     name = _provider_label(provider, base_url)
     try:
         response = impl(provider, prompt, input_data, **kwargs)

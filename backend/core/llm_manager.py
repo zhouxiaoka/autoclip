@@ -425,8 +425,14 @@ class LLMManager:
             raise
     
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> str:
-        """调用LLM。设了 AUTOCLIP_LLM_CACHE_DIR 时按 sha1(prompt+input) 录制 / 回放，给回归集用。"""
+        """调用LLM。设了 AUTOCLIP_LLM_CACHE_DIR 时按 sha1(prompt+input) 录制 / 回放，给回归集用。
+
+        ``model`` is per-call candidate state. It is not written to
+        ``settings`` or ``current_provider.model_name``.
+        """
+        from backend.core.llm_degrade import bind_request_model, bound_request_model
         from backend.core.project_cancellation import checkpoint
+        override = kwargs.pop("model", None)
         checkpoint()  # 项目已删除：不再为它花钱（RC156 #12）
         self._reload_if_settings_changed()
         cache_path = _llm_cache_path(prompt, input_data)
@@ -443,16 +449,20 @@ class LLMManager:
             except Exception:  # noqa: BLE001 - identity is optional; the call still runs
                 info = {}
             settings = self.settings if isinstance(getattr(self, 'settings', None), dict) else {}
-            with llm_telemetry.bind_context(
-                provider=str(info.get('provider') or ''),
-                model=str(info.get('model') or getattr(self.current_provider, 'model_name', '') or ''),
-                base_url=str(info.get('base_url') or settings.get('openai_base_url') or settings.get('dashscope_base_url') or ''),
-                kind='text',
-            ):
-                response = self.current_provider.call(prompt, input_data, **kwargs)
+            with bind_request_model(override):
+                chosen = bound_request_model(
+                    str(info.get('model') or getattr(self.current_provider, 'model_name', '') or '')
+                )
+                with llm_telemetry.bind_context(
+                    provider=str(info.get('provider') or ''),
+                    model=chosen,
+                    base_url=str(info.get('base_url') or settings.get('openai_base_url') or settings.get('dashscope_base_url') or ''),
+                    kind='text',
+                ):
+                    response = self.current_provider.call(prompt, input_data, **kwargs)
             content = response.content
             from backend.core import llm_usage
-            llm_usage.record(response.model or getattr(self.current_provider, 'model_name', None), response.usage,
+            llm_usage.record(response.model or chosen, response.usage,
                              prompt_chars=len(self.current_provider._build_full_input(prompt, input_data)), completion_chars=len(content or ''))
             if cache_path is not None:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -462,133 +472,119 @@ class LLMManager:
             from backend.core.llm_telemetry import sanitize_exception_text
             logger.error("LLM调用失败: %s", sanitize_exception_text(e))
             raise
-    
-    def _use_runtime_model(self, model: str | None) -> None:
-        """Point this process at a candidate. Never writes settings.json."""
-        name = (model or "").strip()
-        if not name:
-            return
-        provider = getattr(self, "current_provider", None)
-        if provider is not None:
-            provider.model_name = name
-        settings = getattr(self, "settings", None)
-        if isinstance(settings, dict):
-            settings["model_name"] = name
 
     def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3, **kwargs) -> str:
         """Retry, then fall back to the next same-provider preset candidate.
 
-        Inner loop (#358 / #365): same model, at most 3 attempts.
-        Outer loop (R1): ``model_source=preset`` only; frequency
-        ``limit_requests`` / ``rate_limit_exceeded``; never quota; never
-        another provider. User-chosen and missing source stay on one model.
-        Candidates × retries share a 6-call cap per chunk.
+        #358 / #365 budget is shared across candidates (not reset per model):
+        at most 3 manager ``call()`` for a retryable type. Each ``call()``
+        reserves ``1 + LLM_SDK_MAX_RETRIES`` HTTP attempts against the
+        per-chunk cap of 6, so SDK retries cannot push a chunk to 12 HTTP
+        calls. Candidate model is per-call state only.
         """
+        from backend.core import llm_telemetry
         from backend.core.llm_degrade import (
-            CHUNK_CALL_CAP,
             call_note_same_provider_degrade,
             candidates_for_call,
             chunk_call_budget,
-            chunk_calls_used,
+            chunk_http_remaining,
+            chunk_last_error,
+            consume_chunk_call,
+            http_attempts_per_call,
             remember_chunk_error,
             resolve_model_source,
             should_degrade_to_next,
         )
-        from backend.core.llm_telemetry import sanitize_model
-
-        settings = self.settings if isinstance(getattr(self, "settings", None), dict) else {}
-        original = (
-            (settings.get("model_name") or "").strip()
-            or getattr(getattr(self, "current_provider", None), "model_name", None)
-            or ""
-        )
-        source = resolve_model_source(settings)
-        candidates = candidates_for_call(settings)
-        last_error: Exception | None = None
-        try:
-            with chunk_call_budget():
-                for index, model in enumerate(candidates):
-                    if model:
-                        self._use_runtime_model(model)
-                    try:
-                        return self._retry_same_model(
-                            prompt, input_data, max_retries=max_retries, **kwargs
-                        )
-                    except Exception as error:
-                        last_error = error
-                        remember_chunk_error(error)
-                        more = index + 1 < len(candidates)
-                        if (
-                            source != "preset"
-                            or not more
-                            or chunk_calls_used() >= CHUNK_CALL_CAP
-                            or not should_degrade_to_next(error)
-                        ):
-                            raise
-                        logger.warning(
-                            "frequency rate limit on %s, trying next same-provider candidate",
-                            sanitize_model(str(model or "")) or "model",
-                        )
-                        # #375 hook (R2). No-op until note_same_provider_degrade lands.
-                        call_note_same_provider_degrade(self)
-                if last_error is not None:
-                    raise last_error
-                raise RuntimeError("LLM candidate loop exhausted")
-        except Exception:
-            if last_error is not None:
-                self._use_runtime_model(original)
-            raise
-
-    def _retry_same_model(self, prompt: str, input_data: Any = None, max_retries: int = 3, **kwargs) -> str:
-        """#358 / #365 inner retry. Each attempt consumes the chunk call budget."""
-        from backend.core import llm_telemetry
-        from backend.core.llm_degrade import consume_chunk_call, chunk_last_error, remember_chunk_error
         from backend.core.llm_retry import (
             backoff_seconds,
             classify_for_retry as classify_http,
             max_attempts_for,
         )
+        from backend.core.llm_telemetry import sanitize_model
         from backend.core.result_retry import classify_for_retry as classify_result
         from backend.core.upstream_errors import UpstreamErrorType
         import time
 
+        settings = self.settings if isinstance(getattr(self, "settings", None), dict) else {}
+        source = resolve_model_source(settings)
+        candidates = candidates_for_call(settings)
+        last_error: Exception | None = None
         attempt = 0
-        while True:
-            if not consume_chunk_call():
-                raise chunk_last_error() or RuntimeError("llm chunk call budget exhausted")
-            token = llm_telemetry.set_retry_count(attempt)
-            try:
-                return self.call(prompt, input_data, **kwargs)
-            except Exception as error:
-                remember_chunk_error(error)
-                info, status, retry_after = classify_http(error)
-                result_kind, result_retryable = classify_result(error)
-                if info.error_type is UpstreamErrorType.RATE_LIMITED:
-                    from backend.pipeline.concurrency import note_rate_limited
-                    note_rate_limited()
-                retryable = bool(info.retryable or result_retryable)
-                kind = result_kind if result_retryable else info.error_type.value
-                if result_retryable and not info.retryable:
-                    from backend.core.result_retry import MAX_ATTEMPTS
-                    budget = min(MAX_ATTEMPTS, max(1, max_retries))
-                else:
-                    budget = max_attempts_for(info.error_type, max(1, max_retries))
-                if not retryable or attempt >= budget - 1:
-                    if attempt:
-                        logger.error(
-                            "LLM调用在%s次后失败（%s，retryable=%s）。",
-                            attempt + 1, kind, retryable,
+        with chunk_call_budget():
+            for index, model in enumerate(candidates):
+                while True:
+                    if not consume_chunk_call():
+                        raise last_error or chunk_last_error() or RuntimeError(
+                            "llm chunk call budget exhausted"
                         )
-                    raise
-                delay = backoff_seconds(retry_after, attempt) if info.retryable else (2 ** attempt)
-                logger.warning(
-                    "第%s次调用失败（%s，http=%s），%.1fs 后重试: %s",
-                    attempt + 1, kind, status, delay, llm_telemetry.sanitize_exception_text(error),
-                )
-                time.sleep(delay)
-                attempt += 1
-            finally:
-                llm_telemetry.reset_retry_count(token)
+                    token = llm_telemetry.set_retry_count(attempt)
+                    try:
+                        return self.call(prompt, input_data, model=model, **kwargs)
+                    except Exception as error:
+                        last_error = error
+                        remember_chunk_error(error)
+                        info, status, retry_after = classify_http(error)
+                        result_kind, result_retryable = classify_result(error)
+                        if info.error_type is UpstreamErrorType.RATE_LIMITED:
+                            from backend.pipeline.concurrency import note_rate_limited
+                            note_rate_limited()
+                        retryable = bool(info.retryable or result_retryable)
+                        kind = result_kind if result_retryable else info.error_type.value
+                        if result_retryable and not info.retryable:
+                            from backend.core.result_retry import MAX_ATTEMPTS
+                            budget = min(MAX_ATTEMPTS, max(1, max_retries))
+                        else:
+                            budget = max_attempts_for(info.error_type, max(1, max_retries))
+                        more = index + 1 < len(candidates)
+                        can_degrade = (
+                            source == "preset"
+                            and more
+                            and should_degrade_to_next(error)
+                            and chunk_http_remaining() >= http_attempts_per_call()
+                        )
+                        if can_degrade:
+                            if retryable and attempt >= budget - 1:
+                                if attempt:
+                                    logger.error(
+                                        "LLM调用在%s次后失败（%s，retryable=%s）。",
+                                        attempt + 1, kind, retryable,
+                                    )
+                                raise
+                            logger.warning(
+                                "frequency rate limit on %s, trying next same-provider candidate",
+                                sanitize_model(str(model or "")) or "model",
+                            )
+                            call_note_same_provider_degrade(self)
+                            if retryable:
+                                delay = backoff_seconds(retry_after, attempt) if info.retryable else (2 ** attempt)
+                                logger.warning(
+                                    "第%s次调用失败（%s，http=%s），%.1fs 后重试: %s",
+                                    attempt + 1, kind, status, delay,
+                                    llm_telemetry.sanitize_exception_text(error),
+                                )
+                                time.sleep(delay)
+                                attempt += 1
+                            break
+                        if not retryable or attempt >= budget - 1:
+                            if attempt:
+                                logger.error(
+                                    "LLM调用在%s次后失败（%s，retryable=%s）。",
+                                    attempt + 1, kind, retryable,
+                                )
+                            raise
+                        delay = backoff_seconds(retry_after, attempt) if info.retryable else (2 ** attempt)
+                        logger.warning(
+                            "第%s次调用失败（%s，http=%s），%.1fs 后重试: %s",
+                            attempt + 1, kind, status, delay,
+                            llm_telemetry.sanitize_exception_text(error),
+                        )
+                        time.sleep(delay)
+                        attempt += 1
+                    finally:
+                        llm_telemetry.reset_retry_count(token)
+            if last_error is not None:
+                raise last_error
+            raise RuntimeError("LLM candidate loop exhausted")
     
     def note_same_provider_degrade(self) -> int:
         """R1 hook: increment ``degrade_count`` when switching to the next candidate.
