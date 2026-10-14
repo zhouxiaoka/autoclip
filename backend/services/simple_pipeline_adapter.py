@@ -280,6 +280,12 @@ class SimplePipelineAdapter:
                 input_video_path, srt_available=bool(input_srt_path and Path(input_srt_path).exists()))
             if blocked:
                 raise blocked
+            from backend.pipeline.concurrency import reset_limiter
+            reset_limiter()
+            srt_available = bool(input_srt_path and Path(input_srt_path).exists())
+            if not srt_available:
+                from backend.services.studio import readiness
+                readiness.require_transcription(stage="SUBTITLE", srt_available=False)
             self._preflight_llm()
             checkpoint(self.project_id)
 

@@ -454,30 +454,56 @@ class LLMManager:
             raise
     
     def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3, **kwargs) -> str:
-        """Retry only invalid_response / timeline_empty, at most twice.
+        """Retry result-quality failures and transient HTTP errors, at most twice each.
 
-        Other types classified by classify_upstream_error (401/429/5xx/timeout/…)
-        are not retried here. ``max_retries`` cannot raise that ceiling.
-        Each attempt records ``retry_count`` for ``llm_request_finished``.
+        Result codes: only ``invalid_response`` / ``timeline_empty`` (#365).
+        HTTP: ``rate_limited`` / ``upstream_unavailable`` / ``timeout`` / ``connection``.
+        401/402/403/404 and quota/key/model errors do not retry.
+        429 honors Retry-After (capped) and otherwise uses equal-jitter 2/4/8/16/32s.
+        A 429 also halves process-wide chunk concurrency. Each attempt records
+        ``retry_count`` for ``llm_request_finished``.
         """
         from backend.core import llm_telemetry
-        from backend.core.result_retry import MAX_RETRIES, classify_for_retry
+        from backend.core.llm_retry import (
+            backoff_seconds,
+            classify_for_retry as classify_http,
+            max_attempts_for,
+        )
+        from backend.core.result_retry import classify_for_retry as classify_result
+        from backend.core.upstream_errors import UpstreamErrorType
+        import time
 
         attempt = 0
-        ceiling = min(MAX_RETRIES, max(0, max_retries - 1)) if max_retries > 0 else 0
         while True:
             token = llm_telemetry.set_retry_count(attempt)
             try:
                 return self.call(prompt, input_data, **kwargs)
             except Exception as error:
-                kind, retryable = classify_for_retry(error)
-                if not retryable or attempt >= ceiling:
+                info, status, retry_after = classify_http(error)
+                result_kind, result_retryable = classify_result(error)
+                if info.error_type is UpstreamErrorType.RATE_LIMITED:
+                    from backend.pipeline.concurrency import note_rate_limited
+                    note_rate_limited()
+                retryable = bool(info.retryable or result_retryable)
+                kind = result_kind if result_retryable else info.error_type.value
+                if result_retryable and not info.retryable:
+                    from backend.core.result_retry import MAX_ATTEMPTS
+                    budget = min(MAX_ATTEMPTS, max(1, max_retries))
+                else:
+                    budget = max_attempts_for(info.error_type, max(1, max_retries))
+                if not retryable or attempt >= budget - 1:
                     if attempt:
-                        logger.error("LLM调用在%s次后失败（%s）。", attempt + 1, kind)
+                        logger.error(
+                            "LLM调用在%s次后失败（%s，retryable=%s）。",
+                            attempt + 1, kind, retryable,
+                        )
                     raise
-                logger.warning("第%s次调用失败（%s），准备重试: %s", attempt + 1, kind, error)
-                import time
-                time.sleep(2 ** attempt)
+                delay = backoff_seconds(retry_after, attempt) if info.retryable else (2 ** attempt)
+                logger.warning(
+                    "第%s次调用失败（%s，http=%s），%.1fs 后重试: %s",
+                    attempt + 1, kind, status, delay, error,
+                )
+                time.sleep(delay)
                 attempt += 1
             finally:
                 llm_telemetry.reset_retry_count(token)

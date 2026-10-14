@@ -135,10 +135,20 @@ def vision_call(content, config=None, *, allow_event_list=False):
             raise failure('timeout', '视觉模型响应超时，请在「设置 → 视觉理解」中提高请求超时后重试；原素材已保留') from None
         except urllib.error.HTTPError as error:
             status = error.code
+            detail = ''
+            try:
+                detail = error.read(4096).decode('utf-8', 'replace')
+            except Exception:  # noqa: BLE001
+                detail = ''
             error.close()
-            code = 'rate_limited' if status == 429 else 'authentication' if status in (401, 403) else 'provider_error'
-            message = '视觉模型请求过于频繁，请稍后手动重试；不会自动重复请求' if status == 429 else f'视觉模型请求失败（HTTP {status}），请检查视觉模型设置后重试'
-            raise failure(code, message, status) from None
+            from backend.core.llm_retry import studio_code_for
+            from backend.core.upstream_errors import classify_upstream_error
+            info = classify_upstream_error(status, detail)
+            if status == 429:
+                message = '视觉模型请求过于频繁，请稍后手动重试；不会自动重复请求'
+            else:
+                message = info.hint_key or f'视觉模型请求失败（HTTP {status}），请检查视觉模型设置后重试'
+            raise failure(studio_code_for(info.error_type, status), message, status) from None
         except urllib.error.URLError as error:
             if isinstance(error.reason, TimeoutError):
                 raise failure('timeout', '视觉模型连接超时，请检查网络后重试；原素材已保留') from None

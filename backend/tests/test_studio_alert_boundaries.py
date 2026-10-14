@@ -16,6 +16,10 @@ from backend.services.studio.models import ImportOptions
     FileNotFoundError('private-frame-path'),
 ])
 def test_quick_screening_media_failure_keeps_fallback_and_skips_provider(monkeypatch, error):
+    monkeypatch.setattr(
+        'backend.services.studio.readiness.transcription_check',
+        lambda: {'ok': True, 'code': 'whisper_installed', 'repair': 'none'},
+    )
     monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto', allow_visual_screening=True))
     monkeypatch.setattr(intelligence, 'ready', lambda: True)
     monkeypatch.setattr(intelligence, '_probe', lambda _: {'duration': 20})

@@ -43,13 +43,16 @@ def test_network_failures_have_stable_safe_codes(monkeypatch,error,code):
     assert invoke(monkeypatch,error=error).code==code
 
 
-@pytest.mark.parametrize('status,code',[(401,'authentication'),(403,'authentication'),(429,'rate_limited'),(500,'provider_error')])
-def test_http_body_and_request_details_are_never_exposed(monkeypatch,status,code):
+@pytest.mark.parametrize('status,code,kind',[(401,'authentication','invalid_key'),(403,'authentication','permission_denied'),(429,'rate_limited',None),(500,'provider_error',None)])
+def test_http_body_and_request_details_are_never_exposed(monkeypatch,status,code,kind):
     body=io.BytesIO(b'private-key and private-provider-body')
     error=urllib.error.HTTPError(CONFIG['base_url'],status,'private-message',{},body)
     failure=invoke(monkeypatch,error=error)
     assert failure.code==code and failure.diagnostics()['http_status']==status
     assert body.closed
+    if kind:
+        from backend.core.upstream_errors import HINT_KEYS, UpstreamErrorType
+        assert str(failure)==HINT_KEYS[UpstreamErrorType(kind)]
 
 
 @pytest.mark.parametrize('response',[
@@ -79,6 +82,10 @@ def test_refusal_and_valid_fenced_json(monkeypatch):
 def test_stage_annotation_and_quick_fallback_preserve_diagnostics(monkeypatch):
     from backend.services.studio import analysis_preferences as ap
     # Exercise timeout diagnostics only after explicitly authorizing paid screening.
+    monkeypatch.setattr(
+        'backend.services.studio.readiness.transcription_check',
+        lambda: {'ok': True, 'code': 'whisper_installed', 'repair': 'none'},
+    )
     monkeypatch.setattr(ap, 'load', lambda: ap.AnalysisPreferences(analysis_mode='auto', allow_visual_screening=True))
     def fail(*a,**k):raise vision.VisionRequestError('timeout','模型超时',elapsed_seconds=30)
     monkeypatch.setattr(vision,'vision_call',fail)

@@ -35,6 +35,10 @@ def app_path(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
     monkeypatch.delenv('AUTOCLIP_LLM_CACHE_DIR', raising=False)
+    monkeypatch.setattr(
+        'backend.services.studio.readiness.transcription_check',
+        lambda: {'ok': True, 'code': 'whisper_installed', 'repair': 'none'},
+    )
     from backend.core import llm_manager, path_utils
     from backend.pipeline import media_precheck
     from backend.services import simple_pipeline_adapter as adapter

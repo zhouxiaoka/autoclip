@@ -89,6 +89,20 @@ def test_step1_unparseable_response_is_a_failure_not_empty_list(tmp_path, prompt
     assert exc.value.code == "invalid_response"
 
 
+def test_outline_quota_failure_uses_classified_user_copy(tmp_path, prompt_files, monkeypatch):
+    from backend.core.upstream_errors import HINT_KEYS, UpstreamErrorType
+    srt = tmp_path / 'input.srt'
+    srt.write_text(SRT, encoding='utf-8')
+    error = type('PermissionDeniedError', (Exception,), {'status_code': 403})('Error code: 403 - insufficient_user_quota')
+    extractor = _extractor(tmp_path, prompt_files, monkeypatch, [error])
+    with pytest.raises(PipelineFailure) as caught:
+        extractor.extract_outline(srt)
+    assert caught.value.code == 'authentication'
+    assert caught.value.upstream_error_type == 'insufficient_quota'
+    assert caught.value.user_message() == HINT_KEYS[UpstreamErrorType.INSUFFICIENT_QUOTA]
+    assert 'insufficient_user_quota' not in caught.value.user_message()
+
+
 @pytest.mark.parametrize('error, expected_code', [
     (RuntimeError('HTTP 429'), 'rate_limited'),
     (RuntimeError('HTTP 500'), 'provider_error'),
@@ -215,6 +229,10 @@ def test_adapter_distinguishes_install_failure_from_empty_transcript(adapter, mo
     assert ".srt" in failed["error"]
 
     _whisper_status(monkeypatch, "installed")
+    monkeypatch.setattr(
+        "backend.services.studio.readiness.transcription_check",
+        lambda: {"ok": True, "code": "whisper_installed", "repair": "none"},
+    )
     empty = asyncio.run(adapter.process_project_sync(str(tmp_path / "in.mp4"), ""))
     assert empty["error_code"] == "transcription_empty"
     assert "已安装" in empty["error"]
@@ -226,6 +244,10 @@ def test_adapter_surfaces_whisper_error_on_the_subtitle_stage(adapter, monkeypat
     from backend.utils.speech_recognizer import SpeechRecognitionError
 
     _fake_manager(monkeypatch, available=True)
+    monkeypatch.setattr(
+        "backend.services.studio.readiness.transcription_check",
+        lambda: {"ok": True, "code": "whisper_installed", "repair": "none"},
+    )
     video = tmp_path / "in.mp4"
     video.write_bytes(b"x")
 
@@ -537,6 +559,15 @@ def test_timeline_call_failure_report_carries_http_status():
         {"outcome": "call_failed", "error_code": "connection"},
     ]})
     assert studio_failure_context(no_status, "production") == {"failure_stage": "analyze"}
+
+    from backend.core.upstream_errors import HINT_KEYS, UpstreamErrorType
+    quota = timeline_failure_from_report(2, {"parsed": 0, "chunks": [
+        {"outcome": "call_failed", "error_code": "authentication",
+         "upstream_error_type": "insufficient_quota", "http_status": 403},
+    ]})
+    assert quota.upstream_error_type == "insufficient_quota"
+    assert HINT_KEYS[UpstreamErrorType.INSUFFICIENT_QUOTA] in quota.user_message()
+    assert "insufficient_user_quota" not in quota.user_message()
 
 
 @pytest.mark.parametrize('error, code', [

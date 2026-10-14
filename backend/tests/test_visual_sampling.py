@@ -133,6 +133,10 @@ def test_explicit_visual_screening_failure_stops_before_speech_production(client
     subprocess.CalledProcessError(1, ['ffmpeg', 'private-input']),
 ])
 def test_default_auto_screening_failure_continues_with_the_subtitle_route(client, source, monkeypatch, error):
+    monkeypatch.setattr(
+        'backend.services.studio.readiness.transcription_check',
+        lambda: {'ok': True, 'code': 'whisper_installed', 'repair': 'none'},
+    )
     monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(
         analysis_mode='auto', allow_visual_screening=True))
     monkeypatch.setattr(intelligence, 'ready', lambda: True)
@@ -161,6 +165,10 @@ def test_default_auto_screening_failure_continues_with_the_subtitle_route(client
 
 
 def test_manual_screening_failure_still_offers_an_unselected_plan(monkeypatch):
+    monkeypatch.setattr(
+        'backend.services.studio.readiness.transcription_check',
+        lambda: {'ok': True, 'code': 'whisper_installed', 'repair': 'none'},
+    )
     monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(
         analysis_mode='auto', allow_visual_screening=True))
     monkeypatch.setattr(intelligence, 'ready', lambda: True)

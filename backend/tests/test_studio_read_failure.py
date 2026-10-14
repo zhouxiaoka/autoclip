@@ -24,6 +24,10 @@ from backend.services.studio.models import Draft, Scene
 def project(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(
+        'backend.services.studio.readiness.transcription_check',
+        lambda: {'ok': True, 'code': 'whisper_installed', 'repair': 'none'},
+    )
     (tmp_path / 'privacy.json').write_text('{"crash_reports":false,"analytics":false}')
     monkeypatch.setattr(store, '_io_failures', {})
     monkeypatch.setattr(store, '_read_failures', {})
