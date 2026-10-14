@@ -29,6 +29,7 @@ _PROVIDER_ALIASES = {
     "siliconflow": "compatible",
     "88api": "api88",
     "88api.ai": "api88",
+    "api.88api.ai": "api88",
     "unknown": "other",
 }
 _STAGE_ALIASES = {
@@ -556,7 +557,9 @@ def _provider_label(provider: Any, base_url: str) -> str:
         return "compatible"
     host = schema.hostname_of_base_url(base_url) or ""
     try:
-        from backend.core.cloud_presets import CLOUD_PRESETS
+        from backend.core.cloud_presets import CLOUD_PRESETS, is_api88_host
+        if is_api88_host(host):
+            return "api88"
         for key, preset in CLOUD_PRESETS.items():
             if schema.hostname_of_base_url(preset.base_url) == host:
                 return _provider_name(key) or "other"

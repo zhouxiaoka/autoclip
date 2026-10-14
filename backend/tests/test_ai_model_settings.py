@@ -482,7 +482,7 @@ def test_api88_gateway_catalog_routes_account_models_and_isolates_keys(monkeypat
         pass
 
     async def account_models(url, **kwargs):
-        assert url == 'https://88api.ai/v1/models'
+        assert url == 'https://api.88api.ai/v1/models'
         assert kwargs['headers']['Authorization'] == 'Bearer sk-88-only'
         return {'data': [{'id': 'gpt-image-1'}, {'id': 'whisper-1'},
                          {'id': 'gpt-5-mini'}, {'id': 'tts-1'}, {'id': 'sora-2'}]}
@@ -496,7 +496,7 @@ def test_api88_gateway_catalog_routes_account_models_and_isolates_keys(monkeypat
     assert by_id['whisper-1']['asr_supported'] and not by_id['whisper-1']['analysis']
     assert by_id['gpt-5-mini']['analysis']
     assert not by_id['tts-1']['analysis'] and not by_id['sora-2']['analysis']
-    assert ai.image_endpoint(c)['base_url'] == 'https://88api.ai/v1'
+    assert ai.image_endpoint(c)['base_url'] == 'https://api.88api.ai/v1'
     assert ai.image_endpoint(c)['api_key'] == 'sk-88-only'
 
     config = ai.ModelSettings(connections=[c], analysis=ai.Assignment(connection_id='88', model='gpt-5-mini'),
@@ -504,6 +504,16 @@ def test_api88_gateway_catalog_routes_account_models_and_isolates_keys(monkeypat
     response = ai.save(config)
     assert 'sk-88-only' not in json.dumps(response)
     assert ai.load().connections[0].api_key == 'sk-88-only'
+
+
+def test_api88_saved_legacy_base_url_is_not_rewritten():
+    saved = ai.Connection(
+        id='88', name='88API', provider='api88', api_key='sk-88-only',
+        base_url='https://88api.ai/v1',
+    )
+    assert saved.base_url == 'https://88api.ai/v1'
+    assert ai.chat_endpoint(saved, 'gpt-5-mini')['base_url'] == 'https://88api.ai/v1'
+    assert ai.image_endpoint(saved)['base_url'] == 'https://88api.ai/v1'
 
 
 def test_a_dedicated_bailian_endpoint_serves_text_models_on_its_compatible_path():

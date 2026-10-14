@@ -79,16 +79,21 @@ CLOUD_PRESETS: Dict[str, CloudPreset] = {
         hint="赞助合作伙伴。一个 Key 调 Claude / GPT / Gemini / DeepSeek 等模型，专属链接注册可领体验额度。",
     ),
     "api88": CloudPreset(
-        key="api88", display_name="88API Token聚合平台", base_url="https://88api.ai/v1",
+        key="api88", display_name="88API Token聚合平台", base_url="https://api.88api.ai/v1",
         default_model="", api_key_setting="api88_api_key",
         docs_url="https://88api.ai/sign-up?aff=2PIc",
         hint="赞助合作伙伴。新用户注册赠送体验额度，站内提供人工客服。",
     ),
 }
 
+# Current official OpenAI-compatible host is api.88api.ai. Saved configs may still
+# use 88api.ai; both stay valid. Do not rewrite a stored URL to the new host.
+API88_HOSTS = frozenset({"88api.ai", "api.88api.ai"})
+
 _ALIASES = {
     "88api": "api88",
     "88api.ai": "api88",
+    "api.88api.ai": "api88",
     "deepseek-ai": "deepseek",
     "moonshot": "kimi",
     "moonshotai": "kimi",
@@ -106,6 +111,10 @@ _ALIASES = {
     "infistar.cc": "infistar",
     "wuxianxinghe": "infistar",
 }
+
+
+def is_api88_host(host: Optional[str]) -> bool:
+    return (host or "").lower() in API88_HOSTS
 
 
 def normalize_cloud_preset_key(name: Optional[str]) -> Optional[str]:

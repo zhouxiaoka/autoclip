@@ -347,6 +347,11 @@ def test_cover_follows_text_model_service(data_dir, monkeypatch):
     cfg = cover.load_config()
     assert (cfg.provider, cfg.base_url, cfg.api_key) == ("openai", "https://infistar.cc/v1", "sk-inf")
     # 88API uses its own credentials and gateway when following the text service.
+    _text_keys(monkeypatch, llm_provider="openai", cloud_preset="api88", api88_api_key="sk-88", openai_base_url="https://api.88api.ai/v1")
+    cfg = cover.load_config()
+    assert (cfg.provider, cfg.base_url, cfg.api_key) == ("openai", "https://api.88api.ai/v1", "sk-88")
+    assert cover._text_model_key("openai", "https://api.88api.ai/v1") == "sk-88"
+    # Saved legacy host still reuses the 88API key; lookalike hosts do not.
     _text_keys(monkeypatch, llm_provider="openai", cloud_preset="api88", api88_api_key="sk-88", openai_base_url="https://88api.ai/v1")
     cfg = cover.load_config()
     assert (cfg.provider, cfg.base_url, cfg.api_key) == ("openai", "https://88api.ai/v1", "sk-88")

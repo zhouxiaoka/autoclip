@@ -47,6 +47,8 @@ def test_cleanup_collapses_spaces_slashes_and_scheme(raw, expected):
     ('https://fal.run/', 'compatible', 'https://fal.run'),
     ('https://ark.cn-beijing.volces.com/api/v3', 'seed', 'https://ark.cn-beijing.volces.com/api/v3'),
     ('https://open.bigmodel.cn/api/paas/v4', 'glm', 'https://open.bigmodel.cn/api/paas/v4'),
+    ('https://88api.ai/v1', 'api88', 'https://88api.ai/v1'),
+    ('https://api.88api.ai/v1', 'api88', 'https://api.88api.ai/v1'),
     ('', 'compatible', ''),
 ])
 def test_normalize_adds_or_dedupes_v1_per_provider(raw, provider, expected):

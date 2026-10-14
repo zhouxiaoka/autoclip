@@ -7,6 +7,8 @@
 
 ## [未发布]
 
+- 88API 服务商预设接口地址改为 `https://api.88api.ai/v1`（与 provider-e2e 回归一致）。已保存的 `https://88api.ai/v1` 不改写，仍可继续使用。（1.5.7）
+
 - 内容分析只对 `invalid_response` / `timeline_empty` 自动重试，每种最多再试 2 次（不含首次）；401/429/5xx/超时等由 `classify_upstream_error` 分类后不重试。不含 429 退避或付费前 ASR 预检。（1.5.7 #8）
 - 设置页接口地址保存和输入时规范化：去掉空白和尾部 `/`，缺 scheme 时按本机/公网补 `http`/`https`，OpenAI 兼容地址自动补或去重 `/v1`（百炼专属主机、Gemini 官方路径、fal.run 按各自约定）。只改写，不拦截保存。
 

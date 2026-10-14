@@ -255,7 +255,7 @@ def test_api88_has_no_builtin_list_and_fetches_gateway_models(monkeypatch):
 
     _FakeAsyncClient.calls = []
     _FakeAsyncClient.routes = {
-        "https://88api.ai/v1/models": (
+        "https://api.88api.ai/v1/models": (
             {"data": [{"id": "claude-sonnet-5-5"}, {"id": "deepseek-v4-pro"}, {"id": "gemini-3.8-flash"},
                       {"id": "text-embedding-3-large"}, {"id": "sora-2"}]},
             200,

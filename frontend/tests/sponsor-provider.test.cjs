@@ -52,4 +52,5 @@ test('sponsor selection, offer, registration link and attribution follow the cho
     }
   }
   assert.equal(providers.PROVIDERS.api88.sponsor.registerUrl, 'https://88api.ai/sign-up?aff=2PIc')
+  assert.equal(providers.PROVIDERS.api88.cloud.baseUrl, 'https://api.88api.ai/v1')
 })
