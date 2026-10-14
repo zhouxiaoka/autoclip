@@ -2,9 +2,9 @@
 
 Reads ``presets/provider_presets.json`` when that file exists (P12) or when
 ``AUTOCLIP_PROVIDER_PRESETS`` points at a JSON file. This module does not ship
-a second product catalog. Live chat URLs and fallback models stay in
-``matrix.py``. Never print secrets — the catalog has none, and extra key-like
-fields are dropped.
+or rewrite a product catalog. Live chat URLs (Gemini ``/openai``) and
+fallback models (DashScope ``qwen-plus``) stay in ``matrix.py``. Never print
+secrets — the catalog has none, and extra key-like fields are dropped.
 """
 from __future__ import annotations
 

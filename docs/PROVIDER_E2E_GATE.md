@@ -21,7 +21,7 @@
 
 ## 矩阵数据源
 
-Live 服务商行优先读当前分支的 `presets/provider_presets.json`（与产品预设同一份，若已合入）。该文件不存在时，门槛使用 `scripts/provider_e2e/matrix.py` 里的 live 默认，**不另写一份产品 JSON**。可用 `AUTOCLIP_PROVIDER_PRESETS` 指向另一份 JSON。`*_MODEL` 仍可覆盖型号。日志、报告和用例库继续脱敏，不打印密钥。
+Live 聊天地址和回退型号以 [`matrix.py`](../scripts/provider_e2e/matrix.py) 的 `LIVE_PROVIDERS` 为准，**不要把门槛 live 默认写进产品 JSON**。产品目录里 Gemini 默认是 `gemini-3.8-flash`、地址是 `https://generativelanguage.googleapis.com/v1beta`（给原生 `/models` 用）；live 出片走 OpenAI 兼容根 `…/v1beta/openai`。DashScope live 默认是 `qwen-plus`。有 `presets/provider_presets.json` 时只读显示名和非空默认型号；聊天地址仍经 `locked_chat_url` 补齐。可用 `AUTOCLIP_PROVIDER_PRESETS` 指向另一份 JSON。`*_MODEL` 仍可覆盖型号。日志、报告和用例库继续脱敏，不打印密钥。
 
 ## 判定
 
@@ -57,9 +57,9 @@ B 站 / YouTube 链接单独验收，不计入本门槛。
 | `DEEPSEEK_API_KEY` | DeepSeek 官方独立项目 key |
 | `DEEPSEEK_MODEL` | 可选，缺省 `deepseek-flash` |
 | `GEMINI_API_KEY` | Gemini 独立项目 key（夜间走免费档） |
-| `GEMINI_MODEL` | 可选，缺省 `gemini-3.5-flash-lite`（2026 目录里最便宜的一档；不要再用已下线的 `gemini-2.0-flash` / `gemini-2.0-flash-lite`） |
+| `GEMINI_MODEL` | 可选。未设时用预设 JSON 默认型号（产品目录为 `gemini-3.8-flash`）；无 JSON 时门槛回退已核实的 `gemini-3.5-flash-lite`。聊天地址固定 `…/v1beta/openai`，不要用缺 `/openai` 的产品目录地址。不要再用已下线的 `gemini-2.0-flash` / `gemini-2.0-flash-lite` |
 | `DASHSCOPE_API_KEY` | 阿里云百炼 / DashScope。地址 `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| `DASHSCOPE_MODEL` | 可选，缺省 `qwen-flash` |
+| `DASHSCOPE_MODEL` | 可选，缺省 `qwen-plus` |
 | `INFISTAR_API_KEY` | Infistar。地址 `https://infistar.ai/v1` |
 | `INFISTAR_MODEL` | 可选，缺省 `gpt-4o-mini` |
 
@@ -110,7 +110,7 @@ PYTHONPATH=scripts python -m provider_e2e --suite mock --out /tmp/provider-e2e-m
 | Gemini flash-lite 一条 | 约 ¥0–0.1 | 常走免费档，仍按有价计入预算 |
 | 88API `deepseek-v4-flash` 一条 | 约 ¥0.05–0.3 | 只在预发布或 verify / `api88` 探针 |
 | Infistar `gpt-4o-mini` 一条 | 约 ¥0.3–1.5 | 只在预发布或 verify 探针 |
-| DashScope `qwen-flash` 一条 | 约 ¥0.1–0.5 | 同上 |
+| DashScope `qwen-plus` 一条 | 约 ¥0.1–0.5 | 同上 |
 | 一夜 late nightly（2–3 条） | 约 ¥0.2–0.8 | 30 夜 ≈ ¥6–24 |
 | 一次预发布（10 条拆 5 家） | 约 ¥4–20 | 每月约 4 次 ≈ ¥16–80 |
 | 一次 verify（夜间子集 + 三家各 1 条） | 约 ¥1–8 | 少用 |

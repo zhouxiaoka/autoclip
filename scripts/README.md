@@ -13,7 +13,7 @@
 | `build_windows_x64.sh` | 桌面打包（Windows x64）。在 Git Bash 里跑，产出 NSIS 安装包 `*-setup.exe`。 |
 | `lib/desktop_build_common.sh` | 上面两个脚本共用的平台无关步骤（便携 Python 下载、pip、后端拷贝、依赖检查、前端构建）。不直接执行。 |
 | `verify_desktop.sh` | 后端冒烟测试：`cargo check` + 起后端，校验 `/health` 与 `/api/v1/video-categories`。被 `nightly-desktop-smoke.yml` 调用。 |
-| `provider_e2e/` | 发版服务商端到端门槛：生成 lavfi 素材、本地 mock OpenAI（含故障注入）、分层 live（nightly / prerelease / verify）、用例库与月度预算。Live 行读 `presets/provider_presets.json`（没有该文件时用 `matrix.py` 默认）。`PYTHONPATH=scripts python -m provider_e2e --suite mock`。说明见 [docs/PROVIDER_E2E_GATE.md](../docs/PROVIDER_E2E_GATE.md)。 |
+| `provider_e2e/` | 发版服务商端到端门槛：生成 lavfi 素材、本地 mock OpenAI（含故障注入）、分层 live（nightly / prerelease / verify）、用例库与月度预算。Live 默认在 `matrix.py`（Gemini `/openai`，DashScope `qwen-plus`），不写进产品 JSON。`PYTHONPATH=scripts python -m provider_e2e --suite mock`。说明见 [docs/PROVIDER_E2E_GATE.md](../docs/PROVIDER_E2E_GATE.md)。 |
 | `verify_live_publish.py` | 用本机 `UPLOAD_POST_API_KEY` 与 `BILIBILI_COOKIE` 做一次真实私密试发。打小版本前跑。 |
 | `runtime/start.sh` | 源码 Web 唯一启动逻辑，支持前台与后台模式。 |
 | `local_services.py` / `runtime/local.sh` | 当前 checkout 的 PID 归属、状态和停止逻辑，供根目录兼容入口共用。 |
