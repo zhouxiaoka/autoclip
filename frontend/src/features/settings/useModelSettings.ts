@@ -5,7 +5,7 @@ import { errorText } from '../studio/api'
 import { beginExperience, trackProviderValidation, type Placement } from '../../analytics/experience'
 import { hintKeyForUpstreamError } from '../../analytics/successRateContract'
 import { PROVIDERS, type ProviderKey } from './providers'
-import { bindingCapability, modelSettingsApi, type Connection, type ModelList, type ModelSettings } from './modelSettingsApi'
+import { bindingCapability, modelSettingsApi, type Connection, type FetchListResult, type ModelList, type ModelSettings } from './modelSettingsApi'
 import { applyModelDefaults } from './modelDefaults'
 import * as logic from './modelSettingsLogic'
 import type { Role, SaveIssue } from './modelSettingsLogic'
@@ -137,6 +137,44 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const setCoverEnabled = (enabled: boolean) => { autoCover.current = false; if (settings) replace(logic.setCoverEnabled(settings, enabled, lists)) }
   const setCoverModel = (connectionId: string, model: string) => { autoCover.current = false; update({ cover_enabled: true, cover: { ...logic.cleanBinding(connectionId), model } }) }
   const setVisual = (enabled: boolean) => { if (settings) replace(logic.setVisual(settings, enabled)) }
+  const fetchModels = async (connection: Connection): Promise<FetchListResult> => {
+    const version = (versions.current[connection.id] || 0) + 1
+    versions.current[connection.id] = version
+    setBusy(old => ({ ...old, [connection.id]: true }))
+    try {
+      const listing = await modelSettingsApi.fetchList(connection)
+      if (!alive.current || versions.current[connection.id] !== version) return listing
+      if (listing.ok || listing.success) {
+        setLists(old => ({
+          ...old,
+          [connection.id]: mergeCustomList(connection, {
+            models: listing.models.map(id => ({ id, capability: null, analysis: true, image: false })),
+            source: listing.source === 'cache' || listing.source === 'catalog' ? listing.source : 'live',
+            preview: false,
+            updated_at: Date.now(),
+          }),
+        }))
+        setListErrors(old => { const next = { ...old }; delete next[connection.id]; return next })
+      } else {
+        setListErrors(old => ({
+          ...old,
+          [connection.id]: t('未能获取模型列表。可检查地址和密钥后重试，或手动添加模型 ID。'),
+        }))
+      }
+      return listing
+    } catch (e) {
+      if (alive.current && versions.current[connection.id] === version) {
+        setListErrors(old => ({
+          ...old,
+          [connection.id]: t('未能获取模型列表。可检查地址和密钥后重试，或手动添加模型 ID。'),
+        }))
+      }
+      throw e
+    } finally {
+      if (alive.current && versions.current[connection.id] === version) setBusy(old => ({ ...old, [connection.id]: false }))
+    }
+  }
+
   const addCustomProvider = (draft: CustomProviderDraft) => {
     if (!settings) return
     const next = applyCustomProvider(settings, draft)
@@ -239,7 +277,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const main = settings ? logic.mainConnection(settings) : undefined
   return {
     settings, lists, busy, listErrors, dirty, saving, testing, error, setError, main, keyHints,
-    load, discover, update, editConnection, chooseProvider, addCustomProvider, setTranscriptionLocal,
+    load, discover, fetchModels, update, editConnection, chooseProvider, addCustomProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test,
   }
 }

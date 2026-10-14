@@ -558,6 +558,26 @@ test('actual unified settings hook records save once and HTTP-200 negative tests
  assert.equal(s.events.some(e=>e.event==='api_key_configured'),false)
  assert.equal(JSON.stringify(s.events).includes('sk-secret'),false);assert.equal(JSON.stringify(s.events).includes('private'),false)
 })
+test('actual fetchList ignores stale completions',async()=>{
+ const s=setup();const pending=[]
+ const render=settingsHook(s,{
+  discover:async()=>({models:[],source:'catalog',preview:true}),
+  fetchList:()=>new Promise(resolve=>pending.push(resolve)),
+ },modelFixture())
+ await render().load();const m=render();const c=m.settings.connections[0]
+ const first=m.fetchModels(c)
+ const second=m.fetchModels(c)
+ pending[0]({ok:true,models:['stale-id'],source:'live'})
+ await Promise.resolve()
+ pending[1]({ok:true,models:['fresh-id'],source:'live'})
+ await second
+ await first.catch(()=>{})
+ const latest=render()
+ const ids=latest.lists[c.id].models.map(model=>model.id)
+ assert.equal(ids.join(','),'fresh-id')
+ assert.equal(JSON.stringify(s.events).includes('stale-id'),false)
+})
+
 test('actual discovery ignores stale completions and distinguishes preview from live results',async()=>{
  const s=setup();let pending=[]
  const render=settingsHook(s,{discover:()=>new Promise(resolve=>pending.push(resolve))},modelFixture())

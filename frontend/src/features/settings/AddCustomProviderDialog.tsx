@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Input, Switch } from 'antd'
 import { t } from '../../i18n'
 import { Btn, Dialog, Row } from '../../ui'
@@ -13,7 +13,7 @@ import {
   draftUrlIssue,
   editModel,
   emptyDraft,
-  mergeDiscovered,
+  mergeFetched,
   normalizedDraftUrl,
   scenarioAllowed,
   toggleModel,
@@ -75,8 +75,10 @@ export default function AddCustomProviderDialog({
   const [fetched, setFetched] = useState(false)
   const [fetchFailed, setFetchFailed] = useState(false)
   const [note, setNote] = useState('')
+  const fetchGen = useRef(0)
 
   const reset = () => {
+    fetchGen.current += 1
     setDraft(emptyDraft())
     setSearch('')
     setManualId('')
@@ -92,20 +94,30 @@ export default function AddCustomProviderDialog({
       setNote(t(ISSUE_COPY.url))
       return
     }
+    const gen = ++fetchGen.current
     setFetching(true)
     setFetchFailed(false)
     setNote('')
     const finish = beginExperience('model_discovery', { placement: 'settings_model', provider: 'compatible', trigger: 'manual' })
     try {
-      const result = await modelSettingsApi.discover(toConnection({ ...draft, models: draft.models }), true)
-      finish('completed', { source: result.source, preview: !!result.preview, result_count: result.models.length })
-      setDraft(current => mergeDiscovered(current, result.models))
-      setFetched(true)
+      const result = await modelSettingsApi.fetchList(toConnection({ ...draft, models: draft.models }))
+      if (gen !== fetchGen.current) return
+      if (result.ok || result.success) {
+        const source = result.source === 'cache' || result.source === 'catalog' ? result.source : 'live'
+        finish('completed', { source, preview: false, result_count: result.models.length })
+        setDraft(current => mergeFetched(current, result.models))
+        setFetched(true)
+        setFetchFailed(false)
+      } else {
+        finish('failed', {}, { response: { status: 0 } })
+        setFetchFailed(true)
+      }
     } catch {
+      if (gen !== fetchGen.current) return
       finish('failed', {}, { response: { status: 0 } })
       setFetchFailed(true)
     } finally {
-      setFetching(false)
+      if (gen === fetchGen.current) setFetching(false)
     }
   }
 

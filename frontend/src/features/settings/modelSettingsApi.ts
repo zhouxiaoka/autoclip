@@ -38,11 +38,24 @@ export interface ModelSettings {
 }
 export interface ModelEntry { id: string; capability: 'multimodal' | 'text' | null; capability_source?: string; analysis: boolean; image: boolean; asr?: boolean; asr_supported?: boolean; asr_preview?: boolean; asr_note?: string | null }
 export interface ModelList { models: ModelEntry[]; source: 'live' | 'cache' | 'catalog'; preview?: boolean; updated_at: number | null; warning?: string }
+export interface FetchListResult {
+  ok?: boolean
+  success?: boolean
+  models: string[]
+  recommended?: Record<string, string[]>
+  truncated?: boolean
+  source?: string
+  error_type?: string
+  hint_key?: string
+  message_key?: string
+  base_url_host?: string
+}
 export const modelSettingsApi = {
   get: () => api.get<unknown, ModelSettings>('/settings/ai-models'),
   save: (value: ModelSettings) => api.put<unknown, ModelSettings>('/settings/ai-models', value),
   discover: (connection: Connection, refresh = false) => api.post<unknown, ModelList>('/settings/ai-models/discover', { connection, refresh }),
   test: (connection: Connection, model: string, vision = false) => api.post<unknown, ValidationResult>('/settings/ai-models/test', { connection, model, vision }),
+  fetchList: (connection: Connection) => api.post<unknown, FetchListResult>('/settings/ai-models/fetch-list', { connection }),
 }
 
 export function bindingCapability(binding: Assignment | null, lists: Record<string, ModelList>): Capability {

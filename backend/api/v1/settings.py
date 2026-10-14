@@ -63,6 +63,39 @@ async def discover_connection_models(body: ConnectionModelsRequest):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.post('/ai-models/fetch-list')
+async def fetch_connection_model_list(body: ConnectionModelsRequest):
+    """Custom-provider fetch: account /models IDs only. No keys or full URLs."""
+    from backend.core.llm_telemetry import hostname_of_base_url
+    from backend.core.model_registry import discover
+    from backend.core.upstream_errors import hint_key_for
+    try:
+        connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
+        listing = await discover(connection, True)
+        models = [item['id'] for item in listing.get('models') or [] if isinstance(item, dict) and item.get('id')]
+        return {
+            'ok': True,
+            'success': True,
+            'models': models,
+            'recommended': {},
+            'truncated': False,
+            'source': listing.get('source') or 'live',
+            'error_type': '',
+            'hint_key': '',
+            'message_key': '',
+            'base_url_host': hostname_of_base_url(connection.base_url) or 'unknown',
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        return {
+            'ok': False, 'success': False, 'models': [], 'recommended': {},
+            'truncated': False, 'source': 'empty', 'error_type': 'unknown',
+            'hint_key': hint_key_for('unknown'), 'message_key': '',
+            'base_url_host': 'unknown',
+        }
+
+
 class ConnectionTestRequest(BaseModel):
     connection: ai_models.Connection
     model: str = Field(min_length=1, max_length=200)
