@@ -128,17 +128,22 @@ export function hiddenNonVisionCount(lists: Record<string, ModelList>): number {
   return ids.size
 }
 
+/** Same capability resolution as #377 `visionFollowLacksCapability`. */
 export function modelHasVision(binding: Assignment | null | undefined, lists: Record<string, ModelList>): boolean | null {
   if (!binding?.model) return null
-  const capability = lists[binding.connection_id]?.models.find(entry => entry.id === binding.model)?.capability
+  const capability = binding.capability && binding.capability !== 'auto'
+    ? binding.capability
+    : (lists[binding.connection_id]?.models.find(entry => entry.id === binding.model)?.capability ?? null)
   if (capability === 'multimodal') return true
   if (capability === 'text') return false
   return null
 }
 
-/** Red warning on save; generation intercept belongs to B2. Unknown capability is not a warning. */
+/** Red warning on save; generation intercept belongs to B2. Subtitle mode does not need vision. */
 export function visionWarning(settings: ModelSettings, lists: Record<string, ModelList>): VisionWarning | null {
+  if (settings.analysis_mode === 'subtitle') return null
   const binding = settings.vision || settings.analysis
+  if (!binding?.model) return settings.analysis_mode === 'visual' ? 'follow' : null
   if (modelHasVision(binding, lists) !== false) return null
   return settings.vision ? 'selected' : 'follow'
 }

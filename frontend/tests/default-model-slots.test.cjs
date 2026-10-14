@@ -74,7 +74,8 @@ test('cloud transcription only lists models with a supported, non-preview ASR ro
     ] },
   }
   const groups = slots.collectModelGroups(settings({ connections: [conn('ds', 'dashscope')] }), asrLists, 'transcription')
-  assert.deepEqual(groups.map(group => group.modelId), ['qwen-audio-3.0-asr-flash'])
+  assert.equal(groups.length, 1)
+  assert.equal(groups[0].modelId, 'qwen-audio-3.0-asr-flash')
 })
 
 test('a key without a passed access check is not shown as connected', () => {
@@ -121,7 +122,8 @@ test('vision follow warns only when the followed model is known to lack vision',
   assert.equal(slots.visionWarning(independent, lists), null)
   const badPick = slots.applyFixedSelection(state, 'vision', 'qwen-plus', 'ds')
   assert.equal(slots.visionWarning(badPick, lists), 'selected')
-  assert.equal(slots.visionWarning(state, {}), null, 'unknown capability is not a red warning')
+  assert.equal(slots.visionWarning(settings({ analysis: { connection_id: 'ds', model: 'qwen-plus', capability: 'auto', model_source: 'user' } }), {}), null, 'unknown capability is not a red warning')
+  assert.equal(slots.visionWarning(settings({ analysis_mode: 'subtitle' }), lists), null, 'subtitle mode does not need vision')
 })
 
 test('cover off keeps the cover assignment and cover_enabled', () => {
