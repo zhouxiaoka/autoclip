@@ -6,7 +6,6 @@
 """
 
 from __future__ import annotations
-import re
 
 
 class PipelineFailure(RuntimeError):
@@ -17,7 +16,15 @@ class PipelineFailure(RuntimeError):
     hint:  用户下一步能做什么（去哪个设置项、装什么），追加在错误正文后面。
     """
 
-    def __init__(self, stage: str, message: str, hint: str = "", code: str = "", http_status: int | None = None):
+    def __init__(
+        self,
+        stage: str,
+        message: str,
+        hint: str = "",
+        code: str = "",
+        http_status: int | None = None,
+        upstream_error_type: str = "",
+    ):
         super().__init__(message)
         self.stage = stage
         self.hint = hint
@@ -29,6 +36,9 @@ class PipelineFailure(RuntimeError):
         # timeline_empty：有效候选被时长筛选清空（不要再指到「设置 → 模型」）
         # source_too_short | source_no_audio：源视频本身不能走字幕路线（media_precheck），用户输入，不上报
         self.code = code
+        # Fine-grained upstream kind (insufficient_quota / invalid_key / …). Not a studio
+        # error_code — keep analytics on the coarse `code` until the #9 contract expands.
+        self.upstream_error_type = upstream_error_type
 
     @property
     def message(self) -> str:
@@ -105,25 +115,16 @@ def empty_timeline_failure(topic_count: int) -> PipelineFailure:
 
 
 def model_call_error_code(error: Exception) -> str:
-    """Classify without publishing a provider body, URL, credential or local path."""
-    status = getattr(error, "status_code", None)
-    if status is None:
-        status = getattr(error, "code", None)
-    if not isinstance(status, int):
-        match = re.search(r"(?:status(?:[_ ]code)?|http)\s*[:=]?\s*(\d{3})\b", str(error), re.I)
-        status = int(match[1]) if match else None
-    if status in (401, 403) or looks_like_llm_setup_error(str(error)):
+    """Coarse studio code only. Fine type lives on ClassifiedUpstreamError / PipelineFailure.upstream_error_type."""
+    from backend.core.llm_retry import studio_code_for
+    from backend.core.upstream_errors import classify_exception, http_error_parts
+
+    info = classify_exception(error)
+    status, _body = http_error_parts(error)
+    code = studio_code_for(info.error_type, status)
+    if code == "provider_error" and looks_like_llm_setup_error(str(error)):
         return "authentication"
-    if status == 429:
-        return "rate_limited"
-    if status is not None:
-        return "provider_error"
-    name = type(error).__name__.lower()
-    if isinstance(error, TimeoutError) or "timeout" in name:
-        return "timeout"
-    if isinstance(error, ConnectionError) or "connection" in name:
-        return "connection"
-    return "provider_error"
+    return code
 
 
 def http_status_of(error: BaseException | None) -> int | None:
@@ -164,7 +165,11 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
         return empty_timeline_failure(topic_count)
     failed_calls = [chunk for chunk in chunks if chunk.get("outcome") == "call_failed"]
     if failed_calls:
-        code = failed_calls[-1]["error_code"]
+        from backend.core.upstream_errors import hint_key_for
+
+        last = failed_calls[-1]
+        code = last["error_code"]
+        kind = last.get("upstream_error_type") or ""
         hints = {
             "authentication": "请检查「设置 → 模型」中的密钥、模型权限和提供商配置，再测试连接。",
             "rate_limited": MODEL_CALL_MESSAGES["rate_limited"],
@@ -172,10 +177,11 @@ def timeline_failure_from_report(topic_count: int, report: dict) -> PipelineFail
             "connection": MODEL_CALL_MESSAGES["connection"],
             "provider_error": "提供商未完成时间线请求，请检查模型可用性和接口兼容性后重试。",
         }
+        classified = hint_key_for(kind) if kind else hints.get(code, hints["provider_error"])
         return PipelineFailure(
             "ANALYZE", f"时间线模型调用失败：{len(failed_calls)}/{len(chunks)} 个字幕块调用失败，本次没有可用候选。",
-            hints[code] + "大纲成功或测试连接成功，不能保证后续长文本请求也成功。", code=code,
-            http_status=failed_calls[-1].get("http_status"),
+            classified + "大纲成功或测试连接成功，不能保证后续长文本请求也成功。", code=code,
+            http_status=last.get("http_status"), upstream_error_type=kind,
         )
     if chunks and all(chunk.get("outcome") == "missing_subtitles" for chunk in chunks):
         return PipelineFailure("ANALYZE", "时间线所需的字幕分块无法读取。",
@@ -206,6 +212,38 @@ def cloud_transcription_failure(message: str) -> PipelineFailure:
         "SUBTITLE", f"云端转写失败：{message}",
         "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
         code="provider_error",
+    )
+
+
+def transcription_not_ready_failure(check: dict, stage: str = "SUBTITLE") -> PipelineFailure:
+    """ASR is not ready: same codes the frontend import gate already uses, before any paid call."""
+    code = (check or {}).get("code") or "whisper_not_installed"
+    if code in {"whisper_install_failed", "whisper_model_failed"}:
+        return PipelineFailure(
+            stage,
+            "没有字幕可分析：视频不带字幕，且 Whisper 上次安装没有成功。",
+            "到「设置 → 转写」重试安装，或重新导入时带上 .srt 字幕。",
+            code="whisper_install_failed",
+        )
+    if code == "sensevoice_not_ready":
+        return PipelineFailure(
+            stage,
+            "没有字幕可分析：SenseVoice 本次没有生成可用字幕。",
+            "到「设置 → 转写」检查 SenseVoiceSmall 是否就绪，或导入 .srt 字幕后重试。",
+            code="subtitle_setup",
+        )
+    if code == "cloud_not_configured":
+        return PipelineFailure(
+            stage,
+            "云端转写失败：本次未获得可用转写结果。",
+            "到「设置 → AI模型」检查所选云端转写的服务、密钥和模型；确认服务可用后重试，或导入 .srt 字幕。",
+            code="provider_error",
+        )
+    return PipelineFailure(
+        stage,
+        "没有字幕可分析：视频不带字幕，且本地 Whisper 还没安装。",
+        "到「设置 → 转写」安装 Whisper 并下载一个模型，或重新导入时带上 .srt 字幕。",
+        code="whisper_not_installed",
     )
 
 

@@ -256,5 +256,5 @@ def test_api88_wrong_stored_url_is_forced_to_the_preset(monkeypatch):
         'gpt-4o-mini',
     )
     assert result.ok is True
-    assert seen[0].startswith('https://88api.ai/v1/')
-    assert result.base_url_host == '88api.ai'
+    assert seen[0].startswith('https://api.88api.ai/v1/')
+    assert result.base_url_host == 'api.88api.ai'

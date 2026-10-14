@@ -133,3 +133,33 @@ def report() -> dict:
         'ready': all(item['ok'] for name, item in checks.items() if name != 'transcription') and checks['analysis']['ok'],
         'checks': checks,
     }
+
+
+def transcription_check() -> dict:
+    """Saved transcription settings and local runtimes only. Does not migrate legacy LLM config."""
+    try:
+        settings = ai_models.load()
+    except Exception:  # noqa: BLE001 - a corrupt document must not skip the Whisper gate
+        settings = None
+    return _transcription(settings or ai_models.ModelSettings())
+
+
+def needs_transcription(*, srt_available: bool, analysis_mode: str | None = None) -> bool:
+    """The subtitle/content pipeline needs ASR when there is no SRT. Visual-only does not.
+
+    `analysis_mode is None` means the caller is the content/API/MCP path, which is never visual-only.
+    """
+    if srt_available:
+        return False
+    return analysis_mode != 'visual'
+
+
+def require_transcription(*, stage: str = 'SUBTITLE', srt_available: bool = False, analysis_mode: str | None = None) -> None:
+    """Block before any paid call when the subtitle route still needs a local/cloud ASR."""
+    if not needs_transcription(srt_available=srt_available, analysis_mode=analysis_mode):
+        return
+    check = transcription_check()
+    if check.get('ok'):
+        return
+    from backend.pipeline.failures import transcription_not_ready_failure
+    raise transcription_not_ready_failure(check, stage)

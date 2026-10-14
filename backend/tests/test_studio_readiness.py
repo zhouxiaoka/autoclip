@@ -228,6 +228,17 @@ def test_generic_compatible_gateway_still_needs_an_explicit_choice(monkeypatch):
     assert report_for(monkeypatch, settings)['checks']['visual']['code'] == 'not_configured'
 
 
+def test_require_transcription_raises_before_caller_spends(monkeypatch):
+    from backend.pipeline.failures import PipelineFailure
+    from backend.services.studio import readiness
+    monkeypatch.setattr(readiness, 'transcription_check', lambda: {'ok': False, 'code': 'whisper_not_installed', 'repair': 'install_whisper'})
+    with pytest.raises(PipelineFailure) as caught:
+        readiness.require_transcription(srt_available=False, analysis_mode='auto')
+    assert caught.value.code == 'whisper_not_installed'
+    readiness.require_transcription(srt_available=True, analysis_mode='auto')
+    readiness.require_transcription(srt_available=False, analysis_mode='visual')
+
+
 def test_completed_download_flips_readiness_immediately(monkeypatch, isolated):
     # W157 IA: right after the download thread reports "downloaded", readiness must say installed.
     from backend.services.whisper_model_manager import get_model_manager

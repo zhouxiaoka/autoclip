@@ -14,7 +14,7 @@ from ..core.shared_config import PROMPT_FILES, METADATA_DIR
 from .failures import (
     MODEL_CALL_MESSAGES,
     PipelineFailure, HINT_CHECK_LLM, HINT_SUBTITLE, looks_like_llm_setup_error, llm_key_failure,
-    model_call_error_code,
+    http_status_of, model_call_error_code,
 )
 
 logger = logging.getLogger(__name__)
@@ -143,13 +143,38 @@ class OutlineExtractor:
             logger.warning("大纲提取失败：%s/%s 个文本块调用模型都失败了。最后一次错误：%s: %s",
                            failed_chunks, total_chunks, type(last_error).__name__, last_error)
             detail = f"大纲提取失败：{failed_chunks}/{total_chunks} 个文本块调用模型都失败了。"
+            from backend.core.llm_retry import studio_code_for
+            from backend.core.upstream_errors import (
+                UpstreamErrorType,
+                classify_exception,
+                http_error_parts,
+            )
+            info = classify_exception(last_error) if last_error is not None else None
+            status = None
+            kind = ""
+            if info is not None and last_error is not None:
+                status, _body = http_error_parts(last_error)
+                kind = info.error_type.value
+            if info is not None and info.error_type is not UpstreamErrorType.UNKNOWN:
+                raise PipelineFailure(
+                    "ANALYZE", info.hint_key, "",
+                    code=studio_code_for(info.error_type, status),
+                    http_status=status or http_status_of(last_error),
+                    upstream_error_type=kind,
+                ) from last_error
             if looks_like_llm_setup_error(str(last_error)):
                 raise llm_key_failure("ANALYZE", detail) from last_error
-            code = model_call_error_code(last_error)
+            code = studio_code_for(info.error_type, status) if info is not None else model_call_error_code(last_error)
             fixed = MODEL_CALL_MESSAGES.get(code)
             if fixed:
-                raise PipelineFailure("ANALYZE", fixed, "", code=code) from last_error
-            raise PipelineFailure("ANALYZE", detail, HINT_CHECK_LLM, code=code) from last_error
+                raise PipelineFailure(
+                    "ANALYZE", fixed, "", code=code,
+                    http_status=status, upstream_error_type=kind,
+                ) from last_error
+            raise PipelineFailure(
+                "ANALYZE", detail, HINT_CHECK_LLM, code=code,
+                http_status=status, upstream_error_type=kind,
+            ) from last_error
         if failed_chunks:
             logger.warning(f"{failed_chunks}/{total_chunks} 个文本块失败，用其余块继续。最后一次错误：{last_error}")
         

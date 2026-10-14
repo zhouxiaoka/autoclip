@@ -47,6 +47,13 @@ def _no_model_calls(monkeypatch):
     monkeypatch.setattr(intelligence, 'sample', forbidden)
 
 
+def _asr_ready(monkeypatch):
+    monkeypatch.setattr(
+        'backend.services.studio.readiness.transcription_check',
+        lambda: {'ok': True, 'code': 'whisper_installed', 'repair': 'none'},
+    )
+
+
 # ---------------------------------------------------------------- probe ---
 
 def test_probe_tells_audio_and_duration_and_never_guesses(tmp_path):
@@ -122,6 +129,7 @@ def test_silent_source_with_srt_keeps_the_subtitle_route(tmp_path, monkeypatch):
 
 def test_silent_source_goes_visual_when_screening_picks_a_visual_goal(tmp_path, monkeypatch):
     video = _video(tmp_path / 'raw' / 'input.mp4', 2, audio=False)
+    _asr_ready(monkeypatch)
     _preferences(monkeypatch)
     monkeypatch.setattr(intelligence, 'ready', lambda: True)
     monkeypatch.setattr(intelligence, '_probe', lambda v: {'duration': 45.0, 'width': 64, 'height': 36})
@@ -187,6 +195,7 @@ def test_import_of_a_silent_video_without_vision_fails_fast(client, monkeypatch)
 def test_confirm_refuses_the_subtitle_route_for_a_short_source(client, monkeypatch):
     # The review flow (auto_start=false) keeps the visual route open; confirming subtitles is refused.
     short = _video(store.directory('p1').parent / 'upload' / 'short.mp4', 10)
+    _asr_ready(monkeypatch)
     _preferences(monkeypatch)
     monkeypatch.setattr(intelligence, 'ready', lambda: True)
     monkeypatch.setattr(intelligence, 'sample', lambda *a, **k: [])

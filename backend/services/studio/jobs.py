@@ -1613,11 +1613,20 @@ def confirm_project(project_id, body):
         if route == 'subtitle' or 'content' in body.goals:
             # Too short / no audio and no SRT: refuse before production spends any model call (RC156 #10/#11).
             from backend.pipeline import media_precheck
+            from backend.pipeline.failures import PipelineFailure
             video = source(project_id)
+            srt_available = (video.parent / 'input.srt').is_file()
             blocked = media_precheck.subtitle_route_failure(
-                video, srt_available=(video.parent / 'input.srt').is_file(), duration=plan.get('source_duration'))
+                video, srt_available=srt_available, duration=plan.get('source_duration'))
             if blocked:
                 raise ValueError(str(blocked))
+            if not srt_available:
+                from backend.services.studio import readiness
+                try:
+                    readiness.require_transcription(
+                        stage='SUBTITLE', srt_available=False, analysis_mode='subtitle')
+                except PipelineFailure as missing:
+                    raise ValueError(missing.user_message()) from missing
         previous = deepcopy(state)
         plan['confirmed_analysis'] = route
         plan['selected_goals'] = body.goals
