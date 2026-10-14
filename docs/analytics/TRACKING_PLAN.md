@@ -273,7 +273,7 @@ multiIf(
 | 事件 | 必填 | 说明 |
 | --- | --- | --- |
 | `studio_confirm_requested` / `_accepted` | `analysis_mode` | 仅确认制作路径 |
-| `studio_generation_finished` | `outcome` | 自动出片终态：`completed` / `partial` / `failed` |
+| `studio_generation_finished` | `outcome` | 自动出片终态：`success` / `partial` / `error` |
 | `studio_production_finished` | `outcome` | 确认制作终态 |
 
 失败两者都必须有 `error_code`、`failure_stage`；模型失败加 `provider`、`base_url_host`、`upstream_error_type`、`http_status`、`billable_calls_before_failure`。身份按 **本次 run 实际调用**，不用设置页最后保存值。
@@ -295,7 +295,7 @@ multiIf(
 不单独发明 `user_returned`。用 `app_opened` 做留存：
 
 - D1 / D7：安装后第 1 / 7 天是否再次 `app_opened`
-- 出片后回访：首次 `studio_generation_finished|studio_production_finished` 且 `outcome=completed` 之后 7 日内是否再次 `app_opened`
+- 出片后回访：首次 `studio_generation_finished|studio_production_finished` 且 `outcome_canon=success` 之后 7 日内是否再次 `app_opened`
 
 ### 5.8 触发点（文件 + 函数）
 
@@ -347,7 +347,7 @@ app_version = 当前发布版本
 runtime = desktop   -- 主指标；web 可另列
 ```
 
-`partial` 算出片未成功（分子只认 `completed`）。
+`partial` 算出片未成功（分子只认 `outcome_canon=success`）。
 
 ### 6.1 按次出片成功率（主指标，目标 ≥95%）
 
@@ -355,10 +355,10 @@ runtime = desktop   -- 主指标；web 可另列
 
 - **分母**：上述事件中，`failure_attribution ≠ user` 且 `≠ environment` 的次数。  
   即：成功 + 产品侧失败。用户原因（余额不足、无音轨、密钥/地址/未配置等）和环境（站点拒绝、服务重启）不进分母。
-- **分子**：分母里 `outcome=completed` 的次数。
-- **公式**：`countIf(completed) / countIf(qualifying)`
+- **分子**：分母里 `outcome_canon = 'success'` 的次数。
+- **公式**：`countIf(success) / countIf(qualifying)`（`success` 经 `outcome_canon`，含历史 `completed`）
 
-归因优先级：先看 `upstream_error_type` 是否属于用户原因；否则看 `error_code`。`outcome=completed` 一律算成功，忽略错误字段。
+归因优先级：先看 `upstream_error_type` 是否属于用户原因；否则看 `error_code`。`outcome_canon = 'success'` 一律算成功，忽略错误字段。
 
 按服务商拆分用事件上的 `provider`（本次 run），**禁止**再用「最后保存的 provider」近似。
 
@@ -401,14 +401,14 @@ runtime = desktop   -- 主指标；web 可另列
 
 | # | 图 | Insight 类型 | 事件 | 过滤 / 拆解 | 公式或读法 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 按次出片成功率 | Trends · formula | A `studio_generation_finished` + `studio_production_finished` | 排除 user/environment（见下） | `A_completed / A_qualifying`。A 用两条事件的 **Trends 公式** 或一条 HogQL |
+| 1 | 按次出片成功率 | Trends · formula | A `studio_generation_finished` + `studio_production_finished` | 排除 user/environment（见下） | `A_success / A_qualifying`。A 用两条事件的 **Trends 公式** 或一条 HogQL |
 | 2 | 按人首次出片成功率 | HogQL / SQL insight | 同上 | 按 `distinct_id` 取 earliest qualifying | 见下方 HogQL |
 | 3 | 按服务商按次成功率 | Trends · 公式，breakdown `provider` | 同上 | 同上 | 看 api88 / deepseek / … 不要用设置页 provider |
-| 4 | 按 `failure_stage` × `error_code` | Trends · total count | 失败的出片终态 | `outcome ∈ (failed, partial)` | 堆叠或表格；`unexpected` 要下钻 `llm_request_finished` |
+| 4 | 按 `failure_stage` × `error_code` | Trends · total count | 失败的出片终态 | `outcome_canon ∈ (error, partial)` | 堆叠或表格；`unexpected` 要下钻 `llm_request_finished` |
 | 5 | 按 `upstream_error_type` | Trends | `llm_request_finished` | `outcome=error`，breakdown `upstream_error_type`、`provider` | 诊断用，不是 6.1 分母 |
 | 6 | 配置→能跑 | Funnel | `app_opened` → `provider_validation_finished` (`result=success`) → `studio_import_accepted` | 生产 + 版本 | 线 B 上线后主看 |
-| 7 | 导入→出片 | Funnel | `studio_import_accepted` → `studio_screen_finished` → 出片 `completed` | `material_origin=user` | 真实素材，排除 sample |
-| 8 | 出片→落盘 | Funnel | 出片 `completed` → `studio_download_saved` | `download_mode=native` | 浏览器下载不进 |
+| 7 | 导入→出片 | Funnel | `studio_import_accepted` → `studio_screen_finished` → 出片 `outcome_canon=success` | `material_origin=user` | 真实素材，排除 sample |
+| 8 | 出片→落盘 | Funnel | 出片 `outcome_canon=success` → `studio_download_saved` | `download_mode=native` | 浏览器下载不进 |
 | 9 | D7 回访 | Retention | `app_opened` | 起始事件 `app_installed` 或首次出片成功 | 第一列 D1、第七列 D7 |
 | 10 | 收数健康 | Trends | 核心事件列表 | 按 event 分列 | 无收数先查同意/发布，不判产品失败 |
 
@@ -416,10 +416,19 @@ runtime = desktop   -- 主指标；web 可另列
 
 ```sql
 -- qualifying = 成功，或失败但不属于用户/环境
+-- outcome_canon：1.5.8 发 success/error；历史 completed/failed 一并计入
 (
-  properties.outcome = 'completed'
+  multiIf(
+    properties.outcome IN ('completed', 'success'), 'success',
+    properties.outcome IN ('failed', 'error'), 'error',
+    properties.outcome
+  ) = 'success'
   OR (
-    properties.outcome IN ('failed', 'partial')
+    multiIf(
+      properties.outcome IN ('completed', 'success'), 'success',
+      properties.outcome IN ('failed', 'error'), 'error',
+      properties.outcome
+    ) IN ('error', 'partial')
     AND coalesce(properties.upstream_error_type, '') NOT IN
         ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
     AND coalesce(properties.error_code, '') NOT IN
@@ -434,22 +443,37 @@ runtime = desktop   -- 主指标；web 可另列
 
 ```sql
 SELECT
-  uniqIf(distinct_id, first_outcome = 'completed') AS first_success_users,
+  uniqIf(distinct_id, first_outcome = 'success') AS first_success_users,
   uniq(distinct_id) AS qualifying_users,
   first_success_users / qualifying_users AS first_attempt_success_rate
 FROM (
   SELECT
     distinct_id,
-    argMin(properties.outcome, timestamp) AS first_outcome
+    argMin(
+      multiIf(
+        properties.outcome IN ('completed', 'success'), 'success',
+        properties.outcome IN ('failed', 'error'), 'error',
+        properties.outcome
+      ),
+      timestamp
+    ) AS first_outcome
   FROM events
   WHERE event IN ('studio_generation_finished', 'studio_production_finished')
     AND properties.analytics_environment = 'production'
     AND properties.app_version = {version}
     AND timestamp >= now() - INTERVAL 7 DAY
     AND (
-      properties.outcome = 'completed'
+      multiIf(
+        properties.outcome IN ('completed', 'success'), 'success',
+        properties.outcome IN ('failed', 'error'), 'error',
+        properties.outcome
+      ) = 'success'
       OR (
-        properties.outcome IN ('failed', 'partial')
+        multiIf(
+          properties.outcome IN ('completed', 'success'), 'success',
+          properties.outcome IN ('failed', 'error'), 'error',
+          properties.outcome
+        ) IN ('error', 'partial')
         AND coalesce(properties.upstream_error_type, '') NOT IN
             ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
         AND coalesce(properties.error_code, '') NOT IN

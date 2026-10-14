@@ -127,11 +127,24 @@ def test_envelope_does_not_look_like_production_in_tests():
 @pytest.mark.parametrize("event,props", [
     ("asr_readiness_checked", {"provider": "whisper_local", "blocked": True}),
     ("provider_validation_finished", {"provider": "openai", "success_rate_schema_version": 1}),
-    ("studio_generation_finished", {"outcome": "failed"}),
+    ("studio_generation_finished", {"outcome": "error"}),
 ])
 def test_core_events_reject_incomplete_payloads(event, props):
     errors = event_catalog.validate_event(event, props)
     assert errors and "unregistered" not in errors[0]
+
+
+def test_studio_error_outcome_requires_failure_fields():
+    missing = event_catalog.validate_event("studio_generation_finished", {"outcome": "error"})
+    assert any("error_code" in item and "failure_stage" in item for item in missing)
+    assert event_catalog.validate_event("studio_generation_finished", {
+        "outcome": "error", "error_code": "provider_error", "failure_stage": "analyze",
+    }) == []
+    assert event_catalog.validate_event("studio_screen_finished", {
+        "outcome": "error", "error_code": "source_no_audio", "failure_stage": "ingest",
+    }) == []
+    stale = event_catalog.validate_event("studio_generation_finished", {"outcome": "failed"})
+    assert any("not in studio_outcome" in item for item in stale)
 
 
 def test_feedback_submitted_may_include_user_text_and_contact():
