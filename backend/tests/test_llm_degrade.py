@@ -86,6 +86,7 @@ def test_frequency_codes_degrade_quota_does_not():
 def test_user_source_never_degrades(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     n = {"i": 0, "models": []}
+    notes = []
 
     def boom():
         n["i"] += 1
@@ -93,11 +94,13 @@ def test_user_source_never_degrades(monkeypatch):
         raise _http(429, "rate", "rate_limit_exceeded")
 
     manager = _manager(boom, source="user", model="qwen-plus")
+    manager.note_same_provider_degrade = lambda: notes.append("noted")
     with pytest.raises(Exception, match="rate"):
         manager.call_with_retry("p")
     assert n["i"] == 3
     assert n["models"] == ["qwen-plus", "qwen-plus", "qwen-plus"]
     assert manager.settings["model_name"] == "qwen-plus"
+    assert notes == []
 
 
 def test_preset_degrades_on_rate_limit_exceeded(monkeypatch):
@@ -193,6 +196,64 @@ def test_preset_does_not_degrade_on_server_error(monkeypatch):
         manager.call_with_retry("p")
     assert set(seen) == {"qwen-plus"}
     assert manager.settings["model_name"] == "qwen-plus"
+
+
+def test_degrade_calls_note_same_provider_degrade_once(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    notes = []
+
+    def flaky():
+        if manager.current_provider.model_name == "qwen-plus":
+            raise _http(429, "rate", "rate_limit_exceeded")
+        return "ok"
+
+    manager = _manager(flaky, source="preset", model="qwen-plus")
+    manager.note_same_provider_degrade = lambda: notes.append("noted")
+    assert manager.call_with_retry("p") == "ok"
+    assert notes == ["noted"]
+
+
+def test_degrade_works_when_r2_hook_missing_or_raises(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+
+    def flaky():
+        if manager.current_provider.model_name == "qwen-plus":
+            raise _http(429, "rate", "rate_limit_exceeded")
+        return "ok"
+
+    manager = _manager(flaky, source="preset", model="qwen-plus")
+    assert not hasattr(manager, "note_same_provider_degrade")
+    assert manager.call_with_retry("p") == "ok"
+
+    notes = []
+
+    def boom():
+        notes.append("called")
+        raise RuntimeError("telemetry down")
+
+    manager = _manager(flaky, source="preset", model="qwen-plus")
+    manager.note_same_provider_degrade = boom
+    assert manager.call_with_retry("p") == "ok"
+    assert notes == ["called"]
+
+
+def test_degrade_falls_back_to_increment_degrade_count(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    counts = []
+    monkeypatch.setattr(
+        "backend.core.llm_telemetry.increment_degrade_count",
+        lambda: counts.append(1) or 1,
+        raising=False,
+    )
+
+    def flaky():
+        if manager.current_provider.model_name == "qwen-plus":
+            raise _http(429, "rate", "rate_limit_exceeded")
+        return "ok"
+
+    manager = _manager(flaky, source="preset", model="qwen-plus")
+    assert manager.call_with_retry("p") == "ok"
+    assert counts == [1]
 
 
 def test_degrade_log_and_telemetry_omit_secrets():

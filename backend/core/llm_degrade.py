@@ -185,6 +185,31 @@ def candidates_for_call(settings: Mapping[str, Any] | None, assignment: Any = No
     return found if found else (current,)
 
 
+def call_note_same_provider_degrade(manager: Any = None) -> None:
+    """Call #375's ``note_same_provider_degrade`` when R2 is present.
+
+    #375 is not on this branch. Prefer ``manager.note_same_provider_degrade``,
+    else ``llm_telemetry.increment_degrade_count``. Missing hooks are a
+    no-op so R1 does not depend on R2. Never records model names, URLs,
+    paths, or user text.
+    """
+    if manager is not None:
+        hook = getattr(manager, "note_same_provider_degrade", None)
+        if callable(hook):
+            try:
+                hook()
+            except Exception:
+                return
+            return
+    try:
+        from backend.core import llm_telemetry
+        increment = getattr(llm_telemetry, "increment_degrade_count", None)
+        if callable(increment):
+            increment()
+    except Exception:
+        return
+
+
 def should_degrade_to_next(error: BaseException) -> bool:
     """True only for frequency limits. Quota / other types stay on the chosen model."""
     tokens = error_code_tokens(error)
