@@ -20,7 +20,7 @@
 本地 OpenAI 兼容服务回答大纲 / 时间线 / 评分 / 标题。素材由 `ffmpeg` lavfi 现场生成（约 25 秒、带 SRT），体积小、可再分发。应拦下的两条不带 SRT。
 
 **真实服务商（有 key 才跑）**  
-88API、DeepSeek、Gemini。密钥只从 GitHub Environment `provider-e2e` 读取。**一个都没配时 job 记 `skipped` 并写进汇总，workflow 不失败。** 额度用尽或产品失败会失败，并在报告里用错误码区分。
+88API、DeepSeek、Gemini、DashScope（百炼）、Infistar。密钥只从 GitHub Environment `provider-e2e` 读取。**只缺 `*_MODEL` 时用矩阵里的默认模型，不跳过。** 一家都没配 key 时 job 记 `skipped` 并写进汇总，workflow 不失败。额度用尽或产品失败会失败，并在报告里用错误码区分。
 
 B 站 / YouTube 链接单独验收，不计入本门槛。
 
@@ -32,12 +32,16 @@ B 站 / YouTube 链接单独验收，不计入本门槛。
 
 | Secret | 用途 |
 | --- | --- |
-| `API88_API_KEY` | 88API 专用 CI token，设额度上限并限制模型 |
-| `API88_MODEL` | 可选，默认 `gpt-4o-mini` |
+| `API88_API_KEY` | 88API 专用 CI token，设额度上限并限制模型。地址 `https://api.88api.ai/v1` |
+| `API88_MODEL` | 可选，缺省 `gpt-4o-mini` |
 | `DEEPSEEK_API_KEY` | DeepSeek 官方独立项目 key |
-| `DEEPSEEK_MODEL` | 可选，默认 `deepseek-flash` |
+| `DEEPSEEK_MODEL` | 可选，缺省 `deepseek-flash` |
 | `GEMINI_API_KEY` | Gemini 独立项目 key |
-| `GEMINI_MODEL` | 可选，默认 `gemini-2.0-flash` |
+| `GEMINI_MODEL` | 可选，缺省 `gemini-2.0-flash` |
+| `DASHSCOPE_API_KEY` | 阿里云百炼 / DashScope。地址 `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `DASHSCOPE_MODEL` | 可选，缺省 `qwen-plus` |
+| `INFISTAR_API_KEY` | Infistar。地址 `https://infistar.ai/v1` |
+| `INFISTAR_MODEL` | 可选，缺省 `gpt-4o-mini` |
 
 Harness 只读环境变量。日志和 artifact 会掩码 `sk-` / `Bearer` / `api_key`。每季度轮换。GitHub 也会自动掩码 secrets。
 
@@ -60,7 +64,7 @@ PYTHONPATH=scripts python -m provider_e2e --suite mock --out /tmp/provider-e2e-m
 | DeepSeek 单条短素材 | 约 ¥0.05–0.5 |
 | Gemini flash 单条 | 约 $0.01–0.1 |
 | 88API（中档模型）单条 | 约 ¥0.2–2 |
-| 一次完整真实门槛（约 3 家 × 10 条） | 约 ¥30–100 |
+| 一次完整真实门槛（约 5 家 × 10 条） | 约 ¥30–100 |
 | 夜间子集 | 约 ¥10–20 |
 | 每月 | 约 ¥500–1000 |
 

@@ -197,7 +197,7 @@ LIVE_PROVIDERS: tuple[dict[str, Any], ...] = (
         'secret': 'API88_API_KEY',
         'model_env': 'API88_MODEL',
         'default_model': 'gpt-4o-mini',
-        'base_url': 'https://88api.ai/v1',
+        'base_url': 'https://api.88api.ai/v1',
         'vision_model_env': 'API88_VISION_MODEL',
     },
     {
@@ -221,6 +221,28 @@ LIVE_PROVIDERS: tuple[dict[str, Any], ...] = (
         'default_model': 'gemini-2.0-flash',
         'base_url': 'https://generativelanguage.googleapis.com/v1beta/openai',
         'vision_model_env': 'GEMINI_VISION_MODEL',
+    },
+    {
+        'id': 'dashscope',
+        'label': 'DashScope',
+        'kind': 'live',
+        'provider': 'dashscope',
+        'secret': 'DASHSCOPE_API_KEY',
+        'model_env': 'DASHSCOPE_MODEL',
+        'default_model': 'qwen-plus',
+        'base_url': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        'vision_model_env': 'DASHSCOPE_VISION_MODEL',
+    },
+    {
+        'id': 'infistar',
+        'label': 'Infistar',
+        'kind': 'live',
+        'provider': 'infistar',
+        'secret': 'INFISTAR_API_KEY',
+        'model_env': 'INFISTAR_MODEL',
+        'default_model': 'gpt-4o-mini',
+        'base_url': 'https://infistar.ai/v1',
+        'vision_model_env': 'INFISTAR_VISION_MODEL',
     },
 )
 

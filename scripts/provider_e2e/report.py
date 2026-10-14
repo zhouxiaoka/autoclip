@@ -42,6 +42,13 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append('- 跳过的真实服务商: ' + ', '.join(
             f"{item.get('id')}（{item.get('reason')}）" for item in skipped
         ))
+    for item in report.get('providers') or []:
+        lines.append(
+            f"- {item.get('label') or item.get('id')}: 模型 `{item.get('model')}` "
+            f"（{item.get('model_source') or 'default'}） "
+            f"{item.get('should_succeed_passed')}/{item.get('should_succeed_n')} 应成功，"
+            f"{item.get('should_block_passed')}/{item.get('should_block_n')} 应拦下"
+        )
     lines += [
         '',
         '| 用例 | 期望 | 结果 | 错误码 | upstream_error_type | billable_calls_before_failure | 说明 |',

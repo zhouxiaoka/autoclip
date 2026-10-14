@@ -239,5 +239,7 @@ def run_case(
         'phase': (workspace.get('analysis') or {}).get('phase'),
         'completed_variants': sum(1 for row in (workspace.get('output_variants') or []) if row.get('status') == 'completed'),
         'error': error,
+        'provider': connection.get('provider'),
+        'model': connection.get('model'),
     }
     return redact(result, extras)

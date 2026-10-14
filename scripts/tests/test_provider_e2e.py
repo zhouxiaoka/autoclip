@@ -36,8 +36,15 @@ class ProviderE2EContractTests(unittest.TestCase):
         })
 
     def test_live_providers_and_faults(self):
-        ids = {item['id'] for item in matrix.live_providers()}
-        self.assertEqual(ids, {'api88', 'deepseek', 'gemini'})
+        providers = {item['id']: item for item in matrix.live_providers()}
+        self.assertEqual(set(providers), {'api88', 'deepseek', 'gemini', 'dashscope', 'infistar'})
+        self.assertEqual(providers['api88']['base_url'], 'https://api.88api.ai/v1')
+        self.assertEqual(providers['dashscope']['base_url'], 'https://dashscope.aliyuncs.com/compatible-mode/v1')
+        self.assertEqual(providers['infistar']['base_url'], 'https://infistar.ai/v1')
+        self.assertEqual(providers['dashscope']['secret'], 'DASHSCOPE_API_KEY')
+        self.assertEqual(providers['infistar']['secret'], 'INFISTAR_API_KEY')
+        self.assertEqual(providers['dashscope']['default_model'], 'qwen-plus')
+        self.assertTrue(all(item['default_model'] for item in providers.values()))
         faults = {item['id']: item for item in matrix.faults()}
         self.assertEqual(set(faults), {'rate_limited_429', 'unavailable_503', 'disconnect', 'kill_backend'})
         self.assertEqual(faults['rate_limited_429']['upstream_error_type'], UpstreamErrorType.RATE_LIMITED.value)
@@ -58,6 +65,8 @@ class ProviderE2EContractTests(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/provider-e2e-gate.yml').read_text(encoding='utf-8')
         desktop = (ROOT / '.github/workflows/desktop-build.yml').read_text(encoding='utf-8')
         self.assertIn('environment: provider-e2e', workflow)
+        self.assertIn('DASHSCOPE_API_KEY', workflow)
+        self.assertIn('INFISTAR_API_KEY', workflow)
         self.assertIn('workflow_call', workflow)
         self.assertIn('head.repo.full_name == github.repository', workflow)
         self.assertIn('scripts/provider_e2e/**', workflow)
@@ -76,11 +85,19 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertEqual(hidden['ok'], 'plain')
 
     def test_live_ready_skips_without_secrets(self):
-        provider = matrix.live_providers()[0]
-        self.assertFalse(live_ready(provider, {})['ready'])
-        ready = live_ready(provider, {provider['secret']: 'sk-test-key'})
-        self.assertTrue(ready['ready'])
-        self.assertEqual(ready['model'], provider['default_model'])
+        for provider in matrix.live_providers():
+            self.assertFalse(live_ready(provider, {})['ready'])
+            ready = live_ready(provider, {provider['secret']: 'sk-test-key'})
+            self.assertTrue(ready['ready'], provider['id'])
+            self.assertEqual(ready['model'], provider['default_model'])
+            self.assertEqual(ready['model_source'], 'default')
+            self.assertEqual(ready['base_url'], provider['base_url'])
+            override = live_ready(provider, {
+                provider['secret']: 'sk-test-key',
+                provider['model_env']: 'custom-model',
+            })
+            self.assertEqual(override['model'], 'custom-model')
+            self.assertEqual(override['model_source'], 'secret')
 
     def test_judge_thresholds(self):
         succeed = [{'expect': 'succeed', 'passed': True} for _ in range(8)]
@@ -230,6 +247,11 @@ class ProviderE2EContractTests(unittest.TestCase):
         doc = (ROOT / 'docs/PROVIDER_E2E_GATE.md').read_text(encoding='utf-8')
         self.assertIn('provider-e2e', doc)
         self.assertIn('API88_API_KEY', doc)
+        self.assertIn('DASHSCOPE_API_KEY', doc)
+        self.assertIn('INFISTAR_API_KEY', doc)
+        self.assertIn('api.88api.ai', doc)
+        self.assertIn('dashscope.aliyuncs.com/compatible-mode/v1', doc)
+        self.assertIn('infistar.ai/v1', doc)
         self.assertIn('¥500–1000', doc)
         self.assertIn('UpstreamErrorType', doc)
         self.assertIn('billable_calls_before_failure', doc)

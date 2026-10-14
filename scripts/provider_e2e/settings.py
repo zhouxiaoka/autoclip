@@ -17,7 +17,7 @@ def write_data_dir(data_dir: Path, *, base_url: str, api_key: str, provider: str
             'id': 'e2e',
             'name': 'provider-e2e',
             'provider': provider,
-            'base_url': base_url if provider == 'compatible' else '',
+            'base_url': base_url,
             'api_key': api_key,
             'image_api': 'auto',
             'image_base_url': '',
@@ -44,7 +44,9 @@ def write_data_dir(data_dir: Path, *, base_url: str, api_key: str, provider: str
 
 def live_ready(provider: dict[str, Any], env: dict[str, str]) -> dict[str, Any]:
     key = (env.get(provider['secret']) or '').strip()
-    model = (env.get(provider['model_env']) or provider['default_model'] or '').strip()
+    configured = (env.get(provider['model_env']) or '').strip()
+    default_model = (provider.get('default_model') or '').strip()
+    model = configured or default_model
     if not key:
         return {'ready': False, 'reason': f"{provider['secret']} unset"}
     if not model:
@@ -53,6 +55,7 @@ def live_ready(provider: dict[str, Any], env: dict[str, str]) -> dict[str, Any]:
         'ready': True,
         'api_key': key,
         'model': model,
+        'model_source': 'secret' if configured else 'default',
         'provider': provider['provider'],
         'base_url': provider['base_url'],
     }

@@ -148,7 +148,7 @@ def run_live(out: Path, python: str, timeout: float, env: dict[str, str], extras
     cases = []
     for provider, info in ready_rows:
         for spec in assets():
-            cases.append(run_case(
+            row = run_case(
                 case_id=f"{provider['id']}:{spec['id']}",
                 label=f"{provider['label']} / {spec['label']}",
                 expect=spec['expect'],
@@ -163,12 +163,31 @@ def run_live(out: Path, python: str, timeout: float, env: dict[str, str], extras
                 python=python,
                 timeout=timeout,
                 extras=extras,
-            ))
+            )
+            row['provider_id'] = provider['id']
+            row['model_source'] = info.get('model_source')
+            cases.append(row)
     succeed = [
         row for row in cases
         if row.get('expect') == 'succeed' and not row.get('expected_upstream_error_type')
     ]
     rate = sum(1 for row in succeed if row.get('passed')) / len(succeed) if succeed else 1.0
+    summaries = []
+    for provider, info in ready_rows:
+        rows = [row for row in cases if row.get('provider_id') == provider['id']]
+        win = [row for row in rows if row.get('expect') == 'succeed']
+        blocked = [row for row in rows if row.get('expect') == 'block']
+        summaries.append({
+            'id': provider['id'],
+            'label': provider['label'],
+            'model': info['model'],
+            'model_source': info.get('model_source'),
+            'base_url_host': info['base_url'].split('://', 1)[-1].split('/', 1)[0],
+            'should_succeed_n': len(win),
+            'should_succeed_passed': sum(1 for row in win if row.get('passed')),
+            'should_block_n': len(blocked),
+            'should_block_passed': sum(1 for row in blocked if row.get('passed')),
+        })
     report = {
         'schema_version': SCHEMA_VERSION,
         'suite': 'live',
@@ -176,6 +195,7 @@ def run_live(out: Path, python: str, timeout: float, env: dict[str, str], extras
         'commit': _commit(),
         'cases': cases,
         'skipped_providers': skipped,
+        'providers': summaries,
         'history': _history(None, rate),
     }
     write_report(out / 'report.json', report, extras)

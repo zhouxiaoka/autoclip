@@ -77,6 +77,8 @@ jobs:
           DASHSCOPE_API_KEY: ""
           GEMINI_API_KEY: ""
           DEEPSEEK_API_KEY: ""
+          API88_API_KEY: ""
+          INFISTAR_API_KEY: ""
         run: PYTHONPATH=scripts python -m provider_e2e --suite mock --out "$RUNNER_TEMP/provider-e2e-mock"
       - name: Upload mock report
         if: always()
@@ -122,6 +124,10 @@ jobs:
           DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          DASHSCOPE_MODEL: ${{ secrets.DASHSCOPE_MODEL }}
+          INFISTAR_API_KEY: ${{ secrets.INFISTAR_API_KEY }}
+          INFISTAR_MODEL: ${{ secrets.INFISTAR_MODEL }}
         run: PYTHONPATH=scripts python -m provider_e2e --suite live --out "$RUNNER_TEMP/provider-e2e-live"
       - name: Upload live report
         if: always()
