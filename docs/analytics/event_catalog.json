@@ -53,7 +53,9 @@
   },
   "privacy": {
     "forbidden_keys": ["api_key", "prompt", "caption", "authorization", "password"],
-    "forbidden_substrings": ["sk-"]
+    "forbidden_substrings": ["sk-"],
+    "user_content_keys": ["text", "contact"],
+    "user_submitted_events": ["feedback_submitted"]
   },
   "scan": {
     "ignore_events": [
@@ -261,7 +263,7 @@
     },
     "feedback_opened": { "status": "keep", "domain": "feedback" },
     "feedback_dismissed": { "status": "keep", "domain": "feedback" },
-    "feedback_submitted": { "status": "keep", "domain": "feedback", "allow": ["text", "contact"] },
+    "feedback_submitted": { "status": "keep", "domain": "feedback", "kind": "user_submitted", "allow": ["text", "contact"] },
     "sponsor_link_opened": { "status": "keep", "domain": "setup" },
     "video_imported": { "status": "deprecated", "domain": "legacy" },
     "clips_exported": { "status": "deprecated", "domain": "legacy" },

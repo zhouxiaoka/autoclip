@@ -142,6 +142,9 @@ const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ open, onClose, context 
           value={contact}
           onChange={(e) => setContact(e.target.value)}
         />
+        <p className="ac-note">
+          {t("内容和联系方式会发送给开发者，用于回复和创建 GitHub Issue。")}
+        </p>
         <div className="ac-context" title={t("将随反馈一起发送的上下文")}>
           {ctxChips.map((c) => <span key={c}>{c}</span>)}
           <span>{t("发送后会先到 PostHog，再公开到 GitHub；邮箱不会公开。")}</span>

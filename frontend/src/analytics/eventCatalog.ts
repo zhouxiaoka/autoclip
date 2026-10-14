@@ -9,7 +9,12 @@ export type Catalog = {
     runtime: string[]
   }
   enums: Record<string, string[]>
-  privacy?: { forbidden_keys?: string[]; forbidden_substrings?: string[] }
+  privacy?: {
+    forbidden_keys?: string[]
+    forbidden_substrings?: string[]
+    user_content_keys?: string[]
+    user_submitted_events?: string[]
+  }
   scan?: { ignore_events?: string[] }
   families?: Record<string, { verbs: string[]; prefixes: Record<string, Record<string, unknown>>; status?: string }>
   events: Record<string, EventSpec>
@@ -18,6 +23,8 @@ export type Catalog = {
 export type EventSpec = {
   status?: string
   domain?: string
+  kind?: string
+  allow?: string[]
   required?: string[]
   required_when?: Record<string, string[]>
   enums?: Record<string, string>
@@ -112,8 +119,12 @@ export function validateEvent(
   }
   const forbiddenKeys = new Set((catalog.privacy?.forbidden_keys || []).map(key => key.toLowerCase()))
   const forbiddenSub = (catalog.privacy?.forbidden_substrings || []).map(item => item.toLowerCase())
+  const userContent = new Set((catalog.privacy?.user_content_keys || []).map(key => key.toLowerCase()))
+  const submitted = new Set(catalog.privacy?.user_submitted_events || [])
+  if (spec.kind === 'user_submitted') submitted.add(name)
   for (const [key, value] of Object.entries(props)) {
     if (forbiddenKeys.has(key.toLowerCase())) errors.push(`${name} has forbidden property ${key}`)
+    if (userContent.has(key.toLowerCase()) && !submitted.has(name)) errors.push(`${name} has user content ${key}`)
     if (typeof value === 'string') {
       const lowered = value.toLowerCase()
       if (forbiddenSub.some(marker => lowered.includes(marker))) errors.push(`${name}.${key} looks like a secret`)

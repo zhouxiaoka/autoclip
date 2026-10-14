@@ -195,10 +195,18 @@ def _privacy_errors(name: str, props: Mapping[str, Any], catalog: Mapping[str, A
     privacy = catalog.get("privacy") or {}
     forbidden_keys = {str(key).lower() for key in privacy.get("forbidden_keys") or []}
     forbidden_sub = [str(item).lower() for item in privacy.get("forbidden_substrings") or []]
+    user_content = {str(key).lower() for key in privacy.get("user_content_keys") or []}
+    submitted = {str(item) for item in privacy.get("user_submitted_events") or []}
+    spec = event_spec(name, catalog) or {}
+    if spec.get("kind") == "user_submitted":
+        submitted.add(name)
     errors: list[str] = []
     for key, value in props.items():
-        if str(key).lower() in forbidden_keys:
+        lowered_key = str(key).lower()
+        if lowered_key in forbidden_keys:
             errors.append(f"{name} has forbidden property {key}")
+        if lowered_key in user_content and name not in submitted:
+            errors.append(f"{name} has user content {key}")
         if isinstance(value, str):
             lowered = value.lower()
             if any(marker in lowered for marker in forbidden_sub):

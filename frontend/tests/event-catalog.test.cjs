@@ -112,3 +112,20 @@ test('os aliases normalize to macos/windows/linux', () => {
   assert.equal(catalogApi.normalizeOs('win32', catalog), 'windows')
   assert.equal(catalogApi.normalizeOs('linux', catalog), 'linux')
 })
+
+test('feedback_submitted may include user text and contact', () => {
+  assert.equal(catalog.events.feedback_submitted.kind, 'user_submitted')
+  assert.deepEqual(catalog.events.feedback_submitted.allow, ['text', 'contact'])
+  const errors = catalogApi.validateEvent('feedback_submitted', {
+    text: '进度停住了', contact: 'person@example.com',
+  }, catalog)
+  assert.equal(errors.join(';'), '')
+})
+
+test('auto-collected events still reject user content', () => {
+  const errors = catalogApi.validateEvent('llm_request_finished', {
+    success_rate_schema_version: 1, provider: 'openai', kind: 'text', outcome: 'success', duration_ms: 1,
+    text: '用户口播', contact: 'person@example.com',
+  }, catalog)
+  assert.ok(errors.some(item => item.includes('user content')))
+})

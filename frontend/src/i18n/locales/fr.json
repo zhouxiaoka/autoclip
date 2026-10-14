@@ -71,6 +71,7 @@
   "你想让 AutoClip 帮你做到什么？": "Que souhaitez-vous faire avec AutoClip ?",
   "想说什么都可以。": "Partagez ce que vous souhaitez.",
   "联系方式（可选，邮箱，只经 PostHog 送达，不会公开）": "Contact (e-mail facultatif, uniquement via PostHog, non publié)",
+  "内容和联系方式会发送给开发者，用于回复和创建 GitHub Issue。": "Le contenu et le contact sont envoyés aux développeurs pour répondre et créer une GitHub Issue.",
   "将随反馈一起发送的上下文": "Informations jointes au retour",
   "发送后会先到 PostHog，再公开到 GitHub；邮箱不会公开。": "Après envoi, ceci part d’abord vers PostHog, puis apparaît sur GitHub ; votre e-mail reste privé.",
   "链接已复制到剪贴板:{{value1}}": "Lien copié : {{value1}}",

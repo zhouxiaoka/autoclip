@@ -132,3 +132,26 @@ def test_envelope_does_not_look_like_production_in_tests():
 def test_core_events_reject_incomplete_payloads(event, props):
     errors = event_catalog.validate_event(event, props)
     assert errors and "unregistered" not in errors[0]
+
+
+def test_feedback_submitted_may_include_user_text_and_contact():
+    row = event_catalog.load_catalog()["events"]["feedback_submitted"]
+    assert row["kind"] == "user_submitted"
+    assert set(row["allow"]) == {"text", "contact"}
+    assert event_catalog.validate_event("feedback_submitted", {
+        "text": "进度停住了",
+        "contact": "person@example.com",
+    }) == []
+
+
+def test_auto_events_reject_user_content():
+    leaked = event_catalog.validate_event("llm_request_finished", {
+        "success_rate_schema_version": 1,
+        "provider": "openai",
+        "kind": "text",
+        "outcome": "success",
+        "duration_ms": 12,
+        "text": "用户口播",
+        "contact": "person@example.com",
+    })
+    assert any("user content" in item for item in leaked)
