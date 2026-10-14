@@ -436,7 +436,7 @@ def test_transcription_model_is_saved_and_used_without_overriding_explicit_call(
     config = example()
     config.transcription = ai.Transcription(model='large-v3')
     saved = ai.save(config)
-    assert saved['transcription'] == {'provider': 'whisper_local', 'model': 'large-v3', 'connection_id': None}
+    assert saved['transcription'] == {'provider': 'whisper_local', 'model': 'large-v3', 'connection_id': None, 'model_source': 'user'}
     calls = []
     class FakeRecognizer:
         def __init__(self, config=None):
