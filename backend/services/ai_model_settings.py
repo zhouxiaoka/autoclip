@@ -130,11 +130,14 @@ class Connection(BaseModel):
     @classmethod
     def valid_url(cls, value):
         from backend.core.provider_url import cleanup_base_url
+        from backend.core.provider_endpoint import is_console_host
         value = cleanup_base_url(value)
         if value:
             parsed = urlparse(value)
             if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
                 raise ValueError('请填写不含密钥或查询参数的 HTTP(S) 接口地址')
+            if is_console_host(parsed.hostname):
+                raise ValueError('这是控制台或官网地址，不是模型接口')
         return value
 
     @model_validator(mode='after')

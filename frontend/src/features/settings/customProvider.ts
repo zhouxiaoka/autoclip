@@ -5,6 +5,7 @@
 import { normalizeProviderBaseUrl } from './providerUrl'
 import type { Connection, ModelEntry, ModelList, ModelSettings } from './modelSettingsApi'
 import { cleanBinding } from './modelSettingsLogic'
+import { isConsoleHost } from './providerAccess'
 
 export const CUSTOM_PROTOCOL = 'openai_compatible' as const
 export type CustomProtocol = typeof CUSTOM_PROTOCOL
@@ -126,16 +127,24 @@ export function normalizedDraftUrl(url: string): string {
   return normalizeProviderBaseUrl(url, 'compatible')
 }
 
+function urlLooksBlocked(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname) return true
+    if (parsed.username || parsed.password) return true
+    return isConsoleHost(parsed.hostname)
+  } catch {
+    return true
+  }
+}
+
 export function draftUrlIssue(url: string): 'empty' | 'invalid' | null {
+  const stripped = stripChatCompletions(collapseSpaces(url))
+  if (!stripped) return 'empty'
   const cleaned = normalizedDraftUrl(url)
   if (!cleaned) return 'empty'
-  try {
-    const parsed = new URL(cleaned)
-    if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname) return 'invalid'
-    return null
-  } catch {
-    return 'invalid'
-  }
+  if (urlLooksBlocked(stripped) || urlLooksBlocked(cleaned)) return 'invalid'
+  return null
 }
 
 export function draftIssue(draft: CustomProviderDraft): Exclude<DraftIssue, 'model_id' | 'duplicate'> | null {
