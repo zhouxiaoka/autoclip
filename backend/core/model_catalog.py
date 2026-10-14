@@ -13,100 +13,21 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from backend.core.provider_presets import (
+    curated_models_map,
+    default_models_map,
+    get_provider,
+    image_catalog_map,
+    provider_labels_map,
+)
+
 logger = logging.getLogger(__name__)
 
 # 各家仍在维护的稳定别名 / 旗舰型号。实时列表失败时用这份，也作为下拉靠前的常用项。
-# 日期以 2026-09 公开文档为准；具体可用性以账号权限为准。
-CURATED_MODELS: Dict[str, List[str]] = {
-    "dashscope": [
-        "qwen3.8-max",
-        "qwen3.8-flash",
-        "qwen3.7-plus",
-        "qwen-plus",
-        "qwen-plus-latest",
-        "qwen-max",
-        "qwen-max-latest",
-        "qwen-flash",
-        # 多模态：能看画面，视觉分析 / 封面校对用
-        "qwen-vl-max",
-        "qwen-vl-plus",
-    ],
-    "openai": [
-        "gpt-5.6-sol",
-        "gpt-5.6-terra",
-        "gpt-5.6-luna",
-        "gpt-5.4",
-        "gpt-5.4-mini",
-        "gpt-5",
-        "gpt-5-mini",
-        "gpt-5-nano",
-    ],
-    "gemini": [
-        "gemini-3.8-flash",
-        "gemini-3.7-flash",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-pro-preview",
-        "gemini-3-flash-preview",
-        "gemini-2.5-flash",
-    ],
-    "deepseek": [
-        "deepseek-flash",
-        "deepseek-v4-pro",
-    ],
-    "seed": [
-        "doubao-seed-2-1-lite-260915",
-        "doubao-seed-2-1-pro-260915",
-        "doubao-seed-2-1-turbo-260628",
-        "doubao-seed-evolving",
-    ],
-    "kimi": [
-        "kimi-k3",
-        "kimi-k2.6",
-        "kimi-k2.5",
-        "kimi-k2.7-code",
-    ],
-    "glm": [
-        "glm-5.3",
-        "glm-5.2",
-        "glm-4.7",
-    ],
-    "grok": [
-        "grok-4.6",
-        "grok-4.5",
-        "grok-4.3",
-    ],
-    # 多模型网关，型号随账号而定：不内置名单，填好 key 后实时拉取
-    "infistar": [],
-    "api88": [],
-}
-
-DEFAULT_MODELS: Dict[str, str] = {
-    "dashscope": "qwen-plus",
-    "openai": "gpt-5-mini",
-    "gemini": "gemini-3.8-flash",
-    "deepseek": "deepseek-flash",
-    "seed": "doubao-seed-2-1-lite-260915",
-    "kimi": "kimi-k2.6",
-    "glm": "glm-5.3",
-    "grok": "grok-4.6",
-    "infistar": "",
-    "api88": "",
-}
-
-PROVIDER_LABELS: Dict[str, str] = {
-    "dashscope": "通义千问",
-    "openai": "OpenAI",
-    "gemini": "Gemini",
-    "deepseek": "DeepSeek",
-    "seed": "Seed",
-    "kimi": "Kimi",
-    "glm": "GLM",
-    "grok": "Grok",
-    "infistar": "Infistar",
-    "api88": "88API",
-}
+# 内容来自 presets/provider_presets.json，禁止再手写第二份。
+CURATED_MODELS: Dict[str, List[str]] = curated_models_map()
+DEFAULT_MODELS: Dict[str, str] = default_models_map()
+PROVIDER_LABELS: Dict[str, str] = provider_labels_map()
 
 CLOUD_PROVIDERS = frozenset(CURATED_MODELS)
 
@@ -164,14 +85,7 @@ def supports_vision(model: str) -> bool:
 # ---- 封面生图：跟着文本模型的服务商走，同一个 key ----
 # 这里只是下拉的常用项；填好 key 后再合并账号 /models 里实时拉到的生图型号，用户也可以直接输入模型 ID。
 # 不在表里的服务商（DeepSeek / Kimi / GLM / Grok / 本地）目前没有接入生图接口，封面用视频截帧。
-IMAGE_MODELS: Dict[str, List[str]] = {
-    "dashscope": ["wanx2.1-t2i-turbo", "wanx2.1-t2i-plus"],
-    "seed": ["doubao-seedream-5-0-260128"],
-    "openai": ["gpt-image-1"],
-    "api88": ["gpt-image-1", "dall-e-3", "dall-e-2"],
-    # Infistar 是多模型网关，主流生图模型都能调，具体以账号可用型号为准
-    "infistar": ["gpt-image-1", "dall-e-3", "doubao-seedream-5-0-260128", "flux-1.1-pro", "imagen-4", "wanx2.1-t2i-turbo"],
-}
+IMAGE_MODELS: Dict[str, List[str]] = image_catalog_map()
 _IMAGE_MARKERS = ("gpt-image", "dall-e", "seedream", "wanx", "flux", "imagen", "t2i", "midjourney", "ideogram",
                   "recraft", "stable-diffusion", "sdxl", "sd3", "kolors", "cogview", "hunyuan-image", "qwen-image")
 
@@ -222,8 +136,10 @@ _OPENAI_CHAT_PREFIXES = (
 
 _DATED_SNAPSHOT = re.compile(r"^(.+)-(?:\d{4}-\d{2}-\d{2}|\d{8})$")
 
-SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
-GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+_siliconflow = get_provider("siliconflow")
+SILICONFLOW_BASE_URL = _siliconflow.base_url if _siliconflow else ""
+_gemini = get_provider("gemini")
+GEMINI_MODELS_URL = f"{_gemini.base_url.rstrip('/')}/models" if _gemini and _gemini.base_url else ""
 
 _CACHE_TTL_SECONDS = 300.0
 _cache: Dict[Tuple[str, str, str], Tuple[float, List[str]]] = {}

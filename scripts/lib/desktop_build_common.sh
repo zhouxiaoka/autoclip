@@ -152,6 +152,7 @@ copy_backend_source() {
     rm -rf "$BACKEND_DEST"
     "$PORTABLE_PY" - backend "$BACKEND_DEST" <<'PY'
 import shutil, sys
+from pathlib import Path
 src, dest = sys.argv[1], sys.argv[2]
 IGNORED_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "tests", "data", "logs", "temp"}
 IGNORED_SUFFIXES = (".pyc", ".log", ".pid", ".rdb")
@@ -160,6 +161,9 @@ def ignore(_dir, names):
     return {n for n in names if n in IGNORED_DIRS or n.endswith(IGNORED_SUFFIXES)}
 
 shutil.copytree(src, dest, ignore=ignore)
+presets = Path('presets')
+if presets.is_dir():
+    shutil.copytree(presets, Path(dest) / 'presets', dirs_exist_ok=True)
 PY
     echo "OK"
 }

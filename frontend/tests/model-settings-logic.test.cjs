@@ -1,38 +1,25 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
-
-const dir = path.join(__dirname, '../src/features/settings')
-function load(file, mocks) {
-  const exports = {}
-  const code = ts.transpileModule(fs.readFileSync(path.join(dir, file), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
-  vm.runInNewContext(code, { exports, URL, require: id => { assert.ok(id in mocks, id); return mocks[id] }, crypto: { randomUUID: () => 'uuid' } })
-  return exports
-}
+const { loadTs } = require('./load-ts.cjs')
 const providers = {
   PROVIDERS: {
     dashscope: { name: '阿里云百炼' }, openai: { name: 'OpenAI' }, deepseek: { name: 'DeepSeek' },
     compatible: { name: '自定义' }, ollama: { name: 'Ollama', local: { baseUrl: 'http://localhost:11434/v1' } },
   },
 }
-function loadContract() {
-  const source = path.join(__dirname, '../src/analytics/successRateContract.ts')
-  const module = { exports: {} }
-  vm.runInNewContext(
-    ts.transpileModule(fs.readFileSync(source, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText,
-    { exports: module.exports, module, URL },
-    { filename: source },
-  )
-  return module.exports
-}
-const defaults = load('modelDefaults.ts', {})
-const access = load('providerAccess.ts', {
-  '../../i18n': { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) },
+const i18n = { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) }
+const defaults = loadTs('modelDefaults.ts')
+const access = loadTs('providerAccess.ts', {
+  '../../i18n': i18n,
   './providers': providers,
-  '../../analytics/successRateContract': loadContract(),
 })
-const urls = load('providerUrl.ts', {})
-const logic = load('modelSettingsLogic.ts', { './providers': providers, './modelDefaults': defaults, './providerAccess': access, './providerUrl': urls })
+const urls = loadTs('providerUrl.ts')
+const logic = loadTs('modelSettingsLogic.ts', {
+  './providers': providers,
+  './modelDefaults': defaults,
+  './providerAccess': access,
+  './providerUrl': urls,
+})
 
 const plain = x => JSON.parse(JSON.stringify(x))
 const conn = (id, provider, extra = {}) => ({ id, name: provider, provider, base_url: '', api_key: '', image_api: 'auto', image_base_url: '', ...extra })

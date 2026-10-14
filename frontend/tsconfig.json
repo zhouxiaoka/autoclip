@@ -25,9 +25,10 @@
     /* Path mapping */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@provider-presets": ["../presets/provider_presets.json"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "../presets/provider_presets.json"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
