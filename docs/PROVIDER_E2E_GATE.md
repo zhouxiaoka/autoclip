@@ -2,44 +2,57 @@
 
 1.5.8 起，Desktop Build 在 `candidate-gate` 之后、Release Acceptance 之前必须通过 [`.github/workflows/provider-e2e-gate.yml`](../.github/workflows/provider-e2e-gate.yml)。它在 Linux 上起无界面桌面后端（`backend.desktop_main`），用 Studio HTTP 跑「导入 → 自动出片」，不打开 UI。
 
-同一份 workflow 也可单独触发（PR / main / 候选 tag / 夜间定时 / `workflow_dispatch`）。**fork 的 PR 整门都不跑**，避免把 environment 密钥暴露给外部仓库。
+同一份 workflow 也可单独触发（PR / 分支 push / 候选 tag / 夜间定时 / `workflow_dispatch`）。**fork 的 PR 整门都不跑**，避免把 environment 密钥暴露给外部仓库。
+
+## 分层：谁跑真实服务商
+
+| 触发 | 跑什么 | 真实服务商 |
+| --- | --- | --- |
+| PR、功能分支 push、未打 tag 的 Desktop Build | 仅 mock | 不调用 |
+| 夜间 `17 18 * * *` | `nightly`：DeepSeek + Gemini 免费/低价档，2–3 条短素材（按 ISO 周轮转分配） | 只这两家 |
+| 候选 tag / `workflow_dispatch` 且 `full=true` | `prerelease`：10 条素材拆给 5 家，每家 2 条；配对按 ISO 周轮转 | 五家都在 key 齐时跑 |
+| `workflow_dispatch` 且 `include_live=true`（默认） | `nightly` 规模 | DeepSeek + Gemini |
+| `workflow_dispatch` 且 `live_mode=verify` | 夜间子集 + 88API / DashScope / Infistar 各 1 条最小成功用例 | 五家各至少探一次 |
+
+**PR / push 永远不会打真实服务商。** 缺 `*_MODEL` 时用矩阵里最便宜的默认模型，不跳过。一家都没配 key 时 live job 记 `skipped` 并写进汇总，workflow 不失败。
 
 ## 判定
 
 | 组合 | 门槛 |
 | --- | --- |
-| 应成功（口播、访谈、英文播客、带字幕、竖屏、游戏、体育、纯音乐） | 当次成功率 ≥ 95%。8 条素材时必须全部通过。 |
-| 应拦下（太短、无音轨） | 100% 在开始前拦下，契约字段 `billable_calls_before_failure = 0`（由 `llm_usage.jsonl` 计数，埋点线落地后读同一字段） |
+| Mock 应成功（口播、访谈、英文播客、带字幕、竖屏、游戏、体育、纯音乐） | **当次**成功率 ≥ 95%。8 条素材时必须全部通过。 |
+| 应拦下（太短、无音轨） | 100% 在开始前拦下，契约字段 `billable_calls_before_failure = 0`（由 `llm_usage.jsonl` 计数） |
 | 故障注入（本地 mock：429 + `Retry-After`、503、断线、中途杀后端） | 期望类型用 [`UpstreamErrorType`](SUCCESS_RATE_CONTRACT.md)：`rate_limited` / `upstream_unavailable` / `connection`（均可重试，退避后出片）。杀后端不是上游错误，重启后应落成 `service_restarted`。不做自动换服务商。 |
+| Live 应成功 | **不看单次 10 条。** 从用例库取最近 5 次 live run、合计至少 20 条应成功样本后，滚动成功率 ≥ 95% 才强制。样本不足时只记录、不卡发版。单次硬失败（不可重试的 `UpstreamErrorType` 或产品失败）会中止该服务商剩余用例。 |
 
-近 7 次夜间累计成功率会写进报告，当前没有跨 run 历史时只作说明，不单独卡发版。产物是 `provider-e2e-report` artifact（`report.json` / `report.md`），不含密钥。
+产物是 `provider-e2e-report` 与 `provider-e2e-cases` artifact（`report.json` / `report.md` / `cases.jsonl`），不含密钥、用户正文、字幕全文或完整 URL（只留 host）。
 
 ## 两套套件
 
 **Mock（必跑，不花钱）**  
-本地 OpenAI 兼容服务回答大纲 / 时间线 / 评分 / 标题。素材由 `ffmpeg` lavfi 现场生成（约 25 秒、带 SRT），体积小、可再分发。应拦下的两条不带 SRT。
+本地 OpenAI 兼容服务回答大纲 / 时间线 / 评分 / 标题。素材由 `ffmpeg` lavfi 现场生成（约 70 秒、带 SRT），体积小、可再分发。应拦下的两条不带 SRT。
 
-**真实服务商（有 key 才跑）**  
-88API、DeepSeek、Gemini、DashScope（百炼）、Infistar。密钥只从 GitHub Environment `provider-e2e` 读取。**只缺 `*_MODEL` 时用矩阵里的默认模型，不跳过。** 一家都没配 key 时 job 记 `skipped` 并写进汇总，workflow 不失败。额度用尽或产品失败会失败，并在报告里用错误码区分。
+**真实服务商（有 key 才跑，且只在上表允许的触发里跑）**  
+88API、DeepSeek、Gemini、DashScope（阿里云百炼）、Infistar。密钥只从 GitHub Environment `provider-e2e` 读取。额度用尽或产品失败会失败，并在报告里用错误码 / `error_class` 区分。
 
 B 站 / YouTube 链接单独验收，不计入本门槛。
 
 ## 配置 Environment 与密钥
 
 1. 仓库 Settings → Environments → 新建 `provider-e2e`。
-2. Deployment branches：只允许 `main` 和 `v*` tag。不要对尚未配 key 的仓库加 required reviewers，否则 Desktop Build 会停在审批。
+2. Deployment branches：只允许 `main` 和 `v*` tag。夜间 cron 与 `workflow_dispatch` 也要能部署到该 environment；不要对尚未配 key 的仓库加 required reviewers，否则 Desktop Build 会停在审批。
 3. Environment secrets（不要写进仓库 Secrets，除非你清楚 fork 风险）：
 
 | Secret | 用途 |
 | --- | --- |
 | `API88_API_KEY` | 88API 专用 CI token，设额度上限并限制模型。地址 `https://api.88api.ai/v1` |
-| `API88_MODEL` | 可选，缺省 `gpt-4o-mini` |
+| `API88_MODEL` | 可选，缺省最便宜档 `gpt-4o-mini` |
 | `DEEPSEEK_API_KEY` | DeepSeek 官方独立项目 key |
 | `DEEPSEEK_MODEL` | 可选，缺省 `deepseek-flash` |
-| `GEMINI_API_KEY` | Gemini 独立项目 key |
-| `GEMINI_MODEL` | 可选，缺省 `gemini-2.0-flash` |
+| `GEMINI_API_KEY` | Gemini 独立项目 key（夜间走免费档） |
+| `GEMINI_MODEL` | 可选，缺省 `gemini-2.0-flash-lite` |
 | `DASHSCOPE_API_KEY` | 阿里云百炼 / DashScope。地址 `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| `DASHSCOPE_MODEL` | 可选，缺省 `qwen-plus` |
+| `DASHSCOPE_MODEL` | 可选，缺省 `qwen-flash` |
 | `INFISTAR_API_KEY` | Infistar。地址 `https://infistar.ai/v1` |
 | `INFISTAR_MODEL` | 可选，缺省 `gpt-4o-mini` |
 
@@ -53,27 +66,54 @@ pip install -r requirements.txt
 PYTHONPATH=scripts python -m provider_e2e --suite mock --out /tmp/provider-e2e-mock
 ```
 
-真实服务商：把上面的变量 export 到当前 shell 后再跑 `--suite live`。不要把 key 写进命令行历史能看到的脚本。
+真实服务商：把上面的变量 export 到当前 shell 后再跑 `--suite live --mode nightly`。不要把 key 写进命令行历史能看到的脚本。
 
-## 费用量级
+## 用例库
 
-数字来自倒推方案的公开价估算，以各家账单为准。
+每次 live 跑完写一条脱敏记录（provider、clip id、model、pass/fail、`error_class`、duration_ms、估费、run id / commit）。不写密钥、用户内容、转写、完整 URL。
 
-| 范围 | 量级 |
-| --- | --- |
-| DeepSeek 单条短素材 | 约 ¥0.05–0.5 |
-| Gemini flash 单条 | 约 $0.01–0.1 |
-| 88API（中档模型）单条 | 约 ¥0.2–2 |
-| 一次完整真实门槛（约 5 家 × 10 条） | 约 ¥30–100 |
-| 夜间子集 | 约 ¥10–20 |
-| 每月 | 约 ¥500–1000 |
+- Artifact：`provider-e2e-cases`（`cases.jsonl` + `cases.json`），保留 90 天，供滚动窗口和月度预算回放。
+- 追加分支：`provider-e2e-cases`（孤儿分支，**不要合进 main**）。live job 在有 `contents: write` 时尽量追加；失败只记日志，不挡 mock。
 
-Mock 套件为 0。本门槛只走字幕 + 自带 SRT，不跑 Whisper，也不默认打视觉。CI token 请设月度上限；额度耗尽时报告会带服务商错误，而不是被当成「没配 key」跳过。
+## 预算与熔断
+
+| 上限 | 值 | 行为 |
+| --- | --- | --- |
+| 月度硬顶 | **¥300** | 开跑前：本月用例库估费 + 本轮估费。超了则 **不发起任何真实调用**，live 记 `budget_blocked`，job 失败，写 step summary；有权限时开一条 GitHub issue。 |
+| 单轮 | nightly ¥15 / verify ¥25 / prerelease ¥40 | 超过则中止剩余用例 |
+| 单服务商 | nightly ¥8 / verify ¥10 / prerelease ¥12 | 超过则中止该服务商剩余用例 |
+| 首个硬失败 | 不可重试的上游错误或产品失败 | 中止该服务商剩余用例 |
+| live job | 60 分钟 | Actions timeout |
+
+**请 Kris 在各服务商控制台再加一道账单上限**（本仓库的 ¥300 是 CI 自己的保险丝，控制台限额才能挡住泄漏或重放）：
+
+- 88API：token / 额度上限，限制可用模型
+- DeepSeek：用量或余额告警
+- Gemini：AI Studio / Cloud 预算与日配额
+- DashScope（百炼）：费用预警与额度
+- Infistar：credit / 模型白名单
+
+## 费用量级（月估 ¥80–180，硬顶 ¥300）
+
+数字来自公开价的偏高估算，以各家账单为准。假设：字幕路线、约 70 秒 lavfi、每条成功用例约 1.5 万 + 4 千 token、默认最便宜模型。
+
+| 范围 | 量级 | 假设 |
+| --- | --- | --- |
+| DeepSeek flash 一条短素材 | 约 ¥0.05–0.2 | 夜间主力 |
+| Gemini flash-lite 一条 | 约 ¥0–0.1 | 常走免费档，仍按有价计入预算 |
+| 88API / Infistar `gpt-4o-mini` 一条 | 约 ¥0.3–1.5 | 只在预发布或 verify 探针 |
+| DashScope `qwen-flash` 一条 | 约 ¥0.1–0.5 | 同上 |
+| 一夜 late nightly（2–3 条） | 约 ¥0.2–0.8 | 30 夜 ≈ ¥6–24 |
+| 一次预发布（10 条拆 5 家） | 约 ¥4–20 | 每月约 4 次 ≈ ¥16–80 |
+| 一次 verify（夜间子集 + 三家各 1 条） | 约 ¥1–8 | 少用 |
+| **每月合计** | **约 ¥80–180** | 含 1.5× 重试缓冲；硬顶 ¥300 |
+
+Mock 套件为 0。本门槛只走字幕 + 自带 SRT，不跑 Whisper，也不默认打视觉。以前「5 家 × 10 条」的完整矩阵已取消，避免单月冲破 ¥300。
 
 ## 接入发版链路
 
-- [`desktop-build.yml`](../.github/workflows/desktop-build.yml) 的 `provider-e2e` job `needs: candidate-gate`，与双平台打包并行。
-- `release` 与 `internal-provenance` 都要求它成功。
+- [`desktop-build.yml`](../.github/workflows/desktop-build.yml) 的 `provider-e2e` job `needs: candidate-gate`，与双平台打包并行。未打 tag 时只跑 mock；`v*` tag 才跑 `prerelease` live。
+- `release` 与 `internal-provenance` 都要求 mock 门槛成功。live 在样本未满 20 条时应成功窗口不强制。
 - [`scripts/release_acceptance.py`](../scripts/release_acceptance.py) 的 `BUILD_JOBS` 含 `provider-e2e`，Release Acceptance 会核对 Desktop Build 里这个 job。
 
-矩阵与故障定义见 [`scripts/provider_e2e/matrix.py`](../scripts/provider_e2e/matrix.py)。判定与故障注入引用 [成功率共享契约](SUCCESS_RATE_CONTRACT.md) 的 `UpstreamErrorType` 与 `billable_calls_before_failure`，不另造一套码。
+矩阵、轮转与故障定义见 [`scripts/provider_e2e/matrix.py`](../scripts/provider_e2e/matrix.py)。判定与故障注入引用 [成功率共享契约](SUCCESS_RATE_CONTRACT.md) 的 `UpstreamErrorType` 与 `billable_calls_before_failure`，不另造一套码。

@@ -36,6 +36,7 @@ on:
 permissions:
   contents: write
   actions: read
+  issues: write
 
 env:
   # GitHub runners are in the US; the default tsinghua mirror in the build
@@ -96,8 +97,9 @@ jobs:
     uses: ./.github/workflows/provider-e2e-gate.yml
     secrets: inherit
     permissions:
-      contents: read
+      contents: write
       actions: read
+      issues: write
 
   # The exact candidate must pass source checks, including hotfix tag builds.
   source-quality:

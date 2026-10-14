@@ -25,7 +25,8 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertEqual(len(blocked), 2)
         self.assertEqual({item['id'] for item in blocked}, {'too_short', 'no_audio'})
         self.assertLess(matrix.TOO_SHORT_DURATION_SEC, 20)
-        self.assertGreaterEqual(matrix.SUCCESS_DURATION_SEC, 20)
+        self.assertGreaterEqual(matrix.SUCCESS_DURATION_SEC, 60)
+        self.assertLessEqual(matrix.SUCCESS_DURATION_SEC, 120)
         self.assertTrue(all(item['duration_sec'] >= 20 for item in succeed))
         labels = {item['label'] for item in succeed}
         for name in ('中文口播', '中文访谈', '英文播客', '带字幕', '竖屏', '游戏', '体育', '纯音乐'):
@@ -43,7 +44,11 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertEqual(providers['infistar']['base_url'], 'https://infistar.ai/v1')
         self.assertEqual(providers['dashscope']['secret'], 'DASHSCOPE_API_KEY')
         self.assertEqual(providers['infistar']['secret'], 'INFISTAR_API_KEY')
-        self.assertEqual(providers['dashscope']['default_model'], 'qwen-plus')
+        self.assertEqual(providers['dashscope']['default_model'], 'qwen-flash')
+        self.assertEqual(providers['gemini']['default_model'], 'gemini-2.0-flash-lite')
+        self.assertEqual(providers['deepseek']['default_model'], 'deepseek-flash')
+        self.assertEqual(providers['api88']['default_model'], 'gpt-4o-mini')
+        self.assertEqual(providers['infistar']['default_model'], 'gpt-4o-mini')
         self.assertTrue(all(item['default_model'] for item in providers.values()))
         faults = {item['id']: item for item in matrix.faults()}
         self.assertEqual(set(faults), {'rate_limited_429', 'unavailable_503', 'disconnect', 'kill_backend'})
@@ -74,6 +79,10 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('uses: ./.github/workflows/provider-e2e-gate.yml', desktop)
         self.assertIn('needs: [candidate-gate]', desktop)
         self.assertIn('needs.provider-e2e.result == \'success\'', desktop)
+        self.assertIn('github.event_name == \'schedule\'', workflow)
+        self.assertNotIn('e2e-live-once', workflow)
+        self.assertIn('provider-e2e-cases', workflow)
+        self.assertIn('live_mode', workflow)
 
     def test_mask_redacts_keys(self):
         text = mask.redact_text('Authorization: Bearer sk-abc123456789 and api_key=supersecretvalue')
@@ -252,7 +261,11 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('api.88api.ai', doc)
         self.assertIn('dashscope.aliyuncs.com/compatible-mode/v1', doc)
         self.assertIn('infistar.ai/v1', doc)
-        self.assertIn('¥500–1000', doc)
+        self.assertIn('¥300', doc)
+        self.assertIn('provider-e2e-cases', doc)
+        self.assertIn('ISO', doc)
+        self.assertIn('gemini-2.0-flash-lite', doc)
+        self.assertIn('qwen-flash', doc)
         self.assertIn('UpstreamErrorType', doc)
         self.assertIn('billable_calls_before_failure', doc)
         self.assertIn('SUCCESS_RATE_CONTRACT.md', doc)
@@ -260,6 +273,162 @@ class ProviderE2EContractTests(unittest.TestCase):
         contract = (ROOT / 'docs/SUCCESS_RATE_CONTRACT.md').read_text(encoding='utf-8')
         self.assertIn('UpstreamErrorType', contract)
         self.assertIn('billable_calls_before_failure', contract)
+
+
+class ProviderE2ECostControlTests(unittest.TestCase):
+    def test_nightly_plan_only_uses_free_tier_providers(self):
+        week0 = matrix.assignments('nightly', week=1)
+        self.assertEqual(len(week0), 3)
+        self.assertEqual({item['clip_id'] for item in week0}, set(matrix.NIGHTLY_CLIP_IDS))
+        self.assertTrue(all(item['provider_id'] in matrix.NIGHTLY_PROVIDER_IDS for item in week0))
+        week1 = matrix.assignments('nightly', week=2)
+        self.assertNotEqual(
+            [(item['provider_id'], item['clip_id']) for item in week0],
+            [(item['provider_id'], item['clip_id']) for item in week1],
+        )
+
+    def test_prerelease_splits_ten_clips_across_five_providers(self):
+        plan = matrix.assignments('prerelease', week=12)
+        self.assertEqual(len(plan), 10)
+        counts = {}
+        for item in plan:
+            counts[item['provider_id']] = counts.get(item['provider_id'], 0) + 1
+        self.assertEqual(set(counts), {'api88', 'deepseek', 'gemini', 'dashscope', 'infistar'})
+        self.assertTrue(all(value == 2 for value in counts.values()))
+        rotated = matrix.assignments('prerelease', week=13)
+        self.assertNotEqual(
+            [(item['provider_id'], item['clip_id']) for item in plan],
+            [(item['provider_id'], item['clip_id']) for item in rotated],
+        )
+
+    def test_verify_adds_one_probe_per_paid_provider(self):
+        plan = matrix.assignments('verify', week=3)
+        probes = [item for item in plan if item['role'] == 'probe']
+        self.assertEqual({item['provider_id'] for item in probes}, set(matrix.VERIFY_PAID_PROVIDER_IDS))
+        self.assertTrue(all(item['clip_id'] == matrix.VERIFY_PROBE_CLIP_ID for item in probes))
+        self.assertGreaterEqual(len(plan), 6)
+
+    def test_resolve_mode_from_event(self):
+        self.assertEqual(matrix.resolve_mode({'GITHUB_EVENT_NAME': 'schedule'}), 'nightly')
+        self.assertEqual(matrix.resolve_mode({'GITHUB_REF': 'refs/tags/v1.5.8'}), 'prerelease')
+        self.assertEqual(matrix.resolve_mode({'INPUT_FULL': 'true'}), 'prerelease')
+        self.assertEqual(matrix.resolve_mode({'PROVIDER_E2E_MODE': 'verify'}), 'verify')
+        self.assertEqual(matrix.resolve_mode({}), 'nightly')
+
+    def test_budget_blocks_when_month_is_full(self):
+        from provider_e2e.library import budget_check
+        from provider_e2e.cost import MONTHLY_BUDGET_CNY
+        plan = matrix.assignments('prerelease', week=1)
+        for item in plan:
+            item['model'] = item['provider']['default_model']
+        rows = [{
+            'recorded_at': '2099-01-15T00:00:00Z',
+            'estimated_cost_cny': MONTHLY_BUDGET_CNY,
+            'run_id': 'old',
+            'provider': 'deepseek',
+            'clip_id': 'talk_zh',
+            'expect': 'succeed',
+            'passed': True,
+        }]
+        from datetime import datetime, timezone
+        check = budget_check(rows, plan, now=datetime(2099, 1, 20, tzinfo=timezone.utc))
+        self.assertTrue(check['blocked'])
+        self.assertGreater(check['projected_cny'], MONTHLY_BUDGET_CNY)
+
+    def test_rolling_window_needs_minimum_sample(self):
+        from provider_e2e.library import rolling_window
+        small = [{
+            'run_id': 'r1',
+            'expect': 'succeed',
+            'passed': False,
+            'provider': 'deepseek',
+            'clip_id': 'talk_zh',
+        } for _ in range(8)]
+        under = rolling_window(small, min_sample=20)
+        self.assertFalse(under['enforced'])
+        self.assertTrue(under['passed'])
+        full = []
+        for run in range(5):
+            for index in range(10):
+                full.append({
+                    'run_id': f'r{run}',
+                    'expect': 'succeed',
+                    'passed': index > 0,
+                    'provider': 'deepseek',
+                    'clip_id': f'clip{index}',
+                })
+        window = rolling_window(full, min_sample=20)
+        self.assertTrue(window['enforced'])
+        self.assertEqual(window['should_succeed_n'], 50)
+        self.assertLess(window['success_rate'], 0.95)
+        self.assertFalse(window['passed'])
+
+    def test_case_record_strips_secrets_and_urls(self):
+        from provider_e2e.library import case_from_result, sanitize_case
+        record = case_from_result(
+            {
+                'passed': True,
+                'expect': 'succeed',
+                'model': 'deepseek-flash',
+                'error_class': 'rate_limited',
+                'error_code': None,
+                'duration_ms': 1200,
+                'estimated_cost_cny': 0.12,
+                'prompt_tokens': 100,
+                'completion_tokens': 20,
+                'billable_calls': 3,
+                'reason': 'should never be stored',
+                'api_key': 'sk-should-not-leak',
+            },
+            run_id='385',
+            commit='abc',
+            mode='nightly',
+            iso_week=42,
+            provider_id='deepseek',
+            clip_id='talk_zh',
+            model_source='default',
+            base_url_host='https://api.deepseek.com/v1/chat/completions?x=1',
+        )
+        self.assertEqual(record['base_url_host'], 'api.deepseek.com')
+        self.assertNotIn('reason', record)
+        self.assertNotIn('api_key', record)
+        self.assertNotIn('sk-should-not-leak', json.dumps(record))
+        dirty = sanitize_case({
+            **record,
+            'transcript': '用户口播原文',
+            'base_url_host': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        })
+        self.assertNotIn('transcript', dirty)
+        self.assertEqual(dirty['base_url_host'], 'dashscope.aliyuncs.com')
+
+    def test_live_judge_uses_window_not_single_run(self):
+        report = {
+            'suite': 'live',
+            'status': 'completed',
+            'cases': [
+                {'expect': 'succeed', 'passed': False},
+                {'expect': 'block', 'passed': True, 'billable_calls_before_failure': 0},
+            ],
+            'case_records': [{
+                'run_id': 'this',
+                'expect': 'succeed',
+                'passed': False,
+                'provider': 'deepseek',
+                'clip_id': 'talk_zh',
+            }],
+        }
+        verdict = judge.judge_suite(report)
+        self.assertTrue(verdict['passed'])
+        self.assertFalse((verdict.get('window') or {}).get('enforced'))
+        blocked = dict(report)
+        blocked['status'] = 'budget_blocked'
+        blocked['reason'] = 'monthly live budget cap reached'
+        self.assertFalse(judge.judge_suite(blocked)['passed'])
+
+    def test_mask_does_not_keep_full_url_in_library_host(self):
+        from provider_e2e.library import host_only
+        self.assertEqual(host_only('https://infistar.ai/v1'), 'infistar.ai')
+        self.assertEqual(host_only('https://api.88api.ai/v1/chat'), 'api.88api.ai')
 
 
 if __name__ == '__main__':

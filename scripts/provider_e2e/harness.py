@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from backend.core.llm_telemetry import sanitize_upstream_error_type
-from backend.core.upstream_errors import is_retryable
+from backend.core.upstream_errors import classify_upstream_error, is_retryable
 
 from .backend import DesktopBackend
+from .cost import usage_tokens
 from .http_util import HttpError, get_json, post_multipart
 from .mask import redact
 from .mock_openai import MockServer
@@ -33,6 +34,29 @@ def billable_calls_before_failure(data_dir: Path, project_id: str) -> int:
 
 
 billable_calls = billable_calls_before_failure
+
+
+def usage_rows(data_dir: Path, project_id: str) -> list[dict[str, Any]]:
+    path = data_dir / 'projects' / project_id / 'metadata' / 'llm_usage.jsonl'
+    if not path.is_file():
+        return []
+    rows = []
+    for line in path.read_text(encoding='utf-8').splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+def classify_case_error(error: str | None, error_code: str | None) -> str | None:
+    blob = ' '.join(part for part in (error or '', error_code or '') if part)
+    if not blob:
+        return None
+    classified = classify_upstream_error(None, blob)
+    return sanitize_upstream_error_type(classified.error_type.value)
 
 
 def _observed_upstream_error_type(server: MockServer | None, since: int) -> str | None:
@@ -183,6 +207,7 @@ def run_case(
     project_id = ''
     workspace: dict[str, Any] = {}
     error = None
+    started = time.monotonic()
     observer = mock_server or kill_after_request
     events_before = len(observer.state.snapshot()['events']) if observer is not None else 0
     try:
@@ -211,7 +236,12 @@ def run_case(
     finally:
         backend.stop()
     billable = billable_calls_before_failure(data_dir, project_id) if project_id else 0
+    prompt_tokens, completion_tokens = (0, 0)
+    if project_id:
+        prompt_tokens, completion_tokens = usage_tokens(usage_rows(data_dir, project_id))
     observed = _observed_upstream_error_type(observer, events_before)
+    error_code = (workspace.get('generation') or {}).get('error_code') or (workspace.get('analysis') or {}).get('error_code')
+    error_class = observed or classify_case_error(error, error_code)
     judged = evaluate_case(
         expect,
         workspace,
@@ -231,9 +261,13 @@ def run_case(
         'reason': judged.get('reason'),
         'billable_calls_before_failure': billable,
         'billable_calls': billable,
+        'prompt_tokens': prompt_tokens,
+        'completion_tokens': completion_tokens,
+        'duration_ms': int((time.monotonic() - started) * 1000),
         'expected_upstream_error_type': expected_upstream_error_type,
         'upstream_error_type': observed,
-        'error_code': (workspace.get('generation') or {}).get('error_code') or (workspace.get('analysis') or {}).get('error_code'),
+        'error_class': error_class,
+        'error_code': error_code,
         'status': (workspace.get('generation') or {}).get('status') or (workspace.get('analysis') or {}).get('status'),
         'failure_stage': (workspace.get('generation') or {}).get('failure_stage'),
         'phase': (workspace.get('analysis') or {}).get('phase'),

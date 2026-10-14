@@ -83,7 +83,7 @@ Windows 验收分三层，前两层必须过，第三层补上界面和真实网
 - [ ] 运行 **Internal Acceptance**：源码完整 SHA、内部 Desktop Build run ID、已提交 manifest 路径；它核对双平台全部场景、修复、当前包哈希、新执行或受影响断言的新证据、原执行的影响承接证明、时间及实名复核；Internal/Release/Promote 都从同一已审计 dispatch ref 执行 gate
 - [ ] Internal Acceptance 成功且用户已授权本版本后，在**被验收的原提交**创建带注解标签：注解必须有独立一行 `Internal-Acceptance-Run: RUN_ID`；不要在验收后再 bump / 合入修改
 - [ ] 推送标签。tag 的 Desktop Build 会核对上述不可变验收回执；缺失或提交不符时，阻断打包和 Pre-release
-- [ ] exact tag CI、双平台构建、Windows 安装/升级和运行时全绿；**Provider E2E Gate**（mock 必过；真实服务商在 Environment `provider-e2e` 有 key 时必过，没配 key 则报告标明跳过）通过；Release 为 Pre-release，全部 DMG / EXE / wheel / ZIP / updater / 签名 / provenance 齐全
+- [ ] exact tag CI、双平台构建、Windows 安装/升级和运行时全绿；**Provider E2E Gate**（mock 必过；tag 上的 live 为 10 条拆 5 家，Environment `provider-e2e` 有 key 时跑，没配 key 则报告标明跳过；滚动窗口未满 20 条应成功样本时不因单次成功率卡死）通过；Release 为 Pre-release，全部 DMG / EXE / wheel / ZIP / updater / 签名 / provenance 齐全
 - [ ] 核对正式构建包哈希与内部包；最终包仍须按必测矩阵留证。发生重建/换包时重跑受影响场景，不能把内部包记录改时间后冒充最终包验收
 
 此时应用内更新和官网还不推送该候选；只有手动下载 Pre-release 的人能装。标签后的核对与观察是第二道门槛，不能取代标签前的内部产品验收。

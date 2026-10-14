@@ -1,7 +1,7 @@
 name: Provider E2E Gate
 
 # Required after candidate-gate and before Release Acceptance.
-# Mock never needs secrets. Live keys live in environment provider-e2e
+# PR / branch push: mock only. Live keys live in environment provider-e2e
 # and are skipped (not failed) when unset.
 
 on:
@@ -10,12 +10,26 @@ on:
       include_live:
         type: boolean
         default: false
+      full:
+        type: boolean
+        default: false
+      live_mode:
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       include_live:
-        description: "Also run live providers when environment secrets exist"
+        description: "Run live providers (nightly-sized unless full=true)"
         type: boolean
         default: false
+      full:
+        description: "Pre-release matrix: 10 clips split across 5 providers"
+        type: boolean
+        default: false
+      live_mode:
+        description: "nightly | prerelease | verify (empty = infer)"
+        type: string
+        default: ""
   schedule:
     - cron: "17 18 * * *"
   pull_request:
@@ -94,16 +108,17 @@ jobs:
     needs: mock
     if: >-
       github.event_name != 'pull_request'
-      && (github.ref == 'refs/heads/main'
+      && (github.event_name == 'schedule'
           || startsWith(github.ref, 'refs/tags/v')
-          || (github.event_name == 'workflow_dispatch' && inputs.include_live)
-          || github.event_name == 'schedule'
-          || (github.event_name == 'push'
-              && github.ref == 'refs/heads/cursor/provider-e2e-gate-626f'
-              && contains(github.event.head_commit.message, 'e2e-live-once')))
+          || (github.event_name == 'workflow_dispatch' && (inputs.include_live || inputs.full || inputs.live_mode != ''))
+          || (github.event_name == 'workflow_call' && (inputs.include_live || inputs.full || startsWith(github.ref, 'refs/tags/v'))))
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
     environment: provider-e2e
+    permissions:
+      contents: write
+      actions: read
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -119,6 +134,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-test.txt
+      - name: Load case library
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          DEST="$RUNNER_TEMP/provider-e2e-library"
+          mkdir -p "$DEST"
+          git fetch origin provider-e2e-cases --depth=1 || true
+          if git rev-parse --verify origin/provider-e2e-cases >/dev/null 2>&1; then
+            git show origin/provider-e2e-cases:cases.jsonl > "$DEST/branch.jsonl" || true
+          fi
+          PYTHONPATH=scripts python -m provider_e2e --suite fetch-library --library-dir "$DEST"
       - name: Run live providers or skip when keys are unset
         env:
           API88_API_KEY: ${{ secrets.API88_API_KEY }}
@@ -131,7 +159,14 @@ jobs:
           DASHSCOPE_MODEL: ${{ secrets.DASHSCOPE_MODEL }}
           INFISTAR_API_KEY: ${{ secrets.INFISTAR_API_KEY }}
           INFISTAR_MODEL: ${{ secrets.INFISTAR_MODEL }}
-        run: PYTHONPATH=scripts python -m provider_e2e --suite live --out "$RUNNER_TEMP/provider-e2e-live"
+          INPUT_FULL: ${{ inputs.full }}
+          INPUT_INCLUDE_LIVE: ${{ inputs.include_live }}
+          INPUT_LIVE_MODE: ${{ inputs.live_mode }}
+          PROVIDER_E2E_MODE: ${{ inputs.live_mode }}
+        run: |
+          PYTHONPATH=scripts python -m provider_e2e --suite live --mode auto \
+            --library-dir "$RUNNER_TEMP/provider-e2e-library" \
+            --out "$RUNNER_TEMP/provider-e2e-live"
       - name: Upload live report
         if: always()
         uses: actions/upload-artifact@v4
@@ -140,6 +175,26 @@ jobs:
           path: ${{ runner.temp }}/provider-e2e-live/report.*
           if-no-files-found: error
           retention-days: 30
+      - name: Upload case records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-e2e-cases
+          path: |
+            ${{ runner.temp }}/provider-e2e-live/cases.jsonl
+            ${{ runner.temp }}/provider-e2e-live/cases.json
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Archive cases to provider-e2e-cases branch
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          PYTHONPATH=scripts python -m provider_e2e --suite archive \
+            --out "$RUNNER_TEMP/provider-e2e-live" \
+            --library-dir "$RUNNER_TEMP/provider-e2e-library"
 
   provider-e2e:
     name: provider-e2e
@@ -156,15 +211,21 @@ jobs:
           name: provider-e2e-mock
           path: reports/mock
       - uses: actions/download-artifact@v4
-        if: needs.live.result == 'success'
+        if: needs.live.result == 'success' || needs.live.result == 'failure'
         continue-on-error: true
         with:
           name: provider-e2e-live
           path: reports/live
+      - uses: actions/download-artifact@v4
+        if: needs.live.result == 'success' || needs.live.result == 'failure'
+        continue-on-error: true
+        with:
+          name: provider-e2e-cases
+          path: reports/library
       - name: Judge combined reports
         run: |
           set -euo pipefail
-          ARGS=(--suite judge --out "$RUNNER_TEMP/provider-e2e" --report reports/mock/report.json)
+          ARGS=(--suite judge --out "$RUNNER_TEMP/provider-e2e" --report reports/mock/report.json --library-dir reports/library)
           if [ -f reports/live/report.json ]; then
             ARGS+=(--report reports/live/report.json)
           fi

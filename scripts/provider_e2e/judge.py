@@ -6,7 +6,8 @@ from typing import Any
 from backend.core.llm_telemetry import sanitize_upstream_error_type
 from backend.core.upstream_errors import is_retryable
 
-from . import SUCCESS_RATE_THRESHOLD
+from . import ROLLING_MIN_SAMPLE, ROLLING_WINDOW_RUNS, SUCCESS_RATE_THRESHOLD
+from .library import rolling_window
 
 
 class VerdictError(ValueError):
@@ -53,7 +54,16 @@ def _fault_contract_ok(row: dict[str, Any]) -> bool:
     return True
 
 
-def judge_suite(report: dict[str, Any]) -> dict[str, Any]:
+def judge_suite(report: dict[str, Any], *, library: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    if report.get('status') == 'budget_blocked':
+        return {
+            'passed': False,
+            'skipped': False,
+            'reason': report.get('reason') or 'monthly live budget cap reached',
+            'should_succeed_rate': None,
+            'should_block_rate': None,
+            'reasons': [report.get('reason') or 'monthly live budget cap reached'],
+        }
     if report.get('status') == 'skipped':
         return {
             'passed': True,
@@ -62,31 +72,52 @@ def judge_suite(report: dict[str, Any]) -> dict[str, Any]:
             'should_succeed_rate': None,
             'should_block_rate': None,
         }
-    all_cases = [row for row in report.get('cases') or []]
-    succeed = [row for row in _cases(report, 'succeed') if not _injected(row)]
-    blocked = _cases(report, 'block')
+    all_cases = [row for row in report.get('cases') or [] if not row.get('aborted')]
+    succeed = [row for row in _cases({'cases': all_cases}, 'succeed') if not _injected(row)]
+    blocked = _cases({'cases': all_cases}, 'block')
     faults = [row for row in all_cases if _injected(row)]
     succeed_rate = success_rate(succeed)
     block_ok = all(row.get('passed') for row in blocked) if blocked else True
     billable_ok = all(billable_calls_before_failure(row) == 0 for row in blocked)
     fault_ok = all(row.get('passed') and _fault_contract_ok(row) for row in faults) if faults else True
+    window = report.get('window')
+    if report.get('suite') == 'live':
+        records = list(library or [])
+        records.extend(report.get('case_records') or [])
+        if window is None:
+            window = rolling_window(
+                records,
+                window_runs=ROLLING_WINDOW_RUNS,
+                min_sample=ROLLING_MIN_SAMPLE,
+                threshold=SUCCESS_RATE_THRESHOLD,
+            )
+        succeed_ok = bool(window.get('passed', True))
+    else:
+        succeed_ok = succeed_rate >= SUCCESS_RATE_THRESHOLD
     passed = (
-        succeed_rate >= SUCCESS_RATE_THRESHOLD
+        succeed_ok
         and block_ok and billable_ok and fault_ok
         and all(row.get('passed') is True or row.get('passed') is False for row in succeed + blocked + faults)
     )
     reasons = []
-    if succeed and succeed_rate < SUCCESS_RATE_THRESHOLD:
+    if report.get('suite') != 'live' and succeed and succeed_rate < SUCCESS_RATE_THRESHOLD:
         reasons.append(f'should-succeed {succeed_rate:.1%} < {SUCCESS_RATE_THRESHOLD:.0%}')
+    if report.get('suite') == 'live' and window and window.get('enforced') and not window.get('passed'):
+        reasons.append(
+            f"live rolling-window {window.get('success_rate', 0):.1%} < {SUCCESS_RATE_THRESHOLD:.0%} "
+            f"over {window.get('should_succeed_n', 0)} cases"
+        )
     if blocked and not block_ok:
         reasons.append('should-block case failed')
     if blocked and not billable_ok:
         reasons.append('should-block billable_calls_before_failure != 0')
     if faults and not fault_ok:
         reasons.append('fault injection did not match the expected UpstreamErrorType or outcome')
-    history = report.get('history') or {}
+    history = report.get('history') or window or {}
     history_note = None
-    if history.get('available') and history.get('cumulative_success_rate') is not None:
+    if history.get('note'):
+        history_note = history['note']
+    elif history.get('available') and history.get('cumulative_success_rate') is not None:
         if history['cumulative_success_rate'] < SUCCESS_RATE_THRESHOLD:
             history_note = (
                 f"recent-7 cumulative {history['cumulative_success_rate']:.1%} < {SUCCESS_RATE_THRESHOLD:.0%} "
@@ -103,11 +134,12 @@ def judge_suite(report: dict[str, Any]) -> dict[str, Any]:
         'fault_passed': fault_ok,
         'reasons': reasons,
         'history_note': history_note,
+        'window': window,
     }
 
 
-def judge_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
-    suites = [judge_suite(report) for report in reports if report]
+def judge_reports(reports: list[dict[str, Any]], *, library: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    suites = [judge_suite(report, library=library) for report in reports if report]
     blocking = [suite for suite in suites if not suite.get('skipped')]
     passed = all(suite['passed'] for suite in blocking) if blocking else False
     if not reports:
@@ -125,8 +157,8 @@ def judge_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def require_pass(reports: list[dict[str, Any]]) -> dict[str, Any]:
-    verdict = judge_reports(reports)
+def require_pass(reports: list[dict[str, Any]], *, library: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    verdict = judge_reports(reports, library=library)
     if not verdict['passed']:
         raise VerdictError('; '.join(verdict['reasons']) or 'provider-e2e gate failed')
     return verdict

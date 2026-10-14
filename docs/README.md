@@ -30,7 +30,7 @@
 - [CLI、MCP 与本地模型](CLI_AND_MCP.md)（中文）
 - [opencode CLI 接入（MCP 一键注册）](OPENCODE.md)（中文 · [English](OPENCODE.en.md)）
 - [AI 模型与本地转写配置](AI_MODEL_CONFIGURATION.md)（中文）
-- [发版前服务商端到端门槛](PROVIDER_E2E_GATE.md)（Environment、密钥与费用）
+- [发版前服务商端到端门槛](PROVIDER_E2E_GATE.md)（Environment、分层 live、用例库、¥300 月顶）
 - [贡献指南](../CONTRIBUTING.md)（中文）
 - [构建指南](../BUILD_GUIDE.md)（中文）
 - [README 翻译与徽章维护](i18n.md)（中文）

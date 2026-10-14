@@ -5,13 +5,19 @@ store large binaries; sha256 is recorded after generation.
 """
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any
 
 from backend.core.upstream_errors import UpstreamErrorType
 
-# Success clips must be >= short-tier min_clip_sec (20s). 25s keeps files small.
-SUCCESS_DURATION_SEC = 25
+# Success clips must be >= short-tier min_clip_sec (20s). Live material stays 1–2 min.
+SUCCESS_DURATION_SEC = 70
 TOO_SHORT_DURATION_SEC = 8
+LIVE_MODES = ('nightly', 'prerelease', 'verify')
+NIGHTLY_PROVIDER_IDS = ('deepseek', 'gemini')
+NIGHTLY_CLIP_IDS = ('talk_zh', 'with_srt', 'too_short')
+VERIFY_PAID_PROVIDER_IDS = ('api88', 'dashscope', 'infistar')
+VERIFY_PROBE_CLIP_ID = 'talk_zh'
 
 ASSETS: tuple[dict[str, Any], ...] = (
     {
@@ -199,6 +205,7 @@ LIVE_PROVIDERS: tuple[dict[str, Any], ...] = (
         'default_model': 'gpt-4o-mini',
         'base_url': 'https://api.88api.ai/v1',
         'vision_model_env': 'API88_VISION_MODEL',
+        'tier': 'paid',
     },
     {
         'id': 'deepseek',
@@ -210,6 +217,7 @@ LIVE_PROVIDERS: tuple[dict[str, Any], ...] = (
         'default_model': 'deepseek-flash',
         'base_url': 'https://api.deepseek.com',
         'vision_model_env': 'DEEPSEEK_VISION_MODEL',
+        'tier': 'cheap',
     },
     {
         'id': 'gemini',
@@ -218,9 +226,10 @@ LIVE_PROVIDERS: tuple[dict[str, Any], ...] = (
         'provider': 'gemini',
         'secret': 'GEMINI_API_KEY',
         'model_env': 'GEMINI_MODEL',
-        'default_model': 'gemini-2.0-flash',
+        'default_model': 'gemini-2.0-flash-lite',
         'base_url': 'https://generativelanguage.googleapis.com/v1beta/openai',
         'vision_model_env': 'GEMINI_VISION_MODEL',
+        'tier': 'free',
     },
     {
         'id': 'dashscope',
@@ -229,9 +238,10 @@ LIVE_PROVIDERS: tuple[dict[str, Any], ...] = (
         'provider': 'dashscope',
         'secret': 'DASHSCOPE_API_KEY',
         'model_env': 'DASHSCOPE_MODEL',
-        'default_model': 'qwen-plus',
+        'default_model': 'qwen-flash',
         'base_url': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         'vision_model_env': 'DASHSCOPE_VISION_MODEL',
+        'tier': 'paid',
     },
     {
         'id': 'infistar',
@@ -243,6 +253,7 @@ LIVE_PROVIDERS: tuple[dict[str, Any], ...] = (
         'default_model': 'gpt-4o-mini',
         'base_url': 'https://infistar.ai/v1',
         'vision_model_env': 'INFISTAR_VISION_MODEL',
+        'tier': 'paid',
     },
 )
 
@@ -300,3 +311,80 @@ def live_providers() -> list[dict[str, Any]]:
 
 def faults() -> list[dict[str, Any]]:
     return [dict(item) for item in FAULTS]
+
+
+def current_iso_week(today: dt.date | None = None) -> int:
+    return int((today or dt.date.today()).isocalendar().week)
+
+
+def resolve_mode(env: dict[str, str] | None = None) -> str:
+    source = env or {}
+    explicit = (source.get('PROVIDER_E2E_MODE') or source.get('INPUT_LIVE_MODE') or '').strip()
+    if explicit in LIVE_MODES:
+        return explicit
+    if (source.get('INPUT_FULL') or '').strip().lower() in {'true', '1', 'yes'}:
+        return 'prerelease'
+    ref = source.get('GITHUB_REF') or ''
+    if ref.startswith('refs/tags/v'):
+        return 'prerelease'
+    if source.get('GITHUB_EVENT_NAME') == 'schedule':
+        return 'nightly'
+    return 'nightly'
+
+
+def _by_id(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {item['id']: item for item in rows}
+
+
+def _pair(provider: dict[str, Any], asset: dict[str, Any], role: str) -> dict[str, Any]:
+    return {
+        'provider': dict(provider),
+        'asset': dict(asset),
+        'provider_id': provider['id'],
+        'clip_id': asset['id'],
+        'expect': asset['expect'],
+        'role': role,
+        'model': provider.get('default_model'),
+    }
+
+
+def assignments(
+    mode: str,
+    *,
+    week: int | None = None,
+    providers: list[dict[str, Any]] | None = None,
+    asset_rows: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    if mode not in LIVE_MODES:
+        raise ValueError(f'unknown live mode {mode}')
+    week = current_iso_week() if week is None else int(week)
+    provider_rows = providers if providers is not None else live_providers()
+    clip_rows = asset_rows if asset_rows is not None else assets()
+    by_provider = _by_id(provider_rows)
+    by_asset = _by_id(clip_rows)
+    if mode == 'prerelease':
+        pairs = []
+        for index, asset in enumerate(clip_rows):
+            provider = provider_rows[(index + week) % len(provider_rows)]
+            pairs.append(_pair(provider, asset, 'rotate'))
+        return pairs
+    nightly = []
+    nightly_providers = [by_provider[item] for item in NIGHTLY_PROVIDER_IDS if item in by_provider]
+    nightly_clips = [by_asset[item] for item in NIGHTLY_CLIP_IDS if item in by_asset]
+    for index, asset in enumerate(nightly_clips):
+        provider = nightly_providers[(index + week) % len(nightly_providers)]
+        nightly.append(_pair(provider, asset, 'nightly'))
+    if mode == 'nightly':
+        return nightly
+    probes = list(nightly)
+    probe = by_asset[VERIFY_PROBE_CLIP_ID]
+    for ident in VERIFY_PAID_PROVIDER_IDS:
+        if ident in by_provider:
+            probes.append(_pair(by_provider[ident], probe, 'probe'))
+    return probes
+
+
+def provider_ids_for_mode(mode: str) -> tuple[str, ...]:
+    if mode == 'nightly':
+        return NIGHTLY_PROVIDER_IDS
+    return tuple(item['id'] for item in LIVE_PROVIDERS)

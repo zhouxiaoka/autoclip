@@ -62,7 +62,7 @@ def generate(spec: dict[str, Any], dest: Path) -> dict[str, Any]:
     else:
         command += ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'ultrafast', '-crf', '32',
                     '-an', str(video)]
-    subprocess.run(command, check=True, timeout=60)
+    subprocess.run(command, check=True, timeout=90)
     if not video.is_file() or video.stat().st_size == 0:
         raise RuntimeError(f'fixture video was not written: {video}')
     record = {
