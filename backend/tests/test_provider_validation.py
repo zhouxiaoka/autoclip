@@ -99,9 +99,16 @@ def test_missing_v1_is_normalized_then_models_404_is_bad_endpoint(monkeypatch):
 
 
 def test_console_host_is_rejected_without_a_network_call(monkeypatch):
+    from pydantic import ValidationError
     monkeypatch.setattr('httpx.Client', lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('network')))
+    with pytest.raises(ValidationError, match='控制台或官网'):
+        _connection(base_url='https://platform.openai.com')
+    # A stored row that skipped the constructor still must not hit the network.
     result = validate_connection(
-        _connection(base_url='https://platform.openai.com'),
+        ai.Connection.model_construct(
+            id='c1', name='custom', provider='compatible',
+            base_url='https://platform.openai.com', api_key='sk-test-key',
+        ),
         'gpt-4o-mini',
     )
     assert result.ok is False
