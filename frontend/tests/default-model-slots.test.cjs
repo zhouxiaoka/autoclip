@@ -2,15 +2,12 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { loadTs } = require('./load-ts.cjs')
 
-const slots = loadTs('defaultModelSlots.ts', {
-  '../../i18n': { t: text => text },
-  './modelSettingsLogic': { connectionReady: c => !!(c.api_key || c.has_key) },
-})
+const slots = loadTs('defaultModelSlots.ts', { '../../i18n': { t: text => text } })
 const plain = value => JSON.parse(JSON.stringify(value))
 
 const conn = (id, provider, extra = {}) => ({
   id, name: provider, provider, base_url: '', api_key: 'k', has_key: true,
-  image_api: 'auto', image_base_url: '', ...extra,
+  image_api: 'auto', image_base_url: '', validation_status: 'ok', ...extra,
 })
 const settings = (extra = {}) => ({
   version: 1, saved: true,
@@ -65,6 +62,20 @@ test('a live list without a suitable model does not invent catalog candidates', 
     connections: [conn('ds', 'dashscope')],
   }), { ds: { source: 'live', models: [{ id: 'qwen-plus', capability: 'text', analysis: true, image: false }] } }, 'cover')
   assert.equal(emptyCover.length, 0)
+})
+
+test('a key without a passed access check is not shown as connected', () => {
+  const state = settings({
+    connections: [
+      conn('ds', 'dashscope', { validation_status: 'unchecked' }),
+      conn('infi', 'infistar', { validation_status: 'failed' }),
+    ],
+  })
+  const groups = slots.collectModelGroups(state, lists, 'analysis')
+  const qwen = groups.find(group => group.modelId === 'qwen-plus')
+  assert.ok(qwen)
+  assert.equal(qwen.offers.every(offer => offer.connected === false), true)
+  assert.equal(slots.preferredOffer(qwen.offers), undefined)
 })
 
 test('the same model id is listed once and smart pick prefers the sponsor connection', () => {

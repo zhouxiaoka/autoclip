@@ -6,7 +6,6 @@
  * `vision === null` follows analysis and warns when that model has no vision.
  * There is no video purpose slot.
  */
-import { connectionReady } from './modelSettingsLogic'
 import { getCatalog, getProvider, type PurposeId as CatalogPurpose } from './providerPresets'
 import type { Assignment, Connection, ModelEntry, ModelList, ModelSettings, ModelSource } from './modelSettingsApi'
 
@@ -63,6 +62,11 @@ function displayName(connection: Connection): string {
   return getProvider(connection.provider)?.short_name || connection.name || connection.provider
 }
 
+/** A key is not enough: the access check must have passed. */
+function isValidated(connection?: Connection | null): boolean {
+  return connection?.validation_status === 'ok'
+}
+
 function addOffer(byId: Record<string, ModelOffer[]>, offer: ModelOffer) {
   const list = byId[offer.modelId] || []
   if (list.some(item => item.provider === offer.provider && item.connectionId === offer.connectionId)) return
@@ -77,11 +81,10 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
   for (const connection of settings.connections) {
     const list = lists[connection.id]
     const live = (list?.models || []).filter(entry => entryFits(purpose, entry))
-    const ready = connectionReady(connection)
     for (const entry of live) {
       addOffer(byId, {
         modelId: entry.id, provider: connection.provider, connectionId: connection.id,
-        connected: ready, displayName: displayName(connection),
+        connected: isValidated(connection), displayName: displayName(connection),
       })
     }
     // A live/cache list with no suitable model is authoritative: do not invent catalog candidates.
@@ -96,7 +99,7 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
       if (list && !list.models.some(entry => entry.id === modelId && entryFits(purpose, entry))) continue
       addOffer(byId, {
         modelId, provider: preset.id, connectionId: connection?.id,
-        connected: !!connection && connectionReady(connection) && !!list,
+        connected: isValidated(connection) && !!list,
         displayName: preset.short_name || preset.display_name,
       })
     }
