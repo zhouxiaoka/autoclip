@@ -473,18 +473,53 @@ FROM (
 1. 生产者出现 **未登记** 的业务事件名（`captureBusinessEvent`、`_post_event`、`qa.telemetry` 的 `event` 字段）。
 2. 已登记事件的一次发送 **缺必填字段**（目录里 `required`；含 `required_when`）。
 3. 字段值不在闭集（`enums`）或不满足类型。
-4. 载荷含违禁 **属性名** 或违禁 **属性值**（§11）。下列夹具必须让 `validate_event` 失败：
+4. 载荷含违禁 **属性名** 或违禁 **属性值**（§10–§11）。sanitize 之后仍含这些值，或未 sanitize 就发送，都算失败。
 
-| 夹具 | 为何拦 |
-| --- | --- |
-| 属性名 `api_key` / `authorization` / `password` / `prompt` / `caption` / `transcript` / `transcription` / `subtitle_text` / `title` / `video_title` / `filename` / `file_name` / `file_path` / `path` | 这些键本身就不该出现 |
-| 任一字符串值含 `sk-`、`bearer `、`api_key=`、`token=` | 密钥 |
-| 任一字符串值含 `/Users/`、`/home/`、`C:\Users\`、`C:/Users/` | 带用户名的本机路径 |
-| 任一字符串值匹配 `https?://…/…`（带 path 的完整 URL） | 只能报 host，不能报 URL |
-| `base_url_host` = `https://api.openai.com/v1` 或带 userinfo 的 URL | 必须先走 `hostname_of_base_url` |
-| `model` = `sk-abc123` 或含空格/路径 | `sanitize_model` 应丢弃 |
-| 属性值是视频标题或文件名（如 `我的旅行vlog`、`talk.mp4`、`interview.mov`）出现在非枚举字段 | 标题/文件名一律不上报 |
-| 属性值是转写或提示词片段（如「大家好今天…」、`Write a viral title for:`） | 正文不上报 |
+`event_catalog.json` 的 `privacy` 必须能被测试直接读出，至少包括：
+
+```json
+{
+  "forbidden_keys": [
+    "api_key", "authorization", "password", "prompt", "caption",
+    "transcript", "transcription", "subtitle_text", "title", "video_title",
+    "filename", "file_name", "file_path", "path", "base_url"
+  ],
+  "forbidden_substrings": [
+    "sk-", "bearer ", "api_key=", "token=",
+    "/Users/", "/home/", "C:\\Users\\", "C:/Users/"
+  ],
+  "forbidden_value_patterns": [
+    "https?://\\S+/\\S+",
+    "(?i)\\.(mp4|mov|mkv|webm|m4a|mp3|wav|srt|vtt|ass)$"
+  ],
+  "forbidden_value_samples": [
+    "sk-abc123deadbeef",
+    "/Users/xxx/Movies/talk.mp4",
+    "C:\\Users\\xxx\\Videos\\interview.mov",
+    "我的旅行vlog",
+    "talk.mp4",
+    "大家好今天我们来聊",
+    "Write a viral title for:"
+  ]
+}
+```
+
+下列夹具对 `validate_event("llm_request_finished", payload)`（或任意已登记事件）**必须失败**。合法基线只含枚举/计数；在其上叠加一行即红：
+
+| # | 叠加 | 拦住的类 |
+| --- | --- | --- |
+| 1 | `"api_key": "sk-abc123deadbeef"` | key（属性名 + 值） |
+| 2 | `"authorization": "Bearer sk-abc"` | key |
+| 3 | `"model": "sk-abc123deadbeef"` | key 出现在允许字段里 |
+| 4 | `"path": "/Users/xxx/Movies/talk.mp4"` | 带用户名的本机路径（macOS） |
+| 5 | `"file_path": "C:\\Users\\xxx\\Videos\\interview.mov"` | 带用户名的本机路径（Windows） |
+| 6 | 任一字符串值含 `/Users/xxx` 或 `C:\\Users\\xxx` | 路径渗进任意字段 |
+| 7 | `"title": "我的旅行vlog"` 或 `"filename": "talk.mp4"` | 视频标题 / 文件名 |
+| 8 | `"caption": "大家好今天我们来聊"` | 转写 / 字幕 |
+| 9 | `"prompt": "Write a viral title for:"` | 提示词 |
+| 10 | `"transcript": "大家好今天我们来聊"` | 转写文本 |
+| 11 | `"base_url": "https://api.openai.com/v1/chat/completions"` | 完整 URL；只允许 `base_url_host` |
+| 12 | `"base_url_host": "https://api.openai.com/v1"` | host 字段仍带 scheme/path |
 
 测试位置：`backend/tests/test_event_catalog.py`、`frontend/tests/event-catalog.test.cjs`。新增事件的 PR 必须同时改本文件、JSON 目录和测试。
 
@@ -492,7 +527,9 @@ FROM (
 
 ---
 
-## 10. 隐私硬性要求
+## 10. 隐私硬性要求（PM / Kris）
+
+上报内容一律不得含：**key**、**带用户名的本地路径**（`/Users/xxx`、`C:\Users\xxx`）、**视频标题 / 文件名**、**转写文本**、**提示词**。`base_url` **只保留 host**（本机/内网记 `local`）。这五类值出现在任意属性名或任意字符串值里，schema 校验必须失败。
 
 产品默认开埋点。用户关掉后，或构建未配置 PostHog key 时，**一条事件也不许出网**。
 
@@ -509,42 +546,56 @@ FROM (
 
 无 key 的开发构建与用户关闭同等对待：不污染线上。
 
-### 10.2 一律不得出现在上报里
+### 10.2 一律不得出现在上报里（硬性）
 
-- API key、Authorization、Bearer、任何 `sk-` 前缀
-- 带用户名的本机路径：`/Users/<name>/…`、`/home/<name>/…`、`C:\Users\<name>\…`
-- 视频标题、文件名、目录名
-- 转写文本、字幕、口播、提示词、模型响应原文
-- 完整 URL（含 path / query / userinfo）。`base_url` **只留 host**
-- email、IP（本机/局域网统一 `local`，不报具体地址）、内部 `project_id` / `run_id` / `job_id`（新事件）
+| 类 | 例子 | 怎么处理 |
+| --- | --- | --- |
+| key | `sk-…`、`Authorization`、`Bearer`、`api_key=`、`token=` | 属性名丢弃；任一字符串值含这些标记则整键丢弃，`validate_event` 失败 |
+| 带用户名的本机路径 | `/Users/xxx/Movies/talk.mp4`、`C:\Users\xxx\Videos\interview.mov`、`/home/xxx/…` | 不报 `path` / `file_path`；任一值含 `/Users/`、`/home/`、`C:\Users\`、`C:/Users/` 则失败 |
+| 视频标题 / 文件名 | `我的旅行vlog`、`talk.mp4`、`interview.mov` | 没有 title/filename 字段；白名单丢掉自由文本；值匹配媒体扩展名则失败 |
+| 转写文本 | 字幕、口播、`caption`、`transcript`、「大家好今天我们来聊」 | 只报 `has_subtitle: bool`；正文键和样本句必须失败 |
+| 提示词 | `prompt`、模型 system/user 原文、`Write a viral title for:` | `prompt` / `input_data` 只留在 `LLMProvider.call` / `vision_call` 内，不传入发送层 |
+| 完整 URL | `https://api.openai.com/v1/chat/completions?key=…` | **禁止**属性名 `base_url`。只报 `base_url_host`，且值只能是 host 或 `local` |
 
-Sentry 只对齐 `user.id` = PostHog `distinct_id`。分类结果只留枚举，不留响应原文。
+另外不上报：email、具体 IP（本机/局域网 → `local`）、模型响应原文、内部 `project_id` / `run_id` / `job_id`（新事件）。Sentry 只对齐 `user.id` = `distinct_id`。
 
 ---
 
 ## 11. 每个字段怎么脱敏
 
-实现必须调用现有 helper，不要手写第二套：
+实现必须调用已合入 #354 的 helper，不要手写第二套：
 
 - 后端：`backend.core.llm_telemetry.hostname_of_base_url` / `sanitize_model` / `sanitize_*_properties`
-- 前端：`frontend/src/analytics/successRateContract.ts` 的同名函数
+- 前端：`frontend/src/analytics/successRateContract.ts` 的同名函数；Studio 事件再过 `safeStudioProperties`
 - 上游分类：`backend.core.upstream_errors.classify_upstream_error`（只把枚举写入事件）
 
-| 字段 | 允许值 | 脱敏 | 丢弃（报 None / 不写该键） |
+**主策略是白名单。** 未列出的键全部丢掉——这是挡住标题、文件名、转写、提示词的第一道。第二道是 §9 对键名、子串、扩展名、样本句的扫描。
+
+| 字段 | 允许值 | 脱敏方式 | 遇到硬性违禁时 |
 | --- | --- | --- | --- |
-| `base_url_host` | 域名或 `local` | `hostname_of_base_url`：只取 host；localhost / 内网 / `0.0.0.0` / `host.docker.internal` → `local` | 完整 URL、path、query、userinfo、密钥形、解析失败 |
-| `model` | `^[\w.\-:/]{1,64}$` | `sanitize_model` | 含 `sk-`、空格、路径、超长 |
-| `provider` | 闭集（含 ASR 三值） | `sanitize_provider` | 自由文本、服务商显示名 |
-| `kind` / `outcome` / `result` / `finish_reason` / `failure_stage` / `upstream_error_type` / `error_code` / `source_type` / `material_origin` / `download_mode` / `analysis_mode` / `os` / `runtime` / `analytics_environment` | 各自闭集 | 枚举校验 | 原文、HTTP body、中文说明 |
-| `http_status` | 100–599 的整数 | 范围裁剪 | 响应头、URL |
-| `duration_ms` / `*_tokens` / `llm_calls` / `retry_count` / `billable_calls_before_failure` / `session_number` | 非负整数 | 转 int | 字符串附言 |
-| `has_subtitle` / `blocked` / `ok` | 布尔 | `bool()` | 字幕内容 |
-| `code`（ASR） | 就绪探针枚举 | 只报 code | 探针 message |
-| `distinct_id` | 匿名 ID 正则 | `ANONYMOUS_ID` | email、路径、`../` |
-| `app_version` | `MAJOR.MINOR.PATCH` | 去 `v` 前缀 | 构建路径 |
-| `flow_id` / `operation_id` / `attempt_id` / `artifact_id` | `t-[a-z0-9-]{10,100}` | 格式校验 | 内部 UUID / 文件名 |
-| 任意未列字段 | — | **白名单丢掉** | 标题、路径、prompt、caption、filename |
+| `base_url` | **不上报** | 禁止该键 | 有此键 → 校验失败 |
+| `base_url_host` | 域名或 `local` | `hostname_of_base_url(raw)`：只取 host；丢掉 scheme / path / query / userinfo；localhost、内网、`0.0.0.0`、`host.docker.internal` → `local` | 输入是 URL、`/Users/xxx`、`C:\Users\xxx` 或含 `sk-` → 输出空；若仍把原值发出 → 失败 |
+| `model` | `^[\w.\-:/]{1,64}$` | `sanitize_model` | 含 `sk-`、空格、路径、标题 → 丢弃 |
+| `provider` | 闭集（含 ASR 三值） | `sanitize_provider` | 自由文本（可能是路径或标题）→ 丢弃 |
+| `kind` / `outcome` / `result` / `finish_reason` / `failure_stage` / `upstream_error_type` / `error_code` / `source_type` / `material_origin` / `download_mode` / `analysis_mode` / `os` / `runtime` / `analytics_environment` 以及 `safeStudioProperties` 里的其它枚举 | 各自闭集 | 枚举校验，不在闭集则不写 | 标题/转写/路径进枚举字段 → 不匹配闭集，丢掉；若硬写出发 → 失败 |
+| `http_status` | 100–599 的整数 | 范围裁剪 | 不接受字符串（避免 URL/路径） |
+| `duration_ms` / `*_tokens` / `llm_calls` / `retry_count` / `billable_calls_before_failure` / `session_number` | 非负整数 | 转 int | 附带的说明文字丢掉 |
+| `has_subtitle` / `blocked` / `ok` | 布尔 | `bool()` | **不报**字幕内容 |
+| `code`（ASR） | `^[a-z][a-z0-9_]{1,64}$` | 只报就绪探针 code | 探针 message / 转写丢掉 |
+| `distinct_id` | 匿名 ID 正则 | `ANONYMOUS_ID` | email、`/Users/xxx`、`../` → 拒绝 |
+| `app_version` | `MAJOR.MINOR.PATCH` | 去 `v` 前缀 | 构建路径丢掉 |
+| `flow_id` / `operation_id` / `attempt_id` / `artifact_id` | `t-[a-z0-9-]{10,100}` | 格式校验 | 文件名、内部 UUID 不匹配则丢掉 |
+| `prompt` / `caption` / `transcript` / `title` / `filename` / `path` / `file_path` | **不上报** | 白名单外，发送前删除 | 残留 → §9 夹具失败 |
+| 任意未列字段 | — | **丢掉** | 同上 |
 
-`hostname_of_base_url("https://api.openai.com/v1/chat/completions?key=sk-…")` 只能得到 `api.openai.com`。`hostname_of_base_url("/Users/alex/models")` 必须是空。
+对照：
 
-Schema 测试用 §9 夹具证明：sanitize 之后仍含违禁值，或未 sanitize 就发送，都算失败。
+```
+hostname_of_base_url("https://api.openai.com/v1/chat/completions?key=sk-abc")  →  "api.openai.com"
+hostname_of_base_url("/Users/xxx/models")                                      →  None
+hostname_of_base_url("C:\\Users\\xxx\\AppData\\api")                           →  None
+sanitize_model("sk-abc123deadbeef")                                           →  None
+sanitize_llm_request_properties({prompt: "…", title: "我的旅行vlog"})         →  不含这两键
+```
+
+Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五类值，或未 sanitize 就发送，都失败。
