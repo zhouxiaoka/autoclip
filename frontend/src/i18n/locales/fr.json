@@ -1689,7 +1689,7 @@
   "{{count}} 个服务商提供": "Proposé par {{count}} fournisseurs",
   "已连接": "Connecté",
   "未连接": "Non connecté",
-  "自动从当前服务商的推荐列表里选可用模型；这家限流或下线时换下一个推荐型号，不会改换服务商。": "Choisit un modèle disponible dans la liste recommandée de ce fournisseur. En cas de limite ou de retrait, il passe au modèle suivant — sans changer de fournisseur.",
+  "记下这个型号，只绑定这一家服务商。换服务商请用下面的固定选项。": "Enregistre ce modèle et le lie uniquement à ce fournisseur. Pour en changer, choisissez une option fixe ci-dessous.",
   "已隐藏 {{count}} 个不支持视觉的模型": "{{count}} modèles sans vision sont masqués",
   "还没有已连接的服务商。请先在下方配置一家。": "Aucun fournisseur connecté. Configurez-en un ci-dessous.",
   "画面理解跟随的模型没有视觉能力。可以保存，开始生成前会拦住。": "Le modèle suivi n’a pas de vision. Vous pouvez enregistrer ; la génération sera bloquée tant que ce n’est pas corrigé.",
