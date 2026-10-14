@@ -424,8 +424,8 @@ FROM (
 | run 级 provider/错误身份 | 线 A | 本 PR |
 | `asr_readiness_checked` | 线 A | 本 PR |
 | `provider_validation_finished` 挂钩 | 线 A 预留，线 B 调用 | 挂钩已留 |
-| 后端事件补 `app_version` / `os` | 线 A 后续提交 | 规范已定，代码收口 |
-| 事件目录校验（未登记即失败） | 线 A 后续提交 | 与 `event_catalog.json` 一起落地 |
+| 后端事件补 `app_version` / `os` | 线 A | 本 PR：`event_catalog.envelope_properties` |
+| 事件目录校验（未登记即失败） | 线 A | 本 PR：`event_catalog.json` + 前后端校验测试 |
 | `backend_exit`（#1 续跑） | 1.5.9 | 本版不发 |
 | 线上看板 7 张 insight | 埋点上线后由负责人建 | 本文件 §7 是配置方案 |
 

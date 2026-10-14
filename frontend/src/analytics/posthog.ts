@@ -170,6 +170,25 @@ function disableFlagNetwork() {
   notifyRemoteFlags()
 }
 
+const OS_ALIASES: Record<string, string> = { darwin: 'macos', win32: 'windows' }
+
+function detectOs(): string {
+  if (typeof navigator === 'undefined') return 'unknown'
+  const ua = navigator.userAgent
+  if (/Mac/i.test(ua)) return 'macos'
+  if (/Win/i.test(ua)) return 'windows'
+  if (/Linux/i.test(ua)) return 'linux'
+  return 'unknown'
+}
+
+function canonicalOs(value: unknown): string {
+  if (typeof value === 'string' && value) {
+    const mapped = OS_ALIASES[value] || value
+    if (mapped === 'macos' || mapped === 'windows' || mapped === 'linux' || mapped === 'unknown') return mapped
+  }
+  return detectOs()
+}
+
 /** Never let analytics failures change a successful product operation. */
 export function captureBusinessEvent(name: string, properties: Properties = {}): boolean {
   if (!initialized || !isAnalyticsEnabled()) return false
@@ -178,6 +197,7 @@ export function captureBusinessEvent(name: string, properties: Properties = {}):
       ...properties,
       schema_version: 2,
       app_version: import.meta.env.VITE_APP_VERSION || 'unknown',
+      os: canonicalOs(properties.os),
       analytics_environment: import.meta.env.VITE_TELEMETRY_VALIDATION === 'true' ? 'validation' : import.meta.env.DEV ? 'development' : 'production',
       runtime: '__TAURI_INTERNALS__' in window ? 'desktop' : 'web',
       entrypoint: 'ui',

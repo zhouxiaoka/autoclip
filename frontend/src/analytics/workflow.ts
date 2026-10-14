@@ -49,7 +49,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     encoder: ['libx264', 'h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox'],
     downgrade_reason: ['none', 'over_budget', 'missing_runtime', 'intel_mac_unverified', 'rank', 'flag_off', 'capture', 'encode'],
     failure_reason: ['none', 'capture', 'encode', 'runtime', 'timeout', 'unknown'],
-    os: ['darwin', 'win32', 'linux'],
+    os: ['macos', 'windows', 'linux', 'unknown', 'darwin', 'win32'],
     stage: ['pre_import', 'results_chip', 'editor'],
     packaging_style: ['classic', 'boxed', 'spotlight', 'pop', 'cinematic'],
     framing: ['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'],
@@ -64,8 +64,10 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     upstream_error_type: ['invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint', 'rate_limited', 'upstream_unavailable', 'timeout', 'connection', 'output_truncated', 'unknown'],
     code: ['whisper_installed', 'whisper_installing', 'whisper_install_failed', 'whisper_not_installed', 'whisper_model_downloading', 'whisper_model_failed', 'whisper_model_missing', 'sensevoice_ready', 'sensevoice_not_ready', 'cloud_configured', 'cloud_not_configured'],
   }
+  const osAliases: Record<string, string> = { darwin: 'macos', win32: 'windows' }
   for (const [key, allowed] of Object.entries(enums)) {
-    if (typeof input[key] === 'string' && allowed.includes(input[key] as string)) out[key] = input[key] as string
+    if (typeof input[key] !== 'string' || !allowed.includes(input[key] as string)) continue
+    out[key] = key === 'os' ? (osAliases[input[key] as string] || input[key] as string) : input[key] as string
   }
   for (const key of ['outro_applied', 'brand_outro_enabled', 'reused_content_profile', 'has_crop_track', 'has_manual_adjustment', 'auto_frame_retained', 'tags_enabled', 'packaging_fallback', 'burned_captions', 'subtitle_enabled', 'has_subtitle', 'blocked', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', 'is_recommended', 'accepted_recommendation', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean

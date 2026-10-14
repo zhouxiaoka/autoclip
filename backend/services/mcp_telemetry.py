@@ -279,11 +279,12 @@ def _post(event: str, properties: dict) -> bool:
         key = qa_telemetry._key()
         if not key or not qa_telemetry._analytics_allowed():
             return False
+        from backend.core.event_catalog import envelope_properties
         body = json.dumps({
             'api_key': key,
             'event': event,
             'distinct_id': qa_telemetry.anonymous_distinct_id(),
-            'properties': properties,
+            'properties': {**properties, **envelope_properties()},
         }).encode()
         request = urllib.request.Request(
             f'{qa_telemetry._HOST}/capture/', data=body, headers={'Content-Type': 'application/json'}, method='POST',

@@ -138,12 +138,13 @@ def emit_checked(report: dict, strategy_id: str, *, variant: str | None = None) 
     if not key or not _analytics_allowed():
         return
     try:
+        from backend.core.event_catalog import envelope_properties
         properties = {
             'qa_mode': 'shadow',
             'duration_ms': max(0, min(60_000, int(report.get('duration_ms') or 0))),
             'studio_schema_version': 2,
-            'runtime': 'python',
             '$feature/qa_gate_blocking': _qa_variant(variant),
+            **envelope_properties(),
         }
         if strategy_id in TARGETS:
             properties['strategy_id'] = strategy_id

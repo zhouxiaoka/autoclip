@@ -26,7 +26,7 @@ test('template render facts stay enumerable and drop captions and paths', () => 
   assert.equal(props.downgraded, false)
   assert.equal(props.downgrade_reason, 'rank')
   assert.equal(props.outcome, 'skipped')
-  assert.equal(props.os, 'darwin')
+  assert.equal(props.os, 'macos')
   assert.equal(props.cpu_count, 8)
   assert.equal(props.duration_ms, 90000)
   const blob = JSON.stringify(props)

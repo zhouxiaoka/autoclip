@@ -28,7 +28,7 @@ def test_render_event_keeps_enums_and_drops_paths_titles_and_free_text():
     assert props['encoder'] == 'h264_nvenc'
     assert props['downgraded'] is True
     assert props['downgrade_reason'] == 'over_budget'
-    assert props['os'] == 'win32' and props['cpu_count'] == 8
+    assert props['os'] == 'windows' and props['cpu_count'] == 8
     assert props['duration_ms'] == 4200 and props['outcome'] == 'downgraded'
     blob = str(props)
     assert 'private' not in blob and '秘密' not in blob and '原话' not in blob and '/tmp' not in blob

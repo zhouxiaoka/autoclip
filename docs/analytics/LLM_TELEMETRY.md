@@ -1,5 +1,7 @@
 # 1.5.8 出片成功率埋点（线 A）
 
+体系化规范（命名、漏斗、口径、旧事件迁移、看板）见 [`TRACKING_PLAN.md`](TRACKING_PLAN.md)；机读目录 [`event_catalog.json`](event_catalog.json)。
+
 事件、查询和验收一起改。字段与枚举以第 0 步契约为准：[`docs/SUCCESS_RATE_CONTRACT.md`](../../docs/SUCCESS_RATE_CONTRACT.md)、`backend/core/upstream_errors.py`、`backend/core/llm_telemetry.py`、`frontend/src/analytics/successRateContract.ts`。
 
 本线只发送事件、把 run 级字段写入 generation / production，并把允许字段并进 `safeStudioProperties`。不上报 key、提示词、字幕、模型原文或完整 URL；`base_url` 只留域名，本机地址记为 `local`。
