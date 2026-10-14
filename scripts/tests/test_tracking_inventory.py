@@ -82,10 +82,10 @@ class TrackingInventoryTests(unittest.TestCase):
         self.assertIn("§12.1", plan)
         self.assertIn("single_os_enum", plan)
 
-    def test_current_version_defers_producer_gates(self) -> None:
+    def test_current_version_enables_producer_gates(self) -> None:
         version = check.app_version(ROOT)
-        self.assertEqual(version, "1.5.7")
-        self.assertFalse(check.transition_due(version))
+        self.assertEqual(version, "1.5.8")
+        self.assertTrue(check.transition_due(version))
         gaps = check.producer_transition_errors(ROOT)
         self.assertTrue(gaps)
         self.assertTrue(any(item.startswith("T1 ") for item in gaps))
