@@ -7,6 +7,10 @@
 
 ## [未发布]
 
+_（本周尚无改动）_
+
+## [1.5.8] - 2026-10-14
+
 - 自定义服务商获取模型列表接入专用 `/models` 客户端，失败不再用缓存或目录冒充成功；修改地址或密钥后忽略旧响应。控制台主机和地址锁定统一读取预设目录，允许 Infistar API 主机；ASR 时间戳支持由后端适配器决定。移除无效的场景复选框，获取列表的错误不回显地址或密钥。
 
 - 设置页可添加自定义 OpenAI 兼容服务商：填写名称、接口地址和密钥，拉取模型列表或手动加模型 ID，并选择类型 / 视觉。首次启动改为选择 88API、Infistar 或其他服务商；赞助商一键获取只打开注册页（deeplink 写入另做）。SenseVoice 首次启用复用 Whisper 的准备模型进度行。不做「从剪贴板粘贴」。埋点不含密钥、完整 URL、用户路径或用户文本。
@@ -543,7 +547,8 @@
 
 ### 链接
 
-- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.7...HEAD
+- [Unreleased]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.8...HEAD
+- [1.5.8]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.7...v1.5.8
 - [1.5.7]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.6...v1.5.7
 - [1.5.6]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.3...v1.5.6
 - [1.5.3]: https://github.com/zhouxiaoka/autoclip/compare/v1.5.2...v1.5.3
