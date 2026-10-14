@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Select, Switch } from 'antd'
 import { t } from '../../i18n'
-import { Btn, Row, Section, Segmented, StatusDot } from '../../ui'
+import { Btn, Icon, Row, Section, Segmented, StatusDot } from '../../ui'
 import SpeechRecognitionConfig from '../../components/SpeechRecognitionConfig'
 import { PROVIDERS, providerPickerOptions, type ProviderKey } from './providers'
 import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
 import { connectionOf, isTextOnly, mainConnection, presetKey, type SaveIssue } from './modelSettingsLogic'
+import type { Connection } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
 import SenseVoiceConfig from './SenseVoiceConfig'
 import ProviderCatalog from './ProviderCatalog'
 import ProviderDetail from './ProviderDetail'
-import { catalogPreset, type CapabilityFilter } from './providerCatalogView'
+import {
+  catalogPreset, customConnectionId, isUnmatchedCompatible, type CapabilityFilter,
+} from './providerCatalogView'
 
 const ANCHORS: Record<string, string> = { model: 'ai-model', analysis: 'ai-model', vision: 'ai-model', speech: 'ai-speech', cover: 'ai-cover' }
 const issueAnchor = (issue: SaveIssue) => issue.role === 'transcription' ? 'ai-speech' : issue.role === 'cover' ? 'ai-cover' : 'ai-model'
@@ -111,6 +114,56 @@ function CoverSection({ m }: { m: ModelSettingsStore }) {
   </div>
 }
 
+function CustomGatewayRepair({
+  connection, m, onBack,
+}: {
+  connection: Connection
+  m: ModelSettingsStore
+  onBack: () => void
+}) {
+  const { settings, lists, busy, listErrors } = m
+  if (!settings) return null
+  const main = mainConnection(settings)
+  const isAnalysis = main?.id === connection.id
+  const list = lists[connection.id]
+  return (
+    <div className="ac-provider-detail" data-provider-id="compatible" data-connect-kind="compatible">
+      <button type="button" className="ac-back" onClick={onBack}>
+        <Icon.Back />{t('settings.providers.back')}
+      </button>
+      <h3 className="ac-model-section-title">{connection.name || t('自定义 OpenAI 兼容接口')}</h3>
+      <p className="ac-note">{t('settings.providers.repair_custom_hint')}</p>
+      <ProviderFields
+        connection={connection}
+        placement="settings_model"
+        keyHint={m.keyHints[connection.id]}
+        onChoose={p => m.chooseProvider('analysis', p)}
+        onEdit={patch => m.editConnection(connection, patch)}
+      />
+      {isAnalysis && settings.analysis
+        ? <Row wide label={t('settings.providers.using_for_analysis')} hint={t('已为你选好推荐模型，可随时更换。')}>
+            <ModelPicker
+              role="analysis"
+              model={settings.analysis.model || ''}
+              capability={settings.analysis.capability}
+              connection={connection}
+              list={list}
+              busy={!!busy[connection.id]}
+              listError={listErrors[connection.id]}
+              mode={settings.analysis_mode}
+              onChange={value => m.update({ analysis: { connection_id: connection.id, model: value, capability: 'auto' } })}
+              onCapability={capability => settings.analysis && m.update({ analysis: { ...settings.analysis, capability } })}
+              onRefresh={() => void m.discover(connection, true)}
+              actions={<Btn variant="text" size="sm" disabled={!settings.analysis.model} loading={m.testing} onClick={() => void m.test()}>{t('测试连接')}</Btn>}
+            />
+          </Row>
+        : <Row label={t('settings.providers.use_for_analysis')} hint={t('settings.providers.use_for_analysis_hint')}>
+            <Btn size="sm" onClick={() => m.assignAnalysisConnection(connection)}>{t('settings.providers.use_for_analysis')}</Btn>
+          </Row>}
+    </div>
+  )
+}
+
 function CurrentAnalysis({ m }: { m: ModelSettingsStore }) {
   const { settings, lists, busy, listErrors } = m
   if (!settings) return null
@@ -124,7 +177,18 @@ function CurrentAnalysis({ m }: { m: ModelSettingsStore }) {
     : model && list && !list.preview ? t('已为你选好推荐模型，可随时更换。')
     : t('填写 API Key 后自动选择推荐模型。')
   const name = PROVIDERS[presetKey(main)]?.name || main.name
+  const repairCustom = isUnmatchedCompatible(main)
   return <>
+    {repairCustom && <>
+      <p className="ac-note">{t('settings.providers.repair_custom_hint')}</p>
+      <ProviderFields
+        connection={main}
+        placement="settings_model"
+        keyHint={m.keyHints[main.id]}
+        onChoose={p => m.chooseProvider('analysis', p)}
+        onEdit={patch => m.editConnection(main, patch)}
+      />
+    </>}
     <Row wide label={t('settings.providers.using_for_analysis')} hint={`${name} · ${hint}`}>
       <ModelPicker role="analysis" model={model} capability={settings.analysis.capability} connection={main} list={list} busy={!!busy[main.id]} listError={listErrors[main.id]} mode={settings.analysis_mode}
         onChange={value => m.update({ analysis: { connection_id: main.id, model: value, capability: 'auto' } })}
@@ -149,6 +213,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   const [moreOpen, setMoreOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(() => catalogPreset(requestedProvider)?.id || null)
   const selected = catalogPreset(selectedId)
+  const customSelected = settings?.connections.find(connection => connection.id === customConnectionId(selectedId))
 
   useEffect(() => {
     setSelectedId(catalogPreset(requestedProvider)?.id || null)
@@ -177,7 +242,8 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     {settings.migration_warnings?.includes('cover_configuration_invalid') && <p role="alert" className="ac-note">{t('旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。')}</p>}
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
     <fieldset className="ac-model-fields" disabled={m.saving}>
-      {selected ? <ProviderDetail preset={selected} m={m} onBack={closeProvider} /> : <>
+      {customSelected ? <CustomGatewayRepair connection={customSelected} m={m} onBack={closeProvider} />
+        : selected ? <ProviderDetail preset={selected} m={m} onBack={closeProvider} /> : <>
         <div className="ac-model-section">
           <h3 className="ac-model-section-title">{t('settings.providers.title')}</h3>
           <p className="ac-note">{t('settings.providers.subtitle')}</p>

@@ -63,6 +63,25 @@ test('catalog renders recommended / popular / local and keeps more collapsed', (
   assert.deepEqual(opened, ['deepseek'])
 })
 
+test('saved custom gateways appear as a repair entry', () => {
+  const tree = Catalog({
+    settings: {
+      ...settings,
+      connections: [{
+        id: 'gw', name: 'Home gateway', provider: 'compatible',
+        base_url: 'https://gw.home.example/v1', api_key: '', image_api: 'auto', image_base_url: '',
+      }],
+    },
+    query: '', filter: 'all', moreOpen: false, selectedId: null,
+    onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+  })
+  const nodes = flatten(tree)
+  assert.ok(nodes.some(node => node.props && node.props['data-provider-group'] === 'custom'))
+  const card = nodes.find(node => node.props && node.props['data-provider-id'] === 'custom:gw')
+  assert.ok(card)
+  assert.match(textOf(card), /settings\.providers\.repair_custom/)
+})
+
 test('search and capability filter show unconnected more-group providers', () => {
   const tree = Catalog({
     settings, query: 'OpenRouter', filter: 'all', moreOpen: false, selectedId: null,

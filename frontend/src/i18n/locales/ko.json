@@ -1790,5 +1790,8 @@
   "腾讯混元": "Tencent Hunyuan",
   "腾讯混元。国内公开文档常见地址，上线前须核实。": "Tencent Hunyuan. 공개 문서의 흔한 주소이며 정식 출시 전 확인이 필요합니다.",
   "蚂蚁百灵": "Ant Ling",
-  "蚂蚁百灵。OpenAI 兼容。": "Ant Ling. OpenAI 호환."
+  "蚂蚁百灵。OpenAI 兼容。": "Ant Ling. OpenAI 호환.",
+  "settings.providers.repair_custom": "사용자 지정 엔드포인트 복구",
+  "settings.providers.repair_custom_hint": "저장된 사용자 지정 OpenAI 호환 게이트웨이입니다. 주소나 키를 바꿀 수 있습니다.",
+  "settings.providers.custom_group": "저장된 사용자 지정 엔드포인트"
 }

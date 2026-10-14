@@ -1790,5 +1790,8 @@
   "腾讯混元": "Tencent Hunyuan",
   "腾讯混元。国内公开文档常见地址，上线前须核实。": "Tencent Hunyuan. Adresse courante des docs publics ; à vérifier avant publication.",
   "蚂蚁百灵": "Ant Ling",
-  "蚂蚁百灵。OpenAI 兼容。": "Ant Ling. Compatible OpenAI."
+  "蚂蚁百灵。OpenAI 兼容。": "Ant Ling. Compatible OpenAI.",
+  "settings.providers.repair_custom": "Réparer l’endpoint personnalisé",
+  "settings.providers.repair_custom_hint": "C’est une passerelle compatible OpenAI déjà enregistrée. Vous pouvez changer l’adresse ou la clé.",
+  "settings.providers.custom_group": "Endpoints personnalisés enregistrés"
 }

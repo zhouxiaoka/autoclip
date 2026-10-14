@@ -176,3 +176,39 @@ export function ensureCatalogConnection(
 export function catalogPreset(id?: string | null): ProviderPreset | undefined {
   return id ? getProvider(id) : undefined
 }
+
+export const CUSTOM_CONNECTION_PREFIX = 'custom:'
+
+export function customConnectionId(selectedId?: string | null): string | undefined {
+  return selectedId?.startsWith(CUSTOM_CONNECTION_PREFIX) ? selectedId.slice(CUSTOM_CONNECTION_PREFIX.length) : undefined
+}
+
+export function customCatalogId(connectionId: string): string {
+  return `${CUSTOM_CONNECTION_PREFIX}${connectionId}`
+}
+
+/** A saved OpenAI-compatible row that does not match any catalog preset (custom gateway). */
+export function matchedCatalogPreset(connection: Connection): ProviderPreset | undefined {
+  const resolved = resolveProviderId(connection.provider) || connection.provider
+  const byId = catalogProviders().find(preset => {
+    if (preset.id === 'whisper' || preset.id === 'sensevoice') return false
+    if (resolved !== preset.id) return false
+    return preset.id !== 'openai' || presetKey(connection) === 'openai'
+  })
+  if (byId) return byId
+  if (presetKey(connection) === 'openai') return getProvider('openai')
+  const host = catalogHost(connection.base_url)
+  if (!host) return undefined
+  return catalogProviders().find(preset => (
+    catalogHost(preset.base_url) === host && OPENAI_LIKE.has(preset.protocol)
+  ))
+}
+
+export function isUnmatchedCompatible(connection: Connection): boolean {
+  if (connection.provider !== 'compatible' && presetKey(connection) !== 'compatible') return false
+  return !matchedCatalogPreset(connection)
+}
+
+export function unmatchedCompatibleConnections(settings: ModelSettings): Connection[] {
+  return settings.connections.filter(isUnmatchedCompatible)
+}
