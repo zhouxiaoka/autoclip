@@ -462,6 +462,7 @@ def _remember_run(properties: dict[str, Any]) -> None:
 
 
 def _post_event(event: str, properties: dict[str, Any]) -> None:
+    from backend.core.event_catalog import envelope_properties, validate_event
     from backend.services.studio.qa import telemetry as qa_telemetry
     key = qa_telemetry._key()
     if not key or not qa_telemetry._analytics_allowed():
@@ -470,16 +471,19 @@ def _post_event(event: str, properties: dict[str, Any]) -> None:
     if "sk-" in blob.lower() or "authorization" in blob.lower():
         logger.warning("refusing to post an event that looks like it contains a secret")
         return
+    posted = {
+        **properties,
+        **envelope_properties(),
+        "studio_schema_version": 2,
+    }
+    problems = validate_event(event, posted, envelope=True)
+    if problems:
+        logger.warning("%s failed catalog checks: %s", event, "; ".join(problems))
     body = json.dumps({
         "api_key": key,
         "event": event,
         "distinct_id": qa_telemetry.anonymous_distinct_id(),
-        "properties": {
-            **properties,
-            "schema_version": 2,
-            "studio_schema_version": 2,
-            "runtime": "python",
-        },
+        "properties": posted,
     }).encode()
     request = urllib.request.Request(
         f"{qa_telemetry._HOST}/capture/", data=body,
