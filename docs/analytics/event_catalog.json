@@ -194,7 +194,7 @@
       "domain": "studio",
       "required": ["outcome"],
       "required_when": {
-        "outcome=failed": ["error_code", "failure_stage"]
+        "outcome=error": ["error_code", "failure_stage"]
       }
     },
     "studio_generation_finished": {
@@ -202,7 +202,7 @@
       "domain": "studio",
       "required": ["outcome"],
       "required_when": {
-        "outcome=failed": ["error_code", "failure_stage"],
+        "outcome=error": ["error_code", "failure_stage"],
         "outcome=partial": ["error_code", "failure_stage"]
       },
       "enums": { "outcome": "studio_outcome" }
@@ -212,7 +212,7 @@
       "domain": "studio",
       "required": ["outcome"],
       "required_when": {
-        "outcome=failed": ["error_code", "failure_stage"]
+        "outcome=error": ["error_code", "failure_stage"]
       },
       "enums": { "outcome": "studio_outcome" }
     },
