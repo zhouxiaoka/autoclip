@@ -13,7 +13,7 @@ Register through the [AutoClip referral link](https://88api.ai/sign-up?aff=2PIc)
 ### New versions: select 88API directly
 
 1. Open **Settings → AI Models → AI service** and select **88API** in the recommended group. You can also configure it during first-run setup.
-2. Enter your 88API key. The preset base URL is `https://88api.ai/v1`.
+2. Enter your 88API key. The preset base URL is `https://api.88api.ai/v1`. A saved `https://88api.ai/v1` still works and is not rewritten.
 3. Wait for your account's model list and choose an analysis model. For visual analysis, select a multimodal model that accepts images.
 4. Test the connection and save. Verify the result with a short video before larger jobs.
 
@@ -30,7 +30,7 @@ If 88API is not listed, select the custom OpenAI-compatible provider:
 | Setting | Value |
 | --- | --- |
 | Provider | Custom OpenAI-compatible API |
-| Base URL | `https://88api.ai/v1` |
+| Base URL | `https://api.88api.ai/v1` |
 | API key | The API key created in the 88API console |
 | Model | An exact account model ID supporting Chat Completions |
 

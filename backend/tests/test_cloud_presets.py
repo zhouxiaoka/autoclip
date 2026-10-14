@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-from backend.core.cloud_presets import CLOUD_PRESETS, resolve_cloud_preset
+from backend.core.cloud_presets import CLOUD_PRESETS, is_api88_host, resolve_cloud_preset
 from backend.core.llm_manager import LLMManager
 
 
@@ -125,7 +125,7 @@ def test_infistar_key_from_env(fake_openai, tmp_path, monkeypatch):
 def test_api88_sponsor_preset_uses_gateway_and_own_key(fake_openai, tmp_path):
     provider, url, preset = resolve_cloud_preset("api88")
     assert provider == "openai"
-    assert url == "https://88api.ai/v1"
+    assert url == "https://api.88api.ai/v1"
     # 多模型网关不预设型号；专属注册链接带推广参数
     assert preset.default_model == ""
     assert "aff=" in preset.docs_url
@@ -138,10 +138,20 @@ def test_api88_sponsor_preset_uses_gateway_and_own_key(fake_openai, tmp_path):
     )
     info = LLMManager(settings_file=settings).get_current_provider_info()
     assert info["provider"] == "api88"
-    assert info["base_url"] == "https://88api.ai/v1"
+    assert info["base_url"] == "https://api.88api.ai/v1"
     assert info["model"] == "deepseek-v4-pro"
     assert fake_openai.created[-1]["api_key"] == "sk-api88-key-123"
-    assert fake_openai.created[-1]["base_url"] == "https://88api.ai/v1"
+    assert fake_openai.created[-1]["base_url"] == "https://api.88api.ai/v1"
+
+
+def test_api88_saved_legacy_base_url_is_kept():
+    provider, url, preset = resolve_cloud_preset("api88", "https://88api.ai/v1")
+    assert provider == "openai"
+    assert url == "https://88api.ai/v1"
+    assert preset.base_url == "https://api.88api.ai/v1"
+    assert is_api88_host("88api.ai")
+    assert is_api88_host("api.88api.ai")
+    assert not is_api88_host("88api.ai.evil.example")
 
 
 @pytest.mark.parametrize("env_name", ["API88_API_KEY", "API_API88_API_KEY"])

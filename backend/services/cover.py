@@ -109,7 +109,8 @@ def _text_model_key(provider: str, base_url: str) -> str:
     if kind == "seedream":
         return str(settings.get("seed_api_key") or "")
     from urllib.parse import urlparse
-    if urlparse(base_url or "").hostname == "88api.ai":
+    from backend.core.cloud_presets import is_api88_host
+    if is_api88_host(urlparse(base_url or "").hostname):
         return str(settings.get("api88_api_key") or "")
     if "infistar" in host:
         return str(settings.get("infistar_api_key") or "")

@@ -34,5 +34,7 @@ test('normalize adds or dedupes /v1 per provider and never rejects', () => {
     'https://llm-x.cn-beijing.maas.aliyuncs.com',
   )
   assert.equal(urls.normalizeProviderBaseUrl('https://fal.run', 'compatible'), 'https://fal.run')
+  assert.equal(urls.normalizeProviderBaseUrl('https://88api.ai/v1', 'api88'), 'https://88api.ai/v1')
+  assert.equal(urls.normalizeProviderBaseUrl('https://api.88api.ai/v1', 'api88'), 'https://api.88api.ai/v1')
   assert.equal(urls.normalizeProviderBaseUrl('not-an-endpoint', 'compatible'), 'not-an-endpoint')
 })
