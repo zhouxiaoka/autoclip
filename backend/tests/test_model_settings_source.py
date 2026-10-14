@@ -130,3 +130,51 @@ def test_annotate_legacy_empty_model_slot_is_preset_not_a_reset_notice():
     assert data['analysis']['model_source'] == 'user'
     assert data['connections'][0]['base_url_source'] == 'preset'
     assert source.NOTICE_PURPOSE_RESET not in warnings
+
+
+def test_migration_never_switches_binding_to_another_provider(tmp_path, monkeypatch):
+    """A missing connection is needs-repair. Do not reuse connections[0] (that changes provider)."""
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    raw = {
+        'version': 1,
+        'connections': [
+            {'id': 'openai-1', 'name': 'OpenAI', 'provider': 'openai', 'api_key': 'sk-openai-keep',
+             'base_url': 'https://api.openai.com/v1'},
+            {'id': 'dashscope-1', 'name': '百炼', 'provider': 'dashscope', 'api_key': 'sk-dashscope-keep'},
+        ],
+        'analysis': {'connection_id': 'gone', 'model': 'gpt-4o-mini', 'capability': 'auto'},
+        'cover_enabled': False,
+    }
+    data, warnings = source.annotate_document(raw)
+    assert data['analysis'] is None
+    assert [item['provider'] for item in data['connections']] == ['openai', 'dashscope']
+    assert [item['id'] for item in data['connections']] == ['openai-1', 'dashscope-1']
+    assert 'analysis_configuration_invalid' in warnings
+    assert source.NOTICE_PURPOSE_RESET not in warnings
+
+    ai.path().parent.mkdir(parents=True, exist_ok=True)
+    ai.path().write_text(json.dumps(raw), encoding='utf-8')
+    loaded = ai.load()
+    assert loaded.analysis is None
+    assert [item.provider for item in loaded.connections] == ['openai', 'dashscope']
+    assert 'analysis_configuration_invalid' in loaded._migration_warnings
+    public = ai.public(loaded)
+    assert public['analysis'] is None
+    assert [item['provider'] for item in public['connections']] == ['openai', 'dashscope']
+    assert 'sk-openai-keep' not in json.dumps(public)
+
+
+def test_unmigratable_model_resets_on_the_same_provider():
+    data, warnings = source.annotate_document({
+        'connections': [
+            {'id': 'gemini-1', 'name': 'Gemini', 'provider': 'gemini', 'api_key': 'AIza-keep'},
+            {'id': 'openai-1', 'name': 'OpenAI', 'provider': 'openai', 'api_key': 'sk-other',
+             'base_url': 'https://api.openai.com/v1'},
+        ],
+        'analysis': {'connection_id': 'gemini-1', 'model': 'm' * 201, 'capability': 'auto'},
+    })
+    assert data['analysis']['connection_id'] == 'gemini-1'
+    assert data['analysis']['model'] == source.recommended_model('gemini', 'analysis')
+    assert data['analysis']['model_source'] == 'preset'
+    assert next(item['provider'] for item in data['connections'] if item['id'] == 'gemini-1') == 'gemini'
+    assert source.NOTICE_PURPOSE_RESET in warnings
