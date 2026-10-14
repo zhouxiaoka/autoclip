@@ -48,14 +48,14 @@ FAILURE_STAGES: frozenset[str] = frozenset({
 RUN_LEVEL_FIELDS: frozenset[str] = frozenset({
     "provider", "model", "base_url_host", "http_status", "upstream_error_type",
     "failure_stage", "llm_calls", "prompt_tokens", "completion_tokens",
-    "reasoning_tokens", "retry_count", "billable_calls_before_failure",
+    "reasoning_tokens", "retry_count", "degrade_count", "billable_calls_before_failure",
 })
 # 单次模型请求
 LLM_REQUEST_FIELDS: frozenset[str] = frozenset({
     "success_rate_schema_version", "provider", "model", "base_url_host", "kind",
     "stage", "http_status", "upstream_error_type", "prompt_tokens",
-    "completion_tokens", "reasoning_tokens", "retry_count", "duration_ms",
-    "outcome", "finish_reason",
+    "completion_tokens", "reasoning_tokens", "retry_count", "degrade_count",
+    "duration_ms", "outcome", "finish_reason",
 })
 ASR_READINESS_FIELDS: frozenset[str] = frozenset({
     "success_rate_schema_version", "provider", "code", "has_subtitle", "blocked",
@@ -202,14 +202,17 @@ def _sanitize(value: Mapping[str, Any] | None, *, kind: str) -> dict[str, Any]:
         _put_enum(out, raw, "outcome", REQUEST_OUTCOMES)
         _put_enum(out, raw, "finish_reason", FINISH_REASONS)
         _put_http_status(out, raw.get("http_status"), minimum=100)
-        for key in ("prompt_tokens", "completion_tokens", "reasoning_tokens", "retry_count", "duration_ms"):
+        for key in (
+            "prompt_tokens", "completion_tokens", "reasoning_tokens",
+            "retry_count", "degrade_count", "duration_ms",
+        ):
             _put_count(out, raw, key)
     elif kind == "run":
         _put_enum(out, raw, "failure_stage", FAILURE_STAGES)
         _put_http_status(out, raw.get("http_status"), minimum=400)
         for key in (
             "llm_calls", "prompt_tokens", "completion_tokens", "reasoning_tokens",
-            "retry_count", "billable_calls_before_failure",
+            "retry_count", "degrade_count", "billable_calls_before_failure",
         ):
             _put_count(out, raw, key)
     elif kind == "asr":
@@ -294,6 +297,10 @@ _EMITTERS = frozenset({
     "set_retry_count",
     "reset_retry_count",
     "current_retry_count",
+    "increment_degrade_count",
+    "set_degrade_count",
+    "reset_degrade_count",
+    "current_degrade_count",
     "normalize_failure_stage",
     "classify_run_upstream",
 })

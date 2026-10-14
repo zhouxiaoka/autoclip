@@ -262,7 +262,7 @@ multiIf(
 | 事件 | 必填 | 说明 |
 | --- | --- | --- |
 | `studio_screen_finished` | `outcome` | 初筛结束。失败必带 `error_code`+`failure_stage` |
-| `llm_request_finished` | `provider`, `kind`, `outcome`, `duration_ms` | **诊断**，每条模型调用。失败带 `upstream_error_type`、`failure_stage`、`http_status` |
+| `llm_request_finished` | `provider`, `kind`, `outcome`, `duration_ms` | **诊断**，每条模型调用。失败带 `upstream_error_type`、`failure_stage`、`http_status`；同服务商换候选时带 `degrade_count` |
 
 阶段细节看 run 上的 `failure_stage`，不要为每个 pipeline step 再发明一个 finished 事件。
 
@@ -314,6 +314,7 @@ multiIf(
 | `studio_screen_finished` | 观察器看到初筛终态 | `frontend/src/analytics/workflow.ts` | `WorkflowTracker.observeStudio` |
 | `llm_request_finished`（text） | 每一次 `LLMProvider.call` 返回或抛错 | `backend/core/llm_providers.py` → `llm_emit.py` | `LLMProvider.__init_subclass__` 包装 → `observe_provider_call` → `request_finished` |
 | `llm_request_finished`（vision） | 每一次 `vision_call` 结束 | `backend/services/studio/intelligence.py` | `vision_call` → `emit_vision_request` |
+| `degrade_count`（请求级 + run 级） | 同服务商换下一个候选时 +1 | `backend/core/llm_manager.py` → `llm_emit.py` | `note_same_provider_degrade` → `increment_degrade_count`。R1 的降级循环只调这个钩子 |
 | run 级字段（挂到现有出片终态，不改事件名） | `studio.json` 写入失败/部分成功身份 | `backend/services/studio/store.py` | `write` → `_ensure_failure_identity` + `_attach_run_telemetry`；上下文 `llm_emit.track_run` |
 | `studio_generation_finished` / `studio_production_finished` | 观察器看到出片终态（读 snapshot 上的 run 字段） | `frontend/src/analytics/workflow.ts` + `observer.ts` | `observeStudio` / `startWorkflowObserver` |
 | `studio_confirm_*` | 用户确认制作 | `frontend/src/analytics/studio.ts` | `observeStudioOperation('studio_confirm', …)` |
@@ -664,7 +665,7 @@ FROM (
 | `provider` | 闭集（含 ASR 三值） | `sanitize_provider` | 自由文本（可能是路径或标题）→ 丢弃 |
 | `kind` / `outcome` / `result` / `finish_reason` / `failure_stage` / `upstream_error_type` / `error_code` / `source_type` / `material_origin` / `download_mode` / `analysis_mode` / `os` / `runtime` / `analytics_environment` 以及 `safeStudioProperties` 里的其它枚举 | 各自闭集 | 枚举校验，不在闭集则不写 | 标题/转写/路径进枚举字段 → 不匹配闭集，丢掉；若硬写出发 → 失败 |
 | `http_status` | 100–599 的整数 | 范围裁剪 | 不接受字符串（避免 URL/路径） |
-| `duration_ms` / `*_tokens` / `llm_calls` / `retry_count` / `billable_calls_before_failure` / `session_number` | 非负整数 | 转 int | 附带的说明文字丢掉 |
+| `duration_ms` / `*_tokens` / `llm_calls` / `retry_count` / `degrade_count` / `billable_calls_before_failure` / `session_number` | 非负整数 | 转 int | 附带的说明文字丢掉 |
 | `has_subtitle` / `blocked` / `ok` | 布尔 | `bool()` | **不报**字幕内容 |
 | `code`（ASR） | `^[a-z][a-z0-9_]{1,64}$` | 只报就绪探针 code | 探针 message / 转写丢掉 |
 | `distinct_id` | 匿名 ID 正则 | `ANONYMOUS_ID` | email、`/Users/xxx`、`../` → 拒绝 |

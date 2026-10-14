@@ -514,6 +514,15 @@ class LLMManager:
             finally:
                 llm_telemetry.reset_retry_count(token)
     
+    def note_same_provider_degrade(self) -> int:
+        """R1 hook: increment ``degrade_count`` when switching to the next candidate.
+
+        Isolated from ``call`` / ``call_with_retry`` so the fallback loop can
+        rebase without touching emit plumbing. Only a non-negative count is
+        recorded — no model name, URL, path, or user text.
+        """
+        return note_same_provider_degrade()
+
     def test_provider_connection(self, provider_type: ProviderType, api_key: str, model_name: str,
                                  **provider_kwargs) -> bool:
         """测试提供商连接"""
@@ -596,6 +605,15 @@ class LLMManager:
         from ..utils.llm_client import LLMClient
         temp_client = LLMClient()
         return temp_client.parse_json_response(response)
+
+def note_same_provider_degrade() -> int:
+    """Increment the run/request ``degrade_count``. Safe if telemetry is absent."""
+    try:
+        from backend.core import llm_telemetry
+        return llm_telemetry.increment_degrade_count()
+    except Exception:  # noqa: BLE001 - telemetry must not break fallback
+        return 0
+
 
 def _llm_cache_path(prompt: str, input_data: Any) -> Optional[Path]:
     """AUTOCLIP_LLM_CACHE_DIR 设了才启用；CI / eval 回放用。"""

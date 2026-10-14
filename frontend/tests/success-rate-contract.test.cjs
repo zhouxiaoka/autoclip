@@ -49,6 +49,7 @@ test('request sanitizer drops secrets, prompts and full URLs', () => {
     upstream_error_type: 'permission_denied',
     prompt_tokens: 80,
     retry_count: 0,
+    degrade_count: 1,
     duration_ms: 12,
     outcome: 'error',
     api_key: SECRET,
@@ -60,6 +61,7 @@ test('request sanitizer drops secrets, prompts and full URLs', () => {
   assert.equal(props.provider, 'api88')
   assert.equal(props.base_url_host, '88api.ai')
   assert.equal(props.upstream_error_type, 'permission_denied')
+  assert.equal(props.degrade_count, 1)
   assert.equal(dumped.includes(SECRET), false)
   assert.equal(dumped.includes(PROMPT), false)
   assert.equal(dumped.includes('/v1'), false)
@@ -74,6 +76,7 @@ test('run sanitizer rejects unknown enums and success HTTP statuses', () => {
     upstream_error_type: 'authentication',
     billable_calls_before_failure: 0,
     retry_count: 2,
+    degrade_count: 3,
   })
   assert.equal(props.provider, undefined)
   assert.equal(props.model, 'ok-model')
@@ -82,6 +85,7 @@ test('run sanitizer rejects unknown enums and success HTTP statuses', () => {
   assert.equal(props.upstream_error_type, undefined)
   assert.equal(props.billable_calls_before_failure, 0)
   assert.equal(props.retry_count, 2)
+  assert.equal(props.degrade_count, 3)
 })
 
 test('validation sanitizer maps ok to success and never keeps secrets', () => {
