@@ -1,6 +1,8 @@
 import api from '../../services/api'
 import type { ValidationResult } from './providerAccess'
 
+import type { CustomModelOffer } from './customProvider'
+
 export type Capability = 'auto' | 'multimodal' | 'text'
 export type Source = 'preset' | 'user'
 export type ModelSource = Source
@@ -18,6 +20,7 @@ export interface Connection {
   validation_error_type?: string
   base_url_source?: Source
   preset_version?: number
+  custom_models?: CustomModelOffer[]
 }
 export interface Assignment { connection_id: string; model: string; capability: Capability; model_source?: Source }
 export interface ModelSettings {

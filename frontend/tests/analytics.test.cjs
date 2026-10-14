@@ -554,6 +554,7 @@ function settingsHook(s, transport, initial) {
   const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls})
   const slotLogic=loadTs('defaultModelSlots.ts',{'../../i18n':{t:x=>x}})
   const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+  const custom=load('../features/settings/customProvider',{'./providerUrl':urls,'./modelSettingsLogic':logic},{URL,crypto:{randomUUID:()=>'uuid'}})
   const hook=load('../features/settings/useModelSettings',{
     react,antd:{message:{success(){},error(){}}},'../../i18n':{t:x=>x},'../studio/api':{errorText:()=> 'redacted'},
     '../../analytics/experience':experience,'./providers':providers,'./providerAccess':access,
@@ -561,6 +562,7 @@ function settingsHook(s, transport, initial) {
     './modelDefaults':defaults,'./modelSettingsLogic':logic,'./defaultModelSlots':slotLogic,
     './providerCatalogView':{assignAnalysis:value=>value,ensureCatalogConnection:value=>({settings:value,changed:false}),selectLocalAsr:value=>value},
     './providerPresets':{getProvider:()=>undefined},
+    './customProvider':custom,
   },{window:{setTimeout(){},clearTimeout(){},addEventListener(){},removeEventListener(){}}})
   return ()=>{cursor=0;return hook.useModelSettings('home_setup')}
 }

@@ -19,6 +19,7 @@ import {
   type CapabilityFilter, type LocalAsrReady,
 } from './providerCatalogView'
 import DefaultModels from './DefaultModels'
+import AddCustomProviderDialog from './AddCustomProviderDialog'
 
 function useLocalAsrReady(settings: ModelSettings | null): LocalAsrReady {
   const [ready, setReady] = useState<LocalAsrReady>({})
@@ -267,6 +268,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     setSelectedId(catalogPreset(requestedProvider)?.id || null)
   }, [requestedProvider])
 
+  const [customOpen, setCustomOpen] = useState(false)
   useEffect(() => {
     const anchor = ANCHORS[requestedSection]
     if (!settings || !anchor || selectedId) return
@@ -300,7 +302,10 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
           <VisionSection m={m} />
         </div>
         <div id="ai-model" className="ac-model-section">
-          <h3 className="ac-model-section-title">{t('settings.providers.title')}</h3>
+          <div className="ac-model-section-head">
+            <h3 className="ac-model-section-title">{t('settings.providers.title')}</h3>
+            <Btn size="sm" onClick={() => setCustomOpen(true)}>{t('添加服务商')}</Btn>
+          </div>
           <p className="ac-note">{t('settings.providers.subtitle')}</p>
           <CurrentAnalysis m={m} />
         </div>
@@ -330,5 +335,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
       <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? (validationTargets(settings).some(({ connection }) => connection.validation_status === 'failed') ? t('校验未通过。设置已保存，但开始生成前会拦住。') : t(VISION_HINT_KEY)) : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
       <Btn variant="cta" disabled={m.testing} loading={m.saving} onClick={() => void save()}>{t('保存设置')}</Btn>
     </div>
+    <AddCustomProviderDialog open={customOpen} onClose={() => setCustomOpen(false)}
+      onSubmit={draft => { m.addCustomProvider(draft); setCustomOpen(false) }} />
   </div>
 }

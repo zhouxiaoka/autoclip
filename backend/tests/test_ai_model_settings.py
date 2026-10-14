@@ -612,3 +612,32 @@ def test_official_qwen_vision_route_survives_unavailable_capability_catalog(monk
     config.connections[0].provider = 'compatible'
     config.connections[0].base_url = 'https://gateway.example/v1'
     assert ai.vision_endpoint(config) is None
+
+
+def test_custom_models_persist_without_exposing_keys():
+    settings = ai.ModelSettings(
+        connections=[ai.Connection(
+            id='gw', name='Office gateway', provider='compatible',
+            base_url='https://gw.example/v1', api_key='sk-custom-secret',
+            custom_models=[ai.CustomModelOffer(
+                id='office-llm', display_name='Office', types=['language'],
+                vision=True, scenarios=['analysis', 'vision'], enabled=True,
+            )],
+        )],
+        analysis=ai.Assignment(connection_id='gw', model='office-llm', capability='multimodal'),
+    )
+    public = ai.save(settings)
+    dumped = json.dumps(public)
+    assert 'sk-custom-secret' not in dumped
+    assert public['connections'][0]['custom_models'][0]['id'] == 'office-llm'
+    loaded = ai.load()
+    offer = loaded.connections[0].custom_models[0]
+    assert offer.id == 'office-llm'
+    assert offer.vision is True
+    assert offer.scenarios == ['analysis', 'vision']
+    illegal = ai.CustomModelOffer(id='img', types=['image'], vision=True, scenarios=['analysis', 'cover', 'vision'])
+    assert illegal.vision is False
+    assert illegal.scenarios == ['cover']
+    blank = ai.CustomModelOffer(id='x', types=[], scenarios=['analysis'])
+    assert blank.types == ['language']
+    assert blank.scenarios == ['analysis']

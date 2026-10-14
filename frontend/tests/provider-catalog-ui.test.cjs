@@ -245,6 +245,7 @@ for (const requestedProvider of ['', 'deepseek', 'custom:ds']) {
       main: value.connections[0], update: patch => updates.push(patch),
     }
     const Page = loadTs('AIModelSettings.tsx', {
+      './AddCustomProviderDialog': { default: () => null },
       react: { ...React, useState: initial => [typeof initial === 'function' ? (requestedProvider.startsWith('custom:') ? requestedProvider : initial()) : initial, () => {}], useEffect: () => {} },
       'react-i18next': { useTranslation: () => {} },
       antd: { Select: () => null, Switch: () => null },

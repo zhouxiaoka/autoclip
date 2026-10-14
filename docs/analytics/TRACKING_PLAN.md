@@ -242,7 +242,7 @@ multiIf(
 | 事件 | 必填 | 说明 |
 | --- | --- | --- |
 | `setup_presented` | `placement`, `trigger` | 引导实际显示 |
-| `setup_action` | `placement`, `action` | `later` / `open_settings` |
+| `setup_action` | `placement`, `action` | `later` / `open_settings` / `one_click`（赞助商一键获取只记 action + provider，不记 URL / key） |
 | `import_blocked` | `reason` | 未配置就被导入挡住 |
 | `provider_configuration_save_requested` / `_finished` | `provider`, `outcome`（finished） | 保存设置；保存成功 ≠ 能调用 |
 | `provider_connection_test_requested` / `_finished` | `provider`, `outcome`（finished） | 现有连接测试 |
@@ -304,7 +304,7 @@ multiIf(
 | 事件 | 何时 | 文件 | 函数 |
 | --- | --- | --- | --- |
 | `app_installed` / `app_opened` / `app_updated` | 桌面启动；安装只发一次 | `frontend/src/analytics/lifecycle.ts` | `trackLaunch` |
-| `setup_presented` / `setup_action` | 引导实际显示 / 用户点稍后或去设置 | `frontend/src/features/settings/FirstRunSetup.tsx` → `experience.ts` | `trackExperience` |
+| `setup_presented` / `setup_action` | 引导实际显示 / 用户点稍后、去设置或赞助商一键获取 | `frontend/src/features/settings/FirstRunSetup.tsx` → `experience.ts` | `trackExperience` |
 | `import_blocked` | 未配置服务商就被导入挡住 | `frontend/src/features/studio/CreativeImport.tsx` | `trackExperience('import_blocked', …)` |
 | `settings_section_viewed` | 打开设置分区 | `frontend/src/pages/SettingsPage.tsx` | `trackExperience` |
 | `provider_configuration_save_*` / `provider_connection_test_*` | 设置页保存 / 连接测试 | `frontend/src/analytics/experience.ts` | `beginExperience` |

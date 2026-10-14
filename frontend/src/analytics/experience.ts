@@ -8,7 +8,7 @@ export type Placement = 'home_setup' | 'settings_model'
 export type ExperienceEvent = 'setup_presented' | 'setup_action' | 'import_blocked' | 'settings_section_viewed' | 'example_project_viewed'
 const enums: Record<string, readonly string[]> = {
   entry_source: ['home_setup', 'direct'],
-  placement: ['home_setup', 'settings_model'], action: ['later', 'open_settings'],
+  placement: ['home_setup', 'settings_model'], action: ['later', 'open_settings', 'one_click'],
   trigger: ['initial', 'import_blocked', 'auto', 'manual', 'provider_change', 'load', 'edit', 'portrait_preset'],
   section: ['ai', 'publish', 'app', 'feedback'], role: ['analysis', 'vision', 'cover', 'transcription'],
   reason: ['setup_required', 'provider', 'model', 'key'], mode: ['initial', 'update'],

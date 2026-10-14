@@ -33,6 +33,53 @@ from backend.services.model_settings_source import (
 _lock = threading.RLock()
 Capability = Literal['auto', 'multimodal', 'text']
 Source = Literal['preset', 'user']
+ModelType = Literal['language', 'asr', 'tts', 'image', 'music', 'video']
+Scenario = Literal['analysis', 'vision', 'transcription', 'cover']
+
+
+class CustomModelOffer(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    id: str = Field(min_length=1, max_length=200)
+    display_name: str = Field(default='', max_length=200)
+    types: list[ModelType] = Field(default_factory=lambda: ['language'])
+    vision: bool = False
+    scenarios: list[Scenario] = Field(default_factory=list)
+    enabled: bool = True
+
+    @field_validator('id', 'display_name')
+    @classmethod
+    def strip_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator('types', 'scenarios')
+    @classmethod
+    def unique_items(cls, value):
+        seen: list[str] = []
+        for item in value or []:
+            if item not in seen:
+                seen.append(item)
+        return seen
+
+    @model_validator(mode='after')
+    def constrain(self):
+        if not self.types:
+            self.types = ['language']
+        types = set(self.types)
+        if 'language' not in types:
+            self.vision = False
+        allowed: list[Scenario] = []
+        for scenario in self.scenarios:
+            if scenario == 'transcription' and 'asr' not in types:
+                continue
+            if scenario == 'cover' and 'image' not in types:
+                continue
+            if scenario == 'analysis' and 'language' not in types:
+                continue
+            if scenario == 'vision' and ('language' not in types or not self.vision):
+                continue
+            allowed.append(scenario)
+        self.scenarios = allowed
+        return self
 
 
 class Connection(BaseModel):
@@ -49,6 +96,7 @@ class Connection(BaseModel):
     # None = omitted (legacy file or old client). Inferred after validation.
     base_url_source: Source | None = None
     preset_version: int = Field(default=0, ge=0)
+    custom_models: list[CustomModelOffer] = Field(default_factory=list, max_length=200)
 
     @field_validator('provider')
     @classmethod
