@@ -50,7 +50,7 @@ To fix crashes, the Software may send stack traces via **Sentry** when a DSN is 
 
 ### 2.3 Information You Provide
 
-- **In-app feedback**: When you press Send, we receive the note, its category, and the app version, operating system, architecture, model name, failure stage, and a short error summary. That note is published on GitHub: problems become Issues, and ideas or other notes become Discussions. An optional email stays in the maintainer inbox and is not placed on the public post. Sending feedback does not depend on the anonymous analytics switch. Video content, subtitles, and API keys are not included; key-like text in an error summary is redacted before sending.
+- **In-app feedback**: When you press Send, the note, its category, optional contact, and the app version, operating system, architecture, model name, failure stage, and a short error summary go to **PostHog first**, then we publish the note on GitHub: problems become Issues, and ideas or other notes become Discussions. An optional email stays in the maintainer inbox and is not placed on the public post. This is something you submit on purpose, not silent collection; sending does not depend on the anonymous analytics switch. Video content, subtitles, and API keys are not included; key-like text in an error summary is redacted before sending.
 - **Third-party platform accounts/cookies**: If you use download or upload features for platforms such as Bilibili or YouTube, the related credentials (cookies, etc.) are **stored only on your device** to perform the actions you initiate. We do not collect or upload them.
 
 ### 2.4 Information We Do Not Collect

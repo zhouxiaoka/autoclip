@@ -261,7 +261,7 @@
     },
     "feedback_opened": { "status": "keep", "domain": "feedback" },
     "feedback_dismissed": { "status": "keep", "domain": "feedback" },
-    "feedback_submitted": { "status": "keep", "domain": "feedback" },
+    "feedback_submitted": { "status": "keep", "domain": "feedback", "allow": ["text", "contact"] },
     "sponsor_link_opened": { "status": "keep", "domain": "setup" },
     "video_imported": { "status": "deprecated", "domain": "legacy" },
     "clips_exported": { "status": "deprecated", "domain": "legacy" },
