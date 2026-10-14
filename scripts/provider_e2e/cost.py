@@ -10,6 +10,7 @@ from typing import Any
 # (prompt, completion) CNY per 1M tokens. Unknown models use the fallback.
 RATES_CNY_PER_M: dict[str, tuple[float, float]] = {
     'deepseek-flash': (0.6, 2.4),
+    'deepseek-v4-flash': (0.6, 2.4),
     'deepseek-chat': (2.5, 10.0),
     'gemini-2.0-flash-lite': (0.6, 2.4),
     'gemini-2.0-flash': (0.8, 3.2),
@@ -31,11 +32,13 @@ PER_RUN_CAP_CNY = {
     'nightly': 15.0,
     'verify': 25.0,
     'prerelease': 40.0,
+    'api88': 8.0,
 }
 PER_PROVIDER_CAP_CNY = {
     'nightly': 8.0,
     'verify': 10.0,
     'prerelease': 12.0,
+    'api88': 8.0,
 }
 
 

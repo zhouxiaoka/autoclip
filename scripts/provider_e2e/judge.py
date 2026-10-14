@@ -100,7 +100,7 @@ def planned_pairs(report: dict[str, Any]) -> list[tuple[str, str]]:
     if pairs:
         return pairs
     mode = report.get('mode')
-    if mode in {'nightly', 'prerelease', 'verify'}:
+    if mode in {'nightly', 'prerelease', 'verify', 'api88'}:
         from .matrix import assignments
         week = report.get('iso_week')
         for item in assignments(str(mode), week=None if week is None else int(week)):

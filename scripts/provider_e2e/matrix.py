@@ -13,7 +13,7 @@ from backend.core.upstream_errors import UpstreamErrorType
 # Success clips must be >= short-tier min_clip_sec (20s). Live material stays 1–2 min.
 SUCCESS_DURATION_SEC = 70
 TOO_SHORT_DURATION_SEC = 8
-LIVE_MODES = ('nightly', 'prerelease', 'verify')
+LIVE_MODES = ('nightly', 'prerelease', 'verify', 'api88')
 NIGHTLY_PROVIDER_IDS = ('deepseek', 'gemini')
 NIGHTLY_CLIP_IDS = ('talk_zh', 'with_srt', 'too_short')
 VERIFY_PAID_PROVIDER_IDS = ('api88', 'dashscope', 'infistar')
@@ -202,8 +202,8 @@ LIVE_PROVIDERS: tuple[dict[str, Any], ...] = (
         'provider': 'api88',
         'secret': 'API88_API_KEY',
         'model_env': 'API88_MODEL',
-        'default_model': 'gpt-4o-mini',
-        'base_url': 'https://88api.ai/v1',
+        'default_model': 'deepseek-v4-flash',
+        'base_url': 'https://api.88api.ai/v1',
         'vision_model_env': 'API88_VISION_MODEL',
         'tier': 'paid',
     },
@@ -362,6 +362,10 @@ def assignments(
     clip_rows = asset_rows if asset_rows is not None else assets()
     by_provider = _by_id(provider_rows)
     by_asset = _by_id(clip_rows)
+    if mode == 'api88':
+        if 'api88' not in by_provider or VERIFY_PROBE_CLIP_ID not in by_asset:
+            return []
+        return [_pair(by_provider['api88'], by_asset[VERIFY_PROBE_CLIP_ID], 'probe')]
     if mode == 'prerelease':
         pairs = []
         for index, asset in enumerate(clip_rows):
@@ -387,4 +391,6 @@ def assignments(
 def provider_ids_for_mode(mode: str) -> tuple[str, ...]:
     if mode == 'nightly':
         return NIGHTLY_PROVIDER_IDS
+    if mode == 'api88':
+        return ('api88',)
     return tuple(item['id'] for item in LIVE_PROVIDERS)

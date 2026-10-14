@@ -30,7 +30,7 @@ on:
         type: boolean
         default: false
       live_mode:
-        description: "nightly | prerelease | verify (empty = infer)"
+        description: "nightly | prerelease | verify | api88 (empty = infer)"
         type: string
         default: ""
   schedule:

@@ -39,7 +39,7 @@ class ProviderE2EContractTests(unittest.TestCase):
     def test_live_providers_and_faults(self):
         providers = {item['id']: item for item in matrix.live_providers()}
         self.assertEqual(set(providers), {'api88', 'deepseek', 'gemini', 'dashscope', 'infistar'})
-        self.assertEqual(providers['api88']['base_url'], 'https://88api.ai/v1')
+        self.assertEqual(providers['api88']['base_url'], 'https://api.88api.ai/v1')
         self.assertEqual(providers['dashscope']['base_url'], 'https://dashscope.aliyuncs.com/compatible-mode/v1')
         self.assertEqual(providers['infistar']['base_url'], 'https://infistar.ai/v1')
         self.assertEqual(providers['dashscope']['secret'], 'DASHSCOPE_API_KEY')
@@ -47,7 +47,7 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertEqual(providers['dashscope']['default_model'], 'qwen-flash')
         self.assertEqual(providers['gemini']['default_model'], 'gemini-3.5-flash-lite')
         self.assertEqual(providers['deepseek']['default_model'], 'deepseek-flash')
-        self.assertEqual(providers['api88']['default_model'], 'gpt-4o-mini')
+        self.assertEqual(providers['api88']['default_model'], 'deepseek-v4-flash')
         self.assertEqual(providers['infistar']['default_model'], 'gpt-4o-mini')
         self.assertTrue(all(item['default_model'] for item in providers.values()))
         faults = {item['id']: item for item in matrix.faults()}
@@ -260,8 +260,8 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('API88_API_KEY', doc)
         self.assertIn('DASHSCOPE_API_KEY', doc)
         self.assertIn('INFISTAR_API_KEY', doc)
-        self.assertIn('88api.ai/v1', doc)
-        self.assertNotIn('api.88api.ai/v1', doc)
+        self.assertIn('api.88api.ai/v1', doc)
+        self.assertIn('deepseek-v4-flash', doc)
         self.assertIn('dashscope.aliyuncs.com/compatible-mode/v1', doc)
         self.assertIn('infistar.ai/v1', doc)
         self.assertIn('¥300', doc)
@@ -318,7 +318,13 @@ class ProviderE2ECostControlTests(unittest.TestCase):
         self.assertEqual(matrix.resolve_mode({'GITHUB_REF': 'refs/tags/v1.5.8'}), 'prerelease')
         self.assertEqual(matrix.resolve_mode({'INPUT_FULL': 'true'}), 'prerelease')
         self.assertEqual(matrix.resolve_mode({'PROVIDER_E2E_MODE': 'verify'}), 'verify')
+        self.assertEqual(matrix.resolve_mode({'PROVIDER_E2E_MODE': 'api88'}), 'api88')
         self.assertEqual(matrix.resolve_mode({}), 'nightly')
+        plan = matrix.assignments('api88', week=1)
+        self.assertEqual(len(plan), 1)
+        self.assertEqual(plan[0]['provider_id'], 'api88')
+        self.assertEqual(plan[0]['clip_id'], 'talk_zh')
+        self.assertEqual(plan[0]['model'], 'deepseek-v4-flash')
 
     def test_budget_blocks_when_month_is_full(self):
         from provider_e2e.library import budget_check
@@ -497,7 +503,7 @@ class ProviderE2ECostControlTests(unittest.TestCase):
     def test_mask_does_not_keep_full_url_in_library_host(self):
         from provider_e2e.library import host_only
         self.assertEqual(host_only('https://infistar.ai/v1'), 'infistar.ai')
-        self.assertEqual(host_only('https://88api.ai/v1/chat'), '88api.ai')
+        self.assertEqual(host_only('https://api.88api.ai/v1/chat'), 'api.88api.ai')
 
 
 class ProviderE2EFailClosedTests(unittest.TestCase):
@@ -633,7 +639,8 @@ class ProviderE2EFailClosedTests(unittest.TestCase):
         self.assertIn('不要用这个门槛放行发版', acceptance)
         changelog = (ROOT / 'CHANGELOG.md').read_text(encoding='utf-8')
         self.assertIn('gemini-3.5-flash-lite', changelog)
-        self.assertIn('88api.ai/v1', changelog)
+        self.assertIn('api.88api.ai/v1', changelog)
+        self.assertIn('deepseek-v4-flash', changelog)
 
 
 if __name__ == '__main__':

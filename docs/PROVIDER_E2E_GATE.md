@@ -1,6 +1,6 @@
 # 发版前服务商端到端门槛
 
-> **验收冻结：** fail-closed 已在 verify live（Actions `38514864277`）核对：88API 失败时具名 `provider-e2e` job 为红，不再被滚动窗口样本不足放行。Gemini 默认 `gemini-3.5-flash-lite` 已通过。88API 仍因 HTTP 503 / `upstream_unavailable` 失败（token 未开通 `gpt-4o-mini` 通道或上游无渠道）。在 Environment 设好可用的 `API88_MODEL` 并再跑绿之前，**不要用这个门槛放行发版**。mock 套件本身仍可用来挡回归。
+> **验收冻结：** fail-closed 已在 verify live（Actions `38514864277`）核对。Gemini 默认 `gemini-3.5-flash-lite` 已通过。88API CI 地址是 `https://api.88api.ai/v1`（该 token 的 `/v1/models` 在此返回 200），默认模型是目录里有的 `deepseek-v4-flash`（`gpt-4o-mini` 不在该 token 的模型列表里，旧默认会 503）。在 88API 单探针跑绿之前，**不要用这个门槛放行发版**。mock 套件本身仍可用来挡回归。
 
 1.5.8 起，Desktop Build 在 `candidate-gate` 之后、Release Acceptance 之前必须通过 [`.github/workflows/provider-e2e-gate.yml`](../.github/workflows/provider-e2e-gate.yml)。它在 Linux 上起无界面桌面后端（`backend.desktop_main`），用 Studio HTTP 跑「导入 → 自动出片」，不打开 UI。
 
@@ -15,6 +15,7 @@
 | 候选 tag / `workflow_dispatch` 且 `full=true` | `prerelease`：10 条素材拆给 5 家，每家 2 条；配对按 ISO 周轮转 | 五家都在 key 齐时跑 |
 | `workflow_dispatch` 且 `include_live=true`（默认） | `nightly` 规模 | DeepSeek + Gemini |
 | `workflow_dispatch` 且 `live_mode=verify` | 夜间子集 + 88API / DashScope / Infistar 各 1 条最小成功用例 | 五家各至少探一次 |
+| `workflow_dispatch` 且 `live_mode=api88` | 只跑 88API 一条 `talk_zh` 探针 | 只这一家 |
 
 **PR / push 永远不会打真实服务商。** 缺 `*_MODEL` 时用矩阵里最便宜的默认模型，不跳过。一家都没配 key 时 live job 记 `skipped` 并写进汇总，workflow 不失败。
 
@@ -47,8 +48,8 @@ B 站 / YouTube 链接单独验收，不计入本门槛。
 
 | Secret | 用途 |
 | --- | --- |
-| `API88_API_KEY` | 88API 专用 CI token，设额度上限并限制模型。地址 `https://88api.ai/v1`（与产品预设相同；不要用 `api.88api.ai`） |
-| `API88_MODEL` | 可选，缺省最便宜档 `gpt-4o-mini`。88API 产品没有内置默认模型；token 未开通该模型时在 Environment 里改这个 secret |
+| `API88_API_KEY` | 88API 专用 CI token，设额度上限并限制模型。**门槛默认地址** `https://api.88api.ai/v1`（该 token 的 `GET /v1/models` 在此返回 200；产品设置页预设仍是 `https://88api.ai/v1`，两套不要混用） |
+| `API88_MODEL` | 可选，缺省 `deepseek-v4-flash`（该 token 模型列表里有；`gpt-4o-mini` 没有）。Environment 已可覆盖 |
 | `DEEPSEEK_API_KEY` | DeepSeek 官方独立项目 key |
 | `DEEPSEEK_MODEL` | 可选，缺省 `deepseek-flash` |
 | `GEMINI_API_KEY` | Gemini 独立项目 key（夜间走免费档） |
@@ -103,7 +104,8 @@ PYTHONPATH=scripts python -m provider_e2e --suite mock --out /tmp/provider-e2e-m
 | --- | --- | --- |
 | DeepSeek flash 一条短素材 | 约 ¥0.05–0.2 | 夜间主力 |
 | Gemini flash-lite 一条 | 约 ¥0–0.1 | 常走免费档，仍按有价计入预算 |
-| 88API / Infistar `gpt-4o-mini` 一条 | 约 ¥0.3–1.5 | 只在预发布或 verify 探针 |
+| 88API `deepseek-v4-flash` 一条 | 约 ¥0.05–0.3 | 只在预发布或 verify / `api88` 探针 |
+| Infistar `gpt-4o-mini` 一条 | 约 ¥0.3–1.5 | 只在预发布或 verify 探针 |
 | DashScope `qwen-flash` 一条 | 约 ¥0.1–0.5 | 同上 |
 | 一夜 late nightly（2–3 条） | 约 ¥0.2–0.8 | 30 夜 ≈ ¥6–24 |
 | 一次预发布（10 条拆 5 家） | 约 ¥4–20 | 每月约 4 次 ≈ ¥16–80 |
@@ -126,7 +128,7 @@ Actions `38508586808`（全矩阵）与 `38511841070`（verify）里，DeepSeek 
 
 | 服务商 | 归类 | 契约 `error_type` | 典型 HTTP | 脱敏线索 | 修复 |
 | --- | --- | --- | --- | --- | --- |
-| 88API | 配置 | 错 host 时曾是 `unknown`/`bad_endpoint`；改对 host 后为 `upstream_unavailable` | 503（`38514864277`） | `大纲提取失败：1/1 个文本块调用模型都失败了`；host `88api.ai`；0 次计费 | 默认 base 已是产品预设 `https://88api.ai/v1`。503 表示该 token/分组没有 `gpt-4o-mini` 渠道或上游无可用通道。在 Environment 设 `API88_MODEL` 为控制台已勾选的模型 |
+| 88API | 配置 | 旧默认 `gpt-4o-mini` 不在该 token 的 `/v1/models` 里，落成 `upstream_unavailable` | 503（`38514864277`） | `大纲提取失败：1/1 个文本块调用模型都失败了`；0 次计费 | CI 默认 base `https://api.88api.ai/v1`（`GET /v1/models` 200）；默认模型 `deepseek-v4-flash`。`API88_MODEL` 已在 Environment 设为同一值 |
 | Gemini | 配置（已修好） | 旧默认是 `model_not_found`；现默认已通过 | 旧 404 | 旧：`Gemini调用失败` / `gemini-2.0-flash*`；新：`gemini-3.5-flash-lite` 3 次计费出片 | 默认改为目录内最便宜的 `gemini-3.5-flash-lite`；可被 `GEMINI_MODEL` 覆盖 |
 
 复现夹具：[`scripts/provider_e2e/testdata/live_24_of_40.json`](../scripts/provider_e2e/testdata/live_24_of_40.json)。旧判定（只看滚动窗口、样本不足即绿）会放行；fail-closed 必须红。
