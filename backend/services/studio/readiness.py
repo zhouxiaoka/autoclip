@@ -34,11 +34,13 @@ def _analysis(settings: ai_models.ModelSettings) -> dict:
 
 
 def ensure_analysis_usable() -> None:
-    """Block import / generation when the saved analysis connection failed validation.
+    """Block import / generation when the saved analysis connection failed validation,
+    or when visual understanding follows a model that cannot see images.
 
-    Only a persisted document with `validation_status=failed` is a hard stop.
-    Missing, legacy, or unreadable files stay on the existing readiness path so
-    first-run imports and inspect tests are not turned into errors.
+    Only a persisted document with `validation_status=failed` or a known
+    vision-capability miss is a hard stop. Missing, legacy, or unreadable files
+    stay on the existing readiness path so first-run imports and inspect tests
+    are not turned into errors.
     """
     try:
         settings = ai_models.load()
@@ -49,6 +51,9 @@ def ensure_analysis_usable() -> None:
     check = _analysis(settings)
     if check['code'] == 'validation_failed':
         raise ValueError('当前模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。')
+    if ai_models.vision_follow_lacks_capability(settings):
+        from backend.services.provider_validation import VISION_BLOCK_MESSAGE
+        raise ValueError(VISION_BLOCK_MESSAGE)
 
 
 def _transcription(settings: ai_models.ModelSettings) -> dict:
@@ -100,6 +105,8 @@ def _visual(settings: ai_models.ModelSettings) -> dict:
     mode = settings.analysis_mode
     if mode == 'subtitle':
         return _check(True, 'not_required')
+    if ai_models.vision_follow_lacks_capability(settings):
+        return _check(False, 'vision_unsupported', 'settings_vision')
     if mode != 'visual':
         return _check(True, 'optional')
     # Same answer as the pipeline (vision_endpoint): capability=auto resolves through

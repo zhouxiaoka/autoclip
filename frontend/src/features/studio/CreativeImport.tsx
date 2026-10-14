@@ -29,6 +29,7 @@ function issueCopy(item: ReadinessIssue) {
   if (item.code === 'whisper_model_failed') return t('转写模型下载失败，请重试。已有字幕可以直接继续。')
   if (item.code === 'sensevoice_not_ready') return t('SenseVoice 还没准备好。已有字幕可以直接继续。')
   if (item.code === 'cloud_not_configured') return t('云端转写还没配好。已有字幕可以直接继续。')
+  if (item.key === 'visual' && item.code === 'vision_unsupported') return t('画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型，或关闭画面识别后再生成。')
   if (item.key === 'visual') return t('画面分析需要可用的视觉模型。')
   if (item.key === 'ffmpeg') return t('找不到 FFmpeg，暂时无法处理视频。')
   return t('导入条件还没准备好。')
@@ -128,7 +129,12 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       return
     }
     if (reason === 'transcription') { setError(t('还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。')); return }
-    if (reason === 'visual') { setError(t('请先配好画面分析模型，再生成成片。')); return }
+    if (reason === 'visual') {
+      setError(readiness?.checks?.visual?.code === 'vision_unsupported'
+        ? t('画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型，或关闭画面识别后再生成。')
+        : t('请先配好画面分析模型，再生成成片。'))
+      return
+    }
     if (reason === 'ffmpeg') { setError(t('找不到 FFmpeg，无法生成成片。')); return }
     setBusy(true); setError('')
     try {

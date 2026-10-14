@@ -9,7 +9,7 @@ import { bindingCapability, modelSettingsApi, type Connection, type ModelList, t
 import { applyModelDefaults } from './modelDefaults'
 import * as logic from './modelSettingsLogic'
 import type { Role, SaveIssue } from './modelSettingsLogic'
-import { passed, telemetryHost, validationCopy, type ValidationResult } from './providerAccess'
+import { passed, telemetryHost, validationCopy, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
 
 export const roleLabel = (role: Role) =>
   ({ analysis: t('模型'), vision: t('画面理解模型'), cover: t('生图模型'), transcription: t('转写模型') })[role]
@@ -191,7 +191,9 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       savedRef.current = value
       message.success(t('已保存'))
       const failed = value.connections.some(c => c.validation_status === 'failed') || next.connections.some(c => c.validation_status === 'failed')
-      return { ok: true, validationFailed: failed }
+      const visionFailed = logic.visionFollowLacksCapability(next, lists) || logic.visionFollowLacksCapability(value, lists)
+      if (visionFailed && !failed) setError(t(VISION_HINT_KEY))
+      return { ok: true, validationFailed: failed || visionFailed }
     } catch (e) { finish('failed', {}, e); setError(errorText(e)); return { ok: false } }
     finally { setSaving(false) }
   }
