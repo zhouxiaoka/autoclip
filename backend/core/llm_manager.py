@@ -480,6 +480,7 @@ class LLMManager:
         """
         from backend.core.llm_degrade import (
             CHUNK_CALL_CAP,
+            call_note_same_provider_degrade,
             candidates_for_call,
             chunk_call_budget,
             chunk_calls_used,
@@ -522,6 +523,8 @@ class LLMManager:
                             "frequency rate limit on %s, trying next same-provider candidate",
                             sanitize_model(str(model or "")) or "model",
                         )
+                        # #375 hook (R2). No-op until note_same_provider_degrade lands.
+                        call_note_same_provider_degrade(self)
                 if last_error is not None:
                     raise last_error
                 raise RuntimeError("LLM candidate loop exhausted")
