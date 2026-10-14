@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { t } from '../../i18n'
 import { Btn, Row } from '../../ui'
-import api from '../../services/api'
 import LocalModelPrepare from './LocalModelPrepare'
+import api from '../../services/api'
 
 type SenseVoiceStatus = { status: 'not_installed' | 'installing' | 'ready' | 'error'; message: string }
 
+/**
+ * First enable reuses the Whisper prepare row (download + progress).
+ */
 export default function SenseVoiceConfig() {
   const [runtime, setRuntime] = useState<SenseVoiceStatus | null>(null)
   const [error, setError] = useState('')
@@ -19,7 +22,8 @@ export default function SenseVoiceConfig() {
       } catch { if (active) setError(t('暂时无法读取本地模型状态。')) }
     }
     void refresh()
-    const timer = window.setInterval(() => void refresh(), runtime?.status === 'installing' ? 2000 : 15000)
+    const preparing = runtime?.status === 'installing'
+    const timer = window.setInterval(() => void refresh(), preparing ? 2000 : 15000)
     return () => { active = false; window.clearInterval(timer) }
   }, [runtime?.status])
   const act = async (remove = false) => {

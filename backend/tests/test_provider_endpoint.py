@@ -79,12 +79,18 @@ def test_console_host_is_not_treated_as_an_api_root():
     assert not looks_like_html('{"data":[]}')
 
 
-def test_normalize_never_blocks_console_host_on_save():
+def test_normalize_warns_but_connection_rejects_console_host():
+    url = 'https://platform.openai.com/api-keys'
+    assert normalize_provider_base_url(url).url == url
+    with pytest.raises(ValueError, match='这是控制台或官网地址，不是模型接口'):
+        ai.Connection(
+            id='c', name='c', provider='compatible', base_url=url, api_key='k',
+        )
     connection = ai.Connection(
         id='c', name='c', provider='compatible',
-        base_url='https://platform.openai.com/api-keys', api_key='k',
+        base_url='https://infistar.ai/v1', api_key='k',
     )
-    assert connection.base_url == 'https://platform.openai.com/api-keys'
+    assert connection.base_url == 'https://infistar.ai/v1'
     assert normalize_provider_base_url('not-an-endpoint').url == 'not-an-endpoint'
 
 
@@ -131,6 +137,11 @@ def test_console_detection_allows_live_catalog_api_hosts(tmp_path, monkeypatch):
     assert not is_console_host('platform.deepseek.com')
     assert not is_console_host('aistudio.google.com')
     assert 'console_host' not in normalize_provider_base_url('https://platform.deepseek.com/v1').warnings
+    connection = ai.Connection(
+        id='catalog', name='catalog', provider='compatible',
+        base_url='https://platform.deepseek.com/v1', api_key='k',
+    )
+    assert connection.base_url == 'https://platform.deepseek.com/v1'
     assert is_console_host('platform.openai.com')
     provider_presets.reset_catalog_cache()
     monkeypatch.delenv('AUTOCLIP_PROVIDER_PRESETS')
