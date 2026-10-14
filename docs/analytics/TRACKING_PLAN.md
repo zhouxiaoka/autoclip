@@ -4,14 +4,17 @@
 
 **本 PR 只交文档。** 纯埋点代码另开 PR，等本规范确认后再改、再合。已开的上报 PR 标 `[WIP]`，不继续大改。
 
+**本文是埋点唯一准绳。** [`docs/ANALYTICS.md`](../ANALYTICS.md) 与 [`docs/ANALYTICS_V2.md`](../ANALYTICS_V2.md) 是 2026-09 的历史说明，北极星不再是 `clips_exported`。查询、看板、校验和新事件都以本文件 + [`event_inventory.json`](event_inventory.json) 为准。
+
 配套：
 
 - 分类与脱敏：[`docs/SUCCESS_RATE_CONTRACT.md`](../SUCCESS_RATE_CONTRACT.md)、[`backend/core/upstream_errors.py`](../../backend/core/upstream_errors.py)、[`backend/core/llm_telemetry.py`](../../backend/core/llm_telemetry.py)、[`frontend/src/analytics/successRateContract.ts`](../../frontend/src/analytics/successRateContract.ts)
-- 线 A 发送说明：`docs/analytics/LLM_TELEMETRY.md`（随纯埋点 PR，规范确认后）
-- 机读目录：`docs/analytics/event_catalog.json`（随纯埋点 PR；未登记事件、缺必填、或载荷含违禁值，校验测试必须失败）
+- 线 A 发送说明：`docs/analytics/LLM_TELEMETRY.md`（随纯埋点 PR #361，规范确认后）
+- **本规范的机读清单：** [`event_inventory.json`](event_inventory.json)（事件名、状态、legacy 映射）。`scripts/check_tracking_inventory.py` 校验这份清单。
+- **生产者目录：** `docs/analytics/event_catalog.json`（随 #361）。它必须由本清单生成，或在 CI 里对照本清单；未登记、缺必填、违禁值，校验测试必须失败。两份漂移即失败。
 - 看板 SQL 草案：[`success_rate.sql`](success_rate.sql)
 
-先看 §1–§5（规则、漏斗、触发点）、§10–§11（隐私硬性 / 脱敏 / 开关关闭）、§6–§7（口径与看板），再看 §8（旧事件盘点）。§8 的删除/改名只是方案，**不在纯埋点 PR 里执行**，以免现有看板断数。
+先看 §1–§5（规则、漏斗、触发点）、§10–§11（隐私硬性 / 脱敏 / 开关关闭）、§6–§7（口径与看板），再看 §8（全量盘点）和 §12（过渡日期）。§8 的删除/改名 **不在 #361 纯埋点 PR 里执行**。旧事件 **2027-01-12** 停发，**2027-02-09** 删代码。
 
 ---
 
@@ -34,7 +37,7 @@
 <domain>_<object>_<verb>
 ```
 
-- **domain**：`app` / `setup` / `provider` / `studio` / `asr` / `llm` / `mcp` / `feedback`
+- **domain**：`app` / `setup` / `provider` / `studio` / `asr` / `llm` / `mcp` / `feedback` / `social`
 - **object**：被观察的对象（`generation`、`import`、`download`），不是内部函数名
 - **verb** 闭集：
 
@@ -61,16 +64,41 @@
 
 同步调用：`<name>_requested` → `<name>_finished`（`outcome` 区分结果）。不要再发明 `*_accepted`。
 
-### 2.3 `outcome` 口径
+### 2.3 `outcome` 口径（查询统一为 `success` / `error` / `partial`）
 
-| 值 | 用于 | 含义 |
+**查询规范值**（看板、HogQL、成功率一律先规范化再算）：
+
+| 规范值 | 含义 |
+| --- | --- |
+| `success` | 这次尝试成功 |
+| `error` | 这次尝试失败 |
+| `partial` | 部分成功（出片有成片也有失败变体） |
+| `recommended` / `auto_started` / `manual` / `fallback` | 仅 `studio_screen_finished`，不是出片成败 |
+| `blocked` | 仅 experience（被设置/引导挡住） |
+| `skipped` | 校验被跳过 |
+
+**生产者现状与过渡：**
+
+| 生产者现在发的 | 规范成 | 何时改生产者 |
 | --- | --- | --- |
-| `success` / `error` | 新事件（`llm_request_finished`、`provider_validation_finished.result`） | 第 0 步契约 |
-| `completed` / `failed` / `partial` | 现有 Studio 终态 | 已上线，不改名；新事件不要再扩 `completed` |
-| `recommended` / `auto_started` / `manual` / `fallback` | 仅 `studio_screen_finished` | 初筛如何结束 |
-| `skipped` | 校验被跳过 | 线 B 设置校验 |
+| Studio `completed` | `success` | 2027-01-12 起新发送用 `success`；此前查询映射 |
+| Studio / experience `failed` | `error` | 同上 |
+| `llm_request_finished` `success` / `error` | 已是规范值 | 保持 |
+| `provider_test_finished` `success` / `failed` | `success` / `error` | 该事件 2027-01-12 停发 |
+| experience `completed` / `failed` / `blocked` | `success` / `error` / `blocked` | 2027-01-12 改 `completed`→`success` |
+| `provider_validation_finished.result` `success` / `failed` / `skipped` | 这是 `result` 不是 `outcome` | 保持 |
 
-查询成功率时：**新事件用 `outcome=success`；Studio 出片用 `outcome=completed`。** 公式里写清楚，不要混加。
+查询映射（历史 + 过渡期）：
+
+```sql
+multiIf(
+  properties.outcome IN ('completed', 'success'), 'success',
+  properties.outcome IN ('failed', 'error'), 'error',
+  properties.outcome
+) AS outcome_canon
+```
+
+§6.1 分子用 `outcome_canon = 'success'`（包含历史 `completed`）。不要把 `success` 和 `completed` 加两次。MCP 工具结果用布尔 `ok`，不发明第二套 outcome。
 
 ---
 
@@ -81,8 +109,8 @@
 | 属性 | 来源 | 规则 | 必填 |
 | --- | --- | --- | --- |
 | `distinct_id` | PostHog 匿名 ID；后端读 `analytics.json` | 与 Sentry `user.id` 相同；禁止 email / IP | 是（SDK 自动；后端显式传） |
-| `app_version` | 前端 `VITE_APP_VERSION` / 生命周期 `version`；后端 `AUTOCLIP_APP_VERSION` | `MAJOR.MINOR.PATCH`，无 `v` 前缀 | 是 |
-| `os` | 生命周期 super property | **统一** `macos` / `windows` / `linux` / `unknown`。禁止再写 `darwin` / `win32` | 是（前端 register；后端补） |
+| `app_version` | 前端 `VITE_APP_VERSION`；后端 `AUTOCLIP_APP_VERSION` 或 `backend.__version__` | `MAJOR.MINOR.PATCH`，无 `v` 前缀。**禁止**再把版本写进 `version`（MCP / `app_installed` 过渡期见 §4.4） | 是 |
+| `os` | 生命周期 super property；后端 `event_catalog.detect_os()` | **只允许** `macos` / `windows` / `linux` / `unknown`。`darwin`→`macos`，`win32`→`windows`。查询见 §4.4 | 是（前端 register；后端补） |
 | `session_id` | PostHog `$session_id`（前端）；后端暂无会话 | 前端依赖 SDK，不要另造。后端事件用 `distinct_id` + 时间窗近似 | 前端是；后端可空 |
 | `session_number` | 仅 `app_opened` | 本机启动次数，不是会话 ID | 仅该事件 |
 | `analytics_environment` | 构建注入 | `production` / `development` / `validation` | 是 |
@@ -103,6 +131,10 @@
 | `artifact_id` | 同一导出作业的成片 |
 
 禁止把内部 `project_id` / `run_id` / `job_id` 当作新事件属性。旧 legacy 事件若已带，不回填、不扩散。
+
+**旁路也走同一信封。** QA（`studio_qa_checked`）、MCP（`mcp_tool_called` / `mcp_job_finished`）、feedback（`feedback_opened` / `feedback_dismissed` / `feedback_submitted`）不得再裸 POST `/capture/` 或 `posthog.capture`。前端一律 `captureBusinessEvent`；后端一律叠 `envelope_properties()`（`app_version` / `os` / `analytics_environment` / `runtime` / `schema_version`）再加 `distinct_id`。#361 已给 `llm_emit` 加信封；QA/MCP 信封在清理 PR 补，最晚 **2027-01-12**。feedback 旁路见独立隐私 PR，须立即收口。
+
+`legacy=true`：旧路径事件（§8.2）在停发前必须带此布尔。Studio / 设置 / 线 A 新事件禁止带。#361 不改旧事件；清理 PR 补标记。查询在标记齐之前用事件名列表。
 
 ---
 
@@ -158,6 +190,32 @@ Studio `error_code` 仍用现有闭集（`STUDIO_ERROR_CODES`）。成功率口�
 | `product` | 其余（`unexpected`、`rate_limited`、`timeout`、`connection`、`provider_error`、`invalid_response`、`transcription_empty`、`render` 失败等） | **计入** |
 
 查询里用 `error_code` + `upstream_error_type` 映射到上表，不要在事件上再发一个自由文本归因。机器校验用 `event_catalog.json` 的 `user_caused_error_codes` / `user_caused_upstream_types` / `environment_error_codes`。
+
+### 4.4 `os` 与 `app_version`（唯一取值）
+
+**`os` 只允许：** `macos` / `windows` / `linux` / `unknown`。
+
+| 历史值 | 规范值 |
+| --- | --- |
+| `darwin` | `macos` |
+| `win32` | `windows` |
+| `macos` / `windows` / `linux` | 原样 |
+| 其它 / 空 | `unknown` |
+
+查询（过渡期 + 历史）：
+
+```sql
+multiIf(
+  properties.os IN ('darwin', 'macos'), 'macos',
+  properties.os IN ('win32', 'windows'), 'windows',
+  properties.os = 'linux', 'linux',
+  'unknown'
+) AS os_canon
+```
+
+发送：lifecycle super property 和 #361 `envelope_properties()` 已经发规范值。`workflow.safeStudioProperties` 与 `template_telemetry.OPERATING_SYSTEMS` 仍允许 `darwin`/`win32`——清理 PR 改白名单，最晚 **2027-01-12** 只发规范值。#361 不改已有 `darwin`/`win32`，以免打断现有看板。
+
+**版本只报 `app_version`。** `version` 是别名，查询 `coalesce(nullIf(properties.app_version, ''), nullIf(properties.version, ''))`。`app_installed` / `app_opened` / MCP 在 **2027-01-12** 停发 `version`。
 
 ---
 
@@ -259,7 +317,18 @@ Studio `error_code` 仍用现有闭集（`STUDIO_ERROR_CODES`）。成功率口�
 | `studio_confirm_*` | 用户确认制作 | `frontend/src/analytics/studio.ts` | `observeStudioOperation('studio_confirm', …)` |
 | `studio_export_*` | 提交/完成渲染 | `studio.ts` + `workflow.ts` | `observeStudioOperation` / `observeStudio` |
 | `studio_download_requested` / `_saved` / `_failed` | 用户要文件；**仅原生落盘**发 saved | `frontend/src/analytics/studio.ts` | `studioDownloadRequested` / `observeStudioDownload` |
-| `studio_qa_checked` | 渲染进程跑完 QA | `backend/services/studio/qa/telemetry.py` | `emit_checked` |
+| `studio_qa_checked` | 渲染进程跑完 QA | `backend/services/studio/qa/telemetry.py` | `emit_checked`（须叠信封） |
+| `studio_rescreen_*` / `studio_plan_update_*` | 再筛 / 改计划 | `frontend/src/features/studio/api.ts` | `observeStudioOperation` |
+| `studio_draft_create_*` / `studio_draft_save_*` / `studio_draft_duplicate_*` | 草稿 | 同上 | `observeStudioOperation` |
+| `studio_rewrite_*` | 改写（不报 instruction 正文） | 同上 | `observeStudioOperation` |
+| `studio_analysis_preferences_*` | 分析偏好 | 同上 | `observeStudioOperation` |
+| `studio_framing_install_*` / `studio_framing_install_finished` | 取景运行时 | `api.ts` + `observer.ts` | `observeStudioOperation` / `emitOnce` |
+| `studio_platform_append_*` / `studio_platforms_selected` | 追加平台 / 选择 | `api.ts` / `studio.ts` | `observeStudioOperation` / `trackQuickOutputPlatforms` |
+| `studio_post_save_*` | 发布文案保存（不报正文） | `api.ts` | `observeStudioOperation` |
+| `studio_variant_*` / `studio_cover_*` / `studio_auto_frame_*` | 变体 / 封面 / 取景 | `api.ts` + `workflow.ts` | `observeStudioOperation` / `observeStudio` |
+| `output_branding_save_*` | 设置页片尾开关 | `frontend/src/features/settings/OutputBrandingSetting.tsx` | `beginExperience` |
+| `feedback_opened` / `feedback_dismissed` / `feedback_submitted` | 反馈开关与提交 | `frontend/src/analytics/feedback.ts` | `trackFeedbackOpened` / `Dismissed` / `submitFeedback` → **只许** `captureBusinessEvent`。提交不报 `text` / `contact`，且看 opt-out |
+| `mcp_tool_called` / `mcp_job_finished` | MCP 工具 | `backend/services/mcp_telemetry.py` | `record` / `_emit`（须叠信封；`version`→`app_version`） |
 | Sentry `user.id` = PostHog `distinct_id` | 前端拿到匿名 ID 后 | `frontend/src/analytics/posthog.ts` → `PUT /settings/analytics-identity` → `qa/telemetry.py` → `sentry_setup.py` | `publishAnonymousId` / `remember_distinct_id` / `sync_anonymous_user`；前端 `setAnonymousUser` |
 
 `llm_request_finished`、run 级字段、`asr_readiness_checked`、身份对齐、schema 校验是线 A 纯埋点 PR 要挂钩的部分；挂钩位置以本表为准，不得另开入口。`prompt` / `input_data` / 转写正文只留在被调用函数内，不得传入发送层。
@@ -396,79 +465,89 @@ FROM (
 
 ## 8. 现有事件盘点与迁移
 
-盘点范围：前端 `captureBusinessEvent` / `posthog.capture`、后端 `qa.telemetry` / `llm_emit` / `mcp_telemetry`。`$pageview`、`$identify`、PostHog `survey *` 不算业务目录。
+盘点范围：`origin/main` 上前端 `captureBusinessEvent` / `posthog.capture` / `observeStudioOperation` / `observeOperation` / `beginExperience` / `emitOnce` / `events.ts` wrapper，后端 `qa.telemetry` / `mcp_telemetry` / `llm_emit`。`template_telemetry` 只产属性。Tauri/`src-tauri` 无埋点。`$pageview`、`$identify`、PostHog `survey *` 不算业务目录。完整名录见 [`event_inventory.json`](event_inventory.json)。
 
 ### 8.1 保留（漏斗或诊断仍要用）
 
 | 事件 | 角色 | 动作 |
 | --- | --- | --- |
-| `app_installed` / `app_opened` / `app_updated` | 生命周期 | 保留；`os` 统一为 macos/windows/linux |
+| `app_installed` / `app_opened` / `app_updated` | 生命周期 | 保留；`os` 只报 macos/windows/linux |
 | `setup_*` / `import_blocked` / `settings_section_viewed` | 引导 | 保留 |
-| `provider_configuration_save_*` / `provider_connection_test_*` / `model_settings_load_*` / `model_discovery_*` | 设置 | 保留；线 B 后主看 `provider_validation_finished` |
-| `studio_import_*` / `studio_screen_finished` / `studio_confirm_*` / `studio_generation_finished` / `studio_production_finished` | 主漏斗 | 保留；补 run 级字段（线 A 已做） |
+| `provider_configuration_save_*` / `provider_connection_test_*` / `model_settings_load_*` / `model_discovery_*` / `output_branding_save_*` | 设置 | 保留；线 B 后主看 `provider_validation_finished` |
+| `studio_import_*` / `studio_screen_finished` / `studio_confirm_*` / `studio_generation_finished` / `studio_production_finished` | 主漏斗 | 保留；补 run 级字段（线 A / #361） |
 | `studio_export_*` / `studio_download_*` | 交付 | 保留 |
 | `asr_readiness_checked` / `llm_request_finished` / `provider_validation_finished` | 1.5.8 成功率 | 保留 |
 | `studio_rescreen_*` / `studio_plan_update_*` / `studio_variant_*` / `studio_cover_*` / `studio_auto_frame_*` | 编辑/重试 | 保留，不进主漏斗 |
-| `social_publish_*` | 发布 | 保留；`scheduled`/`inbox` 不算 completed |
-| `studio_qa_checked` / `studio_template_*` / `studio_output_rated` / `studio_output_shared` | 质量与包装 | 保留，诊断 |
-| `mcp_tool_called` / `mcp_job_finished` | MCP | 保留，独立域 |
-| `feedback_opened` / `feedback_dismissed` | 反馈 | 保留；不要再用裸 `posthog.capture` 绕过白名单（后续收口） |
+| `studio_draft_create_*` / `studio_draft_save_*` / `studio_draft_duplicate_*` / `studio_rewrite_*` | 草稿/改写 | 保留，不进主漏斗；不报标题/instruction |
+| `studio_analysis_preferences_*` / `studio_framing_install_*` / `studio_platform_append_*` / `studio_platforms_selected` / `studio_post_save_*` | Studio 设置与包装 | 保留，不进主漏斗 |
+| `social_publish_*` | 发布 | 保留；`scheduled`/`inbox` 不算 success |
+| `studio_qa_checked` / `studio_template_*` / `studio_output_rated` / `studio_output_shared` | 质量与包装 | 保留，诊断；QA 须叠信封 |
+| `mcp_tool_called` / `mcp_job_finished` | MCP | 保留，独立域；须叠信封 |
+| `feedback_opened` / `feedback_dismissed` / `feedback_submitted` | 反馈 | 保留；**必须**走 `captureBusinessEvent`；提交不报 `text`/`contact`，且看 opt-out |
 | `example_project_open_*` / `example_project_viewed` | 示例 | 保留；`material_origin=sample` 不进真实出片率 |
+| `sponsor_link_opened` | 增长 | 保留，不进成功率 |
 
-### 8.2 重复或命名不一（迁移）
+### 8.2 重复或命名不一（迁移 / merge）
 
-| 现状 | 问题 | 方案 |
-| --- | --- | --- |
-| `provider_test_requested/accepted/request_failed` + `provider_test_finished`（`api.ts` 旧设置） | 与 `provider_connection_test_*` 重复；verb 还多一个 `accepted` | **废弃旧 `provider_test_*`**。1.5.8 只认 `provider_connection_test_*` + `provider_validation_finished` |
-| `import_requested/accepted/request_failed` + `import_finished`（旧 `/projects/upload`） | 与 `studio_import_*` 并行 | 旧导入路径若仍存在：继续发但标 `legacy=true`；看板不用。Studio 成为唯一漏斗 |
-| `processing_requested/accepted` + `processing_started/finished/task_observed` | 旧内容管线；与 Studio `failure_stage` 重叠 | **冻结**：不再加字段。成功率不读这些事件 |
-| `processing_failed` | 裸失败，无 run 身份 | **停止发送**（代码若仍调用则改为 no-op 或改走 Studio 终态） |
-| `media_download_*` vs `studio_download_*` | 两套下载 | 新交付只看 `studio_download_*`。`media_download_*` 仅旧剪辑页 |
-| `clips_exported` | 名字像导出成功，实际是旧下载触发 | **废弃**，查询忽略 |
-| `video_imported` | 与 `studio_import_accepted` 重复 | **废弃** |
-| `api_key_configured` | 保存 key 就发，不管能不能用 | **废弃**；用 `provider_configuration_save_finished` + `provider_validation_finished` |
-| `example_project_opened` | 过早触发 | 已由 `example_project_open_*` / `example_project_viewed` 替代，**停止发送** |
-| `outcome=completed` vs `success` | 两套成功值 | 新事件一律 `success`/`error`；旧 Studio 终态保持 `completed`，查询映射 |
-| `os=darwin/win32` vs `macos/windows` | 两套系统名 | 新发送统一 macos/windows/linux；查询用 `if(os IN ('darwin','macos'), 'macos', …)` |
-| `version` vs `app_version` | `app_installed` 仍带 `version` | 继续 register `app_version`；生命周期事件可同时带两者一个版本，新查询只用 `app_version` |
-| `error_type` vs `upstream_error_type` | 线 A 校验钩子曾用过 `error_type` | **只报 `upstream_error_type`** |
+| 现状 | 问题 | merge / 查询 | 停发 |
+| --- | --- | --- | --- |
+| `provider_test_requested/accepted/request_failed` + `provider_test_finished`（`api.ts` 旧设置） | 与 `provider_connection_test_*` 重复；多一个 `accepted` | **废弃 `provider_test_*`**。`requested`→`provider_connection_test_requested`；`finished`→`provider_connection_test_finished`（`failed`→`error`）。`accepted`/`request_failed` 无对应 verb，只作诊断 | **2027-01-12** |
+| `import_requested/accepted/request_failed` + `import_finished`（旧 `/projects/upload`） | 与 `studio_import_*` 并行 | 继续发时打 `legacy=true`。漏斗只用 `studio_import_*` | **2027-01-12** |
+| `processing_requested/accepted/request_failed` + `processing_started/finished/task_observed` | 旧内容管线；与 Studio `failure_stage` 重叠 | 冻结，打 `legacy=true`。成功率不读 | **2027-01-12** |
+| `processing_failed` | 裸失败，无 run 身份 | 查询忽略；改为 no-op | **2027-01-12**（能提前则提前） |
+| `media_download_*` vs `studio_download_*` | 两套下载 | 新交付只看 `studio_download_*`。旧剪辑页继续发时打 `legacy=true` | **2027-01-12** |
+| `publish_export_requested/accepted/request_failed` + `publish_export_finished`（`api.ts` 旧发布导出） | 与 `studio_export_*` / `social_publish_*` 并行，规范此前漏行 | **废弃。** 查询：`publish_export_requested`→`studio_export_requested`；`publish_export_finished`→`studio_export_finished`（`outcome` 按 §2.3）。新发布看 `social_publish_*`。打 `legacy=true` | **2027-01-12** |
+| `clips_exported` | 名字像导出成功，实际是旧下载触发 | 查询忽略；不要当北极星 | **2027-01-12** |
+| `video_imported` | 与 `studio_import_accepted` 重复 | 查询忽略 | **2027-01-12** |
+| `api_key_configured` | 保存 key 就发 | 用 `provider_configuration_save_finished` + `provider_validation_finished`。代码已无调用点 | **2027-02-09** 删 wrapper |
+| `example_project_opened` | 过早触发 | 已被 `example_project_open_*` / `example_project_viewed` 替代。代码已无调用点 | **2027-02-09** 删 wrapper |
+| `outcome=completed` vs `success` | 两套成功值 | 查询用 §2.3 `outcome_canon` | 生产者 **2027-01-12** 只发规范值 |
+| `os=darwin/win32` vs `macos/windows` | 两套系统名 | 查询用 §4.4 `os_canon` | 生产者 **2027-01-12** 只发规范值 |
+| `version` vs `app_version` | 生命周期 / MCP 仍带 `version` | `coalesce(app_version, version)` | **2027-01-12** 停发 `version` |
+| `error_type` vs `upstream_error_type` | 线 A 校验钩子曾用过 `error_type` | **只报 `upstream_error_type`** | 已禁止 |
+
+`legacy=true`：上表仍在发的旧路径，清理 PR 补上该布尔；Studio 路径永不带。#361 不改旧事件。
 
 ### 8.3 无用或易误导（废弃）
 
-| 事件 | 原因 | 动作 |
-| --- | --- | --- |
-| `clips_exported` | 语义错误 | 代码删除调用；PostHog 隐藏 |
-| `video_imported` | 被 Studio 导入替代 | 同上 |
-| `processing_failed` | 无阶段、无归因 | 同上 |
-| `api_key_configured` | 不能代表可出片 | 同上 |
-| `example_project_opened` | 已被替代 | 同上 |
-| `sponsor_link_opened` | 可留作增长，但不进成功率 | 保留但移出核心目录 |
+| 事件 | 原因 | 停发 | 删代码 |
+| --- | --- | --- | --- |
+| `clips_exported` | 语义错误 | 2027-01-12 | 2027-02-09 |
+| `video_imported` | 被 Studio 导入替代 | 2027-01-12 | 2027-02-09 |
+| `processing_failed` | 无阶段、无归因 | 2027-01-12 | 2027-02-09 |
+| `api_key_configured` | 不能代表可出片 | 已不发 | 2027-02-09 |
+| `example_project_opened` | 已被替代 | 已不发 | 2027-02-09 |
+| `provider_test_*` | 被 `provider_connection_test_*` 替代 | 2027-01-12 | 2027-02-09 |
+| `publish_export_*` | 被 `studio_export_*` / `social_publish_*` 替代 | 2027-01-12 | 2027-02-09 |
+| `import_*` / `processing_*` / `media_download_*`（旧路径） | 被 Studio 替代 | 2027-01-12 | 2027-02-09 |
 
-废弃事件 **90 天**后从代码删除；此前生产者改为不发送。看板过滤 `event not in (...)`。纯埋点 PR **不删不改名**，只继续发新事件。
-
-`os` 统一为 `macos` / `windows` / `linux` 也只是方案：现有 `darwin` / `win32` 继续上报，查询用 `if(os IN ('darwin','macos'), 'macos', …)`。不要在尽早上线的上报 PR 里改取值。
+停发后看板过滤 `event not in (...)`。PostHog 隐藏废弃事件。#361 **不删不改名**。
 
 ### 8.4 缺口（本规范要求补齐，按线落地）
 
 | 缺口 | 谁做 | 状态 |
 | --- | --- | --- |
-| 模型单次 `llm_request_finished` | 线 A 纯埋点 PR | **等本规范确认**后再改代码 |
-| run 级 provider/错误身份 | 线 A 纯埋点 PR | 同上 |
-| `asr_readiness_checked` | 线 A 纯埋点 PR | 同上 |
-| Sentry / PostHog id 对齐 | 线 A 纯埋点 PR | 同上 |
-| `provider_validation_finished` 挂钩 | 线 A 预留，线 B 调用 | 发射函数预留；线 B 再调 |
-| 后端事件补 `app_version` / `os` | 线 A 纯埋点 PR | 新增字段；不改已有 `darwin`/`win32` |
-| 事件目录校验（未登记 / 缺字段 / 违禁值即失败） | 线 A 纯埋点 PR | `event_catalog.json` + §9 夹具 |
-| 旧事件停止发送 / 删除 | 后续，90 天 | **本规范只写方案** |
-| `os` 取值统一 | 后续 | **本规范只写方案** |
+| 模型单次 `llm_request_finished` | 线 A #361 | 代码已写，等规范确认后合 |
+| run 级 provider/错误身份 | 线 A #361 | 同上 |
+| `asr_readiness_checked` | 线 A #361 | 同上 |
+| Sentry / PostHog id 对齐 | 线 A #361 | 同上 |
+| `provider_validation_finished` 挂钩 | 线 A 预留，线 B 调用 | 发射函数预留 |
+| 后端线 A 事件补信封 | 线 A #361 | 新增字段；不改已有 `darwin`/`win32` |
+| 事件目录对照本清单 | 线 A #361 + `check_tracking_inventory.py` | catalog 必须覆盖 inventory |
+| QA / MCP 公共信封、`version`→`app_version` | 清理 PR | 最晚 2027-01-12 |
+| feedback 走白名单、去 text/contact、看 opt-out | 独立隐私 PR | 立即 |
+| 旧事件打 `legacy=true` 后停发 / 删除 | 清理 PR | 停发 **2027-01-12**，删代码 **2027-02-09** |
+| `os` / `outcome` / `app_version` 生产者统一 | 清理 PR | **2027-01-12** |
 | `backend_exit`（#1 续跑） | 1.5.9 | 本版不发 |
-| 线上看板 7 张 insight | 埋点上线后由负责人建 | 本文件 §7 是配置方案 |
+| 线上看板 insight | 埋点上线后由负责人建 | 本文件 §7 |
 
 ---
 
 ## 9. 校验合同
 
-`event_catalog.json` 是唯一机读目录。校验测试必须失败，当：
+[`event_inventory.json`](event_inventory.json) 是本规范的机读清单（单一来源）。#361 的 `event_catalog.json` 是生产者登记表：字段、`required`、`enums`、隐私夹具在 catalog；**事件名与 status 必须与 inventory 一致**。`scripts/check_tracking_inventory.py` 在 catalog 存在时做双向对照，漂移即失败。
+
+校验测试必须失败，当：
 
 1. 生产者出现 **未登记** 的业务事件名（`captureBusinessEvent`、`_post_event`、`qa.telemetry` 的 `event` 字段）。
 2. 已登记事件的一次发送 **缺必填字段**（目录里 `required`；含 `required_when`）。
@@ -521,7 +600,7 @@ FROM (
 | 11 | `"base_url": "https://api.openai.com/v1/chat/completions"` | 完整 URL；只允许 `base_url_host` |
 | 12 | `"base_url_host": "https://api.openai.com/v1"` | host 字段仍带 scheme/path |
 
-测试位置：`backend/tests/test_event_catalog.py`、`frontend/tests/event-catalog.test.cjs`。新增事件的 PR 必须同时改本文件、JSON 目录和测试。
+测试位置：`scripts/check_tracking_inventory.py`、`backend/tests/test_event_catalog.py`、`frontend/tests/event-catalog.test.cjs`。新增事件必须同时改本文件、`event_inventory.json`、（#361 起）`event_catalog.json` 和测试。
 
 `$` 前缀、PostHog survey 事件、以及测试里故意使用的假名（`disabled`、`test`）不在目录里，扫描时排除。
 
@@ -531,7 +610,7 @@ FROM (
 
 上报内容一律不得含：**key**、**带用户名的本地路径**（`/Users/xxx`、`C:\Users\xxx`）、**视频标题 / 文件名**、**转写文本**、**提示词**。`base_url` **只保留 host**（本机/内网记 `local`）。这五类值出现在任意属性名或任意字符串值里，schema 校验必须失败。
 
-产品默认开埋点。用户关掉后，或构建未配置 PostHog key 时，**一条事件也不许出网**。
+产品默认开埋点。用户关掉后，或构建未配置 PostHog key 时，**一条事件也不许出网**。`feedback_submitted` / `feedback_opened` / `feedback_dismissed` 不例外：不得裸 POST `/capture/` 或 `posthog.capture`，不得上报 `text` / `contact` / 用户正文。关闭分析时反馈正文只走用户自己打开的 GitHub 回退页。
 
 ### 10.1 开关关闭时的行为
 
@@ -599,3 +678,20 @@ sanitize_llm_request_properties({prompt: "…", title: "我的旅行vlog"})     
 ```
 
 Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五类值，或未 sanitize 就发送，都失败。
+
+---
+
+## 12. 过渡计划与停发日期
+
+以本文件日期 **2026-10-14** 为起点。旧事件和双轨取值按固定日收口，不靠「观察期延长」。
+
+| 日期 | 做什么 | 谁 |
+| --- | --- | --- |
+| 2026-10-14 | 本文件成为唯一准绳；`ANALYTICS.md` / `ANALYTICS_V2.md` 标为历史 | 本 PR（#362） |
+| 规范确认后 | 合 #361：只加新事件与 catalog，不删旧事件、不改 `darwin`/`win32` | 线 A |
+| 立即（独立 PR） | feedback 走 `captureBusinessEvent`，去掉 `text`/`contact`，遵守 opt-out | 隐私修复 |
+| 清理 PR（#361 之后、2027-01-12 之前） | 旧路径打 `legacy=true`；QA/MCP 叠信封；`version`→`app_version`；workflow/template `os` 白名单改为 macos/windows | 清理 |
+| **2027-01-12** | **停发** §8.2 / §8.3 全部 legacy/deprecated 事件；生产者只发规范 `os` / `outcome` / `app_version` | 清理或热修 |
+| **2027-02-09** | 删除停发后的 wrapper 与死代码；PostHog 隐藏废弃事件 | 清理 |
+
+查询从现在起就用 §2.3 / §4.4 映射，这样 2027-01-12 前后数字连续。过了停发日还在发的旧事件名，视为规范违规，catalog 扫描应失败。

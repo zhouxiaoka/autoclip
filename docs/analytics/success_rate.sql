@@ -1,6 +1,12 @@
--- 1.5.8 出片成功率（审查副本）。口径见 docs/analytics/TRACKING_PLAN.md §6–§7。
+-- 1.5.8 出片成功率（审查副本）。口径见 docs/analytics/TRACKING_PLAN.md §6–§7、§2.3、§4.4。
 -- 业务看板只看 production + 目标 app_version。validation 事件不进转化率。
 -- {version} 发版后替换为当前正式版，例如 '1.5.8'。
+--
+-- 过渡期规范化（2027-01-12 前生产者仍可能发 completed/darwin/version）：
+--   outcome_canon = multiIf(outcome IN ('completed','success'), 'success', outcome IN ('failed','error'), 'error', outcome)
+--   os_canon      = multiIf(os IN ('darwin','macos'), 'macos', os IN ('win32','windows'), 'windows', os = 'linux', 'linux', 'unknown')
+--   app_version   = coalesce(nullIf(app_version, ''), nullIf(version, ''))
+-- provider_test_* → provider_connection_test_*；publish_export_* → studio_export_*。见 §8.2。
 
 -- 图 1 / 图 3：按次出片成功率（可再 breakdown provider）
 SELECT
@@ -61,7 +67,7 @@ FROM events
 WHERE event IN ('studio_generation_finished', 'studio_production_finished')
   AND properties.analytics_environment = 'production'
   AND properties.app_version = {version}
-  AND properties.outcome IN ('failed', 'partial')
+  AND multiIf(properties.outcome IN ('completed', 'success'), 'success', properties.outcome IN ('failed', 'error'), 'error', properties.outcome) IN ('error', 'partial')
   AND timestamp >= now() - INTERVAL 7 DAY
 GROUP BY failure_stage, error_code
 ORDER BY events DESC;
