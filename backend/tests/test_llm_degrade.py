@@ -1,11 +1,15 @@
-"""R1: same-provider preset degrade, frequency-only, 6-call chunk cap."""
+"""R1: same-provider preset degrade, frequency-only, 6-HTTP chunk cap."""
+import json
+import threading
 from types import SimpleNamespace
 
 import pytest
 
 from backend.core import llm_degrade as degrade
 from backend.core.llm_manager import LLMManager
+from backend.core.llm_providers import LLM_SDK_MAX_RETRIES
 from backend.core.llm_telemetry import sanitize_llm_request_properties
+from backend.pipeline import concurrency
 
 
 def _http(status, message, code=None, extra=None):
@@ -18,6 +22,10 @@ def _http(status, message, code=None, extra=None):
     return error
 
 
+def _model_of(*_args, **kwargs):
+    return kwargs.get("model") or degrade.bound_request_model()
+
+
 def _manager(fn, *, source="user", provider="dashscope", model="qwen-plus"):
     manager = LLMManager.__new__(LLMManager)
     manager.settings = {
@@ -27,7 +35,11 @@ def _manager(fn, *, source="user", provider="dashscope", model="qwen-plus"):
         "llm_provider": "openai",
     }
     manager.current_provider = SimpleNamespace(model_name=model)
-    manager.call = lambda *a, **k: fn()
+
+    def call_stub(*args, **kwargs):
+        return fn(*args, **kwargs)
+
+    manager.call = call_stub
     return manager
 
 
@@ -83,14 +95,20 @@ def test_frequency_codes_degrade_quota_does_not():
     assert degrade.should_degrade_to_next(_http(401, "invalid api key")) is False
 
 
+def test_http_attempts_include_sdk_retries():
+    assert degrade.http_attempts_per_call() == 1 + LLM_SDK_MAX_RETRIES
+    assert 1 + LLM_SDK_MAX_RETRIES == 2
+    assert degrade.CHUNK_CALL_CAP == 6
+
+
 def test_user_source_never_degrades(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     n = {"i": 0, "models": []}
     notes = []
 
-    def boom():
+    def boom(*_a, **k):
         n["i"] += 1
-        n["models"].append("qwen-plus")
+        n["models"].append(_model_of(*_a, **k) or "qwen-plus")
         raise _http(429, "rate", "rate_limit_exceeded")
 
     manager = _manager(boom, source="user", model="qwen-plus")
@@ -100,6 +118,7 @@ def test_user_source_never_degrades(monkeypatch):
     assert n["i"] == 3
     assert n["models"] == ["qwen-plus", "qwen-plus", "qwen-plus"]
     assert manager.settings["model_name"] == "qwen-plus"
+    assert manager.current_provider.model_name == "qwen-plus"
     assert notes == []
 
 
@@ -107,8 +126,8 @@ def test_preset_degrades_on_rate_limit_exceeded(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     seen = []
 
-    def flaky():
-        name = manager.current_provider.model_name
+    def flaky(*_a, **k):
+        name = _model_of(*_a, **k) or manager.settings["model_name"]
         seen.append(name)
         if name == "qwen-plus":
             raise _http(429, "rate", "rate_limit_exceeded")
@@ -118,15 +137,16 @@ def test_preset_degrades_on_rate_limit_exceeded(monkeypatch):
     assert manager.call_with_retry("p") == "ok:qwen3.8-flash"
     assert seen[0] == "qwen-plus"
     assert "qwen3.8-flash" in seen
-    assert manager.settings["model_name"] == "qwen3.8-flash"
+    assert manager.settings["model_name"] == "qwen-plus"
+    assert manager.current_provider.model_name == "qwen-plus"
 
 
 def test_preset_degrades_on_limit_requests(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     seen = []
 
-    def flaky():
-        name = manager.current_provider.model_name
+    def flaky(*_a, **k):
+        name = _model_of(*_a, **k) or manager.settings["model_name"]
         seen.append(name)
         if name == "qwen-plus":
             raise _http(429, "Throttling", "limit_requests")
@@ -136,14 +156,16 @@ def test_preset_degrades_on_limit_requests(monkeypatch):
     assert manager.call_with_retry("p") == "ok"
     assert seen[0] == "qwen-plus"
     assert any(name != "qwen-plus" for name in seen)
+    assert manager.settings["model_name"] == "qwen-plus"
+    assert manager.current_provider.model_name == "qwen-plus"
 
 
 def test_preset_does_not_degrade_on_quota(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     seen = []
 
-    def boom():
-        seen.append(manager.current_provider.model_name)
+    def boom(*_a, **k):
+        seen.append(_model_of(*_a, **k) or manager.settings["model_name"])
         raise _http(429, "You exceeded your current quota", "insufficient_quota")
 
     manager = _manager(boom, source="preset", model="qwen-plus")
@@ -153,26 +175,46 @@ def test_preset_does_not_degrade_on_quota(monkeypatch):
     assert manager.settings["model_name"] == "qwen-plus"
 
 
-def test_chunk_budget_caps_at_six_across_candidates_and_retries(monkeypatch):
+def test_chunk_budget_caps_http_including_sdk_retries(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     n = {"i": 0}
 
-    def always():
+    def always(*_a, **_k):
         n["i"] += 1
         raise _http(429, "rate", "rate_limit_exceeded")
 
     manager = _manager(always, source="preset", model="qwen-plus")
     with pytest.raises(Exception, match="rate"):
         manager.call_with_retry("p")
-    assert n["i"] == 6
+    # 6 HTTP / (1 + SDK retry) = 3 manager calls; #358 budget is also 3 and not reset.
+    assert n["i"] == degrade.CHUNK_CALL_CAP // degrade.http_attempts_per_call()
+    assert n["i"] == 3
     assert manager.settings["model_name"] == "qwen-plus"
+
+
+def test_358_outer_budget_is_shared_across_candidates(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    seen = []
+
+    def always(*_a, **k):
+        seen.append(_model_of(*_a, **k) or "qwen-plus")
+        raise _http(429, "rate", "rate_limit_exceeded")
+
+    manager = _manager(always, source="preset", model="qwen-plus")
+    with pytest.raises(Exception, match="rate"):
+        manager.call_with_retry("p")
+    assert len(seen) == 3
+    assert seen[0] == "qwen-plus"
+    assert len(set(seen)) > 1
+    assert manager.settings["model_name"] == "qwen-plus"
+    assert manager.current_provider.model_name == "qwen-plus"
 
 
 def test_failed_degrade_does_not_persist_fallback(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     writes = []
 
-    def always():
+    def always(*_a, **_k):
         raise _http(429, "rate", "rate_limit_exceeded")
 
     manager = _manager(always, source="preset", model="qwen-plus")
@@ -180,6 +222,7 @@ def test_failed_degrade_does_not_persist_fallback(monkeypatch):
     with pytest.raises(Exception):
         manager.call_with_retry("p")
     assert manager.settings["model_name"] == "qwen-plus"
+    assert manager.current_provider.model_name == "qwen-plus"
     assert writes == []
 
 
@@ -187,8 +230,8 @@ def test_preset_does_not_degrade_on_server_error(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     seen = []
 
-    def boom():
-        seen.append(manager.current_provider.model_name)
+    def boom(*_a, **k):
+        seen.append(_model_of(*_a, **k) or manager.settings["model_name"])
         raise _http(500, "internal server error")
 
     manager = _manager(boom, source="preset", model="qwen-plus")
@@ -198,12 +241,43 @@ def test_preset_does_not_degrade_on_server_error(monkeypatch):
     assert manager.settings["model_name"] == "qwen-plus"
 
 
+def test_parallel_chunks_do_not_mutate_shared_model(monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    concurrency.reset_limiter()
+    monkeypatch.setenv("AUTOCLIP_LLM_CONCURRENCY", "2")
+    seen = []
+    lock = threading.Lock()
+
+    def flaky(*_a, **k):
+        name = _model_of(*_a, **k) or manager.settings["model_name"]
+        with lock:
+            seen.append((
+                threading.current_thread().name,
+                name,
+                manager.settings["model_name"],
+                manager.current_provider.model_name,
+            ))
+        if name == "qwen-plus":
+            raise _http(429, "rate", "rate_limit_exceeded")
+        return f"ok:{name}"
+
+    manager = _manager(flaky, source="preset", model="qwen-plus")
+    assert concurrency.map_chunks(lambda prompt: manager.call_with_retry(prompt), ["a", "b"]) == [
+        "ok:qwen3.8-flash",
+        "ok:qwen3.8-flash",
+    ]
+    assert manager.settings["model_name"] == "qwen-plus"
+    assert manager.current_provider.model_name == "qwen-plus"
+    assert all(row[2] == "qwen-plus" and row[3] == "qwen-plus" for row in seen)
+    concurrency.reset_limiter()
+
+
 def test_degrade_calls_note_same_provider_degrade_once(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
     notes = []
 
-    def flaky():
-        if manager.current_provider.model_name == "qwen-plus":
+    def flaky(*_a, **k):
+        if (_model_of(*_a, **k) or manager.settings["model_name"]) == "qwen-plus":
             raise _http(429, "rate", "rate_limit_exceeded")
         return "ok"
 
@@ -216,8 +290,8 @@ def test_degrade_calls_note_same_provider_degrade_once(monkeypatch):
 def test_degrade_works_when_r2_hook_missing_or_raises(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
 
-    def flaky():
-        if manager.current_provider.model_name == "qwen-plus":
+    def flaky(*_a, **k):
+        if (_model_of(*_a, **k) or manager.settings["model_name"]) == "qwen-plus":
             raise _http(429, "rate", "rate_limit_exceeded")
         return "ok"
 
@@ -226,6 +300,12 @@ def test_degrade_works_when_r2_hook_missing_or_raises(monkeypatch):
     assert manager.call_with_retry("p") == "ok"
 
     notes = []
+    backup = []
+    monkeypatch.setattr(
+        "backend.core.llm_telemetry.increment_degrade_count",
+        lambda: backup.append(1) or 1,
+        raising=False,
+    )
 
     def boom():
         notes.append("called")
@@ -235,6 +315,7 @@ def test_degrade_works_when_r2_hook_missing_or_raises(monkeypatch):
     manager.note_same_provider_degrade = boom
     assert manager.call_with_retry("p") == "ok"
     assert notes == ["called"]
+    assert backup == [1]
 
 
 def test_degrade_falls_back_to_increment_degrade_count(monkeypatch):
@@ -246,14 +327,93 @@ def test_degrade_falls_back_to_increment_degrade_count(monkeypatch):
         raising=False,
     )
 
-    def flaky():
-        if manager.current_provider.model_name == "qwen-plus":
+    def flaky(*_a, **k):
+        if (_model_of(*_a, **k) or manager.settings["model_name"]) == "qwen-plus":
             raise _http(429, "rate", "rate_limit_exceeded")
         return "ok"
 
     manager = _manager(flaky, source="preset", model="qwen-plus")
     assert manager.call_with_retry("p") == "ok"
     assert counts == [1]
+
+
+def test_real_http_calls_under_concurrency_stay_within_chunk_cap(monkeypatch):
+    import httpx
+    import openai
+
+    monkeypatch.setattr("time.sleep", lambda _seconds: None)
+    concurrency.reset_limiter()
+    monkeypatch.setenv("AUTOCLIP_LLM_CONCURRENCY", "2")
+
+    from backend.core.llm_providers import OpenAIProvider
+
+    hits: list[tuple[str, str]] = []
+    lock = threading.Lock()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        prompt = ""
+        messages = body.get("messages") or []
+        if messages:
+            prompt = str(messages[0].get("content") or "")
+        with lock:
+            hits.append((prompt, str(body.get("model") or "")))
+            assert manager.settings["model_name"] == "qwen-plus"
+            assert manager.current_provider.model_name == "qwen-plus"
+        return httpx.Response(
+            429,
+            json={"error": {"code": "rate_limit_exceeded", "message": "rate"}},
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.Client(transport=transport)
+    provider = OpenAIProvider.__new__(OpenAIProvider)
+    provider.api_key = "sk-test"
+    provider.model_name = "qwen-plus"
+    provider.kwargs = {}
+    provider.base_url = "https://llm.test/v1"
+    provider.is_custom_endpoint = True
+    provider.client = openai.OpenAI(
+        api_key="sk-test",
+        base_url="https://llm.test/v1",
+        max_retries=LLM_SDK_MAX_RETRIES,
+        http_client=http_client,
+    )
+
+    manager = LLMManager.__new__(LLMManager)
+    manager.settings = {
+        "model_source": "preset",
+        "model_name": "qwen-plus",
+        "connection_provider": "dashscope",
+        "llm_provider": "openai",
+        "openai_base_url": "https://llm.test/v1",
+    }
+    manager.current_provider = provider
+    manager._reload_if_settings_changed = lambda: None
+    manager.get_current_provider_info = lambda: {
+        "provider": "dashscope",
+        "model": "qwen-plus",
+        "base_url": "https://llm.test/v1",
+    }
+
+    with pytest.raises(Exception):
+        concurrency.map_chunks(
+            lambda prompt: manager.call_with_retry(prompt),
+            ["chunk-a", "chunk-b"],
+        )
+
+    by_chunk: dict[str, list[str]] = {"chunk-a": [], "chunk-b": []}
+    for prompt, model in hits:
+        for key in by_chunk:
+            if key in prompt:
+                by_chunk[key].append(model)
+    assert len(by_chunk["chunk-a"]) == degrade.CHUNK_CALL_CAP
+    assert len(by_chunk["chunk-b"]) == degrade.CHUNK_CALL_CAP
+    assert len(hits) == degrade.CHUNK_CALL_CAP * 2
+    assert manager.settings["model_name"] == "qwen-plus"
+    assert provider.model_name == "qwen-plus"
+    concurrency.reset_limiter()
 
 
 def test_degrade_log_and_telemetry_omit_secrets():
