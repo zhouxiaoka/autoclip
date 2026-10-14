@@ -1793,5 +1793,7 @@
   "蚂蚁百灵。OpenAI 兼容。": "Ant Ling。OpenAI 互換。",
   "settings.providers.repair_custom": "カスタム接続を修復",
   "settings.providers.repair_custom_hint": "保存済みのカスタム OpenAI 互換ゲートウェイです。アドレスやキーを変更できます。",
-  "settings.providers.custom_group": "保存済みのカスタム接続"
+  "settings.providers.custom_group": "保存済みのカスタム接続",
+  "settings.providers.needs_endpoint": "アドレスが必要",
+  "settings.providers.needs_endpoint_guide": "このサービスには共通の接続先がありません。この版では既定の接続先にできません。推奨・人気・ローカル、または保存済みのカスタム接続を使ってください。"
 }

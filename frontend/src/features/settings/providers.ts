@@ -84,7 +84,12 @@ export const providerPickerOptions = () => PROVIDER_GROUPS
   .map((group) => ({
     label: group.label(),
     options: (Object.keys(PROVIDERS) as ProviderKey[])
-      .filter((key) => PROVIDERS[key].group === group.key)
+      .filter((key) => {
+        if (PROVIDERS[key].group !== group.key) return false
+        if (key === 'compatible') return true
+        const preset = getProvider(key)
+        return !preset || !!preset.base_url.trim() || !!PROVIDERS[key].local
+      })
       .map((key) => ({
         value: key,
         label: PROVIDERS[key].short,

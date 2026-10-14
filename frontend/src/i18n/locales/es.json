@@ -1793,5 +1793,7 @@
   "蚂蚁百灵。OpenAI 兼容。": "Ant Ling. Compatible con OpenAI.",
   "settings.providers.repair_custom": "Reparar endpoint personalizado",
   "settings.providers.repair_custom_hint": "Es una pasarela compatible con OpenAI ya guardada. Puedes cambiar la dirección o la clave.",
-  "settings.providers.custom_group": "Endpoints personalizados guardados"
+  "settings.providers.custom_group": "Endpoints personalizados guardados",
+  "settings.providers.needs_endpoint": "Requiere tu URL",
+  "settings.providers.needs_endpoint_guide": "Este proveedor no tiene un endpoint compartido. Esta versión no puede usarlo como valor predeterminado. Elige uno recomendado, popular o local, o un gateway personalizado ya guardado."
 }

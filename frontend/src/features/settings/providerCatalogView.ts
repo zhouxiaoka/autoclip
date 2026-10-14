@@ -8,7 +8,7 @@ import { cleanBinding, newConnection, presetKey } from './modelSettingsLogic'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 
 export type CapabilityFilter = 'all' | 'language' | 'asr' | 'tts' | 'image' | 'music' | 'video'
-export type CatalogConnectKind = 'legacy' | 'local_asr' | 'compatible' | 'guide'
+export type CatalogConnectKind = 'legacy' | 'local_asr' | 'compatible' | 'guide' | 'needs_endpoint'
 export type LocalAsrId = 'whisper' | 'sensevoice'
 
 export const CAPABILITY_FILTERS: CapabilityFilter[] = ['all', 'language', 'asr', 'tts', 'image', 'music', 'video']
@@ -31,8 +31,15 @@ export function displayNameOf(preset: ProviderPreset): string {
 export function connectKind(preset: ProviderPreset): CatalogConnectKind {
   if (preset.id === 'whisper' || preset.id === 'sensevoice') return 'local_asr'
   if (LEGACY_IDS.has(preset.id)) return 'legacy'
+  if (!preset.base_url.trim()) return OPENAI_LIKE.has(preset.protocol) ? 'needs_endpoint' : 'guide'
   if (OPENAI_LIKE.has(preset.protocol)) return 'compatible'
   return 'guide'
+}
+
+/** Eligible for the live picker / as the current analysis default. Empty-URL presets are not. */
+export function isLiveConnectable(preset: ProviderPreset): boolean {
+  const kind = connectKind(preset)
+  return kind === 'legacy' || kind === 'compatible' || kind === 'local_asr'
 }
 
 export function isLegacyProviderId(id: string): id is ProviderKey {
@@ -115,7 +122,7 @@ export function selectLocalAsr(settings: ModelSettings, id: LocalAsrId, model?: 
 /** In-memory form row. Opening a card must not write this into settings. */
 export function catalogDraftConnection(preset: ProviderPreset, id = `draft:${preset.id}`): Connection | undefined {
   const kind = connectKind(preset)
-  if (kind === 'guide' || kind === 'local_asr') return undefined
+  if (kind === 'guide' || kind === 'needs_endpoint' || kind === 'local_asr') return undefined
   if (kind === 'legacy' && isLegacyProviderId(preset.id)) return newConnection(preset.id, id)
   return {
     id,
@@ -147,7 +154,7 @@ export function ensureCatalogConnection(
   createId: () => string = () => crypto.randomUUID(),
 ): { settings: ModelSettings; connection?: Connection; changed: boolean } {
   const kind = connectKind(preset)
-  if (kind === 'guide' || kind === 'local_asr') return { settings, changed: false }
+  if (kind === 'guide' || kind === 'needs_endpoint' || kind === 'local_asr') return { settings, changed: false }
   const existing = findCatalogConnection(settings, preset)
   if (existing) {
     if (!settings.analysis && preset.capabilities.includes('language')) {
