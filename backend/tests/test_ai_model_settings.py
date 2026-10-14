@@ -245,16 +245,16 @@ def test_migration_keeps_legacy_endpoints_without_writing(monkeypatch, cover_pro
     assert ai.image_endpoint(ai.connection_for(config, config.cover)) == {
         'provider': cover_provider, 'api_key': 'image-key', 'base_url': 'https://image.example/v1'}
     assert config.analysis_mode == 'subtitle'
+    assert config.analysis.model_source == 'user'
+    assert config.vision.model_source == 'user'
+    assert config.cover.model_source == 'user'
+    assert config.connections[0].base_url_source == 'user'
+    assert config.connections[1].base_url_source == 'user'
+    assert config.connections[2].base_url_source == 'user'
     assert not ai.path().exists()
 
 
-@pytest.mark.parametrize('invalid', [
-    {'base_url': 'https://image.example/v1?api_key=synthetic-secret'},
-    {'base_url': 'not-an-endpoint'},
-    {'api_key': 'x' * 2001},
-    {'model': 'm' * 201},
-])
-def test_invalid_legacy_cover_does_not_block_settings_or_overwrite_files(monkeypatch, invalid):
+def _legacy_cover_client(monkeypatch, invalid):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from backend.api.v1.settings import router
@@ -273,17 +273,55 @@ def test_invalid_legacy_cover_does_not_block_settings_or_overwrite_files(monkeyp
     legacy_path.write_text('{"legacy": "preserved"}')
     app = FastAPI()
     app.include_router(router)
-    with TestClient(app) as client:
+    return TestClient(app), legacy_path
+
+
+def test_unmigratable_legacy_cover_keeps_key_and_resets_to_recommended(monkeypatch):
+    from backend.services.model_settings_source import NOTICE_PURPOSE_RESET, recommended_model
+    client, legacy_path = _legacy_cover_client(monkeypatch, {'base_url': 'https://image.example/v1?api_key=synthetic-secret'})
+    with client:
         response = client.get('/settings/ai-models')
         assert response.status_code == 200
         value = response.json()
         assert value['analysis']['model'] == 'main-model'
-        assert value['connections'][0]['has_key']
-        assert value['cover'] is None and not value['cover_enabled']
-        assert value['migration_warnings'] == ['cover_configuration_invalid']
+        assert value['analysis']['model_source'] == 'user'
+        assert any(c['has_key'] for c in value['connections'])
+        assert value['cover']['model'] == recommended_model('openai', 'cover')
+        assert value['cover']['model_source'] == 'preset'
+        assert value['cover_enabled'] is True
+        assert NOTICE_PURPOSE_RESET in value['migration_warnings']
         assert 'synthetic-secret' not in response.text and 'main-key' not in response.text
     assert legacy_path.read_text() == '{"legacy": "preserved"}'
     assert not ai.path().exists()
+
+
+def test_oversized_legacy_cover_key_does_not_block_settings(monkeypatch):
+    client, legacy_path = _legacy_cover_client(monkeypatch, {'api_key': 'x' * 2001})
+    with client:
+        response = client.get('/settings/ai-models')
+        assert response.status_code == 200
+        value = response.json()
+        assert value['analysis']['model'] == 'main-model'
+        assert value['cover'] is None and not value['cover_enabled']
+        assert value['migration_warnings'] == ['cover_configuration_invalid']
+        assert 'main-key' not in response.text
+    assert legacy_path.read_text() == '{"legacy": "preserved"}'
+    assert not ai.path().exists()
+
+
+def test_oversized_legacy_cover_model_resets_to_recommended(monkeypatch):
+    from backend.services.model_settings_source import NOTICE_PURPOSE_RESET, recommended_model
+    client, legacy_path = _legacy_cover_client(monkeypatch, {'model': 'm' * 201, 'api_key': 'image-key', 'base_url': 'https://image.example/v1'})
+    with client:
+        response = client.get('/settings/ai-models')
+        assert response.status_code == 200
+        value = response.json()
+        assert value['cover']['model'] == recommended_model('openai', 'cover')
+        assert value['cover']['model_source'] == 'preset'
+        assert NOTICE_PURPOSE_RESET in value['migration_warnings']
+        assert value['connections'][-1]['has_key']
+        assert 'image-key' not in response.text and 'm' * 20 not in response.text
+    assert legacy_path.read_text() == '{"legacy": "preserved"}'
 
 
 @pytest.mark.parametrize('role', ['analysis', 'vision'])
@@ -302,9 +340,14 @@ def test_invalid_legacy_role_preserves_other_connections(monkeypatch, role):
     monkeypatch.setattr(cover, 'load_config', lambda: cover.CoverConfig(model='image-model', api_key='image-key', base_url='https://image.example/v1'))
     monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences())
     config = legacy_migrate()
-    assert getattr(config, role) is None
+    from backend.services.model_settings_source import NOTICE_PURPOSE_RESET, recommended_model
+    assert getattr(config, role) is not None
+    assert getattr(config, role).model_source == 'preset'
+    assert getattr(config, role).model == recommended_model(
+        'openai' if role == 'analysis' else 'openai', role)
     assert config.cover.model == 'image-model'
-    assert config._migration_warnings == [role + '_configuration_invalid']
+    assert NOTICE_PURPOSE_RESET in config._migration_warnings
+    assert next(c for c in config.connections if c.id == ('legacy-analysis' if role == 'analysis' else 'legacy-vision')).api_key
     assert 'synthetic-secret' not in json.dumps(ai.public(config))
     assert not ai.path().exists()
 

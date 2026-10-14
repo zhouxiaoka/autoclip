@@ -2,6 +2,7 @@ import api from '../../services/api'
 import type { ValidationResult } from './providerAccess'
 
 export type Capability = 'auto' | 'multimodal' | 'text'
+export type Source = 'preset' | 'user'
 export interface Connection {
   id: string
   name: string
@@ -14,12 +15,18 @@ export interface Connection {
   image_base_url: string
   validation_status?: 'ok' | 'failed' | 'unchecked'
   validation_error_type?: string
+  base_url_source?: Source
+  preset_version?: number
 }
-export interface Assignment { connection_id: string; model: string; capability: Capability }
+export interface Assignment { connection_id: string; model: string; capability: Capability; model_source?: Source }
 export interface ModelSettings {
   version: 1
   saved?: boolean
   migration_warnings?: string[]
+  catalog_version?: number
+  preset_update_available?: boolean
+  seen_notices?: string[]
+  acked_catalog_version?: number
   connections: Connection[]
   analysis: Assignment | null
   vision: Assignment | null

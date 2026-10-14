@@ -15,9 +15,24 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, field_validator, model_validator
 
 from backend.core.path_utils import get_data_directory
+from backend.services.model_settings_source import (
+    NOTICE_PRESET_UPDATED,
+    NOTICE_PURPOSE_RESET,
+    annotate_document,
+    current_catalog_version,
+    infer_base_url_source,
+    infer_model_source,
+    known_notices,
+    prepare_connections_for_save,
+    preset_update_available,
+    recommended_model,
+    try_connection,
+    usable_model,
+)
 
 _lock = threading.RLock()
 Capability = Literal['auto', 'multimodal', 'text']
+Source = Literal['preset', 'user']
 
 
 class Connection(BaseModel):
@@ -31,6 +46,9 @@ class Connection(BaseModel):
     image_base_url: str = ''
     validation_status: Literal['ok', 'failed', 'unchecked'] = 'unchecked'
     validation_error_type: str = ''
+    # None = omitted (legacy file or old client). Inferred after validation.
+    base_url_source: Source | None = None
+    preset_version: int = Field(default=0, ge=0)
 
     @field_validator('provider')
     @classmethod
@@ -102,11 +120,19 @@ class Connection(BaseModel):
             return ''
         return text
 
+    @model_validator(mode='after')
+    def infer_url_source(self):
+        if self.base_url_source is None:
+            self.base_url_source = infer_base_url_source(self.provider, self.base_url)
+        return self
+
 
 class Assignment(BaseModel):
+    model_config = ConfigDict(extra='ignore')
     connection_id: str
     model: str = Field(min_length=1, max_length=200)
     capability: Capability = 'auto'
+    model_source: Source | None = None
 
     @field_validator('model')
     @classmethod
@@ -114,6 +140,12 @@ class Assignment(BaseModel):
         if not value.strip():
             raise ValueError('请选择或输入模型 ID')
         return value.strip()
+
+    @model_validator(mode='after')
+    def infer_source(self):
+        if self.model_source is None:
+            self.model_source = infer_model_source(self.model)
+        return self
 
 
 class Transcription(BaseModel):
@@ -143,6 +175,8 @@ class ModelSettings(BaseModel):
     _migration_warnings: list[str] = PrivateAttr(default_factory=list)
     version: Literal[1] = 1
     connections: list[Connection] = Field(default_factory=list, max_length=100)
+    seen_notices: list[str] = Field(default_factory=list)
+    acked_catalog_version: int = Field(default=0, ge=0)
     analysis: Assignment | None = None
     # None explicitly means reuse the analysis assignment, not an independently changing provider.
     vision: Assignment | None = None
@@ -161,6 +195,22 @@ class ModelSettings(BaseModel):
     chunk_size: int = Field(default=5000, ge=1000, le=10000)
     min_score_threshold: float = Field(default=.7, ge=.1, le=1)
     max_clips_per_collection: int = Field(default=5, ge=1, le=20)
+
+    @field_validator('seen_notices')
+    @classmethod
+    def only_known_notices(cls, value):
+        return known_notices(value or [])
+
+    @model_validator(mode='wrap')
+    @classmethod
+    def apply_source_migration(cls, data, handler):
+        warnings: list[str] = []
+        if isinstance(data, dict):
+            data, warnings = annotate_document(data)
+        settings = handler(data)
+        if warnings:
+            settings._migration_warnings = list(dict.fromkeys([*settings._migration_warnings, *warnings]))
+        return settings
 
     @model_validator(mode='after')
     def consistent(self):
@@ -219,6 +269,22 @@ def connection_for(settings: ModelSettings, assignment: Assignment) -> Connectio
     return next(c for c in settings.connections if c.id == assignment.connection_id)
 
 
+def _keep_saved_chat_url(connection: Connection) -> bool:
+    """True when a stored URL must not be replaced by the current catalog lock."""
+    saved = connection.base_url
+    if not saved:
+        return False
+    if connection.preset_version > 0:
+        return True
+    if connection.provider == 'compatible':
+        return True
+    if connection.provider == 'api88':
+        from backend.core.cloud_presets import is_api88_host
+        return is_api88_host(urlparse(saved).hostname)
+    url_source = connection.base_url_source or infer_base_url_source(connection.provider, saved)
+    return url_source == 'user' and connection.provider not in {'api88', 'infistar', 'deepseek', 'gemini'}
+
+
 def chat_endpoint(connection: Connection, model: str) -> dict:
     from backend.core.cloud_presets import CLOUD_PRESETS
     from backend.core.local_presets import LOCAL_PRESETS
@@ -232,12 +298,16 @@ def chat_endpoint(connection: Connection, model: str) -> dict:
     }
     from backend.core.provider_endpoint import locked_chat_url, normalize_provider_base_url
     locked = locked_chat_url(connection.provider, connection.base_url)
-    if locked:
+    saved = connection.base_url
+    if _keep_saved_chat_url(connection):
+        # Q14: stamped or historically accepted URLs stay. Wrong hosts on locked presets still lock.
+        base = normalize_provider_base_url(saved).url if connection.provider == 'compatible' else saved
+    elif locked:
         base = locked
-    elif connection.provider == 'compatible' and connection.base_url:
-        base = normalize_provider_base_url(connection.base_url).url
+    elif connection.provider == 'compatible' and saved:
+        base = normalize_provider_base_url(saved).url
     else:
-        base = connection.base_url or defaults[connection.provider]
+        base = saved or defaults[connection.provider]
     if connection.provider == 'dashscope' and connection.base_url and (urlparse(base).hostname or '').endswith('.aliyuncs.com'):
         # Dedicated Bailian endpoints are pasted as a host or its native /api/v1 path; text models
         # use the OpenAI-compatible path on the same host (speech recognition uses /api/v1).
@@ -302,8 +372,14 @@ def vision_endpoint(settings: ModelSettings) -> dict | None:
 
 def public(settings: ModelSettings) -> dict:
     value = settings.model_dump()
-    if settings._migration_warnings:
-        value['migration_warnings'] = list(settings._migration_warnings)
+    notices = [item for item in settings._migration_warnings if item not in settings.seen_notices]
+    update_available = preset_update_available(settings)
+    value['catalog_version'] = current_catalog_version()
+    value['preset_update_available'] = update_available
+    if update_available and NOTICE_PRESET_UPDATED not in settings.seen_notices:
+        notices.append(NOTICE_PRESET_UPDATED)
+    if notices:
+        value['migration_warnings'] = list(dict.fromkeys(notices))
     if settings.transcription is None:
         from backend.core.desktop_config import get_desktop_config
         previous = get_desktop_config().speech_recognition.whisper_config.model_name
@@ -334,8 +410,14 @@ def save(settings: ModelSettings) -> dict:
     with _lock:
         settings = ModelSettings.model_validate(settings.model_dump())
         previous = for_editing()
-        resolved = settings.model_copy(update={'connections': [resolve_secret(c, previous) for c in settings.connections],
-                                               'cover_choice_version': COVER_CHOICE_VERSION})
+        resolved = settings.model_copy(update={
+            'connections': prepare_connections_for_save(
+                [resolve_secret(c, previous) for c in settings.connections]
+            ),
+            'cover_choice_version': COVER_CHOICE_VERSION,
+            'seen_notices': known_notices([*previous._migration_warnings, *settings.seen_notices, *previous.seen_notices]),
+            'acked_catalog_version': max(settings.acked_catalog_version, previous.acked_catalog_version, current_catalog_version()),
+        })
         if not resolved.analysis:
             raise ValueError('请选择高光分析模型')
         if resolved.analysis_mode == 'visual' and not vision_endpoint(resolved):
@@ -359,8 +441,25 @@ def save(settings: ModelSettings) -> dict:
         return public(resolved)
 
 
+def _legacy_assignment(connection: Connection, model: str, purpose: str, capability: Capability = 'auto') -> tuple[Assignment | None, str | None]:
+    """Keep a filled legacy model as user (Q16). Invalid models reset to the recommended default."""
+    if usable_model(model):
+        try:
+            return Assignment(connection_id=connection.id, model=model, capability=capability, model_source='user'), None
+        except ValidationError:
+            pass
+    recommended = recommended_model(connection.provider, purpose)
+    if not recommended:
+        return None, 'cover_configuration_invalid' if purpose == 'cover' else f'{purpose}_configuration_invalid'
+    try:
+        notice = NOTICE_PURPOSE_RESET if model else None
+        return Assignment(connection_id=connection.id, model=recommended, capability=capability, model_source='preset'), notice
+    except ValidationError:
+        return None, 'cover_configuration_invalid' if purpose == 'cover' else f'{purpose}_configuration_invalid'
+
+
 def migrate_legacy() -> ModelSettings:
-    """Read-only migration: preserve separate legacy vision/cover endpoints and keys."""
+    """Read-only migration: preserve keys; unmigratable purposes reset to recommended defaults."""
     from backend.core.llm_manager import get_llm_manager
     from backend.services.studio import vision_settings, analysis_preferences
     from backend.services import cover
@@ -378,10 +477,21 @@ def migrate_legacy() -> ModelSettings:
     try:
         connection = Connection(id='legacy-analysis', name=provider, provider=provider,
                                 base_url=base, api_key=endpoint.get('api_key', ''))
-        analysis = Assignment(connection_id='legacy-analysis', model=s.get('model_name') or 'qwen-plus')
+        analysis, warning = _legacy_assignment(connection, s.get('model_name') or '', 'analysis')
         connections.append(connection)
+        if warning:
+            migration_warnings.append(warning)
+        if analysis is None:
+            migration_warnings.append('analysis_configuration_invalid')
     except ValidationError:
-        migration_warnings.append('analysis_configuration_invalid')
+        salvaged = try_connection(id='legacy-analysis', name=provider, provider=provider,
+                                  base_url='', api_key=endpoint.get('api_key', ''))
+        if salvaged:
+            analysis, _warning = _legacy_assignment(salvaged, '', 'analysis')
+            connections.append(salvaged)
+            migration_warnings.append(NOTICE_PURPOSE_RESET if analysis else 'analysis_configuration_invalid')
+        else:
+            migration_warnings.append('analysis_configuration_invalid')
     v = vision_settings.effective()
     if analysis and v.get('mode') == 'text_model' and v.get('model'):
         # Preserve the already working legacy choice until refreshed metadata is available.
@@ -390,10 +500,18 @@ def migrate_legacy() -> ModelSettings:
     if v.get('mode') == 'custom' and v.get('base_url') and v.get('model'):
         try:
             connection = Connection(id='legacy-vision', name='视觉服务', base_url=v['base_url'], api_key=v.get('api_key', ''))
-            vision = Assignment(connection_id='legacy-vision', model=v['model'], capability='multimodal')
+            vision, warning = _legacy_assignment(connection, v.get('model') or '', 'vision', 'multimodal')
             connections.append(connection)
+            if warning:
+                migration_warnings.append(warning)
         except ValidationError:
-            migration_warnings.append('vision_configuration_invalid')
+            salvaged = try_connection(id='legacy-vision', name='视觉服务', base_url='', api_key=v.get('api_key', ''))
+            if salvaged:
+                vision, _warning = _legacy_assignment(salvaged, '', 'vision', 'multimodal')
+                connections.append(salvaged)
+                migration_warnings.append(NOTICE_PURPOSE_RESET if vision else 'vision_configuration_invalid')
+            else:
+                migration_warnings.append('vision_configuration_invalid')
     cfg = cover.load_config()
     cover_assignment = None
     if cfg.model:
@@ -403,18 +521,42 @@ def migrate_legacy() -> ModelSettings:
             if cfg.mode == 'text_model':
                 if analysis is None:
                     raise ValueError('invalid legacy analysis')
-                cover_assignment = Assignment(connection_id='legacy-analysis', model=cfg.model)
+                cover_assignment, warning = _legacy_assignment(
+                    next(c for c in connections if c.id == 'legacy-analysis'), cfg.model, 'cover')
+                if warning:
+                    migration_warnings.append(warning)
             else:
                 kind = {'dashscope': 'dashscope', 'seedream': 'seed',
                         'gemini': 'gemini', 'grok': 'grok', 'glm': 'glm'}.get(cfg.provider, 'openai')
-                connection = Connection(id='legacy-cover', name='封面服务', provider=kind,
-                                        api_key=cfg.api_key,
-                                        image_api='auto' if kind in {'gemini', 'grok', 'glm'} else cfg.provider,
-                                        base_url=cfg.base_url if kind != 'dashscope' else '',
-                                        image_base_url=cfg.base_url)
-                cover_assignment = Assignment(connection_id='legacy-cover', model=cfg.model)
-                connections.append(connection)
-        except (ValidationError, ValueError):
+                try:
+                    connection = Connection(
+                        id='legacy-cover', name='封面服务', provider=kind,
+                        api_key=cfg.api_key,
+                        image_api='auto' if kind in {'gemini', 'grok', 'glm'} else cfg.provider,
+                        base_url=cfg.base_url if kind != 'dashscope' else '',
+                        image_base_url=cfg.base_url,
+                    )
+                    cover_assignment, warning = _legacy_assignment(connection, cfg.model, 'cover')
+                    connections.append(connection)
+                    if warning:
+                        migration_warnings.append(warning)
+                except ValidationError:
+                    salvaged = try_connection(
+                        id='legacy-cover', name='封面服务', provider=kind,
+                        api_key=cfg.api_key,
+                        image_api='auto' if kind in {'gemini', 'grok', 'glm'} else cfg.provider,
+                        base_url='',
+                        image_base_url='',
+                    )
+                    if salvaged is None:
+                        raise ValueError('invalid legacy cover')
+                    cover_assignment, _warning = _legacy_assignment(salvaged, '', 'cover')
+                    connections.append(salvaged)
+                    if cover_assignment:
+                        migration_warnings.append(NOTICE_PURPOSE_RESET)
+                    else:
+                        raise ValueError('invalid legacy cover')
+        except (ValidationError, ValueError, StopIteration):
             # An optional legacy cover must not block loading or repairing the AI settings.
             # Keep the old file untouched and never send its values in the warning.
             cover_assignment = None
@@ -427,5 +569,5 @@ def migrate_legacy() -> ModelSettings:
                          allow_visual_screening=prefs.allow_visual_screening,
                          chunk_size=s.get('chunk_size', 5000), min_score_threshold=s.get('min_score_threshold', .7),
                          max_clips_per_collection=s.get('max_clips_per_collection', 5))
-    settings._migration_warnings = migration_warnings
+    settings._migration_warnings = list(dict.fromkeys([*migration_warnings, *settings._migration_warnings]))
     return settings

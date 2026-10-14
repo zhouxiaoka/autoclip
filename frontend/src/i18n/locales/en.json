@@ -1,6 +1,8 @@
 {
   "部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。": "Some AI settings could not be read. Select the service and enter the key again. The original settings are preserved; damaged files are backed up when you save the corrections.",
   "旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。": "The previous cover configuration is invalid. Select a service again in cover settings. The original configuration file has been preserved.",
+  "部分用途无法按原样迁移。API Key 已保留，相关模型已改为推荐默认。此提示只出现一次。": "Some purposes could not be migrated as-is. API keys were kept, and those models were reset to the recommended defaults. This notice appears only once.",
+  "服务商推荐列表已更新。已保存的连接不会改动，新连接会使用新的推荐。": "Provider recommendations have been updated. Saved connections stay unchanged; new connections will use the new recommendations.",
   "加载项目失败": "Could not load projects",
   "项目删除成功": "Project deleted",
   "删除项目失败": "Could not delete project",
