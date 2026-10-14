@@ -1650,5 +1650,13 @@
   "无法读取这个视频的时长，文件可能已损坏、格式不受支持，或路径里有特殊字符。请换一个文件，或先用其他软件转成 MP4 后重新导入。": "Couldn't read this video's duration. The file may be damaged, in an unsupported format, or its path may contain special characters. Try another file, or convert it to MP4 with another app and import again.",
   "视频太短：不到 1 秒，无法制作。请换一段更长的视频。": "This video is too short: under 1 second, nothing can be made from it. Please use a longer video.",
   "未找到 Chrome 或 Edge 浏览器，杂志风/街头样式已改用经典样式。安装 Google Chrome 后重新导出即可。": "Chrome or Edge wasn't found, so the Editorial/Street style fell back to Classic. Install Google Chrome and export again.",
-  "高级包装组件不可用，杂志风/街头样式已改用经典样式。": "The advanced packaging component isn't available, so the Editorial/Street style fell back to Classic."
+  "高级包装组件不可用，杂志风/街头样式已改用经典样式。": "The advanced packaging component isn't available, so the Editorial/Street style fell back to Classic.",
+  "密钥无效或已过期，请到「设置 → 模型」检查密钥后重试。": "The API key is invalid or has expired. Check it under Settings → Model, then try again.",
+  "账户余额或令牌额度不足，请充值或更换令牌后再试。": "The account balance or token quota is used up. Top up or replace the token, then try again.",
+  "当前令牌没有该模型权限或分组不对，请到服务商控制台勾选模型或更换分组。": "This token cannot use the selected model or group. Enable the model or switch groups in the provider console.",
+  "当前分组或服务下没有这个模型，请换一个模型或分组。": "This model is not available for the current group or service. Choose another model or group.",
+  "接口地址不正确（常见是漏了 /v1 或填成了控制台网址），请到「设置 → 模型」核对地址。": "The API address looks wrong (often a missing /v1, or a console URL). Check it under Settings → Model.",
+  "模型服务暂时不可用，请稍后重试。": "The model service is temporarily unavailable. Please try again later.",
+  "模型输出被截断，请稍后重试或换一个模型。": "The model output was cut off. Try again later or switch models.",
+  "模型服务返回了无法识别的错误，请检查配置后重试。": "The model service returned an unrecognized error. Check your configuration and try again."
 }
