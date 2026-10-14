@@ -52,7 +52,8 @@ Homepage = "https://github.com/zhouxiaoka/autoclip"
 Issues = "https://github.com/zhouxiaoka/autoclip/issues"
 
 [tool.setuptools.packages.find]
-include = ["backend", "backend.*"]
+include = ["backend", "backend.*", "presets"]
 
 [tool.setuptools.package-data]
 backend = ["prompt/*.txt", "prompt/**/*.txt", "assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/fonts/*.json", "assets/models/*.onnx", "assets/models/*-LICENSE.txt", "assets/outro/*.mp4", "core/infistar_models.json"]
+presets = ["provider_presets.json"]
