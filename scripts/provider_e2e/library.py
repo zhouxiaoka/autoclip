@@ -30,6 +30,7 @@ CASE_FIELDS = (
     'passed',
     'expect',
     'error_class',
+    'http_status',
     'error_code',
     'duration_ms',
     'estimated_cost_cny',
@@ -58,6 +59,11 @@ def sanitize_case(row: dict[str, Any]) -> dict[str, Any]:
     if clean.get('passed') is not None:
         clean['passed'] = bool(clean['passed'])
     clean['aborted'] = bool(clean.get('aborted'))
+    if clean.get('http_status') is not None:
+        try:
+            clean['http_status'] = int(clean['http_status'])
+        except (TypeError, ValueError):
+            clean['http_status'] = None
     for key in ('duration_ms', 'prompt_tokens', 'completion_tokens', 'billable_calls', 'iso_week'):
         try:
             clean[key] = int(clean.get(key) or 0)
@@ -95,6 +101,7 @@ def case_from_result(
         'passed': result.get('passed'),
         'expect': result.get('expect'),
         'error_class': result.get('error_class') or result.get('upstream_error_type'),
+        'http_status': result.get('http_status'),
         'error_code': result.get('error_code'),
         'duration_ms': result.get('duration_ms') or 0,
         'estimated_cost_cny': result.get('estimated_cost_cny') or 0,

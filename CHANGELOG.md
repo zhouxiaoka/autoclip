@@ -7,7 +7,7 @@
 
 ## [未发布]
 
-- 发版增加服务商端到端门槛：Linux 无界面后端按固定素材矩阵出片，本地 mock 覆盖 429 / 503 / 断线和中途杀后端。PR / push 只跑 mock。夜间只跑 DeepSeek + Gemini 免费/低价档 2–3 条；预发布把 10 条拆给 5 家（每家 2 条，按 ISO 周轮转）。真实 88API / DeepSeek / Gemini / DashScope / Infistar 在 GitHub Environment `provider-e2e` 配好 key 后才跑，没配就跳过并写进报告。缺 `*_MODEL` 时用最便宜默认模型（88API / Infistar `gpt-4o-mini`，DeepSeek `deepseek-flash`，Gemini `gemini-2.0-flash-lite`，DashScope `qwen-flash`）。88API 地址为 `https://api.88api.ai/v1`。故障注入期望类型用 `UpstreamErrorType`（`rate_limited` / `upstream_unavailable` / `connection`），应拦下组合要求 `billable_calls_before_failure = 0`。Mock 应成功当次 ≥95%；live 按用例库近 5 次、满 20 条后滚动 ≥95%。月度估费硬顶 ¥300。不达标不能出 Release Acceptance。
+- 发版增加服务商端到端门槛：Linux 无界面后端按固定素材矩阵出片，本地 mock 覆盖 429 / 503 / 断线和中途杀后端。PR / push 只跑 mock。夜间只跑 DeepSeek + Gemini 免费/低价档 2–3 条；预发布把 10 条拆给 5 家（每家 2 条，按 ISO 周轮转）。真实 88API / DeepSeek / Gemini / DashScope / Infistar 在 GitHub Environment `provider-e2e` 配好 key 后才跑，没配就跳过并写进报告。缺 `*_MODEL` 时用最便宜默认模型（88API / Infistar `gpt-4o-mini`，DeepSeek `deepseek-flash`，Gemini `gemini-3.5-flash-lite`，DashScope `qwen-flash`）。88API 地址为产品预设 `https://88api.ai/v1`。故障注入期望类型用 `UpstreamErrorType`（`rate_limited` / `upstream_unavailable` / `connection`），应拦下组合要求 `billable_calls_before_failure = 0`。Mock 应成功当次 ≥95%。Live 先 fail-closed（任一服务商失败、缺/空/无法解析的报告、或条数少于计划必须红），再叠加用例库近 5 次、满 20 条后滚动 ≥95%。月度估费硬顶 ¥300。**fail-closed 被 verify live 跑通之前，不要用此门槛做发版验收。**
 - 88API 服务商预设接口地址改为 `https://api.88api.ai/v1`（与 provider-e2e 回归一致）。已保存的 `https://88api.ai/v1` 不改写，仍可继续使用。（1.5.7）
 
 - 内容分析对 `invalid_response` / `timeline_empty` 自动重试，每种最多再试 2 次（不含首次）。（1.5.7 #8）HTTP 瞬时错误的退避与付费前 ASR 预检见线 C。

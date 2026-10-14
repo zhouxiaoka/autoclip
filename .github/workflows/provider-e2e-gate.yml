@@ -3,6 +3,9 @@ name: Provider E2E Gate
 # Required after candidate-gate and before Release Acceptance.
 # PR / branch push: mock only. Live keys live in environment provider-e2e
 # and are skipped (not failed) when unset.
+# The named provider-e2e job is fail-closed: a live provider failure, a missing /
+# empty / unparsable live report, or fewer results than planned must turn it RED.
+# Do not use this gate for release acceptance until that fail-closed path is verified.
 
 on:
   workflow_call:
@@ -214,7 +217,6 @@ jobs:
           path: reports/mock
       - uses: actions/download-artifact@v4
         if: needs.live.result == 'success' || needs.live.result == 'failure'
-        continue-on-error: true
         with:
           name: provider-e2e-live
           path: reports/live
@@ -225,11 +227,17 @@ jobs:
           name: provider-e2e-cases
           path: reports/library
       - name: Judge combined reports
+        env:
+          LIVE_RESULT: ${{ needs.live.result }}
         run: |
           set -euo pipefail
           ARGS=(--suite judge --out "$RUNNER_TEMP/provider-e2e" --report reports/mock/report.json --library-dir reports/library)
-          if [ -f reports/live/report.json ]; then
-            ARGS+=(--report reports/live/report.json)
+          if [ "$LIVE_RESULT" = "success" ] || [ "$LIVE_RESULT" = "failure" ]; then
+            if [ ! -s reports/live/report.json ]; then
+              echo 'fail-closed: live job ran but report.json is missing or empty' >&2
+              exit 1
+            fi
+            ARGS+=(--report reports/live/report.json --expect-live)
           fi
           PYTHONPATH=scripts python -m provider_e2e "${ARGS[@]}"
           python - <<'PY'

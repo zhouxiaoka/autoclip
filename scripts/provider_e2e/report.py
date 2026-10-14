@@ -47,6 +47,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- 说明: {report['reason']}")
     if verdict.get('history_note'):
         lines.append(f"- 滚动窗口: {verdict['history_note']}")
+    for reason in verdict.get('reasons') or []:
+        lines.append(f"- 失败原因: {reason}")
     skipped = report.get('skipped_providers') or []
     if skipped:
         lines.append('- 跳过的真实服务商: ' + ', '.join(
@@ -64,8 +66,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         )
     lines += [
         '',
-        '| 用例 | 期望 | 结果 | 错误码 | error_class | billable | 估费 |',
-        '| --- | --- | --- | --- | --- | --- | --- |',
+        '| 用例 | 期望 | 结果 | 错误码 | error_class | HTTP | billable | 估费 |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- |',
     ]
     for row in report.get('cases') or []:
         billed = row.get('billable_calls_before_failure')
@@ -78,6 +80,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"| {row.get('label') or row.get('id')} | {row.get('expect')} | "
             f"{outcome} | {row.get('error_code') or '—'} | "
             f"{row.get('error_class') or row.get('upstream_error_type') or row.get('expected_upstream_error_type') or '—'} | "
+            f"{row.get('http_status') or '—'} | "
             f"{billed} | {cost_text} |"
         )
     lines.append('')
@@ -108,7 +111,10 @@ def merge_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
         'parts': [{'suite': report.get('suite'), 'status': report.get('status')} for report in reports],
     }
     if live:
-        for key in ('mode', 'iso_week', 'budget', 'providers', 'window', 'spent_cny', 'run_id', 'case_records'):
+        for key in (
+            'mode', 'iso_week', 'budget', 'providers', 'window', 'spent_cny',
+            'run_id', 'case_records', 'planned',
+        ):
             if live.get(key) is not None:
                 merged[key] = live[key]
     return merged

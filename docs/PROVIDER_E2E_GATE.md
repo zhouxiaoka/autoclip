@@ -1,5 +1,7 @@
 # 发版前服务商端到端门槛
 
+> **验收冻结：** 2026-10 的 live 全矩阵（Actions `38508586808`）只有 24/40 应成功，88API 与 Gemini 在分析阶段失败，但具名 `provider-e2e` job 仍是绿的——失败没有 fail-closed 进汇总。在本页所述 fail-closed 修复被一次最小 live（`verify`）跑通并核对之前，**不要把这个门槛当作发版验收依据**。mock 套件本身仍可用来挡回归。
+
 1.5.8 起，Desktop Build 在 `candidate-gate` 之后、Release Acceptance 之前必须通过 [`.github/workflows/provider-e2e-gate.yml`](../.github/workflows/provider-e2e-gate.yml)。它在 Linux 上起无界面桌面后端（`backend.desktop_main`），用 Studio HTTP 跑「导入 → 自动出片」，不打开 UI。
 
 同一份 workflow 也可单独触发（PR / 分支 push / 候选 tag / 夜间定时 / `workflow_dispatch`）。**fork 的 PR 整门都不跑**，避免把 environment 密钥暴露给外部仓库。
@@ -23,7 +25,7 @@
 | Mock 应成功（口播、访谈、英文播客、带字幕、竖屏、游戏、体育、纯音乐） | **当次**成功率 ≥ 95%。8 条素材时必须全部通过。 |
 | 应拦下（太短、无音轨） | 100% 在开始前拦下，契约字段 `billable_calls_before_failure = 0`（由 `llm_usage.jsonl` 计数） |
 | 故障注入（本地 mock：429 + `Retry-After`、503、断线、中途杀后端） | 期望类型用 [`UpstreamErrorType`](SUCCESS_RATE_CONTRACT.md)：`rate_limited` / `upstream_unavailable` / `connection`（均可重试，退避后出片）。杀后端不是上游错误，重启后应落成 `service_restarted`。不做自动换服务商。 |
-| Live 应成功 | **不看单次 10 条。** 从用例库取最近 5 次 live run、合计至少 20 条应成功样本后，滚动成功率 ≥ 95% 才强制。样本不足时只记录、不卡发版。单次硬失败（不可重试的 `UpstreamErrorType` 或产品失败）会中止该服务商剩余用例。 |
+| Live 应成功 | **fail-closed。** 任一服务商失败、缺报告 / 空报告 / 无法解析、或实际条数少于计划矩阵，具名 `provider-e2e` job 必须红。滚动窗口（用例库最近 5 次、满 20 条应成功样本后 ≥ 95%）是额外门槛，样本不足不能把当次失败判绿。单次硬失败（不可重试的 `UpstreamErrorType` 或产品失败）会中止该服务商剩余用例。 |
 
 产物是 `provider-e2e-report` 与 `provider-e2e-cases` artifact（`report.json` / `report.md` / `cases.jsonl`），不含密钥、用户正文、字幕全文或完整 URL（只留 host）。
 
@@ -45,12 +47,12 @@ B 站 / YouTube 链接单独验收，不计入本门槛。
 
 | Secret | 用途 |
 | --- | --- |
-| `API88_API_KEY` | 88API 专用 CI token，设额度上限并限制模型。地址 `https://api.88api.ai/v1` |
-| `API88_MODEL` | 可选，缺省最便宜档 `gpt-4o-mini` |
+| `API88_API_KEY` | 88API 专用 CI token，设额度上限并限制模型。地址 `https://88api.ai/v1`（与产品预设相同；不要用 `api.88api.ai`） |
+| `API88_MODEL` | 可选，缺省最便宜档 `gpt-4o-mini`。88API 产品没有内置默认模型；token 未开通该模型时在 Environment 里改这个 secret |
 | `DEEPSEEK_API_KEY` | DeepSeek 官方独立项目 key |
 | `DEEPSEEK_MODEL` | 可选，缺省 `deepseek-flash` |
 | `GEMINI_API_KEY` | Gemini 独立项目 key（夜间走免费档） |
-| `GEMINI_MODEL` | 可选，缺省 `gemini-2.0-flash-lite` |
+| `GEMINI_MODEL` | 可选，缺省 `gemini-3.5-flash-lite`（2026 目录里最便宜的一档；不要再用已下线的 `gemini-2.0-flash` / `gemini-2.0-flash-lite`） |
 | `DASHSCOPE_API_KEY` | 阿里云百炼 / DashScope。地址 `https://dashscope.aliyuncs.com/compatible-mode/v1` |
 | `DASHSCOPE_MODEL` | 可选，缺省 `qwen-flash` |
 | `INFISTAR_API_KEY` | Infistar。地址 `https://infistar.ai/v1` |
@@ -113,7 +115,18 @@ Mock 套件为 0。本门槛只走字幕 + 自带 SRT，不跑 Whisper，也不�
 ## 接入发版链路
 
 - [`desktop-build.yml`](../.github/workflows/desktop-build.yml) 的 `provider-e2e` job `needs: candidate-gate`，与双平台打包并行。未打 tag 时只跑 mock；`v*` tag 才跑 `prerelease` live。
-- `release` 与 `internal-provenance` 都要求 mock 门槛成功。live 在样本未满 20 条时应成功窗口不强制。
+- `release` 与 `internal-provenance` 都要求具名 `provider-e2e` job 成功。在 fail-closed 验证前不要据此放行发版。live 滚动窗口在样本未满 20 条时不额外卡；当次服务商失败仍红。
 - [`scripts/release_acceptance.py`](../scripts/release_acceptance.py) 的 `BUILD_JOBS` 含 `provider-e2e`，Release Acceptance 会核对 Desktop Build 里这个 job。
 
 矩阵、轮转与故障定义见 [`scripts/provider_e2e/matrix.py`](../scripts/provider_e2e/matrix.py)。判定与故障注入引用 [成功率共享契约](SUCCESS_RATE_CONTRACT.md) 的 `UpstreamErrorType` 与 `billable_calls_before_failure`，不另造一套码。
+
+## 2026-10 live 失败根因（配置，不是管线）
+
+Actions `38508586808`（全矩阵）与 `38511841070`（verify）里，DeepSeek / DashScope / Infistar 同一条分析管线能过；88API 与 Gemini 在分析阶段 0 次计费、`error_code=provider_error`。产品把除 401/403/429 以外带 HTTP 状态的失败都落成 `provider_error`，所以报告里的 `error_class` 当时是 `unknown`。二者都按 **配置** 修，不改调用链：
+
+| 服务商 | 归类 | 契约 `error_type` | 典型 HTTP | 脱敏线索 | 修复 |
+| --- | --- | --- | --- | --- | --- |
+| 88API | 配置 | `bad_endpoint`（HTML/错 host）或 `model_not_found`（token 未开通模型） | 404 / 连接失败 | `OpenAI调用失败` / `Error code: 404`，host 曾是 `api.88api.ai` | 默认 base 改为产品预设 `https://88api.ai/v1`；模型不对时设 `API88_MODEL` |
+| Gemini | 配置 | `model_not_found` | 404 | `Gemini调用失败` / `Error code: 404`，模型曾是 `gemini-2.0-flash` / `gemini-2.0-flash-lite` | 默认改为目录内最便宜的 `gemini-3.5-flash-lite`；可被 `GEMINI_MODEL` 覆盖 |
+
+复现夹具：[`scripts/provider_e2e/testdata/live_24_of_40.json`](../scripts/provider_e2e/testdata/live_24_of_40.json)。旧判定（只看滚动窗口、样本不足即绿）会放行；fail-closed 必须红。

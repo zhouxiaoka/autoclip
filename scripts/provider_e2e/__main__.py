@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 import sys
@@ -15,7 +14,7 @@ from .backend import ROOT
 from .cost import MONTHLY_BUDGET_CNY, actual_case_cny, provider_cap_cny, run_cap_cny
 from .fixtures import generate_all
 from .harness import run_case
-from .judge import VerdictError, require_pass
+from .judge import VerdictError, load_reports, require_pass
 from .library import (
     budget_check,
     case_from_result,
@@ -280,6 +279,7 @@ def run_live(
             int(row.get('prompt_tokens') or 0),
             int(row.get('completion_tokens') or 0),
             item['expect'],
+            passed=row.get('passed'),
         )
         row['estimated_cost_cny'] = cost
         run_spent = round(run_spent + cost, 4)
@@ -335,6 +335,15 @@ def run_live(
         'commit': commit,
         'run_id': run_id,
         'cases': cases,
+        'planned': [
+            {
+                'provider_id': item['provider_id'],
+                'clip_id': item['clip_id'],
+                'expect': item['expect'],
+                'role': item.get('role'),
+            }
+            for item in planned if item['provider_id'] in ready_map
+        ],
         'case_records': records,
         'skipped_providers': skipped,
         'providers': summaries,
@@ -360,6 +369,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--mode', choices=('auto',) + LIVE_MODES, default='auto')
     parser.add_argument('--library-dir', type=Path, default=None)
     parser.add_argument('--iso-week', type=int, default=None)
+    parser.add_argument(
+        '--expect-live',
+        action='store_true',
+        help='Fail closed if the live report is missing, empty, unparsable, incomplete, or has a provider failure',
+    )
     args = parser.parse_args(argv)
     extras = [value for key, value in os.environ.items()
               if value and key.upper().endswith(('_API_KEY', '_TOKEN'))]
@@ -381,11 +395,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"provider-e2e: archive {result}")
             return 0 if result.get('pushed') or result.get('reason') in {'nothing to commit', 'missing token, repo, or rows'} else 1
         if args.suite == 'judge':
-            reports = [json.loads(path.read_text(encoding='utf-8')) for path in args.report]
+            reports = load_reports(args.report, expect_live=args.expect_live)
             library = load_library(args.library_dir)
             merged = merge_reports(reports)
             write_report(args.out / 'report.json', merged, extras)
-            require_pass(reports, library=library)
+            require_pass(reports, library=library, expect_live=args.expect_live)
             return 0
         mode = None if args.mode == 'auto' else args.mode
         if args.suite in {'mock', 'all'}:

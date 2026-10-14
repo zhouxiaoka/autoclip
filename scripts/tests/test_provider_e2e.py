@@ -39,13 +39,13 @@ class ProviderE2EContractTests(unittest.TestCase):
     def test_live_providers_and_faults(self):
         providers = {item['id']: item for item in matrix.live_providers()}
         self.assertEqual(set(providers), {'api88', 'deepseek', 'gemini', 'dashscope', 'infistar'})
-        self.assertEqual(providers['api88']['base_url'], 'https://api.88api.ai/v1')
+        self.assertEqual(providers['api88']['base_url'], 'https://88api.ai/v1')
         self.assertEqual(providers['dashscope']['base_url'], 'https://dashscope.aliyuncs.com/compatible-mode/v1')
         self.assertEqual(providers['infistar']['base_url'], 'https://infistar.ai/v1')
         self.assertEqual(providers['dashscope']['secret'], 'DASHSCOPE_API_KEY')
         self.assertEqual(providers['infistar']['secret'], 'INFISTAR_API_KEY')
         self.assertEqual(providers['dashscope']['default_model'], 'qwen-flash')
-        self.assertEqual(providers['gemini']['default_model'], 'gemini-2.0-flash-lite')
+        self.assertEqual(providers['gemini']['default_model'], 'gemini-3.5-flash-lite')
         self.assertEqual(providers['deepseek']['default_model'], 'deepseek-flash')
         self.assertEqual(providers['api88']['default_model'], 'gpt-4o-mini')
         self.assertEqual(providers['infistar']['default_model'], 'gpt-4o-mini')
@@ -83,6 +83,8 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertNotIn('e2e-live-once', workflow)
         self.assertIn('provider-e2e-cases', workflow)
         self.assertIn('live_mode', workflow)
+        self.assertIn('--expect-live', workflow)
+        self.assertIn('fail-closed: live job ran but report.json is missing or empty', workflow)
 
     def test_mask_redacts_keys(self):
         text = mask.redact_text('Authorization: Bearer sk-abc123456789 and api_key=supersecretvalue')
@@ -258,14 +260,17 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('API88_API_KEY', doc)
         self.assertIn('DASHSCOPE_API_KEY', doc)
         self.assertIn('INFISTAR_API_KEY', doc)
-        self.assertIn('api.88api.ai', doc)
+        self.assertIn('88api.ai/v1', doc)
+        self.assertNotIn('api.88api.ai/v1', doc)
         self.assertIn('dashscope.aliyuncs.com/compatible-mode/v1', doc)
         self.assertIn('infistar.ai/v1', doc)
         self.assertIn('¥300', doc)
         self.assertIn('provider-e2e-cases', doc)
         self.assertIn('ISO', doc)
-        self.assertIn('gemini-2.0-flash-lite', doc)
+        self.assertIn('gemini-3.5-flash-lite', doc)
         self.assertIn('qwen-flash', doc)
+        self.assertIn('fail-closed', doc)
+        self.assertIn('不要把这个门槛当作发版验收依据', doc)
         self.assertIn('UpstreamErrorType', doc)
         self.assertIn('billable_calls_before_failure', doc)
         self.assertIn('SUCCESS_RATE_CONTRACT.md', doc)
@@ -401,46 +406,224 @@ class ProviderE2ECostControlTests(unittest.TestCase):
         self.assertNotIn('transcript', dirty)
         self.assertEqual(dirty['base_url_host'], 'dashscope.aliyuncs.com')
 
-    def test_live_judge_uses_window_not_single_run(self):
-        report = {
+    def test_live_judge_fail_closed_does_not_hide_provider_failure(self):
+        ok = {
             'suite': 'live',
             'status': 'completed',
+            'mode': 'nightly',
+            'iso_week': 1,
+            'planned': [
+                {'provider_id': 'deepseek', 'clip_id': 'talk_zh'},
+                {'provider_id': 'deepseek', 'clip_id': 'too_short'},
+            ],
             'cases': [
-                {'expect': 'succeed', 'passed': False},
-                {'expect': 'block', 'passed': True, 'billable_calls_before_failure': 0},
+                {
+                    'id': 'deepseek:talk_zh', 'provider_id': 'deepseek', 'clip_id': 'talk_zh',
+                    'expect': 'succeed', 'passed': True,
+                },
+                {
+                    'id': 'deepseek:too_short', 'provider_id': 'deepseek', 'clip_id': 'too_short',
+                    'expect': 'block', 'passed': True, 'billable_calls_before_failure': 0,
+                },
             ],
             'case_records': [{
-                'run_id': 'this',
-                'expect': 'succeed',
-                'passed': False,
-                'provider': 'deepseek',
-                'clip_id': 'talk_zh',
+                'run_id': 'ok', 'expect': 'succeed', 'passed': True,
+                'provider': 'deepseek', 'clip_id': 'talk_zh',
             }],
         }
-        verdict = judge.judge_suite(report)
-        self.assertTrue(verdict['passed'])
+        self.assertTrue(judge.judge_suite(ok)['passed'])
+        failed = {
+            'suite': 'live',
+            'status': 'completed',
+            'planned': [
+                {'provider_id': 'deepseek', 'clip_id': 'talk_zh'},
+                {'provider_id': 'deepseek', 'clip_id': 'too_short'},
+            ],
+            'cases': [
+                {
+                    'id': 'deepseek:talk_zh', 'provider_id': 'deepseek', 'clip_id': 'talk_zh',
+                    'expect': 'succeed', 'passed': False, 'error_class': 'unknown',
+                },
+                {
+                    'id': 'deepseek:too_short', 'provider_id': 'deepseek', 'clip_id': 'too_short',
+                    'expect': 'block', 'passed': True, 'billable_calls_before_failure': 0,
+                },
+            ],
+            'case_records': [{
+                'run_id': 'this', 'expect': 'succeed', 'passed': False,
+                'provider': 'deepseek', 'clip_id': 'talk_zh',
+            }],
+        }
+        verdict = judge.judge_suite(failed)
+        self.assertFalse(verdict['passed'])
         self.assertFalse((verdict.get('window') or {}).get('enforced'))
+        self.assertTrue((verdict.get('window') or {}).get('passed'))
+        self.assertTrue(any('provider failure' in item for item in verdict['reasons']))
         combined = {
             'suite': 'combined',
             'mode': 'verify',
             'status': 'completed',
+            'planned': [
+                {'provider_id': 'deepseek', 'clip_id': 'talk_zh'},
+                {'provider_id': 'gemini', 'clip_id': 'with_srt'},
+                {'provider_id': 'deepseek', 'clip_id': 'too_short'},
+            ],
             'cases': [
                 {'id': 'deepseek:talk_zh', 'expect': 'succeed', 'passed': True},
-                {'id': 'gemini:with_srt', 'expect': 'succeed', 'passed': False},
+                {'id': 'gemini:with_srt', 'expect': 'succeed', 'passed': False, 'error_class': 'unknown'},
                 {'id': 'deepseek:too_short', 'expect': 'block', 'passed': True, 'billable_calls_before_failure': 0},
             ],
             'case_records': [{'run_id': 'v', 'expect': 'succeed', 'passed': True}],
         }
-        self.assertTrue(judge.judge_suite(combined)['passed'])
-        blocked = dict(report)
+        self.assertFalse(judge.judge_suite(combined)['passed'])
+        blocked = dict(failed)
         blocked['status'] = 'budget_blocked'
         blocked['reason'] = 'monthly live budget cap reached'
         self.assertFalse(judge.judge_suite(blocked)['passed'])
+        library = []
+        for run in range(5):
+            for index in range(8):
+                library.append({
+                    'run_id': f'hist{run}',
+                    'expect': 'succeed',
+                    'passed': index > 0,
+                    'provider': 'deepseek',
+                    'clip_id': f'clip{index}',
+                })
+        windowed = judge.judge_suite(ok, library=library)
+        self.assertFalse(windowed['passed'])
+        self.assertTrue(any('rolling-window' in item for item in windowed['reasons']))
 
     def test_mask_does_not_keep_full_url_in_library_host(self):
         from provider_e2e.library import host_only
         self.assertEqual(host_only('https://infistar.ai/v1'), 'infistar.ai')
-        self.assertEqual(host_only('https://api.88api.ai/v1/chat'), 'api.88api.ai')
+        self.assertEqual(host_only('https://88api.ai/v1/chat'), '88api.ai')
+
+
+class ProviderE2EFailClosedTests(unittest.TestCase):
+    def test_historical_24_of_40_is_red_under_fail_closed(self):
+        from provider_e2e.testdata import LIVE_24_OF_40_PATH, live_24_of_40_report
+        report = live_24_of_40_report()
+        succeed = [row for row in report['cases'] if row['expect'] == 'succeed']
+        self.assertEqual(len(succeed), 40)
+        self.assertEqual(sum(1 for row in succeed if row['passed']), 24)
+        self.assertLess(judge.success_rate(succeed), SUCCESS_RATE_THRESHOLD)
+        # Strip the case library so the rolling window is under-sampled (the
+        # original GREEN path). Fail-closed must still turn the check RED.
+        isolated = dict(report)
+        isolated['case_records'] = []
+        isolated.pop('window', None)
+        verdict = judge.judge_suite(isolated)
+        self.assertFalse(verdict['passed'])
+        self.assertFalse((verdict.get('window') or {}).get('enforced'))
+        self.assertTrue((verdict.get('window') or {}).get('passed'))
+        joined = ' '.join(verdict['reasons'])
+        self.assertIn('provider failure: api88', joined)
+        self.assertIn('provider failure: gemini', joined)
+        snapshot = json.loads(LIVE_24_OF_40_PATH.read_text(encoding='utf-8'))
+        self.assertEqual(snapshot['run_id'], '38508586808')
+        self.assertFalse(judge.judge_suite(snapshot)['passed'])
+
+    def test_undersampled_verify_failures_are_red(self):
+        from provider_e2e.testdata import VERIFY_UNDER_SAMPLE_PATH, verify_under_sample_report
+        report = verify_under_sample_report()
+        verdict = judge.judge_suite(report)
+        self.assertFalse(verdict['passed'])
+        self.assertFalse((verdict.get('window') or {}).get('enforced'))
+        self.assertTrue((verdict.get('window') or {}).get('passed'))
+        joined = ' '.join(verdict['reasons'])
+        self.assertIn('provider failure: gemini', joined)
+        self.assertIn('provider failure: api88', joined)
+        snapshot = json.loads(VERIFY_UNDER_SAMPLE_PATH.read_text(encoding='utf-8'))
+        self.assertFalse(judge.judge_suite(snapshot)['passed'])
+
+    def test_workflow_fixture_mock_plus_24_of_40_fails_cli(self):
+        import tempfile
+        from provider_e2e.testdata import LIVE_24_OF_40_PATH, MOCK_PASS_PATH
+        from provider_e2e import __main__ as cli
+        with tempfile.TemporaryDirectory() as tmp:
+            code = cli.main([
+                '--suite', 'judge',
+                '--expect-live',
+                '--report', str(MOCK_PASS_PATH),
+                '--report', str(LIVE_24_OF_40_PATH),
+                '--out', tmp,
+            ])
+        self.assertEqual(code, 1)
+
+    def test_expect_live_missing_empty_unparsable(self):
+        import tempfile
+        from provider_e2e.testdata import MOCK_PASS_PATH
+        missing = judge.load_reports([MOCK_PASS_PATH], expect_live=True)
+        self.assertFalse(judge.judge_reports(missing, expect_live=True)['passed'])
+        self.assertTrue(any('missing live report' in item for item in judge.judge_reports(missing, expect_live=True)['reasons']))
+        with tempfile.TemporaryDirectory() as tmp:
+            empty = Path(tmp) / 'live' / 'report.json'
+            empty.parent.mkdir()
+            empty.write_text('', encoding='utf-8')
+            loaded = judge.load_report_file(empty)
+            self.assertEqual(loaded['status'], 'empty')
+            self.assertFalse(judge.judge_suite(loaded)['passed'])
+            broken = Path(tmp) / 'live' / 'broken.json'
+            broken.write_text('{not-json', encoding='utf-8')
+            parsed = judge.load_report_file(broken)
+            self.assertEqual(parsed['status'], 'unparsable')
+            self.assertFalse(judge.judge_suite(parsed)['passed'])
+            absent = judge.load_report_file(Path(tmp) / 'live' / 'nope.json')
+            self.assertEqual(absent['status'], 'missing')
+
+    def test_incomplete_planned_matrix_is_red(self):
+        report = {
+            'suite': 'live',
+            'status': 'completed',
+            'planned': [
+                {'provider_id': 'deepseek', 'clip_id': 'talk_zh'},
+                {'provider_id': 'gemini', 'clip_id': 'with_srt'},
+                {'provider_id': 'deepseek', 'clip_id': 'too_short'},
+            ],
+            'cases': [
+                {'id': 'deepseek:talk_zh', 'expect': 'succeed', 'passed': True},
+            ],
+        }
+        verdict = judge.judge_suite(report)
+        self.assertFalse(verdict['passed'])
+        self.assertTrue(any('incomplete live results' in item for item in verdict['reasons']))
+        self.assertIn('gemini:with_srt', verdict['completeness']['missing'])
+
+    def test_diagnose_extracts_http_status_and_redacts(self):
+        import tempfile
+        from provider_e2e.diagnose import classify_http, from_backend_log, from_workspace, merge_diagnosis
+        workspace = {
+            'generation': {},
+            'analysis': {
+                'error': 'OpenAI调用失败 Error code: 404 model does not exist api_key=sk-secretvalue99',
+                'http_status': 404,
+            },
+        }
+        extracted = from_workspace(workspace)
+        self.assertEqual(extracted['http_status'], 404)
+        self.assertEqual(extracted['error_class'], UpstreamErrorType.MODEL_NOT_FOUND.value)
+        self.assertNotIn('sk-secretvalue99', extracted['log_excerpt'] or '')
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / 'backend.log'
+            log.write_text(
+                'Gemini调用失败 Error code: 404 The model `gemini-2.0-flash` does not exist\n',
+                encoding='utf-8',
+            )
+            logged = from_backend_log(log)
+        self.assertEqual(logged['http_status'], 404)
+        self.assertEqual(logged['error_class'], UpstreamErrorType.MODEL_NOT_FOUND.value)
+        merged = merge_diagnosis({'http_status': None, 'error_class': None}, logged)
+        self.assertEqual(merged['http_status'], 404)
+        self.assertEqual(classify_http(404), UpstreamErrorType.BAD_ENDPOINT.value)
+        self.assertEqual(classify_http(401), UpstreamErrorType.INVALID_KEY.value)
+
+    def test_acceptance_docs_freeze_the_gate(self):
+        acceptance = (ROOT / 'docs/TESTING_ACCEPTANCE.md').read_text(encoding='utf-8')
+        self.assertIn('不要用这个门槛做发版验收', acceptance)
+        changelog = (ROOT / 'CHANGELOG.md').read_text(encoding='utf-8')
+        self.assertIn('gemini-3.5-flash-lite', changelog)
+        self.assertIn('88api.ai/v1', changelog)
 
 
 if __name__ == '__main__':

@@ -81,9 +81,18 @@ def usage_tokens(rows: list[dict[str, Any]]) -> tuple[int, int]:
     return prompt, completion
 
 
-def actual_case_cny(model: str | None, prompt_tokens: int, completion_tokens: int, expect: str) -> float:
+def actual_case_cny(
+    model: str | None,
+    prompt_tokens: int,
+    completion_tokens: int,
+    expect: str,
+    *,
+    passed: bool | None = None,
+) -> float:
     if prompt_tokens or completion_tokens:
         return tokens_cny(model, prompt_tokens, completion_tokens)
+    if passed is False:
+        return 0.0
     return estimate_case_cny(model, expect)
 
 

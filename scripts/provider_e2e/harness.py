@@ -11,6 +11,7 @@ from backend.core.upstream_errors import classify_upstream_error, is_retryable
 
 from .backend import DesktopBackend
 from .cost import usage_tokens
+from .diagnose import from_backend_log, from_workspace, merge_diagnosis
 from .http_util import HttpError, get_json, post_multipart
 from .mask import redact
 from .mock_openai import MockServer
@@ -241,7 +242,13 @@ def run_case(
         prompt_tokens, completion_tokens = usage_tokens(usage_rows(data_dir, project_id))
     observed = _observed_upstream_error_type(observer, events_before)
     error_code = (workspace.get('generation') or {}).get('error_code') or (workspace.get('analysis') or {}).get('error_code')
-    error_class = observed or classify_case_error(error, error_code)
+    diagnosis = merge_diagnosis(from_workspace(workspace), from_backend_log(backend.log_path))
+    error_class = (
+        observed
+        or diagnosis.get('error_class')
+        or classify_case_error(error, error_code)
+    )
+    http_status = diagnosis.get('http_status')
     judged = evaluate_case(
         expect,
         workspace,
@@ -267,6 +274,8 @@ def run_case(
         'expected_upstream_error_type': expected_upstream_error_type,
         'upstream_error_type': observed,
         'error_class': error_class,
+        'http_status': http_status,
+        'log_excerpt': diagnosis.get('log_excerpt'),
         'error_code': error_code,
         'status': (workspace.get('generation') or {}).get('status') or (workspace.get('analysis') or {}).get('status'),
         'failure_stage': (workspace.get('generation') or {}).get('failure_stage'),
