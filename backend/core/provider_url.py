@@ -1,5 +1,7 @@
 """Normalize a provider base URL. Cleanup only — never rejects or raises.
 
+Idempotent: running the same URL through again returns the same result.
+
 Rules (applied in order):
 
 1. Collapse every whitespace (including interior spaces and newlines).
