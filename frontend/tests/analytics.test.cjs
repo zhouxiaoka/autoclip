@@ -557,6 +557,27 @@ test('actual unified settings hook records save once and HTTP-200 negative tests
  assert.equal(s.events.some(e=>e.event==='api_key_configured'),false)
  assert.equal(JSON.stringify(s.events).includes('sk-secret'),false);assert.equal(JSON.stringify(s.events).includes('private'),false)
 })
+test('fetchModels ignores a late response after the URL changes',async()=>{
+  const s=setup();const fetchPending=[]
+  const render=settingsHook(s,{
+    discover:()=>new Promise(()=>{}),
+    fetchList:()=>new Promise(resolve=>fetchPending.push(resolve)),
+  },modelFixture())
+  await render().load();await Promise.resolve()
+  let m=render();const id=m.settings.connections[0].id
+  const stale=m.fetchModels({...m.settings.connections[0],base_url:'https://old.example/v1'})
+  m=render();m.editConnection(m.settings.connections[0],{base_url:'https://new.example/v1'})
+  m=render();const fresh=m.fetchModels({...m.settings.connections[0],base_url:'https://new.example/v1'})
+  fetchPending[0]({ok:true,models:['stale-old'],recommended:{analysis:[]}})
+  await Promise.resolve();m=render()
+  assert.equal(JSON.stringify(m.lists[id]||{}).includes('stale-old'),false)
+  fetchPending[1]({ok:true,models:['fresh-new'],recommended:{analysis:[]}})
+  await fresh;await stale;m=render()
+  assert.deepEqual((m.lists[id]||{models:[]}).models.map(item=>item.id),['fresh-new'])
+  assert.equal(JSON.stringify(m.lists).includes('stale-old'),false)
+  assert.equal(JSON.stringify(m.lists).includes('old.example'),false)
+})
+
 test('actual discovery ignores stale completions and distinguishes preview from live results',async()=>{
  const s=setup();let pending=[]
  const render=settingsHook(s,{discover:()=>new Promise(resolve=>pending.push(resolve))},modelFixture())
