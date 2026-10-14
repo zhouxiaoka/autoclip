@@ -173,7 +173,11 @@ test('edit collapses URL spaces; save adds or dedupes /v1 without rejecting', ()
   const spaced = logic.editConnection(state, 'a', { base_url: '  https://gw.example /v1/  ' })
   assert.equal(spaced.connections[0].base_url, 'https://gw.example/v1/')
   assert.equal(logic.forSave(spaced).connections[0].base_url, 'https://gw.example/v1')
-  const dashscope = { ...fresh(), connections: [conn('b', 'dashscope', { base_url: 'https://llm-x.cn-beijing.maas.aliyuncs.com' })] }
+  const dashscope = {
+    ...fresh(),
+    connections: [conn('b', 'dashscope', { base_url: 'https://llm-x.cn-beijing.maas.aliyuncs.com' })],
+    analysis: { connection_id: 'b', model: 'qwen-plus', capability: 'auto' },
+  }
   assert.equal(logic.forSave(dashscope).connections[0].base_url, 'https://llm-x.cn-beijing.maas.aliyuncs.com')
 })
 
@@ -214,6 +218,25 @@ test('save validation reports the first blocking field in page order and prunes 
   const doc = logic.forSave({ ...ok, connections: [...ok.connections, conn('blank', 'compatible')], cover: { connection_id: 'a', model: '', capability: 'auto' } })
   assert.deepEqual(doc.connections.map(c => c.id), ['a'])
   assert.equal(doc.cover, null)
+  const browsed = logic.forSave({
+    ...ok,
+    connections: [
+      ...ok.connections,
+      conn('sf', 'compatible', { base_url: 'https://api.siliconflow.cn/v1' }),
+      conn('ds', 'deepseek'),
+    ],
+  })
+  assert.deepEqual(browsed.connections.map(c => c.id).join(','), 'a')
+  const extraKey = logic.forSave({
+    ...ok,
+    connections: [...ok.connections, conn('ds', 'deepseek', { has_key: true })],
+  })
+  assert.equal(extraKey.connections.map(c => c.id).includes('ds'), true)
+  const local = logic.forSave({
+    ...ok,
+    connections: [...ok.connections, conn('ollama', 'ollama')],
+  })
+  assert.equal(local.connections.map(c => c.id).includes('ollama'), true)
 })
 
 test('AI covers fall back to frames only when the service has no image model at all', () => {

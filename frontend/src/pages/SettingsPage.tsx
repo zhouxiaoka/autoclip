@@ -23,7 +23,7 @@ import FlagOverrides, { flagOverridesVisible } from '../features/settings/FlagOv
 
 type SectionKey = 'ai' | 'publish' | 'app' | 'feedback'
 const NAV: Array<{ key: SectionKey; label: string }> = [
-  { key: 'ai', get label() { return t("AI 模型") } },
+  { key: 'ai', get label() { return t('settings.providers.nav') } },
   { key: 'publish', get label() { return t("发布") } },
   { key: 'app', get label() { return t("应用") } },
   { key: 'feedback', get label() { return t("反馈") } },
@@ -80,7 +80,7 @@ const SettingsPage: React.FC = () => {
 
         <div className="ac-settings-body">
           <div hidden={active !== 'ai'}>
-            <AIModelSettings requestedSection={requested} />
+            <AIModelSettings requestedSection={requested} requestedProvider={new URLSearchParams(location.search).get('provider') || ''} />
           </div>
 
           {/* ---------------- 应用 ---------------- */}

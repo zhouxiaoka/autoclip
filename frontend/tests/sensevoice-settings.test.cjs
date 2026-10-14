@@ -18,6 +18,10 @@ function loadSection() {
     './useModelSettings': {},
     './modelSettingsLogic': { connectionOf: () => undefined, mainConnection: () => undefined },
     './ProviderFields': {}, './ModelPicker': {}, '../../services/api': {},
+    './SenseVoiceConfig': { default: 'SenseVoiceConfig' },
+    './ProviderCatalog': { default: 'ProviderCatalog' },
+    './ProviderDetail': { default: 'ProviderDetail' },
+    './providerCatalogView': { catalogPreset: () => undefined },
   }
   const source = fs.readFileSync('src/features/settings/AIModelSettings.tsx', 'utf8') + '\nexport const testSection = TranscriptionSection;'
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText

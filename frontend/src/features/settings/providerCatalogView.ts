@@ -1,0 +1,178 @@
+/**
+ * Settings catalog (U1): group, search, capability filter, and connection matching.
+ * Driven by presets/provider_presets.json. No React, no telemetry payloads.
+ */
+import { PROVIDERS, type ProviderKey } from './providers'
+import { getCatalog, getProvider, resolveProviderId, type ProviderGroupId, type ProviderPreset } from './providerPresets'
+import { cleanBinding, newConnection, presetKey } from './modelSettingsLogic'
+import type { Connection, ModelSettings } from './modelSettingsApi'
+
+export type CapabilityFilter = 'all' | 'language' | 'asr' | 'tts' | 'image' | 'music' | 'video'
+export type CatalogConnectKind = 'legacy' | 'local_asr' | 'compatible' | 'guide'
+export type LocalAsrId = 'whisper' | 'sensevoice'
+
+export const CAPABILITY_FILTERS: CapabilityFilter[] = ['all', 'language', 'asr', 'tts', 'image', 'music', 'video']
+export const CATALOG_GROUPS: ProviderGroupId[] = ['recommended', 'popular', 'local', 'more']
+
+const LEGACY_IDS = new Set<string>([
+  'dashscope', 'openai', 'infistar', 'api88', 'gemini', 'deepseek',
+  'seed', 'kimi', 'glm', 'grok', 'ollama', 'lmstudio',
+])
+const OPENAI_LIKE = new Set(['openai-completions', 'openai-responses'])
+
+export function catalogProviders(): ProviderPreset[] {
+  return Object.values(getCatalog().providers)
+}
+
+export function displayNameOf(preset: ProviderPreset): string {
+  return preset.ui_name || preset.display_name
+}
+
+export function connectKind(preset: ProviderPreset): CatalogConnectKind {
+  if (preset.id === 'whisper' || preset.id === 'sensevoice') return 'local_asr'
+  if (LEGACY_IDS.has(preset.id)) return 'legacy'
+  if (OPENAI_LIKE.has(preset.protocol)) return 'compatible'
+  return 'guide'
+}
+
+export function isLegacyProviderId(id: string): id is ProviderKey {
+  return LEGACY_IDS.has(id) && id in PROVIDERS
+}
+
+/** Hostname only. Never return the original URL (telemetry / logs must not store it). */
+export function catalogHost(url?: string): string {
+  try {
+    return new URL((url || '').trim()).hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  } catch {
+    return ''
+  }
+}
+
+export function matchesQuery(preset: ProviderPreset, query: string): boolean {
+  const needle = query.trim().toLowerCase()
+  if (!needle) return true
+  return [preset.display_name, preset.ui_name, preset.short_name, preset.id]
+    .some(value => value.toLowerCase().includes(needle))
+}
+
+export function matchesCapability(preset: ProviderPreset, filter: CapabilityFilter): boolean {
+  return filter === 'all' || preset.capabilities.includes(filter)
+}
+
+export function filterCatalog(query: string, filter: CapabilityFilter): ProviderPreset[] {
+  return catalogProviders().filter(preset => matchesQuery(preset, query) && matchesCapability(preset, filter))
+}
+
+export function groupCatalog(presets: ProviderPreset[]): Record<ProviderGroupId, ProviderPreset[]> {
+  const groups: Record<ProviderGroupId, ProviderPreset[]> = { recommended: [], popular: [], local: [], more: [] }
+  for (const preset of presets) groups[preset.group].push(preset)
+  return groups
+}
+
+export function shouldExpandMore(query: string, filter: CapabilityFilter, moreCount: number): boolean {
+  return moreCount > 0 && (!!query.trim() || filter !== 'all')
+}
+
+export function initialLetter(preset: ProviderPreset): string {
+  const name = (preset.short_name || preset.display_name).trim()
+  return (name.charAt(0) || '?').toUpperCase()
+}
+
+export function findCatalogConnection(settings: ModelSettings, preset: ProviderPreset): Connection | undefined {
+  if (preset.id === 'whisper' || preset.id === 'sensevoice') return undefined
+  const byId = settings.connections.find(connection => {
+    const resolved = resolveProviderId(connection.provider) || connection.provider
+    if (resolved === preset.id) return preset.id !== 'openai' || presetKey(connection) === 'openai'
+    return false
+  })
+  if (byId) return byId
+  if (preset.id === 'openai') return settings.connections.find(connection => presetKey(connection) === 'openai')
+  const host = catalogHost(preset.base_url)
+  if (!host) return undefined
+  return settings.connections.find(connection => (
+    (connection.provider === 'compatible' || presetKey(connection) === 'compatible')
+    && catalogHost(connection.base_url) === host
+  ))
+}
+
+export function isCatalogConnected(settings: ModelSettings, preset: ProviderPreset): boolean {
+  if (preset.id === 'whisper') {
+    return settings.transcription?.provider !== 'sensevoice_local' && settings.transcription?.provider !== 'cloud'
+  }
+  if (preset.id === 'sensevoice') return settings.transcription?.provider === 'sensevoice_local'
+  const connection = findCatalogConnection(settings, preset)
+  if (!connection) return false
+  if (preset.auth === 'none') return true
+  return !!(connection.api_key || connection.has_key)
+}
+
+export function selectLocalAsr(settings: ModelSettings, id: LocalAsrId, model?: string): ModelSettings {
+  if (id === 'sensevoice') return { ...settings, transcription: { provider: 'sensevoice_local', model: 'SenseVoiceSmall' } }
+  const current = settings.transcription?.provider === 'whisper_local' ? settings.transcription.model : 'base'
+  return { ...settings, transcription: { provider: 'whisper_local', model: model || current || 'base' } }
+}
+
+/** In-memory form row. Opening a card must not write this into settings. */
+export function catalogDraftConnection(preset: ProviderPreset, id = `draft:${preset.id}`): Connection | undefined {
+  const kind = connectKind(preset)
+  if (kind === 'guide' || kind === 'local_asr') return undefined
+  if (kind === 'legacy' && isLegacyProviderId(preset.id)) return newConnection(preset.id, id)
+  return {
+    id,
+    name: displayNameOf(preset).slice(0, 100),
+    provider: 'compatible',
+    base_url: preset.base_url,
+    api_key: '',
+    image_api: 'auto',
+    image_base_url: '',
+  }
+}
+
+export function assignAnalysis(
+  settings: ModelSettings,
+  connection: Connection,
+): ModelSettings {
+  const oldMainId = settings.analysis?.connection_id
+  if (oldMainId === connection.id) return settings
+  let next: ModelSettings = { ...settings, analysis: cleanBinding(connection.id) }
+  if (settings.cover?.connection_id === oldMainId) next = { ...next, cover: settings.cover_enabled ? cleanBinding(connection.id) : null }
+  if (settings.vision?.connection_id === oldMainId) next = { ...next, vision: null }
+  return next
+}
+
+export function ensureCatalogConnection(
+  settings: ModelSettings,
+  preset: ProviderPreset,
+  createLegacy: (provider: ProviderKey) => Connection = newConnection,
+  createId: () => string = () => crypto.randomUUID(),
+): { settings: ModelSettings; connection?: Connection; changed: boolean } {
+  const kind = connectKind(preset)
+  if (kind === 'guide' || kind === 'local_asr') return { settings, changed: false }
+  const existing = findCatalogConnection(settings, preset)
+  if (existing) {
+    if (!settings.analysis && preset.capabilities.includes('language')) {
+      return { settings: assignAnalysis(settings, existing), connection: existing, changed: true }
+    }
+    return { settings, connection: existing, changed: false }
+  }
+  const connection = kind === 'legacy' && isLegacyProviderId(preset.id)
+    ? createLegacy(preset.id)
+    : {
+        id: createId(),
+        name: displayNameOf(preset).slice(0, 100),
+        provider: 'compatible',
+        base_url: preset.base_url,
+        api_key: '',
+        image_api: 'auto' as const,
+        image_base_url: '',
+      }
+  let next: ModelSettings = { ...settings, connections: [...settings.connections, connection] }
+  if (!settings.analysis && preset.capabilities.includes('language') && (kind === 'legacy' || !!preset.base_url)) {
+    next = assignAnalysis(next, connection)
+  }
+  return { settings: next, connection, changed: true }
+}
+
+export function catalogPreset(id?: string | null): ProviderPreset | undefined {
+  return id ? getProvider(id) : undefined
+}

@@ -8,6 +8,8 @@ import { PROVIDERS, type ProviderKey } from './providers'
 import { bindingCapability, modelSettingsApi, type Connection, type FetchListResult, type ModelList, type ModelSettings } from './modelSettingsApi'
 import { applyModelDefaults } from './modelDefaults'
 import * as logic from './modelSettingsLogic'
+import { assignAnalysis, ensureCatalogConnection, selectLocalAsr, type LocalAsrId } from './providerCatalogView'
+import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
 
@@ -122,6 +124,38 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     if (!result.changed) return
     replace(result.settings)
     void discover(result.connection, false, 'provider_change')
+  }
+  const ensureCatalogProvider = (id: string, patch?: Partial<Connection>, useForAnalysis = false) => {
+    if (!settings) return
+    const preset = getProvider(id)
+    if (!preset) return
+    const result = ensureCatalogConnection(settings, preset)
+    let next = result.settings
+    let connection = result.connection
+    if (connection && patch) {
+      next = logic.editConnection(next, connection.id, patch)
+      connection = next.connections.find(row => row.id === connection!.id)
+    }
+    if (connection && useForAnalysis) next = assignAnalysis(next, connection)
+    if (result.changed || patch || useForAnalysis) {
+      if (connection) {
+        const cached = lists[connection.id]
+        if (cached && !cached.preview) next = applyModelDefaults(next, connection, cached.models, autoCover.current)
+      }
+      replace(next)
+    }
+    if (connection) void discover(connection, false, 'provider_change')
+  }
+  const assignAnalysisConnection = (connection: Connection) => {
+    if (!settings) return
+    let next = assignAnalysis(settings, connection)
+    const cached = lists[connection.id]
+    if (cached && !cached.preview) next = applyModelDefaults(next, connection, cached.models, autoCover.current)
+    replace(next)
+  }
+  const selectLocalAsrProvider = (id: LocalAsrId) => {
+    if (!settings) return
+    replace(selectLocalAsr(settings, id))
   }
   const setTranscriptionLocal = (model: string) => update({ transcription: { provider: 'whisper_local', model } })
   const setCoverSeparate = (separate: boolean) => { if (settings) replace(logic.setCoverSeparate(settings, separate, lists)) }
@@ -256,7 +290,8 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const main = settings ? logic.mainConnection(settings) : undefined
   return {
     settings, lists, busy, listErrors, dirty, saving, testing, error, setError, main, keyHints,
-    load, discover, fetchModels, update, editConnection, chooseProvider, setTranscriptionLocal,
+    load, discover, fetchModels, update, editConnection, chooseProvider, ensureCatalogProvider,
+    assignAnalysisConnection, selectLocalAsrProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test,
   }
 }
