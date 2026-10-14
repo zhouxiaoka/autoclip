@@ -112,7 +112,7 @@ function render(options = {}) {
       },
       errorText: String,
     },
-    '../../analytics/studio': { trackQuickOutputPlatforms() {} },
+    '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {} },
     '../../analytics/flags': { useFlag: () => false, featureSnapshot: () => ({ pkg_templates_v1: false }) },
     './TemplatePicker': { default: 'template-picker', templateImportFields: () => ({}) },
     './StyleProbeLine': { default: 'style-probe' },
@@ -198,6 +198,23 @@ test('AUTOCLIP-FRONTEND-C: a readiness report without checks or transcription do
   const onlyFfmpeg = { analysis_mode: 'auto', ready: false, checks: { ffmpeg: check(false, 'ffmpeg_missing', 'none') } }
   assert.equal(readiness.submissionBlock(onlyFfmpeg, false, true), 'ffmpeg')
   assert.equal(readiness.visibleIssues(onlyFfmpeg, false).map(item => item.key).join(','), 'ffmpeg')
+})
+
+test('ASR readiness properties infer provider from the check code and never need a model name', () => {
+  const { asrReadinessProperties } = readiness
+  const local = asrReadinessProperties(report({ transcription: check(false, 'whisper_not_installed', 'install_whisper') }), false)
+  assert.equal(local.provider, 'whisper_local')
+  assert.equal(local.code, 'whisper_not_installed')
+  assert.equal(local.has_subtitle, false)
+  assert.equal(local.blocked, true)
+  const sense = asrReadinessProperties(report({ transcription: check(false, 'sensevoice_not_ready', 'settings_transcription') }), true)
+  assert.equal(sense.provider, 'sensevoice_local')
+  assert.equal(sense.blocked, false)
+  const cloud = asrReadinessProperties(report({ transcription: check(false, 'cloud_not_configured', 'settings_transcription') }), false)
+  assert.equal(cloud.provider, 'cloud')
+  assert.equal(cloud.blocked, true)
+  assert.equal(asrReadinessProperties({ analysis_mode: 'auto', ready: false }, false).provider, 'whisper_local')
+  assert.equal(asrReadinessProperties({ analysis_mode: 'auto', ready: false }, false).blocked, false)
 })
 
 test('CreativeImport reads readiness transcription with optional chaining at every level', () => {

@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { Btn, Segmented, Dialog, StatusDot } from '../../ui'
 import PlatformPicker from './PlatformPicker'
 import { studioApi, errorText } from './api'
-import { trackQuickOutputPlatforms } from '../../analytics/studio'
+import { trackAsrReadiness, trackQuickOutputPlatforms } from '../../analytics/studio'
 import { featureSnapshot, useFlag } from '../../analytics/flags'
 import TemplatePicker, { templateImportFields, type HtmlTemplateChoice } from './TemplatePicker'
 import StyleProbeLine from './StyleProbeLine'
@@ -15,7 +15,7 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { repairDestination, submissionBlock, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import { asrReadinessProperties, repairDestination, submissionBlock, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
 import './studio.css'
 import './quick-output.css'
 
@@ -64,7 +64,11 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
   useEffect(() => {
     let cancel = false
     studioApi.readiness()
-      .then(value => { if (!cancel) setReadiness(value) })
+      .then(value => {
+        if (cancel) return
+        setReadiness(value)
+        trackAsrReadiness(asrReadinessProperties(value, false))
+      })
       .catch(() => { if (!cancel) setReadiness(null) })
       .finally(() => { if (!cancel) setSettled(true) })
     return () => { cancel = true }
@@ -115,6 +119,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     if (source === 'file' ? !file : !url.trim()) { setError(t("请先添加视频文件或链接")); return }
     const reason = submissionBlock(readiness, !!subtitle, settled)
     if (reason === 'pending') { setError(t('正在确认导入条件…')); return }
+    trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
     if (reason === 'analysis') { setError(t('请先连接 AI 服务，再导入视频。')); return }
     if (reason === 'transcription') { setError(t('还没有可用的转写。可以附上 SRT 字幕，或先准备好转写。')); return }
     if (reason === 'visual') { setError(t('请先配好画面分析模型，再生成成片。')); return }

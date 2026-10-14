@@ -8,6 +8,7 @@
 ## [未发布]
 
 - 新增上游错误分类与成功率埋点字段契约（`upstream_errors` / `llm_telemetry`，前端 `successRateContract`）：按 OpenAI、new-api、Gemini、DeepSeek 等响应区分密钥、余额、权限/分组、模型不存在、地址错误、限流、5xx、超时/断连、截断；只提供分类与脱敏，不改现有调用链或上报。八语补齐对应提示 key。
+- 1.5.8 线 A：在契约之上补齐出片成功率埋点。每次模型 `call` / `vision_call` 上报 `llm_request_finished`（provider、model、base_url 域名、HTTP 状态、上游错误类型、token、重试次数、失败阶段、耗时）；生成/出片终态带同一套 run 级字段，失败时后端保证有 `error_code` 和 `failure_stage`；导入探针与提交上报 `asr_readiness_checked`；为设置页校验预留 `provider_validation_finished`。Sentry `user.id` 与 PostHog 匿名 `distinct_id` 对齐。不上报 key、提示词、字幕或完整 URL。
 
 - 发布 autoclip-mcp 时推送标签 `mcp-v<version>`。该标签走 pypi environment，只允许从 `mcp-v*` 部署。
 

@@ -51,6 +51,8 @@ provider、model、base_url_host、http_status（400–599）、upstream_error_t
 
 provider 枚举与现有 experience 契约一致：dashscope / openai / gemini / deepseek / seed / kimi / glm / grok / infistar / api88 / compatible / ollama / lmstudio / other。
 
-## 明确不做（本 PR）
+线 A（#9）在契约之上发送事件、把 run 级字段写入 generation / production，并把允许字段并进 `safeStudioProperties`。见 [`docs/analytics/LLM_TELEMETRY.md`](analytics/LLM_TELEMETRY.md)。
 
-不调用 `classify_upstream_error` 去改 `model_call_error_code` / `call_with_retry` / 设置页保存。不往 PostHog 打 `llm_request_finished`。不把新字段并进 `safeStudioProperties`（避免现有 generation 快照意外带上 model）。这些由对应并行线在引用本契约后各自落地。
+## 明确不做（第 0 步契约本身）
+
+契约模块不改 `model_call_error_code` / `call_with_retry` / 设置页保存，也不自己打点。分类与脱敏只提供能力。

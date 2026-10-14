@@ -57,3 +57,15 @@ export function repairDestination(repair: RepairAction): string | null {
   if (repair === 'settings_vision') return '/settings?section=vision'
   return null
 }
+
+/** Allowlisted ASR probe payload. Never reads model names or paths. */
+export function asrReadinessProperties(report: ImportReadiness | null, hasSubtitle: boolean): Record<string, unknown> {
+  const checks = report && report.checks
+  const transcription = checks && checks.transcription
+  const code = transcription && typeof transcription.code === 'string' ? transcription.code : undefined
+  let provider = 'whisper_local'
+  if (typeof code === 'string' && code.indexOf('sensevoice') === 0) provider = 'sensevoice_local'
+  else if (typeof code === 'string' && code.indexOf('cloud') === 0) provider = 'cloud'
+  const blocked = Boolean(transcription && transcription.ok === false && !hasSubtitle)
+  return { provider, code, has_subtitle: hasSubtitle, blocked }
+}

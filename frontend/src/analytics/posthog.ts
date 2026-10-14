@@ -45,8 +45,10 @@ function publishAnonymousId(): void {
   retryIdentity = false
   const finish = (ok: boolean) => {
     if (pendingDistinctId === id) pendingDistinctId = ''
-    if (ok) publishedDistinctId = id
-    else if (retryIdentity) {
+    if (ok) {
+      publishedDistinctId = id
+      syncSentryUser(id)
+    } else if (retryIdentity) {
       retryIdentity = false
       publishAnonymousId()
     }
@@ -61,6 +63,14 @@ function publishAnonymousId(): void {
   } catch {
     finish(false)
   }
+}
+
+function syncSentryUser(id: string | null): void {
+  try {
+    void import('../desktop/sentry').then((mod) => {
+      try { mod.setAnonymousUser(id) } catch { /* identity cannot break analytics */ }
+    }).catch(() => undefined)
+  } catch { /* analytics.test.cjs require() must not throw */ }
 }
 
 function watchAnonymousId(): void {
@@ -261,6 +271,8 @@ export function setAnalyticsEnabled(enabled: boolean): void {
     } else {
       posthog.opt_out_capturing()
       disableFlagNetwork()
+      publishedDistinctId = ''
+      syncSentryUser(null)
     }
   } catch { /* analytics cannot break settings */ }
 }
@@ -283,6 +295,9 @@ export function identifyUser(
 export function resetUser(): void {
   if (!initialized) return
   posthog.reset()
+  publishedDistinctId = ''
+  syncSentryUser(null)
+  publishAnonymousId()
 }
 
 export { posthog }

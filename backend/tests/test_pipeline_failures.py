@@ -518,7 +518,7 @@ def test_step1_provider_500_reaches_failure_context_http_status(tmp_path, prompt
 
     assert exc.value.stage == "ANALYZE"
     assert studio_error_code(exc.value) == "provider_error"
-    assert studio_failure_context(exc.value, "production") == {"failure_stage": "analyze", "http_status": 500}
+    assert studio_failure_context(exc.value, "production") == {"failure_stage": "analyze", "http_status": 500, "upstream_error_type": "upstream_unavailable"}
 
 
 def test_timeline_call_failure_report_carries_http_status():
@@ -531,7 +531,7 @@ def test_timeline_call_failure_report_carries_http_status():
     ]}
     failure = timeline_failure_from_report(2, report)
     assert failure.code == "provider_error"
-    assert studio_failure_context(failure, "production") == {"failure_stage": "analyze", "http_status": 503}
+    assert studio_failure_context(failure, "production") == {"failure_stage": "analyze", "http_status": 503, "upstream_error_type": "upstream_unavailable"}
 
     no_status = timeline_failure_from_report(2, {"parsed": 0, "chunks": [
         {"outcome": "call_failed", "error_code": "connection"},

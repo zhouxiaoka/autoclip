@@ -31,6 +31,20 @@ def source(project_id):
     from backend.services.publish_export import find_source_video
     return find_source_video(project_id)
 
+
+def _project_has_subtitle(project_id):
+    try:
+        video = source(project_id)
+        if video is not None and (video.parent / 'input.srt').is_file():
+            return True
+    except Exception:  # noqa: BLE001 - missing source is just "no subtitle yet"
+        pass
+    try:
+        root = store.directory(project_id)
+        return (root / 'input.srt').is_file()
+    except Exception:  # noqa: BLE001
+        return False
+
 def export(project_id, draft, *, brand_outro=False, _variant_identity=None, html_template=None, html_fallback=None, safe_area='xiaohongshu', requested_template=None):
     from backend.services.output_branding import load_settings
     brand_outro = bool(brand_outro and load_settings().enabled)
@@ -95,7 +109,8 @@ def _tracked(stage):
         def run(project_id, *args, **kwargs):
             identity = kwargs.pop('_io_receipt', None)
             from backend.core.project_cancellation import ProjectDeleted, bind
-            with bind(project_id), store.worker_read_scope(project_id, identity), llm_usage.tracking(project_id), llm_usage.stage(stage):
+            from backend.core import llm_telemetry
+            with bind(project_id), store.worker_read_scope(project_id, identity), llm_usage.tracking(project_id), llm_usage.stage(stage), llm_telemetry.track_run():
                 try:
                     return fn(project_id, *args, **kwargs)
                 except ProjectDeleted:
@@ -1495,6 +1510,11 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
         state.setdefault('output_variants', [])
         state['analysis'] = {'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
+        try:
+            from backend.core.llm_telemetry import emit_asr_readiness_checked
+            emit_asr_readiness_checked(has_subtitle=_project_has_subtitle(project_id))
+        except Exception:  # noqa: BLE001
+            logger.debug('asr_readiness_checked was skipped', exc_info=True)
         if options.auto_start:
             _prepare_speaker_framing(options.platforms)
         try:
