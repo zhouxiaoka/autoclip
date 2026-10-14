@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 
@@ -157,6 +158,9 @@ def test_catalog_change_preserves_frozen_connection_but_updates_new_one(tmp_path
     assert original.preset_version > 0
     raw = json.loads(CATALOG.read_text(encoding='utf-8'))
     raw['version'] += 1
+    # A catalog migration must explicitly continue accepting the frozen host;
+    # preset_version alone cannot authorize an arbitrary saved address.
+    raw['providers'][provider].setdefault('accepted_hosts', []).append(urlparse(frozen_url).hostname)
     raw['providers'][provider]['base_url'] = 'https://changed.example.test/v1beta' if provider == 'gemini' else 'https://changed.example.test/v1'
     path = tmp_path / 'provider_presets.json'
     path.write_text(json.dumps(raw), encoding='utf-8')
@@ -167,6 +171,29 @@ def test_catalog_change_preserves_frozen_connection_but_updates_new_one(tmp_path
     fresh = ai.Connection(id='fresh', name='fresh', provider=provider)
     expected = 'https://changed.example.test/v1beta/openai' if provider == 'gemini' else 'https://changed.example.test/v1'
     assert ai.chat_endpoint(fresh, 'fixture-model')['base_url'] == expected
+
+
+@pytest.mark.parametrize('provider', ['api88', 'infistar', 'deepseek', 'gemini'])
+def test_stamped_urls_use_live_catalog_hosts_and_shared_chat_path(tmp_path, monkeypatch, provider):
+    raw = json.loads(CATALOG.read_text(encoding='utf-8'))
+    raw['providers'][provider]['base_url'] = 'https://current.example.test/v1'
+    raw['providers'][provider]['accepted_hosts'] = ['legacy.example.test']
+    path = tmp_path / 'provider_presets.json'
+    path.write_text(json.dumps(raw), encoding='utf-8')
+    monkeypatch.setenv('AUTOCLIP_PROVIDER_PRESETS', str(path))
+    provider_presets.reset_catalog_cache()
+    saved = 'http://legacy.example.test:8443/v1beta' if provider == 'gemini' else 'http://legacy.example.test:8443/v1'
+    connection = ai.Connection(
+        id='saved', name='saved', provider=provider, base_url=saved,
+        base_url_source='preset', preset_version=99,
+    )
+    expected = saved + '/openai' if provider == 'gemini' else saved
+    assert ai.chat_endpoint(connection, 'fixture-model')['base_url'] == expected
+    wrong = ai.Connection(
+        id='wrong', name='wrong', provider=provider, base_url='https://wrong.example.test/v1',
+        base_url_source='preset', preset_version=99,
+    )
+    assert ai.chat_endpoint(wrong, 'fixture-model')['base_url'] == official_chat_url(provider)
 
 
 def test_key_hint_is_prefix_only_and_host_is_sanitized():

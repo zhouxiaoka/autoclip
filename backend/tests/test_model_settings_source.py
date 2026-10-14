@@ -1,5 +1,6 @@
 """source=preset/user inference, legacy document migration, and catalog freeze."""
 import json
+from urllib.parse import urlparse
 
 from backend.services import ai_model_settings as ai
 from backend.services import model_settings_source as source
@@ -178,3 +179,61 @@ def test_unmigratable_model_resets_on_the_same_provider():
     assert data['analysis']['model_source'] == 'preset'
     assert next(item['provider'] for item in data['connections'] if item['id'] == 'gemini-1') == 'gemini'
     assert source.NOTICE_PURPOSE_RESET in warnings
+
+
+def test_stamped_gemini_native_url_keeps_host_and_openai_compat_path():
+    """Catalog native /v1beta plus preset_version must not become /v1beta/chat/completions."""
+    connection = ai.Connection(
+        id='g', name='Gemini', provider='gemini', api_key='AIza-test-key',
+        base_url='https://generativelanguage.googleapis.com/v1beta',
+        base_url_source='preset', preset_version=9,
+    )
+    endpoint = ai.chat_endpoint(connection, 'gemini-3.8-flash')
+    parsed = urlparse(endpoint['base_url'])
+    assert parsed.scheme == 'https'
+    assert parsed.hostname == 'generativelanguage.googleapis.com'
+    assert parsed.path == '/v1beta/openai'
+    assert endpoint['base_url'] == 'https://generativelanguage.googleapis.com/v1beta/openai'
+    assert not endpoint['base_url'].rstrip('/').endswith('/v1beta')
+    assert 'chat/completions' not in endpoint['base_url']
+
+
+def test_preset_version_does_not_bypass_lock_on_wrong_gemini_host():
+    connection = ai.Connection(
+        id='g', name='Gemini', provider='gemini', api_key='AIza-test-key',
+        base_url='https://api.openai.com/v1',
+        base_url_source='preset', preset_version=99,
+    )
+    assert ai.chat_endpoint(connection, 'gemini-3.8-flash')['base_url'] == (
+        'https://generativelanguage.googleapis.com/v1beta/openai'
+    )
+
+
+def test_frozen_saved_host_and_scheme_survive_catalog_stamp(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    monkeypatch.setattr(ai, 'migrate_legacy', lambda: ai.ModelSettings())
+    raw = {
+        'version': 1,
+        'connections': [{
+            'id': 'g', 'name': 'Gemini', 'provider': 'gemini', 'api_key': 'AIza-test-key',
+            'base_url': 'https://generativelanguage.googleapis.com/v1beta',
+            'base_url_source': 'preset', 'preset_version': 1,
+        }],
+        'analysis': {'connection_id': 'g', 'model': 'gemini-3.8-flash', 'capability': 'auto',
+                     'model_source': 'user'},
+        'cover_enabled': False,
+        'acked_catalog_version': 1,
+        'seen_notices': [],
+    }
+    ai.path().parent.mkdir(parents=True, exist_ok=True)
+    ai.path().write_text(json.dumps(raw), encoding='utf-8')
+    loaded = ai.load()
+    saved = loaded.connections[0]
+    assert urlparse(saved.base_url).hostname == 'generativelanguage.googleapis.com'
+    assert urlparse(saved.base_url).scheme == 'https'
+    endpoint = ai.chat_endpoint(saved, 'gemini-3.8-flash')
+    assert urlparse(endpoint['base_url']).hostname == 'generativelanguage.googleapis.com'
+    assert urlparse(endpoint['base_url']).scheme == 'https'
+    assert endpoint['base_url'] == 'https://generativelanguage.googleapis.com/v1beta/openai'
+    persisted = json.loads(ai.path().read_text(encoding='utf-8'))
+    assert urlparse(persisted['connections'][0]['base_url']).hostname == 'generativelanguage.googleapis.com'

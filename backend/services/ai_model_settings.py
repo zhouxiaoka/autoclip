@@ -266,22 +266,6 @@ def connection_for(settings: ModelSettings, assignment: Assignment) -> Connectio
     return next(c for c in settings.connections if c.id == assignment.connection_id)
 
 
-def _keep_saved_chat_url(connection: Connection) -> bool:
-    """True when a stored URL must not be replaced by the current catalog lock."""
-    saved = connection.base_url
-    if not saved:
-        return False
-    if connection.preset_version > 0:
-        return True
-    if connection.provider == 'compatible':
-        return True
-    if connection.provider == 'api88':
-        from backend.core.cloud_presets import is_api88_host
-        return is_api88_host(urlparse(saved).hostname)
-    url_source = connection.base_url_source or infer_base_url_source(connection.provider, saved)
-    return url_source == 'user' and connection.provider not in {'api88', 'infistar', 'deepseek', 'gemini'}
-
-
 def chat_endpoint(connection: Connection, model: str) -> dict:
     from backend.core.cloud_presets import CLOUD_PRESETS
     from backend.core.local_presets import LOCAL_PRESETS
@@ -295,16 +279,14 @@ def chat_endpoint(connection: Connection, model: str) -> dict:
     }
     from backend.core.provider_endpoint import locked_chat_url, normalize_provider_base_url
     locked = locked_chat_url(connection.provider, connection.base_url)
-    saved = connection.base_url
-    if _keep_saved_chat_url(connection):
-        # Q14: stamped or historically accepted URLs stay. Wrong hosts on locked presets still lock.
-        base = normalize_provider_base_url(saved, connection.provider).url if connection.provider == 'compatible' else saved
-    elif locked:
+    # The live catalog lock preserves accepted hosts and schemes, regardless of
+    # preset_version. All chat-path rewriting goes through the shared helper.
+    if locked:
         base = locked
-    elif connection.provider == 'compatible' and saved:
-        base = normalize_provider_base_url(saved, connection.provider).url
+    elif connection.base_url:
+        base = normalize_provider_base_url(connection.base_url, connection.provider).url
     else:
-        base = saved or defaults[connection.provider]
+        base = defaults[connection.provider]
     if connection.provider == 'dashscope' and connection.base_url and (urlparse(base).hostname or '').endswith('.aliyuncs.com'):
         # Dedicated Bailian endpoints are pasted as a host or its native /api/v1 path; text models
         # use the OpenAI-compatible path on the same host (speech recognition uses /api/v1).
