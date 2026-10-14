@@ -1,27 +1,27 @@
 # AutoClip 埋点规范（Tracking Plan）
 
-1.5.7 起按本文件体系统一埋点：先登记，再发送；字段和枚举只引用本规范与第 0 步契约，不再各自打补丁。
+给 Kris 审的规范文档。1.5.7 起按本文件体系统一埋点：先登记，再发送；字段和枚举只引用本规范与第 0 步契约（`backend.core.upstream_errors`、`backend.core.llm_telemetry`、`frontend/src/analytics/successRateContract.ts`），禁止再复制一套分类或脱敏。
 
-本文件是规范（PR ①）。线 A 发送与 schema 校验在独立的纯埋点 PR（只上报、不改界面、不删旧事件）。
+**本 PR 只交文档。** 纯埋点代码另开 PR，等本规范确认后再改、再合。已开的上报 PR 标 `[WIP]`，不继续大改。
 
 配套：
 
-- 分类与脱敏：[`docs/SUCCESS_RATE_CONTRACT.md`](../SUCCESS_RATE_CONTRACT.md)、`backend/core/upstream_errors.py`、`backend/core/llm_telemetry.py`
-- 线 A 发送说明：`docs/analytics/LLM_TELEMETRY.md`（随纯埋点 PR）
-- 机读目录：`docs/analytics/event_catalog.json`（随纯埋点 PR；未登记事件或缺必填字段，校验测试失败）
+- 分类与脱敏：[`docs/SUCCESS_RATE_CONTRACT.md`](../SUCCESS_RATE_CONTRACT.md)、[`backend/core/upstream_errors.py`](../../backend/core/upstream_errors.py)、[`backend/core/llm_telemetry.py`](../../backend/core/llm_telemetry.py)、[`frontend/src/analytics/successRateContract.ts`](../../frontend/src/analytics/successRateContract.ts)
+- 线 A 发送说明：`docs/analytics/LLM_TELEMETRY.md`（随纯埋点 PR，规范确认后）
+- 机读目录：`docs/analytics/event_catalog.json`（随纯埋点 PR；未登记事件、缺必填、或载荷含违禁值，校验测试必须失败）
 - 看板 SQL 草案：[`success_rate.sql`](success_rate.sql)
 
-负责人先看 §1–§5（规则、漏斗、口径、看板），再看 §8（旧事件盘点）。§8 的删除/改名只是方案，**不在纯埋点 PR 里执行**，以免现有看板断数。
+先看 §1–§5（规则、漏斗、触发点）、§10–§11（隐私硬性 / 脱敏 / 开关关闭）、§6–§7（口径与看板），再看 §8（旧事件盘点）。§8 的删除/改名只是方案，**不在纯埋点 PR 里执行**，以免现有看板断数。
 
 ---
 
 ## 1. 原则
 
 1. **先登记后发送。** 新事件必须写入本文件 + `event_catalog.json`，并补齐八语无关（埋点无 UI 文案）的校验测试。未登记的事件名不得出现在生产者里。
-2. **只发枚举、计数、布尔、随机 token。** 不上报 key、完整 URL、提示词、字幕、文件名、用户正文、内部项目/作业 ID。`base_url` 只留域名；本机/内网记 `local`。
+2. **只发枚举、计数、布尔、随机 token。** 不上报 key、完整 URL、提示词、字幕/转写、视频标题、文件名、带用户名的本机路径、用户正文、内部项目/作业 ID。`base_url` 只留 host；本机/内网记 `local`。详见 §10–§11。schema 校验必须拦住这些值。
 3. **终态与请求分开。** 按钮点击不是成功。后台受理用 `*_accepted`，真正做完用 `*_finished`。浏览器点击下载不是落盘。
 4. **失败必有身份。** 失败的 run 级事件必须有 `error_code` + `failure_stage`。模型失败另带 `upstream_error_type`（站点拒绝、素材太短/无音轨等不算上游错误）。
-5. **同一匿名 ID。** 前端 PostHog `distinct_id` 经 `PUT /settings/analytics-identity` 写入 `analytics.json`；后端事件与 Sentry `user.id` 只用这个 ID。
+5. **同一匿名 ID。** 前端 PostHog `distinct_id` 经 `PUT /settings/analytics-identity` 写入 `analytics.json`；后端事件与 Sentry `user.id` 只用这个 ID。分析开关关闭时不写、不对齐（§10.1）。
 6. **生产与验收隔离。** 业务看板只看 `analytics_environment=production` 且目标 `app_version`。validation 单独列，不进转化率。
 
 ---
@@ -237,6 +237,33 @@ Studio `error_code` 仍用现有闭集（`STUDIO_ERROR_CODES`）。成功率口�
 - D1 / D7：安装后第 1 / 7 天是否再次 `app_opened`
 - 出片后回访：首次 `studio_generation_finished|studio_production_finished` 且 `outcome=completed` 之后 7 日内是否再次 `app_opened`
 
+### 5.8 触发点（文件 + 函数）
+
+发送层必须 catch：埋点失败不得改变产品行为。开关关闭或无 key 时，下列函数仍可被调用，但**不得发网络请求**（见 §10.1）。
+
+| 事件 | 何时 | 文件 | 函数 |
+| --- | --- | --- | --- |
+| `app_installed` / `app_opened` / `app_updated` | 桌面启动；安装只发一次 | `frontend/src/analytics/lifecycle.ts` | `trackLaunch` |
+| `setup_presented` / `setup_action` | 引导实际显示 / 用户点稍后或去设置 | `frontend/src/features/settings/FirstRunSetup.tsx` → `experience.ts` | `trackExperience` |
+| `import_blocked` | 未配置服务商就被导入挡住 | `frontend/src/features/studio/CreativeImport.tsx` | `trackExperience('import_blocked', …)` |
+| `settings_section_viewed` | 打开设置分区 | `frontend/src/pages/SettingsPage.tsx` | `trackExperience` |
+| `provider_configuration_save_*` / `provider_connection_test_*` | 设置页保存 / 连接测试 | `frontend/src/analytics/experience.ts` | `beginExperience` |
+| `provider_validation_finished` | 保存前真实小请求终态（线 B 挂钩） | `backend/core/llm_emit.py`（预留） | `emit_provider_validation_finished` |
+| `asr_readiness_checked` | 导入页探针变化；以及后端受理导入/初筛 | 前端 `CreativeImport.tsx` → `studio.ts`；后端 `backend/services/studio/jobs.py` | `trackAsrReadiness` / `emit_asr_readiness_checked`（`inspect_project`） |
+| `studio_import_requested` / `_accepted` / `_request_failed` | 用户提交导入 | `frontend/src/analytics/studio.ts` | `observeStudioOperation('studio_import', …)` |
+| `studio_screen_finished` | 观察器看到初筛终态 | `frontend/src/analytics/workflow.ts` | `WorkflowTracker.observeStudio` |
+| `llm_request_finished`（text） | 每一次 `LLMProvider.call` 返回或抛错 | `backend/core/llm_providers.py` → `llm_emit.py` | `LLMProvider.__init_subclass__` 包装 → `observe_provider_call` → `request_finished` |
+| `llm_request_finished`（vision） | 每一次 `vision_call` 结束 | `backend/services/studio/intelligence.py` | `vision_call` → `emit_vision_request` |
+| run 级字段（挂到现有出片终态，不改事件名） | `studio.json` 写入失败/部分成功身份 | `backend/services/studio/store.py` | `write` → `_ensure_failure_identity` + `_attach_run_telemetry`；上下文 `llm_emit.track_run` |
+| `studio_generation_finished` / `studio_production_finished` | 观察器看到出片终态（读 snapshot 上的 run 字段） | `frontend/src/analytics/workflow.ts` + `observer.ts` | `observeStudio` / `startWorkflowObserver` |
+| `studio_confirm_*` | 用户确认制作 | `frontend/src/analytics/studio.ts` | `observeStudioOperation('studio_confirm', …)` |
+| `studio_export_*` | 提交/完成渲染 | `studio.ts` + `workflow.ts` | `observeStudioOperation` / `observeStudio` |
+| `studio_download_requested` / `_saved` / `_failed` | 用户要文件；**仅原生落盘**发 saved | `frontend/src/analytics/studio.ts` | `studioDownloadRequested` / `observeStudioDownload` |
+| `studio_qa_checked` | 渲染进程跑完 QA | `backend/services/studio/qa/telemetry.py` | `emit_checked` |
+| Sentry `user.id` = PostHog `distinct_id` | 前端拿到匿名 ID 后 | `frontend/src/analytics/posthog.ts` → `PUT /settings/analytics-identity` → `qa/telemetry.py` → `sentry_setup.py` | `publishAnonymousId` / `remember_distinct_id` / `sync_anonymous_user`；前端 `setAnonymousUser` |
+
+`llm_request_finished`、run 级字段、`asr_readiness_checked`、身份对齐、schema 校验是线 A 纯埋点 PR 要挂钩的部分；挂钩位置以本表为准，不得另开入口。`prompt` / `input_data` / 转写正文只留在被调用函数内，不得传入发送层。
+
 ---
 
 ## 6. 核心指标口径
@@ -425,12 +452,13 @@ FROM (
 
 | 缺口 | 谁做 | 状态 |
 | --- | --- | --- |
-| 模型单次 `llm_request_finished` | 线 A 纯埋点 PR | 上报 PR |
-| run 级 provider/错误身份 | 线 A 纯埋点 PR | 上报 PR |
-| `asr_readiness_checked` | 线 A 纯埋点 PR | 上报 PR |
-| `provider_validation_finished` 挂钩 | 线 A 预留，线 B 调用 | 挂钩在上报 PR |
+| 模型单次 `llm_request_finished` | 线 A 纯埋点 PR | **等本规范确认**后再改代码 |
+| run 级 provider/错误身份 | 线 A 纯埋点 PR | 同上 |
+| `asr_readiness_checked` | 线 A 纯埋点 PR | 同上 |
+| Sentry / PostHog id 对齐 | 线 A 纯埋点 PR | 同上 |
+| `provider_validation_finished` 挂钩 | 线 A 预留，线 B 调用 | 发射函数预留；线 B 再调 |
 | 后端事件补 `app_version` / `os` | 线 A 纯埋点 PR | 新增字段；不改已有 `darwin`/`win32` |
-| 事件目录校验（未登记即失败） | 线 A 纯埋点 PR | `event_catalog.json` + 测试 |
+| 事件目录校验（未登记 / 缺字段 / 违禁值即失败） | 线 A 纯埋点 PR | `event_catalog.json` + §9 夹具 |
 | 旧事件停止发送 / 删除 | 后续，90 天 | **本规范只写方案** |
 | `os` 取值统一 | 后续 | **本规范只写方案** |
 | `backend_exit`（#1 续跑） | 1.5.9 | 本版不发 |
@@ -443,9 +471,20 @@ FROM (
 `event_catalog.json` 是唯一机读目录。校验测试必须失败，当：
 
 1. 生产者出现 **未登记** 的业务事件名（`captureBusinessEvent`、`_post_event`、`qa.telemetry` 的 `event` 字段）。
-2. 已登记事件的一次发送 **缺必填字段**（目录里 `required`）。
+2. 已登记事件的一次发送 **缺必填字段**（目录里 `required`；含 `required_when`）。
 3. 字段值不在闭集（`enums`）或不满足类型。
-4. 载荷含 `sk-`、完整 URL 路径、或属性名 `api_key` / `prompt` / `caption`。
+4. 载荷含违禁 **属性名** 或违禁 **属性值**（§11）。下列夹具必须让 `validate_event` 失败：
+
+| 夹具 | 为何拦 |
+| --- | --- |
+| 属性名 `api_key` / `authorization` / `password` / `prompt` / `caption` / `transcript` / `transcription` / `subtitle_text` / `title` / `video_title` / `filename` / `file_name` / `file_path` / `path` | 这些键本身就不该出现 |
+| 任一字符串值含 `sk-`、`bearer `、`api_key=`、`token=` | 密钥 |
+| 任一字符串值含 `/Users/`、`/home/`、`C:\Users\`、`C:/Users/` | 带用户名的本机路径 |
+| 任一字符串值匹配 `https?://…/…`（带 path 的完整 URL） | 只能报 host，不能报 URL |
+| `base_url_host` = `https://api.openai.com/v1` 或带 userinfo 的 URL | 必须先走 `hostname_of_base_url` |
+| `model` = `sk-abc123` 或含空格/路径 | `sanitize_model` 应丢弃 |
+| 属性值是视频标题或文件名（如 `我的旅行vlog`、`talk.mp4`、`interview.mov`）出现在非枚举字段 | 标题/文件名一律不上报 |
+| 属性值是转写或提示词片段（如「大家好今天…」、`Write a viral title for:`） | 正文不上报 |
 
 测试位置：`backend/tests/test_event_catalog.py`、`frontend/tests/event-catalog.test.cjs`。新增事件的 PR 必须同时改本文件、JSON 目录和测试。
 
@@ -453,6 +492,59 @@ FROM (
 
 ---
 
-## 10. 隐私（重申）
+## 10. 隐私硬性要求
 
-不上报：API key、Authorization、完整 URL、提示词、字幕、口播、文件路径、内部 ID。Sentry 只留 `user.id` = `distinct_id`。分类结果只留枚举，不留响应原文。
+产品默认开埋点。用户关掉后，或构建未配置 PostHog key 时，**一条事件也不许出网**。
+
+### 10.1 开关关闭时的行为
+
+| 开关 | 存在哪 | 关闭后 |
+| --- | --- | --- |
+| 设置页「使用分析」 | 前端 `setAnalyticsEnabled(false)` → `localStorage` 键 `autoclip.analytics.optOut=true` | `isAnalyticsEnabled()` 为 false；`captureBusinessEvent` 直接 return；`posthog.opt_out_capturing()`；停 flag 网络；`syncSentryUser(null)`；**不再** `PUT /settings/analytics-identity`；观察器 `workflow.clear()` |
+| 未配置 `VITE_PUBLIC_POSTHOG_KEY` | 构建 | `initAnalytics` 不初始化 SDK，零网络 |
+| `privacy.json` 的 `analytics: false` | 桌面数据目录（与崩溃报告同文件） | 后端 `qa.telemetry._analytics_allowed()` / MCP 发送 / `llm_emit._post_event` 全部 no-op |
+| 崩溃报告另开 | `privacy.json` `crash_reports`；前端 `autoclip.crashReports.optOut` | 与分析开关独立；分析关时 Sentry 仍不得带 PostHog id 去「补发」业务事件 |
+
+关闭时允许：生产者函数被调用、本地算脱敏字典、写测试夹具。禁止：对 `us.i.posthog.com`（或自建 host）发 capture/identify/flag；把未发送的事件缓冲到以后再补发。打开开关后只收**之后**的事件。
+
+无 key 的开发构建与用户关闭同等对待：不污染线上。
+
+### 10.2 一律不得出现在上报里
+
+- API key、Authorization、Bearer、任何 `sk-` 前缀
+- 带用户名的本机路径：`/Users/<name>/…`、`/home/<name>/…`、`C:\Users\<name>\…`
+- 视频标题、文件名、目录名
+- 转写文本、字幕、口播、提示词、模型响应原文
+- 完整 URL（含 path / query / userinfo）。`base_url` **只留 host**
+- email、IP（本机/局域网统一 `local`，不报具体地址）、内部 `project_id` / `run_id` / `job_id`（新事件）
+
+Sentry 只对齐 `user.id` = PostHog `distinct_id`。分类结果只留枚举，不留响应原文。
+
+---
+
+## 11. 每个字段怎么脱敏
+
+实现必须调用现有 helper，不要手写第二套：
+
+- 后端：`backend.core.llm_telemetry.hostname_of_base_url` / `sanitize_model` / `sanitize_*_properties`
+- 前端：`frontend/src/analytics/successRateContract.ts` 的同名函数
+- 上游分类：`backend.core.upstream_errors.classify_upstream_error`（只把枚举写入事件）
+
+| 字段 | 允许值 | 脱敏 | 丢弃（报 None / 不写该键） |
+| --- | --- | --- | --- |
+| `base_url_host` | 域名或 `local` | `hostname_of_base_url`：只取 host；localhost / 内网 / `0.0.0.0` / `host.docker.internal` → `local` | 完整 URL、path、query、userinfo、密钥形、解析失败 |
+| `model` | `^[\w.\-:/]{1,64}$` | `sanitize_model` | 含 `sk-`、空格、路径、超长 |
+| `provider` | 闭集（含 ASR 三值） | `sanitize_provider` | 自由文本、服务商显示名 |
+| `kind` / `outcome` / `result` / `finish_reason` / `failure_stage` / `upstream_error_type` / `error_code` / `source_type` / `material_origin` / `download_mode` / `analysis_mode` / `os` / `runtime` / `analytics_environment` | 各自闭集 | 枚举校验 | 原文、HTTP body、中文说明 |
+| `http_status` | 100–599 的整数 | 范围裁剪 | 响应头、URL |
+| `duration_ms` / `*_tokens` / `llm_calls` / `retry_count` / `billable_calls_before_failure` / `session_number` | 非负整数 | 转 int | 字符串附言 |
+| `has_subtitle` / `blocked` / `ok` | 布尔 | `bool()` | 字幕内容 |
+| `code`（ASR） | 就绪探针枚举 | 只报 code | 探针 message |
+| `distinct_id` | 匿名 ID 正则 | `ANONYMOUS_ID` | email、路径、`../` |
+| `app_version` | `MAJOR.MINOR.PATCH` | 去 `v` 前缀 | 构建路径 |
+| `flow_id` / `operation_id` / `attempt_id` / `artifact_id` | `t-[a-z0-9-]{10,100}` | 格式校验 | 内部 UUID / 文件名 |
+| 任意未列字段 | — | **白名单丢掉** | 标题、路径、prompt、caption、filename |
+
+`hostname_of_base_url("https://api.openai.com/v1/chat/completions?key=sk-…")` 只能得到 `api.openai.com`。`hostname_of_base_url("/Users/alex/models")` 必须是空。
+
+Schema 测试用 §9 夹具证明：sanitize 之后仍含违禁值，或未 sanitize 就发送，都算失败。
