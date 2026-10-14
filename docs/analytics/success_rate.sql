@@ -2,7 +2,7 @@
 -- 业务看板只看 production + 目标 app_version。validation 事件不进转化率。
 -- {version} 发版后替换为当前正式版，例如 '1.5.8'。
 --
--- 过渡期规范化（2027-01-12 前生产者仍可能发 completed/darwin/version）：
+-- 查询映射保留（覆盖 1.5.7 及更早）。1.5.8 起生产者只发规范值，映射仍用于历史行：
 --   outcome_canon = multiIf(outcome IN ('completed','success'), 'success', outcome IN ('failed','error'), 'error', outcome)
 --   os_canon      = multiIf(os IN ('darwin','macos'), 'macos', os IN ('win32','windows'), 'windows', os = 'linux', 'linux', 'unknown')
 --   app_version   = coalesce(nullIf(app_version, ''), nullIf(version, ''))
@@ -10,11 +10,11 @@
 
 -- 图 1 / 图 3：按次出片成功率（可再 breakdown provider）
 SELECT
-  countIf(properties.outcome = 'completed') AS completed,
+  countIf(multiIf(properties.outcome IN ('completed', 'success'), 'success', properties.outcome IN ('failed', 'error'), 'error', properties.outcome) = 'success') AS completed,
   countIf(
-    properties.outcome = 'completed'
+    multiIf(properties.outcome IN ('completed', 'success'), 'success', properties.outcome IN ('failed', 'error'), 'error', properties.outcome) = 'success'
     OR (
-      properties.outcome IN ('failed', 'partial')
+      multiIf(properties.outcome IN ('completed', 'success'), 'success', properties.outcome IN ('failed', 'error'), 'error', properties.outcome) IN ('error', 'partial')
       AND coalesce(properties.upstream_error_type, '') NOT IN
           ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
       AND coalesce(properties.error_code, '') NOT IN
@@ -32,22 +32,22 @@ WHERE event IN ('studio_generation_finished', 'studio_production_finished')
 
 -- 图 2：按人首次合格出片成功率
 SELECT
-  uniqIf(distinct_id, first_outcome = 'completed') AS first_success_users,
+  uniqIf(distinct_id, first_outcome = 'success') AS first_success_users,
   uniq(distinct_id) AS qualifying_users,
   first_success_users / qualifying_users AS first_attempt_success_rate
 FROM (
   SELECT
     distinct_id,
-    argMin(properties.outcome, timestamp) AS first_outcome
+    argMin(multiIf(properties.outcome IN ('completed', 'success'), 'success', properties.outcome IN ('failed', 'error'), 'error', properties.outcome), timestamp) AS first_outcome
   FROM events
   WHERE event IN ('studio_generation_finished', 'studio_production_finished')
     AND properties.analytics_environment = 'production'
     AND properties.app_version = {version}
     AND timestamp >= now() - INTERVAL 7 DAY
     AND (
-      properties.outcome = 'completed'
+      multiIf(properties.outcome IN ('completed', 'success'), 'success', properties.outcome IN ('failed', 'error'), 'error', properties.outcome) = 'success'
       OR (
-        properties.outcome IN ('failed', 'partial')
+        multiIf(properties.outcome IN ('completed', 'success'), 'success', properties.outcome IN ('failed', 'error'), 'error', properties.outcome) IN ('error', 'partial')
         AND coalesce(properties.upstream_error_type, '') NOT IN
             ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
         AND coalesce(properties.error_code, '') NOT IN
