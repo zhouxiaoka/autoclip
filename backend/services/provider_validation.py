@@ -2,6 +2,10 @@
 
 Save may persist a failed result (marked red). Generation reads the stored
 status and blocks. Never returns keys, full URLs, or provider error text.
+
+HTTP failures go through ``classify_upstream_error``; the returned
+``hint_key`` is the official catalog sentence. Local remaps (console host,
+HTML, GET /models 404) use ``hint_key_for`` of the same enum.
 """
 from __future__ import annotations
 
@@ -17,7 +21,14 @@ from backend.core.provider_endpoint import (
     looks_like_html,
     normalize_provider_base_url,
 )
-from backend.core.upstream_errors import classify_upstream_error
+from backend.core.upstream_errors import (
+    UPSTREAM_ERROR_TYPES,
+    ClassifiedUpstreamError,
+    UpstreamErrorType,
+    classify_upstream_error,
+    hint_key_for,
+    is_retryable,
+)
 from backend.services import ai_model_settings as ai_models
 
 PROBE_MAX_TOKENS = 16
@@ -31,6 +42,7 @@ class ValidationResult:
     ok: bool
     result: str
     error_type: str = ''
+    hint_key: str = ''
     key_hint: Optional[str] = None
     normalized_base_url: str = ''
     base_url_host: str = ''
@@ -42,6 +54,7 @@ class ValidationResult:
             'ok': self.ok,
             'result': self.result,
             'error_type': self.error_type,
+            'hint_key': self.hint_key,
             'key_hint': self.key_hint,
             'normalized_base_url': self.normalized_base_url,
             'base_url_host': self.base_url_host,
@@ -53,14 +66,34 @@ def _host(base: str) -> str:
     return hostname_of_base_url(base) or 'unknown'
 
 
-def _classify(status: int | None, body: str | None = None, *, error_name: str | None = None) -> str:
-    return classify_upstream_error(status, body, error_name=error_name).error_type.value
+def _as_type(error_type: str | UpstreamErrorType) -> ClassifiedUpstreamError:
+    typed = error_type if isinstance(error_type, UpstreamErrorType) else (
+        UpstreamErrorType(error_type) if error_type in UPSTREAM_ERROR_TYPES else UpstreamErrorType.UNKNOWN
+    )
+    return ClassifiedUpstreamError(
+        error_type=typed,
+        retryable=is_retryable(typed),
+        hint_key=hint_key_for(typed),
+    )
 
 
-def _failed(error_type: str, base: str, key_hint: Optional[str], models: Optional[list[str]] = None) -> ValidationResult:
+def _classify(status: int | None, body: str | None = None, *, error_name: str | None = None) -> ClassifiedUpstreamError:
+    return classify_upstream_error(status, body, error_name=error_name)
+
+
+def _failed(
+    classified: ClassifiedUpstreamError | str | UpstreamErrorType,
+    base: str,
+    key_hint: Optional[str],
+    models: Optional[list[str]] = None,
+) -> ValidationResult:
+    if not isinstance(classified, ClassifiedUpstreamError):
+        classified = _as_type(classified)
     return ValidationResult(
-        ok=False, result='failed', error_type=error_type, key_hint=key_hint,
-        normalized_base_url=base, base_url_host=_host(base), model_ids=models or [],
+        ok=False, result='failed',
+        error_type=classified.error_type.value,
+        hint_key=classified.hint_key,
+        key_hint=key_hint, normalized_base_url=base, base_url_host=_host(base), model_ids=models or [],
     )
 
 
@@ -86,13 +119,21 @@ def _extract_ids(payload) -> list[str]:
     return ids
 
 
-def _classify_response(status: int, text: str, *, models_path: bool) -> str:
+def _classify_response(status: int, text: str, *, models_path: bool) -> ClassifiedUpstreamError:
+    classified = _classify(status, text)
     if models_path and status == 404:
-        return 'bad_endpoint'
-    return _classify(status, text)
+        return _as_type(UpstreamErrorType.BAD_ENDPOINT)
+    return classified
 
 
-def _get_models(base: str, api_key: str) -> tuple[list[str], Optional[str]]:
+def _html_or_classify(status: int, text: str, content_type: str) -> ClassifiedUpstreamError | None:
+    if 'text/html' in content_type or looks_like_html(text):
+        classified = _classify(status, text)
+        return classified if classified.error_type is UpstreamErrorType.BAD_ENDPOINT else _as_type(UpstreamErrorType.BAD_ENDPOINT)
+    return None
+
+
+def _get_models(base: str, api_key: str) -> tuple[list[str], Optional[ClassifiedUpstreamError]]:
     import httpx
     url = base.rstrip('/') + '/models'
     try:
@@ -104,19 +145,20 @@ def _get_models(base: str, api_key: str) -> tuple[list[str], Optional[str]]:
         return [], _classify(None, '', error_name='ConnectionError')
     text = response.text or ''
     content_type = (response.headers.get('content-type') or '').lower()
-    if 'text/html' in content_type or looks_like_html(text):
-        return [], 'bad_endpoint'
+    html = _html_or_classify(response.status_code, text[:4000], content_type)
+    if html:
+        return [], html
     if response.status_code >= 400:
         return [], _classify_response(response.status_code, text[:4000], models_path=True)
     try:
         payload = response.json()
     except ValueError:
-        return [], 'bad_endpoint'
+        return [], _as_type(UpstreamErrorType.BAD_ENDPOINT)
     ids = _extract_ids(payload)
     return ids, None
 
 
-def _probe(base: str, api_key: str, model: str) -> Optional[str]:
+def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamError]:
     import httpx
     from backend.core.llm_providers import guarded_chat_kwargs, token_param_kwargs
     tokens = PROBE_REASONING_MAX_TOKENS if uses_max_completion_tokens(model, base) else PROBE_MAX_TOKENS
@@ -138,8 +180,9 @@ def _probe(base: str, api_key: str, model: str) -> Optional[str]:
         return _classify(None, '', error_name='ConnectionError')
     text = response.text or ''
     content_type = (response.headers.get('content-type') or '').lower()
-    if 'text/html' in content_type or looks_like_html(text):
-        return 'bad_endpoint'
+    html = _html_or_classify(response.status_code, text[:4000], content_type)
+    if html:
+        return html
     if response.status_code >= 400:
         return _classify(response.status_code, text[:4000])
     return None
@@ -154,20 +197,20 @@ def validate_connection(connection: ai_models.Connection, model: str) -> Validat
         normalized = normalize_provider_base_url(resolved.base_url)
         base = normalized.url
         if 'console_host' in normalized.warnings:
-            return _failed('bad_endpoint', base, hint)
+            return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)
     else:
         base = ai_models.chat_endpoint(resolved, model or 'unused')['base_url']
     host = urlparse(base).hostname or ''
     if is_console_host(host):
-        return _failed('bad_endpoint', base, hint)
+        return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)
     if resolved.provider == 'compatible' and not base:
-        return _failed('bad_endpoint', base, hint)
+        return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)
     api_key = resolved.api_key or ''
     models, models_error = _get_models(base, api_key)
     if models_error:
         return _failed(models_error, base, hint, models)
     if not (model or '').strip():
-        return _failed('model_not_found', base, hint, models)
+        return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models)
     probe_error = _probe(base, api_key, model.strip())
     if probe_error:
         return _failed(probe_error, base, hint, models)

@@ -3,6 +3,7 @@ import { message } from 'antd'
 import { t } from '../../i18n'
 import { errorText } from '../studio/api'
 import { beginExperience, trackProviderValidation, type Placement } from '../../analytics/experience'
+import { hintKeyForUpstreamError } from '../../analytics/successRateContract'
 import { PROVIDERS, type ProviderKey } from './providers'
 import { bindingCapability, modelSettingsApi, type Connection, type ModelList, type ModelSettings } from './modelSettingsApi'
 import { applyModelDefaults } from './modelDefaults'
@@ -157,7 +158,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     try {
       return await modelSettingsApi.test(payload, model, vision)
     } catch {
-      return { success: false, ok: false, result: 'failed', error_type: 'unknown' }
+      return { success: false, ok: false, result: 'failed', error_type: 'unknown', hint_key: hintKeyForUpstreamError('unknown') }
     }
   }
 
@@ -181,7 +182,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         emitValidation(main, result)
         next = logic.applyValidation(next, main.id, result)
         if (passed(result)) backfillModels({ ...main, base_url: result.normalized_base_url || main.base_url }, result.models)
-        else setError(validationCopy(result.error_type))
+        else setError(validationCopy(result.error_type, result.hint_key))
         setSettings(next)
       }
       const value = await modelSettingsApi.save(logic.forSave(next))
@@ -211,7 +212,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         message.success(t('连接正常'))
         setError('')
       } else {
-        const text = validationCopy(value.error_type)
+        const text = validationCopy(value.error_type, value.hint_key)
         setError(text)
         message.error(text)
       }

@@ -5,6 +5,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from backend.core.upstream_errors import HINT_KEYS, UpstreamErrorType
 from backend.services import ai_model_settings as ai
 from backend.services.provider_validation import validate_connection
 
@@ -91,6 +92,7 @@ def test_missing_v1_is_normalized_then_models_404_is_bad_endpoint(monkeypatch):
     result = validate_connection(_connection(base_url='https://gw.example'), 'gpt-4o-mini')
     assert result.ok is False
     assert result.error_type == 'bad_endpoint'
+    assert result.hint_key == HINT_KEYS[UpstreamErrorType.BAD_ENDPOINT]
     assert result.normalized_base_url == 'https://gw.example/v1'
     assert result.base_url_host == 'gw.example'
     assert calls == ['https://gw.example/v1/models']
@@ -104,6 +106,7 @@ def test_console_host_is_rejected_without_a_network_call(monkeypatch):
     )
     assert result.ok is False
     assert result.error_type == 'bad_endpoint'
+    assert result.hint_key == HINT_KEYS[UpstreamErrorType.BAD_ENDPOINT]
     assert result.base_url_host in {'platform.openai.com', 'unknown'}
 
 
@@ -115,6 +118,7 @@ def test_html_console_response_is_flagged(monkeypatch):
     _patch_httpx(monkeypatch, handler)
     result = validate_connection(_connection(), 'gpt-4o-mini')
     assert result.error_type == 'bad_endpoint'
+    assert result.hint_key == HINT_KEYS[UpstreamErrorType.BAD_ENDPOINT]
     assert result.ok is False
 
 
@@ -131,6 +135,7 @@ def test_wrong_provider_key_is_hinted_not_switched(monkeypatch):
     )
     assert result.ok is False
     assert result.error_type == 'invalid_key'
+    assert result.hint_key == HINT_KEYS[UpstreamErrorType.INVALID_KEY]
     assert result.key_hint == 'gemini'
 
 
@@ -144,6 +149,7 @@ def test_group_forbidden_is_permission_denied(monkeypatch):
     result = validate_connection(_connection(), 'gpt-4o-mini')
     assert result.ok is False
     assert result.error_type == 'permission_denied'
+    assert result.hint_key == HINT_KEYS[UpstreamErrorType.PERMISSION_DENIED]
 
 
 def test_zero_balance_is_insufficient_quota(monkeypatch):
@@ -156,6 +162,7 @@ def test_zero_balance_is_insufficient_quota(monkeypatch):
     result = validate_connection(_connection(), 'gpt-4o-mini')
     assert result.ok is False
     assert result.error_type == 'insufficient_quota'
+    assert result.hint_key == HINT_KEYS[UpstreamErrorType.INSUFFICIENT_QUOTA]
 
 
 def test_success_probes_with_about_sixteen_tokens_and_returns_models(monkeypatch):
@@ -194,6 +201,7 @@ def test_http_test_endpoint_returns_classified_payload(monkeypatch):
     body = response.json()
     assert body['success'] is False
     assert body['error_type'] == 'invalid_key'
+    assert body['hint_key'] == HINT_KEYS[UpstreamErrorType.INVALID_KEY]
     assert body['base_url_host'] == 'gw.example'
     assert 'sk-test-key' not in response.text
     assert '无效的令牌' not in response.text

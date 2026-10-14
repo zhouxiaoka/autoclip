@@ -60,7 +60,11 @@ test('wrong-provider keys are hinted, never treated as a switch, and hosts stay 
   assert.equal(access.telemetryHost('https://88api.ai/v1/chat/completions?key=secret'), '88api.ai')
   assert.equal(access.telemetryHost('http://127.0.0.1:11434/v1'), 'local')
   assert.equal(access.sponsorKeyLink('api88').href.includes('88api.ai'), true)
-  assert.equal(access.validationCopy('insufficient_quota').includes('余额'), true)
+  assert.equal(access.validationCopy('insufficient_quota'), contract.UPSTREAM_HINT_KEYS.insufficient_quota)
+  assert.equal(
+    access.validationCopy('invalid_key', contract.UPSTREAM_HINT_KEYS.bad_endpoint),
+    contract.UPSTREAM_HINT_KEYS.bad_endpoint,
+  )
   assert.equal(access.passed({ success: false, error_type: 'invalid_key' }), false)
   assert.equal(access.passed({ success: true }), true)
 })

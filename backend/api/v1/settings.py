@@ -80,14 +80,22 @@ def test_connection_assignment(body: ConnectionTestRequest):
             endpoint = ai_models.chat_endpoint(connection, body.model)
             vision = test(VisionSettingsInput(mode='custom', **endpoint))
             if not (vision.get('success') or vision.get('ok')):
+                from backend.core.upstream_errors import hint_key_for
                 payload = result.as_api()
-                payload.update(success=False, ok=False, result='failed', error_type=payload.get('error_type') or 'unknown')
+                payload.update(
+                    success=False, ok=False, result='failed',
+                    error_type='unknown', hint_key=hint_key_for('unknown'),
+                )
                 return payload
         return result.as_api()
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception:
-        return {'success': False, 'ok': False, 'result': 'failed', 'error_type': 'unknown', 'models': []}
+        from backend.core.upstream_errors import hint_key_for
+        return {
+            'success': False, 'ok': False, 'result': 'failed',
+            'error_type': 'unknown', 'hint_key': hint_key_for('unknown'), 'models': [],
+        }
 
 
 class BasicSettings(BaseModel):

@@ -17,6 +17,7 @@ export interface ValidationResult {
   ok?: boolean
   result?: 'ok' | 'failed' | 'success'
   error_type?: string
+  hint_key?: string
   key_hint?: string | null
   normalized_base_url?: string
   base_url_host?: string
@@ -87,9 +88,9 @@ export function telemetryHost(url?: string) {
   return hostnameOfBaseUrl(url) || 'unknown'
 }
 
-export function validationCopy(errorType?: string) {
+export function validationCopy(errorType?: string, hintKey?: string) {
   if (errorType === 'console_host') return t(CONSOLE_COPY)
-  return t(hintKeyForUpstreamError(errorType || 'unknown'))
+  return t(hintKey || hintKeyForUpstreamError(errorType || 'unknown'))
 }
 
 export function keyHintCopy(hint: ProviderKey) {
