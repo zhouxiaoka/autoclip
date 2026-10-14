@@ -1,6 +1,6 @@
-# AutoClip 埋点体系
+# AutoClip 埋点体系（历史）
 
-> **2026-09-21 更新：** 本页下方保留历史埋点说明。新实现、事件准确口径、看板和验收请以 [ANALYTICS_V2.md](ANALYTICS_V2.md) 为准。旧 `clips_exported` 并非完整出片指标；`app_installed` 是匿名存储身份首次启动；网页与桌面不能直接串联归因。V2 本地代码尚待发布与正式包收数验收。
+> **2026-10-14：本页与 [ANALYTICS_V2.md](ANALYTICS_V2.md) 都是历史说明，不再是准绳。** 现行规范是 [analytics/TRACKING_PLAN.md](analytics/TRACKING_PLAN.md) 与 [analytics/event_inventory.json](analytics/event_inventory.json)。北极星不是 `clips_exported`。下方原文只供对照 1.3.x 看板。
 
 > 工具：**PostHog**（US 区，`https://us.i.posthog.com`）
 > 原则（见 `ROADMAP.md` Phase 0）：**匿名 · 可关 · 本地缓冲**。不采集 PII、视频内容、字幕文本、API key 明文。
