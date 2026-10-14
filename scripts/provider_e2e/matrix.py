@@ -2,6 +2,11 @@
 
 Videos are generated at runtime (lavfi + SRT). Specs stay in-repo so CI does not
 store large binaries; sha256 is recorded after generation.
+
+``LIVE_PROVIDERS`` stays the live e2e default source (chat URL, fallback model,
+secret env, tier). When ``presets/provider_presets.json`` exists, this module
+reads labels and non-empty default models from that file. It does not rewrite
+the product JSON. ``*_MODEL`` still overrides at run time. Do not print secrets.
 """
 from __future__ import annotations
 
@@ -9,6 +14,12 @@ import datetime as dt
 from typing import Any
 
 from backend.core.upstream_errors import UpstreamErrorType
+
+from .presets import load_catalog_providers, reset_catalog_cache
+
+
+def reset_live_catalog() -> None:
+    reset_catalog_cache()
 
 # Success clips must be >= short-tier min_clip_sec (20s). Live material stays 1–2 min.
 SUCCESS_DURATION_SEC = 70
@@ -306,7 +317,23 @@ def assets(*, expect: str | None = None) -> list[dict[str, Any]]:
 
 
 def live_providers() -> list[dict[str, Any]]:
-    return [dict(item) for item in LIVE_PROVIDERS]
+    catalog = load_catalog_providers()
+    if catalog:
+        missing = [item['id'] for item in LIVE_PROVIDERS if item['id'] not in catalog]
+        if missing:
+            raise KeyError(f'provider presets missing live e2e entries: {", ".join(missing)}')
+    rows = []
+    for item in LIVE_PROVIDERS:
+        row = dict(item)
+        preset = catalog.get(item['id'])
+        if preset:
+            row['label'] = preset['label'] or row['label']
+            if preset['default_model']:
+                row['default_model'] = preset['default_model']
+            if preset['base_url']:
+                row['base_url'] = preset['base_url']
+        rows.append(row)
+    return rows
 
 
 def faults() -> list[dict[str, Any]]:
