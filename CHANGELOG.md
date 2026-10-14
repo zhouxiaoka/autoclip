@@ -7,8 +7,14 @@
 
 ## [未发布]
 
+- 内容分析只对 `invalid_response` / `timeline_empty` 自动重试，每种最多再试 2 次（不含首次）；401/429/5xx/超时等由 `classify_upstream_error` 分类后不重试。不含 429 退避或付费前 ASR 预检。（1.5.7 #8）
+
+- 启动时检查更新：复用现有 GitHub Release / Tauri updater（`latest.json`）。发现新版本时弹出提醒，确认后再下载；同一版本一天最多提醒一次；设置页和提醒弹层可关闭提醒，关闭后仍可手动检查。检查请求不带用户标识；网络失败、限流或离线时静默，不阻塞启动。
+
 - 新增上游错误分类与成功率埋点字段契约（`upstream_errors` / `llm_telemetry`，前端 `successRateContract`）：按 OpenAI、new-api、Gemini、DeepSeek 等响应区分密钥、余额、权限/分组、模型不存在、地址错误、限流、5xx、超时/断连、截断；只提供分类与脱敏，不改现有调用链或上报。八语补齐对应提示 key。
 - 出片成功率埋点（只上报，不改界面）：每次模型 `call` / `vision_call` 上报 `llm_request_finished`；生成/出片终态带 run 级字段，失败时有 `error_code` 和 `failure_stage`；导入探针与提交上报 `asr_readiness_checked`；为设置页校验预留 `provider_validation_finished`。Sentry `user.id` 与 PostHog 匿名 `distinct_id` 对齐。未登记事件或缺必填字段由 `event_catalog.json` 校验测试拦住。不上报 key、提示词、字幕或完整 URL。不删除旧事件。`feedback_submitted` 仍带用户主动填写的 `text` / `contact`；反馈弹窗补充告知：内容和联系方式会发送给开发者，用于回复和创建 GitHub Issue。
+
+- 设置页 API Key 保存和输入去掉首尾空格（含换行），避免粘贴时带上空格导致 401。
 
 - 发布 autoclip-mcp 时推送标签 `mcp-v<version>`。该标签走 pypi environment，只允许从 `mcp-v*` 部署。
 

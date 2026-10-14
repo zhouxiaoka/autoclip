@@ -92,20 +92,40 @@ class OutlineExtractor:
         
         # 4. 每个文本块独立调用模型（并行，结果按块顺序）
         def outline_chunk(item):
+            from backend.core.result_retry import MAX_ATTEMPTS, classify_for_retry
+
             i, chunk_file = item
             logger.info(f"处理第{i+1}/{len(chunks)}个文本块: {chunk_file.name}")
+            last_error: Exception | None = None
             try:
                 with open(chunk_file, 'r', encoding='utf-8') as f:
                     chunk_text = f.read()
-                response = self.llm_client.call_with_retry(outline_prompt, {"text": chunk_text})
-                if not response:
-                    logger.warning(f"处理第{i+1}个文本块时返回空响应")
-                    return [], None
-                # chunk_index 直接用 i，与文件名和原始 chunk 对应
-                return self._parse_outline_response(response, i), None
             except Exception as e:
                 logger.error(f"处理第{i+1}个文本块失败: {e}")
                 return [], e
+            for attempt in range(MAX_ATTEMPTS):
+                try:
+                    response = self.llm_client.call_with_retry(outline_prompt, {"text": chunk_text})
+                except Exception as e:
+                    last_error = e
+                    _kind, retryable = classify_for_retry(e)
+                    logger.error(f"处理第{i+1}个文本块失败: {e}")
+                    if not retryable:
+                        return [], e
+                    if attempt >= MAX_ATTEMPTS - 1:
+                        return [], e
+                    continue
+                if not response:
+                    logger.warning(f"处理第{i+1}个文本块时返回空响应")
+                    if attempt >= MAX_ATTEMPTS - 1:
+                        return [], None
+                    continue
+                parsed = self._parse_outline_response(response, i)
+                if parsed:
+                    return parsed, None
+                if attempt >= MAX_ATTEMPTS - 1:
+                    return [], None
+            return [], last_error
 
         from .concurrency import map_chunks
         for parsed_outlines, error in map_chunks(outline_chunk, enumerate(chunk_files)):

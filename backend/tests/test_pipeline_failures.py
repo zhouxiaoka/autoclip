@@ -79,7 +79,7 @@ def test_step1_all_chunks_failing_surfaces_llm_error(tmp_path, prompt_files, mon
 def test_step1_unparseable_response_is_a_failure_not_empty_list(tmp_path, prompt_files, monkeypatch):
     srt = tmp_path / "a.srt"
     srt.write_text(SRT, encoding="utf-8")
-    extractor = _extractor(tmp_path, prompt_files, monkeypatch, ["抱歉，我无法完成这个任务。"])
+    extractor = _extractor(tmp_path, prompt_files, monkeypatch, ["抱歉，我无法完成这个任务。"] * 3)
 
     with pytest.raises(PipelineFailure) as exc:
         extractor.extract_outline(srt)

@@ -45,6 +45,13 @@ class Connection(BaseModel):
         # fall back to auto instead of rejecting every connection (and every task) with it.
         return value if value in ('auto', 'openai', 'seedream', 'dashscope', 'fal') else 'auto'
 
+    @field_validator('api_key')
+    @classmethod
+    def strip_key(cls, value):
+        if value is None:
+            return None
+        return value.strip() if isinstance(value, str) else value
+
     @model_validator(mode='after')
     def custom_requires_url(self):
         if self.provider == 'compatible' and not self.base_url:

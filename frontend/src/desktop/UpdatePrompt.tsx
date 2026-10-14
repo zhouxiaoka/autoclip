@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { t } from '../i18n'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { Btn, ProgressLine } from '../ui'
+import { Btn, Dialog, ProgressLine } from '../ui'
 import { isDesktopMode } from '../utils/desktopMode'
 import {
   type AppUpdate,
@@ -10,7 +10,15 @@ import {
   getAppVersion,
   maybeCheckForUpdate,
 } from './updater'
-import { applyDownloadEvent, displayError, previewNotes, SNOOZE_KEY } from './updateSchedule'
+import {
+  applyDownloadEvent,
+  areRemindersEnabled,
+  displayError,
+  previewNotes,
+  rememberReminder,
+  SNOOZE_KEY,
+  writeRemindersEnabled,
+} from './updateSchedule'
 
 export type UpdatePhase = 'idle' | 'checking' | 'downloading' | 'ready' | 'failed' | 'restarting'
 
@@ -24,24 +32,39 @@ export type AppUpdateController = {
   percent: number | null
   error: string
   toastVisible: boolean
+  reminderVisible: boolean
+  remindersEnabled: boolean
   checkNow: () => Promise<'current' | 'available'>
   snooze: () => void
   showToast: () => void
   openUpdate: () => void
   restart: () => Promise<void>
   retry: () => Promise<void>
+  setRemindersEnabled: (enabled: boolean) => void
+  dismissReminder: () => void
+  acceptReminder: () => Promise<void>
+  disableReminders: () => void
 }
 
 const UpdateContext = createContext<AppUpdateController | null>(null)
 
-type PreviewKind = 'downloading' | 'ready' | 'failed'
+type PreviewKind = 'downloading' | 'ready' | 'failed' | 'available'
 
 function readPreview(): PreviewKind | null {
   if (!import.meta.env.DEV || typeof window === 'undefined') return null
   const query = window.location.hash.split('?')[1] || ''
   const value = new URLSearchParams(query).get('previewUpdate')
-  if (value === 'downloading' || value === 'ready' || value === 'failed') return value
+  if (value === 'downloading' || value === 'ready' || value === 'failed' || value === 'available') return value
   return null
+}
+
+function localStore(): Storage | null {
+  try { return localStorage } catch { return null }
+}
+
+function readRemindersEnabled(): boolean {
+  const storage = localStore()
+  return storage ? areRemindersEnabled(storage) : true
 }
 
 function readSnooze(): string {
@@ -66,12 +89,16 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [desktop, setDesktop] = useState(Boolean(previewKind))
   const [version, setVersion] = useState(previewKind ? '1.4.0' : '')
   const [currentVersion, setCurrentVersion] = useState(previewKind ? '1.3.1' : '')
-  const [notes, setNotes] = useState(previewKind && previewKind !== 'failed' ? '后台下载新版本，准备好后提示重启。' : '')
+  const [notes, setNotes] = useState(previewKind === 'downloading' || previewKind === 'ready' ? '后台下载新版本，准备好后提示重启。' : '')
   const [percent, setPercent] = useState<number | null>(previewKind === 'downloading' ? 42 : previewKind === 'ready' ? 100 : null)
   const [error, setError] = useState(previewKind === 'failed' ? 'offline' : '')
   const [toastVisible, setToastVisible] = useState(previewKind === 'ready' || previewKind === 'failed')
+  const [reminderVisible, setReminderVisible] = useState(previewKind === 'available')
+  const [remindersEnabled, setRemindersEnabledState] = useState(readRemindersEnabled)
   const live = useRef<AppUpdate | null>(null)
   const generation = useRef(0)
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
 
   const beginDownload = useCallback(async (found: AppUpdate) => {
     const token = ++generation.current
@@ -127,12 +154,14 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setVersion('')
         setNotes('')
         setToastVisible(false)
+        setReminderVisible(false)
         const previous = live.current
         live.current = null
         if (previous) void previous.close().catch(() => undefined)
         return 'current'
       }
       clearSnooze()
+      setReminderVisible(false)
       await beginDownload(found)
       return 'available'
     } catch (err) {
@@ -178,6 +207,61 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (phase === 'failed') void checkNow()
   }, [phase, checkNow])
 
+  const persistReminders = useCallback((enabled: boolean) => {
+    setRemindersEnabledState(enabled)
+    const storage = localStore()
+    if (storage) writeRemindersEnabled(storage, enabled)
+  }, [])
+
+  const releaseIdleUpdate = useCallback(() => {
+    const current = phaseRef.current
+    if (current === 'downloading' || current === 'ready' || current === 'restarting') return
+    const previous = live.current
+    live.current = null
+    if (previous) void previous.close().catch(() => undefined)
+  }, [])
+
+  const offerReminder = useCallback((found: AppUpdate) => {
+    const previous = live.current
+    live.current = found
+    if (previous && previous !== found) void previous.close().catch(() => undefined)
+    setVersion(found.version)
+    setNotes(previewNotes(found.body))
+    setError('')
+    setReminderVisible(true)
+    const storage = localStore()
+    if (storage) rememberReminder(storage, found.version, Date.now())
+  }, [])
+
+  const dismissReminder = useCallback(() => {
+    setReminderVisible(false)
+    releaseIdleUpdate()
+  }, [releaseIdleUpdate])
+
+  const acceptReminder = useCallback(async () => {
+    setReminderVisible(false)
+    if (previewKind === 'available') {
+      setPhase('downloading')
+      setToastVisible(false)
+      return
+    }
+    const found = live.current
+    if (!found) return
+    await beginDownload(found)
+  }, [beginDownload, previewKind])
+
+  const setRemindersEnabled = useCallback((enabled: boolean) => {
+    persistReminders(enabled)
+    if (enabled) return
+    setReminderVisible(false)
+    setToastVisible(false)
+    releaseIdleUpdate()
+  }, [persistReminders, releaseIdleUpdate])
+
+  const disableReminders = useCallback(() => {
+    setRemindersEnabled(false)
+  }, [setRemindersEnabled])
+
   useEffect(() => {
     if (previewKind) return
     let cancelled = false
@@ -191,23 +275,58 @@ export const UpdateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!isDesktop) return
       const found = await maybeCheckForUpdate()
       if (cancelled || !found) return
-      await beginDownload(found)
+      offerReminder(found)
     })()
     return () => { cancelled = true }
-  }, [beginDownload, previewKind])
+  }, [offerReminder, previewKind])
 
   const value = useMemo<AppUpdateController>(() => ({
     phase, desktop, preview: Boolean(previewKind), version, currentVersion, notes, percent, error, toastVisible,
+    reminderVisible, remindersEnabled,
     checkNow, snooze, showToast, openUpdate, restart, retry,
-  }), [phase, desktop, previewKind, version, currentVersion, notes, percent, error, toastVisible, checkNow, snooze, showToast, openUpdate, restart, retry])
+    setRemindersEnabled, dismissReminder, acceptReminder, disableReminders,
+  }), [phase, desktop, previewKind, version, currentVersion, notes, percent, error, toastVisible, reminderVisible, remindersEnabled, checkNow, snooze, showToast, openUpdate, restart, retry, setRemindersEnabled, dismissReminder, acceptReminder, disableReminders])
 
-  return <UpdateContext.Provider value={value}>{children}</UpdateContext.Provider>
+  return (
+    <UpdateContext.Provider value={value}>
+      {children}
+      <UpdateReminder />
+    </UpdateContext.Provider>
+  )
 }
 
 export function useAppUpdate(): AppUpdateController {
   const value = useContext(UpdateContext)
   if (!value) throw new Error('useAppUpdate must be used within UpdateProvider')
   return value
+}
+
+export const UpdateReminder: React.FC = () => {
+  useTranslation()
+  const update = useAppUpdate()
+  if (!update.reminderVisible) return null
+  const description = update.currentVersion
+    ? t('发现 {{version}}，当前是 {{current}}。下载安装后会自动重启。', { version: update.version, current: update.currentVersion })
+    : t('发现 {{version}}。下载安装后会自动重启。', { version: update.version })
+  return (
+    <Dialog
+      open
+      onClose={update.dismissReminder}
+      title={t('有新版本')}
+      description={description}
+      footer={(
+        <>
+          <Btn size="sm" variant="text" onClick={update.disableReminders}>{t('不再提醒')}</Btn>
+          <div className="right">
+            <Btn size="sm" onClick={update.dismissReminder}>{t('稍后')}</Btn>
+            <Btn size="sm" variant="cta" onClick={() => void update.acceptReminder()}>{t('下载并安装')}</Btn>
+          </div>
+        </>
+      )}
+    >
+      {update.notes ? <p className="ac-update-notes">{update.notes}</p> : null}
+    </Dialog>
+  )
 }
 
 export const UpdateToast: React.FC = () => {
@@ -247,6 +366,9 @@ export const UpdateToast: React.FC = () => {
         </div>
       )}
       <div className="ac-update-actions">
+        {update.phase !== 'restarting' && (
+          <Btn size="sm" variant="text" onClick={update.disableReminders}>{t('不再提醒')}</Btn>
+        )}
         {update.phase !== 'restarting' && (
           <Btn size="sm" onClick={update.snooze}>{t('暂不')}</Btn>
         )}
