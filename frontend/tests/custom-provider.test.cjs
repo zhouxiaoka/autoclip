@@ -121,6 +121,15 @@ test('custom base URLs reject console hosts and embedded credentials', () => {
   assert.equal(custom.draftUrlIssue('https://gw.example/v1'), null)
 })
 
+test('firstBoundModel does not fall back to a non-language model', () => {
+  const started = custom.addManualModel({ ...custom.emptyDraft(), name: 'Office', base_url: 'https://gw.example/v1' }, 'whisper-x').draft
+  const asr = custom.editModel(started, 'whisper-x', { types: ['asr'], scenarios: ['transcription'] })
+  assert.equal(custom.firstBoundModel(asr), undefined)
+  const applied = custom.applyCustomProvider(fresh(), asr, 'custom-asr')
+  assert.equal(applied.analysis, null)
+  assert.equal(applied.connections[0].custom_models[0].id, 'whisper-x')
+})
+
 test('custom dialog and first-run source have no clipboard-paste control', () => {
   const files = [
     'AddCustomProviderDialog.tsx',

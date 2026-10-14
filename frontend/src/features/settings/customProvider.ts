@@ -221,7 +221,6 @@ export function listFromOffers(offers: CustomModelOffer[]): ModelList {
 export function firstBoundModel(draft: CustomProviderDraft): CustomModelOffer | undefined {
   const enabled = enabledOffers(draft)
   return enabled.find(model => model.scenarios.includes('analysis') || model.types.includes('language'))
-    || enabled[0]
 }
 
 /** Append a custom connection. Bind analysis only when the document has none yet. */
