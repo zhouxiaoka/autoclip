@@ -101,19 +101,25 @@ def test_changed_endpoint_cannot_reuse_hidden_key():
     assert ai.path().read_bytes() == before
 
 
-def test_invalid_binding_and_visual_choice_do_not_partially_save():
+def test_invalid_binding_does_not_partially_save():
     ai.save(example())
     before = ai.path().read_bytes()
-    config = example()
-    config.analysis.capability = 'text'
-    config.analysis_mode = 'visual'
-    with pytest.raises(ValueError, match='多模态'):
-        ai.save(config)
-    assert ai.path().read_bytes() == before
     raw = example().model_dump()
     raw['connections'].pop()
     with pytest.raises(ValidationError, match='引用的服务'):
         ai.ModelSettings.model_validate(raw)
+    assert ai.path().read_bytes() == before
+
+
+def test_visual_mode_without_vision_saves():
+    config = example()
+    config.analysis.capability = 'text'
+    config.analysis_mode = 'visual'
+    ai.save(config)
+    loaded = ai.load()
+    assert loaded.analysis_mode == 'visual'
+    assert loaded.analysis.capability == 'text'
+    assert ai.vision_follow_lacks_capability(loaded) is True
 
 
 def test_atomic_write_failure_leaves_old_config(monkeypatch):

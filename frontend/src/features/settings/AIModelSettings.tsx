@@ -6,7 +6,7 @@ import { Btn, Row, Section, Segmented, StatusDot } from '../../ui'
 import SpeechRecognitionConfig from '../../components/SpeechRecognitionConfig'
 import { PROVIDERS, providerPickerOptions, type ProviderKey } from './providers'
 import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
-import { connectionOf, isTextOnly, mainConnection, presetKey, type SaveIssue } from './modelSettingsLogic'
+import { connectionOf, isTextOnly, mainConnection, presetKey, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
 import api from '../../services/api'
@@ -72,6 +72,7 @@ export function AIServiceFields({ m, placement, showVisual = true }: { m: ModelS
   if (!main) return <ProviderFields placement={placement} onChoose={p => m.chooseProvider('analysis', p)} onEdit={() => undefined} />
   const list = lists[main.id]
   const model = settings.analysis?.model || ''
+  const visionIssue = visionFollowLacksCapability(settings, lists)
   const hint = busy[main.id] && !model ? t('正在获取可用模型…')
     : model && list && !list.preview ? t('已为你选好推荐模型，可随时更换。')
     : t('填写 API Key 后自动选择推荐模型。')
@@ -79,6 +80,7 @@ export function AIServiceFields({ m, placement, showVisual = true }: { m: ModelS
     <ProviderFields connection={main} placement={placement} keyHint={m.keyHints[main.id]} onChoose={p => m.chooseProvider('analysis', p)} onEdit={patch => m.editConnection(main, patch)} />
     <Row wide label={t('模型')} hint={hint}>
       <ModelPicker role="analysis" model={model} capability={settings.analysis?.capability} connection={main} list={list} busy={!!busy[main.id]} listError={listErrors[main.id]} mode={settings.analysis_mode}
+        invalid={visionIssue}
         onChange={value => m.update({ analysis: { connection_id: main.id, model: value, capability: 'auto', model_source: 'user' } })}
         onCapability={capability => settings.analysis && m.update({ analysis: { ...settings.analysis, capability } })}
         onRefresh={() => void m.discover(main, true)}
@@ -89,6 +91,7 @@ export function AIServiceFields({ m, placement, showVisual = true }: { m: ModelS
       : t('抽样几张画面理解动作与场景。游戏画面、口播较少的内容推荐开启，切分更准；费用略高。关闭后只发送字幕。')}>
       <Switch checked={settings.analysis_mode !== 'subtitle'} onChange={m.setVisual} />
     </Row>}
+    {showVisual && visionIssue && <p className="ac-note ac-note--error" role="alert">{t(VISION_HINT_KEY)}</p>}
   </>
 }
 
@@ -171,7 +174,8 @@ export default function AIModelSettings({ requestedSection }: { requestedSection
     if (result.issue) document.getElementById(issueAnchor(result.issue))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
     else if (result.validationFailed) document.getElementById('ai-model')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
-  const failed = !!m.main && m.main.validation_status === 'failed'
+  const visionFailed = visionFollowLacksCapability(settings, m.lists)
+  const failed = (!!m.main && m.main.validation_status === 'failed') || visionFailed
   return <div className="ac-ai-settings">
     {settings.migration_warnings?.includes('cover_configuration_invalid') && <p role="alert" className="ac-note">{t('旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。')}</p>}
     {settings.migration_warnings?.includes('purpose_reset_to_recommended') && <p role="alert" className="ac-note">{t('部分用途无法按原样迁移。API Key 已保留，相关模型已改为推荐默认。此提示只出现一次。')}</p>}
@@ -193,7 +197,7 @@ export default function AIModelSettings({ requestedSection }: { requestedSection
     </fieldset>
     {m.error && <p className="studio-error" role="alert">{m.error}</p>}
     <div className="ac-savebar">
-      <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? t('校验未通过。设置已保存，但开始生成前会拦住。') : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
+      <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? (m.main?.validation_status === 'failed' ? t('校验未通过。设置已保存，但开始生成前会拦住。') : t(VISION_HINT_KEY)) : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
       <Btn variant="cta" loading={m.saving} onClick={() => void save()}>{t('保存设置')}</Btn>
     </div>
   </div>

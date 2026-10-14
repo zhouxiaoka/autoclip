@@ -6,6 +6,9 @@ status and blocks. Never returns keys, full URLs, or provider error text.
 HTTP failures go through ``classify_upstream_error``; the returned
 ``hint_key`` is the official catalog sentence. Local remaps (console host,
 HTML, GET /models 404) use ``hint_key_for`` of the same enum.
+
+A followed visual-understanding model without vision is a local capability
+miss (``vision_unsupported``), not an upstream class: save stays allowed.
 """
 from __future__ import annotations
 
@@ -35,6 +38,11 @@ PROBE_MAX_TOKENS = 16
 PROBE_REASONING_MAX_TOKENS = 256
 MODELS_TIMEOUT = 12.0
 PROBE_TIMEOUT = 20.0
+
+# Local capability miss — not an upstream HTTP class, never stored on connection.validation_error_type.
+VISION_UNSUPPORTED = 'vision_unsupported'
+VISION_HINT_KEY = '画面理解使用的模型不能看图。设置已保存，开始生成前会拦住。请换一个能看图的模型，或关闭画面识别。'
+VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型，或关闭画面识别后再生成。'
 
 
 @dataclass
@@ -186,6 +194,16 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
     if response.status_code >= 400:
         return _classify(response.status_code, text[:4000])
     return None
+
+
+def vision_follow_issue(settings: ai_models.ModelSettings) -> ValidationResult | None:
+    """Failed result when the followed vision model lacks vision. Save remains allowed."""
+    if not ai_models.vision_follow_lacks_capability(settings):
+        return None
+    return ValidationResult(
+        ok=False, result='failed',
+        error_type=VISION_UNSUPPORTED, hint_key=VISION_HINT_KEY,
+    )
 
 
 def validate_connection(connection: ai_models.Connection, model: str) -> ValidationResult:

@@ -53,7 +53,7 @@ def test_saved_document_is_ready_without_a_provider_call(monkeypatch):
     connection = Connection(id='local', name='Ollama', provider='ollama')
     settings = document(
         connections=[connection],
-        analysis=Assignment(connection_id='local', model='qwen2.5:7b', capability='text'),
+        analysis=Assignment(connection_id='local', model='qwen2.5:7b', capability='auto'),
     )
     ai.path().write_text(settings.model_dump_json(), encoding='utf-8')
     monkeypatch.setattr(ai, 'migrate_legacy', lambda: (_ for _ in ()).throw(AssertionError('legacy migration')))
@@ -150,15 +150,20 @@ def test_large_alias_uses_the_large_v3_model(monkeypatch, isolated):
 def test_visual_mode_requires_a_multimodal_model_and_auto_does_not(monkeypatch):
     text = document(analysis_mode='visual')
     blocked = report_for(monkeypatch, text)
-    assert blocked['checks']['visual'] == {'ok': False, 'code': 'not_configured', 'repair': 'settings_vision'}
+    assert blocked['checks']['visual'] == {'ok': False, 'code': 'vision_unsupported', 'repair': 'settings_vision'}
     assert blocked['ready'] is False
     allowed = report_for(monkeypatch, document(
         analysis=Assignment(connection_id='ai', model='gpt-4o', capability='multimodal'),
         analysis_mode='visual',
     ))
     assert allowed['checks']['visual'] == {'ok': True, 'code': 'configured', 'repair': 'none'}
-    auto = report_for(monkeypatch, document(analysis_mode='auto'))
-    assert auto['checks']['visual'] == {'ok': True, 'code': 'optional', 'repair': 'none'}
+    auto_text = report_for(monkeypatch, document(analysis_mode='auto'))
+    assert auto_text['checks']['visual'] == {'ok': False, 'code': 'vision_unsupported', 'repair': 'settings_vision'}
+    auto_unresolved = report_for(monkeypatch, document(
+        analysis=Assignment(connection_id='ai', model='o3-mini', capability='auto'),
+        analysis_mode='auto',
+    ))
+    assert auto_unresolved['checks']['visual'] == {'ok': True, 'code': 'optional', 'repair': 'none'}
     subtitles = report_for(monkeypatch, document(analysis_mode='subtitle', allow_visual_screening=False))
     assert subtitles['checks']['visual'] == {'ok': True, 'code': 'not_required', 'repair': 'none'}
 
@@ -205,7 +210,7 @@ def test_visual_check_uses_the_pipeline_capability(monkeypatch, model, capabilit
                         analysis=Assignment(connection_id='ai', model=model, capability=capability))
     visual = report_for(monkeypatch, settings)['checks']['visual']
     assert visual['ok'] is ok
-    assert visual['code'] == ('configured' if ok else 'not_configured')
+    assert visual['code'] == ('configured' if ok else 'vision_unsupported')
     # The pipeline gives the same answer: a vision endpoint exists exactly when readiness is ok.
     assert (ai.vision_endpoint(settings) is not None) is ok
     assert ai.sees_images(settings, settings.analysis) is ok
@@ -225,7 +230,7 @@ def test_generic_compatible_gateway_still_needs_an_explicit_choice(monkeypatch):
     gateway = Connection(id='ai', name='Gateway', provider='compatible', api_key='k', base_url='https://gateway.example/v1')
     settings = document(connections=[gateway], analysis_mode='visual',
                         analysis=Assignment(connection_id='ai', model='gpt-6.1-sol', capability='auto'))
-    assert report_for(monkeypatch, settings)['checks']['visual']['code'] == 'not_configured'
+    assert report_for(monkeypatch, settings)['checks']['visual']['code'] == 'vision_unsupported'
 
 
 def test_require_transcription_raises_before_caller_spends(monkeypatch):

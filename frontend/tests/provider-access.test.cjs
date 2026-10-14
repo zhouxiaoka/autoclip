@@ -73,6 +73,8 @@ test('wrong-provider keys are hinted, never treated as a switch, and hosts stay 
   )
   assert.equal(access.passed({ success: false, error_type: 'invalid_key' }), false)
   assert.equal(access.passed({ success: true }), true)
+  assert.equal(access.VISION_UNSUPPORTED, 'vision_unsupported')
+  assert.match(access.validationCopy('vision_unsupported'), /不能看图/)
 })
 
 test('settings URL wrapper shares Gemini chat-root normalization', () => {
