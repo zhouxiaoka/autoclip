@@ -679,7 +679,8 @@ FROM (
 hostname_of_base_url("https://api.openai.com/v1/chat/completions?key=sk-abc")  →  "api.openai.com"
 hostname_of_base_url("/Users/xxx/models")                                      →  None
 hostname_of_base_url("C:\\Users\\xxx\\AppData\\api")                           →  None
-sanitize_model("sk-abc123deadbeef")                                           →  None
+sanitize_model("sk-abc123deadbeef")                                           →  "redacted"
+sanitize_model("https://api.openai.com/v1")                                   →  "redacted"
 sanitize_llm_request_properties({prompt: "…", title: "我的旅行vlog"})         →  不含这两键
 ```
 

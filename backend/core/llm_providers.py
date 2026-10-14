@@ -502,7 +502,8 @@ class OpenAIProvider(LLMProvider):
             )
             
         except Exception as e:
-            logger.error(f"OpenAI调用失败: {str(e)}")
+            from backend.core.llm_telemetry import sanitize_exception_text
+            logger.error("OpenAI调用失败: %s", sanitize_exception_text(e))
             raise
     
     def test_connection(self) -> bool:

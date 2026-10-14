@@ -67,8 +67,8 @@ def test_hostname_and_model_never_keep_keys_or_urls():
     assert schema.hostname_of_base_url("https://dashscope.aliyuncs.com/compatible-mode/v1") == "dashscope.aliyuncs.com"
     assert schema.hostname_of_base_url("http://127.0.0.1:11434/v1") == "local"
     assert schema.sanitize_model("qwen-plus") == "qwen-plus"
-    assert schema.sanitize_model("has space") is None
-    assert schema.sanitize_model("用户口播：把这段广告词发到抖音") is None
+    assert schema.sanitize_model("has space") == "redacted"
+    assert schema.sanitize_model("用户口播：把这段广告词发到抖音") == "redacted"
     blob = json.dumps(telem.request_finished(
         provider="openai", model="sk-abc", base_url="https://api.openai.com/v1/chat/completions?k=1",
         outcome="success", http_status=200, duration_ms=12,

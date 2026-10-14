@@ -450,7 +450,8 @@ class LLMManager:
                 cache_path.write_text(content, encoding="utf-8")
             return content
         except Exception as e:
-            logger.error(f"LLM调用失败: {e}")
+            from backend.core.llm_telemetry import sanitize_exception_text
+            logger.error("LLM调用失败: %s", sanitize_exception_text(e))
             raise
     
     def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3, **kwargs) -> str:
@@ -501,7 +502,7 @@ class LLMManager:
                 delay = backoff_seconds(retry_after, attempt) if info.retryable else (2 ** attempt)
                 logger.warning(
                     "第%s次调用失败（%s，http=%s），%.1fs 后重试: %s",
-                    attempt + 1, kind, status, delay, error,
+                    attempt + 1, kind, status, delay, llm_telemetry.sanitize_exception_text(error),
                 )
                 time.sleep(delay)
                 attempt += 1
