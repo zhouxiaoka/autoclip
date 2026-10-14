@@ -68,6 +68,11 @@ class LLMProvider(ABC):
         self.api_key = api_key
         self.model_name = model_name
         self.kwargs = kwargs
+
+    def request_model(self) -> str:
+        """Model for this request only. Never writes ``self.model_name``."""
+        from backend.core.llm_degrade import bound_request_model
+        return bound_request_model(self.model_name)
     
     @abstractmethod
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
@@ -138,8 +143,9 @@ class DashScopeProvider(LLMProvider):
     
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用DashScope API（mode: native|compatible）"""
+        model = self.request_model()
         masked_key = self.api_key[:3] + "***" + self.api_key[-2:] if self.api_key else ""
-        logger.info(f"[DashScope] mode={self.mode} model={self.model_name} base_url={self.base_url if self.mode=='compatible' else 'sdk-generation'} key={masked_key}")
+        logger.info(f"[DashScope] mode={self.mode} model={model} base_url={self.base_url if self.mode=='compatible' else 'sdk-generation'} key={masked_key}")
         logger.debug(f"[DashScope] 传入的kwargs: {kwargs}")
         if self.mode == "native":
             try:
@@ -148,11 +154,11 @@ class DashScopeProvider(LLMProvider):
                 os.environ["DASHSCOPE_API_KEY"] = self.api_key
                 
                 full_input = self._build_full_input(prompt, input_data)
-                if (self.model_name or "").strip().lower() in QWEN_HYBRID_THINKING_MODELS:
+                if (model or "").strip().lower() in QWEN_HYBRID_THINKING_MODELS:
                     # 原生 SDK 只连百炼；清单内的混合思考模型关掉默认思考（见 QWEN_HYBRID_THINKING_MODELS）
                     kwargs.setdefault("enable_thinking", False)
                 resp = self._ds_generation.call(
-                    model=self.model_name,
+                    model=model,
                     prompt=full_input,
                     api_key=self.api_key,
                     stream=False,
@@ -170,7 +176,7 @@ class DashScopeProvider(LLMProvider):
                         return LLMResponse(
                             content=resp.output.text,
                             usage={'input_tokens': usage.get('input_tokens'), 'output_tokens': usage.get('output_tokens')} if usage else None,
-                            model=self.model_name,
+                            model=model,
                             finish_reason=getattr(resp.output, 'finish_reason', None)
                         )
                     finish_reason = getattr(resp.output, 'finish_reason', 'unknown') if getattr(resp, 'output', None) else 'unknown'
@@ -192,12 +198,12 @@ class DashScopeProvider(LLMProvider):
                     "Content-Type": "application/json",
                 }
                 payload = {
-                    "model": self.model_name,
+                    "model": model,
                     "messages": [{"role": "user", "content": full_input}],
                     "stream": False,
                 }
                 payload.update({k: v for k, v in kwargs.items() if v is not None})
-                if disables_qwen_thinking(self.model_name, self.base_url):
+                if disables_qwen_thinking(model, self.base_url):
                     payload.setdefault("enable_thinking", False)  # 原始 HTTP 请求：顶层参数
                 url = f"{self.base_url}/chat/completions"
                 # 以前读超时只有 30 秒：长字幕的挑片调用必然超时。与 OpenAIProvider 保持一致。
@@ -213,7 +219,7 @@ class DashScopeProvider(LLMProvider):
                 content = data["choices"][0]["message"]["content"]
                 usage = data.get("usage")
                 finish_reason = data["choices"][0].get("finish_reason")
-                return LLMResponse(content=content, usage=usage, model=self.model_name, finish_reason=finish_reason)
+                return LLMResponse(content=content, usage=usage, model=model, finish_reason=finish_reason)
             except Exception as e:
                 logger.error(f"DashScope(compatible)调用失败: {str(e)}")
                 raise
@@ -464,9 +470,10 @@ class OpenAIProvider(LLMProvider):
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> LLMResponse:
         """调用OpenAI API"""
         try:
+            model = self.request_model()
             full_input = self._build_full_input(prompt, input_data)
-            payload = token_param_kwargs(self.model_name, self.base_url, guarded_chat_kwargs(self.base_url, {
-                "model": self.model_name,
+            payload = token_param_kwargs(model, self.base_url, guarded_chat_kwargs(self.base_url, {
+                "model": model,
                 "messages": [{"role": "user", "content": full_input}],
                 **kwargs,
             }))
@@ -476,7 +483,7 @@ class OpenAIProvider(LLMProvider):
                 if payload.get("max_tokens") is None or getattr(error, "status_code", None) != 400 \
                         or not asks_for_max_completion_tokens(error):
                     raise
-                logger.info("模型 %s 不支持 max_tokens，改用 max_completion_tokens 重试一次", self.model_name)
+                logger.info("模型 %s 不支持 max_tokens，改用 max_completion_tokens 重试一次", model)
                 response = self.client.chat.completions.create(**to_max_completion_tokens(payload))
             
             content = response.choices[0].message.content
@@ -488,7 +495,7 @@ class OpenAIProvider(LLMProvider):
             if usage:
                 logger.info(
                     "LLM usage model=%s prompt_tokens=%s completion_tokens=%s total_tokens=%s",
-                    self.model_name,
+                    model,
                     usage.get("prompt_tokens"),
                     usage.get("completion_tokens"),
                     usage.get("total_tokens"),
@@ -497,7 +504,7 @@ class OpenAIProvider(LLMProvider):
             return LLMResponse(
                 content=content,
                 usage=usage,
-                model=self.model_name,
+                model=model,
                 finish_reason=response.choices[0].finish_reason
             )
             
@@ -552,15 +559,16 @@ class GeminiProvider(LLMProvider):
                 from google.genai import types
                 config = types.GenerateContentConfig(max_output_tokens=max_tokens)
 
+            model = self.request_model()
             response = self.client.models.generate_content(
-                model=self.model_name,
+                model=model,
                 contents=full_input,
                 config=config,
             )
 
             return LLMResponse(
                 content=response.text,
-                model=self.model_name,
+                model=model,
                 finish_reason=getattr(response, 'finish_reason', None)
             )
 
@@ -604,8 +612,9 @@ class SiliconFlowProvider(LLMProvider):
                 "Content-Type": "application/json"
             }
             
+            model = self.request_model()
             data = {
-                "model": self.model_name,
+                "model": model,
                 "messages": [{"role": "user", "content": full_input}],
                 "stream": False,
                 **kwargs
@@ -627,7 +636,7 @@ class SiliconFlowProvider(LLMProvider):
             return LLMResponse(
                 content=content,
                 usage=usage,
-                model=self.model_name,
+                model=model,
                 finish_reason=result["choices"][0].get("finish_reason")
             )
             

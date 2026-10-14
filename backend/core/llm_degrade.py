@@ -80,6 +80,24 @@ class _ChunkBudget:
 _chunk_budget: contextvars.ContextVar[_ChunkBudget | None] = contextvars.ContextVar(
     "llm_chunk_call_budget", default=None,
 )
+_request_model: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "llm_request_model", default=None,
+)
+
+
+@contextmanager
+def bind_request_model(model: str | None) -> Iterator[str | None]:
+    """Per-call candidate. Does not write ``settings`` or ``provider.model_name``."""
+    name = (model or "").strip() or None
+    token = _request_model.set(name)
+    try:
+        yield name
+    finally:
+        _request_model.reset(token)
+
+
+def bound_request_model(fallback: str | None = None) -> str:
+    return (_request_model.get() or fallback or "").strip()
 
 
 def resolve_model_source(settings: Mapping[str, Any] | None, assignment: Any = None) -> str:
@@ -189,18 +207,18 @@ def call_note_same_provider_degrade(manager: Any = None) -> None:
     """Call #375's ``note_same_provider_degrade`` when R2 is present.
 
     #375 is not on this branch. Prefer ``manager.note_same_provider_degrade``,
-    else ``llm_telemetry.increment_degrade_count``. Missing hooks are a
-    no-op so R1 does not depend on R2. Never records model names, URLs,
-    paths, or user text.
+    else ``llm_telemetry.increment_degrade_count``. If the instance hook
+    throws, fall back to the backup counter. Missing hooks are a no-op.
+    Never records model names, URLs, paths, or user text.
     """
     if manager is not None:
         hook = getattr(manager, "note_same_provider_degrade", None)
         if callable(hook):
             try:
                 hook()
-            except Exception:
                 return
-            return
+            except Exception:
+                pass
     try:
         from backend.core import llm_telemetry
         increment = getattr(llm_telemetry, "increment_degrade_count", None)
@@ -258,15 +276,36 @@ def chunk_call_budget() -> Iterator[_ChunkBudget]:
         _chunk_budget.reset(token)
 
 
-def consume_chunk_call() -> bool:
-    """Count one billed ``call()``. ``True`` = allowed. No active budget → unlimited."""
+def http_attempts_per_call() -> int:
+    """One manager ``call()`` including OpenAI SDK retries (``LLM_SDK_MAX_RETRIES``)."""
+    try:
+        from backend.core.llm_providers import LLM_SDK_MAX_RETRIES
+        return 1 + max(0, int(LLM_SDK_MAX_RETRIES))
+    except Exception:
+        return 1
+
+
+def consume_chunk_call(cost: int | None = None) -> bool:
+    """Reserve HTTP attempts for one ``call()``. ``True`` = allowed.
+
+    Each ``call()`` costs ``1 + LLM_SDK_MAX_RETRIES`` so the per-chunk cap
+    of 6 cannot expand to 12 real HTTP requests. No active budget → unlimited.
+    """
+    units = http_attempts_per_call() if cost is None else max(1, int(cost))
     budget = _chunk_budget.get()
     if budget is None:
         return True
-    if budget.used >= CHUNK_CALL_CAP:
+    if budget.used + units > CHUNK_CALL_CAP:
         return False
-    budget.used += 1
+    budget.used += units
     return True
+
+
+def chunk_http_remaining() -> int:
+    budget = _chunk_budget.get()
+    if budget is None:
+        return CHUNK_CALL_CAP
+    return max(0, CHUNK_CALL_CAP - budget.used)
 
 
 def remember_chunk_error(error: BaseException) -> None:
