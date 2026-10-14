@@ -1,8 +1,8 @@
 """Anonymous mcp_tool_called and mcp_job_finished events.
 
 Uses the same switch as studio QA: no project key, or privacy.json analytics
-false, means no request. Properties are tool, client, version, duration, ok
-and error_code. Paths, secrets and free text are not properties.
+false, means no request. Properties are tool, client, app_version, duration, ok
+and error_code plus the common envelope. Paths, secrets and free text are not properties.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from backend import __version__
+from backend.core.event_catalog import envelope_properties
 from backend.services.studio.features import flag_enabled, resolve_features
 from backend.services.studio.qa import telemetry as qa_telemetry
 
@@ -123,9 +123,9 @@ def client_from_context(context: object) -> str:
 def _properties(tool: str, client: str | None, duration_ms: int, ok: bool, error_code: str) -> dict:
     code = normalize_error(error_code, ok=ok)
     return {
+        **envelope_properties(),
         'tool': normalize_tool(tool),
         'client': client_label(client),
-        'version': __version__,
         'duration_ms': duration_ms,
         'ok': ok,
         'error_code': code,

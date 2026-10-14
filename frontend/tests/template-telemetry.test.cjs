@@ -17,7 +17,7 @@ const workflow = loadWorkflow()
 test('template render facts stay enumerable and drop captions and paths', () => {
   const props = workflow.safeStudioProperties({
     template: 'classic', requested_template: 'editorial', encoder: 'h264_nvenc', downgraded: false, downgrade_reason: 'rank',
-    os: 'darwin', cpu_count: 8, duration_ms: 90000, failure_reason: 'none', outcome: 'skipped',
+    os: 'macos', cpu_count: 8, duration_ms: 90000, failure_reason: 'none', outcome: 'skipped',
     strategy_id: 'douyin', flow_id: 't-abc123def456', title: '秘密标题', caption: '原话', path: '/Users/a/v.mp4',
   })
   assert.equal(props.template, 'classic')
@@ -26,7 +26,9 @@ test('template render facts stay enumerable and drop captions and paths', () => 
   assert.equal(props.downgraded, false)
   assert.equal(props.downgrade_reason, 'rank')
   assert.equal(props.outcome, 'skipped')
-  assert.equal(props.os, 'darwin')
+  assert.equal(props.os, 'macos')
+  assert.equal(workflow.safeStudioProperties({ os: 'darwin', outcome: 'completed' }).os, 'macos')
+  assert.equal(workflow.safeStudioProperties({ os: 'win32', outcome: 'failed' }).outcome, 'error')
   assert.equal(props.cpu_count, 8)
   assert.equal(props.duration_ms, 90000)
   const blob = JSON.stringify(props)

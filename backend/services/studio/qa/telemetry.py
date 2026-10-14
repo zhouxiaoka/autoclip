@@ -15,6 +15,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+from backend.core.event_catalog import envelope_properties
 from backend.services.studio.features import DEFAULTS, VARIANTS
 from backend.services.studio.qa.loudness import TARGETS
 from backend.services.studio.qa.report import BUCKETS, CHECKERS
@@ -139,10 +140,10 @@ def emit_checked(report: dict, strategy_id: str, *, variant: str | None = None) 
         return
     try:
         properties = {
+            **envelope_properties(),
             'qa_mode': 'shadow',
             'duration_ms': max(0, min(60_000, int(report.get('duration_ms') or 0))),
             'studio_schema_version': 2,
-            'runtime': 'python',
             '$feature/qa_gate_blocking': _qa_variant(variant),
         }
         if strategy_id in TARGETS:

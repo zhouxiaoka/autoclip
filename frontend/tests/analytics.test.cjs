@@ -298,7 +298,7 @@ test('actual API entrypoints enroll imports/exports and count every media downlo
   await api.projectApi.downloadExport('p', 'exportjob')
   await api.settingsApi.testApiKey('dashscope', 'sk-secret')
   assert.equal(s.events.filter(e => e.event === 'media_download_received').length, 5)
-  assert.equal(s.events.find(e => e.event === 'provider_test_finished').props.outcome, 'failed')
+  assert.equal(s.events.find(e => e.event === 'provider_test_finished').props.outcome, 'error')
   assert.equal(JSON.stringify(s.events).includes('secret'), false)
   assert.equal(s.tracker.list().length, 4)
   const accepted = s.events.filter(e => e.event.endsWith('_accepted'))
@@ -318,7 +318,7 @@ test('Studio phases dedupe locally across restart without sending internal IDs o
   recovered.observeStudio(recovered.list()[0],snapshot)
   assert.equal(s.events.length,1)
   assert.equal(s.events[0].props.studio_schema_version,2)
-  assert.equal(s.events[0].props.outcome,'failed')
+  assert.equal(s.events[0].props.outcome,'error')
   assert.equal(JSON.stringify(s.events).includes('secret'),false)
   s.tracker.watch('studio-export','secret-job','secret-project')
   s.tracker.observeStudio(s.tracker.list()[1],{jobs:[{job_id:'secret-job',status:'completed'}]})
@@ -328,7 +328,7 @@ test('Studio phases dedupe locally across restart without sending internal IDs o
   assert.equal(s.events.length,2)
 })
 test('Studio screening distinguishes recommendations, manual fallback and import failure',()=>{
-  for (const [snapshot,outcome] of [[{plan:{id:'plan',mode:'ai'},analysis:{status:'awaiting_confirmation'}},'recommended'],[{plan:{id:'plan',mode:'fallback'},analysis:{status:'awaiting_confirmation'}},'fallback'],[{analysis:{status:'failed'}},'failed']]) {
+  for (const [snapshot,outcome] of [[{plan:{id:'plan',mode:'ai'},analysis:{status:'awaiting_confirmation'}},'recommended'],[{plan:{id:'plan',mode:'fallback'},analysis:{status:'awaiting_confirmation'}},'fallback'],[{analysis:{status:'failed'}},'error']]) {
     const s=setup();s.tracker.watch('studio-screen','private-project')
     s.tracker.observeStudio(s.tracker.list()[0],snapshot)
     assert.equal(s.events[0].props.outcome,outcome)
@@ -428,7 +428,7 @@ test('social publishing distinguishes scheduling and inbox acceptance from publi
  assert.equal(aggregate.socialPublishOutcome('submitted',false,[{success:true,fallback_to_inbox:true}]),'inbox')
  assert.equal(aggregate.socialPublishOutcome('completed',false,[]),'unknown')
  assert.equal(aggregate.socialPublishOutcome('completed',false,[{success:true},{success:false}]),'partial')
- assert.equal(aggregate.socialPublishOutcome('completed',false,[{success:false}]),'failed')
+ assert.equal(aggregate.socialPublishOutcome('completed',false,[{success:false}]),'error')
  aggregate.socialPublishObserved(s.tracker.generation(),{source_type:'studio',gateway:'bilibili',outcome:'completed',url:'private'})
  assert.equal(s.events[0].props.source_type,'studio');assert.equal(JSON.stringify(s.events).includes('private'),false)
  const gen=s.tracker.generation();s.tracker.clear();aggregate.socialPublishObserved(gen,{outcome:'completed'});assert.equal(s.events.length,1)
@@ -484,7 +484,7 @@ test('immutable receipts recover the right run after a newer plan replaced curre
   const w=s.tracker.list()[0]
   s.tracker.observeStudio(w,{material_origin:'sample',plan:{id:'new-plan'},analysis:{run_id:'new-run',phase:'screening',status:'running'},analysis_history:[{run_id:'old-run',plan:{id:'old-plan',confirmed_analysis:'subtitle'},analysis:{phase:'production',status:'completed'}}]})
   s.tracker.observeStudio(w,{plan:{id:'new-plan'},analysis:{status:'failed'}})
-  assert.equal(s.events.length,1);assert.equal(s.events[0].props.outcome,'completed');assert.equal(s.events[0].props.material_origin,'sample')
+  assert.equal(s.events.length,1);assert.equal(s.events[0].props.outcome,'success');assert.equal(s.events[0].props.material_origin,'sample')
   assert.equal(JSON.stringify(s.events).includes('old-run'),false)
   s.tracker.watch('studio-screen','p',undefined,undefined,{},true,'screen-run')
   s.tracker.observeStudio(s.tracker.list()[1],{analysis:{run_id:'production-run',phase:'production',status:'failed'}})
@@ -495,7 +495,7 @@ test('experience contract excludes config secrets and results cannot replay acro
   const s=setup();const x=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const finish=x.beginExperience('provider_connection_test',{provider:'openai',placement:'home_setup',api_key:'sk-secret',model:'private-model',base_url:'https://private'})
   finish('failed',{error:'sk-secret'});finish('completed')
-  assert.equal(s.events.length,2);assert.equal(s.events[1].props.outcome,'failed')
+  assert.equal(s.events.length,2);assert.equal(s.events[1].props.outcome,'error')
   assert.equal(JSON.stringify(s.events).includes('secret'),false);assert.equal(JSON.stringify(s.events).includes('private'),false)
   const late=x.beginExperience('model_discovery',{provider:'openai'});s.tracker.clear();late('completed',{result_count:9})
   assert.equal(s.events.length,3)
@@ -572,7 +572,7 @@ test('actual unified settings hook records save once and HTTP-200 negative tests
  await render().load();await Promise.resolve();let m=render();await m.save();m=render();await m.test()
  assert.equal(s.events.filter(e=>e.event==='provider_configuration_save_finished').length,1)
  assert.equal(s.events.find(e=>e.event==='provider_configuration_save_finished').props.mode,'initial')
- assert.equal(s.events.find(e=>e.event==='provider_connection_test_finished').props.outcome,'failed')
+ assert.equal(s.events.find(e=>e.event==='provider_connection_test_finished').props.outcome,'error')
  const validation=s.events.filter(e=>e.event==='provider_validation_finished')
  assert.ok(validation.length>=1)
  assert.equal(validation[0].props.result,'failed')
@@ -677,7 +677,7 @@ test('retrying the same plan retains both execution attempts until independently
  const state={plan:{id:'plan'},analysis:{status:'completed',phase:'production',run_id:'run-second'},analysis_history:[{run_id:'run-first',plan:{id:'plan'},analysis:{status:'failed',phase:'production'}}]}
  for(const watch of s.tracker.list())s.tracker.observeStudio(watch,state)
  assert.equal(s.events.length,2)
- assert.deepEqual(s.events.map(e=>e.props.outcome),['failed','completed'])
+ assert.deepEqual(s.events.map(e=>e.props.outcome),['error','success'])
  assert.notEqual(s.events[0].props.attempt_id,s.events[1].props.attempt_id)
 })
 
@@ -729,7 +729,7 @@ test('1.5 API observes cover and retry terminal results across restart without c
  snapshot.jobs=[{job_id:'private-new-render',status:'completed',result:{outro_applied:false,warnings:['private error']}}]
  for(const w of recovered.list()){recovered.observeStudio(w,snapshot);recovered.observeStudio(w,snapshot)}
  const finished=s.events.filter(e=>e.event==='studio_variant_finished')
- assert.equal(finished.length,1);assert.equal(finished[0].props.outcome,'completed');assert.equal(finished[0].props.outro_applied,false);assert.equal(finished[0].props.warning_count,1)
+ assert.equal(finished.length,1);assert.equal(finished[0].props.outcome,'success');assert.equal(finished[0].props.outro_applied,false);assert.equal(finished[0].props.warning_count,1)
  assert.equal(JSON.stringify(s.events).includes('private'),false)
  assert.equal(s.events.filter(e=>e.event==='studio_post_save_accepted').length,1)
 })
