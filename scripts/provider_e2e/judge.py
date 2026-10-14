@@ -71,7 +71,6 @@ def _live_like(report: dict[str, Any]) -> bool:
     return (
         report.get('suite') == 'combined'
         and bool(report.get('mode') or report.get('case_records') or report.get('planned'))
-        and not any(str(row.get('id') or '').startswith('mock:') for row in report.get('cases') or [])
     )
 
 

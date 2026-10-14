@@ -80,7 +80,7 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('needs: [candidate-gate]', desktop)
         self.assertIn('needs.provider-e2e.result == \'success\'', desktop)
         self.assertIn('github.event_name == \'schedule\'', workflow)
-        # Temporary one-shot trigger is present on this commit only; reverted after verify.
+        self.assertNotIn('e2e-live-once', workflow)
         self.assertIn('provider-e2e-cases', workflow)
         self.assertIn('live_mode', workflow)
         self.assertIn('--expect-live', workflow)
@@ -270,7 +270,7 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('gemini-3.5-flash-lite', doc)
         self.assertIn('qwen-flash', doc)
         self.assertIn('fail-closed', doc)
-        self.assertIn('不要把这个门槛当作发版验收依据', doc)
+        self.assertIn('不要用这个门槛放行发版', doc)
         self.assertIn('UpstreamErrorType', doc)
         self.assertIn('billable_calls_before_failure', doc)
         self.assertIn('SUCCESS_RATE_CONTRACT.md', doc)
@@ -537,6 +537,16 @@ class ProviderE2EFailClosedTests(unittest.TestCase):
         snapshot = json.loads(VERIFY_UNDER_SAMPLE_PATH.read_text(encoding='utf-8'))
         self.assertFalse(judge.judge_suite(snapshot)['passed'])
 
+    def test_combined_mock_plus_live_still_fail_closed(self):
+        from provider_e2e.report import merge_reports
+        from provider_e2e.testdata import live_24_of_40_report, mock_pass_report
+        merged = merge_reports([mock_pass_report(), live_24_of_40_report()])
+        verdict = judge.judge_suite(merged)
+        self.assertFalse(verdict['passed'])
+        joined = ' '.join(verdict['reasons'])
+        self.assertIn('provider failure: api88', joined)
+        self.assertIn('provider failure: gemini', joined)
+
     def test_workflow_fixture_mock_plus_24_of_40_fails_cli(self):
         import tempfile
         from provider_e2e.testdata import LIVE_24_OF_40_PATH, MOCK_PASS_PATH
@@ -620,7 +630,7 @@ class ProviderE2EFailClosedTests(unittest.TestCase):
 
     def test_acceptance_docs_freeze_the_gate(self):
         acceptance = (ROOT / 'docs/TESTING_ACCEPTANCE.md').read_text(encoding='utf-8')
-        self.assertIn('不要用这个门槛做发版验收', acceptance)
+        self.assertIn('不要用这个门槛放行发版', acceptance)
         changelog = (ROOT / 'CHANGELOG.md').read_text(encoding='utf-8')
         self.assertIn('gemini-3.5-flash-lite', changelog)
         self.assertIn('88api.ai/v1', changelog)

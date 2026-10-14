@@ -1,6 +1,6 @@
 # 发版前服务商端到端门槛
 
-> **验收冻结：** 2026-10 的 live 全矩阵（Actions `38508586808`）只有 24/40 应成功，88API 与 Gemini 在分析阶段失败，但具名 `provider-e2e` job 仍是绿的——失败没有 fail-closed 进汇总。在本页所述 fail-closed 修复被一次最小 live（`verify`）跑通并核对之前，**不要把这个门槛当作发版验收依据**。mock 套件本身仍可用来挡回归。
+> **验收冻结：** fail-closed 已在 verify live（Actions `38514864277`）核对：88API 失败时具名 `provider-e2e` job 为红，不再被滚动窗口样本不足放行。Gemini 默认 `gemini-3.5-flash-lite` 已通过。88API 仍因 HTTP 503 / `upstream_unavailable` 失败（token 未开通 `gpt-4o-mini` 通道或上游无渠道）。在 Environment 设好可用的 `API88_MODEL` 并再跑绿之前，**不要用这个门槛放行发版**。mock 套件本身仍可用来挡回归。
 
 1.5.8 起，Desktop Build 在 `candidate-gate` 之后、Release Acceptance 之前必须通过 [`.github/workflows/provider-e2e-gate.yml`](../.github/workflows/provider-e2e-gate.yml)。它在 Linux 上起无界面桌面后端（`backend.desktop_main`），用 Studio HTTP 跑「导入 → 自动出片」，不打开 UI。
 
@@ -115,7 +115,7 @@ Mock 套件为 0。本门槛只走字幕 + 自带 SRT，不跑 Whisper，也不�
 ## 接入发版链路
 
 - [`desktop-build.yml`](../.github/workflows/desktop-build.yml) 的 `provider-e2e` job `needs: candidate-gate`，与双平台打包并行。未打 tag 时只跑 mock；`v*` tag 才跑 `prerelease` live。
-- `release` 与 `internal-provenance` 都要求具名 `provider-e2e` job 成功。在 fail-closed 验证前不要据此放行发版。live 滚动窗口在样本未满 20 条时不额外卡；当次服务商失败仍红。
+- `release` 与 `internal-provenance` 都要求具名 `provider-e2e` job 成功。fail-closed 已在 `38514864277` 核对；88API 仍红时不要据此放行发版。live 滚动窗口在样本未满 20 条时不额外卡；当次服务商失败仍红。
 - [`scripts/release_acceptance.py`](../scripts/release_acceptance.py) 的 `BUILD_JOBS` 含 `provider-e2e`，Release Acceptance 会核对 Desktop Build 里这个 job。
 
 矩阵、轮转与故障定义见 [`scripts/provider_e2e/matrix.py`](../scripts/provider_e2e/matrix.py)。判定与故障注入引用 [成功率共享契约](SUCCESS_RATE_CONTRACT.md) 的 `UpstreamErrorType` 与 `billable_calls_before_failure`，不另造一套码。
@@ -126,7 +126,7 @@ Actions `38508586808`（全矩阵）与 `38511841070`（verify）里，DeepSeek 
 
 | 服务商 | 归类 | 契约 `error_type` | 典型 HTTP | 脱敏线索 | 修复 |
 | --- | --- | --- | --- | --- | --- |
-| 88API | 配置 | `bad_endpoint`（HTML/错 host）或 `model_not_found`（token 未开通模型） | 404 / 连接失败 | `OpenAI调用失败` / `Error code: 404`，host 曾是 `api.88api.ai` | 默认 base 改为产品预设 `https://88api.ai/v1`；模型不对时设 `API88_MODEL` |
-| Gemini | 配置 | `model_not_found` | 404 | `Gemini调用失败` / `Error code: 404`，模型曾是 `gemini-2.0-flash` / `gemini-2.0-flash-lite` | 默认改为目录内最便宜的 `gemini-3.5-flash-lite`；可被 `GEMINI_MODEL` 覆盖 |
+| 88API | 配置 | 错 host 时曾是 `unknown`/`bad_endpoint`；改对 host 后为 `upstream_unavailable` | 503（`38514864277`） | `大纲提取失败：1/1 个文本块调用模型都失败了`；host `88api.ai`；0 次计费 | 默认 base 已是产品预设 `https://88api.ai/v1`。503 表示该 token/分组没有 `gpt-4o-mini` 渠道或上游无可用通道。在 Environment 设 `API88_MODEL` 为控制台已勾选的模型 |
+| Gemini | 配置（已修好） | 旧默认是 `model_not_found`；现默认已通过 | 旧 404 | 旧：`Gemini调用失败` / `gemini-2.0-flash*`；新：`gemini-3.5-flash-lite` 3 次计费出片 | 默认改为目录内最便宜的 `gemini-3.5-flash-lite`；可被 `GEMINI_MODEL` 覆盖 |
 
 复现夹具：[`scripts/provider_e2e/testdata/live_24_of_40.json`](../scripts/provider_e2e/testdata/live_24_of_40.json)。旧判定（只看滚动窗口、样本不足即绿）会放行；fail-closed 必须红。
