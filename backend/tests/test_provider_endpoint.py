@@ -117,6 +117,58 @@ def test_locked_urls_follow_swapped_json_catalog(tmp_path, monkeypatch):
     assert LOCKED_PRESETS['api88'] == 'https://lock.example.test/v1'
 
 
+def test_console_detection_allows_live_catalog_api_hosts(tmp_path, monkeypatch):
+    raw = json.loads(CATALOG.read_text(encoding='utf-8'))
+    raw['providers']['api88']['base_url'] = 'https://platform.deepseek.com/v1'
+    raw['providers']['api88']['accepted_hosts'] = ['aistudio.google.com']
+    path = tmp_path / 'provider_presets.json'
+    path.write_text(json.dumps(raw), encoding='utf-8')
+    monkeypatch.setenv('AUTOCLIP_PROVIDER_PRESETS', str(path))
+    provider_presets.reset_catalog_cache()
+    assert not is_console_host('platform.deepseek.com')
+    assert not is_console_host('aistudio.google.com')
+    assert 'console_host' not in normalize_provider_base_url('https://platform.deepseek.com/v1').warnings
+    assert is_console_host('platform.openai.com')
+    provider_presets.reset_catalog_cache()
+    monkeypatch.delenv('AUTOCLIP_PROVIDER_PRESETS')
+    assert is_console_host('platform.deepseek.com')
+    assert is_console_host('aistudio.google.com')
+
+
+def test_gemini_catalog_native_path_uses_shared_helper(tmp_path, monkeypatch):
+    raw = json.loads(CATALOG.read_text(encoding='utf-8'))
+    raw['providers']['gemini']['base_url'] = 'https://gemini.example.test/v1beta'
+    path = tmp_path / 'provider_presets.json'
+    path.write_text(json.dumps(raw), encoding='utf-8')
+    monkeypatch.setenv('AUTOCLIP_PROVIDER_PRESETS', str(path))
+    provider_presets.reset_catalog_cache()
+    assert official_chat_url('gemini') == 'https://gemini.example.test/v1beta/openai'
+
+
+@pytest.mark.parametrize('provider', ['api88', 'infistar', 'deepseek', 'gemini'])
+def test_catalog_change_preserves_frozen_connection_but_updates_new_one(tmp_path, monkeypatch, provider):
+    ai.save(ai.ModelSettings(
+        connections=[ai.Connection(id='saved', name='saved', provider=provider)],
+        analysis=ai.Assignment(connection_id='saved', model='fixture-model'),
+    ))
+    original = ai.load().connections[0]
+    frozen_url = ai.chat_endpoint(original, 'fixture-model')['base_url']
+    assert original.base_url == frozen_url
+    assert original.preset_version > 0
+    raw = json.loads(CATALOG.read_text(encoding='utf-8'))
+    raw['version'] += 1
+    raw['providers'][provider]['base_url'] = 'https://changed.example.test/v1beta' if provider == 'gemini' else 'https://changed.example.test/v1'
+    path = tmp_path / 'provider_presets.json'
+    path.write_text(json.dumps(raw), encoding='utf-8')
+    monkeypatch.setenv('AUTOCLIP_PROVIDER_PRESETS', str(path))
+    provider_presets.reset_catalog_cache()
+    restored = ai.load().connections[0]
+    assert ai.chat_endpoint(restored, 'fixture-model')['base_url'] == frozen_url
+    fresh = ai.Connection(id='fresh', name='fresh', provider=provider)
+    expected = 'https://changed.example.test/v1beta/openai' if provider == 'gemini' else 'https://changed.example.test/v1'
+    assert ai.chat_endpoint(fresh, 'fixture-model')['base_url'] == expected
+
+
 def test_key_hint_is_prefix_only_and_host_is_sanitized():
     assert hint_provider_for_key('  AIzaSySecret  ') == 'gemini'
     assert hint_provider_for_key('sk-proj-abc') == 'openai'

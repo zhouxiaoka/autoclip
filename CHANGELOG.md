@@ -10,6 +10,8 @@
 - 设置页锁定地址改为读取 `presets/provider_presets.json`，不再在 `provider_endpoint` 里写死各家 URL。地址规范化只走 `#364` 的 `provider_url`（去掉重复的 `/v1` 规则）；误贴的 `/chat/completions` 仍会截掉。规范化只改写、不拦截保存；控制台域名仍标红提示。
 - 服务商与模型预设改为单一数据源 `presets/provider_presets.json`（约 38 家）。后端 `cloud_presets` / `local_presets` / `DEFAULT_MODELS` 与前端 `providers` / `modelDefaults` 都从这份 JSON 读取；现有地址和默认型号保持不变。wheel / CLI·MCP ZIP 把该文件打进 `presets` 包，用 `importlib.resources` 定位。不含远程拉取，也不改设置页布局。
 - 发版增加服务商端到端门槛：Linux 无界面后端按固定素材矩阵出片，本地 mock 覆盖 429 / 503 / 断线和中途杀后端。PR / push 只跑 mock。夜间只跑 DeepSeek + Gemini 免费/低价档 2–3 条；预发布把 10 条拆给 5 家（每家 2 条，按 ISO 周轮转）。真实 88API / DeepSeek / Gemini / DashScope / Infistar 在 GitHub Environment `provider-e2e` 配好 key 后才跑，没配就跳过并写进报告。缺 `*_MODEL` 时用最便宜默认模型（88API `deepseek-v4-flash`，Infistar `gpt-4o-mini`，DeepSeek `deepseek-flash`，Gemini `gemini-3.5-flash-lite`，DashScope `qwen-flash`）。88API 门槛地址为 `https://api.88api.ai/v1`。故障注入期望类型用 `UpstreamErrorType`（`rate_limited` / `upstream_unavailable` / `connection`），应拦下组合要求 `billable_calls_before_failure = 0`。Mock 应成功当次 ≥95%。Live 先 fail-closed（任一服务商失败、缺/空/无法解析的报告、或条数少于计划必须红），再叠加用例库近 5 次、满 20 条后滚动 ≥95%。月度估费硬顶 ¥300。**fail-closed 已核对；88API 单探针（`api.88api.ai` + `deepseek-v4-flash`）已通过，完整发版仍走分层 live。**
+- 模型设置增加 `source=preset|user`（连接地址 `base_url_source`、用途模型 `model_source`）。旧文件已填的模型记为 `user`（不自动降级）；迁不了的用途保留 API Key，重置为该服务商推荐默认，并提示一次。预设表更新只影响新连接，已保存的连接冻结，有更新时提示。不含密钥、完整 URL 或用户正文。（1.5.8 P3）
+
 - 88API 服务商预设接口地址改为 `https://api.88api.ai/v1`（与 provider-e2e 回归一致）。已保存的 `https://88api.ai/v1` 不改写，仍可继续使用。（1.5.7）
 
 - 内容分析对 `invalid_response` / `timeline_empty` 自动重试，每种最多再试 2 次（不含首次）。（1.5.7 #8）HTTP 瞬时错误的退避与付费前 ASR 预检见线 C。

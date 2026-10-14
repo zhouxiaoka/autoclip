@@ -12,7 +12,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from backend.core.llm_providers import normalize_base_url
-from backend.core.provider_presets import get_provider
+from backend.core.provider_presets import get_provider, iter_providers
 from backend.core.provider_url import NormalizeResult, cleanup_base_url, normalize_provider_url
 from backend.core.provider_url import normalize_provider_base_url as rewrite_provider_base_url
 
@@ -32,7 +32,7 @@ CONSOLE_HOSTS = frozenset({
     'console.volcengine.com', 'www.volcengine.com',
     'platform.moonshot.cn', 'www.moonshot.cn',
     'console.x.ai',
-    'www.infistar.cc', 'www.infistar.ai', 'infistar.ai',
+    'www.infistar.cc', 'www.infistar.ai',
     'www.88api.ai',
 })
 
@@ -60,12 +60,7 @@ def official_chat_url(provider: Optional[str]) -> Optional[str]:
     cleaned = cleanup_base_url(preset.base_url)
     if (preset.protocol or '') != 'google-generative-ai':
         return cleaned
-    parsed = urlparse(cleaned)
-    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
-        return cleaned
-    host_only = f'{parsed.scheme}://{parsed.netloc}'
-    remapped = rewrite_provider_base_url(host_only, preset.id)
-    return remapped or cleaned
+    return rewrite_provider_base_url(cleaned, preset.id) or cleaned
 
 
 def locked_preset_url(provider: Optional[str]) -> Optional[str]:
@@ -105,6 +100,10 @@ LOCKED_PRESETS = _LockedPresetMap()
 def is_console_host(host: Optional[str]) -> bool:
     value = (host or '').lower().strip('.')
     if not value:
+        return False
+    # The same live catalog drives routing and validation. A documented API host
+    # (including an accepted legacy host) takes precedence over console hints.
+    if any(value in _accepted_hosts(preset.id, preset.base_url) for preset in iter_providers()):
         return False
     if value in CONSOLE_HOSTS:
         return True

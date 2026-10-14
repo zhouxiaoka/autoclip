@@ -11,10 +11,12 @@ const blank = () => ({ analysis: { connection_id: 'main', model: '', capability:
 test('first setup chooses the analysis model; covers stay on the free local design', () => {
   const value = applyModelDefaults(blank(), connection, models, true)
   assert.equal(value.analysis.model, 'qwen3.8-flash')
+  assert.equal(value.analysis.model_source, 'preset')
   assert.equal(value.cover, null, 'no image service is assumed')
   assert.equal(value.cover_enabled, false)
   const chosen = applyModelDefaults({ ...blank(), cover_enabled: true }, connection, models, false)
   assert.equal(chosen.cover.model, 'wanx2.1-t2i-turbo', 'once the user switches to AI covers, the recommended image model is filled')
+  assert.equal(chosen.cover.model_source, 'preset')
 })
 test('refresh never overrides explicit model or frame-only choice', () => {
   const state = blank(); state.analysis.model = 'my-custom-model'

@@ -24,7 +24,7 @@ export const canDiscover = (c: Connection) => !!(c.api_key || c.has_key || c.bas
 export const connectionReady = (c: Connection) =>
   !!(c.api_key || c.has_key) || !!PROVIDERS[c.provider as ProviderKey]?.local || (presetKey(c) === 'compatible' && !!c.base_url)
 
-export const cleanBinding = (connection_id: string): Assignment => ({ connection_id, model: '', capability: 'auto' })
+export const cleanBinding = (connection_id: string): Assignment => ({ connection_id, model: '', capability: 'auto', model_source: 'preset' })
 export const mainConnection = (s: ModelSettings) => s.connections.find(c => c.id === s.analysis?.connection_id)
 export const connectionOf = (s: ModelSettings, role: Role) => s.connections.find(c => c.id === s[role]?.connection_id)
 
@@ -55,7 +55,10 @@ export function coverFallback(s: ModelSettings, lists: Record<string, ModelList>
 }
 
 export const newConnection = (provider: ProviderKey, id: string = crypto.randomUUID()): Connection =>
-  ({ id, name: PROVIDERS[provider].name, provider, base_url: '', api_key: '', image_api: 'auto', image_base_url: '' })
+  ({
+    id, name: PROVIDERS[provider].name, provider, base_url: '', api_key: '', image_api: 'auto', image_base_url: '',
+    base_url_source: provider === 'compatible' ? 'user' : 'preset', preset_version: 0,
+  })
 
 /** Merge a field edit; changing the address invalidates a stored key so one service's key never reaches another. */
 export function editConnection(s: ModelSettings, id: string, patch: Partial<Connection>): ModelSettings {
@@ -67,13 +70,20 @@ export function editConnection(s: ModelSettings, id: string, patch: Partial<Conn
   const changedCreds = changedAddress || next.api_key !== undefined
   return {
     ...s,
-    connections: s.connections.map(c => c.id === id ? {
-      ...c,
-      ...next,
-      ...(changedAddress && c.has_key && next.api_key === undefined ? { api_key: '', has_key: false } : {}),
-      ...(typeof next.api_key === 'string' && next.api_key ? { has_key: true } : {}),
-      ...(changedCreds ? { validation_status: 'unchecked' as const, validation_error_type: '' } : {}),
-    } : c),
+    connections: s.connections.map(c => {
+      if (c.id !== id) return c
+      const merged = {
+        ...c,
+        ...next,
+        ...(changedAddress && c.has_key && next.api_key === undefined ? { api_key: '', has_key: false } : {}),
+        ...(typeof next.api_key === 'string' && next.api_key ? { has_key: true } : {}),
+        ...(changedCreds ? { validation_status: 'unchecked' as const, validation_error_type: '' } : {}),
+      }
+      if (next.base_url !== undefined) {
+        merged.base_url_source = c.provider === 'compatible' || merged.base_url ? 'user' : 'preset'
+      }
+      return merged
+    }),
   }
 }
 

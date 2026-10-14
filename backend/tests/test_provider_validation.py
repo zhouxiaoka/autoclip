@@ -110,6 +110,24 @@ def test_console_host_is_rejected_without_a_network_call(monkeypatch):
     assert result.base_url_host in {'platform.openai.com', 'unknown'}
 
 
+def test_infistar_api_host_reaches_validation_probes(monkeypatch):
+    calls = []
+
+    def handler(method, url, headers, body):
+        calls.append((method, url))
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'fixture-model'}]})
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(_connection(base_url='https://infistar.ai/v1'), 'fixture-model')
+    assert result.ok is True
+    assert calls == [
+        ('GET', 'https://infistar.ai/v1/models'),
+        ('POST', 'https://infistar.ai/v1/chat/completions'),
+    ]
+
+
 def test_html_console_response_is_flagged(monkeypatch):
     def handler(method, url, headers, body):
         return _FakeResponse(200, '<!DOCTYPE html><html>控制台</html>', headers={'content-type': 'text/html'},
