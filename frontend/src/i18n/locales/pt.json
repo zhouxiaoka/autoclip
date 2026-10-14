@@ -1650,5 +1650,13 @@
   "无法读取这个视频的时长，文件可能已损坏、格式不受支持，或路径里有特殊字符。请换一个文件，或先用其他软件转成 MP4 后重新导入。": "Não foi possível ler a duração deste vídeo. O arquivo pode estar danificado, em um formato não suportado ou o caminho pode conter caracteres especiais. Tente outro arquivo ou converta-o para MP4 em outro aplicativo e importe novamente.",
   "视频太短：不到 1 秒，无法制作。请换一段更长的视频。": "Este vídeo é curto demais: com menos de 1 segundo, não é possível criar nada. Use um vídeo mais longo.",
   "未找到 Chrome 或 Edge 浏览器，杂志风/街头样式已改用经典样式。安装 Google Chrome 后重新导出即可。": "Chrome ou Edge não foi encontrado; o estilo Editorial/Urbano voltou para Clássico. Instale o Google Chrome e exporte novamente.",
-  "高级包装组件不可用，杂志风/街头样式已改用经典样式。": "O componente de edição avançada não está disponível; o estilo Editorial/Urbano voltou para Clássico."
+  "高级包装组件不可用，杂志风/街头样式已改用经典样式。": "O componente de edição avançada não está disponível; o estilo Editorial/Urbano voltou para Clássico.",
+  "密钥无效或已过期，请到「设置 → 模型」检查密钥后重试。": "A chave de API é inválida ou expirou. Verifique-a em Configurações → Modelo e tente novamente.",
+  "账户余额或令牌额度不足，请充值或更换令牌后再试。": "O saldo da conta ou a cota do token acabou. Recarregue ou troque o token e tente novamente.",
+  "当前令牌没有该模型权限或分组不对，请到服务商控制台勾选模型或更换分组。": "Este token não tem permissão para o modelo ou grupo selecionado. Ative o modelo ou troque de grupo no console do provedor.",
+  "当前分组或服务下没有这个模型，请换一个模型或分组。": "Este modelo não está disponível no grupo ou serviço atual. Escolha outro modelo ou grupo.",
+  "接口地址不正确（常见是漏了 /v1 或填成了控制台网址），请到「设置 → 模型」核对地址。": "O endereço da API parece incorreto (muitas vezes falta /v1 ou foi colada a URL do console). Verifique em Configurações → Modelo.",
+  "模型服务暂时不可用，请稍后重试。": "O serviço do modelo está temporariamente indisponível. Tente novamente mais tarde.",
+  "模型输出被截断，请稍后重试或换一个模型。": "A saída do modelo foi interrompida. Tente novamente mais tarde ou troque de modelo.",
+  "模型服务返回了无法识别的错误，请检查配置后重试。": "O serviço do modelo retornou um erro não reconhecido. Verifique a configuração e tente novamente."
 }

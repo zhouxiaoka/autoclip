@@ -1650,5 +1650,13 @@
   "无法读取这个视频的时长，文件可能已损坏、格式不受支持，或路径里有特殊字符。请换一个文件，或先用其他软件转成 MP4 后重新导入。": "Impossible de lire la durée de cette vidéo. Le fichier est peut-être endommagé, dans un format non pris en charge, ou son chemin contient des caractères spéciaux. Essayez un autre fichier, ou convertissez-le en MP4 avec une autre application puis réimportez-le.",
   "视频太短：不到 1 秒，无法制作。请换一段更长的视频。": "Cette vidéo est trop courte : moins d'une seconde, rien ne peut en être tiré. Utilisez une vidéo plus longue.",
   "未找到 Chrome 或 Edge 浏览器，杂志风/街头样式已改用经典样式。安装 Google Chrome 后重新导出即可。": "Chrome ou Edge introuvable : le style Magazine/Urbain est remplacé par Classique. Installez Google Chrome puis exportez à nouveau.",
-  "高级包装组件不可用，杂志风/街头样式已改用经典样式。": "Le composant d’habillage avancé est indisponible : le style Magazine/Urbain est remplacé par Classique."
+  "高级包装组件不可用，杂志风/街头样式已改用经典样式。": "Le composant d’habillage avancé est indisponible : le style Magazine/Urbain est remplacé par Classique.",
+  "密钥无效或已过期，请到「设置 → 模型」检查密钥后重试。": "La clé API est invalide ou a expiré. Vérifiez-la dans Paramètres → Modèle, puis réessayez.",
+  "账户余额或令牌额度不足，请充值或更换令牌后再试。": "Le solde du compte ou le quota du jeton est épuisé. Rechargez ou remplacez le jeton, puis réessayez.",
+  "当前令牌没有该模型权限或分组不对，请到服务商控制台勾选模型或更换分组。": "Ce jeton n’a pas l’autorisation pour le modèle ou le groupe choisi. Autorisez le modèle ou changez de groupe dans la console du fournisseur.",
+  "当前分组或服务下没有这个模型，请换一个模型或分组。": "Ce modèle n’est pas disponible pour le groupe ou le service actuel. Choisissez un autre modèle ou groupe.",
+  "接口地址不正确（常见是漏了 /v1 或填成了控制台网址），请到「设置 → 模型」核对地址。": "L’adresse de l’API semble incorrecte (souvent un /v1 manquant, ou l’URL de la console). Vérifiez-la dans Paramètres → Modèle.",
+  "模型服务暂时不可用，请稍后重试。": "Le service du modèle est temporairement indisponible. Réessayez plus tard.",
+  "模型输出被截断，请稍后重试或换一个模型。": "La sortie du modèle a été coupée. Réessayez plus tard ou changez de modèle.",
+  "模型服务返回了无法识别的错误，请检查配置后重试。": "Le service du modèle a renvoyé une erreur non reconnue. Vérifiez la configuration et réessayez."
 }

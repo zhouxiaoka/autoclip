@@ -1650,5 +1650,13 @@
   "无法读取这个视频的时长，文件可能已损坏、格式不受支持，或路径里有特殊字符。请换一个文件，或先用其他软件转成 MP4 后重新导入。": "No se pudo leer la duración de este vídeo. Es posible que el archivo esté dañado, tenga un formato no compatible o que su ruta contenga caracteres especiales. Prueba con otro archivo o conviértelo a MP4 con otra aplicación e impórtalo de nuevo.",
   "视频太短：不到 1 秒，无法制作。请换一段更长的视频。": "Este vídeo es demasiado corto: dura menos de 1 segundo y no se puede procesar. Usa un vídeo más largo.",
   "未找到 Chrome 或 Edge 浏览器，杂志风/街头样式已改用经典样式。安装 Google Chrome 后重新导出即可。": "No se encontró Chrome ni Edge; el estilo Editorial/Urbano se cambió a Clásico. Instala Google Chrome y vuelve a exportar.",
-  "高级包装组件不可用，杂志风/街头样式已改用经典样式。": "El componente de edición avanzada no está disponible; el estilo Editorial/Urbano se cambió a Clásico."
+  "高级包装组件不可用，杂志风/街头样式已改用经典样式。": "El componente de edición avanzada no está disponible; el estilo Editorial/Urbano se cambió a Clásico.",
+  "密钥无效或已过期，请到「设置 → 模型」检查密钥后重试。": "La clave API no es válida o ha caducado. Revísala en Ajustes → Modelo e inténtalo de nuevo.",
+  "账户余额或令牌额度不足，请充值或更换令牌后再试。": "El saldo de la cuenta o la cuota del token se ha agotado. Recarga o cambia el token e inténtalo de nuevo.",
+  "当前令牌没有该模型权限或分组不对，请到服务商控制台勾选模型或更换分组。": "Este token no tiene permiso para el modelo o el grupo seleccionado. Activa el modelo o cambia de grupo en la consola del proveedor.",
+  "当前分组或服务下没有这个模型，请换一个模型或分组。": "Este modelo no está disponible en el grupo o servicio actual. Elige otro modelo o grupo.",
+  "接口地址不正确（常见是漏了 /v1 或填成了控制台网址），请到「设置 → 模型」核对地址。": "La dirección de la API parece incorrecta (a menudo falta /v1 o se ha puesto la URL de la consola). Revísala en Ajustes → Modelo.",
+  "模型服务暂时不可用，请稍后重试。": "El servicio del modelo no está disponible temporalmente. Inténtalo de nuevo más tarde.",
+  "模型输出被截断，请稍后重试或换一个模型。": "La salida del modelo se cortó. Inténtalo más tarde o cambia de modelo.",
+  "模型服务返回了无法识别的错误，请检查配置后重试。": "El servicio del modelo devolvió un error no reconocido. Revisa la configuración e inténtalo de nuevo."
 }
