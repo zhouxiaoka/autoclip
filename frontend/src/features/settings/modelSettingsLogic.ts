@@ -195,14 +195,15 @@ export function saveIssue(s: ModelSettings): SaveIssue | null {
   return null
 }
 
-/** Keep a connection that a role uses, one that already has a key, or a keyless local runtime. */
+/** Keep a connection that a role uses, one that already has a key, a keyless local runtime, or a custom URL. */
 export function persistableConnection(c: Connection, active: Set<string | undefined>): boolean {
   if (active.has(c.id)) return true
   if (c.api_key || c.has_key) return true
-  return !!PROVIDERS[c.provider as ProviderKey]?.local
+  if (PROVIDERS[c.provider as ProviderKey]?.local) return true
+  return presetKey(c) === 'compatible' && !!c.base_url.trim()
 }
 
-/** Document to send: drop unused drafts (including catalog URLs without a key); a disabled cover with no model is null. */
+/** Document to send: drop unused blank drafts; keep compatible rows that already have a URL. */
 export function forSave(s: ModelSettings): ModelSettings {
   const cover = !s.cover_enabled && !s.cover?.model ? null : s.cover
   const active = new Set([s.analysis?.connection_id, s.vision?.connection_id, cover?.connection_id, s.transcription?.connection_id])

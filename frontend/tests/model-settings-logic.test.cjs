@@ -226,7 +226,7 @@ test('save validation reports the first blocking field in page order and prunes 
       conn('ds', 'deepseek'),
     ],
   })
-  assert.deepEqual(browsed.connections.map(c => c.id).join(','), 'a')
+  assert.equal(browsed.connections.map(c => c.id).join(','), 'a,sf')
   const extraKey = logic.forSave({
     ...ok,
     connections: [...ok.connections, conn('ds', 'deepseek', { has_key: true })],
