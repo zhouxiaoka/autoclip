@@ -63,8 +63,12 @@ class TrackingInventoryTests(unittest.TestCase):
 
     def test_1_5_8_enforces_producer_acceptance(self) -> None:
         errors = check.check(ROOT, version="1.5.8")
+        joined = "\n".join(errors)
         self.assertTrue(errors)
-        self.assertTrue(any("T1 " in item or "T4 " in item or "T5 " in item for item in errors))
+        for prefix in ("T1 ", "T2 ", "T3 ", "T4 ", "T5 "):
+            self.assertIn(prefix, joined)
+        self.assertIn("feedback path missing envelope fields", joined)
+        self.assertIn("publish_export_*", joined)
 
 
 if __name__ == "__main__":

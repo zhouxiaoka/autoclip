@@ -48,7 +48,7 @@
         "title": "Common envelope on QA/MCP/feedback",
         "envelope": ["app_version", "os", "analytics_environment", "runtime", "schema_version"],
         "paths": ["studio_qa_checked", "mcp_tool_called", "mcp_job_finished", "feedback_opened", "feedback_dismissed", "feedback_submitted"],
-        "accept": "QA/MCP call envelope_properties(). feedback_submitted may POST /capture/ with user-authored text/contact"
+        "accept": "QA/MCP call envelope_properties(). Feedback capture payload includes the same envelope fields. feedback_submitted may POST /capture/ with user-authored text/contact"
       },
       "legacy_stopped_or_tagged": {
         "title": "Legacy events stopped or tagged legacy=true",

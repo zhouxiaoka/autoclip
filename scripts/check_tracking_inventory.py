@@ -49,6 +49,7 @@ PLAN_NEEDLES = (
     "`macos` / `windows` / `linux`",
     "envelope_properties()",
     "用户主动提交",
+    "QA / MCP / 反馈",
 )
 ANALYTICS_PRODUCERS = (
     "frontend/src/analytics/workflow.ts",
@@ -58,6 +59,7 @@ ANALYTICS_PRODUCERS = (
     "frontend/src/analytics/operations.ts",
     "frontend/src/analytics/events.ts",
     "frontend/src/analytics/feedback.ts",
+    "frontend/src/analytics/feedbackDraft.ts",
     "frontend/src/analytics/observer.ts",
     "frontend/src/services/api.ts",
     "backend/core/llm_emit.py",
@@ -96,6 +98,14 @@ LEGACY_EVENT_NAMES = (
     "media_download_received",
     "media_download_saved",
 )
+LEGACY_OPERATION_PREFIXES = (
+    "publish_export",
+    "import",
+    "processing",
+    "provider_test",
+    "media_download",
+)
+ENVELOPE_FIELDS = ("app_version", "os", "analytics_environment", "runtime", "schema_version")
 _OS_ALLOWLIST = re.compile(
     r"""(?:\bos\s*:\s*\[|OPERATING_SYSTEMS\s*=\s*[(\[])([^\]\)]+)"""
 )
@@ -106,6 +116,7 @@ _EMITTED_NAME = re.compile(
     r"""|:\s*['\"](clips_exported|video_imported|processing_failed|api_key_configured|example_project_opened)['\"]"""
 )
 _LEGACY_FLAG = re.compile(r"""['\"]?legacy['\"]?\s*:\s*true""", re.IGNORECASE)
+_OBSERVE_OPERATION = re.compile(r"""observeOperation\(\s*['\"]([a-z_]+)['\"]""")
 
 
 def _load(path: Path) -> dict:
@@ -175,19 +186,40 @@ def producer_transition_errors(root: Path) -> list[str]:
 
     qa = texts.get("backend/services/studio/qa/telemetry.py", "")
     feedback = texts.get("frontend/src/analytics/feedback.ts", "")
+    feedback_draft = texts.get("frontend/src/analytics/feedbackDraft.ts", "")
     if qa and "envelope_properties" not in qa:
         errors.append("T4 common_envelope: QA telemetry does not call envelope_properties()")
     if mcp and "envelope_properties" not in mcp:
         errors.append("T4 common_envelope: MCP telemetry does not call envelope_properties()")
-    # feedback_submitted is user-initiated: /capture/ with text/contact is allowed.
+    # feedback_submitted may POST /capture/ with text/contact; the payload still needs the envelope.
+    if feedback or feedback_draft:
+        blob = f"{feedback}\n{feedback_draft}"
+        missing = [
+            field
+            for field in ENVELOPE_FIELDS
+            if not re.search(rf"""['\"]?{re.escape(field)}['\"]?\s*:""", blob)
+        ]
+        if missing:
+            errors.append(
+                "T4 common_envelope: feedback path missing envelope fields "
+                + ", ".join(missing)
+            )
 
     for relative, text in texts.items():
         emitted = {name for match in _EMITTED_NAME.findall(text) for name in match if name}
-        leftover = sorted(name for name in emitted if name in LEGACY_EVENT_NAMES)
-        if leftover and not _LEGACY_FLAG.search(text):
+        leftover = sorted({name for name in emitted if name in LEGACY_EVENT_NAMES})
+        prefixes = sorted({
+            name for name in _OBSERVE_OPERATION.findall(text) if name in LEGACY_OPERATION_PREFIXES
+        })
+        if (leftover or prefixes) and not _LEGACY_FLAG.search(text):
+            parts = leftover + [
+                f"{name}_*"
+                for name in prefixes
+                if not any(item.startswith(f"{name}_") for item in leftover)
+            ]
             errors.append(
                 "T5 legacy_stopped_or_tagged: "
-                f"{relative} still emits {', '.join(leftover)} without legacy=true"
+                f"{relative} still emits {', '.join(parts)} without legacy=true"
             )
     return errors
 

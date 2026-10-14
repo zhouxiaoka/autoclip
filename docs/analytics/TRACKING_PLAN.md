@@ -14,7 +14,7 @@
 - **生产者目录：** `docs/analytics/event_catalog.json`（随 #361）。它必须由本清单生成，或在 CI 里对照本清单；未登记、缺必填、违禁值，校验测试必须失败。两份漂移即失败。
 - 看板 SQL 草案：[`success_rate.sql`](success_rate.sql)
 
-先看 §1–§5（规则、漏斗、触发点）、§10–§11（隐私硬性 / 脱敏 / 开关关闭）、§6–§7（口径与看板），再看 §8（全量盘点）和 §12（过渡计划 / 1.5.8 收口）。§8 的删除/改名 **不在 #361 纯埋点 PR 里执行**。过渡保留（查询继续映射历史值）；**1.5.8 必须收口**：单一 `os` / `outcome`、只报 `app_version`、QA/MCP 公共信封、旧事件停发或打 `legacy=true`。`feedback_submitted` 是用户主动提交，允许 `text`/`contact`。
+先看 §1–§5（规则、漏斗、触发点）、§10–§11（隐私硬性 / 脱敏 / 开关关闭）、§6–§7（口径与看板），再看 §8（全量盘点）和 §12（过渡计划 / 1.5.8 收口）。§8 的删除/改名 **不在 #361 纯埋点 PR 里执行**。过渡保留（查询继续映射历史值）；**1.5.8 必须收口**：单一 `os` / `outcome`、只报 `app_version`、QA/MCP/反馈公共信封、旧事件停发或打 `legacy=true`。`feedback_submitted` 是用户主动提交，允许 `text`/`contact`。
 
 ---
 
@@ -132,9 +132,9 @@ multiIf(
 
 禁止把内部 `project_id` / `run_id` / `job_id` 当作新事件属性。旧 legacy 事件若已带，不回填、不扩散。
 
-**旁路也走同一信封。** QA（`studio_qa_checked`）、MCP（`mcp_tool_called` / `mcp_job_finished`）不得再裸 POST `/capture/`。后端一律叠 `envelope_properties()`（`app_version` / `os` / `analytics_environment` / `runtime` / `schema_version`）再加 `distinct_id`。#361 已给 `llm_emit` 加信封。QA / MCP 公共信封是 **1.5.8 必交任务**（§12.1 T4）。
+**旁路也走同一信封。** QA（`studio_qa_checked`）、MCP（`mcp_tool_called` / `mcp_job_finished`）不得再裸 POST `/capture/`。后端一律叠 `envelope_properties()`（`app_version` / `os` / `analytics_environment` / `runtime` / `schema_version`）再加 `distinct_id`。#361 已给 `llm_emit` 加信封。QA / MCP / 反馈公共信封是 **1.5.8 必交任务**（§12.1 T4）。
 
-**反馈是用户主动提交，不是旁路泄漏。** `feedback_submitted` 可以带 `text` / 可选 `contact`，发送可以走 `/capture/`，且不看匿名统计开关（没有 key 时才回退 GitHub）。界面必须告知会先经 PostHog 再公开到 GitHub（邮箱不公开）。告知文案在 #361。`feedback_opened` / `feedback_dismissed` 仍是诊断事件，不带正文。
+**反馈是用户主动提交，不是旁路泄漏。** `feedback_submitted` 可以带 `text` / 可选 `contact`，发送可以走 `/capture/`，且不看匿名统计开关（没有 key 时才回退 GitHub）。**1.5.8 起 `/capture/` 载荷必须带同一信封字段。** 界面必须告知会先经 PostHog 再公开到 GitHub（邮箱不公开）。告知文案在 #361。`feedback_opened` / `feedback_dismissed` 仍是诊断事件，不带正文。
 
 `legacy=true`：旧路径事件（§8.2）在 1.5.8 要么停发，要么每条带此布尔。Studio / 设置 / 线 A 新事件禁止带。#361 不改旧事件；1.5.8 清理 PR 补标记或停发。查询在标记齐之前用事件名列表。
 
@@ -536,7 +536,7 @@ FROM (
 | `provider_validation_finished` 挂钩 | 线 A 预留，线 B 调用 | 发射函数预留 |
 | 后端线 A 事件补信封 | 线 A #361 | 新增字段；不改已有 `darwin`/`win32` |
 | 事件目录对照本清单 | 线 A #361 + `check_tracking_inventory.py` | catalog 必须覆盖 inventory |
-| QA / MCP 公共信封、`version`→`app_version` | 1.5.8 清理 PR | §12.1 T3 / T4 |
+| QA / MCP / 反馈公共信封、`version`→`app_version` | 1.5.8 清理 PR | §12.1 T3 / T4 |
 | feedback 告知文案（经 PostHog 送达 `text`/`contact`） | #361 | Kris：用户主动提交，不是隐私泄漏 |
 | 旧事件停发或打 `legacy=true`；删死 wrapper | 1.5.8 清理 PR | §12.1 T5 |
 | `os` / `outcome` / `app_version` 生产者统一 | 1.5.8 清理 PR | §12.1 T1 / T2 / T3 |
@@ -709,7 +709,7 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 | T1 `single_os_enum` | 全生产者单一 `os`：只发 `macos` / `windows` / `linux`（侦不到才 `unknown`） | `workflow.ts`、`template_telemetry.py`、lifecycle、envelope 的 os 白名单不含 `darwin` / `win32` |
 | T2 `single_outcome_enum` | 全生产者单一 `outcome`：出片/设置终态只发 `success` / `error` / `partial` | 生产者 `outcome` 白名单不含 `completed`。screen 仍可用 `recommended` / `auto_started` / `manual` / `fallback`；experience 可用 `blocked`；校验可用 `skipped` |
 | T3 `app_version_only` | 版本只报 `app_version`，禁止裸字段 `version` | `app_installed` / `app_opened` / MCP 不再写 `version` |
-| T4 `common_envelope` | QA / MCP 走公共信封 | QA、MCP 调用 `envelope_properties()`。`feedback_submitted` 是用户主动提交，允许 `/capture/` 带 `text`/`contact`，不看统计开关 |
+| T4 `common_envelope` | QA / MCP / 反馈走公共信封 | QA、MCP 调用 `envelope_properties()`。反馈 `/capture/` 载荷必须带同一信封字段（`app_version` / `os` / `analytics_environment` / `runtime` / `schema_version`）。`feedback_submitted` 允许 `text`/`contact`，不看统计开关 |
 | T5 `legacy_stopped_or_tagged` | §8.2 / §8.3 旧事件停发，或继续发时每条带 `legacy=true`；死 wrapper 删除 | 仍出现在生产者里的 legacy 事件名，同一文件必须带 `legacy: true` |
 
 机读清单：`dates.close_transition` / `dates.stop_legacy_emit` / `dates.delete_wrappers` 均为 `"1.5.8"`。
