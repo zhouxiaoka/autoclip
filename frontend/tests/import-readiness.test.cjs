@@ -163,6 +163,17 @@ test('the banner installs whisper, opens first-run setup, and blocks an unready 
   assert.equal(withSubtitle.calls[0].get('subtitle'), '[object Object]')
 })
 
+test('a failed provider check blocks generation and points at model settings', async () => {
+  const failing = report({ analysis: check(false, 'validation_failed', 'settings_ai') })
+  assert.equal(readiness.submissionBlock(failing, true, true), 'analysis')
+  const view = render({ report: failing })
+  assert.ok(view.tree.some(node => node.type === 'status' && String(node.props?.label || '').includes('未通过校验')))
+  await button(view.tree, '去设置修改').props.onClick()
+  assert.deepEqual(view.navigations, ['/settings?section=ai'])
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 0)
+})
+
 test('vision repair opens the vision settings section', async () => {
   const view = render({ report: report({ visual: check(false, 'not_configured', 'settings_vision') }) })
   await button(view.tree, '视觉设置').props.onClick()

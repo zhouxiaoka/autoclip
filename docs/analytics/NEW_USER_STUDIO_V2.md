@@ -8,6 +8,7 @@
 |---|---|---|
 | 用户是否看到配置引导，是否跳过，是否被导入门槛挡住？ | `setup_presented`、`setup_action`、`import_blocked` | 引导实际显示才报曝光；跳过、更多选项分开；曝光不能当安装数 |
 | 配置卡在读取、模型发现、保存还是连接测试？ | `model_settings_load`、`model_discovery`、`provider_configuration_save`、`provider_connection_test` 的 requested/finished | placement 区分首页与设置；保存成功不表示模型可用；HTTP 200 且 success=false 记失败；发现区分 live/cache/catalog、preview、自动/手动 |
+| 设置页接入校验结果如何分布？ | `provider_validation_finished`（`provider`、`base_url_host`、`result`、`error_type`） | 保存前和「测试连接」各报一次；`result` 为 ok/failed；`error_type` 为闭合枚举；只报主机名，不上报密钥或完整 URL。保存成功且 `result=failed` 仍会在生成前拦住 |
 | 新设置页哪些分类被访问？ | `settings_section_viewed` | ai/publish/app/feedback；隐藏但保持挂载的组件加载不算分类访问 |
 | 示例是否打开、真实显示、导出？ | `example_project_open_requested/finished`、`example_project_viewed`，下游 `material_origin=sample` | API 创建/复用成功与页面实际展示分开；项目卡直接进入也记录；示例不进入真实素材激活指标 |
 | Studio 使用后是否交付？ | 导入、初筛、确认、制作、导出、原生保存、发布事件，以及 flow/attempt/artifact 标记 | 渲染完成、文件保存、平台发布分别呈现；浏览器只知道下载请求，不能认定落盘 |

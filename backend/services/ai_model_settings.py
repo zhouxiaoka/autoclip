@@ -29,6 +29,8 @@ class Connection(BaseModel):
     api_key: str | None = Field(default=None, max_length=2000)
     image_api: Literal['auto', 'openai', 'seedream', 'dashscope', 'fal'] = 'auto'
     image_base_url: str = ''
+    validation_status: Literal['ok', 'failed', 'unchecked'] = 'unchecked'
+    validation_error_type: str = ''
 
     @field_validator('provider')
     @classmethod
@@ -51,10 +53,17 @@ class Connection(BaseModel):
             raise ValueError('请填写自定义服务的接口地址')
         return self
 
+    @field_validator('api_key')
+    @classmethod
+    def strip_key(cls, value):
+        if value is None:
+            return None
+        return value.strip() if isinstance(value, str) else value
+
     @field_validator('base_url', 'image_base_url')
     @classmethod
     def valid_url(cls, value):
-        value = value.strip().rstrip('/')
+        value = ''.join((value or '').split()).rstrip('/')
         if value:
             parsed = urlparse(value)
             if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
@@ -67,6 +76,22 @@ class Connection(BaseModel):
         if not value.strip():
             raise ValueError('名称不能为空')
         return value.strip()
+
+    @field_validator('validation_error_type')
+    @classmethod
+    def known_validation_type(cls, value):
+        from backend.core.upstream_errors import VALIDATION_ERROR_TYPES
+        text = (value or '').strip()
+        if text and text not in VALIDATION_ERROR_TYPES:
+            return ''
+        return text
+
+    @model_validator(mode='after')
+    def normalize_compatible_url(self):
+        if self.provider == 'compatible' and self.base_url:
+            from backend.core.provider_endpoint import normalize_provider_base_url
+            self.base_url = normalize_provider_base_url(self.base_url).url
+        return self
 
 
 class Assignment(BaseModel):
@@ -196,7 +221,14 @@ def chat_endpoint(connection: Connection, model: str) -> dict:
         **{key: preset.base_url for key, preset in CLOUD_PRESETS.items()},
         **{key: preset.base_url for key, preset in LOCAL_PRESETS.items()},
     }
-    base = connection.base_url or defaults[connection.provider]
+    from backend.core.provider_endpoint import locked_chat_url, normalize_provider_base_url
+    locked = locked_chat_url(connection.provider, connection.base_url)
+    if locked:
+        base = locked
+    elif connection.provider == 'compatible' and connection.base_url:
+        base = normalize_provider_base_url(connection.base_url).url
+    else:
+        base = connection.base_url or defaults[connection.provider]
     if connection.provider == 'dashscope' and connection.base_url and (urlparse(base).hostname or '').endswith('.aliyuncs.com'):
         # Dedicated Bailian endpoints are pasted as a host or its native /api/v1 path; text models
         # use the OpenAI-compatible path on the same host (speech recognition uses /api/v1).

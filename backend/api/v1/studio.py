@@ -114,6 +114,8 @@ async def import_visual(
 ):
     if bool(url) == bool(video):
         raise HTTPException(422, '请提供一个视频链接或文件')
+    from backend.services.studio import readiness
+    call(readiness.ensure_analysis_usable)
     if url:
         parsed = urlparse(url)
         host = (parsed.hostname or '').lower()

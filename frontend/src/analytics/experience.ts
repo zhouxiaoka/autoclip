@@ -5,6 +5,7 @@ import { errorCode, telemetryId, type Properties } from './workflow'
 
 export type Placement = 'home_setup' | 'settings_model'
 export type ExperienceEvent = 'setup_presented' | 'setup_action' | 'import_blocked' | 'settings_section_viewed' | 'example_project_viewed'
+const HOST = /^(?:local|unknown|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)$/
 const enums: Record<string, readonly string[]> = {
   entry_source: ['home_setup', 'direct'],
   placement: ['home_setup', 'settings_model'], action: ['later', 'open_settings'],
@@ -16,6 +17,12 @@ const enums: Record<string, readonly string[]> = {
   resolution: ['created', 'reused'], material_origin: ['sample', 'user', 'unknown'],
   analysis_mode: ['auto', 'subtitle', 'visual'], transcription_mode: ['whisper_local', 'sensevoice_local', 'cloud', 'unknown'],
   cover_mode: ['ai', 'frame'], capability: ['text', 'multimodal', 'auto'],
+  result: ['ok', 'failed'],
+  error_type: [
+    'insufficient_quota', 'invalid_key', 'model_forbidden', 'group_forbidden',
+    'model_not_found', 'rate_limited', 'upstream_unavailable',
+    'bad_endpoint', 'console_host', 'connection', 'timeout', 'unknown',
+  ],
 }
 export function safeExperience(value: Record<string, unknown>): Properties {
   const out: Properties = { experience_schema_version: 1 }
@@ -32,10 +39,18 @@ export function safeExperience(value: Record<string, unknown>): Properties {
     if (typeof value[key] === 'string' && /^t-[a-z0-9-]{10,100}$/.test(value[key] as string)) out[key] = value[key] as string
   }
   if (typeof value.error_code === 'string' && /^(http_[45][0-9]{2}|network|timeout|unknown|validation)$/.test(value.error_code)) out.error_code = value.error_code
+  if (typeof value.base_url_host === 'string') {
+    const host = value.base_url_host.toLowerCase()
+    if (!host.includes('/') && !host.includes(':') && host.length <= 253 && HOST.test(host)) out.base_url_host = host
+  }
   return out
 }
 export function trackExperience(event: ExperienceEvent, properties: Record<string, unknown>) {
   captureBusinessEvent(event, safeExperience(properties))
+}
+/** Settings access check. Never include keys or a full URL. */
+export function trackProviderValidation(properties: Record<string, unknown>) {
+  captureBusinessEvent('provider_validation_finished', safeExperience(properties))
 }
 /** The same token gates request + result, including consent changes while awaiting an API. */
 export function beginExperience(name: 'model_settings_load' | 'model_discovery' | 'provider_configuration_save' | 'provider_connection_test' | 'example_project_open' | 'output_branding_save', properties: Record<string, unknown>) {

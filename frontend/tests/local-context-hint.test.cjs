@@ -37,6 +37,7 @@ test('local presets and local compatible servers get a context hint; cloud provi
 })
 
 test('the address row shows the hint for local setups only', () => {
+  const access = load('providerAccess.ts', { '../../i18n': { t: text => text }, './providers': providers })
   const Fields = load('ProviderFields.tsx', {
     react: { useState: () => [false, () => {}] },
     antd: { Input: Object.assign(() => null, { Password: 'password' }), Select: 'select' },
@@ -44,6 +45,7 @@ test('the address row shows the hint for local setups only', () => {
     '../../utils/externalLinks': { openExternalLink() {} },
     '../../analytics/events': { trackSponsorLinkOpened() {} },
     './providers': providers, './modelSettingsLogic': { presetKey: c => c.provider },
+    './providerAccess': access,
   }).default
   const hints = connection => flatten(Fields({ connection, placement: 'settings_model', onChoose() {}, onEdit() {} }))
     .filter(node => React.isValidElement(node) && node.type === 'row').map(node => node.props.hint).filter(h => typeof h === 'string')

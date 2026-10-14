@@ -6,7 +6,7 @@ const dir = path.join(__dirname, '../src/features/settings')
 function load(file, mocks) {
   const exports = {}
   const code = ts.transpileModule(fs.readFileSync(path.join(dir, file), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
-  vm.runInNewContext(code, { exports, require: id => { assert.ok(id in mocks, id); return mocks[id] }, crypto: { randomUUID: () => 'uuid' } })
+  vm.runInNewContext(code, { exports, URL, require: id => { assert.ok(id in mocks, id); return mocks[id] }, crypto: { randomUUID: () => 'uuid' } })
   return exports
 }
 const providers = {
@@ -16,7 +16,8 @@ const providers = {
   },
 }
 const defaults = load('modelDefaults.ts', {})
-const logic = load('modelSettingsLogic.ts', { './providers': providers, './modelDefaults': defaults })
+const access = load('providerAccess.ts', { '../../i18n': { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) }, './providers': providers })
+const logic = load('modelSettingsLogic.ts', { './providers': providers, './modelDefaults': defaults, './providerAccess': access })
 
 const plain = x => JSON.parse(JSON.stringify(x))
 const conn = (id, provider, extra = {}) => ({ id, name: provider, provider, base_url: '', api_key: '', image_api: 'auto', image_base_url: '', ...extra })
@@ -123,6 +124,22 @@ test('changing an address drops the stored key so it cannot leak to another endp
   assert.deepEqual([edited.connections[0].has_key, edited.connections[0].api_key], [false, ''])
   const keyOnly = logic.editConnection(state, 'a', { api_key: 'sk' })
   assert.equal(keyOnly.connections[0].has_key, true)
+})
+
+test('save strips key spaces, normalizes a compatible URL, and records a failed check', () => {
+  const ok = { ...fresh(), connections: [conn('a', 'compatible', { api_key: '  sk-live  ', base_url: 'https://gw.example' })], analysis: { connection_id: 'a', model: 'gpt-4o-mini', capability: 'auto' } }
+  const saved = logic.forSave(ok)
+  assert.equal(saved.connections[0].api_key, 'sk-live')
+  assert.equal(saved.connections[0].base_url, 'https://gw.example/v1')
+  const trimmed = logic.editConnection(ok, 'a', { api_key: '  sk-new  \n' })
+  assert.equal(trimmed.connections[0].api_key, 'sk-new')
+  assert.equal(trimmed.connections[0].validation_status, 'unchecked')
+  const failed = logic.applyValidation(ok, 'a', { success: false, error_type: 'insufficient_quota', normalized_base_url: 'https://gw.example/v1' })
+  assert.equal(failed.connections[0].validation_status, 'failed')
+  assert.equal(failed.connections[0].validation_error_type, 'insufficient_quota')
+  const passed = logic.applyValidation(ok, 'a', { success: true, result: 'ok' })
+  assert.equal(passed.connections[0].validation_status, 'ok')
+  assert.equal(passed.connections[0].validation_error_type, '')
 })
 
 test('save validation reports the first blocking field in page order and prunes blank custom connections', () => {

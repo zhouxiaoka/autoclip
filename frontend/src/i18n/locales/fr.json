@@ -1658,5 +1658,12 @@
   "接口地址不正确（常见是漏了 /v1 或填成了控制台网址），请到「设置 → 模型」核对地址。": "L’adresse de l’API semble incorrecte (souvent un /v1 manquant, ou l’URL de la console). Vérifiez-la dans Paramètres → Modèle.",
   "模型服务暂时不可用，请稍后重试。": "Le service du modèle est temporairement indisponible. Réessayez plus tard.",
   "模型输出被截断，请稍后重试或换一个模型。": "La sortie du modèle a été coupée. Réessayez plus tard ou changez de modèle.",
-  "模型服务返回了无法识别的错误，请检查配置后重试。": "Le service du modèle a renvoyé une erreur non reconnue. Vérifiez la configuration et réessayez."
+  "模型服务返回了无法识别的错误，请检查配置后重试。": "Le service du modèle a renvoyé une erreur non reconnue. Vérifiez la configuration et réessayez.",
+  "这是控制台或官网地址，不是模型接口。请改选对应服务商，或用「自定义兼容」填写带 /v1 的接口地址。": "Ceci est l’URL de la console ou du site, pas l’API du modèle. Choisissez le fournisseur correspondant, ou utilisez Compatible personnalisé et saisissez une adresse avec /v1.",
+  "此 key 看起来属于 {{name}}。当前仍使用你选择的服务商，不会自动改。": "Cette clé semble appartenir à {{name}}. Nous gardons le fournisseur que vous avez choisi et ne le changeons pas automatiquement.",
+  "去 88API 获取密钥": "Obtenir une clé 88API",
+  "去 Infistar 获取密钥": "Obtenir une clé Infistar",
+  "校验未通过。设置已保存，但开始生成前会拦住。": "Le contrôle a échoué. Les réglages sont enregistrés, mais la génération sera bloquée tant que ce n’est pas corrigé.",
+  "去设置修改": "Corriger dans les réglages",
+  "模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。": "La connexion au modèle n’a pas passé le contrôle. Modifiez la clé ou l’adresse dans Réglages → Modèles, puis générez."
 }

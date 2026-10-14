@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { message } from 'antd'
 import { t } from '../../i18n'
 import { errorText } from '../studio/api'
-import { beginExperience, type Placement } from '../../analytics/experience'
+import { beginExperience, trackProviderValidation, type Placement } from '../../analytics/experience'
 import { PROVIDERS, type ProviderKey } from './providers'
 import { bindingCapability, modelSettingsApi, type Connection, type ModelList, type ModelSettings } from './modelSettingsApi'
 import { applyModelDefaults } from './modelDefaults'
 import * as logic from './modelSettingsLogic'
 import type { Role, SaveIssue } from './modelSettingsLogic'
+import { passed, telemetryHost, validationCopy, type ValidationResult } from './providerAccess'
 
 export const roleLabel = (role: Role) =>
   ({ analysis: t('模型'), vision: t('画面理解模型'), cover: t('生图模型'), transcription: t('转写模型') })[role]
@@ -31,6 +32,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [error, setError] = useState('')
+  const [keyHints, setKeyHints] = useState<Record<string, string>>({})
   const versions = useRef<Record<string, number>>({})
   const alive = useRef(true)
   // First run only: the recommended image model turns AI covers on. Any explicit cover choice ends it.
@@ -126,8 +128,41 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const setCoverModel = (connectionId: string, model: string) => { autoCover.current = false; update({ cover_enabled: true, cover: { ...logic.cleanBinding(connectionId), model } }) }
   const setVisual = (enabled: boolean) => { if (settings) replace(logic.setVisual(settings, enabled)) }
 
+  const emitValidation = (connection: Connection, result: ValidationResult) => {
+    const provider = PROVIDERS[connection.provider as ProviderKey] ? connection.provider : 'other'
+    trackProviderValidation({
+      placement, provider,
+      base_url_host: result.base_url_host || telemetryHost(connection.base_url),
+      result: passed(result) ? 'ok' : 'failed',
+      ...(passed(result) ? {} : { error_type: result.error_type || 'unknown' }),
+    })
+    if (result.key_hint) setKeyHints(old => ({ ...old, [connection.id]: result.key_hint as string }))
+  }
+
+  const backfillModels = (connection: Connection, ids?: string[]) => {
+    if (ids?.length) {
+      setLists(old => ({
+        ...old,
+        [connection.id]: {
+          models: ids.map(id => ({ id, capability: null, analysis: true, image: false })),
+          source: 'live', preview: false, updated_at: Date.now(),
+        },
+      }))
+    }
+    void discover(connection, true, 'manual')
+  }
+
+  const probe = async (connection: Connection, model: string, vision: boolean): Promise<ValidationResult> => {
+    const payload = { ...connection, api_key: connection.api_key?.trim() ?? connection.api_key }
+    try {
+      return await modelSettingsApi.test(payload, model, vision)
+    } catch {
+      return { success: false, ok: false, result: 'failed', error_type: 'unknown' }
+    }
+  }
+
   /** Validate, persist, and report the first blocking problem so the caller can scroll to it. */
-  const save = async (): Promise<{ ok: boolean; issue?: SaveIssue }> => {
+  const save = async (): Promise<{ ok: boolean; issue?: SaveIssue; validationFailed?: boolean }> => {
     if (!settings) return { ok: false }
     const effective = logic.coverFallback(settings, lists)
     const finish = beginExperience('provider_configuration_save', summary(effective))
@@ -135,12 +170,27 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     if (issue) { finish('blocked', { reason: issue.reason, role: issue.role, error_code: 'validation' }); const text = issueText(issue); setError(text); message.error(text); return { ok: false, issue } }
     setSaving(true); setError('')
     try {
-      const value = await modelSettingsApi.save(logic.forSave(effective))
+      let next = effective
+      const main = logic.mainConnection(next)
+      const modelChanged = savedRef.current?.analysis?.model !== next.analysis?.model
+        || savedRef.current?.analysis?.connection_id !== next.analysis?.connection_id
+      const shouldValidate = !!main && !!next.analysis?.model && (main.validation_status !== 'ok' || modelChanged)
+      if (shouldValidate && main && next.analysis) {
+        const vision = next.analysis_mode !== 'subtitle' && bindingCapability(next.analysis, lists) === 'multimodal'
+        const result = await probe(main, next.analysis.model, vision)
+        emitValidation(main, result)
+        next = logic.applyValidation(next, main.id, result)
+        if (passed(result)) backfillModels({ ...main, base_url: result.normalized_base_url || main.base_url }, result.models)
+        else setError(validationCopy(result.error_type))
+        setSettings(next)
+      }
+      const value = await modelSettingsApi.save(logic.forSave(next))
       setSettings(value); setDirty(false); autoCover.current = false
       finish('completed')
       savedRef.current = value
       message.success(t('已保存'))
-      return { ok: true }
+      const failed = value.connections.some(c => c.validation_status === 'failed') || next.connections.some(c => c.validation_status === 'failed')
+      return { ok: true, validationFailed: failed }
     } catch (e) { finish('failed', {}, e); setError(errorText(e)); return { ok: false } }
     finally { setSaving(false) }
   }
@@ -152,17 +202,26 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     setTesting(true)
     try {
       const vision = settings.analysis_mode !== 'subtitle' && bindingCapability(settings.analysis, lists) === 'multimodal'
-      const value = await modelSettingsApi.test(main, settings.analysis.model, vision)
-      finish(value.success || value.ok ? 'completed' : 'failed')
-      if (value.success || value.ok) message.success(t('连接正常'))
-      else message.error(t('连接测试失败，请检查接口、密钥和模型'))
+      const value = await probe(main, settings.analysis.model, vision)
+      emitValidation(main, value)
+      replace(logic.applyValidation(settings, main.id, value))
+      finish(passed(value) ? 'completed' : 'failed')
+      if (passed(value)) {
+        backfillModels({ ...main, base_url: value.normalized_base_url || main.base_url }, value.models)
+        message.success(t('连接正常'))
+        setError('')
+      } else {
+        const text = validationCopy(value.error_type)
+        setError(text)
+        message.error(text)
+      }
     } catch (e) { finish('failed', {}, e); message.error(errorText(e)) }
     finally { setTesting(false) }
   }
 
   const main = settings ? logic.mainConnection(settings) : undefined
   return {
-    settings, lists, busy, listErrors, dirty, saving, testing, error, setError, main,
+    settings, lists, busy, listErrors, dirty, saving, testing, error, setError, main, keyHints,
     load, discover, update, editConnection, chooseProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test,
   }

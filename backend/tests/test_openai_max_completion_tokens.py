@@ -61,7 +61,7 @@ def test_connection_test_sends_max_completion_tokens_for_gpt6():
 def test_gpt4o_mini_connection_test_still_uses_max_tokens():
     provider, completions = _provider("gpt-4o-mini")
     assert provider.test_connection()
-    assert completions.calls[0]["max_tokens"] == 1 and "max_completion_tokens" not in completions.calls[0]
+    assert completions.calls[0]["max_tokens"] == 16 and "max_completion_tokens" not in completions.calls[0]
 
 
 def test_unknown_model_retries_once_when_400_names_the_param():

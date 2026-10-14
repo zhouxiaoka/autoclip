@@ -1468,6 +1468,8 @@ def _finish_generation(data):
 
 def inspect_project(project_id, options, url=None, browser=None, *, producer=None, features=None):
     """Only ingest and screen. Expensive production requires an explicit confirmation."""
+    from backend.services.studio import readiness
+    readiness.ensure_analysis_usable()
     # Reserve and dispatch together so another request cannot observe an
     # accepted task before submission succeeds. Preserve existing exports/plan.
     with store.lock:
@@ -1574,6 +1576,8 @@ def _inspect(project_id, options, url, browser):
 
 
 def confirm_project(project_id, body):
+    from backend.services.studio import readiness
+    readiness.ensure_analysis_usable()
     with store.lock:
         state = store.read(project_id)
         plan = state.get('plan') or {}

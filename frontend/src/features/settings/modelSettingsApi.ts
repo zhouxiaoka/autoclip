@@ -1,4 +1,5 @@
 import api from '../../services/api'
+import type { ValidationResult } from './providerAccess'
 
 export type Capability = 'auto' | 'multimodal' | 'text'
 export interface Connection {
@@ -11,6 +12,8 @@ export interface Connection {
   api_key_masked?: string
   image_api: 'auto' | 'openai' | 'seedream' | 'dashscope' | 'fal'
   image_base_url: string
+  validation_status?: 'ok' | 'failed' | 'unchecked'
+  validation_error_type?: string
 }
 export interface Assignment { connection_id: string; model: string; capability: Capability }
 export interface ModelSettings {
@@ -36,7 +39,7 @@ export const modelSettingsApi = {
   get: () => api.get<unknown, ModelSettings>('/settings/ai-models'),
   save: (value: ModelSettings) => api.put<unknown, ModelSettings>('/settings/ai-models', value),
   discover: (connection: Connection, refresh = false) => api.post<unknown, ModelList>('/settings/ai-models/discover', { connection, refresh }),
-  test: (connection: Connection, model: string, vision = false) => api.post<unknown, { success?: boolean; ok?: boolean }>('/settings/ai-models/test', { connection, model, vision }),
+  test: (connection: Connection, model: string, vision = false) => api.post<unknown, ValidationResult>('/settings/ai-models/test', { connection, model, vision }),
 }
 
 export function bindingCapability(binding: Assignment | null, lists: Record<string, ModelList>): Capability {

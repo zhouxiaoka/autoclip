@@ -503,8 +503,8 @@ class OpenAIProvider(LLMProvider):
                 if not self.api_key.startswith("sk-"):
                     logger.warning(f"OpenAI API Key格式可能不正确，期望以'sk-'开头，实际: {self.api_key[:10]}...")
             
-            # 使用最简单的测试。推理型号的输出上限也算推理 token，给 1 会因上限截断报错（#333）。
-            response = self.call("测试", max_tokens=256 if uses_max_completion_tokens(self.model_name, self.base_url) else 1)
+            # 真实小请求：额度只剩一点时 max_tokens=1 也能通过。推理型号的输出上限也算推理 token。
+            response = self.call("测试", max_tokens=256 if uses_max_completion_tokens(self.model_name, self.base_url) else 16)
             return response and response.content is not None
         except Exception as e:
             logger.error(f"OpenAI连接测试失败 (base_url={self.base_url or OPENAI_OFFICIAL_BASE_URL}): {e}")
