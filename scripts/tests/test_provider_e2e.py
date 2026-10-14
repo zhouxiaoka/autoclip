@@ -49,7 +49,7 @@ def _full_live_catalog(**overrides: dict) -> dict:
                               default_model='gemini-3.5-flash-lite'),
         'dashscope': _preset_row(display_name='阿里云百炼', short_name='DashScope',
                                  base_url='https://dashscope.aliyuncs.com/compatible-mode/v1',
-                                 default_model='qwen-flash'),
+                                 default_model='qwen-plus'),
         'infistar': _preset_row(display_name='Infistar', short_name='Infistar', group='recommended',
                                 base_url='https://infistar.ai/v1', default_model='gpt-4o-mini'),
     }
@@ -80,11 +80,13 @@ class ProviderE2EContractTests(unittest.TestCase):
         providers = {item['id']: item for item in matrix.live_providers()}
         self.assertEqual(set(providers), {'api88', 'deepseek', 'gemini', 'dashscope', 'infistar'})
         self.assertEqual(providers['api88']['base_url'], 'https://api.88api.ai/v1')
+        self.assertEqual(providers['gemini']['base_url'], 'https://generativelanguage.googleapis.com/v1beta/openai')
+        self.assertTrue(providers['gemini']['base_url'].endswith('/openai'))
         self.assertEqual(providers['dashscope']['base_url'], 'https://dashscope.aliyuncs.com/compatible-mode/v1')
         self.assertEqual(providers['infistar']['base_url'], 'https://infistar.ai/v1')
         self.assertEqual(providers['dashscope']['secret'], 'DASHSCOPE_API_KEY')
         self.assertEqual(providers['infistar']['secret'], 'INFISTAR_API_KEY')
-        self.assertEqual(providers['dashscope']['default_model'], 'qwen-flash')
+        self.assertEqual(providers['dashscope']['default_model'], 'qwen-plus')
         self.assertEqual(providers['gemini']['default_model'], 'gemini-3.5-flash-lite')
         self.assertEqual(providers['deepseek']['default_model'], 'deepseek-flash')
         self.assertEqual(providers['api88']['default_model'], 'deepseek-v4-flash')
@@ -174,7 +176,7 @@ class ProviderE2EContractTests(unittest.TestCase):
                 else:
                     os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
                 matrix.reset_live_catalog()
-        self.assertEqual(providers['deepseek']['base_url'], 'https://example.test/deepseek')
+        self.assertEqual(providers['deepseek']['base_url'], 'https://api.deepseek.com')
         self.assertEqual(providers['deepseek']['default_model'], 'fixture-flash')
         self.assertEqual(providers['deepseek']['label'], 'FixtureSeek')
         self.assertEqual(providers['api88']['default_model'], 'deepseek-v4-flash')
@@ -258,6 +260,53 @@ class ProviderE2EContractTests(unittest.TestCase):
                 os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
             matrix.reset_live_catalog()
 
+    def test_product_gemini_38_flash_gets_openai_compat_url(self):
+        raw = _full_live_catalog(gemini=_preset_row(
+            display_name='Google Gemini',
+            short_name='Gemini',
+            base_url='https://generativelanguage.googleapis.com/v1beta',
+            default_model='gemini-3.8-flash',
+        ))
+        old = os.environ.get('AUTOCLIP_PROVIDER_PRESETS')
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'provider_presets.json'
+            path.write_text(json.dumps(raw), encoding='utf-8')
+            os.environ['AUTOCLIP_PROVIDER_PRESETS'] = str(path)
+            matrix.reset_live_catalog()
+            try:
+                providers = {item['id']: item for item in matrix.live_providers()}
+            finally:
+                if old is None:
+                    os.environ.pop('AUTOCLIP_PROVIDER_PRESETS', None)
+                else:
+                    os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
+                matrix.reset_live_catalog()
+        self.assertEqual(providers['gemini']['default_model'], 'gemini-3.8-flash')
+        self.assertEqual(
+            providers['gemini']['base_url'],
+            'https://generativelanguage.googleapis.com/v1beta/openai',
+        )
+        self.assertTrue(providers['gemini']['base_url'].endswith('/openai'))
+
+    def test_dashscope_live_default_is_qwen_plus(self):
+        providers = {item['id']: item for item in matrix.live_providers()}
+        self.assertEqual(providers['dashscope']['default_model'], 'qwen-plus')
+        overlay = next(item for item in matrix.LIVE_PROVIDERS if item['id'] == 'dashscope')
+        self.assertEqual(overlay['default_model'], 'qwen-plus')
+
+    def test_live_defaults_do_not_write_product_json(self):
+        shipped = ROOT / 'presets' / 'provider_presets.json'
+        existed = shipped.is_file()
+        before = shipped.read_bytes() if existed else None
+        matrix.reset_live_catalog()
+        matrix.live_providers()
+        if existed:
+            self.assertEqual(shipped.read_bytes(), before)
+            default = json.loads(shipped.read_text(encoding='utf-8'))['providers']['dashscope']['default_model']
+            self.assertEqual(default, 'qwen-plus')
+        else:
+            self.assertFalse(shipped.exists())
+
     def test_catalog_path_prefers_shipped_json_then_live_defaults(self):
         old = os.environ.get('AUTOCLIP_PROVIDER_PRESETS')
         if old is not None:
@@ -275,7 +324,7 @@ class ProviderE2EContractTests(unittest.TestCase):
                 self.assertNotIn('api_key', providers['deepseek'])
             else:
                 self.assertIsNone(path)
-                self.assertEqual(providers['dashscope']['default_model'], 'qwen-flash')
+                self.assertEqual(providers['dashscope']['default_model'], 'qwen-plus')
                 self.assertEqual(set(load_catalog_providers()), set())
         finally:
             if old is not None:
@@ -441,7 +490,8 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('provider-e2e-cases', doc)
         self.assertIn('ISO', doc)
         self.assertIn('gemini-3.5-flash-lite', doc)
-        self.assertIn('qwen-flash', doc)
+        self.assertIn('qwen-plus', doc)
+        self.assertIn('/openai', doc)
         self.assertIn('fail-closed', doc)
         self.assertIn('不要只靠这一条探针放行', doc)
         self.assertIn('UpstreamErrorType', doc)
