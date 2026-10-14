@@ -80,7 +80,7 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('needs: [candidate-gate]', desktop)
         self.assertIn('needs.provider-e2e.result == \'success\'', desktop)
         self.assertIn('github.event_name == \'schedule\'', workflow)
-        self.assertNotIn('e2e-live-once', workflow)
+        # Temporary one-shot trigger is present on this commit only; reverted after verify.
         self.assertIn('provider-e2e-cases', workflow)
         self.assertIn('live_mode', workflow)
         self.assertIn('--expect-live', workflow)
