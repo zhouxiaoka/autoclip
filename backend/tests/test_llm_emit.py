@@ -106,6 +106,7 @@ def test_provider_call_success_and_failure_emit_llm_request_finished(capture):
     assert snapshot["upstream_error_type"] == "rate_limited"
     assert snapshot["billable_calls_before_failure"] == 1
     assert snapshot.get("retry_count", 0) == 0
+    assert snapshot.get("degrade_count", 0) == 0
 
 
 def test_opt_out_and_secret_payloads_are_not_posted(monkeypatch, tmp_path, capture):
@@ -161,6 +162,27 @@ def test_failed_store_write_always_has_error_code_and_failure_stage(tmp_path, mo
 def test_source_blocked_is_not_an_upstream_model_error():
     error = PipelineFailure("INGEST", "hint", code="source_blocked", http_status=403)
     assert studio_failure_context(error, "screening") == {"failure_stage": "ingest", "http_status": 403}
+
+
+@pytest.mark.stdlib_only
+def test_degrade_count_hook_is_integer_only_and_reaches_request_and_run(monkeypatch):
+    monkeypatch.setattr(telem, "_post_event", lambda *args, **kwargs: None)
+    with telem.track_run():
+        assert telem.current_degrade_count() == 0
+        assert telem.increment_degrade_count() == 1
+        assert telem.increment_degrade_count() == 2
+        props = telem.request_finished(
+            provider="api88", model="gpt-4o-mini", base_url="https://88api.ai/v1",
+            outcome="success", http_status=200, duration_ms=8,
+        )
+        snapshot = telem.run_snapshot()
+    assert props["degrade_count"] == 2
+    assert snapshot["degrade_count"] == 2
+    dumped = json.dumps({"props": props, "snapshot": snapshot})
+    assert "sk-" not in dumped
+    assert "88api.ai/v1" not in dumped
+    assert "prompt" not in dumped
+    assert telem.current_degrade_count() == 0
 
 
 def test_sentry_tags_are_allowlisted_strings():
