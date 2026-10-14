@@ -102,6 +102,19 @@ test('generation and production finished carry run identity; failures keep stage
   assert.equal(row.provider, 'openai')
   assert.equal(row.upstream_error_type, 'invalid_key')
   assert.equal(row.error_code, 'authentication')
+
+  const screen = []
+  const screening = new workflow.WorkflowTracker(storage, () => true, (event, props) => {
+    screen.push({ event, props }); return true
+  })
+  screening.watch('studio-screen', 'p1')
+  screening.observeStudio(screening.list()[0], {
+    analysis: { status: 'failed', phase: 'screening', error_code: 'source_no_audio', failure_stage: 'ingest' },
+  })
+  const screened = screen.find(item => item.event === 'studio_screen_finished').props
+  assert.equal(screened.outcome, 'failed')
+  assert.equal(screened.error_code, 'source_no_audio')
+  assert.equal(screened.failure_stage, 'ingest')
 })
 
 test('trackAsrReadiness posts the allowlisted probe', () => {
