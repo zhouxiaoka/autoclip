@@ -28,6 +28,16 @@ test('hostname helper keeps domain only and never returns a key or path', () => 
   assert.equal(JSON.stringify(contract.hostnameOfBaseUrl(`https://88api.ai/v1?api_key=${SECRET}`)).includes('sk-'), false)
 })
 
+test('sanitizeModel keeps real ids and redacts secrets disguised as models', () => {
+  assert.equal(contract.sanitizeModel('gpt-4o-mini'), 'gpt-4o-mini')
+  assert.equal(contract.sanitizeModel('Qwen/Qwen2.5-7B-Instruct'), 'Qwen/Qwen2.5-7B-Instruct')
+  assert.equal(contract.sanitizeModel('https://api.openai.com/v1'), 'redacted')
+  assert.equal(contract.sanitizeModel(SECRET), 'redacted')
+  assert.equal(contract.sanitizeModel('api.openai.com/v1/models'), 'redacted')
+  assert.equal(contract.sanitizeModel('用户口播把这段广告词发到抖音'), 'redacted')
+  assert.equal(contract.sanitizeModel(''), undefined)
+})
+
 test('request sanitizer drops secrets, prompts and full URLs', () => {
   const props = contract.sanitizeLlmRequestProperties({
     provider: 'api88',

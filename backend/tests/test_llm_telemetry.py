@@ -30,13 +30,40 @@ def test_sanitize_model_and_provider():
     assert telemetry.sanitize_model("gpt-4o-mini") == "gpt-4o-mini"
     assert telemetry.sanitize_model("Qwen/Qwen2.5-7B-Instruct") == "Qwen/Qwen2.5-7B-Instruct"
     assert telemetry.sanitize_model("qwen2.5:7b") == "qwen2.5:7b"
-    assert telemetry.sanitize_model("has space") is None
-    assert telemetry.sanitize_model("a" * 65) is None
-    assert telemetry.sanitize_model(PROMPT) is None
+    assert telemetry.sanitize_model("has space") == "redacted"
+    assert telemetry.sanitize_model("a" * 65) == "redacted"
+    assert telemetry.sanitize_model(PROMPT) == "redacted"
     assert telemetry.sanitize_provider("API88") == "api88"
     assert telemetry.sanitize_provider("siliconflow") is None
     assert telemetry.sanitize_provider("whisper_local", allow_asr=True) == "whisper_local"
     assert telemetry.sanitize_provider("whisper_local") is None
+
+
+def test_sanitize_model_rejects_secrets_disguised_as_ids():
+    assert telemetry.sanitize_model("https://api.openai.com/v1") == "redacted"
+    assert telemetry.sanitize_model("https://api.openai.com/v1/chat/completions?key=sk-live") == "redacted"
+    assert telemetry.sanitize_model(SECRET) == "redacted"
+    assert telemetry.sanitize_model("sk-proj-abc123def456") == "redacted"
+    assert telemetry.sanitize_model("api.openai.com/v1/models") == "redacted"
+    assert telemetry.sanitize_model("用户口播把这段广告词发到抖音") == "redacted"
+    assert telemetry.sanitize_model(f"gpt-4o-mini {SECRET}") == "redacted"
+    assert telemetry.sanitize_model("") is None
+    assert telemetry.sanitize_model(None) is None
+
+
+def test_sanitize_exception_text_keeps_host_drops_keys_and_body():
+    raw = (
+        f"POST https://api.openai.com/v1/chat/completions Authorization: Bearer {SECRET} "
+        f"{PROMPT} token={SECRET}"
+    )
+    cleaned = telemetry.sanitize_exception_text(raw)
+    assert SECRET not in cleaned
+    assert "sk-" not in cleaned.lower()
+    assert PROMPT not in cleaned
+    assert "https://" not in cleaned
+    assert "/chat/completions" not in cleaned
+    assert "api.openai.com" in cleaned
+    assert telemetry.sanitize_exception_text(RuntimeError(raw)) == cleaned
 
 
 def test_llm_request_properties_drop_secrets_and_user_text():
@@ -135,3 +162,78 @@ def test_validation_and_asr_payloads():
     assert validation["upstream_error_type"] == "bad_endpoint"
     assert validation["result"] == "failed"
     assert SECRET not in str(validation)
+
+
+def test_request_properties_redact_a_url_disguised_as_model():
+    out = telemetry.sanitize_llm_request_properties({
+        "provider": "openai",
+        "model": f"https://api.openai.com/v1/chat/completions?api_key={SECRET}",
+        "kind": "text",
+        "outcome": "error",
+        "prompt": PROMPT,
+    })
+    assert out["model"] == "redacted"
+    assert SECRET not in str(out)
+    assert "https://" not in str(out)
+    assert PROMPT not in str(out)
+
+
+def test_llm_manager_call_logs_sanitized_exception(monkeypatch, caplog):
+    from backend.core import llm_manager as lm
+
+    class Fake:
+        model_name = "gpt-4o-mini"
+
+        def call(self, *args, **kwargs):
+            raise RuntimeError(
+                f"POST https://api.openai.com/v1/chat/completions {SECRET} {PROMPT}"
+            )
+
+        def _build_full_input(self, *args, **kwargs):
+            return "x"
+
+    monkeypatch.setattr("backend.core.project_cancellation.checkpoint", lambda: None)
+    mgr = lm.LLMManager.__new__(lm.LLMManager)
+    mgr.current_provider = Fake()
+    mgr.settings = {}
+    monkeypatch.setattr(mgr, "_reload_if_settings_changed", lambda: None)
+    monkeypatch.setattr(lm, "_llm_cache_path", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        mgr,
+        "get_current_provider_info",
+        lambda: {"provider": "openai", "model": "gpt-4o-mini", "base_url": "https://api.openai.com/v1"},
+    )
+    with caplog.at_level("ERROR"):
+        with pytest.raises(RuntimeError):
+            mgr.call("prompt")
+    assert SECRET not in caplog.text
+    assert PROMPT not in caplog.text
+    assert "https://api.openai.com/v1/chat/completions" not in caplog.text
+    assert "api.openai.com" in caplog.text
+
+
+def test_openai_provider_call_logs_sanitized_exception(caplog):
+    from backend.core import llm_providers as lp
+
+    class Completions:
+        @staticmethod
+        def create(**kwargs):
+            raise RuntimeError(
+                f"POST https://api.openai.com/v1/chat/completions Bearer {SECRET} {PROMPT}"
+            )
+
+    class Chat:
+        completions = Completions()
+
+    provider = lp.OpenAIProvider.__new__(lp.OpenAIProvider)
+    provider.model_name = "gpt-4o-mini"
+    provider.base_url = "https://api.openai.com/v1"
+    provider.client = type("Client", (), {"chat": Chat()})()
+    provider._build_full_input = lambda *args, **kwargs: "prompt"
+    with caplog.at_level("ERROR", logger=lp.__name__):
+        with pytest.raises(RuntimeError):
+            provider.call("prompt")
+    assert SECRET not in caplog.text
+    assert PROMPT not in caplog.text
+    assert "https://api.openai.com/v1/chat/completions" not in caplog.text
+    assert "api.openai.com" in caplog.text

@@ -73,7 +73,7 @@ export const UPSTREAM_HINT_KEYS: Record<UpstreamErrorType, string> = {
   unknown: '模型服务返回了无法识别的错误，请检查配置后重试。',
 }
 
-const MODEL_RE = /^[\w.\-:/]{1,64}$/
+const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._\-/:]{0,63}$/
 const HOST_RE = /^[a-z0-9](?:[a-z0-9._-]{0,251}[a-z0-9])?$/
 const LOCAL_HOSTS = new Set(['localhost', '0.0.0.0', 'host.docker.internal', '::1'])
 const SECRET_MARKERS = ['sk-', 'api_key', 'apikey', 'authorization', 'bearer ', 'token=']
@@ -106,7 +106,14 @@ export function hostnameOfBaseUrl(url?: string | null): string | undefined {
 export function sanitizeModel(name?: string | null): string | undefined {
   if (typeof name !== 'string') return undefined
   const cleaned = name.trim()
-  if (!cleaned || cleaned.length > 64 || !MODEL_RE.test(cleaned)) return undefined
+  if (!cleaned) return undefined
+  if (cleaned.length > 64 || cleaned.includes('://') || cleaned.toLowerCase().includes('sk-') || !MODEL_RE.test(cleaned)) {
+    return 'redacted'
+  }
+  if (cleaned.includes('/')) {
+    const head = cleaned.split('/', 1)[0]
+    if (head.includes('.') || ['http', 'https', 'www'].includes(head.toLowerCase())) return 'redacted'
+  }
   return cleaned
 }
 
