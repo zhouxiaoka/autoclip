@@ -24,7 +24,7 @@
 2. **只发枚举、计数、布尔、随机 token。** 不上报 key、完整 URL、提示词、字幕/转写、视频标题、文件名、带用户名的本机路径、内部项目/作业 ID。`base_url` 只留 host；本机/内网记 `local`。详见 §10–§11。schema 校验必须拦住这些值。**例外：** `feedback_submitted` 是 `user_submitted`，可以带用户写下的 `text` 和可选 `contact`（见 §10）。`ingest_app_feedback.py` 据此开 Issue。
 3. **终态与请求分开。** 按钮点击不是成功。后台受理用 `*_accepted`，真正做完用 `*_finished`。浏览器点击下载不是落盘。
 4. **失败必有身份。** 失败的 run 级事件必须有 `error_code` + `failure_stage`。模型失败另带 `upstream_error_type`（站点拒绝、素材太短/无音轨等不算上游错误）。
-5. **同一匿名 ID。** 前端 PostHog `distinct_id` 经 `PUT /settings/analytics-identity` 写入 `analytics.json`；后端事件与 Sentry `user.id` 只用这个 ID。分析开关关闭时不写、不对齐（§10.1）。
+5. **同一匿名 ID。** 前端 PostHog 在 webview localStorage 持久化匿名 UUID，待桌面后端就绪后经 `PUT /settings/analytics-identity` 原子写入 app 数据目录的 `analytics.json`；失败有限重试。Tauri 下次启动把已有 UUID 通过 `AUTOCLIP_ANONYMOUS_DEVICE_ID` 交给后端，并给 webview bootstrap 同一 ID。后端以共享文件为准、环境变量兜底；晚到的 ID 更新 Sentry 全局 scope，发送前再次读取。只接受 UUID，不接受标题、密钥、邮箱、路径或正文。分析开关关闭时不对齐（§10.1）。
 6. **生产与验收隔离。** 业务看板只看 `analytics_environment=production` 且目标 `app_version`。validation 单独列，不进转化率。
 
 ---
@@ -111,6 +111,7 @@ multiIf(
 | `distinct_id` | PostHog 匿名 ID；后端读 `analytics.json` | 与 Sentry `user.id` 相同；禁止 email / IP | 是（SDK 自动；后端显式传） |
 | `app_version` | 前端 `VITE_APP_VERSION`；后端 `AUTOCLIP_APP_VERSION` 或 `backend.__version__` | `MAJOR.MINOR.PATCH`，无 `v` 前缀。**禁止**再把版本写进 `version`（MCP / `app_installed` 过渡期见 §4.4） | 是 |
 | `os` | 生命周期 super property；后端 `event_catalog.detect_os()` | **只允许** `macos` / `windows` / `linux` / `unknown`。`darwin`→`macos`，`win32`→`windows`。查询见 §4.4 | 是（前端 register；后端补） |
+| `arch` | Tauri 在前端脚本之前注入原生架构；后端使用 native env / `platform.machine()` | `arm64`→`aarch64`，`amd64` / `x64`→`x86_64`；只发 `aarch64` / `x86_64` / `unknown`。浏览器无法可靠识别 Mac 架构时允许 `unknown`。PostHog loaded 同步注册 os/arch；业务 capture 再附加，不等版本异步查询 | UI 与后端公共信封是；历史/旁路事件可空 |
 | `session_id` | PostHog `$session_id`（前端）；后端暂无会话 | 前端依赖 SDK，不要另造。后端事件用 `distinct_id` + 时间窗近似 | 前端是；后端可空 |
 | `session_number` | 仅 `app_opened` | 本机启动次数，不是会话 ID | 仅该事件 |
 | `analytics_environment` | 构建注入 | `production` / `development` / `validation` | 是 |

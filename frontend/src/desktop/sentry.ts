@@ -9,7 +9,7 @@ const OPT_OUT_KEY = 'autoclip.crashReports.optOut'
 
 let initialized = false
 let preferenceOverride: boolean | undefined
-const ANONYMOUS_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,199}$/
+const ANONYMOUS_ID = /^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12})$/
 let pendingUserId: string | null = null
 
 function applyAnonymousUser(): void {

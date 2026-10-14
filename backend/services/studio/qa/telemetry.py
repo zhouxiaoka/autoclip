@@ -25,7 +25,7 @@ _HOST = os.environ.get('AUTOCLIP_POSTHOG_HOST', 'https://us.i.posthog.com').rstr
 _OUTCOMES = frozenset({'pass', 'fail', 'skip'})
 _QA_VARIANTS = VARIANTS['qa_gate_blocking']
 # Anonymous device ids only. Paths, emails and free text never qualify.
-_ANONYMOUS_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.:-]{7,199}$')
+_ANONYMOUS_ID = re.compile(r'^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12})$')
 
 
 def _key() -> str:
@@ -77,6 +77,15 @@ def _read_id(path: Path | None) -> str | None:
     return None
 
 
+def stored_distinct_id() -> str | None:
+    """UI persistence wins after a reset; the launch env is a startup fallback."""
+    stored = _read_id(_identity_path())
+    if stored:
+        return stored
+    value = os.getenv('AUTOCLIP_ANONYMOUS_DEVICE_ID', '')
+    return value if _ANONYMOUS_ID.fullmatch(value) else None
+
+
 def remember_distinct_id(value: str) -> bool:
     """Store the UI's anonymous id so later backend events join the same person."""
     if not isinstance(value, str) or _ANONYMOUS_ID.fullmatch(value) is None:
@@ -115,7 +124,7 @@ def remember_distinct_id(value: str) -> bool:
 def anonymous_distinct_id() -> str:
     """The id already on this machine. A fresh uuid is written only when none exists."""
     path = _identity_path()
-    found = _read_id(path)
+    found = stored_distinct_id()
     if found:
         return found
     minted = uuid.uuid4().hex

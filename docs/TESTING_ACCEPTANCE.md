@@ -75,6 +75,8 @@ Privacy/telemetry 使用独立 validation 构建和隔离数据目录（前端 `
 
 自动制作在生成版本前失败的恢复验收，还需从真实结果页确认重试入口，修正前置条件后沿用原素材和所选平台完成出片；validation 收数应保留同一 flow、不同 attempt 的失败与成功，各尝试重复观察只入库一次。
 
+1.5.7 E5 / 启动环境字段回归：在隔离目录验证首次启动、已有 `analytics.json` 的重启、后端端口延迟与首次身份写入失败。PostHog 与后端 Sentry 的匿名 UUID 必须相同；晚到的身份必须覆盖启动环境变量并对 worker 生效。Mac arm64 的首屏/启动事件必须带 `os=macos, arch=aarch64`，Windows x64 必须为 `windows, x86_64`；执行 [release_validation.sql](analytics/release_validation.sql) 的首屏覆盖查询，缺失/unknown 不通过。分析关闭时 Sentry 不携带 user，崩溃报告关闭时不发送；载荷不得出现密钥、完整 URL、个人路径、标题或正文。首次安装在前端尚未生成 UUID 前的后端错误可以无 user，不能为了填字段另造设备身份。源码回归不能替代两平台最终包实际收数。
+
 每条修复和新功能还需列入 `regressions`，写明 issue/变更 ID、触发条件、实际平台、预期与结果；一个 happy path 不代表整个发布说明通过。首次出片时间、费用、画幅、语种、字幕同步、切点与包装质量须按素材记录，性能声明需要与上一版同条件对照。
 
 自动出片的 validation 查询模板见 [release_validation.sql](analytics/release_validation.sql)，逐条运行并替换版本；缺 flow 或失败码需要调查。上线新流程时同步更新实际看板，不能只在仓库增加 SQL 就宣布线上监控已覆盖。
