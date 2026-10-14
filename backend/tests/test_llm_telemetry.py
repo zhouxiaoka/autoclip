@@ -1,6 +1,8 @@
 """成功率埋点字段脱敏：只留域名与枚举，不含 key / 完整 URL / 用户内容。"""
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ALL_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 import pytest
@@ -171,6 +173,30 @@ def test_increment_degrade_count_is_exported_and_capped():
         assert telemetry.current_degrade_count() == 32
     finally:
         telemetry.reset_degrade_count(token)
+
+
+def test_parallel_context_copies_do_not_undercount_degrades():
+    """Pipeline chunks copy_context(); two degrades must not both record as 1."""
+    from backend.core.llm_usage import run_in_context
+
+    workers = 8
+    barrier = threading.Barrier(workers)
+
+    def bump(_index: int) -> int:
+        barrier.wait(timeout=2)
+        return telemetry.increment_degrade_count()
+
+    with telemetry.track_run():
+        wrapped = run_in_context(bump)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            pending = [pool.submit(wrapped, index) for index in range(workers)]
+            wait(pending, return_when=ALL_COMPLETED)
+            observed = [future.result() for future in pending]
+        assert telemetry.current_degrade_count() == workers
+        snapshot = telemetry.run_snapshot()
+    assert sorted(observed) == list(range(1, workers + 1))
+    assert snapshot["degrade_count"] == workers
+    assert telemetry.current_degrade_count() == 0
 
 
 def test_degrade_count_is_non_negative_and_drops_user_payloads():
