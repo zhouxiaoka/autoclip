@@ -117,6 +117,15 @@ test('cover follows or separates from the main connection without nested toggles
   assert.equal(enabled.cover.model, 'wanx2.1-t2i-turbo')
 })
 
+test('edit and save strip surrounding spaces and newlines from the API key', () => {
+  const state = { ...fresh(), connections: [conn('a', 'openai', { api_key: '  sk-live  \n' })], analysis: { connection_id: 'a', model: 'gpt-4o-mini', capability: 'auto' } }
+  assert.equal(logic.forSave(state).connections[0].api_key, 'sk-live')
+  const edited = logic.editConnection(state, 'a', { api_key: '  sk-new  \n' })
+  assert.equal(edited.connections[0].api_key, 'sk-new')
+  const blank = logic.editConnection(state, 'a', { api_key: '   ' })
+  assert.equal(blank.connections[0].api_key, '')
+})
+
 test('changing an address drops the stored key so it cannot leak to another endpoint', () => {
   const state = { ...fresh(), connections: [conn('a', 'compatible', { has_key: true, base_url: 'https://old/v1' })] }
   const edited = logic.editConnection(state, 'a', { base_url: 'https://new/v1' })

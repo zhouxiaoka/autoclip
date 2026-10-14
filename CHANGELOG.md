@@ -9,6 +9,8 @@
 
 - 新增上游错误分类与成功率埋点字段契约（`upstream_errors` / `llm_telemetry`，前端 `successRateContract`）：按 OpenAI、new-api、Gemini、DeepSeek 等响应区分密钥、余额、权限/分组、模型不存在、地址错误、限流、5xx、超时/断连、截断；只提供分类与脱敏，不改现有调用链或上报。八语补齐对应提示 key。
 
+- 设置页 API Key 保存和输入去掉首尾空格（含换行），避免粘贴时带上空格导致 401。
+
 - 发布 autoclip-mcp 时推送标签 `mcp-v<version>`。该标签走 pypi environment，只允许从 `mcp-v*` 部署。
 
 ## [1.5.7] - 2026-10-10

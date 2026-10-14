@@ -55,6 +55,31 @@ def test_same_provider_multiple_accounts_and_separate_vision():
     assert ai.vision_endpoint(ai.load()) == {'base_url': 'https://two.example/v1', 'api_key': 'sk-second-secret', 'model': 'vision-b'}
 
 
+def test_api_key_strips_surrounding_whitespace_on_construct_and_save():
+    connection = ai.Connection(id='c', name='k', provider='openai', api_key='  sk-live-secret  \n')
+    assert connection.api_key == 'sk-live-secret'
+    assert ai.Connection(id='c', name='k', provider='openai', api_key=None).api_key is None
+    assert ai.Connection(id='c', name='k', provider='openai', api_key='   ').api_key == ''
+    settings = ai.ModelSettings(connections=[connection], analysis=ai.Assignment(connection_id='c', model='gpt-4o-mini'))
+    ai.save(settings)
+    assert ai.load().connections[0].api_key == 'sk-live-secret'
+
+
+def test_http_put_strips_key_spaces():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    app = FastAPI()
+    app.include_router(router)
+    payload = example().model_dump()
+    payload['connections'][0]['api_key'] = '  sk-first-secret  \n'
+    with TestClient(app) as client:
+        response = client.put('/settings/ai-models', json=payload)
+    assert response.status_code == 200
+    assert 'sk-first-secret' not in response.text
+    assert ai.load().connections[0].api_key == 'sk-first-secret'
+
+
 def test_secrets_are_masked_preserved_and_can_be_cleared():
     response = ai.save(example())
     assert 'sk-first-secret' not in json.dumps(response)

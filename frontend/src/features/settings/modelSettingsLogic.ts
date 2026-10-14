@@ -57,8 +57,10 @@ export const newConnection = (provider: ProviderKey, id: string = crypto.randomU
 
 /** Merge a field edit; changing the address invalidates a stored key so one service's key never reaches another. */
 export function editConnection(s: ModelSettings, id: string, patch: Partial<Connection>): ModelSettings {
-  const changedAddress = patch.base_url !== undefined || patch.image_base_url !== undefined
-  return { ...s, connections: s.connections.map(c => c.id === id ? { ...c, ...patch, ...(changedAddress && c.has_key ? { api_key: '', has_key: false } : {}) } : c) }
+  const next = { ...patch }
+  if (typeof next.api_key === 'string') next.api_key = next.api_key.trim()
+  const changedAddress = next.base_url !== undefined || next.image_base_url !== undefined
+  return { ...s, connections: s.connections.map(c => c.id === id ? { ...c, ...next, ...(changedAddress && c.has_key ? { api_key: '', has_key: false } : {}) } : c) }
 }
 
 /**
@@ -135,5 +137,11 @@ export function saveIssue(s: ModelSettings): SaveIssue | null {
 export function forSave(s: ModelSettings): ModelSettings {
   const cover = !s.cover_enabled && !s.cover?.model ? null : s.cover
   const active = new Set([s.analysis?.connection_id, s.vision?.connection_id, cover?.connection_id, s.transcription?.connection_id])
-  return { ...s, cover, connections: s.connections.filter(c => c.provider !== 'compatible' || c.base_url.trim() || active.has(c.id)) }
+  return {
+    ...s,
+    cover,
+    connections: s.connections
+      .filter(c => c.provider !== 'compatible' || c.base_url.trim() || active.has(c.id))
+      .map(c => ({ ...c, api_key: typeof c.api_key === 'string' ? c.api_key.trim() : c.api_key })),
+  }
 }
