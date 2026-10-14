@@ -9,53 +9,10 @@ import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
 import { connectionOf, isTextOnly, mainConnection, presetKey, type SaveIssue } from './modelSettingsLogic'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
-import api from '../../services/api'
-
-type SenseVoiceStatus = { status: 'not_installed' | 'installing' | 'ready' | 'error'; message: string }
-
-function SenseVoiceConfig() {
-  const [runtime, setRuntime] = useState<SenseVoiceStatus | null>(null)
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    let active = true
-    const refresh = async () => {
-      try {
-        const value = await api.get<unknown, SenseVoiceStatus>('/sensevoice/status')
-        if (active) { setRuntime(value); setError('') }
-      } catch { if (active) setError(t('暂时无法读取本地模型状态。')) }
-    }
-    void refresh()
-    const timer = window.setInterval(() => void refresh(), 3000)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [])
-  const act = async (remove = false) => {
-    setBusy(true)
-    try {
-      const value = remove ? await api.delete<unknown, SenseVoiceStatus>('/sensevoice')
-        : await api.post<unknown, SenseVoiceStatus>('/sensevoice/prepare')
-      setRuntime(value); setError('')
-    } catch { setError(t('操作失败，请稍后重试。')) }
-    finally { setBusy(false) }
-  }
-  const preparing = runtime?.status === 'installing'
-  return <div className="ac-rows">
-    <Row label={t('转写模型')} hint={t('支持中文、粤语、英语、日语和韩语，使用词级时间戳生成字幕。')}><span>SenseVoiceSmall</span></Row>
-    <Row label={runtime?.status === 'ready' ? t('模型已就绪') : t('准备本地模型')}
-      hint={runtime?.status === 'ready' ? t('保存设置后，新任务将使用这个模型。') : t('首次需联网下载组件和模型，请预留至少 8 GB 磁盘空间；准备完成后转写不上传音频。')}>
-      {runtime?.status === 'ready' ? <StatusDot tone="ok" label={t('已就绪')} />
-        : preparing ? <StatusDot tone="accent" label={t('正在准备组件与模型…')} />
-        : <Btn size="sm" disabled={!runtime || busy} onClick={() => void act()}>{t('准备模型')}</Btn>}
-    </Row>
-    {(error || runtime?.status === 'error') && <p className="ac-note" role="alert">{error || t('模型准备失败，请检查网络和磁盘空间后重试。')}</p>}
-    <p className="ac-note">{t('仅安装所需模型，不启用说话人分离。')} <a href="https://huggingface.co/FunAudioLLM/SenseVoiceSmall" target="_blank" rel="noreferrer">{t('模型与许可说明')}</a></p>
-    {runtime?.status === 'ready' && <details className="ac-disclosure"><summary>{t('高级')}</summary>
-      <Row label={t('删除 SenseVoice 组件与模型')} hint={t('删除后需要重新下载才能使用。')}>
-        <Btn variant="danger" size="sm" disabled={busy} onClick={() => void act(true)}>{t('删除')}</Btn>
-      </Row>
-    </details>}
-  </div>
-}
+import SenseVoiceConfig from './SenseVoiceConfig'
+import ProviderCatalog from './ProviderCatalog'
+import ProviderDetail from './ProviderDetail'
+import { catalogPreset, type CapabilityFilter } from './providerCatalogView'
 
 const ANCHORS: Record<string, string> = { model: 'ai-model', analysis: 'ai-model', vision: 'ai-model', speech: 'ai-speech', cover: 'ai-cover' }
 const issueAnchor = (issue: SaveIssue) => issue.role === 'transcription' ? 'ai-speech' : issue.role === 'cover' ? 'ai-cover' : 'ai-model'
@@ -154,18 +111,62 @@ function CoverSection({ m }: { m: ModelSettingsStore }) {
   </div>
 }
 
-export default function AIModelSettings({ requestedSection }: { requestedSection: string }) {
+function CurrentAnalysis({ m }: { m: ModelSettingsStore }) {
+  const { settings, lists, busy, listErrors } = m
+  if (!settings) return null
+  const main = mainConnection(settings)
+  if (!main || !settings.analysis) {
+    return <p className="ac-note">{t('settings.providers.unconnected_guide')}</p>
+  }
+  const list = lists[main.id]
+  const model = settings.analysis.model || ''
+  const hint = busy[main.id] && !model ? t('正在获取可用模型…')
+    : model && list && !list.preview ? t('已为你选好推荐模型，可随时更换。')
+    : t('填写 API Key 后自动选择推荐模型。')
+  const name = PROVIDERS[presetKey(main)]?.name || main.name
+  return <>
+    <Row wide label={t('settings.providers.using_for_analysis')} hint={`${name} · ${hint}`}>
+      <ModelPicker role="analysis" model={model} capability={settings.analysis.capability} connection={main} list={list} busy={!!busy[main.id]} listError={listErrors[main.id]} mode={settings.analysis_mode}
+        onChange={value => m.update({ analysis: { connection_id: main.id, model: value, capability: 'auto' } })}
+        onCapability={capability => settings.analysis && m.update({ analysis: { ...settings.analysis, capability } })}
+        onRefresh={() => void m.discover(main, true)}
+        actions={<Btn variant="text" size="sm" disabled={!model} loading={m.testing} onClick={() => void m.test()}>{t('测试连接')}</Btn>} />
+    </Row>
+    <Row label={t('画面识别')} hint={isTextOnly(settings, lists)
+      ? t('当前模型仅支持文字，只能靠字幕切分。游戏画面、口播较少的内容建议换一个多模态模型再开启。')
+      : t('抽样几张画面理解动作与场景。游戏画面、口播较少的内容推荐开启，切分更准；费用略高。关闭后只发送字幕。')}>
+      <Switch checked={settings.analysis_mode !== 'subtitle'} onChange={m.setVisual} />
+    </Row>
+  </>
+}
+
+export default function AIModelSettings({ requestedSection, requestedProvider = '' }: { requestedSection: string; requestedProvider?: string }) {
   useTranslation()
   const m = useModelSettings()
   const { settings } = m
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<CapabilityFilter>('all')
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(() => catalogPreset(requestedProvider)?.id || null)
+  const selected = catalogPreset(selectedId)
+
+  useEffect(() => {
+    setSelectedId(catalogPreset(requestedProvider)?.id || null)
+  }, [requestedProvider])
+
   useEffect(() => {
     const anchor = ANCHORS[requestedSection]
-    if (!settings || !anchor) return
+    if (!settings || !anchor || selectedId) return
     const timer = window.setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ block: 'start' }), 0)
     return () => window.clearTimeout(timer)
-  }, [requestedSection, !!settings])
+  }, [requestedSection, !!settings, selectedId])
 
-  if (!settings) return <Section title={t('AI 模型')}><p className="ac-note">{m.error || t('加载中…')}</p>{m.error && <Btn onClick={() => void m.load()}>{t('重试')}</Btn>}</Section>
+  const openProvider = (id: string) => {
+    setSelectedId(id)
+  }
+  const closeProvider = () => setSelectedId(null)
+
+  if (!settings) return <Section title={t('settings.providers.title')}><p className="ac-note">{m.error || t('加载中…')}</p>{m.error && <Btn onClick={() => void m.load()}>{t('重试')}</Btn>}</Section>
   const save = async () => {
     const result = await m.save()
     if (result.issue) document.getElementById(issueAnchor(result.issue))?.scrollIntoView({ block: 'start', behavior: 'smooth' })
@@ -176,18 +177,31 @@ export default function AIModelSettings({ requestedSection }: { requestedSection
     {settings.migration_warnings?.includes('cover_configuration_invalid') && <p role="alert" className="ac-note">{t('旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。')}</p>}
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
     <fieldset className="ac-model-fields" disabled={m.saving}>
-      <div id="ai-model" className="ac-model-section">
-        <h3 className="ac-model-section-title">{t('AI 服务')}</h3>
-        <p className="ac-note">{t('选一家服务、填好 API Key，模型会自动选好。字幕转写和封面默认沿用这把 Key。')}</p>
-        <AIServiceFields m={m} placement="settings_model" />
-      </div>
-      <TranscriptionSection m={m} />
-      <CoverSection m={m} />
-      <details className="ac-disclosure ac-model-section"><summary>{t('高级')}</summary>
-        <Row label={t('文本分块大小')}><input aria-label={t('文本分块大小')} className="ac-input" type="number" min={1000} max={10000} step={500} value={settings.chunk_size} onChange={e => m.update({ chunk_size: Number(e.target.value) })} /></Row>
-        <Row label={t('最低评分阈值')}><input aria-label={t('最低评分阈值')} className="ac-input" type="number" min={.1} max={1} step={.05} value={settings.min_score_threshold} onChange={e => m.update({ min_score_threshold: Number(e.target.value) })} /></Row>
-        <Row label={t('每个合集最多切片')}><input aria-label={t('每个合集最多切片')} className="ac-input" type="number" min={1} max={20} value={settings.max_clips_per_collection} onChange={e => m.update({ max_clips_per_collection: Number(e.target.value) })} /></Row>
-      </details>
+      {selected ? <ProviderDetail preset={selected} m={m} onBack={closeProvider} /> : <>
+        <div className="ac-model-section">
+          <h3 className="ac-model-section-title">{t('settings.providers.title')}</h3>
+          <p className="ac-note">{t('settings.providers.subtitle')}</p>
+          <CurrentAnalysis m={m} />
+        </div>
+        <ProviderCatalog
+          settings={settings}
+          query={query}
+          filter={filter}
+          moreOpen={moreOpen}
+          selectedId={selectedId}
+          onQuery={setQuery}
+          onFilter={setFilter}
+          onToggleMore={() => setMoreOpen(open => !open)}
+          onOpen={openProvider}
+        />
+        <TranscriptionSection m={m} />
+        <CoverSection m={m} />
+        <details className="ac-disclosure ac-model-section"><summary>{t('高级')}</summary>
+          <Row label={t('文本分块大小')}><input aria-label={t('文本分块大小')} className="ac-input" type="number" min={1000} max={10000} step={500} value={settings.chunk_size} onChange={e => m.update({ chunk_size: Number(e.target.value) })} /></Row>
+          <Row label={t('最低评分阈值')}><input aria-label={t('最低评分阈值')} className="ac-input" type="number" min={.1} max={1} step={.05} value={settings.min_score_threshold} onChange={e => m.update({ min_score_threshold: Number(e.target.value) })} /></Row>
+          <Row label={t('每个合集最多切片')}><input aria-label={t('每个合集最多切片')} className="ac-input" type="number" min={1} max={20} value={settings.max_clips_per_collection} onChange={e => m.update({ max_clips_per_collection: Number(e.target.value) })} /></Row>
+        </details>
+      </>}
     </fieldset>
     {m.error && <p className="studio-error" role="alert">{m.error}</p>}
     <div className="ac-savebar">

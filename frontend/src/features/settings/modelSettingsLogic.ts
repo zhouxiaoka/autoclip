@@ -164,7 +164,14 @@ export function saveIssue(s: ModelSettings): SaveIssue | null {
   return null
 }
 
-/** Document to send: drop blank compatible connections nothing points at; a disabled cover with no model is null. */
+/** Keep a connection that a role uses, one that already has a key, or a keyless local runtime. */
+export function persistableConnection(c: Connection, active: Set<string | undefined>): boolean {
+  if (active.has(c.id)) return true
+  if (c.api_key || c.has_key) return true
+  return !!PROVIDERS[c.provider as ProviderKey]?.local
+}
+
+/** Document to send: drop unused drafts (including catalog URLs without a key); a disabled cover with no model is null. */
 export function forSave(s: ModelSettings): ModelSettings {
   const cover = !s.cover_enabled && !s.cover?.model ? null : s.cover
   const active = new Set([s.analysis?.connection_id, s.vision?.connection_id, cover?.connection_id, s.transcription?.connection_id])
@@ -172,7 +179,7 @@ export function forSave(s: ModelSettings): ModelSettings {
     ...s,
     cover,
     connections: s.connections
-      .filter(c => c.provider !== 'compatible' || c.base_url.trim() || active.has(c.id))
+      .filter(c => persistableConnection(c, active))
       .map(c => ({
         ...c,
         api_key: typeof c.api_key === 'string' ? c.api_key.trim() : c.api_key,

@@ -538,6 +538,8 @@ function settingsHook(s, transport, initial) {
     '../../analytics/experience':experience,'./providers':providers,'./providerAccess':access,
     './modelSettingsApi':{modelSettingsApi:{get:async()=>structuredClone(initial),...transport},bindingCapability:()=> 'text'},
     './modelDefaults':defaults,'./modelSettingsLogic':logic,
+    './providerCatalogView':{assignAnalysis:value=>value,ensureCatalogConnection:value=>({settings:value,changed:false}),selectLocalAsr:value=>value},
+    './providerPresets':{getProvider:()=>undefined},
   },{window:{setTimeout(){},clearTimeout(){},addEventListener(){},removeEventListener(){}}})
   return ()=>{cursor=0;return hook.useModelSettings('home_setup')}
 }
