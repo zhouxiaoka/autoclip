@@ -14,7 +14,7 @@ const urls = loadTs('providerUrl.ts')
 const defaults = loadTs('modelDefaults.ts')
 const access = loadTs('providerAccess.ts', { '../../i18n': { t: x => x }, './providers': providers })
 const logic = loadTs('modelSettingsLogic.ts', { './providers': providers, './modelDefaults': defaults, './providerAccess': access, './providerUrl': urls })
-const custom = loadTs('customProvider.ts', { './providerUrl': urls, './modelSettingsLogic': logic })
+const custom = loadTs('customProvider.ts', { './providerUrl': urls, './modelSettingsLogic': logic, './providerAccess': access })
 
 const fresh = () => ({
   version: 1, saved: false,
@@ -81,6 +81,17 @@ test('chat completions suffixes and invalid URLs are rejected before fetch', () 
   assert.equal(custom.normalizedDraftUrl('https://gw.example/v1/chat/completions'), 'https://gw.example/v1')
   assert.equal(custom.draftUrlIssue(''), 'empty')
   assert.equal(custom.draftUrlIssue('not-a-url'), 'invalid')
+  assert.equal(custom.draftUrlIssue('https://gw.example/v1'), null)
+})
+
+test('custom base URLs reject console hosts and embedded credentials', () => {
+  assert.equal(custom.draftUrlIssue('https://user:pass@gw.example/v1'), 'invalid')
+  assert.equal(custom.draftUrlIssue('https://user@gw.example/v1'), 'invalid')
+  assert.equal(custom.draftUrlIssue('https://platform.openai.com/v1'), 'invalid')
+  assert.equal(custom.draftUrlIssue('https://platform.openai.com/api-keys'), 'invalid')
+  assert.equal(custom.draftUrlIssue('https://bailian.console.aliyun.com'), 'invalid')
+  assert.equal(custom.draftUrlIssue('https://aistudio.google.com'), 'invalid')
+  assert.equal(custom.draftUrlIssue('https://api.openai.com/v1'), null)
   assert.equal(custom.draftUrlIssue('https://gw.example/v1'), null)
 })
 

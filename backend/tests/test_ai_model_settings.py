@@ -565,6 +565,19 @@ def test_official_qwen_vision_route_survives_unavailable_capability_catalog(monk
     assert ai.vision_endpoint(config) is None
 
 
+def test_custom_base_url_rejects_console_host_and_embedded_credentials():
+    with pytest.raises(ValidationError):
+        ai.Connection(id='c', name='x', provider='compatible', base_url='https://user:pass@gw.example/v1')
+    with pytest.raises(ValidationError):
+        ai.Connection(id='c', name='x', provider='compatible', base_url='https://user@gw.example/v1')
+    with pytest.raises(ValidationError, match='控制台或官网'):
+        ai.Connection(id='c', name='x', provider='compatible', base_url='https://platform.openai.com/v1')
+    with pytest.raises(ValidationError, match='控制台或官网'):
+        ai.Connection(id='c', name='x', provider='compatible', base_url='https://bailian.console.aliyun.com')
+    ok = ai.Connection(id='c', name='x', provider='compatible', base_url='https://gw.example/v1', api_key='k')
+    assert ok.base_url == 'https://gw.example/v1'
+
+
 def test_custom_models_persist_without_exposing_keys():
     settings = ai.ModelSettings(
         connections=[ai.Connection(
