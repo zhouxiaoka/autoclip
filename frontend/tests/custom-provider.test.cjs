@@ -55,6 +55,32 @@ test('scenario checkboxes follow model type and vision', () => {
   assert.equal(stripped.scenarios.join(','), 'cover')
 })
 
+test('custom_models win over a live list so discovery cannot drop user attributes', () => {
+  const connection = {
+    id: 'gw', name: 'Office', provider: 'compatible', base_url: 'https://gw.example/v1',
+    image_api: 'auto', image_base_url: '',
+    custom_models: [{
+      id: 'office-llm', display_name: 'Office LLM', types: ['language'],
+      vision: true, scenarios: ['analysis', 'vision'], enabled: true,
+    }],
+  }
+  const live = {
+    models: [
+      { id: 'other-live', capability: 'text', analysis: true, image: false },
+      { id: 'office-llm', capability: 'text', analysis: true, image: false },
+    ],
+    source: 'live', preview: false, updated_at: 1,
+  }
+  const merged = custom.mergeCustomList(connection, live)
+  const office = merged.models.find(model => model.id === 'office-llm')
+  assert.equal(office.capability, 'multimodal')
+  assert.equal(office.analysis, true)
+  assert.ok(merged.models.some(model => model.id === 'other-live'))
+  const seeded = custom.mergeCustomList(connection)
+  assert.equal(seeded.models[0].id, 'office-llm')
+  assert.equal(seeded.models[0].capability, 'multimodal')
+})
+
 test('discover merge keeps manual models; apply writes a compatible connection without touching existing analysis', () => {
   const started = custom.addManualModel({ ...custom.emptyDraft(), name: 'Office', base_url: 'https://gw.example' }, 'keep-me').draft
   const merged = custom.mergeDiscovered(started, [

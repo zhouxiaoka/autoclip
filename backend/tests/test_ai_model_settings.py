@@ -578,6 +578,71 @@ def test_custom_base_url_rejects_console_host_and_embedded_credentials():
     assert ok.base_url == 'https://gw.example/v1'
 
 
+def test_custom_models_survive_save_reopen_and_are_not_overwritten_by_discover(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    settings = ai.ModelSettings(
+        connections=[ai.Connection(
+            id='gw', name='Office gateway', provider='compatible',
+            base_url='https://gw.example/v1', api_key='sk-custom-secret',
+            custom_models=[ai.CustomModelOffer(
+                id='office-llm', display_name='Office LLM', types=['language'],
+                vision=True, scenarios=['analysis', 'vision'], enabled=True,
+            )],
+        )],
+        analysis=ai.Assignment(connection_id='gw', model='office-llm', capability='multimodal'),
+    )
+    public = ai.save(settings)
+    assert public['connections'][0]['custom_models'][0]['display_name'] == 'Office LLM'
+    assert public['connections'][0]['custom_models'][0]['vision'] is True
+
+    loaded = ai.load()
+    offer = loaded.connections[0].custom_models[0]
+    assert offer.id == 'office-llm'
+    assert offer.display_name == 'Office LLM'
+    assert offer.vision is True
+    assert registry.lookup_capability(loaded.connections[0], 'office-llm') == 'multimodal'
+
+    async def metadata():
+        return None
+
+    async def fetch(*args, **kwargs):
+        return {'data': [{'id': 'other-live', 'architecture': {
+            'input_modalities': ['text'], 'output_modalities': ['text'],
+        }}]}
+
+    monkeypatch.setattr(registry, '_ensure_metadata', metadata)
+    monkeypatch.setattr(registry.model_catalog, '_http_get_json', fetch)
+    result = asyncio.run(registry.discover(loaded.connections[0], refresh=True))
+    listed = {item['id']: item for item in result['models']}
+    assert 'office-llm' in listed
+    assert 'other-live' in listed
+    assert listed['office-llm']['capability'] == 'multimodal'
+    assert listed['office-llm']['analysis'] is True
+    reopened = ai.load()
+    assert reopened.connections[0].custom_models[0].display_name == 'Office LLM'
+    assert reopened.connections[0].custom_models[0].vision is True
+
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        body = client.get('/settings/ai-models').json()
+        assert body['connections'][0]['custom_models'][0]['id'] == 'office-llm'
+        assert body['connections'][0]['custom_models'][0]['display_name'] == 'Office LLM'
+        listing = client.post('/settings/ai-models/discover', json={
+            'connection': body['connections'][0], 'refresh': True,
+        })
+        assert listing.status_code == 200
+        http_listed = {item['id']: item for item in listing.json()['models']}
+        assert http_listed['office-llm']['capability'] == 'multimodal'
+        again = client.get('/settings/ai-models').json()['connections'][0]['custom_models']
+        assert again[0]['id'] == 'office-llm'
+        assert again[0]['display_name'] == 'Office LLM'
+        assert again[0]['vision'] is True
+
+
 def test_custom_models_persist_without_exposing_keys():
     settings = ai.ModelSettings(
         connections=[ai.Connection(

@@ -98,6 +98,21 @@ export function mergeDiscovered(draft: CustomProviderDraft, entries: ModelEntry[
   return { ...draft, models: Array.from(byId.values()) }
 }
 
+export function mergeFetched(draft: CustomProviderDraft, ids: string[]): CustomProviderDraft {
+  return mergeDiscovered(draft, ids.filter(Boolean).map(id => ({
+    id, capability: null, analysis: true, image: false,
+  })))
+}
+
+/** Custom offers win on id clash so a live /models refresh cannot drop user attributes. */
+export function mergeCustomList(connection: Connection, live?: ModelList | null): ModelList {
+  const custom = listFromOffers(connection.custom_models || [])
+  if (!live) return custom
+  const byId = new Map(live.models.map(model => [model.id, model]))
+  for (const entry of custom.models) byId.set(entry.id, entry)
+  return { ...live, models: Array.from(byId.values()) }
+}
+
 export function addManualModel(draft: CustomProviderDraft, rawId: string): { draft: CustomProviderDraft; issue?: DraftIssue } {
   const id = rawId.trim()
   if (!id) return { draft, issue: 'model_id' }
