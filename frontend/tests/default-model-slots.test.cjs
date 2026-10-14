@@ -2,14 +2,12 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { loadTs } = require('./load-ts.cjs')
 
-const slots = loadTs('defaultModelSlots.ts', {
-  '../../i18n': { t: text => text },
-})
+const slots = loadTs('defaultModelSlots.ts', { '../../i18n': { t: text => text } })
 const plain = value => JSON.parse(JSON.stringify(value))
 
 const conn = (id, provider, extra = {}) => ({
   id, name: provider, provider, base_url: '', api_key: 'k', has_key: true,
-  image_api: 'auto', image_base_url: '', ...extra,
+  image_api: 'auto', image_base_url: '', validation_status: 'ok', ...extra,
 })
 const settings = (extra = {}) => ({
   version: 1, saved: true,
@@ -64,6 +62,20 @@ test('a live list without a suitable model does not invent catalog candidates', 
     connections: [conn('ds', 'dashscope')],
   }), { ds: { source: 'live', models: [{ id: 'qwen-plus', capability: 'text', analysis: true, image: false }] } }, 'cover')
   assert.equal(emptyCover.length, 0)
+})
+
+test('a key without a passed access check is not shown as connected', () => {
+  const state = settings({
+    connections: [
+      conn('ds', 'dashscope', { validation_status: 'unchecked' }),
+      conn('infi', 'infistar', { validation_status: 'failed' }),
+    ],
+  })
+  const groups = slots.collectModelGroups(state, lists, 'analysis')
+  const qwen = groups.find(group => group.modelId === 'qwen-plus')
+  assert.ok(qwen)
+  assert.equal(qwen.offers.every(offer => offer.connected === false), true)
+  assert.equal(slots.preferredOffer(qwen.offers), undefined)
 })
 
 test('the same model id is listed once and smart pick prefers the sponsor connection', () => {
@@ -151,6 +163,26 @@ test('U2 reuses U1 compatible catalog connections without duplicate provider off
   const next = slots.applySmartSelection(state, 'analysis', group.modelId, offer.connectionId)
   assert.equal(next.connections[0].provider, 'compatible', 'routing retains the U1 connection API')
   assert.equal(next.analysis.model_source, 'preset')
+})
+
+test('compatible catalog offers require validation for live and enriched models', () => {
+  const infi = { ...lists.infi, models: [{ id: 'deepseek-flash', capability: 'text', analysis: true, image: false }] }
+  for (const validation_status of [undefined, 'unchecked', 'failed', 'ok']) {
+    const gateway = conn('ds', 'compatible', {
+      name: 'DeepSeek', base_url: 'https://api.deepseek.com', validation_status,
+    })
+    const state = settings({ connections: [conn('infi', 'infistar'), gateway] })
+    for (const gatewayList of [undefined, { source: 'live', models: infi.models }]) {
+      const groups = slots.collectModelGroups(state, { infi, ...(gatewayList ? { ds: gatewayList } : {}) }, 'analysis')
+      const group = groups.find(item => item.modelId === 'deepseek-flash')
+      const offers = group.offers.filter(item => item.provider === 'deepseek')
+      assert.equal(offers.length, 1)
+      assert.equal(group.offers.some(item => item.provider === 'compatible'), false)
+      assert.equal(offers[0].connectionId, 'ds')
+      assert.equal(offers[0].connected, validation_status === 'ok' && !!gatewayList)
+      assert.equal(!!slots.preferredOffer(offers), validation_status === 'ok' && !!gatewayList)
+    }
+  }
 })
 
 test('catalog enrichment respects authoritative lists on compatible connections', () => {

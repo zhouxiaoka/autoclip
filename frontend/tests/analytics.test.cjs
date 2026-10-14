@@ -552,7 +552,7 @@ function settingsHook(s, transport, initial) {
   const access=loadTs('providerAccess.ts',{'../../i18n':{t:x=>x},'./providers':providers,'../../analytics/successRateContract':load('successRateContract')})
   const urls=loadTs('providerUrl.ts')
   const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls})
-  const slotLogic=loadTs('defaultModelSlots.ts',{'../../i18n':{t:x=>x},'./modelSettingsLogic':{connectionReady:c=>!!(c.api_key||c.has_key)}})
+  const slotLogic=loadTs('defaultModelSlots.ts',{'../../i18n':{t:x=>x}})
   const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const hook=load('../features/settings/useModelSettings',{
     react,antd:{message:{success(){},error(){}}},'../../i18n':{t:x=>x},'../studio/api':{errorText:()=> 'redacted'},
