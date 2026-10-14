@@ -442,20 +442,28 @@ class LLMManager:
             raise
     
     def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3, **kwargs) -> str:
-        """带重试机制的LLM调用"""
-        for attempt in range(max_retries):
+        """Retry only invalid_response / timeline_empty, at most twice.
+
+        Other types classified by classify_upstream_error (401/429/5xx/timeout/…)
+        are not retried here. ``max_retries`` cannot raise that ceiling.
+        """
+        from backend.core.result_retry import MAX_RETRIES, classify_for_retry
+
+        attempt = 0
+        ceiling = min(MAX_RETRIES, max(0, max_retries - 1)) if max_retries > 0 else 0
+        while True:
             try:
                 return self.call(prompt, input_data, **kwargs)
-            except ValueError:  # 如果是API Key或参数错误，不重试
-                raise
-            except Exception as e:
-                if attempt == max_retries - 1:
-                    logger.error(f"LLM调用在{max_retries}次重试后彻底失败。")
+            except Exception as error:
+                kind, retryable = classify_for_retry(error)
+                if not retryable or attempt >= ceiling:
+                    if attempt:
+                        logger.error("LLM调用在%s次后失败（%s）。", attempt + 1, kind)
                     raise
-                logger.warning(f"第{attempt + 1}次调用失败，准备重试: {str(e)}")
+                logger.warning("第%s次调用失败（%s），准备重试: %s", attempt + 1, kind, error)
                 import time
-                time.sleep(2 ** attempt)  # 指数退避
-        return ""
+                time.sleep(2 ** attempt)
+                attempt += 1
     
     def test_provider_connection(self, provider_type: ProviderType, api_key: str, model_name: str,
                                  **provider_kwargs) -> bool:

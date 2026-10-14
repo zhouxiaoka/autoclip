@@ -135,7 +135,9 @@ class TimelineExtractor:
                 }
                 # Cache replay follows the same parser. An invalid cache is a
                 # failed chunk, never permission to silently make a paid call.
-                attempts = 1 if cached else 3
+                # invalid_response: first request + at most two retries.
+                from backend.core.result_retry import MAX_ATTEMPTS
+                attempts = 1 if cached else MAX_ATTEMPTS
                 for retry_count in range(attempts):
                     raw_response = ""
                     try:
@@ -425,15 +427,23 @@ def run_step2_timeline(outline_path: Path, metadata_dir: Path = None, output_pat
     # 加载大纲
     with open(outline_path, 'r', encoding='utf-8') as f:
         outlines = json.load(f)
-        
-    timeline_data = extractor.extract_timeline(outlines)
-    
-    # 保存结果
+
+    from backend.core.result_retry import MAX_ATTEMPTS, classify_for_retry
+
     if output_path is None:
         output_path = metadata_dir / "step2_timeline.json"
-        
-    extractor.save_timeline(timeline_data, output_path)
-    if not timeline_data:
-        raise timeline_failure_from_report(len(outlines), extractor.extraction_report)
-    
-    return timeline_data
+
+    last_failure = None
+    for attempt in range(MAX_ATTEMPTS):
+        timeline_data = extractor.extract_timeline(outlines)
+        extractor.save_timeline(timeline_data, output_path)
+        if timeline_data:
+            return timeline_data
+        last_failure = timeline_failure_from_report(len(outlines), extractor.extraction_report)
+        kind, retryable = classify_for_retry(last_failure)
+        # invalid_response already used its budget in the per-chunk JSON loop.
+        if kind != "timeline_empty" or not retryable or attempt >= MAX_ATTEMPTS - 1:
+            raise last_failure
+        for cached in extractor.llm_raw_output_dir.glob("chunk_*.txt"):
+            cached.unlink(missing_ok=True)
+    raise last_failure
