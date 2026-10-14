@@ -53,7 +53,7 @@ export function assignment(connectionId: string, model: string, source: ModelSou
 
 function entryFits(purpose: PurposeId, entry: ModelEntry): boolean {
   if (purpose === 'cover') return !!entry.image
-  if (purpose === 'transcription') return !!entry.asr
+  if (purpose === 'transcription') return !!entry.asr && !!entry.asr_supported && !entry.asr_preview
   if (purpose === 'vision') return !!entry.analysis && entry.capability === 'multimodal'
   return !!entry.analysis
 }
