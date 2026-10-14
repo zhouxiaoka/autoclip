@@ -1,6 +1,6 @@
 # AutoClip 埋点规范（Tracking Plan）
 
-给 Kris 审的规范文档。1.5.7 起按本文件体系统一埋点：先登记，再发送；字段和枚举只引用本规范与第 0 步契约（`backend.core.upstream_errors`、`backend.core.llm_telemetry`、`frontend/src/analytics/successRateContract.ts`），禁止再复制一套分类或脱敏。
+给 Kris 审的规范文档。1.5.7 起按本文件体系统一埋点：先登记，再发送。字段和枚举只引用第 0 步契约（#354，merge `8f49726`，已在 main）：`backend.core.upstream_errors`、`backend.core.llm_telemetry`、`frontend/src/analytics/successRateContract.ts`。禁止再复制一套分类或脱敏；后续代码直接 import 这三处。
 
 **本 PR 只交文档。** 纯埋点代码另开 PR，等本规范确认后再改、再合。已开的上报 PR 标 `[WIP]`，不继续大改。
 
