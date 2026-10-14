@@ -112,7 +112,7 @@ test('generation and production finished carry run identity; failures keep stage
     analysis: { status: 'failed', phase: 'screening', error_code: 'source_no_audio', failure_stage: 'ingest' },
   })
   const screened = screen.find(item => item.event === 'studio_screen_finished').props
-  assert.equal(screened.outcome, 'failed')
+  assert.equal(screened.outcome, 'error')
   assert.equal(screened.error_code, 'source_no_audio')
   assert.equal(screened.failure_stage, 'ingest')
 })
