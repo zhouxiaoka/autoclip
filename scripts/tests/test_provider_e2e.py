@@ -80,7 +80,7 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('needs: [candidate-gate]', desktop)
         self.assertIn('needs.provider-e2e.result == \'success\'', desktop)
         self.assertIn('github.event_name == \'schedule\'', workflow)
-        # Temporary one-shot trigger is present on this commit only; reverted after the 88API probe.
+        self.assertNotIn('e2e-live-once', workflow)
         self.assertIn('provider-e2e-cases', workflow)
         self.assertIn('live_mode', workflow)
         self.assertIn('--expect-live', workflow)
@@ -270,7 +270,7 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('gemini-3.5-flash-lite', doc)
         self.assertIn('qwen-flash', doc)
         self.assertIn('fail-closed', doc)
-        self.assertIn('不要用这个门槛放行发版', doc)
+        self.assertIn('不要只靠这一条探针放行', doc)
         self.assertIn('UpstreamErrorType', doc)
         self.assertIn('billable_calls_before_failure', doc)
         self.assertIn('SUCCESS_RATE_CONTRACT.md', doc)
@@ -636,7 +636,7 @@ class ProviderE2EFailClosedTests(unittest.TestCase):
 
     def test_acceptance_docs_freeze_the_gate(self):
         acceptance = (ROOT / 'docs/TESTING_ACCEPTANCE.md').read_text(encoding='utf-8')
-        self.assertIn('不要用这个门槛放行发版', acceptance)
+        self.assertIn('不要只靠这一条探针放行', acceptance)
         changelog = (ROOT / 'CHANGELOG.md').read_text(encoding='utf-8')
         self.assertIn('gemini-3.5-flash-lite', changelog)
         self.assertIn('api.88api.ai/v1', changelog)

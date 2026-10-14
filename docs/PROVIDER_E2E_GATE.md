@@ -1,6 +1,6 @@
 # 发版前服务商端到端门槛
 
-> **验收冻结：** fail-closed 已在 verify live（Actions `38514864277`）核对。Gemini 默认 `gemini-3.5-flash-lite` 已通过。88API CI 地址是 `https://api.88api.ai/v1`（该 token 的 `/v1/models` 在此返回 200），默认模型是目录里有的 `deepseek-v4-flash`（`gpt-4o-mini` 不在该 token 的模型列表里，旧默认会 503）。在 88API 单探针跑绿之前，**不要用这个门槛放行发版**。mock 套件本身仍可用来挡回归。
+> **验收冻结：** fail-closed 已在 verify live（Actions `38514864277`）核对。Gemini 默认 `gemini-3.5-flash-lite` 已通过。88API 单探针（Actions `38516691310`，`https://api.88api.ai/v1` + `deepseek-v4-flash`）已通过。完整发版仍要走分层 live，**不要只靠这一条探针放行**。mock 套件本身仍可用来挡回归。
 
 1.5.8 起，Desktop Build 在 `candidate-gate` 之后、Release Acceptance 之前必须通过 [`.github/workflows/provider-e2e-gate.yml`](../.github/workflows/provider-e2e-gate.yml)。它在 Linux 上起无界面桌面后端（`backend.desktop_main`），用 Studio HTTP 跑「导入 → 自动出片」，不打开 UI。
 
@@ -117,7 +117,7 @@ Mock 套件为 0。本门槛只走字幕 + 自带 SRT，不跑 Whisper，也不�
 ## 接入发版链路
 
 - [`desktop-build.yml`](../.github/workflows/desktop-build.yml) 的 `provider-e2e` job `needs: candidate-gate`，与双平台打包并行。未打 tag 时只跑 mock；`v*` tag 才跑 `prerelease` live。
-- `release` 与 `internal-provenance` 都要求具名 `provider-e2e` job 成功。fail-closed 已在 `38514864277` 核对；88API 仍红时不要据此放行发版。live 滚动窗口在样本未满 20 条时不额外卡；当次服务商失败仍红。
+- `release` 与 `internal-provenance` 都要求具名 `provider-e2e` job 成功。fail-closed 已在 `38514864277` 核对；88API 单探针已在 `38516691310` 通过。live 滚动窗口在样本未满 20 条时不额外卡；当次服务商失败仍红。
 - [`scripts/release_acceptance.py`](../scripts/release_acceptance.py) 的 `BUILD_JOBS` 含 `provider-e2e`，Release Acceptance 会核对 Desktop Build 里这个 job。
 
 矩阵、轮转与故障定义见 [`scripts/provider_e2e/matrix.py`](../scripts/provider_e2e/matrix.py)。判定与故障注入引用 [成功率共享契约](SUCCESS_RATE_CONTRACT.md) 的 `UpstreamErrorType` 与 `billable_calls_before_failure`，不另造一套码。
