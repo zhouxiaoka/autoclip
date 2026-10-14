@@ -75,33 +75,29 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
   const byId: Record<string, ModelOffer[]> = {}
   const key = CANDIDATE_KEY[purpose]
   for (const connection of settings.connections) {
-    const live = (lists[connection.id]?.models || []).filter(entry => entryFits(purpose, entry))
+    const list = lists[connection.id]
+    const live = (list?.models || []).filter(entry => entryFits(purpose, entry))
     const ready = connectionReady(connection)
-    if (live.length) {
-      for (const entry of live) {
-        addOffer(byId, {
-          modelId: entry.id, provider: connection.provider, connectionId: connection.id,
-          connected: ready, displayName: displayName(connection),
-        })
-      }
-    } else if (ready) {
-      for (const modelId of getProvider(connection.provider)?.candidates[key] || []) {
-        addOffer(byId, {
-          modelId, provider: connection.provider, connectionId: connection.id,
-          connected: true, displayName: displayName(connection),
-        })
-      }
+    for (const entry of live) {
+      addOffer(byId, {
+        modelId: entry.id, provider: connection.provider, connectionId: connection.id,
+        connected: ready, displayName: displayName(connection),
+      })
     }
+    // A live/cache list with no suitable model is authoritative: do not invent catalog candidates.
   }
   for (const modelId of Object.keys(byId)) {
     const offers = byId[modelId]
     for (const preset of Object.values(getCatalog().providers)) {
       if (!(preset.candidates[key] || []).includes(modelId)) continue
       if (offers.some(item => item.provider === preset.id)) continue
-      const connection = settings.connections.find(item => item.provider === preset.id && connectionReady(item))
+      const connection = settings.connections.find(item => item.provider === preset.id)
+      const list = connection && lists[connection.id]
+      if (list && !list.models.some(entry => entry.id === modelId && entryFits(purpose, entry))) continue
       addOffer(byId, {
         modelId, provider: preset.id, connectionId: connection?.id,
-        connected: !!connection, displayName: preset.short_name || preset.display_name,
+        connected: !!connection && connectionReady(connection) && !!list,
+        displayName: preset.short_name || preset.display_name,
       })
     }
   }

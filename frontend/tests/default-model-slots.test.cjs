@@ -56,6 +56,17 @@ test('provider rank is recommended then popular then other', () => {
   assert.ok(slots.providerRank('dashscope') < slots.providerRank('openrouter'))
 })
 
+test('a live list without a suitable model does not invent catalog candidates', () => {
+  const groups = slots.collectModelGroups(settings(), lists, 'transcription')
+  assert.equal(groups.length, 0)
+  const cover = slots.collectModelGroups(settings(), lists, 'cover')
+  assert.equal(cover.some(group => group.modelId === 'wanx2.1-t2i-turbo'), true, 'image models that are on a live list stay')
+  const emptyCover = slots.collectModelGroups(settings({
+    connections: [conn('ds', 'dashscope')],
+  }), { ds: { source: 'live', models: [{ id: 'qwen-plus', capability: 'text', analysis: true, image: false }] } }, 'cover')
+  assert.equal(emptyCover.length, 0)
+})
+
 test('the same model id is listed once and smart pick prefers the sponsor connection', () => {
   const groups = slots.collectModelGroups(settings(), lists, 'analysis')
   const gpt = groups.find(group => group.modelId === 'gpt-4o-mini')
