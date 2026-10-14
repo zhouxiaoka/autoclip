@@ -47,12 +47,6 @@ class Connection(BaseModel):
         # fall back to auto instead of rejecting every connection (and every task) with it.
         return value if value in ('auto', 'openai', 'seedream', 'dashscope', 'fal') else 'auto'
 
-    @model_validator(mode='after')
-    def custom_requires_url(self):
-        if self.provider == 'compatible' and not self.base_url:
-            raise ValueError('请填写自定义服务的接口地址')
-        return self
-
     @field_validator('api_key')
     @classmethod
     def strip_key(cls, value):
@@ -60,15 +54,37 @@ class Connection(BaseModel):
             return None
         return value.strip() if isinstance(value, str) else value
 
+    @model_validator(mode='after')
+    def custom_requires_url(self):
+        if self.provider == 'compatible' and not self.base_url:
+            raise ValueError('请填写自定义服务的接口地址')
+        return self
+
     @field_validator('base_url', 'image_base_url')
     @classmethod
     def valid_url(cls, value):
-        value = ''.join((value or '').split()).rstrip('/')
+        from backend.core.provider_url import cleanup_base_url
+        value = cleanup_base_url(value)
         if value:
             parsed = urlparse(value)
             if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
                 raise ValueError('请填写不含密钥或查询参数的 HTTP(S) 接口地址')
         return value
+
+    @model_validator(mode='after')
+    def normalize_provider_url(self):
+        from backend.core.provider_url import normalize_provider_base_url
+        if self.base_url:
+            from backend.core.provider_endpoint import normalize_provider_base_url as line_b_normalize
+            # Only reuse line B when it stripped a pasted /chat/completions.
+            # Other rewrites stay in provider_url so dedicated Bailian hosts
+            # and Gemini official paths are not given a stray /v1.
+            info = line_b_normalize(self.base_url)
+            source = info.url if 'chat_completions' in info.warnings else self.base_url
+            self.base_url = normalize_provider_base_url(source, self.provider)
+        if self.image_base_url:
+            self.image_base_url = normalize_provider_base_url(self.image_base_url, 'image')
+        return self
 
     @field_validator('name', 'id')
     @classmethod
@@ -85,13 +101,6 @@ class Connection(BaseModel):
         if text and text not in UPSTREAM_ERROR_TYPES:
             return ''
         return text
-
-    @model_validator(mode='after')
-    def normalize_compatible_url(self):
-        if self.provider == 'compatible' and self.base_url:
-            from backend.core.provider_endpoint import normalize_provider_base_url
-            self.base_url = normalize_provider_base_url(self.base_url).url
-        return self
 
 
 class Assignment(BaseModel):

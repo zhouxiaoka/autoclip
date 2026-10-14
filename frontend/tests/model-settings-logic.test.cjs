@@ -31,7 +31,8 @@ const access = load('providerAccess.ts', {
   './providers': providers,
   '../../analytics/successRateContract': loadContract(),
 })
-const logic = load('modelSettingsLogic.ts', { './providers': providers, './modelDefaults': defaults, './providerAccess': access })
+const urls = load('providerUrl.ts', {})
+const logic = load('modelSettingsLogic.ts', { './providers': providers, './modelDefaults': defaults, './providerAccess': access, './providerUrl': urls })
 
 const plain = x => JSON.parse(JSON.stringify(x))
 const conn = (id, provider, extra = {}) => ({ id, name: provider, provider, base_url: '', api_key: '', image_api: 'auto', image_base_url: '', ...extra })
@@ -130,6 +131,25 @@ test('cover follows or separates from the main connection without nested toggles
   const enabled = logic.setCoverEnabled(fresh(), true, lists)
   assert.equal(enabled.cover_enabled, true)
   assert.equal(enabled.cover.model, 'wanx2.1-t2i-turbo')
+})
+
+test('edit and save strip surrounding spaces and newlines from the API key', () => {
+  const state = { ...fresh(), connections: [conn('a', 'openai', { api_key: '  sk-live  \n' })], analysis: { connection_id: 'a', model: 'gpt-4o-mini', capability: 'auto' } }
+  assert.equal(logic.forSave(state).connections[0].api_key, 'sk-live')
+  const edited = logic.editConnection(state, 'a', { api_key: '  sk-new  \n' })
+  assert.equal(edited.connections[0].api_key, 'sk-new')
+  const blank = logic.editConnection(state, 'a', { api_key: '   ' })
+  assert.equal(blank.connections[0].api_key, '')
+})
+
+test('edit collapses URL spaces; save adds or dedupes /v1 without rejecting', () => {
+  const state = { ...fresh(), connections: [conn('a', 'compatible', { base_url: 'https://gw.example' })], analysis: { connection_id: 'a', model: 'gpt-4o-mini', capability: 'auto' } }
+  assert.equal(logic.forSave(state).connections[0].base_url, 'https://gw.example/v1')
+  const spaced = logic.editConnection(state, 'a', { base_url: '  https://gw.example /v1/  ' })
+  assert.equal(spaced.connections[0].base_url, 'https://gw.example/v1/')
+  assert.equal(logic.forSave(spaced).connections[0].base_url, 'https://gw.example/v1')
+  const dashscope = { ...fresh(), connections: [conn('b', 'dashscope', { base_url: 'https://llm-x.cn-beijing.maas.aliyuncs.com' })] }
+  assert.equal(logic.forSave(dashscope).connections[0].base_url, 'https://llm-x.cn-beijing.maas.aliyuncs.com')
 })
 
 test('changing an address drops the stored key so it cannot leak to another endpoint', () => {

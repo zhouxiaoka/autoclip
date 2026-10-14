@@ -1,16 +1,48 @@
-/** 自动检查的节流，以及下载进度、更新说明摘要。不依赖 Tauri。 */
+/** 自动检查的节流、提醒限频，以及下载进度、更新说明摘要。不依赖 Tauri。 */
 
 export const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000
 export const LAST_CHECK_KEY = 'autoclip.updater.lastCheckAt'
 export const LAST_RESULT_KEY = 'autoclip.updater.lastResult'
 export const SNOOZE_KEY = 'autoclip.updater.snoozeVersion'
+export const REMINDERS_ENABLED_KEY = 'autoclip.updater.remindersEnabled'
+export const LAST_REMINDED_VERSION_KEY = 'autoclip.updater.lastRemindedVersion'
+export const LAST_REMINDED_AT_KEY = 'autoclip.updater.lastRemindedAt'
 
 export type CheckResult = 'current' | 'available'
 
 type Reader = { getItem(key: string): string | null }
 type Writer = { setItem(key: string, value: string): void }
 
+export function areRemindersEnabled(storage: Reader): boolean {
+  return storage.getItem(REMINDERS_ENABLED_KEY) !== 'false'
+}
+
+export function writeRemindersEnabled(storage: Writer, enabled: boolean): void {
+  storage.setItem(REMINDERS_ENABLED_KEY, enabled ? 'true' : 'false')
+}
+
+/** 同一个新版本 24 小时内最多提醒一次；不同版本可以当天再提醒。关闭开关后不再提醒。 */
+export function shouldRemind(
+  storage: Reader,
+  version: string,
+  now: number,
+  interval = UPDATE_CHECK_INTERVAL_MS,
+): boolean {
+  if (!version || !areRemindersEnabled(storage)) return false
+  const lastVersion = storage.getItem(LAST_REMINDED_VERSION_KEY) || ''
+  if (lastVersion !== version) return true
+  const last = Number(storage.getItem(LAST_REMINDED_AT_KEY) || 0)
+  if (!Number.isFinite(last) || last <= 0) return true
+  return now - last >= interval
+}
+
+export function rememberReminder(storage: Writer, version: string, now: number): void {
+  storage.setItem(LAST_REMINDED_VERSION_KEY, version)
+  storage.setItem(LAST_REMINDED_AT_KEY, String(now))
+}
+
 export function shouldCheckAutomatically(storage: Reader, now: number, interval = UPDATE_CHECK_INTERVAL_MS): boolean {
+  if (!areRemindersEnabled(storage)) return false
   if (storage.getItem(LAST_RESULT_KEY) === 'available') return true
   const last = Number(storage.getItem(LAST_CHECK_KEY) || 0)
   if (!Number.isFinite(last) || last <= 0) return true

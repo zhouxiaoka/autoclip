@@ -92,9 +92,9 @@ const SettingsPage: React.FC = () => {
 
           {/* ---------------- 反馈 ---------------- */}
           {active === 'feedback' && (
-            <Section title={t("反馈")} description={t("哪里不对、想要什么，直接说。运行环境会自动附上，不含视频内容与 API 密钥。正文会公开出现在 GitHub。")}>
+            <Section title={t("反馈")} description={t("哪里不对、想要什么，直接说。运行环境会自动附上，不含视频内容与 API 密钥。发送后正文和可选联系方式会先到 PostHog，再公开到 GitHub；邮箱不会公开。")}>
               <div className="ac-rows">
-                <Row label={t("发送反馈")} hint={t("在应用内写一句话即可。故障会进 GitHub Issue，想法会进 Discussions。")}>
+                <Row label={t("发送反馈")} hint={t("在应用内写一句话即可。会先经 PostHog 送达；故障进 GitHub Issue，想法进 Discussions。")}>
                   <Btn variant="cta" size="sm" style={{ height: 32, fontSize: 13, padding: '0 16px' }} onClick={() => setFeedbackOpen(true)}>
                     <Icon.Chat size={13} />{t("写反馈")}</Btn>
                 </Row>
@@ -221,17 +221,22 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         </Row>
         <OutputBrandingSetting />
         {(desktop || appUpdate.preview) && (
-          <Row label={t('版本')} hint={versionHint}>
-            {appUpdate.phase === 'ready' || appUpdate.phase === 'restarting' ? (
-              <Btn size="sm" variant="cta" loading={appUpdate.phase === 'restarting'} onClick={() => void appUpdate.restart()}>{t('更新并重启')}</Btn>
-            ) : appUpdate.phase === 'downloading' ? (
-              <Btn size="sm" onClick={appUpdate.showToast}>{t('查看进度')}</Btn>
-            ) : appUpdate.phase === 'failed' ? (
-              <Btn size="sm" onClick={() => void appUpdate.retry()}>{t('重试')}</Btn>
-            ) : (
-              <Btn size="sm" loading={appUpdate.phase === 'checking'} onClick={() => void handleCheckUpdate()}>{t('检查更新')}</Btn>
-            )}
-          </Row>
+          <>
+            <Row label={t('版本')} hint={versionHint}>
+              {appUpdate.phase === 'ready' || appUpdate.phase === 'restarting' ? (
+                <Btn size="sm" variant="cta" loading={appUpdate.phase === 'restarting'} onClick={() => void appUpdate.restart()}>{t('更新并重启')}</Btn>
+              ) : appUpdate.phase === 'downloading' ? (
+                <Btn size="sm" onClick={appUpdate.showToast}>{t('查看进度')}</Btn>
+              ) : appUpdate.phase === 'failed' ? (
+                <Btn size="sm" onClick={() => void appUpdate.retry()}>{t('重试')}</Btn>
+              ) : (
+                <Btn size="sm" loading={appUpdate.phase === 'checking'} onClick={() => void handleCheckUpdate()}>{t('检查更新')}</Btn>
+              )}
+            </Row>
+            <Row label={t('启动时检查更新')} hint={t('发现新版本时提醒，同一版本一天最多一次。关闭后仍可手动检查。')}>
+              <Switch checked={appUpdate.remindersEnabled} onChange={appUpdate.setRemindersEnabled} />
+            </Row>
+          </>
         )}
         <Row label={t("匿名使用统计")} hint={t("只采集功能使用、出片成功 / 失败等匿名事件，不含视频内容、字幕文本或 API 密钥。关闭后仍可在反馈里主动发送。")}>
           <Switch checked={analyticsOn} onChange={onAnalyticsChange} />

@@ -11,6 +11,7 @@ import {
   canEditAddress, hintProviderForKey, keyHintCopy, normalizeCompatibleUrl,
   sponsorKeyLink, validationCopy,
 } from './providerAccess'
+import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
 
 const ENDPOINT_ERRORS = new Set(['bad_endpoint', 'connection', 'timeout'])
 const KEY_ERRORS = new Set(['invalid_key', 'insufficient_quota', 'permission_denied'])
@@ -74,13 +75,14 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
             onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />
         </Row>)}
-    {addressEditable && <Row wide label={t('接口地址')} hint={[preset?.local ? t('本机服务无需 API Key，保持默认地址即可。') : '', contextHintFor(key, connection.base_url)].filter(Boolean).join(' ') || undefined}>
+    {addressEditable && <Row wide label={t('接口地址')} hint={[preset?.local ? t('本机服务无需 API Key，保持默认地址即可。') : key === 'dashscope' ? t('使用百炼专属接入地址时填写，留空用默认地址。') : '', contextHintFor(key, connection.base_url)].filter(Boolean).join(' ') || undefined}>
       <Input aria-label={label(t('接口地址'))} value={connection.base_url}
         status={(urlInfo?.warnings.includes('console_host') || (failed && ENDPOINT_ERRORS.has(errorType))) ? 'error' : undefined}
-        placeholder={preset?.local?.baseUrl || 'https://example.com/v1'}
-        onChange={e => onEdit({ base_url: e.target.value.replace(/\s+/g, '') })}
+        placeholder={preset?.local?.baseUrl || (key === 'dashscope' ? 'https://dashscope.aliyuncs.com/api/v1' : 'https://example.com/v1')}
+        onChange={e => onEdit({ base_url: collapseSpaces(e.target.value) })}
         onBlur={() => {
-          const { url } = normalizeCompatibleUrl(connection.base_url)
+          const stripped = key === 'compatible' ? normalizeCompatibleUrl(connection.base_url).url : connection.base_url
+          const url = normalizeProviderBaseUrl(stripped, key)
           if (url !== connection.base_url) onEdit({ base_url: url })
         }} />
     </Row>}

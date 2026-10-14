@@ -40,6 +40,7 @@ test('sponsor selection, offer, registration link and attribution follow the cho
     '../../analytics/events': { trackSponsorLinkOpened: event => events.push(plain(event)) },
     './providers': providers, './modelSettingsLogic': { presetKey: c => c.provider },
     './providerAccess': access,
+    './providerUrl': load('providerUrl.ts', {}),
   }).default
   const options = providers.providerPickerOptions()
   assert.deepEqual(Array.from(options[0].options, p => p.value), ['api88', 'infistar'])

@@ -1,4 +1,6 @@
-# AutoClip 业务分析 V2：实现与验收
+# AutoClip 业务分析 V2：实现与验收（历史）
+
+> **2026-10-14：本页是历史说明，不再是准绳。** 现行规范是 [analytics/TRACKING_PLAN.md](analytics/TRACKING_PLAN.md)。`clips_exported` / `video_imported` / `api_key_configured` 已列入废弃，停发日见规范 §12。
 
 更新：2026-09-21。状态：已合入 v1.3.1。契约测试及构建检查通过；新看板查询已准备，真实 PostHog 接收与业务转化基线仍需独立验收，不能由离线测试推断。
 

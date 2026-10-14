@@ -113,3 +113,28 @@ test('Studio dynamic label maps and validation messages have translations in all
     visit(source)
   }
 })
+
+test('feedback dialog discloses developer delivery in every locale', () => {
+  const key = '内容和联系方式会发送给开发者，用于回复和创建 GitHub Issue。'
+  for (const lang of langs) {
+    assert.ok(Object.hasOwn(catalogs[lang], key), `${lang}: ${key}`)
+    assert.ok(catalogs[lang][key].trim(), `${lang}: ${key}`)
+  }
+  assert.ok(catalogs.zh[key].includes('GitHub Issue'))
+  assert.ok(catalogs.en[key].includes('GitHub Issue'))
+})
+
+test('feedback disclosure tells every locale that send goes through PostHog', () => {
+  const keys = [
+    '已收到。这句话会先到 PostHog，再公开出现在 GitHub。',
+    '发送后会先到 PostHog，再公开到 GitHub；邮箱不会公开。',
+    '联系方式（可选，邮箱，只经 PostHog 送达，不会公开）',
+    '在应用内写一句话即可。会先经 PostHog 送达；故障进 GitHub Issue，想法进 Discussions。',
+  ]
+  for (const key of keys) {
+    for (const lang of langs) {
+      assert.ok(Object.hasOwn(catalogs[lang], key), `${lang}: ${key}`)
+      assert.ok(catalogs[lang][key].includes('PostHog'), `${lang}: ${key}`)
+    }
+  }
+})

@@ -20,6 +20,7 @@ def checks(group: str, python: str):
         'contracts': [
             ('versions', [python, 'scripts/bump_version.py', '--check'], ROOT),
             ('readmes', [python, 'scripts/check_readmes.py'], ROOT),
+            ('tracking_inventory', [python, 'scripts/check_tracking_inventory.py'], ROOT),
             ('release_gate_tests', [python, '-m', 'unittest', 'discover', '-s', 'scripts/tests', '-p', 'test_*.py'], ROOT),
         ],
         'backend': [

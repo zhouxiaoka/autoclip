@@ -69,6 +69,15 @@ test('stable failure code and transcription role survive capture and fallback se
   assert.ok(!body.includes('person@example.com'))
 })
 
+test('feedback dialog discloses that text and contact go to developers', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../src/components/FeedbackDialog.tsx'), 'utf8')
+  assert.ok(src.includes('内容和联系方式会发送给开发者，用于回复和创建 GitHub Issue。'))
+  const { buildFeedbackDraft, captureProperties } = loadDraft()
+  const props = captureProperties(buildFeedbackDraft(draftInput))
+  assert.equal(props.text.includes('进度停住了'), true)
+  assert.equal(props.contact, 'person@example.com')
+})
+
 test('arbitrary failure codes and transcription provider payloads are not published', () => {
   const { buildFeedbackDraft, captureProperties, githubFallbackUrl } = loadDraft()
   const draft = buildFeedbackDraft({ ...draftInput, errorCode: 'private-path', transcriptionProvider: 'secret-url', transcriptionModel: 'sk-test-abc1234567890' })

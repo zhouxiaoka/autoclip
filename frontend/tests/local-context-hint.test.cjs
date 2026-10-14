@@ -53,6 +53,7 @@ test('the address row shows the hint for local setups only', () => {
     '../../analytics/events': { trackSponsorLinkOpened() {} },
     './providers': providers, './modelSettingsLogic': { presetKey: c => c.provider },
     './providerAccess': access,
+    './providerUrl': load('providerUrl.ts', {}),
   }).default
   const hints = connection => flatten(Fields({ connection, placement: 'settings_model', onChoose() {}, onEdit() {} }))
     .filter(node => React.isValidElement(node) && node.type === 'row').map(node => node.props.hint).filter(h => typeof h === 'string')

@@ -2,6 +2,7 @@ import { isDesktopMode } from '../utils/desktopMode'
 import {
   rememberSuccessfulCheck,
   shouldCheckAutomatically,
+  shouldRemind,
   type ProgressSnap,
 } from './updateSchedule'
 
@@ -69,7 +70,7 @@ export async function checkForUpdate(): Promise<AppUpdate | null> {
 
 let automaticCheck: Promise<AppUpdate | null> | null = null
 
-/** 生产桌面端：已是最新时 24 小时内不再查。上次发现过新版本，或上次检查失败，下次打开会再查。 */
+/** 生产桌面端自动检查：关闭提醒则不查；已是最新时 24 小时内不再查。发现过新版本或检查失败时下次打开会再查，但同一版本一天最多提醒一次。离线/限流静默失败。 */
 export function maybeCheckForUpdate(): Promise<AppUpdate | null> {
   if (automaticCheck) return automaticCheck
   automaticCheck = runAutomaticCheck().finally(() => { automaticCheck = null })
@@ -85,6 +86,10 @@ async function runAutomaticCheck(): Promise<AppUpdate | null> {
   try {
     const update = await checkForUpdate()
     if (storage) rememberSuccessfulCheck(storage, Date.now(), update ? 'available' : 'current')
+    if (update && storage && !shouldRemind(storage, update.version, Date.now())) {
+      void update.close().catch(() => undefined)
+      return null
+    }
     return update
   } catch {
     return null

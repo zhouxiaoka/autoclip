@@ -79,7 +79,7 @@ def test_step1_all_chunks_failing_surfaces_llm_error(tmp_path, prompt_files, mon
 def test_step1_unparseable_response_is_a_failure_not_empty_list(tmp_path, prompt_files, monkeypatch):
     srt = tmp_path / "a.srt"
     srt.write_text(SRT, encoding="utf-8")
-    extractor = _extractor(tmp_path, prompt_files, monkeypatch, ["抱歉，我无法完成这个任务。"])
+    extractor = _extractor(tmp_path, prompt_files, monkeypatch, ["抱歉，我无法完成这个任务。"] * 3)
 
     with pytest.raises(PipelineFailure) as exc:
         extractor.extract_outline(srt)
@@ -518,7 +518,7 @@ def test_step1_provider_500_reaches_failure_context_http_status(tmp_path, prompt
 
     assert exc.value.stage == "ANALYZE"
     assert studio_error_code(exc.value) == "provider_error"
-    assert studio_failure_context(exc.value, "production") == {"failure_stage": "analyze", "http_status": 500}
+    assert studio_failure_context(exc.value, "production") == {"failure_stage": "analyze", "http_status": 500, "upstream_error_type": "upstream_unavailable"}
 
 
 def test_timeline_call_failure_report_carries_http_status():
@@ -531,7 +531,7 @@ def test_timeline_call_failure_report_carries_http_status():
     ]}
     failure = timeline_failure_from_report(2, report)
     assert failure.code == "provider_error"
-    assert studio_failure_context(failure, "production") == {"failure_stage": "analyze", "http_status": 503}
+    assert studio_failure_context(failure, "production") == {"failure_stage": "analyze", "http_status": 503, "upstream_error_type": "upstream_unavailable"}
 
     no_status = timeline_failure_from_report(2, {"parsed": 0, "chunks": [
         {"outcome": "call_failed", "error_code": "connection"},
