@@ -876,9 +876,11 @@ async def list_compatible_models(base_url: str = "", provider: str = "openai", a
     if not url:
         raise HTTPException(status_code=400, detail="缺少 base_url")
     try:
+        from starlette.concurrency import run_in_threadpool
         from backend.core.provider_model_fetch import list_account_models
         key = (api_key or "").strip()
-        result = list_account_models(
+        result = await run_in_threadpool(
+            list_account_models,
             base_url=url,
             api_key=key,
             provider=provider or "openai",

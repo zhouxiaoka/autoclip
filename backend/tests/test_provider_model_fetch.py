@@ -420,6 +420,39 @@ def _settings_router():
     return router
 
 
+def test_compatible_models_runs_fetch_in_threadpool(isolated, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.core.provider_model_fetch import AccountModelList
+
+    seen = []
+
+    def fake_list(**kwargs):
+        seen.append(("list", kwargs.get("base_url"), kwargs.get("provider")))
+        return AccountModelList(ok=True, models=["local-a"], source="live", base_url_host="127.0.0.1")
+
+    async def fake_pool(func, *args, **kwargs):
+        seen.append(("threadpool", func))
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("backend.core.provider_model_fetch.list_account_models", fake_list)
+    monkeypatch.setattr("starlette.concurrency.run_in_threadpool", fake_pool)
+    app = FastAPI()
+    app.include_router(_settings_router())
+    with TestClient(app) as client:
+        response = client.get("/settings/compatible-models", params={
+            "base_url": "http://127.0.0.1:11434/v1",
+            "provider": "ollama",
+        })
+    assert response.status_code == 200
+    assert seen[0] == ("threadpool", fake_list)
+    assert seen[1][0] == "list"
+    assert seen[1][2] == "ollama"
+    assert response.json()["models"] == ["local-a"]
+    assert response.json()["reachable"] is True
+    assert SECRET not in response.text
+
+
 def test_fetch_list_http_endpoint(isolated, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
