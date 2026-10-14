@@ -307,6 +307,22 @@ def _read_json(response: Any) -> tuple[Any, Optional[ClassifiedUpstreamError]]:
     return payload, None
 
 
+def _is_models_page(payload: Any, protocol: str) -> bool:
+    """A live page must carry a list (``data``, ``models``, or a top-level array). ``{}`` is invalid."""
+    if isinstance(payload, list):
+        return True
+    if not isinstance(payload, Mapping):
+        return False
+    if protocol == "google-generative-ai":
+        return isinstance(payload.get("models"), list)
+    data = payload.get("data")
+    if isinstance(data, list):
+        return True
+    if isinstance(data, Mapping):
+        return isinstance(data.get("data") or data.get("models"), list)
+    return isinstance(payload.get("models"), list)
+
+
 def _default_http_get(url: str, *, headers: Mapping[str, str], timeout: float, trust_env: bool) -> Any:
     import httpx
     with httpx.Client(timeout=timeout, trust_env=trust_env, follow_redirects=False) as client:
@@ -388,11 +404,15 @@ def fetch_provider_models(
             if classified.error_type is not UpstreamErrorType.BAD_ENDPOINT:
                 classified = _as_classified(UpstreamErrorType.BAD_ENDPOINT)
             return _failed(classified, host, pages=pages)
-        if status >= 400:
-            return _failed(_classify_http(status, text, models_path=True), host, pages=pages)
+        if status != 200:
+            if status >= 400:
+                return _failed(_classify_http(status, text, models_path=True), host, pages=pages)
+            return _failed(_as_classified(UpstreamErrorType.BAD_ENDPOINT), host, pages=pages)
         payload, parse_error = _read_json(response)
         if parse_error:
             return _failed(parse_error, host, pages=pages)
+        if not _is_models_page(payload, resolved_protocol):
+            return _failed(_as_classified(UpstreamErrorType.BAD_ENDPOINT), host, pages=pages)
 
         page_ids = extract_model_ids(payload, protocol=resolved_protocol)
         for name in page_ids:
