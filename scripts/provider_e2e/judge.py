@@ -1,7 +1,10 @@
-"""Verdict for one report: should-succeed ≥95%, should-block 100% with 0 billable calls."""
+"""Verdict for one report: should-succeed ≥95%, should-block 100% with billable_calls_before_failure=0."""
 from __future__ import annotations
 
 from typing import Any
+
+from backend.core.llm_telemetry import sanitize_upstream_error_type
+from backend.core.upstream_errors import is_retryable
 
 from . import SUCCESS_RATE_THRESHOLD
 
@@ -14,10 +17,40 @@ def _cases(report: dict[str, Any], *expects: str) -> list[dict[str, Any]]:
     return [row for row in report.get('cases') or [] if row.get('expect') in expects]
 
 
+def _injected(row: dict[str, Any]) -> bool:
+    return bool(row.get('expected_upstream_error_type')) or row.get('expect') in {
+        'service_restarted', 'fault',
+    }
+
+
+def billable_calls_before_failure(row: dict[str, Any]) -> int:
+    value = row.get('billable_calls_before_failure')
+    if value is None:
+        value = row.get('billable_calls')
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def success_rate(cases: list[dict[str, Any]]) -> float:
     if not cases:
         return 1.0
     return sum(1 for row in cases if row.get('passed')) / len(cases)
+
+
+def _fault_contract_ok(row: dict[str, Any]) -> bool:
+    expected = sanitize_upstream_error_type(row.get('expected_upstream_error_type'))
+    observed = sanitize_upstream_error_type(
+        row.get('upstream_error_type') or row.get('observed_upstream_error_type')
+    )
+    if row.get('expect') == 'succeed':
+        if expected is None or not is_retryable(expected):
+            return False
+        if observed is not None and observed != expected:
+            return False
+        return True
+    return True
 
 
 def judge_suite(report: dict[str, Any]) -> dict[str, Any]:
@@ -29,15 +62,14 @@ def judge_suite(report: dict[str, Any]) -> dict[str, Any]:
             'should_succeed_rate': None,
             'should_block_rate': None,
         }
-    succeed = _cases(report, 'succeed')
+    all_cases = [row for row in report.get('cases') or []]
+    succeed = [row for row in _cases(report, 'succeed') if not _injected(row)]
     blocked = _cases(report, 'block')
-    faults = _cases(report, 'service_restarted', 'fault')
-    # Fault cases that expect a successful pipeline after injection use expect=succeed
-    # and already sit in `succeed`. Kill uses expect=service_restarted.
+    faults = [row for row in all_cases if _injected(row)]
     succeed_rate = success_rate(succeed)
     block_ok = all(row.get('passed') for row in blocked) if blocked else True
-    billable_ok = all((row.get('billable_calls') or 0) == 0 for row in blocked)
-    fault_ok = all(row.get('passed') for row in faults) if faults else True
+    billable_ok = all(billable_calls_before_failure(row) == 0 for row in blocked)
+    fault_ok = all(row.get('passed') and _fault_contract_ok(row) for row in faults) if faults else True
     passed = (
         succeed_rate >= SUCCESS_RATE_THRESHOLD
         and block_ok and billable_ok and fault_ok
@@ -49,9 +81,9 @@ def judge_suite(report: dict[str, Any]) -> dict[str, Any]:
     if blocked and not block_ok:
         reasons.append('should-block case failed')
     if blocked and not billable_ok:
-        reasons.append('should-block made a billable call')
+        reasons.append('should-block billable_calls_before_failure != 0')
     if faults and not fault_ok:
-        reasons.append('fault injection did not match the expected outcome')
+        reasons.append('fault injection did not match the expected UpstreamErrorType or outcome')
     history = report.get('history') or {}
     history_note = None
     if history.get('available') and history.get('cumulative_success_rate') is not None:

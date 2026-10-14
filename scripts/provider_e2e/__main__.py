@@ -98,11 +98,16 @@ def run_mock(out: Path, python: str, timeout: float, extras: list[str]) -> dict:
                 extras=extras,
                 kill_after_request=server if kill else None,
                 restart_after_kill=kill,
+                expected_upstream_error_type=fault.get('upstream_error_type'),
+                mock_server=server,
             ))
         snapshot = server.state.snapshot()
     finally:
         stop(server)
-    succeed = [row for row in cases if row.get('expect') == 'succeed']
+    succeed = [
+        row for row in cases
+        if row.get('expect') == 'succeed' and not row.get('expected_upstream_error_type')
+    ]
     rate = sum(1 for row in succeed if row.get('passed')) / len(succeed) if succeed else 1.0
     report = {
         'schema_version': SCHEMA_VERSION,
@@ -159,7 +164,10 @@ def run_live(out: Path, python: str, timeout: float, env: dict[str, str], extras
                 timeout=timeout,
                 extras=extras,
             ))
-    succeed = [row for row in cases if row.get('expect') == 'succeed']
+    succeed = [
+        row for row in cases
+        if row.get('expect') == 'succeed' and not row.get('expected_upstream_error_type')
+    ]
     rate = sum(1 for row in succeed if row.get('passed')) / len(succeed) if succeed else 1.0
     report = {
         'schema_version': SCHEMA_VERSION,

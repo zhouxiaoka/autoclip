@@ -6,6 +6,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+from backend.core.llm_telemetry import sanitize_upstream_error_type
+from backend.core.upstream_errors import is_retryable
+
 from .backend import DesktopBackend
 from .http_util import HttpError, get_json, post_multipart
 from .mask import redact
@@ -13,7 +16,7 @@ from .mock_openai import MockServer
 from .settings import write_data_dir
 
 
-def billable_calls(data_dir: Path, project_id: str) -> int:
+def billable_calls_before_failure(data_dir: Path, project_id: str) -> int:
     path = data_dir / 'projects' / project_id / 'metadata' / 'llm_usage.jsonl'
     if not path.is_file():
         return 0
@@ -27,6 +30,19 @@ def billable_calls(data_dir: Path, project_id: str) -> int:
             continue
         count += 1
     return count
+
+
+billable_calls = billable_calls_before_failure
+
+
+def _observed_upstream_error_type(server: MockServer | None, since: int) -> str | None:
+    if server is None:
+        return None
+    for event in server.state.snapshot()['events'][since:]:
+        value = sanitize_upstream_error_type(event.get('upstream_error_type'))
+        if value:
+            return value
+    return None
 
 
 def _workspace(base_url: str, project_id: str) -> dict[str, Any]:
@@ -86,7 +102,15 @@ def import_project(base_url: str, fixture: dict[str, Any]) -> str:
     return str(project_id)
 
 
-def evaluate_case(expect: str, workspace: dict[str, Any], billable: int, block_code: str | None = None) -> dict[str, Any]:
+def evaluate_case(
+    expect: str,
+    workspace: dict[str, Any],
+    billable_calls_before_failure: int,
+    block_code: str | None = None,
+    *,
+    expected_upstream_error_type: str | None = None,
+    observed_upstream_error_type: str | None = None,
+) -> dict[str, Any]:
     generation = workspace.get('generation') or {}
     analysis = workspace.get('analysis') or {}
     error_code = generation.get('error_code') or analysis.get('error_code')
@@ -95,19 +119,33 @@ def evaluate_case(expect: str, workspace: dict[str, Any], billable: int, block_c
     completed = [row for row in variants if row.get('status') == 'completed']
     if expect == 'succeed':
         passed = status == 'completed' and bool(completed) and not workspace.get('poll_timeout')
-        return {
-            'passed': passed,
-            'reason': None if passed else f'status={status} completed_variants={len(completed)} code={error_code}',
-        }
+        reason = None if passed else f'status={status} completed_variants={len(completed)} code={error_code}'
+        if passed and expected_upstream_error_type:
+            expected = sanitize_upstream_error_type(expected_upstream_error_type)
+            observed = sanitize_upstream_error_type(observed_upstream_error_type)
+            if expected is None or not is_retryable(expected):
+                passed = False
+                reason = (
+                    f'expected_upstream_error_type={expected_upstream_error_type} '
+                    'is not a retryable UpstreamErrorType'
+                )
+            elif observed is not None and observed != expected:
+                passed = False
+                reason = f'upstream_error_type={observed} expected={expected}'
+        return {'passed': passed, 'reason': reason}
     if expect == 'block':
         before_start = (generation.get('failure_stage') in (None, 'screening', 'ingest', 'INGEST')
                         or analysis.get('phase') == 'screening'
                         or error_code in {'source_too_short', 'source_no_audio'})
         code_ok = error_code == block_code if block_code else error_code in {'source_too_short', 'source_no_audio'}
-        passed = status == 'failed' and code_ok and before_start and billable == 0
+        passed = status == 'failed' and code_ok and before_start and billable_calls_before_failure == 0
         reason = None
         if not passed:
-            reason = f'status={status} code={error_code} billable={billable} phase={analysis.get("phase")}'
+            reason = (
+                f'status={status} code={error_code} '
+                f'billable_calls_before_failure={billable_calls_before_failure} '
+                f'phase={analysis.get("phase")}'
+            )
         return {'passed': passed, 'reason': reason}
     if expect == 'service_restarted':
         passed = error_code == 'service_restarted'
@@ -131,6 +169,8 @@ def run_case(
     extras: list[str] | None = None,
     kill_after_request: MockServer | None = None,
     restart_after_kill: bool = False,
+    expected_upstream_error_type: str | None = None,
+    mock_server: MockServer | None = None,
 ) -> dict[str, Any]:
     write_data_dir(
         data_dir,
@@ -143,7 +183,8 @@ def run_case(
     project_id = ''
     workspace: dict[str, Any] = {}
     error = None
-    events_before = len(kill_after_request.state.snapshot()['events']) if kill_after_request is not None else 0
+    observer = mock_server or kill_after_request
+    events_before = len(observer.state.snapshot()['events']) if observer is not None else 0
     try:
         base_url = backend.start()
         project_id = import_project(base_url, fixture)
@@ -169,8 +210,16 @@ def run_case(
             error += f' body={exc.body[:400]}'
     finally:
         backend.stop()
-    billable = billable_calls(data_dir, project_id) if project_id else 0
-    judged = evaluate_case(expect, workspace, billable, fixture.get('block_code'))
+    billable = billable_calls_before_failure(data_dir, project_id) if project_id else 0
+    observed = _observed_upstream_error_type(observer, events_before)
+    judged = evaluate_case(
+        expect,
+        workspace,
+        billable,
+        fixture.get('block_code'),
+        expected_upstream_error_type=expected_upstream_error_type,
+        observed_upstream_error_type=observed,
+    )
     if error and expect != 'service_restarted':
         judged = {'passed': False, 'reason': error}
     result = {
@@ -180,7 +229,10 @@ def run_case(
         'project_id': project_id,
         'passed': judged['passed'],
         'reason': judged.get('reason'),
+        'billable_calls_before_failure': billable,
         'billable_calls': billable,
+        'expected_upstream_error_type': expected_upstream_error_type,
+        'upstream_error_type': observed,
         'error_code': (workspace.get('generation') or {}).get('error_code') or (workspace.get('analysis') or {}).get('error_code'),
         'status': (workspace.get('generation') or {}).get('status') or (workspace.get('analysis') or {}).get('status'),
         'failure_stage': (workspace.get('generation') or {}).get('failure_stage'),

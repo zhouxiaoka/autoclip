@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from backend.core.upstream_errors import UpstreamErrorType
+
 # Success clips must be >= short-tier min_clip_sec (20s). 25s keeps files small.
 SUCCESS_DURATION_SEC = 25
 TOO_SHORT_DURATION_SEC = 8
@@ -223,10 +225,34 @@ LIVE_PROVIDERS: tuple[dict[str, Any], ...] = (
 )
 
 FAULTS: tuple[dict[str, Any], ...] = (
-    {'id': 'rate_limited_429', 'label': '429 Retry-After', 'fault': '429', 'expect': 'succeed'},
-    {'id': 'unavailable_503', 'label': '503', 'fault': '503', 'expect': 'succeed'},
-    {'id': 'disconnect', 'label': '断线', 'fault': 'disconnect', 'expect': 'succeed'},
-    {'id': 'kill_backend', 'label': '中途杀后端', 'fault': 'kill', 'expect': 'service_restarted'},
+    {
+        'id': 'rate_limited_429',
+        'label': '429 Retry-After',
+        'fault': '429',
+        'expect': 'succeed',
+        'upstream_error_type': UpstreamErrorType.RATE_LIMITED.value,
+    },
+    {
+        'id': 'unavailable_503',
+        'label': '503',
+        'fault': '503',
+        'expect': 'succeed',
+        'upstream_error_type': UpstreamErrorType.UPSTREAM_UNAVAILABLE.value,
+    },
+    {
+        'id': 'disconnect',
+        'label': '断线',
+        'fault': 'disconnect',
+        'expect': 'succeed',
+        'upstream_error_type': UpstreamErrorType.CONNECTION.value,
+    },
+    {
+        'id': 'kill_backend',
+        'label': '中途杀后端',
+        'fault': 'kill',
+        'expect': 'service_restarted',
+        'upstream_error_type': None,
+    },
 )
 
 MOCK_PROVIDER = {

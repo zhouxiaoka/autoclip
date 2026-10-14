@@ -9,8 +9,8 @@
 | 组合 | 门槛 |
 | --- | --- |
 | 应成功（口播、访谈、英文播客、带字幕、竖屏、游戏、体育、纯音乐） | 当次成功率 ≥ 95%。8 条素材时必须全部通过。 |
-| 应拦下（太短、无音轨） | 100% 在开始前拦下，`llm_usage.jsonl` 付费调用为 0 |
-| 故障注入（本地 mock：429 + `Retry-After`、503、断线、中途杀后端） | 前三项应退避后出片；杀后端后重启应落成 `service_restarted`。不做自动换服务商。 |
+| 应拦下（太短、无音轨） | 100% 在开始前拦下，契约字段 `billable_calls_before_failure = 0`（由 `llm_usage.jsonl` 计数，埋点线落地后读同一字段） |
+| 故障注入（本地 mock：429 + `Retry-After`、503、断线、中途杀后端） | 期望类型用 [`UpstreamErrorType`](SUCCESS_RATE_CONTRACT.md)：`rate_limited` / `upstream_unavailable` / `connection`（均可重试，退避后出片）。杀后端不是上游错误，重启后应落成 `service_restarted`。不做自动换服务商。 |
 
 近 7 次夜间累计成功率会写进报告，当前没有跨 run 历史时只作说明，不单独卡发版。产物是 `provider-e2e-report` artifact（`report.json` / `report.md`），不含密钥。
 
@@ -72,4 +72,4 @@ Mock 套件为 0。本门槛只走字幕 + 自带 SRT，不跑 Whisper，也不�
 - `release` 与 `internal-provenance` 都要求它成功。
 - [`scripts/release_acceptance.py`](../scripts/release_acceptance.py) 的 `BUILD_JOBS` 含 `provider-e2e`，Release Acceptance 会核对 Desktop Build 里这个 job。
 
-矩阵与故障定义见 [`scripts/provider_e2e/matrix.py`](../scripts/provider_e2e/matrix.py)。
+矩阵与故障定义见 [`scripts/provider_e2e/matrix.py`](../scripts/provider_e2e/matrix.py)。判定与故障注入引用 [成功率共享契约](SUCCESS_RATE_CONTRACT.md) 的 `UpstreamErrorType` 与 `billable_calls_before_failure`，不另造一套码。

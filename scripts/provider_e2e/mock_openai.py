@@ -9,6 +9,37 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlparse
 
+from backend.core.upstream_errors import ClassifiedUpstreamError, classify_upstream_error
+
+# Bodies match docs/SUCCESS_RATE_CONTRACT.md / upstream_errors examples so
+# classify_upstream_error() returns the injected UpstreamErrorType.
+FAULT_BODIES: dict[str, dict[str, Any]] = {
+    '429': {
+        'error': {
+            'message': 'Rate limit reached',
+            'type': 'rate_limit_error',
+            'code': 'rate_limit_exceeded',
+        },
+    },
+    '503': {
+        'error': {
+            'message': 'Server is overloaded',
+            'type': 'server_error',
+        },
+    },
+}
+
+
+def classify_injected_fault(fault: str) -> ClassifiedUpstreamError | None:
+    """Map a mock fault id to the contract UpstreamErrorType."""
+    if fault == '429':
+        return classify_upstream_error(429, FAULT_BODIES['429'])
+    if fault == '503':
+        return classify_upstream_error(503, FAULT_BODIES['503'])
+    if fault == 'disconnect':
+        return classify_upstream_error(None, 'Connection error.', error_name='APIConnectionError')
+    return None
+
 
 def classify(text: str) -> str:
     if 'final_score' in text or 'recommend_reason' in text:
@@ -175,20 +206,35 @@ class MockHandler(BaseHTTPRequestHandler):
         if isinstance(messages, list):
             text = '\n'.join(str((item or {}).get('content') or '') for item in messages if isinstance(item, dict))
         fault = _fault_from(path)
-        self.server.state.record({
-            'path': path, 'fault': fault, 'kind': classify(text) if text else None, 'bytes': length,
-        })
+        event = {
+            'path': path,
+            'fault': fault,
+            'kind': classify(text) if text else None,
+            'bytes': length,
+            'upstream_error_type': None,
+        }
         if not _is_chat(path):
+            self.server.state.record(event)
             self._json(404, {'error': {'message': 'not found', 'type': 'invalid_request_error'}})
             return
         if fault == '429' and self.server.state.hit('429') == 1:
-            self._json(429, {'error': {'message': 'rate limited', 'type': 'rate_limit_error', 'code': 'rate_limited'}},
-                       extra={'Retry-After': '1'})
+            classified = classify_injected_fault('429')
+            event['upstream_error_type'] = classified.error_type.value if classified else None
+            event['http_status'] = 429
+            self.server.state.record(event)
+            self._json(429, FAULT_BODIES['429'], extra={'Retry-After': '1'})
             return
         if fault == '503' and self.server.state.hit('503') == 1:
-            self._json(503, {'error': {'message': 'unavailable', 'type': 'server_error'}})
+            classified = classify_injected_fault('503')
+            event['upstream_error_type'] = classified.error_type.value if classified else None
+            event['http_status'] = 503
+            self.server.state.record(event)
+            self._json(503, FAULT_BODIES['503'])
             return
         if fault == 'disconnect' and self.server.state.hit('disconnect') == 1:
+            classified = classify_injected_fault('disconnect')
+            event['upstream_error_type'] = classified.error_type.value if classified else None
+            self.server.state.record(event)
             try:
                 self.connection.shutdown(socket.SHUT_RDWR)
             except OSError:
@@ -198,6 +244,7 @@ class MockHandler(BaseHTTPRequestHandler):
         if fault == 'slow':
             self.server.state.hit('slow')
             time.sleep(self.server.state.slow_seconds)
+        self.server.state.record(event)
         model = str((payload or {}).get('model') or 'mock-gpt')
         self._json(200, chat_payload(completion_body(text), model))
 

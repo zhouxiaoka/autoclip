@@ -7,7 +7,7 @@
 
 ## [未发布]
 
-- 发版增加服务商端到端门槛：Linux 无界面后端按固定素材矩阵出片，本地 mock 覆盖 429 / 503 / 断线和中途杀后端；真实 88API / DeepSeek / Gemini 在 GitHub Environment `provider-e2e` 配好 key 后才跑，没配就跳过并写进报告。应成功组合当次成功率须 ≥95%，太短和无音轨必须在开始前拦下且不产生付费调用。不达标不能出 Release Acceptance。
+- 发版增加服务商端到端门槛：Linux 无界面后端按固定素材矩阵出片，本地 mock 覆盖 429 / 503 / 断线和中途杀后端；真实 88API / DeepSeek / Gemini 在 GitHub Environment `provider-e2e` 配好 key 后才跑，没配就跳过并写进报告。故障注入期望类型用 `UpstreamErrorType`（`rate_limited` / `upstream_unavailable` / `connection`），应拦下组合要求 `billable_calls_before_failure = 0`。应成功组合当次成功率须 ≥95%。不达标不能出 Release Acceptance。
 - 88API 服务商预设接口地址改为 `https://api.88api.ai/v1`（与 provider-e2e 回归一致）。已保存的 `https://88api.ai/v1` 不改写，仍可继续使用。（1.5.7）
 
 - 内容分析对 `invalid_response` / `timeline_empty` 自动重试，每种最多再试 2 次（不含首次）。（1.5.7 #8）HTTP 瞬时错误的退避与付费前 ASR 预检见线 C。

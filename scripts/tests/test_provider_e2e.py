@@ -7,8 +7,10 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / 'scripts'
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(SCRIPTS))
 
+from backend.core.upstream_errors import UpstreamErrorType, is_retryable
 from provider_e2e import SUCCESS_RATE_THRESHOLD, judge, mask, matrix, mock_openai
 from provider_e2e.report import merge_reports
 from provider_e2e.settings import live_ready
@@ -36,8 +38,20 @@ class ProviderE2EContractTests(unittest.TestCase):
     def test_live_providers_and_faults(self):
         ids = {item['id'] for item in matrix.live_providers()}
         self.assertEqual(ids, {'api88', 'deepseek', 'gemini'})
-        faults = {item['fault'] for item in matrix.faults()}
-        self.assertEqual(faults, {'429', '503', 'disconnect', 'kill'})
+        faults = {item['id']: item for item in matrix.faults()}
+        self.assertEqual(set(faults), {'rate_limited_429', 'unavailable_503', 'disconnect', 'kill_backend'})
+        self.assertEqual(faults['rate_limited_429']['upstream_error_type'], UpstreamErrorType.RATE_LIMITED.value)
+        self.assertEqual(faults['unavailable_503']['upstream_error_type'], UpstreamErrorType.UPSTREAM_UNAVAILABLE.value)
+        self.assertEqual(faults['disconnect']['upstream_error_type'], UpstreamErrorType.CONNECTION.value)
+        self.assertIsNone(faults['kill_backend']['upstream_error_type'])
+        for item in faults.values():
+            if item['upstream_error_type'] is None:
+                continue
+            self.assertTrue(is_retryable(item['upstream_error_type']))
+            classified = mock_openai.classify_injected_fault(item['fault'])
+            self.assertIsNotNone(classified)
+            self.assertEqual(classified.error_type.value, item['upstream_error_type'])
+            self.assertTrue(classified.retryable)
 
     def test_release_acceptance_requires_provider_e2e_job(self):
         self.assertIn('provider-e2e', gate.BUILD_JOBS)
@@ -71,8 +85,8 @@ class ProviderE2EContractTests(unittest.TestCase):
     def test_judge_thresholds(self):
         succeed = [{'expect': 'succeed', 'passed': True} for _ in range(8)]
         blocked = [
-            {'expect': 'block', 'passed': True, 'billable_calls': 0},
-            {'expect': 'block', 'passed': True, 'billable_calls': 0},
+            {'expect': 'block', 'passed': True, 'billable_calls_before_failure': 0},
+            {'expect': 'block', 'passed': True, 'billable_calls_before_failure': 0},
         ]
         report = {'cases': succeed + blocked, 'status': 'completed'}
         self.assertTrue(judge.judge_suite(report)['passed'])
@@ -85,10 +99,31 @@ class ProviderE2EContractTests(unittest.TestCase):
 
         billed = dict(report)
         billed['cases'] = succeed + [
-            {'expect': 'block', 'passed': True, 'billable_calls': 1},
-            {'expect': 'block', 'passed': True, 'billable_calls': 0},
+            {'expect': 'block', 'passed': True, 'billable_calls_before_failure': 1},
+            {'expect': 'block', 'passed': True, 'billable_calls_before_failure': 0},
         ]
         self.assertFalse(judge.judge_suite(billed)['passed'])
+        self.assertIn('billable_calls_before_failure', ' '.join(judge.judge_suite(billed)['reasons']))
+
+        injected = dict(report)
+        injected['cases'] = succeed + blocked + [{
+            'expect': 'succeed',
+            'passed': True,
+            'expected_upstream_error_type': UpstreamErrorType.RATE_LIMITED.value,
+            'upstream_error_type': UpstreamErrorType.RATE_LIMITED.value,
+        }]
+        verdict = judge.judge_suite(injected)
+        self.assertTrue(verdict['passed'])
+        self.assertEqual(verdict['should_succeed_n'], 8)
+        self.assertEqual(verdict['fault_n'], 1)
+
+        bad_type = dict(report)
+        bad_type['cases'] = succeed + blocked + [{
+            'expect': 'succeed',
+            'passed': True,
+            'expected_upstream_error_type': 'not_a_contract_type',
+        }]
+        self.assertFalse(judge.judge_suite(bad_type)['passed'])
 
         skipped = {'status': 'skipped', 'reason': 'secrets unset', 'cases': []}
         self.assertTrue(judge.judge_suite(skipped)['skipped'])
@@ -110,6 +145,22 @@ class ProviderE2EContractTests(unittest.TestCase):
             'generation': {'status': 'completed'},
             'output_variants': [{'status': 'completed'}],
         }, 3)['passed'])
+        recovered = evaluate_case(
+            'succeed',
+            {'generation': {'status': 'completed'}, 'output_variants': [{'status': 'completed'}]},
+            8,
+            expected_upstream_error_type=UpstreamErrorType.RATE_LIMITED.value,
+            observed_upstream_error_type=UpstreamErrorType.RATE_LIMITED.value,
+        )
+        self.assertTrue(recovered['passed'])
+        mismatch = evaluate_case(
+            'succeed',
+            {'generation': {'status': 'completed'}, 'output_variants': [{'status': 'completed'}]},
+            8,
+            expected_upstream_error_type=UpstreamErrorType.RATE_LIMITED.value,
+            observed_upstream_error_type=UpstreamErrorType.INVALID_KEY.value,
+        )
+        self.assertFalse(mismatch['passed'])
 
     def test_mock_server_models_and_faults(self):
         server, root = mock_openai.start()
@@ -129,12 +180,19 @@ class ProviderE2EContractTests(unittest.TestCase):
                 chat(root + '/fault/429/v1/chat/completions')
             self.assertEqual(first.exception.code, 429)
             self.assertEqual(first.exception.headers.get('Retry-After'), '1')
+            classified_429 = mock_openai.classify_injected_fault('429')
+            self.assertEqual(classified_429.error_type, UpstreamErrorType.RATE_LIMITED)
+            self.assertTrue(classified_429.retryable)
             second = json.loads(chat(root + '/fault/429/v1/chat/completions').read().decode())
             self.assertIn('final_score', second['choices'][0]['message']['content'])
 
             with self.assertRaises(HTTPError) as unavailable:
                 chat(root + '/fault/503/v1/chat/completions')
             self.assertEqual(unavailable.exception.code, 503)
+            self.assertEqual(
+                mock_openai.classify_injected_fault('503').error_type,
+                UpstreamErrorType.UPSTREAM_UNAVAILABLE,
+            )
             recovered = chat(root + '/fault/503/v1/chat/completions')
             self.assertEqual(recovered.status, 200)
 
@@ -173,7 +231,13 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('provider-e2e', doc)
         self.assertIn('API88_API_KEY', doc)
         self.assertIn('¥500–1000', doc)
+        self.assertIn('UpstreamErrorType', doc)
+        self.assertIn('billable_calls_before_failure', doc)
+        self.assertIn('SUCCESS_RATE_CONTRACT.md', doc)
         self.assertIn('PROVIDER_E2E_GATE.md', (ROOT / 'docs/README.md').read_text(encoding='utf-8'))
+        contract = (ROOT / 'docs/SUCCESS_RATE_CONTRACT.md').read_text(encoding='utf-8')
+        self.assertIn('UpstreamErrorType', contract)
+        self.assertIn('billable_calls_before_failure', contract)
 
 
 if __name__ == '__main__':

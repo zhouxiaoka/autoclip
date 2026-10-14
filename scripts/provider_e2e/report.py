@@ -29,9 +29,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- 应成功: {verdict.get('should_succeed_n', 0)} 条，成功率 "
         f"{_pct(verdict.get('should_succeed_rate'))}（门槛 {SUCCESS_RATE_THRESHOLD:.0%}）",
         f"- 应拦下: {verdict.get('should_block_n', 0)} 条，"
-        f"{'全部在开始前拦下且 0 次付费调用' if verdict.get('should_block_passed') else '未满足 100% 拦截'}",
+        f"{'全部在开始前拦下且 billable_calls_before_failure = 0' if verdict.get('should_block_passed') else '未满足 100% 拦截'}",
         f"- 故障注入: {verdict.get('fault_n', 0)} 条，"
-        f"{'按预期' if verdict.get('fault_passed') else '未按预期'}",
+        f"{'按预期 UpstreamErrorType 退避或续跑' if verdict.get('fault_passed') else '未按预期'}",
     ]
     if report.get('reason'):
         lines.append(f"- 说明: {report['reason']}")
@@ -42,12 +42,20 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append('- 跳过的真实服务商: ' + ', '.join(
             f"{item.get('id')}（{item.get('reason')}）" for item in skipped
         ))
-    lines += ['', '| 用例 | 期望 | 结果 | 错误码 | 付费调用 | 说明 |', '| --- | --- | --- | --- | --- | --- |']
+    lines += [
+        '',
+        '| 用例 | 期望 | 结果 | 错误码 | upstream_error_type | billable_calls_before_failure | 说明 |',
+        '| --- | --- | --- | --- | --- | --- | --- |',
+    ]
     for row in report.get('cases') or []:
+        billed = row.get('billable_calls_before_failure')
+        if billed is None:
+            billed = row.get('billable_calls', 0)
         lines.append(
             f"| {row.get('label') or row.get('id')} | {row.get('expect')} | "
             f"{'通过' if row.get('passed') else '失败'} | {row.get('error_code') or '—'} | "
-            f"{row.get('billable_calls', 0)} | {(row.get('reason') or '—').replace('|', '/')} |"
+            f"{row.get('upstream_error_type') or row.get('expected_upstream_error_type') or '—'} | "
+            f"{billed} | {(row.get('reason') or '—').replace('|', '/')} |"
         )
     lines.append('')
     return '\n'.join(lines) + '\n'
