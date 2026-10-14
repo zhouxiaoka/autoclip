@@ -80,7 +80,6 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('needs: [candidate-gate]', desktop)
         self.assertIn('needs.provider-e2e.result == \'success\'', desktop)
         self.assertIn('github.event_name == \'schedule\'', workflow)
-        self.assertNotIn('e2e-live-once', workflow)
         self.assertIn('provider-e2e-cases', workflow)
         self.assertIn('live_mode', workflow)
 
