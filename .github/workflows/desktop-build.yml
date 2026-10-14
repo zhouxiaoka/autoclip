@@ -36,6 +36,7 @@ on:
 permissions:
   contents: write
   actions: read
+  issues: write
 
 env:
   # GitHub runners are in the US; the default tsinghua mirror in the build
@@ -87,6 +88,18 @@ jobs:
           gh run download "$ACCEPTANCE_RUN_ID" -n internal-acceptance -D internal-accepted
           python scripts/internal_acceptance.py check-receipt --version "${TAG#v}" --commit "$GITHUB_SHA" \
             --receipt internal-accepted/receipt.json --acceptance-run internal-acceptance-run.json
+
+  # Headless provider e2e (mock always; live keys optional). Required before
+  # Release Acceptance; runs after the candidate identity gate, in parallel with packaging.
+  provider-e2e:
+    name: provider-e2e
+    needs: [candidate-gate]
+    uses: ./.github/workflows/provider-e2e-gate.yml
+    secrets: inherit
+    permissions:
+      contents: write
+      actions: read
+      issues: write
 
   # The exact candidate must pass source checks, including hotfix tag builds.
   source-quality:
@@ -301,8 +314,8 @@ jobs:
 
   # Bind untagged installers to their source/run without creating a Release.
   internal-provenance:
-    if: github.event_name == 'workflow_dispatch' && needs.build-macos-arm64.result == 'success' && needs.build-windows-x64.result == 'success' && needs.smoke-windows-x64.result == 'success'
-    needs: [build-macos-arm64, build-windows-x64, smoke-windows-x64]
+    if: github.event_name == 'workflow_dispatch' && needs.build-macos-arm64.result == 'success' && needs.build-windows-x64.result == 'success' && needs.smoke-windows-x64.result == 'success' && needs.provider-e2e.result == 'success'
+    needs: [build-macos-arm64, build-windows-x64, smoke-windows-x64, provider-e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -326,8 +339,8 @@ jobs:
 
   # Publish only after both platforms succeed; never advertise a partial release.
   release:
-    if: startsWith(github.ref, 'refs/tags/v') && needs.build-macos-arm64.result == 'success' && needs.build-windows-x64.result == 'success' && needs.smoke-windows-x64.result == 'success'
-    needs: [build-macos-arm64, build-windows-x64, smoke-windows-x64]
+    if: startsWith(github.ref, 'refs/tags/v') && needs.build-macos-arm64.result == 'success' && needs.build-windows-x64.result == 'success' && needs.smoke-windows-x64.result == 'success' && needs.provider-e2e.result == 'success'
+    needs: [build-macos-arm64, build-windows-x64, smoke-windows-x64, provider-e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

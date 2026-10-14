@@ -7,7 +7,7 @@
 | #3 付费前预检 / 上游错误分类 / 退避 | `backend.core.upstream_errors.classify_upstream_error`；`retryable` 决定是否重试（401/402/403/404 与余额、权限、地址错为 false） |
 | #S 设置页接入校验 | 同一分类函数；提示用 `hint_key`（八语 catalog key） |
 | #9 埋点 | `backend.core.llm_telemetry` 的字段集合与 `sanitize_*`；前端 `frontend/src/analytics/successRateContract.ts` |
-| #10 发版回归门槛 | 故障注入的期望类型用 `UpstreamErrorType`；应拦下的组合要求 `billable_calls_before_failure = 0` |
+| #10 发版回归门槛 | 故障注入的期望类型用 `UpstreamErrorType`；应拦下的组合要求 `billable_calls_before_failure = 0`。Live 先 fail-closed（任一服务商失败 / 缺报告 / 少结果必须红），再叠加用例库近 5 次、满 20 条后的滚动成功率。实现：[`scripts/provider_e2e`](../scripts/provider_e2e/matrix.py) |
 
 源码：
 
