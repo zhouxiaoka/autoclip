@@ -10,6 +10,7 @@ import { applyModelDefaults } from './modelDefaults'
 import * as logic from './modelSettingsLogic'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, type ValidationResult } from './providerAccess'
+import { applyCustomProvider, listFromOffers, type CustomProviderDraft } from './customProvider'
 
 export const roleLabel = (role: Role) =>
   ({ analysis: t('模型'), vision: t('画面理解模型'), cover: t('生图模型'), transcription: t('转写模型') })[role]
@@ -128,6 +129,16 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const setCoverEnabled = (enabled: boolean) => { autoCover.current = false; if (settings) replace(logic.setCoverEnabled(settings, enabled, lists)) }
   const setCoverModel = (connectionId: string, model: string) => { autoCover.current = false; update({ cover_enabled: true, cover: { ...logic.cleanBinding(connectionId), model } }) }
   const setVisual = (enabled: boolean) => { if (settings) replace(logic.setVisual(settings, enabled)) }
+  const addCustomProvider = (draft: CustomProviderDraft) => {
+    if (!settings) return
+    const next = applyCustomProvider(settings, draft)
+    const connection = next.connections[next.connections.length - 1]
+    replace(next)
+    if (connection) {
+      setLists(old => ({ ...old, [connection.id]: listFromOffers(draft.models) }))
+      void discover(connection, true, 'provider_change')
+    }
+  }
 
   const emitValidation = (connection: Connection, result: ValidationResult) => {
     const provider = PROVIDERS[connection.provider as ProviderKey] ? connection.provider : 'other'
@@ -223,7 +234,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const main = settings ? logic.mainConnection(settings) : undefined
   return {
     settings, lists, busy, listErrors, dirty, saving, testing, error, setError, main, keyHints,
-    load, discover, update, editConnection, chooseProvider, setTranscriptionLocal,
+    load, discover, update, editConnection, chooseProvider, addCustomProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test,
   }
 }

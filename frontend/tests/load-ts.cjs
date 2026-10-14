@@ -10,7 +10,7 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
   const abs = path.isAbsolute(file) ? file : path.join(fromDir, file)
   const source = fs.readFileSync(abs, 'utf8')
   const { outputText } = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
     fileName: abs,
   })
   const exports = {}
@@ -30,7 +30,7 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
     }
     throw new Error(id)
   }
-  vm.runInNewContext(outputText, { exports, URL, require: requireImpl, crypto: { randomUUID: () => 'uuid' } })
+  vm.runInNewContext(outputText, { exports, URL, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set })
   return exports
 }
 

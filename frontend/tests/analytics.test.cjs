@@ -533,11 +533,12 @@ function settingsHook(s, transport, initial) {
   const urls=load('../features/settings/providerUrl',{},{URL})
   const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls})
   const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+  const custom=load('../features/settings/customProvider',{'./providerUrl':urls,'./modelSettingsLogic':logic},{URL,crypto:{randomUUID:()=>'uuid'}})
   const hook=load('../features/settings/useModelSettings',{
     react,antd:{message:{success(){},error(){}}},'../../i18n':{t:x=>x},'../studio/api':{errorText:()=> 'redacted'},
     '../../analytics/experience':experience,'./providers':providers,'./providerAccess':access,
     './modelSettingsApi':{modelSettingsApi:{get:async()=>structuredClone(initial),...transport},bindingCapability:()=> 'text'},
-    './modelDefaults':defaults,'./modelSettingsLogic':logic,
+    './modelDefaults':defaults,'./modelSettingsLogic':logic,'./customProvider':custom,
   },{window:{setTimeout(){},clearTimeout(){},addEventListener(){},removeEventListener(){}}})
   return ()=>{cursor=0;return hook.useModelSettings('home_setup')}
 }

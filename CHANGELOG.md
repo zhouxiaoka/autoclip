@@ -7,6 +7,8 @@
 
 ## [未发布]
 
+- 设置页可添加自定义 OpenAI 兼容服务商：填写名称、接口地址和密钥，拉取模型列表或手动加模型 ID，并勾选类型 / 视觉 / 场景。首次启动改为选择 88API、Infistar 或其他服务商；赞助商一键获取只打开注册页（deeplink 写入另做）。SenseVoice 首次启用复用 Whisper 的准备模型进度行。不做「从剪贴板粘贴」。埋点不含密钥、完整 URL、用户路径或用户文本。
+
 - 服务商与模型预设改为单一数据源 `presets/provider_presets.json`（约 38 家）。后端 `cloud_presets` / `local_presets` / `DEFAULT_MODELS` 与前端 `providers` / `modelDefaults` 都从这份 JSON 读取；现有地址和默认型号保持不变。wheel / CLI·MCP ZIP 把该文件打进 `presets` 包，用 `importlib.resources` 定位。不含远程拉取，也不改设置页布局。
 - 发版增加服务商端到端门槛：Linux 无界面后端按固定素材矩阵出片，本地 mock 覆盖 429 / 503 / 断线和中途杀后端。PR / push 只跑 mock。夜间只跑 DeepSeek + Gemini 免费/低价档 2–3 条；预发布把 10 条拆给 5 家（每家 2 条，按 ISO 周轮转）。真实 88API / DeepSeek / Gemini / DashScope / Infistar 在 GitHub Environment `provider-e2e` 配好 key 后才跑，没配就跳过并写进报告。缺 `*_MODEL` 时用最便宜默认模型（88API `deepseek-v4-flash`，Infistar `gpt-4o-mini`，DeepSeek `deepseek-flash`，Gemini `gemini-3.5-flash-lite`，DashScope `qwen-flash`）。88API 门槛地址为 `https://api.88api.ai/v1`。故障注入期望类型用 `UpstreamErrorType`（`rate_limited` / `upstream_unavailable` / `connection`），应拦下组合要求 `billable_calls_before_failure = 0`。Mock 应成功当次 ≥95%。Live 先 fail-closed（任一服务商失败、缺/空/无法解析的报告、或条数少于计划必须红），再叠加用例库近 5 次、满 20 条后滚动 ≥95%。月度估费硬顶 ¥300。**fail-closed 已核对；88API 单探针（`api.88api.ai` + `deepseek-v4-flash`）已通过，完整发版仍走分层 live。**
 - 88API 服务商预设接口地址改为 `https://api.88api.ai/v1`（与 provider-e2e 回归一致）。已保存的 `https://88api.ai/v1` 不改写，仍可继续使用。（1.5.7）

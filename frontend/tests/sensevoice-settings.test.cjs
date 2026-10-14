@@ -7,7 +7,7 @@ const ts = require('typescript')
 function loadSection() {
   const jsx = (type, props) => ({ type, props })
   const modules = {
-    react: { useEffect() {}, useState() {} },
+    react: { useEffect() {}, useState: value => [value, () => {}] },
     'react/jsx-runtime': { jsx, jsxs: jsx },
     'react-i18next': { useTranslation() {} },
     antd: { Select: 'Select', Switch: 'Switch' },
@@ -18,6 +18,9 @@ function loadSection() {
     './useModelSettings': {},
     './modelSettingsLogic': { connectionOf: () => undefined, mainConnection: () => undefined },
     './ProviderFields': {}, './ModelPicker': {}, '../../services/api': {},
+    './AddCustomProviderDialog': { default: () => null },
+    './LocalModelPrepare': { default: 'LocalModelPrepare' },
+    './customProvider': {},
   }
   const source = fs.readFileSync('src/features/settings/AIModelSettings.tsx', 'utf8') + '\nexport const testSection = TranscriptionSection;'
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -25,15 +28,22 @@ function loadSection() {
   vm.runInNewContext(code, { module, exports: module.exports, require: name => modules[name] || assert.fail(name) })
   return module.exports.testSection
 }
-function findSelect(node) {
+function walk(node, visit) {
   if (!node || typeof node !== 'object') return null
-  if (node.type === 'Select') return node
+  if (typeof node.type === 'function') {
+    try { return walk(node.type(node.props || {}), visit) } catch { return null }
+  }
+  const hit = visit(node)
+  if (hit) return hit
   const children = node.props?.children
   for (const child of Array.isArray(children) ? children.flat(5) : [children]) {
-    const found = findSelect(child)
+    const found = walk(child, visit)
     if (found) return found
   }
   return null
+}
+function findSelect(node) {
+  return walk(node, n => n.type === 'Select' ? n : null)
 }
 test('the actual transcription selector offers SenseVoice and switches local engines without a cloud connection', () => {
   const Section = loadSection()
@@ -51,4 +61,19 @@ test('the actual transcription selector offers SenseVoice and switches local eng
   assert.equal(select.props.value, 'sensevoice_local')
   select.props.onChange('whisper_local')
   assert.deepEqual(settings.transcription, { provider: 'whisper_local', model: 'base' })
+})
+
+function findType(node, type) {
+  return walk(node, n => n.type === type ? n : null)
+}
+
+test('SenseVoice first enable reuses the Whisper prepare row instead of a new wizard', () => {
+  const source = fs.readFileSync('src/features/settings/AIModelSettings.tsx', 'utf8')
+  assert.match(source, /LocalModelPrepare/)
+  assert.equal(/向导|wizard|clipboard/i.test(source), false)
+  const Section = loadSection()
+  const settings = { connections: [], transcription: { provider: 'sensevoice_local', model: 'SenseVoiceSmall' } }
+  const tree = Section({ m: { settings, lists: {}, busy: {}, listErrors: {}, update() {}, setTranscriptionLocal() {}, chooseProvider() {} } })
+  assert.ok(findType(tree, 'LocalModelPrepare'))
+  assert.equal(findType(tree, 'Dialog'), null)
 })

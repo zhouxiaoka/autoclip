@@ -95,8 +95,8 @@ export const StatusDot: React.FC<{ tone: 'ok' | 'error' | 'accent' | 'muted'; la
   </span>
 )
 
-export const ProgressLine: React.FC<{ percent: number }> = ({ percent }) => (
-  <div className="ac-line"><i style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>
+export const ProgressLine: React.FC<{ percent?: number; busy?: boolean }> = ({ percent = 0, busy }) => (
+  <div className={`ac-line${busy ? ' ac-line--busy' : ''}`}><i style={busy ? undefined : { width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>
 )
 
 /* ---------- Dialog ---------- */

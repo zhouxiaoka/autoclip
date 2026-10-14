@@ -9,6 +9,8 @@ import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
 import { connectionOf, isTextOnly, mainConnection, presetKey, type SaveIssue } from './modelSettingsLogic'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
+import AddCustomProviderDialog from './AddCustomProviderDialog'
+import LocalModelPrepare from './LocalModelPrepare'
 import api from '../../services/api'
 
 type SenseVoiceStatus = { status: 'not_installed' | 'installing' | 'ready' | 'error'; message: string }
@@ -26,9 +28,10 @@ function SenseVoiceConfig() {
       } catch { if (active) setError(t('暂时无法读取本地模型状态。')) }
     }
     void refresh()
-    const timer = window.setInterval(() => void refresh(), 3000)
+    const preparing = runtime?.status === 'installing'
+    const timer = window.setInterval(() => void refresh(), preparing ? 2000 : 15000)
     return () => { active = false; window.clearInterval(timer) }
-  }, [])
+  }, [runtime?.status])
   const act = async (remove = false) => {
     setBusy(true)
     try {
@@ -38,16 +41,18 @@ function SenseVoiceConfig() {
     } catch { setError(t('操作失败，请稍后重试。')) }
     finally { setBusy(false) }
   }
-  const preparing = runtime?.status === 'installing'
+  const preparing = runtime?.status === 'installing' || busy
   return <div className="ac-rows">
     <Row label={t('转写模型')} hint={t('支持中文、粤语、英语、日语和韩语，使用词级时间戳生成字幕。')}><span>SenseVoiceSmall</span></Row>
-    <Row label={runtime?.status === 'ready' ? t('模型已就绪') : t('准备本地模型')}
-      hint={runtime?.status === 'ready' ? t('保存设置后，新任务将使用这个模型。') : t('首次需联网下载组件和模型，请预留至少 8 GB 磁盘空间；准备完成后转写不上传音频。')}>
-      {runtime?.status === 'ready' ? <StatusDot tone="ok" label={t('已就绪')} />
-        : preparing ? <StatusDot tone="accent" label={t('正在准备组件与模型…')} />
-        : <Btn size="sm" disabled={!runtime || busy} onClick={() => void act()}>{t('准备模型')}</Btn>}
-    </Row>
-    {(error || runtime?.status === 'error') && <p className="ac-note" role="alert">{error || t('模型准备失败，请检查网络和磁盘空间后重试。')}</p>}
+    <LocalModelPrepare
+      ready={runtime?.status === 'ready'}
+      preparing={preparing && runtime?.status !== 'ready'}
+      busy
+      hint={runtime?.status === 'error' ? t('模型准备失败，请检查网络和磁盘空间后重试。') : t('首次需联网下载组件和模型，请预留至少 8 GB 磁盘空间；准备完成后转写不上传音频。')}
+      busyHint={t('正在准备组件与模型…')}
+      error={error}
+      disabled={!runtime || busy}
+      onPrepare={() => void act()} />
     <p className="ac-note">{t('仅安装所需模型，不启用说话人分离。')} <a href="https://huggingface.co/FunAudioLLM/SenseVoiceSmall" target="_blank" rel="noreferrer">{t('模型与许可说明')}</a></p>
     {runtime?.status === 'ready' && <details className="ac-disclosure"><summary>{t('高级')}</summary>
       <Row label={t('删除 SenseVoice 组件与模型')} hint={t('删除后需要重新下载才能使用。')}>
@@ -158,6 +163,7 @@ export default function AIModelSettings({ requestedSection }: { requestedSection
   useTranslation()
   const m = useModelSettings()
   const { settings } = m
+  const [customOpen, setCustomOpen] = useState(false)
   useEffect(() => {
     const anchor = ANCHORS[requestedSection]
     if (!settings || !anchor) return
@@ -177,7 +183,10 @@ export default function AIModelSettings({ requestedSection }: { requestedSection
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
     <fieldset className="ac-model-fields" disabled={m.saving}>
       <div id="ai-model" className="ac-model-section">
-        <h3 className="ac-model-section-title">{t('AI 服务')}</h3>
+        <div className="ac-model-section-head">
+          <h3 className="ac-model-section-title">{t('AI 服务')}</h3>
+          <Btn size="sm" onClick={() => setCustomOpen(true)}>{t('添加服务商')}</Btn>
+        </div>
         <p className="ac-note">{t('选一家服务、填好 API Key，模型会自动选好。字幕转写和封面默认沿用这把 Key。')}</p>
         <AIServiceFields m={m} placement="settings_model" />
       </div>
@@ -194,5 +203,7 @@ export default function AIModelSettings({ requestedSection }: { requestedSection
       <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? t('校验未通过。设置已保存，但开始生成前会拦住。') : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
       <Btn variant="cta" loading={m.saving} onClick={() => void save()}>{t('保存设置')}</Btn>
     </div>
+    <AddCustomProviderDialog open={customOpen} onClose={() => setCustomOpen(false)}
+      onSubmit={draft => { m.addCustomProvider(draft); setCustomOpen(false) }} />
   </div>
 }
