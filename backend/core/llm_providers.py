@@ -50,6 +50,19 @@ def _catalog_model_infos(provider_type: "ProviderType") -> List[ModelInfo]:
 
 class LLMProvider(ABC):
     """LLM提供商抽象基类"""
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        raw = cls.__dict__.get('call')
+        if raw is None or getattr(raw, '_llm_telemetry', False):
+            return
+
+        def wrapped(self, prompt: str, input_data: Any = None, **call_kwargs):
+            from backend.core.llm_telemetry import observe_provider_call
+            return observe_provider_call(self, raw, prompt, input_data, **call_kwargs)
+
+        wrapped._llm_telemetry = True  # type: ignore[attr-defined]
+        cls.call = wrapped  # type: ignore[method-assign]
     
     def __init__(self, api_key: str, model_name: str, **kwargs):
         self.api_key = api_key

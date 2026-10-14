@@ -1,8 +1,8 @@
 """成功率埋点字段契约（1.5.8）。
 
 定义 run 级与 ``llm_request_finished`` 级允许字段，以及脱敏 helper。
-本模块**不发送事件**、不写入 ``llm_usage``、不改现有调用链。埋点实现线只应
-``sanitize_*`` 之后上报；设置页校验线只借 ``upstream_errors`` 的分类。
+本模块提供字段白名单与 ``sanitize_*``。事件发送在 ``llm_emit``（经 ``__getattr__``
+再导出），调用链由线 A 挂上。设置页校验线只借 ``upstream_errors`` 的分类。
 
 隐私：不上报 key、完整 URL、提示词、字幕、模型原文。base_url 只留域名；
 本机 / 局域网统一记 ``local``。model 必须匹配 ``^[\\w.\\-:/]{1,64}$``。
@@ -238,3 +238,30 @@ def _put_http_status(out: dict[str, Any], value: Any, *, minimum: int) -> None:
 def _put_bool(out: dict[str, Any], raw: Mapping[str, Any], key: str) -> None:
     if isinstance(raw.get(key), bool):
         out[key] = raw[key]
+
+
+_EMITTERS = frozenset({
+    "request_finished",
+    "observe_provider_call",
+    "emit_vision_request",
+    "emit_asr_readiness_checked",
+    "emit_provider_validation_finished",
+    "run_snapshot",
+    "configured_connection_fields",
+    "sentry_tags_for_error",
+    "bind_context",
+    "track_run",
+    "set_retry_count",
+    "reset_retry_count",
+    "current_retry_count",
+    "normalize_failure_stage",
+    "classify_run_upstream",
+})
+
+
+def __getattr__(name: str):
+    """Line A emitters live in ``llm_emit`` so this module stays a schema for step-0 tests."""
+    if name in _EMITTERS:
+        from backend.core import llm_emit
+        return getattr(llm_emit, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

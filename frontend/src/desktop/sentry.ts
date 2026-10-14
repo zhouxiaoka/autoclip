@@ -9,6 +9,22 @@ const OPT_OUT_KEY = 'autoclip.crashReports.optOut'
 
 let initialized = false
 let preferenceOverride: boolean | undefined
+const ANONYMOUS_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,199}$/
+let pendingUserId: string | null = null
+
+function applyAnonymousUser(): void {
+  if (!initialized) return
+  try {
+    if (pendingUserId && isCrashReportsEnabled()) Sentry.setUser({ id: pendingUserId })
+    else Sentry.setUser(null)
+  } catch { /* identity cannot break crash reporting */ }
+}
+
+/** Align Sentry user.id with the PostHog anonymous distinct_id. Id only. */
+export function setAnonymousUser(id?: string | null): void {
+  pendingUserId = typeof id === 'string' && ANONYMOUS_ID.test(id) ? id : null
+  applyAnonymousUser()
+}
 
 export function isCrashReportsEnabled(): boolean {
   if (preferenceOverride !== undefined) return preferenceOverride
@@ -50,10 +66,12 @@ export function initSentry(): void {
       if (!isCrashReportsEnabled()) return null
       // An allowlist avoids leaking request bodies, console text or exception
       // messages containing subtitles/paths. Preserve debug IDs for source maps.
+      const userId = event.user && typeof event.user.id === 'string' ? event.user.id : undefined
       return {
         type: event.type, event_id: event.event_id, timestamp: event.timestamp, platform: event.platform,
         level: event.level, release: event.release, environment: event.environment,
         sdk: event.sdk, debug_meta: event.debug_meta,
+        ...(userId && ANONYMOUS_ID.test(userId) ? { user: { id: userId } } : {}),
         tags: { ...(event.tags?.area === 'studio' && (event.tags?.phase === 'native_download' || event.tags?.phase === 'template_picker') ? { area: 'studio', phase: event.tags.phase } : {}), app_locale: typeof document !== "undefined" ? document.documentElement.lang : "unknown" },
         exception: { values: event.exception?.values?.map(value => ({
           type: value.type, value: '[message omitted for privacy]',
@@ -66,6 +84,7 @@ export function initSentry(): void {
     },
   })
   initialized = true
+  applyAnonymousUser()
 }
 
 export function setCrashReportsEnabled(enabled: boolean): void {
@@ -76,6 +95,7 @@ export function setCrashReportsEnabled(enabled: boolean): void {
     /* ignore */
   }
   // beforeSend gates immediately; avoid close()/re-init races on rapid toggles.
+  applyAnonymousUser()
   if (!enabled) return
   if (!initialized) initSentry()
 }

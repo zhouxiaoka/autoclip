@@ -152,9 +152,9 @@ def test_studio_failure_context_keeps_stage_and_http_status_without_messages():
 
     vision = VisionRequestError('provider_error', 'private body', http_status=429)
     assert sentry_setup.studio_failure_context(vision, 'screening') == {
-        'failure_stage': 'screening', 'http_status': 429}
+        'failure_stage': 'screening', 'http_status': 429, 'upstream_error_type': 'rate_limited'}
     assert sentry_setup.studio_failure_context(vision, 'production') == {
-        'failure_stage': 'vision', 'http_status': 429}
+        'failure_stage': 'vision', 'http_status': 429, 'upstream_error_type': 'rate_limited'}
 
     timeout = sentry_setup.studio_failure_context(TimeoutError('private'), 'render')
     assert timeout == {'failure_stage': 'render'}
@@ -184,7 +184,7 @@ def test_studio_failure_context_reads_http_status_from_wrapped_provider_error():
                 return failure
 
     context = sentry_setup.studio_failure_context(wrapped(_ProviderStatusError('private body', 500)), 'production')
-    assert context == {'failure_stage': 'analyze', 'http_status': 500}
+    assert context == {'failure_stage': 'analyze', 'http_status': 500, 'upstream_error_type': 'upstream_unavailable'}
     assert 'private' not in json.dumps(context)
 
     # Two levels deep (provider error re-wrapped by a client layer), explicit and implicit chaining.
@@ -198,7 +198,7 @@ def test_studio_failure_context_reads_http_status_from_wrapped_provider_error():
     except RuntimeError as inner:
         failure = wrapped(inner)
     assert sentry_setup.studio_failure_context(failure, 'production') == {
-        'failure_stage': 'analyze', 'http_status': 502}
+        'failure_stage': 'analyze', 'http_status': 502, 'upstream_error_type': 'upstream_unavailable'}
 
     # The nearest valid status wins; non-HTTP and out-of-range values are ignored.
     outer = _ProviderStatusError('proxy', 503)
@@ -211,7 +211,7 @@ def test_studio_failure_context_reads_http_status_from_wrapped_provider_error():
     # An explicit status on the failure itself (timeline aggregation has no cause to walk).
     assert sentry_setup.studio_failure_context(
         PipelineFailure('ANALYZE', 'x', code='provider_error', http_status=429), 'production') == {
-        'failure_stage': 'analyze', 'http_status': 429}
+        'failure_stage': 'analyze', 'http_status': 429, 'upstream_error_type': 'rate_limited'}
 
 
 def test_studio_failure_context_without_status_in_chain_and_with_cycles():
@@ -294,6 +294,32 @@ def test_text_sdk_failures_keep_provider_code_in_rewrite_and_render(monkeypatch,
         assert clean['level'] == ('warning' if code in ('authentication', 'rate_limited') else 'error')
     assert sentry_setup.studio_error_code(RuntimeError('unrelated programming defect')) == 'unexpected'
     assert sentry_setup.studio_error_code(PermissionError('private-local-file')) == 'unexpected'
+
+
+def test_before_send_keeps_anonymous_user_id_and_allowlisted_tags(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    (tmp_path / 'privacy.json').write_text('{"analytics":true,"crash_reports":true}', encoding='utf-8')
+    (tmp_path / 'analytics.json').write_text(
+        '{"distinct_id":"018f6b2a-7c3d-7b2a-8c11-111111111111"}', encoding='utf-8')
+    clean = sentry_setup.before_send({
+        'event_id': 'e',
+        'exception': {'values': [{'type': 'Error', 'value': 'private key sk-secret'}]},
+        'user': {'id': '018f6b2a-7c3d-7b2a-8c11-111111111111', 'email': 'a@b.com', 'ip_address': '1.2.3.4'},
+        'tags': {
+            'area': 'studio', 'error_code': 'provider_error', 'phase': 'production',
+            'provider': 'api88', 'upstream_error_type': 'rate_limited',
+            'base_url_host': '88api.ai', 'model': 'gpt-4o-mini',
+            'http_status': '429', 'failure_stage': 'analyze', 'private': 'secret',
+        },
+    })
+    assert clean['user'] == {'id': '018f6b2a-7c3d-7b2a-8c11-111111111111'}
+    assert clean['tags']['provider'] == 'api88'
+    assert clean['tags']['upstream_error_type'] == 'rate_limited'
+    assert clean['tags']['base_url_host'] == '88api.ai'
+    assert clean['tags']['failure_stage'] == 'analyze'
+    assert 'email' not in clean['user']
+    assert 'private' not in clean['tags']
+    assert 'sk-secret' not in json.dumps(clean)
 
 
 def test_source_blocked_is_classified_and_never_sent(monkeypatch, tmp_path):

@@ -94,7 +94,7 @@ def test_http_500_reaches_the_generation_failure_context_through_apply_get(pipel
         jobs.run_content('p', video)
 
     assert raised.value.http_status == 500
-    assert studio_failure_context(raised.value, 'production') == {'failure_stage': 'analyze', 'http_status': 500}
+    assert studio_failure_context(raised.value, 'production') == {'failure_stage': 'analyze', 'http_status': 500, 'upstream_error_type': 'upstream_unavailable'}
     assert 'private body' not in str(raised.value)
 
 
@@ -123,7 +123,7 @@ def test_unexpected_provider_error_keeps_its_status(pipeline, monkeypatch):
     with pytest.raises(RuntimeError) as raised:
         jobs.run_content('p', video)
 
-    assert studio_failure_context(raised.value, 'production') == {'failure_stage': 'production', 'http_status': 502}
+    assert studio_failure_context(raised.value, 'production') == {'failure_stage': 'production', 'http_status': 502, 'upstream_error_type': 'upstream_unavailable'}
 
 
 def test_failure_without_status_and_out_of_range_values_add_nothing(pipeline, monkeypatch):
