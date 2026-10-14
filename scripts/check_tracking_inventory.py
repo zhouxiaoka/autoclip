@@ -50,7 +50,12 @@ PLAN_NEEDLES = (
     "envelope_properties()",
     "用户主动提交",
     "QA / MCP / 反馈",
+    "user_submitted",
+    "ingest_app_feedback.py",
 )
+USER_CONTENT_KEYS = ("text", "contact")
+USER_SUBMITTED_KIND = "user_submitted"
+USER_SUBMITTED_EVENT = "feedback_submitted"
 ANALYTICS_PRODUCERS = (
     "frontend/src/analytics/workflow.ts",
     "frontend/src/analytics/lifecycle.ts",
@@ -224,6 +229,43 @@ def producer_transition_errors(root: Path) -> list[str]:
     return errors
 
 
+def user_content_errors(data: dict) -> list[str]:
+    """Auto-collected events must not allow user content; feedback_submitted may."""
+    errors: list[str] = []
+    events = data.get("events") or {}
+    privacy = data.get("privacy") or {}
+    content_keys = tuple(privacy.get("user_content_keys") or USER_CONTENT_KEYS)
+    submitted = set(privacy.get("user_submitted_events") or [])
+    if USER_SUBMITTED_EVENT not in submitted:
+        errors.append(f"privacy.user_submitted_events must include {USER_SUBMITTED_EVENT}")
+    extra = sorted(submitted - {USER_SUBMITTED_EVENT})
+    if extra:
+        errors.append("unexpected user_submitted events: " + ", ".join(extra))
+    if set(content_keys) != set(USER_CONTENT_KEYS):
+        errors.append("privacy.user_content_keys must be text and contact")
+
+    spec = events.get(USER_SUBMITTED_EVENT) or {}
+    if spec.get("kind") != USER_SUBMITTED_KIND:
+        errors.append(f"{USER_SUBMITTED_EVENT} must be kind={USER_SUBMITTED_KIND}")
+    allow = set(spec.get("allow") or [])
+    if not set(USER_CONTENT_KEYS) <= allow:
+        errors.append(f"{USER_SUBMITTED_EVENT} must allow text and contact")
+    forbid = set(spec.get("forbid") or [])
+    if forbid & set(USER_CONTENT_KEYS):
+        errors.append(f"{USER_SUBMITTED_EVENT} must not forbid text or contact")
+
+    for name, row in events.items():
+        row = row or {}
+        if name == USER_SUBMITTED_EVENT:
+            continue
+        if row.get("kind") == USER_SUBMITTED_KIND:
+            errors.append(f"{name}: only {USER_SUBMITTED_EVENT} may be {USER_SUBMITTED_KIND}")
+        leaked = sorted(set(row.get("allow") or []) & set(USER_CONTENT_KEYS))
+        if leaked:
+            errors.append(f"{name}: auto-collected events must not allow {', '.join(leaked)}")
+    return errors
+
+
 def _document_errors(root: Path, data: dict, plan: str) -> list[str]:
     errors: list[str] = []
     if not data.get("source_of_truth"):
@@ -267,12 +309,7 @@ def _document_errors(root: Path, data: dict, plan: str) -> list[str]:
     missing = [name for name in required if name not in events]
     if missing:
         errors.append("inventory missing previously uncovered events: " + ", ".join(missing))
-    feedback = events.get("feedback_submitted") or {}
-    allowed = set(feedback.get("allow") or [])
-    if "text" not in allowed or "contact" not in allowed:
-        errors.append("feedback_submitted must allow user-authored text and contact")
-    if "text" in set(feedback.get("forbid") or []) or "contact" in set(feedback.get("forbid") or []):
-        errors.append("feedback_submitted must not forbid text/contact")
+    errors.extend(user_content_errors(data))
     tasks = ((data.get("transition") or {}).get("tasks") or {})
     if (data.get("transition") or {}).get("milestone") != MILESTONE:
         errors.append(f"transition.milestone must be {MILESTONE}")

@@ -21,10 +21,43 @@ class TrackingInventoryTests(unittest.TestCase):
     def test_feedback_submitted_allows_user_text(self) -> None:
         data = check._load(ROOT / "docs" / "analytics" / "event_inventory.json")
         row = data["events"]["feedback_submitted"]
+        self.assertEqual(row.get("kind"), "user_submitted")
         self.assertTrue(row.get("user_initiated"))
         self.assertIn("text", row.get("allow") or [])
         self.assertIn("contact", row.get("allow") or [])
         self.assertNotIn("text", row.get("forbid") or [])
+        self.assertEqual(data["privacy"]["user_submitted_events"], ["feedback_submitted"])
+        self.assertEqual(check.user_content_errors(data), [])
+
+    def test_auto_events_must_not_allow_user_content(self) -> None:
+        data = check._load(ROOT / "docs" / "analytics" / "event_inventory.json")
+        for name, spec in data["events"].items():
+            if name == "feedback_submitted":
+                continue
+            allow = set((spec or {}).get("allow") or [])
+            self.assertFalse(allow & {"text", "contact"}, name)
+            self.assertNotEqual((spec or {}).get("kind"), "user_submitted", name)
+
+    def test_checker_rejects_auto_event_user_content(self) -> None:
+        data = check._load(ROOT / "docs" / "analytics" / "event_inventory.json")
+        data["events"]["studio_import_requested"] = {
+            **data["events"]["studio_import_requested"],
+            "allow": ["text"],
+        }
+        errors = check.user_content_errors(data)
+        self.assertTrue(any("studio_import_requested" in item for item in errors))
+
+    def test_checker_rejects_feedback_without_allow(self) -> None:
+        data = check._load(ROOT / "docs" / "analytics" / "event_inventory.json")
+        data["events"]["feedback_submitted"] = {
+            "status": "keep",
+            "domain": "feedback",
+            "path": "capture",
+            "forbid": ["text", "contact"],
+        }
+        errors = check.user_content_errors(data)
+        self.assertTrue(any("feedback_submitted" in item for item in errors))
+        self.assertTrue(any("allow" in item for item in errors))
 
     def test_publish_export_is_legacy_with_merge(self) -> None:
         data = check._load(ROOT / "docs" / "analytics" / "event_inventory.json")

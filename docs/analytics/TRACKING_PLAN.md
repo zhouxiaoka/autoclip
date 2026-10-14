@@ -14,14 +14,14 @@
 - **生产者目录：** `docs/analytics/event_catalog.json`（随 #361）。它必须由本清单生成，或在 CI 里对照本清单；未登记、缺必填、违禁值，校验测试必须失败。两份漂移即失败。
 - 看板 SQL 草案：[`success_rate.sql`](success_rate.sql)
 
-先看 §1–§5（规则、漏斗、触发点）、§10–§11（隐私硬性 / 脱敏 / 开关关闭）、§6–§7（口径与看板），再看 §8（全量盘点）和 §12（过渡计划 / 1.5.8 收口）。§8 的删除/改名 **不在 #361 纯埋点 PR 里执行**。过渡保留（查询继续映射历史值）；**1.5.8 必须收口**：单一 `os` / `outcome`、只报 `app_version`、QA/MCP/反馈公共信封、旧事件停发或打 `legacy=true`。`feedback_submitted` 是用户主动提交，允许 `text`/`contact`。
+先看 §1–§5（规则、漏斗、触发点）、§10–§11（隐私硬性 / 脱敏 / 开关关闭）、§6–§7（口径与看板），再看 §8（全量盘点）和 §12（过渡计划 / 1.5.8 收口）。§8 的删除/改名 **不在 #361 纯埋点 PR 里执行**。过渡保留（查询继续映射历史值）；**1.5.8 必须收口**：单一 `os` / `outcome`、只报 `app_version`、QA/MCP/反馈公共信封、旧事件停发或打 `legacy=true`。`feedback_submitted` 是 `user_submitted` 例外，允许 `text`/`contact`。
 
 ---
 
 ## 1. 原则
 
 1. **先登记后发送。** 新事件必须写入本文件 + `event_catalog.json`，并补齐八语无关（埋点无 UI 文案）的校验测试。未登记的事件名不得出现在生产者里。
-2. **只发枚举、计数、布尔、随机 token。** 不上报 key、完整 URL、提示词、字幕/转写、视频标题、文件名、带用户名的本机路径、内部项目/作业 ID。`base_url` 只留 host；本机/内网记 `local`。详见 §10–§11。schema 校验必须拦住这些值。**例外：** 用户点发送的 `feedback_submitted` 可以带用户写下的 `text` 和可选 `contact`（见 §10）。
+2. **只发枚举、计数、布尔、随机 token。** 不上报 key、完整 URL、提示词、字幕/转写、视频标题、文件名、带用户名的本机路径、内部项目/作业 ID。`base_url` 只留 host；本机/内网记 `local`。详见 §10–§11。schema 校验必须拦住这些值。**例外：** `feedback_submitted` 是 `user_submitted`，可以带用户写下的 `text` 和可选 `contact`（见 §10）。`ingest_app_feedback.py` 据此开 Issue。
 3. **终态与请求分开。** 按钮点击不是成功。后台受理用 `*_accepted`，真正做完用 `*_finished`。浏览器点击下载不是落盘。
 4. **失败必有身份。** 失败的 run 级事件必须有 `error_code` + `failure_stage`。模型失败另带 `upstream_error_type`（站点拒绝、素材太短/无音轨等不算上游错误）。
 5. **同一匿名 ID。** 前端 PostHog `distinct_id` 经 `PUT /settings/analytics-identity` 写入 `analytics.json`；后端事件与 Sentry `user.id` 只用这个 ID。分析开关关闭时不写、不对齐（§10.1）。
@@ -614,7 +614,7 @@ FROM (
 
 产品默认开埋点。用户关掉后，或构建未配置 PostHog key 时，**业务事件一条也不许出网**。
 
-**`feedback_submitted` 例外（Kris，2026-10-14）：** 用户点「发送」是主动把这句话交给我们，不是静默采集。该事件**可以**带 `text` 和可选 `contact`，**可以** POST `/capture/`，且**不看**匿名统计开关。没有 PostHog key 或网络失败时，才打开预填的 GitHub 页。界面必须写明：正文和可选联系方式会先到 PostHog，再公开到 GitHub；邮箱不进公开帖。`feedback_opened` / `feedback_dismissed` 不带正文。其它事件仍不得报用户正文、邮箱或自由文本。
+**`feedback_submitted` 例外（`user_submitted`，Kris，2026-10-14）：** 用户点「发送」是主动把这句话交给我们，不是静默采集。该事件**可以**带 `text` 和可选 `contact`，**可以** POST `/capture/`，且**不看**匿名统计开关。`scripts/ingest_app_feedback.py` 读取这两列自动开 GitHub Issue / Discussion，这条链路保留。没有 PostHog key 或网络失败时，才打开预填的 GitHub 页。界面必须写明：内容和联系方式会发送给开发者，用于回复和创建 GitHub Issue。`feedback_opened` / `feedback_dismissed` 不带正文。其它自动采集事件仍不得报用户正文、邮箱或自由文本。
 
 ### 10.1 开关关闭时的行为
 
