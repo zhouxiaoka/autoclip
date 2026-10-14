@@ -1,11 +1,11 @@
 import { t } from '../../i18n'
 import { Btn, StatusDot } from '../../ui'
-import type { ModelSettings } from './modelSettingsApi'
+import type { Connection, ModelSettings } from './modelSettingsApi'
 import type { ProviderGroupId, ProviderPreset } from './providerPresets'
 import {
   CAPABILITY_FILTERS, CATALOG_GROUPS, type CapabilityFilter,
-  connectKind, displayNameOf, filterCatalog, groupCatalog, initialLetter,
-  isCatalogConnected, shouldExpandMore,
+  connectKind, customCatalogId, displayNameOf, filterCatalog, groupCatalog, initialLetter,
+  isCatalogConnected, shouldExpandMore, unmatchedCompatibleConnections,
 } from './providerCatalogView'
 
 const FILTER_KEY: Record<CapabilityFilter, string> = {
@@ -29,6 +29,41 @@ function actionLabel(preset: ProviderPreset, connected: boolean): string {
   if (connected) return preset.id === 'whisper' || preset.id === 'sensevoice' ? t('settings.providers.available') : t('settings.providers.connected')
   if (preset.sponsor) return t('settings.providers.one_click')
   return t('settings.providers.configure')
+}
+
+function matchesCustom(connection: Connection, query: string, filter: CapabilityFilter): boolean {
+  if (filter !== 'all' && filter !== 'language') return false
+  const needle = query.trim().toLowerCase()
+  if (!needle) return true
+  return [connection.name, connection.provider, 'compatible'].some(value => value.toLowerCase().includes(needle))
+}
+
+function CustomCard({
+  connection, selected, onOpen,
+}: {
+  connection: Connection
+  selected: boolean
+  onOpen: (id: string) => void
+}) {
+  const id = customCatalogId(connection.id)
+  return (
+    <button
+      type="button"
+      className={`ac-provider-card${selected ? ' is-selected' : ''}`}
+      data-provider-id={id}
+      data-connect-kind="compatible"
+      aria-current={selected || undefined}
+      onClick={() => onOpen(id)}
+    >
+      <span className="ac-provider-mark" aria-hidden>{(connection.name.charAt(0) || '?').toUpperCase()}</span>
+      <span className="ac-provider-card-body">
+        <span className="ac-provider-card-title">{connection.name || t('自定义 OpenAI 兼容接口')}</span>
+      </span>
+      <span className="ac-provider-card-action">
+        <span className="ac-provider-action-label">{t('settings.providers.repair_custom')}</span>
+      </span>
+    </button>
+  )
 }
 
 function ProviderCard({
@@ -88,8 +123,9 @@ export default function ProviderCatalog({
 }) {
   const visible = filterCatalog(query, filter)
   const groups = groupCatalog(visible)
+  const customs = unmatchedCompatibleConnections(settings).filter(connection => matchesCustom(connection, query, filter))
   const expandMore = moreOpen || shouldExpandMore(query, filter, groups.more.length)
-  const empty = visible.length === 0
+  const empty = visible.length === 0 && customs.length === 0
   return (
     <div className="ac-provider-catalog" id="ai-model">
       <div className="ac-provider-toolbar">
@@ -124,6 +160,26 @@ export default function ProviderCatalog({
           <b>{t('settings.providers.no_matches')}</b>
           {t('settings.providers.no_matches_hint')}
         </div>
+      )}
+      {customs.length > 0 && (
+        <section className="ac-provider-group" data-provider-group="custom">
+          <header className="ac-provider-group-head">
+            <h3 className="ac-model-section-title">
+              {t('settings.providers.custom_group')}
+              <span className="count">{customs.length}</span>
+            </h3>
+          </header>
+          <div className="ac-provider-grid">
+            {customs.map(connection => (
+              <CustomCard
+                key={connection.id}
+                connection={connection}
+                selected={selectedId === customCatalogId(connection.id)}
+                onOpen={onOpen}
+              />
+            ))}
+          </div>
+        </section>
       )}
       {CATALOG_GROUPS.map(group => {
         const rows = groups[group]

@@ -1799,5 +1799,8 @@
   "腾讯混元": "Tencent Hunyuan",
   "腾讯混元。国内公开文档常见地址，上线前须核实。": "Tencent Hunyuan。公開ドキュメントのよくあるアドレスです。正式公開前に確認してください。",
   "蚂蚁百灵": "Ant Ling",
-  "蚂蚁百灵。OpenAI 兼容。": "Ant Ling。OpenAI 互換。"
+  "蚂蚁百灵。OpenAI 兼容。": "Ant Ling。OpenAI 互換。",
+  "settings.providers.repair_custom": "カスタム接続を修復",
+  "settings.providers.repair_custom_hint": "保存済みのカスタム OpenAI 互換ゲートウェイです。アドレスやキーを変更できます。",
+  "settings.providers.custom_group": "保存済みのカスタム接続"
 }

@@ -1799,5 +1799,8 @@
   "腾讯混元": "腾讯混元",
   "腾讯混元。国内公开文档常见地址，上线前须核实。": "腾讯混元。国内公开文档常见地址，上线前须核实。",
   "蚂蚁百灵": "蚂蚁百灵",
-  "蚂蚁百灵。OpenAI 兼容。": "蚂蚁百灵。OpenAI 兼容。"
+  "蚂蚁百灵。OpenAI 兼容。": "蚂蚁百灵。OpenAI 兼容。",
+  "settings.providers.repair_custom": "修复自定义接口",
+  "settings.providers.repair_custom_hint": "这是已保存的自定义 OpenAI 兼容网关。可以改地址或密钥。",
+  "settings.providers.custom_group": "已保存的自定义接口"
 }

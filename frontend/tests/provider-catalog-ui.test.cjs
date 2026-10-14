@@ -63,6 +63,25 @@ test('catalog renders recommended / popular / local and keeps more collapsed', (
   assert.deepEqual(opened, ['deepseek'])
 })
 
+test('saved custom gateways appear as a repair entry', () => {
+  const tree = Catalog({
+    settings: {
+      ...settings,
+      connections: [{
+        id: 'gw', name: 'Home gateway', provider: 'compatible',
+        base_url: 'https://gw.home.example/v1', api_key: '', image_api: 'auto', image_base_url: '',
+      }],
+    },
+    query: '', filter: 'all', moreOpen: false, selectedId: null,
+    onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+  })
+  const nodes = flatten(tree)
+  assert.ok(nodes.some(node => node.props && node.props['data-provider-group'] === 'custom'))
+  const card = nodes.find(node => node.props && node.props['data-provider-id'] === 'custom:gw')
+  assert.ok(card)
+  assert.match(textOf(card), /settings\.providers\.repair_custom/)
+})
+
 test('search and capability filter show unconnected more-group providers', () => {
   const tree = Catalog({
     settings, query: 'OpenRouter', filter: 'all', moreOpen: false, selectedId: null,
@@ -139,13 +158,13 @@ test('catalog source does not send search text, keys, or full URLs to telemetry'
   }
 })
 
-for (const requestedProvider of ['', 'deepseek']) {
+for (const requestedProvider of ['', 'deepseek', 'custom:ds']) {
   test(`manual model choice remains user-owned in ${requestedProvider || 'overview'}`, () => {
     const updates = []
     const value = {
       ...settings,
       saved: true,
-      connections: [{ id: 'ds', name: 'DeepSeek', provider: 'deepseek', base_url: '', has_key: true }],
+      connections: [{ id: 'ds', name: 'Gateway', provider: requestedProvider.startsWith('custom:') ? 'compatible' : 'deepseek', base_url: 'https://gateway.example/v1', has_key: true }],
       analysis: { connection_id: 'ds', model: 'deepseek-flash', capability: 'auto', model_source: 'preset' },
     }
     const m = {
@@ -153,7 +172,7 @@ for (const requestedProvider of ['', 'deepseek']) {
       main: value.connections[0], update: patch => updates.push(patch),
     }
     const Page = loadTs('AIModelSettings.tsx', {
-      react: { ...React, useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}], useEffect: () => {} },
+      react: { ...React, useState: initial => [typeof initial === 'function' ? (requestedProvider.startsWith('custom:') ? requestedProvider : initial()) : initial, () => {}], useEffect: () => {} },
       'react-i18next': { useTranslation: () => {} },
       antd: { Select: () => null, Switch: () => null },
       '../../i18n': i18n,
@@ -166,8 +185,11 @@ for (const requestedProvider of ['', 'deepseek']) {
       './SenseVoiceConfig': { default: () => null },
       './ProviderCatalog': { default: () => null },
     }).default
-    const picker = flatten(Page({ requestedSection: 'model', requestedProvider }))
-      .find(node => node.props?.role === 'analysis')
+    const nodes = flatten(Page({ requestedSection: 'model', requestedProvider }))
+    if (requestedProvider.startsWith('custom:')) {
+      assert.ok(nodes.some(node => node.props?.['data-connect-kind'] === 'compatible'))
+    }
+    const picker = nodes.find(node => node.props?.role === 'analysis')
     assert.ok(picker)
     picker.props.onChange('manually-selected-model')
     const { forSave } = loadTs('modelSettingsLogic.ts', { '../../i18n': i18n })

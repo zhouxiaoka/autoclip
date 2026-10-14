@@ -92,6 +92,30 @@ test('legacy providers reuse an existing connection and can become the analysis 
   assert.equal(view.isCatalogConnected(settings, view.catalogPreset('deepseek')), true)
 })
 
+test('unmatched custom gateways stay repairable and do not attach to a catalog preset', () => {
+  const settings = {
+    ...blank(),
+    connections: [{
+      id: 'gw', name: 'Home gateway', provider: 'compatible',
+      base_url: 'https://gw.home.example/v1', api_key: '', has_key: false,
+      image_api: 'auto', image_base_url: '',
+    }],
+    analysis: { connection_id: 'gw', model: 'local-model', capability: 'auto' },
+  }
+  assert.equal(view.isUnmatchedCompatible(settings.connections[0]), true)
+  assert.equal(view.matchedCatalogPreset(settings.connections[0]), undefined)
+  assert.equal(view.unmatchedCompatibleConnections(settings).map(row => row.id).join(','), 'gw')
+  assert.equal(view.customCatalogId('gw'), 'custom:gw')
+  assert.equal(view.customConnectionId('custom:gw'), 'gw')
+  const silicon = {
+    ...settings.connections[0],
+    id: 'sf',
+    base_url: catalog.providers.siliconflow.base_url,
+  }
+  assert.equal(view.isUnmatchedCompatible(silicon), false)
+  assert.equal(view.matchedCatalogPreset(silicon).id, 'siliconflow')
+})
+
 test('guide-only providers do not write a connection', () => {
   const settings = blank()
   const result = view.ensureCatalogConnection(settings, view.catalogPreset('anthropic'))
@@ -122,7 +146,10 @@ test('every catalog name and hint used in the UI exists in all eight locales', (
     lang,
     JSON.parse(fs.readFileSync(path.join(__dirname, '../src/i18n/locales', `${lang}.json`), 'utf8')),
   ]))
-  const needed = new Set(['settings.providers.title', 'settings.providers.unconnected_guide', 'settings.providers.configure'])
+  const needed = new Set([
+    'settings.providers.title', 'settings.providers.unconnected_guide', 'settings.providers.configure',
+    'settings.providers.repair_custom', 'settings.providers.repair_custom_hint', 'settings.providers.custom_group',
+  ])
   for (const row of Object.values(catalog.providers)) {
     for (const key of ['ui_name', 'display_name', 'short_name', 'hint']) {
       if (row[key]) needed.add(row[key])
