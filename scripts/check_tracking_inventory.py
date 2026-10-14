@@ -48,6 +48,7 @@ PLAN_NEEDLES = (
     "legacy_stopped_or_tagged",
     "`macos` / `windows` / `linux`",
     "envelope_properties()",
+    "用户主动提交",
 )
 ANALYTICS_PRODUCERS = (
     "frontend/src/analytics/workflow.ts",
@@ -178,13 +179,7 @@ def producer_transition_errors(root: Path) -> list[str]:
         errors.append("T4 common_envelope: QA telemetry does not call envelope_properties()")
     if mcp and "envelope_properties" not in mcp:
         errors.append("T4 common_envelope: MCP telemetry does not call envelope_properties()")
-    if feedback:
-        if "captureBusinessEvent" not in feedback:
-            errors.append("T4 common_envelope: feedback does not use captureBusinessEvent")
-        if "/capture/" in feedback:
-            errors.append("T4 common_envelope: feedback still POSTs /capture/")
-        if re.search(r"posthog\.capture\(\s*'feedback_", feedback):
-            errors.append("T4 common_envelope: feedback still calls posthog.capture")
+    # feedback_submitted is user-initiated: /capture/ with text/contact is allowed.
 
     for relative, text in texts.items():
         emitted = {name for match in _EMITTED_NAME.findall(text) for name in match if name}
@@ -240,6 +235,12 @@ def _document_errors(root: Path, data: dict, plan: str) -> list[str]:
     missing = [name for name in required if name not in events]
     if missing:
         errors.append("inventory missing previously uncovered events: " + ", ".join(missing))
+    feedback = events.get("feedback_submitted") or {}
+    allowed = set(feedback.get("allow") or [])
+    if "text" not in allowed or "contact" not in allowed:
+        errors.append("feedback_submitted must allow user-authored text and contact")
+    if "text" in set(feedback.get("forbid") or []) or "contact" in set(feedback.get("forbid") or []):
+        errors.append("feedback_submitted must not forbid text/contact")
     tasks = ((data.get("transition") or {}).get("tasks") or {})
     if (data.get("transition") or {}).get("milestone") != MILESTONE:
         errors.append(f"transition.milestone must be {MILESTONE}")

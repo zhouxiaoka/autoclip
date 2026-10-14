@@ -18,6 +18,14 @@ class TrackingInventoryTests(unittest.TestCase):
         errors = check.check(ROOT)
         self.assertEqual(errors, [])
 
+    def test_feedback_submitted_allows_user_text(self) -> None:
+        data = check._load(ROOT / "docs" / "analytics" / "event_inventory.json")
+        row = data["events"]["feedback_submitted"]
+        self.assertTrue(row.get("user_initiated"))
+        self.assertIn("text", row.get("allow") or [])
+        self.assertIn("contact", row.get("allow") or [])
+        self.assertNotIn("text", row.get("forbid") or [])
+
     def test_publish_export_is_legacy_with_merge(self) -> None:
         data = check._load(ROOT / "docs" / "analytics" / "event_inventory.json")
         row = data["events"]["publish_export_finished"]

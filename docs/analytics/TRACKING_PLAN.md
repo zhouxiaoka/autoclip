@@ -14,14 +14,14 @@
 - **生产者目录：** `docs/analytics/event_catalog.json`（随 #361）。它必须由本清单生成，或在 CI 里对照本清单；未登记、缺必填、违禁值，校验测试必须失败。两份漂移即失败。
 - 看板 SQL 草案：[`success_rate.sql`](success_rate.sql)
 
-先看 §1–§5（规则、漏斗、触发点）、§10–§11（隐私硬性 / 脱敏 / 开关关闭）、§6–§7（口径与看板），再看 §8（全量盘点）和 §12（过渡计划 / 1.5.8 收口）。§8 的删除/改名 **不在 #361 纯埋点 PR 里执行**。过渡保留（查询继续映射历史值）；**1.5.8 必须收口**：单一 `os` / `outcome`、只报 `app_version`、QA/MCP/feedback 公共信封、旧事件停发或打 `legacy=true`。
+先看 §1–§5（规则、漏斗、触发点）、§10–§11（隐私硬性 / 脱敏 / 开关关闭）、§6–§7（口径与看板），再看 §8（全量盘点）和 §12（过渡计划 / 1.5.8 收口）。§8 的删除/改名 **不在 #361 纯埋点 PR 里执行**。过渡保留（查询继续映射历史值）；**1.5.8 必须收口**：单一 `os` / `outcome`、只报 `app_version`、QA/MCP 公共信封、旧事件停发或打 `legacy=true`。`feedback_submitted` 是用户主动提交，允许 `text`/`contact`。
 
 ---
 
 ## 1. 原则
 
 1. **先登记后发送。** 新事件必须写入本文件 + `event_catalog.json`，并补齐八语无关（埋点无 UI 文案）的校验测试。未登记的事件名不得出现在生产者里。
-2. **只发枚举、计数、布尔、随机 token。** 不上报 key、完整 URL、提示词、字幕/转写、视频标题、文件名、带用户名的本机路径、用户正文、内部项目/作业 ID。`base_url` 只留 host；本机/内网记 `local`。详见 §10–§11。schema 校验必须拦住这些值。
+2. **只发枚举、计数、布尔、随机 token。** 不上报 key、完整 URL、提示词、字幕/转写、视频标题、文件名、带用户名的本机路径、内部项目/作业 ID。`base_url` 只留 host；本机/内网记 `local`。详见 §10–§11。schema 校验必须拦住这些值。**例外：** 用户点发送的 `feedback_submitted` 可以带用户写下的 `text` 和可选 `contact`（见 §10）。
 3. **终态与请求分开。** 按钮点击不是成功。后台受理用 `*_accepted`，真正做完用 `*_finished`。浏览器点击下载不是落盘。
 4. **失败必有身份。** 失败的 run 级事件必须有 `error_code` + `failure_stage`。模型失败另带 `upstream_error_type`（站点拒绝、素材太短/无音轨等不算上游错误）。
 5. **同一匿名 ID。** 前端 PostHog `distinct_id` 经 `PUT /settings/analytics-identity` 写入 `analytics.json`；后端事件与 Sentry `user.id` 只用这个 ID。分析开关关闭时不写、不对齐（§10.1）。
@@ -132,7 +132,9 @@ multiIf(
 
 禁止把内部 `project_id` / `run_id` / `job_id` 当作新事件属性。旧 legacy 事件若已带，不回填、不扩散。
 
-**旁路也走同一信封。** QA（`studio_qa_checked`）、MCP（`mcp_tool_called` / `mcp_job_finished`）、feedback（`feedback_opened` / `feedback_dismissed` / `feedback_submitted`）不得再裸 POST `/capture/` 或 `posthog.capture`。前端一律 `captureBusinessEvent`；后端一律叠 `envelope_properties()`（`app_version` / `os` / `analytics_environment` / `runtime` / `schema_version`）再加 `distinct_id`。#361 已给 `llm_emit` 加信封。QA / MCP / feedback 公共信封是 **1.5.8 必交任务**（§12.1 T4）；feedback 正文/邮箱见独立隐私 PR，须立即收口。
+**旁路也走同一信封。** QA（`studio_qa_checked`）、MCP（`mcp_tool_called` / `mcp_job_finished`）不得再裸 POST `/capture/`。后端一律叠 `envelope_properties()`（`app_version` / `os` / `analytics_environment` / `runtime` / `schema_version`）再加 `distinct_id`。#361 已给 `llm_emit` 加信封。QA / MCP 公共信封是 **1.5.8 必交任务**（§12.1 T4）。
+
+**反馈是用户主动提交，不是旁路泄漏。** `feedback_submitted` 可以带 `text` / 可选 `contact`，发送可以走 `/capture/`，且不看匿名统计开关（没有 key 时才回退 GitHub）。界面必须告知会先经 PostHog 再公开到 GitHub（邮箱不公开）。告知文案在 #361。`feedback_opened` / `feedback_dismissed` 仍是诊断事件，不带正文。
 
 `legacy=true`：旧路径事件（§8.2）在 1.5.8 要么停发，要么每条带此布尔。Studio / 设置 / 线 A 新事件禁止带。#361 不改旧事件；1.5.8 清理 PR 补标记或停发。查询在标记齐之前用事件名列表。
 
@@ -327,7 +329,7 @@ multiIf(
 | `studio_post_save_*` | 发布文案保存（不报正文） | `api.ts` | `observeStudioOperation` |
 | `studio_variant_*` / `studio_cover_*` / `studio_auto_frame_*` | 变体 / 封面 / 取景 | `api.ts` + `workflow.ts` | `observeStudioOperation` / `observeStudio` |
 | `output_branding_save_*` | 设置页片尾开关 | `frontend/src/features/settings/OutputBrandingSetting.tsx` | `beginExperience` |
-| `feedback_opened` / `feedback_dismissed` / `feedback_submitted` | 反馈开关与提交 | `frontend/src/analytics/feedback.ts` | `trackFeedbackOpened` / `Dismissed` / `submitFeedback` → **只许** `captureBusinessEvent`。提交不报 `text` / `contact`，且看 opt-out |
+| `feedback_opened` / `feedback_dismissed` / `feedback_submitted` | 反馈开关与提交 | `frontend/src/analytics/feedback.ts` | `trackFeedbackOpened` / `Dismissed` / `submitFeedback`。提交是用户主动功能：带 `text` / 可选 `contact`，可走 `/capture/`，不看统计开关；界面须告知经 PostHog |
 | `mcp_tool_called` / `mcp_job_finished` | MCP 工具 | `backend/services/mcp_telemetry.py` | `record` / `_emit`（须叠信封；`version`→`app_version`） |
 | Sentry `user.id` = PostHog `distinct_id` | 前端拿到匿名 ID 后 | `frontend/src/analytics/posthog.ts` → `PUT /settings/analytics-identity` → `qa/telemetry.py` → `sentry_setup.py` | `publishAnonymousId` / `remember_distinct_id` / `sync_anonymous_user`；前端 `setAnonymousUser` |
 
@@ -483,7 +485,7 @@ FROM (
 | `social_publish_*` | 发布 | 保留；`scheduled`/`inbox` 不算 success |
 | `studio_qa_checked` / `studio_template_*` / `studio_output_rated` / `studio_output_shared` | 质量与包装 | 保留，诊断；QA 须叠信封 |
 | `mcp_tool_called` / `mcp_job_finished` | MCP | 保留，独立域；须叠信封 |
-| `feedback_opened` / `feedback_dismissed` / `feedback_submitted` | 反馈 | 保留；**必须**走 `captureBusinessEvent`；提交不报 `text`/`contact`，且看 opt-out |
+| `feedback_opened` / `feedback_dismissed` / `feedback_submitted` | 反馈 | 保留。`feedback_submitted` 是用户主动提交：允许 `text` / 可选 `contact`，可走 `/capture/`；须有 PostHog 告知文案 |
 | `example_project_open_*` / `example_project_viewed` | 示例 | 保留；`material_origin=sample` 不进真实出片率 |
 | `sponsor_link_opened` | 增长 | 保留，不进成功率 |
 
@@ -534,8 +536,8 @@ FROM (
 | `provider_validation_finished` 挂钩 | 线 A 预留，线 B 调用 | 发射函数预留 |
 | 后端线 A 事件补信封 | 线 A #361 | 新增字段；不改已有 `darwin`/`win32` |
 | 事件目录对照本清单 | 线 A #361 + `check_tracking_inventory.py` | catalog 必须覆盖 inventory |
-| QA / MCP / feedback 公共信封、`version`→`app_version` | 1.5.8 清理 PR | §12.1 T3 / T4 |
-| feedback 走白名单、去 text/contact、看 opt-out | 独立隐私 PR | 立即（1.5.8 仍验收信封） |
+| QA / MCP 公共信封、`version`→`app_version` | 1.5.8 清理 PR | §12.1 T3 / T4 |
+| feedback 告知文案（经 PostHog 送达 `text`/`contact`） | #361 | Kris：用户主动提交，不是隐私泄漏 |
 | 旧事件停发或打 `legacy=true`；删死 wrapper | 1.5.8 清理 PR | §12.1 T5 |
 | `os` / `outcome` / `app_version` 生产者统一 | 1.5.8 清理 PR | §12.1 T1 / T2 / T3 |
 | `backend_exit`（#1 续跑） | 1.5.9 | 本版不发 |
@@ -610,7 +612,9 @@ FROM (
 
 上报内容一律不得含：**key**、**带用户名的本地路径**（`/Users/xxx`、`C:\Users\xxx`）、**视频标题 / 文件名**、**转写文本**、**提示词**。`base_url` **只保留 host**（本机/内网记 `local`）。这五类值出现在任意属性名或任意字符串值里，schema 校验必须失败。
 
-产品默认开埋点。用户关掉后，或构建未配置 PostHog key 时，**一条事件也不许出网**。`feedback_submitted` / `feedback_opened` / `feedback_dismissed` 不例外：不得裸 POST `/capture/` 或 `posthog.capture`，不得上报 `text` / `contact` / 用户正文。关闭分析时反馈正文只走用户自己打开的 GitHub 回退页。
+产品默认开埋点。用户关掉后，或构建未配置 PostHog key 时，**业务事件一条也不许出网**。
+
+**`feedback_submitted` 例外（Kris，2026-10-14）：** 用户点「发送」是主动把这句话交给我们，不是静默采集。该事件**可以**带 `text` 和可选 `contact`，**可以** POST `/capture/`，且**不看**匿名统计开关。没有 PostHog key 或网络失败时，才打开预填的 GitHub 页。界面必须写明：正文和可选联系方式会先到 PostHog，再公开到 GitHub；邮箱不进公开帖。`feedback_opened` / `feedback_dismissed` 不带正文。其它事件仍不得报用户正文、邮箱或自由文本。
 
 ### 10.1 开关关闭时的行为
 
@@ -621,7 +625,9 @@ FROM (
 | `privacy.json` 的 `analytics: false` | 桌面数据目录（与崩溃报告同文件） | 后端 `qa.telemetry._analytics_allowed()` / MCP 发送 / `llm_emit._post_event` 全部 no-op |
 | 崩溃报告另开 | `privacy.json` `crash_reports`；前端 `autoclip.crashReports.optOut` | 与分析开关独立；分析关时 Sentry 仍不得带 PostHog id 去「补发」业务事件 |
 
-关闭时允许：生产者函数被调用、本地算脱敏字典、写测试夹具。禁止：对 `us.i.posthog.com`（或自建 host）发 capture/identify/flag；把未发送的事件缓冲到以后再补发。打开开关后只收**之后**的事件。
+关闭时允许：生产者函数被调用、本地算脱敏字典、写测试夹具。禁止：对 `us.i.posthog.com`（或自建 host）发**业务** capture/identify/flag；把未发送的事件缓冲到以后再补发。打开开关后只收**之后**的事件。
+
+例外：用户点发送的 `feedback_submitted` 仍可出网（§10），不看此开关。
 
 无 key 的开发构建与用户关闭同等对待：不污染线上。
 
@@ -689,7 +695,7 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 | --- | --- | --- |
 | 2026-10-14 | 本文件成为唯一准绳；`ANALYTICS.md` / `ANALYTICS_V2.md` 标为历史 | 本 PR（#362） |
 | 规范确认后 | 合 #361：只加新事件与 catalog，不删旧事件、不改 `darwin`/`win32` | 线 A |
-| 立即（独立 PR） | feedback 走 `captureBusinessEvent`，去掉 `text`/`contact`，遵守 opt-out | 隐私修复 |
+| #361 | 反馈告知文案：发送会先经 PostHog 再公开到 GitHub；`text`/`contact` 是用户主动提交 | 线 A |
 | **1.5.8** | 完成 §12.1 五条任务；停发或打标 §8.2 / §8.3；删死 wrapper。`check_tracking_inventory.py` 在 `backend.__version__ >= 1.5.8` 时强制验收 | 清理 PR |
 
 查询从现在起就用 §2.3 / §4.4 映射，这样 1.5.8 前后数字连续。1.5.8 之后还在发、又未打 `legacy=true` 的旧事件名，视为规范违规，扫描应失败。
@@ -703,7 +709,7 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 | T1 `single_os_enum` | 全生产者单一 `os`：只发 `macos` / `windows` / `linux`（侦不到才 `unknown`） | `workflow.ts`、`template_telemetry.py`、lifecycle、envelope 的 os 白名单不含 `darwin` / `win32` |
 | T2 `single_outcome_enum` | 全生产者单一 `outcome`：出片/设置终态只发 `success` / `error` / `partial` | 生产者 `outcome` 白名单不含 `completed`。screen 仍可用 `recommended` / `auto_started` / `manual` / `fallback`；experience 可用 `blocked`；校验可用 `skipped` |
 | T3 `app_version_only` | 版本只报 `app_version`，禁止裸字段 `version` | `app_installed` / `app_opened` / MCP 不再写 `version` |
-| T4 `common_envelope` | QA / MCP / feedback 走公共信封 | QA、MCP 调用 `envelope_properties()`；feedback 走 `captureBusinessEvent`，禁止裸 POST `/capture/` 与 `posthog.capture('feedback_*')` |
+| T4 `common_envelope` | QA / MCP 走公共信封 | QA、MCP 调用 `envelope_properties()`。`feedback_submitted` 是用户主动提交，允许 `/capture/` 带 `text`/`contact`，不看统计开关 |
 | T5 `legacy_stopped_or_tagged` | §8.2 / §8.3 旧事件停发，或继续发时每条带 `legacy=true`；死 wrapper 删除 | 仍出现在生产者里的 legacy 事件名，同一文件必须带 `legacy: true` |
 
 机读清单：`dates.close_transition` / `dates.stop_legacy_emit` / `dates.delete_wrappers` 均为 `"1.5.8"`。

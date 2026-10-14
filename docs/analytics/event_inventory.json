@@ -48,7 +48,7 @@
         "title": "Common envelope on QA/MCP/feedback",
         "envelope": ["app_version", "os", "analytics_environment", "runtime", "schema_version"],
         "paths": ["studio_qa_checked", "mcp_tool_called", "mcp_job_finished", "feedback_opened", "feedback_dismissed", "feedback_submitted"],
-        "accept": "QA/MCP call envelope_properties(); feedback uses captureBusinessEvent and does not POST /capture/"
+        "accept": "QA/MCP call envelope_properties(). feedback_submitted may POST /capture/ with user-authored text/contact"
       },
       "legacy_stopped_or_tagged": {
         "title": "Legacy events stopped or tagged legacy=true",
@@ -161,7 +161,7 @@
     "mcp_job_finished": { "status": "keep", "domain": "mcp", "envelope": "required" },
     "feedback_opened": { "status": "keep", "domain": "feedback", "path": "captureBusinessEvent" },
     "feedback_dismissed": { "status": "keep", "domain": "feedback", "path": "captureBusinessEvent" },
-    "feedback_submitted": { "status": "keep", "domain": "feedback", "path": "captureBusinessEvent", "forbid": ["text", "contact"] },
+    "feedback_submitted": { "status": "keep", "domain": "feedback", "path": "capture", "allow": ["text", "contact"], "user_initiated": true },
     "provider_test_requested": { "status": "legacy", "domain": "legacy", "legacy": true, "merge": "provider_connection_test_requested", "stop": "1.5.8" },
     "provider_test_accepted": { "status": "legacy", "domain": "legacy", "legacy": true, "merge": null, "stop": "1.5.8" },
     "provider_test_request_failed": { "status": "legacy", "domain": "legacy", "legacy": true, "merge": null, "stop": "1.5.8" },
