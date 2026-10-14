@@ -215,11 +215,20 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const fetchModels = async (connection: Connection): Promise<FetchListResult> => {
     const version = (versions.current[connection.id] || 0) + 1
     versions.current[connection.id] = version
+    setBusy(old => ({ ...old, [connection.id]: true }))
     try {
       const listing = await modelSettingsApi.fetchList(connection)
       if (!alive.current || versions.current[connection.id] !== version) return listing
       if (listing.ok || listing.success) {
-        backfillModels(connection, listing)
+        setLists(old => ({
+          ...old,
+          [connection.id]: mergeCustomList(connection, {
+            models: orderedIds(listing).map(id => ({ id, capability: null, analysis: true, image: false })),
+            source: listing.source === 'cache' || listing.source === 'catalog' ? listing.source : 'live',
+            preview: false,
+            updated_at: Date.now(),
+          }),
+        }))
         setListErrors(old => { const next = { ...old }; delete next[connection.id]; return next })
       } else {
         setListErrors(old => ({
@@ -230,9 +239,14 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       return listing
     } catch (e) {
       if (alive.current && versions.current[connection.id] === version) {
-        setListErrors(old => ({ ...old, [connection.id]: t('settings.providers.fetch_list_failed') }))
+        setListErrors(old => ({
+          ...old,
+          [connection.id]: t('settings.providers.fetch_list_failed'),
+        }))
       }
       throw e
+    } finally {
+      if (alive.current && versions.current[connection.id] === version) setBusy(old => ({ ...old, [connection.id]: false }))
     }
   }
 

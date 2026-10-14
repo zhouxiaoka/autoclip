@@ -135,6 +135,13 @@ test('firstBoundModel does not fall back to a non-language model', () => {
   assert.equal(applied.connections[0].custom_models[0].id, 'whisper-x')
 })
 
+test('fetchList ids merge without overwriting a manual model', () => {
+  const started = custom.addManualModel({ ...custom.emptyDraft(), name: 'Office', base_url: 'https://gw.example/v1' }, 'keep-me').draft
+  const merged = custom.mergeFetched(started, ['keep-me', 'new-llm', ''])
+  assert.equal(merged.models.find(model => model.id === 'keep-me').enabled, true)
+  assert.equal(merged.models.find(model => model.id === 'new-llm').enabled, false)
+})
+
 test('custom dialog and first-run source have no clipboard-paste control', () => {
   const files = [
     'AddCustomProviderDialog.tsx',
@@ -146,4 +153,67 @@ test('custom dialog and first-run source have no clipboard-paste control', () =>
     const source = fs.readFileSync(path.join(__dirname, '../src/features/settings', name), 'utf8')
     assert.equal(/从剪贴板粘贴|pasteFromClipboard|navigator\.clipboard/i.test(source), false, name)
   }
+})
+
+test('custom dialog fetches with fetchList and ignores a late response', async () => {
+  const React = require('react')
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/settings/AddCustomProviderDialog.tsx'), 'utf8')
+  assert.match(source, /modelSettingsApi\.fetchList/)
+  assert.equal(/modelSettingsApi\.discover/.test(source), false)
+  const pending = []
+  let cursor = 0
+  const slots = []
+  const react = {
+    useState(value) {
+      const i = cursor++
+      if (!(i in slots)) slots[i] = typeof value === 'function' ? value() : value
+      return [slots[i], next => { slots[i] = typeof next === 'function' ? next(slots[i]) : next }]
+    },
+    useRef(value) {
+      const i = cursor++
+      if (!(i in slots)) slots[i] = { current: value }
+      return slots[i]
+    },
+  }
+  const Dialog = loadTs('AddCustomProviderDialog.tsx', {
+    react,
+    antd: {
+      Input: { Password: props => React.createElement('input', props) },
+      Switch: () => null,
+    },
+    '../../i18n': { t: text => text },
+    '../../ui': {
+      Btn: ({ children, onClick }) => React.createElement('button', { onClick }, children),
+      Dialog: ({ children, footer }) => React.createElement('dialog', null, children, footer),
+      Row: ({ children }) => React.createElement('div', null, children),
+    },
+    '../../analytics/experience': { beginExperience: () => () => {} },
+    './modelSettingsApi': {
+      modelSettingsApi: {
+        fetchList: () => new Promise(resolve => pending.push(resolve)),
+        discover: () => { throw new Error('must not use discover') },
+      },
+    },
+    './customProvider': custom,
+  }).default
+  const flatten = node => {
+    if (Array.isArray(node)) return node.flatMap(flatten)
+    if (!React.isValidElement(node)) return [node]
+    return [node, ...React.Children.toArray(node.props?.children).flatMap(flatten),
+      ...React.Children.toArray(node.props?.footer).flatMap(flatten)]
+  }
+  const render = () => { cursor = 0; return Dialog({ open: true, onClose() {}, onSubmit() {} }) }
+  flatten(render()).find(node => node?.props?.['aria-label'] === '接口地址')
+    .props.onChange({ target: { value: 'https://gw.example/v1' } })
+  const fetchBtn = flatten(render()).find(node => String(node?.props?.children).includes('获取模型列表'))
+  void fetchBtn.props.onClick()
+  void fetchBtn.props.onClick()
+  pending[0]({ ok: true, models: ['stale-id'], source: 'live' })
+  await Promise.resolve()
+  pending[1]({ ok: true, models: ['fresh-id'], source: 'live' })
+  await Promise.resolve()
+  await Promise.resolve()
+  const tree = JSON.stringify(flatten(render()))
+  assert.equal(tree.includes('fresh-id'), true)
+  assert.equal(tree.includes('stale-id'), false)
 })

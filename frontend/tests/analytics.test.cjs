@@ -603,6 +603,50 @@ test('fetchModels ignores a late response after the URL changes',async()=>{
   assert.equal(JSON.stringify(m.lists).includes('old.example'),false)
 })
 
+test('actual fetchList ignores stale completions',async()=>{
+ const s=setup();const pending=[]
+ const render=settingsHook(s,{
+  discover:async()=>({models:[],source:'catalog',preview:true}),
+  fetchList:()=>new Promise(resolve=>pending.push(resolve)),
+ },modelFixture())
+ await render().load();const m=render();const c=m.settings.connections[0]
+ const first=m.fetchModels(c)
+ const second=m.fetchModels(c)
+ pending[0]({ok:true,models:['stale-id'],source:'live'})
+ await Promise.resolve()
+ pending[1]({ok:true,models:['fresh-id'],source:'live'})
+ await second
+ await first.catch(()=>{})
+ const latest=render()
+ const ids=latest.lists[c.id].models.map(model=>model.id)
+ assert.equal(ids.join(','),'fresh-id')
+ assert.equal(JSON.stringify(s.events).includes('stale-id'),false)
+})
+
+test('fetchList preserves recommendations and server hints without rediscovery',async()=>{
+ let discoveries=0;const pending=[]
+ const render=settingsHook(setup(),{
+  discover:async()=>{discoveries++;return {models:[],source:'catalog',preview:true}},
+  fetchList:()=>new Promise(resolve=>pending.push(resolve)),
+ },modelFixture())
+ await render().load();await Promise.resolve()
+ const c=render().settings.connections[0];const initialDiscoveries=discoveries
+ const success=render().fetchModels(c)
+ assert.equal(render().busy[c.id],true)
+ pending[0]({ok:true,models:['other','recommended'],recommended:{analysis:['recommended']},source:'cache'})
+ await success
+ assert.deepEqual(Array.from(render().lists[c.id].models,m=>m.id),['recommended','other'])
+ assert.equal(render().lists[c.id].source,'cache')
+ assert.equal(render().busy[c.id],false)
+ assert.equal(discoveries,initialDiscoveries)
+ const failed=render().fetchModels(c)
+ pending[1]({ok:false,models:[],message_key:'settings.providers.fetch_list_failed'})
+ await failed
+ assert.equal(render().listErrors[c.id],'settings.providers.fetch_list_failed')
+ assert.equal(render().busy[c.id],false)
+ assert.deepEqual(Array.from(render().lists[c.id].models,m=>m.id),['recommended','other'])
+})
+
 test('actual discovery ignores stale completions and distinguishes preview from live results',async()=>{
  const s=setup();let pending=[]
  const render=settingsHook(s,{discover:()=>new Promise(resolve=>pending.push(resolve))},modelFixture())

@@ -692,6 +692,44 @@ def test_custom_models_survive_save_reopen_and_are_not_overwritten_by_discover(m
         assert again[0]['vision'] is True
 
 
+def test_fetch_list_returns_ids_without_secrets(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    from backend.core.provider_model_fetch import AccountModelList
+    from backend.services import provider_validation
+
+    assert len([route for route in router.routes
+                if route.path == '/settings/ai-models/fetch-list' and 'POST' in route.methods]) == 1
+
+    def fetch_list(connection):
+        assert connection.api_key == 'sk-custom-secret'
+        return AccountModelList(ok=True, models=['relay-a', 'office-llm'],
+                                source='live', base_url_host='gw.example')
+
+    monkeypatch.setattr(provider_validation, 'fetch_list_for_connection', fetch_list)
+    settings = ai.ModelSettings(
+        connections=[ai.Connection(
+            id='gw', name='Office', provider='compatible',
+            base_url='https://gw.example/v1', api_key='sk-custom-secret',
+        )],
+        analysis=ai.Assignment(connection_id='gw', model='office-llm'),
+    )
+    ai.save(settings)
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        public = client.get('/settings/ai-models').json()['connections'][0]
+        response = client.post('/settings/ai-models/fetch-list', json={'connection': public})
+    assert response.status_code == 200
+    body = response.json()
+    assert body['ok'] is True
+    assert body['models'] == ['relay-a', 'office-llm']
+    assert body['base_url_host'] == 'gw.example'
+    assert 'sk-custom-secret' not in response.text
+    assert 'https://gw.example' not in response.text
+
+
 def test_custom_models_persist_without_exposing_keys():
     settings = ai.ModelSettings(
         connections=[ai.Connection(
