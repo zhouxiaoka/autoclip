@@ -13,7 +13,7 @@ import { assignAnalysis, ensureCatalogConnection, selectLocalAsr, type LocalAsrI
 import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
-import { applyCustomProvider, listFromOffers, type CustomProviderDraft } from './customProvider'
+import { applyCustomProvider, mergeCustomList, type CustomProviderDraft } from './customProvider'
 
 export const roleLabel = (role: Role) =>
   ({ analysis: t('模型'), vision: t('画面理解模型'), cover: t('生图模型'), transcription: t('转写模型') })[role]
@@ -73,12 +73,13 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     try {
       const result = await modelSettingsApi.discover(connection, refresh)
       if (!alive.current || versions.current[connection.id] !== version) return
+      const merged = mergeCustomList(connection, result)
       const before = settingsRef.current
-      const after = before && !result.preview ? applyModelDefaults(before, connection, result.models, autoCover.current) : before
-      finish('completed', { source: result.source, preview: !!result.preview, has_warning: !!result.warning, result_count: result.models.length, defaults_applied: JSON.stringify(before) !== JSON.stringify(after) })
-      setLists(old => ({ ...old, [connection.id]: result }))
+      const after = before && !merged.preview ? applyModelDefaults(before, connection, merged.models, autoCover.current) : before
+      finish('completed', { source: merged.source, preview: !!merged.preview, has_warning: !!merged.warning, result_count: merged.models.length, defaults_applied: JSON.stringify(before) !== JSON.stringify(after) })
+      setLists(old => ({ ...old, [connection.id]: merged }))
       setListErrors(old => { const next = { ...old }; delete next[connection.id]; return next })
-      setSettings(old => old && !result.preview ? applyModelDefaults(old, connection, result.models, autoCover.current) : old)
+      setSettings(old => old && !merged.preview ? applyModelDefaults(old, connection, merged.models, autoCover.current) : old)
     } catch (e) {
       if (alive.current && versions.current[connection.id] === version) { finish('failed', {}, e); setListErrors(old => ({ ...old, [connection.id]: errorText(e) })) }
     } finally {
@@ -96,6 +97,13 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       savedRef.current = value
       autoCover.current = !value.saved
       setSettings(value)
+      setLists(old => {
+        const next = { ...old }
+        value.connections.forEach(connection => {
+          if (connection.custom_models?.length) next[connection.id] = mergeCustomList(connection, next[connection.id])
+        })
+        return next
+      })
       value.connections.forEach(c => { void discover(c, false, 'load') })
     } catch (e) { if (alive.current) { finish('failed', {}, e); setError(errorText(e)) } }
   }
@@ -170,10 +178,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     const next = applyCustomProvider(settings, draft)
     const connection = next.connections[next.connections.length - 1]
     replace(next)
-    if (connection) {
-      setLists(old => ({ ...old, [connection.id]: listFromOffers(draft.models) }))
-      void discover(connection, true, 'provider_change')
-    }
+    if (connection) setLists(old => ({ ...old, [connection.id]: mergeCustomList(connection) }))
   }
 
   const emitValidation = (connection: Connection, result: ValidationResult) => {
@@ -198,10 +203,10 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     if (ids.length) {
       setLists(old => ({
         ...old,
-        [connection.id]: {
+        [connection.id]: mergeCustomList(connection, {
           models: ids.map(id => ({ id, capability: null, analysis: true, image: false })),
           source: 'live', preview: false, updated_at: Date.now(),
-        },
+        }),
       }))
     }
     void discover(connection, true, 'manual')

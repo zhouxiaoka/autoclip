@@ -136,7 +136,67 @@ def _cap(inputs):
     return None
 
 
+def _custom_offers(connection):
+    offers = list(getattr(connection, 'custom_models', None) or [])
+    if offers:
+        return offers
+    try:
+        from backend.services import ai_model_settings as ai_models
+        previous = ai_models.load()
+    except Exception:
+        return []
+    ident = getattr(connection, 'id', None)
+    old = next((item for item in previous.connections if item.id == ident), None) if previous and ident else None
+    return list(old.custom_models) if old else []
+
+
+def _record_from_offer(offer):
+    name = str(getattr(offer, 'id', '') or '').strip()
+    if not name:
+        return None
+    types = set(getattr(offer, 'types', None) or ['language'])
+    scenarios = set(getattr(offer, 'scenarios', None) or [])
+    vision = bool(getattr(offer, 'vision', False) and 'language' in types)
+    asr = 'asr' in types or 'transcription' in scenarios
+    return {
+        'id': name,
+        'capability': 'multimodal' if vision else ('text' if 'language' in types else None),
+        'capability_source': 'custom',
+        'analysis': 'analysis' in scenarios or 'language' in types,
+        'image': 'image' in types or 'cover' in scenarios,
+        'asr': asr,
+        'asr_supported': 'asr' in types,
+        'asr_preview': False,
+        'asr_note': None,
+    }
+
+
+def _merge_custom_models(connection, value):
+    """Keep user-authored custom_models in the picker. Live IDs are additive."""
+    models = [item for item in (value.get('models') or []) if isinstance(item, dict)]
+    by_id = {item.get('id'): index for index, item in enumerate(models)}
+    for offer in _custom_offers(connection):
+        if getattr(offer, 'enabled', True) is False:
+            continue
+        record = _record_from_offer(offer)
+        if not record:
+            continue
+        existing = by_id.get(record['id'])
+        if existing is None:
+            by_id[record['id']] = len(models)
+            models.append(record)
+        else:
+            models[existing] = {**models[existing], **record}
+    return {**value, 'models': models}
+
+
 def lookup_capability(connection, model):
+    for offer in _custom_offers(connection):
+        if getattr(offer, 'id', None) != model or getattr(offer, 'enabled', True) is False:
+            continue
+        record = _record_from_offer(offer)
+        if record:
+            return record.get('capability')
     data = _read()
     entry = next((m for m in data.get(_scope(connection), {}).get('models', []) if m['id'] == model), None)
     if entry and entry.get('capability_source') == 'provider' and entry.get('capability'):
@@ -248,6 +308,10 @@ def _records(connection, raw, data):
 
 
 async def discover(connection, refresh=False):
+    return _merge_custom_models(connection, await _discover_from_provider(connection, refresh))
+
+
+async def _discover_from_provider(connection, refresh=False):
     from backend.services.ai_model_settings import chat_endpoint
     from backend.core.llm_providers import is_local_url
     endpoint = chat_endpoint(connection, '')

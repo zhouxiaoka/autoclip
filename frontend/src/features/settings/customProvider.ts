@@ -2,7 +2,7 @@
  * Draft + constraints for a user-added OpenAI-compatible provider.
  * Protocol is fixed; model attributes follow the settings purpose rules.
  */
-import { normalizeProviderBaseUrl } from './providerUrl'
+import { cleanupBaseUrl, normalizeProviderBaseUrl } from './providerUrl'
 import type { Connection, ModelEntry, ModelList, ModelSettings } from './modelSettingsApi'
 import { cleanBinding } from './modelSettingsLogic'
 import { isConsoleHost } from './providerAccess'
@@ -96,6 +96,22 @@ export function mergeDiscovered(draft: CustomProviderDraft, entries: ModelEntry[
   return { ...draft, models: Array.from(byId.values()) }
 }
 
+export function mergeFetched(draft: CustomProviderDraft, ids: string[]): CustomProviderDraft {
+  return mergeDiscovered(draft, ids.filter(Boolean).map(id => ({
+    id, capability: null, analysis: true, image: false,
+  })))
+}
+
+/** Custom offers win on id clash so a live /models refresh cannot drop user attributes. */
+export function mergeCustomList(connection: Connection, live?: ModelList | null): ModelList {
+  const custom = listFromOffers(connection.custom_models || [])
+  if (!live) return custom
+  if (!custom.models.length) return live
+  const byId = new Map(live.models.map(model => [model.id, model]))
+  for (const entry of custom.models) byId.set(entry.id, entry)
+  return { ...live, models: Array.from(byId.values()) }
+}
+
 export function addManualModel(draft: CustomProviderDraft, rawId: string): { draft: CustomProviderDraft; issue?: DraftIssue } {
   const id = rawId.trim()
   if (!id) return { draft, issue: 'model_id' }
@@ -139,7 +155,7 @@ function urlLooksBlocked(value: string): boolean {
 }
 
 export function draftUrlIssue(url: string): 'empty' | 'invalid' | null {
-  const stripped = stripChatCompletions(collapseSpaces(url))
+  const stripped = cleanupBaseUrl(url)
   if (!stripped) return 'empty'
   const cleaned = normalizedDraftUrl(url)
   if (!cleaned) return 'empty'
