@@ -78,23 +78,16 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
   for (const connection of settings.connections) {
     const preset = matchedCatalogPreset(connection)
     const provider = preset?.id || connection.provider
-    const live = (lists[connection.id]?.models || []).filter(entry => entryFits(purpose, entry))
+    const list = lists[connection.id]
+    const live = (list?.models || []).filter(entry => entryFits(purpose, entry))
     const ready = connectionReady(connection)
-    if (live.length) {
-      for (const entry of live) {
-        addOffer(byId, {
-          modelId: entry.id, provider, connectionId: connection.id,
-          connected: ready, displayName: displayName(connection),
-        })
-      }
-    } else if (ready) {
-      for (const modelId of preset?.candidates[key] || []) {
-        addOffer(byId, {
-          modelId, provider, connectionId: connection.id,
-          connected: true, displayName: displayName(connection),
-        })
-      }
+    for (const entry of live) {
+      addOffer(byId, {
+        modelId: entry.id, provider, connectionId: connection.id,
+        connected: ready, displayName: displayName(connection),
+      })
     }
+    // A live/cache list with no suitable model is authoritative: do not invent catalog candidates.
   }
   for (const modelId of Object.keys(byId)) {
     const offers = byId[modelId]
@@ -103,9 +96,12 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
       if (offers.some(item => item.provider === preset.id)) continue
       const candidate = findCatalogConnection(settings, preset)
       const connection = candidate && connectionReady(candidate) ? candidate : undefined
+      const list = connection && lists[connection.id]
+      if (list && !list.models.some(entry => entry.id === modelId && entryFits(purpose, entry))) continue
       addOffer(byId, {
         modelId, provider: preset.id, connectionId: connection?.id,
-        connected: !!connection, displayName: preset.short_name || preset.display_name,
+        connected: !!connection && connectionReady(connection) && !!list,
+        displayName: preset.short_name || preset.display_name,
       })
     }
   }

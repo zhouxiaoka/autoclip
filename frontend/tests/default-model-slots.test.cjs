@@ -55,6 +55,17 @@ test('provider rank is recommended then popular then other', () => {
   assert.ok(slots.providerRank('dashscope') < slots.providerRank('openrouter'))
 })
 
+test('a live list without a suitable model does not invent catalog candidates', () => {
+  const groups = slots.collectModelGroups(settings(), lists, 'transcription')
+  assert.equal(groups.length, 0)
+  const cover = slots.collectModelGroups(settings(), lists, 'cover')
+  assert.equal(cover.some(group => group.modelId === 'wanx2.1-t2i-turbo'), true, 'image models that are on a live list stay')
+  const emptyCover = slots.collectModelGroups(settings({
+    connections: [conn('ds', 'dashscope')],
+  }), { ds: { source: 'live', models: [{ id: 'qwen-plus', capability: 'text', analysis: true, image: false }] } }, 'cover')
+  assert.equal(emptyCover.length, 0)
+})
+
 test('the same model id is listed once and smart pick prefers the sponsor connection', () => {
   const groups = slots.collectModelGroups(settings(), lists, 'analysis')
   const gpt = groups.find(group => group.modelId === 'gpt-4o-mini')
@@ -140,4 +151,33 @@ test('U2 reuses U1 compatible catalog connections without duplicate provider off
   const next = slots.applySmartSelection(state, 'analysis', group.modelId, offer.connectionId)
   assert.equal(next.connections[0].provider, 'compatible', 'routing retains the U1 connection API')
   assert.equal(next.analysis.model_source, 'preset')
+})
+
+test('catalog enrichment respects authoritative lists on compatible connections', () => {
+  const gateway = conn('ds', 'compatible', { name: 'DeepSeek', base_url: 'https://api.deepseek.com' })
+  const state = settings({ connections: [conn('infi', 'infistar'), gateway] })
+  const infi = { ...lists.infi, models: [{ id: 'deepseek-flash', capability: 'text', analysis: true, image: false }] }
+  for (const source of ['live', 'cache']) {
+    for (const models of [[], [{ id: 'deepseek-flash', capability: 'text', analysis: false, image: true }]]) {
+      const groups = slots.collectModelGroups(state, { infi, ds: { source, models } }, 'analysis')
+      const group = groups.find(item => item.modelId === 'deepseek-flash')
+      assert.ok(group)
+      assert.equal(group.offers.some(offer => offer.provider === 'deepseek'), false)
+      assert.equal(group.offers.some(offer => offer.provider === 'compatible'), false)
+    }
+  }
+})
+
+test('missing lists create no models and do not make matched catalog offers connected', () => {
+  const gateway = conn('ds', 'compatible', { name: 'DeepSeek', base_url: 'https://api.deepseek.com' })
+  const state = settings({ connections: [conn('infi', 'infistar'), gateway] })
+  assert.deepEqual(plain(slots.collectModelGroups(state, {}, 'analysis')), [])
+  const infi = { ...lists.infi, models: [{ id: 'deepseek-flash', capability: 'text', analysis: true, image: false }] }
+  const groups = slots.collectModelGroups(state, { infi }, 'analysis')
+  const group = groups.find(item => item.modelId === 'deepseek-flash')
+  const offer = group.offers.find(item => item.provider === 'deepseek')
+  assert.ok(offer)
+  assert.equal(offer.connectionId, 'ds')
+  assert.equal(offer.connected, false)
+  assert.equal(slots.preferredOffer([offer]), undefined)
 })
