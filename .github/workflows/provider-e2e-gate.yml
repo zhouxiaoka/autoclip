@@ -1,0 +1,189 @@
+name: Provider E2E Gate
+
+# Required after candidate-gate and before Release Acceptance.
+# Mock never needs secrets. Live keys live in environment provider-e2e
+# and are skipped (not failed) when unset.
+
+on:
+  workflow_call:
+    inputs:
+      include_live:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      include_live:
+        description: "Also run live providers when environment secrets exist"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "17 18 * * *"
+  pull_request:
+  # No branch filter: same-repo feature-branch pushes that touch the gate
+  # must actually run mock on Actions (release still goes through workflow_call).
+  push:
+    paths:
+      - ".github/workflows/provider-e2e-gate.yml"
+      - ".github/workflows/desktop-build.yml"
+      - "scripts/provider_e2e/**"
+      - "scripts/tests/test_provider_e2e.py"
+      - "docs/PROVIDER_E2E_GATE.md"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: provider-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PIP_INDEX_URL: https://pypi.org/simple
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  fork-skip:
+    name: fork-skip
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Fork PRs skip provider e2e so environment secrets never leave the repo.'
+
+  mock:
+    name: mock-e2e
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install headless media runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
+          ffmpeg -version
+          ffprobe -version
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+      - name: Run mock provider e2e
+        env:
+          OPENAI_API_KEY: ""
+          DASHSCOPE_API_KEY: ""
+          GEMINI_API_KEY: ""
+          DEEPSEEK_API_KEY: ""
+        run: PYTHONPATH=scripts python -m provider_e2e --suite mock --out "$RUNNER_TEMP/provider-e2e-mock"
+      - name: Upload mock report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-e2e-mock
+          path: ${{ runner.temp }}/provider-e2e-mock/report.*
+          if-no-files-found: error
+          retention-days: 30
+
+  live:
+    name: live-e2e
+    needs: mock
+    if: >-
+      github.event_name != 'pull_request'
+      && (github.ref == 'refs/heads/main'
+          || startsWith(github.ref, 'refs/tags/v')
+          || (github.event_name == 'workflow_dispatch' && inputs.include_live)
+          || github.event_name == 'schedule')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: provider-e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install headless media runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+      - name: Run live providers or skip when keys are unset
+        env:
+          API88_API_KEY: ${{ secrets.API88_API_KEY }}
+          API88_MODEL: ${{ secrets.API88_MODEL }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+        run: PYTHONPATH=scripts python -m provider_e2e --suite live --out "$RUNNER_TEMP/provider-e2e-live"
+      - name: Upload live report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-e2e-live
+          path: ${{ runner.temp }}/provider-e2e-live/report.*
+          if-no-files-found: error
+          retention-days: 30
+
+  provider-e2e:
+    name: provider-e2e
+    needs: [mock, live]
+    if: always() && !cancelled() && needs.mock.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: provider-e2e-mock
+          path: reports/mock
+      - uses: actions/download-artifact@v4
+        if: needs.live.result == 'success'
+        continue-on-error: true
+        with:
+          name: provider-e2e-live
+          path: reports/live
+      - name: Judge combined reports
+        run: |
+          set -euo pipefail
+          ARGS=(--suite judge --out "$RUNNER_TEMP/provider-e2e" --report reports/mock/report.json)
+          if [ -f reports/live/report.json ]; then
+            ARGS+=(--report reports/live/report.json)
+          fi
+          PYTHONPATH=scripts python -m provider_e2e "${ARGS[@]}"
+          python - <<'PY'
+          import json, pathlib
+          report = json.loads(pathlib.Path('reports/mock/report.json').read_text())
+          print(pathlib.Path('reports/mock/report.md').read_text() if pathlib.Path('reports/mock/report.md').is_file() else report.get('status'))
+          live = pathlib.Path('reports/live/report.md')
+          if live.is_file():
+              print(live.read_text())
+          PY
+      - name: Upload combined report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-e2e-report
+          path: |
+            reports/**
+            ${{ runner.temp }}/provider-e2e/report.*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo '## Provider e2e'
+            [ -f reports/mock/report.md ] && cat reports/mock/report.md
+            [ -f reports/live/report.md ] && cat reports/live/report.md
+            [ -f "$RUNNER_TEMP/provider-e2e/report.md" ] && cat "$RUNNER_TEMP/provider-e2e/report.md"
+          } >> "$GITHUB_STEP_SUMMARY"

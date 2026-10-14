@@ -50,6 +50,8 @@ runner 创建临时数据库、配置、日志和隐私关闭文件，清空继�
 
 Desktop Build 除统一源码 CI 外，还必须通过 Windows Whisper 恢复/真实离线转写，以及三平台 SenseVoice 实际安装、模型下载与离线转写。原有这两套工作流只有 PR 路径触发，不能当成 tag 已验证；现在复用为构建的依赖，校验器核对目标构建中的实际 job。开发 Python 上的真实转写仍须由最终安装包产品矩阵补验。
 
+发版还必须通过 [服务商端到端门槛](PROVIDER_E2E_GATE.md)：`desktop-build.yml` 在 `candidate-gate` 之后调用 `provider-e2e-gate.yml`，Release Acceptance 把 `provider-e2e` 列为 required job。Linux 无界面后端跑约 10 条固定素材；本地 mock（含 429 / 503 / 断线 / 杀后端）是必过项。真实 88API / DeepSeek / Gemini 只在 Environment `provider-e2e` 有 key 时运行，未配置则跳过并在汇总标明，不因此失败。应成功组合当次 ≥95%；应拦下组合必须在开始前 100% 拦下且付费调用为 0。这不能代替双平台安装包真机验收。
+
 终端用户不应为可选 ASR 安装编译工具。Python 3.13 下 editdistance 缺少上游 wheel，开发 CI 曾因自带编译器而掩盖安装包失败。桌面构建现用同一 portable Python 预编译、离线安装并加载原生 wheel，随 backend 提供；两平台的安装包阶段还运行真实 SenseVoice 准备、模型下载和离线转写，防止仅源码环境可用。模型网络下载失败仍是红灯，不以 wheel 检查代替完整准备。
 
 ## 4. 最终安装包的必测矩阵
@@ -164,6 +166,7 @@ Desktop Build 发布前自动生成 `build-provenance.json`，记录源提交、
 
 - 仓库执行约束：[AGENTS.md](../AGENTS.md)
 - 统一源码检查：[quality_gate.py](../scripts/quality_gate.py)，[CI](../.github/workflows/ci.yml)
+- 服务商端到端门槛：[PROVIDER_E2E_GATE.md](PROVIDER_E2E_GATE.md)，[provider-e2e-gate.yml](../.github/workflows/provider-e2e-gate.yml)
 - 内部构建与标签前验收：[Desktop Build](../.github/workflows/desktop-build.yml)、[internal_acceptance.py](../scripts/internal_acceptance.py)、[Internal Acceptance](../.github/workflows/internal-acceptance.yml)
 - 验收校验器：[release_acceptance.py](../scripts/release_acceptance.py)，[Release Acceptance](../.github/workflows/release-acceptance.yml)
 - 转正/撤回：[Promote / Halt Release](../.github/workflows/promote-release.yml)
