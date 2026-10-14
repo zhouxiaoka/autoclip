@@ -17,7 +17,8 @@ export function canonOs(value: unknown): string | undefined {
   return OS_CANON[value] || value
 }
 
-/** 1.5.8 send contract: completed→success, failed→error. */
+/** 1.5.8 send contract: completed→success, failed→error.
+ * Legacy `processing_finished` keeps `cancelled` (user abort is not a product error). */
 export function canonOutcome(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   return OUTCOME_CANON[value] || value
