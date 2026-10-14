@@ -64,6 +64,19 @@ test('a live list without a suitable model does not invent catalog candidates', 
   assert.equal(emptyCover.length, 0)
 })
 
+test('cloud transcription only lists models with a supported, non-preview ASR route', () => {
+  const asrLists = {
+    ds: { source: 'live', models: [
+      { id: 'qwen-audio-3.0-asr-flash', asr: true, asr_supported: true, analysis: false, image: false },
+      { id: 'paraformer-v2', asr: true, asr_supported: false, analysis: false, image: false },
+      { id: 'qwen-audio-preview', asr: true, asr_supported: true, asr_preview: true, analysis: false, image: false },
+      { id: 'qwen-plus', capability: 'text', analysis: true, image: false },
+    ] },
+  }
+  const groups = slots.collectModelGroups(settings({ connections: [conn('ds', 'dashscope')] }), asrLists, 'transcription')
+  assert.deepEqual(groups.map(group => group.modelId), ['qwen-audio-3.0-asr-flash'])
+})
+
 test('a key without a passed access check is not shown as connected', () => {
   const state = settings({
     connections: [
