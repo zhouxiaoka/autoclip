@@ -10,7 +10,7 @@ import {
   type ModelGroup, type ModelOffer, type PurposeId, type SlotLine,
 } from './defaultModelSlots'
 
-const SMART_HINT = '自动从当前服务商的推荐列表里选可用模型；这家限流或下线时换下一个推荐型号，不会改换服务商。'
+const SMART_HINT = '记下这个型号，只绑定这一家服务商。换服务商请用下面的固定选项。'
 
 function lineText(line: SlotLine): string {
   if (line.kind === 'off') return t('关闭 · 使用视频帧')
