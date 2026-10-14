@@ -51,7 +51,8 @@ assert len(received) == 1, received
 event = received[0]
 expected = {'runtime': 'python', 'app_mode': 'desktop',
             'build_environment': os.environ['AUTOCLIP_BUILD_ENVIRONMENT'],
-            'area': 'studio', 'phase': 'production', 'error_code': 'unexpected'}
+            'area': 'studio', 'phase': 'production', 'error_code': 'unexpected',
+            'failure_stage': 'production'}
 if os.environ['AUTOCLIP_BUILD_ENVIRONMENT'] == 'validation':
     expected['telemetry_test'] = 'true'
 assert event.get('tags') == expected, event.get('tags')

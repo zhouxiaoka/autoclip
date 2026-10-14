@@ -86,6 +86,11 @@ def remember_distinct_id(value: str) -> bool:
         return False
     try:
         if _read_id(path) == value:
+            try:
+                from backend.core.sentry_setup import sync_anonymous_user
+                sync_anonymous_user(value)
+            except Exception:  # noqa: BLE001
+                logger.debug("Sentry user was not aligned with PostHog distinct_id")
             return True
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f'{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp')
@@ -97,7 +102,14 @@ def remember_distinct_id(value: str) -> bool:
             return False
     except OSError:
         return False
-    return _read_id(path) == value
+    ok = _read_id(path) == value
+    if ok:
+        try:
+            from backend.core.sentry_setup import sync_anonymous_user
+            sync_anonymous_user(value)
+        except Exception:  # noqa: BLE001 - Sentry identity is optional
+            logger.debug("Sentry user was not aligned with PostHog distinct_id")
+    return ok
 
 
 def anonymous_distinct_id() -> str:

@@ -106,67 +106,77 @@ def vision_call(content, config=None, *, allow_event_list=False):
 
     req = request(body)
     started = time.monotonic()
+    _telem = {'retries': 0, 'result': None, 'error': None}
 
     def failure(code, message, status=None):
         return VisionRequestError(code, message, elapsed_seconds=time.monotonic()-started, http_status=status)
 
     try:
         try:
-            with urllib.request.urlopen(req, timeout=config.get('timeout', 180)) as response:
-                result = json.load(response)
+            try:
+                with urllib.request.urlopen(req, timeout=config.get('timeout', 180)) as response:
+                    result = json.load(response)
+            except urllib.error.HTTPError as error:
+                detail = ''
+                if error.code == 400 and 'max_tokens' in body:
+                    try:
+                        detail = error.read(4096).decode('utf-8', 'replace')
+                    except Exception:  # noqa: BLE001
+                        detail = ''
+                if not asks_for_max_completion_tokens(detail):
+                    raise
+                error.close()
+                # One retry with the parameter the provider asked for; never more.
+                _telem['retries'] = 1
+                body = to_max_completion_tokens(body)
+                with urllib.request.urlopen(request(body), timeout=config.get('timeout', 180)) as response:
+                    result = json.load(response)
+        except TimeoutError:
+            raise failure('timeout', '视觉模型响应超时，请在「设置 → 视觉理解」中提高请求超时后重试；原素材已保留') from None
         except urllib.error.HTTPError as error:
-            detail = ''
-            if error.code == 400 and 'max_tokens' in body:
-                try:
-                    detail = error.read(4096).decode('utf-8', 'replace')
-                except Exception:  # noqa: BLE001
-                    detail = ''
-            if not asks_for_max_completion_tokens(detail):
-                raise
+            status = error.code
             error.close()
-            # One retry with the parameter the provider asked for; never more.
-            body = to_max_completion_tokens(body)
-            with urllib.request.urlopen(request(body), timeout=config.get('timeout', 180)) as response:
-                result = json.load(response)
-    except TimeoutError:
-        raise failure('timeout', '视觉模型响应超时，请在「设置 → 视觉理解」中提高请求超时后重试；原素材已保留') from None
-    except urllib.error.HTTPError as error:
-        status = error.code
-        error.close()
-        code = 'rate_limited' if status == 429 else 'authentication' if status in (401, 403) else 'provider_error'
-        message = '视觉模型请求过于频繁，请稍后手动重试；不会自动重复请求' if status == 429 else f'视觉模型请求失败（HTTP {status}），请检查视觉模型设置后重试'
-        raise failure(code, message, status) from None
-    except urllib.error.URLError as error:
-        if isinstance(error.reason, TimeoutError):
-            raise failure('timeout', '视觉模型连接超时，请检查网络后重试；原素材已保留') from None
-        raise failure('connection', '无法连接视觉模型，请检查接口地址与网络后重试') from None
-    except (OSError, EOFError, HTTPException):
-        raise failure('connection', '视觉模型连接中断，请稍后重试；原素材已保留') from None
-    except (ValueError, UnicodeError):
-        raise failure('invalid_response', '视觉模型返回了无法解析的响应，请检查接口兼容性后重试') from None
-    from backend.core import llm_usage
-    llm_usage.record(model, result.get('usage') if isinstance(result, dict) else None, kind='vision',
-                     prompt_chars=sum(len(part.get('text', '')) for part in content if isinstance(part, dict)),
-                     completion_chars=len(str(((result.get('choices') or [{}])[0].get('message') or {}).get('content') or '')) if isinstance(result, dict) else 0,
-                     images=sum(1 for part in content if isinstance(part, dict) and part.get('type') == 'image_url'))
-    try:
-        choice = result['choices'][0]
-        if choice.get('finish_reason') == 'length':
-            raise failure('output_truncated', '视觉模型输出被截断，本次未生成完整结果；请尝试较短素材或其他视觉模型')
-        if choice.get('finish_reason') == 'content_filter' or choice.get('message', {}).get('refusal'):
-            raise failure('refused', '视觉模型未处理这段素材，请检查素材或更换模型')
-        value = decode_json(choice['message']['content'])
-        # Some compatible models return the requested events as a bare array.
-        # Only scan/refinement declare that meaning; other stages remain strict.
-        if allow_event_list and isinstance(value, list) and all(isinstance(item, dict) for item in value):
-            value = {'events': value}
-        if not isinstance(value, dict):
-            raise ValueError('Expected a JSON object')
-        return value
-    except VisionRequestError:
+            code = 'rate_limited' if status == 429 else 'authentication' if status in (401, 403) else 'provider_error'
+            message = '视觉模型请求过于频繁，请稍后手动重试；不会自动重复请求' if status == 429 else f'视觉模型请求失败（HTTP {status}），请检查视觉模型设置后重试'
+            raise failure(code, message, status) from None
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                raise failure('timeout', '视觉模型连接超时，请检查网络后重试；原素材已保留') from None
+            raise failure('connection', '无法连接视觉模型，请检查接口地址与网络后重试') from None
+        except (OSError, EOFError, HTTPException):
+            raise failure('connection', '视觉模型连接中断，请稍后重试；原素材已保留') from None
+        except (ValueError, UnicodeError):
+            raise failure('invalid_response', '视觉模型返回了无法解析的响应，请检查接口兼容性后重试') from None
+        _telem['result'] = result
+        from backend.core import llm_usage
+        llm_usage.record(model, result.get('usage') if isinstance(result, dict) else None, kind='vision',
+                         prompt_chars=sum(len(part.get('text', '')) for part in content if isinstance(part, dict)),
+                         completion_chars=len(str(((result.get('choices') or [{}])[0].get('message') or {}).get('content') or '')) if isinstance(result, dict) else 0,
+                         images=sum(1 for part in content if isinstance(part, dict) and part.get('type') == 'image_url'))
+        try:
+            choice = result['choices'][0]
+            if choice.get('finish_reason') == 'length':
+                raise failure('output_truncated', '视觉模型输出被截断，本次未生成完整结果；请尝试较短素材或其他视觉模型')
+            if choice.get('finish_reason') == 'content_filter' or choice.get('message', {}).get('refusal'):
+                raise failure('refused', '视觉模型未处理这段素材，请检查素材或更换模型')
+            value = decode_json(choice['message']['content'])
+            # Some compatible models return the requested events as a bare array.
+            # Only scan/refinement declare that meaning; other stages remain strict.
+            if allow_event_list and isinstance(value, list) and all(isinstance(item, dict) for item in value):
+                value = {'events': value}
+            if not isinstance(value, dict):
+                raise ValueError('Expected a JSON object')
+            return value
+        except VisionRequestError:
+            raise
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+            raise failure('invalid_response', '视觉模型未返回完整的结构化结果，请检查模型兼容性后重试') from None
+    except Exception as error:
+        _telem['error'] = error
         raise
-    except (ValueError, KeyError, IndexError, TypeError, AttributeError):
-        raise failure('invalid_response', '视觉模型未返回完整的结构化结果，请检查模型兼容性后重试') from None
+    finally:
+        from backend.core.llm_telemetry import emit_vision_request
+        emit_vision_request(config=config, started=started, error=_telem['error'], result=_telem['result'], retries=_telem['retries'])
 
 def validate_scenes(scenes, duration):
     if not scenes:

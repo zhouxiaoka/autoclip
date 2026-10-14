@@ -9,9 +9,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Optional
+
+_ANONYMOUS_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{7,199}$")
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,7 @@ def studio_failure_context(error: Exception, phase: str) -> dict:
     """Where an automatic run failed and the provider HTTP status, without messages or URLs."""
     from backend.services.studio.intelligence import VisionRequestError
     from backend.pipeline.failures import PipelineFailure, http_status_of
+    from backend.core.llm_telemetry import classify_run_upstream
     stage = phase
     if isinstance(error, PipelineFailure):
         stage = _PIPELINE_FAILURE_STAGES.get(error.stage, phase)
@@ -66,6 +70,16 @@ def studio_failure_context(error: Exception, phase: str) -> dict:
     status = http_status_of(error)
     if status is not None:
         result["http_status"] = status
+    # Site refusals and local setup failures are not upstream model errors.
+    # A Bilibili 403 must not become permission_denied / model_forbidden.
+    skip_upstream = isinstance(error, PipelineFailure) and error.code in {
+        "source_blocked", "source_too_short", "source_no_audio", "source_unreadable",
+        "service_restarted", "whisper_not_installed", "whisper_install_failed",
+        "transcription_empty", "subtitle_setup", "timeline_empty",
+    }
+    kind = None if skip_upstream else classify_run_upstream(error, status)
+    if kind:
+        result["upstream_error_type"] = kind
     return result
 
 
@@ -172,6 +186,11 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     if kind in UNREPORTED_IMPORT_FAILURE_KINDS:
         return None
     tags = event.get("tags") or {}
+    from backend.core.llm_telemetry import (
+        ASR_PROVIDERS, FAILURE_STAGES, MODEL_PATTERN, TELEMETRY_PROVIDERS,
+        hostname_of_base_url,
+    )
+    from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES
     allowed = {
         "area": {"studio"}, "error_code": STUDIO_ERROR_CODES,
         "phase": {"screening", "production", "render", "analysis", "dispatch", "vision_test", "rewrite", "auto_frame", "framing_install", "qa", "packaging_html", "packaging_runtime"},
@@ -181,9 +200,24 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         "build_environment": {"production", "development", "validation", "unknown"},
         "telemetry_test": {"true"},
         "pipeline_stage": PIPELINE_STAGES,
+        "upstream_error_type": UPSTREAM_ERROR_TYPES,
+        "failure_stage": FAILURE_STAGES,
+        "provider": TELEMETRY_PROVIDERS | ASR_PROVIDERS,
     }
     clean_tags = {key: value for key, value in tags.items()
                   if key in allowed and isinstance(value, str) and value in allowed[key]}
+    model = tags.get("model")
+    if isinstance(model, str) and MODEL_PATTERN.fullmatch(model) and "sk-" not in model.lower():
+        clean_tags["model"] = model
+    host = tags.get("base_url_host")
+    if isinstance(host, str) and (host == "local" or hostname_of_base_url(host) == host):
+        clean_tags["base_url_host"] = host
+    status = tags.get("http_status")
+    if isinstance(status, str) and status.isdigit() and 400 <= int(status) <= 599:
+        clean_tags["http_status"] = status
+    user_id = _event_distinct_id(event)
+    if user_id:
+        clean["user"] = {"id": user_id}
     if kind:
         clean_tags["import_failure"] = kind
     if clean_tags:
@@ -194,6 +228,39 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     if fingerprint:
         clean["fingerprint"] = fingerprint
     return clean
+
+
+def sync_anonymous_user(distinct_id: str | None = None) -> None:
+    """Align Sentry user.id with the PostHog anonymous distinct_id. Id only."""
+    if not _initialized:
+        return
+    try:
+        from backend.services.studio.qa.telemetry import _analytics_allowed, _identity_path, _read_id
+        import sentry_sdk
+        value = distinct_id if isinstance(distinct_id, str) else _read_id(_identity_path())
+        if value and _ANONYMOUS_ID.fullmatch(value) and _analytics_allowed():
+            sentry_sdk.set_user({"id": value})
+        else:
+            sentry_sdk.set_user(None)
+    except Exception:  # noqa: BLE001 - identity sync cannot break crash reporting
+        logger.debug("Sentry anonymous user was not updated", exc_info=True)
+
+
+def _event_distinct_id(event: dict) -> str | None:
+    try:
+        from backend.services.studio.qa.telemetry import _analytics_allowed, _identity_path, _read_id
+    except Exception:
+        return None
+    if not _analytics_allowed():
+        return None
+    user = event.get("user") if isinstance(event.get("user"), dict) else {}
+    candidate = user.get("id") if isinstance(user, dict) else None
+    if isinstance(candidate, str) and _ANONYMOUS_ID.fullmatch(candidate):
+        return candidate
+    stored = _read_id(_identity_path())
+    if stored and _ANONYMOUS_ID.fullmatch(stored):
+        return stored
+    return None
 
 
 def init_sentry(mode: str = "web") -> bool:
@@ -244,6 +311,7 @@ def init_sentry(mode: str = "web") -> bool:
     if build_environment == "validation":
         scope.set_tag("telemetry_test", "true")
     _initialized = True
+    sync_anonymous_user()
     logger.info("Sentry 已启用（backend）")
     return True
 
@@ -275,6 +343,12 @@ def capture_studio_exception(error: Exception, phase: str, *, analysis_mode=None
                 scope.set_tag("analysis_mode", analysis_mode)
             if goal:
                 scope.set_tag("goal", goal)
+            try:
+                from backend.core.llm_telemetry import sentry_tags_for_error
+                for key, value in sentry_tags_for_error(error, phase).items():
+                    scope.set_tag(key, value)
+            except Exception:
+                pass
             detail = getattr(error, "probe_detail", None)
             if isinstance(detail, str) and detail:
                 scope.set_context("source_probe", {"stderr_tail": detail[-600:]})

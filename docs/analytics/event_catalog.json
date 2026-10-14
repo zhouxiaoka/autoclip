@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "document": "docs/analytics/TRACKING_PLAN.md",
+  "common": {
+    "required": ["app_version", "os", "analytics_environment", "runtime", "schema_version"],
+    "os": ["macos", "windows", "linux", "unknown"],
+    "os_aliases": { "darwin": "macos", "win32": "windows" },
+    "analytics_environment": ["production", "development", "validation"],
+    "runtime": ["desktop", "web", "python"]
+  },
+  "enums": {
+    "failure_stage": [
+      "screening", "dispatch", "production", "ingest", "subtitle", "analyze",
+      "vision", "render", "outline", "timeline", "scoring", "title", "clustering", "other"
+    ],
+    "upstream_error_type": [
+      "invalid_key", "insufficient_quota", "permission_denied", "model_not_found",
+      "bad_endpoint", "rate_limited", "upstream_unavailable", "timeout", "connection",
+      "output_truncated", "unknown"
+    ],
+    "provider": [
+      "dashscope", "openai", "gemini", "deepseek", "seed", "kimi", "glm", "grok",
+      "infistar", "api88", "compatible", "ollama", "lmstudio", "other"
+    ],
+    "asr_provider": ["whisper_local", "sensevoice_local", "cloud"],
+    "request_kind": ["text", "vision"],
+    "request_outcome": ["success", "error"],
+    "validation_result": ["success", "failed", "skipped"],
+    "studio_outcome": [
+      "completed", "failed", "partial", "downgraded", "skipped", "recommended",
+      "manual", "fallback", "scheduled", "inbox", "unknown", "auto_started"
+    ],
+    "experience_outcome": ["completed", "failed", "blocked", "unknown"],
+    "source_type": [
+      "file", "youtube", "bilibili", "other_url", "visual_event", "content_clip",
+      "studio", "legacy", "upload"
+    ],
+    "material_origin": ["sample", "user", "unknown"],
+    "download_mode": ["native", "browser"],
+    "analysis_mode": ["auto", "subtitle", "visual"]
+  },
+  "attribution": {
+    "user_caused_error_codes": [
+      "invalid_key", "insufficient_quota", "permission_denied", "model_not_found",
+      "bad_endpoint", "llm_not_configured", "source_too_short", "source_no_audio",
+      "source_unreadable", "whisper_not_installed"
+    ],
+    "user_caused_upstream_types": [
+      "invalid_key", "insufficient_quota", "permission_denied", "model_not_found",
+      "bad_endpoint"
+    ],
+    "environment_error_codes": ["source_blocked", "service_restarted"]
+  },
+  "privacy": {
+    "forbidden_keys": ["api_key", "prompt", "caption", "authorization", "password"],
+    "forbidden_substrings": ["sk-"],
+    "user_content_keys": ["text", "contact"],
+    "user_submitted_events": ["feedback_submitted"]
+  },
+  "scan": {
+    "ignore_events": [
+      "$pageview", "survey shown", "survey sent", "survey dismissed",
+      "disabled", "enabled", "test", "disabled-again", "blocked", "allowed"
+    ]
+  },
+  "families": {
+    "studio_operation": {
+      "status": "keep",
+      "verbs": ["requested", "accepted", "request_failed"],
+      "prefixes": {
+        "studio_import": { "status": "core" },
+        "studio_confirm": { "status": "core" },
+        "studio_export": { "status": "core" },
+        "studio_rescreen": { "status": "keep" },
+        "studio_plan_update": { "status": "keep" },
+        "studio_draft_create": { "status": "keep" },
+        "studio_draft_save": { "status": "keep" },
+        "studio_draft_duplicate": { "status": "keep" },
+        "studio_rewrite": { "status": "keep" },
+        "studio_analysis_preferences": { "status": "keep" },
+        "vision_provider_test": { "status": "keep" },
+        "vision_provider_save": { "status": "keep" },
+        "social_publish": { "status": "keep" },
+        "studio_auto_frame": { "status": "keep" },
+        "studio_framing_install": { "status": "keep" },
+        "studio_platform_append": { "status": "keep" },
+        "studio_variant_retry": { "status": "keep" },
+        "studio_variant_produce": { "status": "keep" },
+        "studio_post_save": { "status": "keep" },
+        "studio_cover_redesign": { "status": "keep" }
+      }
+    },
+    "experience_operation": {
+      "status": "keep",
+      "verbs": ["requested", "finished"],
+      "prefixes": {
+        "model_settings_load": { "status": "keep" },
+        "model_discovery": { "status": "keep" },
+        "provider_configuration_save": { "status": "keep" },
+        "provider_connection_test": { "status": "keep" },
+        "example_project_open": { "status": "keep" },
+        "output_branding_save": { "status": "keep" }
+      }
+    },
+    "legacy_operation": {
+      "status": "legacy",
+      "verbs": ["requested", "accepted", "request_failed"],
+      "prefixes": {
+        "provider_test": { "status": "deprecated" },
+        "import": { "status": "legacy" },
+        "processing": { "status": "legacy" },
+        "media_download": { "status": "legacy" },
+        "publish_export": { "status": "legacy" }
+      }
+    }
+  },
+  "events": {
+    "app_installed": {
+      "status": "core",
+      "domain": "app",
+      "required": ["os"]
+    },
+    "app_opened": {
+      "status": "core",
+      "domain": "app",
+      "required": ["session_number"]
+    },
+    "app_updated": {
+      "status": "core",
+      "domain": "app",
+      "required": ["from_version", "to_version"]
+    },
+    "setup_presented": {
+      "status": "core",
+      "domain": "setup",
+      "required": ["placement", "trigger"]
+    },
+    "setup_action": {
+      "status": "core",
+      "domain": "setup",
+      "required": ["placement", "action"]
+    },
+    "import_blocked": {
+      "status": "core",
+      "domain": "setup",
+      "required": ["reason"]
+    },
+    "settings_section_viewed": { "status": "keep", "domain": "setup" },
+    "example_project_viewed": { "status": "keep", "domain": "setup" },
+    "provider_validation_finished": {
+      "status": "core",
+      "domain": "provider",
+      "required": ["provider", "result", "success_rate_schema_version"],
+      "enums": { "provider": "provider", "result": "validation_result" }
+    },
+    "asr_readiness_checked": {
+      "status": "core",
+      "domain": "asr",
+      "required": ["provider", "blocked", "has_subtitle"],
+      "enums": { "provider": "asr_provider" }
+    },
+    "llm_request_finished": {
+      "status": "core",
+      "domain": "llm",
+      "required": ["provider", "kind", "outcome", "duration_ms", "success_rate_schema_version"],
+      "required_when": {
+        "outcome=error": ["upstream_error_type", "failure_stage"]
+      },
+      "enums": {
+        "provider": "provider",
+        "kind": "request_kind",
+        "outcome": "request_outcome",
+        "failure_stage": "failure_stage",
+        "upstream_error_type": "upstream_error_type"
+      }
+    },
+    "studio_import_requested": {
+      "status": "core",
+      "domain": "studio",
+      "required": ["source_type", "material_origin"]
+    },
+    "studio_import_accepted": {
+      "status": "core",
+      "domain": "studio",
+      "required": ["source_type", "material_origin"]
+    },
+    "studio_import_request_failed": {
+      "status": "core",
+      "domain": "studio",
+      "required": ["error_code"]
+    },
+    "studio_screen_finished": {
+      "status": "core",
+      "domain": "studio",
+      "required": ["outcome"],
+      "required_when": {
+        "outcome=failed": ["error_code", "failure_stage"]
+      }
+    },
+    "studio_generation_finished": {
+      "status": "core",
+      "domain": "studio",
+      "required": ["outcome"],
+      "required_when": {
+        "outcome=failed": ["error_code", "failure_stage"],
+        "outcome=partial": ["error_code", "failure_stage"]
+      },
+      "enums": { "outcome": "studio_outcome" }
+    },
+    "studio_production_finished": {
+      "status": "core",
+      "domain": "studio",
+      "required": ["outcome"],
+      "required_when": {
+        "outcome=failed": ["error_code", "failure_stage"]
+      },
+      "enums": { "outcome": "studio_outcome" }
+    },
+    "studio_export_finished": {
+      "status": "core",
+      "domain": "studio",
+      "required": ["outcome"]
+    },
+    "studio_download_requested": {
+      "status": "core",
+      "domain": "studio",
+      "required": ["download_mode"]
+    },
+    "studio_download_saved": {
+      "status": "core",
+      "domain": "studio",
+      "required": ["download_mode"]
+    },
+    "studio_download_failed": {
+      "status": "core",
+      "domain": "studio",
+      "required": ["error_code"]
+    },
+    "studio_platforms_selected": { "status": "keep", "domain": "studio" },
+    "studio_template_overridden": { "status": "keep", "domain": "studio" },
+    "studio_template_picker_shown": { "status": "keep", "domain": "studio" },
+    "studio_template_preview_played": { "status": "keep", "domain": "studio" },
+    "studio_template_preview_failed": { "status": "keep", "domain": "studio" },
+    "studio_template_restore_recommended": { "status": "keep", "domain": "studio" },
+    "studio_template_render_finished": { "status": "keep", "domain": "studio" },
+    "studio_output_shared": { "status": "keep", "domain": "studio" },
+    "studio_output_rated": { "status": "keep", "domain": "studio" },
+    "studio_auto_frame_finished": { "status": "keep", "domain": "studio" },
+    "studio_cover_redesign_finished": { "status": "keep", "domain": "studio" },
+    "studio_variant_finished": { "status": "keep", "domain": "studio" },
+    "studio_framing_install_finished": { "status": "keep", "domain": "studio" },
+    "studio_qa_checked": { "status": "keep", "domain": "studio" },
+    "social_publish_finished": { "status": "keep", "domain": "studio" },
+    "mcp_tool_called": {
+      "status": "keep",
+      "domain": "mcp",
+      "required": ["tool", "ok", "duration_ms"]
+    },
+    "mcp_job_finished": {
+      "status": "keep",
+      "domain": "mcp",
+      "required": ["tool", "ok", "duration_ms"]
+    },
+    "feedback_opened": { "status": "keep", "domain": "feedback" },
+    "feedback_dismissed": { "status": "keep", "domain": "feedback" },
+    "feedback_submitted": { "status": "keep", "domain": "feedback", "kind": "user_submitted", "allow": ["text", "contact"] },
+    "sponsor_link_opened": { "status": "keep", "domain": "setup" },
+    "video_imported": { "status": "deprecated", "domain": "legacy" },
+    "clips_exported": { "status": "deprecated", "domain": "legacy" },
+    "processing_failed": { "status": "deprecated", "domain": "legacy" },
+    "api_key_configured": { "status": "deprecated", "domain": "legacy" },
+    "example_project_opened": { "status": "deprecated", "domain": "legacy" },
+    "provider_test_finished": { "status": "deprecated", "domain": "legacy" },
+    "import_finished": { "status": "legacy", "domain": "legacy" },
+    "processing_started": { "status": "legacy", "domain": "legacy" },
+    "processing_finished": { "status": "legacy", "domain": "legacy" },
+    "processing_task_observed": { "status": "legacy", "domain": "legacy" },
+    "media_download_received": { "status": "legacy", "domain": "legacy" },
+    "media_download_saved": { "status": "legacy", "domain": "legacy" },
+    "publish_export_finished": { "status": "legacy", "domain": "legacy" }
+  }
+}

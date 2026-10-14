@@ -428,7 +428,19 @@ class LLMManager:
             raise ValueError("未配置LLM提供商，请自备 API Key 并到「设置 → 模型」填写")
         
         try:
-            response = self.current_provider.call(prompt, input_data, **kwargs)
+            from backend.core import llm_telemetry
+            try:
+                info = self.get_current_provider_info() or {}
+            except Exception:  # noqa: BLE001 - identity is optional; the call still runs
+                info = {}
+            settings = self.settings if isinstance(getattr(self, 'settings', None), dict) else {}
+            with llm_telemetry.bind_context(
+                provider=str(info.get('provider') or ''),
+                model=str(info.get('model') or getattr(self.current_provider, 'model_name', '') or ''),
+                base_url=str(info.get('base_url') or settings.get('openai_base_url') or settings.get('dashscope_base_url') or ''),
+                kind='text',
+            ):
+                response = self.current_provider.call(prompt, input_data, **kwargs)
             content = response.content
             from backend.core import llm_usage
             llm_usage.record(response.model or getattr(self.current_provider, 'model_name', None), response.usage,
@@ -446,12 +458,15 @@ class LLMManager:
 
         Other types classified by classify_upstream_error (401/429/5xx/timeout/…)
         are not retried here. ``max_retries`` cannot raise that ceiling.
+        Each attempt records ``retry_count`` for ``llm_request_finished``.
         """
+        from backend.core import llm_telemetry
         from backend.core.result_retry import MAX_RETRIES, classify_for_retry
 
         attempt = 0
         ceiling = min(MAX_RETRIES, max(0, max_retries - 1)) if max_retries > 0 else 0
         while True:
+            token = llm_telemetry.set_retry_count(attempt)
             try:
                 return self.call(prompt, input_data, **kwargs)
             except Exception as error:
@@ -464,6 +479,8 @@ class LLMManager:
                 import time
                 time.sleep(2 ** attempt)
                 attempt += 1
+            finally:
+                llm_telemetry.reset_retry_count(token)
     
     def test_provider_connection(self, provider_type: ProviderType, api_key: str, model_name: str,
                                  **provider_kwargs) -> bool:

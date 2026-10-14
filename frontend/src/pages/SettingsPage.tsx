@@ -92,9 +92,9 @@ const SettingsPage: React.FC = () => {
 
           {/* ---------------- 反馈 ---------------- */}
           {active === 'feedback' && (
-            <Section title={t("反馈")} description={t("哪里不对、想要什么，直接说。运行环境会自动附上，不含视频内容与 API 密钥。正文会公开出现在 GitHub。")}>
+            <Section title={t("反馈")} description={t("哪里不对、想要什么，直接说。运行环境会自动附上，不含视频内容与 API 密钥。发送后正文和可选联系方式会先到 PostHog，再公开到 GitHub；邮箱不会公开。")}>
               <div className="ac-rows">
-                <Row label={t("发送反馈")} hint={t("在应用内写一句话即可。故障会进 GitHub Issue，想法会进 Discussions。")}>
+                <Row label={t("发送反馈")} hint={t("在应用内写一句话即可。会先经 PostHog 送达；故障进 GitHub Issue，想法进 Discussions。")}>
                   <Btn variant="cta" size="sm" style={{ height: 32, fontSize: 13, padding: '0 16px' }} onClick={() => setFeedbackOpen(true)}>
                     <Icon.Chat size={13} />{t("写反馈")}</Btn>
                 </Row>

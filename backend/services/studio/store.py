@@ -576,6 +576,8 @@ def write(project_id, data, *, _recover_previous=True):
     # Re-screening must not destroy an unobserved production terminal.
     previous = read(project_id, recover=_recover_previous) if path.exists() else {}
     _apply_read_receipts(path, data)
+    _ensure_failure_identity(data)
+    _attach_run_telemetry(data, project_id)
     analysis = data.get('analysis') or {}
     prior = previous.get('analysis') or {}
     if analysis.get('status') in ('awaiting_confirmation', 'completed', 'failed') and not analysis.get('run_id') and prior.get('run_id'):
@@ -608,6 +610,61 @@ def write(project_id, data, *, _recover_previous=True):
             tmp.unlink(missing_ok=True)
         except OSError:
             logger.warning('Could not remove interrupted project-state temporary file')
+
+def _ensure_failure_identity(data):
+    """failed/partial records always carry a known error_code and failure_stage."""
+    from backend.core.llm_telemetry import FAILURE_STAGES, normalize_failure_stage
+    from backend.core.sentry_setup import STUDIO_ERROR_CODES
+    valid = STUDIO_ERROR_CODES | {'multiple'}
+    generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
+    analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
+    hint = None
+    if analysis:
+        hint = normalize_failure_stage(analysis.get('failure_stage') or analysis.get('phase'))
+    if not hint and generation:
+        hint = normalize_failure_stage(generation.get('failure_stage') or generation.get('status'))
+    default = hint or 'production'
+
+    def fill(record):
+        if not isinstance(record, dict) or record.get('status') not in ('failed', 'partial'):
+            return
+        code = record.get('error_code')
+        if not (isinstance(code, str) and code in valid):
+            record['error_code'] = 'unexpected'
+        if record.get('failure_stage') not in FAILURE_STAGES:
+            record['failure_stage'] = normalize_failure_stage(
+                record.get('failure_stage') or record.get('phase') or default
+            ) or default
+
+    fill(generation)
+    fill(analysis)
+
+
+def _attach_run_telemetry(data, project_id):
+    try:
+        from backend.core.llm_telemetry import run_snapshot
+        snapshot = run_snapshot(project_id)
+    except Exception:  # noqa: BLE001 - telemetry cannot block a state write
+        return
+    if not snapshot:
+        return
+    skip_unless_failed = {
+        'http_status', 'upstream_error_type', 'failure_stage', 'billable_calls_before_failure',
+    }
+    keep_if_set = {'http_status', 'upstream_error_type', 'failure_stage', 'billable_calls_before_failure'}
+    for record in (data.get('generation'), data.get('analysis')):
+        if not isinstance(record, dict):
+            continue
+        failed = record.get('status') in ('failed', 'partial')
+        for key, value in snapshot.items():
+            if value is None:
+                continue
+            if key in skip_unless_failed and not failed:
+                continue
+            if key in keep_if_set and record.get(key) not in (None, ''):
+                continue
+            record[key] = value
+
 
 def change(project_id, mutate):
     from backend.core.project_cancellation import checkpoint

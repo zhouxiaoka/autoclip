@@ -31,6 +31,13 @@ export function trackQuickOutputPlatforms(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_platforms_selected', safeStudioProperties(properties))
 }
 
+/** ASR readiness at import probe and submit. Enums and booleans only. */
+export function trackAsrReadiness(properties: Record<string, unknown>) {
+  const props = safeStudioProperties(properties)
+  props.success_rate_schema_version = 1
+  captureBusinessEvent('asr_readiness_checked', props)
+}
+
 /** User changed the default HTML template before import. Enums and a random flow id only. */
 export function trackTemplateOverride(properties: Record<string, unknown>) {
   captureBusinessEvent('studio_template_overridden', safeStudioProperties({ ...properties, stage: properties.stage || 'pre_import' }))
