@@ -3,15 +3,19 @@
 
 底层都是 OpenAI 兼容接口（provider=openai + base_url），这里只是把「provider 名 → 默认地址 /
 默认模型 / 显示名」固化下来，让设置页、CLI、MCP 都能用 `--provider ollama` 这种说法，
-而不用记 `http://localhost:11434/v1`。
+而不用记本机默认端口。
 
 设置文件里允许把 `api_provider` 直接写成 `ollama` / `lmstudio`；`LLMManager` 加载时通过
 `resolve_provider()` 还原成 openai + base_url。
+
+产品语义来自 ``presets/provider_presets.json``。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Optional, Tuple
+
+from backend.core.provider_presets import get_catalog, resolve_provider_id
 
 
 @dataclass(frozen=True)
@@ -25,40 +29,31 @@ class LocalPreset:
     context_hint: str = ""
 
 
-LOCAL_PRESETS: Dict[str, LocalPreset] = {
-    "ollama": LocalPreset(
-        key="ollama",
-        display_name="Ollama（本地）",
-        base_url="http://localhost:11434/v1",
-        default_model="qwen2.5:7b",
-        docs_url="https://ollama.com/download",
-        hint="本机运行 Ollama 后即可用，无需密钥。推荐 `ollama pull qwen2.5:7b`（中文字幕分析效果稳定）。",
-        context_hint="长视频请把上下文调到 16384 以上（环境变量 OLLAMA_CONTEXT_LENGTH 或模型参数 num_ctx），否则字幕开头会被截掉。",
-    ),
-    "lmstudio": LocalPreset(
-        key="lmstudio",
-        display_name="LM Studio（本地）",
-        base_url="http://localhost:1234/v1",
-        default_model="",
-        docs_url="https://lmstudio.ai",
-        hint="在 LM Studio 里加载模型并启动 Local Server（默认端口 1234），模型名以服务端列出的为准。",
-        context_hint="长视频请在 LM Studio 加载模型时把上下文长度（Context Length）调到 16384 以上，否则会报错或截断字幕。",
-    ),
-}
+def _local_presets() -> Dict[str, LocalPreset]:
+    return {
+        item.id: LocalPreset(
+            key=item.id,
+            display_name=item.display_name,
+            base_url=item.base_url,
+            default_model=item.default_model,
+            docs_url=item.docs_url,
+            hint=item.hint,
+            context_hint=item.context_hint,
+        )
+        for item in get_catalog().providers.values()
+        if item.local_compat_remap
+    }
+
+
+LOCAL_PRESETS: Dict[str, LocalPreset] = _local_presets()
 
 # 本机 / 局域网的其它 OpenAI 兼容服务（vLLM、llama.cpp server …）用这条通用提示。
-LOCAL_CONTEXT_HINT = "本机或局域网模型：长视频请把上下文长度调到 16384 以上，否则字幕会被截断。"
-
-# 兼容常见写法
-_ALIASES = {"lm-studio": "lmstudio", "lm_studio": "lmstudio", "local": "ollama"}
+LOCAL_CONTEXT_HINT = get_catalog().local_context_hint
 
 
 def normalize_preset_key(name: Optional[str]) -> Optional[str]:
     """返回规范化的预设 key；不是预设则返回 None。"""
-    if not name:
-        return None
-    key = name.strip().lower()
-    key = _ALIASES.get(key, key)
+    key = resolve_provider_id(name)
     return key if key in LOCAL_PRESETS else None
 
 

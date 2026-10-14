@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 const ts = require('typescript')
+const { loadTs } = require('./load-ts.cjs')
 
 // Compile the actual source in memory. No new runner dependency or network calls.
 function load(name, mocks = {}, globals = {}) {
@@ -527,7 +528,7 @@ function settingsHook(s, transport, initial) {
   let cursor=0;const slots=[]
   const react={useState(value){const i=cursor++;if(!(i in slots))slots[i]=value;return [slots[i],next=>{slots[i]=typeof next==='function'?next(slots[i]):next}]},useRef(value){const i=cursor++;if(!(i in slots))slots[i]={current:value};return slots[i]},useEffect(){}}
   const providers={PROVIDERS:{openai:{}},}
-  const defaults=load('../features/settings/modelDefaults')
+  const defaults=loadTs('modelDefaults.ts')
   const access=load('../features/settings/providerAccess',{'../../i18n':{t:x=>x},'./providers':providers})
   const urls=load('../features/settings/providerUrl',{},{URL})
   const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls})

@@ -1,21 +1,9 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
 const React = require('react')
-const dir = path.join(__dirname, '../src/features/settings')
-function load(file, mocks) {
-  const exports = {}
-  const code = ts.transpileModule(fs.readFileSync(path.join(dir, file), 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText
-  vm.runInNewContext(code, { exports, URL, require: id => {
-    if (id in mocks) return mocks[id]
-    if (id === 'react/jsx-runtime') return require(id)
-    throw Error(id)
-  } })
-  return exports
-}
-const providers = load('providers.ts', { '../../i18n': { t: text => text } })
+const { loadTs } = require('./load-ts.cjs')
+const load = loadTs
+const providers = loadTs('providers.ts', { '../../i18n': { t: text => text } })
 const plain = value => JSON.parse(JSON.stringify(value))
 function flatten(node) {
   if (!React.isValidElement(node)) return [node]
@@ -24,14 +12,7 @@ function flatten(node) {
 
 test('sponsor selection, offer, registration link and attribution follow the chosen provider', () => {
   const events = [], links = []
-  const contractFile = path.join(__dirname, '../src/analytics/successRateContract.ts')
-  const contractMod = { exports: {} }
-  vm.runInNewContext(
-    ts.transpileModule(fs.readFileSync(contractFile, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText,
-    { exports: contractMod.exports, module: contractMod, URL },
-    { filename: contractFile },
-  )
-  const access = load('providerAccess.ts', { '../../i18n': { t: text => text }, './providers': providers, '../../analytics/successRateContract': contractMod.exports })
+  const access = load('providerAccess.ts', { '../../i18n': { t: text => text }, './providers': providers })
   const Fields = load('ProviderFields.tsx', {
     react: { useState: () => [false, () => {}] },
     antd: { Input: { Password: 'password' }, Select: 'select' },
