@@ -252,13 +252,16 @@ for (const requestedProvider of ['', 'deepseek', 'custom:ds']) {
       '../../ui': { ...ui, Section: () => null, Segmented: () => null },
       '../../utils/externalLinks': { openExternalLink: () => {} },
       '../../components/SpeechRecognitionConfig': { default: () => null },
+      '../../services/api': {},
       './useModelSettings': { useModelSettings: () => m },
       './ProviderFields': { default: () => null },
       './ModelPicker': { default: () => null },
       './SenseVoiceConfig': { default: () => null },
       './ProviderCatalog': { default: () => null },
+      './DefaultModels': { default: () => React.createElement('div', { 'data-default-models': true }) },
     }).default
     const nodes = flatten(Page({ requestedSection: 'model', requestedProvider }))
+    assert.equal(nodes.some(node => node.props?.['data-default-models']), !requestedProvider)
     if (requestedProvider.startsWith('custom:')) {
       assert.ok(nodes.some(node => node.props?.['data-connect-kind'] === 'compatible'))
     }

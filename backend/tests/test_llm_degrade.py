@@ -297,7 +297,8 @@ def test_degrade_works_when_r2_hook_missing_or_raises(monkeypatch):
         return "ok"
 
     manager = _manager(flaky, source="preset", model="qwen-plus")
-    assert not hasattr(manager, "note_same_provider_degrade")
+    # The integrated manager has the R2 hook; explicitly exercise its absence.
+    manager.note_same_provider_degrade = None
     assert manager.call_with_retry("p") == "ok"
 
     notes = []
@@ -438,19 +439,19 @@ def test_degrade_log_and_telemetry_omit_secrets():
 
 def test_nested_retry_calls_share_chunk_lifecycle_budget():
     calls = []
-    manager = _manager(lambda: calls.append(1) or "ok")
+    manager = _manager(lambda *_args, **_kwargs: calls.append(1) or "ok")
     with degrade.chunk_call_budget() as budget:
-        for _ in range(degrade.CHUNK_CALL_CAP):
+        for _ in range(degrade.CHUNK_CALL_CAP // degrade.http_attempts_per_call()):
             assert manager.call_with_retry("fixture") == "ok"
         with pytest.raises(RuntimeError, match="budget exhausted"):
             manager.call_with_retry("fixture")
         assert budget.used == degrade.CHUNK_CALL_CAP
-    assert len(calls) == degrade.CHUNK_CALL_CAP
+    assert len(calls) == degrade.CHUNK_CALL_CAP // degrade.http_attempts_per_call()
     # A new chunk owns a fresh ledger.
     assert manager.call_with_retry("next fixture") == "ok"
 
 
-@pytest.mark.parametrize("remaining", [0, 1])
+@pytest.mark.parametrize("remaining", [0, 1, 1 + LLM_SDK_MAX_RETRIES])
 def test_token_parameter_resend_deducts_budget_before_sending(remaining, caplog):
     from backend.core.llm_providers import OpenAIProvider
 
@@ -473,24 +474,25 @@ def test_token_parameter_resend_deducts_budget_before_sending(remaining, caplog)
         completions=SimpleNamespace(create=create),
     ))
     with degrade.chunk_call_budget() as budget:
-        # The manager has reserved the initial call already.
+        # Seed HTTP units: the compatibility resend reserves its SDK retries too.
         for _ in range(degrade.CHUNK_CALL_CAP - remaining):
-            assert degrade.consume_chunk_call()
-        if remaining:
+            assert degrade.consume_chunk_call(cost=1)
+        allowed = remaining >= degrade.http_attempts_per_call()
+        if allowed:
             assert provider.call("fixture", max_tokens=1).content == "ok"
         else:
             with pytest.raises(Exception) as caught:
                 provider.call("fixture", max_tokens=1)
             assert caught.value is error
-        assert budget.used == degrade.CHUNK_CALL_CAP
-    assert len(calls) == 1 + remaining
+        assert budget.used == degrade.CHUNK_CALL_CAP - remaining + (degrade.http_attempts_per_call() if allowed else 0)
+    assert len(calls) == 1 + int(allowed)
     assert "private-path" not in caplog.text
 
 
 def test_retry_failure_log_stays_redacted(monkeypatch, caplog):
     monkeypatch.setattr("time.sleep", lambda _seconds: None)
 
-    def fail():
+    def fail(*_args, **_kwargs):
         raise _http(500, "https://fixture.example/private-path?key=fixture-private")
 
     with pytest.raises(Exception):

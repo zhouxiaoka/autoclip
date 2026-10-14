@@ -72,6 +72,8 @@ def test_console_host_is_not_treated_as_an_api_root():
     assert is_console_host('bailian.console.aliyun.com')
     assert is_console_host('aistudio.google.com')
     assert not is_console_host('api.openai.com')
+    assert not is_console_host('infistar.ai')
+    assert 'console_host' not in normalize_provider_base_url('https://infistar.ai/v1', 'infistar').warnings
     assert not is_console_host('example.com')
     assert looks_like_html('<!DOCTYPE html><html><title>控制台</title>')
     assert not looks_like_html('{"data":[]}')

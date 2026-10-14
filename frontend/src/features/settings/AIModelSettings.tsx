@@ -18,6 +18,7 @@ import {
   catalogPreset, customConnectionId, isUnmatchedCompatible, sensevoiceAsrReady, whisperAsrReady,
   type CapabilityFilter, type LocalAsrReady,
 } from './providerCatalogView'
+import DefaultModels from './DefaultModels'
 
 function useLocalAsrReady(settings: ModelSettings | null): LocalAsrReady {
   const [ready, setReady] = useState<LocalAsrReady>({})
@@ -44,8 +45,13 @@ function useLocalAsrReady(settings: ModelSettings | null): LocalAsrReady {
   return ready
 }
 
-const ANCHORS: Record<string, string> = { model: 'ai-model', analysis: 'ai-model', vision: 'ai-model', speech: 'ai-speech', cover: 'ai-cover' }
-const issueAnchor = (issue: SaveIssue) => issue.role === 'transcription' ? 'ai-speech' : issue.role === 'cover' ? 'ai-cover' : 'ai-model'
+const ANCHORS: Record<string, string> = {
+  model: 'ai-defaults', analysis: 'ai-defaults-analysis', vision: 'ai-defaults-vision',
+  speech: 'ai-defaults-transcription', cover: 'ai-defaults-cover',
+}
+const issueAnchor = (issue: SaveIssue) => (
+  issue.role === 'transcription' ? 'ai-defaults-transcription' : issue.role === 'cover' ? 'ai-defaults-cover' : 'ai-defaults-analysis'
+)
 
 /**
  * Main AI service: provider, key, model (auto-recommended) and the frame-sampling switch.
@@ -98,7 +104,7 @@ function TranscriptionSection({ m }: { m: ModelSettingsStore }) {
     <p className="ac-note">{t('视频没有字幕时，先把说话声转成字幕。默认在本机免费转写，不上传音频。')}</p>
     <Row wide label={t('转写方式')} hint={t('本地转写免费，首次需下载模型；云端转写无需下载，按用量计费。')}>
       <Select aria-label={t('转写方式')} style={{ width: '100%' }} value={cloud ? connection?.provider : sensevoice ? 'sensevoice_local' : 'whisper_local'} options={options}
-        onChange={value => value === 'sensevoice_local' ? m.update({ transcription: { provider: 'sensevoice_local', model: 'SenseVoiceSmall' } }) : value === 'whisper_local' ? m.setTranscriptionLocal(settings.transcription?.model && settings.transcription.provider === 'whisper_local' ? settings.transcription.model : 'base') : m.chooseProvider('transcription', value as ProviderKey)}
+        onChange={value => value === 'sensevoice_local' ? m.update({ transcription: { provider: 'sensevoice_local', model: 'SenseVoiceSmall', model_source: 'user' } }) : value === 'whisper_local' ? m.setTranscriptionLocal(settings.transcription?.model && settings.transcription.provider === 'whisper_local' ? settings.transcription.model : 'base') : m.chooseProvider('transcription', value as ProviderKey)}
         optionRender={option => <span>{option.value === 'whisper_local' ? t('Whisper · 本地') : option.value === 'sensevoice_local' ? t('SenseVoice · 本地') : PROVIDERS[option.value as ProviderKey]?.name}{PROVIDERS[option.value as ProviderKey]?.sponsor && <small style={{ marginLeft: 8, color: 'var(--sub)' }}>{t('赞助')} · {PROVIDERS[option.value as ProviderKey]?.sponsor?.offer}</small>}</span>} />
     </Row>
     {cloud && connection ? <>
@@ -108,7 +114,7 @@ function TranscriptionSection({ m }: { m: ModelSettingsStore }) {
         onChoose={p => m.chooseProvider('transcription', p)} onEdit={patch => m.editConnection(connection, patch)} />
       <Row wide label={t('转写模型')} hint={t('将音频发送给所选服务转写，按服务商计费。')}>
         <ModelPicker role="transcription" model={settings.transcription?.model || ''} connection={connection} list={lists[connection.id]} busy={!!busy[connection.id]} listError={listErrors[connection.id]} mode={settings.analysis_mode}
-          onChange={model => m.update({ transcription: { provider: 'cloud', connection_id: connection.id, model } })} onRefresh={() => void m.discover(connection, true)} />
+          onChange={model => m.update({ transcription: { provider: 'cloud', connection_id: connection.id, model, model_source: 'user' } })} onRefresh={() => void m.discover(connection, true)} />
       </Row>
     </> : sensevoice ? <SenseVoiceConfig /> : <SpeechRecognitionConfig hideProvider selectedModel={settings.transcription?.model || 'base'} onModelChange={m.setTranscriptionLocal} />}
   </div>
@@ -279,6 +285,9 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
       {customSelected ? <CustomGatewayRepair connection={customSelected} m={m} onBack={closeProvider} />
         : selected ? <ProviderDetail preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>
         <div className="ac-model-section">
+          <DefaultModels settings={settings} lists={m.lists} onChange={next => m.update(next)} />
+        </div>
+        <div id="ai-model" className="ac-model-section">
           <h3 className="ac-model-section-title">{t('settings.providers.title')}</h3>
           <p className="ac-note">{t('settings.providers.subtitle')}</p>
           <CurrentAnalysis m={m} />

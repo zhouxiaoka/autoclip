@@ -129,6 +129,7 @@ class Assignment(BaseModel):
     connection_id: str
     model: str = Field(min_length=1, max_length=200)
     capability: Capability = 'auto'
+    # Infer missing legacy sources through the shared P3 migration helper.
     model_source: Source | None = None
 
     @field_validator('model')
@@ -149,6 +150,7 @@ class Transcription(BaseModel):
     provider: Literal['whisper_local', 'sensevoice_local', 'cloud'] = 'whisper_local'
     model: str = Field(default='base', min_length=1, max_length=200)
     connection_id: str | None = None
+    model_source: Source = 'user'
 
     @model_validator(mode='after')
     def valid_selection(self):

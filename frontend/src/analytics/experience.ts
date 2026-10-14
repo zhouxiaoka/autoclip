@@ -17,13 +17,17 @@ const enums: Record<string, readonly string[]> = {
   resolution: ['created', 'reused'], material_origin: ['sample', 'user', 'unknown'],
   analysis_mode: ['auto', 'subtitle', 'visual'], transcription_mode: ['whisper_local', 'sensevoice_local', 'cloud', 'unknown'],
   cover_mode: ['ai', 'frame'], capability: ['text', 'multimodal', 'auto'],
+  analysis_source: ['preset', 'user', 'none'],
+  vision_source: ['preset', 'user', 'follow'],
+  cover_source: ['preset', 'user', 'frame', 'none'],
+  transcription_source: ['preset', 'user', 'whisper_local', 'sensevoice_local', 'none'],
 }
 export function safeExperience(value: Record<string, unknown>): Properties {
   const out: Properties = { experience_schema_version: 1 }
   for (const [key, choices] of Object.entries(enums)) {
     if (typeof value[key] === 'string' && choices.includes(value[key] as string)) out[key] = value[key] as string
   }
-  for (const key of ['brand_outro_enabled', 'changed_connections', 'changed_analysis', 'changed_vision', 'changed_cover', 'changed_transcription', 'preview', 'has_warning', 'defaults_applied', 'analysis_configured', 'vision_configured', 'cover_configured', 'transcription_configured', 'cover_separate']) {
+  for (const key of ['brand_outro_enabled', 'changed_connections', 'changed_analysis', 'changed_vision', 'changed_cover', 'changed_transcription', 'preview', 'has_warning', 'defaults_applied', 'analysis_configured', 'vision_configured', 'cover_configured', 'transcription_configured', 'cover_separate', 'vision_follow_lacks_vision']) {
     if (typeof value[key] === 'boolean') out[key] = value[key] as boolean
   }
   for (const key of ['result_count', 'duration_ms', 'example_version']) {

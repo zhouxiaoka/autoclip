@@ -28,7 +28,7 @@ export function applyModelDefaults(settings: ModelSettings, connection: Connecti
     if (binding?.connection_id !== connection.id || binding.model) continue
     const eligible = role === 'cover' ? models : analysisModels(models, role === 'vision' ? 'visual' : settings.analysis_mode)
     const model = defaultModel(connection.provider, eligible, role === 'cover')
-    if (model) value[role] = { ...binding, model, model_source: 'preset' }
+    if (model) value[role] = { ...binding, model, model_source: binding.model_source || 'preset' }
   }
   // AI covers switched on by the user before a model list arrived: fill the recommended image model.
   // Never switched on automatically: without the user's choice, covers are designed locally.
@@ -38,7 +38,7 @@ export function applyModelDefaults(settings: ModelSettings, connection: Connecti
   }
   if (value.transcription?.provider === 'cloud' && value.transcription.connection_id === connection.id && !value.transcription.model) {
     const model = models.find(m => m.asr && m.asr_supported)?.id
-    if (model) value.transcription = { ...value.transcription, model }
+    if (model) value.transcription = { ...value.transcription, model, model_source: value.transcription.model_source || 'preset' }
   }
   return value
 }

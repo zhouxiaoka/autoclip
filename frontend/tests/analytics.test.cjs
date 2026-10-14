@@ -524,6 +524,26 @@ test('provider validation keeps host and error enum only', () => {
   assert.equal(JSON.stringify(event).includes('sk-secret'), false)
 })
 
+test('purpose-slot telemetry keeps source enums and drops model ids', () => {
+  const s=setup()
+  const x=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
+  const finish=x.beginExperience('provider_configuration_save',{
+    placement:'settings_model', provider:'dashscope',
+    analysis_source:'preset', vision_source:'follow', cover_source:'frame',
+    transcription_source:'whisper_local', vision_follow_lacks_vision:true,
+    analysis_model:'qwen-plus', model:'secret-model', api_key:'sk-secret',
+  })
+  finish('completed')
+  const props=s.events.find(e=>e.event==='provider_configuration_save_finished').props
+  assert.equal(props.analysis_source,'preset')
+  assert.equal(props.vision_source,'follow')
+  assert.equal(props.cover_source,'frame')
+  assert.equal(props.transcription_source,'whisper_local')
+  assert.equal(props.vision_follow_lacks_vision,true)
+  assert.equal(JSON.stringify(props).includes('qwen'),false)
+  assert.equal(JSON.stringify(props).includes('secret'),false)
+})
+
 function settingsHook(s, transport, initial) {
   let cursor=0;const slots=[]
   const react={useState(value){const i=cursor++;if(!(i in slots))slots[i]=value;return [slots[i],next=>{slots[i]=typeof next==='function'?next(slots[i]):next}]},useRef(value){const i=cursor++;if(!(i in slots))slots[i]={current:value};return slots[i]},useEffect(){}}
@@ -532,12 +552,13 @@ function settingsHook(s, transport, initial) {
   const access=loadTs('providerAccess.ts',{'../../i18n':{t:x=>x},'./providers':providers,'../../analytics/successRateContract':load('successRateContract')})
   const urls=loadTs('providerUrl.ts')
   const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls})
+  const slotLogic=loadTs('defaultModelSlots.ts',{'../../i18n':{t:x=>x}})
   const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const hook=load('../features/settings/useModelSettings',{
     react,antd:{message:{success(){},error(){}}},'../../i18n':{t:x=>x},'../studio/api':{errorText:()=> 'redacted'},
     '../../analytics/experience':experience,'./providers':providers,'./providerAccess':access,
     './modelSettingsApi':{modelSettingsApi:{get:async()=>structuredClone(initial),...transport},bindingCapability:()=> 'text'},
-    './modelDefaults':defaults,'./modelSettingsLogic':logic,
+    './modelDefaults':defaults,'./modelSettingsLogic':logic,'./defaultModelSlots':slotLogic,
     './providerCatalogView':{assignAnalysis:value=>value,ensureCatalogConnection:value=>({settings:value,changed:false}),selectLocalAsr:value=>value},
     './providerPresets':{getProvider:()=>undefined},
   },{window:{setTimeout(){},clearTimeout(){},addEventListener(){},removeEventListener(){}}})
