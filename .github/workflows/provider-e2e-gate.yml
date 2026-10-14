@@ -97,7 +97,10 @@ jobs:
       && (github.ref == 'refs/heads/main'
           || startsWith(github.ref, 'refs/tags/v')
           || (github.event_name == 'workflow_dispatch' && inputs.include_live)
-          || github.event_name == 'schedule')
+          || github.event_name == 'schedule'
+          || (github.event_name == 'push'
+              && github.ref == 'refs/heads/cursor/provider-e2e-gate-626f'
+              && contains(github.event.head_commit.message, 'e2e-live-once')))
     runs-on: ubuntu-latest
     timeout-minutes: 120
     environment: provider-e2e
