@@ -1,33 +1,27 @@
-"""Address normalization, locked presets, console-host detection, and key hints.
+"""Address lock, console-host detection, and key hints.
 
-Settings line B (roadmap #S). Locked providers keep their official URL;
-only `compatible` (and local presets) may edit the address.
+Settings line B (roadmap #S). Official URLs come from
+``presets/provider_presets.json``. URL rewrite goes through ``provider_url``
+(cleanup only — never rejects or raises).
 """
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse
 
-from backend.core.cloud_presets import CLOUD_PRESETS
-from backend.core.llm_providers import (
-    DASHSCOPE_CN_COMPATIBLE_BASE_URL,
-    OPENAI_OFFICIAL_BASE_URL,
-    normalize_base_url,
-)
+from backend.core.llm_providers import normalize_base_url
+from backend.core.provider_presets import get_provider
+from backend.core.provider_url import cleanup_base_url
+from backend.core.provider_url import normalize_provider_base_url as rewrite_provider_base_url
 
-LOCKED_PRESETS: dict[str, str] = {
-    'api88': CLOUD_PRESETS['api88'].base_url,
-    'infistar': CLOUD_PRESETS['infistar'].base_url,
-    'deepseek': CLOUD_PRESETS['deepseek'].base_url,
-    'gemini': 'https://generativelanguage.googleapis.com/v1beta/openai',
-    'dashscope': DASHSCOPE_CN_COMPATIBLE_BASE_URL,
-    'openai': OPENAI_OFFICIAL_BASE_URL,
-}
-
-# Beginners pick one of these and only paste a key. Custom gateways use `compatible`.
-ADDRESS_LOCKED_PROVIDERS = frozenset(LOCKED_PRESETS)
+# Settings-page providers whose address is not user-editable. Local presets and
+# ``compatible`` stay editable. URLs are not listed here — they come from JSON.
+ADDRESS_LOCKED_PROVIDERS = frozenset({
+    'api88', 'infistar', 'deepseek', 'gemini', 'dashscope', 'openai',
+})
 
 CONSOLE_HOSTS = frozenset({
     'platform.openai.com', 'chatgpt.com', 'openai.com', 'www.openai.com',
@@ -45,11 +39,8 @@ CONSOLE_HOSTS = frozenset({
 
 _CONSOLE_SUFFIXES = ('.console.aliyun.com', '.console.volcengine.com')
 
-_VERSIONED_PATH = re.compile(
-    r'^/(?:v\d+(?:beta)?(?:/openai)?|compatible-mode/v\d+|api/v\d+|api/paas/v\d+|openai/v\d+)/?$',
-    re.I,
-)
-
+# Pasted chat/completions paths are stripped before provider_url runs.
+# This is not a second /v1 engine.
 _CHAT_SUFFIXES = (
     '/v1/chat/completions',
     '/chat/completions',
@@ -66,10 +57,65 @@ _KEY_HINTS = (
     (re.compile(r'^sk-ant-'), 'compatible'),
 )
 
+
 @dataclass(frozen=True)
 class NormalizeResult:
     url: str
     warnings: tuple[str, ...]
+
+
+def official_chat_url(provider: Optional[str]) -> Optional[str]:
+    """Catalog base URL, with Gemini's native root mapped to the chat path.
+
+    Gemini's JSON row stores the generative-language root; the OpenAI-compatible
+    client needs the ``/v1beta/openai`` convention from ``provider_url``.
+    """
+    preset = get_provider(provider)
+    if not preset or not preset.base_url:
+        return None
+    cleaned = cleanup_base_url(preset.base_url)
+    if (preset.protocol or '') != 'google-generative-ai':
+        return cleaned
+    parsed = urlparse(cleaned)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+        return cleaned
+    host_only = f'{parsed.scheme}://{parsed.netloc}'
+    remapped = rewrite_provider_base_url(host_only, preset.id)
+    return remapped or cleaned
+
+
+def locked_preset_url(provider: Optional[str]) -> Optional[str]:
+    if provider not in ADDRESS_LOCKED_PROVIDERS:
+        return None
+    return official_chat_url(provider)
+
+
+def locked_presets() -> dict[str, str]:
+    """Live map so tests can swap ``AUTOCLIP_PROVIDER_PRESETS``."""
+    return {
+        key: url
+        for key in ADDRESS_LOCKED_PROVIDERS
+        if (url := official_chat_url(key))
+    }
+
+
+class _LockedPresetMap(Mapping[str, str]):
+    """Live view of address-locked official URLs. Reads the catalog on each lookup."""
+
+    def __getitem__(self, key: str) -> str:
+        url = locked_preset_url(key)
+        if url is None:
+            raise KeyError(key)
+        return url
+
+    def __iter__(self):
+        return iter(locked_presets())
+
+    def __len__(self) -> int:
+        return len(locked_presets())
+
+
+LOCKED_PRESETS = _LockedPresetMap()
 
 
 def is_console_host(host: Optional[str]) -> bool:
@@ -101,51 +147,89 @@ def telemetry_host(url: Optional[str]) -> str:
     return hostname_of_base_url(url) or 'unknown'
 
 
-def normalize_provider_base_url(url: Optional[str]) -> NormalizeResult:
-    """Strip spaces / trailing slash, drop `/chat/completions`, add `/v1` when missing."""
-    raw = re.sub(r'\s+', '', (url or '').strip()).rstrip('/')
-    warnings: list[str] = []
-    parsed = urlparse(raw)
-    if parsed.hostname and is_console_host(parsed.hostname):
-        warnings.append('console_host')
-        return NormalizeResult(url=raw, warnings=tuple(warnings))
-    lowered = raw.lower()
+def _strip_chat_suffix(url: str) -> tuple[str, bool]:
+    lowered = url.lower()
     for suffix in _CHAT_SUFFIXES:
         if lowered.endswith(suffix):
-            raw = raw[: len(raw) - len(suffix)].rstrip('/')
-            warnings.append('chat_completions')
-            parsed = urlparse(raw)
-            break
-    path = parsed.path or ''
-    if parsed.scheme in ('http', 'https') and parsed.hostname and not _VERSIONED_PATH.match(path):
-        raw = raw.rstrip('/') + '/v1'
+            return url[: len(url) - len(suffix)].rstrip('/'), True
+    return url, False
+
+
+def _added_openai_v1(before: str, after: str) -> bool:
+    try:
+        previous = urlparse(before)
+        current = urlparse(after)
+    except ValueError:
+        return False
+    return (current.path or '').rstrip('/') == '/v1' and (previous.path or '').rstrip('/') in ('', '/')
+
+
+def normalize_provider_base_url(
+    url: Optional[str],
+    provider: Optional[str] = 'compatible',
+) -> NormalizeResult:
+    """Cleanup via ``provider_url``. Never rejects or raises.
+
+    Warnings (``console_host``, ``chat_completions``, ``missing_v1``) are
+    informational. Callers may still persist the returned URL.
+    """
+    warnings: list[str] = []
+    cleaned = cleanup_base_url(url)
+    if not cleaned:
+        return NormalizeResult(url='', warnings=())
+    parsed = urlparse(cleaned)
+    if parsed.hostname and is_console_host(parsed.hostname):
+        warnings.append('console_host')
+        return NormalizeResult(url=cleaned, warnings=tuple(warnings))
+    stripped, stripped_chat = _strip_chat_suffix(cleaned)
+    if stripped_chat:
+        warnings.append('chat_completions')
+    rewritten = rewrite_provider_base_url(stripped, provider)
+    if _added_openai_v1(stripped, rewritten):
         warnings.append('missing_v1')
-    return NormalizeResult(url=raw, warnings=tuple(warnings))
+    return NormalizeResult(url=rewritten, warnings=tuple(warnings))
+
+
+def _hostname(url: Optional[str]) -> str:
+    return (urlparse(url or '').hostname or '').lower()
+
+
+def _accepted_hosts(provider: Optional[str], official: Optional[str]) -> set[str]:
+    preset = get_provider(provider)
+    hosts = {host.lower() for host in (preset.accepted_hosts if preset else ())}
+    official_host = _hostname(official)
+    if official_host:
+        hosts.add(official_host)
+    return hosts
 
 
 def locked_chat_url(provider: Optional[str], base_url: Optional[str] = None) -> Optional[str]:
     """Forced official URL, or None to keep the existing chat_endpoint resolution.
 
-    OpenAI with a foreign stored URL stays as-is (legacy rows the UI already
-    shows as 自定义兼容). DashScope with a dedicated Aliyun host keeps the
-    existing compatible-mode rewrite.
+    A stored URL whose host is in the catalog ``accepted_hosts`` (or the
+    official host) is kept — 88API's previous host still works. OpenAI with a
+    foreign stored URL stays as-is (legacy rows the UI already shows as
+    自定义兼容). DashScope with a dedicated Aliyun host keeps the existing
+    compatible-mode rewrite.
     """
-    if provider == 'api88':
+    official = locked_preset_url(provider)
+    if provider in {'api88', 'infistar', 'deepseek', 'gemini'}:
         cleaned = normalize_base_url(base_url)
         if cleaned:
-            from backend.core.cloud_presets import is_api88_host
-            if is_api88_host(urlparse(cleaned).hostname):
-                return None
-        return LOCKED_PRESETS['api88']
-    if provider in {'infistar', 'deepseek', 'gemini'}:
-        return LOCKED_PRESETS[provider]
+            host = _hostname(cleaned)
+            if host and host in _accepted_hosts(provider, official):
+                return rewrite_provider_base_url(cleaned, provider) or cleaned
+        return official
     if provider == 'openai':
         cleaned = normalize_base_url(base_url)
-        if not cleaned or cleaned in {OPENAI_OFFICIAL_BASE_URL, 'https://api.openai.com'}:
-            return OPENAI_OFFICIAL_BASE_URL
+        aliases = {official} if official else set()
+        if official:
+            aliases.add(official.removesuffix('/v1'))
+        if not cleaned or cleaned in aliases:
+            return official
         return None
     if provider == 'dashscope':
         if not normalize_base_url(base_url):
-            return LOCKED_PRESETS['dashscope']
+            return official
         return None
     return None

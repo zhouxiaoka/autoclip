@@ -194,7 +194,7 @@ def validate_connection(connection: ai_models.Connection, model: str) -> Validat
     if hint == resolved.provider:
         hint = None
     if resolved.provider == 'compatible' and resolved.base_url:
-        normalized = normalize_provider_base_url(resolved.base_url)
+        normalized = normalize_provider_base_url(resolved.base_url, resolved.provider)
         base = normalized.url
         if 'console_host' in normalized.warnings:
             return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)

@@ -1,23 +1,67 @@
+import json
+from pathlib import Path
+
+import pytest
+
+from backend.core import provider_presets
 from backend.core.provider_endpoint import (
+    ADDRESS_LOCKED_PROVIDERS,
+    LOCKED_PRESETS,
     hint_provider_for_key,
     is_console_host,
     locked_chat_url,
+    locked_preset_url,
     looks_like_html,
     normalize_provider_base_url,
+    official_chat_url,
     telemetry_host,
 )
+from backend.core.provider_presets import get_provider
+from backend.services import ai_model_settings as ai
+
+ROOT = Path(__file__).resolve().parents[2]
+CATALOG = ROOT / 'presets' / 'provider_presets.json'
+ENDPOINT_SRC = ROOT / 'backend' / 'core' / 'provider_endpoint.py'
+
+
+@pytest.fixture(autouse=True)
+def isolated(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(ai, 'migrate_legacy', lambda: ai.ModelSettings())
+    yield
+    provider_presets.reset_catalog_cache()
 
 
 def test_normalize_strips_spaces_slash_and_chat_completions_then_adds_v1():
-    result = normalize_provider_base_url(' https://88api.ai/ ')
-    assert result.url == 'https://88api.ai/v1'
+    result = normalize_provider_base_url(' https://gw.example/ ')
+    assert result.url == 'https://gw.example/v1'
     assert 'missing_v1' in result.warnings
     pasted = normalize_provider_base_url('https://example.com/v1/chat/completions')
     assert pasted.url == 'https://example.com/v1'
     assert 'chat_completions' in pasted.warnings
-    already = normalize_provider_base_url('https://infistar.cc/v1')
-    assert already.url == 'https://infistar.cc/v1'
+    already = normalize_provider_base_url('https://gw.example/v1')
+    assert already.url == 'https://gw.example/v1'
     assert 'missing_v1' not in already.warnings
+
+
+def test_normalize_reuses_provider_url_and_never_raises():
+    assert normalize_provider_base_url('').url == ''
+    assert normalize_provider_base_url('   ').url == ''
+    assert normalize_provider_base_url('not-an-endpoint').url == 'not-an-endpoint'
+    assert normalize_provider_base_url('ftp://gw.example/v1').url == 'ftp://gw.example/v1'
+    assert normalize_provider_base_url('HTTP://gw.example/v1').url == 'http://gw.example/v1'
+    assert normalize_provider_base_url('localhost:11434', 'ollama').url == 'http://localhost:11434/v1'
+    host = 'https://llm-x.cn-beijing.maas.aliyuncs.com'
+    assert normalize_provider_base_url(host, 'dashscope').url == host
+    text = ENDPOINT_SRC.read_text(encoding='utf-8')
+    assert 'rewrite_provider_base_url' in text
+    assert '_VERSIONED_PATH' not in text
+    catalog = json.loads(CATALOG.read_text(encoding='utf-8'))
+    for key in ADDRESS_LOCKED_PROVIDERS:
+        url = (catalog['providers'].get(key) or {}).get('base_url') or ''
+        if url:
+            assert url not in text, f'hard-coded catalog URL {url}'
 
 
 def test_console_host_is_not_treated_as_an_api_root():
@@ -27,22 +71,50 @@ def test_console_host_is_not_treated_as_an_api_root():
     assert is_console_host('bailian.console.aliyun.com')
     assert is_console_host('aistudio.google.com')
     assert not is_console_host('api.openai.com')
-    assert not is_console_host('88api.ai')
+    assert not is_console_host('example.com')
     assert looks_like_html('<!DOCTYPE html><html><title>控制台</title>')
     assert not looks_like_html('{"data":[]}')
 
 
-def test_locked_presets_ignore_wrong_custom_urls_except_legacy_openai_and_bailian():
-    assert locked_chat_url('api88', 'https://api.openai.com/v1') == 'https://api.88api.ai/v1'
-    assert locked_chat_url('api88', 'https://88api.ai/v1') is None
-    assert locked_chat_url('api88', '') == 'https://api.88api.ai/v1'
-    assert locked_chat_url('infistar', 'https://wrong.example/v1') == 'https://infistar.cc/v1'
-    assert locked_chat_url('deepseek', '') == 'https://api.deepseek.com'
-    assert locked_chat_url('gemini', 'https://platform.openai.com') == 'https://generativelanguage.googleapis.com/v1beta/openai'
-    assert locked_chat_url('openai', '') == 'https://api.openai.com/v1'
+def test_normalize_never_blocks_console_host_on_save():
+    connection = ai.Connection(
+        id='c', name='c', provider='compatible',
+        base_url='https://platform.openai.com/api-keys', api_key='k',
+    )
+    assert connection.base_url == 'https://platform.openai.com/api-keys'
+    assert normalize_provider_base_url('not-an-endpoint').url == 'not-an-endpoint'
+
+
+def test_locked_presets_read_catalog_urls_except_legacy_openai_and_bailian():
+    api88 = get_provider('api88').base_url
+    infistar = get_provider('infistar').base_url
+    deepseek = get_provider('deepseek').base_url
+    dashscope = get_provider('dashscope').base_url
+    openai = get_provider('openai').base_url
+    assert locked_chat_url('api88', 'https://wrong.example/v1') == api88
+    assert locked_chat_url('api88', 'https://88api.ai/v1') == 'https://88api.ai/v1'
+    assert locked_chat_url('infistar', 'https://wrong.example/v1') == infistar
+    assert locked_chat_url('deepseek', '') == deepseek
+    assert locked_chat_url('gemini', 'https://platform.openai.com') == official_chat_url('gemini')
+    assert official_chat_url('gemini').endswith('/openai')
+    assert locked_chat_url('openai', '') == openai
     assert locked_chat_url('openai', 'https://one.example/v1') is None
-    assert locked_chat_url('dashscope', '') == 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+    assert locked_chat_url('dashscope', '') == dashscope
     assert locked_chat_url('dashscope', 'https://llm-x.cn-beijing.maas.aliyuncs.com') is None
+    assert set(LOCKED_PRESETS) == set(ADDRESS_LOCKED_PROVIDERS)
+    assert LOCKED_PRESETS['api88'] == api88
+    assert locked_preset_url('siliconflow') is None
+
+
+def test_locked_urls_follow_swapped_json_catalog(tmp_path, monkeypatch):
+    raw = json.loads(CATALOG.read_text(encoding='utf-8'))
+    raw['providers']['api88']['base_url'] = 'https://lock.example.test/v1'
+    path = tmp_path / 'provider_presets.json'
+    path.write_text(json.dumps(raw), encoding='utf-8')
+    monkeypatch.setenv('AUTOCLIP_PROVIDER_PRESETS', str(path))
+    provider_presets.reset_catalog_cache()
+    assert locked_chat_url('api88', 'https://wrong.example/v1') == 'https://lock.example.test/v1'
+    assert LOCKED_PRESETS['api88'] == 'https://lock.example.test/v1'
 
 
 def test_key_hint_is_prefix_only_and_host_is_sanitized():
@@ -50,6 +122,6 @@ def test_key_hint_is_prefix_only_and_host_is_sanitized():
     assert hint_provider_for_key('sk-proj-abc') == 'openai'
     assert hint_provider_for_key('sk-or-v1-abc') == 'compatible'
     assert hint_provider_for_key('sk-generic-88api-or-deepseek') is None
-    assert telemetry_host('https://88api.ai/v1/chat/completions?key=secret') == '88api.ai'
+    assert telemetry_host('https://example.com/v1/chat/completions?key=secret') == 'example.com'
     assert telemetry_host('http://127.0.0.1:11434/v1') == 'local'
     assert 'secret' not in telemetry_host('https://user:secret@evil.example/v1')
