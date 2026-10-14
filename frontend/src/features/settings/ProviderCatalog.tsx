@@ -27,6 +27,7 @@ const GROUP_KEY: Record<ProviderGroupId, string> = {
 
 function actionLabel(preset: ProviderPreset, connected: boolean): string {
   if (connected) return preset.id === 'whisper' || preset.id === 'sensevoice' ? t('settings.providers.available') : t('settings.providers.connected')
+  if (connectKind(preset) === 'needs_endpoint') return t('settings.providers.needs_endpoint')
   if (preset.sponsor) return t('settings.providers.one_click')
   return t('settings.providers.configure')
 }

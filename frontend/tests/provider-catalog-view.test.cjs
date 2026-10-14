@@ -60,6 +60,28 @@ test('unconnected presets stay visible and point at configure / compatible / gui
   assert.equal(view.connectKind(view.catalogPreset('whisper')), 'local_asr')
 })
 
+test('empty-url presets are not live defaults and stay off the picker', () => {
+  for (const id of ['azure-openai', 'amazon-bedrock', 'google-vertex', 'cloudflare-workers-ai', 'cloudflare-ai-gateway']) {
+    const preset = view.catalogPreset(id)
+    assert.ok(preset, id)
+    assert.equal(preset.base_url, '')
+    assert.equal(['guide', 'needs_endpoint'].includes(view.connectKind(preset)), true, id)
+    assert.equal(view.isLiveConnectable(preset), false, id)
+    const result = view.ensureCatalogConnection(blank(), preset)
+    assert.equal(result.changed, false, id)
+    assert.equal(result.connection, undefined, id)
+    assert.equal(result.settings.connections.length, 0, id)
+    assert.equal(result.settings.analysis, null, id)
+    assert.equal(view.catalogDraftConnection(preset), undefined, id)
+  }
+  const providers = loadTs('providers.ts', { '../../i18n': { t: text => text } })
+  const picker = providers.providerPickerOptions().flatMap(group => group.options.map(option => option.value))
+  for (const id of ['azure-openai', 'amazon-bedrock', 'google-vertex', 'cloudflare-workers-ai', 'cloudflare-ai-gateway']) {
+    assert.equal(picker.includes(id), false, id)
+  }
+  assert.equal(picker.includes('compatible'), true)
+})
+
 test('opening a catalog provider creates a draft without treating an empty key as connected', () => {
   const settings = blank()
   const draft = view.catalogDraftConnection(view.catalogPreset('siliconflow'))
@@ -149,6 +171,7 @@ test('every catalog name and hint used in the UI exists in all eight locales', (
   const needed = new Set([
     'settings.providers.title', 'settings.providers.unconnected_guide', 'settings.providers.configure',
     'settings.providers.repair_custom', 'settings.providers.repair_custom_hint', 'settings.providers.custom_group',
+    'settings.providers.needs_endpoint', 'settings.providers.needs_endpoint_guide',
   ])
   for (const row of Object.values(catalog.providers)) {
     for (const key of ['ui_name', 'display_name', 'short_name', 'hint']) {

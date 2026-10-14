@@ -1802,5 +1802,7 @@
   "蚂蚁百灵。OpenAI 兼容。": "蚂蚁百灵。OpenAI 兼容。",
   "settings.providers.repair_custom": "修复自定义接口",
   "settings.providers.repair_custom_hint": "这是已保存的自定义 OpenAI 兼容网关。可以改地址或密钥。",
-  "settings.providers.custom_group": "已保存的自定义接口"
+  "settings.providers.custom_group": "已保存的自定义接口",
+  "settings.providers.needs_endpoint": "需自备地址",
+  "settings.providers.needs_endpoint_guide": "这家服务商没有通用接口地址。当前版本不能把它当作默认可连接服务，请改用推荐、热门、本机，或已保存的自定义兼容网关。"
 }

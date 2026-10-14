@@ -106,9 +106,9 @@ export default function ProviderDetail({
         </>
       )}
 
-      {kind === 'guide' && (
+      {(kind === 'guide' || kind === 'needs_endpoint') && (
         <div className="ac-empty">
-          <b>{t('settings.providers.protocol_guide')}</b>
+          <b>{t(kind === 'needs_endpoint' ? 'settings.providers.needs_endpoint_guide' : 'settings.providers.protocol_guide')}</b>
           {preset.docs_url && (
             <Btn variant="text" size="sm" onClick={() => openExternalLink(preset.docs_url)}>
               {t('settings.providers.docs')}<Icon.External size={12} />
@@ -143,7 +143,7 @@ export default function ProviderDetail({
         </>
       )}
 
-      {kind !== 'local_asr' && kind !== 'guide' && (
+      {kind !== 'local_asr' && kind !== 'guide' && kind !== 'needs_endpoint' && (
         <div className="ac-provider-models">
           <h4 className="ac-provider-models-title">{t('settings.providers.models_preview')}</h4>
           {connection && busy[connection.id] && <p className="ac-note">{t('正在获取可用模型…')}</p>}
@@ -162,7 +162,7 @@ export default function ProviderDetail({
         </div>
       )}
 
-      {kind !== 'guide' && kind !== 'local_asr' && connection && preset.capabilities.includes('language') && (
+      {kind !== 'guide' && kind !== 'needs_endpoint' && kind !== 'local_asr' && connection && preset.capabilities.includes('language') && (
         isAnalysis && settings.analysis
           ? <Row wide label={t('settings.providers.using_for_analysis')} hint={t('已为你选好推荐模型，可随时更换。')}>
               <ModelPicker
@@ -185,7 +185,7 @@ export default function ProviderDetail({
             </Row>
       )}
 
-      {preset.docs_url && kind !== 'guide' && (
+      {preset.docs_url && kind !== 'guide' && kind !== 'needs_endpoint' && (
         <p className="ac-note">
           <a
             className="ac-link"

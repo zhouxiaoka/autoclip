@@ -1802,5 +1802,7 @@
   "蚂蚁百灵。OpenAI 兼容。": "Ant Ling. Совместимо с OpenAI.",
   "settings.providers.repair_custom": "Исправить свой endpoint",
   "settings.providers.repair_custom_hint": "Это сохранённый шлюз, совместимый с OpenAI. Можно изменить адрес или ключ.",
-  "settings.providers.custom_group": "Сохранённые свои endpoint"
+  "settings.providers.custom_group": "Сохранённые свои endpoint",
+  "settings.providers.needs_endpoint": "Нужен свой адрес",
+  "settings.providers.needs_endpoint_guide": "У этого провайдера нет общего адреса. В этой версии его нельзя сделать подключением по умолчанию. Выберите рекомендованного, популярного, локального или уже сохранённый свой шлюз."
 }

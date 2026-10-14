@@ -1802,5 +1802,7 @@
   "蚂蚁百灵。OpenAI 兼容。": "Ant Ling. OpenAI 호환.",
   "settings.providers.repair_custom": "사용자 지정 엔드포인트 복구",
   "settings.providers.repair_custom_hint": "저장된 사용자 지정 OpenAI 호환 게이트웨이입니다. 주소나 키를 바꿀 수 있습니다.",
-  "settings.providers.custom_group": "저장된 사용자 지정 엔드포인트"
+  "settings.providers.custom_group": "저장된 사용자 지정 엔드포인트",
+  "settings.providers.needs_endpoint": "주소 필요",
+  "settings.providers.needs_endpoint_guide": "이 제공자에게는 공통 엔드포인트가 없습니다. 이 버전에서는 기본 연결로 쓸 수 없습니다. 추천·인기·로컬 제공자나 저장된 사용자 지정 게이트웨이를 사용하세요."
 }

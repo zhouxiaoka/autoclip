@@ -1802,5 +1802,7 @@
   "蚂蚁百灵。OpenAI 兼容。": "Ant Ling. Compatível com OpenAI.",
   "settings.providers.repair_custom": "Reparar endpoint personalizado",
   "settings.providers.repair_custom_hint": "Este é um gateway compatível com OpenAI já salvo. Você pode alterar o endereço ou a chave.",
-  "settings.providers.custom_group": "Endpoints personalizados salvos"
+  "settings.providers.custom_group": "Endpoints personalizados salvos",
+  "settings.providers.needs_endpoint": "Precisa do seu endereço",
+  "settings.providers.needs_endpoint_guide": "Este provedor não tem um endpoint compartilhado. Esta versão não pode usá-lo como padrão. Use um recomendado, popular ou local, ou um gateway personalizado já salvo."
 }

@@ -1802,5 +1802,7 @@
   "蚂蚁百灵。OpenAI 兼容。": "Ant Ling. Compatible OpenAI.",
   "settings.providers.repair_custom": "Réparer l’endpoint personnalisé",
   "settings.providers.repair_custom_hint": "C’est une passerelle compatible OpenAI déjà enregistrée. Vous pouvez changer l’adresse ou la clé.",
-  "settings.providers.custom_group": "Endpoints personnalisés enregistrés"
+  "settings.providers.custom_group": "Endpoints personnalisés enregistrés",
+  "settings.providers.needs_endpoint": "Adresse requise",
+  "settings.providers.needs_endpoint_guide": "Ce fournisseur n’a pas d’endpoint partagé. Cette version ne peut pas l’utiliser par défaut. Choisissez un fournisseur recommandé, populaire ou local, ou une passerelle personnalisée déjà enregistrée."
 }
