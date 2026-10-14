@@ -19,7 +19,7 @@ function loadSection() {
     './modelSettingsLogic': { connectionOf: () => undefined, mainConnection: () => undefined },
     './ProviderFields': {}, './ModelPicker': {}, '../../services/api': {},
     './AddCustomProviderDialog': { default: () => null },
-    './LocalModelPrepare': { default: 'LocalModelPrepare' },
+    './SenseVoiceConfig': { default: 'SenseVoiceConfig' },
     './customProvider': {},
   }
   const source = fs.readFileSync('src/features/settings/AIModelSettings.tsx', 'utf8') + '\nexport const testSection = TranscriptionSection;'
@@ -68,12 +68,15 @@ function findType(node, type) {
 }
 
 test('SenseVoice first enable reuses the Whisper prepare row instead of a new wizard', () => {
-  const source = fs.readFileSync('src/features/settings/AIModelSettings.tsx', 'utf8')
+  const page = fs.readFileSync('src/features/settings/AIModelSettings.tsx', 'utf8')
+  const source = fs.readFileSync('src/features/settings/SenseVoiceConfig.tsx', 'utf8')
+  assert.match(page, /SenseVoiceConfig/)
+  assert.equal(/LocalModelPrepare/.test(page), false)
   assert.match(source, /LocalModelPrepare/)
   assert.equal(/向导|wizard|clipboard/i.test(source), false)
   const Section = loadSection()
   const settings = { connections: [], transcription: { provider: 'sensevoice_local', model: 'SenseVoiceSmall' } }
   const tree = Section({ m: { settings, lists: {}, busy: {}, listErrors: {}, update() {}, setTranscriptionLocal() {}, chooseProvider() {} } })
-  assert.ok(findType(tree, 'LocalModelPrepare'))
+  assert.ok(findType(tree, 'SenseVoiceConfig'))
   assert.equal(findType(tree, 'Dialog'), null)
 })
