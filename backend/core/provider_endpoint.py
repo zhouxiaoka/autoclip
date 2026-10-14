@@ -130,7 +130,14 @@ def locked_chat_url(provider: Optional[str], base_url: Optional[str] = None) -> 
     shows as 自定义兼容). DashScope with a dedicated Aliyun host keeps the
     existing compatible-mode rewrite.
     """
-    if provider in {'api88', 'infistar', 'deepseek', 'gemini'}:
+    if provider == 'api88':
+        cleaned = normalize_base_url(base_url)
+        if cleaned:
+            from backend.core.cloud_presets import is_api88_host
+            if is_api88_host(urlparse(cleaned).hostname):
+                return None
+        return LOCKED_PRESETS['api88']
+    if provider in {'infistar', 'deepseek', 'gemini'}:
         return LOCKED_PRESETS[provider]
     if provider == 'openai':
         cleaned = normalize_base_url(base_url)

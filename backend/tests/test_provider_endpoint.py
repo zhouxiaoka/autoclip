@@ -33,7 +33,9 @@ def test_console_host_is_not_treated_as_an_api_root():
 
 
 def test_locked_presets_ignore_wrong_custom_urls_except_legacy_openai_and_bailian():
-    assert locked_chat_url('api88', 'https://api.openai.com/v1') == 'https://88api.ai/v1'
+    assert locked_chat_url('api88', 'https://api.openai.com/v1') == 'https://api.88api.ai/v1'
+    assert locked_chat_url('api88', 'https://88api.ai/v1') is None
+    assert locked_chat_url('api88', '') == 'https://api.88api.ai/v1'
     assert locked_chat_url('infistar', 'https://wrong.example/v1') == 'https://infistar.cc/v1'
     assert locked_chat_url('deepseek', '') == 'https://api.deepseek.com'
     assert locked_chat_url('gemini', 'https://platform.openai.com') == 'https://generativelanguage.googleapis.com/v1beta/openai'
