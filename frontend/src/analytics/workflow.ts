@@ -8,6 +8,21 @@ const CONTEXT_KEY = "autoclip.analytics.context.v1"
 export function telemetryId(): string { return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}` }
 type Context = { props: Properties; updated: number; artifacts: Record<string, string> }
 
+const OS_CANON: Record<string, string> = { darwin: 'macos', win32: 'windows' }
+const OUTCOME_CANON: Record<string, string> = { completed: 'success', failed: 'error' }
+
+/** 1.5.8 send contract: only macos/windows/linux/unknown. */
+export function canonOs(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  return OS_CANON[value] || value
+}
+
+/** 1.5.8 send contract: completed→success, failed→error. */
+export function canonOutcome(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  return OUTCOME_CANON[value] || value
+}
+
 export function projectProperties(project: { settings?: Record<string, unknown>; processing_config?: Record<string, unknown>; material_origin?: unknown; example_version?: unknown }): Properties {
   const settings = project.processing_config || project.settings
   const origin = project.material_origin || (settings ? settings.example === true ? 'sample' : 'user' : 'unknown')
@@ -30,7 +45,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     portrait_style: ['auto', 'interview', 'podcast'], artifact_type: ['video', 'publish_kit'],
     recommendation_mode: ['ai', 'local', 'manual', 'fallback'],
     subtitle_status: ['available', 'missing', 'invalid', 'unreadable', 'too_large'],
-    outcome: ['completed', 'failed', 'partial', 'downgraded', 'skipped', 'recommended', 'manual', 'fallback', 'scheduled', 'inbox', 'unknown', 'auto_started'],
+    outcome: ['success', 'error', 'partial', 'downgraded', 'skipped', 'recommended', 'manual', 'fallback', 'scheduled', 'inbox', 'unknown', 'auto_started'],
     download_mode: ['native', 'browser'], gateway: ['bilibili', 'upload-post'],
     title_style: ['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'],
     share_target: ['copy_caption', 'use_case_discussion'],
@@ -49,7 +64,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     encoder: ['libx264', 'h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox'],
     downgrade_reason: ['none', 'over_budget', 'missing_runtime', 'intel_mac_unverified', 'rank', 'flag_off', 'capture', 'encode'],
     failure_reason: ['none', 'capture', 'encode', 'runtime', 'timeout', 'unknown'],
-    os: ['darwin', 'win32', 'linux'],
+    os: ['macos', 'windows', 'linux', 'unknown'],
     stage: ['pre_import', 'results_chip', 'editor'],
     packaging_style: ['classic', 'boxed', 'spotlight', 'pop', 'cinematic'],
     framing: ['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'],
@@ -65,7 +80,10 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     code: ['whisper_installed', 'whisper_installing', 'whisper_install_failed', 'whisper_not_installed', 'whisper_model_downloading', 'whisper_model_failed', 'whisper_model_missing', 'sensevoice_ready', 'sensevoice_not_ready', 'cloud_configured', 'cloud_not_configured'],
   }
   for (const [key, allowed] of Object.entries(enums)) {
-    if (typeof input[key] === 'string' && allowed.includes(input[key] as string)) out[key] = input[key] as string
+    let raw: unknown = input[key]
+    if (key === 'os') raw = canonOs(raw)
+    if (key === 'outcome') raw = canonOutcome(raw)
+    if (typeof raw === 'string' && allowed.includes(raw)) out[key] = raw
   }
   for (const key of ['outro_applied', 'brand_outro_enabled', 'reused_content_profile', 'has_crop_track', 'has_manual_adjustment', 'auto_frame_retained', 'tags_enabled', 'packaging_fallback', 'burned_captions', 'subtitle_enabled', 'has_subtitle', 'blocked', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', 'is_recommended', 'accepted_recommendation', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean
@@ -360,16 +378,17 @@ export class WorkflowTracker {
       const created = utcMillis(t.created_at)
       if (t.task_type !== 'video_processing' || created === undefined || created < w.since) continue
       const props = { project_id: w.id, task_id: t.id, telemetry_source: 'backend_task_observed' }
-      this.emitOnce(w, `${t.id}:observed`, 'processing_task_observed', props)
+      this.emitOnce(w, `${t.id}:observed`, 'processing_task_observed', { ...props, legacy: true })
       // Some workers omit timestamps. Never invent a start or duration for a missed transition.
       const start = utcMillis(t.started_at)
       const end = utcMillis(t.completed_at)
       if (t.status === 'running' || start !== undefined) this.emitOnce(w, `${t.id}:started`, 'processing_started', {
-        ...props, occurred_at: new Date(start ?? created).toISOString(),
+        ...props, legacy: true, occurred_at: new Date(start ?? created).toISOString(),
         time_basis: start === undefined ? 'task_created_at' : 'task_started_at',
       })
       if (['completed', 'failed', 'cancelled'].includes(t.status)) this.emitOnce(w, `${t.id}:finished`, 'processing_finished', {
-        ...props, outcome: t.status, occurred_at: end === undefined ? undefined : new Date(end).toISOString(),
+        ...props, outcome: canonOutcome(t.status) || t.status, legacy: true,
+        occurred_at: end === undefined ? undefined : new Date(end).toISOString(),
         duration_ms: start !== undefined && end !== undefined && end >= start ? end - start : undefined,
       })
     }

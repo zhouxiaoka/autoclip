@@ -84,8 +84,8 @@ const saveWithSystemDownload = async (
     if (!size) throw new Error('Empty media response')
     return { ...result, size }
   }, (result, _startedAt, props) => {
-    captureBusinessEvent('media_download_received', { ...props, size_bytes: result.size })
-    captureBusinessEvent('media_download_saved', { ...props, download_mode: 'native', size_bytes: result.size })
+    captureBusinessEvent('media_download_received', { ...props, size_bytes: result.size, legacy: true })
+    captureBusinessEvent('media_download_saved', { ...props, download_mode: 'native', size_bytes: result.size, legacy: true })
   })
   const { message } = await import('antd')
   message.success(t('已保存到下载文件夹'))
@@ -266,7 +266,7 @@ export const settingsApi = {
       api_key: apiKey,
       base_url: options.baseUrl,
       model: options.model,
-    }), (result) => { captureBusinessEvent('provider_test_finished', { provider, outcome: result.success ? 'success' : 'failed' }) })
+    }), (result) => { captureBusinessEvent('provider_test_finished', { provider, outcome: result.success ? 'success' : 'error', legacy: true }) })
   },
 
   // 云端提供商模型名单：内置常用 + 有密钥时实时拉取服务商 /models
@@ -370,7 +370,7 @@ export const projectApi = {
       }), (created, startedAt, props) => {
         workflow.rememberProject(created.id, { material_origin: 'user' })
         workflow.watch('project', created.id, undefined, startedAt)
-        captureBusinessEvent('import_finished', { ...props, project_id: created.id, outcome: 'completed', stage: 'upload_received' })
+        captureBusinessEvent('import_finished', { ...props, project_id: created.id, outcome: 'success', stage: 'upload_received', legacy: true })
       })
       trackVideoImported({
         source: 'upload',

@@ -12,17 +12,17 @@ export async function observeOperation<T>(
   const enabledAtStart = workflow.active(generation)
   const operationId = globalThis.crypto?.randomUUID?.() ?? `${startedAt}-${Math.random().toString(36).slice(2)}`
   const props = { ...workflow.context(typeof properties.project_id === 'string' ? properties.project_id : undefined, typeof properties.export_id === 'string' ? properties.export_id : undefined), ...properties, operation_id: operationId }
-  if (enabledAtStart) captureBusinessEvent(`${name}_requested`, props)
+  if (enabledAtStart) captureBusinessEvent(`${name}_requested`, { ...props, legacy: true })
   try {
     const result = await action()
     if (enabledAtStart && workflow.active(generation)) {
-      captureBusinessEvent(`${name}_accepted`, { ...props, request_duration_ms: Date.now() - startedAt })
+      captureBusinessEvent(`${name}_accepted`, { ...props, request_duration_ms: Date.now() - startedAt, legacy: true })
       try { onAccepted?.(result, startedAt, props) } catch { /* telemetry must not change a successful API result */ }
     }
     return result
   } catch (error) {
     if (enabledAtStart && workflow.active(generation)) captureBusinessEvent(`${name}_request_failed`, {
-      ...props, error_code: errorCode(error), request_duration_ms: Date.now() - startedAt,
+      ...props, error_code: errorCode(error), request_duration_ms: Date.now() - startedAt, legacy: true,
     })
     throw error
   }
@@ -34,7 +34,7 @@ export async function observeDownload<T extends Blob>(properties: Properties, ac
     const blob = await action()
     if (!(blob instanceof Blob) || blob.size === 0) throw new Error('Empty media response')
     return blob
-  }, (blob, _startedAt, props) => { captureBusinessEvent('media_download_received', { ...props, size_bytes: blob.size }) })
+  }, (blob, _startedAt, props) => { captureBusinessEvent('media_download_received', { ...props, size_bytes: blob.size, legacy: true }) })
 }
 
 export async function observeMediaResponse<T extends { data: Blob }>(properties: Properties, action: () => Promise<T>): Promise<T> {
@@ -42,5 +42,5 @@ export async function observeMediaResponse<T extends { data: Blob }>(properties:
     const response = await action()
     if (!(response.data instanceof Blob) || response.data.size === 0) throw new Error('Empty media response')
     return response
-  }, (response, _startedAt, props) => { captureBusinessEvent('media_download_received', { ...props, size_bytes: response.data.size }) })
+  }, (response, _startedAt, props) => { captureBusinessEvent('media_download_received', { ...props, size_bytes: response.data.size, legacy: true }) })
 }

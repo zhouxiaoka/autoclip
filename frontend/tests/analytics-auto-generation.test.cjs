@@ -142,7 +142,7 @@ test('local render timeout retains a safe code for export and automatic partial 
   ],
  }
  for(const [kind,id,event,outcome] of [
-  ['studio-export','private-render-job','studio_export_finished','failed'],
+  ['studio-export','private-render-job','studio_export_finished','error'],
   ['studio-generation','private-project','studio_generation_finished','partial'],
  ]){
   const {t,events}=tracker();t.watch(kind,id,'private-project')
