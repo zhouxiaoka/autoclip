@@ -89,21 +89,18 @@ export function buildFeedbackDraft(input: FeedbackDraftInput): FeedbackDraft {
   }
 }
 
-/** 发给 PostHog 的字段。不含接口地址。邮箱只出现在这里。 */
+/** 发给 PostHog 的字段。不含正文、邮箱、接口地址。 */
 export function captureProperties(draft: FeedbackDraft): Record<string, string> {
   const props: Record<string, string> = {
     feedback_id: draft.feedbackId,
     category: draft.category,
-    text: draft.text,
     source: draft.source,
     app_version: draft.version,
     os: draft.os,
     arch: draft.arch,
     $lib: 'autoclip-feedback',
   }
-  if (draft.contact) props.contact = draft.contact
   if (draft.stage) props.stage = draft.stage
-  if (draft.errorMessage) props.error_message = draft.errorMessage
   if (draft.errorCode) props.error_code = draft.errorCode
   if (draft.transcriptionProvider) props.transcription_provider = draft.transcriptionProvider
   if (draft.transcriptionModel) props.transcription_model = draft.transcriptionModel

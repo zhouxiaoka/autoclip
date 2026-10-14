@@ -7,6 +7,8 @@
 
 ## [未发布]
 
+- 应用内反馈不再把正文和邮箱发到 PostHog：`feedback_submitted` / `feedback_opened` / `feedback_dismissed` 走 `captureBusinessEvent`，遵守分析开关；关闭统计时只保留用户自己打开的 GitHub 回退页。
+
 - 启动时检查更新：复用现有 GitHub Release / Tauri updater（`latest.json`）。发现新版本时弹出提醒，确认后再下载；同一版本一天最多提醒一次；设置页和提醒弹层可关闭提醒，关闭后仍可手动检查。检查请求不带用户标识；网络失败、限流或离线时静默，不阻塞启动。
 
 - 新增上游错误分类与成功率埋点字段契约（`upstream_errors` / `llm_telemetry`，前端 `successRateContract`）：按 OpenAI、new-api、Gemini、DeepSeek 等响应区分密钥、余额、权限/分组、模型不存在、地址错误、限流、5xx、超时/断连、截断；只提供分类与脱敏，不改现有调用链或上报。八语补齐对应提示 key。

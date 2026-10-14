@@ -5,17 +5,13 @@
  * 且自动带上排查所需的上下文（版本 / 系统 / 架构 / LLM provider & 模型 / 失败阶段与错误）。
  *
  * 实现要点：
- * - 反馈以 `feedback_submitted` 事件进入 PostHog（无论有没有配置 Survey 都会发）。
- * - 若 PostHog 项目里存在名为 FEEDBACK_SURVEY_NAME（或 env 指定 id）的 Survey（API 型 / 无 UI），
- *   同时按 PostHog 的约定发 `survey shown` / `survey sent` / `survey dismissed`，
- *   这样结果会出现在 PostHog → Surveys 的响应面板里，周报也能直接读。
- * - 版本 / 系统 / 架构 由 lifecycle.ts 注册的 super properties 自动携带；这里额外显式写入，
- *   避免 Surveys 面板只看 `$survey_response*` 时丢上下文。
- * - 点「发送」不看匿名统计开关。事件进入 PostHog 后，收件任务写进 GitHub。
- *   故障开 Issue，想法开 Ideas，其他开 Q&A。邮箱不进公开帖。
- * - 没有配置或网络失败时，打开预填好的 GitHub 页面，由用户再提交一次。
+ * - 业务事件只走 `captureBusinessEvent`（白名单信封 + opt-out）。
+ * - `feedback_submitted` 只报枚举与匿名上下文，不含 `text` / `contact`。
+ * - 用户正文只出现在用户自己打开的 GitHub 回退页。
+ * - 若 PostHog 项目里存在名为 FEEDBACK_SURVEY_NAME（或 env 指定 id）的 Survey，
+ *   同时按约定发 `survey shown` / `survey dismissed`，也走白名单。
  */
-import { posthog, isAnalyticsEnabled, POSTHOG_HOST, POSTHOG_KEY } from './posthog'
+import { captureBusinessEvent, isAnalyticsEnabled, posthog } from './posthog'
 import { settingsApi } from '../services/api'
 import { modelSettingsApi } from '../features/settings/modelSettingsApi'
 import { getRuntimeInfo } from './lifecycle'
@@ -101,15 +97,13 @@ export async function collectLlmContext(): Promise<Pick<FeedbackContext, 'llm_pr
 }
 
 export function trackFeedbackOpened(ctx: FeedbackContext, survey: SurveyLike | null): void {
-  if (typeof posthog?.capture !== 'function') return
-  posthog.capture('feedback_opened', { source: ctx.source, stage: ctx.stage })
-  if (survey) posthog.capture('survey shown', { $survey_id: survey.id, $survey_name: survey.name })
+  captureBusinessEvent('feedback_opened', { source: ctx.source, stage: ctx.stage })
+  if (survey) captureBusinessEvent('survey shown', { $survey_id: survey.id, $survey_name: survey.name })
 }
 
 export function trackFeedbackDismissed(ctx: FeedbackContext, survey: SurveyLike | null): void {
-  if (typeof posthog?.capture !== 'function') return
-  posthog.capture('feedback_dismissed', { source: ctx.source })
-  if (survey) posthog.capture('survey dismissed', { $survey_id: survey.id, $survey_name: survey.name })
+  captureBusinessEvent('feedback_dismissed', { source: ctx.source })
+  if (survey) captureBusinessEvent('survey dismissed', { $survey_id: survey.id, $survey_name: survey.name })
 }
 
 export interface FeedbackPayload {
@@ -124,23 +118,13 @@ export interface FeedbackDelivery {
   fallbackUrl: string
 }
 
-function feedbackDistinctId(draft: FeedbackDraft): string {
-  if (isAnalyticsEnabled()) {
-    try {
-      const current = posthog.get_distinct_id?.()
-      if (current) return current
-    } catch { /* 显式反馈仍要发出 */ }
-  }
-  return `feedback:${draft.feedbackId}`
-}
-
 /**
- * 主动发送不看匿名统计开关。成功时事件进入 PostHog，随后由收件任务写进 GitHub。
- * 没有配置或网络失败时，返回预填好的 GitHub 链接，由调用方打开。
+ * 分析开着时记一条不含正文的 `feedback_submitted`。
+ * 用户正文只放进 GitHub 回退链接；关闭分析或未初始化时不发 PostHog。
  */
 export async function submitFeedback(payload: FeedbackPayload): Promise<FeedbackDelivery> {
   const runtime = getRuntimeInfo()
-  const draft = buildFeedbackDraft({
+  const draft: FeedbackDraft = buildFeedbackDraft({
     feedbackId: newFeedbackId(),
     category: payload.category,
     text: payload.text,
@@ -158,23 +142,6 @@ export async function submitFeedback(payload: FeedbackPayload): Promise<Feedback
     transcriptionModel: payload.context.transcription_model,
   })
   const fallbackUrl = githubFallbackUrl(draft)
-  if (!POSTHOG_KEY) return { ok: false, fallbackUrl }
-  try {
-    const response = await fetch(`${POSTHOG_HOST.replace(/\/$/, '')}/capture/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'omit',
-      body: JSON.stringify({
-        api_key: POSTHOG_KEY,
-        event: 'feedback_submitted',
-        distinct_id: feedbackDistinctId(draft),
-        timestamp: new Date().toISOString(),
-        properties: captureProperties(draft),
-      }),
-      signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(8000) : undefined,
-    })
-    return { ok: response.ok, fallbackUrl }
-  } catch {
-    return { ok: false, fallbackUrl }
-  }
+  const captured = captureBusinessEvent('feedback_submitted', captureProperties(draft))
+  return { ok: captured, fallbackUrl }
 }

@@ -30,19 +30,26 @@ const draftInput = {
   llmModel: 'qwen2.5',
 }
 
-test('capture keeps the email and github links do not', () => {
+test('capture drops email and body; github links keep the body without email', () => {
   const { buildFeedbackDraft, captureProperties, githubFallbackUrl } = loadDraft()
   const draft = buildFeedbackDraft(draftInput)
   const props = captureProperties(draft)
-  assert.equal(props.contact, 'person@example.com')
+  assert.equal(props.contact, undefined)
+  assert.equal(props.text, undefined)
+  assert.equal(props.error_message, undefined)
   assert.equal(props.llm_base_url, undefined)
-  assert.ok(!props.text.includes('sk-test-abc1234567890'))
+  assert.equal(props.category, 'bug')
+  assert.equal(props.source, 'failure')
+  assert.ok(!JSON.stringify(props).includes('person@example.com'))
+  assert.ok(!JSON.stringify(props).includes('进度停住了'))
+  assert.ok(!JSON.stringify(props).includes('sk-test'))
   const url = githubFallbackUrl(draft)
   assert.ok(url.startsWith('https://github.com/zhouxiaoka/autoclip/issues/new?'))
   assert.ok(!url.includes('person@example.com'))
   assert.ok(!url.includes('sk-test-abc1234567890'))
   assert.ok(url.includes('bug_report.yml'))
   assert.ok(decodeURIComponent(url).includes('11111111-1111-4111-8111-111111111111'))
+  assert.ok(decodeURIComponent(url).includes('进度停住了'))
 })
 
 test('ideas and other notes open discussions', () => {
