@@ -17,7 +17,11 @@
 | `workflow_dispatch` 且 `live_mode=verify` | 夜间子集 + 88API / DashScope / Infistar 各 1 条最小成功用例 | 五家各至少探一次 |
 | `workflow_dispatch` 且 `live_mode=api88` | 只跑 88API 一条 `talk_zh` 探针 | 只这一家 |
 
-**PR / push 永远不会打真实服务商。** 缺 `*_MODEL` 时用矩阵里最便宜的默认模型，不跳过。一家都没配 key 时 live job 记 `skipped` 并写进汇总，workflow 不失败。
+**PR / push 永远不会打真实服务商。** 缺 `*_MODEL` 时用当前分支 [`presets/provider_presets.json`](../presets/provider_presets.json) 的默认模型（该文件尚未合入时用 [`matrix.py`](../scripts/provider_e2e/matrix.py) 的 live 默认），不跳过。一家都没配 key 时 live job 记 `skipped` 并写进汇总，workflow 不失败。
+
+## 矩阵数据源
+
+Live 服务商行优先读当前分支的 `presets/provider_presets.json`（与产品预设同一份，若已合入）。该文件不存在时，门槛使用 `scripts/provider_e2e/matrix.py` 里的 live 默认，**不另写一份产品 JSON**。可用 `AUTOCLIP_PROVIDER_PRESETS` 指向另一份 JSON。`*_MODEL` 仍可覆盖型号。日志、报告和用例库继续脱敏，不打印密钥。
 
 ## 判定
 
@@ -48,8 +52,8 @@ B 站 / YouTube 链接单独验收，不计入本门槛。
 
 | Secret | 用途 |
 | --- | --- |
-| `API88_API_KEY` | 88API 专用 CI token，设额度上限并限制模型。**门槛默认地址** `https://api.88api.ai/v1`（该 token 的 `GET /v1/models` 在此返回 200；产品设置页预设仍是 `https://88api.ai/v1`，两套不要混用） |
-| `API88_MODEL` | 可选，缺省 `deepseek-v4-flash`（该 token 模型列表里有；`gpt-4o-mini` 没有）。Environment 已可覆盖 |
+| `API88_API_KEY` | 88API 专用 CI token，设额度上限并限制模型。地址读预设 JSON（已核实门槛为 `https://api.88api.ai/v1`）；无 JSON 时用 `matrix.py` 默认 |
+| `API88_MODEL` | 可选。未设时用预设 JSON 默认模型；该行若为空则回退 `deepseek-v4-flash` |
 | `DEEPSEEK_API_KEY` | DeepSeek 官方独立项目 key |
 | `DEEPSEEK_MODEL` | 可选，缺省 `deepseek-flash` |
 | `GEMINI_API_KEY` | Gemini 独立项目 key（夜间走免费档） |
