@@ -91,6 +91,9 @@ class OutlineExtractor:
         last_error: Optional[BaseException] = None
         
         # 4. 每个文本块独立调用模型（并行，结果按块顺序）
+        from backend.core.llm_degrade import chunk_call_budget
+
+        @chunk_call_budget()
         def outline_chunk(item):
             from backend.core.result_retry import MAX_ATTEMPTS, classify_for_retry
 

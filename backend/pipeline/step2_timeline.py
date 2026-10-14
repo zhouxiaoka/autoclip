@@ -94,6 +94,9 @@ class TimelineExtractor:
         from .concurrency import map_chunks
         parse_lock = threading.Lock()
 
+        from backend.core.llm_degrade import chunk_call_budget
+
+        @chunk_call_budget()
         def timeline_chunk(item):
             chunk_index, chunk_outlines = item
             srt_entries, parsed = [], []

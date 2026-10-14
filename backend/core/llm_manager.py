@@ -172,10 +172,14 @@ class LLMManager:
             binding = ai.require_analysis(configured)
             connection = ai.connection_for(configured, binding)
             endpoint = ai.chat_endpoint(connection, binding.model)
+            source = getattr(binding, 'model_source', None) or getattr(binding, 'source', None)
+            if source not in ('preset', 'user'):
+                source = 'user'
             default_settings.update(llm_provider='openai', cloud_preset=None, llm_provider_preset=None,
                                     openai_api_key=endpoint['api_key'], openai_base_url=endpoint['base_url'],
                                     model_name=binding.model, connection_provider=connection.provider,
-                                    connection_name=connection.name, chunk_size=configured.chunk_size,
+                                    connection_name=connection.name, model_source=source,
+                                    chunk_size=configured.chunk_size,
                                     min_score_threshold=configured.min_score_threshold,
                                     max_clips_per_collection=configured.max_clips_per_collection)
         # Failed loads must remain retryable; never mark a broken assignment as loaded.
@@ -459,17 +463,83 @@ class LLMManager:
             logger.error("LLM调用失败: %s", sanitize_exception_text(e))
             raise
     
-    def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3, **kwargs) -> str:
-        """Retry result-quality failures and transient HTTP errors, at most twice each.
+    def _use_runtime_model(self, model: str | None) -> None:
+        """Point this process at a candidate. Never writes settings.json."""
+        name = (model or "").strip()
+        if not name:
+            return
+        provider = getattr(self, "current_provider", None)
+        if provider is not None:
+            provider.model_name = name
+        settings = getattr(self, "settings", None)
+        if isinstance(settings, dict):
+            settings["model_name"] = name
 
-        Result codes: only ``invalid_response`` / ``timeline_empty`` (#365).
-        HTTP: ``rate_limited`` / ``upstream_unavailable`` / ``timeout`` / ``connection``.
-        401/402/403/404 and quota/key/model errors do not retry.
-        429 honors Retry-After (capped) and otherwise uses equal-jitter 2/4/8/16/32s.
-        A 429 also halves process-wide chunk concurrency. Each attempt records
-        ``retry_count`` for ``llm_request_finished``.
+    def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3, **kwargs) -> str:
+        """Retry, then fall back to the next same-provider preset candidate.
+
+        Inner loop (#358 / #365): same model, at most 3 attempts.
+        Outer loop (R1): ``model_source=preset`` only; frequency
+        ``limit_requests`` / ``rate_limit_exceeded``; never quota; never
+        another provider. User-chosen and missing source stay on one model.
+        Candidates × retries share a 6-call cap per chunk.
         """
+        from backend.core.llm_degrade import (
+            CHUNK_CALL_CAP,
+            candidates_for_call,
+            chunk_call_budget,
+            chunk_calls_used,
+            remember_chunk_error,
+            resolve_model_source,
+            should_degrade_to_next,
+        )
+        from backend.core.llm_telemetry import sanitize_model
+
+        settings = self.settings if isinstance(getattr(self, "settings", None), dict) else {}
+        original = (
+            (settings.get("model_name") or "").strip()
+            or getattr(getattr(self, "current_provider", None), "model_name", None)
+            or ""
+        )
+        source = resolve_model_source(settings)
+        candidates = candidates_for_call(settings)
+        last_error: Exception | None = None
+        try:
+            with chunk_call_budget():
+                for index, model in enumerate(candidates):
+                    if model:
+                        self._use_runtime_model(model)
+                    try:
+                        return self._retry_same_model(
+                            prompt, input_data, max_retries=max_retries, **kwargs
+                        )
+                    except Exception as error:
+                        last_error = error
+                        remember_chunk_error(error)
+                        more = index + 1 < len(candidates)
+                        if (
+                            source != "preset"
+                            or not more
+                            or chunk_calls_used() >= CHUNK_CALL_CAP
+                            or not should_degrade_to_next(error)
+                        ):
+                            raise
+                        logger.warning(
+                            "frequency rate limit on %s, trying next same-provider candidate",
+                            sanitize_model(str(model or "")) or "model",
+                        )
+                if last_error is not None:
+                    raise last_error
+                raise RuntimeError("LLM candidate loop exhausted")
+        except Exception:
+            if last_error is not None:
+                self._use_runtime_model(original)
+            raise
+
+    def _retry_same_model(self, prompt: str, input_data: Any = None, max_retries: int = 3, **kwargs) -> str:
+        """#358 / #365 inner retry. Each attempt consumes the chunk call budget."""
         from backend.core import llm_telemetry
+        from backend.core.llm_degrade import consume_chunk_call, chunk_last_error, remember_chunk_error
         from backend.core.llm_retry import (
             backoff_seconds,
             classify_for_retry as classify_http,
@@ -481,10 +551,13 @@ class LLMManager:
 
         attempt = 0
         while True:
+            if not consume_chunk_call():
+                raise chunk_last_error() or RuntimeError("llm chunk call budget exhausted")
             token = llm_telemetry.set_retry_count(attempt)
             try:
                 return self.call(prompt, input_data, **kwargs)
             except Exception as error:
+                remember_chunk_error(error)
                 info, status, retry_after = classify_http(error)
                 result_kind, result_retryable = classify_result(error)
                 if info.error_type is UpstreamErrorType.RATE_LIMITED:

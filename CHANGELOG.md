@@ -25,6 +25,7 @@
 - 设置页 API Key 保存和输入去掉首尾空格（含换行），避免粘贴时带上空格导致 401。
 
 - 重试与付费前预检引用 `classify_upstream_error`：只对 `rate_limited` / `upstream_unavailable` / `timeout` / `connection` 重试，每种最多再试 2 次（不含首次请求）；401/402/403/404 及余额、权限、模型不存在不再重试，按分类提示。429 遵守 Retry-After，否则按 2/4/8/16/32 秒加抖动退避，并把并发减半；单块失败等其余块跑完，不拖垮整单。后端在付费调用（含画面初筛）之前检查转写是否就绪，未就绪直接拦下；API / MCP / CLI 同一条闸门。（1.5.8 线 C）
+- `model_source=preset` 时，同服务商候选按固定顺序（赞助商 → 热门 → 其他）在频率限制（`limit_requests` / `rate_limit_exceeded`）后换下一个型号；额度不足不换；手选与缺省 `source` 不自动降级；每个分块候选×重试合计最多 6 次调用。不改用户配置，不换服务商。（1.5.8 R1）
 
 - 发布 autoclip-mcp 时推送标签 `mcp-v<version>`。该标签走 pypi environment，只允许从 `mcp-v*` 部署。
 - 设置页保存前做接入校验：识别控制台域名、截掉误贴的 `/chat/completions`；88API / Infistar / DeepSeek / Gemini / 百炼 / OpenAI 锁定预设地址，只有「自定义兼容」和本机可改。地址规范化复用已合入的 `provider_url`（只改写、不拦截保存）；Key strip 已由 #360 落地，本分支不再重复实现。保存前 `GET /models` 再对所选模型发约 16 token 的真实小请求，按第 0 步 `upstream_errors` 分类提示（地址错、密钥无效、无权限/分组、余额不足、模型不存在）。校验失败仍可保存但标红，生成前拦住；通过后用 `/models` 回填模型下拉。埋点 `provider_validation_finished`（`provider`、`base_url_host`、`result` 为 success/failed/skipped、`upstream_error_type`，不上报密钥或完整 URL）。
