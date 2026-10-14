@@ -18,6 +18,7 @@ from backend.core.path_utils import get_data_directory
 
 _lock = threading.RLock()
 Capability = Literal['auto', 'multimodal', 'text']
+ModelSource = Literal['preset', 'user']
 
 
 class Connection(BaseModel):
@@ -107,6 +108,8 @@ class Assignment(BaseModel):
     connection_id: str
     model: str = Field(min_length=1, max_length=200)
     capability: Capability = 'auto'
+    # Missing field on old files = user (do not silently degrade a hand-picked model).
+    model_source: ModelSource = 'user'
 
     @field_validator('model')
     @classmethod
@@ -120,6 +123,7 @@ class Transcription(BaseModel):
     provider: Literal['whisper_local', 'sensevoice_local', 'cloud'] = 'whisper_local'
     model: str = Field(default='base', min_length=1, max_length=200)
     connection_id: str | None = None
+    model_source: ModelSource = 'user'
 
     @model_validator(mode='after')
     def valid_selection(self):

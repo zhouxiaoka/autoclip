@@ -17,7 +17,7 @@ function loadSection() {
     './providers': { PROVIDERS: {}, providerPickerOptions: () => [] },
     './useModelSettings': {},
     './modelSettingsLogic': { connectionOf: () => undefined, mainConnection: () => undefined },
-    './ProviderFields': {}, './ModelPicker': {}, '../../services/api': {},
+    './ProviderFields': {}, './ModelPicker': {}, './DefaultModels': { default: 'DefaultModels' }, '../../services/api': {},
   }
   const source = fs.readFileSync('src/features/settings/AIModelSettings.tsx', 'utf8') + '\nexport const testSection = TranscriptionSection;'
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -45,7 +45,7 @@ test('the actual transcription selector offers SenseVoice and switches local eng
   let select = findSelect(Section({ m }))
   assert.ok(select.props.options[0].options.some(x => x.value === 'sensevoice_local'))
   select.props.onChange('sensevoice_local')
-  assert.deepEqual(JSON.parse(JSON.stringify(settings.transcription)), { provider: 'sensevoice_local', model: 'SenseVoiceSmall' })
+  assert.deepEqual(JSON.parse(JSON.stringify(settings.transcription)), { provider: 'sensevoice_local', model: 'SenseVoiceSmall', model_source: 'user' })
   m.settings = settings
   select = findSelect(Section({ m }))
   assert.equal(select.props.value, 'sensevoice_local')

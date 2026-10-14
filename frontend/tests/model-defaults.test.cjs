@@ -11,6 +11,7 @@ const blank = () => ({ analysis: { connection_id: 'main', model: '', capability:
 test('first setup chooses the analysis model; covers stay on the free local design', () => {
   const value = applyModelDefaults(blank(), connection, models, true)
   assert.equal(value.analysis.model, 'qwen3.8-flash')
+  assert.equal(value.analysis.model_source, 'preset')
   assert.equal(value.cover, null, 'no image service is assumed')
   assert.equal(value.cover_enabled, false)
   const chosen = applyModelDefaults({ ...blank(), cover_enabled: true }, connection, models, false)

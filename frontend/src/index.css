@@ -4,7 +4,7 @@
 /* ===== AutoClip · Calm Premium design tokens (see DESIGN.md) ===== */
 :root{
   --ac-bg:#F6F5F3; --ac-card:#FFFFFF; --ac-ink:#1A1A19; --ac-sub:#6E6B66; --ac-muted:#A8A59F;
-  --ac-line:#EBE9E4; --ac-line-2:#F0EEEA; --ac-accent:#2D6BFF; --ac-thumb:#EEECE8;
+  --ac-line:#EBE9E4; --ac-line-2:#F0EEEA; --ac-accent:#2D6BFF; --ac-thumb:#EEECE8; --ac-sel:#EFEDE9;
   --ac-cta-bg:#1A1A19; --ac-cta-fg:#FFFFFF; --ac-ok:#5BB36A; --ac-error:#E66A5C; --ac-warn:#E6B23C;
   --ac-font-sans:"Geist","PingFang SC","Noto Sans SC",system-ui,-apple-system,sans-serif;
   --ac-font-serif:"Instrument Serif",Georgia,serif;
@@ -17,7 +17,7 @@
 }
 [data-theme="dark"]{
   --ac-bg:#19181A; --ac-card:#211F22; --ac-ink:#ECEAE6; --ac-sub:#A6A29B; --ac-muted:#76726C;
-  --ac-line:#2C2A2D; --ac-line-2:#232124; --ac-accent:#5A8BFF; --ac-thumb:#262428;
+  --ac-line:#2C2A2D; --ac-line-2:#232124; --ac-accent:#5A8BFF; --ac-thumb:#262428; --ac-sel:#2A282B;
   --ac-cta-bg:#ECEAE6; --ac-cta-fg:#19181A;
   --ac-shadow:0 1px 2px rgba(0,0,0,.2), 0 8px 24px rgba(0,0,0,.28);
 }

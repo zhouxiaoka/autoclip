@@ -9,6 +9,7 @@ import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
 import { connectionOf, isTextOnly, mainConnection, presetKey, type SaveIssue } from './modelSettingsLogic'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
+import DefaultModels from './DefaultModels'
 import api from '../../services/api'
 
 type SenseVoiceStatus = { status: 'not_installed' | 'installing' | 'ready' | 'error'; message: string }
@@ -57,8 +58,13 @@ function SenseVoiceConfig() {
   </div>
 }
 
-const ANCHORS: Record<string, string> = { model: 'ai-model', analysis: 'ai-model', vision: 'ai-model', speech: 'ai-speech', cover: 'ai-cover' }
-const issueAnchor = (issue: SaveIssue) => issue.role === 'transcription' ? 'ai-speech' : issue.role === 'cover' ? 'ai-cover' : 'ai-model'
+const ANCHORS: Record<string, string> = {
+  model: 'ai-defaults', analysis: 'ai-defaults-analysis', vision: 'ai-defaults-vision',
+  speech: 'ai-defaults-transcription', cover: 'ai-defaults-cover',
+}
+const issueAnchor = (issue: SaveIssue) => (
+  issue.role === 'transcription' ? 'ai-defaults-transcription' : issue.role === 'cover' ? 'ai-defaults-cover' : 'ai-defaults-analysis'
+)
 
 /**
  * Main AI service: provider, key, model (auto-recommended) and the frame-sampling switch.
@@ -79,7 +85,7 @@ export function AIServiceFields({ m, placement, showVisual = true }: { m: ModelS
     <ProviderFields connection={main} placement={placement} keyHint={m.keyHints[main.id]} onChoose={p => m.chooseProvider('analysis', p)} onEdit={patch => m.editConnection(main, patch)} />
     <Row wide label={t('模型')} hint={hint}>
       <ModelPicker role="analysis" model={model} capability={settings.analysis?.capability} connection={main} list={list} busy={!!busy[main.id]} listError={listErrors[main.id]} mode={settings.analysis_mode}
-        onChange={value => m.update({ analysis: { connection_id: main.id, model: value, capability: 'auto' } })}
+        onChange={value => m.update({ analysis: { connection_id: main.id, model: value, capability: 'auto', model_source: 'user' } })}
         onCapability={capability => settings.analysis && m.update({ analysis: { ...settings.analysis, capability } })}
         onRefresh={() => void m.discover(main, true)}
         actions={<Btn variant="text" size="sm" disabled={!model} loading={m.testing} onClick={() => void m.test()}>{t('测试连接')}</Btn>} />
@@ -108,7 +114,7 @@ function TranscriptionSection({ m }: { m: ModelSettingsStore }) {
     <p className="ac-note">{t('视频没有字幕时，先把说话声转成字幕。默认在本机免费转写，不上传音频。')}</p>
     <Row wide label={t('转写方式')} hint={t('本地转写免费，首次需下载模型；云端转写无需下载，按用量计费。')}>
       <Select aria-label={t('转写方式')} style={{ width: '100%' }} value={cloud ? connection?.provider : sensevoice ? 'sensevoice_local' : 'whisper_local'} options={options}
-        onChange={value => value === 'sensevoice_local' ? m.update({ transcription: { provider: 'sensevoice_local', model: 'SenseVoiceSmall' } }) : value === 'whisper_local' ? m.setTranscriptionLocal(settings.transcription?.model && settings.transcription.provider === 'whisper_local' ? settings.transcription.model : 'base') : m.chooseProvider('transcription', value as ProviderKey)}
+        onChange={value => value === 'sensevoice_local' ? m.update({ transcription: { provider: 'sensevoice_local', model: 'SenseVoiceSmall', model_source: 'user' } }) : value === 'whisper_local' ? m.setTranscriptionLocal(settings.transcription?.model && settings.transcription.provider === 'whisper_local' ? settings.transcription.model : 'base') : m.chooseProvider('transcription', value as ProviderKey)}
         optionRender={option => <span>{option.value === 'whisper_local' ? t('Whisper · 本地') : option.value === 'sensevoice_local' ? t('SenseVoice · 本地') : PROVIDERS[option.value as ProviderKey]?.name}{PROVIDERS[option.value as ProviderKey]?.sponsor && <small style={{ marginLeft: 8, color: 'var(--sub)' }}>{t('赞助')} · {PROVIDERS[option.value as ProviderKey]?.sponsor?.offer}</small>}</span>} />
     </Row>
     {cloud && connection ? <>
@@ -118,7 +124,7 @@ function TranscriptionSection({ m }: { m: ModelSettingsStore }) {
         onChoose={p => m.chooseProvider('transcription', p)} onEdit={patch => m.editConnection(connection, patch)} />
       <Row wide label={t('转写模型')} hint={t('将音频发送给所选服务转写，按服务商计费。')}>
         <ModelPicker role="transcription" model={settings.transcription?.model || ''} connection={connection} list={lists[connection.id]} busy={!!busy[connection.id]} listError={listErrors[connection.id]} mode={settings.analysis_mode}
-          onChange={model => m.update({ transcription: { provider: 'cloud', connection_id: connection.id, model } })} onRefresh={() => void m.discover(connection, true)} />
+          onChange={model => m.update({ transcription: { provider: 'cloud', connection_id: connection.id, model, model_source: 'user' } })} onRefresh={() => void m.discover(connection, true)} />
       </Row>
     </> : sensevoice ? <SenseVoiceConfig /> : <SpeechRecognitionConfig hideProvider selectedModel={settings.transcription?.model || 'base'} onModelChange={m.setTranscriptionLocal} />}
   </div>
@@ -176,6 +182,9 @@ export default function AIModelSettings({ requestedSection }: { requestedSection
     {settings.migration_warnings?.includes('cover_configuration_invalid') && <p role="alert" className="ac-note">{t('旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。')}</p>}
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
     <fieldset className="ac-model-fields" disabled={m.saving}>
+      <div className="ac-model-section">
+        <DefaultModels settings={settings} lists={m.lists} onChange={next => m.update(next)} />
+      </div>
       <div id="ai-model" className="ac-model-section">
         <h3 className="ac-model-section-title">{t('AI 服务')}</h3>
         <p className="ac-note">{t('选一家服务、填好 API Key，模型会自动选好。字幕转写和封面默认沿用这把 Key。')}</p>

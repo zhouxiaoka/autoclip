@@ -7,6 +7,7 @@ import { hintKeyForUpstreamError } from '../../analytics/successRateContract'
 import { PROVIDERS, type ProviderKey } from './providers'
 import { bindingCapability, modelSettingsApi, type Connection, type ModelList, type ModelSettings } from './modelSettingsApi'
 import { applyModelDefaults } from './modelDefaults'
+import { slotTelemetry } from './defaultModelSlots'
 import * as logic from './modelSettingsLogic'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, type ValidationResult } from './providerAccess'
@@ -48,6 +49,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     cover_configured: !!value.cover?.model, transcription_configured: !!value.transcription?.model,
     transcription_mode: value.transcription?.provider || 'unknown', cover_mode: value.cover_enabled ? 'ai' : 'frame',
     cover_separate: !!value.cover && value.cover.connection_id !== value.analysis?.connection_id,
+    ...slotTelemetry(value, lists),
     ...Object.fromEntries(['analysis', 'vision', 'cover', 'transcription'].map(role => [
       `changed_${role}`, JSON.stringify(savedRef.current?.[role as Role]) !== JSON.stringify(value[role as Role]),
     ])),
@@ -123,10 +125,10 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     replace(result.settings)
     void discover(result.connection, false, 'provider_change')
   }
-  const setTranscriptionLocal = (model: string) => update({ transcription: { provider: 'whisper_local', model } })
+  const setTranscriptionLocal = (model: string) => update({ transcription: { provider: 'whisper_local', model, model_source: 'user' } })
   const setCoverSeparate = (separate: boolean) => { if (settings) replace(logic.setCoverSeparate(settings, separate, lists)) }
   const setCoverEnabled = (enabled: boolean) => { autoCover.current = false; if (settings) replace(logic.setCoverEnabled(settings, enabled, lists)) }
-  const setCoverModel = (connectionId: string, model: string) => { autoCover.current = false; update({ cover_enabled: true, cover: { ...logic.cleanBinding(connectionId), model } }) }
+  const setCoverModel = (connectionId: string, model: string) => { autoCover.current = false; update({ cover_enabled: true, cover: { ...logic.cleanBinding(connectionId), model, model_source: 'user' } }) }
   const setVisual = (enabled: boolean) => { if (settings) replace(logic.setVisual(settings, enabled)) }
 
   const emitValidation = (connection: Connection, result: ValidationResult) => {

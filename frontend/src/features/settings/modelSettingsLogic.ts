@@ -24,7 +24,7 @@ export const canDiscover = (c: Connection) => !!(c.api_key || c.has_key || c.bas
 export const connectionReady = (c: Connection) =>
   !!(c.api_key || c.has_key) || !!PROVIDERS[c.provider as ProviderKey]?.local || (presetKey(c) === 'compatible' && !!c.base_url)
 
-export const cleanBinding = (connection_id: string): Assignment => ({ connection_id, model: '', capability: 'auto' })
+export const cleanBinding = (connection_id: string): Assignment => ({ connection_id, model: '', capability: 'auto', model_source: 'preset' })
 export const mainConnection = (s: ModelSettings) => s.connections.find(c => c.id === s.analysis?.connection_id)
 export const connectionOf = (s: ModelSettings, role: Role) => s.connections.find(c => c.id === s[role]?.connection_id)
 
@@ -109,7 +109,7 @@ export function chooseProvider(
   let next: ModelSettings = {
     ...s,
     connections: existing ? s.connections : [...s.connections, connection],
-    [role]: role === 'transcription' ? { provider: 'cloud', model: '', connection_id: connection.id } : cleanBinding(connection.id),
+    [role]: role === 'transcription' ? { provider: 'cloud', model: '', connection_id: connection.id, model_source: 'preset' } : cleanBinding(connection.id),
   }
   if (role === 'analysis') {
     if (s.cover?.connection_id === oldMainId) next.cover = s.cover_enabled ? cleanBinding(connection.id) : null

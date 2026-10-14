@@ -2,6 +2,7 @@ import api from '../../services/api'
 import type { ValidationResult } from './providerAccess'
 
 export type Capability = 'auto' | 'multimodal' | 'text'
+export type ModelSource = 'preset' | 'user'
 export interface Connection {
   id: string
   name: string
@@ -15,7 +16,7 @@ export interface Connection {
   validation_status?: 'ok' | 'failed' | 'unchecked'
   validation_error_type?: string
 }
-export interface Assignment { connection_id: string; model: string; capability: Capability }
+export interface Assignment { connection_id: string; model: string; capability: Capability; model_source?: ModelSource }
 export interface ModelSettings {
   version: 1
   saved?: boolean
@@ -24,7 +25,7 @@ export interface ModelSettings {
   analysis: Assignment | null
   vision: Assignment | null
   cover: Assignment | null
-  transcription?: { provider: 'whisper_local' | 'sensevoice_local' | 'cloud'; model: string; connection_id?: string; capability?: Capability } | null
+  transcription?: { provider: 'whisper_local' | 'sensevoice_local' | 'cloud'; model: string; connection_id?: string; capability?: Capability; model_source?: ModelSource } | null
   cover_enabled: boolean
   allow_send_frame: boolean
   analysis_mode: 'auto' | 'subtitle' | 'visual'
