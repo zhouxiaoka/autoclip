@@ -42,7 +42,7 @@ const Catalog = loadTs('ProviderCatalog.tsx', {
 test('catalog renders recommended / popular / local and keeps more collapsed', () => {
   const opened = []
   const tree = Catalog({
-    settings, query: '', filter: 'all', moreOpen: false, selectedId: null,
+    settings, query: '', filter: 'all', moreOpen: false, selectedId: null, asrReady: { whisper: true },
     onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: id => opened.push(id),
   })
   const nodes = flatten(tree)
@@ -80,6 +80,15 @@ test('saved custom gateways appear as a repair entry', () => {
   const card = nodes.find(node => node.props && node.props['data-provider-id'] === 'custom:gw')
   assert.ok(card)
   assert.match(textOf(card), /settings\.providers\.repair_custom/)
+})
+
+test('whisper is not marked available until the local model is ready', () => {
+  const tree = Catalog({
+    settings, query: '', filter: 'all', moreOpen: false, selectedId: null,
+    onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+  })
+  const whisper = flatten(tree).find(node => node.props && node.props['data-provider-id'] === 'whisper')
+  assert.match(textOf(whisper), /settings\.providers\.configure/)
 })
 
 test('search and capability filter show unconnected more-group providers', () => {

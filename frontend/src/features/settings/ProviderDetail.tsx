@@ -10,6 +10,7 @@ import SenseVoiceConfig from './SenseVoiceConfig'
 import { mainConnection } from './modelSettingsLogic'
 import {
   catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConnected,
+  type LocalAsrReady,
 } from './providerCatalogView'
 
 const CAP_KEY: Record<string, string> = {
@@ -22,10 +23,11 @@ const CAP_KEY: Record<string, string> = {
 }
 
 export default function ProviderDetail({
-  preset, m, onBack,
+  preset, m, asrReady = {}, onBack,
 }: {
   preset: ProviderPreset
   m: ModelSettingsStore
+  asrReady?: LocalAsrReady
   onBack: () => void
 }) {
   const { settings, lists, busy, listErrors } = m
@@ -33,7 +35,7 @@ export default function ProviderDetail({
   const kind = connectKind(preset)
   const persisted = findCatalogConnection(settings, preset)
   const connection = persisted || catalogDraftConnection(preset)
-  const connected = isCatalogConnected(settings, preset)
+  const connected = isCatalogConnected(settings, preset, asrReady)
   const main = mainConnection(settings)
   const isAnalysis = !!persisted && main?.id === persisted.id
   const list = connection ? lists[connection.id] : undefined

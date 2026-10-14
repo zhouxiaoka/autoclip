@@ -10,6 +10,7 @@ import type { Connection, ModelSettings } from './modelSettingsApi'
 export type CapabilityFilter = 'all' | 'language' | 'asr' | 'tts' | 'image' | 'music' | 'video'
 export type CatalogConnectKind = 'legacy' | 'local_asr' | 'compatible' | 'guide' | 'needs_endpoint'
 export type LocalAsrId = 'whisper' | 'sensevoice'
+export type LocalAsrReady = { whisper?: boolean; sensevoice?: boolean }
 
 export const CAPABILITY_FILTERS: CapabilityFilter[] = ['all', 'language', 'asr', 'tts', 'image', 'music', 'video']
 export const CATALOG_GROUPS: ProviderGroupId[] = ['recommended', 'popular', 'local', 'more']
@@ -102,11 +103,26 @@ export function findCatalogConnection(settings: ModelSettings, preset: ProviderP
   ))
 }
 
-export function isCatalogConnected(settings: ModelSettings, preset: ProviderPreset): boolean {
+export function whisperAsrReady(
+  runtime?: { status?: string } | null,
+  models?: Array<{ name: string; status: string }> | null,
+  selectedModel?: string,
+): boolean {
+  const name = selectedModel || 'base'
+  const model = (models || []).find(row => row.name === name)
+  return runtime?.status === 'installed' && model?.status === 'downloaded'
+}
+
+export function sensevoiceAsrReady(status?: { status?: string } | null): boolean {
+  return status?.status === 'ready'
+}
+
+export function isCatalogConnected(settings: ModelSettings, preset: ProviderPreset, asrReady: LocalAsrReady = {}): boolean {
   if (preset.id === 'whisper') {
-    return settings.transcription?.provider !== 'sensevoice_local' && settings.transcription?.provider !== 'cloud'
+    const selected = settings.transcription?.provider !== 'sensevoice_local' && settings.transcription?.provider !== 'cloud'
+    return selected && !!asrReady.whisper
   }
-  if (preset.id === 'sensevoice') return settings.transcription?.provider === 'sensevoice_local'
+  if (preset.id === 'sensevoice') return settings.transcription?.provider === 'sensevoice_local' && !!asrReady.sensevoice
   const connection = findCatalogConnection(settings, preset)
   if (!connection) return false
   if (preset.auth === 'none') return true

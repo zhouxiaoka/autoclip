@@ -7,7 +7,7 @@
 
 ## [未发布]
 
-- 设置页「服务商与模型」改为预设 JSON 驱动的列表与详情：推荐 / 热门 / 本机·免费 / 更多，支持按名称搜索和能力筛选。未连接的服务商也显示，点「配置」或「一键获取」进入详情引导填写密钥；更多默认收起。打开未连接服务商只显示表单，不写入空连接；保存时丢掉未引用且没有密钥的草稿。本版不移植第三方 UI。埋点不携带密钥、完整 URL、路径或用户文本。八语文案已补齐。默认模型四格与自定义服务商不在本切片。
+- 设置页「服务商与模型」改为预设 JSON 驱动的列表与详情：推荐 / 热门 / 本机·免费 / 更多，支持按名称搜索和能力筛选。未连接的服务商也显示，点「配置」或「一键获取」进入详情引导填写密钥；更多默认收起。打开未连接服务商只显示表单，不写入空连接；保存时丢掉未引用且没有密钥的草稿，保留已有地址的兼容连接。已保存的自定义兼容网关可在列表里修复。没有通用地址的服务商（Azure / Bedrock / Vertex / Cloudflare）不进下拉、不当默认连接。本机 ASR 仅在真正就绪时显示为可用。本版不移植第三方 UI。埋点不携带密钥、完整 URL、路径或用户文本。八语文案已补齐。默认模型四格与自定义服务商不在本切片。
 - 设置页锁定地址改为读取 `presets/provider_presets.json`，不再在 `provider_endpoint` 里写死各家 URL。地址规范化只走 `#364` 的 `provider_url`（去掉重复的 `/v1` 规则）；误贴的 `/chat/completions` 仍会截掉。规范化只改写、不拦截保存；控制台域名仍标红提示。
 - 服务商与模型预设改为单一数据源 `presets/provider_presets.json`（约 38 家）。后端 `cloud_presets` / `local_presets` / `DEFAULT_MODELS` 与前端 `providers` / `modelDefaults` 都从这份 JSON 读取；现有地址和默认型号保持不变。wheel / CLI·MCP ZIP 把该文件打进 `presets` 包，用 `importlib.resources` 定位。不含远程拉取，也不改设置页布局。
 - 发版增加服务商端到端门槛：Linux 无界面后端按固定素材矩阵出片，本地 mock 覆盖 429 / 503 / 断线和中途杀后端。PR / push 只跑 mock。夜间只跑 DeepSeek + Gemini 免费/低价档 2–3 条；预发布把 10 条拆给 5 家（每家 2 条，按 ISO 周轮转）。真实 88API / DeepSeek / Gemini / DashScope / Infistar 在 GitHub Environment `provider-e2e` 配好 key 后才跑，没配就跳过并写进报告。缺 `*_MODEL` 时用最便宜默认模型（88API `deepseek-v4-flash`，Infistar `gpt-4o-mini`，DeepSeek `deepseek-flash`，Gemini `gemini-3.5-flash-lite`，DashScope `qwen-flash`）。88API 门槛地址为 `https://api.88api.ai/v1`。故障注入期望类型用 `UpstreamErrorType`（`rate_limited` / `upstream_unavailable` / `connection`），应拦下组合要求 `billable_calls_before_failure = 0`。Mock 应成功当次 ≥95%。Live 先 fail-closed（任一服务商失败、缺/空/无法解析的报告、或条数少于计划必须红），再叠加用例库近 5 次、满 20 条后滚动 ≥95%。月度估费硬顶 ¥300。**fail-closed 已核对；88API 单探针（`api.88api.ai` + `deepseek-v4-flash`）已通过，完整发版仍走分层 live。**

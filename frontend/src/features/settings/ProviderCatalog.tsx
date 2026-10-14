@@ -5,7 +5,7 @@ import type { ProviderGroupId, ProviderPreset } from './providerPresets'
 import {
   CAPABILITY_FILTERS, CATALOG_GROUPS, type CapabilityFilter,
   connectKind, customCatalogId, displayNameOf, filterCatalog, groupCatalog, initialLetter,
-  isCatalogConnected, shouldExpandMore, unmatchedCompatibleConnections,
+  isCatalogConnected, shouldExpandMore, unmatchedCompatibleConnections, type LocalAsrReady,
 } from './providerCatalogView'
 
 const FILTER_KEY: Record<CapabilityFilter, string> = {
@@ -68,14 +68,15 @@ function CustomCard({
 }
 
 function ProviderCard({
-  preset, settings, selected, onOpen,
+  preset, settings, asrReady, selected, onOpen,
 }: {
   preset: ProviderPreset
   settings: ModelSettings
+  asrReady: LocalAsrReady
   selected: boolean
   onOpen: (id: string) => void
 }) {
-  const connected = isCatalogConnected(settings, preset)
+  const connected = isCatalogConnected(settings, preset, asrReady)
   const caps = preset.capabilities.filter((capability): capability is Exclude<CapabilityFilter, 'all'> => capability !== 'all' && capability in FILTER_KEY)
   return (
     <button
@@ -110,13 +111,14 @@ function ProviderCard({
 }
 
 export default function ProviderCatalog({
-  settings, query, filter, moreOpen, selectedId, onQuery, onFilter, onToggleMore, onOpen,
+  settings, query, filter, moreOpen, selectedId, asrReady = {}, onQuery, onFilter, onToggleMore, onOpen,
 }: {
   settings: ModelSettings
   query: string
   filter: CapabilityFilter
   moreOpen: boolean
   selectedId?: string | null
+  asrReady?: LocalAsrReady
   onQuery: (value: string) => void
   onFilter: (value: CapabilityFilter) => void
   onToggleMore: () => void
@@ -206,6 +208,7 @@ export default function ProviderCatalog({
                     key={preset.id}
                     preset={preset}
                     settings={settings}
+                    asrReady={asrReady}
                     selected={selectedId === preset.id}
                     onOpen={onOpen}
                   />

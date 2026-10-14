@@ -4,18 +4,45 @@ import { Select, Switch } from 'antd'
 import { t } from '../../i18n'
 import { Btn, Icon, Row, Section, Segmented, StatusDot } from '../../ui'
 import SpeechRecognitionConfig from '../../components/SpeechRecognitionConfig'
+import api, { speechApi } from '../../services/api'
 import { PROVIDERS, providerPickerOptions, type ProviderKey } from './providers'
 import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
 import { connectionOf, isTextOnly, mainConnection, presetKey, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
-import type { Connection } from './modelSettingsApi'
+import type { Connection, ModelSettings } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
 import SenseVoiceConfig from './SenseVoiceConfig'
 import ProviderCatalog from './ProviderCatalog'
 import ProviderDetail from './ProviderDetail'
 import {
-  catalogPreset, customConnectionId, isUnmatchedCompatible, type CapabilityFilter,
+  catalogPreset, customConnectionId, isUnmatchedCompatible, sensevoiceAsrReady, whisperAsrReady,
+  type CapabilityFilter, type LocalAsrReady,
 } from './providerCatalogView'
+
+function useLocalAsrReady(settings: ModelSettings | null): LocalAsrReady {
+  const [ready, setReady] = useState<LocalAsrReady>({})
+  useEffect(() => {
+    if (!settings) return
+    let alive = true
+    const load = async () => {
+      try {
+        const [runtime, models] = await Promise.all([speechApi.getRuntimeStatus(), speechApi.getModels()])
+        let sense: { status?: string } | null = null
+        try { sense = await api.get('/sensevoice/status') } catch { sense = null }
+        if (!alive) return
+        const selected = settings.transcription?.provider === 'whisper_local' ? (settings.transcription.model || 'base') : 'base'
+        setReady({
+          whisper: whisperAsrReady(runtime, models, selected),
+          sensevoice: sensevoiceAsrReady(sense),
+        })
+      } catch { /* keep last known readiness */ }
+    }
+    void load()
+    const timer = window.setInterval(() => void load(), 15000)
+    return () => { alive = false; window.clearInterval(timer) }
+  }, [settings?.transcription?.provider, settings?.transcription?.model])
+  return ready
+}
 
 const ANCHORS: Record<string, string> = { model: 'ai-model', analysis: 'ai-model', vision: 'ai-model', speech: 'ai-speech', cover: 'ai-cover' }
 const issueAnchor = (issue: SaveIssue) => issue.role === 'transcription' ? 'ai-speech' : issue.role === 'cover' ? 'ai-cover' : 'ai-model'
@@ -211,6 +238,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
   useTranslation()
   const m = useModelSettings()
   const { settings } = m
+  const asrReady = useLocalAsrReady(settings)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<CapabilityFilter>('all')
   const [moreOpen, setMoreOpen] = useState(false)
@@ -249,7 +277,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
     <fieldset className="ac-model-fields" disabled={m.saving}>
       {customSelected ? <CustomGatewayRepair connection={customSelected} m={m} onBack={closeProvider} />
-        : selected ? <ProviderDetail preset={selected} m={m} onBack={closeProvider} /> : <>
+        : selected ? <ProviderDetail preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>
         <div className="ac-model-section">
           <h3 className="ac-model-section-title">{t('settings.providers.title')}</h3>
           <p className="ac-note">{t('settings.providers.subtitle')}</p>
@@ -261,6 +289,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
           filter={filter}
           moreOpen={moreOpen}
           selectedId={selectedId}
+          asrReady={asrReady}
           onQuery={setQuery}
           onFilter={setFilter}
           onToggleMore={() => setMoreOpen(open => !open)}
