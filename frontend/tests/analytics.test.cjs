@@ -504,7 +504,8 @@ function settingsHook(s, transport, initial) {
   const react={useState(value){const i=cursor++;if(!(i in slots))slots[i]=value;return [slots[i],next=>{slots[i]=typeof next==='function'?next(slots[i]):next}]},useRef(value){const i=cursor++;if(!(i in slots))slots[i]={current:value};return slots[i]},useEffect(){}}
   const providers={PROVIDERS:{openai:{}},}
   const defaults=load('../features/settings/modelDefaults')
-  const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults})
+  const urls=load('../features/settings/providerUrl',{},{URL})
+  const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults,'./providerUrl':urls})
   const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const hook=load('../features/settings/useModelSettings',{
     react,antd:{message:{success(){},error(){}}},'../../i18n':{t:x=>x},'../studio/api':{errorText:()=> 'redacted'},
