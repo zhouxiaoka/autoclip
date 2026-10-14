@@ -5,6 +5,7 @@
 import { PROVIDERS, type ProviderKey } from './providers'
 import type { Assignment, Connection, ModelList, ModelSettings } from './modelSettingsApi'
 import { applyModelDefaults, defaultModel } from './modelDefaults'
+import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
 
 export type Role = 'analysis' | 'vision' | 'cover' | 'transcription'
 export type SaveIssue = { role: 'analysis' | 'cover' | 'transcription'; reason: 'provider' | 'model' | 'key' }
@@ -59,6 +60,8 @@ export const newConnection = (provider: ProviderKey, id: string = crypto.randomU
 export function editConnection(s: ModelSettings, id: string, patch: Partial<Connection>): ModelSettings {
   const next = { ...patch }
   if (typeof next.api_key === 'string') next.api_key = next.api_key.trim()
+  if (typeof next.base_url === 'string') next.base_url = collapseSpaces(next.base_url)
+  if (typeof next.image_base_url === 'string') next.image_base_url = collapseSpaces(next.image_base_url)
   const changedAddress = next.base_url !== undefined || next.image_base_url !== undefined
   return { ...s, connections: s.connections.map(c => c.id === id ? { ...c, ...next, ...(changedAddress && c.has_key ? { api_key: '', has_key: false } : {}) } : c) }
 }
@@ -142,6 +145,11 @@ export function forSave(s: ModelSettings): ModelSettings {
     cover,
     connections: s.connections
       .filter(c => c.provider !== 'compatible' || c.base_url.trim() || active.has(c.id))
-      .map(c => ({ ...c, api_key: typeof c.api_key === 'string' ? c.api_key.trim() : c.api_key })),
+      .map(c => ({
+        ...c,
+        api_key: typeof c.api_key === 'string' ? c.api_key.trim() : c.api_key,
+        base_url: normalizeProviderBaseUrl(c.base_url, c.provider),
+        image_base_url: normalizeProviderBaseUrl(c.image_base_url, 'image'),
+      })),
   }
 }

@@ -61,12 +61,22 @@ class Connection(BaseModel):
     @field_validator('base_url', 'image_base_url')
     @classmethod
     def valid_url(cls, value):
-        value = value.strip().rstrip('/')
+        from backend.core.provider_url import cleanup_base_url
+        value = cleanup_base_url(value)
         if value:
             parsed = urlparse(value)
             if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
                 raise ValueError('请填写不含密钥或查询参数的 HTTP(S) 接口地址')
         return value
+
+    @model_validator(mode='after')
+    def normalize_provider_url(self):
+        from backend.core.provider_url import normalize_provider_base_url
+        if self.base_url:
+            self.base_url = normalize_provider_base_url(self.base_url, self.provider)
+        if self.image_base_url:
+            self.image_base_url = normalize_provider_base_url(self.image_base_url, 'image')
+        return self
 
     @field_validator('name', 'id')
     @classmethod

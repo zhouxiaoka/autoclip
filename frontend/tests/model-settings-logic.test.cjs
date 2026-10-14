@@ -6,7 +6,7 @@ const dir = path.join(__dirname, '../src/features/settings')
 function load(file, mocks) {
   const exports = {}
   const code = ts.transpileModule(fs.readFileSync(path.join(dir, file), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
-  vm.runInNewContext(code, { exports, require: id => { assert.ok(id in mocks, id); return mocks[id] }, crypto: { randomUUID: () => 'uuid' } })
+  vm.runInNewContext(code, { exports, URL, require: id => { assert.ok(id in mocks, id); return mocks[id] }, crypto: { randomUUID: () => 'uuid' } })
   return exports
 }
 const providers = {
@@ -16,7 +16,8 @@ const providers = {
   },
 }
 const defaults = load('modelDefaults.ts', {})
-const logic = load('modelSettingsLogic.ts', { './providers': providers, './modelDefaults': defaults })
+const urls = load('providerUrl.ts', {})
+const logic = load('modelSettingsLogic.ts', { './providers': providers, './modelDefaults': defaults, './providerUrl': urls })
 
 const plain = x => JSON.parse(JSON.stringify(x))
 const conn = (id, provider, extra = {}) => ({ id, name: provider, provider, base_url: '', api_key: '', image_api: 'auto', image_base_url: '', ...extra })
@@ -124,6 +125,16 @@ test('edit and save strip surrounding spaces and newlines from the API key', () 
   assert.equal(edited.connections[0].api_key, 'sk-new')
   const blank = logic.editConnection(state, 'a', { api_key: '   ' })
   assert.equal(blank.connections[0].api_key, '')
+})
+
+test('edit collapses URL spaces; save adds or dedupes /v1 without rejecting', () => {
+  const state = { ...fresh(), connections: [conn('a', 'compatible', { base_url: 'https://gw.example' })], analysis: { connection_id: 'a', model: 'gpt-4o-mini', capability: 'auto' } }
+  assert.equal(logic.forSave(state).connections[0].base_url, 'https://gw.example/v1')
+  const spaced = logic.editConnection(state, 'a', { base_url: '  https://gw.example /v1/  ' })
+  assert.equal(spaced.connections[0].base_url, 'https://gw.example/v1/')
+  assert.equal(logic.forSave(spaced).connections[0].base_url, 'https://gw.example/v1')
+  const dashscope = { ...fresh(), connections: [conn('b', 'dashscope', { base_url: 'https://llm-x.cn-beijing.maas.aliyuncs.com' })] }
+  assert.equal(logic.forSave(dashscope).connections[0].base_url, 'https://llm-x.cn-beijing.maas.aliyuncs.com')
 })
 
 test('changing an address drops the stored key so it cannot leak to another endpoint', () => {
