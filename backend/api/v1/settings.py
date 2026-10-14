@@ -69,6 +69,29 @@ class ConnectionTestRequest(BaseModel):
     vision: bool = False
 
 
+@router.post('/ai-models/fetch-list')
+def fetch_connection_model_list(body: ConnectionModelsRequest):
+    """Custom-provider and settings 'fetch list': GET /models, intersect, backfill.
+
+    Never returns keys, full URLs, or upstream response text.
+    """
+    from backend.services.provider_validation import fetch_list_for_connection
+    try:
+        connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
+        return fetch_list_for_connection(connection).as_api()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        from backend.core.provider_model_fetch import FETCH_LIST_FAILED
+        from backend.core.upstream_errors import hint_key_for
+        return {
+            'ok': False, 'success': False, 'models': [], 'recommended': {},
+            'truncated': False, 'source': 'empty', 'error_type': 'unknown',
+            'hint_key': hint_key_for('unknown'), 'message_key': FETCH_LIST_FAILED,
+            'base_url_host': 'unknown',
+        }
+
+
 @router.post('/ai-models/test')
 def test_connection_assignment(body: ConnectionTestRequest):
     from backend.services.provider_validation import validate_connection
@@ -847,25 +870,39 @@ async def list_compatible_models(base_url: str = "", provider: str = "openai", a
     设置页选本地预设时用它填模型下拉，免得用户手敲 `qwen2.5:7b` 这种名字。
     """
     from backend.core.local_presets import resolve_provider
-    from backend.core.llm_providers import normalize_base_url, is_local_url, OPENAI_COMPATIBLE_PLACEHOLDER_KEY
+    from backend.core.llm_providers import normalize_base_url, is_local_url
     _provider, resolved_base_url, _preset = resolve_provider(provider, base_url)
     url = normalize_base_url(resolved_base_url)
     if not url:
         raise HTTPException(status_code=400, detail="缺少 base_url")
     try:
-        import httpx
-        headers = {"Authorization": f"Bearer {api_key or OPENAI_COMPATIBLE_PLACEHOLDER_KEY}"}
-        # 本地地址不走系统代理（否则 macOS 上开着 Clash 之类会 502）
-        async with httpx.AsyncClient(timeout=5.0, trust_env=not is_local_url(url)) as client:
-            resp = await client.get(f"{url}/models", headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("data", data) if isinstance(data, dict) else data
-        models = sorted({str(m.get("id") or m.get("name")) for m in items if isinstance(m, dict) and (m.get("id") or m.get("name"))})
-        return {"reachable": True, "base_url": url, "models": models}
-    except Exception as e:  # noqa: BLE001
-        # 服务没起 / 地址不对：不算服务端错误，前端据此提示「服务未启动」
-        return {"reachable": False, "base_url": url, "models": [], "error": str(e)[:200]}
+        from backend.core.provider_model_fetch import list_account_models
+        key = (api_key or "").strip()
+        result = list_account_models(
+            base_url=url,
+            api_key=key,
+            provider=provider or "openai",
+            auth="none" if is_local_url(url) and not key else "api_key",
+        )
+        return {
+            "reachable": result.ok,
+            "base_url": url,
+            "models": result.models,
+            "error": result.hint_key if not result.ok else None,
+            "hint_key": result.hint_key,
+            "error_type": result.error_type,
+            "message_key": result.message_key,
+            "recommended": result.recommended,
+            "truncated": result.truncated,
+            "base_url_host": result.base_url_host,
+        }
+    except Exception:  # noqa: BLE001
+        from backend.core.upstream_errors import hint_key_for
+        return {
+            "reachable": False, "base_url": url, "models": [],
+            "error": hint_key_for("connection"), "hint_key": hint_key_for("connection"),
+            "error_type": "connection",
+        }
 
 
 @router.get("/current-provider")

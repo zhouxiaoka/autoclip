@@ -34,9 +34,11 @@ from backend.core.upstream_errors import (
 )
 from backend.services import ai_model_settings as ai_models
 
+from backend.core.provider_model_fetch import AccountModelList, list_account_models
+from backend.core.provider_model_fetch import get_models as fetch_account_models
+
 PROBE_MAX_TOKENS = 16
 PROBE_REASONING_MAX_TOKENS = 256
-MODELS_TIMEOUT = 12.0
 PROBE_TIMEOUT = 20.0
 
 # Local capability miss — not an upstream HTTP class, never stored on connection.validation_error_type.
@@ -55,6 +57,9 @@ class ValidationResult:
     normalized_base_url: str = ''
     base_url_host: str = ''
     model_ids: list[str] = field(default_factory=list)
+    recommended: dict[str, list[str]] = field(default_factory=dict)
+    truncated: bool = False
+    message_key: str = ''
 
     def as_api(self) -> dict:
         return {
@@ -67,6 +72,9 @@ class ValidationResult:
             'normalized_base_url': self.normalized_base_url,
             'base_url_host': self.base_url_host,
             'models': self.model_ids,
+            'recommended': {key: list(value) for key, value in self.recommended.items()},
+            'truncated': self.truncated,
+            'message_key': self.message_key,
         }
 
 
@@ -94,6 +102,10 @@ def _failed(
     base: str,
     key_hint: Optional[str],
     models: Optional[list[str]] = None,
+    *,
+    recommended: Optional[dict[str, list[str]]] = None,
+    truncated: bool = False,
+    message_key: str = '',
 ) -> ValidationResult:
     if not isinstance(classified, ClassifiedUpstreamError):
         classified = _as_type(classified)
@@ -102,36 +114,24 @@ def _failed(
         error_type=classified.error_type.value,
         hint_key=classified.hint_key,
         key_hint=key_hint, normalized_base_url=base, base_url_host=_host(base), model_ids=models or [],
+        recommended=recommended or {}, truncated=truncated, message_key=message_key,
     )
 
 
-def _ok(base: str, key_hint: Optional[str], models: list[str]) -> ValidationResult:
+def _ok(
+    base: str,
+    key_hint: Optional[str],
+    models: list[str],
+    *,
+    recommended: Optional[dict[str, list[str]]] = None,
+    truncated: bool = False,
+    message_key: str = '',
+) -> ValidationResult:
     return ValidationResult(
         ok=True, result='ok', key_hint=key_hint,
         normalized_base_url=base, base_url_host=_host(base), model_ids=models,
+        recommended=recommended or {}, truncated=truncated, message_key=message_key,
     )
-
-
-def _extract_ids(payload) -> list[str]:
-    raw = payload.get('data', payload) if isinstance(payload, dict) else payload
-    if not isinstance(raw, list):
-        return []
-    ids = []
-    for item in raw:
-        if isinstance(item, str) and item.strip():
-            ids.append(item.strip())
-        elif isinstance(item, dict):
-            name = str(item.get('id') or item.get('name') or '').removeprefix('models/').strip()
-            if name:
-                ids.append(name)
-    return ids
-
-
-def _classify_response(status: int, text: str, *, models_path: bool) -> ClassifiedUpstreamError:
-    classified = _classify(status, text)
-    if models_path and status == 404:
-        return _as_type(UpstreamErrorType.BAD_ENDPOINT)
-    return classified
 
 
 def _html_or_classify(status: int, text: str, content_type: str) -> ClassifiedUpstreamError | None:
@@ -141,29 +141,9 @@ def _html_or_classify(status: int, text: str, content_type: str) -> ClassifiedUp
     return None
 
 
-def _get_models(base: str, api_key: str) -> tuple[list[str], Optional[ClassifiedUpstreamError]]:
-    import httpx
-    url = base.rstrip('/') + '/models'
-    try:
-        with httpx.Client(timeout=MODELS_TIMEOUT, trust_env=not is_local_url(base)) as client:
-            response = client.get(url, headers={'Authorization': 'Bearer ' + (api_key or 'EMPTY')})
-    except httpx.TimeoutException:
-        return [], _classify(None, '', error_name='TimeoutError')
-    except httpx.RequestError:
-        return [], _classify(None, '', error_name='ConnectionError')
-    text = response.text or ''
-    content_type = (response.headers.get('content-type') or '').lower()
-    html = _html_or_classify(response.status_code, text[:4000], content_type)
-    if html:
-        return [], html
-    if response.status_code >= 400:
-        return [], _classify_response(response.status_code, text[:4000], models_path=True)
-    try:
-        payload = response.json()
-    except ValueError:
-        return [], _as_type(UpstreamErrorType.BAD_ENDPOINT)
-    ids = _extract_ids(payload)
-    return ids, None
+def _get_models(base: str, api_key: str, provider: str = 'compatible'):
+    models, error, fetched = fetch_account_models(base, api_key, provider)
+    return models, error, fetched
 
 
 def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamError]:
@@ -224,12 +204,50 @@ def validate_connection(connection: ai_models.Connection, model: str) -> Validat
     if resolved.provider == 'compatible' and not base:
         return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)
     api_key = resolved.api_key or ''
-    models, models_error = _get_models(base, api_key)
+    models, models_error, fetched = _get_models(base, api_key, resolved.provider)
+    extras = dict(recommended=fetched.recommended, truncated=fetched.truncated, message_key=fetched.message_key)
     if models_error:
-        return _failed(models_error, base, hint, models)
+        return _failed(models_error, base, hint, models, **extras)
     if not (model or '').strip():
-        return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models)
+        return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models, **extras)
     probe_error = _probe(base, api_key, model.strip())
     if probe_error:
-        return _failed(probe_error, base, hint, models)
-    return _ok(base, hint, models)
+        return _failed(probe_error, base, hint, models, **extras)
+    return _ok(base, hint, models, **extras)
+
+
+def resolve_fetch_base(connection: ai_models.Connection) -> tuple[str, Optional[ClassifiedUpstreamError]]:
+    """Same address rules as ``validate_connection``, without the chat probe."""
+    if connection.provider == 'compatible' and connection.base_url:
+        normalized = normalize_provider_base_url(connection.base_url)
+        if 'console_host' in normalized.warnings:
+            return normalized.url, _as_type(UpstreamErrorType.BAD_ENDPOINT)
+        return normalized.url, None
+    base = ai_models.chat_endpoint(connection, 'unused')['base_url']
+    if is_console_host(urlparse(base).hostname or ''):
+        return base, _as_type(UpstreamErrorType.BAD_ENDPOINT)
+    if connection.provider == 'compatible' and not base:
+        return base, _as_type(UpstreamErrorType.BAD_ENDPOINT)
+    return base, None
+
+
+def fetch_list_for_connection(connection: ai_models.Connection, *, http=None) -> AccountModelList:
+    """Custom-provider / settings 'fetch list': ``/models`` + preset intersection."""
+    resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
+    base, pre = resolve_fetch_base(resolved)
+    if pre:
+        from backend.core.provider_model_fetch import FETCH_LIST_FAILED
+        return AccountModelList(
+            ok=False,
+            source='empty',
+            error_type=pre.error_type.value,
+            hint_key=pre.hint_key,
+            message_key=FETCH_LIST_FAILED,
+            base_url_host=_host(base),
+        )
+    return list_account_models(
+        base_url=base,
+        api_key=resolved.api_key or '',
+        provider=resolved.provider,
+        http=http,
+    )
