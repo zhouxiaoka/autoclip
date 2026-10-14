@@ -206,6 +206,28 @@ def test_layered_http_errors_do_not_echo_body_or_key():
     assert "gateway.example/v1" not in dumped
 
 
+def test_empty_object_and_redirect_are_bad_endpoint():
+    empty = _Recorder(lambda url, headers: _FakeResponse(200, {}))
+    result = fetch_provider_models(base_url="https://gateway.example/v1", api_key=SECRET, http=empty)
+    assert result.ok is False
+    assert result.error_type == "bad_endpoint"
+    assert result.source == "empty"
+    assert result.message_key == FETCH_LIST_FAILED
+    assert SECRET not in json.dumps(result.as_api())
+
+    redirect = _Recorder(lambda url, headers: _FakeResponse(
+        302, {}, headers={"content-type": "application/json", "location": "https://gateway.example/login"},
+    ))
+    result = fetch_provider_models(base_url="https://gateway.example/v1", api_key=SECRET, http=redirect)
+    assert result.ok is False
+    assert result.error_type == "bad_endpoint"
+    assert result.source == "empty"
+    dumped = json.dumps(result.as_api())
+    assert SECRET not in dumped
+    assert "gateway.example/v1" not in dumped
+    assert "login" not in dumped
+
+
 def test_html_and_invalid_json_are_bad_endpoint():
     html = _Recorder(lambda url, headers: _FakeResponse(
         200, "<!DOCTYPE html><html>控制台</html>",
