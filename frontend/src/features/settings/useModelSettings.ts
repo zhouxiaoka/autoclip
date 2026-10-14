@@ -131,10 +131,10 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const emitValidation = (connection: Connection, result: ValidationResult) => {
     const provider = PROVIDERS[connection.provider as ProviderKey] ? connection.provider : 'other'
     trackProviderValidation({
-      placement, provider,
+      provider,
       base_url_host: result.base_url_host || telemetryHost(connection.base_url),
-      result: passed(result) ? 'ok' : 'failed',
-      ...(passed(result) ? {} : { error_type: result.error_type || 'unknown' }),
+      result: passed(result) ? 'success' : 'failed',
+      ...(passed(result) ? {} : { upstream_error_type: result.error_type || 'unknown' }),
     })
     if (result.key_hint) setKeyHints(old => ({ ...old, [connection.id]: result.key_hint as string }))
   }

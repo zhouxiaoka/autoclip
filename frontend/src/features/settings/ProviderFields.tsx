@@ -12,8 +12,8 @@ import {
   sponsorKeyLink, validationCopy,
 } from './providerAccess'
 
-const ENDPOINT_ERRORS = new Set(['bad_endpoint', 'console_host', 'connection', 'timeout'])
-const KEY_ERRORS = new Set(['invalid_key', 'insufficient_quota', 'group_forbidden'])
+const ENDPOINT_ERRORS = new Set(['bad_endpoint', 'connection', 'timeout'])
+const KEY_ERRORS = new Set(['invalid_key', 'insufficient_quota', 'permission_denied'])
 
 /**
  * Provider picker + credentials for one connection. Local presets need no key; only

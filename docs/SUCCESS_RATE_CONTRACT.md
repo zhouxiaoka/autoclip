@@ -53,4 +53,4 @@ provider 枚举与现有 experience 契约一致：dashscope / openai / gemini /
 
 ## 明确不做（本 PR）
 
-不调用 `classify_upstream_error` 去改 `model_call_error_code` / `call_with_retry` / 设置页保存。不往 PostHog 打 `llm_request_finished`。不把新字段并进 `safeStudioProperties`（避免现有 generation 快照意外带上 model）。这些由对应并行线在引用本契约后各自落地。
+不调用 `classify_upstream_error` 去改 `model_call_error_code` / `call_with_retry`。不往 PostHog 打 `llm_request_finished`。不把新字段并进 `safeStudioProperties`（避免现有 generation 快照意外带上 model）。设置页接入校验（#S）引用本分类与 `hint_key`，由线 B 落地 `provider_validation_finished`。

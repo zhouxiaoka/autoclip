@@ -68,7 +68,7 @@
 | 事件/现有能力 | 要求 | 优先级 |
 |---|---|---|
 | 配置保存、Provider 测试 | 复用现有 api_key_configured/provider_test_finished/vision_provider 相关能力，统一到 `provider_configuration_saved`、`provider_connection_tested` 的目标语义；只允许 Provider 枚举、能力类别、结果、错误码；HTTP 成功不等于模型测试成功 | 首次阻碍分析同步完成 |
-| 设置页接入校验 | `provider_validation_finished`：`provider`、`base_url_host`、`result`（ok/failed）、`error_type`（闭合枚举）。不上报密钥或完整 URL。保存成功且校验失败仍会在生成前拦住 | 1.5.8 线 B |
+| 设置页接入校验 | `provider_validation_finished`：`provider`、`base_url_host`、`result`（success/failed/skipped）、`upstream_error_type`（成功率契约闭合枚举）。不上报密钥或完整 URL。保存成功且校验失败仍会在生成前拦住 | 1.5.8 线 B |
 | `quality_feedback_prompted` | 提示实际展示时记录；受控抽样和频率限制；有随机 `prompt_id` 与 artifact 关联 | 最小质量反馈 |
 | `quality_feedback_submitted` | 主动提交受控选项时记录；`prompt_id`、可用性四档、问题类别；重复提交按同一反馈的修订处理，不算多人回复 | 最小质量反馈 |
 | `acquisition_source_recorded` | 第一次获得可信来源时记录；来源类别、受控活动代号、`evidence=campaign/self_report`；未知在报表保留 | 基础来源归因 |

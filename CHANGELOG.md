@@ -10,7 +10,7 @@
 - 新增上游错误分类与成功率埋点字段契约（`upstream_errors` / `llm_telemetry`，前端 `successRateContract`）：按 OpenAI、new-api、Gemini、DeepSeek 等响应区分密钥、余额、权限/分组、模型不存在、地址错误、限流、5xx、超时/断连、截断；只提供分类与脱敏，不改现有调用链或上报。八语补齐对应提示 key。
 
 - 发布 autoclip-mcp 时推送标签 `mcp-v<version>`。该标签走 pypi environment，只允许从 `mcp-v*` 部署。
-- 设置页保存前做接入校验：去掉地址空格和尾部 `/`、自动补 `/v1`、截掉误贴的 `/chat/completions`、识别控制台域名；88API / Infistar / DeepSeek / Gemini / 百炼 / OpenAI 锁定预设地址，只有「自定义兼容」可改。保存前 `GET /models` 再对所选模型发约 16 token 的真实小请求，按分类提示（地址错、密钥无效、无权限/分组、余额不足、模型不存在）。校验失败仍可保存但标红，生成前拦住；通过后用 `/models` 回填模型下拉。API Key 保存和输入去掉首尾空格。埋点 `provider_validation_finished`（`provider`、`base_url_host`、`result`、`error_type`，不上报密钥或完整 URL）。
+- 设置页保存前做接入校验：去掉地址空格和尾部 `/`、自动补 `/v1`、截掉误贴的 `/chat/completions`、识别控制台域名；88API / Infistar / DeepSeek / Gemini / 百炼 / OpenAI 锁定预设地址，只有「自定义兼容」可改。保存前 `GET /models` 再对所选模型发约 16 token 的真实小请求，按第 0 步 `upstream_errors` 分类提示（地址错、密钥无效、无权限/分组、余额不足、模型不存在）。校验失败仍可保存但标红，生成前拦住；通过后用 `/models` 回填模型下拉。API Key 保存和输入去掉首尾空格。埋点 `provider_validation_finished`（`provider`、`base_url_host`、`result` 为 success/failed/skipped、`upstream_error_type`，不上报密钥或完整 URL）。
 
 ## [1.5.7] - 2026-10-10
 

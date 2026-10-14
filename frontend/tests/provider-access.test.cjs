@@ -13,6 +13,17 @@ const providers = {
     infistar: { keyUrl: 'https://www.infistar.cc/register' }, ollama: { local: { baseUrl: 'http://localhost:11434/v1' } },
   },
 }
+function loadContract() {
+  const source = path.join(__dirname, '../src/analytics/successRateContract.ts')
+  const module = { exports: {} }
+  vm.runInNewContext(
+    ts.transpileModule(fs.readFileSync(source, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText,
+    { exports: module.exports, module, URL },
+    { filename: source },
+  )
+  return module.exports
+}
+const contract = loadContract()
 const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
 const access = {}
 vm.runInNewContext(code, {
@@ -21,6 +32,7 @@ vm.runInNewContext(code, {
   require: id => {
     if (id === '../../i18n') return { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) }
     if (id === './providers') return providers
+    if (id === '../../analytics/successRateContract') return contract
     throw new Error(id)
   },
 })

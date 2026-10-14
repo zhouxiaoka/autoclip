@@ -10,14 +10,14 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from backend.core.llm_providers import is_local_url, uses_max_completion_tokens
+from backend.core.llm_telemetry import hostname_of_base_url
 from backend.core.provider_endpoint import (
     hint_provider_for_key,
     is_console_host,
     looks_like_html,
     normalize_provider_base_url,
-    telemetry_host,
 )
-from backend.core.upstream_errors import classify_http, classify_upstream_error, fields_from_http_body
+from backend.core.upstream_errors import classify_upstream_error
 from backend.services import ai_model_settings as ai_models
 
 PROBE_MAX_TOKENS = 16
@@ -49,17 +49,25 @@ class ValidationResult:
         }
 
 
+def _host(base: str) -> str:
+    return hostname_of_base_url(base) or 'unknown'
+
+
+def _classify(status: int | None, body: str | None = None, *, error_name: str | None = None) -> str:
+    return classify_upstream_error(status, body, error_name=error_name).error_type.value
+
+
 def _failed(error_type: str, base: str, key_hint: Optional[str], models: Optional[list[str]] = None) -> ValidationResult:
     return ValidationResult(
         ok=False, result='failed', error_type=error_type, key_hint=key_hint,
-        normalized_base_url=base, base_url_host=telemetry_host(base), model_ids=models or [],
+        normalized_base_url=base, base_url_host=_host(base), model_ids=models or [],
     )
 
 
 def _ok(base: str, key_hint: Optional[str], models: list[str]) -> ValidationResult:
     return ValidationResult(
         ok=True, result='ok', key_hint=key_hint,
-        normalized_base_url=base, base_url_host=telemetry_host(base), model_ids=models,
+        normalized_base_url=base, base_url_host=_host(base), model_ids=models,
     )
 
 
@@ -79,12 +87,9 @@ def _extract_ids(payload) -> list[str]:
 
 
 def _classify_response(status: int, text: str, *, models_path: bool) -> str:
-    ctype_html = looks_like_html(text)
-    if ctype_html:
-        return 'bad_endpoint'
     if models_path and status == 404:
         return 'bad_endpoint'
-    return classify_http(status, text)
+    return _classify(status, text)
 
 
 def _get_models(base: str, api_key: str) -> tuple[list[str], Optional[str]]:
@@ -94,14 +99,13 @@ def _get_models(base: str, api_key: str) -> tuple[list[str], Optional[str]]:
         with httpx.Client(timeout=MODELS_TIMEOUT, trust_env=not is_local_url(base)) as client:
             response = client.get(url, headers={'Authorization': 'Bearer ' + (api_key or 'EMPTY')})
     except httpx.TimeoutException:
-        return [], 'timeout'
+        return [], _classify(None, '', error_name='TimeoutError')
     except httpx.RequestError:
-        return [], 'connection'
+        return [], _classify(None, '', error_name='ConnectionError')
     text = response.text or ''
     content_type = (response.headers.get('content-type') or '').lower()
     if 'text/html' in content_type or looks_like_html(text):
-        host = urlparse(base).hostname or ''
-        return [], 'console_host' if is_console_host(host) else 'bad_endpoint'
+        return [], 'bad_endpoint'
     if response.status_code >= 400:
         return [], _classify_response(response.status_code, text[:4000], models_path=True)
     try:
@@ -129,15 +133,15 @@ def _probe(base: str, api_key: str, model: str) -> Optional[str]:
                 headers={'Authorization': 'Bearer ' + (api_key or 'EMPTY'), 'Content-Type': 'application/json'},
             )
     except httpx.TimeoutException:
-        return 'timeout'
+        return _classify(None, '', error_name='TimeoutError')
     except httpx.RequestError:
-        return 'connection'
+        return _classify(None, '', error_name='ConnectionError')
     text = response.text or ''
     content_type = (response.headers.get('content-type') or '').lower()
     if 'text/html' in content_type or looks_like_html(text):
         return 'bad_endpoint'
     if response.status_code >= 400:
-        return classify_upstream_error(**fields_from_http_body(response.status_code, text[:4000]))
+        return _classify(response.status_code, text[:4000])
     return None
 
 
@@ -150,12 +154,12 @@ def validate_connection(connection: ai_models.Connection, model: str) -> Validat
         normalized = normalize_provider_base_url(resolved.base_url)
         base = normalized.url
         if 'console_host' in normalized.warnings:
-            return _failed('console_host', base, hint)
+            return _failed('bad_endpoint', base, hint)
     else:
         base = ai_models.chat_endpoint(resolved, model or 'unused')['base_url']
     host = urlparse(base).hostname or ''
     if is_console_host(host):
-        return _failed('console_host', base, hint)
+        return _failed('bad_endpoint', base, hint)
     if resolved.provider == 'compatible' and not base:
         return _failed('bad_endpoint', base, hint)
     api_key = resolved.api_key or ''

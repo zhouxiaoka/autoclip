@@ -14,7 +14,6 @@ from backend.core.cloud_presets import CLOUD_PRESETS
 from backend.core.llm_providers import (
     DASHSCOPE_CN_COMPATIBLE_BASE_URL,
     OPENAI_OFFICIAL_BASE_URL,
-    is_local_url,
     normalize_base_url,
 )
 
@@ -67,9 +66,6 @@ _KEY_HINTS = (
     (re.compile(r'^sk-ant-'), 'compatible'),
 )
 
-_HOST_RE = re.compile(r'^[a-z0-9.-]{1,253}$')
-
-
 @dataclass(frozen=True)
 class NormalizeResult:
     url: str
@@ -101,10 +97,8 @@ def hint_provider_for_key(api_key: Optional[str]) -> Optional[str]:
 
 def telemetry_host(url: Optional[str]) -> str:
     """Hostname only. Loopback / private → `local`. Never the full URL."""
-    if is_local_url(url):
-        return 'local'
-    host = (urlparse(url or '').hostname or '').lower()
-    return host if host and _HOST_RE.fullmatch(host) else 'unknown'
+    from backend.core.llm_telemetry import hostname_of_base_url
+    return hostname_of_base_url(url) or 'unknown'
 
 
 def normalize_provider_base_url(url: Optional[str]) -> NormalizeResult:

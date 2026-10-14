@@ -1,21 +1,21 @@
 import { t } from '../../i18n'
+import {
+  hintKeyForUpstreamError,
+  hostnameOfBaseUrl,
+  UPSTREAM_ERROR_TYPES,
+} from '../../analytics/successRateContract'
 import { PROVIDERS, type ProviderKey } from './providers'
 
 export const ADDRESS_LOCKED: readonly ProviderKey[] = ['api88', 'infistar', 'deepseek', 'gemini', 'dashscope', 'openai']
 
-export const VALIDATION_ERROR_TYPES = [
-  'insufficient_quota', 'invalid_key', 'model_forbidden', 'group_forbidden',
-  'model_not_found', 'rate_limited', 'upstream_unavailable',
-  'bad_endpoint', 'console_host', 'connection', 'timeout', 'unknown',
-] as const
-
+export const VALIDATION_ERROR_TYPES = UPSTREAM_ERROR_TYPES
 export type ValidationErrorType = (typeof VALIDATION_ERROR_TYPES)[number]
 export type ValidationStatus = 'ok' | 'failed' | 'unchecked'
 
 export interface ValidationResult {
   success?: boolean
   ok?: boolean
-  result?: 'ok' | 'failed'
+  result?: 'ok' | 'failed' | 'success'
   error_type?: string
   key_hint?: string | null
   normalized_base_url?: string
@@ -43,21 +43,7 @@ const CONSOLE_HOSTS = new Set([
   'platform.moonshot.cn', 'www.moonshot.cn', 'console.x.ai',
   'www.infistar.cc', 'www.infistar.ai', 'infistar.ai', 'www.88api.ai',
 ])
-
-export const VALIDATION_COPY: Record<string, string> = {
-  console_host: '这是控制台或官网地址，不是模型接口。请改选对应服务商，或用「自定义兼容」填写带 /v1 的接口地址。',
-  bad_endpoint: '接口地址不对。请检查是否漏了 /v1，或误把 /chat/completions、控制台域名当成接口。',
-  invalid_key: '密钥无效。请到「设置 → 模型」核对 API Key，或到服务商网站重新创建。',
-  insufficient_quota: '余额或额度不足。请到服务商控制台充值或更换令牌后再试。',
-  model_forbidden: '当前密钥没有这个模型的权限。请到令牌设置里勾选该模型，或换一个模型。',
-  group_forbidden: '当前密钥不能访问这个分组。请到服务商控制台调整分组，或换一把令牌。',
-  model_not_found: '当前分组下没有这个模型。请换一个模型，或到服务商控制台调整分组。',
-  rate_limited: '提供商限制了请求频率或额度，请检查配额并稍后重试。',
-  connection: '无法连接模型服务。请检查接口地址和网络。',
-  timeout: '模型服务响应超时。请稍后重试，或检查网络。',
-  upstream_unavailable: '服务商暂时不可用。请稍后重试。',
-  unknown: '连接未通过校验。请按提示修改后，到「设置 → 模型」再保存一次。',
-}
+const CONSOLE_COPY = '这是控制台或官网地址，不是模型接口。请改选对应服务商，或用「自定义兼容」填写带 /v1 的接口地址。'
 
 export const canEditAddress = (key?: ProviderKey) => key === 'compatible' || !!PROVIDERS[key || 'compatible']?.local
 
@@ -98,17 +84,12 @@ export function normalizeCompatibleUrl(raw: string): { url: string; warnings: st
 }
 
 export function telemetryHost(url?: string) {
-  if (!url) return 'unknown'
-  try {
-    const host = new URL(url).hostname.toLowerCase()
-    if (['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host) || host.endsWith('.local')) return 'local'
-    if (/^[a-z0-9.-]{1,253}$/.test(host)) return host
-  } catch { /* ignore */ }
-  return 'unknown'
+  return hostnameOfBaseUrl(url) || 'unknown'
 }
 
 export function validationCopy(errorType?: string) {
-  return t(VALIDATION_COPY[errorType || ''] || VALIDATION_COPY.unknown)
+  if (errorType === 'console_host') return t(CONSOLE_COPY)
+  return t(hintKeyForUpstreamError(errorType || 'unknown'))
 }
 
 export function keyHintCopy(hint: ProviderKey) {
@@ -122,5 +103,5 @@ export function sponsorKeyLink(provider?: string): { label: string; href: string
 }
 
 export function passed(result?: ValidationResult | null) {
-  return !!(result && (result.success || result.ok || result.result === 'ok'))
+  return !!(result && (result.success || result.ok || result.result === 'ok' || result.result === 'success'))
 }

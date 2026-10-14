@@ -15,8 +15,22 @@ const providers = {
     compatible: { name: '自定义' }, ollama: { name: 'Ollama', local: { baseUrl: 'http://localhost:11434/v1' } },
   },
 }
+function loadContract() {
+  const source = path.join(__dirname, '../src/analytics/successRateContract.ts')
+  const module = { exports: {} }
+  vm.runInNewContext(
+    ts.transpileModule(fs.readFileSync(source, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText,
+    { exports: module.exports, module, URL },
+    { filename: source },
+  )
+  return module.exports
+}
 const defaults = load('modelDefaults.ts', {})
-const access = load('providerAccess.ts', { '../../i18n': { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) }, './providers': providers })
+const access = load('providerAccess.ts', {
+  '../../i18n': { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) },
+  './providers': providers,
+  '../../analytics/successRateContract': loadContract(),
+})
 const logic = load('modelSettingsLogic.ts', { './providers': providers, './modelDefaults': defaults, './providerAccess': access })
 
 const plain = x => JSON.parse(JSON.stringify(x))

@@ -80,9 +80,9 @@ class Connection(BaseModel):
     @field_validator('validation_error_type')
     @classmethod
     def known_validation_type(cls, value):
-        from backend.core.upstream_errors import VALIDATION_ERROR_TYPES
+        from backend.core.upstream_errors import UPSTREAM_ERROR_TYPES
         text = (value or '').strip()
-        if text and text not in VALIDATION_ERROR_TYPES:
+        if text and text not in UPSTREAM_ERROR_TYPES:
             return ''
         return text
 

@@ -17,6 +17,7 @@ function load(name, mocks = {}, globals = {}) {
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key' },
     require: (id) => {
       if (id in mocks) return mocks[id]
+      if (id === './successRateContract' || id === '../../analytics/successRateContract') return load('successRateContract')
       if (id === '../utils/apiConfig') {
         return { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener: () => () => {} } }
       }
@@ -501,20 +502,23 @@ test('experience contract excludes config secrets and results cannot replay acro
 
 test('provider validation keeps host and error enum only', () => {
   const s=setup();const x=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
-  const leaked=x.safeExperience({
+  x.trackProviderValidation({
     provider:'openai', result:'failed', error_type:'invalid_key',
     base_url_host:'https://api.openai.com/v1?key=sk-secret', api_key:'sk-secret', model:'gpt-4o',
   })
-  assert.equal(leaked.base_url_host, undefined)
+  const leaked=s.events[0].props
+  assert.equal(leaked.base_url_host, 'api.openai.com')
   assert.equal(leaked.result, 'failed')
-  assert.equal(leaked.error_type, 'invalid_key')
+  assert.equal(leaked.upstream_error_type, 'invalid_key')
+  assert.equal(leaked.error_type, undefined)
   assert.equal(JSON.stringify(leaked).includes('sk-secret'), false)
   assert.equal(JSON.stringify(leaked).includes('https://'), false)
   x.trackProviderValidation({provider:'api88', base_url_host:'88api.ai', result:'ok', error_type:'not-a-type', api_key:'sk-secret'})
-  const event=s.events.find(e=>e.event==='provider_validation_finished')
+  const event=s.events.find(e=>e.event==='provider_validation_finished' && e.props.provider==='api88')
   assert.equal(event.props.provider,'api88')
   assert.equal(event.props.base_url_host,'88api.ai')
-  assert.equal(event.props.result,'ok')
+  assert.equal(event.props.result,'success')
+  assert.equal(event.props.upstream_error_type, undefined)
   assert.equal(event.props.error_type, undefined)
   assert.equal(JSON.stringify(event).includes('sk-secret'), false)
 })
@@ -545,7 +549,7 @@ test('actual unified settings hook records save once and HTTP-200 negative tests
  const validation=s.events.filter(e=>e.event==='provider_validation_finished')
  assert.ok(validation.length>=1)
  assert.equal(validation[0].props.result,'failed')
- assert.equal(validation[0].props.error_type,'invalid_key')
+ assert.equal(validation[0].props.upstream_error_type,'invalid_key')
  assert.equal(validation[0].props.base_url_host,'gw.example')
  assert.equal(validation[0].props.provider,'openai')
  assert.equal(s.events.some(e=>e.event==='api_key_configured'),false)
