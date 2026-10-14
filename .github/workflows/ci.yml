@@ -11,6 +11,8 @@ on:
       - cursor/normalize-provider-url-aa38
       # Draft #373: force-push rebase onto release/1.5.8 did not emit pull_request CI.
       - cursor/provider-presets-json-42d9
+      # Draft #383: review-fix push did not emit pull_request CI.
+      - cursor/custom-provider-firstrun-c6a4
 
 permissions:
   contents: read
