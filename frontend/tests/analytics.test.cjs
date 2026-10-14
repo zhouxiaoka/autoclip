@@ -88,6 +88,8 @@ test('missing worker timestamps do not invent start or duration; cancellation is
   s.tracker.observeTasks(s.tracker.list()[0], [task({ status: 'cancelled', started_at: null, completed_at: null })])
   assert.equal(s.events.length, 2)
   assert.equal(s.events[1].props.outcome, 'cancelled')
+  assert.equal(core.canonOutcome('cancelled'), 'cancelled')
+  assert.equal(core.canonOutcome('failed'), 'error')
   assert.equal(s.events[1].props.duration_ms, undefined)
   assert.equal(s.events[1].props.occurred_at, undefined)
 })
