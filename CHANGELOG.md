@@ -7,6 +7,8 @@
 
 ## [未发布]
 
+- 启动时检查更新：复用现有 GitHub Release / Tauri updater（`latest.json`）。发现新版本时弹出提醒，确认后再下载；同一版本一天最多提醒一次；设置页和提醒弹层可关闭提醒，关闭后仍可手动检查。检查请求不带用户标识；网络失败、限流或离线时静默，不阻塞启动。
+
 - 新增上游错误分类与成功率埋点字段契约（`upstream_errors` / `llm_telemetry`，前端 `successRateContract`）：按 OpenAI、new-api、Gemini、DeepSeek 等响应区分密钥、余额、权限/分组、模型不存在、地址错误、限流、5xx、超时/断连、截断；只提供分类与脱敏，不改现有调用链或上报。八语补齐对应提示 key。
 
 - 发布 autoclip-mcp 时推送标签 `mcp-v<version>`。该标签走 pypi environment，只允许从 `mcp-v*` 部署。

@@ -221,17 +221,22 @@ const AppSection: React.FC<{ analyticsOn: boolean; onAnalyticsChange: (on: boole
         </Row>
         <OutputBrandingSetting />
         {(desktop || appUpdate.preview) && (
-          <Row label={t('版本')} hint={versionHint}>
-            {appUpdate.phase === 'ready' || appUpdate.phase === 'restarting' ? (
-              <Btn size="sm" variant="cta" loading={appUpdate.phase === 'restarting'} onClick={() => void appUpdate.restart()}>{t('更新并重启')}</Btn>
-            ) : appUpdate.phase === 'downloading' ? (
-              <Btn size="sm" onClick={appUpdate.showToast}>{t('查看进度')}</Btn>
-            ) : appUpdate.phase === 'failed' ? (
-              <Btn size="sm" onClick={() => void appUpdate.retry()}>{t('重试')}</Btn>
-            ) : (
-              <Btn size="sm" loading={appUpdate.phase === 'checking'} onClick={() => void handleCheckUpdate()}>{t('检查更新')}</Btn>
-            )}
-          </Row>
+          <>
+            <Row label={t('版本')} hint={versionHint}>
+              {appUpdate.phase === 'ready' || appUpdate.phase === 'restarting' ? (
+                <Btn size="sm" variant="cta" loading={appUpdate.phase === 'restarting'} onClick={() => void appUpdate.restart()}>{t('更新并重启')}</Btn>
+              ) : appUpdate.phase === 'downloading' ? (
+                <Btn size="sm" onClick={appUpdate.showToast}>{t('查看进度')}</Btn>
+              ) : appUpdate.phase === 'failed' ? (
+                <Btn size="sm" onClick={() => void appUpdate.retry()}>{t('重试')}</Btn>
+              ) : (
+                <Btn size="sm" loading={appUpdate.phase === 'checking'} onClick={() => void handleCheckUpdate()}>{t('检查更新')}</Btn>
+              )}
+            </Row>
+            <Row label={t('启动时检查更新')} hint={t('发现新版本时提醒，同一版本一天最多一次。关闭后仍可手动检查。')}>
+              <Switch checked={appUpdate.remindersEnabled} onChange={appUpdate.setRemindersEnabled} />
+            </Row>
+          </>
         )}
         <Row label={t("匿名使用统计")} hint={t("只采集功能使用、出片成功 / 失败等匿名事件，不含视频内容、字幕文本或 API 密钥。关闭后仍可在反馈里主动发送。")}>
           <Switch checked={analyticsOn} onChange={onAnalyticsChange} />
