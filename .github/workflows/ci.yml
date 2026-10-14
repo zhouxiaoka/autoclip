@@ -7,6 +7,8 @@ on:
     branches:
       - main
       - master
+      # Draft #364: pull_request events did not start CI for this branch; run on push instead.
+      - cursor/normalize-provider-url-aa38
 
 permissions:
   contents: read
