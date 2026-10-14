@@ -157,8 +157,7 @@ def try_connection(**kwargs: Any) -> Any:
 def _reset_binding(data: Dict[str, Any], role: str, binding: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     connections = data.get('connections') or []
     conn = next((item for item in connections if item.get('id') == binding.get('connection_id')), None)
-    if conn is None and connections:
-        conn = connections[0]
+    # Missing connection: mark needs-repair. Never borrow connections[0] (that switches provider).
     if not isinstance(conn, dict):
         return None
     model = recommended_model(conn.get('provider') or 'openai', role)
