@@ -10,7 +10,7 @@ import os
 import threading
 import uuid
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, field_validator, model_validator
 
@@ -24,6 +24,7 @@ from backend.services.model_settings_source import (
     infer_model_source,
     known_notices,
     prepare_connections_for_save,
+    preset_base_url,
     preset_update_available,
     recommended_model,
     try_connection,
@@ -269,20 +270,64 @@ def connection_for(settings: ModelSettings, assignment: Assignment) -> Connectio
     return next(c for c in settings.connections if c.id == assignment.connection_id)
 
 
+def _known_official_hosts(provider: str) -> set[str]:
+    """Hosts this provider may keep. Catalog native paths are not hosts."""
+    hosts: set[str] = set()
+    try:
+        from backend.core.provider_endpoint import LOCKED_PRESETS
+        locked = LOCKED_PRESETS.get(provider)
+        host = urlparse(locked or '').hostname
+        if host:
+            hosts.add(host.lower())
+    except Exception:
+        pass
+    catalog = urlparse(preset_base_url(provider) or '').hostname
+    if catalog:
+        hosts.add(catalog.lower())
+    if provider == 'api88':
+        from backend.core.cloud_presets import API88_HOSTS
+        hosts.update(API88_HOSTS)
+    return hosts
+
+
 def _keep_saved_chat_url(connection: Connection) -> bool:
-    """True when a stored URL must not be replaced by the current catalog lock."""
+    """True when the saved host+scheme must stay (path may still be the chat root).
+
+    ``preset_version`` is only a catalog stamp. It does not skip the URL lock or
+    treat a native listing root as an OpenAI-compatible chat base.
+    """
     saved = connection.base_url
     if not saved:
         return False
-    if connection.preset_version > 0:
-        return True
     if connection.provider == 'compatible':
         return True
+    host = (urlparse(saved).hostname or '').lower()
+    if not host:
+        return False
     if connection.provider == 'api88':
         from backend.core.cloud_presets import is_api88_host
-        return is_api88_host(urlparse(saved).hostname)
+        return is_api88_host(host)
     url_source = connection.base_url_source or infer_base_url_source(connection.provider, saved)
-    return url_source == 'user' and connection.provider not in {'api88', 'infistar', 'deepseek', 'gemini'}
+    if connection.provider in {'infistar', 'deepseek', 'gemini'}:
+        return host in _known_official_hosts(connection.provider)
+    if url_source == 'user':
+        return True
+    return host in _known_official_hosts(connection.provider)
+
+
+def _frozen_chat_url(saved: str, provider: str) -> str:
+    """Keep scheme+host(+port). Apply this provider's chat path; never swap hosts."""
+    from backend.core.provider_endpoint import normalize_provider_base_url as line_b_normalize
+    from backend.core.provider_url import normalize_provider_base_url
+    parsed = urlparse(saved)
+    if provider == 'compatible':
+        return line_b_normalize(saved).url
+    host = (parsed.hostname or '').lower()
+    if provider == 'gemini' and host == 'generativelanguage.googleapis.com':
+        # Catalog native root is /v1beta (listing). Chat stays on the OpenAI-compat path.
+        scheme = parsed.scheme if parsed.scheme in ('http', 'https') else 'https'
+        return urlunparse((scheme, parsed.netloc, '/v1beta/openai', '', '', ''))
+    return normalize_provider_base_url(saved, provider)
 
 
 def chat_endpoint(connection: Connection, model: str) -> dict:
@@ -300,8 +345,8 @@ def chat_endpoint(connection: Connection, model: str) -> dict:
     locked = locked_chat_url(connection.provider, connection.base_url)
     saved = connection.base_url
     if _keep_saved_chat_url(connection):
-        # Q14: stamped or historically accepted URLs stay. Wrong hosts on locked presets still lock.
-        base = normalize_provider_base_url(saved).url if connection.provider == 'compatible' else saved
+        # Q14: host+scheme stay. Wrong hosts on locked presets still lock.
+        base = _frozen_chat_url(saved, connection.provider)
     elif locked:
         base = locked
     elif connection.provider == 'compatible' and saved:
