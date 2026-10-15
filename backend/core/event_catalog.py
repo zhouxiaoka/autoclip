@@ -1,6 +1,6 @@
 """Machine-readable tracking-plan catalog and payload validator.
 
-``docs/analytics/event_catalog.json`` is the only registry. Unregistered
+The packaged ``event_catalog.json`` mirrors the docs tracking plan. Unregistered
 business events and missing required fields fail validation. Telemetry
 callers must still catch errors — this module never raises on emit.
 """
@@ -11,6 +11,8 @@ import os
 import re
 import sys
 from functools import lru_cache
+from importlib.resources import files
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -48,11 +50,11 @@ _BACKEND_FILES = (
 )
 
 
-def catalog_path() -> Path:
+def catalog_path() -> Traversable:
     override = os.environ.get("AUTOCLIP_EVENT_CATALOG")
     if override:
         return Path(override)
-    return Path(__file__).resolve().parents[2] / "docs" / "analytics" / "event_catalog.json"
+    return files(__package__).joinpath("event_catalog.json")
 
 
 @lru_cache(maxsize=1)
@@ -218,7 +220,7 @@ def _privacy_errors(name: str, props: Mapping[str, Any], catalog: Mapping[str, A
 
 def collect_producer_events(root: Path | None = None) -> set[str]:
     """Event names referenced by frontend/backend producers."""
-    repo = root or catalog_path().parents[1]
+    repo = root if root is not None else Path(__file__).resolve().parents[2]
     names: set[str] = set()
     frontend = repo / "frontend" / "src"
     if frontend.is_dir():

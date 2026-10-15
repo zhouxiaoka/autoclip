@@ -12,6 +12,7 @@
 - 线 A 发送说明：`docs/analytics/LLM_TELEMETRY.md`（随纯埋点 PR #361，规范确认后）
 - **本规范的机读清单：** [`event_inventory.json`](event_inventory.json)（事件名、状态、legacy 映射）。`scripts/check_tracking_inventory.py` 校验这份清单。
 - **生产者目录：** `docs/analytics/event_catalog.json`（随 #361）。它必须由本清单生成，或在 CI 里对照本清单；未登记、缺必填、违禁值，校验测试必须失败。两份漂移即失败。
+  运行时副本位于 `backend/core/event_catalog.json`，通过 Python package data 随 wheel 分发，也随 backend 目录进入桌面与 Docker 包；`test_event_catalog_package.py` 校验它与此处目录逐字节一致，并在仓库外安装 wheel 后验证加载。修改目录时须同步两份 JSON。
 - 看板 SQL 草案：[`success_rate.sql`](success_rate.sql)
 
 先看 §1–§5（规则、漏斗、触发点）、§10–§11（隐私硬性 / 脱敏 / 开关关闭）、§6–§7（口径与看板），再看 §8（全量盘点）和 §12（过渡计划 / 1.5.8 收口）。§8 的删除/改名 **不在 #361 纯埋点 PR 里执行**。过渡保留（查询继续映射历史值）；**1.5.8 必须收口**：单一 `os` / `outcome`、只报 `app_version`、QA/MCP/反馈公共信封、旧事件停发或打 `legacy=true`。`feedback_submitted` 是 `user_submitted` 例外，允许 `text`/`contact`。
