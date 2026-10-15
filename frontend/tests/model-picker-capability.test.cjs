@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const vm = require('node:vm')
 const ts = require('typescript')
+const { loadTs } = require('./load-ts.cjs')
 
 function loadPicker() {
   const jsx = (type, props) => ({ type, props })
@@ -11,6 +12,7 @@ function loadPicker() {
     'react/jsx-runtime': { jsx, jsxs: jsx },
     antd: { Select: 'Select' }, '../../i18n': { t: s => s }, '../../ui': { Btn: 'Btn' },
     './modelDefaults': { analysisModels: models => models },
+    './endpointProvider': loadTs('endpointProvider.ts'),
     './modelSettingsLogic': { connectionReady: () => true, presetKey: c => c.provider },
   }
   const code = ts.transpileModule(fs.readFileSync('src/features/settings/ModelPicker.tsx', 'utf8'),
@@ -46,4 +48,22 @@ test('known provider capability needs no manual confirmation', () => {
     connection: { id: 'one', provider: 'dashscope' }, list: { source: 'live', models: [{ id: 'known-vision', capability: 'multimodal' }] },
     busy: false, mode: 'auto', onChange() {}, onRefresh() {}, onCapability() {} })
   assert.equal(findTypeSelect(picker), null)
+})
+
+
+test('every purpose picker hides endpoint-only connections until URL and validation pass', () => {
+  const Picker = loadPicker()
+  const catalog = loadTs('providerPresets.ts').getCatalog()
+  for (const preset of Object.values(catalog.providers).filter(row => !row.base_url && row.protocol !== 'local')) {
+    for (const [base_url, validation_status, ready] of [['', 'ok', false], ['https://endpoint.example.test/v1', 'unchecked', false], ['https://endpoint.example.test/v1', 'failed', false], ['https://endpoint.example.test/v1', 'ok', true]]) {
+      for (const role of ['analysis', 'vision', 'cover', 'transcription']) {
+        const tree = Picker({ role, model: '', connection: { id: 'endpoint', provider: 'compatible', catalog_provider_id: preset.id, base_url, validation_status },
+          list: { source: 'live', models: [{ id: 'test-model', analysis: true, capability: 'multimodal', image: true, asr: true, asr_supported: true }] },
+          busy: false, mode: 'auto', onChange() {}, onRefresh() {} })
+        const select = tree.props.children[0]
+        assert.equal(select.props.disabled, !ready, `${preset.id}: ${role}`)
+        assert.equal(select.props.options.length, ready ? 1 : 0, `${preset.id}: ${role}`)
+      }
+    }
+  }
 })

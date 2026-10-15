@@ -7,7 +7,7 @@ store large binaries; sha256 is recorded after generation.
 secret env, tier). The product catalog is not that source: Gemini's product
 row is ``gemini-3.8-flash`` at ``/v1beta`` (native models), while live chat
 needs ``/v1beta/openai``. DashScope live default is ``qwen-plus``. When
-``presets/provider_presets.json`` exists, this module reads labels and
+``backend/presets/provider_presets.json`` exists, this module reads labels and
 chat URL inputs only, preserving live default models. It never writes the
 product JSON. ``*_MODEL`` still overrides at run time. Do not print secrets.
 """

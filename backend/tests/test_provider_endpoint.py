@@ -21,7 +21,7 @@ from backend.core.provider_presets import get_provider
 from backend.services import ai_model_settings as ai
 
 ROOT = Path(__file__).resolve().parents[2]
-CATALOG = ROOT / 'presets' / 'provider_presets.json'
+CATALOG = ROOT / 'backend' / 'presets' / 'provider_presets.json'
 ENDPOINT_SRC = ROOT / 'backend' / 'core' / 'provider_endpoint.py'
 
 

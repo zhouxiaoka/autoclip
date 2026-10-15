@@ -4,7 +4,7 @@ const vm = require('node:vm')
 const ts = require('typescript')
 
 const SETTINGS = path.join(__dirname, '../src/features/settings')
-const PRESETS = path.join(__dirname, '../../presets/provider_presets.json')
+const PRESETS = path.join(__dirname, '../../backend/presets/provider_presets.json')
 
 function loadTs(file, mocks = {}, fromDir = SETTINGS) {
   const abs = path.isAbsolute(file) ? file : path.join(fromDir, file)

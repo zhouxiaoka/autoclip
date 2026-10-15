@@ -10,6 +10,7 @@ export interface Connection {
   id: string
   name: string
   provider: string
+  catalog_provider_id?: string
   base_url: string
   api_key?: string | null
   has_key?: boolean

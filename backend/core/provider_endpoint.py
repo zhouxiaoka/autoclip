@@ -1,7 +1,7 @@
 """Address lock, console-host detection, and key hints.
 
 Settings line B (roadmap #S). Official URLs come from
-``presets/provider_presets.json``. URL rewrite goes through ``provider_url``
+``backend/presets/provider_presets.json``. URL rewrite goes through ``provider_url``
 (cleanup only — never rejects or raises).
 """
 from __future__ import annotations

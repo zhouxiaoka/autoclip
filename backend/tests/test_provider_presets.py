@@ -1,8 +1,9 @@
-"""P12: presets/provider_presets.json is the only product catalog."""
+"""P12: backend/presets/provider_presets.json is the only product catalog."""
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -12,7 +13,7 @@ import pytest
 from backend.core import cloud_presets, local_presets, model_catalog, provider_presets
 
 ROOT = Path(__file__).resolve().parents[2]
-CATALOG_PATH = ROOT / "presets" / "provider_presets.json"
+CATALOG_PATH = ROOT / "backend" / "presets" / "provider_presets.json"
 PRODUCT_HOSTS = (
     "api.deepseek.com",
     "api.moonshot.cn",
@@ -128,8 +129,13 @@ def test_installed_wheel_loads_catalog_outside_the_repo(tmp_path):
     elsewhere = tmp_path / "elsewhere"
     wheel_dir.mkdir()
     elsewhere.mkdir()
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copytree(ROOT / "backend", source / "backend", ignore=shutil.ignore_patterns("__pycache__", "tests", "data", "logs"))
+    for name in ("pyproject.toml", "README.md", "LICENSE"):
+        shutil.copy2(ROOT / name, source / name)
     subprocess.run(
-        [sys.executable, "-m", "pip", "wheel", "--no-deps", "--wheel-dir", str(wheel_dir), str(ROOT)],
+        [sys.executable, "-m", "pip", "wheel", "--no-deps", "--no-build-isolation", "--wheel-dir", str(wheel_dir), str(source)],
         check=True,
         cwd=elsewhere,
     )
@@ -140,7 +146,8 @@ def test_installed_wheel_loads_catalog_outside_the_repo(tmp_path):
         check=True,
         cwd=elsewhere,
     )
-    assert (installed / "presets" / "provider_presets.json").is_file()
+    assert not (installed / "presets").exists()
+    assert (installed / "backend" / "presets" / "provider_presets.json").is_file()
     env = {
         key: value
         for key, value in os.environ.items()
@@ -149,6 +156,7 @@ def test_installed_wheel_loads_catalog_outside_the_repo(tmp_path):
     env["PYTHONPATH"] = str(installed)
     probe = r"""
 import os
+import shutil
 from pathlib import Path
 os.environ.pop("AUTOCLIP_PROVIDER_PRESETS", None)
 import backend

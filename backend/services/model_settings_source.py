@@ -1,7 +1,7 @@
 """Infer and persist ``preset`` / ``user`` sources on model settings.
 
 First-party AutoClip logic. Catalog product data comes from
-``presets/provider_presets.json`` via ``provider_presets``; this module does
+``backend/presets/provider_presets.json`` via ``provider_presets``; this module does
 not vendor third-party code.
 
 Telemetry and public notices use only stable codes. They never include keys,

@@ -4,7 +4,7 @@
 底层仍是 openai + 官方 base_url，和 Ollama 预设同一套路，但必须带各家自己的 key，
 不能复用用户的 OpenAI key。设置页、CLI、MCP 都用 `--provider deepseek` 这种名字。
 
-产品语义（地址、默认模型、显示名）来自 ``presets/provider_presets.json``。
+产品语义（地址、默认模型、显示名）来自 ``backend/presets/provider_presets.json``。
 """
 from __future__ import annotations
 

@@ -23,7 +23,6 @@ RUN npm ci
 COPY frontend/ ./
 # Vite reads the shared application version for the web build.
 COPY src-tauri/tauri.conf.json /app/src-tauri/tauri.conf.json
-COPY presets /app/presets
 
 # 构建前端
 RUN npm run build
@@ -81,7 +80,6 @@ COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 # 复制项目文件
 COPY backend/ ./backend/
-COPY presets/ ./presets/
 COPY scripts/ ./scripts/
 COPY init_database.py ./
 COPY env.example .env

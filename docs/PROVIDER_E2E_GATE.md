@@ -21,7 +21,7 @@
 
 ## 矩阵数据源
 
-Live 聊天地址和回退型号以 [`matrix.py`](../scripts/provider_e2e/matrix.py) 的 `LIVE_PROVIDERS` 为准，**不要把门槛 live 默认写进产品 JSON**。产品目录里 Gemini 默认是 `gemini-3.8-flash`、地址是 `https://generativelanguage.googleapis.com/v1beta`（给原生 `/models` 用）；live 出片走 OpenAI 兼容根 `…/v1beta/openai`。DashScope live 默认是 `qwen-plus`。有 `presets/provider_presets.json` 时只读显示名和聊天地址输入，保留 live 默认型号；聊天地址仍经 `locked_chat_url` 补齐。可用 `AUTOCLIP_PROVIDER_PRESETS` 指向另一份 JSON。`*_MODEL` 仍可覆盖型号。日志、报告和用例库继续脱敏，不打印密钥。
+Live 聊天地址和回退型号以 [`matrix.py`](../scripts/provider_e2e/matrix.py) 的 `LIVE_PROVIDERS` 为准，**不要把门槛 live 默认写进产品 JSON**。产品目录里 Gemini 默认是 `gemini-3.8-flash`、地址是 `https://generativelanguage.googleapis.com/v1beta`（给原生 `/models` 用）；live 出片走 OpenAI 兼容根 `…/v1beta/openai`。DashScope live 默认是 `qwen-plus`。有 `backend/presets/provider_presets.json` 时只读显示名和聊天地址输入，保留 live 默认型号；聊天地址仍经 `locked_chat_url` 补齐。可用 `AUTOCLIP_PROVIDER_PRESETS` 指向另一份 JSON。`*_MODEL` 仍可覆盖型号。日志、报告和用例库继续脱敏，不打印密钥。
 
 ## 判定
 

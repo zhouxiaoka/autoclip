@@ -87,6 +87,7 @@ class Connection(BaseModel):
     id: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=100)
     provider: str = 'openai'
+    catalog_provider_id: str = ''
     base_url: str = ''
     api_key: str | None = Field(default=None, max_length=2000)
     image_api: Literal['auto', 'openai', 'seedream', 'dashscope', 'fal'] = 'auto'
@@ -105,6 +106,15 @@ class Connection(BaseModel):
         if value not in {'dashscope', 'openai', 'compatible', 'gemini', 'siliconflow', 'ollama', 'lmstudio', *CLOUD_PRESETS}:
             raise ValueError('请选择支持的服务类型；自定义服务请选择 OpenAI 兼容')
         return value
+
+    @model_validator(mode='after')
+    def endpoint_catalog_identity(self):
+        if self.catalog_provider_id:
+            from backend.core.provider_presets import get_provider
+            preset = get_provider(self.catalog_provider_id)
+            if not preset or preset.base_url or preset.protocol == 'local' or self.provider != 'compatible':
+                raise ValueError('请选择需要自定义接口地址的服务商')
+        return self
 
     @field_validator('image_api', mode='before')
     @classmethod
@@ -315,10 +325,20 @@ def for_editing() -> ModelSettings:
         return settings
 
 
+def endpoint_provider_ready(connection: Connection) -> bool:
+    from backend.core.provider_presets import get_provider
+    preset = get_provider(connection.catalog_provider_id or connection.provider)
+    if not preset or preset.base_url or preset.protocol == 'local':
+        return True
+    return bool(connection.base_url.strip()) and connection.validation_status == 'ok'
+
+
 def connection_for(settings: ModelSettings, assignment: Assignment) -> Connection:
     connection = next((c for c in settings.connections if c.id == assignment.connection_id), None)
     if connection is None:
         raise ValueError('模型引用的服务连接已缺失，请到「设置 → 模型」重新选择并保存，完成修复后再生成。')
+    if not endpoint_provider_ready(connection):
+        raise ValueError('请填写服务商接口地址并通过连接验证后再生成。')
     return connection
 
 
@@ -339,17 +359,7 @@ def require_analysis(settings: ModelSettings) -> Assignment:
 
 
 def chat_endpoint(connection: Connection, model: str) -> dict:
-    from backend.core.cloud_presets import CLOUD_PRESETS
-    from backend.core.local_presets import LOCAL_PRESETS
-    defaults = {
-        'openai': 'https://api.openai.com/v1',
-        'dashscope': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        'gemini': 'https://generativelanguage.googleapis.com/v1beta/openai',
-        'siliconflow': 'https://api.siliconflow.cn/v1',
-        **{key: preset.base_url for key, preset in CLOUD_PRESETS.items()},
-        **{key: preset.base_url for key, preset in LOCAL_PRESETS.items()},
-    }
-    from backend.core.provider_endpoint import locked_chat_url, normalize_provider_base_url
+    from backend.core.provider_endpoint import locked_chat_url, normalize_provider_base_url, official_chat_url
     locked = locked_chat_url(connection.provider, connection.base_url)
     # The live catalog lock preserves accepted hosts and schemes, regardless of
     # preset_version. All chat-path rewriting goes through the shared helper.
@@ -358,7 +368,9 @@ def chat_endpoint(connection: Connection, model: str) -> dict:
     elif connection.base_url:
         base = normalize_provider_base_url(connection.base_url, connection.provider).url
     else:
-        base = defaults[connection.provider]
+        base = official_chat_url(connection.provider)
+        if not base:
+            raise ValueError('请填写服务商接口地址')
     if connection.provider == 'dashscope' and connection.base_url and (urlparse(base).hostname or '').endswith('.aliyuncs.com'):
         # Dedicated Bailian endpoints are pasted as a host or its native /api/v1 path; text models
         # use the OpenAI-compatible path on the same host (speech recognition uses /api/v1).

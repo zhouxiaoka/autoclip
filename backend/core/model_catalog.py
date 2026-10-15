@@ -24,7 +24,7 @@ from backend.core.provider_presets import (
 logger = logging.getLogger(__name__)
 
 # 各家仍在维护的稳定别名 / 旗舰型号。实时列表失败时用这份，也作为下拉靠前的常用项。
-# 内容来自 presets/provider_presets.json，禁止再手写第二份。
+# 内容来自 backend/presets/provider_presets.json，禁止再手写第二份。
 CURATED_MODELS: Dict[str, List[str]] = curated_models_map()
 DEFAULT_MODELS: Dict[str, str] = default_models_map()
 PROVIDER_LABELS: Dict[str, str] = provider_labels_map()

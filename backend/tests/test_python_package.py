@@ -39,9 +39,11 @@ def test_distribution_is_autoclip_mcp_and_keeps_runtime_pins():
     from scripts.build_python_release import expected_wheel_name
     assert expected_wheel_name(project['version']) == f'autoclip_mcp-{project["version"]}-py3-none-any.whl'
     package_data = tomllib.loads((ROOT / 'pyproject.toml').read_text(encoding='utf-8'))['tool']['setuptools']['package-data']
-    assert 'provider_presets.json' in package_data['presets']
+    assert 'presets/*.json' in package_data['backend']
+    assert 'presets' not in package_data
     find = tomllib.loads((ROOT / 'pyproject.toml').read_text(encoding='utf-8'))['tool']['setuptools']['packages']['find']
-    assert 'presets' in find['include']
+    assert 'presets' not in find['include']
+    assert 'backend.*' in find['include']
     for relative in (
         '.github/workflows/ci.yml',
         '.github/workflows/desktop-build.yml',

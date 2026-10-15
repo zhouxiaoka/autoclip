@@ -128,6 +128,7 @@ test('detail only shows a successful status for verified connections or ready lo
     '../../components/SpeechRecognitionConfig': { default: () => null },
     './ProviderFields': { default: () => null },
     './ModelPicker': { default: () => null },
+    './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
   }).default
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
@@ -179,6 +180,7 @@ test('detail shows a configure form for an unconnected preset without writing a 
       }),
     },
     './ModelPicker': { default: () => null },
+    './EndpointProviderSetup': { default: () => null },
     './SenseVoiceConfig': { default: () => null },
   }).default
   const ensured = []
@@ -257,7 +259,8 @@ for (const requestedProvider of ['', 'deepseek', 'custom:ds']) {
       './useModelSettings': { useModelSettings: () => m },
       './ProviderFields': { default: () => null },
       './ModelPicker': { default: () => null },
-      './SenseVoiceConfig': { default: () => null },
+      './EndpointProviderSetup': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
       './ProviderCatalog': { default: () => null },
       './DefaultModels': { default: () => React.createElement('div', { 'data-default-models': true }) },
     }).default
@@ -275,3 +278,53 @@ for (const requestedProvider of ['', 'deepseek', 'custom:ds']) {
     assert.equal(saved.analysis.model_source, 'user', 'manual models must never opt into preset fallback')
   })
 }
+
+test('all endpoint-only catalog cards open an address entry flow without binding a default', () => {
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const Detail = loadTs('ProviderDetail.tsx', {
+    '../../i18n': i18n, '../../ui': ui,
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    './ProviderFields': { default: () => null }, './ModelPicker': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+    './EndpointProviderSetup': { default: ({ connection, onEdit }) => React.createElement('input', {
+      'data-endpoint-setup': connection.catalog_provider_id, value: connection.base_url,
+      onChange: event => onEdit({ base_url: event.target.value }),
+    }) },
+  }).default
+  for (const preset of view.catalogProviders().filter(row => !row.base_url && row.protocol !== 'local')) {
+    const opened = []
+    const tree = Catalog({ settings, query: preset.id, filter: 'all', moreOpen: true,
+      onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: id => opened.push(id) })
+    flatten(tree).find(node => node.props?.['data-provider-id'] === preset.id).props.onClick()
+    assert.deepEqual(opened, [preset.id])
+    const edits = []
+    const detail = Detail({ preset, m: { settings, lists: {}, busy: {}, listErrors: {},
+      ensureCatalogProvider: (id, patch) => edits.push({ id, patch }) }, onBack: () => {} })
+    const input = flatten(detail).find(node => node.props?.['data-endpoint-setup'] === preset.id)
+    assert.ok(input)
+    input.props.onChange({ target: { value: 'https://endpoint.example.test/v1' } })
+    assert.deepEqual(edits, [{ id: preset.id, patch: { base_url: 'https://endpoint.example.test/v1' } }])
+    assert.equal(settings.analysis, null)
+  }
+})
+
+test('endpoint setup requires an address and model before sending validation', () => {
+  const calls = []
+  const Setup = loadTs('EndpointProviderSetup.tsx', {
+    react: { ...React, useState: () => ['test-model', () => {}] },
+    antd: { Input: props => React.createElement('input', props) },
+    '../../i18n': i18n, '../../ui': ui,
+    './ProviderFields': { default: () => null },
+  }).default
+  for (const base_url of ['', 'https://endpoint.example.test/v1']) {
+    const connection = { id: 'endpoint', provider: 'compatible', base_url }
+    const tree = Setup({ connection, onEdit: () => {}, m: { testing: false,
+      validateCatalogConnection: (...args) => calls.push(args) } })
+    const button = flatten(tree).find(node => node.type === 'button')
+    assert.equal(button.props.disabled, !base_url)
+    if (base_url) button.props.onClick()
+  }
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][1], 'test-model')
+})

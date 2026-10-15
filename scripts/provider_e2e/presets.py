@@ -1,6 +1,6 @@
 """Optional catalog loader for the provider-e2e matrix.
 
-Reads ``presets/provider_presets.json`` when that file exists (P12) or when
+Reads ``backend/presets/provider_presets.json`` when that file exists (P12) or when
 ``AUTOCLIP_PROVIDER_PRESETS`` points at a JSON file. This module does not ship
 or rewrite a product catalog. Live chat URLs (Gemini ``/openai``) and
 fallback models (DashScope ``qwen-plus``) stay in ``matrix.py``. Never print
@@ -39,7 +39,7 @@ def find_e2e_presets_path(start: Path | None = None) -> Path | None:
     roots = [Path(start).resolve() if start else Path(__file__).resolve().parent, Path.cwd()]
     for root in roots:
         for parent in (root, *root.parents):
-            candidate = parent / 'presets' / 'provider_presets.json'
+            candidate = parent / 'backend' / 'presets' / 'provider_presets.json'
             if candidate in seen:
                 continue
             seen.add(candidate)

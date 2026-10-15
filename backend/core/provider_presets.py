@@ -1,4 +1,4 @@
-"""Single loader for ``presets/provider_presets.json``.
+"""Single loader for ``backend/presets/provider_presets.json``.
 
 This is first-party AutoClip data. The JSON is the product catalog; this module
 only finds, validates and projects it. Installed wheels and the CLI/MCP ZIP
@@ -80,29 +80,19 @@ def _env_presets_path() -> Optional[Path]:
 
 
 def _resource_presets_path() -> Optional[Path]:
-    """Installed wheel / editable checkout: ``presets/provider_presets.json``."""
-    for package, parts in (
-        ("presets", (_RESOURCE_NAME,)),
-        ("backend", ("presets", _RESOURCE_NAME)),
-    ):
-        try:
-            resource = package_files(package)
-            for part in parts:
-                resource = resource.joinpath(part)
-            if not resource.is_file():
-                continue
-            path = Path(os.fspath(resource))
-            if path.is_file():
-                return path
-        except (ModuleNotFoundError, FileNotFoundError, TypeError, OSError, ValueError):
-            continue
-    return None
+    """Installed wheel / editable checkout: ``backend/presets/provider_presets.json``."""
+    try:
+        resource = package_files("backend").joinpath("presets", _RESOURCE_NAME)
+        path = Path(os.fspath(resource))
+        return path if path.is_file() else None
+    except (ModuleNotFoundError, FileNotFoundError, TypeError, OSError, ValueError):
+        return None
 
 
 def _walk_presets(start: Path) -> Optional[Path]:
     seen: set[Path] = set()
     for parent in (start.resolve(), *start.resolve().parents):
-        candidate = parent / "presets" / _RESOURCE_NAME
+        candidate = parent / "backend" / "presets" / _RESOURCE_NAME
         if candidate in seen:
             continue
         seen.add(candidate)
@@ -126,7 +116,7 @@ def find_provider_presets_path(start: Optional[Path] = None) -> Path:
     found = _walk_presets(Path(__file__).resolve().parent) or _walk_presets(Path.cwd())
     if found:
         return found
-    raise FileNotFoundError("presets/provider_presets.json not found")
+    raise FileNotFoundError("backend/presets/provider_presets.json not found")
 
 
 def _strings(value: Any) -> Tuple[str, ...]:

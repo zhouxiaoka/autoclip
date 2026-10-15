@@ -5,6 +5,7 @@ import SpeechRecognitionConfig from '../../components/SpeechRecognitionConfig'
 import type { ProviderPreset } from './providerPresets'
 import type { ModelSettingsStore } from './useModelSettings'
 import ProviderFields from './ProviderFields'
+import EndpointProviderSetup from './EndpointProviderSetup'
 import ModelPicker from './ModelPicker'
 import SenseVoiceConfig from './SenseVoiceConfig'
 import { mainConnection } from './modelSettingsLogic'
@@ -120,6 +121,10 @@ export default function ProviderDetail({
         </div>
       )}
 
+      {(kind === 'needs_endpoint' || (kind === 'guide' && !preset.base_url)) && connection && (
+        <EndpointProviderSetup connection={connection} onEdit={persistEdit} m={m} />
+      )}
+
       {kind === 'local_asr' && preset.id === 'whisper' && (
         <>
           {settings.transcription?.provider !== 'whisper_local' && (
@@ -165,7 +170,7 @@ export default function ProviderDetail({
         </div>
       )}
 
-      {kind !== 'guide' && kind !== 'needs_endpoint' && kind !== 'local_asr' && connection && preset.capabilities.includes('language') && (
+      {kind !== 'local_asr' && connection && preset.capabilities.includes('language') && ((kind !== 'guide' && kind !== 'needs_endpoint') || connected) && (
         isAnalysis && settings.analysis
           ? <Row wide label={t('settings.providers.using_for_analysis')} hint={t('已为你选好推荐模型，可随时更换。')}>
               <ModelPicker

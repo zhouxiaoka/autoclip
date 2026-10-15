@@ -2,6 +2,8 @@
  * Pure state transitions for the AI model settings document.
  * No React, no i18n: the hook and the tests both call these.
  */
+import { endpointProviderReady } from './endpointProvider'
+export { endpointProviderReady } from './endpointProvider'
 import { PROVIDERS, type ProviderKey } from './providers'
 import type { Assignment, Connection, ModelList, ModelSettings } from './modelSettingsApi'
 import { applyModelDefaults, defaultModel } from './modelDefaults'
@@ -22,7 +24,7 @@ export const canDiscover = (c: Connection) => !!(c.api_key || c.has_key || c.bas
 
 /** The connection can actually serve requests: credentials present, or a service that needs none. */
 export const connectionReady = (c: Connection) =>
-  !!(c.api_key || c.has_key) || !!PROVIDERS[c.provider as ProviderKey]?.local || (presetKey(c) === 'compatible' && !!c.base_url)
+  endpointProviderReady(c) && (!!(c.api_key || c.has_key) || !!PROVIDERS[c.provider as ProviderKey]?.local || (presetKey(c) === 'compatible' && !!c.base_url))
 
 export const cleanBinding = (connection_id: string): Assignment => ({ connection_id, model: '', capability: 'auto', model_source: 'preset' })
 export const mainConnection = (s: ModelSettings) => s.connections.find(c => c.id === s.analysis?.connection_id)
@@ -113,7 +115,7 @@ export function chooseProvider(
   create: (provider: ProviderKey) => Connection = newConnection,
 ): { settings: ModelSettings; connection: Connection; changed: boolean } {
   const oldMainId = s.analysis?.connection_id
-  const existing = s.connections.find(c => presetKey(c) === provider && (role === 'analysis' || role === 'transcription' || c.id !== oldMainId))
+  const existing = s.connections.find(c => endpointProviderReady(c) && presetKey(c) === provider && (role === 'analysis' || role === 'transcription' || c.id !== oldMainId))
   const connection = existing || create(provider)
   if (s[role]?.connection_id === connection.id) return { settings: s, connection, changed: false }
   let next: ModelSettings = {
@@ -136,7 +138,7 @@ export function setCoverSeparate(
   create: (provider: ProviderKey) => Connection = newConnection,
 ): ModelSettings {
   const main = mainConnection(s)
-  if (!main) return s
+  if (!main || !endpointProviderReady(main)) return s
   if (!separate) return { ...s, cover: { ...cleanBinding(main.id), model: defaultModel(main.provider, lists[main.id]?.models || [], true) } }
   const connection = create(presetKey(main))
   return { ...s, connections: [...s.connections, connection], cover: cleanBinding(connection.id) }
@@ -145,6 +147,7 @@ export function setCoverSeparate(
 export function setCoverEnabled(s: ModelSettings, enabled: boolean, lists: Record<string, ModelList>): ModelSettings {
   const main = mainConnection(s)
   if (!enabled) return { ...s, cover_enabled: false }
+  if (main && !endpointProviderReady(main)) return s
   return { ...s, cover_enabled: true, ...(!s.cover && main ? { cover: { ...cleanBinding(main.id), model: defaultModel(main.provider, lists[main.id]?.models || [], true) } } : {}) }
 }
 

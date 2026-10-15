@@ -73,11 +73,11 @@ test('empty-url presets are not live defaults and stay off the picker', () => {
     assert.equal(['guide', 'needs_endpoint'].includes(view.connectKind(preset)), true, id)
     assert.equal(view.isLiveConnectable(preset), false, id)
     const result = view.ensureCatalogConnection(blank(), preset)
-    assert.equal(result.changed, false, id)
-    assert.equal(result.connection, undefined, id)
-    assert.equal(result.settings.connections.length, 0, id)
+    assert.equal(result.changed, true, id)
+    assert.equal(result.connection.catalog_provider_id, id)
+    assert.equal(result.settings.connections.length, 1, id)
     assert.equal(result.settings.analysis, null, id)
-    assert.equal(view.catalogDraftConnection(preset), undefined, id)
+    assert.equal(view.catalogDraftConnection(preset).catalog_provider_id, id)
   }
   const providers = loadTs('providers.ts', { '../../i18n': { t: text => text } })
   const picker = providers.providerPickerOptions().flatMap(group => group.options.map(option => option.value))
@@ -230,6 +230,40 @@ test('every catalog name and hint used in the UI exists in all eight locales', (
   for (const lang of langs) {
     for (const key of needed) {
       assert.ok(locales[lang][key] && String(locales[lang][key]).trim(), `${lang}: ${key}`)
+    }
+  }
+})
+
+test('endpoint drafts stay out of every purpose and default until address and validation pass', () => {
+  const slots = loadTs('defaultModelSlots.ts', { '../../i18n': { t: text => text } })
+  const logic = loadTs('modelSettingsLogic.ts', { '../../i18n': { t: text => text } })
+  const defaults = loadTs('modelDefaults.ts', { '../../i18n': { t: text => text } })
+  for (const preset of view.catalogProviders().filter(row => !row.base_url && row.protocol !== 'local')) {
+    assert.ok(view.filterCatalog(preset.id, 'all').some(row => row.id === preset.id))
+    for (const [base_url, validation_status, ready] of [['', 'ok', false], ['https://endpoint.example.test/v1', 'unchecked', false], ['https://endpoint.example.test/v1', 'failed', false], ['https://endpoint.example.test/v1', 'ok', true]]) {
+      const connection = { id: 'endpoint', name: preset.display_name, provider: 'compatible', catalog_provider_id: preset.id, base_url, has_key: true, validation_status }
+      assert.equal(logic.connectionReady(connection), ready, preset.id)
+      const model = { id: 'test-model', analysis: true, capability: 'multimodal', image: true, asr: true, asr_supported: true }
+      const lists = { endpoint: { models: [model], source: 'live', preview: false } }
+      const settings = { ...blank(), connections: [connection] }
+      for (const purpose of slots.PURPOSE_IDS) {
+        const groups = slots.collectModelGroups(settings, lists, purpose)
+        assert.equal(groups.some(group => group.offers.some(offer => offer.connectionId === connection.id)), ready, `${preset.id}: ${purpose}`)
+        const selected = slots.applySmartSelection(settings, purpose, model.id, connection.id)
+        assert.equal(!!selected[purpose]?.connection_id, ready, `${preset.id}: smart ${purpose}`)
+        const fixed = slots.applyFixedSelection(settings, purpose, model.id, connection.id)
+        assert.equal(!!fixed[purpose]?.connection_id, ready, `${preset.id}: fixed ${purpose}`)
+      }
+      assert.equal(!!view.assignAnalysis(settings, connection).analysis, ready)
+      assert.equal(view.isCatalogConnected(settings, preset), ready)
+      const stale = { ...settings, analysis: { connection_id: connection.id, model: '', capability: 'auto' } }
+      assert.equal(!!defaults.applyModelDefaults(stale, connection, [model], false).analysis.model, ready)
+      const bound = { ...stale, analysis: { ...stale.analysis, model: model.id } }
+      assert.equal(!!logic.setCoverEnabled(bound, true, lists).cover, ready)
+      if (ready) {
+        assert.equal(logic.connectionReady(logic.editConnection(settings, connection.id, { base_url: 'https://changed.example.test/v1' }).connections[0]), false)
+        assert.equal(logic.connectionReady(logic.editConnection(settings, connection.id, { api_key: 'test-only' }).connections[0]), false)
+      }
     }
   }
 })

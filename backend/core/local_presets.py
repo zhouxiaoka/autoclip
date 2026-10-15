@@ -8,7 +8,7 @@
 设置文件里允许把 `api_provider` 直接写成 `ollama` / `lmstudio`；`LLMManager` 加载时通过
 `resolve_provider()` 还原成 openai + base_url。
 
-产品语义来自 ``presets/provider_presets.json``。
+产品语义来自 ``backend/presets/provider_presets.json``。
 """
 from __future__ import annotations
 

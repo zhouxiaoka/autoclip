@@ -1,9 +1,10 @@
+import { endpointProviderReady } from './endpointProvider'
 import type { Connection, ModelEntry, ModelSettings } from './modelSettingsApi'
 import { analysisCandidates, imageCandidates } from './providerPresets'
 
 // Preference order only: select a recommendation from the provider's actual list.
 // Never substitute an existing explicit choice when a catalog refreshes.
-// Order comes from presets/provider_presets.json candidates.
+// Order comes from backend/presets/provider_presets.json candidates.
 export function defaultModel(provider: string, models: ModelEntry[], image = false): string {
   const eligible = models.filter(m => image ? m.image : m.analysis)
   if (image && provider === 'infistar') return eligible.find(m => m.id === 'qwen-image-plus')?.id || eligible[0]?.id || ''
@@ -22,6 +23,7 @@ export function analysisModels(models: ModelEntry[], mode: ModelSettings['analys
 }
 
 export function applyModelDefaults(settings: ModelSettings, connection: Connection, models: ModelEntry[], _autoCover: boolean): ModelSettings {
+  if (!endpointProviderReady(connection)) return settings
   const value = { ...settings }
   for (const role of ['analysis', 'vision', 'cover'] as const) {
     const binding = value[role]

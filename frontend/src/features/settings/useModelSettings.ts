@@ -299,6 +299,23 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     finally { setSaving(false) }
   }
 
+  const validateCatalogConnection = async (connection: Connection, model: string) => {
+    if (!settings || !connection.base_url.trim() || !model.trim()) return
+    const version = versions.current[connection.id] || 0
+    setTesting(true)
+    try {
+      const result = await probe(connection, model, false, 'analysis')
+      if (!alive.current || (versions.current[connection.id] || 0) !== version) return
+      emitValidation(connection, result)
+      setSettings(old => old && logic.applyValidation(old, connection.id, result))
+      setDirty(true)
+      if (passed(result)) {
+        backfillModels(connection, result)
+        void discover(connection, true, 'manual')
+      }
+    } finally { setTesting(false) }
+  }
+
   const test = async (role: Role = 'analysis') => {
     const connection = settings && logic.connectionOf(settings, role)
     const binding = settings?.[role]
@@ -331,7 +348,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   return {
     settings, lists, busy, listErrors, dirty, saving, testing, error, setError, main, keyHints,
     load, discover, fetchModels, update, editConnection, chooseProvider, addCustomProvider, ensureCatalogProvider,
-    assignAnalysisConnection, selectLocalAsrProvider, setTranscriptionLocal,
+    assignAnalysisConnection, validateCatalogConnection, selectLocalAsrProvider, setTranscriptionLocal,
     setCoverSeparate, setCoverEnabled, setCoverModel, setVisual, save, test,
   }
 }

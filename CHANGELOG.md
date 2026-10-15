@@ -17,9 +17,9 @@ _（本周尚无改动）_
 
 - 设置页增加「默认模型」四格（精彩片段分析 / 画面理解 / 语音转字幕 / 封面生成）：每格可「智能选择」（`model_source=preset`，只在同一服务商的推荐列表里降级）或「固定」（`model_source=user`）。封面继续用现有 `cover` + `cover_enabled`（关闭即用视频帧）。画面理解可跟随分析模型；跟随或所选模型没有视觉能力时保存标红，不拦截保存。配音 / 配乐仅「即将支持」占位，默认模型区没有视频用途。旧文件缺 `model_source` 的已填模型按 `user` 读。埋点只报来源枚举，不含模型 id 或用户内容。在 U1 服务商列表与 P3 地址来源 API 上提供四格选择。
 - 设置页「服务商与模型」改为预设 JSON 驱动的列表与详情：推荐 / 热门 / 本机·免费 / 更多，支持按名称搜索和能力筛选。未连接的服务商也显示，点「配置」或「一键获取」进入详情引导填写密钥；更多默认收起。打开未连接服务商只显示表单，不写入空连接；保存时丢掉未引用且没有密钥的草稿，保留已有地址的兼容连接。已保存的自定义兼容网关可在列表里修复。没有通用地址的服务商（Azure / Bedrock / Vertex / Cloudflare）不进下拉、不当默认连接。本机 ASR 仅在真正就绪时显示为可用。本版不移植第三方 UI。埋点不携带密钥、完整 URL、路径或用户文本。八语文案已补齐。默认模型四格见下述 U2 功能；自定义服务商新增见上述功能。
-- 设置页锁定地址改为读取 `presets/provider_presets.json`，不再在 `provider_endpoint` 里写死各家 URL。地址规范化只走 `#364` 的 `provider_url`（去掉重复的 `/v1` 规则）；误贴的 `/chat/completions` 仍会截掉。规范化只改写、不拦截保存；控制台域名仍标红提示。
-- 服务商与模型预设改为单一数据源 `presets/provider_presets.json`（约 38 家）。后端 `cloud_presets` / `local_presets` / `DEFAULT_MODELS` 与前端 `providers` / `modelDefaults` 都从这份 JSON 读取；现有地址和默认型号保持不变。wheel / CLI·MCP ZIP 把该文件打进 `presets` 包，用 `importlib.resources` 定位。不含远程拉取，也不改设置页布局。
-- 服务商门槛矩阵读取 `presets/provider_presets.json` 的显示名和聊天地址输入，默认型号始终保留 `matrix.py` 的 live 默认（Gemini 为 `gemini-3.5-flash-lite`），不受产品目录覆盖。`*_MODEL` 仍可覆盖。不改写产品 JSON，日志与报告继续脱敏，不打印密钥。
+- 设置页锁定地址改为读取 `backend/presets/provider_presets.json`，不再在 `provider_endpoint` 里写死各家 URL。地址规范化只走 `#364` 的 `provider_url`（去掉重复的 `/v1` 规则）；误贴的 `/chat/completions` 仍会截掉。规范化只改写、不拦截保存；控制台域名仍标红提示。
+- 服务商与模型预设改为单一数据源 `backend/presets/provider_presets.json`（约 38 家）。后端 `cloud_presets` / `local_presets` / `DEFAULT_MODELS` 与前端 `providers` / `modelDefaults` 都从这份 JSON 读取；现有地址和默认型号保持不变。wheel / CLI·MCP ZIP 把该文件打进 `backend` 包，用 `importlib.resources` 定位。不含远程拉取，也不改设置页布局。空地址预设继续显示接入指南；用户填写自己的 OpenAI 兼容接口并通过验证后才可用于各用途或智能默认，修改地址或密钥后须重新验证。
+- 服务商门槛矩阵读取 `backend/presets/provider_presets.json` 的显示名和聊天地址输入，默认型号始终保留 `matrix.py` 的 live 默认（Gemini 为 `gemini-3.5-flash-lite`），不受产品目录覆盖。`*_MODEL` 仍可覆盖。不改写产品 JSON，日志与报告继续脱敏，不打印密钥。
 - 门槛 live 默认不写进产品 JSON：Gemini 聊天地址补 `/v1beta/openai`（产品目录 `gemini-3.8-flash` 只有 `/v1beta`），DashScope 默认 `qwen-plus`。
 
 - 埋点生产者收口：`os` 只发 `macos`/`windows`/`linux`，出片/设置终态 `outcome` 只发 `success`/`error`/`partial`，版本只报 `app_version`，QA/MCP/反馈补齐公共信封，旧事件打 `legacy=true`。不发 key、完整 URL、用户路径、标题、转写；`feedback_submitted` 仍可带用户正文和联系方式。

@@ -329,7 +329,7 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertEqual(overlay['default_model'], 'qwen-plus')
 
     def test_live_defaults_do_not_write_product_json(self):
-        shipped = ROOT / 'presets' / 'provider_presets.json'
+        shipped = ROOT / 'backend' / 'presets' / 'provider_presets.json'
         existed = shipped.is_file()
         before = shipped.read_bytes() if existed else None
         matrix.reset_live_catalog()
@@ -347,7 +347,7 @@ class ProviderE2EContractTests(unittest.TestCase):
             os.environ.pop('AUTOCLIP_PROVIDER_PRESETS', None)
         matrix.reset_live_catalog()
         try:
-            shipped = ROOT / 'presets' / 'provider_presets.json'
+            shipped = ROOT / 'backend' / 'presets' / 'provider_presets.json'
             path = find_e2e_presets_path()
             providers = {item['id']: item for item in matrix.live_providers()}
             if shipped.is_file():
@@ -512,7 +512,7 @@ class ProviderE2EContractTests(unittest.TestCase):
     def test_docs_exist(self):
         doc = (ROOT / 'docs/PROVIDER_E2E_GATE.md').read_text(encoding='utf-8')
         self.assertIn('provider-e2e', doc)
-        self.assertIn('presets/provider_presets.json', doc)
+        self.assertIn('backend/presets/provider_presets.json', doc)
         self.assertIn('API88_API_KEY', doc)
         self.assertIn('DASHSCOPE_API_KEY', doc)
         self.assertIn('INFISTAR_API_KEY', doc)

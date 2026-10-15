@@ -6,7 +6,7 @@
  * `vision === null` follows analysis and warns when that model has no vision.
  * There is no video purpose slot.
  */
-import { connectionReady } from './modelSettingsLogic'
+import { connectionReady, endpointProviderReady } from './modelSettingsLogic'
 import { findCatalogConnection, matchedCatalogPreset } from './providerCatalogView'
 import { getCatalog, getProvider, type PurposeId as CatalogPurpose } from './providerPresets'
 import type { Assignment, Connection, ModelEntry, ModelList, ModelSettings, ModelSource } from './modelSettingsApi'
@@ -85,6 +85,7 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
   const byId: Record<string, ModelOffer[]> = {}
   const key = CANDIDATE_KEY[purpose]
   for (const connection of settings.connections) {
+    if (!endpointProviderReady(connection)) continue
     const preset = matchedCatalogPreset(connection)
     const provider = preset?.id || connection.provider
     const list = lists[connection.id]
@@ -103,6 +104,7 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
       if (!(preset.candidates[key] || []).includes(modelId)) continue
       if (offers.some(item => item.provider === preset.id)) continue
       const candidate = findCatalogConnection(settings, preset)
+      if (!preset.base_url && preset.protocol !== 'local' && (!candidate || !endpointProviderReady(candidate))) continue
       const connection = candidate && connectionReady(candidate) ? candidate : undefined
       const list = connection && lists[connection.id]
       if (list && !list.models.some(entry => entry.id === modelId && entryFits(purpose, entry))) continue
@@ -185,6 +187,8 @@ export function slotSummary(settings: ModelSettings, _lists: Record<string, Mode
 }
 
 function bindPurpose(settings: ModelSettings, purpose: PurposeId, connectionId: string, model: string, source: ModelSource): ModelSettings {
+  const connection = settings.connections.find(row => row.id === connectionId)
+  if (!connection || !endpointProviderReady(connection)) return settings
   if (purpose === 'transcription') {
     return { ...settings, transcription: { provider: 'cloud', connection_id: connectionId, model, model_source: source } }
   }

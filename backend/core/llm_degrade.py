@@ -43,31 +43,6 @@ QUOTA_CODES = frozenset({
     "allocationquota", "allocationquota_freetieronly", "throttling_allocationquota",
 })
 
-# First-party fallback when P12's loader is not on this branch. Same-provider only.
-PROVIDER_GROUPS: dict[str, str] = {
-    "api88": "sponsor",
-    "infistar": "sponsor",
-    "dashscope": "popular",
-    "openai": "popular",
-    "gemini": "popular",
-    "deepseek": "popular",
-    "seed": "popular",
-    "kimi": "popular",
-    "glm": "popular",
-    "grok": "popular",
-    "siliconflow": "popular",
-}
-FALLBACK_CANDIDATES: dict[str, tuple[str, ...]] = {
-    "dashscope": ("qwen3.8-flash", "qwen3.8-max", "qwen-vl-plus", "qwen-plus"),
-    "openai": ("gpt-5-mini", "gpt-4o-mini"),
-    "gemini": ("gemini-3.8-flash", "gemini-2.5-flash"),
-    "deepseek": ("deepseek-flash",),
-    "seed": ("doubao-seed-2-1-lite-260915",),
-    "kimi": ("kimi-k2.6", "kimi-k3"),
-    "glm": ("glm-5.3",),
-    "grok": ("grok-4.6",),
-}
-
 _TOKEN = re.compile(r"[\s.\-]+")
 
 
@@ -123,15 +98,9 @@ def routing_provider_id(settings: Mapping[str, Any] | None) -> str:
 
 
 def provider_group(provider: str) -> str:
-    key = (provider or "").strip().lower()
-    try:
-        from backend.core.provider_presets import get_provider
-        preset = get_provider(key)
-        if preset is not None:
-            return _canonical_group(preset.group)
-    except ImportError:
-        pass
-    return _canonical_group(PROVIDER_GROUPS.get(key, "other"))
+    from backend.core.provider_presets import get_provider
+    preset = get_provider(provider)
+    return _canonical_group(preset.group if preset else None)
 
 
 def _canonical_group(group: str | None) -> str:
@@ -162,17 +131,8 @@ def order_candidates(entries: Iterable[tuple[str, str]]) -> list[str]:
 
 
 def catalog_candidates(provider: str, purpose: str = "analysis") -> tuple[str, ...]:
-    key = (provider or "").strip().lower()
-    if not key:
-        return ()
-    try:
-        from backend.core.provider_presets import candidates_for
-        found = candidates_for(key, purpose)
-        if found:
-            return tuple(item.strip() for item in found if isinstance(item, str) and item.strip())
-    except ImportError:
-        pass
-    return FALLBACK_CANDIDATES.get(key, ())
+    from backend.core.provider_presets import candidates_for
+    return candidates_for(provider, purpose)
 
 
 def same_provider_candidates(

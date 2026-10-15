@@ -113,7 +113,7 @@ test('Infistar API host is accepted and console detection follows the catalog', 
 
 
 test('Infistar API is accepted and address locks are projected from the catalog', () => {
-  const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, '../../presets/provider_presets.json'), 'utf8'))
+  const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, '../../backend/presets/provider_presets.json'), 'utf8'))
   assert.equal(access.isConsoleHost('infistar.ai'), false)
   assert.equal(access.normalizeCompatibleUrl('https://infistar.ai/v1').warnings.length, 0)
   assert.deepEqual(Array.from(access.ADDRESS_LOCKED).sort(), Object.entries(catalog.providers)

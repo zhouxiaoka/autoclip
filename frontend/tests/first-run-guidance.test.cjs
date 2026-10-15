@@ -7,7 +7,7 @@ const guidance = loadTs('firstRunGuidance.ts')
 const experience = loadTs(path.join(__dirname, '../src/analytics/experience.ts'), {
   './posthog': { captureBusinessEvent() {} },
   './observer': { workflow: { generation() { return 1 }, active() { return false } } },
-  './workflow': { errorCode: () => 'unknown', telemetryId: () => 't-aaaaaaaaaaaa' },
+  './workflow': loadTs(path.join(__dirname, '../src/analytics/workflow.ts')),
   './successRateContract': { sanitizeProviderValidationProperties: x => x, SuccessRateEvent: { ProviderValidationFinished: 'provider_validation_finished' } },
 }, path.join(__dirname, '../src/analytics'))
 

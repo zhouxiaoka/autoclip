@@ -1,10 +1,10 @@
 /**
  * Settings catalog (U1): group, search, capability filter, and connection matching.
- * Driven by presets/provider_presets.json. No React, no telemetry payloads.
+ * Driven by backend/presets/provider_presets.json. No React, no telemetry payloads.
  */
 import { PROVIDERS, type ProviderKey } from './providers'
 import { getCatalog, getProvider, resolveProviderId, type ProviderGroupId, type ProviderPreset } from './providerPresets'
-import { cleanBinding, newConnection, presetKey } from './modelSettingsLogic'
+import { cleanBinding, newConnection, presetKey, endpointProviderReady } from './modelSettingsLogic'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 
 export type CapabilityFilter = 'all' | 'language' | 'asr' | 'tts' | 'image' | 'music' | 'video'
@@ -89,7 +89,7 @@ export function initialLetter(preset: ProviderPreset): string {
 export function findCatalogConnection(settings: ModelSettings, preset: ProviderPreset): Connection | undefined {
   if (preset.id === 'whisper' || preset.id === 'sensevoice') return undefined
   const byId = settings.connections.find(connection => {
-    const resolved = resolveProviderId(connection.provider) || connection.provider
+    const resolved = resolveProviderId(connection.catalog_provider_id || connection.provider) || connection.provider
     if (resolved === preset.id) return preset.id !== 'openai' || presetKey(connection) === 'openai'
     return false
   })
@@ -120,7 +120,8 @@ export function sensevoiceAsrReady(status?: { status?: string } | null): boolean
 /** Credentials (or a keyless connection) are configuration, not proof of connectivity. */
 export function isCatalogConfigured(settings: ModelSettings, preset: ProviderPreset): boolean {
   const connection = findCatalogConnection(settings, preset)
-  if (!connection) return false
+  if (!connection || !endpointProviderReady(connection)) return false
+  if (!preset.base_url && preset.protocol !== 'local') return true
   if (preset.auth === 'none') return true
   return !!(connection.api_key?.trim() || connection.has_key)
 }
@@ -141,12 +142,13 @@ export function selectLocalAsr(settings: ModelSettings, id: LocalAsrId, model?: 
 /** In-memory form row. Opening a card must not write this into settings. */
 export function catalogDraftConnection(preset: ProviderPreset, id = `draft:${preset.id}`): Connection | undefined {
   const kind = connectKind(preset)
-  if (kind === 'guide' || kind === 'needs_endpoint' || kind === 'local_asr') return undefined
+  if (kind === 'local_asr' || (kind === 'guide' && preset.base_url)) return undefined
   if (kind === 'legacy' && isLegacyProviderId(preset.id)) return newConnection(preset.id, id)
   return {
     id,
     name: displayNameOf(preset).slice(0, 100),
     provider: 'compatible',
+    ...(!preset.base_url ? { catalog_provider_id: preset.id } : {}),
     base_url: preset.base_url,
     api_key: '',
     image_api: 'auto',
@@ -158,6 +160,7 @@ export function assignAnalysis(
   settings: ModelSettings,
   connection: Connection,
 ): ModelSettings {
+  if (!endpointProviderReady(connection)) return settings
   const oldMainId = settings.analysis?.connection_id
   if (oldMainId === connection.id) return settings
   let next: ModelSettings = { ...settings, analysis: cleanBinding(connection.id) }
@@ -173,7 +176,7 @@ export function ensureCatalogConnection(
   createId: () => string = () => crypto.randomUUID(),
 ): { settings: ModelSettings; connection?: Connection; changed: boolean } {
   const kind = connectKind(preset)
-  if (kind === 'guide' || kind === 'needs_endpoint' || kind === 'local_asr') return { settings, changed: false }
+  if (kind === 'local_asr' || (kind === 'guide' && preset.base_url)) return { settings, changed: false }
   const existing = findCatalogConnection(settings, preset)
   if (existing) {
     if (!settings.analysis && preset.capabilities.includes('language')) {
@@ -183,15 +186,7 @@ export function ensureCatalogConnection(
   }
   const connection = kind === 'legacy' && isLegacyProviderId(preset.id)
     ? createLegacy(preset.id)
-    : {
-        id: createId(),
-        name: displayNameOf(preset).slice(0, 100),
-        provider: 'compatible',
-        base_url: preset.base_url,
-        api_key: '',
-        image_api: 'auto' as const,
-        image_base_url: '',
-      }
+    : catalogDraftConnection(preset, createId())!
   let next: ModelSettings = { ...settings, connections: [...settings.connections, connection] }
   if (!settings.analysis && preset.capabilities.includes('language') && (kind === 'legacy' || !!preset.base_url)) {
     next = assignAnalysis(next, connection)
@@ -215,7 +210,7 @@ export function customCatalogId(connectionId: string): string {
 
 /** A saved OpenAI-compatible row that does not match any catalog preset (custom gateway). */
 export function matchedCatalogPreset(connection: Connection): ProviderPreset | undefined {
-  const resolved = resolveProviderId(connection.provider) || connection.provider
+  const resolved = resolveProviderId(connection.catalog_provider_id || connection.provider) || connection.provider
   const byId = catalogProviders().find(preset => {
     if (preset.id === 'whisper' || preset.id === 'sensevoice') return false
     if (resolved !== preset.id) return false

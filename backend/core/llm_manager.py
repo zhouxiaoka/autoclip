@@ -86,7 +86,7 @@ class LLMManager:
             from .path_utils import get_data_directory
             return get_data_directory() / "settings.json"
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"无法通过 path_utils 定位 settings.json，回退到旧逻辑: {e}")
+            logger.warning(f"无法通过 path_utils 定位 settings.json，回退到旧逻辑: {sanitize_exception_text(e)}")
         
         # 优先使用默认的用户目录（macOS）- 客户端配置位置
         default_app_dir = Path.home() / "Library" / "Application Support" / "AutoClip"
@@ -113,7 +113,7 @@ class LLMManager:
                 else:
                     logger.warning("配置同步失败")
         except Exception as e:
-            logger.error(f"配置同步检查失败: {e}")
+            logger.error(f"配置同步检查失败: {sanitize_exception_text(e)}")
     
     def _load_settings(self) -> Dict[str, Any]:
         """加载设置"""
@@ -184,7 +184,7 @@ class LLMManager:
                         default_settings.update(saved_settings)
                         
             except Exception as e:
-                logger.warning(f"加载设置文件失败: {e}")
+                logger.warning(f"加载设置文件失败: {sanitize_exception_text(e)}")
         
         self._apply_env_fallbacks(default_settings)
         self._apply_local_preset(default_settings)
@@ -304,7 +304,7 @@ class LLMManager:
             with open(self.settings_file, 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.error(f"保存设置失败: {e}")
+            logger.error(f"保存设置失败: {sanitize_exception_text(e)}")
             raise
     
     def _initialize_provider(self):
@@ -387,7 +387,8 @@ class LLMManager:
             base = normalize_base_url(s.get("dashscope_base_url")) or DASHSCOPE_CN_COMPATIBLE_BASE_URL
         elif provider == "gemini":
             key = s.get("gemini_api_key", "")
-            base = "https://generativelanguage.googleapis.com/v1beta/openai"
+            from backend.core.provider_endpoint import official_chat_url
+            base = official_chat_url('gemini')
         elif provider == "siliconflow":
             from backend.core.model_catalog import SILICONFLOW_BASE_URL
             key = s.get("siliconflow_api_key", "")
@@ -629,7 +630,7 @@ class LLMManager:
             provider = LLMProviderFactory.create_provider(provider_type, api_key, model_name, **provider_kwargs)
             return provider.test_connection()
         except Exception as e:
-            logger.error(f"测试{provider_type.value}连接失败: {e}")
+            logger.error(f"测试{provider_type.value}连接失败: {sanitize_exception_text(e)}")
             return False
     
     def get_current_provider_info(self) -> Dict[str, Any]:

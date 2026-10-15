@@ -553,7 +553,7 @@ function settingsHook(s, transport, initial) {
   const defaults=loadTs('modelDefaults.ts')
   const access=loadTs('providerAccess.ts',{'../../i18n':{t:x=>x},'./providers':providers,'../../analytics/successRateContract':load('successRateContract')})
   const urls=loadTs('providerUrl.ts')
-  const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls})
+  const logic=load('../features/settings/modelSettingsLogic',{'./endpointProvider':loadTs('endpointProvider.ts'),'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls})
   const slotLogic=loadTs('defaultModelSlots.ts',{'../../i18n':{t:x=>x}})
   const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const custom=load('../features/settings/customProvider',{'./providerUrl':urls,'./modelSettingsLogic':logic,'./providerAccess':access},{URL,crypto:{randomUUID:()=>'uuid'}})
@@ -877,4 +877,25 @@ test('save rechecks only the changed optional binding on a validated connection'
  await render().save()
  assert.deepEqual(calls,[['cover','private-new-image']])
  assert.equal(render().lists.cover.preview,true,'non-chat ids must not be backfilled as live chat models')
+})
+
+test('catalog endpoint validation unlocks only the current credentials and keeps telemetry sanitized', async () => {
+  for (const stale of [false, true]) {
+    const s = setup()
+    let finishProbe
+    const initial = { ...modelFixture(), saved: true, analysis: null,
+      connections: [{ id: 'endpoint', name: 'Endpoint', provider: 'compatible', catalog_provider_id: 'azure-openai',
+        base_url: 'https://endpoint.example.test/v1', api_key: 'test-only', validation_status: 'unchecked' }] }
+    const render = settingsHook(s, { discover: async () => ({ models: [], source: 'live' }),
+      test: () => new Promise(resolve => { finishProbe = resolve }) }, initial)
+    await render().load()
+    const pending = render().validateCatalogConnection(render().settings.connections[0], 'test-model')
+    if (stale) render().editConnection(render().settings.connections[0], { base_url: 'https://changed.example.test/v1' })
+    finishProbe({ ok: true, success: true, result: 'success', base_url_host: 'endpoint.example.test', model_ids: ['test-model'] })
+    await pending
+    assert.equal(render().settings.connections[0].validation_status, stale ? 'unchecked' : 'ok')
+    assert.equal(render().settings.analysis, null)
+    const telemetry = JSON.stringify(s.events)
+    for (const privateValue of ['https://', 'test-only', 'test-model', 'azure-openai']) assert.equal(telemetry.includes(privateValue), false)
+  }
 })

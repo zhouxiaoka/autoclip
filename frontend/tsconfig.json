@@ -26,9 +26,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@provider-presets": ["../presets/provider_presets.json"]
+      "@provider-presets": ["../backend/presets/provider_presets.json"]
     }
   },
-  "include": ["src", "../presets/provider_presets.json"],
+  "include": ["src", "../backend/presets/provider_presets.json"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
