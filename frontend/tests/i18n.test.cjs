@@ -8,6 +8,19 @@ const { createInstance } = require('i18next')
 const root = path.join(__dirname, '../src/i18n')
 const langs = ['zh','en','ja','ko','es','pt','ru','fr']
 const catalogs = Object.fromEntries(langs.map(l => [l, JSON.parse(fs.readFileSync(path.join(root, 'locales', l + '.json'), 'utf8'))]))
+test('locale JSON objects have no duplicate keys', () => {
+  for (const lang of langs) {
+    const source = ts.parseJsonText(lang + '.json', fs.readFileSync(path.join(root, 'locales', lang + '.json'), 'utf8'))
+    function visit(node) {
+      if (ts.isObjectLiteralExpression(node)) {
+        const keys = node.properties.map(property => property.name.text)
+        assert.equal(new Set(keys).size, keys.length, `${lang}: duplicate JSON keys`)
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(source)
+  }
+})
 function loadResolver(storage) {
   const code = ts.transpileModule(fs.readFileSync(path.join(root, 'language.ts'), 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS}}).outputText
   const module = {exports:{}}
