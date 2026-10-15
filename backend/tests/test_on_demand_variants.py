@@ -38,6 +38,11 @@ def test_the_top_scored_clips_render_now_and_unscored_ones_always_do():
     assert automatic == {f'd{n}' for n in range(5, 15)}  # ten highest scores
     few = [_base(n, .1) for n in range(3)] + [{'id': 'visual', 'scenes': []}]
     assert jobs._automatic_drafts(few) == {'d0', 'd1', 'd2', 'visual'}
+    top3 = jobs._automatic_drafts(drafts, 3)
+    assert top3 == {f'd{n}' for n in range(12, 15)}
+    assert jobs._render_limit(None) == jobs.AUTO_RENDER_LIMIT
+    assert jobs._render_limit({'render_top_first': 'limit10'}) == jobs.AUTO_RENDER_LIMIT
+    assert jobs._render_limit({'render_top_first': 'top3'}) == 3
 
 
 def test_on_demand_variants_do_not_keep_the_generation_open(monkeypatch):
@@ -180,6 +185,32 @@ def test_long_platform_queues_its_only_eligible_clip_below_global_top_ten(monkey
     assert state['generation']['status'] == 'completed'
     from backend.services.quick_output_runner import status
     assert status('p1')['status'] == 'completed', 'CLI and MCP observers see a terminal outcome'
+
+
+def test_top3_renders_the_highest_scores_first_and_keeps_the_score_local(monkeypatch):
+    drafts = [_base(n, n / 20) for n in range(6)] + [{'id': 'visual', 'title': 'v', 'scenes': [{'id': 'sv', 'label': 'x', 'start': 900, 'end': 930}]}]
+    state, exports = _auto_fixture(monkeypatch, drafts, ['douyin'])
+    state['generation']['features'] = {'render_top_first': 'top3'}
+    jobs._auto_generate('p1', {})
+    by_scene = {}
+    for draft in state['drafts']:
+        by_scene[draft['id']] = draft['scenes'][0]['id']
+    queued = [by_scene[item['draft_id']] for item in state['output_variants'] if item['status'] == 'queued']
+    assert queued[:3] == ['s5', 's4', 's3']
+    assert 'sv' in queued  # unscored drafts still render, after the scored ones
+    assert exports[0].scenes[0].id == 's5'
+    assert all(jobs.SCORE_KEY not in item for item in state['output_variants'])
+    assert sum(item['status'] == 'on_demand' for item in state['output_variants']) == 3
+
+
+def test_a_finished_render_records_a_backend_timestamp(monkeypatch):
+    state = {'generation': {'status': 'rendering'}, 'analysis': {'run_id': 'run'}, 'jobs': [{'job_id': 'j1', 'status': 'running'}],
+             'output_variants': [{'id': 'v1', 'render_job_id': 'j1', 'status': 'running'}]}
+    _patch_store(monkeypatch, state)
+    monkeypatch.setattr(jobs, 'sync_project_completion', lambda *_: None)
+    jobs._sync_variant_status('p1', 'j1', 'completed')
+    assert state['jobs'][0]['finished_at']
+    assert state['output_variants'][0]['status'] == 'completed'
 
 
 def test_each_platform_ranks_its_eligible_candidates_and_retains_backups(monkeypatch):

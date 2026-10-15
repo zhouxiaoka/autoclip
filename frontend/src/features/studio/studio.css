@@ -88,3 +88,16 @@
 .studio-readiness{display:flex;flex-direction:column;gap:10px;margin:16px 0 2px;padding:12px 14px;border:1px solid var(--ac-line);border-radius:12px;background:var(--ac-bg)}
 .studio-readiness-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .studio-readiness-row .ac-status{min-width:0;line-height:1.45}
+.ac-dropzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--ac-space-md);min-height:280px;margin:var(--ac-space-sm) 0 var(--ac-space-lg);padding:var(--ac-space-3xl) var(--ac-space-xl);border:1px dashed var(--ac-line);border-radius:var(--ac-radius);background:var(--ac-bg);text-align:center;transition:border-color 160ms ease,background 160ms ease}
+.ac-dropzone.is-hot{border-color:var(--ac-accent);background:var(--ac-card)}
+.ac-dropzone-title{margin:0;color:var(--ac-ink);font-size:22px;font-weight:500;letter-spacing:-0.02em;line-height:1.3}
+.ac-dropzone-hint{max-width:36rem;margin:0;color:var(--ac-sub);font-size:14px;line-height:1.6}
+.ac-dropzone-field{width:min(520px,100%);margin:var(--ac-space-sm) 0 0}
+.ac-dropzone-field textarea{width:100%;min-height:72px;border:1px solid var(--ac-line);border-radius:var(--ac-radius-sm);background:var(--ac-card);color:var(--ac-ink);padding:var(--ac-space-md);text-align:left}
+.ac-dropzone-file{display:flex;align-items:center;gap:var(--ac-space-sm);margin:0;color:var(--ac-ink);font-size:13px}
+.ac-dropzone-file-label{position:relative;display:inline-flex;color:var(--ac-accent);cursor:pointer;font-size:13px}
+.ac-dropzone-file-label input{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.ac-platform-line{display:flex;align-items:baseline;justify-content:space-between;gap:var(--ac-space-md);margin:var(--ac-space-lg) 0 var(--ac-space-sm);color:var(--ac-ink);font-size:15px;line-height:1.5}
+.ac-platform-line p{margin:0}
+.ac-undo{display:flex;align-items:center;justify-content:space-between;gap:var(--ac-space-md);margin-top:var(--ac-space-md);padding:var(--ac-space-md) var(--ac-space-lg);border-radius:var(--ac-radius-sm);background:var(--ac-ink);color:var(--ac-bg)}
+.ac-undo-action{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
