@@ -11,6 +11,7 @@ import {
   catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected,
   type LocalAsrReady,
 } from './providerCatalogView'
+import { providerIcon } from './providerIcons'
 
 const CAP_KEY: Record<string, string> = {
   language: 'settings.providers.filter.language',
@@ -73,6 +74,7 @@ export default function ProviderDetail({
   const showModels = kind !== 'local_asr' && kind !== 'guide'
   const showConnectPanel = kind !== 'local_asr'
   const name = t(displayNameOf(preset))
+  const icon = providerIcon(preset.id)
   const testing = m.testing
   const listing = connection && busy[connection.id]
   const status = connection?.validation_status
@@ -87,6 +89,11 @@ export default function ProviderDetail({
       </button>
       <header className="ac-provider-detail-head">
         <h3 className="ac-model-section-title">
+          {icon && (
+            <span className={`ac-provider-mark has-icon is-${icon.tone} ac-provider-mark--title`} aria-hidden>
+              <img src={icon.src} alt="" />
+            </span>
+          )}
           {name}
           {isSponsor && (
             <span className="ac-badge">

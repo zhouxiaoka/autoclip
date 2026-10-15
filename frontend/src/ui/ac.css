@@ -451,6 +451,23 @@
   background: var(--ac-line-2); color: var(--ac-sub); display: inline-flex;
   align-items: center; justify-content: center; font-size: 13px; font-weight: 500;
 }
+.ac-provider-mark.has-icon {
+  background: var(--ac-panel, #fff);
+  border: 1px solid var(--ac-line, rgba(0,0,0,.08));
+  color: inherit;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.ac-provider-mark.has-icon img {
+  width: 70%; height: 70%; object-fit: contain; display: block;
+}
+.ac-provider-mark.is-monochrome img { filter: none; }
+.ac-provider-mark--title {
+  width: 28px; height: 28px; margin-right: 8px; vertical-align: -6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+}
+
 .ac-provider-card-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
 .ac-provider-card-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--ac-ink); }
 .ac-provider-caps { display: flex; flex-wrap: wrap; gap: 6px; }

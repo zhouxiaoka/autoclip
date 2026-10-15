@@ -7,6 +7,7 @@ import {
   connectKind, customCatalogId, displayNameOf, filterCatalog, groupCatalog, initialLetter,
   isCatalogConfigured, isCatalogConnected, shouldExpandMore, unmatchedCompatibleConnections, type LocalAsrReady,
 } from './providerCatalogView'
+import { providerIcon } from './providerIcons'
 
 const FILTER_KEY: Record<CapabilityFilter, string> = {
   all: 'settings.providers.filter.all',
@@ -68,6 +69,16 @@ function CustomCard({
   )
 }
 
+function ProviderMark({ presetId, letter }: { presetId: string; letter: string }) {
+  const icon = providerIcon(presetId)
+  if (!icon) return <span className="ac-provider-mark" aria-hidden>{letter}</span>
+  return (
+    <span className={`ac-provider-mark has-icon is-${icon.tone}`} aria-hidden>
+      <img src={icon.src} alt="" />
+    </span>
+  )
+}
+
 function ProviderCard({
   preset, settings, asrReady, selected, onOpen,
 }: {
@@ -88,7 +99,7 @@ function ProviderCard({
       aria-current={selected || undefined}
       onClick={() => onOpen(preset.id)}
     >
-      <span className="ac-provider-mark" aria-hidden>{initialLetter(preset)}</span>
+      <ProviderMark presetId={preset.id} letter={initialLetter(preset)} />
       <span className="ac-provider-card-body">
         <span className="ac-provider-card-title">
           {t(displayNameOf(preset))}
