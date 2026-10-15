@@ -551,6 +551,8 @@ class LLMManager:
         candidates = candidates_for_call(settings)
         last_error: Exception | None = None
         attempt = 0
+        from backend.core.llm_emit import begin_logical_call
+        begin_logical_call()  # E2: all attempts of this call share one retry peak
         with chunk_call_budget():
             for index, model in enumerate(candidates):
                 while True:
