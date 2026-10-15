@@ -2,6 +2,7 @@
 统一错误处理中间件
 为FastAPI应用提供统一的错误处理机制
 """
+import re
 
 import logging
 import traceback
@@ -194,6 +195,46 @@ def _loc_is_secret(loc) -> bool:
     return any(str(part).lower() in _SECRET_KEYS for part in (loc or ()))
 
 
+_CJK = re.compile(r"[\u4e00-\u9fff]")
+_PYDANTIC_PREFIXES = ("Value error, ", "Assertion failed, ")
+_TYPE_HINTS = {
+    "missing": "缺少必填项，请补全后再保存",
+    "string_type": "这里需要填写文字",
+    "int_parsing": "这里需要填写整数", "int_type": "这里需要填写整数",
+    "float_parsing": "这里需要填写数字", "float_type": "这里需要填写数字",
+    "bool_parsing": "这里只能选是或否", "bool_type": "这里只能选是或否",
+    "literal_error": "选项不在可选范围内，请重新选择", "enum": "选项不在可选范围内，请重新选择",
+    "json_invalid": "请求内容格式不对，请刷新页面后重试",
+    "list_type": "这里的格式不对，请重新选择", "dict_type": "这里的格式不对，请重新填写",
+    "model_type": "这里的格式不对，请重新填写",
+    "url_parsing": "地址格式不对，请填写完整的 http(s):// 地址", "url_scheme": "地址格式不对，请填写完整的 http(s):// 地址",
+}
+
+
+def validation_message(error: dict) -> str:
+    """Beginner-readable Chinese message for one pydantic error; never quotes the input."""
+    kind = str(error.get("type") or "")
+    loc = error.get("loc", ())
+    msg = str(error.get("msg") or "")
+    for prefix in _PYDANTIC_PREFIXES:
+        if msg.startswith(prefix):
+            msg = msg[len(prefix):]
+    if _loc_is_secret(loc):
+        if kind == "string_too_long":
+            return "密钥太长，请检查是否粘贴错了"
+        if kind == "missing":
+            return "请填写密钥"
+        return "密钥格式不对，请重新粘贴"
+    if kind == "string_too_long":
+        limit = (error.get("ctx") or {}).get("max_length")
+        return f"内容太长（最多 {limit} 个字符），请检查是否粘贴错了" if limit else "内容太长，请检查是否粘贴错了"
+    if kind == "string_too_short":
+        return "内容太短，请补全后再保存"
+    if _CJK.search(msg):
+        return msg  # our own validators already speak Chinese
+    return _TYPE_HINTS.get(kind) or "填写的内容格式不对，请检查后重试"
+
+
 def handle_validation_error(exc: RequestValidationError, request_id: str = None) -> JSONResponse:
     """处理请求验证错误 — never echo credential-bearing `input` (beginner self-test 422 leak)."""
     errors = []
@@ -201,7 +242,7 @@ def handle_validation_error(exc: RequestValidationError, request_id: str = None)
         loc = error.get("loc", ())
         entry = {
             "field": ".".join(str(part) for part in loc),
-            "message": error.get("msg", ""),
+            "message": validation_message(error),
             "type": error.get("type", ""),
             "loc": list(loc),
         }
