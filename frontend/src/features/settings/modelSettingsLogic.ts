@@ -165,9 +165,8 @@ export const isTextOnly = (s: ModelSettings, lists: Record<string, ModelList>) =
 /** The assignment visual understanding follows (explicit vision, else analysis). */
 /** Model picked in the cover section: stays following only when it is on the analysis connection. */
 export function setCoverModel(s: ModelSettings, connectionId: string, model: string): ModelSettings {
-  // D1: first cover pick (cover was null) is independent; keep follow only when already following on analysis.
-  const follow = !!s.cover && coverFollowsAnalysis(s) && connectionId === s.analysis?.connection_id
-  return { ...s, cover_enabled: true, cover_follows_analysis: follow, cover: { ...cleanBinding(connectionId), model, model_source: 'user' } }
+  // E1: an explicit cover model pick is independent; only 「跟随分析」 turns following on.
+  return { ...s, cover_enabled: true, cover_follows_analysis: false, cover: { ...cleanBinding(connectionId), model, model_source: 'user' } }
 }
 
 export { coverFollowsAnalysis }

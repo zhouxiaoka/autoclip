@@ -107,6 +107,8 @@ def vision_call(content, config=None, *, allow_event_list=False):
     req = request(body)
     started = time.monotonic()
     _telem = {'retries': 0, 'result': None, 'error': None}
+    from backend.core.llm_emit import begin_logical_call
+    begin_logical_call()  # E2: each vision call counts its own retry once
 
     def failure(code, message, status=None):
         return VisionRequestError(code, message, elapsed_seconds=time.monotonic()-started, http_status=status)
