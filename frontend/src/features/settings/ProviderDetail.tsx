@@ -12,6 +12,7 @@ import {
   type LocalAsrReady,
 } from './providerCatalogView'
 import { providerIcon } from './providerIcons'
+import { enabledModelIds } from './modelVisibility'
 
 const CAP_KEY: Record<string, string> = {
   language: 'settings.providers.filter.language',
@@ -68,13 +69,18 @@ export default function ProviderDetail({
   const canTest = kind === 'legacy' || kind === 'compatible' || needsEndpoint
   const isSponsor = !!preset.sponsor
 
-  const hidden = new Set(persisted?.hidden_model_ids || [])
-  // Visibility only: no revalidation, no list reset. Hidden IDs leave the default-model pickers.
-  const toggleModels = (ids: string[], enabled: boolean) => {
+  // Visibility only: no revalidation, no list reset. Only enabled IDs reach the default-model pickers.
+  const enabledSet = persisted && list ? enabledModelIds(settings, persisted, list.models) : new Set<string>()
+  const customized = Array.isArray(persisted?.enabled_model_ids)
+  const toggleModels = (ids: string[], on: boolean) => {
     if (!persisted) return
-    const next = new Set(persisted.hidden_model_ids || [])
-    for (const id of ids) { if (enabled) next.delete(id); else next.add(id) }
-    m.update({ connections: settings.connections.map(c => c.id === persisted.id ? { ...c, hidden_model_ids: [...next] } : c) })
+    const next = new Set(enabledSet)
+    for (const id of ids) { if (on) next.add(id); else next.delete(id) }
+    m.update({ connections: settings.connections.map(c => c.id === persisted.id ? { ...c, enabled_model_ids: [...next] } : c) })
+  }
+  const resetRecommended = () => {
+    if (!persisted) return
+    m.update({ connections: settings.connections.map(c => c.id === persisted.id ? { ...c, enabled_model_ids: null } : c) })
   }
 
   const persistEdit = (patch: Parameters<typeof m.editConnection>[1]) => {
@@ -226,11 +232,17 @@ export default function ProviderDetail({
           <section className="ac-provider-detail-card" data-panel="models">
             <h4 className="ac-provider-models-title">
               {t('可用模型')}
-              <span className="count">{fetched ? (hidden.size ? `${models.length - models.filter(x => hidden.has(x.id)).length}/${models.length}` : models.length) : t('测通后获取')}</span>
+              <span className="count">{fetched ? (persisted ? `${t('已启用')} ${models.filter(x => enabledSet.has(x.id)).length} / ${models.length}` : models.length) : t('测通后获取')}</span>
             </h4>
             {connection && busy[connection.id] && <p className="ac-note">{t('正在获取…')}</p>}
             {connection && listErrors[connection.id] && <p className="ac-note">{t('settings.providers.models_empty')}</p>}
-            {fetched && models.length > 0 && <ModelGroups models={models} hidden={hidden} onToggle={persisted ? toggleModels : undefined} />}
+            {fetched && models.length > 0 && persisted && (
+              <p className="ac-note ac-provider-model-hint" data-visibility={customized ? 'custom' : 'recommended'}>
+                {customized ? t('已按你的勾选；默认模型只从已勾选里选。') : t('已为你勾选推荐模型，可自行增减；默认模型只从已勾选里选。')}
+                {customized && <button type="button" className="ac-link-button" onClick={resetRecommended}>{t('恢复推荐')}</button>}
+              </p>
+            )}
+            {fetched && models.length > 0 && <ModelGroups models={models} enabled={enabledSet} onToggle={persisted ? toggleModels : undefined} />}
             {connection && !busy[connection.id] && !fetched && (
               <p className="ac-note" data-models-hint="pending">{t('填写 API 密钥并测通后，将自动拉取可用模型。')}</p>
             )}
@@ -244,17 +256,17 @@ export default function ProviderDetail({
   )
 }
 
-function ModelGroups({ models, hidden, onToggle }: {
+function ModelGroups({ models, enabled: on, onToggle }: {
   models: Array<DetailModel>
-  hidden: Set<string>
+  enabled: Set<string>
   onToggle?: (ids: string[], enabled: boolean) => void
 }) {
   return (
     <>
       {MODEL_GROUP.map(group => {
-        const rows = models.filter(model => modelGroupOf(model) === group.key)
+        const rows = models.filter(model => modelGroupOf(model) === group.key).sort((a, b) => Number(on.has(b.id)) - Number(on.has(a.id)))
         if (!rows.length) return null
-        const enabled = rows.filter(model => !hidden.has(model.id)).length
+        const enabled = rows.filter(model => on.has(model.id)).length
         return (
           <details key={group.key} className="ac-provider-model-block" data-model-group={group.key} open={group.open}>
             <summary className="ac-provider-model-group">
@@ -268,10 +280,10 @@ function ModelGroups({ models, hidden, onToggle }: {
             </summary>
             <ul className="ac-provider-model-list">
               {rows.map(model => (
-                <li key={model.id} className={`ac-mono${hidden.has(model.id) ? ' is-hidden' : ''}`} data-model-id={model.id}>
+                <li key={model.id} className={`ac-mono${!on.has(model.id) && onToggle ? ' is-hidden' : ''}`} data-model-id={model.id}>
                   {onToggle
                     ? <label className="ac-provider-model-check">
-                        <input type="checkbox" checked={!hidden.has(model.id)} aria-label={`${t('启用')} ${model.id}`} onChange={event => onToggle([model.id], event.target.checked)} />
+                        <input type="checkbox" checked={on.has(model.id)} aria-label={`${t('启用')} ${model.id}`} onChange={event => onToggle([model.id], event.target.checked)} />
                         <span>{model.id}</span>
                       </label>
                     : model.id}

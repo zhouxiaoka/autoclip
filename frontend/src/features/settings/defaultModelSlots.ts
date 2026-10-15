@@ -8,6 +8,7 @@
  */
 import { connectionReady, endpointProviderReady, visionFollowLacksCapability } from './modelSettingsLogic'
 export { modelHasVision } from './modelSettingsLogic'
+import { enabledModelIds } from './modelVisibility'
 import { findCatalogConnection, matchedCatalogPreset } from './providerCatalogView'
 import { syncFollowingCover } from './modelDefaults'
 import { getCatalog, getProvider, type PurposeId as CatalogPurpose } from './providerPresets'
@@ -92,8 +93,11 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
     const preset = matchedCatalogPreset(connection)
     const provider = preset?.id || connection.provider
     const list = lists[connection.id]
-    const hidden = new Set(connection.hidden_model_ids || [])
-    const live = (list?.models || []).filter(entry => entryFits(purpose, entry) && !hidden.has(entry.id))
+    const fitting = (list?.models || []).filter(entry => entryFits(purpose, entry))
+    // Visibility applies to account lists only. Explicit user choice is strict; the recommendation never empties a purpose.
+    const enabled = list && isAccountList(list) ? enabledModelIds(settings, connection, list.models) : null
+    const picked = enabled ? fitting.filter(entry => enabled.has(entry.id)) : fitting
+    const live = !enabled || Array.isArray(connection.enabled_model_ids) || picked.length ? picked : fitting
     for (const entry of live) {
       addOffer(byId, {
         modelId: entry.id, provider, connectionId: connection.id,

@@ -31,6 +31,8 @@ def test_gateway_endpoint_types_split_video_tts_task_from_language():
         assert not _row(rows, name)['analysis'] and _row(rows, name)['kind'] == 'audio'
 
 
-def test_hidden_model_ids_round_trip_and_dedupe():
-    c = Connection(id='c1', name='88API', provider='openai', hidden_model_ids=[' veo-3.1 ', 'veo-3.1', ''])
-    assert c.hidden_model_ids == ['veo-3.1']
+def test_enabled_model_ids_default_none_and_dedupe():
+    assert Connection(id='c0', name='x', provider='openai').enabled_model_ids is None
+    c = Connection(id='c1', name='88API', provider='openai', enabled_model_ids=[' claude-opus-5 ', 'claude-opus-5', ''])
+    assert c.enabled_model_ids == ['claude-opus-5']
+    assert Connection(id='c2', name='x', provider='openai', enabled_model_ids=[]).enabled_model_ids == []

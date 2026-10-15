@@ -573,3 +573,5 @@ details.ac-provider-model-block[open] > summary.ac-provider-model-group::before 
 .ac-provider-model-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .ac-provider-model-check input { accent-color: var(--ac-ink); }
 .ac-provider-model-list li.is-hidden { color: var(--ac-muted); }
+.ac-provider-model-hint { margin: 0 0 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ac-link-button { appearance: none; border: 0; background: transparent; padding: 0; color: var(--ac-ink); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }

@@ -22,7 +22,7 @@ export interface Connection {
   base_url_source?: Source
   preset_version?: number
   custom_models?: CustomModelOffer[]
-  hidden_model_ids?: string[]
+  enabled_model_ids?: string[] | null
 }
 export interface Assignment { connection_id: string; model: string; capability: Capability; model_source?: Source }
 export interface ModelSettings {

@@ -98,12 +98,14 @@ class Connection(BaseModel):
     base_url_source: Source | None = None
     preset_version: int = Field(default=0, ge=0)
     custom_models: list[CustomModelOffer] = Field(default_factory=list, max_length=200)
-    # OhMyGame-style visibility: every account model is enabled unless its ID is listed here.
-    hidden_model_ids: list[str] = Field(default_factory=list, max_length=2000)
+    # OhMyGame-style visibility whitelist. None = never edited: the UI enables a small recommended set.
+    enabled_model_ids: list[str] | None = Field(default=None, max_length=2000)
 
-    @field_validator('hidden_model_ids')
+    @field_validator('enabled_model_ids')
     @classmethod
-    def clean_hidden(cls, value):
+    def clean_enabled(cls, value):
+        if value is None:
+            return None
         return list(dict.fromkeys(str(item).strip()[:200] for item in value if str(item).strip()))
 
     @field_validator('provider')
