@@ -794,6 +794,8 @@ export interface WhisperModelDownload {
   message: string
 }
 
+export type WhisperModelSource = 'auto' | 'huggingface' | 'hf-mirror'
+
 // 语音识别 / Whisper 运行时与模型管理
 export const speechApi = {
   getRuntimeStatus: (): Promise<WhisperRuntimeStatus> => api.get('/whisper/runtime-status'),
@@ -802,6 +804,9 @@ export const speechApi = {
   getModels: (): Promise<WhisperModel[]> => api.get('/whisper-models'),
   downloadModel: (model: string): Promise<WhisperModelDownload> => api.post('/whisper-models/download', { model }),
   deleteModel: (model: string): Promise<unknown> => api.delete(`/whisper-models/${model}`),
+  /** E3: where Whisper models download from. auto probes huggingface.co and switches to hf-mirror when blocked. */
+  getModelSource: (): Promise<{ source: WhisperModelSource; effective: WhisperModelSource }> => api.get('/whisper/model-source'),
+  setModelSource: (source: WhisperModelSource): Promise<{ source: WhisperModelSource }> => api.put('/whisper/model-source', { source }),
 }
 
 export default api

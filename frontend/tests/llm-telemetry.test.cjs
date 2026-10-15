@@ -122,6 +122,7 @@ test('generation and production finished carry run identity; failures keep stage
 test('trackAsrReadiness posts the allowlisted probe', () => {
   const events = []
   const studio = load('studio', {
+    './flags': { flagAssigned: () => false },
     './posthog': { captureBusinessEvent: (event, props) => { events.push({ event, props }); return true } },
     './observer': { workflow: { generation: () => 1, active: () => true, list: () => [], rememberProject() {}, observeStudio() {}, context: () => ({}) } },
     './workflow': workflow,
