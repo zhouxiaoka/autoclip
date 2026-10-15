@@ -136,6 +136,40 @@ test('trackAsrReadiness posts the allowlisted probe', () => {
   assert.equal(JSON.stringify(events).includes('sk-'), false)
 })
 
+test('same-project attempts emit independent generation and production usage', () => {
+  const events = []
+  const storage = { getItem: () => null, setItem() {}, removeItem() {} }
+  const tracker = new workflow.WorkflowTracker(storage, () => true, (event, props) => {
+    events.push({ event, props }); return true
+  })
+  // Persisted run fields from the backend: two successes, then one success and one failure.
+  const runs = [
+    { status: 'completed', llm_calls: 2, prompt_tokens: 22, completion_tokens: 8 },
+    { status: 'failed', llm_calls: 2, prompt_tokens: 11, completion_tokens: 4,
+      billable_calls_before_failure: 1, error_code: 'provider_error', failure_stage: 'analyze' },
+  ]
+  for (const [index, run] of runs.entries()) {
+    const runId = `run-${index + 1}`
+    tracker.watch('studio-generation', 'p1', undefined, undefined, {}, true)
+    tracker.watch('studio-production', 'plan', 'p1', undefined, {}, true, runId)
+    const snapshot = {
+      generation: run,
+      analysis: { ...run, phase: 'production', run_id: runId },
+      plan: { id: 'plan', mode: 'ai', confirmed_analysis: 'subtitle' },
+    }
+    for (const watch of tracker.list()) tracker.observeStudio(watch, snapshot)
+  }
+  for (const event of ['studio_generation_finished', 'studio_production_finished']) {
+    const rows = events.filter(row => row.event === event)
+    assert.equal(rows.length, 2)
+    assert.deepEqual(rows.map(({ props }) => [props.llm_calls, props.prompt_tokens, props.completion_tokens]),
+      [[2, 22, 8], [2, 11, 4]])
+    assert.equal(rows[1].props.billable_calls_before_failure, 1)
+    assert.notEqual(rows[0].props.attempt_id, rows[1].props.attempt_id)
+    assert.equal(rows[0].props.flow_id, rows[1].props.flow_id)
+  }
+})
+
 test('Sentry keeps only a valid anonymous id and drops emails', () => {
   let config
   let user

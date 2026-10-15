@@ -109,6 +109,44 @@ def test_provider_call_success_and_failure_emit_llm_request_finished(capture):
     assert snapshot.get("degrade_count", 0) == 0
 
 
+def test_same_project_runs_persist_independent_usage(capture, monkeypatch, tmp_path):
+    from backend.core import llm_usage
+    from backend.services.studio import store
+
+    monkeypatch.setattr(telem, "configured_connection_fields", lambda: {})
+    monkeypatch.setattr(store, "directory", lambda project_id: tmp_path / project_id)
+    monkeypatch.setattr(llm_usage, "usage_path", lambda project_id: tmp_path / project_id / "metadata" / llm_usage.FILE)
+    (tmp_path / "p1").mkdir()
+    provider = _ProbeProvider()
+    saved = []
+    for run_id, calls, fail in (("run-1", 2, False), ("run-2", 1, True), ("run-3", 0, False)):
+        with llm_usage.tracking("p1"), telem.track_run():
+            assert telem.run_snapshot("p1").get("llm_calls", 0) == 0
+            for _ in range(calls):
+                response = provider.call("fixture")
+                llm_usage.record(response.model, response.usage, prompt_chars=7, completion_chars=11)
+            if fail:
+                with pytest.raises(_StatusError):
+                    provider.call("fixture", fail=True)
+            status = "failed" if fail else "completed"
+            store.write("p1", {
+                "schema_version": 2,
+                "generation": {"status": status},
+                "analysis": {"status": status, "phase": "production", "run_id": run_id},
+            })
+            saved.append(json.loads((tmp_path / "p1" / "metadata" / "studio.json").read_text()))
+
+    for state, expected in zip(saved, ((2, 22, 8), (2, 11, 4), (0, 0, 0))):
+        for name in ("generation", "analysis"):
+            record = state[name]
+            assert tuple(record.get(key, 0) for key in ("llm_calls", "prompt_tokens", "completion_tokens")) == expected
+    assert saved[1]["generation"]["billable_calls_before_failure"] == 1
+    # Cost reporting remains project-wide, including previous attempts.
+    assert llm_usage.summary("p1")["total"]["calls"] == 3
+    assert llm_usage.summary("p1")["total"]["prompt_tokens"] == 33
+    assert telem.run_snapshot("p1") == {"billable_calls_before_failure": 0}
+
+
 def test_opt_out_and_secret_payloads_are_not_posted(monkeypatch, tmp_path, capture):
     (tmp_path / "privacy.json").write_text('{"analytics":false}', encoding="utf-8")
     telem.request_finished(provider="openai", outcome="success", http_status=200)

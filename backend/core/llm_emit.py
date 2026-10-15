@@ -418,7 +418,6 @@ def run_snapshot(project_id: str | None = None) -> dict[str, Any]:
     acc = _run_acc.get()
     # Settings are a last-saved identity, not this run. Only fill gaps inside track_run.
     configured = configured_connection_fields() if acc is not None else {}
-    usage_total = _usage_total(project_id)
     provider = (acc.provider if acc and acc.provider else None) or configured.get("provider")
     model = _safe_model((acc.model if acc and acc.model else None) or configured.get("model"))
     host = (acc.host if acc and acc.host else None) or configured.get("base_url_host")
@@ -428,15 +427,16 @@ def run_snapshot(project_id: str | None = None) -> dict[str, Any]:
         "base_url_host": host,
         "http_status": acc.last_http_status if acc else None,
         "upstream_error_type": acc.last_upstream if acc else None,
-        "billable_calls_before_failure": acc.billable if acc else usage_total.get("calls") or 0,
+        "billable_calls_before_failure": acc.billable if acc else 0,
     }
-    calls = usage_total.get("calls") or (acc.calls if acc else 0)
+    # Project usage is historical; track_run's accumulator belongs to this attempt only.
+    calls = acc.calls if acc else 0
     if calls:
         raw["llm_calls"] = calls
-    prompt = usage_total.get("prompt_tokens") or (acc.prompt_tokens if acc else 0)
+    prompt = acc.prompt_tokens if acc else 0
     if prompt:
         raw["prompt_tokens"] = prompt
-    completion = usage_total.get("completion_tokens") or (acc.completion_tokens if acc else 0)
+    completion = acc.completion_tokens if acc else 0
     if completion:
         raw["completion_tokens"] = completion
     if acc and acc.reasoning_tokens:
@@ -713,17 +713,6 @@ def _asr_provider_from_code(code: Any, provider: Any = None) -> str:
     if text.startswith("cloud"):
         return "cloud"
     return "whisper_local"
-
-
-def _usage_total(project_id: str | None) -> dict[str, int]:
-    if not project_id:
-        return {}
-    try:
-        from backend.core import llm_usage
-        total = llm_usage.summary(project_id).get("total") or {}
-        return {key: int(total[key]) for key in ("calls", "prompt_tokens", "completion_tokens") if key in total}
-    except Exception:  # noqa: BLE001
-        return {}
 
 
 def _safe_model(value: Any) -> str | None:

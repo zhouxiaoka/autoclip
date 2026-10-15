@@ -57,6 +57,8 @@
 | `degrade_count` | 本次 run 已发生的同服务商降级次数 |
 | `llm_calls` / `prompt_tokens` / `completion_tokens` | 本次 run 累计，可空 |
 
+查询这些字段时以当前尝试为单位；同一项目重试或重新运行不包含历史调用与 tokens。计数来自当前 `track_run`，没有当前 run 时不回退到项目历史；项目成本报表 `llm_usage.summary(project_id)` 仍累计历史。回归验收：同一项目连续两次运行分别记录 2 次成功、1 次成功加 1 次失败，终态持久化和前端事件应分别为 2/2 次调用、22/11 prompt tokens、8/4 completion tokens，后一次失败前成功调用数为 1；零调用的新尝试不带历史值。
+
 ### `asr_readiness_checked`
 
 | 字段 | 规则 |
