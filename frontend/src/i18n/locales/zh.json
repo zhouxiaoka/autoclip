@@ -1878,5 +1878,10 @@
   "settings.providers.fetch_list_updated": "已根据账号可用模型更新列表。",
   "settings.providers.fetch_list_no_overlap": "推荐候选都不在当前账号的可用列表里，请手选模型或刷新列表。",
   "settings.providers.fetch_list_truncated": "模型列表过长，只保留前 2000 个；其余请手动填写。",
-  "API Key 无效或已过期，请检查后重试": "API Key 无效或已过期，请检查后重试"
+  "API Key 无效或已过期，请检查后重试": "API Key 无效或已过期，请检查后重试",
+  "模型下载源": "模型下载源",
+  "自动：官方源连不上时改用 hf-mirror 镜像。": "自动：官方源连不上时改用 hf-mirror 镜像。",
+  "自动": "自动",
+  "hf-mirror 镜像": "hf-mirror 镜像",
+  "保存失败，请重试": "保存失败，请重试"
 }

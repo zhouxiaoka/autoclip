@@ -1878,5 +1878,10 @@
   "settings.providers.fetch_list_updated": "Lista atualizada com os modelos disponíveis nesta conta.",
   "settings.providers.fetch_list_no_overlap": "Nenhum candidato recomendado está na lista desta conta. Escolha um manualmente ou atualize a lista.",
   "settings.providers.fetch_list_truncated": "A lista de modelos é longa demais; só os primeiros 2000 são mantidos. Insira os demais manualmente.",
-  "API Key 无效或已过期，请检查后重试": "A chave de API é inválida ou expirou. Verifique-a e tente novamente."
+  "API Key 无效或已过期，请检查后重试": "A chave de API é inválida ou expirou. Verifique-a e tente novamente.",
+  "模型下载源": "Origem do download do modelo",
+  "自动：官方源连不上时改用 hf-mirror 镜像。": "Automático: usa o espelho hf-mirror quando a fonte oficial não responde.",
+  "自动": "Automático",
+  "hf-mirror 镜像": "hf-mirror (espelho)",
+  "保存失败，请重试": "Falha ao salvar. Tente novamente."
 }

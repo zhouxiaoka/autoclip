@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { pipInstallErrorText } from '../utils/pipInstallError'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Popconfirm, Select, message } from 'antd'
-import { speechApi, WhisperRuntimeStatus, WhisperModel } from '../services/api'
+import { speechApi, WhisperRuntimeStatus, WhisperModel, WhisperModelSource } from '../services/api'
 import { Btn, Row } from '../ui'
 import LocalModelPrepare from '../features/settings/LocalModelPrepare'
 
@@ -22,6 +22,13 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = ({ selec
   const pendingModel = useRef<string | null>(null)
   const [preparing, setPreparing] = useState(false)
   const timer = useRef<number | null>(null)
+  const [modelSource, setModelSource] = useState<WhisperModelSource>('auto')
+  useEffect(() => { speechApi.getModelSource().then(v => setModelSource(v.source)).catch(() => undefined) }, [])
+  const changeModelSource = async (source: WhisperModelSource) => {
+    const previous = modelSource
+    setModelSource(source)
+    try { await speechApi.setModelSource(source) } catch { setModelSource(previous); message.error(t('保存失败，请重试')) }
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -140,6 +147,11 @@ const SpeechRecognitionConfig: React.FC<SpeechRecognitionConfigProps> = ({ selec
       onPrepare={() => void prepare()} />
     {!runtime && !loading && <p className="ac-note">{t('暂时无法读取本地模型状态。')} <Btn variant="text" size="sm" onClick={() => void refresh()}>{t('重试')}</Btn></p>}
     <details className="ac-disclosure"><summary>{t('本地模型管理')}</summary>
+      <Row label={t('模型下载源')} hint={t('自动：官方源连不上时改用 hf-mirror 镜像。')}>
+        <Select aria-label={t('模型下载源')} style={{ minWidth: 180 }} value={modelSource} disabled={downloading}
+          options={[{ value: 'auto', label: t('自动') }, { value: 'huggingface', label: 'Hugging Face' }, { value: 'hf-mirror', label: t('hf-mirror 镜像') }]}
+          onChange={value => void changeModelSource(value as WhisperModelSource)} />
+      </Row>
       {models.filter(m => m.status === 'downloaded').map(m => <Row key={m.name} label={`${m.name} · ${m.size}`}>
         <Popconfirm title={t('删除模型 {{value1}}？', { value1: m.name })} onConfirm={() => handleDelete(m.name)} okText={t('删除')} cancelText={t('取消')}><Btn variant="danger" size="sm">{t('删除')}</Btn></Popconfirm>
       </Row>)}
