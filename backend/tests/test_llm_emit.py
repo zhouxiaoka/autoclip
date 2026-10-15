@@ -299,10 +299,13 @@ def test_cross_stage_usage_persists_once_per_generation(capture, monkeypatch, tm
         assert record["reasoning_tokens"] == 0
         assert record["retry_count"] == int(retry)
 
-    # A no-call follow-up worker preserves this generation's accumulated usage.
+    # A zero-call render worker must preserve the retries used by final events.
     with telem.track_run():
         store.write("p1", json.loads(path.read_text()))
-    assert json.loads(path.read_text())["generation"]["llm_calls"] == 3
+    final_state = json.loads(path.read_text())
+    for name in ("generation", "analysis"):
+        assert final_state[name]["llm_calls"] == 3
+        assert final_state[name]["retry_count"] == int(retry)
 
     # A new generation carrying old fields must explicitly replace them with zero.
     state = json.loads(path.read_text())
