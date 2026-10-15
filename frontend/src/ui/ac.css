@@ -522,3 +522,34 @@
 .ac-provider-group[data-provider-group="more"] .ac-provider-group-head {
   margin-bottom: 8px;
 }
+
+/* ---- v5: OhMyGame-style compact pills (settings) ---- */
+.ac-btn.ac-btn--pill {
+  height: 32px; min-height: 32px; padding: 0 14px; font-size: 13px; font-weight: 500;
+  border-radius: 999px; gap: 6px; white-space: nowrap;
+}
+.ac-btn.ac-btn--pill:not(.ac-btn--cta) { background: transparent; border-color: var(--ac-line); color: var(--ac-ink); }
+.ac-btn.ac-btn--pill:not(.ac-btn--cta):hover:not(:disabled) { background: var(--ac-line-2); border-color: var(--ac-muted); }
+.ac-btn.ac-btn--pill.ac-btn--cta { padding: 0 16px; }
+.ac-sponsor-inline { display: inline-flex; align-items: center; flex: 0 0 auto; }
+.ac-row-control--wide:has(.ac-sponsor-inline) { flex-wrap: nowrap; }
+.ac-row-control--wide:has(.ac-sponsor-inline) > :first-child { flex: 1 1 auto; min-width: 0; }
+.ac-sponsor-inline .ac-btn--pill { height: 28px; min-height: 28px; padding: 0 12px; font-size: 12.5px; }
+.ac-provider-test-row { margin-top: 12px; }
+.ac-provider-action-label {
+  display: inline-flex; align-items: center; height: 26px; padding: 0 11px;
+  border: 1px solid var(--ac-line); border-radius: 999px; font-size: 12px; color: var(--ac-ink); background: transparent;
+}
+.ac-provider-card:hover .ac-provider-action-label { border-color: var(--ac-muted); }
+
+/* 「更多服务商 (N)」独立折叠条 */
+.ac-provider-group[data-provider-group="more"] { margin-top: 8px; }
+.ac-provider-more {
+  border-style: solid; background: var(--ac-card); padding: 12px 16px; margin: 0;
+  font-size: 14px; font-weight: 500;
+}
+.ac-provider-more:focus-visible { outline: 2px solid var(--ac-ink); outline-offset: 2px; }
+.ac-provider-more-label { display: inline-flex; align-items: baseline; }
+.ac-provider-more-chevron { flex: 0 0 auto; transition: transform .15s ease-out; }
+.ac-provider-more[aria-expanded="true"] .ac-provider-more-chevron { transform: rotate(180deg); }
+.ac-provider-more[aria-expanded="true"] + .ac-provider-grid { margin-top: 12px; }

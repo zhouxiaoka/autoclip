@@ -204,7 +204,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     {m.error && <p className="studio-error" role="alert">{m.error}</p>}
     <div className="ac-savebar">
       <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? (validationTargets(settings).some(({ connection }) => connection.validation_status === 'failed') ? t('校验未通过。设置已保存，但开始生成前会拦住。') : t(VISION_HINT_KEY)) : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
-      <Btn variant="cta" disabled={m.testing} loading={m.saving} onClick={() => void save()}>{t('保存设置')}</Btn>
+      <Btn variant="cta" size="sm" className="ac-btn--pill" disabled={m.testing} loading={m.saving} onClick={() => void save()}>{t('保存设置')}</Btn>
     </div>
     <AddCustomProviderDialog open={customOpen} onClose={() => setCustomOpen(false)}
       onSubmit={draft => { m.addCustomProvider(draft); setCustomOpen(false) }} />

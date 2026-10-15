@@ -201,23 +201,37 @@ export default function ProviderCatalog({
       {CATALOG_GROUPS.map(group => {
         const rows = groups[group]
         if (!rows.length) return null
-        const collapsed = group === 'more' && !expandMore
-        // OhMyGame:「更多」默认收起，整行按钮展开；展开后再显示列表与收起。
-        if (group === 'more' && collapsed) {
+        // OhMyGame models-settings.tsx 175–182：「更多服务商 (N)」是独立折叠条，默认收起，展开后才渲染列表。
+        if (group === 'more') {
           return (
-            <section key={group} className="ac-provider-group" data-provider-group={group}>
+            <section key={group} className="ac-provider-group" data-provider-group={group} data-expanded={expandMore ? '1' : '0'}>
               <button
                 type="button"
                 className="ac-provider-more"
-                aria-expanded={false}
+                aria-expanded={expandMore}
+                aria-controls="ac-provider-more-list"
                 onClick={onToggleMore}
               >
-                <span>
+                <span className="ac-provider-more-label">
                   {t(GROUP_KEY[group])}
                   <small>({rows.length})</small>
                 </span>
-                <span className="ac-provider-more-chevron" aria-hidden>▾</span>
+                <svg className="ac-provider-more-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M6 9l6 6 6-6" /></svg>
               </button>
+              {expandMore && (
+                <div id="ac-provider-more-list" className="ac-provider-grid">
+                  {rows.map(preset => (
+                    <ProviderCard
+                      key={preset.id}
+                      preset={preset}
+                      settings={settings}
+                      asrReady={asrReady}
+                      selected={selectedId === preset.id}
+                      onOpen={onOpen}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
           )
         }
@@ -228,11 +242,6 @@ export default function ProviderCatalog({
                 {t(GROUP_KEY[group])}
                 <span className="count">{rows.length}</span>
               </h3>
-              {group === 'more' && (
-                <Btn variant="text" size="sm" aria-expanded={true} onClick={onToggleMore}>
-                  {t('settings.providers.collapse')}
-                </Btn>
-              )}
             </header>
             {(
               <div className={`ac-provider-grid${group === 'recommended' ? ' ac-provider-grid--recommended' : ''}`}>

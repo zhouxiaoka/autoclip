@@ -52,27 +52,14 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
   const addressEditable = canEditAddress(key)
   return <>
     {picker}
-    {preset?.sponsor && (
-      <div className="ac-sponsor ac-sponsor--compact" data-sponsor={preset.sponsor.id}>
-        <Btn
-          variant="cta"
-          size="sm"
-          onClick={() => {
-            trackSponsorLinkOpened({ sponsor: preset.sponsor!.id, target: 'register', placement })
-            openExternalLink(preset.sponsor!.registerUrl)
-          }}
-        >
-          {t('settings.providers.one_click')}
-        </Btn>
-      </div>
-    )}
     {!preset?.local && (sharedKey && !editShared
       ? <Row wide label={t('API 密钥')} hint={t('与上方 AI 服务共用，一般不用改。')}>
           <span className="ac-hint">{t('已复用密钥')}</span>
           <Btn variant="text" size="sm" onClick={() => setEditShared(true)}>{t('修改密钥')}</Btn>
         </Row>
       : <Row wide label={t('API 密钥')} hint={
-          preset?.sponsor ? undefined
+          preset?.sponsor
+            ? undefined
             : preset?.keyUrl
               ? <>{t('在官网创建后粘贴到这里。')} <a className="ac-link" href={preset.keyUrl} onClick={e => { e.preventDefault(); openExternalLink(preset.keyUrl) }}>{t('获取 API Key')} ↗</a>
                 {keyLink && keyLink.href !== preset.keyUrl && <> · <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a></>}</>
@@ -83,6 +70,20 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             placeholder={connection.has_key ? t('已保存；留空则不改') : preset?.placeholder || 'sk-…'}
             onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
             onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />
+          {preset?.sponsor && (
+            <span className="ac-sponsor-inline" data-sponsor={preset.sponsor.id}>
+              <Btn
+                size="sm"
+                className="ac-btn--pill"
+                onClick={() => {
+                  trackSponsorLinkOpened({ sponsor: preset.sponsor!.id, target: 'register', placement })
+                  openExternalLink(preset.sponsor!.registerUrl)
+                }}
+              >
+                {t('settings.providers.one_click')}<span aria-hidden>↗</span>
+              </Btn>
+            </span>
+          )}
         </Row>)}
     {addressEditable && <Row wide label={t('接口地址')} hint={[
       preset?.local ? t('本机服务用默认地址即可。')

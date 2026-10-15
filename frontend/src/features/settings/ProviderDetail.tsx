@@ -158,7 +158,7 @@ export default function ProviderDetail({
 
             {canTest && connection && (
               <div className="ac-provider-test-row">
-                <Btn size="sm" variant="cta" disabled={testDisabled} loading={testing || !!listing} onClick={onTest}>
+                <Btn size="sm" className="ac-btn--pill" disabled={testDisabled} loading={testing || !!listing} onClick={onTest}>
                   {t('测试连接')}
                 </Btn>
                 {status === 'failed' && (
