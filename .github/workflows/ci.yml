@@ -9,8 +9,6 @@ on:
       - master
       # Draft #364: pull_request events did not start CI for this branch; run on push instead.
       - cursor/normalize-provider-url-aa38
-      # Draft #373: force-push rebase onto release/1.5.8 did not emit pull_request CI.
-      - cursor/provider-presets-json-42d9
 
 permissions:
   contents: read
