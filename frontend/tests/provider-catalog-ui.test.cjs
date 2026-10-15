@@ -91,6 +91,70 @@ test('whisper is not marked available until the local model is ready', () => {
   assert.match(textOf(whisper), /settings\.providers\.configure/)
 })
 
+test('catalog distinguishes configured credentials from verified connections', () => {
+  for (const validation_status of [undefined, 'unchecked', 'failed', 'ok']) {
+    const tree = Catalog({
+      settings: {
+        ...settings,
+        connections: [{ id: 'ds', name: 'DeepSeek', provider: 'deepseek', base_url: '', has_key: true, validation_status, image_api: 'auto', image_base_url: '' }],
+      },
+      query: '', filter: 'all', moreOpen: false,
+      onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+    })
+    const card = flatten(tree).find(node => node.props?.['data-provider-id'] === 'deepseek')
+    assert.equal(card.props.className.includes('is-connected'), validation_status === 'ok')
+    assert.match(textOf(card), validation_status === 'ok' ? /settings\.providers\.connected/ : /已配置/)
+    assert.equal(flatten(card).some(node => node.props?.['data-status']), validation_status === 'ok')
+  }
+})
+
+test('catalog shows both ready local ASR engines while cloud transcription is selected', () => {
+  const tree = Catalog({
+    settings: { ...settings, transcription: { provider: 'cloud', model: 'test-asr', connection_id: 'asr' } },
+    query: '', filter: 'asr', moreOpen: false, asrReady: { whisper: true, sensevoice: true },
+    onQuery: () => {}, onFilter: () => {}, onToggleMore: () => {}, onOpen: () => {},
+  })
+  for (const id of ['whisper', 'sensevoice']) {
+    const card = flatten(tree).find(node => node.props?.['data-provider-id'] === id)
+    assert.match(textOf(card), /settings\.providers\.available/)
+    assert.ok(card.props.className.includes('is-connected'))
+  }
+})
+
+test('detail only shows a successful status for verified connections or ready local ASR', () => {
+  const Detail = loadTs('ProviderDetail.tsx', {
+    '../../i18n': i18n, '../../ui': ui,
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    './ProviderFields': { default: () => null },
+    './ModelPicker': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+  }).default
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  for (const id of ['deepseek', 'ollama']) {
+    for (const validation_status of ['unchecked', 'failed', 'ok']) {
+      const tree = Detail({
+        preset: view.catalogPreset(id),
+        m: {
+          settings: { ...settings, connections: [{ ...view.catalogDraftConnection(view.catalogPreset(id)), has_key: true, validation_status }] },
+          lists: {}, busy: {}, listErrors: {}, keyHints: {},
+        },
+        onBack: () => {},
+      })
+      const statuses = flatten(tree).filter(node => node.props?.['data-status'])
+      assert.equal(statuses.length, validation_status === 'ok' ? 1 : 0)
+      assert.match(textOf(tree), validation_status === 'ok' ? /settings\.providers\.connected|settings\.providers\.available/ : /已配置/)
+    }
+  }
+  for (const id of ['whisper', 'sensevoice']) {
+    const tree = Detail({
+      preset: view.catalogPreset(id), m: { settings, lists: {}, busy: {}, listErrors: {} },
+      asrReady: { [id]: true }, onBack: () => {},
+    })
+    assert.match(textOf(tree), /settings\.providers\.available/)
+  }
+})
+
 test('search and capability filter show unconnected more-group providers', () => {
   const tree = Catalog({
     settings, query: 'OpenRouter', filter: 'all', moreOpen: false, selectedId: null,

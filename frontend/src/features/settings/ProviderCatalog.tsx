@@ -5,7 +5,7 @@ import type { ProviderGroupId, ProviderPreset } from './providerPresets'
 import {
   CAPABILITY_FILTERS, CATALOG_GROUPS, type CapabilityFilter,
   connectKind, customCatalogId, displayNameOf, filterCatalog, groupCatalog, initialLetter,
-  isCatalogConnected, shouldExpandMore, unmatchedCompatibleConnections, type LocalAsrReady,
+  isCatalogConfigured, isCatalogConnected, shouldExpandMore, unmatchedCompatibleConnections, type LocalAsrReady,
 } from './providerCatalogView'
 
 const FILTER_KEY: Record<CapabilityFilter, string> = {
@@ -25,8 +25,9 @@ const GROUP_KEY: Record<ProviderGroupId, string> = {
   more: 'settings.providers.group.more',
 }
 
-function actionLabel(preset: ProviderPreset, connected: boolean): string {
+function actionLabel(preset: ProviderPreset, connected: boolean, configured = false): string {
   if (connected) return preset.id === 'whisper' || preset.id === 'sensevoice' ? t('settings.providers.available') : t('settings.providers.connected')
+  if (configured) return t('已配置')
   if (connectKind(preset) === 'needs_endpoint') return t('settings.providers.needs_endpoint')
   if (preset.sponsor) return t('settings.providers.one_click')
   return t('settings.providers.configure')
@@ -104,7 +105,7 @@ function ProviderCard({
       <span className="ac-provider-card-action">
         {connected
           ? <StatusDot tone="ok" label={actionLabel(preset, true)} />
-          : <span className="ac-provider-action-label">{actionLabel(preset, false)}</span>}
+          : <span className="ac-provider-action-label">{actionLabel(preset, false, isCatalogConfigured(settings, preset))}</span>}
       </span>
     </button>
   )

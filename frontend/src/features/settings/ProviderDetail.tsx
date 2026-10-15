@@ -9,7 +9,7 @@ import ModelPicker from './ModelPicker'
 import SenseVoiceConfig from './SenseVoiceConfig'
 import { mainConnection } from './modelSettingsLogic'
 import {
-  catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConnected,
+  catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected,
   type LocalAsrReady,
 } from './providerCatalogView'
 
@@ -68,6 +68,7 @@ export default function ProviderDetail({
             </span>
           )}
           {connected && <StatusDot tone="ok" label={preset.auth === 'none' ? t('settings.providers.available') : t('settings.providers.connected')} />}
+          {!connected && isCatalogConfigured(settings, preset) && <span className="ac-badge">{t('已配置')}</span>}
         </h3>
         <p className="ac-note">{t(preset.hint)}</p>
         <div className="ac-provider-caps">
