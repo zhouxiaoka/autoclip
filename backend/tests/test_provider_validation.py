@@ -184,6 +184,28 @@ def test_success_probes_with_about_sixteen_tokens_and_returns_models(monkeypatch
     assert posted[0]['model'] == 'gpt-4o-mini'
 
 
+@pytest.mark.parametrize('provider', ['gemini', 'compatible'])
+def test_gemini_native_root_uses_openai_models_and_chat_paths(monkeypatch, provider):
+    calls = []
+    root = 'https://generativelanguage.googleapis.com/v1beta/openai'
+
+    def handler(method, url, headers, body):
+        calls.append((method, url))
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'gemini-test'}]})
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    # Also cover legacy persisted connections that bypass constructor cleanup.
+    connection = _connection(provider=provider).model_copy(update={
+        'base_url': 'https://generativelanguage.googleapis.com/v1beta',
+    })
+    result = validate_connection(connection, 'gemini-test')
+    assert result.ok is True
+    assert result.normalized_base_url == root
+    assert calls == [('GET', root + '/models'), ('POST', root + '/chat/completions')]
+
+
 def test_http_test_endpoint_returns_classified_payload(monkeypatch):
     def handler(method, url, headers, body):
         return _FakeResponse(401, {'error': {'message': '无效的令牌'}})

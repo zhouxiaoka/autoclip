@@ -39,26 +39,44 @@ export function cleanupBaseUrl(url?: string | null): string {
 }
 
 export function normalizeProviderBaseUrl(url?: string | null, provider = 'compatible'): string {
+  return normalizeProviderUrl(url, provider).url
+}
+
+export function normalizeProviderUrl(url?: string | null, provider = 'compatible'): { url: string; warnings: string[] } {
   const cleaned = cleanupBaseUrl(url)
-  if (!cleaned) return ''
+  const warnings: string[] = []
+  if (!cleaned) return { url: '', warnings }
   let parsed: URL
   try {
     parsed = new URL(cleaned)
   } catch {
-    return cleaned
+    return { url: cleaned, warnings }
   }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return cleaned
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return { url: cleaned, warnings }
   const host = parsed.hostname.toLowerCase()
-  let path = dedupeRepeatedV1((parsed.pathname || '').replace(/\/+$/, ''))
-  path = applyConvention((provider || '').trim().toLowerCase(), host, path)
-  parsed.pathname = path || '/'
+  const key = (provider || '').trim().toLowerCase()
+  let path = (parsed.pathname || '').replace(/\/+$/, '')
+  if (key !== 'image') {
+    for (const suffix of ['/chat/completions', '/completions']) {
+      if (path.toLowerCase().endsWith(suffix)) {
+        path = path.slice(0, -suffix.length).replace(/\/+$/, '')
+        warnings.push('chat_completions')
+        break
+      }
+    }
+  }
+  path = dedupeRepeatedV1(path)
+  const normalizedPath = applyConvention(key, host, path)
+  if (!path && normalizedPath === '/v1') warnings.push('missing_v1')
+  parsed.pathname = normalizedPath || '/'
   parsed.search = ''
   parsed.hash = ''
-  return parsed.toString().replace(/\/+$/, '')
+  return { url: parsed.toString().replace(/\/+$/, ''), warnings }
 }
 
 function applyConvention(provider: string, host: string, path: string): string {
   if (host === 'fal.run' || host.endsWith('.fal.run')) return path
+  if (provider !== 'image' && (provider === 'gemini' || host === 'generativelanguage.googleapis.com') && path.toLowerCase() === '/v1beta') return '/v1beta/openai'
   if (VERSIONED.test(path || '/')) return path
   if (path && path !== '/') return path
   if (provider === 'dashscope' || provider === 'image') return path

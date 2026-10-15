@@ -5,7 +5,7 @@ import {
   UPSTREAM_ERROR_TYPES,
 } from '../../analytics/successRateContract'
 import { PROVIDERS, type ProviderKey } from './providers'
-import { cleanupBaseUrl, normalizeProviderBaseUrl } from './providerUrl'
+import { cleanupBaseUrl, normalizeProviderUrl } from './providerUrl'
 
 export const ADDRESS_LOCKED: readonly ProviderKey[] = ['api88', 'infistar', 'deepseek', 'gemini', 'dashscope', 'openai']
 
@@ -34,7 +34,6 @@ const KEY_HINTS: Array<[RegExp, ProviderKey]> = [
   [/^sk-ant-/, 'compatible'],
 ]
 
-const CHAT_SUFFIXES = ['/v1/chat/completions', '/chat/completions', '/v1/completions', '/completions']
 const CONSOLE_HOSTS = new Set([
   'platform.openai.com', 'chatgpt.com', 'openai.com', 'www.openai.com',
   'platform.deepseek.com', 'chat.deepseek.com', 'www.deepseek.com', 'deepseek.com',
@@ -68,24 +67,7 @@ export function normalizeCompatibleUrl(raw: string, provider = 'compatible'): { 
   let host = ''
   try { host = new URL(cleaned).hostname.toLowerCase() } catch { return { url: cleaned, warnings } }
   if (isConsoleHost(host)) return { url: cleaned, warnings: ['console_host'] }
-  let stripped = cleaned
-  const lower = cleaned.toLowerCase()
-  for (const suffix of CHAT_SUFFIXES) {
-    if (lower.endsWith(suffix)) {
-      stripped = cleaned.slice(0, cleaned.length - suffix.length).replace(/\/+$/, '')
-      warnings.push('chat_completions')
-      break
-    }
-  }
-  const url = normalizeProviderBaseUrl(stripped, provider)
-  try {
-    const before = new URL(stripped)
-    const after = new URL(url)
-    const beforePath = (before.pathname || '').replace(/\/+$/, '')
-    const afterPath = (after.pathname || '').replace(/\/+$/, '')
-    if (afterPath === '/v1' && (beforePath === '' || beforePath === '/')) warnings.push('missing_v1')
-  } catch { /* rewrite still returned a string */ }
-  return { url, warnings }
+  return normalizeProviderUrl(cleaned, provider)
 }
 
 export function telemetryHost(url?: string) {
