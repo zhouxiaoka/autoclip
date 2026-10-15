@@ -49,6 +49,8 @@ def create_app(mode: str = "web") -> FastAPI:
             logging.FileHandler(logging_config["file"])
         ]
     )
+    for name in ("httpx", "httpcore", "openai"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     
     # 创建 FastAPI 应用
     app = FastAPI(

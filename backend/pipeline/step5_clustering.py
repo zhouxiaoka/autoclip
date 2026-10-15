@@ -86,7 +86,7 @@ class ClusteringEngine:
             return validated_collections
             
         except Exception as e:
-            logger.error(f"主题聚类失败: {str(e)}")
+            logger.error("主题聚类失败: %s message_length=%s", type(e).__name__, len(str(e)))
             # 使用预聚类结果作为备选
             if pre_clusters:
                 logger.info("使用预聚类结果作为备选方案")
@@ -240,7 +240,7 @@ class ClusteringEngine:
                 validated_collections.append(validated_collection)
                 
             except Exception as e:
-                logger.error(f"验证合集 {i} 失败: {str(e)}")
+                logger.error("验证合集失败: %s message_length=%s", type(e).__name__, len(str(e)))
                 continue
         
         return validated_collections
@@ -311,7 +311,7 @@ class ClusteringEngine:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(collections_data, f, ensure_ascii=False, indent=2)
         
-        logger.info(f"合集数据已保存到: {output_path}")
+        logger.info("合集数据已保存 count=%s", len(collections_data))
         return output_path
     
     def load_collections(self, input_path: Path) -> List[Dict]:
