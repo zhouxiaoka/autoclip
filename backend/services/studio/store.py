@@ -673,6 +673,9 @@ def _attach_run_telemetry(data, project_id, previous):
         usage_id = (project_id, name, identity)
         counted = checkpoint.get(usage_id, {}) if checkpoint is not None else {}
         failed = record.get('status') in ('failed', 'partial')
+        if not failed:
+            for key in skip_unless_failed:
+                record.pop(key, None)
         for key, value in snapshot.items():
             if value is None:
                 continue

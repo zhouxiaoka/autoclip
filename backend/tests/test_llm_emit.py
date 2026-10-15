@@ -142,6 +142,43 @@ def test_successful_recovery_clears_upstream_error_across_run_and_store(capture,
         assert saved[name]["llm_calls"] == 2
 
 
+@pytest.mark.parametrize("generation_status,analysis_status", [("completed", "completed"), ("production", "running")])
+def test_reused_store_records_clear_stale_failure_telemetry(capture, monkeypatch, tmp_path, generation_status, analysis_status):
+    from backend.services.studio import store
+
+    monkeypatch.setattr(telem, "configured_connection_fields", lambda: {})
+    monkeypatch.setattr(store, "directory", lambda project_id: tmp_path / project_id)
+    (tmp_path / "p1").mkdir()
+    path = tmp_path / "p1" / "metadata" / "studio.json"
+    state = {
+        "schema_version": 2,
+        "generation": {"status": "failed"},
+        "analysis": {"status": "failed", "phase": "production"},
+    }
+    provider = _ProbeProvider()
+    with telem.track_run():
+        with pytest.raises(_StatusError):
+            provider.call("fixture", fail=True)
+        store.write("p1", state)
+        state = json.loads(path.read_text())
+        for name in ("generation", "analysis"):
+            assert state[name]["upstream_error_type"] == "rate_limited"
+            assert state[name]["http_status"] == 429
+            assert state[name]["failure_stage"] == "production"
+            assert state[name]["billable_calls_before_failure"] == 0
+
+        provider.call("fixture")
+        state["generation"]["status"] = generation_status
+        state["analysis"]["status"] = analysis_status
+        store.write("p1", state)
+
+    saved = json.loads(path.read_text())
+    for name in ("generation", "analysis"):
+        for key in ("http_status", "upstream_error_type", "failure_stage", "billable_calls_before_failure"):
+            assert key not in saved[name]
+        assert saved[name]["llm_calls"] == 2
+
+
 def test_same_project_runs_persist_independent_usage(capture, monkeypatch, tmp_path):
     from backend.core import llm_usage
     from backend.services.studio import store
