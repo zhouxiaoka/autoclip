@@ -10,6 +10,7 @@ from backend.pipeline import concurrency
 
 def _manager(calls):
     manager = LLMManager.__new__(LLMManager)
+    manager._reload_if_settings_changed = lambda: None
     manager.call = lambda *a, **k: calls['fn']()
     return manager
 

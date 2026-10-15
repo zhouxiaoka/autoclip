@@ -4,6 +4,8 @@ LLM管理器 - 统一管理多个模型提供商
 import json
 import logging
 import os
+import threading
+from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
@@ -12,8 +14,20 @@ from .llm_providers import (
     ModelInfo, LLMResponse
 )
 from ..services.config_sync_service import config_sync_service
+from .llm_telemetry import hostname_of_base_url, sanitize_exception_text, sanitize_model
 
 logger = logging.getLogger(__name__)
+
+# Serialize refresh/snapshot only; network calls remain concurrent.
+_settings_lock = threading.RLock()
+
+
+@dataclass(frozen=True, repr=False)
+class _CallRoute:
+    provider: Optional[LLMProvider]
+    settings: Dict[str, Any]
+    info: Dict[str, Any]
+
 
 class LLMManager:
     """LLM管理器"""
@@ -40,12 +54,24 @@ class LLMManager:
     def _reload_if_settings_changed(self) -> None:
         """设置页保存后 settings.json 会变；API 进程与 Celery worker 都要在下一次调用时拿到新配置，
         而不是等重启。"""
-        mtime = self._current_settings_mtime()
-        if mtime != self._settings_mtime:
-            logger.info("检测到 settings.json 变化，重新加载 LLM 配置")
-            self.current_provider = None
-            self.settings = self._load_settings()
-            self._initialize_provider()
+        with _settings_lock:
+            mtime = self._current_settings_mtime()
+            if mtime != self._settings_mtime:
+                logger.info("检测到 settings.json 变化，重新加载 LLM 配置")
+                self.current_provider = None
+                self.settings = self._load_settings()
+                self._initialize_provider()
+
+    def _snapshot_call_route(self) -> _CallRoute:
+        """Refresh before candidate selection, then pin this run's connection."""
+        with _settings_lock:
+            self._reload_if_settings_changed()
+            try:
+                info = self.get_current_provider_info() or {}
+            except Exception:  # identity is optional; a configured provider can still run
+                info = {}
+            settings = self.settings if isinstance(getattr(self, "settings", None), dict) else {}
+            return _CallRoute(getattr(self, "current_provider", None), dict(settings), dict(info))
     
     def _get_default_settings_file(self) -> Path:
         """获取默认设置文件路径"""
@@ -304,14 +330,15 @@ class LLMManager:
                 self.current_provider = LLMProviderFactory.create_provider(
                     provider_type, api_key or "", model_name, **provider_kwargs
                 )
-                logger.info(f"已初始化{provider_type.value}提供商，模型: {model_name}"
-                            + (f", base_url: {provider_kwargs['base_url']}" if provider_kwargs.get("base_url") else ""))
+                logger.info("已初始化%s提供商，模型: %s, base_url_host: %s",
+                            provider_type.value, sanitize_model(model_name),
+                            hostname_of_base_url(provider_kwargs.get("base_url")))
             else:
                 logger.warning(f"未找到{provider_type.value}的API密钥")
                 self.current_provider = None
                 
         except Exception as e:
-            logger.error(f"初始化提供商失败: {e}")
+            logger.error("初始化提供商失败: %s", sanitize_exception_text(e))
             self.current_provider = None
 
     def _get_provider_kwargs(self, provider_type: ProviderType) -> Dict[str, Any]:
@@ -387,9 +414,10 @@ class LLMManager:
     
     def update_settings(self, new_settings: Dict[str, Any]):
         """更新设置"""
-        self.settings.update(new_settings)
-        self._save_settings()
-        self._initialize_provider()
+        with _settings_lock:
+            self.settings.update(new_settings)
+            self._save_settings()
+            self._initialize_provider()
     
     def set_provider(self, provider_type: ProviderType, api_key: str, model_name: str,
                      base_url: Optional[str] = None):
@@ -418,10 +446,10 @@ class LLMManager:
             # update_settings 会保存并重新初始化 current_provider
             self.update_settings(provider_settings)
             
-            logger.info(f"已切换到{provider_type.value}提供商，模型: {model_name}")
+            logger.info("已切换到%s提供商，模型: %s", provider_type.value, sanitize_model(model_name))
             
         except Exception as e:
-            logger.error(f"设置提供商失败: {e}")
+            logger.error("设置提供商失败: %s", sanitize_exception_text(e))
             raise
     
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> str:
@@ -433,25 +461,22 @@ class LLMManager:
         from backend.core.llm_degrade import bind_request_model, bound_request_model
         from backend.core.project_cancellation import checkpoint
         override = kwargs.pop("model", None)
+        route = kwargs.pop("_route", None)
         checkpoint()  # 项目已删除：不再为它花钱（RC156 #12）
-        self._reload_if_settings_changed()
+        route = route or self._snapshot_call_route()
+        provider, settings, info = route.provider, route.settings, route.info
         cache_path = _llm_cache_path(prompt, input_data)
         if cache_path is not None and cache_path.exists():
             logger.info(f"LLM 缓存命中: {cache_path.name}")
             return cache_path.read_text(encoding="utf-8")
-        if not self.current_provider:
+        if not provider:
             raise ValueError("未配置LLM提供商，请自备 API Key 并到「设置 → 模型」填写")
         
         try:
             from backend.core import llm_telemetry
-            try:
-                info = self.get_current_provider_info() or {}
-            except Exception:  # noqa: BLE001 - identity is optional; the call still runs
-                info = {}
-            settings = self.settings if isinstance(getattr(self, 'settings', None), dict) else {}
             with bind_request_model(override):
                 chosen = bound_request_model(
-                    str(info.get('model') or getattr(self.current_provider, 'model_name', '') or '')
+                    str(info.get('model') or getattr(provider, 'model_name', '') or '')
                 )
                 with llm_telemetry.bind_context(
                     provider=str(info.get('provider') or ''),
@@ -459,11 +484,11 @@ class LLMManager:
                     base_url=str(info.get('base_url') or settings.get('openai_base_url') or settings.get('dashscope_base_url') or ''),
                     kind='text',
                 ):
-                    response = self.current_provider.call(prompt, input_data, **kwargs)
+                    response = provider.call(prompt, input_data, **kwargs)
             content = response.content
             from backend.core import llm_usage
             llm_usage.record(response.model or chosen, response.usage,
-                             prompt_chars=len(self.current_provider._build_full_input(prompt, input_data)), completion_chars=len(content or ''))
+                             prompt_chars=len(provider._build_full_input(prompt, input_data)), completion_chars=len(content or ''))
             if cache_path is not None:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 cache_path.write_text(content, encoding="utf-8")
@@ -479,8 +504,9 @@ class LLMManager:
         #358 / #365 budget is shared across candidates (not reset per model):
         at most 3 manager ``call()`` for a retryable type. Each ``call()``
         reserves ``1 + LLM_SDK_MAX_RETRIES`` HTTP attempts against the
-        per-chunk cap of 6, so SDK retries cannot push a chunk to 12 HTTP
-        calls. Candidate model is per-call state only.
+        per-chunk cap of 6. OpenAI compatibility resends reserve their own
+        attempts. An enclosing chunk keeps this budget across result-repair
+        rounds. Candidate model is per-call state only.
         """
         from backend.core import llm_telemetry
         from backend.core.llm_degrade import (
@@ -505,7 +531,8 @@ class LLMManager:
         from backend.core.upstream_errors import UpstreamErrorType
         import time
 
-        settings = self.settings if isinstance(getattr(self, "settings", None), dict) else {}
+        route = self._snapshot_call_route()
+        settings = route.settings
         source = resolve_model_source(settings)
         candidates = candidates_for_call(settings)
         last_error: Exception | None = None
@@ -519,7 +546,7 @@ class LLMManager:
                         )
                     token = llm_telemetry.set_retry_count(attempt)
                     try:
-                        return self.call(prompt, input_data, model=model, **kwargs)
+                        return self.call(prompt, input_data, model=model, _route=route, **kwargs)
                     except Exception as error:
                         last_error = error
                         remember_chunk_error(error)

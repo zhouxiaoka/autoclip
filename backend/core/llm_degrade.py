@@ -268,7 +268,7 @@ def _norm_token(value: str) -> str:
 
 @contextmanager
 def chunk_call_budget() -> Iterator[_ChunkBudget]:
-    """Own one chunk's budget; nested retry calls keep the same ledger."""
+    """Own one chunk's budget; nested retry calls must keep the same ledger."""
     existing = _chunk_budget.get()
     if existing is not None:
         yield existing

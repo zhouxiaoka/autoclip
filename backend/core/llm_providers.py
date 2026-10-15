@@ -489,7 +489,8 @@ class OpenAIProvider(LLMProvider):
                 if payload.get("max_tokens") is None or getattr(error, "status_code", None) != 400 \
                         or not asks_for_max_completion_tokens(error):
                     raise
-                # The compatibility resend shares the active chunk's budget.
+                # The manager reserved the first SDK call, not this compatibility
+                # resend. Reserve its SDK retries too before issuing another request.
                 from backend.core.llm_degrade import consume_chunk_call
                 if not consume_chunk_call():
                     raise

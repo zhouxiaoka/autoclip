@@ -35,6 +35,7 @@ def _manager(fn, *, source="user", provider="dashscope", model="qwen-plus"):
         "llm_provider": "openai",
     }
     manager.current_provider = SimpleNamespace(model_name=model)
+    manager._reload_if_settings_changed = lambda: None
 
     def call_stub(*args, **kwargs):
         return fn(*args, **kwargs)
