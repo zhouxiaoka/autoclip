@@ -163,3 +163,21 @@ test('slot telemetry is enums and a boolean — never a model id', () => {
   assert.equal(JSON.stringify(payload).includes('qwen'), false)
   assert.equal(JSON.stringify(payload).includes('gpt'), false)
 })
+
+test('catalog and preview lists never make a validated connection selectable', () => {
+  for (const flags of [
+    { source: 'catalog' }, { source: 'catalog', preview: false },
+    { source: 'live', preview: true }, { source: 'cache', preview: true },
+  ]) {
+    const groups = slots.collectModelGroups(settings(), {
+      ...lists, infi: { ...lists.infi, ...flags },
+    }, 'analysis')
+    const gpt = groups.find(group => group.modelId === 'gpt-4o-mini')
+    assert.equal(gpt.offers.find(offer => offer.connectionId === 'infi').connected, false)
+    assert.equal(slots.preferredOffer(gpt.offers).connectionId, 'or')
+  }
+  const cached = slots.collectModelGroups(settings(), {
+    infi: { ...lists.infi, source: 'cache', preview: false },
+  }, 'analysis')
+  assert.equal(slots.preferredOffer(cached.find(group => group.modelId === 'gpt-4o-mini').offers).connectionId, 'infi')
+})

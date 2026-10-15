@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const vm = require('node:vm')
 const ts = require('typescript')
 
-function loadSection() {
+function loadSection(section = 'TranscriptionSection') {
   const jsx = (type, props) => ({ type, props })
   const modules = {
     react: { useEffect() {}, useState() {} },
@@ -16,21 +16,25 @@ function loadSection() {
     '../../components/SpeechRecognitionConfig': { default: 'WhisperConfig' },
     './providers': { PROVIDERS: {}, providerPickerOptions: () => [] },
     './useModelSettings': {},
-    './modelSettingsLogic': { connectionOf: () => undefined, mainConnection: () => undefined },
-    './ProviderFields': {}, './ModelPicker': {}, './DefaultModels': { default: 'DefaultModels' }, '../../services/api': {},
+    './modelSettingsLogic': {
+      connectionOf: (s, role) => s.connections.find(c => c.id === s[role]?.connection_id),
+      mainConnection: s => s.connections.find(c => c.id === s.analysis?.connection_id),
+      presetKey: c => c.provider,
+    },
+    './ProviderFields': { default: 'ProviderFields' }, './ModelPicker': { default: 'ModelPicker' }, './DefaultModels': { default: 'DefaultModels' }, '../../services/api': {},
   }
-  const source = fs.readFileSync('src/features/settings/AIModelSettings.tsx', 'utf8') + '\nexport const testSection = TranscriptionSection;'
+  const source = fs.readFileSync('src/features/settings/AIModelSettings.tsx', 'utf8') + `\nexport const testSection = ${section};`
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
   const module = { exports: {} }
   vm.runInNewContext(code, { module, exports: module.exports, require: name => modules[name] || assert.fail(name) })
   return module.exports.testSection
 }
-function findSelect(node) {
+function findSelect(node, type = 'Select') {
   if (!node || typeof node !== 'object') return null
-  if (node.type === 'Select') return node
+  if (node.type === type) return node
   const children = node.props?.children
   for (const child of Array.isArray(children) ? children.flat(5) : [children]) {
-    const found = findSelect(child)
+    const found = findSelect(child, type)
     if (found) return found
   }
   return null
@@ -51,4 +55,22 @@ test('the actual transcription selector offers SenseVoice and switches local eng
   assert.equal(select.props.value, 'sensevoice_local')
   select.props.onChange('whisper_local')
   assert.deepEqual(settings.transcription, { provider: 'whisper_local', model: 'base' })
+})
+
+test('separate vision, cover and ASR model rows expose tests for their own role', () => {
+  for (const [section, role] of [['VisionSection', 'vision'], ['CoverSection', 'cover'], ['TranscriptionSection', 'transcription']]) {
+    const calls = []
+    const settings = {
+      connections: [{ id: 'a', provider: 'openai' }, { id: 'separate', provider: 'openai' }],
+      analysis: { connection_id: 'a', model: 'chat' },
+      [role]: { connection_id: 'separate', model: 'selected', provider: 'cloud' },
+      cover_enabled: true,
+    }
+    const m = { settings, lists: {}, busy: {}, listErrors: {}, keyHints: {}, test: role => calls.push(role) }
+    const picker = findSelect(loadSection(section)({ m }), 'ModelPicker')
+    assert.ok(picker)
+    assert.equal(picker.props.actions.props.disabled, false)
+    picker.props.actions.props.onClick()
+    assert.deepEqual(calls, [role])
+  }
 })

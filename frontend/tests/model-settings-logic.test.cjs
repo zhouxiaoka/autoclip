@@ -190,3 +190,11 @@ test('AI covers fall back to frames only when the service has no image model at 
   const filled = defaults.applyModelDefaults(state, state.connections[0], models, false)
   assert.equal(filled.cover.model, 'wanx2.1-t2i-turbo', 'cover switched on before the list arrived is filled without the first-run flag')
 })
+
+test('separate vision requires a provider, model and credentials before save', () => {
+  const state={...fresh(),connections:[conn('a','openai',{api_key:'k'}),conn('v','openai')],analysis:{connection_id:'a',model:'gpt-4o',capability:'auto'}}
+  assert.equal(logic.saveIssue(state),null,'follow analysis needs no separate check')
+  assert.deepEqual(plain(logic.saveIssue({...state,vision:{connection_id:'missing',model:'gpt-4o'}})),{role:'vision',reason:'provider'})
+  assert.deepEqual(plain(logic.saveIssue({...state,vision:{connection_id:'v',model:''}})),{role:'vision',reason:'model'})
+  assert.deepEqual(plain(logic.saveIssue({...state,vision:{connection_id:'v',model:'gpt-4o'}})),{role:'vision',reason:'key'})
+})

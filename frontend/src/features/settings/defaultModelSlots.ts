@@ -67,6 +67,10 @@ function isValidated(connection?: Connection | null): boolean {
   return connection?.validation_status === 'ok'
 }
 
+function isAccountList(list?: ModelList): boolean {
+  return !!list && !list.preview && (list.source === 'live' || list.source === 'cache')
+}
+
 function addOffer(byId: Record<string, ModelOffer[]>, offer: ModelOffer) {
   const list = byId[offer.modelId] || []
   if (list.some(item => item.provider === offer.provider && item.connectionId === offer.connectionId)) return
@@ -84,7 +88,7 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
     for (const entry of live) {
       addOffer(byId, {
         modelId: entry.id, provider: connection.provider, connectionId: connection.id,
-        connected: isValidated(connection), displayName: displayName(connection),
+        connected: isValidated(connection) && isAccountList(list), displayName: displayName(connection),
       })
     }
     // A live/cache list with no suitable model is authoritative: do not invent catalog candidates.
@@ -99,7 +103,7 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
       if (list && !list.models.some(entry => entry.id === modelId && entryFits(purpose, entry))) continue
       addOffer(byId, {
         modelId, provider: preset.id, connectionId: connection?.id,
-        connected: isValidated(connection) && !!list,
+        connected: isValidated(connection) && isAccountList(list),
         displayName: preset.short_name || preset.display_name,
       })
     }

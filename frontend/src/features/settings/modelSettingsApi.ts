@@ -40,7 +40,7 @@ export const modelSettingsApi = {
   get: () => api.get<unknown, ModelSettings>('/settings/ai-models'),
   save: (value: ModelSettings) => api.put<unknown, ModelSettings>('/settings/ai-models', value),
   discover: (connection: Connection, refresh = false) => api.post<unknown, ModelList>('/settings/ai-models/discover', { connection, refresh }),
-  test: (connection: Connection, model: string, vision = false) => api.post<unknown, ValidationResult>('/settings/ai-models/test', { connection, model, vision }),
+  test: (connection: Connection, model: string, vision = false, purpose: 'analysis' | 'vision' | 'cover' | 'transcription' = 'analysis') => api.post<unknown, ValidationResult>('/settings/ai-models/test', { connection, model, vision, purpose }),
 }
 
 export function bindingCapability(binding: Assignment | null, lists: Record<string, ModelList>): Capability {

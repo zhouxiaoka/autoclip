@@ -1,4 +1,7 @@
-"""Settings-page provider access check: GET /models then a tiny real chat call.
+"""Settings-page provider access check: GET /models, plus a tiny call for chat models.
+
+Image/audio connections check account model access without paid generation. They
+must list the selected model; a public catalog is never proof of account access.
 
 Save may persist a failed result (marked red). Generation reads the stored
 status and blocks. Never returns keys, full URLs, or provider error text.
@@ -10,7 +13,7 @@ HTML, GET /models 404) use ``hint_key_for`` of the same enum.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Literal, Optional
 from urllib.parse import urlparse
 
 from backend.core.llm_providers import is_local_url, uses_max_completion_tokens
@@ -188,7 +191,10 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
     return None
 
 
-def validate_connection(connection: ai_models.Connection, model: str) -> ValidationResult:
+def validate_connection(
+    connection: ai_models.Connection, model: str,
+    *, purpose: Literal['analysis', 'cover', 'transcription'] = 'analysis',
+) -> ValidationResult:
     resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
     hint = hint_provider_for_key(resolved.api_key)
     if hint == resolved.provider:
@@ -200,6 +206,8 @@ def validate_connection(connection: ai_models.Connection, model: str) -> Validat
             return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)
     else:
         base = ai_models.chat_endpoint(resolved, model or 'unused')['base_url']
+    if purpose == 'cover' and resolved.image_base_url:
+        base = ai_models.image_endpoint(resolved)['base_url']
     host = urlparse(base).hostname or ''
     if is_console_host(host):
         return _failed(UpstreamErrorType.BAD_ENDPOINT, base, hint)
@@ -211,6 +219,12 @@ def validate_connection(connection: ai_models.Connection, model: str) -> Validat
         return _failed(models_error, base, hint, models)
     if not (model or '').strip():
         return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models)
+    if purpose in ('cover', 'transcription'):
+        # Check authenticated account access, not paid image/audio generation. Never
+        # send non-chat models to chat/completions or infer access from a catalog.
+        if model.strip() not in models:
+            return _failed(UpstreamErrorType.MODEL_NOT_FOUND, base, hint, models)
+        return _ok(base, hint, models)
     probe_error = _probe(base, api_key, model.strip())
     if probe_error:
         return _failed(probe_error, base, hint, models)

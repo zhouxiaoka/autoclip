@@ -9,7 +9,7 @@ import { normalizeCompatibleUrl, passed, type ValidationResult } from './provide
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
 
 export type Role = 'analysis' | 'vision' | 'cover' | 'transcription'
-export type SaveIssue = { role: 'analysis' | 'cover' | 'transcription'; reason: 'provider' | 'model' | 'key' }
+export type SaveIssue = { role: Role; reason: 'provider' | 'model' | 'key' }
 
 const OPENAI_URL = /^https:\/\/api\.openai\.com(?:\/v1)?\/?$/
 
@@ -152,7 +152,8 @@ export const isTextOnly = (s: ModelSettings, lists: Record<string, ModelList>) =
 
 /** First blocking problem before save, in page order. */
 export function saveIssue(s: ModelSettings): SaveIssue | null {
-  for (const role of ['analysis', 'transcription', 'cover'] as const) {
+  for (const role of ['analysis', 'vision', 'transcription', 'cover'] as const) {
+    if (role === 'vision' && !s.vision) continue
     if (role === 'transcription' && s.transcription?.provider !== 'cloud') continue
     if (role === 'cover' && !s.cover_enabled) continue
     const binding = s[role]
@@ -162,6 +163,22 @@ export function saveIssue(s: ModelSettings): SaveIssue | null {
     if (connection && !connectionReady(connection)) return { role, reason: 'key' }
   }
   return null
+}
+
+/** One access check per active connection; shared credentials are checked only once. */
+export function validationTargets(s: ModelSettings): { role: Role; connection: Connection; model: string }[] {
+  const seen = new Set<string>()
+  const targets: { role: Role; connection: Connection; model: string }[] = []
+  for (const role of ['analysis', 'vision', 'transcription', 'cover'] as const) {
+    if (role === 'transcription' && s.transcription?.provider !== 'cloud') continue
+    if (role === 'cover' && !s.cover_enabled) continue
+    const binding = s[role]
+    const connection = connectionOf(s, role)
+    if (!connection || !binding?.model || seen.has(connection.id)) continue
+    seen.add(connection.id)
+    targets.push({ role, connection, model: binding.model })
+  }
+  return targets
 }
 
 /** Document to send: drop blank compatible connections nothing points at; a disabled cover with no model is null. */

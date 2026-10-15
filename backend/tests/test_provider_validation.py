@@ -258,3 +258,84 @@ def test_api88_wrong_stored_url_is_forced_to_the_preset(monkeypatch):
     assert result.ok is True
     assert seen[0].startswith('https://api.88api.ai/v1/')
     assert result.base_url_host == 'api.88api.ai'
+
+
+@pytest.mark.parametrize('purpose,model', [('cover', 'image-only'), ('transcription', 'whisper-1')])
+def test_non_chat_connection_checks_account_access_without_chat_probe(monkeypatch, purpose, model):
+    calls = []
+
+    def handler(method, url, headers, body):
+        calls.append((method, url))
+        assert method == 'GET', 'image and ASR models must never be sent to chat/completions'
+        return _FakeResponse(200, {'data': [{'id': model}]})
+
+    _patch_httpx(monkeypatch, handler)
+    app = FastAPI()
+    from backend.api.v1.settings import router
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.post('/settings/ai-models/test', json={
+            'connection': _connection().model_dump(), 'model': model, 'purpose': purpose,
+        })
+    assert response.status_code == 200
+    assert response.json()['ok'] is True
+    assert calls == [('GET', 'https://gw.example/v1/models')]
+
+
+@pytest.mark.parametrize('purpose', ['cover', 'transcription'])
+@pytest.mark.parametrize('status,expected', [(401, 'invalid_key'), (200, 'model_not_found')])
+def test_non_chat_access_never_accepts_unauthorized_or_unlisted_models(monkeypatch, purpose, status, expected):
+    def handler(method, url, headers, body):
+        assert method == 'GET'
+        return _FakeResponse(status, {'data': [{'id': 'another-model'}]} if status == 200
+                             else {'error': {'message': 'Incorrect API key provided'}})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(_connection(), 'selected-model', purpose=purpose)
+    assert result.ok is False
+    assert result.error_type == expected
+    assert result.base_url_host == 'gw.example'
+
+
+def test_cover_access_uses_image_address_without_replacing_chat_address(monkeypatch):
+    def handler(method, url, headers, body):
+        assert (method, url) == ('GET', 'https://images.example/v1/models')
+        return _FakeResponse(200, {'data': [{'id': 'image-only'}]})
+
+    _patch_httpx(monkeypatch, handler)
+    app = FastAPI()
+    from backend.api.v1.settings import router
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.post('/settings/ai-models/test', json={
+            'connection': _connection(image_base_url='https://images.example/v1').model_dump(),
+            'model': 'image-only', 'purpose': 'cover',
+        })
+    assert response.status_code == 200
+    assert response.json()['ok'] is True
+    assert response.json()['base_url_host'] == 'images.example'
+    assert response.json()['normalized_base_url'] == 'https://gw.example/v1'
+
+
+def test_explicit_vision_purpose_runs_vision_validation(monkeypatch):
+    from backend.services import provider_validation
+    from backend.services.studio import vision_settings
+    monkeypatch.setattr(provider_validation, 'validate_connection', lambda *args: provider_validation._ok('https://gw.example/v1', None, ['gpt-4o']))
+    probes = []
+
+    def vision_probe(value):
+        probes.append(value)
+        return {'success': True}
+
+    monkeypatch.setattr(vision_settings, 'test', vision_probe)
+    app = FastAPI()
+    from backend.api.v1.settings import router
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.post('/settings/ai-models/test', json={
+            'connection': _connection().model_dump(), 'model': 'gpt-4o', 'purpose': 'vision',
+        })
+    assert response.status_code == 200
+    assert response.json()['ok'] is True
+    assert len(probes) == 1
+    assert probes[0].model == 'gpt-4o'
