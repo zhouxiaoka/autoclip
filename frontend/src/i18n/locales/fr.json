@@ -1878,5 +1878,6 @@
   "settings.providers.fetch_list_updated": "Liste mise à jour avec les modèles disponibles sur ce compte.",
   "settings.providers.fetch_list_no_overlap": "Aucun candidat recommandé n’est dans la liste de ce compte. Choisissez-en un manuellement ou actualisez la liste.",
   "settings.providers.fetch_list_truncated": "La liste des modèles est trop longue ; seuls les 2000 premiers sont conservés. Saisissez les autres manuellement.",
-  "API Key 无效或已过期，请检查后重试": "La clé API est invalide ou a expiré. Vérifiez-la et réessayez."
+  "API Key 无效或已过期，请检查后重试": "La clé API est invalide ou a expiré. Vérifiez-la et réessayez.",
+  "连不上本机模型服务。请先启动 Ollama（或 LM Studio），确认地址和端口正确后再点测试。": "Impossible de joindre le service de modèles local. Démarrez Ollama (ou LM Studio), vérifiez l'adresse et le port, puis cliquez à nouveau sur Tester."
 }

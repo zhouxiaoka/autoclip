@@ -608,3 +608,19 @@ def test_e6_remote_connection_error_keeps_generic_hint(monkeypatch):
     result = validate_connection(_connection(base_url='https://api.example.com/v1'), 'm')
     assert result.error_type == 'connection'
     assert result.hint_key == HINT_KEYS[UpstreamErrorType.CONNECTION]
+
+
+def test_e6_local_service_down_hint_exists_in_all_eight_locales():
+    from pathlib import Path
+    from backend.services.provider_validation import LOCAL_SERVICE_DOWN_HINT_KEY
+
+    root = Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'i18n' / 'locales'
+    langs = ('zh', 'en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru')
+    catalogs = {lang: json.loads((root / f'{lang}.json').read_text(encoding='utf-8')) for lang in langs}
+    assert catalogs['zh'][LOCAL_SERVICE_DOWN_HINT_KEY] == LOCAL_SERVICE_DOWN_HINT_KEY
+    for lang in langs:
+        text = catalogs[lang].get(LOCAL_SERVICE_DOWN_HINT_KEY)
+        assert text and str(text).strip(), f'{lang} missing E6 local-service-down hint'
+        if lang != 'zh':
+            assert text != LOCAL_SERVICE_DOWN_HINT_KEY, f'{lang} still uses Chinese source string'
+            assert 'Ollama' in text, f'{lang} should name Ollama'

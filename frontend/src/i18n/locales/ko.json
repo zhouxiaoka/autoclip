@@ -1878,5 +1878,6 @@
   "settings.providers.fetch_list_updated": "이 계정에서 사용할 수 있는 모델로 목록을 업데이트했습니다.",
   "settings.providers.fetch_list_no_overlap": "추천 후보가 이 계정의 사용 가능 목록에 없습니다. 직접 선택하거나 목록을 새로고침하세요.",
   "settings.providers.fetch_list_truncated": "모델 목록이 너무 길어 처음 2000개만 유지합니다. 나머지는 직접 입력하세요.",
-  "API Key 无效或已过期，请检查后重试": "API 키가 유효하지 않거나 만료되었습니다. 확인한 후 다시 시도하세요."
+  "API Key 无效或已过期，请检查后重试": "API 키가 유효하지 않거나 만료되었습니다. 확인한 후 다시 시도하세요.",
+  "连不上本机模型服务。请先启动 Ollama（或 LM Studio），确认地址和端口正确后再点测试。": "로컬 모델 서비스에 연결할 수 없습니다. 먼저 Ollama(또는 LM Studio)를 실행하고 주소와 포트를 확인한 뒤 다시 테스트를 누르세요."
 }
