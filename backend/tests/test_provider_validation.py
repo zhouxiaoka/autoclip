@@ -577,3 +577,34 @@ def test_explicit_vision_purpose_runs_vision_validation(monkeypatch):
     assert response.json()['ok'] is True
     assert len(probes) == 1
     assert probes[0].model == 'gpt-4o'
+
+
+def _closed_local_port():
+    import socket
+    sock = socket.socket()
+    sock.bind(('127.0.0.1', 0))
+    port = sock.getsockname()[1]
+    sock.close()  # nothing listens here now -> connection refused
+    return port
+
+
+def test_e6_ollama_not_running_gets_inline_start_hint():
+    from backend.services.provider_validation import LOCAL_SERVICE_DOWN_HINT_KEY
+    port = _closed_local_port()
+    conn = ai.Connection(id='o1', name='Ollama', provider='ollama', base_url=f'http://127.0.0.1:{port}/v1')
+    result = validate_connection(conn, 'qwen2.5:7b')
+    assert result.ok is False
+    assert result.error_type == 'connection'
+    assert result.hint_key == LOCAL_SERVICE_DOWN_HINT_KEY
+    assert 'Ollama' in result.hint_key
+    assert result.as_api()['hint_key'] == LOCAL_SERVICE_DOWN_HINT_KEY
+
+
+def test_e6_remote_connection_error_keeps_generic_hint(monkeypatch):
+    from types import SimpleNamespace
+    from backend.services import provider_validation as pv
+    fetched = SimpleNamespace(recommended={}, truncated=False, message_key='')
+    monkeypatch.setattr(pv, '_get_models', lambda *a, **k: ([], pv._classify(None, '', error_name='ConnectError'), fetched))
+    result = validate_connection(_connection(base_url='https://api.example.com/v1'), 'm')
+    assert result.error_type == 'connection'
+    assert result.hint_key == HINT_KEYS[UpstreamErrorType.CONNECTION]
