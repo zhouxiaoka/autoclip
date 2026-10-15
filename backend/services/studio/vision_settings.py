@@ -102,7 +102,10 @@ def _with_text_model(stored):
 
 def effective():
     from backend.services import ai_model_settings as ai
-    settings = ai.load()
+    try:
+        settings = ai.load()
+    except Exception:
+        raise ValueError('已保存的模型配置需要修复，请到「设置 → 模型」修复并保存后再生成。') from None
     if settings:
         endpoint = ai.vision_endpoint(settings)
         binding = settings.vision or settings.analysis

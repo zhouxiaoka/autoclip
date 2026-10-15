@@ -263,7 +263,26 @@ def for_editing() -> ModelSettings:
 
 
 def connection_for(settings: ModelSettings, assignment: Assignment) -> Connection:
-    return next(c for c in settings.connections if c.id == assignment.connection_id)
+    connection = next((c for c in settings.connections if c.id == assignment.connection_id), None)
+    if connection is None:
+        raise ValueError('模型引用的服务连接已缺失，请到「设置 → 模型」重新选择并保存，完成修复后再生成。')
+    return connection
+
+
+def ensure_runtime_bindings(settings: ModelSettings) -> None:
+    """A lost explicit assignment is never consent to borrow another provider."""
+    if {'analysis_configuration_invalid', 'vision_configuration_invalid'} & set(settings._migration_warnings):
+        raise ValueError('分析或视觉模型引用的服务连接已缺失或配置无效，请到「设置 → 模型」修复并保存后再生成。')
+    for binding in (settings.analysis, settings.vision):
+        if binding is not None:
+            connection_for(settings, binding)
+
+
+def require_analysis(settings: ModelSettings) -> Assignment:
+    ensure_runtime_bindings(settings)
+    if settings.analysis is None:
+        raise ValueError('分析模型配置需要修复，请到「设置 → 模型」选择服务连接和模型并保存后再生成。')
+    return settings.analysis
 
 
 def chat_endpoint(connection: Connection, model: str) -> dict:
@@ -343,6 +362,7 @@ def sees_images(settings: ModelSettings, assignment: Assignment | None) -> bool:
 
 
 def vision_endpoint(settings: ModelSettings) -> dict | None:
+    ensure_runtime_bindings(settings)
     binding = settings.vision or settings.analysis
     if not sees_images(settings, binding):
         return None

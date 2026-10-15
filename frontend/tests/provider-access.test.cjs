@@ -24,6 +24,7 @@ function loadContract() {
   return module.exports
 }
 const contract = loadContract()
+const urls = loadTs('providerUrl.ts')
 const access = loadTs('providerAccess.ts', {
   '../../i18n': { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) },
   './providers': providers,
@@ -48,6 +49,14 @@ test('compatible URLs gain /v1, drop chat completions, and flag console hosts', 
   const source = fs.readFileSync(path.join(__dirname, '../src/features/settings/providerAccess.ts'), 'utf8')
   assert.match(source, /normalizeProviderUrl/)
   assert.doesNotMatch(source, /VERSIONED/)
+})
+
+test('validation and settings share Gemini and ordinary chat roots', () => {
+  const root = 'https://generativelanguage.googleapis.com'
+  for (const [suffix, expected] of [['/v1beta', '/v1beta/openai'], ['/v1beta/openai', '/v1beta/openai'], ['/v1', '/v1']]) {
+    assert.equal(access.normalizeCompatibleUrl(root + suffix).url, root + expected)
+    assert.equal(access.normalizeCompatibleUrl(root + suffix).url, urls.normalizeProviderBaseUrl(root + suffix))
+  }
 })
 
 test('wrong-provider keys are hinted, never treated as a switch, and hosts stay sanitized', () => {
@@ -75,4 +84,21 @@ test('settings URL wrapper shares Gemini chat-root normalization', () => {
     assert.equal(pasted.url, root + '/openai')
     assert.ok(pasted.warnings.includes('chat_completions'))
   }
+})
+
+// Catalog API and legacy hosts take precedence over website/console hints.
+test('Infistar API host is accepted and console detection follows the catalog', () => {
+  assert.equal(access.isConsoleHost('infistar.ai'), false)
+  assert.equal(access.normalizeCompatibleUrl('https://infistar.ai/v1').warnings.includes('console_host'), false)
+  const catalogAccess = loadTs('providerAccess.ts', {
+    '../../i18n': { t: x => x },
+    './providers': providers,
+    '../../analytics/successRateContract': contract,
+    './providerPresets': { getCatalog: () => ({ providers: {
+      fixture: { base_url: 'https://platform.deepseek.com/v1', accepted_hosts: ['aistudio.google.com'] },
+    } }) },
+  })
+  assert.equal(catalogAccess.isConsoleHost('platform.deepseek.com'), false)
+  assert.equal(catalogAccess.isConsoleHost('aistudio.google.com'), false)
+  assert.equal(catalogAccess.isConsoleHost('platform.openai.com'), true)
 })

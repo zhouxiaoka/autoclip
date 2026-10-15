@@ -5,6 +5,7 @@ import {
   UPSTREAM_ERROR_TYPES,
 } from '../../analytics/successRateContract'
 import { PROVIDERS, type ProviderKey } from './providers'
+import { getCatalog } from './providerPresets'
 import { cleanupBaseUrl, normalizeProviderUrl } from './providerUrl'
 
 export const ADDRESS_LOCKED: readonly ProviderKey[] = ['api88', 'infistar', 'deepseek', 'gemini', 'dashscope', 'openai']
@@ -41,7 +42,7 @@ const CONSOLE_HOSTS = new Set([
   'console.cloud.google.com', 'bailian.console.aliyun.com', 'dashscope.console.aliyun.com',
   'www.aliyun.com', 'aliyun.com', 'console.volcengine.com', 'www.volcengine.com',
   'platform.moonshot.cn', 'www.moonshot.cn', 'console.x.ai',
-  'www.infistar.cc', 'www.infistar.ai', 'infistar.ai', 'www.88api.ai',
+  'www.infistar.cc', 'www.infistar.ai', 'www.88api.ai',
 ])
 const CONSOLE_COPY = '这是控制台或官网地址，不是模型接口。请改选对应服务商，或用「自定义兼容」填写带 /v1 的接口地址。'
 
@@ -57,6 +58,12 @@ export function hintProviderForKey(apiKey?: string | null): ProviderKey | null {
 
 export function isConsoleHost(host?: string) {
   const value = (host || '').toLowerCase().replace(/^\.+|\.+$/g, '')
+  if (!value) return false
+  // Match the backend: catalog API and accepted legacy hosts take precedence.
+  for (const preset of Object.values(getCatalog().providers)) {
+    if (preset.accepted_hosts.includes(value)) return false
+    try { if (new URL(preset.base_url).hostname.toLowerCase() === value) return false } catch { /* No API host. */ }
+  }
   return CONSOLE_HOSTS.has(value) || value.endsWith('.console.aliyun.com') || value.endsWith('.console.volcengine.com')
 }
 

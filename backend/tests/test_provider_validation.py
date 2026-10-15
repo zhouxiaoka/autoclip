@@ -78,6 +78,32 @@ def test_compatible_url_gains_v1_and_drops_chat_completions():
     assert connection.base_url == 'https://gw.example/v1'
 
 
+@pytest.mark.parametrize('path,expected', [
+    ('/v1beta', '/v1beta/openai'),
+    ('/v1beta/openai', '/v1beta/openai'),
+    ('/v1', '/v1'),
+])
+@pytest.mark.parametrize('provider', ['gemini', 'compatible'])
+def test_gemini_validation_requests_use_the_shared_chat_root(monkeypatch, path, expected, provider):
+    root = 'https://generativelanguage.googleapis.com'
+    calls = []
+
+    def handler(method, url, headers, body):
+        calls.append(url)
+        if method == 'GET':
+            return _FakeResponse(200, {'data': [{'id': 'gemini-test'}]})
+        return _FakeResponse(200, {'choices': [{'message': {'content': 'ok'}}]})
+
+    _patch_httpx(monkeypatch, handler)
+    result = validate_connection(ai.Connection(
+        id='g', name='Gemini', provider=provider, base_url=root + path,
+        base_url_source='user', preset_version=1, api_key='test-only-key',
+    ), 'gemini-test')
+    assert result.ok
+    assert calls == [root + expected + '/models', root + expected + '/chat/completions']
+    assert root + '/v1beta/chat/completions' not in calls
+
+
 def test_missing_v1_is_normalized_then_models_404_is_bad_endpoint(monkeypatch):
     calls = []
 

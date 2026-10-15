@@ -68,14 +68,16 @@ def test_normalize_never_raises_on_odd_input():
     ('/v1', '/v1'),
 ])
 @pytest.mark.parametrize('provider', ['gemini', 'compatible'])
-def test_shared_gemini_chat_normalization(path, expected, provider):
+@pytest.mark.parametrize('preset_version', [0, 1])
+def test_shared_gemini_chat_normalization(path, expected, provider, preset_version):
     from backend.core.provider_endpoint import normalize_provider_base_url as endpoint_normalize
     raw = 'https://generativelanguage.googleapis.com' + path
     wanted = 'https://generativelanguage.googleapis.com' + expected
     assert normalize_provider_base_url(raw, provider) == wanted
     assert normalize_provider_base_url(wanted, provider) == wanted
     assert endpoint_normalize(raw, provider).url == wanted
-    connection = ai.Connection(id='g', name='Gemini', provider=provider, base_url=raw)
+    connection = ai.Connection(id='g', name='Gemini', provider=provider, base_url=raw,
+                               base_url_source='user', preset_version=preset_version)
     assert connection.base_url == wanted
     ai.save(ai.ModelSettings(
         connections=[connection], analysis=ai.Assignment(connection_id='g', model='gemini-test'),

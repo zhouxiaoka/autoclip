@@ -16,6 +16,7 @@ export type ProviderPreset = {
   capabilities: string[]
   docs_url: string
   locked: boolean
+  accepted_hosts: string[]
   default_model: string
   candidates: Record<PurposeId, string[]>
   openai_compat_remap: boolean
@@ -77,6 +78,7 @@ function parseProvider(id: string, rawProvider: unknown): ProviderPreset | undef
     capabilities: asStrings(row.capabilities),
     docs_url: String(row.docs_url || '').trim(),
     locked: Boolean(row.locked),
+    accepted_hosts: asStrings(row.accepted_hosts).map(host => host.toLowerCase()),
     default_model: typeof row.default_model === 'string' ? row.default_model : (candidates.analysis[0] || ''),
     candidates,
     openai_compat_remap: Boolean(row.openai_compat_remap),

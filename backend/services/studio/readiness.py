@@ -34,18 +34,15 @@ def _analysis(settings: ai_models.ModelSettings) -> dict:
 
 
 def ensure_analysis_usable() -> None:
-    """Block import / generation when the saved analysis connection failed validation.
-
-    Only a persisted document with `validation_status=failed` is a hard stop.
-    Missing, legacy, or unreadable files stay on the existing readiness path so
-    first-run imports and inspect tests are not turned into errors.
-    """
+    """Block broken saved assignments before dispatch or any provider request."""
     try:
         settings = ai_models.load()
     except Exception:
-        return
+        # Validation errors may contain private settings values. Expose only this message.
+        raise ValueError('已保存的模型配置需要修复，请到「设置 → 模型」重新选择服务和模型并保存后再生成。') from None
     if settings is None:
         return
+    ai_models.require_analysis(settings)
     check = _analysis(settings)
     if check['code'] == 'validation_failed':
         raise ValueError('当前模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。')
@@ -104,8 +101,11 @@ def _visual(settings: ai_models.ModelSettings) -> dict:
         return _check(True, 'optional')
     # Same answer as the pipeline (vision_endpoint): capability=auto resolves through
     # provider metadata and supports_vision, not only a literal 'multimodal'.
-    if ai_models.vision_endpoint(settings) is not None:
-        return _check(True, 'configured')
+    try:
+        if ai_models.vision_endpoint(settings) is not None:
+            return _check(True, 'configured')
+    except ValueError:
+        return _check(False, 'settings_invalid', 'settings_vision')
     return _check(False, 'not_configured', 'settings_vision')
 
 
