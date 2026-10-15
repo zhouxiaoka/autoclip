@@ -656,7 +656,7 @@ def _attach_run_telemetry(data, project_id, previous):
         'http_status', 'upstream_error_type', 'failure_stage', 'billable_calls_before_failure',
     }
     keep_if_set = {'http_status', 'upstream_error_type', 'failure_stage', 'billable_calls_before_failure'}
-    usage_keys = {'llm_calls', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'degrade_count'}
+    usage_keys = {'llm_calls', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'degrade_count', 'retry_count'}
     persisted = {}
     for name in ('generation', 'analysis'):
         record = data.get(name)
