@@ -329,6 +329,26 @@ async def get_speech_methods_status():
         logger.error(f"获取语音识别方法状态失败: {e}")
         raise HTTPException(status_code=500, detail="获取语音识别方法状态失败")
 
+class WhisperModelSourceRequest(BaseModel):
+    source: str
+
+
+@router.get("/whisper/model-source")
+async def get_whisper_model_source():
+    """模型下载源（E3）：auto 自动探测 hf-mirror / huggingface 官方 / hf-mirror 镜像。"""
+    from backend.services import whisper_model_manager as wmm
+    return {"source": wmm.saved_model_source(), "effective": wmm.model_source(), "options": list(wmm.MODEL_SOURCES)}
+
+
+@router.put("/whisper/model-source")
+async def put_whisper_model_source(request: WhisperModelSourceRequest):
+    from backend.services import whisper_model_manager as wmm
+    try:
+        return {"source": wmm.save_model_source(request.source)}
+    except ValueError:
+        raise HTTPException(status_code=422, detail="不支持的模型下载源")
+
+
 @router.get("/whisper-models")
 async def get_whisper_models():
     """获取Whisper模型信息"""

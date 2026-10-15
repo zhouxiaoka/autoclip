@@ -21,6 +21,17 @@ class Recommendation(BaseModel):
 VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sources use the subtitle route
 VISION_FALLBACK_CODE = 'vision_unavailable_subtitle_fallback'
 VISION_FALLBACK_MESSAGE = '视觉服务暂不可用，已切换为字幕分析继续制作。'
+# E1: AUTO mode, screening answered but the answer could not be parsed.
+VISION_INVALID_FALLBACK_CODE = 'vision_invalid_subtitle_fallback'
+VISION_INVALID_FALLBACK_MESSAGE = '画面结果不可用，已改用字幕继续制作。'
+
+
+def _is_parse_failure(error) -> bool:
+    from backend.services.studio import intelligence
+    if isinstance(error, intelligence.VisionRequestError):
+        return error.code == 'invalid_response'
+    # Recommendation.model_validate / decode errors on a response that did arrive.
+    return isinstance(error, (ValueError, KeyError, TypeError))
 
 
 def _local_recommendation(video: Path, duration: float, prefix: str = ''):
@@ -87,6 +98,7 @@ def recommend(video: Path, options: ImportOptions):
     consent = analysis_preferences.load()
     degrade_reason = None
     screening_degrade = False
+    invalid_degrade = False
     try:
         configured = consent.analysis_mode != 'subtitle' and intelligence.ready()
     except ValueError:
@@ -148,16 +160,22 @@ def recommend(video: Path, options: ImportOptions):
         except (RuntimeError, ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
             # Only an explicit visual choice fails the run; the default automatic
             # screening is optional and falls back to the subtitle route.
+            if consent.analysis_mode == 'auto' and _is_parse_failure(error):
+                # E1: AUTO screening answered but unparseably -> subtitle route with notice.
+                # Subtitle readiness was already required above for AUTO.
+                invalid_degrade = True
             if options.auto_start and consent.analysis_mode == 'visual':
+                # Kris rule: a manual visual choice never falls back to subtitles (incl. E1
+                # parse failures); auto-start hard-blocks, the review screen keeps the route.
                 raise
             from backend.core.sentry_setup import capture_studio_exception
             capture_studio_exception(error, 'screening', analysis_mode='visual')
             if isinstance(error, intelligence.VisionRequestError):
                 diagnostics = {**error.diagnostics(), 'phase':'screening'}
             mode = 'fallback'
-            if consent.analysis_mode == 'auto' and isinstance(error, intelligence.VisionRequestError):
+            if consent.analysis_mode == 'auto' and isinstance(error, intelligence.VisionRequestError) and not invalid_degrade:
                 screening_degrade = True  # S5: record the fixed reason; keep the screening message first
-            if options.auto_start or screening_degrade:
+            if options.auto_start or screening_degrade or invalid_degrade:
                 local_evidence, result = _local_recommendation(
                     video, duration, '快速画面判断未完成，已改按字幕制作。')
             else:
@@ -169,10 +187,21 @@ def recommend(video: Path, options: ImportOptions):
     elif screening_degrade:  # vision request failed during auto screening
         degrade_reason = VISION_FALLBACK_CODE
         result.reason = (result.reason + VISION_FALLBACK_MESSAGE)[:500]
+    elif invalid_degrade:  # visual mode screening returned an unparseable answer
+        degrade_reason = VISION_INVALID_FALLBACK_CODE
+        result.reason = (VISION_INVALID_FALLBACK_MESSAGE + result.reason)[:500]
+    explicit_visual = (consent.analysis_mode == 'visual' and not invalid_degrade and configured and mode in ('ai', 'local')
+                       and options.goal == 'auto' and duration <= VISUAL_MAX_SOURCE_SEC)
+    if explicit_visual and result.goal == 'content':
+        # E2: the user chose visual analysis; a content-type recommendation must not
+        # silently turn the run into a subtitle-only route. The review screen shows the
+        # route that will actually run (visual); the user may still switch to subtitles.
+        result.goal = 'highlight'
+        result.suggested_goals = ['highlight'] + [g for g in (result.suggested_goals or []) if g not in ('highlight', 'content')]
     prefs = Preferences(goal=result.goal, language=options.language,
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
-    route = 'visual' if duration <= VISUAL_MAX_SOURCE_SEC and result.goal != 'content' and (consent.analysis_mode == 'visual' or (consent.analysis_mode == 'auto' and mode == 'ai' and result.goal != 'content')) else 'subtitle'
+    route = 'subtitle' if invalid_degrade else 'visual' if duration <= VISUAL_MAX_SOURCE_SEC and result.goal != 'content' and (consent.analysis_mode == 'visual' or (consent.analysis_mode == 'auto' and mode == 'ai' and result.goal != 'content')) else 'subtitle'
     if short or no_audio:
         from backend.pipeline import media_precheck
         if route == 'subtitle' and options.auto_start:
