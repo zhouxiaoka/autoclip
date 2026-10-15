@@ -24,6 +24,7 @@ def prompt_files(tmp_path):
 
 def _manager(fn):
     manager = LLMManager.__new__(LLMManager)
+    manager._reload_if_settings_changed = lambda: None
     manager.call = lambda *a, **k: fn()
     return manager
 

@@ -483,6 +483,11 @@ class OpenAIProvider(LLMProvider):
                 if payload.get("max_tokens") is None or getattr(error, "status_code", None) != 400 \
                         or not asks_for_max_completion_tokens(error):
                     raise
+                # The manager reserved the first SDK call, not this compatibility
+                # resend. Reserve its SDK retries too before issuing another request.
+                from backend.core.llm_degrade import consume_chunk_call
+                if not consume_chunk_call():
+                    raise
                 logger.info("模型 %s 不支持 max_tokens，改用 max_completion_tokens 重试一次", model)
                 response = self.client.chat.completions.create(**to_max_completion_tokens(payload))
             
