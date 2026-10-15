@@ -18,8 +18,9 @@ export type SlotKind = 'smart' | 'fixed' | 'local' | 'follow' | 'off' | 'empty'
 export type VisionWarning = 'follow' | 'selected'
 
 export const PURPOSE_SLOTS = [
-  { id: 'analysis' as const, titleKey: '精彩片段分析', kindKey: '语言模型' },
-  { id: 'vision' as const, titleKey: '画面理解', kindKey: '带视觉的语言模型' },
+  // kindKey 与目录筛选词对齐（语言 / 语音识别 / 图像生成）；「视觉」仅为标签。
+  { id: 'analysis' as const, titleKey: '精彩片段分析', kindKey: '语言' },
+  { id: 'vision' as const, titleKey: '画面理解', kindKey: '语言 · 视觉' },
   { id: 'transcription' as const, titleKey: '语音转字幕', kindKey: '语音识别' },
   { id: 'cover' as const, titleKey: '封面生成', kindKey: '图像生成' },
 ]

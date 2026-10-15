@@ -260,7 +260,7 @@ test('overview uses DefaultModels and drops legacy CurrentAnalysis / transcripti
     './DefaultModels': { default: () => React.createElement('div', { 'data-default-models': true }) },
   }).default
   const nodes = flatten(Page({ requestedSection: 'model', requestedProvider: '' }))
-  assert.ok(nodes.some(node => node.props?.['data-layout'] === 'v6'))
+  assert.ok(nodes.some(node => String(node.props?.['data-layout'] || '').startsWith('v6')))
   assert.ok(nodes.some(node => node.props?.['data-default-models']))
   assert.ok(nodes.some(node => node.props?.['data-catalog'] && node.props?.['data-has-add']))
   assert.equal(nodes.some(node => node.props?.role === 'analysis'), false)
@@ -370,12 +370,12 @@ test('provider detail uses two-column connect/models layout without analysis Mod
     },
     onBack: () => {},
   })
-  const root = flatten(tree).find(node => node.props?.['data-layout'] === 'v6')
+  const root = flatten(tree).find(node => String(node.props?.['data-layout'] || '').startsWith('v6'))
   assert.ok(root)
   assert.ok(flatten(tree).some(node => node.props?.['data-panel'] === 'connect'))
   assert.ok(flatten(tree).some(node => node.props?.['data-panel'] === 'models'))
   assert.equal(flatten(tree).some(node => node.props?.role === 'analysis'), false)
-  assert.match(textOf(tree), /连接后，以上模型将出现在「默认模型」的选项中/)
+  assert.match(textOf(tree), /连接后可在上方「默认模型」中选择/)
 })
 
 

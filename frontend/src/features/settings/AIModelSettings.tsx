@@ -176,10 +176,7 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
       {customSelected ? <CustomGatewayRepair connection={customSelected} m={m} onBack={closeProvider} />
         : selected ? <ProviderDetail preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>
         <header className="ac-settings-ai-head">
-          <div>
-            <h2 className="ac-title" style={{ fontSize: 22 }}>{t('settings.providers.title')}</h2>
-            <p className="ac-note" style={{ marginTop: 4 }}>{t('settings.providers.subtitle')}</p>
-          </div>
+          <p className="ac-note">{t('settings.providers.subtitle')}</p>
         </header>
         <div className="ac-model-section" data-section="default-models">
           <DefaultModels settings={settings} lists={m.lists} onChange={next => m.update(next)} />
