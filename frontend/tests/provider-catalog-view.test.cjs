@@ -17,6 +17,31 @@ const blank = () => ({
   chunk_size: 5000, min_score_threshold: .7, max_clips_per_collection: 5,
 })
 
+test('B2: catalog analysis switching preserves explicit bindings and follows only a null vision', () => {
+  const logic = loadTs('modelSettingsLogic.ts', { '../../i18n': { t: text => text } })
+  const defaults = loadTs('modelDefaults.ts')
+  const connections = ['old', 'new', 'independent'].map(id => ({ id, name: id, provider: 'ollama', base_url: '', image_api: 'auto', image_base_url: '' }))
+  for (const bindingId of ['old', 'independent']) {
+    for (const cover_enabled of [true, false]) {
+      const state = { ...blank(), connections, analysis: { connection_id: 'old', model: 'old-analysis', capability: 'auto' },
+        vision: { connection_id: bindingId, model: 'my-vision', capability: 'multimodal', model_source: 'user' },
+        cover: { connection_id: bindingId, model: 'my-cover', capability: 'auto', model_source: 'user' }, cover_enabled }
+      const switched = view.assignAnalysis(state, connections[1])
+      const filled = defaults.applyModelDefaults(switched, connections[1], [{ id: 'new-analysis', analysis: true, capability: 'multimodal' }, { id: 'new-image', image: true }], false)
+      assert.equal(filled.analysis.connection_id, 'new')
+      assert.equal(filled.analysis.model, 'new-analysis')
+      for (const value of [switched, filled, logic.forSave(logic.setVisual(logic.setVisual(filled, false), true))]) {
+        assert.deepEqual(value.vision, state.vision)
+        assert.deepEqual(value.cover, state.cover)
+      }
+      const followed = view.assignAnalysis({ ...state, vision: null }, connections[1])
+      assert.equal(followed.vision, null)
+      assert.equal(logic.followedVisionBinding(followed).connection_id, 'new')
+      assert.equal(view.assignAnalysis(state, connections[0]), state)
+    }
+  }
+})
+
 test('catalog lists all 38 presets in the four product groups', () => {
   const rows = view.catalogProviders()
   assert.equal(rows.length, 38)

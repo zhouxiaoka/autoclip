@@ -55,6 +55,55 @@ def test_same_provider_multiple_accounts_and_separate_vision():
     assert ai.vision_endpoint(ai.load()) == {'base_url': 'https://two.example/v1', 'api_key': 'sk-second-secret', 'model': 'vision-b'}
 
 
+@pytest.mark.parametrize('binding_id', ['old', 'independent', None])
+@pytest.mark.parametrize('cover_enabled', [True, False])
+def test_b2_analysis_switch_and_visual_toggle_http_save_round_trip(binding_id, cover_enabled):
+    """Persist the frontend's switch/toggle contract through HTTP, disk and runtime routing."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    config = ai.ModelSettings(
+        connections=[ai.Connection(id=id_, name=id_, provider=provider, api_key='')
+                     for id_, provider in [('old', 'ollama'), ('new', 'lmstudio'), ('independent', 'ollama')]],
+        analysis=ai.Assignment(connection_id='old', model='old-analysis', capability='multimodal'),
+        vision=ai.Assignment(connection_id=binding_id, model='my-vision', capability='multimodal', model_source='user') if binding_id else None,
+        cover=ai.Assignment(connection_id=binding_id or 'old', model='my-cover', model_source='user'),
+        cover_enabled=cover_enabled,
+    )
+    switched = config.model_copy(update={
+        'analysis': ai.Assignment(connection_id='new', model='new-analysis'),
+    })
+    off = switched.model_copy(update={'analysis_mode': 'subtitle', 'allow_visual_screening': False})
+    on = off.model_copy(update={'analysis_mode': 'auto', 'allow_visual_screening': True})
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        for index, document in enumerate([config, switched, off, on]):
+            response = client.put('/settings/ai-models', json=document.model_dump())
+            assert response.status_code == 200
+            public = response.json()
+            loaded = ai.load()
+            assert loaded.vision == config.vision
+            assert loaded.cover == config.cover
+            assert loaded.cover_enabled == cover_enabled
+            assert loaded.analysis.connection_id == ('old' if index == 0 else 'new')
+            assert loaded.analysis_mode == ('subtitle' if index == 2 else 'auto')
+            assert loaded.allow_visual_screening == (index != 2)
+            assert public['vision'] == config.model_dump()['vision']
+            assert public['cover'] == config.model_dump()['cover']
+            assert client.get('/settings/ai-models').json()['vision'] == public['vision']
+            assert client.get('/settings/ai-models').json()['cover'] == public['cover']
+            routed = ai.vision_follow_binding(loaded)
+            assert routed.connection_id == (binding_id or loaded.analysis.connection_id)
+            assert routed.model == ('my-vision' if binding_id else loaded.analysis.model)
+            assert ai.connection_for(loaded, loaded.cover).id == (binding_id or 'old')
+            # Re-save the public editing document, just as reopening settings does.
+            assert client.put('/settings/ai-models', json=public).status_code == 200
+            assert ai.load().vision == config.vision
+            assert ai.load().cover == config.cover
+
+
 def test_api_key_strips_surrounding_whitespace_on_construct_and_save():
     connection = ai.Connection(id='c', name='k', provider='openai', api_key='  sk-live-secret  \n')
     assert connection.api_key == 'sk-live-secret'

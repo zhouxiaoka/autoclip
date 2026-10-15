@@ -161,12 +161,9 @@ export function assignAnalysis(
   connection: Connection,
 ): ModelSettings {
   if (!endpointProviderReady(connection)) return settings
-  const oldMainId = settings.analysis?.connection_id
-  if (oldMainId === connection.id) return settings
-  let next: ModelSettings = { ...settings, analysis: cleanBinding(connection.id) }
-  if (settings.cover?.connection_id === oldMainId) next = { ...next, cover: settings.cover_enabled ? cleanBinding(connection.id) : null }
-  if (settings.vision?.connection_id === oldMainId) next = { ...next, vision: null }
-  return next
+  if (settings.analysis?.connection_id === connection.id) return settings
+  // An explicit binding stays independent even when it shares the old analysis connection.
+  return { ...settings, analysis: cleanBinding(connection.id) }
 }
 
 export function ensureCatalogConnection(

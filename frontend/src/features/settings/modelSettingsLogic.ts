@@ -123,10 +123,6 @@ export function chooseProvider(
     connections: existing ? s.connections : [...s.connections, connection],
     [role]: role === 'transcription' ? { provider: 'cloud', model: '', connection_id: connection.id, model_source: 'preset' } : cleanBinding(connection.id),
   }
-  if (role === 'analysis') {
-    if (s.cover?.connection_id === oldMainId) next.cover = s.cover_enabled ? cleanBinding(connection.id) : null
-    if (s.vision?.connection_id === oldMainId) next.vision = null
-  }
   const cached = lists[connection.id]
   if (cached && !cached.preview) next = applyModelDefaults(next, connection, cached.models, autoCover)
   return { settings: next, connection, changed: true }
@@ -153,7 +149,7 @@ export function setCoverEnabled(s: ModelSettings, enabled: boolean, lists: Recor
 
 /** The "画面识别" switch: on = smart selection (multimodal models sample frames), off = subtitles only. */
 export function setVisual(s: ModelSettings, enabled: boolean): ModelSettings {
-  return { ...s, analysis_mode: enabled ? 'auto' : 'subtitle', allow_visual_screening: enabled, vision: null }
+  return { ...s, analysis_mode: enabled ? 'auto' : 'subtitle', allow_visual_screening: enabled }
 }
 
 export const isTextOnly = (s: ModelSettings, lists: Record<string, ModelList>) => {

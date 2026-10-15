@@ -130,11 +130,18 @@ test('text-only models stay eligible in smart mode; only the explicit visual rou
   assert.equal(logic.isTextOnly(filled, { d: { models: [{ id: 'deepseek-flash', capability: 'text', analysis: true }] } }), true)
 })
 
-test('the frame-analysis switch maps to smart/subtitle mode and never keeps a stale vision binding', () => {
-  const on = logic.setVisual({ ...fresh(), analysis_mode: 'subtitle', allow_visual_screening: false, vision: { connection_id: 'x', model: 'm', capability: 'auto' } }, true)
-  assert.deepEqual([on.analysis_mode, on.allow_visual_screening, on.vision], ['auto', true, null])
-  const off = logic.setVisual(on, false)
-  assert.deepEqual([off.analysis_mode, off.allow_visual_screening], ['subtitle', false])
+test('B2: the frame-analysis switch preserves explicit bindings and follow analysis', () => {
+  for (const vision of [null, { connection_id: 'legacy-analysis', model: 'my-vision', capability: 'multimodal', model_source: 'user' }]) {
+    const state = { ...fresh(), vision, cover: { connection_id: 'legacy-analysis', model: 'my-cover', capability: 'auto', model_source: 'user' }, cover_enabled: true }
+    const off = logic.setVisual(state, false)
+    assert.deepEqual([off.analysis_mode, off.allow_visual_screening], ['subtitle', false])
+    const on = logic.setVisual(off, true)
+    assert.deepEqual([on.analysis_mode, on.allow_visual_screening], ['auto', true])
+    for (const value of [off, on, logic.forSave(off), logic.forSave(on)]) {
+      assert.deepEqual(plain(value.vision), plain(vision))
+      assert.deepEqual(plain(value.cover), plain(state.cover))
+    }
+  }
 })
 
 test('choosing a provider reuses its saved connection and never moves the analysis key to the cover', () => {
@@ -143,11 +150,31 @@ test('choosing a provider reuses its saved connection and never moves the analys
   assert.equal(toOpenAI.changed, true)
   assert.equal(toOpenAI.connection.id, 'b')
   assert.equal(toOpenAI.settings.connections.length, 2)
-  assert.deepEqual(plain(toOpenAI.settings.cover), { connection_id: 'b', model: '', capability: 'auto', model_source: 'preset' })
+  assert.deepEqual(plain(toOpenAI.settings.cover), plain(state.cover))
   const separateCover = logic.chooseProvider(toOpenAI.settings, 'cover', 'openai', {}, false, p => conn('new', p))
   assert.equal(separateCover.connection.id, 'new', 'cover must not share the analysis connection')
   const same = logic.chooseProvider(toOpenAI.settings, 'analysis', 'openai', {}, false)
   assert.equal(same.changed, false)
+})
+
+test('B2: legacy analysis switching keeps explicit vision and cover even on the old analysis connection', () => {
+  for (const bindingId of ['a', 'independent']) {
+    for (const cover_enabled of [true, false]) {
+      const state = { ...fresh(), connections: [conn('a', 'dashscope', { has_key: true }), conn('b', 'openai', { has_key: true }), conn('independent', 'dashscope', { has_key: true })],
+        analysis: { connection_id: 'a', model: 'qwen-plus', capability: 'auto' },
+        vision: { connection_id: bindingId, model: 'my-vision', capability: 'multimodal', model_source: 'user' },
+        cover: { connection_id: bindingId, model: 'my-cover', capability: 'auto', model_source: 'user' }, cover_enabled }
+      const switched = logic.chooseProvider(state, 'analysis', 'openai', {}, false).settings
+      assert.equal(switched.analysis.connection_id, 'b')
+      for (const value of [switched, logic.forSave(logic.setVisual(logic.setVisual(switched, false), true))]) {
+        assert.deepEqual(plain(value.vision), plain(state.vision))
+        assert.deepEqual(plain(value.cover), plain(state.cover))
+      }
+      const followed = logic.chooseProvider({ ...state, vision: null }, 'analysis', 'openai', {}, false).settings
+      assert.equal(followed.vision, null)
+      assert.equal(logic.followedVisionBinding(followed).connection_id, 'b')
+    }
+  }
 })
 
 test('a cached live list fills the recommendation immediately when switching provider', () => {
