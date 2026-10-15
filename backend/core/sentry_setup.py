@@ -14,7 +14,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
-_ANONYMOUS_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{7,199}$")
+_ANONYMOUS_ID = re.compile(r"^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12})$")
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +197,8 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         "analysis_mode": {"subtitle", "visual"},
         "goal": {"content", "highlight", "promo"},
         "runtime": {"python"}, "app_mode": {"web", "desktop"},
+        "os": {"macos", "windows", "linux", "unknown"},
+        "arch": {"aarch64", "x86_64", "unknown"},
         "build_environment": {"production", "development", "validation", "unknown"},
         "telemetry_test": {"true"},
         "pipeline_stage": PIPELINE_STAGES,
@@ -235,31 +237,35 @@ def sync_anonymous_user(distinct_id: str | None = None) -> None:
     if not _initialized:
         return
     try:
-        from backend.services.studio.qa.telemetry import _analytics_allowed, _identity_path, _read_id
+        from backend.services.studio.qa.telemetry import _analytics_allowed, stored_distinct_id
         import sentry_sdk
-        value = distinct_id if isinstance(distinct_id, str) else _read_id(_identity_path())
+        value = distinct_id if isinstance(distinct_id, str) else stored_distinct_id()
+        # Identity updates may arrive in an API request. Worker threads need the
+        # process scope, not the transient request/isolation scope.
+        scope = sentry_sdk.get_global_scope()
         if value and _ANONYMOUS_ID.fullmatch(value) and _analytics_allowed():
-            sentry_sdk.set_user({"id": value})
+            scope.set_user({"id": value})
         else:
-            sentry_sdk.set_user(None)
+            scope.set_user(None)
     except Exception:  # noqa: BLE001 - identity sync cannot break crash reporting
         logger.debug("Sentry anonymous user was not updated", exc_info=True)
 
 
 def _event_distinct_id(event: dict) -> str | None:
     try:
-        from backend.services.studio.qa.telemetry import _analytics_allowed, _identity_path, _read_id
+        from backend.services.studio.qa.telemetry import _analytics_allowed, stored_distinct_id
     except Exception:
         return None
     if not _analytics_allowed():
         return None
+    # Also recover identities written after SDK init, including worker processes.
+    stored = stored_distinct_id()
+    if stored:
+        return stored
     user = event.get("user") if isinstance(event.get("user"), dict) else {}
     candidate = user.get("id") if isinstance(user, dict) else None
     if isinstance(candidate, str) and _ANONYMOUS_ID.fullmatch(candidate):
         return candidate
-    stored = _read_id(_identity_path())
-    if stored and _ANONYMOUS_ID.fullmatch(stored):
-        return stored
     return None
 
 
@@ -306,6 +312,9 @@ def init_sentry(mode: str = "web") -> bool:
     scope = sentry_sdk.get_global_scope()
     scope.set_tag("runtime", "python")
     scope.set_tag("app_mode", mode)
+    from backend.core.event_catalog import detect_os, detect_arch
+    scope.set_tag("os", detect_os())
+    scope.set_tag("arch", detect_arch())
     build_environment = os.getenv("AUTOCLIP_BUILD_ENVIRONMENT", "unknown")
     scope.set_tag("build_environment", build_environment)
     if build_environment == "validation":

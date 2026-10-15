@@ -5,6 +5,7 @@ export type Catalog = {
     required: string[]
     os: string[]
     os_aliases?: Record<string, string>
+    arch?: string[]
     analytics_environment: string[]
     runtime: string[]
   }
@@ -115,6 +116,9 @@ export function validateEvent(
     }
     if (props.os !== undefined && !catalog.common.os.includes(String(props.os))) {
       errors.push(`${name}.os=${JSON.stringify(props.os)} is not a canonical os`)
+    }
+    if (props.arch !== undefined && !(catalog.common.arch || ['aarch64', 'x86_64', 'unknown']).includes(String(props.arch))) {
+      errors.push(`${name}.arch=${JSON.stringify(props.arch)} is not a canonical arch`)
     }
   }
   const forbiddenKeys = new Set((catalog.privacy?.forbidden_keys || []).map(key => key.toLowerCase()))

@@ -5,6 +5,7 @@
     "required": ["app_version", "os", "analytics_environment", "runtime", "schema_version"],
     "os": ["macos", "windows", "linux", "unknown"],
     "os_aliases": { "darwin": "macos", "win32": "windows" },
+    "arch": ["aarch64", "x86_64", "unknown"],
     "analytics_environment": ["production", "development", "validation"],
     "runtime": ["desktop", "web", "python"]
   },

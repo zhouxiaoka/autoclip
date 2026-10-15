@@ -80,7 +80,21 @@ def normalize_os(value: str | None) -> str | None:
 
 
 def detect_os() -> str:
-    return normalize_os(sys.platform) or "unknown"
+    return normalize_os(os.getenv('AUTOCLIP_NATIVE_OS') or sys.platform) or "unknown"
+
+
+def normalize_arch(value: str | None) -> str:
+    key = value.strip().lower() if isinstance(value, str) else ''
+    if key in {'arm64', 'aarch64'}:
+        return 'aarch64'
+    if key in {'x86_64', 'amd64', 'x64'}:
+        return 'x86_64'
+    return 'unknown'
+
+
+def detect_arch() -> str:
+    import platform
+    return normalize_arch(os.getenv('AUTOCLIP_NATIVE_ARCH') or platform.machine())
 
 
 def app_version() -> str:
@@ -110,6 +124,7 @@ def envelope_properties() -> dict[str, Any]:
         "runtime": "python",
         "app_version": app_version(),
         "os": detect_os(),
+        "arch": detect_arch(),
         "analytics_environment": analytics_environment(),
     }
 
@@ -189,6 +204,9 @@ def validate_event(
         os_value = props.get("os")
         if os_value is not None and os_value not in data["common"]["os"]:
             errors.append(f"{name}.os={os_value!r} is not a canonical os")
+        arch = props.get('arch')
+        if arch is not None and arch not in data['common']['arch']:
+            errors.append(f"{name}.arch={arch!r} is not a canonical arch")
     errors.extend(_privacy_errors(name, props, data))
     return errors
 

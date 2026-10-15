@@ -322,6 +322,50 @@ def test_before_send_keeps_anonymous_user_id_and_allowlisted_tags(monkeypatch, t
     assert 'sk-secret' not in json.dumps(clean)
 
 
+def test_launcher_identity_fallback_and_late_file_override(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_ANONYMOUS_DEVICE_ID', '018f6b2a-7c3d-7b2a-8c11-111111111111')
+    event = {'exception': {'values': [{'type': 'RuntimeError', 'value': 'private'}]}}
+    assert sentry_setup.before_send(event)['user']['id'] == '018f6b2a-7c3d-7b2a-8c11-111111111111'
+    # A reset/migration in the UI supersedes the immutable launch environment.
+    (tmp_path / 'analytics.json').write_text('{"distinct_id":"018f6b2a-7c3d-7b2a-8c11-222222222222"}')
+    event['user'] = {'id': '018f6b2a-7c3d-7b2a-8c11-111111111111'}
+    assert sentry_setup.before_send(event)['user']['id'].endswith('222222222222')
+    (tmp_path / 'privacy.json').write_text('{"analytics":false}')
+    assert 'user' not in sentry_setup.before_send(event)
+
+
+def test_identity_update_in_request_survives_in_worker(monkeypatch, tmp_path):
+    import sentry_sdk
+    from backend.services.studio.qa.telemetry import remember_distinct_id
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setattr(sentry_setup, '_initialized', True)
+    scope = sentry_sdk.get_global_scope()
+    previous = scope._user
+    try:
+        scope.set_user(None)
+        with sentry_sdk.isolation_scope():
+            with sentry_sdk.new_scope():
+                assert remember_distinct_id('018f6b2a-7c3d-7b2a-8c11-111111111111')
+        assert scope._user == {'id': '018f6b2a-7c3d-7b2a-8c11-111111111111'}
+    finally:
+        scope.set_user(previous)
+
+
+@pytest.mark.parametrize('value', ['sk-live-secret', 'private-title', 'a@b.com',
+    '/Users/private/video.mp4', 'https://private.example/a', 'private user content'])
+def test_launch_identity_rejects_content_and_credentials(monkeypatch, tmp_path, value):
+    from backend.services.studio.qa.telemetry import remember_distinct_id
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setenv('AUTOCLIP_ANONYMOUS_DEVICE_ID', value)
+    event = {'user': {'id': value, 'email': 'private@example.invalid'},
+             'exception': {'values': [{'type': 'RuntimeError', 'value': value}]}}
+    clean = sentry_setup.before_send(event)
+    assert 'user' not in clean
+    assert value not in json.dumps(clean)
+    assert remember_distinct_id(value) is False
+
+
 def test_source_blocked_is_classified_and_never_sent(monkeypatch, tmp_path):
     # RC156 Win QA #9: a site refusing this network (Bilibili 412) is expected, not a crash.
     import sentry_sdk
