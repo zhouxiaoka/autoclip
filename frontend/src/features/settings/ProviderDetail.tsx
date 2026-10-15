@@ -52,7 +52,9 @@ export default function ProviderDetail({
   }
   const connected = isCatalogConnected(settings, preset, asrReady)
   const list = connection ? lists[connection.id] : undefined
-  const models = list?.models.filter(model => model.analysis || model.image || model.asr) || []
+  // Only a real (live/cache, non-preview) fetch shows models; catalog/preview reference IDs would mislead.
+  const fetched = !!list && list.preview !== true && list.source !== 'catalog'
+  const models = fetched ? list!.models.filter(model => model.analysis || model.image || model.asr) : []
   const needsEndpoint = kind === 'needs_endpoint' || (kind === 'guide' && !preset.base_url)
   const canTest = kind === 'legacy' || kind === 'compatible' || needsEndpoint
   const isSponsor = !!preset.sponsor
@@ -206,7 +208,7 @@ export default function ProviderDetail({
           <section className="ac-provider-detail-card" data-panel="models">
             <h4 className="ac-provider-models-title">
               {t('可用模型')}
-              <span className="count">{connected || models.length ? models.length : t('测通后获取')}</span>
+              <span className="count">{fetched ? models.length : t('测通后获取')}</span>
             </h4>
             {connection && busy[connection.id] && <p className="ac-note">{t('正在获取…')}</p>}
             {connection && listErrors[connection.id] && <p className="ac-note">{t('settings.providers.models_empty')}</p>}
@@ -229,8 +231,11 @@ export default function ProviderDetail({
                 </div>
               )
             })}
-            {connection && !busy[connection.id] && !models.length && (
-              <p className="ac-note">{t('测通后在此显示。')}</p>
+            {connection && !busy[connection.id] && !fetched && (
+              <p className="ac-note" data-models-hint="pending">{t('填写 API 密钥并测通后，将自动拉取可用模型。')}</p>
+            )}
+            {connection && !busy[connection.id] && fetched && !models.length && (
+              <p className="ac-note">{t('settings.providers.models_empty')}</p>
             )}
           </section>
         )}
