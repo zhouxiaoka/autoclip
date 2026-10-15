@@ -46,7 +46,7 @@ test('compatible URLs gain /v1, drop chat completions, and flag console hosts', 
   assert.ok(access.canEditAddress('compatible'))
   assert.ok(access.canEditAddress('ollama'))
   const source = fs.readFileSync(path.join(__dirname, '../src/features/settings/providerAccess.ts'), 'utf8')
-  assert.match(source, /normalizeProviderBaseUrl/)
+  assert.match(source, /normalizeProviderUrl/)
   assert.doesNotMatch(source, /VERSIONED/)
 })
 
@@ -64,4 +64,15 @@ test('wrong-provider keys are hinted, never treated as a switch, and hosts stay 
   )
   assert.equal(access.passed({ success: false, error_type: 'invalid_key' }), false)
   assert.equal(access.passed({ success: true }), true)
+})
+
+test('settings URL wrapper shares Gemini chat-root normalization', () => {
+  const root = 'https://generativelanguage.googleapis.com/v1beta'
+  for (const provider of ['gemini', 'compatible']) {
+    const normalized = access.normalizeCompatibleUrl(root, provider)
+    assert.equal(normalized.url, root + '/openai')
+    const pasted = access.normalizeCompatibleUrl(root + '/chat/completions', provider)
+    assert.equal(pasted.url, root + '/openai')
+    assert.ok(pasted.warnings.includes('chat_completions'))
+  }
 })

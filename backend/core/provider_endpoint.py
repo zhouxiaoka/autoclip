@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse
 
 from backend.core.llm_providers import normalize_base_url
 from backend.core.provider_presets import get_provider
-from backend.core.provider_url import cleanup_base_url
+from backend.core.provider_url import NormalizeResult, cleanup_base_url, normalize_provider_url
 from backend.core.provider_url import normalize_provider_base_url as rewrite_provider_base_url
 
 # Settings-page providers whose address is not user-editable. Local presets and
@@ -39,15 +38,6 @@ CONSOLE_HOSTS = frozenset({
 
 _CONSOLE_SUFFIXES = ('.console.aliyun.com', '.console.volcengine.com')
 
-# Pasted chat/completions paths are stripped before provider_url runs.
-# This is not a second /v1 engine.
-_CHAT_SUFFIXES = (
-    '/v1/chat/completions',
-    '/chat/completions',
-    '/v1/completions',
-    '/completions',
-)
-
 _KEY_HINTS = (
     (re.compile(r'^AIza'), 'gemini'),
     (re.compile(r'^xai-'), 'grok'),
@@ -56,12 +46,6 @@ _KEY_HINTS = (
     (re.compile(r'^sk-or-'), 'compatible'),
     (re.compile(r'^sk-ant-'), 'compatible'),
 )
-
-
-@dataclass(frozen=True)
-class NormalizeResult:
-    url: str
-    warnings: tuple[str, ...]
 
 
 def official_chat_url(provider: Optional[str]) -> Optional[str]:
@@ -147,23 +131,6 @@ def telemetry_host(url: Optional[str]) -> str:
     return hostname_of_base_url(url) or 'unknown'
 
 
-def _strip_chat_suffix(url: str) -> tuple[str, bool]:
-    lowered = url.lower()
-    for suffix in _CHAT_SUFFIXES:
-        if lowered.endswith(suffix):
-            return url[: len(url) - len(suffix)].rstrip('/'), True
-    return url, False
-
-
-def _added_openai_v1(before: str, after: str) -> bool:
-    try:
-        previous = urlparse(before)
-        current = urlparse(after)
-    except ValueError:
-        return False
-    return (current.path or '').rstrip('/') == '/v1' and (previous.path or '').rstrip('/') in ('', '/')
-
-
 def normalize_provider_base_url(
     url: Optional[str],
     provider: Optional[str] = 'compatible',
@@ -173,21 +140,11 @@ def normalize_provider_base_url(
     Warnings (``console_host``, ``chat_completions``, ``missing_v1``) are
     informational. Callers may still persist the returned URL.
     """
-    warnings: list[str] = []
     cleaned = cleanup_base_url(url)
-    if not cleaned:
-        return NormalizeResult(url='', warnings=())
     parsed = urlparse(cleaned)
     if parsed.hostname and is_console_host(parsed.hostname):
-        warnings.append('console_host')
-        return NormalizeResult(url=cleaned, warnings=tuple(warnings))
-    stripped, stripped_chat = _strip_chat_suffix(cleaned)
-    if stripped_chat:
-        warnings.append('chat_completions')
-    rewritten = rewrite_provider_base_url(stripped, provider)
-    if _added_openai_v1(stripped, rewritten):
-        warnings.append('missing_v1')
-    return NormalizeResult(url=rewritten, warnings=tuple(warnings))
+        return NormalizeResult(url=cleaned, warnings=('console_host',))
+    return normalize_provider_url(cleaned, provider)
 
 
 def _hostname(url: Optional[str]) -> str:

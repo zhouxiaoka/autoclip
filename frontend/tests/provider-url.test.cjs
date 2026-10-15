@@ -38,3 +38,18 @@ test('normalize adds or dedupes /v1 per provider and never rejects', () => {
   assert.equal(urls.normalizeProviderBaseUrl('https://api.88api.ai/v1', 'api88'), 'https://api.88api.ai/v1')
   assert.equal(urls.normalizeProviderBaseUrl('not-an-endpoint', 'compatible'), 'not-an-endpoint')
 })
+
+test('Gemini native root uses the OpenAI chat path and stays idempotent', () => {
+  for (const provider of ['gemini', 'compatible']) {
+    for (const [suffix, expected] of [['/v1beta', '/v1beta/openai'], ['/v1beta/', '/v1beta/openai'], ['/v1beta/chat/completions', '/v1beta/openai'], ['/v1beta/openai', '/v1beta/openai'], ['/v1', '/v1']]) {
+      const root = 'https://generativelanguage.googleapis.com'
+      assert.equal(urls.normalizeProviderBaseUrl(root + suffix, provider), root + expected)
+      assert.equal(urls.normalizeProviderBaseUrl(root + expected, provider), root + expected)
+    }
+  }
+})
+
+test('Gemini image root stays native', () => {
+  const root = 'https://generativelanguage.googleapis.com/v1beta'
+  assert.equal(urls.normalizeProviderBaseUrl(root, 'image'), root)
+})
