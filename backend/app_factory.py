@@ -14,7 +14,13 @@ from backend.api.v1.health import router as health_router
 from backend.core.database import engine
 from backend.models.base import Base
 from backend.core.config import get_logging_config, get_api_key
-from backend.core.error_middleware import global_exception_handler
+from backend.core.error_middleware import (
+    global_exception_handler,
+    validation_exception_handler,
+    http_exception_handler_safe,
+)
+from fastapi.exceptions import RequestValidationError
+from fastapi import HTTPException
 from backend.core.local_origin_guard import LocalOriginGuard, allowed_origins
 
 logger = logging.getLogger(__name__)
@@ -76,7 +82,10 @@ def create_app(mode: str = "web") -> FastAPI:
         allow_headers=["*"],
     )
     
-    # 注册全局异常处理器
+    # 注册全局异常处理器（RequestValidationError / HTTPException 必须单独挂上，
+    # 否则 FastAPI 默认 handler 会把 detail[].input 里的 api_key 原样回给客户端）
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(HTTPException, http_exception_handler_safe)
     app.add_exception_handler(Exception, global_exception_handler)
     
     # 启动事件
