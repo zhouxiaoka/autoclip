@@ -158,6 +158,14 @@ def test_default_auto_screening_failure_continues_with_the_subtitle_route(client
     plan = submitted[0][1]
     assert plan['mode'] == 'fallback' and plan['recommended_analysis'] == 'subtitle' and plan['goal'] == 'content'
     assert plan['reason'].startswith('快速画面判断未完成')
+    # S5 covering: a vision request failure records the fixed degrade reason and tells the user;
+    # a local ffmpeg failure is not a vision outage and records nothing.
+    if isinstance(error, intelligence.VisionRequestError):
+        assert plan.get('degrade_reason') == 'vision_unavailable_subtitle_fallback'
+        assert '视觉服务暂不可用' in plan['reason']
+    else:
+        assert 'degrade_reason' not in plan
+        assert '视觉服务暂不可用' not in plan['reason']
     assert 'local_evidence' in plan
     state = client.get('/studio/' + pid).json()
     assert state['analysis']['status'] != 'failed' and state['generation']['status'] != 'failed'
