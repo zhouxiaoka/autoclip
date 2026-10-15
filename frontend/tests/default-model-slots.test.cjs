@@ -293,3 +293,32 @@ test('D1: first cover fixed/smart pick stays independent; analysis switch does n
   assert.equal(switched.cover.connection_id, 'ds', 'independent cover stays on A after analysis moves to B')
   assert.equal(switched.cover_follows_analysis, false)
 })
+
+test('E1: an already-following cover re-picked as fixed/smart becomes independent and survives an analysis switch', () => {
+  for (const pick of ['applyFixedSelection', 'applySmartSelection']) {
+    const following = settings({
+      cover: { connection_id: 'ds', model: 'wanx2.0', capability: 'auto', model_source: 'preset' },
+      cover_enabled: true, cover_follows_analysis: true,
+    })
+    const picked = slots[pick](following, 'cover', 'wanx2.1-t2i-turbo', 'ds')
+    assert.equal(picked.cover_follows_analysis, false, `${pick} on a following cover must clear follow`)
+    // save → reopen → analysis moves to another provider
+    const reopened = logic.prepareLoaded(plain(logic.forSave(picked)))
+    const switched = slots.applyFixedSelection(reopened, 'analysis', 'gpt-4o-mini', 'infi')
+    assert.equal(switched.analysis.connection_id, 'infi')
+    assert.equal(switched.cover.connection_id, 'ds', `${pick}: cover must stay on its own provider`)
+    assert.equal(switched.cover.model, 'wanx2.1-t2i-turbo', `${pick}: picked cover model must not be replaced`)
+  }
+})
+
+test('E1: cover-section model pick (setCoverModel) on a following cover is independent', () => {
+  const following = settings({
+    cover: { connection_id: 'ds', model: 'wanx2.0', capability: 'auto', model_source: 'preset' },
+    cover_enabled: true, cover_follows_analysis: true,
+  })
+  const picked = logic.setCoverModel(following, 'ds', 'wanx2.1-t2i-turbo')
+  assert.equal(picked.cover_follows_analysis, false)
+  const switched = slots.applyFixedSelection(picked, 'analysis', 'gpt-4o-mini', 'infi')
+  assert.equal(switched.cover.connection_id, 'ds')
+  assert.equal(switched.cover.model, 'wanx2.1-t2i-turbo')
+})
