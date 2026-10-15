@@ -52,7 +52,8 @@ FROM (
             ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
         AND coalesce(properties.error_code, '') NOT IN
             ('llm_not_configured', 'llm_auth_invalid', 'source_too_short', 'source_no_audio', 'source_unreadable',
-             'whisper_not_installed', 'source_blocked', 'service_restarted')
+             'whisper_not_installed', 'source_blocked', 'service_restarted',
+             'invalid_key', 'insufficient_quota')
       )
     )
   GROUP BY distinct_id
