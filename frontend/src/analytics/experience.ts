@@ -2,7 +2,7 @@
 import { captureBusinessEvent } from './posthog'
 import { workflow } from './observer'
 import { sanitizeProviderValidationProperties, SuccessRateEvent } from './successRateContract'
-import { errorCode, telemetryId, type Properties } from './workflow'
+import { canonOutcome, errorCode, telemetryId, type Properties } from './workflow'
 
 export type Placement = 'home_setup' | 'settings_model'
 export type ExperienceEvent = 'setup_presented' | 'setup_action' | 'import_blocked' | 'settings_section_viewed' | 'example_project_viewed'
@@ -13,7 +13,7 @@ const enums: Record<string, readonly string[]> = {
   section: ['ai', 'publish', 'app', 'feedback'], role: ['analysis', 'vision', 'cover', 'transcription'],
   reason: ['setup_required', 'provider', 'model', 'key'], mode: ['initial', 'update'],
   provider: ['dashscope', 'openai', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok', 'infistar', 'api88', 'compatible', 'ollama', 'lmstudio', 'other'],
-  source: ['live', 'cache', 'catalog'], outcome: ['completed', 'failed', 'blocked', 'unknown'],
+  source: ['live', 'cache', 'catalog'], outcome: ['success', 'error', 'blocked', 'unknown'],
   resolution: ['created', 'reused'], material_origin: ['sample', 'user', 'unknown'],
   analysis_mode: ['auto', 'subtitle', 'visual'], transcription_mode: ['whisper_local', 'sensevoice_local', 'cloud', 'unknown'],
   cover_mode: ['ai', 'frame'], capability: ['text', 'multimodal', 'auto'],
@@ -21,7 +21,9 @@ const enums: Record<string, readonly string[]> = {
 export function safeExperience(value: Record<string, unknown>): Properties {
   const out: Properties = { experience_schema_version: 1 }
   for (const [key, choices] of Object.entries(enums)) {
-    if (typeof value[key] === 'string' && choices.includes(value[key] as string)) out[key] = value[key] as string
+    let raw: unknown = value[key]
+    if (key === 'outcome') raw = canonOutcome(raw)
+    if (typeof raw === 'string' && choices.includes(raw)) out[key] = raw
   }
   for (const key of ['brand_outro_enabled', 'changed_connections', 'changed_analysis', 'changed_vision', 'changed_cover', 'changed_transcription', 'preview', 'has_warning', 'defaults_applied', 'analysis_configured', 'vision_configured', 'cover_configured', 'transcription_configured', 'cover_separate']) {
     if (typeof value[key] === 'boolean') out[key] = value[key] as boolean

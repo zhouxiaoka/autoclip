@@ -30,7 +30,7 @@ test('run-level allowlist keeps provider fields and drops keys, prompts and full
   const props = workflow.safeStudioProperties({
     provider: 'api88', model: 'gpt-4o-mini', base_url_host: '88api.ai',
     http_status: 429, upstream_error_type: 'rate_limited', failure_stage: 'analyze',
-    billable_calls_before_failure: 2, retry_count: 1, prompt_tokens: 40, llm_calls: 3,
+    billable_calls_before_failure: 2, retry_count: 1, degrade_count: 2, prompt_tokens: 40, llm_calls: 3,
     code: 'whisper_not_installed', has_subtitle: false, blocked: true,
     api_key: 'sk-secret', prompt: 'private instruction', caption: 'secret subtitle',
     base_url: 'https://88api.ai/v1/chat/completions',
@@ -40,6 +40,7 @@ test('run-level allowlist keeps provider fields and drops keys, prompts and full
   assert.equal(props.base_url_host, '88api.ai')
   assert.equal(props.upstream_error_type, 'rate_limited')
   assert.equal(props.billable_calls_before_failure, 2)
+  assert.equal(props.degrade_count, 2)
   assert.equal(props.blocked, true)
   assert.equal(props.code, 'whisper_not_installed')
   assert.equal(props.api_key, undefined)
@@ -69,7 +70,7 @@ test('generation and production finished carry run identity; failures keep stage
     generation: {
       status: 'failed', error_code: 'provider_error', failure_stage: 'analyze',
       http_status: 429, provider: 'api88', model: 'gpt-4o-mini', base_url_host: '88api.ai',
-      upstream_error_type: 'rate_limited', billable_calls_before_failure: 1, retry_count: 2,
+      upstream_error_type: 'rate_limited', billable_calls_before_failure: 1, retry_count: 2, degrade_count: 1,
     },
     analysis: { status: 'failed', phase: 'production' },
     plan: { id: 'plan', mode: 'ai', recommended_analysis: 'subtitle' },
@@ -83,6 +84,7 @@ test('generation and production finished carry run identity; failures keep stage
   assert.equal(finished.error_code, 'provider_error')
   assert.equal(finished.billable_calls_before_failure, 1)
   assert.equal(finished.retry_count, 2)
+  assert.equal(finished.degrade_count, 1)
 
   const prod = []
   const production = new workflow.WorkflowTracker(storage, () => true, (event, props) => {
@@ -112,7 +114,7 @@ test('generation and production finished carry run identity; failures keep stage
     analysis: { status: 'failed', phase: 'screening', error_code: 'source_no_audio', failure_stage: 'ingest' },
   })
   const screened = screen.find(item => item.event === 'studio_screen_finished').props
-  assert.equal(screened.outcome, 'failed')
+  assert.equal(screened.outcome, 'error')
   assert.equal(screened.error_code, 'source_no_audio')
   assert.equal(screened.failure_stage, 'ingest')
 })

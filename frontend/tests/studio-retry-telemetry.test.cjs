@@ -27,7 +27,7 @@ test('automatic retry enrolls a fresh terminal watch on the same flow and dedupl
   const state = { generation: { auto_start: true, status: 'completed' }, analysis: { status: 'completed', run_id: 'new-run' } }
   workflow.observeStudio(watch, state); workflow.observeStudio(watch, state)
   const finished = events.filter(item => item.event === 'studio_generation_finished')
-  assert.deepEqual(finished.map(item => item.props.outcome), ['failed', 'completed'])
+  assert.deepEqual(finished.map(item => item.props.outcome), ['error', 'success'])
   assert.equal(finished[0].props.flow_id, finished[1].props.flow_id)
   assert.notEqual(finished[0].props.attempt_id, finished[1].props.attempt_id)
 })

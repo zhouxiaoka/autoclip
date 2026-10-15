@@ -127,14 +127,14 @@ export function socialPublishObserved(generation: number, properties: Record<str
 }
 
 export function socialPublishOutcome(status: string, scheduled: boolean, results: {success: boolean; skipped?: boolean; fallback_to_inbox?: boolean}[]): string {
-  if (status === 'failed') return 'failed'
+  if (status === 'failed') return 'error'
   const failed = results.some(r => !r.success && !r.skipped)
   const success = results.some(r => r.success && !r.skipped)
-  if (failed) return success ? 'partial' : 'failed'
+  if (failed) return success ? 'partial' : 'error'
   if (scheduled) return 'scheduled'
   if (results.some(r => r.fallback_to_inbox)) return 'inbox'
   // A completed gateway with no platform evidence is not proof of publishing.
-  return success ? 'completed' : 'unknown'
+  return success ? 'success' : 'unknown'
 }
 
 /** Reuse the snapshot already shown by the UI; quick confirmations must not

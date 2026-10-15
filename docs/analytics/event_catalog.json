@@ -27,10 +27,10 @@
     "request_outcome": ["success", "error"],
     "validation_result": ["success", "failed", "skipped"],
     "studio_outcome": [
-      "completed", "failed", "partial", "downgraded", "skipped", "recommended",
+      "success", "error", "partial", "downgraded", "skipped", "recommended",
       "manual", "fallback", "scheduled", "inbox", "unknown", "auto_started"
     ],
-    "experience_outcome": ["completed", "failed", "blocked", "unknown"],
+    "experience_outcome": ["success", "error", "blocked", "unknown"],
     "source_type": [
       "file", "youtube", "bilibili", "other_url", "visual_event", "content_clip",
       "studio", "legacy", "upload"
@@ -194,7 +194,7 @@
       "domain": "studio",
       "required": ["outcome"],
       "required_when": {
-        "outcome=failed": ["error_code", "failure_stage"]
+        "outcome=error": ["error_code", "failure_stage"]
       }
     },
     "studio_generation_finished": {
@@ -202,7 +202,7 @@
       "domain": "studio",
       "required": ["outcome"],
       "required_when": {
-        "outcome=failed": ["error_code", "failure_stage"],
+        "outcome=error": ["error_code", "failure_stage"],
         "outcome=partial": ["error_code", "failure_stage"]
       },
       "enums": { "outcome": "studio_outcome" }
@@ -212,7 +212,7 @@
       "domain": "studio",
       "required": ["outcome"],
       "required_when": {
-        "outcome=failed": ["error_code", "failure_stage"]
+        "outcome=error": ["error_code", "failure_stage"]
       },
       "enums": { "outcome": "studio_outcome" }
     },

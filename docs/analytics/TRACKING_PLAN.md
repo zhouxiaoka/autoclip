@@ -12,6 +12,7 @@
 - 线 A 发送说明：`docs/analytics/LLM_TELEMETRY.md`（随纯埋点 PR #361，规范确认后）
 - **本规范的机读清单：** [`event_inventory.json`](event_inventory.json)（事件名、状态、legacy 映射）。`scripts/check_tracking_inventory.py` 校验这份清单。
 - **生产者目录：** `docs/analytics/event_catalog.json`（随 #361）。它必须由本清单生成，或在 CI 里对照本清单；未登记、缺必填、违禁值，校验测试必须失败。两份漂移即失败。
+  运行时副本位于 `backend/core/event_catalog.json`，通过 Python package data 随 wheel 分发，也随 backend 目录进入桌面与 Docker 包；`test_event_catalog_package.py` 校验它与此处目录逐字节一致，并在仓库外安装 wheel 后验证加载。修改目录时须同步两份 JSON。
 - 看板 SQL 草案：[`success_rate.sql`](success_rate.sql)
 
 先看 §1–§5（规则、漏斗、触发点）、§10–§11（隐私硬性 / 脱敏 / 开关关闭）、§6–§7（口径与看板），再看 §8（全量盘点）和 §12（过渡计划 / 1.5.8 收口）。§8 的删除/改名 **不在 #361 纯埋点 PR 里执行**。过渡保留（查询继续映射历史值）；**1.5.8 必须收口**：单一 `os` / `outcome`、只报 `app_version`、QA/MCP/反馈公共信封、旧事件停发或打 `legacy=true`。`feedback_submitted` 是 `user_submitted` 例外，允许 `text`/`contact`。
@@ -262,7 +263,7 @@ multiIf(
 | 事件 | 必填 | 说明 |
 | --- | --- | --- |
 | `studio_screen_finished` | `outcome` | 初筛结束。失败必带 `error_code`+`failure_stage` |
-| `llm_request_finished` | `provider`, `kind`, `outcome`, `duration_ms` | **诊断**，每条模型调用。失败带 `upstream_error_type`、`failure_stage`、`http_status` |
+| `llm_request_finished` | `provider`, `kind`, `outcome`, `duration_ms` | **诊断**，每条模型调用。失败带 `upstream_error_type`、`failure_stage`、`http_status`；同服务商换候选时带 `degrade_count` |
 
 阶段细节看 run 上的 `failure_stage`，不要为每个 pipeline step 再发明一个 finished 事件。
 
@@ -273,7 +274,7 @@ multiIf(
 | 事件 | 必填 | 说明 |
 | --- | --- | --- |
 | `studio_confirm_requested` / `_accepted` | `analysis_mode` | 仅确认制作路径 |
-| `studio_generation_finished` | `outcome` | 自动出片终态：`completed` / `partial` / `failed` |
+| `studio_generation_finished` | `outcome` | 自动出片终态：`success` / `partial` / `error` |
 | `studio_production_finished` | `outcome` | 确认制作终态 |
 
 失败两者都必须有 `error_code`、`failure_stage`；模型失败加 `provider`、`base_url_host`、`upstream_error_type`、`http_status`、`billable_calls_before_failure`。身份按 **本次 run 实际调用**，不用设置页最后保存值。
@@ -295,7 +296,7 @@ multiIf(
 不单独发明 `user_returned`。用 `app_opened` 做留存：
 
 - D1 / D7：安装后第 1 / 7 天是否再次 `app_opened`
-- 出片后回访：首次 `studio_generation_finished|studio_production_finished` 且 `outcome=completed` 之后 7 日内是否再次 `app_opened`
+- 出片后回访：首次 `studio_generation_finished|studio_production_finished` 且 `outcome_canon=success` 之后 7 日内是否再次 `app_opened`
 
 ### 5.8 触发点（文件 + 函数）
 
@@ -314,6 +315,7 @@ multiIf(
 | `studio_screen_finished` | 观察器看到初筛终态 | `frontend/src/analytics/workflow.ts` | `WorkflowTracker.observeStudio` |
 | `llm_request_finished`（text） | 每一次 `LLMProvider.call` 返回或抛错 | `backend/core/llm_providers.py` → `llm_emit.py` | `LLMProvider.__init_subclass__` 包装 → `observe_provider_call` → `request_finished` |
 | `llm_request_finished`（vision） | 每一次 `vision_call` 结束 | `backend/services/studio/intelligence.py` | `vision_call` → `emit_vision_request` |
+| `degrade_count`（请求级 + run 级） | 同服务商换下一个候选时 +1 | `backend/core/llm_manager.py` → `llm_emit.py` | `note_same_provider_degrade` → `increment_degrade_count`。R1 的降级循环只调这个钩子 |
 | run 级字段（挂到现有出片终态，不改事件名） | `studio.json` 写入失败/部分成功身份 | `backend/services/studio/store.py` | `write` → `_ensure_failure_identity` + `_attach_run_telemetry`；上下文 `llm_emit.track_run` |
 | `studio_generation_finished` / `studio_production_finished` | 观察器看到出片终态（读 snapshot 上的 run 字段） | `frontend/src/analytics/workflow.ts` + `observer.ts` | `observeStudio` / `startWorkflowObserver` |
 | `studio_confirm_*` | 用户确认制作 | `frontend/src/analytics/studio.ts` | `observeStudioOperation('studio_confirm', …)` |
@@ -347,7 +349,7 @@ app_version = 当前发布版本
 runtime = desktop   -- 主指标；web 可另列
 ```
 
-`partial` 算出片未成功（分子只认 `completed`）。
+`partial` 算出片未成功（分子只认 `outcome_canon=success`）。
 
 ### 6.1 按次出片成功率（主指标，目标 ≥95%）
 
@@ -355,10 +357,10 @@ runtime = desktop   -- 主指标；web 可另列
 
 - **分母**：上述事件中，`failure_attribution ≠ user` 且 `≠ environment` 的次数。  
   即：成功 + 产品侧失败。用户原因（余额不足、无音轨、密钥/地址/未配置等）和环境（站点拒绝、服务重启）不进分母。
-- **分子**：分母里 `outcome=completed` 的次数。
-- **公式**：`countIf(completed) / countIf(qualifying)`
+- **分子**：分母里 `outcome_canon = 'success'` 的次数。
+- **公式**：`countIf(success) / countIf(qualifying)`（`success` 经 `outcome_canon`，含历史 `completed`）
 
-归因优先级：先看 `upstream_error_type` 是否属于用户原因；否则看 `error_code`。`outcome=completed` 一律算成功，忽略错误字段。
+归因优先级：先看 `upstream_error_type` 是否属于用户原因；否则看 `error_code`。`outcome_canon = 'success'` 一律算成功，忽略错误字段。
 
 按服务商拆分用事件上的 `provider`（本次 run），**禁止**再用「最后保存的 provider」近似。
 
@@ -401,14 +403,14 @@ runtime = desktop   -- 主指标；web 可另列
 
 | # | 图 | Insight 类型 | 事件 | 过滤 / 拆解 | 公式或读法 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 按次出片成功率 | Trends · formula | A `studio_generation_finished` + `studio_production_finished` | 排除 user/environment（见下） | `A_completed / A_qualifying`。A 用两条事件的 **Trends 公式** 或一条 HogQL |
+| 1 | 按次出片成功率 | Trends · formula | A `studio_generation_finished` + `studio_production_finished` | 排除 user/environment（见下） | `A_success / A_qualifying`。A 用两条事件的 **Trends 公式** 或一条 HogQL |
 | 2 | 按人首次出片成功率 | HogQL / SQL insight | 同上 | 按 `distinct_id` 取 earliest qualifying | 见下方 HogQL |
 | 3 | 按服务商按次成功率 | Trends · 公式，breakdown `provider` | 同上 | 同上 | 看 api88 / deepseek / … 不要用设置页 provider |
-| 4 | 按 `failure_stage` × `error_code` | Trends · total count | 失败的出片终态 | `outcome ∈ (failed, partial)` | 堆叠或表格；`unexpected` 要下钻 `llm_request_finished` |
+| 4 | 按 `failure_stage` × `error_code` | Trends · total count | 失败的出片终态 | `outcome_canon ∈ (error, partial)` | 堆叠或表格；`unexpected` 要下钻 `llm_request_finished` |
 | 5 | 按 `upstream_error_type` | Trends | `llm_request_finished` | `outcome=error`，breakdown `upstream_error_type`、`provider` | 诊断用，不是 6.1 分母 |
 | 6 | 配置→能跑 | Funnel | `app_opened` → `provider_validation_finished` (`result=success`) → `studio_import_accepted` | 生产 + 版本 | 线 B 上线后主看 |
-| 7 | 导入→出片 | Funnel | `studio_import_accepted` → `studio_screen_finished` → 出片 `completed` | `material_origin=user` | 真实素材，排除 sample |
-| 8 | 出片→落盘 | Funnel | 出片 `completed` → `studio_download_saved` | `download_mode=native` | 浏览器下载不进 |
+| 7 | 导入→出片 | Funnel | `studio_import_accepted` → `studio_screen_finished` → 出片 `outcome_canon=success` | `material_origin=user` | 真实素材，排除 sample |
+| 8 | 出片→落盘 | Funnel | 出片 `outcome_canon=success` → `studio_download_saved` | `download_mode=native` | 浏览器下载不进 |
 | 9 | D7 回访 | Retention | `app_opened` | 起始事件 `app_installed` 或首次出片成功 | 第一列 D1、第七列 D7 |
 | 10 | 收数健康 | Trends | 核心事件列表 | 按 event 分列 | 无收数先查同意/发布，不判产品失败 |
 
@@ -416,10 +418,19 @@ runtime = desktop   -- 主指标；web 可另列
 
 ```sql
 -- qualifying = 成功，或失败但不属于用户/环境
+-- outcome_canon：1.5.8 发 success/error；历史 completed/failed 一并计入
 (
-  properties.outcome = 'completed'
+  multiIf(
+    properties.outcome IN ('completed', 'success'), 'success',
+    properties.outcome IN ('failed', 'error'), 'error',
+    properties.outcome
+  ) = 'success'
   OR (
-    properties.outcome IN ('failed', 'partial')
+    multiIf(
+      properties.outcome IN ('completed', 'success'), 'success',
+      properties.outcome IN ('failed', 'error'), 'error',
+      properties.outcome
+    ) IN ('error', 'partial')
     AND coalesce(properties.upstream_error_type, '') NOT IN
         ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
     AND coalesce(properties.error_code, '') NOT IN
@@ -434,22 +445,37 @@ runtime = desktop   -- 主指标；web 可另列
 
 ```sql
 SELECT
-  uniqIf(distinct_id, first_outcome = 'completed') AS first_success_users,
+  uniqIf(distinct_id, first_outcome = 'success') AS first_success_users,
   uniq(distinct_id) AS qualifying_users,
   first_success_users / qualifying_users AS first_attempt_success_rate
 FROM (
   SELECT
     distinct_id,
-    argMin(properties.outcome, timestamp) AS first_outcome
+    argMin(
+      multiIf(
+        properties.outcome IN ('completed', 'success'), 'success',
+        properties.outcome IN ('failed', 'error'), 'error',
+        properties.outcome
+      ),
+      timestamp
+    ) AS first_outcome
   FROM events
   WHERE event IN ('studio_generation_finished', 'studio_production_finished')
     AND properties.analytics_environment = 'production'
     AND properties.app_version = {version}
     AND timestamp >= now() - INTERVAL 7 DAY
     AND (
-      properties.outcome = 'completed'
+      multiIf(
+        properties.outcome IN ('completed', 'success'), 'success',
+        properties.outcome IN ('failed', 'error'), 'error',
+        properties.outcome
+      ) = 'success'
       OR (
-        properties.outcome IN ('failed', 'partial')
+        multiIf(
+          properties.outcome IN ('completed', 'success'), 'success',
+          properties.outcome IN ('failed', 'error'), 'error',
+          properties.outcome
+        ) IN ('error', 'partial')
         AND coalesce(properties.upstream_error_type, '') NOT IN
             ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
         AND coalesce(properties.error_code, '') NOT IN
@@ -664,7 +690,7 @@ FROM (
 | `provider` | 闭集（含 ASR 三值） | `sanitize_provider` | 自由文本（可能是路径或标题）→ 丢弃 |
 | `kind` / `outcome` / `result` / `finish_reason` / `failure_stage` / `upstream_error_type` / `error_code` / `source_type` / `material_origin` / `download_mode` / `analysis_mode` / `os` / `runtime` / `analytics_environment` 以及 `safeStudioProperties` 里的其它枚举 | 各自闭集 | 枚举校验，不在闭集则不写 | 标题/转写/路径进枚举字段 → 不匹配闭集，丢掉；若硬写出发 → 失败 |
 | `http_status` | 100–599 的整数 | 范围裁剪 | 不接受字符串（避免 URL/路径） |
-| `duration_ms` / `*_tokens` / `llm_calls` / `retry_count` / `billable_calls_before_failure` / `session_number` | 非负整数 | 转 int | 附带的说明文字丢掉 |
+| `duration_ms` / `*_tokens` / `llm_calls` / `retry_count` / `degrade_count` / `billable_calls_before_failure` / `session_number` | 非负整数 | 转 int | 附带的说明文字丢掉 |
 | `has_subtitle` / `blocked` / `ok` | 布尔 | `bool()` | **不报**字幕内容 |
 | `code`（ASR） | `^[a-z][a-z0-9_]{1,64}$` | 只报就绪探针 code | 探针 message / 转写丢掉 |
 | `distinct_id` | 匿名 ID 正则 | `ANONYMOUS_ID` | email、`/Users/xxx`、`../` → 拒绝 |

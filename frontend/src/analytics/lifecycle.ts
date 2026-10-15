@@ -72,18 +72,18 @@ export function getRuntimeInfo(): RuntimeInfo {
  * 在 initAnalytics() 之后调用一次。posthog 未初始化时仅缓存运行环境。
  */
 export async function trackLaunch(): Promise<void> {
-  const version = await getAppVersion()
+  const appVersion = await getAppVersion()
   const os = detectOS()
   const arch = detectArch()
   const locale = document.documentElement.lang || navigator.language
-  runtimeInfo = { version, os, arch, locale }
+  runtimeInfo = { version: appVersion, os, arch, locale }
 
   if (!isAnalyticsEnabled() || typeof posthog?.register !== 'function') return
 
   // 全局属性：后续每条事件自动携带
   try {
     posthog.register({
-      app_version: version,
+      app_version: appVersion,
       os,
       arch,
       app_locale: locale,
@@ -103,7 +103,7 @@ export async function trackLaunch(): Promise<void> {
     /* ignore */
   }
   if (!isInstalled) {
-    if (captureBusinessEvent('app_installed', { version, os, arch })) safeSet(INSTALL_FLAG_KEY, 'true')
+    if (captureBusinessEvent('app_installed', { app_version: appVersion, os, arch })) safeSet(INSTALL_FLAG_KEY, 'true')
   }
 
   // 版本更新
@@ -113,11 +113,11 @@ export async function trackLaunch(): Promise<void> {
   } catch {
     /* ignore */
   }
-  if (lastVersion && lastVersion !== version) {
-    captureBusinessEvent('app_updated', { from_version: lastVersion, to_version: version })
+  if (lastVersion && lastVersion !== appVersion) {
+    captureBusinessEvent('app_updated', { from_version: lastVersion, to_version: appVersion })
   }
-  safeSet(LAST_VERSION_KEY, version)
+  safeSet(LAST_VERSION_KEY, appVersion)
 
   // 每次启动
-  captureBusinessEvent('app_opened', { version, session_number: sessionCount })
+  captureBusinessEvent('app_opened', { app_version: appVersion, session_number: sessionCount })
 }

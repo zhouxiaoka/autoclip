@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import re
 
+from backend.core.event_catalog import detect_os, normalize_os
+
 TEMPLATES = ('editorial', 'street', 'classic', 'interview_zh', 'podcast_en', 'landscape', 'none')
 ENCODERS = ('libx264', 'h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox')
 DOWNGRADE_REASONS = ('none', 'over_budget', 'missing_runtime', 'intel_mac_unverified', 'rank', 'flag_off', 'capture', 'encode')
 FAILURE_REASONS = ('none', 'capture', 'encode', 'runtime', 'timeout', 'unknown')
-OPERATING_SYSTEMS = ('darwin', 'win32', 'linux')
-OUTCOMES = ('completed', 'downgraded', 'failed', 'skipped')
+OPERATING_SYSTEMS = ('macos', 'windows', 'linux')
+OUTCOMES = ('success', 'error', 'partial', 'downgraded', 'skipped')
+_OUTCOME_CANON = {'completed': 'success', 'failed': 'error'}
 OVERRIDE_STAGES = ('pre_import', 'results_chip', 'editor')
 OVERRIDE_INPUTS = ('mouse', 'keyboard')
 _TOKEN = re.compile(r'^t-[a-z0-9-]{10,100}$')
@@ -41,10 +44,7 @@ def _millis(value: object) -> int | None:
 def host_facts() -> dict:
     """Platform and core count. Nothing else about the machine."""
     import os
-    import sys
-    facts: dict = {}
-    if sys.platform in OPERATING_SYSTEMS:
-        facts['os'] = sys.platform
+    facts: dict = {'os': detect_os()}
     count = os.cpu_count()
     if isinstance(count, int) and 1 <= count <= 1024:
         facts['cpu_count'] = count
@@ -60,11 +60,11 @@ def render_event(payload: dict | None) -> dict:
         'encoder': _enum(raw.get('encoder'), ENCODERS),
         'downgraded': raw.get('downgraded') if isinstance(raw.get('downgraded'), bool) else None,
         'downgrade_reason': _enum(raw.get('downgrade_reason'), DOWNGRADE_REASONS),
-        'os': _enum(raw.get('os'), OPERATING_SYSTEMS),
+        'os': _enum(normalize_os(raw.get('os') if isinstance(raw.get('os'), str) else None) or raw.get('os'), (*OPERATING_SYSTEMS, 'unknown')),
         'cpu_count': _count(raw.get('cpu_count')),
         'duration_ms': _millis(raw.get('duration_ms')),
         'failure_reason': _enum(raw.get('failure_reason'), FAILURE_REASONS),
-        'outcome': _enum(raw.get('outcome'), OUTCOMES),
+        'outcome': _enum(_OUTCOME_CANON.get(raw.get('outcome'), raw.get('outcome')) if isinstance(raw.get('outcome'), str) else raw.get('outcome'), OUTCOMES),
         'strategy_id': _enum(raw.get('strategy_id'), (
             'douyin', 'tiktok', 'instagram_reels', 'youtube_shorts', 'youtube_long',
             'bilibili', 'xiaohongshu', 'original',

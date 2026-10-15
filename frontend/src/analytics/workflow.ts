@@ -8,6 +8,22 @@ const CONTEXT_KEY = "autoclip.analytics.context.v1"
 export function telemetryId(): string { return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}` }
 type Context = { props: Properties; updated: number; artifacts: Record<string, string> }
 
+const OS_CANON: Record<string, string> = { darwin: 'macos', win32: 'windows' }
+const OUTCOME_CANON: Record<string, string> = { completed: 'success', failed: 'error' }
+
+/** 1.5.8 send contract: only macos/windows/linux/unknown. */
+export function canonOs(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  return OS_CANON[value] || value
+}
+
+/** 1.5.8 send contract: completed→success, failed→error.
+ * Legacy `processing_finished` keeps `cancelled` (user abort is not a product error). */
+export function canonOutcome(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  return OUTCOME_CANON[value] || value
+}
+
 export function projectProperties(project: { settings?: Record<string, unknown>; processing_config?: Record<string, unknown>; material_origin?: unknown; example_version?: unknown }): Properties {
   const settings = project.processing_config || project.settings
   const origin = project.material_origin || (settings ? settings.example === true ? 'sample' : 'user' : 'unknown')
@@ -30,7 +46,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     portrait_style: ['auto', 'interview', 'podcast'], artifact_type: ['video', 'publish_kit'],
     recommendation_mode: ['ai', 'local', 'manual', 'fallback'],
     subtitle_status: ['available', 'missing', 'invalid', 'unreadable', 'too_large'],
-    outcome: ['completed', 'failed', 'partial', 'downgraded', 'skipped', 'recommended', 'manual', 'fallback', 'scheduled', 'inbox', 'unknown', 'auto_started'],
+    outcome: ['success', 'error', 'partial', 'downgraded', 'skipped', 'recommended', 'manual', 'fallback', 'scheduled', 'inbox', 'unknown', 'auto_started'],
     download_mode: ['native', 'browser'], gateway: ['bilibili', 'upload-post'],
     title_style: ['plain', 'impact', 'card', 'comic', 'neon', 'arena', 'editorial', 'pixel', 'frosted'],
     share_target: ['copy_caption', 'use_case_discussion'],
@@ -49,7 +65,7 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     encoder: ['libx264', 'h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_videotoolbox'],
     downgrade_reason: ['none', 'over_budget', 'missing_runtime', 'intel_mac_unverified', 'rank', 'flag_off', 'capture', 'encode'],
     failure_reason: ['none', 'capture', 'encode', 'runtime', 'timeout', 'unknown'],
-    os: ['darwin', 'win32', 'linux'],
+    os: ['macos', 'windows', 'linux', 'unknown'],
     stage: ['pre_import', 'results_chip', 'editor'],
     packaging_style: ['classic', 'boxed', 'spotlight', 'pop', 'cinematic'],
     framing: ['speaker', 'full_frame', 'full_frame_pending', 'full_frame_captions'],
@@ -65,13 +81,16 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
     code: ['whisper_installed', 'whisper_installing', 'whisper_install_failed', 'whisper_not_installed', 'whisper_model_downloading', 'whisper_model_failed', 'whisper_model_missing', 'sensevoice_ready', 'sensevoice_not_ready', 'cloud_configured', 'cloud_not_configured'],
   }
   for (const [key, allowed] of Object.entries(enums)) {
-    if (typeof input[key] === 'string' && allowed.includes(input[key] as string)) out[key] = input[key] as string
+    let raw: unknown = input[key]
+    if (key === 'os') raw = canonOs(raw)
+    if (key === 'outcome') raw = canonOutcome(raw)
+    if (typeof raw === 'string' && allowed.includes(raw)) out[key] = raw
   }
   for (const key of ['outro_applied', 'brand_outro_enabled', 'reused_content_profile', 'has_crop_track', 'has_manual_adjustment', 'auto_frame_retained', 'tags_enabled', 'packaging_fallback', 'burned_captions', 'subtitle_enabled', 'has_subtitle', 'blocked', 'goal_content', 'goal_highlight', 'goal_promo', 'allow_visual_screening', 'scheduled', 'is_recommended', 'accepted_recommendation', ...['requested', 'succeeded', 'failed'].flatMap(p => ['content', 'highlight', 'promo'].map(g => `${p}_${g}`))]) {
     if (typeof input[key] === 'boolean') out[key] = input[key] as boolean
   }
   if (typeof input.downgraded === 'boolean') out.downgraded = input.downgraded
-  for (const key of ['warning_count', 'outro_applied_count', 'outro_fallback_count', 'outro_unknown_count', 'full_frame_count', 'framing_pending_count', 'framing_captions_count', 'example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'latency_ms', 'first_frame_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'on_demand_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'editorial_count', 'street_count', 'classic_count', 'html_downgrade_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count', 'cpu_count', 'retry_count', 'billable_calls_before_failure', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'llm_calls']) {
+  for (const key of ['warning_count', 'outro_applied_count', 'outro_fallback_count', 'outro_unknown_count', 'full_frame_count', 'framing_pending_count', 'framing_captions_count', 'example_version', 'framed_count', 'scene_count', 'fit_count', 'duration_ms', 'request_duration_ms', 'latency_ms', 'first_frame_ms', 'variant_count', 'completed_variant_count', 'failed_variant_count', 'skipped_variant_count', 'on_demand_variant_count', 'interview_count', 'podcast_count', 'landscape_count', 'editorial_count', 'street_count', 'classic_count', 'html_downgrade_count', 'speaker_framed_count', 'packaging_fallback_count', 'trimmed_count', 'platform_count', 'result_count', 'requested_count', 'succeeded_count', 'failed_count', 'cpu_count', 'retry_count', 'degrade_count', 'billable_calls_before_failure', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'llm_calls']) {
     if (typeof input[key] === 'number' && Number.isFinite(input[key]) && (input[key] as number) >= 0) out[key] = input[key] as number
   }
   for (const prefix of ['requested', 'succeeded', 'failed']) {
@@ -129,9 +148,9 @@ export interface StudioSnapshot {
   example_version?: number
   analysis_history?: { run_id: string; plan?: StudioSnapshot['plan']; analysis: StudioSnapshot['analysis'] }[]
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; local_evidence?: { subtitle_status?: string } }
-  analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
+  analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
   jobs?: { job_id: string; status: string; duration_ms?: number; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[]; template_render?: { template?: string; requested_template?: string; downgraded?: boolean; downgrade_reason?: string; encoder?: string; duration_ms?: number; failure_reason?: string; outcome?: string; os?: string; cpu_count?: number } }; qa?: StudioQa | null }[]
-  generation?: { auto_start?: boolean; status?: string; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
+  generation?: { auto_start?: boolean; status?: string; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
   output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null; qa?: StudioQa | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
 }
@@ -340,6 +359,7 @@ export class WorkflowTracker {
         upstream_error_type: unfinished ? run?.upstream_error_type || analysis?.upstream_error_type : undefined,
         billable_calls_before_failure: unfinished ? run?.billable_calls_before_failure ?? analysis?.billable_calls_before_failure : undefined,
         retry_count: run?.retry_count ?? analysis?.retry_count,
+        degrade_count: run?.degrade_count ?? analysis?.degrade_count,
         llm_calls: run?.llm_calls ?? analysis?.llm_calls,
         prompt_tokens: run?.prompt_tokens ?? analysis?.prompt_tokens,
         completion_tokens: run?.completion_tokens ?? analysis?.completion_tokens,
@@ -360,16 +380,17 @@ export class WorkflowTracker {
       const created = utcMillis(t.created_at)
       if (t.task_type !== 'video_processing' || created === undefined || created < w.since) continue
       const props = { project_id: w.id, task_id: t.id, telemetry_source: 'backend_task_observed' }
-      this.emitOnce(w, `${t.id}:observed`, 'processing_task_observed', props)
+      this.emitOnce(w, `${t.id}:observed`, 'processing_task_observed', { ...props, legacy: true })
       // Some workers omit timestamps. Never invent a start or duration for a missed transition.
       const start = utcMillis(t.started_at)
       const end = utcMillis(t.completed_at)
       if (t.status === 'running' || start !== undefined) this.emitOnce(w, `${t.id}:started`, 'processing_started', {
-        ...props, occurred_at: new Date(start ?? created).toISOString(),
+        ...props, legacy: true, occurred_at: new Date(start ?? created).toISOString(),
         time_basis: start === undefined ? 'task_created_at' : 'task_started_at',
       })
       if (['completed', 'failed', 'cancelled'].includes(t.status)) this.emitOnce(w, `${t.id}:finished`, 'processing_finished', {
-        ...props, outcome: t.status, occurred_at: end === undefined ? undefined : new Date(end).toISOString(),
+        ...props, outcome: canonOutcome(t.status) || t.status, legacy: true,
+        occurred_at: end === undefined ? undefined : new Date(end).toISOString(),
         duration_ms: start !== undefined && end !== undefined && end >= start ? end - start : undefined,
       })
     }
