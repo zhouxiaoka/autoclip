@@ -89,6 +89,12 @@
       "group": "recommended",
       "protocol": "openai-completions",
       "base_url": "https://infistar.cc/v1",
+      "accepted_hosts": [
+        "infistar.cc",
+        "www.infistar.cc",
+        "infistar.ai",
+        "www.infistar.ai"
+      ],
       "capabilities": [
         "language",
         "image"

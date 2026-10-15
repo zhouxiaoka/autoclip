@@ -35,6 +35,14 @@ test('current settings dropdown still reads addresses and defaults from the JSON
   assert.equal(defaults.defaultModel('dashscope', models, true), 'wanx2.1-t2i-turbo')
 })
 
+test('Infistar accepts both gateway domains while keeping the Chinese default', () => {
+  const preset = loadTs('providerPresets.ts').getProvider('infistar')
+  assert.equal(preset.base_url, 'https://infistar.cc/v1')
+  for (const host of ['infistar.ai', 'www.infistar.ai', 'infistar.cc', 'www.infistar.cc']) {
+    assert.ok(preset.accepted_hosts.includes(host))
+  }
+})
+
 test('providers.ts and modelDefaults.ts no longer hard-code product hosts or preferred lists', () => {
   const files = ['providers.ts', 'modelDefaults.ts'].map(name =>
     fs.readFileSync(path.join(__dirname, '../src/features/settings', name), 'utf8'))

@@ -37,6 +37,17 @@ const models = [
   { id: 'wanx2.1-t2i-turbo', analysis: false, image: true },
 ]
 
+test('Infistar gateway address survives save and validation without switching domains', () => {
+  for (const host of ['infistar.ai', 'www.infistar.ai', 'infistar.cc', 'www.infistar.cc']) {
+    const url = `https://${host}/v1`
+    const value = { ...fresh(), connections: [conn('legacy-analysis', 'infistar', { base_url: url, api_key: 'fixture' })] }
+    const validated = logic.applyValidation(value, 'legacy-analysis', { success: true, normalized_base_url: url })
+    assert.equal(logic.forSave(validated).connections[0].base_url, url)
+    assert.equal(access.normalizeCompatibleUrl(url, 'infistar').warnings.length, 0)
+    assert.equal(access.isConsoleHost(host), false)
+  }
+})
+
 test('first run: nothing is pre-selected; choosing a provider fills the recommendation, covers stay local', () => {
   const value = logic.prepareLoaded(fresh())
   assert.equal(logic.needsSetup(value), true)

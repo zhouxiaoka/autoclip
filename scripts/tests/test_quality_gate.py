@@ -12,6 +12,31 @@ import quality_gate
 
 
 class QualityGateTests(unittest.TestCase):
+    def test_backend_checks_run_reload_in_order_and_the_unfiltered_directory(self):
+        commands = {name: command for name, command, _ in quality_gate.checks('backend', sys.executable)}
+        self.assertIn('backend/tests/test_llm_hot_reload.py', commands['llm_hot_reload_tests'])
+        self.assertIn('backend/tests', commands['backend_tests'])
+        for name in ('llm_hot_reload_tests', 'backend_tests'):
+            self.assertIn('backend/pytest.ini', commands[name])
+            self.assertIn('addopts=', commands[name])
+            self.assertFalse(set(commands[name][3:]) & {'-k', '-m', '--ignore', '--deselect', '-n'})
+
+    def test_backend_evidence_rejects_missing_modules_and_filtered_reload_cases(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'tests.xml'
+            cases = ''.join(f'<testcase classname="tests.test_llm_hot_reload" name="{name}"/>' for name in (
+                'test_reload_pins_connection_model_and_candidates[False]',
+                'test_reload_pins_connection_model_and_candidates[True]',
+                'test_reload_false_then_true_with_coarse_write_times',
+            ))
+            path.write_text('<testsuite>' + cases + '</testsuite>')
+            coverage = quality_gate.pytest_coverage(path, {'test_llm_hot_reload', 'test_other'})
+            self.assertEqual(coverage['missing_modules'], ['test_other'])
+            self.assertEqual(coverage['missing_reload_cases'], [])
+            path.write_text('<testsuite>' + cases.replace('[True]', '[filtered]') + '</testsuite>')
+            self.assertEqual(quality_gate.pytest_coverage(path, {'test_llm_hot_reload'})['missing_reload_cases'],
+                             ['test_reload_pins_connection_model_and_candidates[True]'])
+
     def test_failure_survives_later_success_and_data_is_isolated(self):
         with tempfile.TemporaryDirectory() as temp:
             original = Path(temp) / 'user-data'
@@ -27,7 +52,7 @@ class QualityGateTests(unittest.TestCase):
                 self.assertTrue(Path(kwargs['env']['AUTOCLIP_DATA_DIR']).is_dir())
                 return subprocess.CompletedProcess(command, 1 if command[-1] == 'lint' else 0)
 
-            with patch.dict(os.environ, {'AUTOCLIP_DATA_DIR': str(original), 'SENTRY_DSN': 'fixture', 'OPENAI_API_KEY': 'fixture-key', 'API_DASHSCOPE_API_KEY': 'fixture-key'}), \
+            with patch.dict(os.environ, {'PYTEST_ADDOPTS': '-k nothing', 'PYTEST_PLUGINS': 'fixture', 'AUTOCLIP_DATA_DIR': str(original), 'SENTRY_DSN': 'fixture', 'OPENAI_API_KEY': 'fixture-key', 'API_DASHSCOPE_API_KEY': 'fixture-key'}), \
                  patch('quality_gate.subprocess.check_output', side_effect=['a' * 40, '']), \
                  patch('quality_gate.subprocess.run', side_effect=execute):
                 self.assertEqual(quality_gate.run('frontend', report, sys.executable), 1)
@@ -39,6 +64,7 @@ class QualityGateTests(unittest.TestCase):
             self.assertTrue(all(row['SENTRY_DSN'] == '' and row['SENTRY_UPLOAD_SOURCEMAPS'] == 'false' for row in environments))
             self.assertTrue(all(row['OPENAI_API_KEY'] == '' and row['API_DASHSCOPE_API_KEY'] == '' for row in environments))
             self.assertTrue(all(row['REDIS_URL'] == 'redis://127.0.0.1:1/0' for row in environments))
+            self.assertTrue(all('PYTEST_ADDOPTS' not in row and 'PYTEST_PLUGINS' not in row for row in environments))
 
     def test_missing_tool_is_a_failed_check(self):
         with tempfile.TemporaryDirectory() as temp, \

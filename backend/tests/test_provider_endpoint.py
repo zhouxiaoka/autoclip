@@ -116,6 +116,21 @@ def test_locked_presets_read_catalog_urls_except_legacy_openai_and_bailian():
     assert locked_preset_url('ollama') is None
 
 
+@pytest.mark.parametrize('host', ['infistar.ai', 'infistar.cc', 'www.infistar.ai', 'www.infistar.cc'])
+def test_infistar_preserves_accepted_gateway_through_save_and_chat(host):
+    url = f'https://{host}/v1'
+    assert host in get_provider('infistar').accepted_hosts
+    assert locked_chat_url('infistar', url) == url
+    connection = ai.Connection(id='gateway', name='fixture', provider='infistar', base_url=url, api_key='fixture')
+    document = ai.ModelSettings(connections=[connection], analysis=ai.Assignment(connection_id='gateway', model='fixture-model'))
+    ai.save(document)
+    saved = ai.load().connections[0]
+    assert saved.base_url == url
+    assert ai.chat_endpoint(saved, 'fixture-model')['base_url'] == url
+    assert locked_chat_url('infistar', '') == 'https://infistar.cc/v1'
+    assert locked_chat_url('infistar', 'https://infistar.ai.attacker.test/v1') == 'https://infistar.cc/v1'
+
+
 def test_locked_urls_follow_swapped_json_catalog(tmp_path, monkeypatch):
     raw = json.loads(CATALOG.read_text(encoding='utf-8'))
     raw['providers']['api88']['base_url'] = 'https://lock.example.test/v1'

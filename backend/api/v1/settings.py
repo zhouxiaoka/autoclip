@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, validator
 logger = logging.getLogger(__name__)
 
 from backend import __version__
+from backend.core.llm_telemetry import sanitize_exception_text
 from backend.core.desktop_config import get_desktop_config, is_desktop_mode, DesktopConfig, save_desktop_config
 from backend.services.config_sync_service import config_sync_service
 from pathlib import Path
@@ -321,7 +322,7 @@ def _effective_llm_settings() -> Dict[str, Any]:
         from backend.core.llm_manager import get_llm_manager
         return get_llm_manager().get_current_provider_info()
     except Exception as e:  # noqa: BLE001
-        logger.debug(f"读取 LLM 管理器状态失败，设置页使用默认值: {e}")
+        logger.debug("读取 LLM 管理器状态失败，设置页使用默认值: %s", sanitize_exception_text(type(e).__name__))
         return {}
 
 
@@ -333,7 +334,7 @@ async def get_settings():
         
         # 尝试从保存的设置文件中读取
         settings_file = config.paths.data_dir / "settings.json"
-        logger.debug(f"设置文件路径: {settings_file} (存在: {settings_file.exists()})")
+        logger.debug("设置文件存在: %s", settings_file.exists())
         
         if settings_file.exists():
             try:
@@ -345,7 +346,7 @@ async def get_settings():
                 return settings
             except Exception as e:
                 # 如果读取失败，回退到默认配置
-                logger.warning(f"读取设置文件失败，回退到默认配置: {e}")
+                logger.warning("读取设置文件失败，回退到默认配置: %s", sanitize_exception_text(type(e).__name__))
 
         # 还没保存过 settings.json：Docker / 脚本模式的提供商、模型、base_url 来自环境变量
         # （LLM_PROVIDER / API_MODEL_NAME / OPENAI_BASE_URL），设置页首屏应如实反映，而不是固定显示通义千问
@@ -563,7 +564,7 @@ async def test_api_connection(request: TestApiRequest):
             }
             
     except Exception as e:
-        logger.error(f"API连接测试异常: {str(e)}")
+        logger.error("API连接测试异常: %s", sanitize_exception_text(type(e).__name__))
         return {
             "success": False,
             "error": f"API连接测试失败: {str(e)}",
@@ -610,7 +611,7 @@ async def update_settings(settings: DesktopSettings):
             from backend.core.llm_manager import get_llm_manager
             get_llm_manager()._reload_if_settings_changed()
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"刷新 LLM 管理器失败（下次调用时会自动重载）: {e}")
+            logger.warning("刷新 LLM 管理器失败（下次调用时会自动重载）: %s", sanitize_exception_text(type(e).__name__))
         
         # 重要：保存主配置文件，确保API key等关键配置被持久化
         from backend.core.desktop_config import save_desktop_config

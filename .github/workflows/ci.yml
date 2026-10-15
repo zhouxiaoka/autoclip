@@ -62,7 +62,7 @@ jobs:
         continue-on-error: true
         run: ruff check backend
 
-      - name: Blocking correctness lint, all backend tests and editorial fixtures
+      - name: Blocking correctness, ordered hot reload and complete backend suite
         env:
           DASHSCOPE_API_KEY: test_api_key
           LOG_FORMAT: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
