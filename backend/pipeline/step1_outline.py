@@ -103,29 +103,31 @@ class OutlineExtractor:
             except Exception as e:
                 logger.error(f"处理第{i+1}个文本块失败: {e}")
                 return [], e
-            for attempt in range(MAX_ATTEMPTS):
-                try:
-                    response = self.llm_client.call_with_retry(outline_prompt, {"text": chunk_text})
-                except Exception as e:
-                    last_error = e
-                    _kind, retryable = classify_for_retry(e)
-                    logger.error(f"处理第{i+1}个文本块失败: {e}")
-                    if not retryable:
-                        return [], e
-                    if attempt >= MAX_ATTEMPTS - 1:
-                        return [], e
-                    continue
-                if not response:
-                    logger.warning(f"处理第{i+1}个文本块时返回空响应")
+            from backend.core.llm_degrade import chunk_call_budget
+            with chunk_call_budget():
+                for attempt in range(MAX_ATTEMPTS):
+                    try:
+                        response = self.llm_client.call_with_retry(outline_prompt, {"text": chunk_text})
+                    except Exception as e:
+                        last_error = e
+                        _kind, retryable = classify_for_retry(e)
+                        logger.error(f"处理第{i+1}个文本块失败: {e}")
+                        if not retryable:
+                            return [], e
+                        if attempt >= MAX_ATTEMPTS - 1:
+                            return [], e
+                        continue
+                    if not response:
+                        logger.warning(f"处理第{i+1}个文本块时返回空响应")
+                        if attempt >= MAX_ATTEMPTS - 1:
+                            return [], None
+                        continue
+                    parsed = self._parse_outline_response(response, i)
+                    if parsed:
+                        return parsed, None
                     if attempt >= MAX_ATTEMPTS - 1:
                         return [], None
-                    continue
-                parsed = self._parse_outline_response(response, i)
-                if parsed:
-                    return parsed, None
-                if attempt >= MAX_ATTEMPTS - 1:
-                    return [], None
-            return [], last_error
+                return [], last_error
 
         from .concurrency import map_chunks
         for parsed_outlines, error in map_chunks(outline_chunk, enumerate(chunk_files)):

@@ -15,6 +15,7 @@ from ..utils.text_processor import TextProcessor
 from .quality import to_seconds, to_srt_time, save_report
 from .failures import PipelineFailure, http_status_of, timeline_failure_from_report
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR
+from ..core.llm_degrade import chunk_call_budget
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,7 @@ class TimelineExtractor:
         from .concurrency import map_chunks
         parse_lock = threading.Lock()
 
+        @chunk_call_budget()
         def timeline_chunk(item):
             chunk_index, chunk_outlines = item
             srt_entries, parsed = [], []
