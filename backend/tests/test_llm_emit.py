@@ -109,6 +109,39 @@ def test_provider_call_success_and_failure_emit_llm_request_finished(capture):
     assert snapshot.get("degrade_count", 0) == 0
 
 
+@pytest.mark.parametrize("status", ["completed", "failed"])
+def test_successful_recovery_clears_upstream_error_across_run_and_store(capture, monkeypatch, tmp_path, status):
+    from backend.services.studio import store
+
+    monkeypatch.setattr(telem, "configured_connection_fields", lambda: {})
+    monkeypatch.setattr(store, "directory", lambda project_id: tmp_path / project_id)
+    (tmp_path / "p1").mkdir()
+    provider = _ProbeProvider()
+    with telem.track_run():
+        with pytest.raises(_StatusError):
+            provider.call("fixture", fail=True)
+        assert telem.run_snapshot()["upstream_error_type"] == "rate_limited"
+        provider.call("fixture")
+        snapshot = telem.run_snapshot()
+        store.write("p1", {
+            "schema_version": 2,
+            "generation": {"status": status},
+            "analysis": {"status": status, "phase": "production"},
+        })
+
+    events = [row["properties"] for row in capture if row["event"] == "llm_request_finished"]
+    assert events[0]["upstream_error_type"] == "rate_limited"
+    assert events[1]["outcome"] == "success"
+    assert "upstream_error_type" not in events[1]
+    assert "upstream_error_type" not in snapshot
+    assert snapshot["llm_calls"] == 2
+    assert snapshot["billable_calls_before_failure"] == 1
+    saved = json.loads((tmp_path / "p1" / "metadata" / "studio.json").read_text())
+    for name in ("generation", "analysis"):
+        assert "upstream_error_type" not in saved[name]
+        assert saved[name]["llm_calls"] == 2
+
+
 def test_same_project_runs_persist_independent_usage(capture, monkeypatch, tmp_path):
     from backend.core import llm_usage
     from backend.services.studio import store

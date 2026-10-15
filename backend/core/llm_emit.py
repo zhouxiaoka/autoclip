@@ -567,6 +567,7 @@ def _remember_run(properties: dict[str, Any]) -> None:
     acc.completion_tokens += int(properties.get("completion_tokens") or 0)
     acc.reasoning_tokens += int(properties.get("reasoning_tokens") or 0)
     if properties.get("outcome") == "success":
+        acc.last_upstream = None
         acc.billable += 1
 
 
