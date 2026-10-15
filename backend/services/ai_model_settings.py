@@ -92,7 +92,7 @@ class Connection(BaseModel):
     api_key: str | None = Field(default=None, max_length=2000)
     image_api: Literal['auto', 'openai', 'seedream', 'dashscope', 'fal'] = 'auto'
     image_base_url: str = ''
-    validation_status: Literal['ok', 'failed', 'unchecked'] = 'unchecked'
+    validation_status: Literal['ok', 'failed', 'unchecked', 'transient'] = 'unchecked'
     validation_error_type: str = ''
     # None = omitted (legacy file or old client). Inferred after validation.
     base_url_source: Source | None = None
@@ -330,7 +330,7 @@ def endpoint_provider_ready(connection: Connection) -> bool:
     preset = get_provider(connection.catalog_provider_id or connection.provider)
     if not preset or preset.base_url or preset.protocol == 'local':
         return True
-    return bool(connection.base_url.strip()) and connection.validation_status == 'ok'
+    return bool(connection.base_url.strip()) and connection.validation_status in ('ok', 'transient')
 
 
 def connection_for(settings: ModelSettings, assignment: Assignment) -> Connection:

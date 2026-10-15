@@ -3,7 +3,7 @@ import { message } from 'antd'
 import { t } from '../../i18n'
 import { errorText } from '../studio/api'
 import { beginExperience, trackProviderValidation, type Placement } from '../../analytics/experience'
-import { hintKeyForUpstreamError } from '../../analytics/successRateContract'
+import { hintKeyForUpstreamError, isRetryableUpstreamError } from '../../analytics/successRateContract'
 import { PROVIDERS, type ProviderKey } from './providers'
 import { bindingCapability, modelSettingsApi, type Connection, type FetchListResult, type ModelList, type ModelSettings } from './modelSettingsApi'
 import { applyModelDefaults } from './modelDefaults'
@@ -254,8 +254,14 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     const payload = { ...connection, api_key: connection.api_key?.trim() ?? connection.api_key }
     try {
       return await modelSettingsApi.test(payload, model, vision, role)
-    } catch {
-      return { success: false, ok: false, result: 'failed', error_type: 'unknown', hint_key: hintKeyForUpstreamError('unknown') }
+    } catch (e) {
+      const error = e as { code?: string; response?: { status?: number } } | null
+      const status = error?.response?.status
+      const errorType = status === 429 ? 'rate_limited'
+        : status && status >= 500 && status <= 599 ? 'upstream_unavailable'
+        : status === 401 ? 'invalid_key'
+        : !status ? (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT' ? 'timeout' : 'connection') : 'unknown'
+      return { success: false, ok: false, result: isRetryableUpstreamError(errorType) ? 'transient' : 'failed', error_type: errorType, hint_key: hintKeyForUpstreamError(errorType) }
     }
   }
 

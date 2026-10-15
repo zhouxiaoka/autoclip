@@ -307,6 +307,56 @@ def test_failed_validation_saves_but_blocks_readiness_and_generation(monkeypatch
         readiness.ensure_analysis_usable()
 
 
+@pytest.mark.parametrize('catalog_provider_id', ['', 'azure-openai'])
+@pytest.mark.parametrize('stage', ['GET', 'POST'])
+@pytest.mark.parametrize('failure', ['timeout', 'connection', 429, 500, 502, 503, 504, 529, 'html_503', 401])
+def test_transient_validation_does_not_block_generation(monkeypatch, catalog_provider_id, stage, failure):
+    import httpx
+    from backend.services.studio import readiness
+
+    def handler(method, url, headers, body):
+        if method != stage:
+            return _FakeResponse(200, {'data': [{'id': 'gpt-4o-mini'}]})
+        if failure == 'timeout':
+            raise httpx.ReadTimeout('fixture')
+        if failure == 'connection':
+            raise httpx.ConnectError('fixture')
+        if failure == 'html_503':
+            return _FakeResponse(503, '<html>Unavailable</html>', {'content-type': 'text/html'})
+        return _FakeResponse(failure, {'error': {'message': 'fixture'}})
+
+    _patch_httpx(monkeypatch, handler)
+    connection = _connection(catalog_provider_id=catalog_provider_id)
+    result = validate_connection(connection, 'gpt-4o-mini').as_api()
+    expected = 'failed' if failure == 401 else 'transient'
+    assert result['ok'] is False
+    assert result['result'] == expected
+    if failure == 401:
+        assert result['error_type'] == 'invalid_key'
+    elif failure == 'timeout':
+        assert result['error_type'] == 'timeout'
+    checked = ai.Connection.model_validate({
+        **connection.model_dump(), 'validation_status': result['result'],
+        'validation_error_type': result['error_type'],
+    })
+    ai.save(ai.ModelSettings(
+        connections=[checked], analysis=ai.Assignment(connection_id='c1', model='gpt-4o-mini'),
+        analysis_mode='subtitle', allow_visual_screening=False,
+    ))
+    loaded = ai.load()
+    assert loaded.connections[0].validation_status == expected
+    monkeypatch.setattr(ai, 'for_editing', lambda: loaded)
+    check = readiness.report()['checks']['analysis']
+    assert check['ok'] is (failure != 401)
+    if failure == 401:
+        assert check['code'] == 'validation_failed'
+        with pytest.raises(ValueError):
+            readiness.ensure_analysis_usable()
+    else:
+        readiness.ensure_analysis_usable()
+        ai.require_analysis(loaded)
+
+
 def test_unchecked_legacy_connections_still_ready(monkeypatch):
     from backend.services.studio import readiness
     settings = ai.ModelSettings(

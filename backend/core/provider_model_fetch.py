@@ -397,6 +397,9 @@ def fetch_provider_models(
             break
 
         status = int(getattr(response, "status_code", 0) or 0)
+        if status == 429 or 500 <= status <= 599:
+            error_type = UpstreamErrorType.RATE_LIMITED if status == 429 else UpstreamErrorType.UPSTREAM_UNAVAILABLE
+            return _failed(_as_classified(error_type), host, pages=pages)
         text = _response_text(response)[:4000]
         content_type = _content_type(response)
         if _looks_like_html(text, content_type):

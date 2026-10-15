@@ -122,11 +122,12 @@ def test_connection_assignment(body: ConnectionTestRequest):
         return result.as_api()
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception:
-        from backend.core.upstream_errors import hint_key_for
+    except Exception as exc:
+        from backend.core.upstream_errors import classify_exception
+        classified = classify_exception(exc)
         return {
-            'success': False, 'ok': False, 'result': 'failed',
-            'error_type': 'unknown', 'hint_key': hint_key_for('unknown'), 'models': [],
+            'success': False, 'ok': False, 'result': 'transient' if classified.retryable else 'failed',
+            'error_type': classified.error_type.value, 'hint_key': classified.hint_key, 'models': [],
         }
 
 

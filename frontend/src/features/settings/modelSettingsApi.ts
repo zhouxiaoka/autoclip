@@ -17,7 +17,7 @@ export interface Connection {
   api_key_masked?: string
   image_api: 'auto' | 'openai' | 'seedream' | 'dashscope' | 'fal'
   image_base_url: string
-  validation_status?: 'ok' | 'failed' | 'unchecked'
+  validation_status?: 'ok' | 'failed' | 'unchecked' | 'transient'
   validation_error_type?: string
   base_url_source?: Source
   preset_version?: number

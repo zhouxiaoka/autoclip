@@ -13,12 +13,12 @@ export const ADDRESS_LOCKED = Object.values(catalog.providers).filter(row => row
 
 export const VALIDATION_ERROR_TYPES = UPSTREAM_ERROR_TYPES
 export type ValidationErrorType = (typeof VALIDATION_ERROR_TYPES)[number]
-export type ValidationStatus = 'ok' | 'failed' | 'unchecked'
+export type ValidationStatus = 'ok' | 'failed' | 'unchecked' | 'transient'
 
 export interface ValidationResult {
   success?: boolean
   ok?: boolean
-  result?: 'ok' | 'failed' | 'success'
+  result?: 'ok' | 'failed' | 'success' | 'transient'
   error_type?: string
   hint_key?: string
   key_hint?: string | null

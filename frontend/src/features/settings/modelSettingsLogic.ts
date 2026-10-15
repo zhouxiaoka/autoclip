@@ -9,6 +9,7 @@ import type { Assignment, Connection, ModelList, ModelSettings } from './modelSe
 import { applyModelDefaults, defaultModel } from './modelDefaults'
 import { normalizeCompatibleUrl, passed, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
+import { isRetryableUpstreamError } from '../../analytics/successRateContract'
 
 export type Role = 'analysis' | 'vision' | 'cover' | 'transcription'
 export type SaveIssue = { role: Role; reason: 'provider' | 'model' | 'key' }
@@ -99,7 +100,7 @@ export function applyValidation(s: ModelSettings, id: string, result: Validation
       return {
         ...c,
         base_url: url,
-        validation_status: ok ? 'ok' : 'failed',
+        validation_status: ok ? 'ok' : result.result === 'transient' || isRetryableUpstreamError(result.error_type || '') ? 'transient' : 'failed',
         validation_error_type: ok ? '' : (result.error_type || 'unknown'),
       }
     }),

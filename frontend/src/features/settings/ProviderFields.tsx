@@ -42,11 +42,12 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
   </Row>
   if (!connection) return <>{picker}</>
   const failed = connection.validation_status === 'failed'
+  const transient = connection.validation_status === 'transient'
   const errorType = connection.validation_error_type || ''
   const urlInfo = key === 'compatible' ? normalizeCompatibleUrl(connection.base_url) : null
   const liveHint = hintProviderForKey(connection.api_key) || (keyHint as ProviderKey | undefined)
   const showHint = liveHint && liveHint !== key
-  const shownError = (urlInfo?.warnings.includes('console_host') && 'console_host') || (failed && errorType) || ''
+  const shownError = (urlInfo?.warnings.includes('console_host') && 'console_host') || ((failed || transient) && errorType) || ''
   const keyLink = sponsorKeyLink(key)
   const addressEditable = canEditAddress(key)
   return <>
@@ -87,7 +88,7 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
         }} />
     </Row>}
     {showHint && <p className="ac-note">{keyHintCopy(liveHint)}</p>}
-    {shownError && <p className="ac-note ac-note--error" role="alert">{validationCopy(shownError)}</p>}
+    {shownError && <p className={transient ? 'ac-note' : 'ac-note ac-note--error'} role={transient ? 'status' : 'alert'}>{validationCopy(shownError)}</p>}
     {failed && keyLink && KEY_ERRORS.has(errorType) && <p className="ac-note">
       <a className="ac-link" href={keyLink.href} onClick={e => { e.preventDefault(); openExternalLink(keyLink.href) }}>{keyLink.label} ↗</a>
     </p>}

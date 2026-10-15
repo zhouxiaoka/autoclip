@@ -3,8 +3,8 @@
 Image/audio connections check account model access without paid generation. They
 must list the selected model; a public catalog is never proof of account access.
 
-Save may persist a failed result (marked red). Generation reads the stored
-status and blocks. Never returns keys, full URLs, or provider error text.
+Save may persist a failed result (marked red). Generation blocks failed checks,
+but permits transient errors. Never returns keys or provider error text.
 
 HTTP failures go through ``classify_upstream_error``; the returned
 ``hint_key`` is the official catalog sentence. Local remaps (console host,
@@ -113,7 +113,7 @@ def _failed(
     if not isinstance(classified, ClassifiedUpstreamError):
         classified = _as_type(classified)
     return ValidationResult(
-        ok=False, result='failed',
+        ok=False, result='transient' if classified.retryable else 'failed',
         error_type=classified.error_type.value,
         hint_key=classified.hint_key,
         key_hint=key_hint, normalized_base_url=base, base_url_host=_host(base), model_ids=models or [],
@@ -170,6 +170,8 @@ def _probe(base: str, api_key: str, model: str) -> Optional[ClassifiedUpstreamEr
     except httpx.RequestError:
         return _classify(None, '', error_name='ConnectionError')
     text = response.text or ''
+    if response.status_code == 429 or 500 <= response.status_code <= 599:
+        return _as_type(UpstreamErrorType.RATE_LIMITED if response.status_code == 429 else UpstreamErrorType.UPSTREAM_UNAVAILABLE)
     content_type = (response.headers.get('content-type') or '').lower()
     html = _html_or_classify(response.status_code, text[:4000], content_type)
     if html:

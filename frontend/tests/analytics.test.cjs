@@ -569,6 +569,36 @@ function settingsHook(s, transport, initial) {
   return ()=>{cursor=0;return hook.useModelSettings('home_setup')}
 }
 const modelFixture=()=>({version:1,saved:false,connections:[{id:'private-id',provider:'openai',api_key:'sk-secret',has_key:true,base_url:'https://gw.example/v1',name:'acct'}],analysis:{connection_id:'private-id',model:'private-model',capability:'text'},vision:null,cover:null,cover_enabled:false,allow_send_frame:false,analysis_mode:'subtitle',allow_visual_screening:false,transcription:{provider:'whisper_local',model:'base'},chunk_size:2000,min_score_threshold:.7,max_clips_per_collection:5})
+test('R6 save persists transient validation without blocking and still blocks invalid keys', async () => {
+ for (const [response, expected] of [
+  [{success:false, result:'transient', error_type:'timeout'}, 'transient'],
+  [{success:false, error_type:'connection'}, 'transient'],
+  [{success:false, error_type:'rate_limited'}, 'transient'],
+  [{success:false, error_type:'upstream_unavailable'}, 'transient'],
+  [{code:'ECONNABORTED'}, 'transient'],
+  [{code:'ERR_NETWORK'}, 'transient'],
+  [{response:{status:503}}, 'transient'],
+  [{response:{status:429}}, 'transient'],
+  [{response:{status:401}}, 'failed'],
+  [{success:false, result:'failed', error_type:'invalid_key'}, 'failed'],
+ ]) {
+  const s = setup()
+  let persisted
+  const render = settingsHook(s, {
+   discover: async () => ({models:[],source:'catalog',preview:true}),
+   test: async () => { if (response.code || response.response) throw response; return response },
+   save: async value => { persisted = value; return {...value,saved:true} },
+  }, modelFixture())
+  await render().load(); await Promise.resolve()
+  const outcome = await render().save()
+  assert.equal(persisted.connections[0].validation_status, expected)
+  assert.equal(outcome.ok, true)
+  assert.equal(outcome.validationFailed, expected === 'failed')
+  const telemetry = JSON.stringify(s.events)
+  for (const value of ['sk-secret', 'https://', 'private-model', 'private-id']) assert.equal(telemetry.includes(value), false)
+ }
+})
+
 test('actual unified settings hook records save once and HTTP-200 negative tests as failures',async()=>{
  const s=setup();const render=settingsHook(s,{discover:async()=>({models:[],source:'catalog',preview:true}),save:async value=>({...value,saved:true}),test:async()=>({success:false,error_type:'invalid_key',base_url_host:'gw.example'})},modelFixture())
  await render().load();await Promise.resolve();let m=render();await m.save();m=render();await m.test()

@@ -328,3 +328,27 @@ test('endpoint setup requires an address and model before sending validation', (
   assert.equal(calls.length, 1)
   assert.equal(calls[0][1], 'test-model')
 })
+
+test('R6 transient validation shows an existing hint without marking credentials invalid', () => {
+  const access = loadTs('providerAccess.ts', { '../../i18n': i18n })
+  const Fields = loadTs('ProviderFields.tsx', {
+    react: { ...React, useState: () => [false, () => {}] },
+    antd: { Input: Object.assign(() => null, { Password: 'password' }), Select: 'select' },
+    '../../i18n': i18n, '../../ui': ui,
+    '../../utils/externalLinks': { openExternalLink() {} },
+    '../../analytics/events': { trackSponsorLinkOpened() {} },
+    './providerAccess': access,
+  }).default
+  const endpoint = loadTs('endpointProvider.ts')
+  for (const validation_status of ['transient', 'failed']) {
+    const connection = { id:'endpoint', name:'Endpoint', provider:'compatible', catalog_provider_id:'azure-openai',
+      base_url:'https://endpoint.example.test/v1', validation_status,
+      validation_error_type: validation_status === 'transient' ? 'timeout' : 'invalid_key' }
+    const tree = Fields({connection, placement:'settings_model', onChoose() {}, onEdit() {}})
+    assert.ok(textOf(tree).includes(access.validationCopy(connection.validation_error_type)))
+    const nodes = flatten(tree)
+    assert.equal(nodes.some(node => node.props?.className?.includes('ac-note--error')), validation_status === 'failed')
+    assert.equal(nodes.some(node => node.props?.status === 'error'), validation_status === 'failed')
+    assert.equal(endpoint.endpointProviderReady(connection), validation_status === 'transient')
+  }
+})

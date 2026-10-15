@@ -686,6 +686,8 @@ def _attach_run_telemetry(data, project_id, previous):
             if key in usage_keys and checkpoint is not None and identity:
                 base = (prior.get(key) or 0) if prior_identity == identity else 0
                 record[key] = base + value - counted.get(key, 0)
+            elif key == 'retry_count' and not snapshot.get('llm_calls') and prior_identity == identity:
+                record[key] = prior.get(key) or value
             else:
                 record[key] = value
         persisted[usage_id] = {key: snapshot[key] for key in usage_keys if key in snapshot}
