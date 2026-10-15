@@ -17,6 +17,12 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 _EVENT_NAME = re.compile(r"^[a-z$][a-z0-9_ ]*$")
+# Runtime facts must work without optional package data. A contract test keeps
+# these canonical values aligned with the tracking plan's single source.
+CANONICAL_OS = ('macos', 'windows', 'linux', 'unknown')
+OS_ALIASES = {'darwin': 'macos', 'win32': 'windows'}
+CANONICAL_ARCH = ('aarch64', 'x86_64', 'unknown')
+ANALYTICS_ENVIRONMENTS = ('production', 'development', 'validation')
 _URL_WITH_PATH = re.compile(r"https?://\S+/\S+")
 _PRODUCER_CALLS = (
     re.compile(r"captureBusinessEvent\(\s*['\"]([a-z$][a-z0-9_]*)['\"]"),
@@ -59,7 +65,11 @@ def catalog_path() -> Traversable:
 
 @lru_cache(maxsize=1)
 def load_catalog() -> dict[str, Any]:
-    return json.loads(catalog_path().read_text(encoding="utf-8"))
+    try:
+        data = json.loads(catalog_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError, UnicodeError):
+        return {}
 
 
 def reload_catalog() -> dict[str, Any]:
@@ -68,13 +78,11 @@ def reload_catalog() -> dict[str, Any]:
 
 
 def normalize_os(value: str | None) -> str | None:
-    catalog = load_catalog()
     if not isinstance(value, str):
         return None
     key = value.strip().lower()
-    aliases = catalog["common"].get("os_aliases") or {}
-    key = aliases.get(key, key)
-    if key in catalog["common"]["os"]:
+    key = OS_ALIASES.get(key, key)
+    if key in CANONICAL_OS:
         return key
     return None
 
@@ -112,8 +120,7 @@ def app_version() -> str:
 
 def analytics_environment() -> str:
     value = (os.environ.get("AUTOCLIP_BUILD_ENVIRONMENT") or "").strip().lower()
-    allowed = set(load_catalog()["common"]["analytics_environment"])
-    if value in allowed:
+    if value in ANALYTICS_ENVIRONMENTS:
         return value
     return "development"
 
@@ -174,6 +181,8 @@ def validate_event(
 ) -> list[str]:
     """Return human-readable errors. Empty list means the payload is allowed."""
     data = catalog or load_catalog()
+    if not data:
+        return []  # Optional registry absent: producers still enforce privacy allowlists.
     errors: list[str] = []
     if name in ignore_events(data):
         return errors
