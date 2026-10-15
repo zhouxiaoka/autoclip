@@ -99,7 +99,43 @@ test('identity waits for the desktop port, retries failure and cancels retries o
   assert.equal(timer, undefined)
   assert.ok(cancelled.length > 0)
   listener()
-  assert.equal(requests.length, 2)
+  const identityPuts = requests.filter(r => r.url.endsWith('/settings/analytics-identity'))
+  assert.equal(identityPuts.length, 2)
+})
+
+test('X2: opting out tells the backend so Sentry drops user.id; re-enable only after an opt-out', async () => {
+  const storage = memory()
+  const puts = []
+  const sdk = { init() {}, capture() { return {} }, get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, {
+    localStorage: storage, window: {},
+    fetch: (url, opts) => { puts.push({ url, body: JSON.parse(opts.body) }); return Promise.resolve({ ok: true }) },
+  })
+  const consent = () => puts.filter(p => p.url === '/api/v1/settings/analytics-consent').map(p => p.body.enabled)
+  ph.initAnalytics()
+  ph.setAnalyticsEnabled(true)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(consent(), [])
+  ph.setAnalyticsEnabled(false)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(consent(), [false])
+  ph.setAnalyticsEnabled(true)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(consent(), [false, true])
+})
+
+test('X2: an opted-out launch reports the opt-out even without a PostHog key', async () => {
+  const storage = memory()
+  storage.setItem('autoclip.analytics.optOut', 'true')
+  const puts = []
+  const ph = load('posthog', { 'posthog-js': { init() { throw Error('must not init') } }, './workflow': core }, {
+    localStorage: storage, window: {},
+    fetch: (url, opts) => { puts.push({ url, body: JSON.parse(opts.body) }); return Promise.resolve({ ok: true }) },
+  })
+  ph.initAnalytics()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts, [{ url: '/api/v1/settings/analytics-consent', body: { enabled: false } }])
 })
 
 test('architecture aliases and untrusted native facts stay within the telemetry enum', () => {

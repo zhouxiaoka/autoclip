@@ -31,6 +31,8 @@ let retryIdentity = false
 let watchingIdentity = false
 let identityRetryTimer: ReturnType<typeof setTimeout> | undefined
 let identityRetries = 0
+let publishedConsent: boolean | undefined
+let watchingConsent = false
 const ANONYMOUS_ID = /^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12})$/
 
 /** Persist the SDK's anonymous id so backend events join the same person and experiment. */
@@ -84,6 +86,34 @@ function publishAnonymousId(): void {
     }).then((response) => finish(Boolean(response?.ok))).catch(() => finish(false))
   } catch {
     finish(false)
+  }
+}
+
+/**
+ * Tell the backend about an opt-out so backend Sentry (API and worker processes) stops
+ * attaching the anonymous user.id. Re-enabling is only sent after an opt-out was sent.
+ */
+function publishConsent(): void {
+  const enabled = isAnalyticsEnabled()
+  if (typeof fetch !== 'function' || publishedConsent === enabled) return
+  if (enabled && publishedConsent === undefined) return
+  if (!watchingConsent) {
+    watchingConsent = true
+    try { apiConfigManager.addListener(() => publishConsent()) } catch { /* port can arrive later */ }
+  }
+  if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+      && !apiConfigManager.isReady()) return
+  publishedConsent = enabled
+  const failed = () => { if (publishedConsent === enabled) publishedConsent = enabled ? false : undefined }
+  try {
+    const base = String(apiConfigManager.getBaseUrl() || '/api/v1').replace(/\/$/, '')
+    void fetch(`${base}/settings/analytics-consent`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    }).then((response) => { if (!response?.ok) failed() }).catch(failed)
+  } catch {
+    failed()
   }
 }
 
@@ -230,6 +260,7 @@ export function isAnalyticsEnabled(): boolean {
  */
 export function initAnalytics(): void {
   if (initialized) return
+  if (!isAnalyticsEnabled()) publishConsent()
   if (!POSTHOG_KEY) {
     if (import.meta.env.DEV) {
       console.info('[analytics] 未配置 VITE_PUBLIC_POSTHOG_KEY，埋点已禁用')
@@ -289,6 +320,7 @@ export function setAnalyticsEnabled(enabled: boolean): void {
     /* localStorage 不可用时忽略 */
   }
   for (const listener of preferenceListeners) { try { listener() } catch { /* isolate observers */ } }
+  publishConsent()
   if (!initialized && enabled) initAnalytics()
   if (!initialized) return
   try {

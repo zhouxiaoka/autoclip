@@ -78,6 +78,10 @@ def begin_shutdown() -> None:
         _shutting_down = True
 
 
+def shutting_down() -> bool:
+    return _shutting_down
+
+
 def cancel(project_id: str) -> None:
     with _lock:
         _cancelled.add(project_id)

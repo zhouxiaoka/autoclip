@@ -291,6 +291,23 @@ async def put_analytics_identity(body: AnalyticsIdentity):
     return {"ok": True}
 
 
+class AnalyticsConsent(BaseModel):
+    enabled: bool
+
+
+@router.put("/analytics-consent")
+async def put_analytics_consent(body: AnalyticsConsent):
+    """The UI analytics switch. Off: backend Sentry stops attaching user.id in every process
+    (before_send rereads privacy.json); this process's scope user is cleared now."""
+    from backend.core.sentry_setup import sync_anonymous_user, write_privacy
+    try:
+        write_privacy(analytics=body.enabled)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    sync_anonymous_user()
+    return {"enabled": body.enabled}
+
+
 @router.put("/privacy")
 async def put_privacy(body: PrivacySettings):
     from backend.core.sentry_setup import write_privacy, crash_reports_enabled, init_sentry

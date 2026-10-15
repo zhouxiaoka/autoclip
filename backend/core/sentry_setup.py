@@ -110,7 +110,7 @@ def crash_reports_enabled() -> bool:
         return False
 
 
-def write_privacy(*, crash_reports: Optional[bool] = None) -> Path:
+def write_privacy(*, crash_reports: Optional[bool] = None, analytics: Optional[bool] = None) -> Path:
     path = _privacy_path()
     if path is None:
         raise RuntimeError("未设置 AUTOCLIP_APP_DIR / AUTOCLIP_DATA_DIR，写不了隐私开关")
@@ -122,6 +122,8 @@ def write_privacy(*, crash_reports: Optional[bool] = None) -> Path:
             current = {}
     if crash_reports is not None:
         current["crash_reports"] = bool(crash_reports)
+    if analytics is not None:
+        current["analytics"] = bool(analytics)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
