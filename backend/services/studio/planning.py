@@ -86,6 +86,7 @@ def recommend(video: Path, options: ImportOptions):
     info = {**info, 'duration': duration}
     consent = analysis_preferences.load()
     degrade_reason = None
+    screening_degrade = False
     try:
         configured = consent.analysis_mode != 'subtitle' and intelligence.ready()
     except ValueError:
@@ -154,18 +155,20 @@ def recommend(video: Path, options: ImportOptions):
             if isinstance(error, intelligence.VisionRequestError):
                 diagnostics = {**error.diagnostics(), 'phase':'screening'}
             mode = 'fallback'
-            if consent.analysis_mode == 'auto':
-                degrade_reason = VISION_FALLBACK_CODE
-                local_evidence, result = _local_recommendation(video, duration)
-            elif options.auto_start:
+            if consent.analysis_mode == 'auto' and isinstance(error, intelligence.VisionRequestError):
+                screening_degrade = True  # S5: record the fixed reason; keep the screening message first
+            if options.auto_start or screening_degrade:
                 local_evidence, result = _local_recommendation(
                     video, duration, '快速画面判断未完成，已改按字幕制作。')
             else:
                 result = Recommendation(content_type='other', goal='highlight', confidence=0, suggested_goals=[],
                     reason='快速判断暂未完成，请按素材内容选择制作类型；尚未启动正式理解与剪辑。')
-    if degrade_reason:
+    if degrade_reason:  # failed vision connection before screening
         mode = 'fallback'
         result.reason = (VISION_FALLBACK_MESSAGE + result.reason)[:500]
+    elif screening_degrade:  # vision request failed during auto screening
+        degrade_reason = VISION_FALLBACK_CODE
+        result.reason = (result.reason + VISION_FALLBACK_MESSAGE)[:500]
     prefs = Preferences(goal=result.goal, language=options.language,
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
