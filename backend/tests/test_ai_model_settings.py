@@ -2,6 +2,8 @@
 import asyncio
 import json
 import os
+from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -102,6 +104,70 @@ def test_b2_analysis_switch_and_visual_toggle_http_save_round_trip(binding_id, c
             assert client.put('/settings/ai-models', json=public).status_code == 200
             assert ai.load().vision == config.vision
             assert ai.load().cover == config.cover
+
+
+@pytest.mark.parametrize('entry', ['legacy', 'catalog', 'slots'])
+@pytest.mark.parametrize('binding_id', ['old', 'independent'])
+@pytest.mark.parametrize('cover_enabled', [True, False])
+def test_x1_smart_own_provider_survives_analysis_switch_round_trip(entry, binding_id, cover_enabled):
+    """Run the real frontend switch, then save/reopen through HTTP, disk and runtime."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    config = ai.ModelSettings(
+        connections=[ai.Connection(id=id_, name=id_, provider=provider, api_key='')
+                     for id_, provider in [('old', 'ollama'), ('new', 'lmstudio'), ('independent', 'ollama')]],
+        analysis=ai.Assignment(connection_id='old', model='old-analysis'),
+        vision=ai.Assignment(connection_id=binding_id, model='own-vision', capability='multimodal', model_source='preset'),
+        cover=ai.Assignment(connection_id=binding_id, model='own-cover', model_source='preset'),
+        cover_enabled=cover_enabled,
+    )
+    script = """
+const fs = require('node:fs')
+const { loadTs } = require('./tests/load-ts.cjs')
+const mocks = { '../../i18n': { t: text => text } }
+const logic = loadTs('modelSettingsLogic.ts', mocks)
+const defaults = loadTs('modelDefaults.ts', mocks)
+const view = loadTs('providerCatalogView.ts', mocks)
+const slots = loadTs('defaultModelSlots.ts', mocks)
+const state = logic.prepareLoaded(JSON.parse(fs.readFileSync(0, 'utf8')))
+const connection = state.connections.find(c => c.id === 'new')
+const models = [{ id: 'new-analysis', analysis: true }, { id: 'new-cover', image: true }]
+const lists = { new: { models, source: 'live', preview: false } }
+const entry = process.argv[1]
+let switched = entry === 'legacy'
+  ? logic.chooseProvider(state, 'analysis', 'lmstudio', lists, false).settings
+  : entry === 'catalog' ? view.assignAnalysis(state, connection)
+  : slots.applySmartSelection(state, 'analysis', 'new-analysis', 'new')
+switched = defaults.applyModelDefaults(switched, connection, models, false)
+process.stdout.write(JSON.stringify(logic.forSave(switched)))
+"""
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        assert client.put('/settings/ai-models', json=config.model_dump()).status_code == 200
+        result = subprocess.run(
+            ['node', '-e', script, entry], cwd=Path(__file__).resolve().parents[2] / 'frontend',
+            input=json.dumps(client.get('/settings/ai-models').json()),
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 0
+        response = client.put('/settings/ai-models', json=json.loads(result.stdout))
+        assert response.status_code == 200
+        reopened = client.get('/settings/ai-models').json()
+        loaded = ai.load()
+        assert reopened['analysis']['connection_id'] == 'new'
+        for role in ('vision', 'cover'):
+            assert reopened[role] == getattr(config, role).model_dump()
+            assert getattr(loaded, role) == getattr(config, role)
+        assert reopened['cover_enabled'] == cover_enabled
+        assert ai.connection_for(loaded, ai.vision_follow_binding(loaded)).id == binding_id
+        assert ai.connection_for(loaded, loaded.cover).id == binding_id
+        # Reopening and saving the public editing document keeps the same routing.
+        assert client.put('/settings/ai-models', json=reopened).status_code == 200
+        assert ai.load().vision == config.vision
+        assert ai.load().cover == config.cover
 
 
 def test_api_key_strips_surrounding_whitespace_on_construct_and_save():

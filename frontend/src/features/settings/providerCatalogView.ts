@@ -162,11 +162,9 @@ export function assignAnalysis(
 ): ModelSettings {
   if (!endpointProviderReady(connection)) return settings
   if (settings.analysis?.connection_id === connection.id) return settings
-  // Only user bindings stay independent; automatic bindings follow the new analysis connection.
+  // Model source controls model selection, not the chosen provider connection.
   return {
     ...settings, analysis: cleanBinding(connection.id),
-    vision: settings.vision?.model_source === 'user' ? settings.vision : null,
-    cover: settings.cover?.model_source === 'user' ? settings.cover : null,
   }
 }
 

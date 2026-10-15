@@ -186,7 +186,7 @@ test('a cached live list fills the recommendation immediately when switching pro
 
 for (const entry of ['legacy', 'catalog']) {
   for (const cached of [false, true]) {
-    test(`R1: ${entry} analysis switch moves automatic cover and vision with ${cached ? 'cached' : 'delayed'} models`, () => {
+    test(`X1: ${entry} analysis switch preserves bound cover and vision with ${cached ? 'cached' : 'delayed'} models`, () => {
       const view = loadTs('providerCatalogView.ts', { './modelSettingsLogic': logic, './providers': providers, '../../i18n': i18n })
       const connections = [conn('old', 'dashscope', { has_key: true }), conn('new', 'openai', { has_key: true })]
       const oldLists = { old: { models, source: 'live', preview: false } }
@@ -205,23 +205,19 @@ for (const entry of ['legacy', 'catalog']) {
             ? logic.chooseProvider(state, 'analysis', 'openai', lists, false).settings
             : view.assignAnalysis(state, connections[1])
           if (!cached) {
-            assert.equal(switched.cover, null, 'the old automatic cover is cleared before discovery')
-            assert.equal(switched.vision, null)
+            assert.deepEqual(plain(switched.cover), plain(state.cover))
+            assert.deepEqual(plain(switched.vision), plain(state.vision))
           }
           switched = defaults.applyModelDefaults(switched, connections[1], newModels, false)
-          // A late response for the old provider must not restore its bindings.
+          // A late response must also preserve the existing bindings.
           switched = defaults.applyModelDefaults(switched, connections[0], models, false)
           const saved = logic.forSave(logic.setVisual(logic.setVisual(switched, false), true))
           assert.equal(saved.analysis.connection_id, 'new')
-          assert.equal(saved.vision, null)
-          assert.equal(logic.followedVisionBinding(saved).connection_id, 'new')
+          assert.deepEqual(plain(saved.vision), plain(state.vision))
+          assert.equal(logic.followedVisionBinding(saved).connection_id, 'old')
           assert.equal(saved.cover_enabled, enabled)
-          if (enabled) {
-            assert.deepEqual(plain(saved.cover), { connection_id: 'new', model: 'dall-e-3', capability: 'auto', model_source: 'preset' })
-          } else {
-            assert.equal(saved.cover, null)
-            assert.equal(logic.setCoverEnabled(saved, true, { new: { models: newModels } }).cover.connection_id, 'new')
-          }
+          assert.deepEqual(plain(saved.cover), plain(state.cover))
+          assert.equal(logic.setCoverEnabled(saved, true, { new: { models: newModels } }).cover.connection_id, 'old')
           assert.equal(state.cover.connection_id, 'old', 'the input settings are unchanged')
         }
       }
