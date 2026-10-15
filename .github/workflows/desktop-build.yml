@@ -157,13 +157,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: bash scripts/build_macos_arm.sh
 
-      - name: Verify shipped macOS runtime before publishing
+      - name: Verify shipped macOS runtime and backend Sentry initialization before publishing
         shell: bash
         run: |
           set -euo pipefail
           APP="src-tauri/target/release/bundle/macos/AutoClip Desktop.app"
           RESOURCES="$PWD/$APP/Contents/Resources/resources"
           codesign --verify --deep --strict "$APP"
+          # The bundle smoke requires "Sentry 已启用" and rejects "Sentry 初始化失败".
+          # It supplies a dummy DSN with a discard transport, so no events are sent.
           "$RESOURCES/python/bin/python3" -B scripts/verify_macos_bundle.py --resources "$RESOURCES" --output-parent "$RUNNER_TEMP/autoclip-release-validation"
           "$RESOURCES/python/bin/python3" -B scripts/verify_sensevoice.py --resources "$RESOURCES" --report "$RUNNER_TEMP/macos-sensevoice-installed.json"
           codesign --verify --deep --strict "$APP"

@@ -28,6 +28,9 @@ PIPELINE_STAGES = {"INGEST", "SUBTITLE", "ANALYZE", "HIGHLIGHT", "EXPORT", "DONE
 
 
 def studio_error_code(error: Exception) -> str:
+    from backend.core.project_cancellation import ServiceRestarted
+    if isinstance(error, ServiceRestarted):
+        return 'service_restarted'
     from backend.services.studio.intelligence import VisionRequestError
     from backend.pipeline.failures import PipelineFailure
     if isinstance(error, (VisionRequestError, PipelineFailure)) and error.code in STUDIO_ERROR_CODES:

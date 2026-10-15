@@ -1,11 +1,105 @@
 """Unregistered events and missing required fields fail the tracking-plan catalog."""
 import json
+import logging
+from pathlib import Path
 
 import pytest
 
 from backend.core import event_catalog
 from backend.core import llm_emit as telem
 from backend.core import llm_telemetry as schema
+
+
+@pytest.fixture
+def unavailable_catalog(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUTOCLIP_EVENT_CATALOG', str(tmp_path / 'missing.json'))
+    event_catalog.load_catalog.cache_clear()
+    yield
+    event_catalog.load_catalog.cache_clear()
+
+
+def test_platform_detection_never_loads_catalog(monkeypatch):
+    def forbidden():
+        raise AssertionError('platform detection must not load a catalog')
+    monkeypatch.setattr(event_catalog, 'load_catalog', forbidden)
+    monkeypatch.setenv('AUTOCLIP_NATIVE_OS', 'darwin')
+    monkeypatch.setenv('AUTOCLIP_NATIVE_ARCH', 'arm64')
+    monkeypatch.setenv('AUTOCLIP_BUILD_ENVIRONMENT', 'validation')
+    assert event_catalog.detect_os() == 'macos'
+    assert event_catalog.detect_arch() == 'aarch64'
+    assert event_catalog.envelope_properties()['analytics_environment'] == 'validation'
+
+
+def test_runtime_constants_match_tracking_plan():
+    common = json.loads((Path(__file__).resolve().parents[2] / 'docs/analytics/event_catalog.json').read_text())['common']
+    assert list(event_catalog.CANONICAL_OS) == common['os']
+    assert event_catalog.OS_ALIASES == common['os_aliases']
+    assert list(event_catalog.CANONICAL_ARCH) == common['arch']
+    assert list(event_catalog.ANALYTICS_ENVIRONMENTS) == common['analytics_environment']
+
+
+def test_catalog_prefers_packaged_resource(tmp_path, monkeypatch):
+    module = tmp_path / 'backend/core/event_catalog.py'
+    module.parent.mkdir(parents=True)
+    packaged = module.with_suffix('.json')
+    packaged.write_text('{"events":{"packaged_event":{}}}')
+    monkeypatch.setattr(event_catalog, '__file__', str(module))
+    monkeypatch.delenv('AUTOCLIP_EVENT_CATALOG', raising=False)
+    event_catalog.load_catalog.cache_clear()
+    try:
+        assert event_catalog.catalog_path() == packaged
+        assert event_catalog.listed_events() == {'packaged_event'}
+    finally:
+        event_catalog.load_catalog.cache_clear()
+
+
+def test_missing_catalog_does_not_break_envelope_or_validation(unavailable_catalog, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_NATIVE_OS', 'darwin')
+    monkeypatch.setenv('AUTOCLIP_NATIVE_ARCH', 'arm64')
+    assert event_catalog.load_catalog() == {}
+    props = event_catalog.envelope_properties()
+    assert props['os'] == 'macos' and props['arch'] == 'aarch64'
+    assert props['runtime'] == 'python' and props['app_version']
+    assert event_catalog.validate_event('not_registered', props, envelope=True) == []
+
+
+def test_sentry_initializes_without_catalog(unavailable_catalog, monkeypatch, tmp_path, caplog):
+    import sentry_sdk
+    from backend.core import sentry_setup
+    monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
+    monkeypatch.setenv('SENTRY_DSN', 'https://public@example.invalid/0')
+    monkeypatch.setattr(sentry_setup, '_initialized', False)
+    monkeypatch.setattr(sentry_sdk, 'init', lambda **options: None)
+    with caplog.at_level(logging.INFO):
+        assert sentry_setup.init_sentry('desktop') is True
+    assert 'Sentry 已启用' in caplog.text
+    assert 'Sentry 初始化失败' not in caplog.text
+
+
+@pytest.mark.parametrize('contents', ['{', '[]', '\udcff'])
+def test_invalid_catalog_is_optional(tmp_path, monkeypatch, contents):
+    path = tmp_path / 'catalog.json'
+    path.write_bytes(contents.encode('utf-8', errors='surrogateescape'))
+    monkeypatch.setenv('AUTOCLIP_EVENT_CATALOG', str(path))
+    event_catalog.load_catalog.cache_clear()
+    try:
+        assert event_catalog.load_catalog() == {}
+        assert event_catalog.validate_event('event', envelope=True) == []
+    finally:
+        event_catalog.load_catalog.cache_clear()
+
+
+def test_unreadable_catalog_is_optional(tmp_path, monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_EVENT_CATALOG', str(tmp_path / 'catalog.json'))
+    def denied(*args, **kwargs):
+        raise PermissionError('unreadable')
+    monkeypatch.setattr(Path, 'read_text', denied)
+    event_catalog.load_catalog.cache_clear()
+    try:
+        assert event_catalog.load_catalog() == {}
+        assert event_catalog.validate_event('event', envelope=True) == []
+    finally:
+        event_catalog.load_catalog.cache_clear()
 
 
 def test_catalog_lists_the_success_rate_funnel():
