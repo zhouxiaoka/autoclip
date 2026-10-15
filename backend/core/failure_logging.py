@@ -51,13 +51,13 @@ def clips_failure_context(step):
     """Step 5 operates on all clips rather than one chunk."""
     def decorate(fn):
         @wraps(fn)
-        def wrapped(self, clips, *args, **kwargs):
+        def wrapped(self, clips_with_titles):
             fields = f"step={step}"
-            if ids := _clip_ids(clips):
+            if ids := _clip_ids(clips_with_titles):
                 fields += f" clip_ids={ids}"
             token = _context.set(fields)
             try:
-                return fn(self, clips, *args, **kwargs)
+                return fn(self, clips_with_titles)
             finally:
                 _context.reset(token)
         return wrapped
@@ -74,6 +74,7 @@ class _FailureLogger(logging.LoggerAdapter):
                 fields += f" project_id={project_id}"
             if fields:
                 msg = fields.strip() + " " + msg
+        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
         self.logger.log(level, msg, *args, **kwargs)
 
 

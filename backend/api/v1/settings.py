@@ -862,7 +862,7 @@ async def get_available_models(
         payload["models_by_provider"] = legacy
         return payload
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取模型列表失败: {sanitize_exception_text(e)}")
 
 
 @router.get("/local-presets")

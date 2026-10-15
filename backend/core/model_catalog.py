@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from backend.core.llm_telemetry import sanitize_exception_text
 from backend.core.provider_presets import (
     curated_models_map,
     default_models_map,
@@ -417,6 +418,6 @@ async def list_available_models(
         _cache_set(cache_key, live)
         return apply(live)
     except Exception as exc:  # noqa: BLE001
-        logger.info("拉取 %s 模型列表失败: %s", key, exc)
-        result.error = str(exc)[:200]
+        result.error = sanitize_exception_text(exc)
+        logger.info("拉取 %s 模型列表失败: %s", key, result.error)
         return result

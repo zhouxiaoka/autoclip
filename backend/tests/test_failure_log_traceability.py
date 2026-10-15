@@ -65,7 +65,7 @@ def test_failing_chunk_logs_ids_without_content(stage, tmp_path, monkeypatch, ca
             engine.max_clips = 5
             engine.clustering_prompt = PRIVATE
             engine.llm_client = client
-            engine.cluster_clips(clips)
+            engine.cluster_clips(clips_with_titles=clips)
             module = step5_clustering
         else:
             if stage in {"retry", "degrade"}:
