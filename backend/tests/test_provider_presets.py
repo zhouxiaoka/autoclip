@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -131,7 +132,7 @@ def test_installed_wheel_loads_catalog_outside_the_repo(tmp_path):
     elsewhere.mkdir()
     source = tmp_path / "source"
     source.mkdir()
-    shutil.copytree(ROOT / "backend", source / "backend", ignore=shutil.ignore_patterns("__pycache__", "tests", "data", "logs"))
+    shutil.copytree(ROOT / "backend", source / "backend", ignore=shutil.ignore_patterns("__pycache__", "data", "logs"))
     for name in ("pyproject.toml", "README.md", "LICENSE"):
         shutil.copy2(ROOT / name, source / name)
     subprocess.run(
@@ -141,6 +142,10 @@ def test_installed_wheel_loads_catalog_outside_the_repo(tmp_path):
     )
     wheels = list(wheel_dir.glob("autoclip_mcp-*-py3-none-any.whl"))
     assert wheels, list(wheel_dir.iterdir())
+    with zipfile.ZipFile(wheels[0]) as archive:
+        members = archive.namelist()
+    assert "backend/presets/provider_presets.json" in members
+    assert not any(name.startswith("backend/tests/") for name in members), "wheel must exclude backend test packages"
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "--no-index", "--no-deps", "--target", str(installed), str(wheels[0])],
         check=True,
