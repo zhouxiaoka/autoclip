@@ -571,8 +571,8 @@ def _remember_run(properties: dict[str, Any]) -> None:
     acc.last_retry = int(properties.get("retry_count") or 0)
     acc.last_degrade = max(acc.last_degrade, int(properties.get("degrade_count") or 0))
     status = properties.get("http_status")
-    acc.last_http_status = status if isinstance(status, int) else acc.last_http_status
-    acc.last_upstream = properties.get("upstream_error_type") or acc.last_upstream
+    acc.last_http_status = status if isinstance(status, int) else None
+    acc.last_upstream = properties.get("upstream_error_type")
     acc.last_outcome = str(properties.get("outcome") or "")
     acc.last_stage = str(properties.get("failure_stage") or properties.get("stage") or "")
     acc.prompt_tokens += int(properties.get("prompt_tokens") or 0)
