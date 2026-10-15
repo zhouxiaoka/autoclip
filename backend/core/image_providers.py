@@ -23,6 +23,7 @@ from urllib.parse import quote, urljoin, urlparse
 import requests
 
 from backend.core.llm_providers import is_local_url, normalize_base_url
+from backend.core.llm_telemetry import sanitize_model
 
 logger = logging.getLogger(__name__)
 
@@ -548,7 +549,7 @@ def generate_image(
     poll_interval: float = 1.5,
 ) -> bytes:
     kind = (provider or "openai").strip().lower()
-    logger.info("封面生图 provider=%s model=%s reference=%s", kind, request.model or "-", bool(request.reference))
+    logger.info("封面生图 provider=%s model=%s reference=%s", kind, sanitize_model(request.model) or "-", bool(request.reference))
     if kind == 'gemini':
         return generate_gemini(api_key=api_key, base_url=base_url, request=request, session=session)
     if kind == 'fal':
