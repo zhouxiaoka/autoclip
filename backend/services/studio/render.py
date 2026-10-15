@@ -1,5 +1,6 @@
 """Render immutable draft snapshots using the existing ffmpeg layout/subtitle code."""
 import os
+import math
 import subprocess
 import tempfile
 from pathlib import Path
@@ -144,6 +145,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
     out_dir.mkdir(parents=True, exist_ok=True)
     output = out_dir / f'{job_id}.mp4'
     partial = out_dir / f'{job_id}.part.mp4'
+    ready = out_dir / f'{job_id}.ready.part.mp4'
     try:
         with tempfile.TemporaryDirectory(prefix='ac-studio-render-') as temp:
             folder = Path(temp)
@@ -289,7 +291,7 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             cmd += ['-t', str(sum(durations)), '-movflags', '+faststart', '-y', str(partial)]
             project_cancellation.run(cmd, check=True, capture_output=True, timeout=max(180, sum(durations)*2))
             from backend.services.output_branding import append_outro
-            outro_applied = append_outro(partial, output, width=w, height=h, enabled=brand_outro)
+            outro_applied = append_outro(partial, ready, width=w, height=h, enabled=brand_outro)
             if brand_outro and not outro_applied:
                 warnings.append('品牌片尾未能添加，已保留成片')
         if overlay_job is not None and overlay_job.downgraded and getattr(overlay_job, 'requested_template', None) in ('editorial', 'street'):
@@ -297,7 +299,15 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             hint = downgrade_warning(overlay_job.downgrade_reason)
             if hint and hint not in warnings:
                 warnings.append(hint)
-        result = {'title': draft.title, 'duration': _probe(output).get('duration'), 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
+        validated = _probe(ready)
+        duration = validated.get('duration') or 0
+        if (not ready.is_file() or ready.stat().st_size == 0 or
+                not math.isfinite(duration) or duration <= 0 or
+                not validated.get('width') or not validated.get('height')):
+            raise ValueError('渲染输出无效，请重新导出')
+        project_cancellation.checkpoint(project_id)
+        os.replace(ready, output)
+        result = {'title': draft.title, 'duration': duration, 'width': w, 'height': h, 'warnings': warnings, 'outro_applied': outro_applied}
         if overlay_job is not None:
             from backend.services import video_encoder
             result['template_render'] = _template_report(overlay_job, video_encoder.encoder())
@@ -310,3 +320,4 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
         return result
     finally:
         partial.unlink(missing_ok=True)
+        ready.unlink(missing_ok=True)

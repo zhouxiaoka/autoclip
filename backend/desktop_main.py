@@ -219,6 +219,8 @@ class DesktopServiceManager:
           minutes-long model call.
         """
         from backend.core import parent_watch
+        from backend.core import project_cancellation
+        project_cancellation.begin_shutdown()
         self.logger.warning('🛑 桌面应用 (pid %s) 已退出，后端随之关闭', parent_pid)
         try:
             killed = parent_watch.terminate_children()
