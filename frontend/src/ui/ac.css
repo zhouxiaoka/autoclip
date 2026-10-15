@@ -575,3 +575,10 @@ details.ac-provider-model-block[open] > summary.ac-provider-model-group::before 
 .ac-provider-model-list li.is-hidden { color: var(--ac-muted); }
 .ac-provider-model-hint { margin: 0 0 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ac-link-button { appearance: none; border: 0; background: transparent; padding: 0; color: var(--ac-ink); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
+.ac-provider-model-off { margin-top: 8px; }
+.ac-provider-model-off > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border: 1px dashed var(--ac-line); border-radius: 999px; font-size: 12px; color: var(--ac-sub); user-select: none; }
+.ac-provider-model-off > summary::-webkit-details-marker { display: none; }
+.ac-provider-model-off > summary::after { content: ''; width: 5px; height: 5px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform .15s ease-out; }
+.ac-provider-model-off[open] > summary::after { transform: rotate(-135deg) translateY(-1px); }
+.ac-provider-model-off > summary .count { font-family: var(--ac-font-mono); color: var(--ac-muted); }
+.ac-provider-model-off[open] > .ac-provider-model-list { margin-top: 8px; }

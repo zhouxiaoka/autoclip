@@ -267,8 +267,21 @@ function ModelGroups({ models, enabled: on, onToggle }: {
         const rows = models.filter(model => modelGroupOf(model) === group.key).sort((a, b) => Number(on.has(b.id)) - Number(on.has(a.id)))
         if (!rows.length) return null
         const enabled = rows.filter(model => on.has(model.id)).length
+        const renderRow = (model: DetailModel) => (
+          <li key={model.id} className={`ac-mono${!on.has(model.id) && onToggle ? ' is-hidden' : ''}`} data-model-id={model.id}>
+            {onToggle
+              ? <label className="ac-provider-model-check">
+                  <input type="checkbox" checked={on.has(model.id)} aria-label={`${t('启用')} ${model.id}`} onChange={event => onToggle([model.id], event.target.checked)} />
+                  <span>{model.id}</span>
+                </label>
+              : model.id}
+            {group.key === 'language' && model.capability === 'multimodal' && (
+              <span className="ac-provider-cap">{t('视觉')}</span>
+            )}
+          </li>
+        )
         return (
-          <details key={group.key} className="ac-provider-model-block" data-model-group={group.key} open={group.open}>
+          <details key={group.key} className="ac-provider-model-block" data-model-group={group.key} open={group.open || (!!onToggle && enabled > 0)}>
             <summary className="ac-provider-model-group">
               {t(group.title)}<span className="count">{onToggle ? `${enabled}/${rows.length}` : rows.length}</span>
               {onToggle && (
@@ -278,21 +291,19 @@ function ModelGroups({ models, enabled: on, onToggle }: {
                 </span>
               )}
             </summary>
-            <ul className="ac-provider-model-list">
-              {rows.map(model => (
-                <li key={model.id} className={`ac-mono${!on.has(model.id) && onToggle ? ' is-hidden' : ''}`} data-model-id={model.id}>
-                  {onToggle
-                    ? <label className="ac-provider-model-check">
-                        <input type="checkbox" checked={on.has(model.id)} aria-label={`${t('启用')} ${model.id}`} onChange={event => onToggle([model.id], event.target.checked)} />
-                        <span>{model.id}</span>
-                      </label>
-                    : model.id}
-                  {group.key === 'language' && model.capability === 'multimodal' && (
-                    <span className="ac-provider-cap">{t('视觉')}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
+            {(onToggle ? rows.filter(model => on.has(model.id)) : rows).length > 0 && (
+              <ul className="ac-provider-model-list" data-model-rows="enabled">
+                {(onToggle ? rows.filter(model => on.has(model.id)) : rows).map(model => renderRow(model))}
+              </ul>
+            )}
+            {onToggle && rows.length > enabled && (
+              <details className="ac-provider-model-off" data-model-rows="disabled">
+                <summary>{t('未启用')}<span className="count">({rows.length - enabled})</span></summary>
+                <ul className="ac-provider-model-list">
+                  {rows.filter(model => !on.has(model.id)).map(model => renderRow(model))}
+                </ul>
+              </details>
+            )}
           </details>
         )
       })}
