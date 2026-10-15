@@ -4,9 +4,9 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 
-function render(automatic, phase, status = 'running', buttons = [], calls = []) {
+function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode) {
   const workspace = {
-    analysis: { status, phase, message: 'screening', error: 'failure' },
+    analysis: { status, phase, message: 'screening', error: 'failure', error_code: errorCode },
     generation: automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null,
     drafts: [], jobs: [], events: [], output_variants: [],
   }
@@ -23,6 +23,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = []) 
       Dialog: empty, fmtDuration: String }
     if (name === './useWorkspace') return { useWorkspace: () => ({ workspace, loaded: true, loading: false, refresh() {} }) }
     if (name === './api') return { studioApi: { source: () => '/test.mp4', analyze: async (...args) => calls.push(args) }, errorText: String }
+    if (name === '../../utils/llmFailure') return require('./load-ts.cjs').loadTs(path.resolve(__dirname, '../src/utils/llmFailure.ts'))
     if (name === './platformLabel') return { platformLabel: String }
     return { default: empty }
   }
@@ -58,4 +59,11 @@ test('active automatic output never offers a second analysis submission', () => 
   const buttons = []
   render(true, 'production', 'running', buttons)
   assert.equal(buttons.some(button => button.children === '重试'), false)
+})
+
+
+test('invalid API key renders the new copy instead of missing-key guidance', () => {
+  const html = render(true, 'production', 'failed', [], [], 'llm_auth_invalid')
+  assert.match(html, /API Key 无效或已过期，请检查后重试/)
+  assert.doesNotMatch(html, /需要你自己的 API Key|自备/)
 })

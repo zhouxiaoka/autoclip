@@ -71,6 +71,6 @@ test('model-call environment failures are one fixed sentence translated in eight
  const src=fs.readFileSync(path.resolve(__dirname,'../../backend/pipeline/failures.py'),'utf8')
  const block=src.match(/MODEL_CALL_MESSAGES = \{([\s\S]*?)\n\}/)[1]
  const messages=[...block.matchAll(/"[a-z_]+": "([^"]+)"/g)].map(m=>m[1])
- assert.equal(messages.length,3)
+ assert.equal(messages.length,4)
  for(const lang of langs)for(const key of messages){assert.ok(catalogs[lang][key],lang+key);if(lang!=='zh')assert.notEqual(catalogs[lang][key],key,lang+key);assert.ok(!/Connection error|timed out/i.test(catalogs[lang][key]),lang)}
 })

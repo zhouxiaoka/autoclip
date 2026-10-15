@@ -31,7 +31,8 @@ class PipelineFailure(RuntimeError):
         # 上游 HTTP 状态码（仅 400–599 的整数）；没有链上原始异常时（如时间线汇总失败）用它带出状态码。
         self.http_status = http_status
         # 稳定机器码。前端用来打开对应设置页，或避免打开错误的设置页。
-        # llm_not_configured：没有可用提供商 / 缺少 API Key / 连接测试没通过
+        # llm_not_configured：没有可用提供商 / 缺少 API Key
+        # llm_auth_invalid：上游拒绝密钥或权限（401/403）
         # whisper_not_installed | whisper_install_failed | transcription_empty | subtitle_setup
         # timeline_empty：有效候选被时长筛选清空（不要再指到「设置 → 模型」）
         # source_too_short | source_no_audio：源视频本身不能走字幕路线（media_precheck），用户输入，不上报
@@ -60,6 +61,7 @@ CODE_LLM_NOT_CONFIGURED = "llm_not_configured"
 # (catalog key in all 8 locales). The provider's own text ("Connection error.",
 # "Request timed out.") stays in the log only (RC156 Win QA c5).
 MODEL_CALL_MESSAGES = {
+    "llm_auth_invalid": "API Key 无效或已过期，请检查后重试",
     "connection": "无法连接模型服务，请检查接口地址与网络；本地模型请先启动服务后重试。",
     "timeout": "模型响应超时，请检查服务和网络后重试；本地模型请确认服务仍在运行。",
     "rate_limited": "提供商限制了请求频率或额度，请检查配额并稍后重试。",

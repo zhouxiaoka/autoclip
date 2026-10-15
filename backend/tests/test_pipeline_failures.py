@@ -76,6 +76,34 @@ def test_step1_all_chunks_failing_surfaces_llm_error(tmp_path, prompt_files, mon
     assert "测试连接" in exc.value.hint
 
 
+@pytest.mark.parametrize('status', [401, 403])
+def test_auth_failure_survives_outline_and_generation_result(adapter, tmp_path, prompt_files, monkeypatch, status):
+    from backend.core import sentry_setup
+    from backend.services import simple_pipeline_adapter as mod
+
+    srt = tmp_path / 'input.srt'
+    srt.write_text(SRT, encoding='utf-8')
+    error = RuntimeError('invalid api key')
+    error.status_code = status
+    extractor = _extractor(tmp_path, prompt_files, monkeypatch, [error])
+    with pytest.raises(PipelineFailure) as caught:
+        extractor.extract_outline(srt)
+    failure = caught.value
+    assert failure.code == 'llm_auth_invalid'
+    assert sentry_setup.studio_error_code(failure) == 'llm_auth_invalid'
+    assert failure.http_status == status
+    assert '自备' not in failure.user_message()
+
+    _fake_manager(monkeypatch, available=True)
+    def fail(*args, **kwargs):
+        raise failure
+    monkeypatch.setattr(mod, 'run_step1_outline', fail)
+    result = asyncio.run(adapter.process_project_sync(str(tmp_path / 'input.mp4'), str(srt)))
+    assert result['status'] == 'failed'
+    assert result['error_code'] == 'llm_auth_invalid'
+    assert result['http_status'] == status
+
+
 def test_step1_unparseable_response_is_a_failure_not_empty_list(tmp_path, prompt_files, monkeypatch):
     srt = tmp_path / "a.srt"
     srt.write_text(SRT, encoding="utf-8")
@@ -97,7 +125,7 @@ def test_outline_quota_failure_uses_classified_user_copy(tmp_path, prompt_files,
     extractor = _extractor(tmp_path, prompt_files, monkeypatch, [error])
     with pytest.raises(PipelineFailure) as caught:
         extractor.extract_outline(srt)
-    assert caught.value.code == 'authentication'
+    assert caught.value.code == 'llm_auth_invalid'
     assert caught.value.upstream_error_type == 'insufficient_quota'
     assert caught.value.user_message() == HINT_KEYS[UpstreamErrorType.INSUFFICIENT_QUOTA]
     assert 'insufficient_user_quota' not in caught.value.user_message()

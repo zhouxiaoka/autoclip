@@ -85,7 +85,7 @@ export interface PostCopy { title: string; description: string; tags: string[] }
 export interface GenerationState {
   requested_platforms: string[]; branding: { outro_enabled: boolean; outro_version: string }
   auto_start: boolean; status: 'screening' | 'awaiting_confirmation' | 'production' | 'rendering' | 'completed' | 'partial' | 'failed'
-  created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; completed_variant_count?: number
+  created_at: string; skipped?: { strategy_id: string; reason: string }[]; error?: string; error_code?: string; completed_variant_count?: number
   html_template?: 'editorial' | 'street' | 'classic'
   recommended_template?: 'editorial' | 'street' | 'classic'
   accepted_recommendation?: boolean
@@ -99,7 +99,7 @@ export interface PlatformStrategySummary {
 export interface Workspace {
   schema_version?: number; plan?: ImportPlan
   drafts: Draft[]; events: Scene[]; jobs: RenderJob[]; output_variants?: OutputVariant[]; generation?: GenerationState
-  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; error?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
+  analysis: null | { status: 'running' | 'awaiting_confirmation' | 'completed' | 'failed'; phase?: 'screening' | 'production' | 'rendering'; message?: string; percent?: number; error?: string; error_code?: string; coverage?: { duration?:number; note: string; sample_interval: number }; outcome?: 'completed' | 'partial' | 'failed' }
 }
 export const languages = [{ value: 'source', label: '原语言' }, { value: 'zh', label: '简体中文' }, { value: 'en', label: 'English' }, { value: 'ja', label: '日本語' }] as const
 export const emptyWorkspace: Workspace = { drafts: [], events: [], jobs: [], analysis: null }

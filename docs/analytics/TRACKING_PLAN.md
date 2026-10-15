@@ -188,7 +188,7 @@ Studio `error_code` 仍用现有闭集（`STUDIO_ERROR_CODES`）。成功率口�
 
 | 归因 `failure_attribution` | 包含 | 按次/按人分母 |
 | --- | --- | --- |
-| `user` | `insufficient_quota`；`invalid_key`；`permission_denied`；`model_not_found`；`bad_endpoint`；`llm_not_configured`；`source_too_short`；`source_no_audio`；`source_unreadable`；`whisper_not_installed`（且无字幕） | **剔除** |
+| `user` | `insufficient_quota`；`invalid_key`；`permission_denied`；`model_not_found`；`bad_endpoint`；`llm_not_configured`；`llm_auth_invalid`；`source_too_short`；`source_no_audio`；`source_unreadable`；`whisper_not_installed`（且无字幕） | **剔除** |
 | `environment` | `source_blocked`；`service_restarted` | **剔除** |
 | `product` | 其余（`unexpected`、`rate_limited`、`timeout`、`connection`、`provider_error`、`invalid_response`、`transcription_empty`、`render` 失败等） | **计入** |
 
@@ -434,7 +434,7 @@ runtime = desktop   -- 主指标；web 可另列
     AND coalesce(properties.upstream_error_type, '') NOT IN
         ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
     AND coalesce(properties.error_code, '') NOT IN
-        ('llm_not_configured', 'source_too_short', 'source_no_audio', 'source_unreadable',
+        ('llm_not_configured', 'llm_auth_invalid', 'source_too_short', 'source_no_audio', 'source_unreadable',
          'whisper_not_installed', 'source_blocked', 'service_restarted',
          'invalid_key', 'insufficient_quota')  -- 若 error_code 复用了上游名
   )
@@ -479,7 +479,7 @@ FROM (
         AND coalesce(properties.upstream_error_type, '') NOT IN
             ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
         AND coalesce(properties.error_code, '') NOT IN
-            ('llm_not_configured', 'source_too_short', 'source_no_audio', 'source_unreadable',
+            ('llm_not_configured', 'llm_auth_invalid', 'source_too_short', 'source_no_audio', 'source_unreadable',
              'whisper_not_installed', 'source_blocked', 'service_restarted')
       )
     )

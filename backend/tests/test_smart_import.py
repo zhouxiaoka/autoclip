@@ -772,16 +772,39 @@ def test_link_import_refused_by_site_records_source_blocked_in_chinese(client, m
     assert reported == ['source_blocked']
 
 
-def test_studio_content_preserves_structured_pipeline_failure(monkeypatch, tmp_path):
+@pytest.mark.parametrize('code', ['llm_not_configured', 'llm_auth_invalid'])
+def test_studio_content_preserves_structured_pipeline_failure(monkeypatch, tmp_path, code):
     from backend.tasks.processing import process_video_pipeline
     from backend.pipeline.failures import PipelineFailure
     class Result:
         def get(self):
-            return {'success':False, 'error':'private hint', 'result':{'stage':'ANALYZE', 'error_code':'llm_not_configured'}}
+            return {'success':False, 'error':'private hint', 'result':{'stage':'ANALYZE', 'error_code':code}}
     monkeypatch.setattr(process_video_pipeline, 'apply', lambda **kwargs: Result())
     with pytest.raises(PipelineFailure) as caught:
         jobs.run_content('p', tmp_path/'input.mp4')
-    assert caught.value.code == 'llm_not_configured'
+    assert caught.value.code == code
+
+
+@pytest.mark.parametrize('status', [401, 403])
+def test_automatic_auth_failure_persists_studio_generation_code(client, source, monkeypatch, status):
+    from backend.pipeline.failures import PipelineFailure, model_call_error_code
+
+    error = RuntimeError('invalid api key')
+    error.status_code = status
+    def fail(*args):
+        raise PipelineFailure('ANALYZE', 'API Key 无效或已过期，请检查后重试',
+                              code=model_call_error_code(error), http_status=status)
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'ready', lambda: False)
+    monkeypatch.setattr(jobs, 'run_content', fail)
+    response = client.post('/studio/import', data={'goal': 'content', 'auto_start': 'true'},
+                           files={'video': ('source.mp4', source.read_bytes(), 'video/mp4')})
+    assert response.status_code == 200
+    state = store.read(response.json()['project_id'])
+    for section in ('analysis', 'generation'):
+        assert state[section]['status'] == 'failed'
+        assert state[section]['error_code'] == 'llm_auth_invalid'
+    assert state['generation']['http_status'] == status
 
 
 def test_local_import_creates_project_thumbnail(client, source, monkeypatch):

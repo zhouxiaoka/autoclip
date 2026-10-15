@@ -165,7 +165,7 @@ class OutlineExtractor:
                 kind = info.error_type.value
             if info is not None and info.error_type is not UpstreamErrorType.UNKNOWN:
                 raise PipelineFailure(
-                    "ANALYZE", info.hint_key, "",
+                    "ANALYZE", MODEL_CALL_MESSAGES["llm_auth_invalid"] if info.error_type is UpstreamErrorType.INVALID_KEY else info.hint_key, "",
                     code=studio_code_for(info.error_type, status),
                     http_status=status or http_status_of(last_error),
                     upstream_error_type=kind,

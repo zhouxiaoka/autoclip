@@ -42,7 +42,7 @@
   "attribution": {
     "user_caused_error_codes": [
       "invalid_key", "insufficient_quota", "permission_denied", "model_not_found",
-      "bad_endpoint", "llm_not_configured", "source_too_short", "source_no_audio",
+      "bad_endpoint", "llm_not_configured", "llm_auth_invalid", "source_too_short", "source_no_audio",
       "source_unreadable", "whisper_not_installed"
     ],
     "user_caused_upstream_types": [

@@ -94,9 +94,9 @@ def studio_code_for(error_type: UpstreamErrorType | str, status: int | None = No
     if value == UpstreamErrorType.CONNECTION.value:
         return "connection"
     if value in {UpstreamErrorType.INVALID_KEY.value, UpstreamErrorType.PERMISSION_DENIED.value}:
-        return "authentication"
+        return "llm_auth_invalid"
     if value == UpstreamErrorType.INSUFFICIENT_QUOTA.value:
-        return "authentication" if status in (401, 403) else "provider_error"
+        return "llm_auth_invalid" if status in (401, 403) else "provider_error"
     return "provider_error"
 
 

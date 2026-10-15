@@ -10,7 +10,7 @@ import { UnifiedStatusBar } from './UnifiedStatusBar'
 import FeedbackDialog from './FeedbackDialog'
 import { useSimpleProgressStore } from '../stores/useSimpleProgressStore'
 import { Btn, Dialog, Icon, StatusDot } from '../ui'
-import { classifyLlmKeyFailure } from '../utils/llmFailure'
+import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
 import { classifySubtitleFailure } from '../utils/subtitleFailure'
 import { classifyTimelineEmpty } from '../utils/timelineFailure'
 import { isSourceDownloading, readDownloadProgress } from '../utils/downloadProgress'
@@ -270,7 +270,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onDelete, onRetry, o
     error_message: project.error_message || failedProgress?.message || undefined,
     error_code: project.error_code || undefined,
   }
-  const failureText = project.error_message || failedProgress?.message
+  const failureText = llmFailureText(project.error_message || failedProgress?.message, project.error_code)
   const timelineEmpty = classifyTimelineEmpty(failureText, project.error_code)
   const llmKeyFailure = !timelineEmpty && classifyLlmKeyFailure(failureText, project.error_code)
   const subtitleFailure = timelineEmpty

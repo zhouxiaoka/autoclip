@@ -1,5 +1,10 @@
 /** 没有可用的模型：前端用来打开「设置 → 模型」，并换一句带自备密钥说明的文案。 */
 export const LLM_NOT_CONFIGURED = 'llm_not_configured'
+export const LLM_AUTH_INVALID = 'llm_auth_invalid'
+
+export function llmFailureText(error?: string | null, code?: string | null): string {
+  return code === LLM_AUTH_INVALID ? 'API Key 无效或已过期，请检查后重试' : error || ''
+}
 
 /**
  * 有 error_code 时以它为准。1.3.2 只留下「没有可用的 LLM 提供商…缺少 API Key」，
@@ -7,7 +12,7 @@ export const LLM_NOT_CONFIGURED = 'llm_not_configured'
  */
 export function classifyLlmKeyFailure(error?: string | null, code?: string | null): boolean {
   if (code === LLM_NOT_CONFIGURED) return true
-  if (code === 'timeline_empty') return false
+  if (code === 'timeline_empty' || code === LLM_AUTH_INVALID) return false
   const text = error || ''
   if (!text) return false
   if (text.includes('时间线提取为空') || text.includes('时间线为空')) return false

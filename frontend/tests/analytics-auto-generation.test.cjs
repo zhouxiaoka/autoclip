@@ -111,6 +111,20 @@ test('automatic failures report the failed stage, HTTP status and route, rejecti
   assert.equal(e3.find(e=>e.name==='studio_generation_finished').props.route,'subtitle')
 })
 
+test('automatic auth failures retain their code and pass catalog validation without private content',()=>{
+ const {loadTs}=require('./load-ts.cjs')
+ const catalogApi=loadTs(path.resolve(__dirname,'../src/analytics/eventCatalog.ts'))
+ const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,'../../docs/analytics/event_catalog.json'),'utf8'))
+ for(const status of [401,403]){
+  const {t,events}=tracker();t.watch('studio-generation','p1')
+  t.observeStudio(t.list()[0],{generation:{status:'failed',error_code:'llm_auth_invalid',http_status:status,failure_stage:'analyze',error:'private content'}})
+  const finished=events.find(e=>e.name==='studio_generation_finished')
+  assert.equal(finished.props.error_code,'llm_auth_invalid')
+  assert.equal(catalogApi.validateEvent(finished.name,finished.props,catalog).join(';'),'')
+  assert.equal(JSON.stringify(finished).includes('private'),false)
+ }
+})
+
 test('old automatic failures use the analysis code and reject unrecognized codes',()=>{
  for(const code of ['subtitle_setup','private arbitrary message']){
   const {t,events}=tracker();t.watch('studio-generation','p1')

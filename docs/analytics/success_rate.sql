@@ -18,7 +18,7 @@ SELECT
       AND coalesce(properties.upstream_error_type, '') NOT IN
           ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
       AND coalesce(properties.error_code, '') NOT IN
-          ('llm_not_configured', 'source_too_short', 'source_no_audio', 'source_unreadable',
+          ('llm_not_configured', 'llm_auth_invalid', 'source_too_short', 'source_no_audio', 'source_unreadable',
            'whisper_not_installed', 'source_blocked', 'service_restarted',
            'invalid_key', 'insufficient_quota')
     )
@@ -51,7 +51,7 @@ FROM (
         AND coalesce(properties.upstream_error_type, '') NOT IN
             ('invalid_key', 'insufficient_quota', 'permission_denied', 'model_not_found', 'bad_endpoint')
         AND coalesce(properties.error_code, '') NOT IN
-            ('llm_not_configured', 'source_too_short', 'source_no_audio', 'source_unreadable',
+            ('llm_not_configured', 'llm_auth_invalid', 'source_too_short', 'source_no_audio', 'source_unreadable',
              'whisper_not_installed', 'source_blocked', 'service_restarted')
       )
     )

@@ -1876,5 +1876,6 @@
   "settings.providers.fetch_list_failed": "モデル一覧を取得できませんでした。エンドポイントと API キーを確認するか、モデル ID を手動で入力してください。",
   "settings.providers.fetch_list_updated": "このアカウントで使えるモデルで一覧を更新しました。",
   "settings.providers.fetch_list_no_overlap": "おすすめ候補がこのアカウントの利用可能リストにありません。手動で選ぶか、一覧を更新してください。",
-  "settings.providers.fetch_list_truncated": "モデル一覧が長すぎるため、先頭 2000 件のみ保持します。それ以外は手動で入力してください。"
+  "settings.providers.fetch_list_truncated": "モデル一覧が長すぎるため、先頭 2000 件のみ保持します。それ以外は手動で入力してください。",
+  "API Key 无效或已过期，请检查后重试": "API キーが無効か、有効期限が切れています。確認してから再試行してください。"
 }

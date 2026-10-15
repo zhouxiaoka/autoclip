@@ -89,6 +89,18 @@ process.stdout.write(JSON.stringify(events))
         for outcome in ('success', 'error'):
             self.insert(f'social_publish_finished-{outcome}', 'social_publish_finished', outcome, age)
 
+    def test_auth_failures_are_excluded_from_every_fixed_success_rate_denominator(self):
+        for code in ('llm_auth_invalid', 'llm_not_configured', 'provider_error'):
+            self.insert(code, 'studio_generation_finished', 'error', error_code=code)
+        for name in ('success_rate.sql', 'TRACKING_PLAN.md'):
+            sql = (ROOT / 'docs/analytics' / name).read_text(encoding='utf-8')
+            predicates = re.findall(r"coalesce\(properties.error_code, ''\) NOT IN\s*\([^)]*\)", sql)
+            self.assertEqual(len(predicates), 2, name)
+            for predicate in predicates:
+                predicate = predicate.replace('properties.error_code', "json_extract(properties, '$.error_code')")
+                rows = self.db.execute('SELECT distinct_id FROM events WHERE ' + predicate).fetchall()
+                self.assertEqual([row[0] for row in rows], ['provider_error'], name)
+
     def test_frontend_fixture_emits_success_and_error(self):
         self.assertEqual({(row['event'], row['props']['outcome']) for row in self.frontend_events}, {
             (event, outcome) for event in ('studio_generation_finished', 'studio_export_finished')

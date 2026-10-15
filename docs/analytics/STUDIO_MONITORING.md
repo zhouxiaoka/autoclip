@@ -50,7 +50,7 @@
 
 验证查询按 `release` 与 `build_environment` 筛选，并分组查看 `phase`、`error_code`、`pipeline_stage` 和事件数。生产事件可能没有 `telemetry_test` 标签，不能通过 `-telemetry_test:true` 查询为空认定没有生产故障；需用 `build_environment:production` 正向筛选。新增阶段只用于定位失败边界，不推断具体模型回答或素材内容。回归应覆盖抽帧失败不调用视觉服务、字幕降级、无错误码的阶段传递以及脱敏白名单，且用新安装包验证正常制作与失败后恢复。
 
-ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其他工程异常保留 error。此分类依据异常类型及受控代码，不解析或上传异常正文。内容管线保留 llm_not_configured、字幕/转写、timeline_empty 等结构化失败码并按 warning 分类，不再包装成无分类的 RuntimeError。普通 ValueError 只能归为 validation；旧导入的 typed failure 分类继续保留。没有屏蔽 ConnectionResetError，也没有调整现有通知接收人或阈值。
+ValueError 校验、素材缺失、视觉鉴权/限流/拒绝为 warning；其他工程异常保留 error。此分类依据异常类型及受控代码，不解析或上传异常正文。内容管线以 llm_auth_invalid 区分上游 401/403 鉴权失败，llm_not_configured 仅用于未配置密钥；保留字幕/转写、timeline_empty 等结构化失败码并按 warning 分类，不再包装成无分类的 RuntimeError。普通 ValueError 只能归为 validation；旧导入的 typed failure 分类继续保留。没有屏蔽 ConnectionResetError，也没有调整现有通知接收人或阈值。
 
 链接导入被视频网站拒绝（yt-dlp 报 HTTP 403/412/429，如 B 站对机房 IP 的风控）归为 `source_blocked`：本地失败记录保留错误码、`failure_stage=ingest` 和 `http_status`，界面显示可翻译的「换网络或选浏览器 Cookie」提示；这类环境原因的预期失败**不发送** Sentry（`UNREPORTED_STUDIO_ERROR_CODES`，`capture_studio_exception` 与 `before_send` 双重过滤）。
 

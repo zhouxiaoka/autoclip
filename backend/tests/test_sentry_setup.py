@@ -263,8 +263,8 @@ def test_auto_frame_phase_survives_scrubbing_without_content(monkeypatch, tmp_pa
 
 
 @pytest.mark.parametrize('kind,code,status', [
-    ('AuthenticationError', 'authentication', 401),
-    ('PermissionDeniedError', 'authentication', 403),
+    ('AuthenticationError', 'llm_auth_invalid', 401),
+    ('PermissionDeniedError', 'llm_auth_invalid', 403),
     ('RateLimitError', 'rate_limited', 429),
     ('InternalServerError', 'provider_error', 503),
     ('APITimeoutError', 'timeout', None),
@@ -291,7 +291,7 @@ def test_text_sdk_failures_keep_provider_code_in_rewrite_and_render(monkeypatch,
         clean = sentry_setup.before_send({'level': 'error', 'tags': captured[-1],
             'exception': {'values': [{'type': kind, 'value': str(error)}]}})
         assert 'private-provider-body' not in str(clean) and 'synthetic-key' not in str(clean)
-        assert clean['level'] == ('warning' if code in ('authentication', 'rate_limited') else 'error')
+        assert clean['level'] == ('warning' if code in ('llm_auth_invalid', 'rate_limited') else 'error')
     assert sentry_setup.studio_error_code(RuntimeError('unrelated programming defect')) == 'unexpected'
     assert sentry_setup.studio_error_code(PermissionError('private-local-file')) == 'unexpected'
 

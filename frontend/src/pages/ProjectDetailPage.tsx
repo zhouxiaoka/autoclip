@@ -12,7 +12,7 @@ import StudioResults from '../features/studio/StudioResults'
 import { needsImportConfirmation } from '../features/studio/importRouting'
 import { studioApi, errorText } from '../features/studio/api'
 import LlmKeyFailureEmpty from '../components/LlmKeyFailureEmpty'
-import { classifyLlmKeyFailure } from '../utils/llmFailure'
+import { classifyLlmKeyFailure, llmFailureText } from '../utils/llmFailure'
 import { classifyTimelineEmpty } from '../utils/timelineFailure'
 import SubtitleFailureEmpty from '../components/SubtitleFailureEmpty'
 import { classifySubtitleFailure, type SubtitleFailureKind } from '../utils/subtitleFailure'
@@ -392,7 +392,7 @@ const ProjectDetailPage: React.FC = () => {
           <b>{t("这次处理没有成功")}</b>
           {currentProject.error_message ? (
             <span className="ac-mono" style={{ display: 'block', marginTop: 6, color: 'var(--ac-muted)', wordBreak: 'break-word' }}>
-              {currentProject.error_message}
+              {t(llmFailureText(currentProject.error_message, currentProject.error_code))}
             </span>
           ) : (
             t("可以直接重试；如果反复失败，点「反馈问题」，运行环境与错误会自动附上。")

@@ -1876,5 +1876,6 @@
   "settings.providers.fetch_list_failed": "未能获取模型列表，请检查接口地址和密钥，或手动填写模型 ID。",
   "settings.providers.fetch_list_updated": "已根据账号可用模型更新列表。",
   "settings.providers.fetch_list_no_overlap": "推荐候选都不在当前账号的可用列表里，请手选模型或刷新列表。",
-  "settings.providers.fetch_list_truncated": "模型列表过长，只保留前 2000 个；其余请手动填写。"
+  "settings.providers.fetch_list_truncated": "模型列表过长，只保留前 2000 个；其余请手动填写。",
+  "API Key 无效或已过期，请检查后重试": "API Key 无效或已过期，请检查后重试"
 }

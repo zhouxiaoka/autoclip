@@ -168,3 +168,11 @@ def test_auto_events_reject_user_content():
         "contact": "person@example.com",
     })
     assert any("user content" in item for item in leaked)
+
+
+@pytest.mark.parametrize("code", ["llm_auth_invalid", "llm_not_configured"])
+def test_studio_auth_and_configuration_codes_validate(code):
+    assert code in event_catalog.load_catalog()["attribution"]["user_caused_error_codes"]
+    assert event_catalog.validate_event("studio_generation_finished", {
+        "outcome": "error", "error_code": code, "failure_stage": "analyze",
+    }) == []

@@ -18,7 +18,7 @@ _ANONYMOUS_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{7,199}$")
 
 logger = logging.getLogger(__name__)
 
-STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "source_too_short", "source_no_audio", "source_unreadable", "service_restarted"}
+STUDIO_ERROR_CODES = {"validation", "missing_resource", "unexpected", "timeout", "connection", "authentication", "rate_limited", "provider_error", "invalid_response", "output_truncated", "refused", "llm_not_configured", "llm_auth_invalid", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty", "source_blocked", "source_too_short", "source_no_audio", "source_unreadable", "service_restarted"}
 # Expected failures caused by the environment or by the user's own source (too short,
 # no audio track): never sent to Sentry, still recorded locally with their code.
 UNREPORTED_STUDIO_ERROR_CODES = {"source_blocked", "source_too_short", "source_no_audio", "service_restarted"}
@@ -222,7 +222,7 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
         clean_tags["import_failure"] = kind
     if clean_tags:
         clean["tags"] = clean_tags
-    if clean_tags.get("area") == "studio" and clean_tags.get("error_code") in {"validation", "missing_resource", "authentication", "rate_limited", "refused", "llm_not_configured", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty"}:
+    if clean_tags.get("area") == "studio" and clean_tags.get("error_code") in {"validation", "missing_resource", "authentication", "rate_limited", "refused", "llm_not_configured", "llm_auth_invalid", "whisper_not_installed", "whisper_install_failed", "transcription_empty", "subtitle_setup", "timeline_empty"}:
         clean["level"] = "warning"
         clean["fingerprint"] = ["studio", clean_tags.get("phase", "unknown"), clean_tags["error_code"]]
     if fingerprint:
