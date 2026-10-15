@@ -10,7 +10,7 @@ import pytest
 from backend.core.llm_degrade import CHUNK_CALL_CAP
 from backend.core.llm_manager import LLMManager
 from backend.core.llm_providers import LLM_SDK_MAX_RETRIES, OpenAIProvider
-from backend.pipeline import concurrency, step1_outline
+from backend.pipeline import concurrency, step1_outline, step2_timeline
 from backend.pipeline.failures import PipelineFailure
 
 
@@ -99,6 +99,55 @@ def test_outline_outer_repair_rounds_share_http_budget(tmp_path, monkeypatch, ht
     assert all(0 < count <= CHUNK_CALL_CAP for count in hits.values()), hits
 
 
+@pytest.mark.parametrize("workers", [1, 2])
+@pytest.mark.parametrize("success_round", [2, 3])
+def test_timeline_can_recover_within_budget_and_new_run_resets_it(
+    tmp_path, monkeypatch, http_manager, workers, success_round,
+):
+    from backend.tests.test_recent_feedback import cue
+
+    monkeypatch.setenv("AUTOCLIP_LLM_CONCURRENCY", str(workers))
+    hits = Counter()
+
+    def handler(request):
+        body = json.loads(request.content)
+        data = json.loads(body["messages"][0]["content"].split("输入内容：\n", 1)[1])
+        chunk = data["outline"][0]["title"]
+        hits[chunk] += 1
+        offset = 0 if chunk == "chunk-a" else 90
+        start, end = (0, 5) if hits[chunk] < success_round else (25, 55)
+        return _response(request, json.dumps([{
+            "outline": chunk, "start_time": offset + start, "end_time": offset + end,
+        }]))
+
+    manager = http_manager(handler)
+    monkeypatch.setattr("backend.utils.llm_client.get_llm_manager", lambda: manager)
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("extract", encoding="utf-8")
+    chunks = tmp_path / "step1_srt_chunks"
+    chunks.mkdir()
+    for index, offset in enumerate((0, 90)):
+        (chunks / f"chunk_{index}.json").write_text(json.dumps([
+            dict(cue(offset, offset + 5), index=1),
+            dict(cue(offset + 25, offset + 55), index=2),
+        ]), encoding="utf-8")
+    outlines = tmp_path / "outline.json"
+    outlines.write_text(json.dumps([
+        {"title": name, "chunk_index": i, "subtopics": []}
+        for i, name in enumerate(("chunk-a", "chunk-b"))
+    ]), encoding="utf-8")
+
+    for _run in range(2):
+        hits.clear()
+        result = step2_timeline.run_step2_timeline(
+            outlines, metadata_dir=tmp_path, prompt_files={"timeline": prompt},
+        )
+        assert [item["outline"] for item in result] == ["chunk-a", "chunk-b"]
+        assert hits == {"chunk-a": success_round, "chunk-b": success_round}
+        assert all(count <= CHUNK_CALL_CAP for count in hits.values())
+        assert json.loads((tmp_path / "step2_timeline.json").read_text()) == result
+
+
 def test_token_parameter_resend_counts_against_chunk_budget(http_manager):
     hits = []
 
@@ -136,9 +185,11 @@ def test_each_outline_chunk_can_recover_in_third_round(tmp_path, monkeypatch, ht
     assert hits == {"chunk-a": 3, "chunk-b": 3}
 
 
-def test_timeline_outer_repair_rounds_share_http_budget(tmp_path, http_manager):
+@pytest.mark.parametrize("workers", [1, 2])
+def test_timeline_outer_repair_rounds_share_http_budget(tmp_path, monkeypatch, http_manager, workers):
     from backend.tests.test_recent_feedback import cue, prepared_extractor
 
+    monkeypatch.setenv("AUTOCLIP_LLM_CONCURRENCY", str(workers))
     hits = Counter()
 
     def handler(request):
@@ -146,18 +197,41 @@ def test_timeline_outer_repair_rounds_share_http_budget(tmp_path, http_manager):
         data = json.loads(body["messages"][0]["content"].split("输入内容：\n", 1)[1])
         chunk = data["outline"][0]["title"]
         hits[chunk] += 1
-        if hits[chunk] % 3:
+        # Five HTTP sends per outer round: SDK retry, JSON repair, then a
+        # valid range that refinement drops. This triggers timeline_empty.
+        if hits[chunk] % 5 in (1, 3):
             return httpx.Response(500, request=request, json={"error": {"message": "unavailable"}})
-        return _response(request, "[]")
+        content = "[]" if hits[chunk] % 5 else json.dumps([{
+            "outline": chunk, "start_time": 0 if chunk == "chunk-a" else 30,
+            "end_time": 5 if chunk == "chunk-a" else 35,
+        }])
+        return _response(request, content)
 
     extractor = prepared_extractor(tmp_path)
+    (extractor.srt_chunks_dir / "chunk_0.json").write_text(
+        json.dumps([dict(cue(0, 5), index=1)]), encoding="utf-8",
+    )
     (extractor.srt_chunks_dir / "chunk_1.json").write_text(
-        json.dumps([dict(cue(30, 60), index=2)]), encoding="utf-8",
+        json.dumps([dict(cue(30, 35), index=2)]), encoding="utf-8",
     )
     extractor.llm_client.call_with_retry = http_manager(handler).call_with_retry
-    extractor.extract_timeline([
+    monkeypatch.setattr(step2_timeline, "TimelineExtractor", lambda *a, **k: extractor)
+    outlines = tmp_path / "outline.json"
+    outlines.write_text(json.dumps([
         {"title": name, "chunk_index": i, "subtopics": []}
         for i, name in enumerate(("chunk-a", "chunk-b"))
-    ])
+    ]), encoding="utf-8")
+    rounds = []
+    extract = extractor.extract_timeline
+
+    def tracked_extract(*args, **kwargs):
+        rounds.append(1)
+        return extract(*args, **kwargs)
+
+    monkeypatch.setattr(extractor, "extract_timeline", tracked_extract)
+    with pytest.raises(PipelineFailure):
+        step2_timeline.run_step2_timeline(outlines, metadata_dir=tmp_path)
+    assert len(rounds) >= 2
+    assert json.loads((tmp_path / "step2_timeline.json").read_text()) == []
     assert set(hits) == {"chunk-a", "chunk-b"}
     assert all(0 < count <= CHUNK_CALL_CAP for count in hits.values()), hits

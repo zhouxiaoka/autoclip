@@ -43,7 +43,7 @@ class TimelineExtractor:
         self.timeline_chunks_dir = self.metadata_dir / "step2_timeline_chunks"
         self.llm_raw_output_dir = self.metadata_dir / "step2_llm_raw_output"
 
-    def extract_timeline(self, outlines: List[Dict]) -> List[Dict]:
+    def extract_timeline(self, outlines: List[Dict], *, chunk_budgets: Optional[Dict] = None) -> List[Dict]:
         """
         提取话题时间区间。
         新版特性：
@@ -96,9 +96,16 @@ class TimelineExtractor:
         import threading
         from .concurrency import map_chunks
         parse_lock = threading.Lock()
+        if chunk_budgets is None:
+            chunk_budgets = {}
 
-        @chunk_call_budget()
         def timeline_chunk(item):
+            # Keep each ledger across whole-extraction retries, including workers.
+            with chunk_call_budget(chunk_budgets.get(item[0])) as budget:
+                chunk_budgets[item[0]] = budget
+                return extract_chunk(item)
+
+        def extract_chunk(item):
             chunk_index, chunk_outlines = item
             srt_entries, parsed = [], []
             logger.info(f"处理块 {chunk_index}，其中包含 {len(chunk_outlines)} 个话题...")
@@ -447,8 +454,9 @@ def run_step2_timeline(outline_path: Path, metadata_dir: Path = None, output_pat
         output_path = metadata_dir / "step2_timeline.json"
 
     last_failure = None
+    chunk_budgets = {}
     for attempt in range(MAX_ATTEMPTS):
-        timeline_data = extractor.extract_timeline(outlines)
+        timeline_data = extractor.extract_timeline(outlines, chunk_budgets=chunk_budgets)
         extractor.save_timeline(timeline_data, output_path)
         if timeline_data:
             return timeline_data
