@@ -1,4 +1,5 @@
 {
+  "画面结果不可用，已改用字幕继续制作。": "Visual result unavailable; switched to subtitles to continue.",
   "视觉服务暂不可用，已切换为字幕分析继续制作。": "Vision is temporarily unavailable. Switched to subtitle analysis to continue creating clips.",
   "部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。": "Some AI settings could not be read. Select the service and enter the key again. The original settings are preserved; damaged files are backed up when you save the corrections.",
   "旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。": "The previous cover configuration is invalid. Select a service again in cover settings. The original configuration file has been preserved.",
@@ -1583,6 +1584,11 @@
   "链接导入不等待本地转写": "Link import does not wait for local transcription",
   "制作完成时通知": "Notify when a cut is ready",
   "复制文案并保存视频和封面": "Copy the caption and save the video and cover",
+  "文案已复制，视频和封面已保存": "Caption copied. The video and cover are saved.",
+  "按内容完整度选出这段": "Chosen because the moment is complete",
+  "第一条成片已经做好": "The first cut is ready",
+  "成片已经全部做好": "Every cut is ready",
+  "这次制作没有完成": "This run did not finish",
   "先渲染得分最高的几条": "Render the highest-scoring clips first",
   "在卡片上写选片理由": "Show why a clip was chosen",
   "隐藏旧的制作入口": "Hide the legacy entry points",
@@ -1878,5 +1884,18 @@
   "settings.providers.fetch_list_updated": "Updated the list from models available on this account.",
   "settings.providers.fetch_list_no_overlap": "None of the recommended models are on this account. Pick one manually or refresh the list.",
   "settings.providers.fetch_list_truncated": "The model list is too long; only the first 2000 IDs are kept. Enter others manually.",
-  "API Key 无效或已过期，请检查后重试": "Your API key is invalid or has expired. Please check it and try again."
+  "API Key 无效或已过期，请检查后重试": "Your API key is invalid or has expired. Please check it and try again.",
+  "把链接或视频放在这里": "Drop a link or a video here",
+  "粘贴链接，或拖入一个视频文件。": "Paste a link, or drop a video file.",
+  "选择一个视频文件": "Choose a video file",
+  "即将开始制作。": "Starting shortly.",
+  "撤销": "Undo",
+  "为 {{names}} 制作": "Making this for {{names}}",
+  "改": "Change",
+  "这些偏好会用在下一次导入。首页不再单独展开。": "These preferences apply to the next import. The home page no longer opens them on its own.",
+  "模型下载源": "Model download source",
+  "自动：官方源连不上时改用 hf-mirror 镜像。": "Auto: switches to the hf-mirror mirror when the official source is unreachable.",
+  "自动": "Auto",
+  "hf-mirror 镜像": "hf-mirror (mirror)",
+  "保存失败，请重试": "Save failed. Please try again."
 }

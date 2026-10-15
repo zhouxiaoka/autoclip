@@ -5,6 +5,7 @@ import { workflow } from '../../analytics/observer'
 import api from '../../services/api'
 import type { ImportReadiness } from './importReadiness'
 import { Draft, Workspace, RenderJob, Language, CandidateList, ImportOptions, Goal, AnalysisMode, AnalysisPreferences, SubtitleCue, FramingStatus, AutoFrameResult, PlatformStrategySummary, OutputVariant, PostCopy } from './types'
+import { noteWorkspaceCompletion } from './noticeRuntime'
 export type SourcePreview = { status: 'idle' | 'queued' | 'running' | 'completed' | 'failed'; version?: string; error?: string }
 export function draftProperties(draft?: Partial<Draft>): Properties {
   const packaging = draft?.packaging
@@ -53,7 +54,11 @@ export const studioApi = {
     return job
   },
   produceOutputVariant: (pid: string, variantId: string, strategyId: string): Promise<OutputVariant> => observeStudioOperation('studio_variant_produce', () => api.post(`/studio/${pid}/output-variants/${variantId}/produce`), (variant: OutputVariant, props) => workflow.watch('studio-variant', variantId, pid, undefined, props, false, variant.render_job_id), { ...workflow.context(pid), strategy_id: strategyId }),
-  get: (pid: string, signal?: AbortSignal): Promise<Workspace> => observeStudioWorkspace(pid, () => api.get(`/studio/${pid}`, { signal })),
+  get: async (pid: string, signal?: AbortSignal): Promise<Workspace> => {
+    const snapshot = await observeStudioWorkspace(pid, () => api.get(`/studio/${pid}`, { signal }) as Promise<Workspace>)
+    noteWorkspaceCompletion(pid, snapshot)
+    return snapshot
+  },
   titleThumbnail: (style: string, version = 6) => `${api.defaults.baseURL}/studio/title-presets/${style}/thumbnail?v=${version}`,
   titlePreview: (pid: string, draft: Draft, signal?: AbortSignal, layer = 'artwork'): Promise<Blob> => api.post(`/studio/${pid}/title-preview?layer=${layer}`, draft, {responseType:'blob', signal}),
   candidates: (pid: string, signal?: AbortSignal): Promise<CandidateList> => api.get(`/studio/${pid}/candidates`, { signal }),

@@ -93,6 +93,7 @@ test('trackAsrReadiness payload matches the catalog', () => {
       if (id === './posthog') return { captureBusinessEvent: (event, props) => { events.push({ event, props }); return true } }
       if (id === './observer') return { workflow: { generation: () => 1, active: () => true, list: () => [], rememberProject() {}, observeStudio() {}, context: () => ({}) } }
       if (id === './workflow') return workflow.exports
+      if (id === './flags') return { flagAssigned: () => false }
       throw new Error(id)
     },
   })
