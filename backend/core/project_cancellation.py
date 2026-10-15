@@ -31,6 +31,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
+_shutting_down = False
 _cancelled: set[str] = set()
 _stopped: set[str] = set()
 _processes: dict[str, set[subprocess.Popen]] = {}
@@ -60,6 +61,21 @@ class JobStopped(Exception):
     def __init__(self, project_id: str = ''):
         super().__init__(STOP_MESSAGE)
         self.project_id = project_id
+
+
+class ServiceRestarted(RuntimeError):
+    """The desktop shell exited; no new work or completed receipts may be committed."""
+
+    def __init__(self):
+        super().__init__('服务已重启，请重新生成')
+
+
+def begin_shutdown() -> None:
+    # Serialize with Popen registration: once this returns the shutdown tree
+    # snapshot includes every child, and no render can start another one.
+    global _shutting_down
+    with _lock:
+        _shutting_down = True
 
 
 def cancel(project_id: str) -> None:
@@ -157,6 +173,8 @@ def record_stop():
 
 
 def checkpoint(project_id: Optional[str] = None) -> None:
+    if _shutting_down:
+        raise ServiceRestarted()
     project_id = project_id or _current.get()
     if is_cancelled(project_id):
         raise ProjectDeleted(project_id or '')
@@ -482,11 +500,13 @@ def run(cmd, *, check: bool = False, timeout: Optional[float] = None, capture_ou
         kwargs['stdout'] = subprocess.PIPE
         kwargs['stderr'] = subprocess.PIPE
     kwargs = _spawn_kwargs(kwargs)
-    with subprocess.Popen(cmd, **kwargs) as proc:
-        with _lock:
-            _processes.setdefault(project_id, set()).add(proc)
-            if os.name != 'nt':
-                _leaders.add(proc.pid)
+    with _lock:
+        checkpoint(project_id)
+        proc = subprocess.Popen(cmd, **kwargs)
+        _processes.setdefault(project_id, set()).add(proc)
+        if os.name != 'nt':
+            _leaders.add(proc.pid)
+    with proc:
         try:
             if _stop_requested(project_id):
                 _kill(proc)  # cancelled between the checkpoint and the registration

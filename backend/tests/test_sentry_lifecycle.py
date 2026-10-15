@@ -89,6 +89,7 @@ sentry_sdk.get_client().close()
     env.update(AUTOCLIP_APP_DIR=str(tmp_path), AUTOCLIP_DATA_DIR=str(tmp_path),
                AUTOCLIP_MODE='desktop', AUTOCLIP_BUILD_ENVIRONMENT=environment,
                AUTOCLIP_APP_VERSION='1.5.4', SENTRY_DSN='https://public@example.invalid/1',
+               AUTOCLIP_EVENT_CATALOG=str(tmp_path / 'missing-catalog.json'),
                DATABASE_URL='sqlite:///' + str(tmp_path / 'isolated.sqlite'),
                PYTHONDONTWRITEBYTECODE='1')
     env.update(IDENTITY_SOURCE=identity_source,

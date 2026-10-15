@@ -3,7 +3,8 @@
 The argv in ``fixtures/render_ffmpeg_c5a72281`` was recorded from c5a72281
 (main after #314, before #315/#316/#317). ``concat_script`` is the one field
 updated later: both render paths use ``concat_quote``, which does not wrap a
-plain path in single quotes. Do not regenerate the argv from a later tree.
+plain path in single quotes. E6 normalizes only the staged branding destination
+filename before comparison. Do not regenerate the argv from a later tree.
 """
 from __future__ import annotations
 
@@ -235,6 +236,13 @@ def capture(aspect: str, outro: bool) -> tuple[dict, dict]:
         'outro_script': scripts.get('outro', ''),
         'shots': shots,
     }
+    # E6 stages the branded output until ffprobe validation before publishing.
+    # Only that temporary destination name changed; retain the original golden
+    # encoder/filter/audio contract and never regenerate the baseline fixtures.
+    for commands in (document['audio'], document['outro']):
+        for argv in commands:
+            if argv[-1].endswith('/job.ready.part.branding.part.mp4'):
+                argv[-1] = argv[-1].replace('/job.ready.part.branding.part.mp4', '/job.branding.part.mp4')
     return document, result
 
 
