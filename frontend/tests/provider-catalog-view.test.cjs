@@ -25,7 +25,7 @@ test('B2: catalog analysis switching preserves explicit bindings and follows onl
     for (const cover_enabled of [true, false]) {
       const state = { ...blank(), connections, analysis: { connection_id: 'old', model: 'old-analysis', capability: 'auto' },
         vision: { connection_id: bindingId, model: 'my-vision', capability: 'multimodal', model_source: 'user' },
-        cover: { connection_id: bindingId, model: 'my-cover', capability: 'auto', model_source: 'user' }, cover_enabled }
+        cover: { connection_id: bindingId, model: 'my-cover', capability: 'auto', model_source: 'user' }, cover_enabled, cover_follows_analysis: false }
       const switched = view.assignAnalysis(state, connections[1])
       const filled = defaults.applyModelDefaults(switched, connections[1], [{ id: 'new-analysis', analysis: true, capability: 'multimodal' }, { id: 'new-image', image: true }], false)
       assert.equal(filled.analysis.connection_id, 'new')

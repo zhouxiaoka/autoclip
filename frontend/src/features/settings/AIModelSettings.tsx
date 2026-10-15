@@ -7,7 +7,7 @@ import SpeechRecognitionConfig from '../../components/SpeechRecognitionConfig'
 import api, { speechApi } from '../../services/api'
 import { PROVIDERS, providerPickerOptions, type ProviderKey } from './providers'
 import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
-import { connectionOf, isTextOnly, mainConnection, presetKey, validationTargets, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
+import { connectionOf, coverFollowsAnalysis, isTextOnly, mainConnection, presetKey, validationTargets, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
@@ -136,7 +136,7 @@ function CoverSection({ m }: { m: ModelSettingsStore }) {
   if (!settings) return null
   const main = mainConnection(settings)
   const connection = connectionOf(settings, 'cover') || main
-  const separate = !!settings.cover && settings.cover.connection_id !== main?.id
+  const separate = !!settings.cover && !coverFollowsAnalysis(settings)
   const mainHasImage = !!lists[main?.id || '']?.models.some(x => x.image)
   return <div id="ai-cover" className="ac-model-section">
     <h3 className="ac-model-section-title">{t('封面')}</h3>

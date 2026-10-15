@@ -68,8 +68,8 @@ class DesktopServiceManager:
                 logging.StreamHandler()
             ]
         )
-        for name in ("httpx", "httpcore", "openai"):
-            logging.getLogger(name).setLevel(logging.WARNING)
+        from backend.core.log_redaction import install_log_redaction
+        install_log_redaction()
         self.logger = logging.getLogger(__name__)
     
     def _create_fastapi_app(self) -> FastAPI:

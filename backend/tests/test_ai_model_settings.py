@@ -72,6 +72,7 @@ def test_b2_analysis_switch_and_visual_toggle_http_save_round_trip(binding_id, c
         vision=ai.Assignment(connection_id=binding_id, model='my-vision', capability='multimodal', model_source='user') if binding_id else None,
         cover=ai.Assignment(connection_id=binding_id or 'old', model='my-cover', model_source='user'),
         cover_enabled=cover_enabled,
+        cover_follows_analysis=False,  # explicit independent cover, even on the analysis connection
     )
     switched = config.model_copy(update={
         'analysis': ai.Assignment(connection_id='new', model='new-analysis'),
@@ -122,6 +123,7 @@ def test_x1_smart_own_provider_survives_analysis_switch_round_trip(entry, bindin
         vision=ai.Assignment(connection_id=binding_id, model='own-vision', capability='multimodal', model_source='preset'),
         cover=ai.Assignment(connection_id=binding_id, model='own-cover', model_source='preset'),
         cover_enabled=cover_enabled,
+        cover_follows_analysis=False,  # explicit independent cover, even on the analysis connection
     )
     script = """
 const fs = require('node:fs')
@@ -889,3 +891,159 @@ def test_custom_asr_support_requires_timestamp_adapter(provider, model, supporte
     record = registry._merge_custom_models(connection, {'models': []})['models'][0]
     assert record['asr'] is True
     assert record['asr_supported'] is bool(adapter(provider, model)) is supported
+
+
+_X1_SWITCH_SCRIPT = """
+const fs = require('node:fs')
+const { loadTs } = require('./tests/load-ts.cjs')
+const mocks = { '../../i18n': { t: text => text } }
+const logic = loadTs('modelSettingsLogic.ts', mocks)
+const defaults = loadTs('modelDefaults.ts', mocks)
+const view = loadTs('providerCatalogView.ts', mocks)
+const slots = loadTs('defaultModelSlots.ts', mocks)
+let state = logic.prepareLoaded(JSON.parse(fs.readFileSync(0, 'utf8')))
+const [entry, target] = process.argv.slice(1)
+const connection = state.connections.find(c => c.id === target)
+const models = [{ id: 'new-analysis', analysis: true, capability: 'multimodal' }, { id: 'new-cover', image: true }]
+const lists = { [target]: { models, source: 'live', preview: false } }
+let switched = entry === 'legacy'
+  ? logic.chooseProvider(state, 'analysis', connection.provider, lists, false).settings
+  : entry === 'catalog' ? view.assignAnalysis(state, connection)
+  : slots.applySmartSelection(state, 'analysis', 'new-analysis', target)
+switched = defaults.applyModelDefaults(switched, connection, models, false)
+process.stdout.write(JSON.stringify(logic.forSave(switched)))
+"""
+
+
+def _x1_switch(client, entry, target):
+    result = subprocess.run(
+        ['node', '-e', _X1_SWITCH_SCRIPT, entry, target], cwd=Path(__file__).resolve().parents[2] / 'frontend',
+        input=json.dumps(client.get('/settings/ai-models').json()), capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert client.put('/settings/ai-models', json=json.loads(result.stdout)).status_code == 200
+    return client.get('/settings/ai-models').json()
+
+
+@pytest.mark.parametrize('entry', ['legacy', 'catalog', 'slots'])
+def test_x1_only_explicit_follow_migrates_vision(entry):
+    """Explicit follow (vision=None) moves with analysis; nothing else is rewritten."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    config = ai.ModelSettings(
+        connections=[ai.Connection(id=id_, name=id_, provider=provider, api_key='')
+                     for id_, provider in [('old', 'ollama'), ('new', 'lmstudio')]],
+        analysis=ai.Assignment(connection_id='old', model='old-analysis'),
+        vision=None,
+    )
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        assert client.put('/settings/ai-models', json=config.model_dump()).status_code == 200
+        reopened = _x1_switch(client, entry, 'new')
+        assert reopened['vision'] is None, 'follow must stay follow, not be frozen to a connection'
+        loaded = ai.load()
+        assert ai.connection_for(loaded, ai.vision_follow_binding(loaded)).id == 'new'
+
+
+@pytest.mark.parametrize('entry', ['legacy', 'catalog', 'slots'])
+@pytest.mark.parametrize('source', ['preset', 'user'])
+def test_x1_independent_binding_survives_two_switches_and_switch_back(entry, source):
+    """independent(+preset) keeps its connection through A->B->A analysis switches and reopen."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+
+    config = ai.ModelSettings(
+        connections=[ai.Connection(id=id_, name=id_, provider=provider, api_key='')
+                     for id_, provider in [('old', 'ollama'), ('new', 'lmstudio'), ('own', 'ollama')]],
+        analysis=ai.Assignment(connection_id='old', model='old-analysis'),
+        vision=ai.Assignment(connection_id='own', model='own-vision', capability='multimodal', model_source=source),
+        cover=ai.Assignment(connection_id='own', model='own-cover', model_source=source),
+        cover_enabled=True,
+    )
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        assert client.put('/settings/ai-models', json=config.model_dump()).status_code == 200
+        before = client.get('/settings/ai-models').json()
+        for target in ('new', 'old'):
+            reopened = _x1_switch(client, entry, target)
+            assert reopened['analysis']['connection_id'] == target
+            for role in ('vision', 'cover'):
+                assert reopened[role]['connection_id'] == 'own'
+                assert reopened[role]['model_source'] == before[role]['model_source']
+        loaded = ai.load()
+        assert ai.connection_for(loaded, ai.vision_follow_binding(loaded)).id == 'own'
+        assert ai.connection_for(loaded, loaded.cover).id == 'own'
+
+
+# ---- cover follow flag (Kris round 6): explicit cover_follows_analysis ----
+
+def _cover_doc(cover_conn, flag='absent'):
+    doc = {
+        'version': 1,
+        'connections': [{'id': i, 'name': i, 'provider': p, 'api_key': ''}
+                        for i, p in [('old', 'ollama'), ('new', 'lmstudio'), ('own', 'ollama')]],
+        'analysis': {'connection_id': 'old', 'model': 'old-analysis'},
+        'cover': {'connection_id': cover_conn, 'model': 'own-cover', 'model_source': 'preset'},
+        'cover_enabled': True, 'cover_choice_version': 1,
+    }
+    if flag != 'absent':
+        doc['cover_follows_analysis'] = flag
+    return doc
+
+
+@pytest.mark.parametrize('cover_conn,expected', [('old', True), ('own', False)])
+def test_cover_follow_legacy_inference_written_back_once(cover_conn, expected):
+    target = ai.path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(_cover_doc(cover_conn)), encoding='utf-8')
+    original = target.read_bytes()
+    loaded = ai.load()
+    assert loaded.cover_follows_analysis is expected
+    assert target.read_bytes() == original, 'runtime reads never rewrite the settings file'
+    ai.for_editing()  # opening settings migrates once
+    assert json.loads(target.read_text(encoding='utf-8'))['cover_follows_analysis'] is expected
+    migrated = target.read_bytes()
+    ai.for_editing()
+    assert target.read_bytes() == migrated
+    assert ai.public(loaded)['cover_follows_analysis'] is expected
+
+
+def test_cover_follow_flag_beats_inference_and_must_match_analysis():
+    assert ai.ModelSettings.model_validate(_cover_doc('old', False)).cover_follows_analysis is False
+    with pytest.raises(ValidationError):
+        ai.ModelSettings.model_validate(_cover_doc('own', True))
+
+
+@pytest.mark.parametrize('entry', ['legacy', 'catalog', 'slots'])
+@pytest.mark.parametrize('follow', [True, False])
+def test_cover_follow_flag_drives_analysis_switch_round_trip(entry, follow):
+    """Following cover moves to the new analysis connection; independent cover on the same connection stays."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1.settings import router
+    from backend.services import cover
+
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        assert client.put('/settings/ai-models', json=_cover_doc('old', follow)).status_code == 200
+        reopened = _x1_switch(client, entry, 'new')
+        assert reopened['analysis']['connection_id'] == 'new'
+        assert reopened['cover_follows_analysis'] is follow
+        if follow:
+            assert reopened['cover']['connection_id'] == 'new'
+            assert reopened['cover']['model'] == 'new-cover'
+        else:
+            assert reopened['cover']['connection_id'] == 'old'
+            assert reopened['cover']['model'] == 'own-cover'
+        # Reopen and save again: unchanged.
+        assert client.put('/settings/ai-models', json=reopened).status_code == 200
+        loaded = ai.load()
+        assert loaded.cover_follows_analysis is follow
+        assert ai.connection_for(loaded, loaded.cover).id == ('new' if follow else 'old')
+        assert cover.load_config().model == ('new-cover' if follow else 'own-cover')

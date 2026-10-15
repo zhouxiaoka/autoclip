@@ -9,6 +9,7 @@
 import { connectionReady, endpointProviderReady, visionFollowLacksCapability } from './modelSettingsLogic'
 export { modelHasVision } from './modelSettingsLogic'
 import { findCatalogConnection, matchedCatalogPreset } from './providerCatalogView'
+import { coverFollowsAnalysis, syncFollowingCover } from './modelDefaults'
 import { getCatalog, getProvider, type PurposeId as CatalogPurpose } from './providerPresets'
 import type { Assignment, Connection, ModelEntry, ModelList, ModelSettings, ModelSource } from './modelSettingsApi'
 
@@ -180,9 +181,11 @@ function bindPurpose(settings: ModelSettings, purpose: PurposeId, connectionId: 
     return { ...settings, transcription: { provider: 'cloud', connection_id: connectionId, model, model_source: source } }
   }
   if (purpose === 'cover') {
-    return { ...settings, cover_enabled: true, cover: assignment(connectionId, model, source) }
+    const follow = connectionId === settings.analysis?.connection_id && (!settings.cover || coverFollowsAnalysis(settings))
+    return { ...settings, cover_enabled: true, cover_follows_analysis: follow, cover: assignment(connectionId, model, source) }
   }
-  return { ...settings, [purpose]: assignment(connectionId, model, source) }
+  const next = { ...settings, [purpose]: assignment(connectionId, model, source) }
+  return purpose === 'analysis' ? syncFollowingCover(settings, next) : next
 }
 
 export function applySmartSelection(settings: ModelSettings, purpose: PurposeId, model: string, connectionId: string): ModelSettings {

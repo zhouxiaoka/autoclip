@@ -6,6 +6,7 @@ import { PROVIDERS, type ProviderKey } from './providers'
 import { getCatalog, getProvider, resolveProviderId, type ProviderGroupId, type ProviderPreset } from './providerPresets'
 import { cleanBinding, newConnection, presetKey, endpointProviderReady } from './modelSettingsLogic'
 import type { Connection, ModelSettings } from './modelSettingsApi'
+import { syncFollowingCover } from './modelDefaults'
 
 export type CapabilityFilter = 'all' | 'language' | 'asr' | 'tts' | 'image' | 'music' | 'video'
 export type CatalogConnectKind = 'legacy' | 'local_asr' | 'compatible' | 'guide' | 'needs_endpoint'
@@ -163,9 +164,8 @@ export function assignAnalysis(
   if (!endpointProviderReady(connection)) return settings
   if (settings.analysis?.connection_id === connection.id) return settings
   // Model source controls model selection, not the chosen provider connection.
-  return {
-    ...settings, analysis: cleanBinding(connection.id),
-  }
+  // A following cover moves with analysis; independent ones keep their connection.
+  return syncFollowingCover(settings, { ...settings, analysis: cleanBinding(connection.id) })
 }
 
 export function ensureCatalogConnection(

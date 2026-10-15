@@ -171,7 +171,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
   const setTranscriptionLocal = (model: string) => update({ transcription: { provider: 'whisper_local', model, model_source: 'user' } })
   const setCoverSeparate = (separate: boolean) => { if (settings) replace(logic.setCoverSeparate(settings, separate, lists)) }
   const setCoverEnabled = (enabled: boolean) => { autoCover.current = false; if (settings) replace(logic.setCoverEnabled(settings, enabled, lists)) }
-  const setCoverModel = (connectionId: string, model: string) => { autoCover.current = false; update({ cover_enabled: true, cover: { ...logic.cleanBinding(connectionId), model, model_source: 'user' } }) }
+  const setCoverModel = (connectionId: string, model: string) => { if (!settings) return; autoCover.current = false; replace(logic.setCoverModel(settings, connectionId, model)) }
   const setVisual = (enabled: boolean) => { if (settings) replace(logic.setVisual(settings, enabled)) }
   const addCustomProvider = (draft: CustomProviderDraft) => {
     if (!settings) return

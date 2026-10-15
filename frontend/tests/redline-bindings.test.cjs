@@ -43,7 +43,7 @@ if (require.main === module) {
             vision: { connection_id: bindingId, model: 'own-vision', capability: 'multimodal', model_source: source },
             cover: { connection_id: bindingId, model: 'own-cover', capability: 'auto', model_source: source },
             transcription: { provider: 'cloud', connection_id: bindingId, model: bindingId === 'old' ? 'whisper-1' : 'qwen-audio-3.0-asr-flash', model_source: source },
-            cover_enabled: true, allow_send_frame: true, analysis_mode: 'auto', allow_visual_screening: true,
+            cover_enabled: true, cover_follows_analysis: false, allow_send_frame: true, analysis_mode: 'auto', allow_visual_screening: true,
           }
           const original = plain(state)
           for (const action of ['switch', 'off', 'on', 'reopen']) {

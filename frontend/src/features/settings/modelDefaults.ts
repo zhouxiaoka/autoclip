@@ -22,6 +22,25 @@ export function analysisModels(models: ModelEntry[], mode: ModelSettings['analys
   return models.filter(m => m.analysis && (mode !== 'visual' || m.capability === 'multimodal'))
 }
 
+/** Same rule as the backend: explicit flag, else the pre-flag meaning (cover on the analysis connection). */
+export function coverFollowsAnalysis(s: ModelSettings): boolean {
+  if (typeof s.cover_follows_analysis === 'boolean') return s.cover_follows_analysis
+  return !!s.cover && !!s.analysis && s.cover.connection_id === s.analysis.connection_id
+}
+
+/**
+ * Call after analysis moved. A following cover moves with it (image model re-recommended for the
+ * new connection); an independent cover keeps its connection, whatever its model_source.
+ */
+export function syncFollowingCover(before: ModelSettings, next: ModelSettings): ModelSettings {
+  const follow = coverFollowsAnalysis(before)
+  const value: ModelSettings = { ...next, cover_follows_analysis: follow }
+  if (follow && value.cover && value.analysis && value.cover.connection_id !== value.analysis.connection_id) {
+    value.cover = { connection_id: value.analysis.connection_id, model: '', capability: 'auto', model_source: 'preset' }
+  }
+  return value
+}
+
 export function applyModelDefaults(settings: ModelSettings, connection: Connection, models: ModelEntry[], _autoCover: boolean): ModelSettings {
   if (!endpointProviderReady(connection)) return settings
   const value = { ...settings }
@@ -36,7 +55,7 @@ export function applyModelDefaults(settings: ModelSettings, connection: Connecti
   // Never switched on automatically: without the user's choice, covers are designed locally.
   if (value.cover_enabled && !value.cover && value.analysis?.connection_id === connection.id) {
     const model = defaultModel(connection.provider, models, true)
-    if (model) value.cover = { connection_id: connection.id, model, capability: 'auto', model_source: 'preset' }
+    if (model) { value.cover = { connection_id: connection.id, model, capability: 'auto', model_source: 'preset' }; value.cover_follows_analysis = true }
   }
   if (value.transcription?.provider === 'cloud' && value.transcription.connection_id === connection.id && !value.transcription.model) {
     const model = models.find(m => m.asr && m.asr_supported)?.id

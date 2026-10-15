@@ -37,6 +37,7 @@ function loadSection(section = 'TranscriptionSection') {
       connectionOf: (s, role) => s.connections.find(c => c.id === s[role]?.connection_id),
       mainConnection: s => s.connections.find(c => c.id === s.analysis?.connection_id),
       presetKey: c => c.provider,
+      coverFollowsAnalysis: s => typeof s.cover_follows_analysis === 'boolean' ? s.cover_follows_analysis : s.cover?.connection_id === s.analysis?.connection_id,
     },
     './ProviderFields': { default: 'ProviderFields' }, './ModelPicker': { default: 'ModelPicker' }, '../../services/api': {},
     './SenseVoiceConfig': { default: loadSenseVoice() },

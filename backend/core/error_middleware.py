@@ -127,32 +127,85 @@ def handle_service_error(exc: ServiceError, request_id: str = None) -> JSONRespo
 
 
 def handle_http_exception(exc: HTTPException, request_id: str = None) -> JSONResponse:
-    """处理HTTPException"""
+    """处理HTTPException — redact secrets that may appear in detail strings."""
+    detail = exc.detail
+    if isinstance(detail, (dict, list)):
+        detail = _redact_validation_value(detail)
+    elif isinstance(detail, str):
+        from backend.core.log_redaction import redact_text
+        detail = redact_text(detail)
     return create_error_response(
         status_code=exc.status_code,
         error_code=f"HTTP_{exc.status_code}",
-        message=exc.detail,
-        request_id=request_id
+        message=detail if isinstance(detail, str) else "请求失败",
+        details={"detail": detail} if not isinstance(detail, str) else None,
+        request_id=request_id,
     )
 
 
+async def http_exception_handler_safe(request: Request, exc: HTTPException) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
+    return handle_http_exception(exc, request_id)
+
+
+# Credential-bearing keys that must never appear in 422 / HTTP error bodies.
+_SECRET_KEYS = frozenset({
+    "api_key", "apikey", "api-key", "access_token", "access-token",
+    "authorization", "password", "secret", "secret_key", "token",
+    "x-api-key", "x-goog-api-key",
+})
+
+
+def _redact_validation_value(value):
+    """Strip credential fields from Pydantic/FastAPI error `input` / `ctx` trees."""
+    from backend.core.log_redaction import redact_text
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            if str(key).lower() in _SECRET_KEYS:
+                out[key] = "[REDACTED]"
+            else:
+                out[key] = _redact_validation_value(item)
+        return out
+    if isinstance(value, (list, tuple)):
+        return [_redact_validation_value(item) for item in value]
+    if isinstance(value, str):
+        return redact_text(value)
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    # Pydantic puts raw Exception objects in ctx["error"] — stringify, then redact.
+    return redact_text(str(value))
+
+
 def handle_validation_error(exc: RequestValidationError, request_id: str = None) -> JSONResponse:
-    """处理请求验证错误"""
+    """处理请求验证错误 — never echo credential-bearing `input` (beginner self-test 422 leak)."""
     errors = []
     for error in exc.errors():
-        errors.append({
-            "field": ".".join(str(loc) for loc in error["loc"]),
-            "message": error["msg"],
-            "type": error["type"]
-        })
-    
+        entry = {
+            "field": ".".join(str(loc) for loc in error.get("loc", ())),
+            "message": error.get("msg", ""),
+            "type": error.get("type", ""),
+        }
+        # Keep loc for clients; redact input/ctx so api_key never leaves the server.
+        if "input" in error:
+            entry["input"] = _redact_validation_value(error["input"])
+        if "ctx" in error:
+            entry["ctx"] = _redact_validation_value(error["ctx"])
+        errors.append(entry)
+
     return create_error_response(
         status_code=422,
         error_code="VALIDATION_ERROR",
         message="请求参数验证失败",
         details={"errors": errors},
-        request_id=request_id
+        request_id=request_id,
     )
+
+
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Registered explicitly so FastAPI's default handler (which echoes input) is replaced."""
+    request_id = getattr(request.state, "request_id", None)
+    return handle_validation_error(exc, request_id)
 
 
 def handle_starlette_http_exception(exc: StarletteHTTPException, request_id: str = None) -> JSONResponse:
