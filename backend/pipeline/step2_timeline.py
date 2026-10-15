@@ -2,7 +2,6 @@
 Step 2: 时间线提取 - 为大纲中的每个话题定位具体时间区间
 """
 import json
-import logging
 import math
 import re
 from typing import List, Dict, Any, Optional
@@ -18,8 +17,9 @@ from ..core.shared_config import PROMPT_FILES, METADATA_DIR
 from ..core.llm_degrade import chunk_call_budget
 
 from backend.core.llm_telemetry import sanitize_exception_text
+from backend.core.failure_logging import failure_logger, chunk_failure_context
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
 
 class TimelineExtractor:
     """从大纲和SRT字幕中提取精确时间线"""
@@ -99,6 +99,7 @@ class TimelineExtractor:
         if chunk_budgets is None:
             chunk_budgets = {}
 
+        @chunk_failure_context("step2_timeline")
         def timeline_chunk(item):
             # Keep each ledger across whole-extraction retries, including workers.
             with chunk_call_budget(chunk_budgets.get(item[0])) as budget:

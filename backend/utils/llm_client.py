@@ -2,7 +2,6 @@
 大模型客户端 - 兼容性包装器，使用新的LLM管理器
 """
 import json
-import logging
 import os
 import re
 from typing import Dict, Any, List
@@ -33,8 +32,9 @@ except ImportError:
     from core.llm_manager import get_llm_manager
 
 from backend.core.llm_telemetry import sanitize_exception_text, log_safe_exception
+from backend.core.failure_logging import failure_logger
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
 
 class LLMClient:
     """LLM客户端 - 兼容性包装器"""

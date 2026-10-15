@@ -2,7 +2,6 @@
 Step 4: 标题生成 - 为高质量内容生成吸引人的标题
 """
 import json
-import logging
 import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -12,8 +11,9 @@ from collections import defaultdict
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR
+from backend.core.failure_logging import failure_logger, chunk_failure_context
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
 
 class TitleGenerator:
     """标题生成器"""
@@ -50,6 +50,7 @@ class TitleGenerator:
             
         all_clips_with_titles = []
 
+        @chunk_failure_context("step4_title")
         def title_chunk(item):
             chunk_index, chunk_clips = item
             logger.info(f"处理块 {chunk_index}，其中包含 {len(chunk_clips)} 个片段...")

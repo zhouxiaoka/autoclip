@@ -2,7 +2,6 @@
 Step 3: 内容评分 - 对每个话题进行质量评分，筛选出高质量内容
 """
 import json
-import logging
 import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -13,8 +12,9 @@ from .scoring_backend import ScoringBackend, LLMScoringBackend
 from ..utils.llm_client import LLMClient
 from ..utils.text_processor import TextProcessor
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR, MIN_SCORE_THRESHOLD
+from backend.core.failure_logging import failure_logger, chunk_failure_context
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
 
 # CLI `--min-score` 之类的显式覆盖：优先级最高。None = 用设置页保存的值，再退到 MIN_SCORE_THRESHOLD
 MIN_SCORE_OVERRIDE: Optional[float] = None
@@ -76,6 +76,7 @@ class ClipScorer:
         
         all_scored_clips = []
         # 2. 每个块独立评分（并行，结果按块顺序）
+        @chunk_failure_context("step3_scoring")
         def score_chunk(item):
             chunk_index, chunk_items = item
             logger.info(f"处理块 {chunk_index}，其中包含 {len(chunk_items)} 个话题...")

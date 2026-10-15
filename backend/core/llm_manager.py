@@ -2,7 +2,6 @@
 LLM管理器 - 统一管理多个模型提供商
 """
 import json
-import logging
 import os
 import threading
 from dataclasses import dataclass
@@ -15,8 +14,9 @@ from .llm_providers import (
 )
 from ..services.config_sync_service import config_sync_service
 from .llm_telemetry import hostname_of_base_url, sanitize_exception_text, sanitize_model, log_safe_exception
+from .failure_logging import failure_logger
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
 
 # Serialize refresh/snapshot only; network calls remain concurrent.
 _settings_lock = threading.RLock()

@@ -2,7 +2,6 @@
 Step 5: 主题聚类 - 将相似内容聚类成合集
 """
 import json
-import logging
 import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -10,8 +9,9 @@ from pathlib import Path
 # 导入依赖
 from ..utils.llm_client import LLMClient
 from ..core.shared_config import PROMPT_FILES, METADATA_DIR, MAX_CLIPS_PER_COLLECTION
+from backend.core.failure_logging import failure_logger, clips_failure_context
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
 
 class ClusteringEngine:
     """主题聚类引擎"""
@@ -31,6 +31,7 @@ class ClusteringEngine:
             metadata_dir = METADATA_DIR
         self.metadata_dir = metadata_dir
     
+    @clips_failure_context("step5_clustering")
     def cluster_clips(self, clips_with_titles: List[Dict]) -> List[Dict]:
         """
         对片段进行主题聚类

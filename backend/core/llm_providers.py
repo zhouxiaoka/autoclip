@@ -3,7 +3,6 @@
 支持OpenAI、Gemini、硅基流动、阿里DashScope等
 """
 import json
-import logging
 import os
 import re
 from abc import ABC, abstractmethod
@@ -13,8 +12,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from backend.core.llm_telemetry import hostname_of_base_url, sanitize_exception_text, sanitize_model, log_safe_exception
+from backend.core.failure_logging import failure_logger
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
 
 class ProviderType(Enum):
     """模型提供商类型"""

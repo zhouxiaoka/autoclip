@@ -2,7 +2,6 @@
 Step 1: 大纲提取 - 从转写文本中提取结构性大纲
 """
 import json
-import logging
 import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -18,8 +17,9 @@ from .failures import (
 )
 
 from backend.core.llm_telemetry import sanitize_exception_text, log_safe_exception
+from backend.core.failure_logging import failure_logger, chunk_failure_context
 
-logger = logging.getLogger(__name__)
+logger = failure_logger(__name__)
 
 class OutlineExtractor:
     """大纲提取器（重构版）"""
@@ -96,6 +96,7 @@ class OutlineExtractor:
         from backend.core.llm_degrade import chunk_call_budget
 
         @chunk_call_budget()
+        @chunk_failure_context("step1_outline")
         def outline_chunk(item):
             from backend.core.result_retry import MAX_ATTEMPTS, classify_for_retry
 
