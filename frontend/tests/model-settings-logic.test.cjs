@@ -241,7 +241,8 @@ test('cover follow flag: separate switch, own-provider choice and model pick kee
   assert.equal(separate.cover_follows_analysis, false)
   assert.equal(logic.setCoverSeparate(separate, false, lists).cover_follows_analysis, true)
   assert.equal(logic.chooseProvider(on, 'cover', 'openai', {}, false, p => conn('o', p)).settings.cover_follows_analysis, false)
-  assert.equal(logic.setCoverModel(on, 'a', 'wanx').cover_follows_analysis, true)
+  // E1: an explicit cover model pick is independent even when the cover was following.
+  assert.equal(logic.setCoverModel(on, 'a', 'wanx').cover_follows_analysis, false)
   assert.equal(logic.setCoverModel({ ...on, cover_follows_analysis: false }, 'a', 'wanx').cover_follows_analysis, false)
   assert.equal(logic.setCoverModel(separate, 'c', 'wanx').cover_follows_analysis, false)
   // Documents older than the flag: a cover on the analysis connection was the old "follow".

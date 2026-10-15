@@ -19,6 +19,7 @@ function load(name, mocks = {}, globals = {}) {
     require: (id) => {
       if (id in mocks) return mocks[id]
       if (id === './successRateContract' || id === '../../analytics/successRateContract') return load('successRateContract')
+      if (id === './errorText') return require('./load-ts.cjs').loadTs(path.join(__dirname, '../src/features/studio/errorText.ts'))
       if (id === '../utils/apiConfig') {
         return { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener: () => () => {} } }
       }
