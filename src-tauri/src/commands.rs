@@ -96,11 +96,7 @@ pub struct SavedDownload {
 #[tauri::command]
 pub async fn save_local_download(app: AppHandle, url: String) -> Result<SavedDownload, String> {
     let parsed = local_http_url(&url)?;
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|e| e.to_string())?;
-    let response = client
+    let response = local_client()?
         .get(parsed)
         .send()
         .await
@@ -146,6 +142,17 @@ async fn save_response(mut response: reqwest::Response, dir: &Path, filename: &s
         let _ = tokio::fs::remove_file(&path).await;
     }
     result
+}
+
+/// Client for the bundled backend on 127.0.0.1 only (#388). reqwest honours the system proxy
+/// (Windows registry / HTTP_PROXY) and 0.11 ignores its local bypass, so with Clash or a company
+/// proxy on, "下载成片" went to the proxy and failed. Local downloads never need one.
+fn local_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| e.to_string())
 }
 
 fn local_http_url(url: &str) -> Result<reqwest::Url, String> {
@@ -272,6 +279,26 @@ mod download_tests {
         });
         reqwest::Client::builder().no_proxy().build().unwrap()
             .get(format!("http://{address}/kit.zip")).send().await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn local_download_ignores_a_system_proxy() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0; 4096];
+            socket.read(&mut request).await.unwrap();
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok").await.unwrap();
+        });
+        // A proxy that refuses every connection, like a stopped Clash left as the system proxy.
+        std::env::set_var("HTTP_PROXY", "http://127.0.0.1:9");
+        std::env::set_var("http_proxy", "http://127.0.0.1:9");
+        let client = local_client();
+        std::env::remove_var("HTTP_PROXY");
+        std::env::remove_var("http_proxy");
+        let response = client.unwrap().get(format!("http://{address}/clip.mp4")).send().await.unwrap();
+        assert_eq!(response.text().await.unwrap(), "ok");
     }
 
     #[tokio::test]
