@@ -17,8 +17,8 @@ const ENDPOINT_ERRORS = new Set(['bad_endpoint', 'connection', 'timeout'])
 const KEY_ERRORS = new Set(['invalid_key', 'insufficient_quota', 'permission_denied'])
 
 /**
- * Provider picker + credentials for one connection. Local presets need no key; only
- * 自定义兼容 / local expose the address. Locked presets hide the URL.
+ * Provider picker + credentials for one connection. Local presets need no key.
+ * 「接口地址」is always editable when the preset has (or needs) a Base URL.
  */
 export default function ProviderFields({ connection, ariaPrefix = '', hideProvider, sharedKey, placement, keyHint, onChoose, onEdit }: {
   connection?: Connection
@@ -76,7 +76,13 @@ export default function ProviderFields({ connection, ariaPrefix = '', hideProvid
             onChange={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })}
             onBlur={e => onEdit({ api_key: e.target.value.trim() || (connection.has_key ? undefined : '') })} />
         </Row>)}
-    {addressEditable && <Row wide label={t('接口地址')} hint={[preset?.local ? t('本机服务无需 API Key，保持默认地址即可。') : key === 'dashscope' ? t('使用百炼专属接入地址时填写，留空用默认地址。') : '', contextHintFor(key, connection.base_url)].filter(Boolean).join(' ') || undefined}>
+    {addressEditable && <Row wide label={t('接口地址')} hint={[
+      preset?.local ? t('本机服务无需 API Key，保持默认地址即可。')
+        : key === 'dashscope' ? t('默认已填官方地址，可按需修改。')
+        : connection.base_url ? t('默认已填官方地址，可按需修改。')
+        : t('请填写服务商提供的接口地址，通常以 /v1 结尾。'),
+      contextHintFor(key, connection.base_url),
+    ].filter(Boolean).join(' ') || undefined}>
       <Input aria-label={label(t('接口地址'))} value={connection.base_url}
         status={(urlInfo?.warnings.includes('console_host') || (failed && ENDPOINT_ERRORS.has(errorType))) ? 'error' : undefined}
         placeholder={preset?.local?.baseUrl || (key === 'dashscope' ? 'https://dashscope.aliyuncs.com/api/v1' : 'https://example.com/v1')}

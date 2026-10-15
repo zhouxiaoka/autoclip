@@ -462,6 +462,10 @@
   background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: 16px; padding: 20px 22px;
   min-width: 0;
 }
+.ac-provider-test-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px;
+}
+.ac-provider-test-row .ac-note { margin: 0; flex: 1 1 100%; }
 .ac-provider-key-hint { margin-top: 14px; }
 .ac-provider-models-title {
   margin: 0 0 10px; font-size: 15px; font-weight: 600; color: var(--ac-ink);

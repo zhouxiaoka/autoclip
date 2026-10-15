@@ -378,6 +378,45 @@ test('provider detail uses two-column connect/models layout without analysis Mod
   assert.match(textOf(tree), /连接后可在上方「默认模型」中选择/)
 })
 
+test('locked catalog detail shows editable 接口地址 and 测试连接', () => {
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const openai = view.catalogProviders().find(row => row.id === 'openai')
+  assert.ok(openai && openai.locked && openai.base_url)
+  const edits = []
+  const tests = []
+  const Detail = loadTs('ProviderDetail.tsx', {
+    '../../i18n': i18n, '../../ui': ui,
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    './ProviderFields': { default: ({ connection, onEdit }) => React.createElement('div', { 'data-fields': true },
+      React.createElement('input', { 'aria-label': '接口地址', value: connection.base_url, onChange: e => onEdit({ base_url: e.target.value }) }),
+      React.createElement('input', { 'aria-label': 'API Key', value: connection.api_key || '', onChange: e => onEdit({ api_key: e.target.value }) }),
+    ) },
+    './ModelPicker': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+  }).default
+  const detail = Detail({
+    preset: openai,
+    m: {
+      settings, lists: {}, busy: {}, listErrors: {}, testing: false, keyHints: {},
+      ensureCatalogProvider: (id, patch) => edits.push({ id, patch }),
+      editConnection: (c, patch) => edits.push({ id: c.id, patch }),
+      testCatalogProvider: (id, draft) => tests.push({ id, draft }),
+    },
+    onBack: () => {},
+  })
+  const nodes = flatten(detail)
+  const address = nodes.find(node => node.props?.['aria-label'] === '接口地址')
+  assert.ok(address)
+  assert.equal(address.props.value, openai.base_url)
+  const testBtn = nodes.find(node => node.type === 'button' && textOf(node).includes('测试连接'))
+  assert.ok(testBtn)
+  testBtn.props.onClick()
+  assert.equal(tests.length, 1)
+  assert.equal(tests[0].id, 'openai')
+  assert.equal(tests[0].draft.base_url, openai.base_url)
+})
+
 
 test('all endpoint-only catalog cards open an address entry flow without binding a default', () => {
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
@@ -385,12 +424,14 @@ test('all endpoint-only catalog cards open an address entry flow without binding
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
-    './ProviderFields': { default: () => null }, './ModelPicker': { default: () => null },
-    './SenseVoiceConfig': { default: () => null },
-    './EndpointProviderSetup': { default: ({ connection, onEdit }) => React.createElement('input', {
-      'data-endpoint-setup': connection.catalog_provider_id, value: connection.base_url,
+    './ProviderFields': { default: ({ connection, onEdit }) => React.createElement('input', {
+      'data-endpoint-setup': connection.catalog_provider_id || connection.provider,
+      'aria-label': '接口地址',
+      value: connection.base_url,
       onChange: event => onEdit({ base_url: event.target.value }),
     }) },
+    './ModelPicker': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
   }).default
   for (const preset of view.catalogProviders().filter(row => !row.base_url && row.protocol !== 'local')) {
     const opened = []
@@ -399,12 +440,19 @@ test('all endpoint-only catalog cards open an address entry flow without binding
     flatten(tree).find(node => node.props?.['data-provider-id'] === preset.id).props.onClick()
     assert.deepEqual(opened, [preset.id])
     const edits = []
-    const detail = Detail({ preset, m: { settings, lists: {}, busy: {}, listErrors: {},
-      ensureCatalogProvider: (id, patch) => edits.push({ id, patch }) }, onBack: () => {} })
-    const input = flatten(detail).find(node => node.props?.['data-endpoint-setup'] === preset.id)
-    assert.ok(input)
+    const tests = []
+    const detail = Detail({ preset, m: { settings, lists: {}, busy: {}, listErrors: {}, testing: false,
+      ensureCatalogProvider: (id, patch) => edits.push({ id, patch }),
+      testCatalogProvider: (id, draft) => tests.push({ id, draft }),
+      editConnection: () => {} }, onBack: () => {} })
+    const nodes = flatten(detail)
+    const input = nodes.find(node => node.props?.['data-endpoint-setup'] === preset.id)
+    assert.ok(input, preset.id)
+    assert.match(textOf(detail), /请填写接口地址后再测试连接/)
     input.props.onChange({ target: { value: 'https://endpoint.example.test/v1' } })
     assert.deepEqual(edits, [{ id: preset.id, patch: { base_url: 'https://endpoint.example.test/v1' } }])
+    const testBtn = nodes.find(node => node.type === 'button' && textOf(node).includes('测试连接'))
+    assert.ok(testBtn, '测试连接 for ' + preset.id)
     assert.equal(settings.analysis, null)
   }
 })

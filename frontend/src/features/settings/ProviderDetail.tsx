@@ -5,8 +5,8 @@ import SpeechRecognitionConfig from '../../components/SpeechRecognitionConfig'
 import type { ProviderPreset } from './providerPresets'
 import type { ModelSettingsStore } from './useModelSettings'
 import ProviderFields from './ProviderFields'
-import EndpointProviderSetup from './EndpointProviderSetup'
 import SenseVoiceConfig from './SenseVoiceConfig'
+import { validationCopy } from './providerAccess'
 import {
   catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected,
   type LocalAsrReady,
@@ -45,19 +45,41 @@ export default function ProviderDetail({
   if (!settings) return null
   const kind = connectKind(preset)
   const persisted = findCatalogConnection(settings, preset)
-  const connection = persisted || catalogDraftConnection(preset)
+  const draft = persisted || catalogDraftConnection(preset)
+  const connection = draft && {
+    ...draft,
+    // Prefill official default so「接口地址」is visible and editable.
+    base_url: draft.base_url || preset.base_url || '',
+  }
   const connected = isCatalogConnected(settings, preset, asrReady)
   const list = connection ? lists[connection.id] : undefined
   const models = list?.models.filter(model => model.analysis || model.image || model.asr) || []
+  const needsEndpoint = kind === 'needs_endpoint' || (kind === 'guide' && !preset.base_url)
+  const canTest = kind === 'legacy' || kind === 'compatible' || needsEndpoint
 
   const persistEdit = (patch: Parameters<typeof m.editConnection>[1]) => {
     if (persisted) m.editConnection(persisted, patch)
     else m.ensureCatalogProvider(preset.id, patch)
   }
 
-  const showModelsPanel = kind !== 'local_asr' && kind !== 'guide' && kind !== 'needs_endpoint'
+  const onTest = () => {
+    if (!connection) return
+    void m.testCatalogProvider(preset.id, {
+      api_key: connection.api_key,
+      base_url: connection.base_url,
+      has_key: connection.has_key,
+    })
+  }
+
+  const showModels = kind !== 'local_asr' && kind !== 'guide'
   const showConnectPanel = kind !== 'local_asr'
   const name = t(displayNameOf(preset))
+  const testing = m.testing
+  const listing = connection && busy[connection.id]
+  const status = connection?.validation_status
+  const testDisabled = !connection || testing || (
+    preset.auth === 'api_key' && !(connection.api_key || '').trim() && !connection.has_key
+  ) || (!connection.base_url.trim() && !preset.base_url && preset.protocol !== 'local')
 
   return (
     <div className="ac-provider-detail" data-provider-id={preset.id} data-connect-kind={kind} data-layout="v6-stack">
@@ -90,9 +112,12 @@ export default function ProviderDetail({
           <section className="ac-provider-detail-card" data-panel="connect">
             <h4 className="ac-provider-models-title">{t('连接')}</h4>
             {!connected && <p className="ac-note">{t('settings.providers.unconnected_guide')}</p>}
+            {needsEndpoint && (
+              <p className="ac-note">{t('请填写接口地址后再测试连接。可参考服务商控制台中的 API Endpoint。')}</p>
+            )}
             {preset.sponsor && <p className="ac-note">{t('settings.providers.one_click_hint')}</p>}
 
-            {kind === 'legacy' && connection && (
+            {(kind === 'legacy' || kind === 'compatible') && connection && (
               <ProviderFields
                 connection={connection}
                 hideProvider
@@ -103,9 +128,9 @@ export default function ProviderDetail({
               />
             )}
 
-            {kind === 'compatible' && connection && (
+            {needsEndpoint && connection && (
               <>
-                <p className="ac-note">{t('settings.providers.compat_guide')}</p>
+                <p className="ac-note">{t('本版仅支持 OpenAI 兼容接口。')}</p>
                 <ProviderFields
                   connection={connection}
                   hideProvider
@@ -117,9 +142,9 @@ export default function ProviderDetail({
               </>
             )}
 
-            {(kind === 'guide' || kind === 'needs_endpoint') && (
+            {kind === 'guide' && !needsEndpoint && (
               <div className="ac-empty">
-                <b>{t(kind === 'needs_endpoint' ? 'settings.providers.needs_endpoint_guide' : 'settings.providers.protocol_guide')}</b>
+                <b>{t('settings.providers.protocol_guide')}</b>
                 {preset.docs_url && (
                   <Btn variant="text" size="sm" onClick={() => openExternalLink(preset.docs_url)}>
                     {t('settings.providers.docs')}<Icon.External size={12} />
@@ -128,8 +153,18 @@ export default function ProviderDetail({
               </div>
             )}
 
-            {(kind === 'needs_endpoint' || (kind === 'guide' && !preset.base_url)) && connection && (
-              <EndpointProviderSetup connection={connection} onEdit={persistEdit} m={m} />
+            {canTest && connection && (
+              <div className="ac-provider-test-row">
+                <Btn size="sm" variant="cta" disabled={testDisabled} loading={testing || !!listing} onClick={onTest}>
+                  {t('测试连接')}
+                </Btn>
+                {status === 'failed' && (
+                  <p className="ac-note ac-note--error" role="alert">{validationCopy(connection.validation_error_type)}</p>
+                )}
+                {status === 'transient' && (
+                  <p className="ac-note" role="status">{validationCopy(connection.validation_error_type)}</p>
+                )}
+              </div>
             )}
 
             <p className="ac-note ac-provider-key-hint">{t('settings.providers.key_local_only')}</p>
@@ -166,11 +201,11 @@ export default function ProviderDetail({
           </section>
         )}
 
-        {showModelsPanel && (
+        {showModels && (
           <section className="ac-provider-detail-card" data-panel="models">
             <h4 className="ac-provider-models-title">
               {t('可用模型')}
-              <span className="count">{connected || models.length ? models.length : t('连接后显示')}</span>
+              <span className="count">{connected || models.length ? models.length : t('测通后自动获取')}</span>
             </h4>
             {connection && busy[connection.id] && <p className="ac-note">{t('正在获取可用模型…')}</p>}
             {connection && listErrors[connection.id] && <p className="ac-note">{t('settings.providers.models_empty')}</p>}
@@ -194,7 +229,7 @@ export default function ProviderDetail({
               )
             })}
             {connection && !busy[connection.id] && !models.length && (
-              <p className="ac-note">{t('settings.providers.models_empty')}</p>
+              <p className="ac-note">{t('填写 API 密钥与接口地址并测试连接后，将在此显示可用模型。')}</p>
             )}
             <p className="ac-note ac-provider-models-foot">
               {t('连接后可在上方「默认模型」中选择。')}
@@ -203,7 +238,7 @@ export default function ProviderDetail({
         )}
       </div>
 
-      {preset.docs_url && kind !== 'guide' && kind !== 'needs_endpoint' && (
+      {preset.docs_url && kind !== 'guide' && (
         <p className="ac-note">
           <a
             className="ac-link"
