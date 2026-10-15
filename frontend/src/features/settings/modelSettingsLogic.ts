@@ -107,8 +107,8 @@ export function applyValidation(s: ModelSettings, id: string, result: Validation
 }
 
 /**
- * Point a role at a provider. Saved credentials for that provider are reused, but the analysis
- * connection is never shared with cover/vision so a provider switch cannot move a key across roles.
+ * Point a role at a provider. Saved credentials for that provider are reused; explicit cover/vision
+ * provider choices use a separate connection while automatic bindings follow analysis.
  */
 export function chooseProvider(
   s: ModelSettings, role: Role, provider: ProviderKey, lists: Record<string, ModelList>, autoCover: boolean,
@@ -122,6 +122,10 @@ export function chooseProvider(
     ...s,
     connections: existing ? s.connections : [...s.connections, connection],
     [role]: role === 'transcription' ? { provider: 'cloud', model: '', connection_id: connection.id, model_source: 'preset' } : cleanBinding(connection.id),
+    ...(role === 'analysis' ? {
+      vision: s.vision?.model_source === 'user' ? s.vision : null,
+      cover: s.cover?.model_source === 'user' ? s.cover : null,
+    } : {}),
   }
   const cached = lists[connection.id]
   if (cached && !cached.preview) next = applyModelDefaults(next, connection, cached.models, autoCover)

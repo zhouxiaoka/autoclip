@@ -162,8 +162,12 @@ export function assignAnalysis(
 ): ModelSettings {
   if (!endpointProviderReady(connection)) return settings
   if (settings.analysis?.connection_id === connection.id) return settings
-  // An explicit binding stays independent even when it shares the old analysis connection.
-  return { ...settings, analysis: cleanBinding(connection.id) }
+  // Only user bindings stay independent; automatic bindings follow the new analysis connection.
+  return {
+    ...settings, analysis: cleanBinding(connection.id),
+    vision: settings.vision?.model_source === 'user' ? settings.vision : null,
+    cover: settings.cover?.model_source === 'user' ? settings.cover : null,
+  }
 }
 
 export function ensureCatalogConnection(

@@ -144,8 +144,8 @@ test('B2: the frame-analysis switch preserves explicit bindings and follow analy
   }
 })
 
-test('choosing a provider reuses its saved connection and never moves the analysis key to the cover', () => {
-  const state = { ...fresh(), connections: [conn('a', 'dashscope', { has_key: true }), conn('b', 'openai', { has_key: true })], analysis: { connection_id: 'a', model: 'qwen-plus', capability: 'auto' }, cover: { connection_id: 'a', model: 'wanx', capability: 'auto' }, cover_enabled: true }
+test('choosing a provider reuses its saved connection and preserves an explicit cover binding', () => {
+  const state = { ...fresh(), connections: [conn('a', 'dashscope', { has_key: true }), conn('b', 'openai', { has_key: true })], analysis: { connection_id: 'a', model: 'qwen-plus', capability: 'auto' }, cover: { connection_id: 'a', model: 'wanx', capability: 'auto', model_source: 'user' }, cover_enabled: true }
   const toOpenAI = logic.chooseProvider(state, 'analysis', 'openai', {}, true)
   assert.equal(toOpenAI.changed, true)
   assert.equal(toOpenAI.connection.id, 'b')
@@ -183,6 +183,51 @@ test('a cached live list fills the recommendation immediately when switching pro
   assert.equal(result.settings.analysis.model, 'gpt-5-mini')
   assert.equal(result.settings.cover_enabled, false, 'choosing a text provider never switches AI covers on')
 })
+
+for (const entry of ['legacy', 'catalog']) {
+  for (const cached of [false, true]) {
+    test(`R1: ${entry} analysis switch moves automatic cover and vision with ${cached ? 'cached' : 'delayed'} models`, () => {
+      const view = loadTs('providerCatalogView.ts', { './modelSettingsLogic': logic, './providers': providers, '../../i18n': i18n })
+      const connections = [conn('old', 'dashscope', { has_key: true }), conn('new', 'openai', { has_key: true })]
+      const oldLists = { old: { models, source: 'live', preview: false } }
+      const newModels = [{ id: 'gpt-5-mini', capability: 'multimodal', analysis: true }, { id: 'dall-e-3', image: true }]
+      const lists = cached ? { ...oldLists, new: { models: newModels, source: 'live', preview: false } } : oldLists
+      for (const source of ['preset', undefined]) {
+        for (const enabled of [true, false]) {
+          const initial = { ...fresh(), connections, saved: true, analysis: { ...logic.cleanBinding('old'), model: 'qwen-plus' } }
+          const state = logic.setCoverEnabled(initial, true, oldLists)
+          assert.equal(state.cover.connection_id, 'old')
+          assert.equal(state.cover.model, 'wanx2.1-t2i-turbo')
+          state.cover = { ...state.cover, model_source: source }
+          state.vision = { connection_id: 'old', model: 'qwen3.8-flash', capability: 'multimodal', model_source: source }
+          state.cover_enabled = enabled
+          let switched = entry === 'legacy'
+            ? logic.chooseProvider(state, 'analysis', 'openai', lists, false).settings
+            : view.assignAnalysis(state, connections[1])
+          if (!cached) {
+            assert.equal(switched.cover, null, 'the old automatic cover is cleared before discovery')
+            assert.equal(switched.vision, null)
+          }
+          switched = defaults.applyModelDefaults(switched, connections[1], newModels, false)
+          // A late response for the old provider must not restore its bindings.
+          switched = defaults.applyModelDefaults(switched, connections[0], models, false)
+          const saved = logic.forSave(logic.setVisual(logic.setVisual(switched, false), true))
+          assert.equal(saved.analysis.connection_id, 'new')
+          assert.equal(saved.vision, null)
+          assert.equal(logic.followedVisionBinding(saved).connection_id, 'new')
+          assert.equal(saved.cover_enabled, enabled)
+          if (enabled) {
+            assert.deepEqual(plain(saved.cover), { connection_id: 'new', model: 'dall-e-3', capability: 'auto', model_source: 'preset' })
+          } else {
+            assert.equal(saved.cover, null)
+            assert.equal(logic.setCoverEnabled(saved, true, { new: { models: newModels } }).cover.connection_id, 'new')
+          }
+          assert.equal(state.cover.connection_id, 'old', 'the input settings are unchanged')
+        }
+      }
+    })
+  }
+}
 
 test('cover follows or separates from the main connection without nested toggles', () => {
   const lists = { 'legacy-analysis': { models, source: 'live' } }
