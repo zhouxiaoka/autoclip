@@ -6,9 +6,7 @@ import type { ProviderPreset } from './providerPresets'
 import type { ModelSettingsStore } from './useModelSettings'
 import ProviderFields from './ProviderFields'
 import EndpointProviderSetup from './EndpointProviderSetup'
-import ModelPicker from './ModelPicker'
 import SenseVoiceConfig from './SenseVoiceConfig'
-import { mainConnection } from './modelSettingsLogic'
 import {
   catalogDraftConnection, connectKind, displayNameOf, findCatalogConnection, isCatalogConfigured, isCatalogConnected,
   type LocalAsrReady,
@@ -37,24 +35,25 @@ export default function ProviderDetail({
   const persisted = findCatalogConnection(settings, preset)
   const connection = persisted || catalogDraftConnection(preset)
   const connected = isCatalogConnected(settings, preset, asrReady)
-  const main = mainConnection(settings)
-  const isAnalysis = !!persisted && main?.id === persisted.id
   const list = connection ? lists[connection.id] : undefined
   const models = list?.models.filter(model => model.analysis || model.image || model.asr) || []
-  const preview = models.slice(0, 8)
-  const hidden = Math.max(0, models.length - preview.length)
+  const languageModels = models.filter(model => model.analysis)
+  const imageModels = models.filter(model => model.image)
+  const asrModels = models.filter(model => model.asr)
+  const previewLanguage = languageModels.slice(0, 8)
+  const previewImage = imageModels.slice(0, 4)
+  const previewAsr = asrModels.slice(0, 4)
 
   const persistEdit = (patch: Parameters<typeof m.editConnection>[1]) => {
     if (persisted) m.editConnection(persisted, patch)
     else m.ensureCatalogProvider(preset.id, patch)
   }
-  const useAsAnalysis = () => {
-    if (persisted) m.assignAnalysisConnection(persisted)
-    else m.ensureCatalogProvider(preset.id, undefined, true)
-  }
+
+  const showModelsPanel = kind !== 'local_asr' && kind !== 'guide' && kind !== 'needs_endpoint'
+  const showConnectPanel = kind !== 'local_asr'
 
   return (
-    <div className="ac-provider-detail" data-provider-id={preset.id} data-connect-kind={kind}>
+    <div className="ac-provider-detail" data-provider-id={preset.id} data-connect-kind={kind} data-layout="v6">
       <button type="button" className="ac-back" onClick={onBack}>
         <Icon.Back />{t('settings.providers.back')}
       </button>
@@ -79,119 +78,140 @@ export default function ProviderDetail({
         </div>
       </header>
 
-      {!connected && kind !== 'local_asr' && (
-        <p className="ac-note">{t('settings.providers.unconnected_guide')}</p>
-      )}
-      {preset.sponsor && <p className="ac-note">{t('settings.providers.one_click_hint')}</p>}
-      {(kind === 'legacy' || kind === 'compatible') && <h4 className="ac-provider-models-title">{t('settings.providers.manual_key')}</h4>}
+      <div className={`ac-provider-detail-grid${showModelsPanel ? '' : ' ac-provider-detail-grid--single'}`}>
+        <section className="ac-provider-detail-card" data-panel="connect">
+          {showConnectPanel && (
+            <>
+              <h4 className="ac-provider-models-title">{t('连接 {{name}}', { name: t(displayNameOf(preset)) })}</h4>
+              {!connected && (
+                <p className="ac-note">{t('settings.providers.unconnected_guide')}</p>
+              )}
+              {preset.sponsor && <p className="ac-note">{t('settings.providers.one_click_hint')}</p>}
+              {(kind === 'legacy' || kind === 'compatible') && <p className="ac-note">{t('settings.providers.manual_key')}</p>}
 
-      {kind === 'legacy' && connection && (
-        <ProviderFields
-          connection={connection}
-          hideProvider
-          placement="settings_model"
-          keyHint={persisted ? m.keyHints[persisted.id] : undefined}
-          onChoose={() => undefined}
-          onEdit={persistEdit}
-        />
-      )}
+              {kind === 'legacy' && connection && (
+                <ProviderFields
+                  connection={connection}
+                  hideProvider
+                  placement="settings_model"
+                  keyHint={persisted ? m.keyHints[persisted.id] : undefined}
+                  onChoose={() => undefined}
+                  onEdit={persistEdit}
+                />
+              )}
 
-      {kind === 'compatible' && connection && (
-        <>
-          <p className="ac-note">{t('settings.providers.compat_guide')}</p>
-          <ProviderFields
-            connection={connection}
-            hideProvider
-            placement="settings_model"
-            keyHint={persisted ? m.keyHints[persisted.id] : undefined}
-            onChoose={() => undefined}
-            onEdit={persistEdit}
-          />
-        </>
-      )}
+              {kind === 'compatible' && connection && (
+                <>
+                  <p className="ac-note">{t('settings.providers.compat_guide')}</p>
+                  <ProviderFields
+                    connection={connection}
+                    hideProvider
+                    placement="settings_model"
+                    keyHint={persisted ? m.keyHints[persisted.id] : undefined}
+                    onChoose={() => undefined}
+                    onEdit={persistEdit}
+                  />
+                </>
+              )}
 
-      {(kind === 'guide' || kind === 'needs_endpoint') && (
-        <div className="ac-empty">
-          <b>{t(kind === 'needs_endpoint' ? 'settings.providers.needs_endpoint_guide' : 'settings.providers.protocol_guide')}</b>
-          {preset.docs_url && (
-            <Btn variant="text" size="sm" onClick={() => openExternalLink(preset.docs_url)}>
-              {t('settings.providers.docs')}<Icon.External size={12} />
-            </Btn>
+              {(kind === 'guide' || kind === 'needs_endpoint') && (
+                <div className="ac-empty">
+                  <b>{t(kind === 'needs_endpoint' ? 'settings.providers.needs_endpoint_guide' : 'settings.providers.protocol_guide')}</b>
+                  {preset.docs_url && (
+                    <Btn variant="text" size="sm" onClick={() => openExternalLink(preset.docs_url)}>
+                      {t('settings.providers.docs')}<Icon.External size={12} />
+                    </Btn>
+                  )}
+                </div>
+              )}
+
+              {(kind === 'needs_endpoint' || (kind === 'guide' && !preset.base_url)) && connection && (
+                <EndpointProviderSetup connection={connection} onEdit={persistEdit} m={m} />
+              )}
+
+              <p className="ac-note ac-provider-key-hint">{t('settings.providers.key_local_only')}</p>
+            </>
           )}
-        </div>
-      )}
 
-      {(kind === 'needs_endpoint' || (kind === 'guide' && !preset.base_url)) && connection && (
-        <EndpointProviderSetup connection={connection} onEdit={persistEdit} m={m} />
-      )}
-
-      {kind === 'local_asr' && preset.id === 'whisper' && (
-        <>
-          {settings.transcription?.provider !== 'whisper_local' && (
-            <Row label={t('settings.providers.use_whisper')} hint={t(preset.hint)}>
-              <Btn size="sm" onClick={() => m.selectLocalAsrProvider('whisper')}>{t('settings.providers.use_whisper')}</Btn>
-            </Row>
-          )}
-          <SpeechRecognitionConfig
-            hideProvider
-            selectedModel={settings.transcription?.provider === 'whisper_local' ? (settings.transcription.model || 'base') : 'base'}
-            onModelChange={m.setTranscriptionLocal}
-          />
-        </>
-      )}
-
-      {kind === 'local_asr' && preset.id === 'sensevoice' && (
-        <>
-          {settings.transcription?.provider !== 'sensevoice_local' && (
-            <Row label={t('settings.providers.use_sensevoice')} hint={t(preset.hint)}>
-              <Btn size="sm" onClick={() => m.selectLocalAsrProvider('sensevoice')}>{t('settings.providers.use_sensevoice')}</Btn>
-            </Row>
-          )}
-          <SenseVoiceConfig />
-        </>
-      )}
-
-      {kind !== 'local_asr' && kind !== 'guide' && kind !== 'needs_endpoint' && (
-        <div className="ac-provider-models">
-          <h4 className="ac-provider-models-title">{t('settings.providers.models_preview')}</h4>
-          {connection && busy[connection.id] && <p className="ac-note">{t('正在获取可用模型…')}</p>}
-          {connection && listErrors[connection.id] && <p className="ac-note">{t('settings.providers.models_empty')}</p>}
-          {preview.length > 0 && (
-            <ul className="ac-provider-model-list">
-              {preview.map(model => (
-                <li key={model.id} className="ac-mono">{model.id}</li>
-              ))}
-            </ul>
-          )}
-          {hidden > 0 && <p className="ac-note">{t('settings.providers.more_models', { count: hidden })}</p>}
-          {connection && !busy[connection.id] && !preview.length && (
-            <p className="ac-note">{t('settings.providers.models_empty')}</p>
-          )}
-        </div>
-      )}
-
-      {kind !== 'local_asr' && connection && preset.capabilities.includes('language') && ((kind !== 'guide' && kind !== 'needs_endpoint') || connected) && (
-        isAnalysis && settings.analysis
-          ? <Row wide label={t('settings.providers.using_for_analysis')} hint={t('已为你选好推荐模型，可随时更换。')}>
-              <ModelPicker
-                role="analysis"
-                model={settings.analysis.model || ''}
-                capability={settings.analysis.capability}
-                connection={connection}
-                list={list}
-                busy={!!busy[connection.id]}
-                listError={listErrors[connection.id]}
-                mode={settings.analysis_mode}
-                onChange={value => m.update({ analysis: { connection_id: connection.id, model: value, capability: 'auto', model_source: 'user' } })}
-                onCapability={capability => settings.analysis && m.update({ analysis: { ...settings.analysis, capability } })}
-                onRefresh={() => void m.discover(connection, true)}
-                actions={<Btn variant="text" size="sm" disabled={!settings.analysis.model} loading={m.testing} onClick={() => void m.test()}>{t('测试连接')}</Btn>}
+          {kind === 'local_asr' && preset.id === 'whisper' && (
+            <>
+              {settings.transcription?.provider !== 'whisper_local' && (
+                <Row label={t('settings.providers.use_whisper')} hint={t(preset.hint)}>
+                  <Btn size="sm" onClick={() => m.selectLocalAsrProvider('whisper')}>{t('settings.providers.use_whisper')}</Btn>
+                </Row>
+              )}
+              <SpeechRecognitionConfig
+                hideProvider
+                selectedModel={settings.transcription?.provider === 'whisper_local' ? (settings.transcription.model || 'base') : 'base'}
+                onModelChange={m.setTranscriptionLocal}
               />
-            </Row>
-          : <Row label={t('settings.providers.use_for_analysis')} hint={t('settings.providers.use_for_analysis_hint')}>
-              <Btn size="sm" disabled={!connection} onClick={useAsAnalysis}>{t('settings.providers.use_for_analysis')}</Btn>
-            </Row>
-      )}
+            </>
+          )}
+
+          {kind === 'local_asr' && preset.id === 'sensevoice' && (
+            <>
+              {settings.transcription?.provider !== 'sensevoice_local' && (
+                <Row label={t('settings.providers.use_sensevoice')} hint={t(preset.hint)}>
+                  <Btn size="sm" onClick={() => m.selectLocalAsrProvider('sensevoice')}>{t('settings.providers.use_sensevoice')}</Btn>
+                </Row>
+              )}
+              <SenseVoiceConfig />
+            </>
+          )}
+        </section>
+
+        {showModelsPanel && (
+          <section className="ac-provider-detail-card" data-panel="models">
+            <div className="ac-provider-models">
+              <h4 className="ac-provider-models-title">
+                {t('settings.providers.models_preview')}
+                <span className="count">{connected || models.length ? models.length : t('连接后自动获取')}</span>
+              </h4>
+              {connection && busy[connection.id] && <p className="ac-note">{t('正在获取可用模型…')}</p>}
+              {connection && listErrors[connection.id] && <p className="ac-note">{t('settings.providers.models_empty')}</p>}
+              {previewLanguage.length > 0 && (
+                <>
+                  <p className="ac-provider-model-group">{t('语言模型 · 用于精彩片段分析；标有「视觉」的模型也可用于画面理解')}</p>
+                  <ul className="ac-provider-model-list">
+                    {previewLanguage.map(model => (
+                      <li key={model.id} className="ac-mono">
+                        {model.id}
+                        {model.capability === 'multimodal' && <span className="ac-provider-cap">{t('视觉')}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {previewImage.length > 0 && (
+                <>
+                  <p className="ac-provider-model-group">{t('图像生成模型 · 用于封面生成')}</p>
+                  <ul className="ac-provider-model-list">
+                    {previewImage.map(model => (
+                      <li key={model.id} className="ac-mono">{model.id}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {previewAsr.length > 0 && (
+                <>
+                  <p className="ac-provider-model-group">{t('语音识别模型 · 用于语音转字幕')}</p>
+                  <ul className="ac-provider-model-list">
+                    {previewAsr.map(model => (
+                      <li key={model.id} className="ac-mono">{model.id}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {connection && !busy[connection.id] && !models.length && (
+                <p className="ac-note">{t('settings.providers.models_empty')}</p>
+              )}
+              <p className="ac-note" style={{ marginTop: 16, borderTop: '1px solid var(--ac-line-2)', paddingTop: 12 }}>
+                {t('连接后，以上模型将出现在「默认模型」的选项中。')}
+              </p>
+            </div>
+          </section>
+        )}
+      </div>
 
       {preset.docs_url && kind !== 'guide' && kind !== 'needs_endpoint' && (
         <p className="ac-note">
@@ -204,7 +224,6 @@ export default function ProviderDetail({
           </a>
         </p>
       )}
-      <p className="ac-note">{t('settings.providers.key_local_only')}</p>
     </div>
   )
 }

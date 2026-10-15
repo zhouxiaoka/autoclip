@@ -233,51 +233,151 @@ test('catalog source does not send search text, keys, or full URLs to telemetry'
   }
 })
 
-for (const requestedProvider of ['', 'deepseek', 'custom:ds']) {
-  test(`manual model choice remains user-owned in ${requestedProvider || 'overview'}`, () => {
-    const updates = []
+test('overview uses DefaultModels and drops legacy CurrentAnalysis / transcription / cover blocks', () => {
+  const value = {
+    ...settings,
+    saved: true,
+    connections: [{ id: 'ds', name: 'DeepSeek', provider: 'deepseek', base_url: '', has_key: true, validation_status: 'ok' }],
+    analysis: { connection_id: 'ds', model: 'deepseek-chat', capability: 'auto', model_source: 'user' },
+  }
+  const m = { settings: value, lists: {}, busy: {}, listErrors: {}, keyHints: {}, update: () => {}, save: async () => ({}), load: async () => {} }
+  const Page = loadTs('AIModelSettings.tsx', {
+    './AddCustomProviderDialog': { default: () => null },
+    react: { ...React, useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}], useEffect: () => {} },
+    'react-i18next': { useTranslation: () => {} },
+    antd: { Select: () => null, Switch: () => null },
+    '../../i18n': i18n,
+    '../../ui': { ...ui, Section: () => null, Segmented: () => null },
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    '../../services/api': { speechApi: { getRuntimeStatus: async () => ({}), getModels: async () => ([]) }, default: { get: async () => ({}) } },
+    './useModelSettings': { useModelSettings: () => m },
+    './ProviderFields': { default: () => null },
+    './ModelPicker': { default: () => null },
+    './EndpointProviderSetup': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+    './ProviderCatalog': { default: props => React.createElement('div', { 'data-catalog': true, 'data-has-add': !!props.onAdd }) },
+    './DefaultModels': { default: () => React.createElement('div', { 'data-default-models': true }) },
+  }).default
+  const nodes = flatten(Page({ requestedSection: 'model', requestedProvider: '' }))
+  assert.ok(nodes.some(node => node.props?.['data-layout'] === 'v6'))
+  assert.ok(nodes.some(node => node.props?.['data-default-models']))
+  assert.ok(nodes.some(node => node.props?.['data-catalog'] && node.props?.['data-has-add']))
+  assert.equal(nodes.some(node => node.props?.role === 'analysis'), false)
+})
+
+test('manual model choice via DefaultModels slots stays user-owned', () => {
+  const slots = loadTs('defaultModelSlots.ts', {
+    '../../i18n': i18n,
+    './modelSettingsLogic': loadTs('modelSettingsLogic.ts', { '../../i18n': i18n }),
+    './providerCatalogView': loadTs('providerCatalogView.ts', { '../../i18n': i18n }),
+    './modelDefaults': loadTs('modelDefaults.ts', { '../../i18n': i18n }),
+    './providerPresets': loadTs('providerPresets.ts', { '../../i18n': i18n }),
+  })
+  const value = {
+    ...settings,
+    saved: true,
+    connections: [{ id: 'ds', name: 'DeepSeek', provider: 'deepseek', base_url: '', has_key: true, validation_status: 'ok', api_key: '', image_api: 'auto', image_base_url: '' }],
+    analysis: { connection_id: 'ds', model: 'deepseek-flash', capability: 'auto', model_source: 'preset' },
+  }
+  const next = slots.applyFixedSelection(value, 'analysis', 'manually-selected-model', 'ds')
+  const { forSave } = loadTs('modelSettingsLogic.ts', { '../../i18n': i18n })
+  const saved = forSave(next)
+  assert.equal(saved.analysis.model, 'manually-selected-model')
+  assert.equal(saved.analysis.model_source, 'user', 'manual models must never opt into preset fallback')
+})
+
+for (const requestedProvider of ['deepseek', 'custom:ds']) {
+  test(`provider detail opens for ${requestedProvider}`, () => {
     const value = {
       ...settings,
       saved: true,
-      connections: [{ id: 'ds', name: 'Gateway', provider: requestedProvider.startsWith('custom:') ? 'compatible' : 'deepseek', base_url: 'https://gateway.example/v1', has_key: true }],
+      connections: [{
+        id: 'ds', name: 'Gateway',
+        provider: requestedProvider.startsWith('custom:') ? 'compatible' : 'deepseek',
+        base_url: 'https://gateway.example/v1', has_key: true,
+      }],
       analysis: { connection_id: 'ds', model: 'deepseek-flash', capability: 'auto', model_source: 'preset' },
     }
     const m = {
       settings: value, lists: {}, busy: {}, listErrors: {}, keyHints: {},
-      main: value.connections[0], update: patch => updates.push(patch),
+      update: () => {}, save: async () => ({}),
     }
     const Page = loadTs('AIModelSettings.tsx', {
       './AddCustomProviderDialog': { default: () => null },
-      react: { ...React, useState: initial => [typeof initial === 'function' ? (requestedProvider.startsWith('custom:') ? requestedProvider : initial()) : initial, () => {}], useEffect: () => {} },
+      react: {
+        ...React,
+        useState: initial => [typeof initial === 'function'
+          ? (requestedProvider.startsWith('custom:') ? requestedProvider : (catalogId => catalogId)(requestedProvider === 'deepseek' ? 'deepseek' : initial()))
+          : (requestedProvider === 'deepseek' ? 'deepseek' : initial), () => {}],
+        useEffect: () => {},
+      },
       'react-i18next': { useTranslation: () => {} },
       antd: { Select: () => null, Switch: () => null },
       '../../i18n': i18n,
       '../../ui': { ...ui, Section: () => null, Segmented: () => null },
       '../../utils/externalLinks': { openExternalLink: () => {} },
       '../../components/SpeechRecognitionConfig': { default: () => null },
-      '../../services/api': {},
+      '../../services/api': { speechApi: { getRuntimeStatus: async () => ({}), getModels: async () => ([]) }, default: { get: async () => ({}) } },
       './useModelSettings': { useModelSettings: () => m },
       './ProviderFields': { default: () => null },
       './ModelPicker': { default: () => null },
       './EndpointProviderSetup': { default: () => null },
-    './SenseVoiceConfig': { default: () => null },
+      './SenseVoiceConfig': { default: () => null },
       './ProviderCatalog': { default: () => null },
       './DefaultModels': { default: () => React.createElement('div', { 'data-default-models': true }) },
+      './ProviderDetail': { default: ({ preset }) => React.createElement('div', { 'data-detail': preset?.id, 'data-layout': 'v6' }) },
     }).default
+    // Force selectedId via requestedProvider prop effect is mocked; seed useState with provider id.
     const nodes = flatten(Page({ requestedSection: 'model', requestedProvider }))
-    assert.equal(nodes.some(node => node.props?.['data-default-models']), !requestedProvider)
     if (requestedProvider.startsWith('custom:')) {
       assert.ok(nodes.some(node => node.props?.['data-connect-kind'] === 'compatible'))
+    } else {
+      assert.ok(nodes.some(node => node.props?.['data-detail'] === 'deepseek' || node.props?.['data-provider-id'] === 'deepseek'))
     }
-    const picker = nodes.find(node => node.props?.role === 'analysis')
-    assert.ok(picker)
-    picker.props.onChange('manually-selected-model')
-    const { forSave } = loadTs('modelSettingsLogic.ts', { '../../i18n': i18n })
-    const saved = forSave({ ...value, ...updates[0] })
-    assert.equal(saved.analysis.model, 'manually-selected-model')
-    assert.equal(saved.analysis.model_source, 'user', 'manual models must never opt into preset fallback')
   })
 }
+
+test('provider detail uses two-column connect/models layout without analysis ModelPicker', () => {
+  const Detail = loadTs('ProviderDetail.tsx', {
+    '../../i18n': i18n, '../../ui': ui,
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    './ProviderFields': { default: () => React.createElement('div', { 'data-fields': true }) },
+    './EndpointProviderSetup': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+  }).default
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const tree = Detail({
+    preset: view.catalogPreset('deepseek'),
+    m: {
+      settings: {
+        ...settings,
+        connections: [{ id: 'ds', name: 'DeepSeek', provider: 'deepseek', has_key: true, validation_status: 'ok', base_url: '', image_api: 'auto', image_base_url: '' }],
+        analysis: { connection_id: 'ds', model: 'deepseek-chat', model_source: 'user' },
+      },
+      lists: {
+        ds: {
+          source: 'live', preview: false,
+          models: [
+            { id: 'deepseek-chat', analysis: true, capability: 'text' },
+            { id: 'deepseek-vl', analysis: true, capability: 'multimodal' },
+          ],
+        },
+      },
+      busy: {}, listErrors: {}, keyHints: {},
+      ensureCatalogProvider: () => {}, editConnection: () => {},
+    },
+    onBack: () => {},
+  })
+  const root = flatten(tree).find(node => node.props?.['data-layout'] === 'v6')
+  assert.ok(root)
+  assert.ok(flatten(tree).some(node => node.props?.['data-panel'] === 'connect'))
+  assert.ok(flatten(tree).some(node => node.props?.['data-panel'] === 'models'))
+  assert.equal(flatten(tree).some(node => node.props?.role === 'analysis'), false)
+  assert.match(textOf(tree), /连接后，以上模型将出现在「默认模型」的选项中/)
+})
+
 
 test('all endpoint-only catalog cards open an address entry flow without binding a default', () => {
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })

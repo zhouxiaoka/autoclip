@@ -112,7 +112,7 @@ function ProviderCard({
 }
 
 export default function ProviderCatalog({
-  settings, query, filter, moreOpen, selectedId, asrReady = {}, onQuery, onFilter, onToggleMore, onOpen,
+  settings, query, filter, moreOpen, selectedId, asrReady = {}, onQuery, onFilter, onToggleMore, onOpen, onAdd,
 }: {
   settings: ModelSettings
   query: string
@@ -124,6 +124,7 @@ export default function ProviderCatalog({
   onFilter: (value: CapabilityFilter) => void
   onToggleMore: () => void
   onOpen: (id: string) => void
+  onAdd?: () => void
 }) {
   const visible = filterCatalog(query, filter)
   const groups = groupCatalog(visible)
@@ -144,6 +145,7 @@ export default function ProviderCatalog({
             onChange={event => onQuery(event.target.value)}
           />
         </label>
+        {onAdd && <Btn size="sm" onClick={onAdd}>{t('添加服务商')}</Btn>}
       </div>
       <div className="ac-chips ac-provider-filters" role="radiogroup" aria-label={t('settings.providers.filter.all')}>
         {CAPABILITY_FILTERS.map(value => (
