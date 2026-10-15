@@ -11,8 +11,6 @@ import os
 import re
 import sys
 from functools import lru_cache
-from importlib.resources import files
-from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -56,11 +54,14 @@ _BACKEND_FILES = (
 )
 
 
-def catalog_path() -> Traversable:
+def catalog_path() -> Path:
     override = os.environ.get("AUTOCLIP_EVENT_CATALOG")
     if override:
         return Path(override)
-    return files(__package__).joinpath("event_catalog.json")
+    packaged = Path(__file__).resolve().with_name("event_catalog.json")
+    if packaged.is_file():
+        return packaged
+    return Path(__file__).resolve().parents[2] / "docs" / "analytics" / "event_catalog.json"
 
 
 @lru_cache(maxsize=1)
