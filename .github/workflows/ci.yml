@@ -65,6 +65,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
+      - name: Required red-line contracts (RL)
+        run: python scripts/quality_gate.py --group redline --report quality/redline.json
+
       - name: Report existing Python style debt (advisory)
         continue-on-error: true
         run: ruff check backend
@@ -79,7 +82,9 @@ jobs:
         if: always()
         with:
           name: quality-backend
-          path: quality/backend.json
+          path: |
+            quality/backend.json
+            quality/redline.json
           if-no-files-found: error
 
       - name: Installed wheel portrait framing smoke
