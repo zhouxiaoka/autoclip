@@ -85,8 +85,8 @@ def setup_logging(verbose: bool = False) -> None:
         sh.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
         handlers.append(sh)
     logging.basicConfig(level=logging.INFO, handlers=handlers, force=True)
-    for name in ("httpx", "httpcore", "openai"):
-        logging.getLogger(name).setLevel(logging.WARNING)
+    from backend.core.log_redaction import install_log_redaction
+    install_log_redaction()
     if not verbose:
         # 第三方库的 WARNING 也不要刷屏
         for noisy in ("httpx", "openai", "urllib3", "faster_whisper", "sqlalchemy"):

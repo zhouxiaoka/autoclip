@@ -9,8 +9,9 @@ from celery import Celery
 from celery.schedules import crontab
 from pathlib import Path
 
-for name in ("httpx", "httpcore", "openai"):
-    logging.getLogger(name).setLevel(logging.WARNING)
+from backend.core.log_redaction import install_celery_log_redaction
+
+install_celery_log_redaction()
 
 # 设置默认配置模块
 # os.environ.setdefault('CELERY_CONFIG_MODULE', 'backend.core.celery_app')
