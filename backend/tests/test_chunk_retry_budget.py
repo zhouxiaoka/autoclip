@@ -131,3 +131,30 @@ def test_each_outline_chunk_can_recover_in_third_round(tmp_path, monkeypatch, ht
     outlines = extractor.extract_outline(srt)
     assert [item["title"] for item in outlines] == ["chunk-a", "chunk-b"]
     assert hits == {"chunk-a": 3, "chunk-b": 3}
+
+
+def test_timeline_outer_repair_rounds_share_http_budget(tmp_path, http_manager):
+    from backend.tests.test_recent_feedback import cue, prepared_extractor
+
+    hits = Counter()
+
+    def handler(request):
+        body = json.loads(request.content)
+        data = json.loads(body["messages"][0]["content"].split("输入内容：\n", 1)[1])
+        chunk = data["outline"][0]["title"]
+        hits[chunk] += 1
+        if hits[chunk] % 3:
+            return httpx.Response(500, request=request, json={"error": {"message": "unavailable"}})
+        return _response(request, "[]")
+
+    extractor = prepared_extractor(tmp_path)
+    (extractor.srt_chunks_dir / "chunk_1.json").write_text(
+        json.dumps([dict(cue(30, 60), index=2)]), encoding="utf-8",
+    )
+    extractor.llm_client.call_with_retry = http_manager(handler).call_with_retry
+    extractor.extract_timeline([
+        {"title": name, "chunk_index": i, "subtopics": []}
+        for i, name in enumerate(("chunk-a", "chunk-b"))
+    ])
+    assert set(hits) == {"chunk-a", "chunk-b"}
+    assert all(0 < count <= CHUNK_CALL_CAP for count in hits.values()), hits
