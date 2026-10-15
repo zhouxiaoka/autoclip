@@ -459,7 +459,10 @@
   border-radius: 10px;
 }
 .ac-provider-mark.has-icon img {
-  width: 70%; height: 70%; object-fit: contain; display: block;
+  width: 72%; height: 72%; object-fit: contain; display: block;
+}
+.ac-provider-mark.is-color img {
+  width: 82%; height: 82%;
 }
 .ac-provider-mark.is-monochrome img { filter: none; }
 .ac-provider-mark--title {
