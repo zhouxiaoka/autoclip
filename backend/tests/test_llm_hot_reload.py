@@ -15,6 +15,39 @@ from backend.tests.test_chunk_retry_budget import (
 )
 
 
+@pytest.mark.parametrize("document", ["legacy", "model_settings"])
+def test_reload_detects_different_saves_with_identical_mtime(tmp_path, monkeypatch, document):
+    monkeypatch.setenv("AUTOCLIP_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("AUTOCLIP_APP_DIR", str(tmp_path))
+    monkeypatch.setattr(LLMManager, "_sync_config_if_needed", lambda self: None)
+    monkeypatch.setattr(LLMManager, "_initialize_provider", lambda self: None)
+    settings_file = tmp_path / "settings.json"
+    target = settings_file if document == "legacy" else ai_model_settings.path()
+    stamp = 1_800_000_000_000_000_000
+
+    def save(model):
+        if document == "legacy":
+            content = json.dumps({"model_name": model})
+        else:
+            content = ai_model_settings.ModelSettings(
+                connections=[ai_model_settings.Connection(id="local", name="Local", provider="ollama", api_key="")],
+                analysis=ai_model_settings.Assignment(connection_id="local", model=model),
+            ).model_dump_json()
+        target.write_text(content, encoding="utf-8")
+        os.utime(target, ns=(stamp, stamp))
+
+    save("model-a")
+    manager = LLMManager(settings_file)
+    assert manager.settings["model_name"] == "model-a"
+    first_stat = target.stat()
+    save("model-b")
+    assert target.stat().st_mtime_ns == first_stat.st_mtime_ns
+    assert target.stat().st_size == first_stat.st_size
+
+    manager._reload_if_settings_changed()
+    assert manager.settings["model_name"] == "model-b"
+
+
 @pytest.mark.parametrize("change_during_retry", [False, True])
 def test_reload_pins_connection_model_and_candidates(tmp_path, monkeypatch, http_manager, change_during_retry):
     _assert_reload_pins(tmp_path, monkeypatch, http_manager, change_during_retry)
