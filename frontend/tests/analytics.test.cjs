@@ -529,8 +529,8 @@ function settingsHook(s, transport, initial) {
   const react={useState(value){const i=cursor++;if(!(i in slots))slots[i]=value;return [slots[i],next=>{slots[i]=typeof next==='function'?next(slots[i]):next}]},useRef(value){const i=cursor++;if(!(i in slots))slots[i]={current:value};return slots[i]},useEffect(){}}
   const providers={PROVIDERS:{openai:{}},}
   const defaults=loadTs('modelDefaults.ts')
-  const access=load('../features/settings/providerAccess',{'../../i18n':{t:x=>x},'./providers':providers})
   const urls=load('../features/settings/providerUrl',{},{URL})
+  const access=load('../features/settings/providerAccess',{'../../i18n':{t:x=>x},'./providers':providers,'./providerUrl':urls})
   const logic=load('../features/settings/modelSettingsLogic',{'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls})
   const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const hook=load('../features/settings/useModelSettings',{

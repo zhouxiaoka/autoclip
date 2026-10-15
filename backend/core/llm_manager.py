@@ -43,6 +43,7 @@ class LLMManager:
         mtime = self._current_settings_mtime()
         if mtime != self._settings_mtime:
             logger.info("检测到 settings.json 变化，重新加载 LLM 配置")
+            self.current_provider = None
             self.settings = self._load_settings()
             self._initialize_provider()
     
@@ -113,7 +114,6 @@ class LLMManager:
             "max_clips_per_collection": 5
         }
         
-        self._settings_mtime = self._current_settings_mtime()
         if self.settings_file.exists():
             try:
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
@@ -164,9 +164,12 @@ class LLMManager:
         self._apply_local_preset(default_settings)
         self._apply_cloud_preset(default_settings)
         from backend.services import ai_model_settings as ai
-        configured = ai.load()
-        if configured and configured.analysis:
-            binding = configured.analysis
+        try:
+            configured = ai.load()
+        except Exception:
+            raise ValueError('已保存的模型配置需要修复，请到「设置 → 模型」修复并保存后再生成。') from None
+        if configured is not None:
+            binding = ai.require_analysis(configured)
             connection = ai.connection_for(configured, binding)
             endpoint = ai.chat_endpoint(connection, binding.model)
             default_settings.update(llm_provider='openai', cloud_preset=None, llm_provider_preset=None,
@@ -175,6 +178,8 @@ class LLMManager:
                                     connection_name=connection.name, chunk_size=configured.chunk_size,
                                     min_score_threshold=configured.min_score_threshold,
                                     max_clips_per_collection=configured.max_clips_per_collection)
+        # Failed loads must remain retryable; never mark a broken assignment as loaded.
+        self._settings_mtime = self._current_settings_mtime()
         return default_settings
 
     def _apply_local_preset(self, settings: Dict[str, Any]) -> None:

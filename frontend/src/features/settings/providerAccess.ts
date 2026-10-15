@@ -5,6 +5,7 @@ import {
   UPSTREAM_ERROR_TYPES,
 } from '../../analytics/successRateContract'
 import { PROVIDERS, type ProviderKey } from './providers'
+import { cleanupBaseUrl, normalizeProviderUrl } from './providerUrl'
 
 export const ADDRESS_LOCKED: readonly ProviderKey[] = ['api88', 'infistar', 'deepseek', 'gemini', 'dashscope', 'openai']
 
@@ -33,8 +34,6 @@ const KEY_HINTS: Array<[RegExp, ProviderKey]> = [
   [/^sk-ant-/, 'compatible'],
 ]
 
-const VERSIONED = /^\/(?:v\d+(?:beta)?(?:\/openai)?|compatible-mode\/v\d+|api\/v\d+|api\/paas\/v\d+|openai\/v\d+)\/?$/i
-const CHAT_SUFFIXES = ['/v1/chat/completions', '/chat/completions', '/v1/completions', '/completions']
 const CONSOLE_HOSTS = new Set([
   'platform.openai.com', 'chatgpt.com', 'openai.com', 'www.openai.com',
   'platform.deepseek.com', 'chat.deepseek.com', 'www.deepseek.com', 'deepseek.com',
@@ -62,26 +61,11 @@ export function isConsoleHost(host?: string) {
 }
 
 export function normalizeCompatibleUrl(raw: string): { url: string; warnings: string[] } {
-  let url = (raw || '').replace(/\s+/g, '').trim().replace(/\/+$/, '')
-  const warnings: string[] = []
+  const url = cleanupBaseUrl(raw)
   let host = ''
-  try { host = new URL(url).hostname.toLowerCase() } catch { return { url, warnings } }
+  try { host = new URL(url).hostname.toLowerCase() } catch { return { url, warnings: [] } }
   if (isConsoleHost(host)) return { url, warnings: ['console_host'] }
-  const lower = url.toLowerCase()
-  for (const suffix of CHAT_SUFFIXES) {
-    if (lower.endsWith(suffix)) {
-      url = url.slice(0, url.length - suffix.length).replace(/\/+$/, '')
-      warnings.push('chat_completions')
-      break
-    }
-  }
-  let path = ''
-  try { path = new URL(url).pathname || '' } catch { return { url, warnings } }
-  if (!VERSIONED.test(path)) {
-    url = url.replace(/\/+$/, '') + '/v1'
-    warnings.push('missing_v1')
-  }
-  return { url, warnings }
+  return normalizeProviderUrl(url, 'compatible')
 }
 
 export function telemetryHost(url?: string) {

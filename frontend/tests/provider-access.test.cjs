@@ -24,6 +24,11 @@ function loadContract() {
   return module.exports
 }
 const contract = loadContract()
+const urls = {}
+vm.runInNewContext(
+  ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/features/settings/providerUrl.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText,
+  { exports: urls, URL },
+)
 const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
 const access = {}
 vm.runInNewContext(code, {
@@ -32,6 +37,7 @@ vm.runInNewContext(code, {
   require: id => {
     if (id === '../../i18n') return { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) }
     if (id === './providers') return providers
+    if (id === './providerUrl') return urls
     if (id === '../../analytics/successRateContract') return contract
     throw new Error(id)
   },
@@ -51,6 +57,14 @@ test('compatible URLs gain /v1, drop chat completions, and flag console hosts', 
   assert.ok(!access.canEditAddress('dashscope'))
   assert.ok(access.canEditAddress('compatible'))
   assert.ok(access.canEditAddress('ollama'))
+})
+
+test('validation and settings share Gemini and ordinary chat roots', () => {
+  const root = 'https://generativelanguage.googleapis.com'
+  for (const [suffix, expected] of [['/v1beta', '/v1beta/openai'], ['/v1beta/openai', '/v1beta/openai'], ['/v1', '/v1']]) {
+    assert.equal(access.normalizeCompatibleUrl(root + suffix).url, root + expected)
+    assert.equal(access.normalizeCompatibleUrl(root + suffix).url, urls.normalizeProviderBaseUrl(root + suffix))
+  }
 })
 
 test('wrong-provider keys are hinted, never treated as a switch, and hosts stay sanitized', () => {

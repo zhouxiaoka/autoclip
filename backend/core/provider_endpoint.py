@@ -6,11 +6,11 @@ only `compatible` (and local presets) may edit the address.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse
 
 from backend.core.cloud_presets import CLOUD_PRESETS
+from backend.core.provider_url import NormalizeResult, cleanup_base_url, normalize_provider_url
 from backend.core.llm_providers import (
     DASHSCOPE_CN_COMPATIBLE_BASE_URL,
     OPENAI_OFFICIAL_BASE_URL,
@@ -45,18 +45,6 @@ CONSOLE_HOSTS = frozenset({
 
 _CONSOLE_SUFFIXES = ('.console.aliyun.com', '.console.volcengine.com')
 
-_VERSIONED_PATH = re.compile(
-    r'^/(?:v\d+(?:beta)?(?:/openai)?|compatible-mode/v\d+|api/v\d+|api/paas/v\d+|openai/v\d+)/?$',
-    re.I,
-)
-
-_CHAT_SUFFIXES = (
-    '/v1/chat/completions',
-    '/chat/completions',
-    '/v1/completions',
-    '/completions',
-)
-
 _KEY_HINTS = (
     (re.compile(r'^AIza'), 'gemini'),
     (re.compile(r'^xai-'), 'grok'),
@@ -65,12 +53,6 @@ _KEY_HINTS = (
     (re.compile(r'^sk-or-'), 'compatible'),
     (re.compile(r'^sk-ant-'), 'compatible'),
 )
-
-@dataclass(frozen=True)
-class NormalizeResult:
-    url: str
-    warnings: tuple[str, ...]
-
 
 def is_console_host(host: Optional[str]) -> bool:
     value = (host or '').lower().strip('.')
@@ -101,26 +83,13 @@ def telemetry_host(url: Optional[str]) -> str:
     return hostname_of_base_url(url) or 'unknown'
 
 
-def normalize_provider_base_url(url: Optional[str]) -> NormalizeResult:
-    """Strip spaces / trailing slash, drop `/chat/completions`, add `/v1` when missing."""
-    raw = re.sub(r'\s+', '', (url or '').strip()).rstrip('/')
-    warnings: list[str] = []
+def normalize_provider_base_url(url: Optional[str], provider: Optional[str] = 'compatible') -> NormalizeResult:
+    """Validation wrapper around the shared provider_url normalization helper."""
+    raw = cleanup_base_url(url)
     parsed = urlparse(raw)
     if parsed.hostname and is_console_host(parsed.hostname):
-        warnings.append('console_host')
-        return NormalizeResult(url=raw, warnings=tuple(warnings))
-    lowered = raw.lower()
-    for suffix in _CHAT_SUFFIXES:
-        if lowered.endswith(suffix):
-            raw = raw[: len(raw) - len(suffix)].rstrip('/')
-            warnings.append('chat_completions')
-            parsed = urlparse(raw)
-            break
-    path = parsed.path or ''
-    if parsed.scheme in ('http', 'https') and parsed.hostname and not _VERSIONED_PATH.match(path):
-        raw = raw.rstrip('/') + '/v1'
-        warnings.append('missing_v1')
-    return NormalizeResult(url=raw, warnings=tuple(warnings))
+        return NormalizeResult(url=raw, warnings=('console_host',))
+    return normalize_provider_url(raw, provider)
 
 
 def locked_chat_url(provider: Optional[str], base_url: Optional[str] = None) -> Optional[str]:
