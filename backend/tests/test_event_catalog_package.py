@@ -80,12 +80,13 @@ def test_installed_wheel_loads_event_catalog():
 import sys
 from pathlib import Path
 import backend
-from backend.core.event_catalog import envelope_properties, normalize_os
+from backend.core.event_catalog import detect_arch, envelope_properties, normalize_os
 assert Path(backend.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
 props = envelope_properties()
 assert props == {
     'schema_version': 2, 'runtime': 'python', 'app_version': backend.__version__,
-    'os': normalize_os(sys.platform) or 'unknown', 'analytics_environment': 'validation',
+    'os': normalize_os(sys.platform) or 'unknown', 'arch': detect_arch(),
+    'analytics_environment': 'validation',
 }
 """],
             cwd=work, env=env, check=False, capture_output=True, text=True, timeout=30,

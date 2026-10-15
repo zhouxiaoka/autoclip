@@ -65,7 +65,7 @@ def test_properties_are_enums_and_job_finished_is_once(monkeypatch, tmp_path):
     body = captured[1]
     assert body['distinct_id'] == '018f6b2a-7c3d-7b2a-8c11-111111111111'
     assert set(body['properties']) == {
-        'tool', 'client', 'app_version', 'os', 'analytics_environment', 'runtime',
+        'tool', 'client', 'app_version', 'os', 'arch', 'analytics_environment', 'runtime',
         'schema_version', 'duration_ms', 'ok', 'error_code', '$feature/mcp_v2_tools',
     }
     assert 'version' not in body['properties']
