@@ -1,4 +1,6 @@
 """B5: saved failed vision validation blocks HTTP generation before dispatch."""
+import subprocess
+
 import httpx
 import pytest
 from fastapi import FastAPI
@@ -8,6 +10,51 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.services import ai_model_settings as ai
 from backend.services.studio import jobs, store
+from backend.tests.test_studio import root, source, client
+
+
+def test_subtitle_import_screening_ignores_failed_vision(client, source, monkeypatch):
+    """R3: import must finish its real screening worker with a failed vision binding."""
+    from backend.services.studio import intelligence
+
+    ai.save(ai.ModelSettings(
+        connections=[
+            ai.Connection(id='a', name='Analysis', provider='ollama', api_key='', validation_status='ok'),
+            ai.Connection(id='v', name='Vision', provider='openai', api_key='', validation_status='failed'),
+        ],
+        analysis=ai.Assignment(connection_id='a', model='local-text', capability='text'),
+        vision=ai.Assignment(connection_id='v', model='gpt-4o', capability='multimodal'),
+        analysis_mode='subtitle',
+    ))
+    original_settings = ai.path().read_bytes()
+    with pytest.raises(ValueError, match='未通过校验'):
+        intelligence.ready()
+
+    class Immediate:
+        def submit(self, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+    monkeypatch.setattr(jobs, 'executor', Immediate())
+    monkeypatch.setattr(intelligence, 'vision_call', lambda *a, **k: pytest.fail('Unexpected vision request'))
+    monkeypatch.setattr(intelligence, 'text_json', lambda *a, **k: pytest.fail('Unexpected text request'))
+    video = source.with_name('subtitle-source.mp4')
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=s=160x90:r=1:d=21',
+                    '-y', str(video)], check=True)
+    subtitles = b'1\n00:00:00,000 --> 00:00:10,000\nSynthetic subtitle\n'
+    response = client.post('/studio/import', files={
+        'video': ('fixture.mp4', video.read_bytes(), 'video/mp4'),
+        'subtitle': ('fixture.srt', subtitles, 'application/x-subrip'),
+    })
+    assert response.status_code == 200
+    pid = response.json()['project_id']
+    state = client.get('/studio/' + pid).json()
+    assert state['analysis']['status'] == 'awaiting_confirmation'
+    assert state['generation']['status'] == 'awaiting_confirmation'
+    assert state['plan']['mode'] == 'local'
+    assert state['plan']['recommended_analysis'] == 'subtitle'
+    assert state['plan']['local_evidence']['subtitle_status'] == 'available'
+    assert (store.directory(pid) / 'raw/input.srt').read_bytes() == subtitles
+    assert ai.path().read_bytes() == original_settings
 
 
 @pytest.mark.parametrize('mode', ['auto', 'visual', 'subtitle'])

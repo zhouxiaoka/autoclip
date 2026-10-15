@@ -83,7 +83,7 @@ def recommend(video: Path, options: ImportOptions):
     duration = media_precheck.duration_or_fail(video, info.get('duration'))
     info = {**info, 'duration': duration}
     consent = analysis_preferences.load()
-    configured = intelligence.ready()
+    configured = consent.analysis_mode != 'subtitle' and intelligence.ready()
     short, no_audio = _subtitle_blockers(video, duration, options, consent, configured)
     mode = 'manual'
     diagnostics = None
