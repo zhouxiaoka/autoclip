@@ -22,6 +22,8 @@ from backend.services.whisper_model_manager import (
 def _clean_source_env(monkeypatch):
     for name in ("AUTOCLIP_WHISPER_MODEL_SOURCE", "HF_ENDPOINT", "HF_HUB_DISABLE_XET"):
         monkeypatch.delenv(name, raising=False)
+    # never probe the real network from tests; individual tests override this
+    monkeypatch.setattr("backend.services.whisper_model_manager._reachable", lambda endpoint, timeout=0: True)
 
 
 def _install_fake_hub(monkeypatch, snapshot_download):
@@ -388,3 +390,51 @@ def test_ensure_downloaded_waits_for_a_running_download(monkeypatch, tmp_path):
     monkeypatch.setattr("backend.services.whisper_model_manager.time.sleep", finish)
     assert manager.ensure_downloaded("base").name == "complete"
     assert ticks == [True]
+
+
+# --- E3: model download source setting + auto probe ---------------------------------------
+
+def test_e3_auto_starts_with_mirror_when_official_is_unreachable(monkeypatch, tmp_path):
+    from backend.services import whisper_model_manager as wmm
+    monkeypatch.setattr(wmm, "_reachable", lambda endpoint, timeout=0: endpoint == wmm.MIRROR_ENDPOINT)
+    calls, download = _recording(tmp_path)
+    _install_fake_hub(monkeypatch, download)
+    manager = _manager(monkeypatch, tmp_path)
+    manager._download_blocking("base")
+    assert [call["endpoint"] for call in calls] == ["https://hf-mirror.com"]
+    assert calls[0]["xet_disabled"] is True
+    assert manager.get_model_info("base").source == "hf-mirror"
+
+
+def test_e3_auto_keeps_official_first_when_mirror_also_unreachable(monkeypatch, tmp_path):
+    from backend.services import whisper_model_manager as wmm
+    monkeypatch.setattr(wmm, "_reachable", lambda endpoint, timeout=0: False)
+    assert [s for s, _ in wmm.download_plan()] == ["huggingface", "hf-mirror"]
+
+
+def test_e3_saved_source_is_used_and_validated(monkeypatch, tmp_path):
+    from backend.services import whisper_model_manager as wmm
+    monkeypatch.setattr(whisper_runtime, "get_models_dir", lambda: tmp_path)
+    assert wmm.saved_model_source() == "auto"
+    assert wmm.save_model_source("hf-mirror") == "hf-mirror"
+    assert wmm.download_plan() == [("hf-mirror", wmm.MIRROR_ENDPOINT)]
+    wmm.save_model_source("huggingface")
+    assert wmm.download_plan() == [("huggingface", wmm.OFFICIAL_ENDPOINT)]
+    with pytest.raises(ValueError):
+        wmm.save_model_source("https://evil.example")
+    monkeypatch.setenv("AUTOCLIP_WHISPER_MODEL_SOURCE", "hf-mirror")
+    assert wmm.model_source() == "hf-mirror"  # env override for QA still wins
+
+
+def test_e3_model_source_api_round_trip(monkeypatch, tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api.v1 import speech_recognition
+    monkeypatch.setattr(whisper_runtime, "get_models_dir", lambda: tmp_path)
+    app = FastAPI()
+    app.include_router(speech_recognition.router)
+    client = TestClient(app)
+    assert client.get("/whisper/model-source").json()["source"] == "auto"
+    assert client.put("/whisper/model-source", json={"source": "hf-mirror"}).json() == {"source": "hf-mirror"}
+    assert client.get("/whisper/model-source").json()["source"] == "hf-mirror"
+    assert client.put("/whisper/model-source", json={"source": "nope"}).status_code == 422

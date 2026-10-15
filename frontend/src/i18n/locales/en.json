@@ -1,4 +1,5 @@
 {
+  "画面结果不可用，已改用字幕继续制作。": "Visual result unavailable; switched to subtitles to continue.",
   "视觉服务暂不可用，已切换为字幕分析继续制作。": "Vision is temporarily unavailable. Switched to subtitle analysis to continue creating clips.",
   "部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。": "Some AI settings could not be read. Select the service and enter the key again. The original settings are preserved; damaged files are backed up when you save the corrections.",
   "旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。": "The previous cover configuration is invalid. Select a service again in cover settings. The original configuration file has been preserved.",
@@ -1891,5 +1892,10 @@
   "撤销": "Undo",
   "为 {{names}} 制作": "Making this for {{names}}",
   "改": "Change",
-  "这些偏好会用在下一次导入。首页不再单独展开。": "These preferences apply to the next import. The home page no longer opens them on its own."
+  "这些偏好会用在下一次导入。首页不再单独展开。": "These preferences apply to the next import. The home page no longer opens them on its own.",
+  "模型下载源": "Model download source",
+  "自动：官方源连不上时改用 hf-mirror 镜像。": "Auto: switches to the hf-mirror mirror when the official source is unreachable.",
+  "自动": "Auto",
+  "hf-mirror 镜像": "hf-mirror (mirror)",
+  "保存失败，请重试": "Save failed. Please try again."
 }

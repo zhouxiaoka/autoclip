@@ -45,9 +45,51 @@ MIRROR_ENDPOINT = "https://hf-mirror.com"
 MODEL_SOURCES = ("auto", "huggingface", "hf-mirror")
 
 
-def model_source() -> str:
-    value = (os.environ.get("AUTOCLIP_WHISPER_MODEL_SOURCE") or "auto").strip().lower()
+PROBE_TIMEOUT = 3.0
+_SOURCE_FILE = "model_source.json"
+
+
+def _source_file() -> Path:
+    return whisper_runtime.get_models_dir() / _SOURCE_FILE
+
+
+def saved_model_source() -> str:
+    """The choice from 设置 → 转写 → 模型下载源 (E3). Default auto."""
+    try:
+        import json
+        value = str(json.loads(_source_file().read_text(encoding="utf-8")).get("source", "auto")).lower()
+    except (OSError, ValueError, AttributeError):
+        return "auto"
     return value if value in MODEL_SOURCES else "auto"
+
+
+def save_model_source(source: str) -> str:
+    import json
+    value = (source or "").strip().lower()
+    if value not in MODEL_SOURCES:
+        raise ValueError(f"unsupported model source: {source}")
+    _source_file().write_text(json.dumps({"source": value}), encoding="utf-8")
+    return value
+
+
+def model_source() -> str:
+    """Env override (QA/CI) wins, then the saved setting."""
+    env = (os.environ.get("AUTOCLIP_WHISPER_MODEL_SOURCE") or "").strip().lower()
+    if env in MODEL_SOURCES:
+        return env
+    return saved_model_source()
+
+
+def _reachable(endpoint: str, timeout: float = PROBE_TIMEOUT) -> bool:
+    """Cheap HEAD probe so a blocked huggingface.co costs seconds, not a full download timeout."""
+    import urllib.request
+    try:
+        request = urllib.request.Request(endpoint.rstrip("/") + "/api/models?limit=1", method="HEAD")
+        with urllib.request.urlopen(request, timeout=timeout):
+            return True
+    except Exception as error:  # noqa: BLE001 - HTTPError still means the host answered
+        import urllib.error
+        return isinstance(error, urllib.error.HTTPError)
 
 
 def download_plan() -> List[tuple]:
@@ -60,6 +102,10 @@ def download_plan() -> List[tuple]:
     custom = (os.environ.get("HF_ENDPOINT") or "").strip().rstrip("/")
     if custom:
         return [("custom", custom)]
+    # auto: probe the official hub; when it is unreachable (typical in mainland China) start
+    # with hf-mirror and keep the official one as the fallback.
+    if not _reachable(OFFICIAL_ENDPOINT) and _reachable(MIRROR_ENDPOINT):
+        return [("hf-mirror", MIRROR_ENDPOINT), ("huggingface", OFFICIAL_ENDPOINT)]
     return [("huggingface", OFFICIAL_ENDPOINT), ("hf-mirror", MIRROR_ENDPOINT)]
 
 
