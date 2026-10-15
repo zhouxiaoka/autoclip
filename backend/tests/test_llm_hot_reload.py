@@ -48,6 +48,37 @@ def test_reload_detects_different_saves_with_identical_mtime(tmp_path, monkeypat
     assert manager.settings["model_name"] == "model-b"
 
 
+def test_reload_after_two_model_settings_saves_with_identical_mtime(tmp_path, monkeypatch):
+    """R7: a second persisted save must reload even within one filesystem tick."""
+    monkeypatch.setenv("AUTOCLIP_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("AUTOCLIP_APP_DIR", str(tmp_path))
+    monkeypatch.setattr(LLMManager, "_sync_config_if_needed", lambda self: None)
+    monkeypatch.setattr(LLMManager, "_initialize_provider", lambda self: None)
+    monkeypatch.setattr(ai_model_settings, "migrate_legacy", lambda: ai_model_settings.ModelSettings())
+    settings = ai_model_settings.ModelSettings(
+        connections=[ai_model_settings.Connection(id="local", name="Local", provider="ollama", api_key="")],
+        analysis=ai_model_settings.Assignment(connection_id="local", model="model-a"),
+    )
+    ai_model_settings.save(settings)
+    target = ai_model_settings.path()
+    stamp = 1_800_000_000_000_000_000
+    os.utime(target, ns=(stamp, stamp))
+    manager = LLMManager(tmp_path / "settings.json")
+    assert manager.settings["model_name"] == "model-a"
+    first_content = target.read_bytes()
+    first_stat = target.stat()
+
+    settings.analysis.model = "model-b"
+    ai_model_settings.save(settings)
+    os.utime(target, ns=(stamp, stamp))
+    assert target.stat().st_mtime_ns == first_stat.st_mtime_ns
+    assert target.stat().st_size == first_stat.st_size
+    assert target.read_bytes() != first_content
+
+    manager._reload_if_settings_changed()
+    assert manager.settings["model_name"] == "model-b"
+
+
 @pytest.mark.parametrize("change_during_retry", [False, True])
 def test_reload_pins_connection_model_and_candidates(tmp_path, monkeypatch, http_manager, change_during_retry):
     _assert_reload_pins(tmp_path, monkeypatch, http_manager, change_during_retry)
