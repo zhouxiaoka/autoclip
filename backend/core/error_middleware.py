@@ -207,14 +207,15 @@ def handle_validation_error(exc: RequestValidationError, request_id: str = None)
         }
         # D5: when loc points at api_key / password / …, wipe the string input
         # entirely — regex alone misses non sk-/AIza secrets.
-        if "input" in error:
-            raw = error["input"]
-            if _loc_is_secret(loc) and isinstance(raw, str):
-                entry["input"] = "[REDACTED]"
-            else:
-                entry["input"] = _redact_validation_value(raw)
-        if "ctx" in error:
-            entry["ctx"] = _redact_validation_value(error["ctx"])
+        # E4: a credential field never echoes its input, whatever its type (str, number,
+        # list, object) — the input is omitted outright, and so is ctx (it can quote it).
+        if _loc_is_secret(loc):
+            pass
+        else:
+            if "input" in error:
+                entry["input"] = _redact_validation_value(error["input"])
+            if "ctx" in error:
+                entry["ctx"] = _redact_validation_value(error["ctx"])
         errors.append(entry)
 
     return create_error_response(

@@ -86,37 +86,7 @@ def test_d3_filter_redacts_signed_url_in_log_record():
     assert REDACTED in record.getMessage()
 
 
-# ---------- D4: uvicorn.Config then reinstall ----------
-
-def test_d4_install_after_uvicorn_config_attaches_filter(tmp_path, monkeypatch):
-    """Mirrors desktop_main: Config rebuilds handlers; install must run after."""
-    import uvicorn
-    from backend.core.log_redaction import RedactingFilter, install_log_redaction
-
-    monkeypatch.chdir(tmp_path)
-    # Simulate pre-Config install (what desktop_main used to do alone)
-    root = logging.getLogger()
-    root.handlers.clear()
-    root.addHandler(logging.StreamHandler())
-    install_log_redaction()
-
-    app = object()  # Config only needs something truthy for logging setup
-
-    class _Dummy:
-        pass
-
-    # uvicorn.Config with a real ASGI callable
-    async def asgi(scope, receive, send):
-        return None
-
-    config = uvicorn.Config(asgi, host="127.0.0.1", port=0, log_level="info", access_log=False)
-    # After Config, uvicorn logger handlers are fresh and unfiltered
-    uv = logging.getLogger("uvicorn")
-    # Reinstall as desktop_main now does
-    install_log_redaction()
-    assert any(isinstance(f, RedactingFilter) for h in uv.handlers for f in h.filters) or any(
-        isinstance(f, RedactingFilter) for h in logging.getLogger().handlers for f in h.filters
-    ) or any(isinstance(f, RedactingFilter) for f in logging.getLogger().filters)
+# ---------- D4: covered by test_r8_e1_e5.py::test_e5_* (real desktop_main / backend.main entries) ----------
 
 
 # ---------- D5: loc-based api_key wipe + userinfo ----------
@@ -138,9 +108,9 @@ def test_d5_422_wipes_non_sk_api_key_string_input(client):
     body = {
         "version": 1,
         "connections": [{
-            "id": "c1", "name": "x", "provider": "compatible",
-            "api_key": PLAIN_SECRET, "base_url": "",  # compatible needs URL → 422
-            "image_api": "auto", "image_base_url": "",
+            "id": "c1", "name": "x", "provider": "openai",
+            # F3: field-level error (string_too_long on api_key itself), not an object-level one
+            "api_key": PLAIN_SECRET + "Z" * 2000, "base_url": "",
         }],
         "analysis": {"connection_id": "c1", "model": "m"},
         "cover_enabled": False,
@@ -194,7 +164,7 @@ def test_d5_validation_handler_wipes_secret_loc_string():
     payload = json.loads(resp.body)
     assert PLAIN_SECRET not in json.dumps(payload)
     errors = payload["error"]["details"]["errors"]
-    assert errors[0]["input"] == "[REDACTED]"
+    assert "input" not in errors[0]  # E4: credential fields omit input entirely
 
 
 # ---------- D6: detail contract ----------

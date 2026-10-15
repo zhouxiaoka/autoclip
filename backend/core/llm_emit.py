@@ -24,6 +24,14 @@ from backend.core.upstream_errors import UpstreamErrorType, classify_upstream_er
 logger = logging.getLogger(__name__)
 
 _retry_count: contextvars.ContextVar[int] = contextvars.ContextVar("llm_retry_count", default=0)
+# E2: highest retry index already counted for the logical call running in *this* context.
+# Contextvars are per thread / task (run_in_context copies), so concurrent calls never share it.
+_retry_peak: contextvars.ContextVar[int] = contextvars.ContextVar("llm_retry_peak", default=0)
+
+
+def begin_logical_call() -> None:
+    """Mark the start of one logical model call (all its attempts share one retry peak)."""
+    _retry_peak.set(0)
 # Run id only. The counter lives in ``_degrade_runs`` so ``copy_context()``
 # (pipeline chunk workers) shares one lock-protected cell instead of forking an int.
 _degrade_run_id: contextvars.ContextVar[int | None] = contextvars.ContextVar("llm_degrade_run_id", default=None)
@@ -85,14 +93,15 @@ class _RunAcc:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     reasoning_tokens: int = 0
-    last_retry: int = 0  # run-level total retries (sum of per-call peaks)
-    _open_retry_peak: int = 0  # peak attempt index inside the current logical call
+    last_retry: int = 0  # run-level total retries (sum over logical calls)
     last_degrade: int = 0
     last_http_status: int | None = None
     last_upstream: str | None = None
     last_outcome: str = ""
     last_stage: str = ""
     persisted_usage: dict = field(default_factory=dict)
+    # E2: one run accumulator is shared by worker threads (run_in_context); guard mutations.
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
 
 def normalize_failure_stage(value: Any) -> str | None:
@@ -238,11 +247,13 @@ def track_run():
     with _degrade_registry_lock:
         _degrade_runs[run_id] = _DegradeAcc()
     acc_token = _run_acc.set(_RunAcc())
+    peak_token = _retry_peak.set(0)  # E2: a fresh worker never inherits a previous run's peak
     degrade_token = _degrade_run_id.set(run_id)
     try:
         yield
     finally:
         _run_acc.reset(acc_token)
+        _retry_peak.reset(peak_token)
         _degrade_run_id.reset(degrade_token)
         with _degrade_registry_lock:
             _degrade_runs.pop(run_id, None)
@@ -565,31 +576,36 @@ def _remember_run(properties: dict[str, Any]) -> None:
     acc = _run_acc.get()
     if acc is None:
         return
-    acc.calls += 1
-    acc.provider = properties.get("provider") or acc.provider
-    acc.model = properties.get("model") or acc.model
-    acc.host = properties.get("base_url_host") or acc.host
-    # D2: accumulate actual retries per logical call. Attempt indices (0,1,2…) are
-    # not summed raw — only the rise in peak within one call counts. A later
-    # successful call with retry_count=0 must not wipe earlier retries.
+    # E2: retries are counted per logical call. ``retry_count`` on a request is that call's
+    # attempt index (text) or its own retry total (vision); only the rise above the peak
+    # already counted for this call in this context is new. The peak lives in a contextvar,
+    # so interleaved / concurrent calls in other threads never reset or inflate each other.
     retry = int(properties.get("retry_count") or 0)
-    if retry > acc._open_retry_peak:
-        acc.last_retry += retry - acc._open_retry_peak
-        acc._open_retry_peak = retry
-    if retry == 0:
-        acc._open_retry_peak = 0
-    acc.last_degrade = max(acc.last_degrade, int(properties.get("degrade_count") or 0))
-    status = properties.get("http_status")
-    acc.last_http_status = status if isinstance(status, int) else None
-    acc.last_upstream = properties.get("upstream_error_type")
-    acc.last_outcome = str(properties.get("outcome") or "")
-    acc.last_stage = str(properties.get("failure_stage") or properties.get("stage") or "")
-    acc.prompt_tokens += int(properties.get("prompt_tokens") or 0)
-    acc.completion_tokens += int(properties.get("completion_tokens") or 0)
-    acc.reasoning_tokens += int(properties.get("reasoning_tokens") or 0)
-    if properties.get("outcome") == "success":
-        acc.last_upstream = None
-        acc.billable += 1
+    peak = _retry_peak.get()
+    delta = 0
+    if retry > peak:
+        delta = retry - peak
+        _retry_peak.set(retry)
+    elif retry == 0:
+        _retry_peak.set(0)
+    with acc.lock:
+        acc.calls += 1
+        acc.provider = properties.get("provider") or acc.provider
+        acc.model = properties.get("model") or acc.model
+        acc.host = properties.get("base_url_host") or acc.host
+        acc.last_retry += delta
+        acc.last_degrade = max(acc.last_degrade, int(properties.get("degrade_count") or 0))
+        status = properties.get("http_status")
+        acc.last_http_status = status if isinstance(status, int) else None
+        acc.last_upstream = properties.get("upstream_error_type")
+        acc.last_outcome = str(properties.get("outcome") or "")
+        acc.last_stage = str(properties.get("failure_stage") or properties.get("stage") or "")
+        acc.prompt_tokens += int(properties.get("prompt_tokens") or 0)
+        acc.completion_tokens += int(properties.get("completion_tokens") or 0)
+        acc.reasoning_tokens += int(properties.get("reasoning_tokens") or 0)
+        if properties.get("outcome") == "success":
+            acc.last_upstream = None
+            acc.billable += 1
 
 
 def _post_event(event: str, properties: dict[str, Any]) -> None:
