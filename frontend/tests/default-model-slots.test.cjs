@@ -2,6 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { loadTs } = require('./load-ts.cjs')
 
+const defaults = loadTs('modelDefaults.ts')
 const slots = loadTs('defaultModelSlots.ts', { '../../i18n': { t: text => text } })
 const logic = loadTs('modelSettingsLogic.ts', { '../../i18n': { t: text => text } })
 const plain = value => JSON.parse(JSON.stringify(value))
@@ -115,13 +116,15 @@ test('fixed selection pins the chosen connection and marks user', () => {
 })
 
 test('vision follow warns only when the followed model is known to lack vision', () => {
+  // D7: auto + text does not warn (subtitle fallback); explicit visual does.
   const state = settings()
-  assert.equal(slots.visionWarning(state, lists), 'follow')
+  assert.equal(slots.visionWarning(state, lists), null, 'auto + text-only analysis does not warn')
+  assert.equal(slots.visionWarning({ ...state, analysis_mode: 'visual' }, lists), 'follow')
   const withVision = slots.applySmartSelection(state, 'analysis', 'qwen-vl-plus', 'ds')
   assert.equal(slots.visionWarning({ ...withVision, vision: null }, lists), null)
   const independent = slots.applyFixedSelection(state, 'vision', 'gpt-4o-mini', 'infi')
   assert.equal(slots.visionWarning(independent, lists), null)
-  const badPick = slots.applyFixedSelection(state, 'vision', 'qwen-plus', 'ds')
+  const badPick = slots.applyFixedSelection({ ...state, analysis_mode: 'visual' }, 'vision', 'qwen-plus', 'ds')
   assert.equal(slots.visionWarning(badPick, lists), 'selected')
   assert.equal(slots.visionWarning(settings({ analysis: { connection_id: 'ds', model: 'qwen-plus', capability: 'auto', model_source: 'user' } }), {}), null, 'unknown capability is not a red warning')
   assert.equal(slots.visionWarning(settings({ analysis_mode: 'subtitle' }), lists), null, 'subtitle mode does not need vision')
@@ -136,7 +139,8 @@ test('N2: both vision warnings follow the backend mode/capability contract', () 
           const state = settings({ analysis_mode: mode, analysis: binding, vision: separate ? binding : null })
           const metadata = { ds: { models: listed ? [{ id: 'alias', capability: listed }] : [] } }
           const resolved = capability && capability !== 'auto' ? capability : listed
-          const blocked = mode !== 'subtitle' && (resolved === 'text' || (resolved !== 'multimodal' && mode === 'visual'))
+          // D7: only explicit visual mode blocks when model is not confirmed multimodal
+          const blocked = mode === 'visual' && resolved !== 'multimodal' 
           assert.equal(logic.visionFollowLacksCapability(state, metadata), blocked)
           assert.equal(slots.visionWarning(state, metadata), blocked ? (separate ? 'selected' : 'follow') : null)
           assert.equal(slots.slotTelemetry(state, metadata).vision_follow_lacks_vision, blocked)
@@ -182,7 +186,9 @@ test('slot telemetry is enums and a boolean — never a model id', () => {
   assert.equal(payload.vision_source, 'follow')
   assert.equal(payload.cover_source, 'frame')
   assert.equal(payload.transcription_source, 'whisper_local')
-  assert.equal(payload.vision_follow_lacks_vision, true)
+  // D7: auto + text-only does not set the lacks flag
+  assert.equal(payload.vision_follow_lacks_vision, false)
+  assert.equal(plain(slots.slotTelemetry(settings({ analysis_mode: 'visual' }), lists)).vision_follow_lacks_vision, true)
   assert.equal(JSON.stringify(payload).includes('qwen'), false)
   assert.equal(JSON.stringify(payload).includes('gpt'), false)
 })
@@ -268,4 +274,22 @@ test('catalog and preview lists never make a validated connection selectable', (
     infi: { ...lists.infi, source: 'cache', preview: false },
   }, 'analysis')
   assert.equal(slots.preferredOffer(cached.find(group => group.modelId === 'gpt-4o-mini').offers).connectionId, 'infi')
+})
+
+test('D1: first cover fixed/smart pick stays independent; analysis switch does not migrate it', () => {
+  const base = settings({ cover: null, cover_enabled: false, cover_follows_analysis: undefined })
+  const fixed = slots.applyFixedSelection(base, 'cover', 'wanx2.1-t2i-turbo', 'ds')
+  assert.equal(fixed.cover_follows_analysis, false, 'first fixed cover pick must not invent follow')
+  assert.equal(fixed.cover.connection_id, 'ds')
+  assert.equal(fixed.cover.model_source, 'user')
+  const smart = slots.applySmartSelection(base, 'cover', 'wanx2.1-t2i-turbo', 'ds')
+  assert.equal(smart.cover_follows_analysis, false, 'first smart cover pick must not invent follow')
+  // Save-reopen analogue: independent cover on analysis connection, then switch analysis
+  const independent = { ...fixed, cover_follows_analysis: false }
+  const switched = defaults.syncFollowingCover(independent, {
+    ...independent,
+    analysis: { connection_id: 'infi', model: 'gpt-4o-mini', capability: 'auto', model_source: 'user' },
+  })
+  assert.equal(switched.cover.connection_id, 'ds', 'independent cover stays on A after analysis moves to B')
+  assert.equal(switched.cover_follows_analysis, false)
 })

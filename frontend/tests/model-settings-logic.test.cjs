@@ -90,10 +90,11 @@ test('vision follow marks a text-only model red without blocking save', () => {
     analysis: { connection_id: 'd', model: 'deepseek-flash', capability: 'auto' },
     analysis_mode: 'auto',
   }
-  assert.equal(logic.visionFollowLacksCapability(text, lists), true)
+  assert.equal(logic.visionFollowLacksCapability(text, lists), false, 'D7: auto + text does not lack')
   assert.equal(logic.saveIssue(text), null)
   const off = logic.setVisual(text, false)
   assert.equal(logic.visionFollowLacksCapability(off, lists), false)
+  assert.equal(logic.visionFollowLacksCapability({ ...text, analysis_mode: 'visual' }, lists), true)
   const visualUnknown = {
     ...fresh(),
     connections: [conn('a', 'compatible', { api_key: 'k', base_url: 'https://gw.example/v1' })],
@@ -110,7 +111,8 @@ test('vision follow marks a text-only model red without blocking save', () => {
     ...multimodal,
     vision: { connection_id: 'd', model: 'deepseek-flash', capability: 'text' },
   }
-  assert.equal(logic.visionFollowLacksCapability(followVision, lists), true)
+  assert.equal(logic.visionFollowLacksCapability(followVision, lists), false, 'D7: auto + dedicated text vision does not lack')
+  assert.equal(logic.visionFollowLacksCapability({ ...followVision, analysis_mode: 'visual' }, lists), true)
   const unresolvedAuto = {
     ...fresh(),
     connections: [conn('o', 'openai', { api_key: 'k' })],
@@ -378,4 +380,26 @@ test('separate vision requires a provider, model and credentials before save', (
   assert.deepEqual(plain(logic.saveIssue({...state,vision:{connection_id:'missing',model:'gpt-4o'}})),{role:'vision',reason:'provider'})
   assert.deepEqual(plain(logic.saveIssue({...state,vision:{connection_id:'v',model:''}})),{role:'vision',reason:'model'})
   assert.deepEqual(plain(logic.saveIssue({...state,vision:{connection_id:'v',model:'gpt-4o'}})),{role:'vision',reason:'key'})
+})
+
+test('D1: setCoverModel on null cover is independent even on analysis connection', () => {
+  const state = {
+    ...fresh(),
+    connections: [conn('a', 'dashscope', { has_key: true }), conn('b', 'openai', { has_key: true })],
+    analysis: { connection_id: 'a', model: 'qwen-plus', capability: 'auto' },
+    cover: null,
+    cover_enabled: false,
+    cover_follows_analysis: undefined,
+  }
+  const picked = logic.setCoverModel(state, 'a', 'wanx')
+  assert.equal(picked.cover_follows_analysis, false, 'first cover model pick must not invent follow')
+  assert.equal(picked.cover.connection_id, 'a')
+  // After save-reopen style: keep independent, switch analysis
+  const reopened = { ...picked, cover_follows_analysis: false }
+  const switched = defaults.syncFollowingCover(reopened, {
+    ...reopened,
+    analysis: { connection_id: 'b', model: 'gpt-4o', capability: 'auto' },
+  })
+  assert.equal(switched.cover.connection_id, 'a')
+  assert.equal(switched.cover_follows_analysis, false)
 })

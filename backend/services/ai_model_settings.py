@@ -465,10 +465,12 @@ def vision_follow_binding(settings: ModelSettings) -> Assignment | None:
 
 
 def vision_follow_lacks_capability(settings: ModelSettings) -> bool:
-    """True when visual understanding is enabled and the followed model cannot see images.
+    """True when explicit visual mode needs vision the followed model cannot provide.
 
-    Known text-only (explicit or catalog) is always a miss. Unresolved ``auto`` only
-    fails when analysis_mode is ``visual`` — smart mode may still fall back to subtitles.
+    D7 / Kris「自动退字幕」: ``analysis_mode=auto`` with a known text-only model
+    must NOT block readiness — the pipeline falls back to subtitles. Only an
+    explicit ``visual`` mode raises ``vision_unsupported``. Unresolved ``auto``
+    capability likewise stays open in smart mode.
     Save stays allowed; readiness and generation read this same answer.
     """
     if settings.analysis_mode == 'subtitle':
@@ -479,8 +481,7 @@ def vision_follow_lacks_capability(settings: ModelSettings) -> bool:
     known = capability(settings, binding)
     if known == 'multimodal':
         return False
-    if known == 'text':
-        return True
+    # text or unresolved: block only when the user demanded visual understanding
     return settings.analysis_mode == 'visual'
 
 

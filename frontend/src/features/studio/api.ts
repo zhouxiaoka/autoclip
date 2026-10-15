@@ -82,6 +82,16 @@ export const studioApi = {
   video: (pid: string, jid: string, download = false) => `${api.defaults.baseURL}/studio/${pid}/exports/${jid}/video${download ? '?download=true' : ''}`,
 }
 export function errorText(error: unknown) {
-  const detail = (error as any)?.response?.data?.detail
-  return typeof detail === 'string' ? detail : (error as Error)?.message || '请求失败，请重试'
+  const data = (error as any)?.response?.data
+  const detail = data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  const envelope = data?.error?.message || data?.error?.user_message
+  if (typeof envelope === 'string' && envelope.trim()) return envelope
+  if (Array.isArray(detail) && detail.length) {
+    const first = detail[0]
+    if (typeof first === 'string' && first.trim()) return first
+    const msg = first?.msg || first?.message
+    if (typeof msg === 'string' && msg.trim()) return msg
+  }
+  return (error as Error)?.message || '请求失败，请重试'
 }

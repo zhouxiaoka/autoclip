@@ -165,7 +165,8 @@ export const isTextOnly = (s: ModelSettings, lists: Record<string, ModelList>) =
 /** The assignment visual understanding follows (explicit vision, else analysis). */
 /** Model picked in the cover section: stays following only when it is on the analysis connection. */
 export function setCoverModel(s: ModelSettings, connectionId: string, model: string): ModelSettings {
-  const follow = connectionId === s.analysis?.connection_id && (!s.cover || coverFollowsAnalysis(s))
+  // D1: first cover pick (cover was null) is independent; keep follow only when already following on analysis.
+  const follow = !!s.cover && coverFollowsAnalysis(s) && connectionId === s.analysis?.connection_id
   return { ...s, cover_enabled: true, cover_follows_analysis: follow, cover: { ...cleanBinding(connectionId), model, model_source: 'user' } }
 }
 
@@ -184,15 +185,16 @@ export function modelHasVision(binding: Assignment | null | undefined, lists: Re
 }
 
 /**
- * Same answer as backend `vision_follow_lacks_capability`: enabled visual understanding
- * whose followed model is known text-only, or visual mode without confirmed vision.
+ * Same answer as backend `vision_follow_lacks_capability` (D7): only explicit
+ * visual mode blocks when the followed model is not confirmed multimodal.
+ * Auto + text-only stays open so generation can fall back to subtitles.
  */
 export function visionFollowLacksCapability(s: ModelSettings, lists: Record<string, ModelList>): boolean {
   if (s.analysis_mode === 'subtitle') return false
   const binding = followedVisionBinding(s)
   if (!binding?.model) return s.analysis_mode === 'visual'
   const vision = modelHasVision(binding, lists)
-  return vision === false || (vision === null && s.analysis_mode === 'visual')
+  return s.analysis_mode === 'visual' && vision !== true
 }
 
 export { VISION_HINT_KEY }

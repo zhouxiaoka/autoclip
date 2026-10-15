@@ -384,24 +384,24 @@ def test_text_only_vision_follow_saves_but_blocks_generation(monkeypatch):
         analysis=ai.Assignment(connection_id='c1', model='deepseek-flash', capability='text'),
         analysis_mode='auto',
     )
+    # D7: auto + text-only is not a readiness block (subtitle fallback). Issue
+    # stays None because vision_follow_lacks_capability is False in auto mode.
     issue = vision_follow_issue(settings)
-    assert issue is not None
-    assert issue.ok is False
-    assert issue.error_type == VISION_UNSUPPORTED
-    assert issue.hint_key == VISION_HINT_KEY
-    assert issue.as_api()['error_type'] == VISION_UNSUPPORTED
-    assert 'sk-test-key' not in str(issue.as_api())
-    assert 'https://gw.example' not in str(issue.as_api())
+    assert issue is None
+    assert ai.vision_follow_lacks_capability(settings) is False
     ai.save(settings)
     loaded = ai.load()
     assert loaded.analysis.capability == 'text'
     assert loaded.connections[0].validation_status == 'unchecked'
     monkeypatch.setattr(ai, 'for_editing', lambda: loaded)
     report = readiness.report()
-    assert report['checks']['visual'] == {'ok': False, 'code': 'vision_unsupported', 'repair': 'settings_vision'}
-    assert report['ready'] is False
-    with pytest.raises(ValueError, match='不能看图'):
-        readiness.ensure_analysis_usable()
+    assert report['checks']['visual'] == {'ok': True, 'code': 'optional', 'repair': 'none'}
+    assert report['ready'] is True
+    readiness.ensure_analysis_usable()  # must not raise
+    # Explicit visual mode still blocks:
+    visual = settings.model_copy(update={'analysis_mode': 'visual'})
+    assert ai.vision_follow_lacks_capability(visual) is True
+    assert vision_follow_issue(visual) is not None
     assert VISION_BLOCK_MESSAGE.startswith('画面理解')
 
 
@@ -469,8 +469,12 @@ def test_dedicated_text_vision_assignment_is_flagged():
         vision=ai.Assignment(connection_id='c1', model='deepseek-flash', capability='text'),
         analysis_mode='auto',
     )
-    assert ai.vision_follow_lacks_capability(settings) is True
-    assert vision_follow_issue(settings) is not None
+    # D7: auto does not flag; explicit visual does.
+    assert ai.vision_follow_lacks_capability(settings) is False
+    assert vision_follow_issue(settings) is None
+    visual = settings.model_copy(update={'analysis_mode': 'visual'})
+    assert ai.vision_follow_lacks_capability(visual) is True
+    assert vision_follow_issue(visual) is not None
 
 
 def test_api88_wrong_stored_url_is_forced_to_the_preset(monkeypatch):

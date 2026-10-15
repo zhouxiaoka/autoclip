@@ -181,7 +181,11 @@ function bindPurpose(settings: ModelSettings, purpose: PurposeId, connectionId: 
     return { ...settings, transcription: { provider: 'cloud', connection_id: connectionId, model, model_source: source } }
   }
   if (purpose === 'cover') {
-    const follow = connectionId === settings.analysis?.connection_id && (!settings.cover || coverFollowsAnalysis(settings))
+    // D1: picking a fixed/smart cover model is always independent. Only the explicit
+    // 「跟随分析」entry sets cover_follows_analysis=true. A null cover must not be
+    // auto-labeled as following just because it shares the analysis connection.
+    const follow = !!settings.cover && coverFollowsAnalysis(settings)
+      && connectionId === settings.analysis?.connection_id
     return { ...settings, cover_enabled: true, cover_follows_analysis: follow, cover: assignment(connectionId, model, source) }
   }
   const next = { ...settings, [purpose]: assignment(connectionId, model, source) }
