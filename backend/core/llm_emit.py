@@ -7,13 +7,15 @@ Keys, prompts, captions and full URLs never become event fields.
 from __future__ import annotations
 
 import contextvars
+import itertools
 import json
 import logging
+import threading
 import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from backend.core import llm_telemetry as schema
@@ -22,8 +24,15 @@ from backend.core.upstream_errors import UpstreamErrorType, classify_upstream_er
 logger = logging.getLogger(__name__)
 
 _retry_count: contextvars.ContextVar[int] = contextvars.ContextVar("llm_retry_count", default=0)
+# Run id only. The counter lives in ``_degrade_runs`` so ``copy_context()``
+# (pipeline chunk workers) shares one lock-protected cell instead of forking an int.
+_degrade_run_id: contextvars.ContextVar[int | None] = contextvars.ContextVar("llm_degrade_run_id", default=None)
 _call_ctx: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar("llm_call_ctx", default=None)
 _run_acc: contextvars.ContextVar[_RunAcc | None] = contextvars.ContextVar("llm_run_acc", default=None)
+_DEGRADE_CAP = 32
+_degrade_seq = itertools.count(1)
+_degrade_registry_lock = threading.Lock()
+_degrade_runs: dict[int, _DegradeAcc] = {}
 
 _PROVIDER_ALIASES = {
     "siliconflow": "compatible",
@@ -61,6 +70,12 @@ _RESULT_ALIASES = {
 
 
 @dataclass
+class _DegradeAcc:
+    count: int = 0
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+
+
+@dataclass
 class _RunAcc:
     provider: str = ""
     model: str = ""
@@ -71,6 +86,7 @@ class _RunAcc:
     completion_tokens: int = 0
     reasoning_tokens: int = 0
     last_retry: int = 0
+    last_degrade: int = 0
     last_http_status: int | None = None
     last_upstream: str | None = None
     last_outcome: str = ""
@@ -125,6 +141,81 @@ def current_retry_count() -> int:
     return _count(_retry_count.get(), 32)
 
 
+def increment_degrade_count() -> int:
+    """Count one same-provider candidate fallback. R1 calls this when switching models.
+
+    Uses a lock-protected per-run cell. ``copy_context()`` (parallel chunks) only
+    copies the run id, so two degrades cannot both write 1. Integer only — no
+    model name, URL, or user text. Without a bound run, skip counting.
+    """
+    cell = _degrade_cell()
+    if cell is None:
+        return 0
+    with cell.lock:
+        cell.count = _count(cell.count + 1, _DEGRADE_CAP)
+        value = cell.count
+    _sync_last_degrade(value)
+    return value
+
+
+def set_degrade_count(value: int) -> contextvars.Token:
+    counted = _count(value, _DEGRADE_CAP)
+    existing = _degrade_run_id.get()
+    cell, token = _bind_degrade_run()
+    if cell is not None:
+        with cell.lock:
+            cell.count = counted
+        _sync_last_degrade(counted)
+    if token is None:
+        token = _degrade_run_id.set(existing if existing is not None else _degrade_run_id.get())
+    return token
+
+
+def reset_degrade_count(token: contextvars.Token) -> None:
+    leaving = _degrade_run_id.get()
+    _degrade_run_id.reset(token)
+    staying = _degrade_run_id.get()
+    if leaving is not None and leaving != staying:
+        with _degrade_registry_lock:
+            _degrade_runs.pop(leaving, None)
+
+
+def current_degrade_count() -> int:
+    cell = _degrade_cell()
+    if cell is None:
+        return 0
+    with cell.lock:
+        return _count(cell.count, _DEGRADE_CAP)
+
+
+def _degrade_cell() -> _DegradeAcc | None:
+    run_id = _degrade_run_id.get()
+    if run_id is None:
+        return None
+    with _degrade_registry_lock:
+        return _degrade_runs.get(run_id)
+
+
+def _bind_degrade_run() -> tuple[_DegradeAcc | None, contextvars.Token | None]:
+    with _degrade_registry_lock:
+        run_id = _degrade_run_id.get()
+        if run_id is not None:
+            # Same run id after copy_context(); do not allocate a second cell.
+            # A missing cell means track_run already ended — do not resurrect.
+            return _degrade_runs.get(run_id), None
+        run_id = next(_degrade_seq)
+        cell = _DegradeAcc()
+        _degrade_runs[run_id] = cell
+        return cell, _degrade_run_id.set(run_id)
+
+
+def _sync_last_degrade(value: int) -> None:
+    acc = _run_acc.get()
+    if acc is None:
+        return
+    acc.last_degrade = max(acc.last_degrade, value)
+
+
 @contextmanager
 def bind_context(*, provider: str = "", model: str = "", base_url: str = "", kind: str = "text"):
     token = _call_ctx.set({
@@ -141,11 +232,18 @@ def bind_context(*, provider: str = "", model: str = "", base_url: str = "", kin
 
 @contextmanager
 def track_run():
-    token = _run_acc.set(_RunAcc())
+    run_id = next(_degrade_seq)
+    with _degrade_registry_lock:
+        _degrade_runs[run_id] = _DegradeAcc()
+    acc_token = _run_acc.set(_RunAcc())
+    degrade_token = _degrade_run_id.set(run_id)
     try:
         yield
     finally:
-        _run_acc.reset(token)
+        _run_acc.reset(acc_token)
+        _degrade_run_id.reset(degrade_token)
+        with _degrade_registry_lock:
+            _degrade_runs.pop(run_id, None)
 
 
 def request_finished(
@@ -161,6 +259,7 @@ def request_finished(
     completion_tokens: int | None = None,
     reasoning_tokens: int | None = None,
     retries: int | None = None,
+    degrades: int | None = None,
     duration_ms: int | float = 0,
     outcome: str = "success",
     finish_reason: str | None = None,
@@ -173,7 +272,8 @@ def request_finished(
             provider=provider, model=model, base_url=base_url, kind=kind, stage=stage,
             http_status=http_status, upstream_error_type=upstream_error_type,
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
-            reasoning_tokens=reasoning_tokens, retries=retries, duration_ms=duration_ms,
+            reasoning_tokens=reasoning_tokens, retries=retries, degrades=degrades,
+            duration_ms=duration_ms,
             outcome=outcome, finish_reason=finish_reason, failure_stage=failure_stage,
             error=error,
         )
@@ -343,6 +443,11 @@ def run_snapshot(project_id: str | None = None) -> dict[str, Any]:
     retry = acc.last_retry if acc else 0
     if retry:
         raw["retry_count"] = retry
+    degrade = current_degrade_count()
+    if acc:
+        degrade = max(degrade, acc.last_degrade)
+    if degrade:
+        raw["degrade_count"] = degrade
     if acc and acc.last_outcome == "error":
         raw["failure_stage"] = normalize_failure_stage(acc.last_stage)
     out = schema.sanitize_run_properties(raw)
@@ -407,8 +512,8 @@ def sentry_tags_for_error(error: BaseException | None, phase: str) -> dict[str, 
 
 def _request_properties(
     *, provider, model, base_url, kind, stage, http_status, upstream_error_type,
-    prompt_tokens, completion_tokens, reasoning_tokens, retries, duration_ms,
-    outcome, finish_reason, failure_stage, error,
+    prompt_tokens, completion_tokens, reasoning_tokens, retries, degrades,
+    duration_ms, outcome, finish_reason, failure_stage, error,
 ) -> dict[str, Any]:
     ctx = _call_ctx.get() or {}
     status = http_status if isinstance(http_status, int) else None
@@ -430,6 +535,7 @@ def _request_properties(
         "completion_tokens": completion_tokens,
         "reasoning_tokens": reasoning_tokens,
         "retry_count": retries if retries is not None else current_retry_count(),
+        "degrade_count": degrades if degrades is not None else current_degrade_count(),
         "duration_ms": duration_ms,
         "outcome": outcome_value,
         "finish_reason": finish_reason,
@@ -450,6 +556,7 @@ def _remember_run(properties: dict[str, Any]) -> None:
     acc.model = properties.get("model") or acc.model
     acc.host = properties.get("base_url_host") or acc.host
     acc.last_retry = int(properties.get("retry_count") or 0)
+    acc.last_degrade = max(acc.last_degrade, int(properties.get("degrade_count") or 0))
     status = properties.get("http_status")
     acc.last_http_status = status if isinstance(status, int) else acc.last_http_status
     acc.last_upstream = properties.get("upstream_error_type") or acc.last_upstream

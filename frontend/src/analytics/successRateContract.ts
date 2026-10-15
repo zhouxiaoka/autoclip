@@ -50,13 +50,13 @@ export const FAILURE_STAGES = [
 export const RUN_LEVEL_FIELDS = [
   'provider', 'model', 'base_url_host', 'http_status', 'upstream_error_type',
   'failure_stage', 'llm_calls', 'prompt_tokens', 'completion_tokens',
-  'reasoning_tokens', 'retry_count', 'billable_calls_before_failure',
+  'reasoning_tokens', 'retry_count', 'degrade_count', 'billable_calls_before_failure',
 ] as const
 export const LLM_REQUEST_FIELDS = [
   'success_rate_schema_version', 'provider', 'model', 'base_url_host', 'kind',
   'stage', 'http_status', 'upstream_error_type', 'prompt_tokens',
-  'completion_tokens', 'reasoning_tokens', 'retry_count', 'duration_ms',
-  'outcome', 'finish_reason',
+  'completion_tokens', 'reasoning_tokens', 'retry_count', 'degrade_count',
+  'duration_ms', 'outcome', 'finish_reason',
 ] as const
 
 export const UPSTREAM_HINT_KEYS: Record<UpstreamErrorType, string> = {
@@ -162,13 +162,13 @@ function sanitize(value: Record<string, unknown> | null | undefined, kind: 'requ
     putEnum(out, raw, 'outcome', REQUEST_OUTCOMES)
     putEnum(out, raw, 'finish_reason', FINISH_REASONS)
     putHttpStatus(out, raw.http_status, 100)
-    for (const key of ['prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'retry_count', 'duration_ms']) {
+    for (const key of ['prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'retry_count', 'degrade_count', 'duration_ms']) {
       putCount(out, raw, key)
     }
   } else if (kind === 'run') {
     putEnum(out, raw, 'failure_stage', FAILURE_STAGES)
     putHttpStatus(out, raw.http_status, 400)
-    for (const key of ['llm_calls', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'retry_count', 'billable_calls_before_failure']) {
+    for (const key of ['llm_calls', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'retry_count', 'degrade_count', 'billable_calls_before_failure']) {
       putCount(out, raw, key)
     }
   } else {

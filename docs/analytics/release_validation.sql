@@ -32,7 +32,9 @@ SELECT event, properties.provider AS provider, properties.upstream_error_type AS
        count() AS events,
        countIf(properties.error_code IS NULL OR toString(properties.error_code) = '') AS missing_error_code,
        countIf(properties.failure_stage IS NULL OR toString(properties.failure_stage) = '') AS missing_failure_stage,
-       avg(properties.billable_calls_before_failure) AS avg_billable_before_failure
+       avg(properties.billable_calls_before_failure) AS avg_billable_before_failure,
+       avg(properties.degrade_count) AS avg_degrade_count,
+       countIf(properties.degrade_count > 0) AS events_with_degrade
 FROM events
 WHERE timestamp >= now() - INTERVAL 7 DAY
   AND properties.analytics_environment = 'validation'

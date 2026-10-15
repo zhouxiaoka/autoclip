@@ -35,6 +35,7 @@
 | `upstream_error_type` | 契约闭集：`invalid_key` / `insufficient_quota` / `permission_denied` / `model_not_found` / `bad_endpoint` / `rate_limited` / `upstream_unavailable` / `timeout` / `connection` / `output_truncated` / `unknown` |
 | `prompt_tokens` / `completion_tokens` / `reasoning_tokens` | 非负计数 |
 | `retry_count` | 非负；SDK 内部重试记不到 |
+| `degrade_count` | 非负；同服务商候选降级次数。R1 在换下一个候选时调用 `note_same_provider_degrade()` |
 | `duration_ms` | 非负耗时 |
 | `outcome` | `success` / `error` |
 | `finish_reason` | `stop` / `length` / `content_filter` / `unknown` |
@@ -53,6 +54,7 @@
 | `error_code` | 失败必填，∈ 现有 studio 错误码（缺失时后端写成 `unexpected`） |
 | `billable_calls_before_failure` | 失败时必有；成功路径不发 |
 | `retry_count` | 最后一次请求的重试次数 |
+| `degrade_count` | 本次 run 已发生的同服务商降级次数 |
 | `llm_calls` / `prompt_tokens` / `completion_tokens` | 本次 run 累计，可空 |
 
 ### `asr_readiness_checked`

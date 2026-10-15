@@ -1,6 +1,11 @@
 """成功率埋点字段脱敏：只留域名与枚举，不含 key / 完整 URL / 用户内容。"""
 from __future__ import annotations
 
+import contextvars
+import threading
+from concurrent.futures import ALL_COMPLETED, ThreadPoolExecutor, wait
+from pathlib import Path
+
 import pytest
 
 from backend.core import llm_telemetry as telemetry
@@ -52,6 +57,7 @@ def test_llm_request_properties_drop_secrets_and_user_text():
         "completion_tokens": 0,
         "reasoning_tokens": 0,
         "retry_count": 0,
+        "degrade_count": 1,
         "duration_ms": 320,
         "outcome": "error",
         "finish_reason": "stop",
@@ -59,11 +65,15 @@ def test_llm_request_properties_drop_secrets_and_user_text():
         "prompt": PROMPT,
         "messages": [{"role": "user", "content": PROMPT}],
         "url": "https://88api.ai/v1/chat/completions",
+        "title": "我的旅行vlog",
+        "transcript": "大家好今天我们来聊",
     })
     dumped = str(out)
     assert SECRET not in dumped
     assert PROMPT not in dumped
     assert "88api.ai/v1" not in dumped
+    assert "旅行" not in dumped
+    assert "大家好" not in dumped
     assert out == {
         "success_rate_schema_version": 1,
         "provider": "api88",
@@ -77,6 +87,7 @@ def test_llm_request_properties_drop_secrets_and_user_text():
         "completion_tokens": 0,
         "reasoning_tokens": 0,
         "retry_count": 0,
+        "degrade_count": 1,
         "duration_ms": 320,
         "outcome": "error",
         "finish_reason": "stop",
@@ -94,7 +105,11 @@ def test_run_properties_reject_success_status_and_unknown_enums():
         "llm_calls": 3,
         "billable_calls_before_failure": 2,
         "retry_count": -1,
+        "degrade_count": -2,
         "prompt": PROMPT,
+        "path": "/Users/private/movie.mp4",
+        "title": "我的旅行vlog",
+        "transcript": "大家好今天我们来聊",
     })
     assert out["success_rate_schema_version"] == 1
     assert "provider" not in out
@@ -106,7 +121,11 @@ def test_run_properties_reject_success_status_and_unknown_enums():
     assert out["llm_calls"] == 3
     assert out["billable_calls_before_failure"] == 2
     assert "retry_count" not in out
+    assert "degrade_count" not in out
     assert PROMPT not in str(out)
+    assert "movie.mp4" not in str(out)
+    assert "旅行" not in str(out)
+    assert "大家好" not in str(out)
 
 
 def test_validation_and_asr_payloads():
@@ -135,3 +154,84 @@ def test_validation_and_asr_payloads():
     assert validation["upstream_error_type"] == "bad_endpoint"
     assert validation["result"] == "failed"
     assert SECRET not in str(validation)
+
+
+def test_r1_increment_hook_lives_on_llm_manager():
+    text = Path(__file__).resolve().parents[1].joinpath("core", "llm_manager.py").read_text(encoding="utf-8")
+    assert "def note_same_provider_degrade" in text
+    assert "increment_degrade_count" in text
+    assert "degrade_count" in text
+    assert "call_with_retry" in text
+
+
+def test_increment_degrade_count_is_exported_and_capped():
+    token = telemetry.set_degrade_count(0)
+    try:
+        assert telemetry.current_degrade_count() == 0
+        assert telemetry.increment_degrade_count() == 1
+        assert telemetry.increment_degrade_count() == 2
+        telemetry.set_degrade_count(40)
+        assert telemetry.current_degrade_count() == 32
+    finally:
+        telemetry.reset_degrade_count(token)
+
+
+def test_increment_degrade_count_without_run_does_not_allocate(monkeypatch):
+    from backend.core import llm_emit
+
+    monkeypatch.setattr(llm_emit, "_degrade_runs", {})
+
+    def check_unbound_counting():
+        for _ in range(2):
+            assert telemetry.increment_degrade_count() == 0
+            assert telemetry.current_degrade_count() == 0
+            assert llm_emit._degrade_run_id.get() is None
+            assert llm_emit._degrade_runs == {}
+
+    contextvars.Context().run(check_unbound_counting)
+
+
+def test_parallel_context_copies_do_not_undercount_degrades():
+    """Pipeline chunks copy_context(); two degrades must not both record as 1."""
+    from backend.core.llm_usage import run_in_context
+
+    workers = 8
+    barrier = threading.Barrier(workers)
+
+    def bump(_index: int) -> int:
+        barrier.wait(timeout=2)
+        return telemetry.increment_degrade_count()
+
+    with telemetry.track_run():
+        wrapped = run_in_context(bump)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            pending = [pool.submit(wrapped, index) for index in range(workers)]
+            wait(pending, return_when=ALL_COMPLETED)
+            observed = [future.result() for future in pending]
+        assert telemetry.current_degrade_count() == workers
+        snapshot = telemetry.run_snapshot()
+    assert sorted(observed) == list(range(1, workers + 1))
+    assert snapshot["degrade_count"] == workers
+    assert telemetry.current_degrade_count() == 0
+
+
+def test_degrade_count_is_non_negative_and_drops_user_payloads():
+    kept = telemetry.sanitize_run_properties({
+        "degrade_count": 3,
+        "api_key": SECRET,
+        "base_url": "https://api.openai.com/v1/chat/completions",
+        "title": "我的旅行vlog",
+    })
+    assert kept["degrade_count"] == 3
+    assert "api_key" not in kept
+    assert "base_url" not in kept
+    assert "title" not in kept
+    assert "chat/completions" not in str(kept)
+    rejected = telemetry.sanitize_llm_request_properties({
+        "degrade_count": -1,
+        "retry_count": 1.5,
+        "prompt": PROMPT,
+    })
+    assert "degrade_count" not in rejected
+    assert "retry_count" not in rejected
+    assert PROMPT not in str(rejected)
