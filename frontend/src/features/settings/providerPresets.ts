@@ -35,6 +35,8 @@ export type ProviderCatalog = {
   version: number
   issued_at: string
   local_context_hint: string
+  console_hosts: string[]
+  console_suffixes: string[]
   aliases: Record<string, string>
   providers: Record<string, ProviderPreset>
 }
@@ -109,8 +111,11 @@ function parseCatalog(document: unknown): ProviderCatalog {
       if (typeof target === 'string' && target.trim()) aliases[alias.trim().toLowerCase()] = target.trim()
     }
   }
+  const addressRules = (data.address_rules || {}) as Record<string, unknown>
   return {
     schema_version: 1,
+    console_hosts: asStrings(addressRules.console_hosts),
+    console_suffixes: asStrings(addressRules.console_suffixes),
     version: typeof data.version === 'number' ? data.version : 1,
     issued_at: String(data.issued_at || ''),
     local_context_hint: String(data.local_context_hint || ''),

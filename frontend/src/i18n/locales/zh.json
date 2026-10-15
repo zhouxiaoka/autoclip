@@ -1876,5 +1876,10 @@
   "请输入模型 ID": "请输入模型 ID",
   "API 密钥仅保存在本机": "API 密钥仅保存在本机",
   "例如公司内网网关": "例如公司内网网关",
-  "仅语言模型可开启视觉。": "仅语言模型可开启视觉。"
+  "仅语言模型可开启视觉。": "仅语言模型可开启视觉。",
+  "settings.providers.fetch_list": "获取模型列表",
+  "settings.providers.fetch_list_failed": "未能获取模型列表，请检查接口地址和密钥，或手动填写模型 ID。",
+  "settings.providers.fetch_list_updated": "已根据账号可用模型更新列表。",
+  "settings.providers.fetch_list_no_overlap": "推荐候选都不在当前账号的可用列表里，请手选模型或刷新列表。",
+  "settings.providers.fetch_list_truncated": "模型列表过长，只保留前 2000 个；其余请手动填写。"
 }

@@ -9,7 +9,7 @@ import shutil
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal
-from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Body
 from pydantic import BaseModel, Field, validator
 
 logger = logging.getLogger(__name__)
@@ -71,17 +71,18 @@ class ConnectionTestRequest(BaseModel):
 
 
 @router.post('/ai-models/fetch-list')
-def fetch_connection_model_list(body: ConnectionModelsRequest):
+def fetch_connection_model_list(body: Any = Body(default=None)):
     """Custom-provider and settings 'fetch list': GET /models, intersect, backfill.
 
     Never returns keys, full URLs, or upstream response text.
     """
     from backend.services.provider_validation import fetch_list_for_connection
     try:
-        connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
+        request = ConnectionModelsRequest.model_validate(body)
+        connection = ai_models.resolve_secret(request.connection, ai_models.for_editing())
         return fetch_list_for_connection(connection).as_api()
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail="Invalid provider connection") from exc
     except Exception:
         from backend.core.provider_model_fetch import FETCH_LIST_FAILED
         from backend.core.upstream_errors import hint_key_for

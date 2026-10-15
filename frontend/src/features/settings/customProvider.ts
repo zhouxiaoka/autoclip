@@ -104,7 +104,7 @@ export function mergeFetched(draft: CustomProviderDraft, ids: string[]): CustomP
 
 /** Custom offers win on id clash so a live /models refresh cannot drop user attributes. */
 export function mergeCustomList(connection: Connection, live?: ModelList | null): ModelList {
-  const custom = listFromOffers(connection.custom_models || [])
+  const custom = listFromOffers(connection.custom_models || [], live?.models)
   if (!live) return custom
   if (!custom.models.length) return live
   const byId = new Map(live.models.map(model => [model.id, model]))
@@ -190,7 +190,7 @@ export function toConnection(draft: CustomProviderDraft, id: string = crypto.ran
   }
 }
 
-export function listFromOffers(offers: CustomModelOffer[]): ModelList {
+export function listFromOffers(offers: CustomModelOffer[], verified: ModelEntry[] = []): ModelList {
   return {
     models: offers.filter(offer => offer.enabled).map(offer => ({
       id: offer.id,
@@ -198,7 +198,9 @@ export function listFromOffers(offers: CustomModelOffer[]): ModelList {
       analysis: offer.scenarios.includes('analysis') || offer.types.includes('language'),
       image: offer.types.includes('image') || offer.scenarios.includes('cover'),
       asr: offer.types.includes('asr') || offer.scenarios.includes('transcription'),
-      asr_supported: offer.types.includes('asr'),
+      // Timestamp support belongs to the backend asr_model_catalog adapter.
+      asr_supported: verified.find(model => model.id === offer.id)?.asr_supported ?? false,
+      asr_note: verified.find(model => model.id === offer.id)?.asr_note,
     })),
     source: 'live',
     preview: false,

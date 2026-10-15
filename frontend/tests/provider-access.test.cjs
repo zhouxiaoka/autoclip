@@ -96,11 +96,26 @@ test('Infistar API host is accepted and console detection follows the catalog', 
     '../../i18n': { t: x => x },
     './providers': providers,
     '../../analytics/successRateContract': contract,
-    './providerPresets': { getCatalog: () => ({ providers: {
+    './providerPresets': { getCatalog: () => ({
+      console_hosts: ['platform.deepseek.com', 'aistudio.google.com', 'platform.openai.com', 'console.fixture.test'],
+      console_suffixes: ['.console.fixture.test'],
+      providers: {
       fixture: { base_url: 'https://platform.deepseek.com/v1', accepted_hosts: ['aistudio.google.com'] },
     } }) },
   })
   assert.equal(catalogAccess.isConsoleHost('platform.deepseek.com'), false)
   assert.equal(catalogAccess.isConsoleHost('aistudio.google.com'), false)
   assert.equal(catalogAccess.isConsoleHost('platform.openai.com'), true)
+  assert.equal(catalogAccess.isConsoleHost('console.fixture.test'), true)
+  assert.equal(catalogAccess.isConsoleHost('account.console.fixture.test'), true)
+  assert.equal(catalogAccess.isConsoleHost('bailian.console.aliyun.com'), false)
+})
+
+
+test('Infistar API is accepted and address locks are projected from the catalog', () => {
+  const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, '../../presets/provider_presets.json'), 'utf8'))
+  assert.equal(access.isConsoleHost('infistar.ai'), false)
+  assert.equal(access.normalizeCompatibleUrl('https://infistar.ai/v1').warnings.length, 0)
+  assert.deepEqual(Array.from(access.ADDRESS_LOCKED).sort(), Object.entries(catalog.providers)
+    .filter(([, row]) => row.locked && row.base_url).map(([id]) => id).sort())
 })

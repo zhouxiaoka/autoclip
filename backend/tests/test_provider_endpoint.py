@@ -112,24 +112,33 @@ def test_locked_presets_read_catalog_urls_except_legacy_openai_and_bailian():
     assert locked_chat_url('dashscope', 'https://llm-x.cn-beijing.maas.aliyuncs.com') is None
     assert set(LOCKED_PRESETS) == set(ADDRESS_LOCKED_PROVIDERS)
     assert LOCKED_PRESETS['api88'] == api88
-    assert locked_preset_url('siliconflow') is None
+    assert locked_preset_url('siliconflow') == get_provider('siliconflow').base_url
+    assert locked_preset_url('ollama') is None
 
 
 def test_locked_urls_follow_swapped_json_catalog(tmp_path, monkeypatch):
     raw = json.loads(CATALOG.read_text(encoding='utf-8'))
     raw['providers']['api88']['base_url'] = 'https://lock.example.test/v1'
+    raw['providers']['siliconflow']['locked'] = False
+    raw['providers']['ollama']['locked'] = True
     path = tmp_path / 'provider_presets.json'
     path.write_text(json.dumps(raw), encoding='utf-8')
     monkeypatch.setenv('AUTOCLIP_PROVIDER_PRESETS', str(path))
     provider_presets.reset_catalog_cache()
     assert locked_chat_url('api88', 'https://wrong.example/v1') == 'https://lock.example.test/v1'
     assert LOCKED_PRESETS['api88'] == 'https://lock.example.test/v1'
+    assert 'siliconflow' not in ADDRESS_LOCKED_PROVIDERS
+    assert locked_preset_url('siliconflow') is None
+    assert 'ollama' in ADDRESS_LOCKED_PROVIDERS
+    assert LOCKED_PRESETS['ollama'] == get_provider('ollama').base_url
 
 
 def test_console_detection_allows_live_catalog_api_hosts(tmp_path, monkeypatch):
     raw = json.loads(CATALOG.read_text(encoding='utf-8'))
     raw['providers']['api88']['base_url'] = 'https://platform.deepseek.com/v1'
     raw['providers']['api88']['accepted_hosts'] = ['aistudio.google.com']
+    raw['address_rules']['console_hosts'].append('control.fixture.test')
+    raw['address_rules']['console_suffixes'].append('.console.fixture.test')
     path = tmp_path / 'provider_presets.json'
     path.write_text(json.dumps(raw), encoding='utf-8')
     monkeypatch.setenv('AUTOCLIP_PROVIDER_PRESETS', str(path))
@@ -143,10 +152,14 @@ def test_console_detection_allows_live_catalog_api_hosts(tmp_path, monkeypatch):
     )
     assert connection.base_url == 'https://platform.deepseek.com/v1'
     assert is_console_host('platform.openai.com')
+    assert is_console_host('control.fixture.test')
+    assert is_console_host('account.console.fixture.test')
     provider_presets.reset_catalog_cache()
     monkeypatch.delenv('AUTOCLIP_PROVIDER_PRESETS')
     assert is_console_host('platform.deepseek.com')
     assert is_console_host('aistudio.google.com')
+    assert not is_console_host('control.fixture.test')
+    assert not is_console_host('account.console.fixture.test')
 
 
 def test_gemini_catalog_native_path_uses_shared_helper(tmp_path, monkeypatch):
@@ -217,3 +230,20 @@ def test_key_hint_is_prefix_only_and_host_is_sanitized():
     assert telemetry_host('https://example.com/v1/chat/completions?key=secret') == 'example.com'
     assert telemetry_host('http://127.0.0.1:11434/v1') == 'local'
     assert 'secret' not in telemetry_host('https://user:secret@evil.example/v1')
+
+
+def test_catalog_api_hosts_are_not_console_hosts_and_locks_match_catalog():
+    from urllib.parse import urlparse
+    from backend.core.provider_presets import get_catalog
+    from backend.core.provider_endpoint import ADDRESS_LOCKED_PROVIDERS, LOCKED_PRESETS
+    from backend.services.ai_model_settings import Connection
+    catalog = get_catalog()
+    assert not is_console_host('infistar.ai')
+    assert Connection(id='inf', name='Infistar', provider='compatible', base_url='https://infistar.ai/v1').base_url == 'https://infistar.ai/v1'
+    assert ADDRESS_LOCKED_PROVIDERS == {p.id for p in catalog.providers.values() if p.locked and p.base_url}
+    for preset in catalog.providers.values():
+        if preset.base_url:
+            assert not is_console_host(urlparse(preset.base_url).hostname)
+        if preset.id in LOCKED_PRESETS:
+            expected = preset.base_url + ('/openai' if preset.protocol == 'google-generative-ai' else '')
+            assert LOCKED_PRESETS[preset.id] == expected

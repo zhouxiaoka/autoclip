@@ -12,31 +12,9 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from backend.core.llm_providers import normalize_base_url
-from backend.core.provider_presets import get_provider, iter_providers
+from backend.core.provider_presets import get_catalog, get_provider, iter_providers
 from backend.core.provider_url import NormalizeResult, cleanup_base_url, normalize_provider_url
 from backend.core.provider_url import normalize_provider_base_url as rewrite_provider_base_url
-
-# Settings-page providers whose address is not user-editable. Local presets and
-# ``compatible`` stay editable. URLs are not listed here — they come from JSON.
-ADDRESS_LOCKED_PROVIDERS = frozenset({
-    'api88', 'infistar', 'deepseek', 'gemini', 'dashscope', 'openai',
-})
-
-CONSOLE_HOSTS = frozenset({
-    'platform.openai.com', 'chatgpt.com', 'openai.com', 'www.openai.com',
-    'platform.deepseek.com', 'chat.deepseek.com', 'www.deepseek.com', 'deepseek.com',
-    'aistudio.google.com', 'ai.google.dev', 'makersuite.google.com',
-    'console.cloud.google.com',
-    'bailian.console.aliyun.com', 'dashscope.console.aliyun.com',
-    'www.aliyun.com', 'aliyun.com',
-    'console.volcengine.com', 'www.volcengine.com',
-    'platform.moonshot.cn', 'www.moonshot.cn',
-    'console.x.ai',
-    'www.infistar.cc', 'www.infistar.ai',
-    'www.88api.ai',
-})
-
-_CONSOLE_SUFFIXES = ('.console.aliyun.com', '.console.volcengine.com')
 
 _KEY_HINTS = (
     (re.compile(r'^AIza'), 'gemini'),
@@ -64,7 +42,8 @@ def official_chat_url(provider: Optional[str]) -> Optional[str]:
 
 
 def locked_preset_url(provider: Optional[str]) -> Optional[str]:
-    if provider not in ADDRESS_LOCKED_PROVIDERS:
+    preset = get_provider(provider)
+    if not preset or not preset.locked:
         return None
     return official_chat_url(provider)
 
@@ -72,9 +51,9 @@ def locked_preset_url(provider: Optional[str]) -> Optional[str]:
 def locked_presets() -> dict[str, str]:
     """Live map so tests can swap ``AUTOCLIP_PROVIDER_PRESETS``."""
     return {
-        key: url
-        for key in ADDRESS_LOCKED_PROVIDERS
-        if (url := official_chat_url(key))
+        preset.id: url
+        for preset in iter_providers()
+        if preset.locked and (url := official_chat_url(preset.id))
     }
 
 
@@ -95,6 +74,8 @@ class _LockedPresetMap(Mapping[str, str]):
 
 
 LOCKED_PRESETS = _LockedPresetMap()
+# A live keys view keeps the existing set API in sync with catalog lock flags.
+ADDRESS_LOCKED_PROVIDERS = LOCKED_PRESETS.keys()
 
 
 def is_console_host(host: Optional[str]) -> bool:
@@ -105,9 +86,10 @@ def is_console_host(host: Optional[str]) -> bool:
     # (including an accepted legacy host) takes precedence over console hints.
     if any(value in _accepted_hosts(preset.id, preset.base_url) for preset in iter_providers()):
         return False
-    if value in CONSOLE_HOSTS:
+    catalog = get_catalog()
+    if value in catalog.console_hosts:
         return True
-    return any(value.endswith(suffix) for suffix in _CONSOLE_SUFFIXES)
+    return any(value.endswith(suffix) for suffix in catalog.console_suffixes)
 
 
 def looks_like_html(text: Optional[str]) -> bool:

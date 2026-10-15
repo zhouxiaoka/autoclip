@@ -150,14 +150,15 @@ def _custom_offers(connection):
     return list(old.custom_models) if old else []
 
 
-def _record_from_offer(offer):
+def _record_from_offer(connection, offer):
     name = str(getattr(offer, 'id', '') or '').strip()
     if not name:
         return None
     types = set(getattr(offer, 'types', None) or ['language'])
     scenarios = set(getattr(offer, 'scenarios', None) or [])
     vision = bool(getattr(offer, 'vision', False) and 'language' in types)
-    asr = 'asr' in types or 'transcription' in scenarios
+    asr_metadata = asr_catalog.metadata(connection.provider, name)
+    asr = 'asr' in types or 'transcription' in scenarios or asr_metadata['asr']
     return {
         'id': name,
         'capability': 'multimodal' if vision else ('text' if 'language' in types else None),
@@ -165,9 +166,9 @@ def _record_from_offer(offer):
         'analysis': 'analysis' in scenarios or 'language' in types,
         'image': 'image' in types or 'cover' in scenarios,
         'asr': asr,
-        'asr_supported': 'asr' in types,
+        'asr_supported': asr_metadata['asr_supported'],
         'asr_preview': False,
-        'asr_note': None,
+        'asr_note': asr_metadata['asr_note'],
     }
 
 
@@ -178,7 +179,7 @@ def _merge_custom_models(connection, value):
     for offer in _custom_offers(connection):
         if getattr(offer, 'enabled', True) is False:
             continue
-        record = _record_from_offer(offer)
+        record = _record_from_offer(connection, offer)
         if not record:
             continue
         existing = by_id.get(record['id'])
@@ -194,7 +195,7 @@ def lookup_capability(connection, model):
     for offer in _custom_offers(connection):
         if getattr(offer, 'id', None) != model or getattr(offer, 'enabled', True) is False:
             continue
-        record = _record_from_offer(offer)
+        record = _record_from_offer(connection, offer)
         if record:
             return record.get('capability')
     data = _read()

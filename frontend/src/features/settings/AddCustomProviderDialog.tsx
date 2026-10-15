@@ -7,7 +7,6 @@ import { modelSettingsApi } from './modelSettingsApi'
 import {
   CUSTOM_PROTOCOL,
   MODEL_TYPES,
-  SCENARIOS,
   addManualModel,
   draftIssue,
   draftUrlIssue,
@@ -15,14 +14,12 @@ import {
   emptyDraft,
   mergeFetched,
   normalizedDraftUrl,
-  scenarioAllowed,
   toggleModel,
   toConnection,
   visibleModels,
   type CustomModelOffer,
   type CustomProviderDraft,
   type ModelType,
-  type Scenario,
 } from './customProvider'
 
 const TYPE_LABEL: Record<ModelType, string> = {
@@ -32,20 +29,6 @@ const TYPE_LABEL: Record<ModelType, string> = {
   image: '图像生成',
   music: '音乐',
   video: '视频',
-}
-
-const SCENARIO_LABEL: Record<Scenario, string> = {
-  analysis: '精彩片段分析',
-  vision: '画面理解',
-  transcription: '语音转字幕',
-  cover: '封面生成',
-}
-
-const SCENARIO_HINT: Record<Scenario, string> = {
-  analysis: '仅语言模型可用于精彩片段分析。',
-  vision: '仅支持视觉的语言模型可用于画面理解。',
-  transcription: '仅语音识别模型可用于语音转字幕。',
-  cover: '仅图像生成模型可用于封面生成。',
 }
 
 const ISSUE_COPY = {
@@ -89,6 +72,16 @@ export default function AddCustomProviderDialog({
   }
   const close = () => { reset(); onClose() }
 
+  const editCredentials = (patch: Partial<Pick<CustomProviderDraft, 'base_url' | 'api_key'>>) => {
+    if (!Object.entries(patch).some(([key, value]) => draft[key as keyof typeof patch] !== value)) return
+    fetchGen.current += 1
+    setFetching(false)
+    setFetched(false)
+    setFetchFailed(false)
+    setNote('')
+    setDraft(current => ({ ...current, ...patch }))
+  }
+
   const fetchModels = async () => {
     if (draftUrlIssue(draft.base_url)) {
       setNote(t(ISSUE_COPY.url))
@@ -103,7 +96,7 @@ export default function AddCustomProviderDialog({
       const result = await modelSettingsApi.fetchList(toConnection({ ...draft, models: draft.models }))
       if (gen !== fetchGen.current) return
       if (result.ok || result.success) {
-        const source = result.source === 'cache' || result.source === 'catalog' ? result.source : 'live'
+        const source = 'live'
         finish('completed', { source, preview: false, result_count: result.models.length })
         setDraft(current => mergeFetched(current, result.models))
         setFetched(true)
@@ -158,14 +151,14 @@ export default function AddCustomProviderDialog({
       <Row wide label={t('接口地址')}>
         <input className="ac-input" aria-label={t('接口地址')} value={draft.base_url}
           placeholder="https://example.com/v1"
-          onChange={e => setDraft({ ...draft, base_url: e.target.value })}
-          onBlur={() => setDraft(current => ({ ...current, base_url: normalizedDraftUrl(current.base_url) || current.base_url }))} />
+          onChange={e => editCredentials({ base_url: e.target.value })}
+          onBlur={() => editCredentials({ base_url: normalizedDraftUrl(draft.base_url) || draft.base_url })} />
       </Row>
       <Row wide label={t('服务密钥（API Key）')} hint={t('API 密钥仅保存在本机')}>
         <Input.Password aria-label="API Key" autoComplete="new-password" value={draft.api_key}
           placeholder={t('sk-…（自建服务可留空）')}
-          onChange={e => setDraft({ ...draft, api_key: e.target.value })}
-          onBlur={e => setDraft(current => ({ ...current, api_key: e.target.value.trim() }))} />
+          onChange={e => editCredentials({ api_key: e.target.value })}
+          onBlur={e => editCredentials({ api_key: e.target.value.trim() })} />
       </Row>
       <div className="ac-custom-toolbar">
         <Btn size="sm" loading={fetching} disabled={fetching} onClick={() => void fetchModels()}>{t('获取模型列表')}</Btn>
@@ -221,24 +214,6 @@ function ModelRow({ model, onToggle, onEdit }: {
       </Row>
       <Row label={t('多模态视觉')} hint={type === 'language' ? undefined : t('仅语言模型可开启视觉。')}>
         <Switch checked={model.vision} disabled={type !== 'language'} onChange={vision => onEdit({ vision })} />
-      </Row>
-      <Row wide label={t('适用场景')}>
-        <div className="ac-custom-scenarios">
-          {SCENARIOS.map(scenario => {
-            const allowed = scenarioAllowed(model.types, model.vision, scenario)
-            const checked = model.scenarios.includes(scenario)
-            return <label key={scenario} className="ac-custom-scenario" title={!allowed ? t(SCENARIO_HINT[scenario]) : undefined}>
-              <input type="checkbox" disabled={!allowed} checked={allowed && checked}
-                onChange={e => {
-                  const next = e.target.checked
-                    ? [...model.scenarios, scenario]
-                    : model.scenarios.filter(item => item !== scenario)
-                  onEdit({ scenarios: next })
-                }} />
-              <span>{t(SCENARIO_LABEL[scenario])}</span>
-            </label>
-          })}
-        </div>
       </Row>
     </div>}
   </li>

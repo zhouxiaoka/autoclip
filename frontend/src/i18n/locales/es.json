@@ -1876,5 +1876,10 @@
   "请输入模型 ID": "Escribe un id de modelo",
   "API 密钥仅保存在本机": "La clave API se guarda solo en este dispositivo",
   "例如公司内网网关": "p. ej. puerta de enlace de la empresa",
-  "仅语言模型可开启视觉。": "La visión solo está disponible en modelos de lenguaje."
+  "仅语言模型可开启视觉。": "La visión solo está disponible en modelos de lenguaje.",
+  "settings.providers.fetch_list": "Obtener lista de modelos",
+  "settings.providers.fetch_list_failed": "No se pudo obtener la lista de modelos. Comprueba la dirección y la clave, o introduce un ID manualmente.",
+  "settings.providers.fetch_list_updated": "Lista actualizada con los modelos disponibles en esta cuenta.",
+  "settings.providers.fetch_list_no_overlap": "Ningún candidato recomendado está en la lista de esta cuenta. Elige uno a mano o actualiza la lista.",
+  "settings.providers.fetch_list_truncated": "La lista de modelos es demasiado larga; solo se conservan los primeros 2000. Introduce el resto a mano."
 }

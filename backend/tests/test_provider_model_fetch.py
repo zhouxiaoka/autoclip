@@ -516,3 +516,71 @@ def test_fetch_list_copy_exists_in_all_locales():
             assert str(catalog[key]).strip()
             if lang != "zh":
                 assert catalog[key] != key
+
+
+@pytest.mark.parametrize('status,payload', [(401, {'error': 'sk-test-secret-key https://gw.example/v1'}),
+    (503, {'error': 'sk-test-secret-key https://gw.example/v1'}), (200, {}), (302, {})])
+def test_fetch_failure_never_uses_discover_cache_or_catalog(isolated, monkeypatch, status, payload):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.core import model_registry
+
+    async def forbidden(*args, **kwargs):
+        pytest.fail('fetch-list must not use discover or its fallback catalogs')
+
+    monkeypatch.setattr(model_registry, 'discover', forbidden)
+    _patch_httpx(monkeypatch, lambda *args: _FakeResponse(status, payload))
+    app = FastAPI()
+    app.include_router(_settings_router())
+    with TestClient(app) as client:
+        response = client.post('/settings/ai-models/fetch-list', json={'connection': {
+            'id': 'gw', 'name': 'gateway', 'provider': 'compatible',
+            'base_url': 'https://gw.example/v1', 'api_key': SECRET,
+            'custom_models': [{'id': 'local-fallback', 'types': ['language']}],
+        }})
+    assert response.status_code == 200
+    body = response.json()
+    assert body['ok'] is body['success'] is False
+    assert body['models'] == []
+    assert body['source'] == 'empty'
+    assert SECRET not in response.text
+    assert 'https://gw.example/v1' not in response.text
+
+
+@pytest.mark.parametrize('connection', [
+    {'id': 'gw', 'name': 'gateway', 'provider': 'compatible', 'base_url': SECRET_URL, 'api_key': SECRET},
+    {'id': 'gw', 'name': 'gateway', 'provider': 'compatible', 'base_url': 'https://gw.example/v1?key='+SECRET, 'api_key': SECRET},
+    {'id': 'gw', 'name': 'gateway', 'provider': 'compatible', 'base_url': 'https://platform.openai.com/api-keys', 'api_key': SECRET},
+    SECRET_URL + SECRET,
+])
+def test_fetch_request_validation_does_not_echo_url_or_key(isolated, connection):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    app = FastAPI()
+    app.include_router(_settings_router())
+    with TestClient(app) as client:
+        response = client.post('/settings/ai-models/fetch-list', json={'connection': connection})
+    assert response.status_code == 422
+    assert response.json() == {'detail': 'Invalid provider connection'}
+    assert SECRET not in response.text
+    assert 'https://' not in response.text
+
+
+@pytest.mark.parametrize('error', [ValueError, RuntimeError])
+def test_fetch_exceptions_are_sanitized(isolated, monkeypatch, error):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.services import provider_validation
+    def fail(*args, **kwargs):
+        raise error(SECRET_URL + SECRET)
+    monkeypatch.setattr(provider_validation, 'fetch_list_for_connection', fail)
+    app = FastAPI()
+    app.include_router(_settings_router())
+    with TestClient(app) as client:
+        response = client.post('/settings/ai-models/fetch-list', json={'connection': {
+            'id': 'gw', 'name': 'gateway', 'provider': 'compatible',
+            'base_url': 'https://gw.example/v1', 'api_key': SECRET,
+        }})
+    assert response.status_code in (200, 422)
+    assert SECRET not in response.text
+    assert 'https://' not in response.text

@@ -8,7 +8,8 @@ import { PROVIDERS, type ProviderKey } from './providers'
 import { getCatalog } from './providerPresets'
 import { cleanupBaseUrl, normalizeProviderUrl } from './providerUrl'
 
-export const ADDRESS_LOCKED: readonly ProviderKey[] = ['api88', 'infistar', 'deepseek', 'gemini', 'dashscope', 'openai']
+const catalog = getCatalog()
+export const ADDRESS_LOCKED = Object.values(catalog.providers).filter(row => row.locked && row.base_url).map(row => row.id)
 
 export const VALIDATION_ERROR_TYPES = UPSTREAM_ERROR_TYPES
 export type ValidationErrorType = (typeof VALIDATION_ERROR_TYPES)[number]
@@ -38,21 +39,12 @@ const KEY_HINTS: Array<[RegExp, ProviderKey]> = [
   [/^sk-ant-/, 'compatible'],
 ]
 
-const CONSOLE_HOSTS = new Set([
-  'platform.openai.com', 'chatgpt.com', 'openai.com', 'www.openai.com',
-  'platform.deepseek.com', 'chat.deepseek.com', 'www.deepseek.com', 'deepseek.com',
-  'aistudio.google.com', 'ai.google.dev', 'makersuite.google.com',
-  'console.cloud.google.com', 'bailian.console.aliyun.com', 'dashscope.console.aliyun.com',
-  'www.aliyun.com', 'aliyun.com', 'console.volcengine.com', 'www.volcengine.com',
-  'platform.moonshot.cn', 'www.moonshot.cn', 'console.x.ai',
-  'www.infistar.cc', 'www.infistar.ai', 'www.88api.ai',
-])
 const CONSOLE_COPY = '这是控制台或官网地址，不是模型接口。请改选对应服务商，或用「自定义兼容」填写带 /v1 的接口地址。'
 export const VISION_UNSUPPORTED = 'vision_unsupported'
 export const VISION_HINT_KEY = '画面理解使用的模型不能看图。设置已保存，开始生成前会拦住。请换一个能看图的模型，或关闭画面识别。'
 export const VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型，或关闭画面识别后再生成。'
 
-export const canEditAddress = (key?: ProviderKey) => key === 'compatible' || !!PROVIDERS[key || 'compatible']?.local
+export const canEditAddress = (key?: ProviderKey) => key === 'compatible' || catalog.providers[key || '']?.locked === false
 
 export function hintProviderForKey(apiKey?: string | null): ProviderKey | null {
   const key = (apiKey || '').trim()
@@ -65,12 +57,13 @@ export function hintProviderForKey(apiKey?: string | null): ProviderKey | null {
 export function isConsoleHost(host?: string) {
   const value = (host || '').toLowerCase().replace(/^\.+|\.+$/g, '')
   if (!value) return false
+  const current = getCatalog()
   // Match the backend: catalog API and accepted legacy hosts take precedence.
-  for (const preset of Object.values(getCatalog().providers)) {
+  for (const preset of Object.values(current.providers)) {
     if (preset.accepted_hosts.includes(value)) return false
     try { if (new URL(preset.base_url).hostname.toLowerCase() === value) return false } catch { /* No API host. */ }
   }
-  return CONSOLE_HOSTS.has(value) || value.endsWith('.console.aliyun.com') || value.endsWith('.console.volcengine.com')
+  return current.console_hosts.includes(value) || current.console_suffixes.some(suffix => value.endsWith(suffix))
 }
 
 export function normalizeCompatibleUrl(raw: string, provider = 'compatible'): { url: string; warnings: string[] } {

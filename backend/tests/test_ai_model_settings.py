@@ -696,18 +696,19 @@ def test_fetch_list_returns_ids_without_secrets(monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from backend.api.v1.settings import router
-    from backend.core.provider_model_fetch import AccountModelList
-    from backend.services import provider_validation
 
     assert len([route for route in router.routes
                 if route.path == '/settings/ai-models/fetch-list' and 'POST' in route.methods]) == 1
 
-    def fetch_list(connection):
-        assert connection.api_key == 'sk-custom-secret'
-        return AccountModelList(ok=True, models=['relay-a', 'office-llm'],
-                                source='live', base_url_host='gw.example')
+    from backend.core import provider_model_fetch
 
-    monkeypatch.setattr(provider_validation, 'fetch_list_for_connection', fetch_list)
+    def fetch(url, *, headers, **kwargs):
+        assert headers['Authorization'] == 'Bearer sk-custom-secret'
+        assert url == 'https://gw.example/v1/models'
+        return SimpleNamespace(status_code=200, text='', headers={},
+            json=lambda: {'data': [{'id': 'relay-a'}, {'id': 'office-llm'}]})
+
+    monkeypatch.setattr(provider_model_fetch, '_default_http_get', fetch)
     settings = ai.ModelSettings(
         connections=[ai.Connection(
             id='gw', name='Office', provider='compatible',
@@ -757,3 +758,19 @@ def test_custom_models_persist_without_exposing_keys():
     blank = ai.CustomModelOffer(id='x', types=[], scenarios=['analysis'])
     assert blank.types == ['language']
     assert blank.scenarios == ['analysis']
+
+
+@pytest.mark.parametrize('provider,model,supported', [
+    ('openai', 'gpt-4o-transcribe', False),
+    ('compatible', 'gpt-4o-mini-transcribe', False),
+    ('openai', 'whisper-1', True),
+    ('compatible', 'whisper-1', True),
+    ('dashscope', 'paraformer-v2', False),
+])
+def test_custom_asr_support_requires_timestamp_adapter(provider, model, supported):
+    from backend.core.asr_model_catalog import adapter
+    connection = ai.Connection(id='asr', name='ASR', provider=provider,
+        base_url='https://gw.example/v1', custom_models=[ai.CustomModelOffer(id=model, types=['asr'])])
+    record = registry._merge_custom_models(connection, {'models': []})['models'][0]
+    assert record['asr'] is True
+    assert record['asr_supported'] is bool(adapter(provider, model)) is supported
