@@ -66,6 +66,42 @@ def test_sanitize_exception_text_keeps_host_drops_keys_and_body():
     assert telemetry.sanitize_exception_text(RuntimeError(raw)) == cleaned
 
 
+@pytest.mark.parametrize("name", ["AIza" + "A" * 35, "xai-" + "a" * 48])
+def test_sanitize_model_rejects_google_and_xai_credentials(name):
+    assert telemetry.sanitize_model(name) == "redacted"
+    for sanitize in (telemetry.sanitize_llm_request_properties, telemetry.sanitize_run_properties):
+        assert sanitize({"model": name})["model"] == "redacted"
+
+
+@pytest.mark.parametrize("field", [
+    "api_key", "apiKey", "key", "token", "authorization", "x-api-key", "x-goog-api-key",
+])
+@pytest.mark.parametrize("quote", ['"', "'"])
+@pytest.mark.parametrize("value", ["fixture-credential", "Bearer fixture-credential", "fixture with spaces"])
+def test_sanitize_exception_redacts_quoted_credential_fields(field, quote, value):
+    raw = f"request failed: {{{quote}{field}{quote}: {quote}{value}{quote}}} status=401"
+    cleaned = telemetry.sanitize_exception_text(raw)
+    assert "fixture" not in cleaned
+    assert "Bearer" not in cleaned
+    assert "status=401" in cleaned
+
+
+@pytest.mark.parametrize("raw", [
+    "Bearer fixture-credential",
+    "Authorization: Bearer fixture-credential",
+    "authorization=Bearer fixture-credential",
+    "x-goog-api-key: fixture-credential",
+    "X-Goog-Api-Key=fixture-credential",
+    "x-api-key: fixture-credential",
+    '"api_key": "fixture-escaped-\\\"credential"',
+    "'api_key': 'fixture-escaped-\\'credential'",
+    "AIza" + "A" * 35,
+    "xai-" + "a" * 48,
+])
+def test_sanitize_exception_redacts_whole_credential(raw):
+    assert telemetry.sanitize_exception_text(raw) == "redacted"
+
+
 def test_llm_request_properties_drop_secrets_and_user_text():
     out = telemetry.sanitize_llm_request_properties({
         "provider": "api88",
