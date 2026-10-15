@@ -1,34 +1,32 @@
-"""kill -9 of the backend leaves ffmpeg running; the next start must reap only ours."""
+"""kill -9 of the backend leaves ffmpeg running; the next start must reap only ours.
+
+No module-level win32 skip: quality_gate treats any unexpected skip as a hard fail.
+The reap logic is exercised with injected process doubles (no /bin/sleep).
+"""
 import os
-import shutil
 import subprocess
 import sys
-import time
 
 import psutil
 import pytest
 
 from backend.core import orphan_reaper
 
-pytestmark = pytest.mark.skipif(sys.platform == 'win32', reason='fake ffmpeg uses /bin/sleep')
 
+class _FakeProc:
+    """Minimal psutil.Process stand-in for find_orphans / reap_orphans."""
 
-def _fake_ffmpeg(tmp_path, env_token=None):
-    exe = tmp_path / 'ffmpeg'
-    if not exe.exists():
-        shutil.copy(shutil.which('sleep'), exe)
-    env = {k: v for k, v in os.environ.items() if k != orphan_reaper.ENV}
-    if env_token:
-        env[orphan_reaper.ENV] = env_token
-    proc = subprocess.Popen([str(exe), '60'], env=env)
-    for _ in range(50):
-        try:
-            if psutil.Process(proc.pid).name() == 'ffmpeg':
-                break
-        except psutil.Error:
-            pass
-        time.sleep(0.05)
-    return proc
+    def __init__(self, pid: int, name: str, environ: dict):
+        self.pid = pid
+        self.info = {'name': name}
+        self._environ = dict(environ)
+        self.killed = False
+
+    def environ(self):
+        return dict(self._environ)
+
+    def kill(self):
+        self.killed = True
 
 
 def _dead_owner_token():
@@ -38,28 +36,44 @@ def _dead_owner_token():
     return f'{owner.pid}:{created:.3f}'
 
 
-def test_reaps_only_orphans_of_a_dead_backend(tmp_path, monkeypatch):
+def test_reaps_only_orphans_of_a_dead_backend(monkeypatch):
     monkeypatch.delenv(orphan_reaper.ENV, raising=False)
-    orphan = _fake_ffmpeg(tmp_path, _dead_owner_token())
-    unrelated = _fake_ffmpeg(tmp_path)  # user's own ffmpeg: no marker
-    live = _fake_ffmpeg(tmp_path, orphan_reaper._owner_token(psutil.Process(os.getppid())))
-    try:
-        assert orphan_reaper.reap_orphans() == 1
-        assert orphan.wait(timeout=5) is not None
-        assert unrelated.poll() is None
-        assert live.poll() is None
-    finally:
-        for p in (orphan, unrelated, live):
-            p.kill()
-            p.wait()
+    current = orphan_reaper.mark_environment()
+    dead = _dead_owner_token()
+    alive = orphan_reaper._owner_token(psutil.Process())
+
+    orphan = _FakeProc(101, 'ffmpeg', {orphan_reaper.ENV: dead})
+    orphan_exe = _FakeProc(102, 'ffmpeg.exe', {orphan_reaper.ENV: dead})  # Windows name
+    unrelated = _FakeProc(103, 'ffmpeg', {})  # user's own: no marker
+    same_backend = _FakeProc(104, 'ffmpeg', {orphan_reaper.ENV: current})
+    other_live = _FakeProc(105, 'ffprobe', {orphan_reaper.ENV: alive})
+    other_app = _FakeProc(106, 'chrome', {orphan_reaper.ENV: dead})
+
+    found = orphan_reaper.find_orphans(
+        [orphan, orphan_exe, unrelated, same_backend, other_live, other_app])
+    assert found == [orphan, orphan_exe]
+
+    waited = []
+
+    def fake_wait(procs, timeout=3.0):
+        waited.extend(procs)
+        return (list(procs), [])
+
+    monkeypatch.setattr(orphan_reaper, 'find_orphans', lambda: [orphan, orphan_exe])
+    monkeypatch.setattr(psutil, 'wait_procs', fake_wait)
+    assert orphan_reaper.reap_orphans() == 2
+    assert orphan.killed and orphan_exe.killed
+    assert waited == [orphan, orphan_exe]
+    assert unrelated.killed is False and same_backend.killed is False
 
 
 def test_mark_environment_is_inherited_by_children(monkeypatch):
     monkeypatch.delenv(orphan_reaper.ENV, raising=False)
     token = orphan_reaper.mark_environment()
-    out = subprocess.check_output([sys.executable, '-c', f'import os;print(os.environ["{orphan_reaper.ENV}"])'])
+    out = subprocess.check_output(
+        [sys.executable, '-c', f'import os;print(os.environ["{orphan_reaper.ENV}"])'])
     assert out.decode().strip() == token
-    assert orphan_reaper.find_orphans() == []
+    assert orphan_reaper.find_orphans([]) == []
 
 
 def test_reaper_never_raises(monkeypatch):
