@@ -180,6 +180,16 @@ test('vision repair opens the vision settings section', async () => {
   assert.deepEqual(view.navigations, ['/settings?section=vision'])
 })
 
+test('B5: failed separate vision validation blocks generation and offers repair', async () => {
+  const failing = report({ visual: check(false, 'validation_failed', 'settings_vision') })
+  assert.equal(readiness.submissionBlock(failing, true, true), 'visual')
+  const view = render({ report: failing, subtitle: { name: 'fixture.srt' } })
+  await button(view.tree, '视觉设置').props.onClick()
+  assert.deepEqual(view.navigations, ['/settings?section=vision'])
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 0)
+})
+
 test('a text-only vision follow blocks generation with a clear message', async () => {
   const failing = report({ visual: check(false, 'vision_unsupported', 'settings_vision') })
   assert.equal(readiness.submissionBlock(failing, true, true), 'visual')

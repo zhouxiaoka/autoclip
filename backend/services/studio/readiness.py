@@ -105,6 +105,10 @@ def _visual(settings: ai_models.ModelSettings) -> dict:
     mode = settings.analysis_mode
     if mode == 'subtitle':
         return _check(True, 'not_required')
+    binding = ai_models.vision_follow_binding(settings)
+    connection = next((item for item in settings.connections if binding and item.id == binding.connection_id), None)
+    if connection and connection.validation_status == 'failed':
+        return _check(False, 'validation_failed', 'settings_vision')
     if ai_models.vision_follow_lacks_capability(settings):
         return _check(False, 'vision_unsupported', 'settings_vision')
     if mode != 'visual':

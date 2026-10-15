@@ -342,13 +342,15 @@ def connection_for(settings: ModelSettings, assignment: Assignment) -> Connectio
     return connection
 
 
-def ensure_runtime_bindings(settings: ModelSettings) -> None:
+def ensure_runtime_bindings(settings: ModelSettings, *, require_vision: bool = False) -> None:
     """A lost explicit assignment is never consent to borrow another provider."""
     if {'analysis_configuration_invalid', 'vision_configuration_invalid'} & set(settings._migration_warnings):
         raise ValueError('分析或视觉模型引用的服务连接已缺失或配置无效，请到「设置 → 模型」修复并保存后再生成。')
     for binding in (settings.analysis, settings.vision):
         if binding is not None:
-            connection_for(settings, binding)
+            connection = connection_for(settings, binding)
+            if connection.validation_status == 'failed' and (binding is settings.analysis or settings.analysis_mode != 'subtitle' or require_vision):
+                raise ValueError('当前模型连接未通过校验。请到「设置 → 模型」修复密钥或地址后再生成。')
 
 
 def require_analysis(settings: ModelSettings) -> Assignment:
@@ -452,7 +454,7 @@ def vision_follow_lacks_capability(settings: ModelSettings) -> bool:
 
 
 def vision_endpoint(settings: ModelSettings) -> dict | None:
-    ensure_runtime_bindings(settings)
+    ensure_runtime_bindings(settings, require_vision=True)
     binding = vision_follow_binding(settings)
     if not sees_images(settings, binding):
         return None

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const { loadTs } = require('./load-ts.cjs')
 
 const slots = loadTs('defaultModelSlots.ts', { '../../i18n': { t: text => text } })
+const logic = loadTs('modelSettingsLogic.ts', { '../../i18n': { t: text => text } })
 const plain = value => JSON.parse(JSON.stringify(value))
 
 const conn = (id, provider, extra = {}) => ({
@@ -124,6 +125,28 @@ test('vision follow warns only when the followed model is known to lack vision',
   assert.equal(slots.visionWarning(badPick, lists), 'selected')
   assert.equal(slots.visionWarning(settings({ analysis: { connection_id: 'ds', model: 'qwen-plus', capability: 'auto', model_source: 'user' } }), {}), null, 'unknown capability is not a red warning')
   assert.equal(slots.visionWarning(settings({ analysis_mode: 'subtitle' }), lists), null, 'subtitle mode does not need vision')
+})
+
+test('N2: both vision warnings follow the backend mode/capability contract', () => {
+  for (const mode of ['auto', 'visual', 'subtitle']) {
+    for (const separate of [false, true]) {
+      for (const capability of ['text', 'multimodal', 'auto', undefined]) {
+        for (const listed of ['text', 'multimodal', null]) {
+          const binding = { connection_id: 'ds', model: 'alias', capability }
+          const state = settings({ analysis_mode: mode, analysis: binding, vision: separate ? binding : null })
+          const metadata = { ds: { models: listed ? [{ id: 'alias', capability: listed }] : [] } }
+          const resolved = capability && capability !== 'auto' ? capability : listed
+          const blocked = mode !== 'subtitle' && (resolved === 'text' || (resolved !== 'multimodal' && mode === 'visual'))
+          assert.equal(logic.visionFollowLacksCapability(state, metadata), blocked)
+          assert.equal(slots.visionWarning(state, metadata), blocked ? (separate ? 'selected' : 'follow') : null)
+          assert.equal(slots.slotTelemetry(state, metadata).vision_follow_lacks_vision, blocked)
+        }
+      }
+    }
+    const empty = settings({ analysis_mode: mode, analysis: null })
+    assert.equal(logic.visionFollowLacksCapability(empty, {}), mode === 'visual')
+    assert.equal(slots.visionWarning(empty, {}), mode === 'visual' ? 'follow' : null)
+  }
 })
 
 test('cover off keeps the cover assignment and cover_enabled', () => {

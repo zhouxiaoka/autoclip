@@ -162,6 +162,16 @@ export const isTextOnly = (s: ModelSettings, lists: Record<string, ModelList>) =
 /** The assignment visual understanding follows (explicit vision, else analysis). */
 export const followedVisionBinding = (s: ModelSettings) => s.vision || s.analysis
 
+export function modelHasVision(binding: Assignment | null | undefined, lists: Record<string, ModelList>): boolean | null {
+  if (!binding?.model) return null
+  const capability = binding.capability && binding.capability !== 'auto'
+    ? binding.capability
+    : (lists[binding.connection_id]?.models.find(entry => entry.id === binding.model)?.capability ?? null)
+  if (capability === 'multimodal') return true
+  if (capability === 'text') return false
+  return null
+}
+
 /**
  * Same answer as backend `vision_follow_lacks_capability`: enabled visual understanding
  * whose followed model is known text-only, or visual mode without confirmed vision.
@@ -170,12 +180,8 @@ export function visionFollowLacksCapability(s: ModelSettings, lists: Record<stri
   if (s.analysis_mode === 'subtitle') return false
   const binding = followedVisionBinding(s)
   if (!binding?.model) return s.analysis_mode === 'visual'
-  const cap = binding.capability !== 'auto'
-    ? binding.capability
-    : (lists[binding.connection_id]?.models.find(m => m.id === binding.model)?.capability ?? null)
-  if (cap === 'multimodal') return false
-  if (cap === 'text') return true
-  return s.analysis_mode === 'visual'
+  const vision = modelHasVision(binding, lists)
+  return vision === false || (vision === null && s.analysis_mode === 'visual')
 }
 
 export { VISION_HINT_KEY }

@@ -255,3 +255,35 @@ def test_completed_download_flips_readiness_immediately(monkeypatch, isolated):
             'ok': True, 'code': 'whisper_installed', 'repair': 'none'}
     finally:
         manager._download_state.pop('small', None)
+
+
+@pytest.mark.parametrize('mode', ['auto', 'visual', 'subtitle'])
+@pytest.mark.parametrize('status', ['failed', 'unchecked', 'ok'])
+def test_separate_vision_validation_gates_readiness_and_runtime(mode, status):
+    from backend.services import ai_model_settings as ai
+    from backend.services.studio import readiness, vision_settings
+    settings = document(
+        connections=[
+            Connection(id='ai', name='Analysis', provider='openai', api_key='fixture', validation_status='ok'),
+            Connection(id='vision', name='Vision', provider='openai', api_key='fixture', validation_status=status),
+        ],
+        vision=Assignment(connection_id='vision', model='gpt-4o', capability='multimodal'),
+        analysis_mode=mode,
+    )
+    ai.save(settings)
+    original = ai.path().read_bytes()
+    result = readiness.report()
+    blocked = status == 'failed' and mode != 'subtitle'
+    assert result['ready'] is not blocked
+    if blocked:
+        assert result['checks']['visual'] == {'ok': False, 'code': 'validation_failed', 'repair': 'settings_vision'}
+        for read in (readiness.ensure_analysis_usable, lambda: ai.require_analysis(ai.load()), vision_settings.effective):
+            with pytest.raises(ValueError, match='未通过校验'):
+                read()
+    else:
+        readiness.ensure_analysis_usable()
+    if status == 'failed':
+        # A confirmation can explicitly request vision even when the saved mode is subtitle.
+        with pytest.raises(ValueError, match='未通过校验'):
+            vision_settings.effective()
+    assert ai.path().read_bytes() == original
