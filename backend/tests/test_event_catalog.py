@@ -118,6 +118,25 @@ def test_os_aliases_normalize_to_canonical_names():
     assert event_catalog.normalize_os("beos") is None
 
 
+@pytest.mark.parametrize('machine,expected', [('arm64', 'aarch64'), ('aarch64', 'aarch64'),
+    ('AMD64', 'x86_64'), ('x86_64', 'x86_64'), ('x64', 'x86_64'), ('private path', 'unknown')])
+def test_envelope_normalizes_architecture(monkeypatch, machine, expected):
+    import platform
+    monkeypatch.delenv('AUTOCLIP_NATIVE_ARCH', raising=False)
+    monkeypatch.setattr(platform, 'machine', lambda: machine)
+    assert event_catalog.envelope_properties()['arch'] == expected
+
+
+def test_native_shell_facts_override_python_runtime(monkeypatch):
+    monkeypatch.setenv('AUTOCLIP_NATIVE_ARCH', 'ARM64')
+    monkeypatch.setenv('AUTOCLIP_NATIVE_OS', 'darwin')
+    props = event_catalog.envelope_properties()
+    assert props['arch'] == 'aarch64'
+    assert props['os'] == 'macos'
+    assert any('canonical arch' in error for error in event_catalog.validate_event(
+        'app_opened', {**props, 'arch': 'arm64'}, envelope=True))
+
+
 def test_envelope_does_not_look_like_production_in_tests():
     props = event_catalog.envelope_properties()
     assert props["analytics_environment"] in {"development", "validation"}

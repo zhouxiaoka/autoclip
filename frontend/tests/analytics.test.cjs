@@ -17,6 +17,7 @@ function load(name, mocks = {}, globals = {}) {
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key' },
     require: (id) => {
       if (id in mocks) return mocks[id]
+      if (id === './runtime') return load('runtime', {}, globals)
       if (id === '../utils/apiConfig') {
         return { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener: () => () => {} } }
       }
@@ -25,6 +26,110 @@ function load(name, mocks = {}, globals = {}) {
   return module.exports
 }
 const core = load('workflow')
+
+test('native Mac architecture overrides the Intel webview UA before launch resolves', () => {
+  const lifecycle = load('lifecycle', {
+    '@tauri-apps/api/app': { getVersion: () => new Promise(() => {}) },
+    './posthog': {},
+  }, {
+    window: { __AUTOCLIP_RUNTIME__: { os: 'macos', arch: 'aarch64' } },
+    navigator: { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X)', language: 'en' },
+    document: { documentElement: { lang: 'en' } },
+  })
+  assert.equal(lifecycle.getRuntimeInfo().arch, 'aarch64')
+})
+
+test('first capture has native os/arch without waiting for trackLaunch', () => {
+  const registered = {}; const events = []
+  const sdk = {
+    init(_key, config) { config.loaded(sdk) },
+    register(props) { Object.assign(registered, props) },
+    capture(name, props) { events.push({ ...registered, ...props }); return {} },
+  }
+  const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, {
+    localStorage: memory(), window: { __TAURI_INTERNALS__: {}, __AUTOCLIP_RUNTIME__: { os: 'macos', arch: 'arm64' } },
+    navigator: { userAgent: 'Macintosh; Intel Mac OS X', language: 'en' },
+  })
+  ph.initAnalytics()
+  assert.equal(registered.os, 'macos')
+  assert.equal(registered.arch, 'aarch64')
+  ph.captureBusinessEvent('setup_presented')
+  assert.equal(events[0].os, 'macos')
+  assert.equal(events[0].arch, 'aarch64')
+})
+
+test('identity waits for the desktop port, retries failure and cancels retries on opt-out', async () => {
+  const id = '018f6b2a-7c3d-7b2a-8c11-111111111111'
+  let ready = false, listener, timer, config
+  const requests = []; const cancelled = []
+  const sdk = {
+    init(_key, options) { config = options; options.loaded(sdk) },
+    register() {}, get_distinct_id: () => id,
+    opt_in_capturing() {}, opt_out_capturing() {},
+  }
+  const ph = load('posthog', {
+    'posthog-js': sdk, './workflow': core,
+    '../utils/apiConfig': { apiConfigManager: {
+      getBaseUrl: () => ready ? 'http://127.0.0.1:8123/api/v1' : '/api/v1',
+      isReady: () => ready, addListener: fn => { listener = fn },
+    } },
+  }, {
+    localStorage: memory(),
+    window: { __TAURI_INTERNALS__: {}, __AUTOCLIP_RUNTIME__: { os: 'windows', arch: 'amd64', distinct_id: id } },
+    setTimeout: fn => { timer = fn; return 1 }, clearTimeout: id => { cancelled.push(id); timer = undefined },
+    fetch: (url, options) => { requests.push({ url, options }); return Promise.resolve({ ok: false }) },
+  })
+  ph.initAnalytics()
+  assert.equal(config.bootstrap.distinctID, id)
+  assert.equal(config.bootstrap.isIdentifiedID, false)
+  assert.equal(requests.length, 0)
+  ready = true; listener()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].url, 'http://127.0.0.1:8123/api/v1/settings/analytics-identity')
+  assert.deepEqual(JSON.parse(requests[0].options.body), { distinct_id: id })
+  assert.equal(typeof timer, 'function')
+  timer()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(requests.length, 2)
+  ph.setAnalyticsEnabled(false)
+  assert.equal(timer, undefined)
+  assert.ok(cancelled.length > 0)
+  listener()
+  assert.equal(requests.length, 2)
+})
+
+test('architecture aliases and untrusted native facts stay within the telemetry enum', () => {
+  const runtime = load('runtime')
+  for (const arch of ['arm64', 'aarch64', 'ARM64']) assert.equal(runtime.normalizeArch(arch), 'aarch64')
+  for (const arch of ['amd64', 'x86_64', 'x64', 'AMD64']) assert.equal(runtime.normalizeArch(arch), 'x86_64')
+  const untrusted = load('runtime', {}, {
+    window: { __AUTOCLIP_RUNTIME__: { os: 'private title', arch: 'sk-secret' } },
+    navigator: { userAgent: 'Macintosh Intel Mac OS X' },
+  })
+  assert.equal(JSON.stringify(untrusted.runtimeProperties()), '{"os":"macos","arch":"unknown"}')
+})
+
+test('reset identity waits for the previous PUT and cannot be overwritten by it', async () => {
+  let id = '018f6b2a-7c3d-7b2a-8c11-111111111111'
+  const next = '018f6b2a-7c3d-7b2a-8c11-222222222222'
+  let finish
+  const ids = []
+  const ph = load('posthog', { 'posthog-js': {
+    init() {}, get_distinct_id: () => id, reset() { id = next },
+  }, './workflow': core }, {
+    localStorage: memory(), window: {},
+    fetch: (_url, options) => { ids.push(JSON.parse(options.body).distinct_id); return new Promise(resolve => { finish = resolve }) },
+  })
+  ph.initAnalytics()
+  ph.resetUser()
+  assert.deepEqual(ids, ['018f6b2a-7c3d-7b2a-8c11-111111111111'])
+  finish({ ok: true })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(ids, ['018f6b2a-7c3d-7b2a-8c11-111111111111', next])
+  finish({ ok: true })
+  await new Promise(resolve => setImmediate(resolve))
+})
 function memory() {
   const data = new Map()
   return { getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: k => data.delete(k) }
@@ -662,6 +767,7 @@ test('every flag evaluation carries app_version as a semver flag person property
     require: (id) => {
       if (id === 'posthog-js') return { __esModule: true, default: sdk }
       if (id === './workflow') return core
+      if (id === './runtime') return load('runtime', {}, { window: {} })
       if (id === '../utils/apiConfig') return { apiConfigManager: { getBaseUrl: () => '/api/v1', addListener: () => () => {} } }
       throw new Error(`Unexpected dependency: ${id}`)
     } }, { filename: file })

@@ -116,6 +116,7 @@ name = "autoclip-desktop"
 version = "1.5.7"
 dependencies = [
  "chrono",
+ "dirs 6.0.0",
  "reqwest 0.11.27",
  "serde",
  "serde_json",

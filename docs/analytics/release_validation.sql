@@ -1,5 +1,20 @@
 -- Validation only. Replace VERSION_UNDER_TEST with the candidate's app version.
 -- Event rows, unique devices and unique flows are separate; do not infer installs/users.
+-- Startup regression: check the first screen as well as launch events on a fresh
+-- validation session. Desktop arch must be aarch64 (Mac arm64) / x86_64 (Win x64).
+SELECT event, properties.os AS os, properties.arch AS arch,
+       count() AS events, uniq(distinct_id) AS devices,
+       countIf(properties.os IS NULL OR toString(properties.os) = '') AS missing_os,
+       countIf(properties.arch IS NULL OR toString(properties.arch) = '') AS missing_arch
+FROM events
+WHERE timestamp >= now() - INTERVAL 7 DAY
+  AND properties.analytics_environment = 'validation'
+  AND properties.app_version = 'VERSION_UNDER_TEST'
+  AND properties.runtime = 'desktop'
+  AND event IN ('$pageview', 'setup_presented', 'app_installed', 'app_opened', 'app_updated')
+GROUP BY event, os, arch
+ORDER BY event, os, arch;
+
 SELECT event, properties.outcome AS outcome, properties.error_code AS error_code,
        count() AS events, uniq(distinct_id) AS devices,
        countIf(properties.flow_id IS NULL OR toString(properties.flow_id) = '') AS missing_flow_events,
