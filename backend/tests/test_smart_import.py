@@ -228,6 +228,12 @@ def test_import_persists_platform_and_branding_contract_without_auto_start(clien
         'features': resolve_features(None),
         'status': 'awaiting_confirmation',
         'created_at': state['generation']['created_at'],
+        'llm_calls': 0,
+        'prompt_tokens': 0,
+        'completion_tokens': 0,
+        'reasoning_tokens': 0,
+        'retry_count': 0,
+        'degrade_count': 0,
     }
     assert state['output_variants'] == []
     assert ImportOptions(platforms=['tiktok', 'reels', 'tiktok']).platforms == ['tiktok', 'instagram_reels']

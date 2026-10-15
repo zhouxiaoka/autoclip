@@ -577,7 +577,7 @@ def write(project_id, data, *, _recover_previous=True):
     previous = read(project_id, recover=_recover_previous) if path.exists() else {}
     _apply_read_receipts(path, data)
     _ensure_failure_identity(data)
-    _attach_run_telemetry(data, project_id)
+    usage_checkpoint = _attach_run_telemetry(data, project_id, previous)
     analysis = data.get('analysis') or {}
     prior = previous.get('analysis') or {}
     if analysis.get('status') in ('awaiting_confirmation', 'completed', 'failed') and not analysis.get('run_id') and prior.get('run_id'):
@@ -600,6 +600,8 @@ def write(project_id, data, *, _recover_previous=True):
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
         _replace_state(tmp, path)
+        if usage_checkpoint is not None:
+            usage_checkpoint[0].update(usage_checkpoint[1])
         _observe_worker_write(path, previous, data)
         _io_failures.pop(path, None)
     except OSError:
@@ -640,10 +642,12 @@ def _ensure_failure_identity(data):
     fill(analysis)
 
 
-def _attach_run_telemetry(data, project_id):
+def _attach_run_telemetry(data, project_id, previous):
     try:
+        from backend.core.llm_emit import run_usage_checkpoint
         from backend.core.llm_telemetry import run_snapshot
         snapshot = run_snapshot(project_id)
+        checkpoint = run_usage_checkpoint()
     except Exception:  # noqa: BLE001 - telemetry cannot block a state write
         return
     if not snapshot:
@@ -652,9 +656,22 @@ def _attach_run_telemetry(data, project_id):
         'http_status', 'upstream_error_type', 'failure_stage', 'billable_calls_before_failure',
     }
     keep_if_set = {'http_status', 'upstream_error_type', 'failure_stage', 'billable_calls_before_failure'}
-    for record in (data.get('generation'), data.get('analysis')):
+    usage_keys = {'llm_calls', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'degrade_count'}
+    persisted = {}
+    for name in ('generation', 'analysis'):
+        record = data.get(name)
         if not isinstance(record, dict):
             continue
+        prior = previous.get(name) or {}
+        identity_key = 'created_at' if name == 'generation' else 'run_id'
+        identity = record.get(identity_key)
+        if name == 'generation' and not identity:
+            identity = (data.get('analysis') or {}).get('run_id')
+            prior_identity = (previous.get('analysis') or {}).get('run_id')
+        else:
+            prior_identity = prior.get(identity_key)
+        usage_id = (project_id, name, identity)
+        counted = checkpoint.get(usage_id, {}) if checkpoint is not None else {}
         failed = record.get('status') in ('failed', 'partial')
         for key, value in snapshot.items():
             if value is None:
@@ -663,7 +680,13 @@ def _attach_run_telemetry(data, project_id):
                 continue
             if key in keep_if_set and record.get(key) not in (None, ''):
                 continue
-            record[key] = value
+            if key in usage_keys and checkpoint is not None and identity:
+                base = (prior.get(key) or 0) if prior_identity == identity else 0
+                record[key] = base + value - counted.get(key, 0)
+            else:
+                record[key] = value
+        persisted[usage_id] = {key: snapshot[key] for key in usage_keys if key in snapshot}
+    return (checkpoint, persisted) if checkpoint is not None else None
 
 
 def change(project_id, mutate):

@@ -91,6 +91,7 @@ class _RunAcc:
     last_upstream: str | None = None
     last_outcome: str = ""
     last_stage: str = ""
+    persisted_usage: dict = field(default_factory=dict)
 
 
 def normalize_failure_stage(value: Any) -> str | None:
@@ -413,6 +414,12 @@ def emit_provider_validation_finished(
         return {}
 
 
+def run_usage_checkpoint() -> dict | None:
+    """Worker-local usage already persisted; advance only after a successful write."""
+    acc = _run_acc.get()
+    return acc.persisted_usage if acc is not None else None
+
+
 def run_snapshot(project_id: str | None = None) -> dict[str, Any]:
     """Sanitized run-level fields for generation / production / Sentry tags."""
     acc = _run_acc.get()
@@ -449,11 +456,16 @@ def run_snapshot(project_id: str | None = None) -> dict[str, Any]:
         degrade = max(degrade, acc.last_degrade)
     if degrade:
         raw["degrade_count"] = degrade
+    if acc is not None:
+        raw.update(llm_calls=calls, prompt_tokens=prompt, completion_tokens=completion,
+                   reasoning_tokens=acc.reasoning_tokens, retry_count=retry, degrade_count=degrade)
     if acc and acc.last_outcome == "error":
         raw["failure_stage"] = normalize_failure_stage(acc.last_stage)
     out = schema.sanitize_run_properties(raw)
     out.pop("success_rate_schema_version", None)
-    return {key: value for key, value in out.items() if value not in (None, "", 0) or key == "billable_calls_before_failure"}
+    return {key: value for key, value in out.items()
+            if value not in (None, "", 0) or key == "billable_calls_before_failure"
+            or (acc is not None and value == 0)}
 
 
 def configured_connection_fields(*, role: str = "analysis") -> dict[str, Any]:
