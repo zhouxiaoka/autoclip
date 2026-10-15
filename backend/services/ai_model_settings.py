@@ -349,7 +349,7 @@ def ensure_runtime_bindings(settings: ModelSettings, *, require_vision: bool = F
     for binding in (settings.analysis, settings.vision):
         if binding is not None:
             connection = connection_for(settings, binding)
-            if connection.validation_status == 'failed' and (binding is settings.analysis or settings.analysis_mode != 'subtitle' or require_vision):
+            if connection.validation_status == 'failed' and (binding is settings.analysis or settings.analysis_mode == 'visual' or require_vision):
                 raise ValueError('当前模型连接未通过校验。请到「设置 → 模型」修复密钥或地址后再生成。')
 
 

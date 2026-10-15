@@ -273,7 +273,7 @@ def test_separate_vision_validation_gates_readiness_and_runtime(mode, status):
     ai.save(settings)
     original = ai.path().read_bytes()
     result = readiness.report()
-    blocked = status == 'failed' and mode != 'subtitle'
+    blocked = status == 'failed' and mode == 'visual'  # S5: auto falls back to subtitles
     assert result['ready'] is not blocked
     if blocked:
         assert result['checks']['visual'] == {'ok': False, 'code': 'validation_failed', 'repair': 'settings_vision'}

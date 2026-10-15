@@ -43,3 +43,16 @@ WHERE timestamp >= now() - INTERVAL 7 DAY
                 'asr_readiness_checked', 'provider_validation_finished')
 GROUP BY event, provider, upstream_error_type, failure_stage, outcome
 ORDER BY event, events DESC;
+
+-- S5: AUTO vision degradation uses a fixed code, never free-text reasons.
+SELECT event, properties.degrade_reason AS degrade_reason,
+       properties.analysis_mode AS analysis_mode, properties.route AS route,
+       properties.outcome AS outcome, count() AS events, uniq(distinct_id) AS devices
+FROM events
+WHERE timestamp >= now() - INTERVAL 7 DAY
+  AND properties.analytics_environment = 'validation'
+  AND properties.app_version = 'VERSION_UNDER_TEST'
+  AND event IN ('studio_screen_finished', 'studio_generation_finished')
+  AND properties.degrade_reason = 'vision_unavailable_subtitle_fallback'
+GROUP BY event, degrade_reason, analysis_mode, route, outcome
+ORDER BY event, outcome;

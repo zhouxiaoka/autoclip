@@ -19,6 +19,8 @@ class Recommendation(BaseModel):
 
 
 VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sources use the subtitle route
+VISION_FALLBACK_CODE = 'vision_unavailable_subtitle_fallback'
+VISION_FALLBACK_MESSAGE = '视觉服务暂不可用，已切换为字幕分析继续制作。'
 
 
 def _local_recommendation(video: Path, duration: float, prefix: str = ''):
@@ -83,7 +85,14 @@ def recommend(video: Path, options: ImportOptions):
     duration = media_precheck.duration_or_fail(video, info.get('duration'))
     info = {**info, 'duration': duration}
     consent = analysis_preferences.load()
-    configured = consent.analysis_mode != 'subtitle' and intelligence.ready()
+    degrade_reason = None
+    try:
+        configured = consent.analysis_mode != 'subtitle' and intelligence.ready()
+    except ValueError:
+        if consent.analysis_mode != 'auto':
+            raise
+        configured = False
+        degrade_reason = VISION_FALLBACK_CODE
     short, no_audio = _subtitle_blockers(video, duration, options, consent, configured)
     mode = 'manual'
     diagnostics = None
@@ -145,12 +154,18 @@ def recommend(video: Path, options: ImportOptions):
             if isinstance(error, intelligence.VisionRequestError):
                 diagnostics = {**error.diagnostics(), 'phase':'screening'}
             mode = 'fallback'
-            if options.auto_start:
+            if consent.analysis_mode == 'auto':
+                degrade_reason = VISION_FALLBACK_CODE
+                local_evidence, result = _local_recommendation(video, duration)
+            elif options.auto_start:
                 local_evidence, result = _local_recommendation(
                     video, duration, '快速画面判断未完成，已改按字幕制作。')
             else:
                 result = Recommendation(content_type='other', goal='highlight', confidence=0, suggested_goals=[],
                     reason='快速判断暂未完成，请按素材内容选择制作类型；尚未启动正式理解与剪辑。')
+    if degrade_reason:
+        mode = 'fallback'
+        result.reason = (VISION_FALLBACK_MESSAGE + result.reason)[:500]
     prefs = Preferences(goal=result.goal, language=options.language,
         aspect=options.aspect or result.aspect, duration=options.duration or result.duration)
     suggested = list(dict.fromkeys(result.suggested_goals if result.suggested_goals is not None else (["highlight", "promo"] if mode == 'ai' and result.content_type == 'gameplay' else [result.goal])))
@@ -162,5 +177,5 @@ def recommend(video: Path, options: ImportOptions):
             raise media_precheck.too_short_failure() if short else media_precheck.no_audio_failure(after_screening=True)
         # The review screen must not preselect a goal that needs subtitles; confirm_project re-checks.
         suggested = [goal for goal in suggested if goal != 'content']
-    return {**({'local_evidence': local_evidence} if local_evidence else {}), 'analysis_preferences': consent.model_dump(), 'recommended_analysis': route, **({'diagnostics': diagnostics} if diagnostics else {}), 'mode': mode, 'source_duration': duration, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
+    return {**({'degrade_reason': degrade_reason} if degrade_reason else {}), **({'local_evidence': local_evidence} if local_evidence else {}), 'analysis_preferences': consent.model_dump(), 'recommended_analysis': route, **({'diagnostics': diagnostics} if diagnostics else {}), 'mode': mode, 'source_duration': duration, **result.model_dump(), 'suggested_goals': suggested, 'preferences': prefs.model_dump(),
             'overrides': options.model_dump(exclude_none=True)}
