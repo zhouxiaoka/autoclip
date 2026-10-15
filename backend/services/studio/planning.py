@@ -191,11 +191,11 @@ def recommend(video: Path, options: ImportOptions):
         degrade_reason = VISION_INVALID_FALLBACK_CODE
         result.reason = (VISION_INVALID_FALLBACK_MESSAGE + result.reason)[:500]
     explicit_visual = (consent.analysis_mode == 'visual' and not invalid_degrade and configured and mode in ('ai', 'local')
-                       and options.goal == 'auto' and options.auto_start and duration <= VISUAL_MAX_SOURCE_SEC)
+                       and options.goal == 'auto' and duration <= VISUAL_MAX_SOURCE_SEC)
     if explicit_visual and result.goal == 'content':
-        # E2: the user chose visual analysis and there is no review screen; a content-type
-        # recommendation must not silently turn the run into a subtitle-only route.
-        # The review flow keeps the recommendation and lets the user confirm the route.
+        # E2: the user chose visual analysis; a content-type recommendation must not
+        # silently turn the run into a subtitle-only route. The review screen shows the
+        # route that will actually run (visual); the user may still switch to subtitles.
         result.goal = 'highlight'
         result.suggested_goals = ['highlight'] + [g for g in (result.suggested_goals or []) if g not in ('highlight', 'content')]
     prefs = Preferences(goal=result.goal, language=options.language,

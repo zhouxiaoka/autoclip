@@ -59,7 +59,8 @@ def test_auto_mode_still_follows_recommendation(source, monkeypatch):
     assert plan['recommended_analysis'] == 'subtitle'
 
 
-def test_review_flow_keeps_recommendation_for_user_confirmation(source, monkeypatch):
+def test_review_screen_shows_the_route_that_will_run(source, monkeypatch):
     _visual(monkeypatch, TALK)
     plan = planning.recommend(source, ImportOptions(auto_start=False))
-    assert plan['goal'] == 'content'  # shown on the review screen; the user confirms the route
+    assert plan['recommended_analysis'] == 'visual'
+    assert plan['goal'] == 'highlight' and plan['preferences']['goal'] == 'highlight'
