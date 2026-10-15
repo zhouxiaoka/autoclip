@@ -296,8 +296,14 @@ def test_one_import_endpoint_routes_and_keeps_srt(client,source,monkeypatch,goal
     from backend.models import Project
     with SessionLocal() as db: assert db.get(Project,pid).processing_config['import_staging'] is True
     assert not content_calls and state['drafts']==[]
-    assert state['plan']['preferences']['goal']==goal
-    confirmed=client.post('/studio/'+pid+'/start',json={'plan_id':state['plan']['id'],'goals':[goal]})
+    # E2: visual mode is the user's explicit choice, so a "content" screening result is
+    # shown as the visual route that will actually run (highlight); choosing content
+    # means the user explicitly switches the review screen to subtitles.
+    assert state['plan']['preferences']['goal']==('highlight' if goal=='content' else goal)
+    assert state['plan']['recommended_analysis']=='visual'
+    start={'plan_id':state['plan']['id'],'goals':[goal]}
+    if goal=='content': start['analysis_mode']='subtitle'
+    confirmed=client.post('/studio/'+pid+'/start',json=start)
     assert confirmed.status_code==200,confirmed.text
     state=client.get('/studio/'+pid).json()
     assert state['analysis']['status']=='completed',state
