@@ -509,3 +509,16 @@
 @media (max-width: 680px) {
   .ac-provider-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+.ac-provider-more {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 4px 0 0; padding: 12px 14px;
+  border: 1px dashed var(--ac-line, rgba(0,0,0,.12)); border-radius: 12px;
+  background: transparent; color: var(--ac-ink); font: inherit; cursor: pointer; text-align: left;
+}
+.ac-provider-more:hover { background: var(--ac-line-2, rgba(0,0,0,.04)); }
+.ac-provider-more small { margin-left: 6px; color: var(--ac-sub); font-weight: 400; }
+.ac-provider-more-chevron { color: var(--ac-sub); font-size: 12px; }
+.ac-provider-group[data-provider-group="more"] .ac-provider-group-head {
+  margin-bottom: 8px;
+}

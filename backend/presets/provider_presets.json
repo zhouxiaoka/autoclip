@@ -1115,6 +1115,32 @@
       "capabilities": [
         "language"
       ]
+    },
+    "byteplus-modelark": {
+      "display_name": "BytePlus ModelArk",
+      "short_name": "BytePlus",
+      "group": "more",
+      "protocol": "openai-completions",
+      "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "docs_url": "https://console.byteplus.com/",
+      "api_key_setting": "byteplus_modelark_api_key",
+      "hint": "BytePlus ModelArk。东南亚节点，OpenAI 兼容。",
+      "kind": "preset",
+      "candidates": {
+        "analysis": [],
+        "vision": [],
+        "asr": [],
+        "image": []
+      },
+      "auth": "api_key",
+      "locked": true,
+      "accepted_hosts": [
+        "ark.ap-southeast.bytepluses.com",
+        "bytepluses.com"
+      ],
+      "capabilities": [
+        "language"
+      ]
     }
   },
   "address_rules": {

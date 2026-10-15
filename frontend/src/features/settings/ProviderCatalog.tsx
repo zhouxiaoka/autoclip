@@ -202,6 +202,25 @@ export default function ProviderCatalog({
         const rows = groups[group]
         if (!rows.length) return null
         const collapsed = group === 'more' && !expandMore
+        // OhMyGame:「更多」默认收起，整行按钮展开；展开后再显示列表与收起。
+        if (group === 'more' && collapsed) {
+          return (
+            <section key={group} className="ac-provider-group" data-provider-group={group}>
+              <button
+                type="button"
+                className="ac-provider-more"
+                aria-expanded={false}
+                onClick={onToggleMore}
+              >
+                <span>
+                  {t(GROUP_KEY[group])}
+                  <small>({rows.length})</small>
+                </span>
+                <span className="ac-provider-more-chevron" aria-hidden>▾</span>
+              </button>
+            </section>
+          )
+        }
         return (
           <section key={group} className="ac-provider-group" data-provider-group={group}>
             <header className="ac-provider-group-head">
@@ -210,12 +229,12 @@ export default function ProviderCatalog({
                 <span className="count">{rows.length}</span>
               </h3>
               {group === 'more' && (
-                <Btn variant="text" size="sm" onClick={onToggleMore}>
-                  {expandMore ? t('settings.providers.collapse') : t('settings.providers.expand')}
+                <Btn variant="text" size="sm" aria-expanded={true} onClick={onToggleMore}>
+                  {t('settings.providers.collapse')}
                 </Btn>
               )}
             </header>
-            {!collapsed && (
+            {(
               <div className={`ac-provider-grid${group === 'recommended' ? ' ac-provider-grid--recommended' : ''}`}>
                 {rows.map(preset => (
                   <ProviderCard

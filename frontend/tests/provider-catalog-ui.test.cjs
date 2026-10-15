@@ -53,6 +53,11 @@ test('catalog renders recommended / popular / local and keeps more collapsed', (
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'deepseek'))
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'whisper'))
   assert.equal(cards.some(node => node.props['data-provider-id'] === 'openrouter'), false)
+  const moreBtn = nodes.find(node => node.props && node.props.className === 'ac-provider-more')
+  assert.ok(moreBtn)
+  assert.equal(moreBtn.props['aria-expanded'], false)
+  assert.match(textOf(moreBtn), /settings\.providers\.group\.more|更多服务商/)
+
   const whisper = cards.find(node => node.props['data-provider-id'] === 'whisper')
   assert.match(textOf(whisper), /settings\.providers\.available/)
   const deepseek = cards.find(node => node.props['data-provider-id'] === 'deepseek')

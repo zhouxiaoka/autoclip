@@ -67,6 +67,7 @@ export const PROVIDER_ICONS: Readonly<Partial<Record<string, ProviderIcon>>> = {
   moonshotai: mono(moonshot),
   glm: mono(zhipu),
   seed: color(bytedance),
+  'byteplus-modelark': color(bytedance),
   hunyuan: color(hunyuan),
   qianfan: color(wenxin),
   minimax: color(minimax),
@@ -85,6 +86,15 @@ export const PROVIDER_ICONS: Readonly<Partial<Record<string, ProviderIcon>>> = {
   xiaomi: mono(xiaomimimo),
   // Volcengine / 豆包 family often shares seed; keep volcengine for clarity if id appears
   volcengine: color(volcengine),
+  'volcengine-ark': color(volcengine),
+  // OhMyGame id aliases
+  google: color(gemini),
+  xai: mono(xai),
+  zai: mono(zhipu),
+  'kimi-coding': color(kimi),
+  'azure-openai-responses': color(azure),
+  'qwen-token-plan': color(bailian),
+  'qwen-token-plan-cn': color(bailian),
 }
 
 export function providerIcon(id?: string | null): ProviderIcon | undefined {
