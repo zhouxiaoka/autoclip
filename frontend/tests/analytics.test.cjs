@@ -754,3 +754,79 @@ test('every flag evaluation carries app_version as a semver flag person property
   const reload = calls.findIndex(call => call[0] === 'reload')
   assert.ok(props >= 0 && reload > props, JSON.stringify(calls))
 })
+
+const separateModelFixture = () => {
+ const value = modelFixture()
+ value.saved = true
+ for (const role of ['vision', 'cover', 'transcription']) {
+  value.connections.push({...value.connections[0], id:role, validation_status:'unchecked'})
+  value[role] = {connection_id:role, model:`private-${role}`, capability:'auto', ...(role === 'transcription' ? {provider:'cloud'} : {})}
+ }
+ value.cover_enabled = true
+ return value
+}
+test('save validates every separate connection and persists their results without leaking identifiers', async () => {
+ const s=setup(); const calls=[]; let persisted
+ const render=settingsHook(s,{
+  discover:async()=>({models:[],source:'catalog',preview:true}),
+  test:async(connection,model,vision,purpose)=>{calls.push([connection.id,model,vision,purpose]);return {success:connection.id!=='cover',error_type:connection.id==='cover'?'invalid_key':undefined}},
+  save:async value=>{persisted=value;return {...value,saved:true}},
+ },separateModelFixture())
+ await render().load(); await Promise.resolve()
+ const result=await render().save()
+ assert.deepEqual(calls.map(call=>call[0]).sort(),['cover','private-id','transcription','vision'])
+ assert.deepEqual(calls.find(call=>call[0]==='vision').slice(2),[true,'vision'])
+ assert.equal(persisted.connections.find(c=>c.id==='vision').validation_status,'ok')
+ assert.equal(persisted.connections.find(c=>c.id==='transcription').validation_status,'ok')
+ assert.equal(persisted.connections.find(c=>c.id==='cover').validation_status,'failed')
+ assert.equal(result.validationFailed,true)
+ assert.equal(JSON.stringify(s.events).includes('private'),false)
+ assert.equal(JSON.stringify(s.events).includes('sk-secret'),false)
+})
+test('each purpose has a manual test entry point that recovers a failed separate connection', async () => {
+ for (const role of ['vision','cover','transcription']) {
+  const s=setup(); const calls=[]; const initial=separateModelFixture()
+  initial.connections.find(c=>c.id===role).validation_status='failed'
+  const render=settingsHook(s,{
+   discover:async()=>({models:[],source:'catalog',preview:true}),
+   test:async(connection,model,vision,purpose)=>{calls.push([connection.id,model,vision,purpose]);return {success:true}},
+  },initial)
+  await render().load(); await Promise.resolve(); await render().test(role)
+  assert.deepEqual(calls,[[role,`private-${role}`,role==='vision',role]])
+  assert.equal(render().settings.connections.find(c=>c.id===role).validation_status,'ok')
+  assert.equal(render().dirty,true)
+ }
+})
+
+test('save skips disabled/local connections and deduplicates shared access checks', async () => {
+ const initial=separateModelFixture()
+ initial.vision={...initial.analysis}
+ initial.cover_enabled=false
+ initial.transcription={provider:'whisper_local',model:'base'}
+ initial.connections.slice(1).forEach(c=>{c.validation_status='failed'})
+ const calls=[];const s=setup()
+ const render=settingsHook(s,{
+  discover:async()=>({models:[],source:'catalog',preview:true}),
+  test:async connection=>{calls.push(connection.id);return {success:true}},
+  save:async value=>({...value,saved:true}),
+ },initial)
+ await render().load();await Promise.resolve()
+ const result=await render().save()
+ assert.deepEqual(calls,['private-id'])
+ assert.equal(result.validationFailed,false)
+})
+
+test('save rechecks only the changed optional binding on a validated connection', async () => {
+ const initial=separateModelFixture()
+ initial.connections.forEach(c=>{c.validation_status='ok'})
+ const calls=[];const render=settingsHook(setup(),{
+  discover:async()=>({models:[],source:'catalog',preview:true}),
+  test:async(connection,model)=>{calls.push([connection.id,model]);return {success:true,models:[model]}},
+  save:async value=>({...value,saved:true}),
+ },initial)
+ await render().load();await Promise.resolve()
+ render().update({cover:{...initial.cover,model:'private-new-image'}})
+ await render().save()
+ assert.deepEqual(calls,[['cover','private-new-image']])
+ assert.equal(render().lists.cover.preview,true,'non-chat ids must not be backfilled as live chat models')
+})

@@ -269,3 +269,11 @@ test('new connections are preset; editing the URL marks user; defaults only fill
   const restored = logic.editConnection(edited, 'a', { base_url: '' })
   assert.equal(restored.connections[0].base_url_source, 'preset')
 })
+
+test('separate vision requires a provider, model and credentials before save', () => {
+  const state={...fresh(),connections:[conn('a','openai',{api_key:'k'}),conn('v','openai')],analysis:{connection_id:'a',model:'gpt-4o',capability:'auto'}}
+  assert.equal(logic.saveIssue(state),null,'follow analysis needs no separate check')
+  assert.deepEqual(plain(logic.saveIssue({...state,vision:{connection_id:'missing',model:'gpt-4o'}})),{role:'vision',reason:'provider'})
+  assert.deepEqual(plain(logic.saveIssue({...state,vision:{connection_id:'v',model:''}})),{role:'vision',reason:'model'})
+  assert.deepEqual(plain(logic.saveIssue({...state,vision:{connection_id:'v',model:'gpt-4o'}})),{role:'vision',reason:'key'})
+})

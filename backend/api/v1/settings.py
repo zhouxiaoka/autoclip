@@ -8,7 +8,7 @@ import json
 import shutil
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Literal
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from pydantic import BaseModel, Field, validator
 
@@ -67,6 +67,7 @@ class ConnectionTestRequest(BaseModel):
     connection: ai_models.Connection
     model: str = Field(min_length=1, max_length=200)
     vision: bool = False
+    purpose: Literal['analysis', 'vision', 'cover', 'transcription'] = 'analysis'
 
 
 @router.post('/ai-models/fetch-list')
@@ -97,8 +98,14 @@ def test_connection_assignment(body: ConnectionTestRequest):
     from backend.services.provider_validation import validate_connection
     try:
         connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
-        result = validate_connection(connection, body.model)
-        if body.vision and result.ok:
+        if body.purpose in ('cover', 'transcription'):
+            result = validate_connection(connection, body.model, purpose=body.purpose)
+            if body.purpose == 'cover' and connection.image_base_url:
+                # The normalised image endpoint must not replace the chat address.
+                result.normalized_base_url = connection.base_url
+        else:
+            result = validate_connection(connection, body.model)
+        if (body.vision or body.purpose == 'vision') and body.purpose in ('analysis', 'vision') and result.ok:
             from backend.services.studio.vision_settings import test, VisionSettingsInput
             endpoint = ai_models.chat_endpoint(connection, body.model)
             vision = test(VisionSettingsInput(mode='custom', **endpoint))

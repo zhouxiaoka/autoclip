@@ -7,7 +7,7 @@ import SpeechRecognitionConfig from '../../components/SpeechRecognitionConfig'
 import api, { speechApi } from '../../services/api'
 import { PROVIDERS, providerPickerOptions, type ProviderKey } from './providers'
 import { useModelSettings, type ModelSettingsStore } from './useModelSettings'
-import { connectionOf, isTextOnly, mainConnection, presetKey, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
+import { connectionOf, isTextOnly, mainConnection, presetKey, validationTargets, visionFollowLacksCapability, VISION_HINT_KEY, type SaveIssue } from './modelSettingsLogic'
 import type { Connection, ModelSettings } from './modelSettingsApi'
 import ProviderFields from './ProviderFields'
 import ModelPicker from './ModelPicker'
@@ -50,7 +50,7 @@ const ANCHORS: Record<string, string> = {
   speech: 'ai-defaults-transcription', cover: 'ai-defaults-cover',
 }
 const issueAnchor = (issue: SaveIssue) => (
-  issue.role === 'transcription' ? 'ai-defaults-transcription' : issue.role === 'cover' ? 'ai-defaults-cover' : 'ai-defaults-analysis'
+  `ai-defaults-${issue.role}`
 )
 
 /**
@@ -88,6 +88,15 @@ export function AIServiceFields({ m, placement, showVisual = true }: { m: ModelS
   </>
 }
 
+function VisionSection({ m }: { m: ModelSettingsStore }) {
+  const binding = m.settings?.vision
+  if (!binding?.model || !m.settings || !connectionOf(m.settings, 'vision')) return null
+  // Selection lives in DefaultModels; keep only the role-specific access check here.
+  return <Row label={t('画面理解模型')}>
+    <Btn variant="text" size="sm" loading={m.testing} onClick={() => void m.test('vision')}>{t('测试连接')}</Btn>
+  </Row>
+}
+
 function TranscriptionSection({ m }: { m: ModelSettingsStore }) {
   const { settings, lists, busy, listErrors } = m
   if (!settings) return null
@@ -114,7 +123,8 @@ function TranscriptionSection({ m }: { m: ModelSettingsStore }) {
         onChoose={p => m.chooseProvider('transcription', p)} onEdit={patch => m.editConnection(connection, patch)} />
       <Row wide label={t('转写模型')} hint={t('将音频发送给所选服务转写，按服务商计费。')}>
         <ModelPicker role="transcription" model={settings.transcription?.model || ''} connection={connection} list={lists[connection.id]} busy={!!busy[connection.id]} listError={listErrors[connection.id]} mode={settings.analysis_mode}
-          onChange={model => m.update({ transcription: { provider: 'cloud', connection_id: connection.id, model, model_source: 'user' } })} onRefresh={() => void m.discover(connection, true)} />
+          onChange={model => m.update({ transcription: { provider: 'cloud', connection_id: connection.id, model, model_source: 'user' } })} onRefresh={() => void m.discover(connection, true)}
+          actions={<Btn variant="text" size="sm" disabled={!settings.transcription?.model} loading={m.testing} onClick={() => void m.test('transcription')}>{t('测试连接')}</Btn>} />
       </Row>
     </> : sensevoice ? <SenseVoiceConfig /> : <SpeechRecognitionConfig hideProvider selectedModel={settings.transcription?.model || 'base'} onModelChange={m.setTranscriptionLocal} />}
   </div>
@@ -141,7 +151,8 @@ function CoverSection({ m }: { m: ModelSettingsStore }) {
       {separate && connection && <ProviderFields connection={connection} ariaPrefix={t('封面')} placement="settings_model" keyHint={m.keyHints[connection.id]} onChoose={p => m.chooseProvider('cover', p)} onEdit={patch => m.editConnection(connection, patch)} />}
       {connection && <Row wide label={t('生图模型')} hint={t('已自动选择推荐的生图模型，可更换。')}>
         <ModelPicker role="cover" model={settings.cover?.model || ''} connection={connection} list={lists[connection.id]} busy={!!busy[connection.id]} listError={listErrors[connection.id]} mode={settings.analysis_mode}
-          onChange={model => m.setCoverModel(connection.id, model)} onRefresh={() => void m.discover(connection, true)} />
+          onChange={model => m.setCoverModel(connection.id, model)} onRefresh={() => void m.discover(connection, true)}
+          actions={<Btn variant="text" size="sm" disabled={!settings.cover?.model} loading={m.testing} onClick={() => void m.test('cover')}>{t('测试连接')}</Btn>} />
       </Row>}
       <Row label={t('参考视频画面')} hint={t('开启后会把一张视频截图发送给封面模型，生成的封面更贴近内容。')}>
         <Switch checked={settings.allow_send_frame} onChange={value => m.update({ allow_send_frame: value })} />
@@ -275,17 +286,18 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     else if (result.validationFailed) document.getElementById('ai-model')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
   const visionFailed = visionFollowLacksCapability(settings, m.lists)
-  const failed = (!!m.main && m.main.validation_status === 'failed') || visionFailed
+  const failed = validationTargets(settings).some(({ connection }) => connection.validation_status === 'failed') || visionFailed
   return <div className="ac-ai-settings">
     {settings.migration_warnings?.includes('cover_configuration_invalid') && <p role="alert" className="ac-note">{t('旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。')}</p>}
     {settings.migration_warnings?.includes('purpose_reset_to_recommended') && <p role="alert" className="ac-note">{t('部分用途无法按原样迁移。API Key 已保留，相关模型已改为推荐默认。此提示只出现一次。')}</p>}
     {settings.migration_warnings?.includes('preset_catalog_updated') && <p role="alert" className="ac-note">{t('服务商推荐列表已更新。已保存的连接不会改动，新连接会使用新的推荐。')}</p>}
     {settings.migration_warnings?.some(code => ['settings_configuration_invalid', 'analysis_configuration_invalid', 'vision_configuration_invalid', 'transcription_configuration_invalid'].includes(code)) && <p role="alert" className="ac-note">{t('部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。')}</p>}
-    <fieldset className="ac-model-fields" disabled={m.saving}>
+    <fieldset className="ac-model-fields" disabled={m.saving || m.testing}>
       {customSelected ? <CustomGatewayRepair connection={customSelected} m={m} onBack={closeProvider} />
         : selected ? <ProviderDetail preset={selected} m={m} asrReady={asrReady} onBack={closeProvider} /> : <>
         <div className="ac-model-section">
           <DefaultModels settings={settings} lists={m.lists} onChange={next => m.update(next)} />
+          <VisionSection m={m} />
         </div>
         <div id="ai-model" className="ac-model-section">
           <h3 className="ac-model-section-title">{t('settings.providers.title')}</h3>
@@ -315,8 +327,8 @@ export default function AIModelSettings({ requestedSection, requestedProvider = 
     </fieldset>
     {m.error && <p className="studio-error" role="alert">{m.error}</p>}
     <div className="ac-savebar">
-      <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? (m.main?.validation_status === 'failed' ? t('校验未通过。设置已保存，但开始生成前会拦住。') : t(VISION_HINT_KEY)) : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
-      <Btn variant="cta" loading={m.saving} onClick={() => void save()}>{t('保存设置')}</Btn>
+      <StatusDot tone={failed ? 'error' : m.dirty ? 'muted' : 'ok'} label={failed ? (validationTargets(settings).some(({ connection }) => connection.validation_status === 'failed') ? t('校验未通过。设置已保存，但开始生成前会拦住。') : t(VISION_HINT_KEY)) : m.dirty ? t('有未保存的更改') : settings.saved ? t('设置已保存') : t('首次使用，保存后生效')} />
+      <Btn variant="cta" disabled={m.testing} loading={m.saving} onClick={() => void save()}>{t('保存设置')}</Btn>
     </div>
   </div>
 }

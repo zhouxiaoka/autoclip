@@ -220,10 +220,10 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     }
   }
 
-  const probe = async (connection: Connection, model: string, vision: boolean): Promise<ValidationResult> => {
+  const probe = async (connection: Connection, model: string, vision: boolean, role: Role): Promise<ValidationResult> => {
     const payload = { ...connection, api_key: connection.api_key?.trim() ?? connection.api_key }
     try {
-      return await modelSettingsApi.test(payload, model, vision)
+      return await modelSettingsApi.test(payload, model, vision, role)
     } catch {
       return { success: false, ok: false, result: 'failed', error_type: 'unknown', hint_key: hintKeyForUpstreamError('unknown') }
     }
@@ -239,16 +239,20 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     setSaving(true); setError('')
     try {
       let next = effective
-      const main = logic.mainConnection(next)
-      const modelChanged = savedRef.current?.analysis?.model !== next.analysis?.model
-        || savedRef.current?.analysis?.connection_id !== next.analysis?.connection_id
-      const shouldValidate = !!main && !!next.analysis?.model && (main.validation_status !== 'ok' || modelChanged)
-      if (shouldValidate && main && next.analysis) {
-        const vision = next.analysis_mode !== 'subtitle' && bindingCapability(next.analysis, lists) === 'multimodal'
-        const result = await probe(main, next.analysis.model, vision)
-        emitValidation(main, result)
-        next = logic.applyValidation(next, main.id, result)
-        if (passed(result)) backfillModels({ ...main, base_url: result.normalized_base_url || main.base_url }, result)
+      for (const { role, connection, model } of logic.validationTargets(next)) {
+        const modelChanged = savedRef.current?.[role]?.model !== next[role]?.model
+          || savedRef.current?.[role]?.connection_id !== connection.id
+        if (connection.validation_status === 'ok' && !modelChanged) continue
+        const vision = role === 'vision' || (role === 'analysis' && next.analysis_mode !== 'subtitle' && bindingCapability(next.analysis, lists) === 'multimodal')
+        const result = await probe(connection, model, vision, role)
+        emitValidation(connection, result)
+        next = logic.applyValidation(next, connection.id, result)
+        if (passed(result)) {
+          const normalized = { ...connection, base_url: result.normalized_base_url || connection.base_url }
+          // Image/audio model ids carry no chat capability metadata.
+          if (role === 'analysis' || role === 'vision') backfillModels(normalized, result)
+          else void discover(normalized, true, 'manual')
+        }
         else setError(validationCopy(result.error_type, result.hint_key))
         setSettings(next)
       }
@@ -257,7 +261,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       finish('completed')
       savedRef.current = value
       message.success(t('已保存'))
-      const failed = value.connections.some(c => c.validation_status === 'failed') || next.connections.some(c => c.validation_status === 'failed')
+      const failed = [value, next].some(s => logic.validationTargets(s).some(({ connection }) => connection.validation_status === 'failed'))
       const visionFailed = logic.visionFollowLacksCapability(next, lists) || logic.visionFollowLacksCapability(value, lists)
       if (visionFailed && !failed) setError(t(VISION_HINT_KEY))
       return { ok: true, validationFailed: failed || visionFailed }
@@ -265,19 +269,23 @@ export function useModelSettings(placement: Placement = 'settings_model') {
     finally { setSaving(false) }
   }
 
-  const test = async () => {
-    const main = settings && logic.mainConnection(settings)
-    if (!settings?.analysis?.model || !main) return
-    const finish = beginExperience('provider_connection_test', { placement, provider: PROVIDERS[main.provider as ProviderKey] ? main.provider : 'other', capability: bindingCapability(settings.analysis, lists) })
+  const test = async (role: Role = 'analysis') => {
+    const connection = settings && logic.connectionOf(settings, role)
+    const binding = settings?.[role]
+    if (!settings || !binding?.model || !connection || (role === 'transcription' && settings.transcription?.provider !== 'cloud')) return
+    const capability = role === 'analysis' || role === 'vision' ? bindingCapability(settings[role], lists) : 'auto'
+    const finish = beginExperience('provider_connection_test', { placement, provider: PROVIDERS[connection.provider as ProviderKey] ? connection.provider : 'other', capability })
     setTesting(true)
     try {
-      const vision = settings.analysis_mode !== 'subtitle' && bindingCapability(settings.analysis, lists) === 'multimodal'
-      const value = await probe(main, settings.analysis.model, vision)
-      emitValidation(main, value)
-      replace(logic.applyValidation(settings, main.id, value))
+      const vision = role === 'vision' || (role === 'analysis' && settings.analysis_mode !== 'subtitle' && capability === 'multimodal')
+      const value = await probe(connection, binding.model, vision, role)
+      emitValidation(connection, value)
+      replace(logic.applyValidation(settings, connection.id, value))
       finish(passed(value) ? 'completed' : 'failed')
       if (passed(value)) {
-        backfillModels({ ...main, base_url: value.normalized_base_url || main.base_url }, value)
+        const normalized = { ...connection, base_url: value.normalized_base_url || connection.base_url }
+        if (role === 'analysis' || role === 'vision') backfillModels(normalized, value)
+        else void discover(normalized, true, 'manual')
         message.success(t('连接正常'))
         setError('')
       } else {

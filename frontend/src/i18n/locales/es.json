@@ -1833,5 +1833,6 @@
   "智能选择说明": "Cómo funciona la selección inteligente",
   "本机 Whisper": "Whisper en este dispositivo",
   "本机 SenseVoice": "SenseVoice en este dispositivo",
-  "搜索模型": "Buscar modelos"
+  "搜索模型": "Buscar modelos",
+  "画面理解使用其他服务": "Usar otro servicio para la comprensión visual"
 }

@@ -9,7 +9,7 @@ import { normalizeCompatibleUrl, passed, VISION_HINT_KEY, type ValidationResult 
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
 
 export type Role = 'analysis' | 'vision' | 'cover' | 'transcription'
-export type SaveIssue = { role: 'analysis' | 'cover' | 'transcription'; reason: 'provider' | 'model' | 'key' }
+export type SaveIssue = { role: Role; reason: 'provider' | 'model' | 'key' }
 
 const OPENAI_URL = /^https:\/\/api\.openai\.com(?:\/v1)?\/?$/
 
@@ -183,7 +183,8 @@ export { VISION_HINT_KEY }
 
 /** First blocking problem before save, in page order. */
 export function saveIssue(s: ModelSettings): SaveIssue | null {
-  for (const role of ['analysis', 'transcription', 'cover'] as const) {
+  for (const role of ['analysis', 'vision', 'transcription', 'cover'] as const) {
+    if (role === 'vision' && !s.vision) continue
     if (role === 'transcription' && s.transcription?.provider !== 'cloud') continue
     if (role === 'cover' && !s.cover_enabled) continue
     const binding = s[role]
@@ -201,6 +202,22 @@ export function persistableConnection(c: Connection, active: Set<string | undefi
   if (c.api_key || c.has_key) return true
   if (PROVIDERS[c.provider as ProviderKey]?.local) return true
   return presetKey(c) === 'compatible' && !!c.base_url.trim()
+}
+
+/** One access check per active connection; shared credentials are checked only once. */
+export function validationTargets(s: ModelSettings): { role: Role; connection: Connection; model: string }[] {
+  const seen = new Set<string>()
+  const targets: { role: Role; connection: Connection; model: string }[] = []
+  for (const role of ['analysis', 'vision', 'transcription', 'cover'] as const) {
+    if (role === 'transcription' && s.transcription?.provider !== 'cloud') continue
+    if (role === 'cover' && !s.cover_enabled) continue
+    const binding = s[role]
+    const connection = connectionOf(s, role)
+    if (!connection || !binding?.model || seen.has(connection.id)) continue
+    seen.add(connection.id)
+    targets.push({ role, connection, model: binding.model })
+  }
+  return targets
 }
 
 /** Document to send: drop unused blank drafts; keep compatible rows that already have a URL. */
