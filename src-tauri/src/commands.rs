@@ -262,7 +262,7 @@ fn unique_download_path(dir: &Path, filename: &str) -> PathBuf {
 
 #[cfg(test)]
 mod download_tests {
-    use super::{filename_from_disposition, local_http_url, safe_filename, save_response, unique_download_path};
+    use super::{filename_from_disposition, local_client, local_http_url, safe_filename, save_response, unique_download_path};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     async fn response_from_fixture(length: usize) -> reqwest::Response {
@@ -286,18 +286,37 @@ mod download_tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.unwrap();
-            let mut request = [0; 4096];
-            socket.read(&mut request).await.unwrap();
-            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok").await.unwrap();
+            // Keep serving so a false-green proxied hit cannot starve the no_proxy request.
+            loop {
+                let Ok((mut socket, _)) = listener.accept().await else { break };
+                let mut request = [0; 4096];
+                let _ = socket.read(&mut request).await;
+                let _ = socket
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                    .await;
+            }
         });
         // A proxy that refuses every connection, like a stopped Clash left as the system proxy.
         std::env::set_var("HTTP_PROXY", "http://127.0.0.1:9");
         std::env::set_var("http_proxy", "http://127.0.0.1:9");
+        // Without .no_proxy() the dead proxy swallows the local request — proves the positive path is real.
+        let proxied = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap()
+            .get(format!("http://{address}/clip.mp4"))
+            .send()
+            .await;
+        assert!(proxied.is_err(), "default client must fail through the dead proxy");
         let client = local_client();
         std::env::remove_var("HTTP_PROXY");
         std::env::remove_var("http_proxy");
-        let response = client.unwrap().get(format!("http://{address}/clip.mp4")).send().await.unwrap();
+        let response = client
+            .unwrap()
+            .get(format!("http://{address}/clip.mp4"))
+            .send()
+            .await
+            .unwrap();
         assert_eq!(response.text().await.unwrap(), "ok");
     }
 
