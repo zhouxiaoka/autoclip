@@ -17,15 +17,17 @@ NOISY_SDK_LOGGERS = ("httpx", "httpcore", "openai")
 
 _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     # URL userinfo: https://user:password@host → keep scheme, drop credentials
-    (re.compile(r"(?i)(://)([^/@\s\"'<>]+@)"), r"\1" + REDACTED + "@"),
-    # URL query credentials: ?key=..., &api_key=..., access_token=..., X-Amz-Signature=...
-    (re.compile(
-        r"(?i)([?&](?:[^=&#]*[_-]?)?(?:key|api[_-]?key|apikey|access[_-]?token|token|secret|password|sig|signature|credential|security[_-]?token)=)[^&#\s\"'<>]+"
-    ), r"\1" + REDACTED),
-    # Authorization headers / bearer tokens
-    (re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=\-]{6,}"), r"\1 " + REDACTED),
+    (re.compile(r"(?i)(://)([^/?#@\s\"'<>]+@)"), r"\1" + REDACTED + "@"),
+    # E3: every URL query value is redacted (names kept for diagnosis). No allow-list of
+    # "secret" names: signed URLs use arbitrary parameter names (auth, __cld_token__, …).
+    (re.compile(r"([?&][^=&#\s\"'<>?]+=)[^&#\s\"'<>]+"), r"\1" + REDACTED),
+    # E3: the whole Authorization / Proxy-Authorization value, whatever the scheme
+    # (Bearer, Basic, Key, Token, raw). Header form and JSON/dict form.
+    (re.compile(r"(?i)((?:proxy-)?authorization[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\][\"',}\r\n]|\[REDACTED\]$)[^\"'\r\n}]+"), r"\1" + REDACTED),
+    # Bare bearer / basic tokens outside a header
+    (re.compile(r"(?i)\b(bearer|basic)\s+(?!\[REDACTED\])[A-Za-z0-9._~+/=\-]{6,}"), r"\1 " + REDACTED),
     # key=value / "key": "value" credential fields
-    (re.compile(r"(?i)([\"']?(?:x-goog-api-key|x-api-key|api[_-]?key|apikey|authorization|access[_-]?token|secret[_-]?key|password)[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\])[^\s\"',;}&]+"), r"\1" + REDACTED),
+    (re.compile(r"(?i)([\"']?(?:x-goog-api-key|x-api-key|api[_-]?key|apikey|access[_-]?token|secret[_-]?key|password)[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\])[^\s\"',;}&]+"), r"\1" + REDACTED),
     # Well-known key shapes
     (re.compile(r"\bsk-[A-Za-z0-9_\-]{8,}"), REDACTED),
     (re.compile(r"\bAIza[0-9A-Za-z_\-]{10,}"), REDACTED),
