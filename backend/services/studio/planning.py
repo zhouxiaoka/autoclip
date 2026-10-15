@@ -21,7 +21,7 @@ class Recommendation(BaseModel):
 VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sources use the subtitle route
 VISION_FALLBACK_CODE = 'vision_unavailable_subtitle_fallback'
 VISION_FALLBACK_MESSAGE = '视觉服务暂不可用，已切换为字幕分析继续制作。'
-# E1: visual mode, screening answered but the answer could not be parsed.
+# E1: AUTO mode, screening answered but the answer could not be parsed.
 VISION_INVALID_FALLBACK_CODE = 'vision_invalid_subtitle_fallback'
 VISION_INVALID_FALLBACK_MESSAGE = '画面结果不可用，已改用字幕继续制作。'
 
@@ -160,29 +160,20 @@ def recommend(video: Path, options: ImportOptions):
         except (RuntimeError, ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
             # Only an explicit visual choice fails the run; the default automatic
             # screening is optional and falls back to the subtitle route.
-            if consent.analysis_mode == 'visual' and _is_parse_failure(error):
-                # E1: an unparseable screening answer degrades to subtitles, but only
-                # when the subtitle route can actually run; otherwise keep the failure.
-                from backend.services.studio import readiness
-                try:
-                    readiness.require_transcription(
-                        stage='SUBTITLE',
-                        srt_available=(video.parent / 'input.srt').is_file(),
-                        analysis_mode='subtitle',
-                    )
-                except Exception:  # noqa: BLE001
-                    raise error from None
-                if short or no_audio:
-                    raise
+            if consent.analysis_mode == 'auto' and _is_parse_failure(error):
+                # E1: AUTO screening answered but unparseably -> subtitle route with notice.
+                # Subtitle readiness was already required above for AUTO.
                 invalid_degrade = True
-            elif options.auto_start and consent.analysis_mode == 'visual':
+            if options.auto_start and consent.analysis_mode == 'visual':
+                # Kris rule: a manual visual choice never falls back to subtitles (incl. E1
+                # parse failures); auto-start hard-blocks, the review screen keeps the route.
                 raise
             from backend.core.sentry_setup import capture_studio_exception
             capture_studio_exception(error, 'screening', analysis_mode='visual')
             if isinstance(error, intelligence.VisionRequestError):
                 diagnostics = {**error.diagnostics(), 'phase':'screening'}
             mode = 'fallback'
-            if consent.analysis_mode == 'auto' and isinstance(error, intelligence.VisionRequestError):
+            if consent.analysis_mode == 'auto' and isinstance(error, intelligence.VisionRequestError) and not invalid_degrade:
                 screening_degrade = True  # S5: record the fixed reason; keep the screening message first
             if options.auto_start or screening_degrade or invalid_degrade:
                 local_evidence, result = _local_recommendation(
