@@ -8,8 +8,8 @@ secret env, tier). The product catalog is not that source: Gemini's product
 row is ``gemini-3.8-flash`` at ``/v1beta`` (native models), while live chat
 needs ``/v1beta/openai``. DashScope live default is ``qwen-plus``. When
 ``presets/provider_presets.json`` exists, this module reads labels and
-non-empty default models only. It never writes the product JSON. ``*_MODEL``
-still overrides at run time. Do not print secrets.
+chat URL inputs only, preserving live default models. It never writes the
+product JSON. ``*_MODEL`` still overrides at run time. Do not print secrets.
 """
 from __future__ import annotations
 
@@ -343,8 +343,6 @@ def live_providers() -> list[dict[str, Any]]:
         catalog_url = ''
         if preset:
             row['label'] = preset['label'] or row['label']
-            if preset['default_model']:
-                row['default_model'] = preset['default_model']
             catalog_url = preset['base_url']
         row['base_url'] = live_chat_url(item['id'], catalog_url, item['base_url'])
         if not row['base_url']:
