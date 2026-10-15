@@ -1,6 +1,7 @@
 """
 LLM管理器 - 统一管理多个模型提供商
 """
+import hashlib
 import json
 import os
 import threading
@@ -39,6 +40,7 @@ class LLMManager:
         self.settings_file = settings_file or self._get_default_settings_file()
         self.current_provider: Optional[LLMProvider] = None
         self._settings_mtime: Optional[float] = None
+        self._settings_hash = None
         self.settings = self._load_settings()
         self._initialize_provider()
 
@@ -51,12 +53,22 @@ class LLMManager:
                 return None
         return (stamp(self.settings_file), stamp(ai_path()))
 
+    def _current_settings_hash(self):
+        from backend.services.ai_model_settings import path as ai_path
+        def digest(path):
+            try:
+                return hashlib.sha256(path.read_bytes()).digest()
+            except OSError:
+                return None
+        return (digest(self.settings_file), digest(ai_path()))
+
     def _reload_if_settings_changed(self) -> None:
         """设置页保存后 settings.json 会变；API 进程与 Celery worker 都要在下一次调用时拿到新配置，
         而不是等重启。"""
         with _settings_lock:
             mtime = self._current_settings_mtime()
-            if mtime != self._settings_mtime:
+            content_hash = self._current_settings_hash()
+            if mtime != self._settings_mtime or content_hash != self._settings_hash:
                 logger.info("检测到 settings.json 变化，重新加载 LLM 配置")
                 self.current_provider = None
                 self.settings = self._load_settings()
@@ -210,6 +222,7 @@ class LLMManager:
                                     max_clips_per_collection=configured.max_clips_per_collection)
         # Failed loads must remain retryable; never mark a broken assignment as loaded.
         self._settings_mtime = self._current_settings_mtime()
+        self._settings_hash = self._current_settings_hash()
         return default_settings
 
     def _apply_local_preset(self, settings: Dict[str, Any]) -> None:
