@@ -326,3 +326,52 @@ def test_sanitizer_keeps_known_type_only_diagnostics():
     from backend.core.llm_telemetry import sanitize_exception_text
     assert sanitize_exception_text("RuntimeError") == "RuntimeError"
     assert sanitize_exception_text("PrivateEnglishSubtitleError") == "unknown"
+
+
+@pytest.mark.parametrize("body_shape", ["dict", "json", "text"])
+@pytest.mark.parametrize("code,message,expected", [
+    ("context_length_exceeded", "Request rejected", "context_length_exceeded"),
+    ("invalid_request_error", "Maximum context length exceeded", "context_length_exceeded"),
+    ("content_filter", "Request rejected", "content_filter"),
+    ("content_policy_violation", "Request rejected", "content_filter"),
+    ("invalid_request_error", "Request blocked by content filter", "content_filter"),
+    ("fixture-private-arbitrary-code", "Request rejected", "unknown"),
+])
+def test_provider_and_client_logs_keep_safe_diagnostic_code(
+    body_shape, code, message, expected, caplog,
+):
+    import json
+    from backend.core.llm_telemetry import sanitize_exception_text
+    from backend.utils.llm_client import LLMClient
+
+    private_body = "fixture-private-prompt-subtitle-response"
+    private_path = "/fixture-private-folder/input.srt"
+    body = {"error": {"code": code, "message": f"{message} {ERROR} {private_body} {private_path}"}}
+    if body_shape == "json":
+        body = json.dumps(body)
+    elif body_shape == "text":
+        body = f"{code}: {message} {ERROR} {private_body} {private_path}"
+
+    def rejected_request(**kwargs):
+        error = RuntimeError(ERROR)
+        error.status_code = 400
+        error.body = body
+        raise error
+
+    provider = make_provider("openai")
+    provider.client.chat.completions.create = rejected_request
+    client = object.__new__(LLMClient)
+    client.llm_manager = SimpleNamespace(call=lambda *args: provider.call(*args))
+    with pytest.raises(RuntimeError) as raised:
+        client.call("fixture prompt")
+
+    diagnostic = expected + " host=api.example.com"
+    assert str(raised.value) == diagnostic
+    assert sanitize_exception_text(raised.value) == diagnostic
+    for name in (providers.__name__, "backend.utils.llm_client"):
+        messages = [record.getMessage() for record in caplog.records if record.name == name]
+        assert len(messages) == 1
+        assert messages[0].endswith(diagnostic)
+    assert_safe(caplog.text)
+    for private in (private_body, private_path, "fixture-private-arbitrary-code"):
+        assert private not in caplog.text

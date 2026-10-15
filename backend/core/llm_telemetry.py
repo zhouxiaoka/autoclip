@@ -84,6 +84,13 @@ _CREDENTIAL_FIELD_IN_TEXT = re.compile(
 _KEY_IN_TEXT = re.compile(
     r'''(?i)(?:(?:sk-|AIza|xai-)[A-Za-z0-9_\-]+|bearer\s+[^\s,;}\]"']+)'''
 )
+# Log-only diagnostics for errors outside the shared telemetry/retry enum.
+_LOG_ERROR_CODES = (
+    ("context_length_exceeded", re.compile(
+        r"\b(?:context_length_exceeded|maximum context length|context (?:length )?(?:is )?too long)\b", re.I,
+    )),
+    ("content_filter", re.compile(r"\b(?:content_filter|content_policy_violation|content filter)\b", re.I)),
+)
 
 
 def hostname_of_base_url(url: str | None) -> str | None:
@@ -122,7 +129,7 @@ def sanitize_model(name: str | None) -> str | None:
 
 def sanitize_exception_text(text: str | BaseException | None) -> str:
     """Allow only a classified error type and URL host; never retain prose."""
-    from backend.core.upstream_errors import classify_exception, classify_upstream_error
+    from backend.core.upstream_errors import classify_exception, classify_upstream_error, http_error_parts
     if isinstance(text, _LogSafeLLMError):
         return str(text)
     if text is None or text == "":
@@ -132,13 +139,20 @@ def sanitize_exception_text(text: str | BaseException | None) -> str:
         if isinstance(error_class, type) and issubclass(error_class, BaseException):
             return text  # Some callers already pass only a known exception type.
     info = classify_exception(text) if isinstance(text, BaseException) else classify_upstream_error(body=text)
+    code = info.error_type.value
+    if info.error_type is UpstreamErrorType.UNKNOWN:
+        body = http_error_parts(text)[1] if isinstance(text, BaseException) else text
+        for diagnostic, pattern in _LOG_ERROR_CODES:
+            if pattern.search(str(body)):
+                code = diagnostic
+                break
     out = _CREDENTIAL_FIELD_IN_TEXT.sub("redacted", str(text))
     out = _KEY_IN_TEXT.sub("redacted", out)
     try:
         host = next((hostname_of_base_url(match.group(0)) for match in _URL_IN_TEXT.finditer(out)), None)
     except ValueError:
         host = None
-    return info.error_type.value + (f" host={host}" if host else "")
+    return code + (f" host={host}" if host else "")
 
 
 class _LogSafeLLMError(RuntimeError):
