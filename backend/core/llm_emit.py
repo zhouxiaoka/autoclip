@@ -146,9 +146,9 @@ def increment_degrade_count() -> int:
 
     Uses a lock-protected per-run cell. ``copy_context()`` (parallel chunks) only
     copies the run id, so two degrades cannot both write 1. Integer only — no
-    model name, URL, or user text.
+    model name, URL, or user text. Without a bound run, skip counting.
     """
-    cell, _token = _bind_degrade_run()
+    cell = _degrade_cell()
     if cell is None:
         return 0
     with cell.lock:
