@@ -52,15 +52,26 @@ def create_error_response(
     error_code: str,
     message: str,
     details: dict = None,
-    request_id: str = None
+    request_id: str = None,
+    *,
+    detail=None,
 ) -> JSONResponse:
-    """创建统一格式的错误响应"""
+    """创建统一格式的错误响应。
+
+    D6: always expose a top-level FastAPI-compatible ``detail`` so frontend
+    ``errorText`` (reads ``response.data.detail``) keeps the human message
+    instead of falling back to an Axios status-code sentence.
+    """
     response = ErrorResponse(error_code, message, details, request_id)
     response.timestamp = time.time()
-    
+    content = response.to_dict()
+    if detail is not None:
+        content["detail"] = detail
+    elif isinstance(message, str) and message:
+        content["detail"] = message
     return JSONResponse(
         status_code=status_code,
-        content=response.to_dict()
+        content=content,
     )
 
 
@@ -134,12 +145,14 @@ def handle_http_exception(exc: HTTPException, request_id: str = None) -> JSONRes
     elif isinstance(detail, str):
         from backend.core.log_redaction import redact_text
         detail = redact_text(detail)
+    message = detail if isinstance(detail, str) else "请求失败"
     return create_error_response(
         status_code=exc.status_code,
         error_code=f"HTTP_{exc.status_code}",
-        message=detail if isinstance(detail, str) else "请求失败",
+        message=message,
         details={"detail": detail} if not isinstance(detail, str) else None,
         request_id=request_id,
+        detail=detail,
     )
 
 
@@ -177,18 +190,29 @@ def _redact_validation_value(value):
     return redact_text(str(value))
 
 
+def _loc_is_secret(loc) -> bool:
+    return any(str(part).lower() in _SECRET_KEYS for part in (loc or ()))
+
+
 def handle_validation_error(exc: RequestValidationError, request_id: str = None) -> JSONResponse:
     """处理请求验证错误 — never echo credential-bearing `input` (beginner self-test 422 leak)."""
     errors = []
     for error in exc.errors():
+        loc = error.get("loc", ())
         entry = {
-            "field": ".".join(str(loc) for loc in error.get("loc", ())),
+            "field": ".".join(str(part) for part in loc),
             "message": error.get("msg", ""),
             "type": error.get("type", ""),
+            "loc": list(loc),
         }
-        # Keep loc for clients; redact input/ctx so api_key never leaves the server.
+        # D5: when loc points at api_key / password / …, wipe the string input
+        # entirely — regex alone misses non sk-/AIza secrets.
         if "input" in error:
-            entry["input"] = _redact_validation_value(error["input"])
+            raw = error["input"]
+            if _loc_is_secret(loc) and isinstance(raw, str):
+                entry["input"] = "[REDACTED]"
+            else:
+                entry["input"] = _redact_validation_value(raw)
         if "ctx" in error:
             entry["ctx"] = _redact_validation_value(error["ctx"])
         errors.append(entry)
@@ -199,6 +223,7 @@ def handle_validation_error(exc: RequestValidationError, request_id: str = None)
         message="请求参数验证失败",
         details={"errors": errors},
         request_id=request_id,
+        detail=errors,
     )
 
 

@@ -85,7 +85,8 @@ class _RunAcc:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     reasoning_tokens: int = 0
-    last_retry: int = 0
+    last_retry: int = 0  # run-level total retries (sum of per-call peaks)
+    _open_retry_peak: int = 0  # peak attempt index inside the current logical call
     last_degrade: int = 0
     last_http_status: int | None = None
     last_upstream: str | None = None
@@ -568,7 +569,15 @@ def _remember_run(properties: dict[str, Any]) -> None:
     acc.provider = properties.get("provider") or acc.provider
     acc.model = properties.get("model") or acc.model
     acc.host = properties.get("base_url_host") or acc.host
-    acc.last_retry = int(properties.get("retry_count") or 0)
+    # D2: accumulate actual retries per logical call. Attempt indices (0,1,2…) are
+    # not summed raw — only the rise in peak within one call counts. A later
+    # successful call with retry_count=0 must not wipe earlier retries.
+    retry = int(properties.get("retry_count") or 0)
+    if retry > acc._open_retry_peak:
+        acc.last_retry += retry - acc._open_retry_peak
+        acc._open_retry_peak = retry
+    if retry == 0:
+        acc._open_retry_peak = 0
     acc.last_degrade = max(acc.last_degrade, int(properties.get("degrade_count") or 0))
     status = properties.get("http_status")
     acc.last_http_status = status if isinstance(status, int) else None

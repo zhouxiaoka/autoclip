@@ -16,8 +16,12 @@ REDACTED = "[REDACTED]"
 NOISY_SDK_LOGGERS = ("httpx", "httpcore", "openai")
 
 _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    # URL query credentials: ?key=..., &api_key=..., access_token=...
-    (re.compile(r"(?i)([?&](?:key|api[_-]?key|apikey|access[_-]?token|token|secret|password|sig|signature)=)[^&#\s\"'<>]+"), r"\1" + REDACTED),
+    # URL userinfo: https://user:password@host → keep scheme, drop credentials
+    (re.compile(r"(?i)(://)([^/@\s\"'<>]+@)"), r"\1" + REDACTED + "@"),
+    # URL query credentials: ?key=..., &api_key=..., access_token=..., X-Amz-Signature=...
+    (re.compile(
+        r"(?i)([?&](?:[^=&#]*[_-]?)?(?:key|api[_-]?key|apikey|access[_-]?token|token|secret|password|sig|signature|credential|security[_-]?token)=)[^&#\s\"'<>]+"
+    ), r"\1" + REDACTED),
     # Authorization headers / bearer tokens
     (re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=\-]{6,}"), r"\1 " + REDACTED),
     # key=value / "key": "value" credential fields

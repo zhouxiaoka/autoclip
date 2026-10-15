@@ -158,7 +158,9 @@ def test_visual_mode_requires_a_multimodal_model_and_auto_does_not(monkeypatch):
     ))
     assert allowed['checks']['visual'] == {'ok': True, 'code': 'configured', 'repair': 'none'}
     auto_text = report_for(monkeypatch, document(analysis_mode='auto'))
-    assert auto_text['checks']['visual'] == {'ok': False, 'code': 'vision_unsupported', 'repair': 'settings_vision'}
+    # D7: auto + known text must stay optional so S5 can fall back to subtitles
+    assert auto_text['checks']['visual'] == {'ok': True, 'code': 'optional', 'repair': 'none'}
+    assert auto_text['ready'] is True
     auto_unresolved = report_for(monkeypatch, document(
         analysis=Assignment(connection_id='ai', model='o3-mini', capability='auto'),
         analysis_mode='auto',

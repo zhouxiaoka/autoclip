@@ -112,6 +112,10 @@ class DesktopServiceManager:
                 log_level=self.config.log_level.lower(),
                 access_log=False
             )
+            # D4: uvicorn.Config rebuilds handlers (propagate=False, empty filters).
+            # Re-attach the unified redacting filter after that final log setup.
+            from backend.core.log_redaction import install_log_redaction
+            install_log_redaction()
             server = uvicorn.Server(config)
             self.server = server
 
