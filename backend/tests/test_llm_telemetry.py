@@ -1,6 +1,7 @@
 """成功率埋点字段脱敏：只留域名与枚举，不含 key / 完整 URL / 用户内容。"""
 from __future__ import annotations
 
+import contextvars
 import threading
 from concurrent.futures import ALL_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
@@ -311,6 +312,21 @@ def test_increment_degrade_count_is_exported_and_capped():
         assert telemetry.current_degrade_count() == 32
     finally:
         telemetry.reset_degrade_count(token)
+
+
+def test_increment_degrade_count_without_run_does_not_allocate(monkeypatch):
+    from backend.core import llm_emit
+
+    monkeypatch.setattr(llm_emit, "_degrade_runs", {})
+
+    def check_unbound_counting():
+        for _ in range(2):
+            assert telemetry.increment_degrade_count() == 0
+            assert telemetry.current_degrade_count() == 0
+            assert llm_emit._degrade_run_id.get() is None
+            assert llm_emit._degrade_runs == {}
+
+    contextvars.Context().run(check_unbound_counting)
 
 
 def test_parallel_context_copies_do_not_undercount_degrades():
