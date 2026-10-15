@@ -1878,5 +1878,6 @@
   "settings.providers.fetch_list_updated": "Updated the list from models available on this account.",
   "settings.providers.fetch_list_no_overlap": "None of the recommended models are on this account. Pick one manually or refresh the list.",
   "settings.providers.fetch_list_truncated": "The model list is too long; only the first 2000 IDs are kept. Enter others manually.",
-  "API Key 无效或已过期，请检查后重试": "Your API key is invalid or has expired. Please check it and try again."
+  "API Key 无效或已过期，请检查后重试": "Your API key is invalid or has expired. Please check it and try again.",
+  "关闭后成片不压字幕，标题和名牌保留。": "Off: no captions burned in; title and nameplates stay."
 }

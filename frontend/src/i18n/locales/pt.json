@@ -1878,5 +1878,6 @@
   "settings.providers.fetch_list_updated": "Lista atualizada com os modelos disponíveis nesta conta.",
   "settings.providers.fetch_list_no_overlap": "Nenhum candidato recomendado está na lista desta conta. Escolha um manualmente ou atualize a lista.",
   "settings.providers.fetch_list_truncated": "A lista de modelos é longa demais; só os primeiros 2000 são mantidos. Insira os demais manualmente.",
-  "API Key 无效或已过期，请检查后重试": "A chave de API é inválida ou expirou. Verifique-a e tente novamente."
+  "API Key 无效或已过期，请检查后重试": "A chave de API é inválida ou expirou. Verifique-a e tente novamente.",
+  "关闭后成片不压字幕，标题和名牌保留。": "Desligado: sem legendas gravadas; título e identificações permanecem."
 }

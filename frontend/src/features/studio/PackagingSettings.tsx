@@ -40,6 +40,9 @@ export default function PackagingSettings({ draft, patch }: { draft: Draft; patc
       {lines.map((line, index) => <input key={index} className="ac-input" aria-label={t('标题第 {{n}} 行', { n: index + 1 })} maxLength={max}
         value={line} placeholder={index === 0 ? t('第一行') : t('第二行（可选）')} onChange={e => setLine(index, e.target.value)} />)}
     </Row>
+    <Row label={t('字幕')} hint={t('关闭后成片不压字幕，标题和名牌保留。')}>
+      <Switch size="small" checked={packaging.captions_enabled !== false} onChange={checked => update({ captions_enabled: checked })} aria-label={t('字幕')} />
+    </Row>
     {packaging.template === 'interview_zh' && <Row label={t('评论标签')} hint={t('在关键句出现的编辑点评。')}>
       <Switch size="small" checked={packaging.tags_enabled} disabled={!packaging.tags.length} onChange={checked => update({ tags_enabled: checked })} aria-label={t('评论标签')} />
     </Row>}

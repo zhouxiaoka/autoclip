@@ -23,3 +23,9 @@ test('this release edits the two title lines, the editor tags switch and the tem
  assert.match(panel,/draft\.packaging \? <PackagingSettings draft=\{draft\} patch=\{patch\} \/>/)
  assert.match(panel,/\{!draft\.packaging && <Row label=\{t\("字幕"\)\}/)
 })
+
+test('#367 template packaging exposes a captions switch',()=>{
+ assert.match(settings,/update\(\{ captions_enabled: checked \}\)/)
+ assert.match(settings,/checked=\{packaging\.captions_enabled !== false\}/)
+ assert.match(types,/captions_enabled\?: boolean/)
+})
