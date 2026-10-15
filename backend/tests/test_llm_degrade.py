@@ -483,7 +483,9 @@ def test_token_parameter_resend_deducts_budget_before_sending(remaining, caplog)
         else:
             with pytest.raises(Exception) as caught:
                 provider.call("fixture", max_tokens=1)
-            assert caught.value is error
+            assert caught.value.status_code == error.status_code
+            assert degrade.error_code_tokens(caught.value) == degrade.error_code_tokens(error)
+            assert str(error) not in str(caught.value)
         assert budget.used == degrade.CHUNK_CALL_CAP - remaining + (degrade.http_attempts_per_call() if allowed else 0)
     assert len(calls) == 1 + int(allowed)
     assert "private-path" not in caplog.text

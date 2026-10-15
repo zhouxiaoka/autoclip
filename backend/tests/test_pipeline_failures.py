@@ -117,7 +117,9 @@ def test_outline_provider_failure_retains_recoverable_code(tmp_path, prompt_file
         extractor.extract_outline(srt)
     assert caught.value.stage == 'ANALYZE'
     assert caught.value.code == expected_code
-    assert caught.value.__cause__ is error
+    from backend.core.upstream_errors import classify_exception
+    assert classify_exception(caught.value.__cause__) == classify_exception(error)
+    assert str(error) not in str(caught.value.__cause__)
 
 
 def test_step1_partial_chunk_failure_still_returns_outline(tmp_path, prompt_files, monkeypatch):
@@ -586,4 +588,5 @@ def test_offline_failure_shows_one_fixed_translatable_sentence(tmp_path, prompt_
     assert caught.value.code == code
     assert caught.value.user_message() == MODEL_CALL_MESSAGES[code]
     assert str(error) not in caught.value.user_message()
-    assert str(error) in caplog.text  # detail kept in the log
+    assert str(error) not in caplog.text
+    assert code in caplog.text  # only the stable error type is retained

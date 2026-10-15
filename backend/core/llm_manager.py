@@ -14,7 +14,7 @@ from .llm_providers import (
     ModelInfo, LLMResponse
 )
 from ..services.config_sync_service import config_sync_service
-from .llm_telemetry import hostname_of_base_url, sanitize_exception_text, sanitize_model
+from .llm_telemetry import hostname_of_base_url, sanitize_exception_text, sanitize_model, log_safe_exception
 
 logger = logging.getLogger(__name__)
 
@@ -451,7 +451,7 @@ class LLMManager:
             
         except Exception as e:
             logger.error("设置提供商失败: %s", sanitize_exception_text(e))
-            raise
+            raise log_safe_exception(e) from None
     
     def call(self, prompt: str, input_data: Any = None, **kwargs) -> str:
         """调用LLM。设了 AUTOCLIP_LLM_CACHE_DIR 时按 sha1(prompt+input) 录制 / 回放，给回归集用。
@@ -468,7 +468,7 @@ class LLMManager:
         provider, settings, info = route.provider, route.settings, route.info
         cache_path = _llm_cache_path(prompt, input_data)
         if cache_path is not None and cache_path.exists():
-            logger.info(f"LLM 缓存命中: {cache_path.name}")
+            logger.info("LLM 缓存命中")
             return cache_path.read_text(encoding="utf-8")
         if not provider:
             raise ValueError("未配置LLM提供商，请自备 API Key 并到「设置 → 模型」填写")
@@ -497,7 +497,7 @@ class LLMManager:
         except Exception as e:
             from backend.core.llm_telemetry import sanitize_exception_text
             logger.error("LLM调用失败: %s", sanitize_exception_text(e))
-            raise
+            raise log_safe_exception(e) from None
 
     def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3, **kwargs) -> str:
         """Retry, then fall back to the next same-provider preset candidate.

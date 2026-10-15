@@ -112,8 +112,11 @@ def test_token_parameter_resend_counts_against_chunk_budget(http_manager):
         return httpx.Response(500, request=request, json={"error": {"message": "unavailable"}})
 
     manager = http_manager(handler)
-    with pytest.raises(openai.APIStatusError):
+    with pytest.raises(RuntimeError) as caught:
         manager.call_with_retry("chunk-a", max_tokens=64)
+    expected_status = 400 if "max_tokens" in hits[-1] else 500
+    assert caught.value.status_code == expected_status
+    assert "Use max_completion_tokens" not in str(caught.value)
     assert any("max_completion_tokens" in body for body in hits)
     assert len(hits) <= CHUNK_CALL_CAP
 

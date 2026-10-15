@@ -6,11 +6,12 @@
 
 隐私：不上报 key、完整 URL、提示词、字幕、模型原文。base_url 只留域名；
 本机 / 局域网统一记 ``local``。model 必须像模型 ID（ASCII、无 URL、无 ``sk-``），
-否则记 ``redacted``。异常日志去掉完整 URL（只留 host）、密钥和非 ASCII 正文。
+否则记 ``redacted``。异常日志只保留错误类型和 host，不保留任何语言的正文。
 ``upstream_error_type`` 只用 :class:`UpstreamErrorType` 枚举。
 """
 from __future__ import annotations
 
+import builtins
 import ipaddress
 import re
 from typing import Any, Mapping
@@ -83,7 +84,6 @@ _CREDENTIAL_FIELD_IN_TEXT = re.compile(
 _KEY_IN_TEXT = re.compile(
     r'''(?i)(?:(?:sk-|AIza|xai-)[A-Za-z0-9_\-]+|bearer\s+[^\s,;}\]"']+)'''
 )
-_NON_ASCII = re.compile(r"[^\x00-\x7F]+")
 
 
 def hostname_of_base_url(url: str | None) -> str | None:
@@ -121,20 +121,44 @@ def sanitize_model(name: str | None) -> str | None:
 
 
 def sanitize_exception_text(text: str | BaseException | None) -> str:
-    """Log-safe exception text: host only, no keys, no non-ASCII body."""
-    if isinstance(text, BaseException):
-        text = str(text)
-    if not isinstance(text, str) or not text:
+    """Allow only a classified error type and URL host; never retain prose."""
+    from backend.core.upstream_errors import classify_exception, classify_upstream_error
+    if isinstance(text, _LogSafeLLMError):
+        return str(text)
+    if text is None or text == "":
         return ""
-
-    def _host(match: re.Match[str]) -> str:
-        return hostname_of_base_url(match.group(0)) or "redacted"
-
-    out = _CREDENTIAL_FIELD_IN_TEXT.sub("redacted", text)
+    if isinstance(text, str):
+        error_class = getattr(builtins, text, None)
+        if isinstance(error_class, type) and issubclass(error_class, BaseException):
+            return text  # Some callers already pass only a known exception type.
+    info = classify_exception(text) if isinstance(text, BaseException) else classify_upstream_error(body=text)
+    out = _CREDENTIAL_FIELD_IN_TEXT.sub("redacted", str(text))
     out = _KEY_IN_TEXT.sub("redacted", out)
-    out = _URL_IN_TEXT.sub(_host, out)
-    out = _NON_ASCII.sub("", out)
-    return " ".join(out.split())
+    try:
+        host = next((hostname_of_base_url(match.group(0)) for match in _URL_IN_TEXT.finditer(out)), None)
+    except ValueError:
+        host = None
+    return info.error_type.value + (f" host={host}" if host else "")
+
+
+class _LogSafeLLMError(RuntimeError):
+    """Safe printable boundary; protocol metadata stays available to retry/degrade."""
+
+
+def log_safe_exception(error: Exception) -> Exception:
+    if isinstance(error, _LogSafeLLMError):
+        return error
+    from backend.core.llm_retry import retry_after_from_error
+    from backend.core.upstream_errors import classify_exception, http_error_parts
+    safe = _LogSafeLLMError(sanitize_exception_text(error))
+    safe.status_code, safe.body = http_error_parts(error)
+    kind = classify_exception(error).error_type
+    # These can be identified by the SDK class alone, which the wrapper replaces.
+    if kind in {UpstreamErrorType.TIMEOUT, UpstreamErrorType.CONNECTION}:
+        safe.body = "timeout" if kind is UpstreamErrorType.TIMEOUT else "connection error"
+    safe.code = getattr(error, "code", None)
+    safe.retry_after = retry_after_from_error(error)
+    return safe
 
 
 def sanitize_provider(value: str | None, *, allow_asr: bool = False) -> str | None:

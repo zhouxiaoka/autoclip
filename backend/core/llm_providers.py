@@ -12,7 +12,7 @@ from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
 
-from backend.core.llm_telemetry import hostname_of_base_url, sanitize_exception_text, sanitize_model
+from backend.core.llm_telemetry import hostname_of_base_url, sanitize_exception_text, sanitize_model, log_safe_exception
 
 logger = logging.getLogger(__name__)
 
@@ -181,17 +181,17 @@ class DashScopeProvider(LLMProvider):
                             model=model,
                             finish_reason=getattr(resp.output, 'finish_reason', None)
                         )
-                    finish_reason = getattr(resp.output, 'finish_reason', 'unknown') if getattr(resp, 'output', None) else 'unknown'
-                    logger.warning(f"API请求成功，但输出为空。结束原因: {finish_reason}")
+                    logger.warning("API请求成功，但输出为空。")
                     return LLMResponse(content="")
                 code = getattr(resp, 'code', 'N/A')
                 message = getattr(resp, 'message', '未知API错误')
-                raise Exception(sanitize_exception_text(
-                    f"API调用失败 - Status: {getattr(resp,'status_code', 'N/A')}, Code: {code}, Message: {message}"
-                ))
+                error = RuntimeError(str(message))
+                error.status_code = getattr(resp, 'status_code', None)
+                error.body = {"code": code, "message": message}
+                raise error
             except Exception as e:
                 logger.error(f"DashScope(native)调用失败: {sanitize_exception_text(e)}")
-                raise
+                raise log_safe_exception(e) from None
         else:
             # compatible
             try:
@@ -218,9 +218,10 @@ class DashScopeProvider(LLMProvider):
                         err = resp.json()
                     except Exception:
                         err = {"message": resp.text}
-                    raise Exception(sanitize_exception_text(
-                        f"API调用失败 - Status: {resp.status_code}, Message: {err}"
-                    ))
+                    error = RuntimeError(str(err))
+                    error.status_code = resp.status_code
+                    error.body = err
+                    raise error
                 data = resp.json()
                 content = data["choices"][0]["message"]["content"]
                 usage = data.get("usage")
@@ -228,7 +229,7 @@ class DashScopeProvider(LLMProvider):
                 return LLMResponse(content=content, usage=usage, model=model, finish_reason=finish_reason)
             except Exception as e:
                 logger.error(f"DashScope(compatible)调用失败: {sanitize_exception_text(e)}")
-                raise
+                raise log_safe_exception(e) from None
     
     def test_connection(self) -> bool:
         """测试DashScope连接"""
@@ -521,7 +522,7 @@ class OpenAIProvider(LLMProvider):
             
         except Exception as e:
             logger.error("OpenAI调用失败: %s", sanitize_exception_text(e))
-            raise
+            raise log_safe_exception(e) from None
     
     def test_connection(self) -> bool:
         """测试OpenAI / 兼容接口连接"""
@@ -587,7 +588,7 @@ class GeminiProvider(LLMProvider):
 
         except Exception as e:
             logger.error(f"Gemini调用失败: {sanitize_exception_text(e)}")
-            raise
+            raise log_safe_exception(e) from None
     
     def test_connection(self) -> bool:
         """测试Gemini连接"""
@@ -655,7 +656,7 @@ class SiliconFlowProvider(LLMProvider):
             
         except Exception as e:
             logger.error(f"硅基流动调用失败: {sanitize_exception_text(e)}")
-            raise
+            raise log_safe_exception(e) from None
     
     def test_connection(self) -> bool:
         """测试硅基流动连接"""

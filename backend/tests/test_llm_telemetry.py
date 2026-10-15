@@ -88,7 +88,7 @@ def test_sanitize_exception_redacts_quoted_credential_fields(field, quote, value
     cleaned = telemetry.sanitize_exception_text(raw)
     assert "fixture" not in cleaned
     assert "Bearer" not in cleaned
-    assert "status=401" in cleaned
+    assert cleaned == "invalid_key"
 
 
 @pytest.mark.parametrize("raw", [
@@ -104,7 +104,7 @@ def test_sanitize_exception_redacts_quoted_credential_fields(field, quote, value
     "xai-" + "a" * 48,
 ])
 def test_sanitize_exception_redacts_whole_credential(raw):
-    assert telemetry.sanitize_exception_text(raw) == "redacted"
+    assert telemetry.sanitize_exception_text(raw) == "unknown"
 
 
 def test_llm_request_properties_drop_secrets_and_user_text():
