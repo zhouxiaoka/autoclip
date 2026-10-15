@@ -553,3 +553,15 @@
 .ac-provider-more-chevron { flex: 0 0 auto; transition: transform .15s ease-out; }
 .ac-provider-more[aria-expanded="true"] .ac-provider-more-chevron { transform: rotate(180deg); }
 .ac-provider-more[aria-expanded="true"] + .ac-provider-grid { margin-top: 12px; }
+
+/* v8: model groups are collapsible; full list, no per-group limit */
+details.ac-provider-model-block > summary.ac-provider-model-group {
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; user-select: none;
+}
+details.ac-provider-model-block > summary.ac-provider-model-group::-webkit-details-marker { display: none; }
+details.ac-provider-model-block > summary.ac-provider-model-group::before {
+  content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg); transition: transform .15s ease-out; margin-right: 2px;
+}
+details.ac-provider-model-block[open] > summary.ac-provider-model-group::before { transform: rotate(45deg); }
+.ac-provider-model-group .count { font-family: var(--ac-font-mono); color: var(--ac-muted); }

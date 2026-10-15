@@ -22,15 +22,13 @@ const CAP_KEY: Record<string, string> = {
   video: 'settings.providers.filter.video',
 }
 
-const MODEL_GROUP: Array<{
-  key: 'language' | 'asr' | 'image'
-  title: string
-  pick: (model: { analysis?: boolean; image?: boolean; asr?: boolean; capability?: string }) => boolean
-  limit: number
-}> = [
-  { key: 'language', title: '语言', pick: m => !!m.analysis, limit: 8 },
-  { key: 'asr', title: '语音识别', pick: m => !!m.asr, limit: 4 },
-  { key: 'image', title: '图像生成', pick: m => !!m.image, limit: 4 },
+type DetailModel = { analysis?: boolean; image?: boolean; asr?: boolean; capability?: string | null }
+// Each model lands in exactly one group, so the header count equals the visible rows. No per-group limits.
+const MODEL_GROUP: Array<{ key: 'language' | 'image' | 'asr' | 'other'; title: string; open: boolean; pick: (model: DetailModel) => boolean }> = [
+  { key: 'language', title: '语言', open: true, pick: m => !!m.analysis && !m.image },
+  { key: 'image', title: '图像生成', open: true, pick: m => !!m.image },
+  { key: 'asr', title: '语音识别', open: true, pick: m => !m.analysis && !m.image && !!m.asr },
+  { key: 'other', title: '其它类型', open: false, pick: m => !m.analysis && !m.image && !m.asr },
 ]
 
 export default function ProviderDetail({
@@ -54,7 +52,7 @@ export default function ProviderDetail({
   const list = connection ? lists[connection.id] : undefined
   // Only a real (live/cache, non-preview) fetch shows models; catalog/preview reference IDs would mislead.
   const fetched = !!list && list.preview !== true && list.source !== 'catalog'
-  const models = fetched ? list!.models.filter(model => model.analysis || model.image || model.asr) : []
+  const models = fetched ? list!.models : []
   const needsEndpoint = kind === 'needs_endpoint' || (kind === 'guide' && !preset.base_url)
   const canTest = kind === 'legacy' || kind === 'compatible' || needsEndpoint
   const isSponsor = !!preset.sponsor
@@ -213,11 +211,13 @@ export default function ProviderDetail({
             {connection && busy[connection.id] && <p className="ac-note">{t('正在获取…')}</p>}
             {connection && listErrors[connection.id] && <p className="ac-note">{t('settings.providers.models_empty')}</p>}
             {MODEL_GROUP.map(group => {
-              const rows = models.filter(group.pick).slice(0, group.limit)
+              const rows = models.filter(group.pick)
               if (!rows.length) return null
               return (
-                <div key={group.key} className="ac-provider-model-block">
-                  <p className="ac-provider-model-group">{t(group.title)}</p>
+                <details key={group.key} className="ac-provider-model-block" data-model-group={group.key} open={group.open}>
+                  <summary className="ac-provider-model-group">
+                    {t(group.title)}<span className="count">{rows.length}</span>
+                  </summary>
                   <ul className="ac-provider-model-list">
                     {rows.map(model => (
                       <li key={model.id} className="ac-mono">
@@ -228,7 +228,7 @@ export default function ProviderDetail({
                       </li>
                     ))}
                   </ul>
-                </div>
+                </details>
               )
             })}
             {connection && !busy[connection.id] && !fetched && (
