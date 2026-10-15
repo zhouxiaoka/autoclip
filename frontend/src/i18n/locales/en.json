@@ -1879,5 +1879,10 @@
   "settings.providers.fetch_list_updated": "Updated the list from models available on this account.",
   "settings.providers.fetch_list_no_overlap": "None of the recommended models are on this account. Pick one manually or refresh the list.",
   "settings.providers.fetch_list_truncated": "The model list is too long; only the first 2000 IDs are kept. Enter others manually.",
-  "API Key 无效或已过期，请检查后重试": "Your API key is invalid or has expired. Please check it and try again."
+  "API Key 无效或已过期，请检查后重试": "Your API key is invalid or has expired. Please check it and try again.",
+  "模型下载源": "Model download source",
+  "自动：官方源连不上时改用 hf-mirror 镜像。": "Auto: switches to the hf-mirror mirror when the official source is unreachable.",
+  "自动": "Auto",
+  "hf-mirror 镜像": "hf-mirror (mirror)",
+  "保存失败，请重试": "Save failed. Please try again."
 }
