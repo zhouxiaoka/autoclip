@@ -104,7 +104,7 @@ test('opening a catalog provider creates a draft without treating an empty key a
     ...created.settings,
     connections: created.settings.connections.map(row => row.id === 'conn-sf' ? { ...row, has_key: true } : row),
   }
-  assert.equal(view.isCatalogConnected(keyed, view.catalogPreset('siliconflow')), true)
+  assert.equal(view.isCatalogConnected(keyed, view.catalogPreset('siliconflow')), false)
   assert.equal(view.findCatalogConnection(keyed, view.catalogPreset('siliconflow')).id, 'conn-sf')
 })
 
@@ -116,7 +116,33 @@ test('legacy providers reuse an existing connection and can become the analysis 
   const reused = view.ensureCatalogConnection(settings, view.catalogPreset('deepseek'))
   assert.equal(reused.connection.id, 'ds')
   assert.equal(reused.settings.analysis.connection_id, 'ds')
-  assert.equal(view.isCatalogConnected(settings, view.catalogPreset('deepseek')), true)
+  assert.equal(view.isCatalogConnected(settings, view.catalogPreset('deepseek')), false)
+})
+
+test('catalog requires successful verification for keyed and keyless connections', () => {
+  for (const provider of ['deepseek', 'siliconflow', 'ollama', 'lmstudio']) {
+    const preset = view.catalogPreset(provider)
+    for (const validation_status of [undefined, 'unchecked', 'failed', 'ok']) {
+      const connection = {
+        ...view.catalogDraftConnection(preset), id: 'conn', has_key: true, validation_status,
+      }
+      const settings = { ...blank(), connections: [connection] }
+      assert.equal(view.isCatalogConnected(settings, preset), validation_status === 'ok', `${provider}: ${validation_status}`)
+    }
+  }
+})
+
+test('validation is invalidated by credential and endpoint edits before the catalog renders', () => {
+  const logic = loadTs('modelSettingsLogic.ts', { '../../i18n': { t: text => text } })
+  const preset = view.catalogPreset('deepseek')
+  const settings = { ...blank(), connections: [{ ...view.catalogDraftConnection(preset), id: 'ds', has_key: true }] }
+  const verified = logic.applyValidation(settings, 'ds', { success: true, ok: true, result: 'success' })
+  assert.equal(view.isCatalogConnected(verified, preset), true)
+  for (const patch of [{ api_key: 'test-replacement' }, { base_url: 'https://example.test/v1' }]) {
+    assert.equal(view.isCatalogConnected(logic.editConnection(verified, 'ds', patch), preset), false)
+  }
+  const failed = logic.applyValidation(verified, 'ds', { success: false, ok: false, result: 'failed' })
+  assert.equal(view.isCatalogConnected(failed, preset), false)
 })
 
 test('unmatched custom gateways stay repairable and do not attach to a catalog preset', () => {
@@ -156,9 +182,22 @@ test('local ASR switching does not invent cloud connections', () => {
   assert.equal(sense.transcription.provider, 'sensevoice_local')
   assert.equal(view.isCatalogConnected(sense, view.catalogPreset('sensevoice')), false)
   assert.equal(view.isCatalogConnected(sense, view.catalogPreset('sensevoice'), { sensevoice: true }), true)
-  assert.equal(view.isCatalogConnected(sense, view.catalogPreset('whisper'), { whisper: true }), false)
+  assert.equal(view.isCatalogConnected(sense, view.catalogPreset('whisper'), { whisper: true }), true)
   const back = view.selectLocalAsr(sense, 'whisper')
   assert.equal(back.transcription.provider, 'whisper_local')
+})
+
+test('ready local ASR stays available independently of the selected transcription provider', () => {
+  for (const provider of ['whisper_local', 'sensevoice_local', 'cloud']) {
+    const settings = { ...blank(), transcription: { provider, model: 'base' } }
+    for (const id of ['whisper', 'sensevoice']) {
+      assert.equal(view.isCatalogConnected(settings, view.catalogPreset(id)), false)
+      assert.equal(view.isCatalogConnected(settings, view.catalogPreset(id), { [id]: false }), false)
+      assert.equal(view.isCatalogConnected(settings, view.catalogPreset(id), { [id]: true }), true)
+    }
+  }
+  assert.equal(view.whisperAsrReady({ status: 'not_installed' }, [{ name: 'base', status: 'downloaded' }], 'base'), false)
+  assert.equal(view.whisperAsrReady({ status: 'installed' }, [{ name: 'base', status: 'downloaded' }], 'small'), false)
 })
 
 test('catalog host helper never returns a full URL', () => {

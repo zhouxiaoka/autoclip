@@ -117,16 +117,19 @@ export function sensevoiceAsrReady(status?: { status?: string } | null): boolean
   return status?.status === 'ready'
 }
 
-export function isCatalogConnected(settings: ModelSettings, preset: ProviderPreset, asrReady: LocalAsrReady = {}): boolean {
-  if (preset.id === 'whisper') {
-    const selected = settings.transcription?.provider !== 'sensevoice_local' && settings.transcription?.provider !== 'cloud'
-    return selected && !!asrReady.whisper
-  }
-  if (preset.id === 'sensevoice') return settings.transcription?.provider === 'sensevoice_local' && !!asrReady.sensevoice
+/** Credentials (or a keyless connection) are configuration, not proof of connectivity. */
+export function isCatalogConfigured(settings: ModelSettings, preset: ProviderPreset): boolean {
   const connection = findCatalogConnection(settings, preset)
   if (!connection) return false
   if (preset.auth === 'none') return true
-  return !!(connection.api_key || connection.has_key)
+  return !!(connection.api_key?.trim() || connection.has_key)
+}
+
+export function isCatalogConnected(settings: ModelSettings, preset: ProviderPreset, asrReady: LocalAsrReady = {}): boolean {
+  // Readiness describes the installed engine, independently of the current ASR selection.
+  if (preset.id === 'whisper') return !!asrReady.whisper
+  if (preset.id === 'sensevoice') return !!asrReady.sensevoice
+  return isCatalogConfigured(settings, preset) && findCatalogConnection(settings, preset)?.validation_status === 'ok'
 }
 
 export function selectLocalAsr(settings: ModelSettings, id: LocalAsrId, model?: string): ModelSettings {
