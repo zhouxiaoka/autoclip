@@ -19,6 +19,10 @@ class Recommendation(BaseModel):
 
 
 VISUAL_MAX_SOURCE_SEC = 7200  # frame-by-frame vision analysis cost; longer sources use the subtitle route
+VISUAL_SOURCE_TOO_LONG_MESSAGE = (
+    f'画面分析最长支持 {VISUAL_MAX_SOURCE_SEC // 60} 分钟的素材。'
+    '请改用字幕分析，或先裁短素材后再试。'
+)
 VISION_FALLBACK_CODE = 'vision_unavailable_subtitle_fallback'
 VISION_FALLBACK_MESSAGE = '视觉服务暂不可用，已切换为字幕分析继续制作。'
 # E1: AUTO mode, screening answered but the answer could not be parsed.
@@ -96,6 +100,9 @@ def recommend(video: Path, options: ImportOptions):
     duration = media_precheck.duration_or_fail(video, info.get('duration'))
     info = {**info, 'duration': duration}
     consent = analysis_preferences.load()
+    # R3: explicit visual must never silently fall back to subtitles on overlong sources.
+    if consent.analysis_mode == 'visual' and duration > VISUAL_MAX_SOURCE_SEC:
+        raise ValueError(VISUAL_SOURCE_TOO_LONG_MESSAGE)
     degrade_reason = None
     screening_degrade = False
     invalid_degrade = False
@@ -173,8 +180,10 @@ def recommend(video: Path, options: ImportOptions):
             if isinstance(error, intelligence.VisionRequestError):
                 diagnostics = {**error.diagnostics(), 'phase':'screening'}
             mode = 'fallback'
-            if consent.analysis_mode == 'auto' and isinstance(error, intelligence.VisionRequestError) and not invalid_degrade:
-                screening_degrade = True  # S5: record the fixed reason; keep the screening message first
+            if consent.analysis_mode == 'auto' and not invalid_degrade:
+                # R4: every AUTO screening failure that falls back to subtitles carries a tip + code
+                # (unavailable for transport/runtime; invalid already set above for parse failures).
+                screening_degrade = True
             if options.auto_start or screening_degrade or invalid_degrade:
                 local_evidence, result = _local_recommendation(
                     video, duration, '快速画面判断未完成，已改按字幕制作。')

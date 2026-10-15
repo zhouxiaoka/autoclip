@@ -136,6 +136,14 @@ class ModelStatus(str, Enum):
     NOT_FOUND = "not_found"
 
 
+# User-facing download failure (R2): status API must never echo raw exception text
+# (URLs, query tokens, auth). Full detail stays in logs only.
+WHISPER_DOWNLOAD_USER_ERROR = (
+    "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，"
+    "或在下载源中改用 hf-mirror 镜像。"
+)
+
+
 @dataclass
 class ModelInfo:
     name: str
@@ -377,7 +385,9 @@ class WhisperModelManager:
                 model_name, type(e).__name__, e,
             )
             with self._lock:
-                self._download_state[model_name] = {"status": "error", "progress": 0, "error": str(e)}
+                self._download_state[model_name] = {
+                    "status": "error", "progress": 0, "error": WHISPER_DOWNLOAD_USER_ERROR,
+                }
 
     def download_status(self, model_name: str) -> Optional[str]:
         """In-process download state only ("downloading" / "downloaded" / "error"); no disk or network."""

@@ -34,7 +34,7 @@
 | `http_status` | 100–599 的整数，可空 |
 | `upstream_error_type` | 契约闭集：`invalid_key` / `insufficient_quota` / `permission_denied` / `model_not_found` / `bad_endpoint` / `rate_limited` / `upstream_unavailable` / `timeout` / `connection` / `output_truncated` / `unknown` |
 | `prompt_tokens` / `completion_tokens` / `reasoning_tokens` | 非负计数 |
-| `retry_count` | 非负；SDK 内部重试记不到 |
+| `retry_count` | 非负；本请求在结果重试环中的次数（`invalid_response`/`timeline_empty` 最多 2）；SDK 内部重试记不到 |
 | `degrade_count` | 非负；同服务商候选降级次数。R1 在换下一个候选时调用 `note_same_provider_degrade()` |
 | `duration_ms` | 非负耗时 |
 | `outcome` | `success` / `error` |
@@ -53,13 +53,13 @@
 | `failure_stage` | 失败必填 |
 | `error_code` | 失败必填，∈ 现有 studio 错误码（缺失时后端写成 `unexpected`） |
 | `billable_calls_before_failure` | 失败时必有；成功路径不发 |
-| `retry_count` | 最后一次请求的重试次数 |
+| `retry_count` | 本次 run 累加的请求重试次数（E2：每次逻辑调用的重试增量之和，不是「最后一次」） |
 | `degrade_count` | 本次 run 已发生的同服务商降级次数 |
 | `llm_calls` / `prompt_tokens` / `completion_tokens` | 本次 run 累计，可空 |
 
 run / generation 的 `http_status` 与 `upstream_error_type` 以最近一次请求为准；连续失败时保留最后一次失败的字段，最近一次缺失的字段不沿用此前失败值。回归验收覆盖 429 后接 503、无法分类的 HTTP 失败或无 HTTP 状态的超时，核对请求事件、run 快照与持久化字段一致。
 
-查询这些字段时以当前尝试为单位；同一项目重新生成不包含历史调用与 tokens。同一 generation 内，初筛和制作的独立 `track_run` 累加调用、prompt/completion/reasoning tokens 与降级次数，请求重试也计入调用数；进度重复写入或保存失败后重试不重复累计。`retry_count` 仍表示最后一次请求的重试次数。零调用 worker 显式写入 0，同一 generation 已累计的调用与 tokens 保留，新 generation 则从 0 开始。没有当前 run 时不回退到项目历史；项目成本报表 `llm_usage.summary(project_id)` 仍累计历史。回归验收：初筛 1 次成功加制作 2 次成功，保存 3 次调用、33 prompt tokens、12 completion tokens；制作改为 1 次失败后重试成功时，保存 3 次调用、22 prompt tokens、8 completion tokens。另验同一项目独立生成、零调用新生成及保存失败重试的计数隔离。
+查询这些字段时以当前尝试为单位；同一项目重新生成不包含历史调用与 tokens。同一 generation 内，初筛和制作的独立 `track_run` 累加调用、prompt/completion/reasoning tokens 与降级次数，请求重试也计入调用数；进度重复写入或保存失败后重试不重复累计。`retry_count` 表示本次 run 内累加的重试次数（E2）：每次逻辑调用只计入相对上次峰值的增量，并行分块不会少算或多算。结果类失败 `invalid_response` / `timeline_empty` 最多再试 2 次（不含首次，合计最多 3 次尝试，见 `backend/core/result_retry.py`）；HTTP/传输类失败不在此重试。零调用 worker 显式写入 0，同一 generation 已累计的调用与 tokens 保留，新 generation 则从 0 开始。没有当前 run 时不回退到项目历史；项目成本报表 `llm_usage.summary(project_id)` 仍累计历史。回归验收：初筛 1 次成功加制作 2 次成功，保存 3 次调用、33 prompt tokens、12 completion tokens；制作改为 1 次失败后重试成功时，保存 3 次调用、22 prompt tokens、8 completion tokens。另验同一项目独立生成、零调用新生成及保存失败重试的计数隔离。
 
 ### `asr_readiness_checked`
 
