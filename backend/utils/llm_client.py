@@ -32,6 +32,8 @@ except ImportError:
         sys.path.insert(0, str(backend_path))
     from core.llm_manager import get_llm_manager
 
+from backend.core.llm_telemetry import sanitize_exception_text
+
 logger = logging.getLogger(__name__)
 
 class LLMClient:
@@ -55,7 +57,7 @@ class LLMClient:
         try:
             return self.llm_manager.call(prompt, input_data)
         except Exception as e:
-            logger.error(f"LLM调用失败: {str(e)}")
+            logger.error("LLM调用失败: %s", sanitize_exception_text(e))
             raise
     
     def call_with_retry(self, prompt: str, input_data: Any = None, max_retries: int = 3) -> str:
@@ -73,7 +75,7 @@ class LLMClient:
         try:
             return self.llm_manager.call_with_retry(prompt, input_data, max_retries)
         except Exception as e:
-            logger.error(f"LLM重试调用失败: {str(e)}")
+            logger.error("LLM重试调用失败: %s", sanitize_exception_text(e))
             raise
     
     def _preprocess_llm_response(self, response: str) -> str:

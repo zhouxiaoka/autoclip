@@ -69,10 +69,19 @@ PROVIDER_VALIDATION_FIELDS: frozenset[str] = frozenset({
 MODEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-/:]{0,63}$")
 _HOST_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,251}[a-z0-9])?$")
 _LOCAL_HOSTS = frozenset({"localhost", "0.0.0.0", "host.docker.internal", "::1"})
-_SECRET_MARKERS = ("sk-", "api_key", "apikey", "authorization", "bearer ", "token=")
+_SECRET_MARKERS = ("sk-", "aiza", "xai-", "api_key", "apikey", "authorization", "bearer ", "token=")
 _URL_IN_TEXT = re.compile(r"https?://[^\s'\"<>]+", re.IGNORECASE)
+# Consume the complete quoted value (including spaces and escaped quotes), or
+# the whole header value including its Bearer scheme, before matching bare keys.
+_CREDENTIAL_FIELD_IN_TEXT = re.compile(
+    r'''(?ix)(?<![\w-])["']?
+    (?:api[_-]?key|key|token|authorization|x-api-key|x-goog-api-key)["']?
+    \s*[:=]\s*
+    (?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?:bearer\s+)?[^\s,;}\]"']+)
+    '''
+)
 _KEY_IN_TEXT = re.compile(
-    r"(?i)(?:sk-[A-Za-z0-9_\-]{4,}|api[_-]?key\s*[:=]\s*\S+|authorization\s*[:=]\s*\S+|bearer\s+\S+|token=\S+)"
+    r'''(?i)(?:(?:sk-|AIza|xai-)[A-Za-z0-9_\-]+|bearer\s+[^\s,;}\]"']+)'''
 )
 _NON_ASCII = re.compile(r"[^\x00-\x7F]+")
 
@@ -102,7 +111,7 @@ def sanitize_model(name: str | None) -> str | None:
     cleaned = name.strip()
     if not cleaned:
         return None
-    if len(cleaned) > 64 or "://" in cleaned or "sk-" in cleaned.lower() or not MODEL_PATTERN.fullmatch(cleaned):
+    if len(cleaned) > 64 or "://" in cleaned or _looks_like_secret(cleaned) or not MODEL_PATTERN.fullmatch(cleaned):
         return "redacted"
     if "/" in cleaned:
         head = cleaned.split("/", 1)[0]
@@ -121,8 +130,9 @@ def sanitize_exception_text(text: str | BaseException | None) -> str:
     def _host(match: re.Match[str]) -> str:
         return hostname_of_base_url(match.group(0)) or "redacted"
 
-    out = _URL_IN_TEXT.sub(_host, text)
+    out = _CREDENTIAL_FIELD_IN_TEXT.sub("redacted", text)
     out = _KEY_IN_TEXT.sub("redacted", out)
+    out = _URL_IN_TEXT.sub(_host, out)
     out = _NON_ASCII.sub("", out)
     return " ".join(out.split())
 
