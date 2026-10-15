@@ -7,6 +7,8 @@
 
 ## [未发布]
 
+- 服务商门槛矩阵读取 `presets/provider_presets.json` 的显示名和聊天地址输入，默认型号始终保留 `matrix.py` 的 live 默认（Gemini 为 `gemini-3.5-flash-lite`），不受产品目录覆盖。`*_MODEL` 仍可覆盖。不改写产品 JSON，日志与报告继续脱敏，不打印密钥。
+- 门槛 live 默认不写进产品 JSON：Gemini 聊天地址补 `/v1beta/openai`（产品目录 `gemini-3.8-flash` 只有 `/v1beta`），DashScope 默认 `qwen-plus`。
 - 发版增加服务商端到端门槛：Linux 无界面后端按固定素材矩阵出片，本地 mock 覆盖 429 / 503 / 断线和中途杀后端。PR / push 只跑 mock。夜间只跑 DeepSeek + Gemini 免费/低价档 2–3 条；预发布把 10 条拆给 5 家（每家 2 条，按 ISO 周轮转）。真实 88API / DeepSeek / Gemini / DashScope / Infistar 在 GitHub Environment `provider-e2e` 配好 key 后才跑，没配就跳过并写进报告。缺 `*_MODEL` 时用最便宜默认模型（88API `deepseek-v4-flash`，Infistar `gpt-4o-mini`，DeepSeek `deepseek-flash`，Gemini `gemini-3.5-flash-lite`，DashScope `qwen-flash`）。88API 门槛地址为 `https://api.88api.ai/v1`。故障注入期望类型用 `UpstreamErrorType`（`rate_limited` / `upstream_unavailable` / `connection`），应拦下组合要求 `billable_calls_before_failure = 0`。Mock 应成功当次 ≥95%。Live 先 fail-closed（任一服务商失败、缺/空/无法解析的报告、或条数少于计划必须红），再叠加用例库近 5 次、满 20 条后滚动 ≥95%。月度估费硬顶 ¥300。**fail-closed 已核对；88API 单探针（`api.88api.ai` + `deepseek-v4-flash`）已通过，完整发版仍走分层 live。**
 - 88API 服务商预设接口地址改为 `https://api.88api.ai/v1`（与 provider-e2e 回归一致）。已保存的 `https://88api.ai/v1` 不改写，仍可继续使用。（1.5.7）
 

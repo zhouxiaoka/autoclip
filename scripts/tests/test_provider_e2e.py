@@ -1,7 +1,10 @@
 import json
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -12,12 +15,83 @@ sys.path.insert(0, str(SCRIPTS))
 
 from backend.core.upstream_errors import UpstreamErrorType, is_retryable
 from provider_e2e import SUCCESS_RATE_THRESHOLD, judge, mask, matrix, mock_openai
+from provider_e2e.presets import find_e2e_presets_path, load_catalog_providers
 from provider_e2e.report import merge_reports
 from provider_e2e.settings import live_ready
 import release_acceptance as gate
 
 
+def _catalog_payload(providers: dict) -> dict:
+    return {'schema_version': 1, 'version': 1, 'providers': providers}
+
+
+def _preset_row(*, display_name: str, short_name: str, group: str = 'popular',
+                base_url: str = '', default_model: str = '', analysis=None) -> dict:
+    return {
+        'kind': 'preset',
+        'display_name': display_name,
+        'short_name': short_name,
+        'group': group,
+        'protocol': 'openai-completions',
+        'base_url': base_url,
+        'default_model': default_model,
+        'candidates': {'analysis': list(analysis or []), 'vision': [], 'asr': [], 'image': []},
+    }
+
+
+def _full_live_catalog(**overrides: dict) -> dict:
+    rows = {
+        'api88': _preset_row(display_name='88API', short_name='88API', group='recommended',
+                             base_url='https://api.88api.ai/v1', default_model='deepseek-v4-flash'),
+        'deepseek': _preset_row(display_name='DeepSeek', short_name='DeepSeek',
+                                base_url='https://api.deepseek.com', default_model='deepseek-flash'),
+        'gemini': _preset_row(display_name='Google Gemini', short_name='Gemini',
+                              base_url='https://generativelanguage.googleapis.com/v1beta/openai',
+                              default_model='gemini-3.5-flash-lite'),
+        'dashscope': _preset_row(display_name='阿里云百炼', short_name='DashScope',
+                                 base_url='https://dashscope.aliyuncs.com/compatible-mode/v1',
+                                 default_model='qwen-plus'),
+        'infistar': _preset_row(display_name='Infistar', short_name='Infistar', group='recommended',
+                                base_url='https://infistar.ai/v1', default_model='gpt-4o-mini'),
+    }
+    rows.update(overrides)
+    return _catalog_payload(rows)
+
+
 class ProviderE2EContractTests(unittest.TestCase):
+    def test_product_models_do_not_override_live_defaults(self):
+        raw = _full_live_catalog()
+        for provider in raw['providers'].values():
+            provider['default_model'] = 'product-only-model'
+            provider['candidates']['analysis'] = ['product-only-candidate']
+        raw['providers']['gemini']['default_model'] = 'gemini-3.8-flash'
+        raw['providers']['gemini']['base_url'] = 'https://generativelanguage.googleapis.com/v1beta'
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'provider_presets.json'
+            path.write_text(json.dumps(raw), encoding='utf-8')
+            before = path.read_bytes()
+            with patch.dict(os.environ, {'AUTOCLIP_PROVIDER_PRESETS': str(path)}):
+                matrix.reset_live_catalog()
+                try:
+                    providers = {item['id']: item for item in matrix.live_providers()}
+                    for expected in matrix.LIVE_PROVIDERS:
+                        with self.subTest(provider=expected['id']):
+                            provider = providers[expected['id']]
+                            self.assertEqual(provider['default_model'], expected['default_model'])
+                            ready = live_ready(provider, {provider['secret']: 'sk-test-key'})
+                            self.assertEqual(ready['model'], expected['default_model'])
+                            override = live_ready(provider, {
+                                provider['secret']: 'sk-test-key',
+                                provider['model_env']: 'explicit-live-model',
+                            })
+                            self.assertEqual(override['model'], 'explicit-live-model')
+                    self.assertEqual(providers['gemini']['default_model'], 'gemini-3.5-flash-lite')
+                    self.assertEqual(providers['gemini']['base_url'],
+                                     'https://generativelanguage.googleapis.com/v1beta/openai')
+                    self.assertEqual(path.read_bytes(), before)
+                finally:
+                    matrix.reset_live_catalog()
+
     def test_matrix_has_eight_success_and_two_blocks(self):
         succeed = matrix.assets(expect='succeed')
         blocked = matrix.assets(expect='block')
@@ -40,11 +114,13 @@ class ProviderE2EContractTests(unittest.TestCase):
         providers = {item['id']: item for item in matrix.live_providers()}
         self.assertEqual(set(providers), {'api88', 'deepseek', 'gemini', 'dashscope', 'infistar'})
         self.assertEqual(providers['api88']['base_url'], 'https://api.88api.ai/v1')
+        self.assertEqual(providers['gemini']['base_url'], 'https://generativelanguage.googleapis.com/v1beta/openai')
+        self.assertTrue(providers['gemini']['base_url'].endswith('/openai'))
         self.assertEqual(providers['dashscope']['base_url'], 'https://dashscope.aliyuncs.com/compatible-mode/v1')
         self.assertEqual(providers['infistar']['base_url'], 'https://infistar.ai/v1')
         self.assertEqual(providers['dashscope']['secret'], 'DASHSCOPE_API_KEY')
         self.assertEqual(providers['infistar']['secret'], 'INFISTAR_API_KEY')
-        self.assertEqual(providers['dashscope']['default_model'], 'qwen-flash')
+        self.assertEqual(providers['dashscope']['default_model'], 'qwen-plus')
         self.assertEqual(providers['gemini']['default_model'], 'gemini-3.5-flash-lite')
         self.assertEqual(providers['deepseek']['default_model'], 'deepseek-flash')
         self.assertEqual(providers['api88']['default_model'], 'deepseek-v4-flash')
@@ -109,6 +185,185 @@ class ProviderE2EContractTests(unittest.TestCase):
             })
             self.assertEqual(override['model'], 'custom-model')
             self.assertEqual(override['model_source'], 'secret')
+
+    def test_live_providers_follow_catalog_labels_but_keep_live_defaults(self):
+        raw = _full_live_catalog(deepseek=_preset_row(
+            display_name='DeepSeek',
+            short_name='FixtureSeek',
+            base_url='https://example.test/deepseek',
+            default_model='fixture-flash',
+        ))
+        raw['providers']['deepseek']['api_key'] = 'sk-should-never-appear'
+        raw['providers']['api88']['default_model'] = ''
+        raw['providers']['api88']['candidates']['analysis'] = []
+        old = os.environ.get('AUTOCLIP_PROVIDER_PRESETS')
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'provider_presets.json'
+            path.write_text(json.dumps(raw), encoding='utf-8')
+            os.environ['AUTOCLIP_PROVIDER_PRESETS'] = str(path)
+            matrix.reset_live_catalog()
+            try:
+                providers = {item['id']: item for item in matrix.live_providers()}
+            finally:
+                if old is None:
+                    os.environ.pop('AUTOCLIP_PROVIDER_PRESETS', None)
+                else:
+                    os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
+                matrix.reset_live_catalog()
+        self.assertEqual(providers['deepseek']['base_url'], 'https://api.deepseek.com')
+        self.assertEqual(providers['deepseek']['default_model'], 'deepseek-flash')
+        self.assertEqual(providers['deepseek']['label'], 'FixtureSeek')
+        self.assertEqual(providers['api88']['default_model'], 'deepseek-v4-flash')
+        dumped = json.dumps(providers, ensure_ascii=False)
+        self.assertNotIn('sk-should-never-appear', dumped)
+        self.assertTrue(all('api_key' not in item for item in providers.values()))
+
+    def test_catalog_analysis_candidate_does_not_override_live_default(self):
+        raw = _full_live_catalog(gemini=_preset_row(
+            display_name='Google Gemini',
+            short_name='Gemini',
+            base_url='https://generativelanguage.googleapis.com/v1beta/openai',
+            default_model='',
+            analysis=['gemini-from-candidates'],
+        ))
+        old = os.environ.get('AUTOCLIP_PROVIDER_PRESETS')
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'provider_presets.json'
+            path.write_text(json.dumps(raw), encoding='utf-8')
+            os.environ['AUTOCLIP_PROVIDER_PRESETS'] = str(path)
+            matrix.reset_live_catalog()
+            try:
+                providers = {item['id']: item for item in matrix.live_providers()}
+            finally:
+                if old is None:
+                    os.environ.pop('AUTOCLIP_PROVIDER_PRESETS', None)
+                else:
+                    os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
+                matrix.reset_live_catalog()
+        self.assertEqual(providers['gemini']['default_model'], 'gemini-3.5-flash-lite')
+
+    def test_unknown_schema_is_rejected(self):
+        raw = _full_live_catalog()
+        raw['schema_version'] = 99
+        old = os.environ.get('AUTOCLIP_PROVIDER_PRESETS')
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'bad.json'
+            path.write_text(json.dumps(raw), encoding='utf-8')
+            os.environ['AUTOCLIP_PROVIDER_PRESETS'] = str(path)
+            matrix.reset_live_catalog()
+            try:
+                with self.assertRaises(ValueError):
+                    matrix.live_providers()
+            finally:
+                if old is None:
+                    os.environ.pop('AUTOCLIP_PROVIDER_PRESETS', None)
+                else:
+                    os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
+                matrix.reset_live_catalog()
+
+    def test_missing_live_entry_is_fail_closed(self):
+        raw = _full_live_catalog()
+        del raw['providers']['dashscope']
+        old = os.environ.get('AUTOCLIP_PROVIDER_PRESETS')
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'partial.json'
+            path.write_text(json.dumps(raw), encoding='utf-8')
+            os.environ['AUTOCLIP_PROVIDER_PRESETS'] = str(path)
+            matrix.reset_live_catalog()
+            try:
+                with self.assertRaises(KeyError):
+                    matrix.live_providers()
+            finally:
+                if old is None:
+                    os.environ.pop('AUTOCLIP_PROVIDER_PRESETS', None)
+                else:
+                    os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
+                matrix.reset_live_catalog()
+
+    def test_missing_presets_env_is_fail_closed(self):
+        old = os.environ.get('AUTOCLIP_PROVIDER_PRESETS')
+        os.environ['AUTOCLIP_PROVIDER_PRESETS'] = '/tmp/autoclip-missing-provider-presets.json'
+        matrix.reset_live_catalog()
+        try:
+            with self.assertRaises(FileNotFoundError):
+                matrix.live_providers()
+        finally:
+            if old is None:
+                os.environ.pop('AUTOCLIP_PROVIDER_PRESETS', None)
+            else:
+                os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
+            matrix.reset_live_catalog()
+
+    def test_product_gemini_38_flash_gets_openai_compat_url(self):
+        raw = _full_live_catalog(gemini=_preset_row(
+            display_name='Google Gemini',
+            short_name='Gemini',
+            base_url='https://generativelanguage.googleapis.com/v1beta',
+            default_model='gemini-3.8-flash',
+        ))
+        old = os.environ.get('AUTOCLIP_PROVIDER_PRESETS')
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'provider_presets.json'
+            path.write_text(json.dumps(raw), encoding='utf-8')
+            os.environ['AUTOCLIP_PROVIDER_PRESETS'] = str(path)
+            matrix.reset_live_catalog()
+            try:
+                providers = {item['id']: item for item in matrix.live_providers()}
+            finally:
+                if old is None:
+                    os.environ.pop('AUTOCLIP_PROVIDER_PRESETS', None)
+                else:
+                    os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
+                matrix.reset_live_catalog()
+        self.assertEqual(providers['gemini']['default_model'], 'gemini-3.5-flash-lite')
+        self.assertEqual(
+            providers['gemini']['base_url'],
+            'https://generativelanguage.googleapis.com/v1beta/openai',
+        )
+        self.assertTrue(providers['gemini']['base_url'].endswith('/openai'))
+
+    def test_dashscope_live_default_is_qwen_plus(self):
+        providers = {item['id']: item for item in matrix.live_providers()}
+        self.assertEqual(providers['dashscope']['default_model'], 'qwen-plus')
+        overlay = next(item for item in matrix.LIVE_PROVIDERS if item['id'] == 'dashscope')
+        self.assertEqual(overlay['default_model'], 'qwen-plus')
+
+    def test_live_defaults_do_not_write_product_json(self):
+        shipped = ROOT / 'presets' / 'provider_presets.json'
+        existed = shipped.is_file()
+        before = shipped.read_bytes() if existed else None
+        matrix.reset_live_catalog()
+        matrix.live_providers()
+        if existed:
+            self.assertEqual(shipped.read_bytes(), before)
+            default = json.loads(shipped.read_text(encoding='utf-8'))['providers']['dashscope']['default_model']
+            self.assertEqual(default, 'qwen-plus')
+        else:
+            self.assertFalse(shipped.exists())
+
+    def test_catalog_path_prefers_shipped_json_then_live_defaults(self):
+        old = os.environ.get('AUTOCLIP_PROVIDER_PRESETS')
+        if old is not None:
+            os.environ.pop('AUTOCLIP_PROVIDER_PRESETS', None)
+        matrix.reset_live_catalog()
+        try:
+            shipped = ROOT / 'presets' / 'provider_presets.json'
+            path = find_e2e_presets_path()
+            providers = {item['id']: item for item in matrix.live_providers()}
+            if shipped.is_file():
+                self.assertEqual(path, shipped.resolve())
+                raw = json.loads(shipped.read_text(encoding='utf-8'))['providers']
+                self.assertEqual(providers['deepseek']['label'], 'DeepSeek')
+                self.assertTrue(raw['deepseek']['base_url'].strip())
+                self.assertNotIn('api_key', providers['deepseek'])
+            else:
+                self.assertIsNone(path)
+                self.assertEqual(providers['dashscope']['default_model'], 'qwen-plus')
+                self.assertEqual(set(load_catalog_providers()), set())
+        finally:
+            if old is not None:
+                os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
+            matrix.reset_live_catalog()
 
     def test_judge_thresholds(self):
         succeed = [{'expect': 'succeed', 'passed': True} for _ in range(8)]
@@ -257,6 +512,7 @@ class ProviderE2EContractTests(unittest.TestCase):
     def test_docs_exist(self):
         doc = (ROOT / 'docs/PROVIDER_E2E_GATE.md').read_text(encoding='utf-8')
         self.assertIn('provider-e2e', doc)
+        self.assertIn('presets/provider_presets.json', doc)
         self.assertIn('API88_API_KEY', doc)
         self.assertIn('DASHSCOPE_API_KEY', doc)
         self.assertIn('INFISTAR_API_KEY', doc)
@@ -268,7 +524,8 @@ class ProviderE2EContractTests(unittest.TestCase):
         self.assertIn('provider-e2e-cases', doc)
         self.assertIn('ISO', doc)
         self.assertIn('gemini-3.5-flash-lite', doc)
-        self.assertIn('qwen-flash', doc)
+        self.assertIn('qwen-plus', doc)
+        self.assertIn('/openai', doc)
         self.assertIn('fail-closed', doc)
         self.assertIn('不要只靠这一条探针放行', doc)
         self.assertIn('UpstreamErrorType', doc)
