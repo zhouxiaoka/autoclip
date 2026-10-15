@@ -211,7 +211,7 @@ test('detail shows a configure form for an unconnected preset without writing a 
   })
   const nodes = flatten(tree)
   assert.equal(nodes.find(node => node.props && node.props['data-provider-id'])?.props['data-connect-kind'], 'compatible')
-  assert.match(textOf(tree), /settings\.providers\.unconnected_guide/)
+  assert.match(textOf(tree), /测试连接|可用模型/)
   const fields = nodes.find(node => node.props && node.props['data-fields'] === 'compatible')
   assert.ok(fields)
   fields.props.onClick()
@@ -375,7 +375,7 @@ test('provider detail uses two-column connect/models layout without analysis Mod
   assert.ok(flatten(tree).some(node => node.props?.['data-panel'] === 'connect'))
   assert.ok(flatten(tree).some(node => node.props?.['data-panel'] === 'models'))
   assert.equal(flatten(tree).some(node => node.props?.role === 'analysis'), false)
-  assert.match(textOf(tree), /连接后可在上方「默认模型」中选择/)
+  assert.match(textOf(tree), /可用模型|测通后/)
 })
 
 test('locked catalog detail shows editable 接口地址 and 测试连接', () => {
@@ -448,7 +448,7 @@ test('all endpoint-only catalog cards open an address entry flow without binding
     const nodes = flatten(detail)
     const input = nodes.find(node => node.props?.['data-endpoint-setup'] === preset.id)
     assert.ok(input, preset.id)
-    assert.match(textOf(detail), /请填写接口地址后再测试连接/)
+    assert.match(textOf(detail), /请先填写接口地址/)
     input.props.onChange({ target: { value: 'https://endpoint.example.test/v1' } })
     assert.deepEqual(edits, [{ id: preset.id, patch: { base_url: 'https://endpoint.example.test/v1' } }])
     const testBtn = nodes.find(node => node.type === 'button' && textOf(node).includes('测试连接'))
@@ -498,5 +498,39 @@ test('R6 transient validation shows an existing hint without marking credentials
     assert.equal(nodes.some(node => node.props?.className?.includes('ac-note--error')), validation_status === 'failed')
     assert.equal(nodes.some(node => node.props?.status === 'error'), validation_status === 'failed')
     assert.equal(endpoint.endpointProviderReady(connection), validation_status === 'transient')
+  }
+})
+
+
+test('sponsor detail keeps only essentials: key, address, one-click, test, models', () => {
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const Detail = loadTs('ProviderDetail.tsx', {
+    '../../i18n': i18n, '../../ui': ui,
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    './ProviderFields': { default: ({ connection }) => React.createElement('div', { 'data-fields': true },
+      React.createElement('button', { type: 'button' }, 'settings.providers.one_click'),
+      React.createElement('input', { 'aria-label': 'API 密钥', value: connection.api_key || '' }),
+      React.createElement('input', { 'aria-label': '接口地址', value: connection.base_url }),
+    ) },
+    './ModelPicker': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+  }).default
+  for (const id of ['api88', 'infistar']) {
+    const preset = view.catalogPreset(id)
+    assert.ok(preset?.sponsor)
+    const tree = Detail({
+      preset,
+      m: { settings, lists: {}, busy: {}, listErrors: {}, testing: false, keyHints: {},
+        ensureCatalogProvider: () => {}, editConnection: () => {}, testCatalogProvider: () => {} },
+      onBack: () => {},
+    })
+    const text = textOf(tree)
+    assert.equal(/推广分成|项目维护|领取条件|注册并领取|接入说明|仅保存在本机|unconnected_guide|one_click_hint/.test(text), false)
+    assert.match(text, /测试连接/)
+    assert.match(text, /可用模型/)
+    assert.ok(flatten(tree).some(n => n.props?.['aria-label'] === '接口地址'))
+    assert.ok(flatten(tree).some(n => n.props?.['aria-label'] === 'API 密钥'))
+    assert.ok(flatten(tree).some(n => n.type === 'button' && /one_click|一键获取/.test(textOf(n))))
   }
 })

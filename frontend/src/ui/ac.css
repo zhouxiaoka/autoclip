@@ -258,6 +258,11 @@
 .ac-badge { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border: 1px solid var(--ac-line); border-radius: 999px; font-size: 11px; font-weight: 500; color: var(--ac-sub); background: transparent; }
 
 /* ---- sponsor card under the provider row ---- */
+.ac-sponsor--compact {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 12px;
+  padding: 0; border: 0; background: transparent;
+}
+.ac-sponsor--compact .ac-btn { margin: 0; }
 .ac-sponsor { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin: 4px 0 2px; padding: 16px 18px; border: 1px solid var(--ac-line); border-radius: 16px; background: var(--ac-card); }
 .ac-sponsor-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .ac-sponsor-text b { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--ac-ink); }

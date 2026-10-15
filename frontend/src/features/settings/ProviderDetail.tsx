@@ -21,16 +21,15 @@ const CAP_KEY: Record<string, string> = {
   video: 'settings.providers.filter.video',
 }
 
-/** 与目录筛选词一致；括号内是默认模型用途，方便小白对照。 */
 const MODEL_GROUP: Array<{
   key: 'language' | 'asr' | 'image'
   title: string
   pick: (model: { analysis?: boolean; image?: boolean; asr?: boolean; capability?: string }) => boolean
   limit: number
 }> = [
-  { key: 'language', title: '语言 · 精彩片段分析 / 画面理解', pick: m => !!m.analysis, limit: 8 },
-  { key: 'asr', title: '语音识别 · 语音转字幕', pick: m => !!m.asr, limit: 4 },
-  { key: 'image', title: '图像生成 · 封面生成', pick: m => !!m.image, limit: 4 },
+  { key: 'language', title: '语言', pick: m => !!m.analysis, limit: 8 },
+  { key: 'asr', title: '语音识别', pick: m => !!m.asr, limit: 4 },
+  { key: 'image', title: '图像生成', pick: m => !!m.image, limit: 4 },
 ]
 
 export default function ProviderDetail({
@@ -48,7 +47,6 @@ export default function ProviderDetail({
   const draft = persisted || catalogDraftConnection(preset)
   const connection = draft && {
     ...draft,
-    // Prefill official default so「接口地址」is visible and editable.
     base_url: draft.base_url || preset.base_url || '',
   }
   const connected = isCatalogConnected(settings, preset, asrReady)
@@ -56,6 +54,7 @@ export default function ProviderDetail({
   const models = list?.models.filter(model => model.analysis || model.image || model.asr) || []
   const needsEndpoint = kind === 'needs_endpoint' || (kind === 'guide' && !preset.base_url)
   const canTest = kind === 'legacy' || kind === 'compatible' || needsEndpoint
+  const isSponsor = !!preset.sponsor
 
   const persistEdit = (patch: Parameters<typeof m.editConnection>[1]) => {
     if (persisted) m.editConnection(persisted, patch)
@@ -82,40 +81,40 @@ export default function ProviderDetail({
   ) || (!connection.base_url.trim() && !preset.base_url && preset.protocol !== 'local')
 
   return (
-    <div className="ac-provider-detail" data-provider-id={preset.id} data-connect-kind={kind} data-layout="v6-stack">
+    <div className="ac-provider-detail" data-provider-id={preset.id} data-connect-kind={kind} data-layout="v6-stack" data-sponsor={isSponsor ? '1' : undefined}>
       <button type="button" className="ac-back" onClick={onBack}>
         <Icon.Back />{t('settings.providers.back')}
       </button>
       <header className="ac-provider-detail-head">
         <h3 className="ac-model-section-title">
           {name}
-          {preset.sponsor && (
+          {isSponsor && (
             <span className="ac-badge">
-              {preset.sponsor.offer
-                ? t('settings.providers.badge.sponsor_offer', { offer: t(preset.sponsor.offer) })
+              {preset.sponsor!.offer
+                ? t('settings.providers.badge.sponsor_offer', { offer: t(preset.sponsor!.offer) })
                 : t('settings.providers.badge.sponsor')}
             </span>
           )}
           {connected && <StatusDot tone="ok" label={preset.auth === 'none' ? t('settings.providers.available') : t('settings.providers.connected')} />}
           {!connected && isCatalogConfigured(settings, preset) && <span className="ac-badge">{t('已配置')}</span>}
         </h3>
-        <p className="ac-note">{t(preset.hint)}</p>
-        <div className="ac-provider-caps">
-          {preset.capabilities.map(capability => CAP_KEY[capability] && (
-            <span key={capability} className="ac-provider-cap">{t(CAP_KEY[capability])}</span>
-          ))}
-        </div>
+        {/* Sponsors: no long hint / marketing. Others keep one short line. */}
+        {!isSponsor && <p className="ac-note">{t(preset.hint)}</p>}
+        {!isSponsor && (
+          <div className="ac-provider-caps">
+            {preset.capabilities.map(capability => CAP_KEY[capability] && (
+              <span key={capability} className="ac-provider-cap">{t(CAP_KEY[capability])}</span>
+            ))}
+          </div>
+        )}
       </header>
 
       <div className="ac-provider-detail-stack">
         {showConnectPanel && (
           <section className="ac-provider-detail-card" data-panel="connect">
-            <h4 className="ac-provider-models-title">{t('连接')}</h4>
-            {!connected && <p className="ac-note">{t('settings.providers.unconnected_guide')}</p>}
             {needsEndpoint && (
-              <p className="ac-note">{t('请填写接口地址后再测试连接。可参考服务商控制台中的 API Endpoint。')}</p>
+              <p className="ac-note">{t('请先填写接口地址，再测试连接。')}</p>
             )}
-            {preset.sponsor && <p className="ac-note">{t('settings.providers.one_click_hint')}</p>}
 
             {(kind === 'legacy' || kind === 'compatible') && connection && (
               <ProviderFields
@@ -129,17 +128,14 @@ export default function ProviderDetail({
             )}
 
             {needsEndpoint && connection && (
-              <>
-                <p className="ac-note">{t('本版仅支持 OpenAI 兼容接口。')}</p>
-                <ProviderFields
-                  connection={connection}
-                  hideProvider
-                  placement="settings_model"
-                  keyHint={persisted ? m.keyHints[persisted.id] : undefined}
-                  onChoose={() => undefined}
-                  onEdit={persistEdit}
-                />
-              </>
+              <ProviderFields
+                connection={connection}
+                hideProvider
+                placement="settings_model"
+                keyHint={persisted ? m.keyHints[persisted.id] : undefined}
+                onChoose={() => undefined}
+                onEdit={persistEdit}
+              />
             )}
 
             {kind === 'guide' && !needsEndpoint && (
@@ -166,8 +162,6 @@ export default function ProviderDetail({
                 )}
               </div>
             )}
-
-            <p className="ac-note ac-provider-key-hint">{t('settings.providers.key_local_only')}</p>
           </section>
         )}
 
@@ -205,9 +199,9 @@ export default function ProviderDetail({
           <section className="ac-provider-detail-card" data-panel="models">
             <h4 className="ac-provider-models-title">
               {t('可用模型')}
-              <span className="count">{connected || models.length ? models.length : t('测通后自动获取')}</span>
+              <span className="count">{connected || models.length ? models.length : t('测通后获取')}</span>
             </h4>
-            {connection && busy[connection.id] && <p className="ac-note">{t('正在获取可用模型…')}</p>}
+            {connection && busy[connection.id] && <p className="ac-note">{t('正在获取…')}</p>}
             {connection && listErrors[connection.id] && <p className="ac-note">{t('settings.providers.models_empty')}</p>}
             {MODEL_GROUP.map(group => {
               const rows = models.filter(group.pick).slice(0, group.limit)
@@ -229,26 +223,11 @@ export default function ProviderDetail({
               )
             })}
             {connection && !busy[connection.id] && !models.length && (
-              <p className="ac-note">{t('填写 API 密钥与接口地址并测试连接后，将在此显示可用模型。')}</p>
+              <p className="ac-note">{t('测通后在此显示。')}</p>
             )}
-            <p className="ac-note ac-provider-models-foot">
-              {t('连接后可在上方「默认模型」中选择。')}
-            </p>
           </section>
         )}
       </div>
-
-      {preset.docs_url && kind !== 'guide' && (
-        <p className="ac-note">
-          <a
-            className="ac-link"
-            href={preset.docs_url}
-            onClick={event => { event.preventDefault(); openExternalLink(preset.docs_url) }}
-          >
-            {t('settings.providers.docs')} ↗
-          </a>
-        </p>
-      )}
     </div>
   )
 }
