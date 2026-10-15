@@ -145,7 +145,7 @@ test('B2: the frame-analysis switch preserves explicit bindings and follow analy
 })
 
 test('choosing a provider reuses its saved connection and preserves an explicit cover binding', () => {
-  const state = { ...fresh(), connections: [conn('a', 'dashscope', { has_key: true }), conn('b', 'openai', { has_key: true })], analysis: { connection_id: 'a', model: 'qwen-plus', capability: 'auto' }, cover: { connection_id: 'a', model: 'wanx', capability: 'auto', model_source: 'user' }, cover_enabled: true }
+  const state = { ...fresh(), connections: [conn('a', 'dashscope', { has_key: true }), conn('b', 'openai', { has_key: true })], analysis: { connection_id: 'a', model: 'qwen-plus', capability: 'auto' }, cover: { connection_id: 'a', model: 'wanx', capability: 'auto', model_source: 'user' }, cover_enabled: true, cover_follows_analysis: false }
   const toOpenAI = logic.chooseProvider(state, 'analysis', 'openai', {}, true)
   assert.equal(toOpenAI.changed, true)
   assert.equal(toOpenAI.connection.id, 'b')
@@ -163,7 +163,7 @@ test('B2: legacy analysis switching keeps explicit vision and cover even on the 
       const state = { ...fresh(), connections: [conn('a', 'dashscope', { has_key: true }), conn('b', 'openai', { has_key: true }), conn('independent', 'dashscope', { has_key: true })],
         analysis: { connection_id: 'a', model: 'qwen-plus', capability: 'auto' },
         vision: { connection_id: bindingId, model: 'my-vision', capability: 'multimodal', model_source: 'user' },
-        cover: { connection_id: bindingId, model: 'my-cover', capability: 'auto', model_source: 'user' }, cover_enabled }
+        cover: { connection_id: bindingId, model: 'my-cover', capability: 'auto', model_source: 'user' }, cover_enabled, cover_follows_analysis: false }
       const switched = logic.chooseProvider(state, 'analysis', 'openai', {}, false).settings
       assert.equal(switched.analysis.connection_id, 'b')
       for (const value of [switched, logic.forSave(logic.setVisual(logic.setVisual(switched, false), true))]) {
@@ -186,7 +186,8 @@ test('a cached live list fills the recommendation immediately when switching pro
 
 for (const entry of ['legacy', 'catalog']) {
   for (const cached of [false, true]) {
-    test(`X1: ${entry} analysis switch preserves bound cover and vision with ${cached ? 'cached' : 'delayed'} models`, () => {
+    for (const follow of [true, false]) {
+    test(`X1: ${entry} analysis switch: ${follow ? 'following cover moves' : 'independent cover stays'}, bound vision stays (${cached ? 'cached' : 'delayed'} models)`, () => {
       const view = loadTs('providerCatalogView.ts', { './modelSettingsLogic': logic, './providers': providers, '../../i18n': i18n })
       const connections = [conn('old', 'dashscope', { has_key: true }), conn('new', 'openai', { has_key: true })]
       const oldLists = { old: { models, source: 'live', preview: false } }
@@ -196,34 +197,56 @@ for (const entry of ['legacy', 'catalog']) {
         for (const enabled of [true, false]) {
           const initial = { ...fresh(), connections, saved: true, analysis: { ...logic.cleanBinding('old'), model: 'qwen-plus' } }
           const state = logic.setCoverEnabled(initial, true, oldLists)
-          assert.equal(state.cover.connection_id, 'old')
+          assert.equal(state.cover_follows_analysis, true, 'turning AI covers on binds a following cover')
           assert.equal(state.cover.model, 'wanx2.1-t2i-turbo')
           state.cover = { ...state.cover, model_source: source }
+          state.cover_follows_analysis = follow
           state.vision = { connection_id: 'old', model: 'qwen3.8-flash', capability: 'multimodal', model_source: source }
           state.cover_enabled = enabled
           let switched = entry === 'legacy'
             ? logic.chooseProvider(state, 'analysis', 'openai', lists, false).settings
             : view.assignAnalysis(state, connections[1])
-          if (!cached) {
-            assert.deepEqual(plain(switched.cover), plain(state.cover))
-            assert.deepEqual(plain(switched.vision), plain(state.vision))
-          }
+          assert.deepEqual(plain(switched.vision), plain(state.vision))
+          if (!cached && follow) assert.equal(switched.cover.connection_id, 'new')
           switched = defaults.applyModelDefaults(switched, connections[1], newModels, false)
-          // A late response must also preserve the existing bindings.
+          // A late response for the old provider must not move anything back.
           switched = defaults.applyModelDefaults(switched, connections[0], models, false)
           const saved = logic.forSave(logic.setVisual(logic.setVisual(switched, false), true))
           assert.equal(saved.analysis.connection_id, 'new')
           assert.deepEqual(plain(saved.vision), plain(state.vision))
           assert.equal(logic.followedVisionBinding(saved).connection_id, 'old')
           assert.equal(saved.cover_enabled, enabled)
-          assert.deepEqual(plain(saved.cover), plain(state.cover))
-          assert.equal(logic.setCoverEnabled(saved, true, { new: { models: newModels } }).cover.connection_id, 'old')
+          assert.equal(saved.cover_follows_analysis, follow)
+          if (follow) {
+            assert.deepEqual(plain(saved.cover), { connection_id: 'new', model: 'dall-e-3', capability: 'auto', model_source: 'preset' })
+          } else {
+            assert.deepEqual(plain(saved.cover), plain(state.cover))
+          }
           assert.equal(state.cover.connection_id, 'old', 'the input settings are unchanged')
         }
       }
     })
+    }
   }
 }
+
+test('cover follow flag: separate switch, own-provider choice and model pick keep the flag honest', () => {
+  const lists = { a: { models, source: 'live' } }
+  const base = { ...fresh(), connections: [conn('a', 'dashscope', { has_key: true })], analysis: { ...logic.cleanBinding('a'), model: 'qwen-plus' } }
+  const on = logic.setCoverEnabled(base, true, lists)
+  assert.equal(on.cover_follows_analysis, true)
+  const separate = logic.setCoverSeparate(on, true, lists, p => conn('c', p))
+  assert.equal(separate.cover_follows_analysis, false)
+  assert.equal(logic.setCoverSeparate(separate, false, lists).cover_follows_analysis, true)
+  assert.equal(logic.chooseProvider(on, 'cover', 'openai', {}, false, p => conn('o', p)).settings.cover_follows_analysis, false)
+  assert.equal(logic.setCoverModel(on, 'a', 'wanx').cover_follows_analysis, true)
+  assert.equal(logic.setCoverModel({ ...on, cover_follows_analysis: false }, 'a', 'wanx').cover_follows_analysis, false)
+  assert.equal(logic.setCoverModel(separate, 'c', 'wanx').cover_follows_analysis, false)
+  // Documents older than the flag: a cover on the analysis connection was the old "follow".
+  const legacy = { ...on, cover_follows_analysis: undefined }
+  assert.equal(logic.coverFollowsAnalysis(legacy), true)
+  assert.equal(logic.coverFollowsAnalysis({ ...legacy, cover: { ...legacy.cover, connection_id: 'c' } }), false)
+})
 
 test('cover follows or separates from the main connection without nested toggles', () => {
   const lists = { 'legacy-analysis': { models, source: 'live' } }

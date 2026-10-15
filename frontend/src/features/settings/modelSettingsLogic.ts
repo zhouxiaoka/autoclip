@@ -6,7 +6,7 @@ import { endpointProviderReady } from './endpointProvider'
 export { endpointProviderReady } from './endpointProvider'
 import { PROVIDERS, type ProviderKey } from './providers'
 import type { Assignment, Connection, ModelList, ModelSettings } from './modelSettingsApi'
-import { applyModelDefaults, defaultModel } from './modelDefaults'
+import { applyModelDefaults, coverFollowsAnalysis, defaultModel, syncFollowingCover } from './modelDefaults'
 import { normalizeCompatibleUrl, passed, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
 import { collapseSpaces, normalizeProviderBaseUrl } from './providerUrl'
 import { isRetryableUpstreamError } from '../../analytics/successRateContract'
@@ -124,6 +124,8 @@ export function chooseProvider(
     connections: existing ? s.connections : [...s.connections, connection],
     [role]: role === 'transcription' ? { provider: 'cloud', model: '', connection_id: connection.id, model_source: 'preset' } : cleanBinding(connection.id),
   }
+  if (role === 'analysis') next = syncFollowingCover(s, next)
+  if (role === 'cover') next = { ...next, cover_follows_analysis: false }
   const cached = lists[connection.id]
   if (cached && !cached.preview) next = applyModelDefaults(next, connection, cached.models, autoCover)
   return { settings: next, connection, changed: true }
@@ -136,16 +138,16 @@ export function setCoverSeparate(
 ): ModelSettings {
   const main = mainConnection(s)
   if (!main || !endpointProviderReady(main)) return s
-  if (!separate) return { ...s, cover: { ...cleanBinding(main.id), model: defaultModel(main.provider, lists[main.id]?.models || [], true) } }
+  if (!separate) return { ...s, cover_follows_analysis: true, cover: { ...cleanBinding(main.id), model: defaultModel(main.provider, lists[main.id]?.models || [], true) } }
   const connection = create(presetKey(main))
-  return { ...s, connections: [...s.connections, connection], cover: cleanBinding(connection.id) }
+  return { ...s, cover_follows_analysis: false, connections: [...s.connections, connection], cover: cleanBinding(connection.id) }
 }
 
 export function setCoverEnabled(s: ModelSettings, enabled: boolean, lists: Record<string, ModelList>): ModelSettings {
   const main = mainConnection(s)
   if (!enabled) return { ...s, cover_enabled: false }
   if (main && !endpointProviderReady(main)) return s
-  return { ...s, cover_enabled: true, ...(!s.cover && main ? { cover: { ...cleanBinding(main.id), model: defaultModel(main.provider, lists[main.id]?.models || [], true) } } : {}) }
+  return { ...s, cover_enabled: true, ...(!s.cover && main ? { cover_follows_analysis: true, cover: { ...cleanBinding(main.id), model: defaultModel(main.provider, lists[main.id]?.models || [], true) } } : {}) }
 }
 
 /** The "画面识别" switch: on = smart selection (multimodal models sample frames), off = subtitles only. */
@@ -161,6 +163,14 @@ export const isTextOnly = (s: ModelSettings, lists: Record<string, ModelList>) =
 }
 
 /** The assignment visual understanding follows (explicit vision, else analysis). */
+/** Model picked in the cover section: stays following only when it is on the analysis connection. */
+export function setCoverModel(s: ModelSettings, connectionId: string, model: string): ModelSettings {
+  const follow = connectionId === s.analysis?.connection_id && (!s.cover || coverFollowsAnalysis(s))
+  return { ...s, cover_enabled: true, cover_follows_analysis: follow, cover: { ...cleanBinding(connectionId), model, model_source: 'user' } }
+}
+
+export { coverFollowsAnalysis }
+
 export const followedVisionBinding = (s: ModelSettings) => s.vision || s.analysis
 
 export function modelHasVision(binding: Assignment | null | undefined, lists: Record<string, ModelList>): boolean | null {

@@ -243,6 +243,10 @@ class ModelSettings(BaseModel):
     cover: Assignment | None = None
     transcription: Transcription | None = None
     cover_enabled: bool = False
+    # Explicit "cover follows analysis". None only while reading a document written before the
+    # flag existed: a cover on the analysis connection was the old "follow", anything else is
+    # independent. Following covers move with analysis; independent ones never change provider.
+    cover_follows_analysis: bool | None = None
     allow_send_frame: bool = False
     # 1 = saved by 1.5+, where AI covers are an explicit choice. 1.4 switched them on by itself at
     # first setup, and 1.5 generates one per output in the background (billed), so a file 1.4 wrote
@@ -287,6 +291,12 @@ class ModelSettings(BaseModel):
             from backend.core.asr_model_catalog import adapter
             if not adapter(connection.provider, self.transcription.model):
                 raise ValueError('该 ASR 模型的字幕时间戳接口尚未适配，请选择其他转写模型')
+        if self.cover_follows_analysis is None:
+            self.cover_follows_analysis = bool(
+                self.cover and self.analysis and self.cover.connection_id == self.analysis.connection_id)
+        if (self.cover_follows_analysis and self.cover and self.analysis
+                and self.cover.connection_id != self.analysis.connection_id):
+            raise ValueError('跟随分析的封面必须使用分析服务连接')
         if self.cover_enabled and not self.cover:
             raise ValueError('请选择封面生图模型')
         if self.analysis_mode == 'subtitle':
@@ -301,12 +311,33 @@ def path():
     return get_data_directory() / 'ai-model-settings.json'
 
 
-def load() -> ModelSettings | None:
+def _atomic_write_json(target, data) -> None:
+    temp = target.with_suffix('.' + uuid.uuid4().hex + '.tmp')
+    try:
+        fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            json.dump(data, stream, ensure_ascii=False, indent=2)
+        os.replace(temp, target)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def load(*, persist_migration: bool = False) -> ModelSettings | None:
     with _lock:
         target = path()
         if not target.exists():
             return None
-        settings = ModelSettings.model_validate_json(target.read_text(encoding='utf-8'))
+        raw_text = target.read_text(encoding='utf-8')
+        settings = ModelSettings.model_validate_json(raw_text)
+        try:
+            raw = json.loads(raw_text)
+        except ValueError:
+            raw = {}
+        if persist_migration and isinstance(raw, dict) and 'cover_follows_analysis' not in raw:
+            # One-time migration when settings are opened: persist the inferred follow flag so it
+            # never flips later. Runtime reads (pipeline readiness) never touch the file.
+            raw['cover_follows_analysis'] = settings.cover_follows_analysis
+            _atomic_write_json(target, raw)
         if settings.cover_choice_version < COVER_CHOICE_VERSION and settings.cover_enabled:
             settings = settings.model_copy(update={'cover_enabled': False})
         return settings
@@ -315,7 +346,7 @@ def load() -> ModelSettings | None:
 def for_editing() -> ModelSettings:
     """Offer repair in the UI without silently changing runtime routing or keys."""
     try:
-        loaded = load()
+        loaded = load(persist_migration=True)
         if loaded is not None:
             return loaded
         return migrate_legacy()
@@ -520,14 +551,7 @@ def save(settings: ModelSettings) -> dict:
             backup = target.with_name('ai-model-settings.invalid.' + uuid.uuid4().hex + '.json')
             with os.fdopen(os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
                 stream.write(target.read_bytes())
-        temp = target.with_suffix('.' + uuid.uuid4().hex + '.tmp')
-        try:
-            fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-                json.dump(resolved.model_dump(), stream, ensure_ascii=False, indent=2)
-            os.replace(temp, target)
-        finally:
-            temp.unlink(missing_ok=True)
+        _atomic_write_json(target, resolved.model_dump())
         return public(resolved)
 
 

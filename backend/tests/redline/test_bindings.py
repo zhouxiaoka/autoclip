@@ -27,6 +27,7 @@ def test_purpose_providers_survive_switch_toggle_save_reopen(entry, source, bind
                                        model="whisper-1" if binding_id == "old" else "qwen-audio-3.0-asr-flash",
                                        model_source=source),
         cover_enabled=True, cover_choice_version=ai.COVER_CHOICE_VERSION,
+        cover_follows_analysis=False,  # explicit independent cover (Kris: follow is an explicit flag)
     )
     script = """
 const fs = require('node:fs')
