@@ -495,14 +495,36 @@ def _wait_child(proc: subprocess.Popen, timeout: Optional[float], project_id: st
 
 
 def run(cmd, *, check: bool = False, timeout: Optional[float] = None, capture_output: bool = False, **kwargs):
-    """subprocess.run for long children (ffmpeg) of the bound project: deleting the project kills them."""
+    """subprocess.run for long children (ffmpeg) of the bound project: deleting the project kills them.
+
+    Unbound callers (branding cache warm-up, etc.) still take ``_lock`` for check+Popen
+    so ``begin_shutdown`` cannot slip a child in between the flag read and the spawn.
+    """
     project_id = _current.get()
-    if project_id is None:
-        return subprocess.run(cmd, check=check, timeout=timeout, capture_output=capture_output, **kwargs)
-    checkpoint(project_id)
     if capture_output:
+        kwargs = dict(kwargs)
         kwargs['stdout'] = subprocess.PIPE
         kwargs['stderr'] = subprocess.PIPE
+    if project_id is None:
+        with _lock:
+            if _shutting_down:
+                raise ServiceRestarted()
+            proc = subprocess.Popen(cmd, **kwargs)
+        with proc:
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                stdout, stderr = proc.communicate()
+                raise subprocess.TimeoutExpired(proc.args, timeout, output=stdout, stderr=stderr) from None
+            except BaseException:
+                proc.kill()
+                raise
+        result = subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
+        if check:
+            result.check_returncode()
+        return result
+    checkpoint(project_id)
     kwargs = _spawn_kwargs(kwargs)
     with _lock:
         checkpoint(project_id)

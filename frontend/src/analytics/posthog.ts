@@ -32,7 +32,10 @@ let watchingIdentity = false
 let identityRetryTimer: ReturnType<typeof setTimeout> | undefined
 let identityRetries = 0
 let publishedConsent: boolean | undefined
+let inflightConsent: boolean | undefined
 let watchingConsent = false
+let consentRetries = 0
+let consentRetryTimer: ReturnType<typeof setTimeout> | undefined
 const ANONYMOUS_ID = /^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12})$/
 
 /** Persist the SDK's anonymous id so backend events join the same person and experiment. */
@@ -92,28 +95,62 @@ function publishAnonymousId(): void {
 /**
  * Tell the backend about an opt-out so backend Sentry (API and worker processes) stops
  * attaching the anonymous user.id. Re-enabling is only sent after an opt-out was sent.
+ *
+ * X2r: mark published only after a successful PUT; retry failures; serialize so a rapid
+ * toggle cannot leave UI=off / backend=on (one in-flight request, then sync to latest).
  */
 function publishConsent(): void {
   const enabled = isAnalyticsEnabled()
-  if (typeof fetch !== 'function' || publishedConsent === enabled) return
-  if (enabled && publishedConsent === undefined) return
+  if (typeof fetch !== 'function') return
   if (!watchingConsent) {
     watchingConsent = true
     try { apiConfigManager.addListener(() => publishConsent()) } catch { /* port can arrive later */ }
   }
   if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
       && !apiConfigManager.isReady()) return
-  publishedConsent = enabled
-  const failed = () => { if (publishedConsent === enabled) publishedConsent = enabled ? false : undefined }
+  // Already in sync and nothing in flight.
+  if (inflightConsent === undefined && publishedConsent === enabled) return
+  // Never advertise enable until an opt-out has been recorded successfully.
+  if (enabled && publishedConsent === undefined && inflightConsent === undefined) return
+  // One in-flight PUT at a time; finish() re-enters with the latest UI value.
+  if (inflightConsent !== undefined) return
+
+  inflightConsent = enabled
+  const controller = typeof AbortController === 'function' ? new AbortController() : undefined
+  const timeout = controller ? setTimeout(() => controller.abort(), 5000) : undefined
+  const finish = (ok: boolean) => {
+    if (timeout !== undefined) clearTimeout(timeout)
+    const sent = inflightConsent
+    inflightConsent = undefined
+    if (ok) {
+      publishedConsent = sent
+      consentRetries = 0
+      // UI may have moved while the PUT was in flight — sync to the latest preference.
+      if (publishedConsent !== isAnalyticsEnabled()) publishConsent()
+      return
+    }
+    if (consentRetries < 5 && typeof setTimeout === 'function') {
+      // Retry against whatever the UI wants now (not a stale mid-toggle value).
+      if (consentRetryTimer !== undefined) clearTimeout(consentRetryTimer)
+      consentRetryTimer = setTimeout(() => {
+        consentRetryTimer = undefined
+        publishConsent()
+      }, 1000 * 2 ** consentRetries++)
+      return
+    }
+    consentRetries = 0
+    // Exhausted; a later toggle or apiConfig listener will try again.
+  }
   try {
     const base = String(apiConfigManager.getBaseUrl() || '/api/v1').replace(/\/$/, '')
     void fetch(`${base}/settings/analytics-consent`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
-    }).then((response) => { if (!response?.ok) failed() }).catch(failed)
+      ...(controller ? { signal: controller.signal } : {}),
+    }).then((response) => finish(Boolean(response?.ok))).catch(() => finish(false))
   } catch {
-    failed()
+    finish(false)
   }
 }
 
@@ -335,6 +372,9 @@ export function setAnalyticsEnabled(enabled: boolean): void {
       if (identityRetryTimer !== undefined) clearTimeout(identityRetryTimer)
       identityRetryTimer = undefined
       identityRetries = 0
+      if (consentRetryTimer !== undefined) clearTimeout(consentRetryTimer)
+      consentRetryTimer = undefined
+      consentRetries = 0
       syncSentryUser(null)
     }
   } catch { /* analytics cannot break settings */ }

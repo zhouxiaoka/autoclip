@@ -136,14 +136,11 @@ def _ffmpeg(cmd: list[str], timeout: float, **kwargs) -> subprocess.CompletedPro
     """Every branding child (ffprobe, outro conform, text outro, concat) starts here.
 
     Bound renders use the project process group so cancel reaches the child. Once the
-    desktop shell exits (``begin_shutdown``) no new child may start, bound or not.
+    desktop shell exits (``begin_shutdown``) no new child may start, bound or not —
+    check and spawn share ``project_cancellation``'s lock with ``begin_shutdown``.
     """
     from backend.core import project_cancellation
-    if project_cancellation.shutting_down():
-        raise project_cancellation.ServiceRestarted()
-    if project_cancellation.current():
-        return project_cancellation.run(cmd, check=True, capture_output=True, timeout=timeout, **kwargs)
-    return subprocess.run(cmd, check=True, capture_output=True, timeout=timeout, **kwargs)
+    return project_cancellation.run(cmd, check=True, capture_output=True, timeout=timeout, **kwargs)
 
 
 def _append(source: Path, partial: Path, width: int, height: int) -> None:

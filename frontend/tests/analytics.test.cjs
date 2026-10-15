@@ -125,6 +125,77 @@ test('X2: opting out tells the backend so Sentry drops user.id; re-enable only a
   assert.deepEqual(consent(), [false, true])
 })
 
+
+test('X2r: consent is marked sent only after success and failed PUTs retry', async () => {
+  const storage = memory()
+  const puts = []
+  let respondOk = false
+  let timer
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: storage, window: {},
+    setTimeout: (fn) => { timer = fn; return 1 },
+    clearTimeout: () => { timer = undefined },
+    fetch: (url, opts) => {
+      const body = JSON.parse(opts.body)
+      if (String(url).includes('/settings/analytics-consent')) puts.push(body.enabled)
+      return Promise.resolve({ ok: respondOk || !String(url).includes('/settings/analytics-consent') })
+    },
+  })
+  const consent = () => puts.slice()
+  ph.initAnalytics()
+  ph.setAnalyticsEnabled(false)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(consent(), [false])
+  // Failure must not stick: a retry should fire with the same opt-out.
+  assert.equal(typeof timer, 'function')
+  respondOk = true
+  timer()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(consent(), [false, false])
+  // Re-enable only after the opt-out was successfully published.
+  ph.setAnalyticsEnabled(true)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(consent(), [false, false, true])
+})
+
+test('X2r: rapid toggle serializes so the backend ends on the latest UI value', async () => {
+  const storage = memory()
+  const puts = []
+  const pending = []
+  const ph = load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: storage, window: {},
+    fetch: (url, opts) => {
+      const body = JSON.parse(opts.body)
+      if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      return new Promise(resolve => {
+        puts.push(body.enabled)
+        pending.push(resolve)
+      })
+    },
+  })
+  ph.initAnalytics()
+  ph.setAnalyticsEnabled(false) // in-flight: false
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(puts, [false])
+  ph.setAnalyticsEnabled(true)
+  ph.setAnalyticsEnabled(false) // UI settles on false while first PUT still open
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(puts.length, 1) // second intent waits for the in-flight PUT
+  pending[0]({ ok: true })
+  await new Promise(resolve => setImmediate(resolve))
+  await new Promise(resolve => setImmediate(resolve))
+  // publishedConsent already false and UI is false → no need to send true mid-flight
+  assert.equal(puts.filter(v => v === true).length, 0)
+  assert.equal(puts[puts.length - 1], false)
+  for (let i = 1; i < pending.length; i++) pending[i]({ ok: true })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(puts[puts.length - 1], false)
+})
+
 test('X2: an opted-out launch reports the opt-out even without a PostHog key', async () => {
   const storage = memory()
   storage.setItem('autoclip.analytics.optOut', 'true')
