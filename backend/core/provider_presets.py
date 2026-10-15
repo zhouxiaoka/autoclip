@@ -58,6 +58,8 @@ class ProviderCatalog:
     version: int
     issued_at: str
     local_context_hint: str
+    console_hosts: Tuple[str, ...]
+    console_suffixes: Tuple[str, ...]
     aliases: Dict[str, str]
     providers: Dict[str, ProviderPreset]
     path: Path
@@ -224,11 +226,14 @@ def load_provider_catalog(path: Optional[Path] = None) -> ProviderCatalog:
     for alias, target in raw_aliases.items():
         if isinstance(alias, str) and isinstance(target, str) and alias.strip() and target.strip():
             aliases[alias.strip().lower()] = target.strip()
+    address_rules = data.get("address_rules") if isinstance(data.get("address_rules"), Mapping) else {}
     return ProviderCatalog(
         schema_version=int(schema_version),
         version=version,
         issued_at=str(data.get("issued_at") or ""),
         local_context_hint=str(data.get("local_context_hint") or ""),
+        console_hosts=_strings(address_rules.get("console_hosts")),
+        console_suffixes=_strings(address_rules.get("console_suffixes")),
         aliases=aliases,
         providers=providers,
         path=catalog_path,

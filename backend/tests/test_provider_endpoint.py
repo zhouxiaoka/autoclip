@@ -53,3 +53,20 @@ def test_key_hint_is_prefix_only_and_host_is_sanitized():
     assert telemetry_host('https://88api.ai/v1/chat/completions?key=secret') == '88api.ai'
     assert telemetry_host('http://127.0.0.1:11434/v1') == 'local'
     assert 'secret' not in telemetry_host('https://user:secret@evil.example/v1')
+
+
+def test_catalog_api_hosts_are_not_console_hosts_and_locks_match_catalog():
+    from urllib.parse import urlparse
+    from backend.core.provider_presets import get_catalog
+    from backend.core.provider_endpoint import ADDRESS_LOCKED_PROVIDERS, LOCKED_PRESETS
+    from backend.services.ai_model_settings import Connection
+    catalog = get_catalog()
+    assert not is_console_host('infistar.ai')
+    assert Connection(id='inf', name='Infistar', provider='compatible', base_url='https://infistar.ai/v1').base_url == 'https://infistar.ai/v1'
+    assert ADDRESS_LOCKED_PROVIDERS == {p.id for p in catalog.providers.values() if p.locked and p.base_url}
+    for preset in catalog.providers.values():
+        if preset.base_url:
+            assert not is_console_host(urlparse(preset.base_url).hostname)
+        if preset.id in LOCKED_PRESETS:
+            expected = preset.base_url + ('/openai' if preset.protocol == 'google-generative-ai' else '')
+            assert LOCKED_PRESETS[preset.id] == expected

@@ -1716,5 +1716,10 @@
   "请输入模型 ID": "모델 ID를 입력하세요",
   "API 密钥仅保存在本机": "API 키는 이 기기에만 저장됩니다",
   "例如公司内网网关": "예: 사내 게이트웨이",
-  "仅语言模型可开启视觉。": "시각은 언어 모델에서만 켤 수 있습니다."
+  "仅语言模型可开启视觉。": "시각은 언어 모델에서만 켤 수 있습니다.",
+  "settings.providers.fetch_list": "모델 목록 가져오기",
+  "settings.providers.fetch_list_failed": "모델 목록을 가져오지 못했습니다. 엔드포인트와 API 키를 확인하거나 모델 ID를 직접 입력하세요.",
+  "settings.providers.fetch_list_updated": "이 계정에서 사용할 수 있는 모델로 목록을 업데이트했습니다.",
+  "settings.providers.fetch_list_no_overlap": "추천 후보가 이 계정의 사용 가능 목록에 없습니다. 직접 선택하거나 목록을 새로고침하세요.",
+  "settings.providers.fetch_list_truncated": "모델 목록이 너무 길어 처음 2000개만 유지합니다. 나머지는 직접 입력하세요."
 }

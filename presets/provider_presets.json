@@ -1110,5 +1110,37 @@
         "language"
       ]
     }
+  },
+  "address_rules": {
+    "console_hosts": [
+      "ai.google.dev",
+      "aistudio.google.com",
+      "aliyun.com",
+      "bailian.console.aliyun.com",
+      "chat.deepseek.com",
+      "chatgpt.com",
+      "console.cloud.google.com",
+      "console.volcengine.com",
+      "console.x.ai",
+      "dashscope.console.aliyun.com",
+      "deepseek.com",
+      "makersuite.google.com",
+      "openai.com",
+      "platform.deepseek.com",
+      "platform.moonshot.cn",
+      "platform.openai.com",
+      "www.88api.ai",
+      "www.aliyun.com",
+      "www.deepseek.com",
+      "www.infistar.ai",
+      "www.infistar.cc",
+      "www.moonshot.cn",
+      "www.openai.com",
+      "www.volcengine.com"
+    ],
+    "console_suffixes": [
+      ".console.aliyun.com",
+      ".console.volcengine.com"
+    ]
   }
 }

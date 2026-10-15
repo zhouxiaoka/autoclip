@@ -9,7 +9,7 @@ import shutil
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Body
 from pydantic import BaseModel, Field, validator
 
 logger = logging.getLogger(__name__)
@@ -64,34 +64,25 @@ async def discover_connection_models(body: ConnectionModelsRequest):
 
 
 @router.post('/ai-models/fetch-list')
-async def fetch_connection_model_list(body: ConnectionModelsRequest):
-    """Custom-provider fetch: account /models IDs only. No keys or full URLs."""
-    from backend.core.llm_telemetry import hostname_of_base_url
-    from backend.core.model_registry import discover
-    from backend.core.upstream_errors import hint_key_for
+def fetch_connection_model_list(body: Any = Body(default=None)):
+    """Custom-provider and settings 'fetch list': GET /models, intersect, backfill.
+
+    Never returns keys, full URLs, or upstream response text.
+    """
+    from backend.services.provider_validation import fetch_list_for_connection
     try:
-        connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
-        listing = await discover(connection, True)
-        models = [item['id'] for item in listing.get('models') or [] if isinstance(item, dict) and item.get('id')]
-        return {
-            'ok': True,
-            'success': True,
-            'models': models,
-            'recommended': {},
-            'truncated': False,
-            'source': listing.get('source') or 'live',
-            'error_type': '',
-            'hint_key': '',
-            'message_key': '',
-            'base_url_host': hostname_of_base_url(connection.base_url) or 'unknown',
-        }
+        request = ConnectionModelsRequest.model_validate(body)
+        connection = ai_models.resolve_secret(request.connection, ai_models.for_editing())
+        return fetch_list_for_connection(connection).as_api()
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail="Invalid provider connection") from exc
     except Exception:
+        from backend.core.provider_model_fetch import FETCH_LIST_FAILED
+        from backend.core.upstream_errors import hint_key_for
         return {
             'ok': False, 'success': False, 'models': [], 'recommended': {},
             'truncated': False, 'source': 'empty', 'error_type': 'unknown',
-            'hint_key': hint_key_for('unknown'), 'message_key': '',
+            'hint_key': hint_key_for('unknown'), 'message_key': FETCH_LIST_FAILED,
             'base_url_host': 'unknown',
         }
 

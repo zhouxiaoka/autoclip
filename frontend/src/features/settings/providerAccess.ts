@@ -5,8 +5,10 @@ import {
   UPSTREAM_ERROR_TYPES,
 } from '../../analytics/successRateContract'
 import { PROVIDERS, type ProviderKey } from './providers'
+import { getCatalog } from './providerPresets'
 
-export const ADDRESS_LOCKED: readonly ProviderKey[] = ['api88', 'infistar', 'deepseek', 'gemini', 'dashscope', 'openai']
+const catalog = getCatalog()
+export const ADDRESS_LOCKED = Object.values(catalog.providers).filter(row => row.locked && row.base_url).map(row => row.id)
 
 export const VALIDATION_ERROR_TYPES = UPSTREAM_ERROR_TYPES
 export type ValidationErrorType = (typeof VALIDATION_ERROR_TYPES)[number]
@@ -35,18 +37,10 @@ const KEY_HINTS: Array<[RegExp, ProviderKey]> = [
 
 const VERSIONED = /^\/(?:v\d+(?:beta)?(?:\/openai)?|compatible-mode\/v\d+|api\/v\d+|api\/paas\/v\d+|openai\/v\d+)\/?$/i
 const CHAT_SUFFIXES = ['/v1/chat/completions', '/chat/completions', '/v1/completions', '/completions']
-const CONSOLE_HOSTS = new Set([
-  'platform.openai.com', 'chatgpt.com', 'openai.com', 'www.openai.com',
-  'platform.deepseek.com', 'chat.deepseek.com', 'www.deepseek.com', 'deepseek.com',
-  'aistudio.google.com', 'ai.google.dev', 'makersuite.google.com',
-  'console.cloud.google.com', 'bailian.console.aliyun.com', 'dashscope.console.aliyun.com',
-  'www.aliyun.com', 'aliyun.com', 'console.volcengine.com', 'www.volcengine.com',
-  'platform.moonshot.cn', 'www.moonshot.cn', 'console.x.ai',
-  'www.infistar.cc', 'www.infistar.ai', 'infistar.ai', 'www.88api.ai',
-])
+const CONSOLE_HOSTS = new Set(catalog.console_hosts)
 const CONSOLE_COPY = '这是控制台或官网地址，不是模型接口。请改选对应服务商，或用「自定义兼容」填写带 /v1 的接口地址。'
 
-export const canEditAddress = (key?: ProviderKey) => key === 'compatible' || !!PROVIDERS[key || 'compatible']?.local
+export const canEditAddress = (key?: ProviderKey) => key === 'compatible' || catalog.providers[key || '']?.locked === false
 
 export function hintProviderForKey(apiKey?: string | null): ProviderKey | null {
   const key = (apiKey || '').trim()
@@ -58,7 +52,7 @@ export function hintProviderForKey(apiKey?: string | null): ProviderKey | null {
 
 export function isConsoleHost(host?: string) {
   const value = (host || '').toLowerCase().replace(/^\.+|\.+$/g, '')
-  return CONSOLE_HOSTS.has(value) || value.endsWith('.console.aliyun.com') || value.endsWith('.console.volcengine.com')
+  return CONSOLE_HOSTS.has(value) || catalog.console_suffixes.some(suffix => value.endsWith(suffix))
 }
 
 export function normalizeCompatibleUrl(raw: string): { url: string; warnings: string[] } {

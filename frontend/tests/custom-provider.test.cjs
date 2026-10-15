@@ -150,7 +150,7 @@ test('custom dialog and first-run source have no clipboard-paste control', () =>
   }
 })
 
-test('custom dialog fetches with fetchList and ignores a late response', async () => {
+for (const edit of ['base_url', 'api_key']) for (const outcome of ['success', 'negative', 'reject']) test(`custom dialog discards stale ${outcome} after ${edit} changes`, async () => {
   const React = require('react')
   const source = fs.readFileSync(path.join(__dirname, '../src/features/settings/AddCustomProviderDialog.tsx'), 'utf8')
   assert.match(source, /modelSettingsApi\.fetchList/)
@@ -185,7 +185,7 @@ test('custom dialog fetches with fetchList and ignores a late response', async (
     '../../analytics/experience': { beginExperience: () => () => {} },
     './modelSettingsApi': {
       modelSettingsApi: {
-        fetchList: () => new Promise(resolve => pending.push(resolve)),
+        fetchList: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
         discover: () => { throw new Error('must not use discover') },
       },
     },
@@ -202,13 +202,43 @@ test('custom dialog fetches with fetchList and ignores a late response', async (
     .props.onChange({ target: { value: 'https://gw.example/v1' } })
   const fetchBtn = flatten(render()).find(node => String(node?.props?.children).includes('获取模型列表'))
   void fetchBtn.props.onClick()
-  void fetchBtn.props.onClick()
-  pending[0]({ ok: true, models: ['stale-id'], source: 'live' })
-  await Promise.resolve()
-  pending[1]({ ok: true, models: ['fresh-id'], source: 'live' })
-  await Promise.resolve()
-  await Promise.resolve()
+  const input = flatten(render()).find(node => node?.props?.['aria-label'] === (edit === 'base_url' ? '接口地址' : 'API Key'))
+  input.props.onChange({ target: { value: edit === 'base_url' ? 'https://other.example/v1' : 'new-test-key' } })
+  if (outcome === 'reject') pending[0].reject(new Error('test transport failure'))
+  else pending[0].resolve({ ok: outcome === 'success', models: ['stale-id'], source: 'live' })
+  await new Promise(setImmediate)
+  const afterStale = JSON.stringify(flatten(render()))
+  assert.equal(afterStale.includes('stale-id'), false)
+  assert.equal(slots[5], false, 'stale failures must not change the current error state')
+  const retry = flatten(render()).find(node => String(node?.props?.children).includes('获取模型列表'))
+  assert.equal(retry.props.disabled, false)
+  void retry.props.onClick()
+  pending[1].resolve({ ok: true, models: ['fresh-id'], source: 'live' })
+  await new Promise(setImmediate)
   const tree = JSON.stringify(flatten(render()))
   assert.equal(tree.includes('fresh-id'), true)
   assert.equal(tree.includes('stale-id'), false)
+})
+
+
+test('ASR support is taken from backend adapter metadata, never user types', () => {
+  const connection = { custom_models: [
+    { ...custom.emptyOffer('gpt-4o-transcribe'), types: ['asr'] },
+    { ...custom.emptyOffer('whisper-1'), types: ['asr'] },
+  ] }
+  const unknown = custom.mergeCustomList(connection)
+  assert.ok(unknown.models.every(model => !model.asr_supported))
+  const live = { source: 'live', preview: false, updated_at: 1, models: [
+    { id: 'gpt-4o-transcribe', asr: true, asr_supported: false, asr_note: 'unsupported' },
+    { id: 'whisper-1', asr: true, asr_supported: true },
+  ] }
+  const merged = custom.mergeCustomList(connection, live)
+  assert.equal(merged.models[0].asr_supported, false)
+  assert.equal(merged.models[0].asr_note, 'unsupported')
+  assert.equal(merged.models[1].asr_supported, true)
+})
+
+test('custom model editor has no ineffective scenario checkboxes', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/features/settings/AddCustomProviderDialog.tsx'), 'utf8')
+  assert.equal(source.includes("label={t('适用场景')}"), false)
 })

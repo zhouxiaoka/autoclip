@@ -31,6 +31,8 @@ from backend.core.upstream_errors import (
 )
 from backend.services import ai_model_settings as ai_models
 
+from backend.core.provider_model_fetch import AccountModelList, list_account_models
+
 PROBE_MAX_TOKENS = 16
 PROBE_REASONING_MAX_TOKENS = 256
 MODELS_TIMEOUT = 12.0
@@ -215,3 +217,40 @@ def validate_connection(connection: ai_models.Connection, model: str) -> Validat
     if probe_error:
         return _failed(probe_error, base, hint, models)
     return _ok(base, hint, models)
+
+
+def resolve_fetch_base(connection: ai_models.Connection) -> tuple[str, Optional[ClassifiedUpstreamError]]:
+    """Same address rules as ``validate_connection``, without the chat probe."""
+    if connection.provider == 'compatible' and connection.base_url:
+        normalized = normalize_provider_base_url(connection.base_url)
+        if 'console_host' in normalized.warnings:
+            return normalized.url, _as_type(UpstreamErrorType.BAD_ENDPOINT)
+        return normalized.url, None
+    base = ai_models.chat_endpoint(connection, 'unused')['base_url']
+    if is_console_host(urlparse(base).hostname or ''):
+        return base, _as_type(UpstreamErrorType.BAD_ENDPOINT)
+    if connection.provider == 'compatible' and not base:
+        return base, _as_type(UpstreamErrorType.BAD_ENDPOINT)
+    return base, None
+
+
+def fetch_list_for_connection(connection: ai_models.Connection, *, http=None) -> AccountModelList:
+    """Custom-provider / settings 'fetch list': ``/models`` + preset intersection."""
+    resolved = ai_models.resolve_secret(connection, ai_models.for_editing())
+    base, pre = resolve_fetch_base(resolved)
+    if pre:
+        from backend.core.provider_model_fetch import FETCH_LIST_FAILED
+        return AccountModelList(
+            ok=False,
+            source='empty',
+            error_type=pre.error_type.value,
+            hint_key=pre.hint_key,
+            message_key=FETCH_LIST_FAILED,
+            base_url_host=_host(base),
+        )
+    return list_account_models(
+        base_url=base,
+        api_key=resolved.api_key or '',
+        provider=resolved.provider,
+        http=http,
+    )

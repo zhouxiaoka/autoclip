@@ -32,6 +32,7 @@ vm.runInNewContext(code, {
   require: id => {
     if (id === '../../i18n') return { t: (x, v) => (v && v.name ? x.replace('{{name}}', v.name) : x) }
     if (id === './providers') return providers
+    if (id === './providerPresets') return require('./load-ts.cjs').loadTs('providerPresets.ts')
     if (id === '../../analytics/successRateContract') return contract
     throw new Error(id)
   },
@@ -67,4 +68,13 @@ test('wrong-provider keys are hinted, never treated as a switch, and hosts stay 
   )
   assert.equal(access.passed({ success: false, error_type: 'invalid_key' }), false)
   assert.equal(access.passed({ success: true }), true)
+})
+
+
+test('Infistar API is accepted and address locks are projected from the catalog', () => {
+  const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, '../../presets/provider_presets.json'), 'utf8'))
+  assert.equal(access.isConsoleHost('infistar.ai'), false)
+  assert.equal(access.normalizeCompatibleUrl('https://infistar.ai/v1').warnings.length, 0)
+  assert.deepEqual(Array.from(access.ADDRESS_LOCKED).sort(), Object.entries(catalog.providers)
+    .filter(([, row]) => row.locked && row.base_url).map(([id]) => id).sort())
 })

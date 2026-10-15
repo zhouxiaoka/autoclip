@@ -10,40 +10,19 @@ from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse
 
-from backend.core.cloud_presets import CLOUD_PRESETS
+from backend.core.provider_presets import get_catalog
 from backend.core.llm_providers import (
-    DASHSCOPE_CN_COMPATIBLE_BASE_URL,
-    OPENAI_OFFICIAL_BASE_URL,
     normalize_base_url,
 )
 
+_catalog = get_catalog()
 LOCKED_PRESETS: dict[str, str] = {
-    'api88': CLOUD_PRESETS['api88'].base_url,
-    'infistar': CLOUD_PRESETS['infistar'].base_url,
-    'deepseek': CLOUD_PRESETS['deepseek'].base_url,
-    'gemini': 'https://generativelanguage.googleapis.com/v1beta/openai',
-    'dashscope': DASHSCOPE_CN_COMPATIBLE_BASE_URL,
-    'openai': OPENAI_OFFICIAL_BASE_URL,
+    item.id: item.base_url + ('/openai' if item.protocol == 'google-generative-ai' else '')
+    for item in _catalog.providers.values() if item.locked and item.base_url
 }
-
-# Beginners pick one of these and only paste a key. Custom gateways use `compatible`.
 ADDRESS_LOCKED_PROVIDERS = frozenset(LOCKED_PRESETS)
-
-CONSOLE_HOSTS = frozenset({
-    'platform.openai.com', 'chatgpt.com', 'openai.com', 'www.openai.com',
-    'platform.deepseek.com', 'chat.deepseek.com', 'www.deepseek.com', 'deepseek.com',
-    'aistudio.google.com', 'ai.google.dev', 'makersuite.google.com',
-    'console.cloud.google.com',
-    'bailian.console.aliyun.com', 'dashscope.console.aliyun.com',
-    'www.aliyun.com', 'aliyun.com',
-    'console.volcengine.com', 'www.volcengine.com',
-    'platform.moonshot.cn', 'www.moonshot.cn',
-    'console.x.ai',
-    'www.infistar.cc', 'www.infistar.ai', 'infistar.ai',
-    'www.88api.ai',
-})
-
-_CONSOLE_SUFFIXES = ('.console.aliyun.com', '.console.volcengine.com')
+CONSOLE_HOSTS = frozenset(_catalog.console_hosts)
+_CONSOLE_SUFFIXES = _catalog.console_suffixes
 
 _VERSIONED_PATH = re.compile(
     r'^/(?:v\d+(?:beta)?(?:/openai)?|compatible-mode/v\d+|api/v\d+|api/paas/v\d+|openai/v\d+)/?$',
@@ -137,15 +116,15 @@ def locked_chat_url(provider: Optional[str], base_url: Optional[str] = None) -> 
             if is_api88_host(urlparse(cleaned).hostname):
                 return None
         return LOCKED_PRESETS['api88']
-    if provider in {'infistar', 'deepseek', 'gemini'}:
-        return LOCKED_PRESETS[provider]
     if provider == 'openai':
         cleaned = normalize_base_url(base_url)
-        if not cleaned or cleaned in {OPENAI_OFFICIAL_BASE_URL, 'https://api.openai.com'}:
-            return OPENAI_OFFICIAL_BASE_URL
+        official = LOCKED_PRESETS['openai']
+        parsed = urlparse(official)
+        if not cleaned or cleaned in {official, f'{parsed.scheme}://{parsed.netloc}'}:
+            return official
         return None
     if provider == 'dashscope':
         if not normalize_base_url(base_url):
             return LOCKED_PRESETS['dashscope']
         return None
-    return None
+    return LOCKED_PRESETS.get(provider)

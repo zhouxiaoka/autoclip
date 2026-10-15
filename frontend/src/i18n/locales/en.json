@@ -1716,5 +1716,10 @@
   "请输入模型 ID": "Enter a model id",
   "API 密钥仅保存在本机": "The API key stays on this device",
   "例如公司内网网关": "e.g. company gateway",
-  "仅语言模型可开启视觉。": "Vision is only available for language models."
+  "仅语言模型可开启视觉。": "Vision is only available for language models.",
+  "settings.providers.fetch_list": "Fetch model list",
+  "settings.providers.fetch_list_failed": "Couldn't fetch the model list. Check the endpoint and API key, or enter a model ID manually.",
+  "settings.providers.fetch_list_updated": "Updated the list from models available on this account.",
+  "settings.providers.fetch_list_no_overlap": "None of the recommended models are on this account. Pick one manually or refresh the list.",
+  "settings.providers.fetch_list_truncated": "The model list is too long; only the first 2000 IDs are kept. Enter others manually."
 }
