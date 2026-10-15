@@ -17,11 +17,11 @@
 | `workflow_dispatch` 且 `live_mode=verify` | 夜间子集 + 88API / DashScope / Infistar 各 1 条最小成功用例 | 五家各至少探一次 |
 | `workflow_dispatch` 且 `live_mode=api88` | 只跑 88API 一条 `talk_zh` 探针 | 只这一家 |
 
-**PR / push 永远不会打真实服务商。** 缺 `*_MODEL` 时用当前分支 [`presets/provider_presets.json`](../presets/provider_presets.json) 的默认模型（该文件尚未合入时用 [`matrix.py`](../scripts/provider_e2e/matrix.py) 的 live 默认），不跳过。一家都没配 key 时 live job 记 `skipped` 并写进汇总，workflow 不失败。
+**PR / push 永远不会打真实服务商。** 缺 `*_MODEL` 时用 [`matrix.py`](../scripts/provider_e2e/matrix.py) 的 live 默认模型，不受产品目录默认型号影响，不跳过。一家都没配 key 时 live job 记 `skipped` 并写进汇总，workflow 不失败。
 
 ## 矩阵数据源
 
-Live 聊天地址和回退型号以 [`matrix.py`](../scripts/provider_e2e/matrix.py) 的 `LIVE_PROVIDERS` 为准，**不要把门槛 live 默认写进产品 JSON**。产品目录里 Gemini 默认是 `gemini-3.8-flash`、地址是 `https://generativelanguage.googleapis.com/v1beta`（给原生 `/models` 用）；live 出片走 OpenAI 兼容根 `…/v1beta/openai`。DashScope live 默认是 `qwen-plus`。有 `presets/provider_presets.json` 时只读显示名和非空默认型号；聊天地址仍经 `locked_chat_url` 补齐。可用 `AUTOCLIP_PROVIDER_PRESETS` 指向另一份 JSON。`*_MODEL` 仍可覆盖型号。日志、报告和用例库继续脱敏，不打印密钥。
+Live 聊天地址和回退型号以 [`matrix.py`](../scripts/provider_e2e/matrix.py) 的 `LIVE_PROVIDERS` 为准，**不要把门槛 live 默认写进产品 JSON**。产品目录里 Gemini 默认是 `gemini-3.8-flash`、地址是 `https://generativelanguage.googleapis.com/v1beta`（给原生 `/models` 用）；live 出片走 OpenAI 兼容根 `…/v1beta/openai`。DashScope live 默认是 `qwen-plus`。有 `presets/provider_presets.json` 时只读显示名和聊天地址输入，保留 live 默认型号；聊天地址仍经 `locked_chat_url` 补齐。可用 `AUTOCLIP_PROVIDER_PRESETS` 指向另一份 JSON。`*_MODEL` 仍可覆盖型号。日志、报告和用例库继续脱敏，不打印密钥。
 
 ## 判定
 

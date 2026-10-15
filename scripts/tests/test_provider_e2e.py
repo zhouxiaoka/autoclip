@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -58,6 +59,39 @@ def _full_live_catalog(**overrides: dict) -> dict:
 
 
 class ProviderE2EContractTests(unittest.TestCase):
+    def test_product_models_do_not_override_live_defaults(self):
+        raw = _full_live_catalog()
+        for provider in raw['providers'].values():
+            provider['default_model'] = 'product-only-model'
+            provider['candidates']['analysis'] = ['product-only-candidate']
+        raw['providers']['gemini']['default_model'] = 'gemini-3.8-flash'
+        raw['providers']['gemini']['base_url'] = 'https://generativelanguage.googleapis.com/v1beta'
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'provider_presets.json'
+            path.write_text(json.dumps(raw), encoding='utf-8')
+            before = path.read_bytes()
+            with patch.dict(os.environ, {'AUTOCLIP_PROVIDER_PRESETS': str(path)}):
+                matrix.reset_live_catalog()
+                try:
+                    providers = {item['id']: item for item in matrix.live_providers()}
+                    for expected in matrix.LIVE_PROVIDERS:
+                        with self.subTest(provider=expected['id']):
+                            provider = providers[expected['id']]
+                            self.assertEqual(provider['default_model'], expected['default_model'])
+                            ready = live_ready(provider, {provider['secret']: 'sk-test-key'})
+                            self.assertEqual(ready['model'], expected['default_model'])
+                            override = live_ready(provider, {
+                                provider['secret']: 'sk-test-key',
+                                provider['model_env']: 'explicit-live-model',
+                            })
+                            self.assertEqual(override['model'], 'explicit-live-model')
+                    self.assertEqual(providers['gemini']['default_model'], 'gemini-3.5-flash-lite')
+                    self.assertEqual(providers['gemini']['base_url'],
+                                     'https://generativelanguage.googleapis.com/v1beta/openai')
+                    self.assertEqual(path.read_bytes(), before)
+                finally:
+                    matrix.reset_live_catalog()
+
     def test_matrix_has_eight_success_and_two_blocks(self):
         succeed = matrix.assets(expect='succeed')
         blocked = matrix.assets(expect='block')
@@ -152,7 +186,7 @@ class ProviderE2EContractTests(unittest.TestCase):
             self.assertEqual(override['model'], 'custom-model')
             self.assertEqual(override['model_source'], 'secret')
 
-    def test_live_providers_follow_presets_json(self):
+    def test_live_providers_follow_catalog_labels_but_keep_live_defaults(self):
         raw = _full_live_catalog(deepseek=_preset_row(
             display_name='DeepSeek',
             short_name='FixtureSeek',
@@ -177,14 +211,14 @@ class ProviderE2EContractTests(unittest.TestCase):
                     os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
                 matrix.reset_live_catalog()
         self.assertEqual(providers['deepseek']['base_url'], 'https://api.deepseek.com')
-        self.assertEqual(providers['deepseek']['default_model'], 'fixture-flash')
+        self.assertEqual(providers['deepseek']['default_model'], 'deepseek-flash')
         self.assertEqual(providers['deepseek']['label'], 'FixtureSeek')
         self.assertEqual(providers['api88']['default_model'], 'deepseek-v4-flash')
         dumped = json.dumps(providers, ensure_ascii=False)
         self.assertNotIn('sk-should-never-appear', dumped)
         self.assertTrue(all('api_key' not in item for item in providers.values()))
 
-    def test_empty_catalog_default_uses_analysis_candidate(self):
+    def test_catalog_analysis_candidate_does_not_override_live_default(self):
         raw = _full_live_catalog(gemini=_preset_row(
             display_name='Google Gemini',
             short_name='Gemini',
@@ -206,7 +240,7 @@ class ProviderE2EContractTests(unittest.TestCase):
                 else:
                     os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
                 matrix.reset_live_catalog()
-        self.assertEqual(providers['gemini']['default_model'], 'gemini-from-candidates')
+        self.assertEqual(providers['gemini']['default_model'], 'gemini-3.5-flash-lite')
 
     def test_unknown_schema_is_rejected(self):
         raw = _full_live_catalog()
@@ -281,7 +315,7 @@ class ProviderE2EContractTests(unittest.TestCase):
                 else:
                     os.environ['AUTOCLIP_PROVIDER_PRESETS'] = old
                 matrix.reset_live_catalog()
-        self.assertEqual(providers['gemini']['default_model'], 'gemini-3.8-flash')
+        self.assertEqual(providers['gemini']['default_model'], 'gemini-3.5-flash-lite')
         self.assertEqual(
             providers['gemini']['base_url'],
             'https://generativelanguage.googleapis.com/v1beta/openai',
