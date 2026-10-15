@@ -16,10 +16,10 @@ WHERE timestamp >= now() - INTERVAL 7 DAY
   AND properties.studio_schema_version = 2
   AND properties.analytics_environment = 'production'
   AND properties.material_origin IN ('sample','user','unknown')
-  AND ((event = 'studio_generation_finished' AND properties.outcome IN ('completed','partial'))
+  AND ((event = 'studio_generation_finished' AND properties.outcome IN ('completed','success','partial'))
        OR (properties.artifact_id IS NOT NULL AND
            (event = 'studio_download_saved' OR
-            (event IN ('studio_export_finished','social_publish_finished') AND properties.outcome = 'completed'))))
+            (event IN ('studio_export_finished','social_publish_finished') AND properties.outcome IN ('completed','success')))))
 GROUP BY app_version,material_origin,event,outcome,runtime
 ORDER BY devices DESC;
 
@@ -55,7 +55,7 @@ WITH sample_cohort AS (
     WHERE event IN ('studio_export_finished','studio_generation_finished')
       AND properties.studio_schema_version = 2 AND properties.analytics_environment = 'production'
       AND properties.material_origin = 'user'
-      AND (properties.outcome = 'completed' OR
+      AND (properties.outcome IN ('completed','success') OR
            (event = 'studio_generation_finished' AND properties.outcome = 'partial'
             AND toFloat(properties.completed_variant_count) > 0))
       AND timestamp >= now() - INTERVAL 14 DAY
