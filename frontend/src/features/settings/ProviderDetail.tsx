@@ -22,13 +22,24 @@ const CAP_KEY: Record<string, string> = {
   video: 'settings.providers.filter.video',
 }
 
-type DetailModel = { analysis?: boolean; image?: boolean; asr?: boolean; capability?: string | null }
-// Each model lands in exactly one group, so the header count equals the visible rows. No per-group limits.
-const MODEL_GROUP: Array<{ key: 'language' | 'image' | 'asr' | 'other'; title: string; open: boolean; pick: (model: DetailModel) => boolean }> = [
-  { key: 'language', title: '语言', open: true, pick: m => !!m.analysis && !m.image },
-  { key: 'image', title: '图像生成', open: true, pick: m => !!m.image },
-  { key: 'asr', title: '语音识别', open: true, pick: m => !m.analysis && !m.image && !!m.asr },
-  { key: 'other', title: '其它类型', open: false, pick: m => !m.analysis && !m.image && !m.asr },
+type DetailModel = { id: string; analysis?: boolean; image?: boolean; asr?: boolean; capability?: string | null; kind?: string }
+type GroupKey = 'language' | 'image' | 'asr' | 'audio' | 'video' | 'other'
+// Group by the backend `kind` (derived from the provider's /models type metadata); flags only for older backends.
+export function modelGroupOf(m: DetailModel): GroupKey {
+  if (m.kind && ['language', 'image', 'asr', 'audio', 'video', 'other'].includes(m.kind)) return m.kind as GroupKey
+  if (m.asr) return 'asr'
+  if (m.image) return 'image'
+  if (m.analysis) return 'language'
+  return 'other'
+}
+// Each model lands in exactly one group, so the header count equals the rows. No per-group limits.
+const MODEL_GROUP: Array<{ key: GroupKey; title: string; open: boolean }> = [
+  { key: 'language', title: '语言', open: true },
+  { key: 'image', title: '图像生成', open: true },
+  { key: 'asr', title: '语音识别', open: true },
+  { key: 'audio', title: '语音合成 / 音频', open: false },
+  { key: 'video', title: '视频', open: false },
+  { key: 'other', title: '其它类型', open: false },
 ]
 
 export default function ProviderDetail({
@@ -56,6 +67,15 @@ export default function ProviderDetail({
   const needsEndpoint = kind === 'needs_endpoint' || (kind === 'guide' && !preset.base_url)
   const canTest = kind === 'legacy' || kind === 'compatible' || needsEndpoint
   const isSponsor = !!preset.sponsor
+
+  const hidden = new Set(persisted?.hidden_model_ids || [])
+  // Visibility only: no revalidation, no list reset. Hidden IDs leave the default-model pickers.
+  const toggleModels = (ids: string[], enabled: boolean) => {
+    if (!persisted) return
+    const next = new Set(persisted.hidden_model_ids || [])
+    for (const id of ids) { if (enabled) next.delete(id); else next.add(id) }
+    m.update({ connections: settings.connections.map(c => c.id === persisted.id ? { ...c, hidden_model_ids: [...next] } : c) })
+  }
 
   const persistEdit = (patch: Parameters<typeof m.editConnection>[1]) => {
     if (persisted) m.editConnection(persisted, patch)
@@ -206,31 +226,11 @@ export default function ProviderDetail({
           <section className="ac-provider-detail-card" data-panel="models">
             <h4 className="ac-provider-models-title">
               {t('可用模型')}
-              <span className="count">{fetched ? models.length : t('测通后获取')}</span>
+              <span className="count">{fetched ? (hidden.size ? `${models.length - models.filter(x => hidden.has(x.id)).length}/${models.length}` : models.length) : t('测通后获取')}</span>
             </h4>
             {connection && busy[connection.id] && <p className="ac-note">{t('正在获取…')}</p>}
             {connection && listErrors[connection.id] && <p className="ac-note">{t('settings.providers.models_empty')}</p>}
-            {MODEL_GROUP.map(group => {
-              const rows = models.filter(group.pick)
-              if (!rows.length) return null
-              return (
-                <details key={group.key} className="ac-provider-model-block" data-model-group={group.key} open={group.open}>
-                  <summary className="ac-provider-model-group">
-                    {t(group.title)}<span className="count">{rows.length}</span>
-                  </summary>
-                  <ul className="ac-provider-model-list">
-                    {rows.map(model => (
-                      <li key={model.id} className="ac-mono">
-                        {model.id}
-                        {group.key === 'language' && model.capability === 'multimodal' && (
-                          <span className="ac-provider-cap">{t('视觉')}</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )
-            })}
+            {fetched && models.length > 0 && <ModelGroups models={models} hidden={hidden} onToggle={persisted ? toggleModels : undefined} />}
             {connection && !busy[connection.id] && !fetched && (
               <p className="ac-note" data-models-hint="pending">{t('填写 API 密钥并测通后，将自动拉取可用模型。')}</p>
             )}
@@ -241,5 +241,49 @@ export default function ProviderDetail({
         )}
       </div>
     </div>
+  )
+}
+
+function ModelGroups({ models, hidden, onToggle }: {
+  models: Array<DetailModel>
+  hidden: Set<string>
+  onToggle?: (ids: string[], enabled: boolean) => void
+}) {
+  return (
+    <>
+      {MODEL_GROUP.map(group => {
+        const rows = models.filter(model => modelGroupOf(model) === group.key)
+        if (!rows.length) return null
+        const enabled = rows.filter(model => !hidden.has(model.id)).length
+        return (
+          <details key={group.key} className="ac-provider-model-block" data-model-group={group.key} open={group.open}>
+            <summary className="ac-provider-model-group">
+              {t(group.title)}<span className="count">{onToggle ? `${enabled}/${rows.length}` : rows.length}</span>
+              {onToggle && (
+                <span className="ac-provider-model-bulk">
+                  <button type="button" disabled={enabled === rows.length} onClick={event => { event.preventDefault(); onToggle(rows.map(m => m.id), true) }}>{t('全部启用')}</button>
+                  <button type="button" disabled={enabled === 0} onClick={event => { event.preventDefault(); onToggle(rows.map(m => m.id), false) }}>{t('全部停用')}</button>
+                </span>
+              )}
+            </summary>
+            <ul className="ac-provider-model-list">
+              {rows.map(model => (
+                <li key={model.id} className={`ac-mono${hidden.has(model.id) ? ' is-hidden' : ''}`} data-model-id={model.id}>
+                  {onToggle
+                    ? <label className="ac-provider-model-check">
+                        <input type="checkbox" checked={!hidden.has(model.id)} aria-label={`${t('启用')} ${model.id}`} onChange={event => onToggle([model.id], event.target.checked)} />
+                        <span>{model.id}</span>
+                      </label>
+                    : model.id}
+                  {group.key === 'language' && model.capability === 'multimodal' && (
+                    <span className="ac-provider-cap">{t('视觉')}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )
+      })}
+    </>
   )
 }

@@ -92,7 +92,8 @@ export function collectModelGroups(settings: ModelSettings, lists: Record<string
     const preset = matchedCatalogPreset(connection)
     const provider = preset?.id || connection.provider
     const list = lists[connection.id]
-    const live = (list?.models || []).filter(entry => entryFits(purpose, entry))
+    const hidden = new Set(connection.hidden_model_ids || [])
+    const live = (list?.models || []).filter(entry => entryFits(purpose, entry) && !hidden.has(entry.id))
     for (const entry of live) {
       addOffer(byId, {
         modelId: entry.id, provider, connectionId: connection.id,

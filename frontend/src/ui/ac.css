@@ -565,3 +565,11 @@ details.ac-provider-model-block > summary.ac-provider-model-group::before {
 }
 details.ac-provider-model-block[open] > summary.ac-provider-model-group::before { transform: rotate(45deg); }
 .ac-provider-model-group .count { font-family: var(--ac-font-mono); color: var(--ac-muted); }
+.ac-provider-model-search { width: 100%; margin: 4px 0 12px; }
+.ac-provider-model-bulk { margin-left: auto; display: inline-flex; gap: 4px; }
+.ac-provider-model-bulk button { appearance: none; border: 1px solid var(--ac-line); background: transparent; color: var(--ac-sub); border-radius: 999px; height: 22px; padding: 0 9px; font-size: 11.5px; cursor: pointer; }
+.ac-provider-model-bulk button:hover:not(:disabled) { color: var(--ac-ink); border-color: var(--ac-muted); }
+.ac-provider-model-bulk button:disabled { opacity: .4; cursor: default; }
+.ac-provider-model-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.ac-provider-model-check input { accent-color: var(--ac-ink); }
+.ac-provider-model-list li.is-hidden { color: var(--ac-muted); }

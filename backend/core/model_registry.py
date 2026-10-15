@@ -259,6 +259,24 @@ async def _ensure_metadata():
     await asyncio.shield(_remote_task)
 
 
+def _model_kind(item, name, *, analysis, image, asr):
+    """One display group per model: provider type metadata first, then capability flags."""
+    endpoints = [str(e) for e in (item.get('supported_endpoint_types') or [])]
+    outputs = item.get('output_modalities') or (item.get('architecture') or {}).get('output_modalities') or []
+    lowered = name.lower()
+    if any('video' in e for e in endpoints) or 'video' in outputs:
+        return 'video'
+    if asr:
+        return 'asr'
+    if any('audio' in e or 'speech' in e for e in endpoints) or 'audio' in outputs or any(t in lowered for t in ('tts', '-stt', 'speech', 'audio')):
+        return 'audio'
+    if image:
+        return 'image'
+    if analysis:
+        return 'language'
+    return 'other'
+
+
 def _records(connection, raw, data):
     result = []
     seen = set()
@@ -297,14 +315,20 @@ def _records(connection, raw, data):
             analysis = image = False
         if 'supported_endpoint_types' in item:
             # Provider routing metadata distinguishes generation from editing.
-            endpoints = item['supported_endpoint_types']
+            endpoints = item['supported_endpoint_types'] or []
             image = 'image-generation' in endpoints or '/v1/images/generations' in endpoints
-            analysis = 'openai' in endpoints or '/v1/chat/completions' in endpoints
+            # new-api style gateways: video routes and async "task plugin" models are not chat models,
+            # even when they also list the generic "openai" endpoint. The name guard drops TTS/STT/embedding.
+            video = any('video' in str(e) for e in endpoints)
+            task = str(item.get('owned_by') or '').lower() == 'task plugin'
+            analysis = (('openai' in endpoints or '/v1/chat/completions' in endpoints) and not image and not video and not task
+                        and model_catalog.is_chat_model(name, '', official=False))
         asr = asr_catalog.metadata(connection.provider, name, item.get('supported_endpoint_types', []))
         if asr['asr']:
             analysis = False
+        kind = _model_kind(item, name, analysis=analysis, image=image, asr=asr['asr'])
         result.append({**asr, 'id': name, 'capability': capability, 'capability_source': source if capability else None,
-                       'analysis': analysis, 'image': image, 'asr_preview': bool(item.get('asr_preview'))})
+                       'analysis': analysis, 'image': image, 'kind': kind, 'asr_preview': bool(item.get('asr_preview'))})
     return result
 
 

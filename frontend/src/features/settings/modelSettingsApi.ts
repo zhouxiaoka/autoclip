@@ -22,6 +22,7 @@ export interface Connection {
   base_url_source?: Source
   preset_version?: number
   custom_models?: CustomModelOffer[]
+  hidden_model_ids?: string[]
 }
 export interface Assignment { connection_id: string; model: string; capability: Capability; model_source?: Source }
 export interface ModelSettings {
@@ -47,7 +48,7 @@ export interface ModelSettings {
   min_score_threshold: number
   max_clips_per_collection: number
 }
-export interface ModelEntry { id: string; capability: 'multimodal' | 'text' | null; capability_source?: string; analysis: boolean; image: boolean; asr?: boolean; asr_supported?: boolean; asr_preview?: boolean; asr_note?: string | null }
+export interface ModelEntry { id: string; capability: 'multimodal' | 'text' | null; capability_source?: string; analysis: boolean; image: boolean; asr?: boolean; asr_supported?: boolean; asr_preview?: boolean; asr_note?: string | null; kind?: 'language' | 'image' | 'asr' | 'audio' | 'video' | 'other' }
 export interface ModelList { models: ModelEntry[]; source: 'live' | 'cache' | 'catalog'; preview?: boolean; updated_at: number | null; warning?: string }
 export interface FetchListResult {
   ok?: boolean
