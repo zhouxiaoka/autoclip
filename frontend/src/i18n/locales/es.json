@@ -1,4 +1,5 @@
 {
+  "画面结果不可用，已改用字幕继续制作。": "Resultado visual no disponible; se usan los subtítulos para continuar.",
   "视觉服务暂不可用，已切换为字幕分析继续制作。": "El análisis visual no está disponible temporalmente. Se ha cambiado al análisis de subtítulos para seguir creando clips.",
   "部分 AI 配置无法读取，请重新选择服务并填写密钥。原配置已保留，保存修正时会备份损坏的文件。": "No se pudieron leer algunos ajustes de IA. Vuelve a seleccionar el servicio e introduce la clave. Los ajustes originales se conservan; los archivos dañados se respaldan al guardar las correcciones.",
   "旧版封面配置无效，请在封面设置中重新选择服务。原配置文件已保留。": "La configuración anterior de la portada no es válida. Vuelve a seleccionar un servicio en los ajustes de portada. El archivo original se ha conservado.",
