@@ -25,6 +25,7 @@ PLATFORM_NOTES = """\
 | 平台 | 文件 | 首次打开 |
 |---|---|---|
 | macOS（Apple Silicon）| `AutoClip.Desktop_{ver}_aarch64.dmg` | 未公证：右键应用 → **打开** |
+| macOS（Intel）| `AutoClip Desktop_{ver}_x64.dmg` | 未公证：右键应用 → **打开** |
 | Windows 10/11 x64 | `AutoClip.Desktop_{ver}_x64-setup.exe` | 未签名：SmartScreen → **更多信息 → 仍要运行** |
 | CLI / MCP（Python 3.11+）| `autoclip-{ver}-cli-mcp.zip` / `autoclip_mcp-{ver}-py3-none-any.whl` | ZIP 内含安装与模型配置说明，需 FFmpeg |
 
