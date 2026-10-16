@@ -175,7 +175,7 @@ test('local render timeout retains a safe code for export and automatic partial 
 function seededMath(values){let i=0;return Object.assign(Object.create(Math),{random:()=>values[i++%values.length]})}
 const SK=(28*36+20)/1296   // (SK).toString(36) === '0.sk'
 
-test('seeded ids that would spell a secret marker are regenerated and pass catalog validation',()=>{
+test('seeded ids that would spell a secret marker are regenerated and pass catalog validation',{timeout:5000},()=>{
  const {loadTs}=require('./load-ts.cjs')
  const catalogApi=loadTs(path.resolve(__dirname,'../src/analytics/eventCatalog.ts'))
  const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,'../../docs/analytics/event_catalog.json'),'utf8'))
