@@ -77,3 +77,21 @@ def test_r24_231c_first_state_the_page_reads_is_the_coded_failure_not_a_running_
     final = unreadable.writes[-1]['analysis']
     assert final['status'] == 'failed' and final['phase'] == 'screening' and final['error_code'] == 'source_unreadable'
     assert '无法读取这个视频' in final['error']
+
+
+# ---- #285: a broken video with a valid SRT fails before any paid text-model call
+def test_r24_285_broken_video_with_valid_srt_fails_before_the_text_model(monkeypatch, tmp_path):
+    import asyncio
+    from backend.services import simple_pipeline_adapter as spa
+    settings('subtitle')
+    broken = tmp_path / 'broken.mp4'
+    broken.write_bytes(b'not a video at all' * 64)
+    srt = tmp_path / 'broken.srt'
+    srt.write_text('1\n00:00:00,000 --> 00:00:05,000\nhello\n\n2\n00:00:05,000 --> 00:00:30,000\nworld\n', encoding='utf-8')
+    paid = []
+    monkeypatch.setattr(spa.SimplePipelineAdapter, '_preflight_llm', staticmethod(lambda: paid.append('preflight')))
+    from backend.core import llm_manager
+    monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda *a, **k: paid.append('llm_manager'))
+    result = asyncio.run(spa.SimplePipelineAdapter('r24-285', task_id='t-r24-285').process_project_sync(str(broken), str(srt)))
+    assert result.get('error_code') == 'source_unreadable', result
+    assert paid == [], paid
