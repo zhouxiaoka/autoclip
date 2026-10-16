@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "test": "node --require ./tests/setup.cjs --test tests/*.test.cjs"
+    "test": "node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",

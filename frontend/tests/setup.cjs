@@ -8,6 +8,13 @@
 // 2. Errors that would otherwise vanish fail the test: console.error, an exception thrown inside a
 //    happy-dom event listener (reported on the window), and unhandled rejections.
 'use strict'
+// Loaded through frontend/.npmrc (node-options) for every npm script: do nothing outside the test runner.
+const testFile = process.env.NODE_TEST_CONTEXT && /\.test\.c?js$/.test(process.argv[1] || '')
+if (testFile && process.env.NODE_OPTIONS) {
+  // Processes a test spawns (vite build, python fixtures, nested node) must not inherit this setup.
+  process.env.NODE_OPTIONS = process.env.NODE_OPTIONS.replace(/--require[= ]\S*setup\.cjs/g, '').trim()
+}
+if (testFile || (process.execArgv.includes('--test') && !process.env.NODE_TEST_CONTEXT) || /\.test\.c?js$/.test(process.argv[1] || '')) {
 const vm = require('node:vm')
 const util = require('node:util')
 const fs = require('node:fs')
@@ -73,3 +80,4 @@ nodeTest.afterEach(() => {
   const found = problems.splice(0)
   throw new Error('swallowed error(s) during the test:\n' + found.join('\n'))
 })
+}
