@@ -2,7 +2,6 @@
 unreadable source is classified by one rule on every route (never "install Whisper"); installing / model
 downloading keep their own code on confirm; the readiness report reads one analysis-mode source."""
 import asyncio
-import json
 import subprocess
 from types import SimpleNamespace
 
@@ -12,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from backend.pipeline import media_precheck
 from backend.services import whisper_runtime
-from backend.services.studio import intelligence, planning, readiness
+from backend.services.studio import intelligence, readiness
 from backend.tests import test_r158_whisper_gate_paths as paths
 from backend.tests import test_r158_whisper_gate_r19 as r19
 from backend.tests.test_r158_whisper_gate_r19 import isolated, media, settings  # noqa: F401
