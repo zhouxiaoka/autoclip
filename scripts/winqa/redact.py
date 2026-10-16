@@ -26,6 +26,14 @@ NAME = r'(?:\\+u(?!00(?:2[fF]|5[cC]))' + _HEX + r'|[^\\/"\r\n<>|*?:])+'
 WIN_PATTERN = r'\b([a-zA-Z]:)(' + SEP + r'+)[uU][sS][eE][rR][sS](' + SEP + r'+)(?!<user>)(' + NAME + r')'
 POSIX_PATTERN = r'(?<![\w.\\-])(\\*/|\\+u002[fF])(Users|home)(' + SEP + r'+)(?!<user>)(' + NAME + r')'
 _WIN, _POSIX = re.compile(WIN_PATTERN), re.compile(POSIX_PATTERN)
+# R22: non-UTF-8 bytes (GBK/CP936) are scanned as latin-1 text. A GBK trail byte can be 0x5C '\\' or
+# 0x7C '|' (乗 = 81 5C), which the text rule took for the end of the name, leaking the rest of it.
+# Byte mode reads the name in GBK units: a lead byte 0x81-0xFE always takes the next byte with it.
+# Only used for input that is not valid UTF-8 (UTF-8 never has 0x5C inside a character), so text and
+# UTF-8 input, and the ps1 copy (which only sees .NET strings), keep the plain rule above.
+NAME_GBK = r'(?:\\+u(?!00(?:2[fF]|5[cC]))' + _HEX + r'|[\x81-\xfe][\x40-\x7e\x80-\xfe]|[^\x81-\xfe\\/"\r\n<>|*?:])+'
+_WIN_GBK = re.compile(WIN_PATTERN[:-len(NAME) - 2] + '(' + NAME_GBK + ')')
+_POSIX_GBK = re.compile(POSIX_PATTERN[:-len(NAME) - 2] + '(' + NAME_GBK + ')')
 
 
 def _mask(name: str, before: str, after: str) -> str:
@@ -47,19 +55,21 @@ def _sub(pattern, text, head):
     return pattern.sub(repl, text)
 
 
-def scrub_homes(text: str) -> str:
-    text = _sub(_WIN, text, lambda m: m.group(1) + m.group(2) + 'Users' + m.group(3))
-    return _sub(_POSIX, text, lambda m: m.group(1) + m.group(2) + m.group(3))
+def scrub_homes(text: str, gbk: bool = False) -> str:
+    """gbk=True: text is latin-1-decoded bytes that are not valid UTF-8 (see NAME_GBK)."""
+    win, posix = (_WIN_GBK, _POSIX_GBK) if gbk else (_WIN, _POSIX)
+    text = _sub(win, text, lambda m: m.group(1) + m.group(2) + 'Users' + m.group(3))
+    return _sub(posix, text, lambda m: m.group(1) + m.group(2) + m.group(3))
 
 
 URL = re.compile(r'https?://\S+')
 
 
-def _scrub_text(n: str, key: str, masked: str = None) -> str:
+def _scrub_text(n: str, key: str, masked: str = None, gbk: bool = False) -> str:
     """key / masked (the app's "abc…xyz" form) must be in n's own representation."""
     if key:
         n = n.replace(key, '***')
-    n = scrub_homes(n)
+    n = scrub_homes(n, gbk)
     n = re.sub(r'("api_key_masked"\s*:\s*")[^"]*(")', r'\1***\2', n)
     if masked is None and key and len(key) > 8:
         masked = key[:3] + '…' + key[-3:]
@@ -124,7 +134,7 @@ def _run(folder):
             # outside a match come back unchanged. Masks are ASCII; the key is matched as UTF-8 bytes.
             as_bytes = lambda v: v.encode('utf-8').decode('latin-1')
             masked = as_bytes(key[:3] + '…' + key[-3:]) if key and len(key) > 8 else ''
-            out = _scrub_text(raw.decode('latin-1'), as_bytes(key), masked).encode('latin-1')
+            out = _scrub_text(raw.decode('latin-1'), as_bytes(key), masked, not _is_utf8(raw)).encode('latin-1')
         if out != raw:
             hits += 1
             p.write_bytes(out)
@@ -132,13 +142,26 @@ def _run(folder):
     return hits
 
 
-def scrub_stream(text: str) -> str:
+def _is_utf8(raw: bytes) -> bool:
+    try:
+        raw.decode('utf-8')
+        return True
+    except UnicodeDecodeError:
+        return False
+
+
+def scrub_stream(text: str, gbk: bool = False) -> str:
     """Diagnostics piped from the shell puller: home directories and URLs (signed links)."""
-    return URL.sub('<url>', scrub_homes(text))
+    return URL.sub('<url>', scrub_homes(text, gbk))
+
+
+def scrub_stream_bytes(raw: bytes) -> bytes:
+    """R22: --stdin works on bytes, so GBK diagnostics get the GBK-aware rule and pass through 1:1."""
+    return scrub_stream(raw.decode('latin-1'), not _is_utf8(raw)).encode('latin-1')
 
 
 if __name__ == '__main__':
     if sys.argv[1:] == ['--stdin']:
-        sys.stdout.write(scrub_stream(sys.stdin.read()))
+        sys.stdout.buffer.write(scrub_stream_bytes(sys.stdin.buffer.read()))
     else:
         main(sys.argv[1])

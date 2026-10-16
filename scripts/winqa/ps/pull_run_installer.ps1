@@ -3,6 +3,8 @@ param([string]$Run,[int64]$Total,[int]$N=16,[string]$WantZip='',[string]$WantExe
 # R16 #51: report on stderr and exit with the code; the Write-Err*r cmdlet under 'Stop' would abort before exit.
 # R21: home-directory scrubbing is redact.py's rule, ported line for line (WIN_PATTERN / POSIX_PATTERN
 # copied verbatim, Mask-HomeName == redact._mask); test_pwsh_and_python_redact_identically keeps them equal.
+# R22: redact.py additionally reads non-UTF-8 *bytes* in GBK units (NAME_GBK, 0x5C/0x7C trail bytes); this
+# script only scrubs .NET strings, where 乗 is one char, so the plain text rule is the complete rule here.
 $WinPattern = '\b([a-zA-Z]:)((?:\\*/|\\+u00(?:2[fF]|5[cC])|(?:\\\\)+|(?<![\\/])\\|\\(?!u[0-9a-fA-F]{4}))+)[uU][sS][eE][rR][sS]((?:\\*/|\\+u00(?:2[fF]|5[cC])|(?:\\\\)+|(?<![\\/])\\|\\(?!u[0-9a-fA-F]{4}))+)(?!<user>)((?:\\+u(?!00(?:2[fF]|5[cC]))[0-9a-fA-F]{4}|[^\\/"\r\n<>|*?:])+)'
 $PosixPattern = '(?<![\w.\\-])(\\*/|\\+u002[fF])(Users|home)((?:\\*/|\\+u00(?:2[fF]|5[cC])|(?:\\\\)+|(?<![\\/])\\|\\(?!u[0-9a-fA-F]{4}))+)(?!<user>)((?:\\+u(?!00(?:2[fF]|5[cC]))[0-9a-fA-F]{4}|[^\\/"\r\n<>|*?:])+)'
 function Mask-HomeName([string]$Name, [string]$Before, [string]$After) {

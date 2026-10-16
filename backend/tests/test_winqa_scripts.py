@@ -507,3 +507,48 @@ def test_pwsh_and_python_redact_identically(tmp_path, raw):
     done, _ = _ps(tmp_path, want_zip='', run=raw)
     assert done.returncode == 4, done.stdout + done.stderr
     assert done.stderr.rstrip('\n') == 'artifact digest missing or invalid; refusing to download run ' + redact.scrub_stream(raw)
+
+
+# R22: GBK trail byte 0x5C ('\\', e.g. 乗 81 5C, 淺 9C 5C) or 0x7C ('|', e.g. 億 83 7C) inside a user
+# name used to end the name early in byte mode, leaking every byte after it.
+GBK_5C_NAMES = ['乗', '张乗', '淺野', '乗a', '億x', '张三']
+GBK_5C_ROOTS = [('C:\\Users\\', '\\AppData\\x.log'), ('/home/', '/x'), ('/Users/', ': 拒绝访问')]
+
+
+@pytest.mark.parametrize('name', GBK_5C_NAMES)
+@pytest.mark.parametrize('root', GBK_5C_ROOTS)
+def test_redact_gbk_name_with_5c_trail_byte_masked_whole(tmp_path, name, root):
+    redact = _module('redact')
+    pre, suf = (s.encode('gbk') for s in root)
+    raw = '错误 '.encode('gbk') + pre + name.encode('gbk') + suf + b'\r\n'
+    (tmp_path / 'e.log').write_bytes(raw)
+    redact.main(str(tmp_path))
+    assert (tmp_path / 'e.log').read_bytes() == '错误 '.encode('gbk') + pre + b'<user>' + suf + b'\r\n'
+
+
+@pytest.mark.parametrize('name', GBK_5C_NAMES)
+def test_redact_stdin_gbk_name_with_5c_trail_byte(name):
+    raw = 'C:\\Users\\'.encode('gbk') + name.encode('gbk') + '\\AppData 日志 https://x.invalid/s?sig=1\n'.encode('gbk')
+    p = subprocess.run([sys.executable, str(ROOT / 'redact.py'), '--stdin'], input=raw, capture_output=True)
+    assert p.returncode == 0, p.stderr
+    assert p.stdout == 'C:\\Users\\<user>\\AppData 日志 <url>\n'.encode('gbk')
+
+
+def test_redact_utf8_log_keeps_plain_rule(tmp_path):
+    """UTF-8 logs are not read in GBK units: 张 (E5 BC A0) before '\\' must not swallow the separator."""
+    redact = _module('redact')
+    raw = 'C:\\Users\\张\\AppData\\x.log /home/乗/y\n'.encode('utf-8')
+    (tmp_path / 'e.log').write_bytes(raw)
+    redact.main(str(tmp_path))
+    assert (tmp_path / 'e.log').read_bytes() == b'C:\\Users\\<user>\\AppData\\x.log /home/<user>/y\n'
+
+
+@need_pwsh
+@pytest.mark.parametrize('raw', ['C:\\Users\\乗\\AppData\\x.log', '/home/淺野/x', 'C:\\Users\\億x\\a', '/Users/张乗: 拒绝访问'])
+def test_pwsh_and_python_agree_on_5c_names_as_text(tmp_path, raw):
+    """ps1 only sees .NET strings (乗 is one char there); it must match redact.py's text rule."""
+    redact = _module('redact')
+    done, _ = _ps(tmp_path, want_zip='', run=raw)
+    assert done.returncode == 4, done.stdout + done.stderr
+    assert not any(c in done.stderr for c in '乗淺野億'), done.stderr
+    assert done.stderr.rstrip('\n') == 'artifact digest missing or invalid; refusing to download run ' + redact.scrub_stream(raw)
