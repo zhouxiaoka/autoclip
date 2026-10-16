@@ -741,3 +741,8 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 | T5 `legacy_stopped_or_tagged` | §8.2 / §8.3 旧事件停发，或继续发时每条带 `legacy=true`；死 wrapper 删除 | 仍出现在生产者里的 legacy 事件名，同一文件必须带 `legacy: true` |
 
 机读清单：`dates.close_transition` / `dates.stop_legacy_emit` / `dates.delete_wrappers` 均为 `"1.5.8"`。
+
+
+### 1.5.8 一键重试
+
+终态事件可带 `retry_of`（上一次 attempt 的 `attempt_id`，`t-` 遥测 id）：失败态「重试」按钮复用 `/studio/{id}/analyze`，新 run 生成新 `attempt_id`。不自动续跑。

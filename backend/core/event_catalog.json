@@ -465,6 +465,9 @@
           "error_code",
           "failure_stage"
         ]
+      },
+      "optional_ids": {
+        "retry_of": "attempt_id of the previous failed attempt (t- telemetry id); set only by the failed-state Retry button"
       }
     },
     "studio_generation_finished": {
@@ -485,6 +488,9 @@
       },
       "enums": {
         "outcome": "studio_outcome"
+      },
+      "optional_ids": {
+        "retry_of": "attempt_id of the previous failed attempt (t- telemetry id); set only by the failed-state Retry button"
       }
     },
     "studio_production_finished": {
@@ -501,6 +507,9 @@
       },
       "enums": {
         "outcome": "studio_outcome"
+      },
+      "optional_ids": {
+        "retry_of": "attempt_id of the previous failed attempt (t- telemetry id); set only by the failed-state Retry button"
       }
     },
     "studio_export_finished": {
