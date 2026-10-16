@@ -12,7 +12,7 @@ function runWithSetup(body, { setup = true, env = {} } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ac-setup-'))
   const file = path.join(dir, 'probe.test.cjs')
   fs.writeFileSync(file, `const { test, after } = require('node:test')\nconst vm = require('node:vm')\n${body}\n`)
-  const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT' && k !== 'NODE_OPTIONS'))
+  const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT' && k !== 'NODE_OPTIONS' && k !== 'AC_STRICT_SETUP_OWNER'))
   const result = spawnSync(process.execPath, [...(setup ? ['--require', SETUP] : []), '--test', file], { encoding: 'utf8', cwd: __dirname, env: { ...clean, ...env } })
   fs.rmSync(dir, { recursive: true, force: true })
   return result
@@ -74,6 +74,37 @@ test('#234 an unhandled rejection during a test fails it', () => {
   assert.notEqual(r.status, 0)
 })
 
+test('#299 console.error inside a module loaded through loadTs fails the test (passed silently before)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ac-loadts-'))
+  const mod = path.join(dir, 'noisy.ts')
+  fs.writeFileSync(mod, "export function run(): number { console.error('handler failed: boom'); return 1 }\n")
+  try {
+    failsOnlyWithSetup(`const { loadTs } = require(${JSON.stringify(path.join(__dirname, 'load-ts.cjs'))})
+test('probe', () => { if (loadTs(${JSON.stringify(mod)}).run() !== 1) throw new Error('not loaded') })`, /handler failed: boom/)
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('#300 console.error in an exit listener the test file registers later still fails the file', () => {
+  failsOnlyWithSetup(`test('probe', () => {})\nprocess.on('exit', () => console.error('in a late exit listener'))`, /in a late exit listener/)
+})
+
+test('#302 a child forked by a test file is not hooked again: no second "tests" summary', () => {
+  const r = runWithSetup(`const fs = require('node:fs'); const path = require('node:path'); const os = require('node:os')
+const { fork } = require('node:child_process')
+test('probe', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ac-fork-'))
+  const child = path.join(dir, 'worker.test.cjs')
+  fs.writeFileSync(child, "process.stdout.write(process.env.AC_STRICT_SETUP_OWNER === String(process.pid) ? 'CHILD:HOOKED' : 'CHILD:CLEAN')")
+  const out = await new Promise((resolve, reject) => {
+    const cp = fork(child, { silent: true }); let text = ''
+    cp.stdout.on('data', d => { text += d }); cp.on('error', reject); cp.on('exit', () => resolve(text))
+  })
+  fs.rmSync(dir, { recursive: true, force: true })
+  if (out !== 'CHILD:CLEAN') throw new Error('forked child was hooked: ' + JSON.stringify(out))
+})`)
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+})
+
 // happy-dom arrives with #418, which merges before this PR (agreed order #418 -> #422).
 let happy = null
 try { happy = require.resolve('happy-dom') } catch { /* not installed on this branch */ }
@@ -88,4 +119,8 @@ test('#271 a window created inside the test body, or at module top level, is cov
 test('probe', () => { const win = new Window(); ${throwingClick} })`, /happy-dom event handler/)
   failsOnlyWithSetup(`const { Window } = require(${HAPPY}); const win = new Window({ url: 'http://localhost/' })
 test('probe', () => { ${throwingClick} })`, /happy-dom event handler/)
+})
+test('#301 a window from a native import() of happy-dom is covered too', { skip: !happy && 'happy-dom comes with #418' }, () => {
+  const url = JSON.stringify(happy && require('node:url').pathToFileURL(happy).href)
+  failsOnlyWithSetup(`test('probe', async () => { const { Window } = await import(${url}); const win = new Window(); ${throwingClick} })`, /happy-dom event handler/)
 })

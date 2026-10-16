@@ -6,11 +6,20 @@
 //    unhandled rejection. A problem is never cleared without being reported (#270): one recorded at module
 //    top level, between tests or in a test's own window fails the next test, and anything left after the
 //    last test fails the file at exit. There is no opt-out (#275).
-// 2. Every happy-dom window is covered, whenever and wherever the test creates it (#271).
+//    A problem recorded after the exit check already ran (an exit listener the test file registered later)
+//    still sets a non-zero exit code (#300).
+// 2. Every happy-dom window is covered, whenever and wherever the test creates it (#271), whether the test
+//    loads happy-dom with require() or with a native import() (#301).
 // 3. vm sandboxes only get URL / URLSearchParams when they forgot them (#209). Timers, AbortController and
-//    DOM types are the test's own decision and must be passed explicitly (#272).
+//    DOM types are the test's own decision and must be passed explicitly (#272). Loaders hand their
+//    sandbox the monitored console explicitly (tests/load-ts.cjs, #299).
+// 4. A process forked or spawned by a test file (it inherits --require and NODE_TEST_CONTEXT) is not
+//    hooked again (#302).
 'use strict'
-if (process.env.NODE_TEST_CONTEXT && /\.test\.c?js$/.test(process.argv[1] || '')) {
+const OWNER = 'AC_STRICT_SETUP_OWNER'
+if (process.env.NODE_TEST_CONTEXT && /\.test\.c?js$/.test(process.argv[1] || '') && !process.env[OWNER]
+    && require('node:worker_threads').isMainThread) {
+  process.env[OWNER] = String(process.pid)  // inherited by every child of this test file (#302)
   const vm = require('node:vm')
   const util = require('node:util')
   const Module = require('node:module')
@@ -29,9 +38,16 @@ if (process.env.NODE_TEST_CONTEXT && /\.test\.c?js$/.test(process.argv[1] || '')
 
   // ---- strict errors
   const problems = []
+  let exitChecked = false
+  function record(message) {
+    if (!exitChecked) { problems.push(message); return }
+    // #300: the exit check already ran; a later exit listener must not end the file with code 0
+    process.stderr.write('swallowed error(s) outside any test:\n' + message + '\n')
+    process.exitCode = 1
+  }
   const realError = console.error.bind(console)
-  console.error = (...args) => { problems.push('console.error: ' + util.format(...args)); realError(...args) }
-  process.on('unhandledRejection', reason => { problems.push('unhandled rejection: ' + util.inspect(reason)) })
+  console.error = (...args) => { record('console.error: ' + util.format(...args)); realError(...args) }
+  process.on('unhandledRejection', reason => { record('unhandled rejection: ' + util.inspect(reason)) })
 
   // happy-dom routes every listener / timer exception of every window through
   // BrowserWindow#[dispatchError], so patching it once covers windows created anywhere (#271).
@@ -43,7 +59,7 @@ if (process.env.NODE_TEST_CONTEXT && /\.test\.c?js$/.test(process.argv[1] || '')
     patched.add(proto)
     const original = proto[key]
     proto[key] = function (error) {
-      problems.push('error in a happy-dom event handler: ' + util.inspect(error))
+      record('error in a happy-dom event handler: ' + util.inspect(error))
       return original.call(this, error)
     }
   }
@@ -53,6 +69,10 @@ if (process.env.NODE_TEST_CONTEXT && /\.test\.c?js$/.test(process.argv[1] || '')
     if (request === 'happy-dom' || /[\\/]happy-dom[\\/]lib[\\/]index\.js$/.test(request)) patchHappyDom(exports)
     return exports
   }
+  // #301: native import() bypasses Module._load. The loader hook appends a call to this function to
+  // happy-dom's ESM entry, so the window class is patched before the importing test sees it.
+  globalThis[Symbol.for('autoclip.test.happyDomLoaded')] = patchHappyDom
+  require('node:module').register(require('node:url').pathToFileURL(require('node:path').join(__dirname, 'setup-hooks.mjs')))
 
   function take() { return problems.splice(0) }
   const nodeTest = require('node:test')
@@ -65,6 +85,7 @@ if (process.env.NODE_TEST_CONTEXT && /\.test\.c?js$/.test(process.argv[1] || '')
     if (found.length) throw new Error('swallowed error(s) during the test:\n' + found.join('\n'))
   })
   process.on('exit', () => {
+    exitChecked = true
     const found = take()
     if (!found.length) return
     process.stderr.write('swallowed error(s) outside any test:\n' + found.join('\n') + '\n')

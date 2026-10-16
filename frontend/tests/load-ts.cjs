@@ -36,7 +36,8 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
     }
     throw new Error(id)
   }
-  vm.runInNewContext(outputText, { exports, URL, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set })
+  // console is passed explicitly so a console.error inside the module reaches the strict setup (#299)
+  vm.runInNewContext(outputText, { exports, URL, console, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set })
   return exports
 }
 
