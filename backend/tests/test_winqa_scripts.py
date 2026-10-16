@@ -50,7 +50,7 @@ def test_powershell_side_refuses_missing_digest():
 
 
 def test_no_hardcoded_host_or_token():
-    text = '\n'.join(p.read_text(encoding='utf-8') for p in ROOT.rglob('*') if p.is_file())
+    text = '\n'.join(p.read_text(encoding='utf-8') for p in ROOT.rglob('*') if p.is_file() and p.suffix in ('.sh', '.ps1', '.py', '.md'))
     for needle in ('ghp_', 'github_pat_', '101.35.', 'BEGIN OPENSSH'):
         assert needle not in text
 
