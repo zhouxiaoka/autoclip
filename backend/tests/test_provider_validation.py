@@ -577,3 +577,76 @@ def test_explicit_vision_purpose_runs_vision_validation(monkeypatch):
     assert response.json()['ok'] is True
     assert len(probes) == 1
     assert probes[0].model == 'gpt-4o'
+
+
+def _closed_local_port():
+    import socket
+    sock = socket.socket()
+    sock.bind(('127.0.0.1', 0))
+    port = sock.getsockname()[1]
+    sock.close()  # nothing listens here now -> connection refused
+    return port
+
+
+def test_e6_ollama_not_running_gets_inline_start_hint():
+    from backend.services.provider_validation import LOCAL_SERVICE_DOWN_HINT_KEY
+    port = _closed_local_port()
+    conn = ai.Connection(id='o1', name='Ollama', provider='ollama', base_url=f'http://127.0.0.1:{port}/v1')
+    result = validate_connection(conn, 'qwen2.5:7b')
+    assert result.ok is False
+    assert result.error_type == 'connection'
+    assert result.hint_key == LOCAL_SERVICE_DOWN_HINT_KEY
+    assert 'Ollama' in result.hint_key
+    assert result.as_api()['hint_key'] == LOCAL_SERVICE_DOWN_HINT_KEY
+
+
+def test_e6_remote_connection_error_keeps_generic_hint(monkeypatch):
+    from types import SimpleNamespace
+    from backend.services import provider_validation as pv
+    fetched = SimpleNamespace(recommended={}, truncated=False, message_key='')
+    monkeypatch.setattr(pv, '_get_models', lambda *a, **k: ([], pv._classify(None, '', error_name='ConnectError'), fetched))
+    result = validate_connection(_connection(base_url='https://api.example.com/v1'), 'm')
+    assert result.error_type == 'connection'
+    assert result.hint_key == HINT_KEYS[UpstreamErrorType.CONNECTION]
+
+
+def test_e6_local_service_down_hint_exists_in_all_eight_locales():
+    from pathlib import Path
+    from backend.services.provider_validation import LOCAL_SERVICE_DOWN_HINT_KEY
+
+    root = Path(__file__).resolve().parents[2] / 'frontend' / 'src' / 'i18n' / 'locales'
+    langs = ('zh', 'en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru')
+    catalogs = {lang: json.loads((root / f'{lang}.json').read_text(encoding='utf-8')) for lang in langs}
+    assert catalogs['zh'][LOCAL_SERVICE_DOWN_HINT_KEY] == LOCAL_SERVICE_DOWN_HINT_KEY
+    for lang in langs:
+        text = catalogs[lang].get(LOCAL_SERVICE_DOWN_HINT_KEY)
+        assert text and str(text).strip(), f'{lang} missing E6 local-service-down hint'
+        if lang != 'zh':
+            assert text != LOCAL_SERVICE_DOWN_HINT_KEY, f'{lang} still uses Chinese source string'
+            assert 'Ollama' in text, f'{lang} should name Ollama'
+
+
+# R10 #399: only loopback counts as "this machine"; LAN / .local gateways keep the generic hint.
+@pytest.mark.parametrize('base,local', [
+    ('http://127.0.0.1:11434/v1', True),
+    ('http://127.8.0.1:11434/v1', True),
+    ('http://localhost:1234/v1', True),
+    ('http://ollama.localhost:11434/v1', True),
+    ('http://[::1]:11434/v1', True),
+    ('http://192.168.1.20:11434/v1', False),
+    ('http://10.0.0.5:11434/v1', False),
+    ('http://172.16.3.4:8000/v1', False),
+    ('http://gpu-box.local:11434/v1', False),
+    ('http://169.254.10.10:11434/v1', False),
+    ('http://host.docker.internal:11434/v1', False),
+    ('https://api.example.com/v1', False),
+])
+def test_r10_local_service_down_hint_only_for_loopback(monkeypatch, base, local):
+    from types import SimpleNamespace
+    from backend.services import provider_validation as pv
+    fetched = SimpleNamespace(recommended={}, truncated=False, message_key='')
+    monkeypatch.setattr(pv, '_get_models', lambda *a, **k: ([], pv._classify(None, '', error_name='ConnectError'), fetched))
+    result = validate_connection(_connection(base_url=base), 'm')
+    assert result.error_type == 'connection'
+    expected = pv.LOCAL_SERVICE_DOWN_HINT_KEY if local else HINT_KEYS[UpstreamErrorType.CONNECTION]
+    assert result.hint_key == expected
