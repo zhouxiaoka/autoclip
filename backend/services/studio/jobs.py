@@ -1148,6 +1148,7 @@ def _auto_generate(project_id, plan):
             data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived_drafts)
             if events:
                 data['events'] = events
+            attempts.own_outputs(data, variants)  # R27 #376: produced by this run's attempt and its plan
             data['output_variants'].extend(variants)
             data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **_generation_route(data.get('plan')))
             data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
@@ -1461,7 +1462,7 @@ def _retry_parent(data, parent_attempt_id):
     return attempts.check_parent(data, parent_attempt_id)
 
 
-def _variant_attempt(data, retry):
+def _variant_attempt(data, retry, variant):
     """「重试这条」 is a new aggregate generation attempt; a second one while it is open joins it (serial)."""
     open_now = attempts.current(data)
     if open_now and open_now['kind'] == 'generation' and open_now.get('trigger') == 'variant_retry':
@@ -1470,7 +1471,8 @@ def _variant_attempt(data, retry):
         parent = _retry_parent(data, (retry or {}).get('parent_attempt_id'))
         receipt = attempts.open_attempt(data, 'generation', trigger='variant_retry', parent=parent,
                                         run_id=uuid.uuid4().hex, key=(retry or {}).get('key'), now=store.now())
-        attempts.inherit_plan(receipt, parent)  # R26 #364: the plan that produced the outputs being retried
+    # R27 #377: the plan and outputs come from the attempt that produced THIS variant, not the retry parent
+    attempts.inherit_plan(receipt, data, variant)
     data['generation']['attempt_id'] = receipt['attempt_id']
     return receipt
 
@@ -1492,7 +1494,7 @@ def retry_variant(project_id, variant_id, retry=None):
             item = next(value for value in data['output_variants'] if value['id'] == variant_id)
             if item.get('status') != 'failed':
                 raise ValueError('只有失败的成片版本可以重试')
-            receipt = _variant_attempt(data, retry)
+            receipt = _variant_attempt(data, retry, item)
             data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
             return _start_preparing(data, item)
         attempt_id = store.change(project_id, prepare)
@@ -1509,7 +1511,7 @@ def retry_variant(project_id, variant_id, retry=None):
         item.pop('error', None)
         item.pop('error_code', None)
         data['generation'].update(status='rendering')
-        receipt = _variant_attempt(data, retry)
+        receipt = _variant_attempt(data, retry, item)
         data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': receipt['run_id'], 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
     store.change(project_id, update)
     _dispatch_pending_variants(project_id)

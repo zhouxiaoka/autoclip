@@ -82,7 +82,8 @@ test('automatic failures report the failed stage, HTTP status and route, rejecti
  t.observeStudio(t.list()[0],state)
  const props=events.find(e=>e.name==='studio_generation_finished').props
  assert.equal(props.failure_stage,'screening');assert.equal(props.http_status,400)
- assert.equal(props.route,'visual');assert.equal(props.recommendation_mode,'ai')
+ // R27 #378: screening failed before production bound a plan, so the stored plan's route/mode are not this attempt's
+ assert.equal(props.route,undefined);assert.equal(props.recommendation_mode,undefined)
  assert.equal(JSON.stringify(props).includes('private'),false)
  const bad=workflow.safeStudioProperties({failure_stage:'private-stage',http_status:200,route:'private-route'})
  assert.equal(bad.failure_stage,undefined);assert.equal(bad.http_status,undefined);assert.equal(bad.route,undefined)

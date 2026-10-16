@@ -121,16 +121,36 @@ def bind_run(receipt, run_id):
     receipt['run_id'] = run_id
 
 
-def inherit_plan(receipt, parent):
-    """R26 #364: a variant retry re-renders outputs of the parent attempt, so it belongs to the plan that produced
-    them (the parent's), not whatever plan the workspace holds now. The parent's frozen enums go along in case that
-    plan has been replaced by a re-screen since."""
-    if receipt is None or not parent:
+def own_outputs(data, variants):
+    """R27 #376/#377: output ownership is stored, not inferred. Each output is stamped, when it is created, with the
+    open attempt that produced it and that attempt's bound plan. Receipts count and inherit from these stamps only."""
+    receipt = current(data)
+    if not receipt:
         return
-    if parent.get('plan_id'):
-        receipt['plan_id'] = parent['plan_id']
-    summary = parent.get('summary') or {}
-    inherited = {k: v for k, v in (('degrade_reason', parent.get('degrade_reason') or (parent.get('inherited') or {}).get('degrade_reason')),
+    for variant in variants:
+        variant['produced_by_attempt'] = receipt['attempt_id']
+        if receipt.get('plan_id'):
+            variant['produced_by_plan'] = receipt['plan_id']
+
+
+def inherit_plan(receipt, data, variant):
+    """R26 #364 / R27 #377: a variant retry re-renders an output, so it belongs to the plan that produced that
+    output (the variant's own stamp) and reports the outputs of the attempt that produced it - not the retry
+    parent, which is just the latest failure (a re-screen may have failed in between). The source attempt's frozen
+    enums go along in case its plan has been replaced since. A joined retry adds its variant's producer."""
+    if receipt is None or not isinstance(variant, dict) or not variant.get('produced_by_attempt'):
+        return
+    sources = receipt.setdefault('sources', [])
+    if variant['produced_by_attempt'] in sources:
+        return
+    sources.append(variant['produced_by_attempt'])
+    if len(sources) > 1:
+        return  # the first retried output decides the plan of this aggregate attempt
+    if variant.get('produced_by_plan'):
+        receipt['plan_id'] = variant['produced_by_plan']
+    source = find(data, variant['produced_by_attempt']) or {}
+    summary = source.get('summary') or {}
+    inherited = {k: v for k, v in (('degrade_reason', source.get('degrade_reason') or (source.get('inherited') or {}).get('degrade_reason')),
                                    *((k, summary.get(k)) for k in PLAN_KEYS)) if isinstance(v, str) and v}
     if inherited:
         receipt['inherited'] = inherited
@@ -210,11 +230,12 @@ def _millis(value):
     return round((parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp() * 1000)
 
 
-def generation_summary(data) -> dict:
+def generation_summary(data, owners=None) -> dict:
     """R25 #347: the generation terminal's counts, frozen in the receipt at settle from THIS attempt's workspace
     (same rules as frontend generationSummary, which it replaces for the terminal). Counts and enums only."""
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else {}
-    all_variants = [v for v in data.get('output_variants') or [] if isinstance(v, dict)]
+    all_variants = [v for v in data.get('output_variants') or [] if isinstance(v, dict)
+                    and (owners is None or v.get('produced_by_attempt') in owners)]
     variants = [v for v in all_variants if v.get('status') != 'on_demand']
     templates = {d.get('id'): d.get('packaging') for d in data.get('drafts') or [] if isinstance(d, dict)}
     packaged = [templates.get(v.get('draft_id')) for v in variants if templates.get(v.get('draft_id'))]
@@ -267,10 +288,13 @@ def generation_summary(data) -> dict:
 
 
 def _owned_summary(receipt, data):
-    """R26 #363: output counts belong to this attempt only once it has its own (or inherited) plan, i.e. it reached
-    production; an attempt that failed before that keeps the request fields but not the previous run's outputs."""
-    summary = generation_summary(data)
-    return summary if receipt.get('plan_id') else {k: v for k, v in summary.items() if k in OUTPUT_FREE}
+    """R26 #363 / R27 #376: output counts are those of the outputs this attempt produced (or, for a variant retry,
+    the outputs of the attempt(s) it re-renders) by their stored produced_by_attempt - having a plan is not owning
+    the workspace. An attempt that produced nothing keeps the request fields but no output counts."""
+    owners = {receipt['attempt_id'], *(receipt.get('sources') or ())}
+    if not any(isinstance(v, dict) and v.get('produced_by_attempt') in owners for v in data.get('output_variants') or []):
+        return {k: v for k, v in generation_summary(data, owners).items() if k in OUTPUT_FREE}
+    return generation_summary(data, owners)
 
 
 def reconcile(data, now=None):
@@ -296,4 +320,4 @@ def reconcile(data, now=None):
 
 def public(receipt) -> dict:
     """What the API returns: the receipt without the idempotency key."""
-    return {k: v for k, v in receipt.items() if k not in ('idempotency_key', 'joined_keys', 'plan_id', 'inherited')}
+    return {k: v for k, v in receipt.items() if k not in ('idempotency_key', 'joined_keys', 'plan_id', 'inherited', 'sources')}

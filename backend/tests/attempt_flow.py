@@ -41,14 +41,33 @@ def render_outcome(pid, statuses):
         data.setdefault('drafts', [])
         data['analysis'] = {**(data.get('analysis') or {}), 'status': 'running', 'phase': 'rendering'}
         data['generation'].update(status='rendering')
-        variants = []
+        # R27 #376/#377: an output that already exists keeps the attempt that produced it (a variant retry re-renders
+        # it); a new one is produced by the open attempt and stamped by the same product call jobs.py persists with.
+        existing = {v.get('id'): v for v in data.get('output_variants') or []}
+        variants, created = [], []
         for vid, (status, code, upstream) in statuses.items():
             if not any(d['id'] == 'd-' + vid for d in data['drafts']):
                 data['drafts'].append({'id': 'd-' + vid, 'title': '', 'scenes': []})
-            variants.append({'id': vid, 'draft_id': 'd-' + vid, 'strategy_id': 'douyin', 'status': status,
-                             **({'error_code': code} if code else {}), **({'upstream_error_type': upstream} if upstream else {})})
-        data['output_variants'] = variants
+            item = existing.get(vid)
+            if item is None:
+                item = {'id': vid, 'draft_id': 'd-' + vid, 'strategy_id': 'douyin'}
+                created.append(item)
+            for key in ('error_code', 'upstream_error_type'):
+                item.pop(key, None)
+            item.update(status=status, **({'error_code': code} if code else {}), **({'upstream_error_type': upstream} if upstream else {}))
+            variants.append(item)
+        attempts.own_outputs(data, created)
+        data['output_variants'] = [v for v in data.get('output_variants') or [] if v.get('id') not in statuses] + variants
         store.settle_generation(data)
+    store.change(pid, mutate)
+
+
+def production_failed_before_outputs(pid, code='timeout'):
+    """The automatic run wrote its plan and started production, then failed before any output was created
+    (_auto_generate / _content_drafts failure path)."""
+    def mutate(data):
+        data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': data['analysis'].get('run_id'), 'error_code': code, 'failure_stage': 'analyze'}
+        data['generation'].update(status='failed', error_code=code, failure_stage='analyze')
     store.change(pid, mutate)
 
 

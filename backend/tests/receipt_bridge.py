@@ -2,6 +2,7 @@
 attempt receipt for a workspace snapshot a frontend telemetry test observes. No receipt rule lives here: the
 attempt is opened, bound and settled by backend.services.studio.attempts through store.write, exactly as jobs.py
 does (open with the run -> running state written -> terminal state written -> attempts.reconcile settles it).
+R27 #378: plan binding and output ownership happen only when the snapshot got past screening, as in the real entry.
 Only the attempt tokens are deterministic (seeded) so repeated observations see the same attempt_id.
 
 stdin  {"kind": "generation"|"production", "run_id": str, "seed": str, "retry": bool, "snapshot": {...}}
@@ -58,7 +59,11 @@ def materialize(payload, attempts, store):
     if parent:
         state['attempt_sequence'] = store.read(pid).get('attempt_sequence')
     receipt = attempts.open_attempt(state, kind, trigger='retry' if parent else 'initial', parent=parent, run_id=run, now=store.now())
-    attempts.bind_plan(receipt, plan)
+    # R27 #378: like the real entry, the plan is bound only once screening handed over to production
+    # (jobs._inspect.start_automatic / confirm_project); a snapshot that failed in screening never had its plan.
+    reached_production = (snapshot.get('analysis') or {}).get('phase') != 'screening'
+    if reached_production:
+        attempts.bind_plan(receipt, plan)
     if kind == 'generation' and isinstance(state.get('generation'), dict):
         state['generation']['attempt_id'] = receipt['attempt_id']
     store.write(pid, state)
@@ -70,6 +75,8 @@ def materialize(payload, attempts, store):
     terminal['analysis'] = {**analysis, 'run_id': analysis.get('run_id') or run, **({'phase': analysis.get('phase') or 'production'} if kind == 'production' else {})}
     if kind == 'generation' and isinstance(terminal.get('generation'), dict):
         terminal['generation'] = {**terminal['generation'], 'attempt_id': receipt['attempt_id']}
+    if reached_production:  # R27 #376: the snapshot's outputs were created by this attempt's production
+        attempts.own_outputs(terminal, [v for v in terminal.get('output_variants') or [] if isinstance(v, dict)])
     store.write(pid, terminal)
     data = store.read(pid)
     return {'attempts': [attempts.public(a) for a in attempts.receipts(data)], 'attempt_id': receipt['attempt_id'], 'run_id': run}
