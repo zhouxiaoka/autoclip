@@ -324,6 +324,11 @@ export class WorkflowTracker {
     const w = [...this.watches].reverse().find(w => ['studio-screen', 'studio-generation', 'studio-production'].includes(w.kind) && (w.projectId || w.id) === projectId && w.settled)
     return w?.failed && w.token ? w.token : undefined
   }
+  /** 1.5.8 「重试这条」: the variant's own last failed attempt, else the project's failed/partial attempt. */
+  variantRetryOf(projectId: string, variantId: string): string | undefined {
+    const own = [...this.watches].reverse().find(w => w.kind === 'studio-variant' && w.id === variantId && w.settled)
+    return own?.failed && own.token ? own.token : this.lastFailedAttempt(projectId)
+  }
   /** retry_of carried by the latest screen attempt of this project (manual flow: production inherits it). */
   retryLink(projectId: string): string | undefined {
     const w = [...this.watches].reverse().find(w => w.kind === 'studio-screen' && (w.projectId || w.id) === projectId)
@@ -382,12 +387,12 @@ export class WorkflowTracker {
         event = 'studio_export_finished'; outcome = job.status; details = { duration_ms: job.duration_ms, error_code: job.error_code, outro_applied: job.result?.outro_applied, warning_count: job.result?.warnings?.length }
       }
     } else if (w.kind === 'studio-screen') {
-      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, failure_stage: snapshot.analysis?.failure_stage, degrade_reason: snapshot.plan?.degrade_reason }
+      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, failure_stage: snapshot.analysis?.failure_stage, http_status: snapshot.analysis?.http_status, upstream_error_type: snapshot.analysis?.upstream_error_type, degrade_reason: snapshot.plan?.degrade_reason }
       const automatic = !!snapshot.generation?.auto_start && ['production', 'rendering'].includes(snapshot.analysis?.phase || '')
       if (automatic) {
         // Automatic output skips confirmation: screening ended once production started, whatever came after.
         event = 'studio_screen_finished'; outcome = 'auto_started'
-        details = { ...details, duration_ms: undefined, error_code: undefined, failure_stage: undefined, recommendation_mode: snapshot.plan?.mode, analysis_mode: snapshot.plan?.recommended_analysis, subtitle_status: snapshot.plan?.local_evidence?.subtitle_status }
+        details = { ...details, duration_ms: undefined, error_code: undefined, failure_stage: undefined, http_status: undefined, upstream_error_type: undefined, recommendation_mode: snapshot.plan?.mode, analysis_mode: snapshot.plan?.recommended_analysis, subtitle_status: snapshot.plan?.local_evidence?.subtitle_status }
       } else if (snapshot.analysis?.status === 'failed' && snapshot.analysis?.phase !== 'production') { event = 'studio_screen_finished'; outcome = 'failed' }
       else if (snapshot.analysis?.status === 'awaiting_confirmation' && snapshot.plan?.id) {
         event = 'studio_screen_finished'

@@ -23,30 +23,19 @@ def test_cloud_asr_http_error_keeps_status_and_type(status, upstream, code):
     assert ctx == {'failure_stage': 'subtitle', 'http_status': status, 'upstream_error_type': upstream}
 
 
-def test_missing_asr_key_is_user_cause():
-    failure = cloud_transcription_failure(CloudTranscriptionError('k', upstream_error_type='invalid_key'))
-    assert failure.code == 'authentication'
-    assert studio_failure_context(failure, 'screening')['upstream_error_type'] == 'invalid_key'
-
-
-def test_transcribe_http_status_error_carries_status(monkeypatch, tmp_path):
-    """The real httpx error path in cloud_transcription.transcribe keeps the status (no body/URL)."""
+def test_missing_asr_key_real_transcribe_path_is_user_cause(tmp_path):
+    """R19 #109: real cloud_transcription.transcribe with an empty key; dropping the invalid_key tag must fail this."""
+    from backend.services import ai_model_settings as ai
     from backend.services import cloud_transcription as ct
-    request = httpx.Request('POST', 'https://asr.example/v1/audio')
-    response = httpx.Response(401, request=request, text='{"error":"secret-body sk-abc"}')
-    err = None
-    try:
-        try:
-            raise httpx.HTTPStatusError('denied', request=request, response=response)
-        except httpx.HTTPStatusError as exc:
-            raise ct.CloudTranscriptionError(f'云端转写请求失败（HTTP {exc.response.status_code}），请检查密钥、额度和模型权限。',
-                                             http_status=exc.response.status_code) from None
-    except ct.CloudTranscriptionError as e:
-        err = e
-    assert err.http_status == 401 and err.upstream_error_type == 'invalid_key'
-    assert 'sk-abc' not in str(err) and 'asr.example' not in str(err)
-    src = (ct.__file__ and open(ct.__file__, encoding='utf-8').read())
-    assert 'http_status=exc.response.status_code' in src
+    settings = ai.ModelSettings(connections=[ai.Connection(id='asr', name='ASR', provider='openai', api_key='')],
+                                transcription=ai.Transcription(provider='cloud', model='whisper-1', connection_id='asr'))
+    video = tmp_path / 'v.mp4'; video.write_bytes(b'0')
+    with pytest.raises(CloudTranscriptionError) as info:
+        ct.transcribe(video, None, settings)
+    assert info.value.upstream_error_type == 'invalid_key' and info.value.http_status is None
+    failure = cloud_transcription_failure(info.value)
+    assert failure.code == 'authentication'
+    assert studio_failure_context(failure, 'screening') == {'failure_stage': 'subtitle', 'upstream_error_type': 'invalid_key'}
 
 
 def test_adapter_result_and_run_content_round_trip_upstream(monkeypatch, tmp_path):
@@ -66,14 +55,61 @@ def test_adapter_result_and_run_content_round_trip_upstream(monkeypatch, tmp_pat
     assert studio_failure_context(info.value, 'production')['failure_stage'] == 'subtitle'
 
 
-def test_adapter_failed_dict_includes_upstream_type():
-    src = open(__import__('backend.services.simple_pipeline_adapter', fromlist=['x']).__file__, encoding='utf-8').read()
-    assert 'failed["upstream_error_type"] = e.upstream_error_type' in src
 
 
-def test_screening_failure_history_keeps_stage_and_upstream(monkeypatch):
-    """Real _inspect failure path writes failure_stage/upstream_error_type into analysis (history)."""
+class _Store:
+    def __init__(self, state):
+        self.state = state
+
+    def change(self, pid, fn):
+        return fn(self.state)
+
+    def read(self, pid, **k):
+        return self.state
+
+
+def _fake_jobs(monkeypatch, state, tmp_path):
     from backend.services.studio import jobs
-    src = open(jobs.__file__, encoding='utf-8').read()
-    assert "data['analysis'] = {**failure, **context}" in src
-    assert "'duration_ms': round((monotonic() - started) * 1000), **context}" in src
+    fake = _Store(state)
+    monkeypatch.setattr(jobs.store, 'change', fake.change)
+    monkeypatch.setattr(jobs.store, 'read', fake.read)
+    monkeypatch.setattr(jobs.store, 'raise_owned_read_error', lambda e: None)
+    monkeypatch.setattr(jobs, 'mark_project', lambda *a, **k: None)
+    monkeypatch.setattr(jobs, 'capture_studio_exception', lambda *a, **k: None)
+    video = tmp_path / 'input.mp4'; video.write_bytes(b'0')
+    monkeypatch.setattr(jobs, 'source', lambda pid: video)
+    return jobs
+
+
+def _asr_401():
+    return cloud_transcription_failure(CloudTranscriptionError('HTTP 401', http_status=401))
+
+
+def test_screening_failure_history_keeps_stage_status_upstream(monkeypatch, tmp_path):
+    """R19 #110 (behavior): a real _inspect failure writes stage/status/upstream into analysis history."""
+    state = {'analysis': {'status': 'running', 'phase': 'screening'}, 'generation': {}}
+    jobs = _fake_jobs(monkeypatch, state, tmp_path)
+    import backend.services.studio.planning as planning
+    def boom(*a, **k):
+        raise _asr_401()
+    monkeypatch.setattr(planning, 'recommend', boom)
+    from backend.services.studio.models import ImportOptions
+    jobs._inspect('p', ImportOptions(), None, None)
+    a = state['analysis']
+    assert a['status'] == 'failed' and a['error_code'] == 'authentication'
+    assert (a['failure_stage'], a['http_status'], a['upstream_error_type']) == ('subtitle', 401, 'invalid_key')
+    assert 'secret' not in str(a)
+
+
+@pytest.mark.parametrize('goals', [['content'], ['content', 'highlight']])
+def test_manual_produce_selected_failure_keeps_stage_status_upstream(monkeypatch, tmp_path, goals):
+    """R19 #106: manual-mode _produce_selected persists the context so 「去设置」 can point at speech."""
+    state = {'analysis': {'status': 'running', 'phase': 'production'}, 'drafts': []}
+    jobs = _fake_jobs(monkeypatch, state, tmp_path)
+    def fail(*a, **k):
+        raise _asr_401()
+    monkeypatch.setattr(jobs, 'run_content', fail)
+    jobs._produce_selected('p', {'selected_goals': goals, 'confirmed_preferences': {}, 'confirmed_analysis': 'subtitle'})
+    a = state['analysis']
+    assert a['status'] == 'failed' and a['error_code'] == 'authentication'
+    assert (a['failure_stage'], a['http_status'], a['upstream_error_type']) == ('subtitle', 401, 'invalid_key')

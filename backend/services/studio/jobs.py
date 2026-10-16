@@ -1700,6 +1700,7 @@ def _produce_selected(project_id, plan):
     labels = {'content':'内容切片','highlight':'精彩高光','promo':'推广成片'}
     errors = []
     error_codes = []
+    contexts = []  # 1.5.8: failure_stage / http_status / upstream_error_type per failed goal (no text)
     diagnostics = []
     visual_error = None
     events = coverage = None
@@ -1762,6 +1763,7 @@ def _produce_selected(project_id, plan):
                 store.raise_owned_read_error(error)
                 failed_goals.append(goal)
                 error_codes.append(studio_error_code(error))
+                contexts.append(studio_failure_context(error, 'production'))
                 if all(error is not previous_error for previous_error in reported):
                     capture_studio_exception(error, 'production', analysis_mode=plan.get('confirmed_analysis', 'subtitle'), goal=goal)
                     reported.append(error)
@@ -1780,6 +1782,7 @@ def _produce_selected(project_id, plan):
         if errors:
             result['error'] = '；'.join(errors)
             result['error_code'] = error_codes[0] if len(set(error_codes)) == 1 else 'multiple'
+            result.update(contexts[0])  # first failure decides where 「去设置」 points (ASR vs analysis)
         store.change(project_id, lambda data:data.update(analysis=result))
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
@@ -1788,7 +1791,8 @@ def _produce_selected(project_id, plan):
         failure = {'status':'failed','error':str(error)[:700], 'error_code':studio_error_code(error),
             'outcome':'partial' if succeeded_goals else 'failed', 'requested_goals':plan['selected_goals'],
             'succeeded_goals':succeeded_goals, 'failed_goals':[g for g in plan['selected_goals'] if g not in succeeded_goals],
-            'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000)}
+            'result_count':result_count, 'duration_ms':round((monotonic() - started) * 1000),
+            **studio_failure_context(error, 'production')}
         try:
             store.change(project_id, lambda data:data.update(analysis=failure))
             mark_project(project_id,'failed')

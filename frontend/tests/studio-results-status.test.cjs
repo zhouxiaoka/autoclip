@@ -131,3 +131,11 @@ for (const [code, stage, destination] of [['authentication', 'subtitle', '/setti
     navigations.length = 0; go.onClick(); assert.deepEqual(navigations, [destination])
   })
 }
+test('R19 #106 manual mode: transcription 401 (authentication @ subtitle) -> 「去设置」 opens speech', () => {
+  const buttons = []
+  render(false, 'production', 'failed', buttons, [], 'authentication', 'subtitle')
+  assert.equal(buttons.some(b => b.children === '重试'), false)
+  navigations.length = 0
+  buttons.find(b => b.children === '去设置').onClick()
+  assert.deepEqual(navigations, ['/settings?section=speech'])
+})
