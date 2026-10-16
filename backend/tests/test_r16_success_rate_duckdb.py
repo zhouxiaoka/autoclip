@@ -490,3 +490,66 @@ def test_362_legacy_rule_mutations_are_caught(figure, name):
         return [key(r) for r in e.run(stmt)]
     cases = [fixture(), _legacy_out_of_order(fixture(), False), _legacy_out_of_order(fixture(), True)]
     assert any(got(c) != want(c) for c in cases), name
+
+
+# --- R27 #380 (PM P3-b): the documented ordering key is the SQL's real key, (seq, leaf, ts) ---
+
+ORD = '(ifNull(seq, 0), leaf, ts) AS ord'
+
+
+def test_380_header_and_tracking_plan_name_the_real_ordering_key():
+    for stmt in (statements()[0], statements()[4]):
+        assert stmt.count(ORD) == 1            # the key the docs describe is the one both figures use
+    header = SQL.split('WITH base AS', 1)[0]
+    assert '(attempt_sequence, leaf, ts)' in header, 'success_rate.sql header must spell out the ordering key'
+    plan = (ROOT / 'docs/analytics/TRACKING_PLAN.md').read_text(encoding='utf-8')
+    assert '(attempt_sequence, leaf, ts)' in plan, 'TRACKING_PLAN §6.1 must spell out the ordering key'
+
+
+# --- R27 #381 (PM P3-c): one flow mixing attempts with and without attempt_sequence ---
+
+def _mixed(retry_linked, old_outcome, new_outcome):
+    """z1 is a pre-#419 attempt (no sequence), z2 a newer retry WITH a sequence, same flow. z2's terminal is
+    observed first and z1 is the chain end only by time, so the sequence alone must decide."""
+    e = Events()
+    e.add('Z', 30, attempt_id='z2', flow_id='FZ', attempt_sequence='1', outcome=new_outcome,
+          **({'retry_of': 'z1'} if retry_linked else {}), **({} if new_outcome == 'completed' else {'error_code': 'timeout'}))
+    e.add('Z', 40, attempt_id='z1', flow_id='FZ', outcome=old_outcome,
+          **({} if old_outcome == 'completed' else {'error_code': 'timeout'}))
+    return e
+
+
+MIXED_CASES = [  # (retry_linked, z1 old, z2 new sequenced) -> flow_ok; the sequenced attempt always wins, never unknown
+    (True, 'error', 'completed', 1),     # Dong: old unsequenced, new sequenced retry_of old -> new wins
+    (False, 'error', 'completed', 1),
+    (False, 'completed', 'error', 0),    # the later-observed unsequenced success must not win
+]
+
+
+def _mixed_result(stmt, case):
+    linked, old, new, _ = case
+    [row] = _mixed(linked, old, new).run(stmt)
+    return row['flow_ok'], row['fq_all'], row['unknown_flows']
+
+
+@pytest.mark.parametrize('figure', [0, 4])
+@pytest.mark.parametrize('case', MIXED_CASES)
+def test_381_mixed_flow_takes_the_last_sequenced_attempt(figure, case):
+    assert _mixed_result(statements()[figure], case) == (case[3], 1, 0)
+
+
+MIXED_MUTATIONS = {
+    'sequence after time': (ORD, '(leaf, ts, ifNull(seq, 0)) AS ord'),
+    'any unsequenced attempt makes it unknown': ("(countIf(seq IS NOT NULL) = 0 AND sum(leaf) > 1) AS unknown",
+                                                 "(countIf(seq IS NULL) > 0 AND count() > 1) AS unknown"),
+}
+
+
+@pytest.mark.parametrize('figure', [0, 4])
+@pytest.mark.parametrize('name', MIXED_MUTATIONS)
+def test_381_mixed_flow_mutations_are_caught(figure, name):
+    old, new = MIXED_MUTATIONS[name]
+    stmt = statements()[figure]
+    assert old in stmt
+    mutated = stmt.replace(old, new)
+    assert any(_mixed_result(mutated, c) != (c[3], 1, 0) for c in MIXED_CASES), name
