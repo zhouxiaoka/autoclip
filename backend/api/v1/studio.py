@@ -53,7 +53,8 @@ async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route
     only a gate refusal becomes a 422 (R20 #146)."""
     from backend.services.studio import readiness
     try:
-        readiness.ensure_local_transcription_for_import(srt_available=srt_available, route=route, goal=goal)
+        # R24 #283: the first (file-less) check reads settings and the runtime state: also off the event loop.
+        await run_in_threadpool(readiness.ensure_local_transcription_for_import, srt_available=srt_available, route=route, goal=goal)
         return None
     except readiness.TranscriptionNotReady:
         pass
