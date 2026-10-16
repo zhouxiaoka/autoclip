@@ -66,6 +66,7 @@ WITH sample_cohort AS (
            (event = 'studio_generation_finished' AND properties.outcome = 'partial'
             AND toFloat(properties.completed_variant_count) > 0))
       AND timestamp >= toDateTime({date_to}, 'UTC') - INTERVAL 14 DAY AND timestamp < toDateTime({date_to}, 'UTC')
+      AND person_id NOT IN COHORT {internal_cohort_id}  -- R20 #141: same exclusion as sample_cohort
 )
 SELECT uniq(s.distinct_id) AS observed_sample_devices,
        uniqIf(s.distinct_id, r.rendered_at > s.sample_at AND r.rendered_at <= s.sample_at + INTERVAL 7 DAY)

@@ -354,6 +354,8 @@ person_id NOT IN COHORT {internal_cohort_id}
 
 `partial` 算出片未成功（分子只认 `outcome_canon=success`），另列 **partial-delivery 率** = `partial` 次数 / 产品口径分母。
 
+分母为 0（稀疏日期、版本或空窗口）时所有比率返回 NULL（`nullIf(分母, 0)`），看板显示为空，不显示 NaN。示例→真实出片转化（`production_results.sql` 04）的样例设备和真实出片两侧都排除内部 cohort（641509，目前为空名单，结果不变）。
+
 ### 6.1 成功率（v4，2026-10-16；主指标，目标 ≥95%）
 
 机器可读口径：`event_catalog.json` → `attribution.success_rate_v4`；SQL：[`success_rate.sql`](success_rate.sql)（两者必须一致，有测试）。

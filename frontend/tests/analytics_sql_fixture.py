@@ -23,8 +23,10 @@ class Uniq:
         return len(self.values)
 
 
-def queries(name):
-    """Adapt HogQL functions/properties to SQLite, preserving query predicates."""
+def queries(name, internal=('internal',)):
+    """Adapt HogQL functions/properties to SQLite, preserving query predicates.
+
+    ``internal`` is the content of the internal cohort ({internal_cohort_id}); () = empty cohort."""
     sql = (ROOT / 'docs/analytics' / name).read_text(encoding='utf-8')
     sql = re.sub(r'--[^\n]*', '', sql)
     sql = re.sub(r'properties\.(\w+)', r"json_extract(properties, '$.\1')", sql)
@@ -32,7 +34,9 @@ def queries(name):
     # v4 fixed UTC window + internal cohort parameters; the fixture window ends at NOW.
     sql = sql.replace("toDateTime({date_from}, 'UTC')", '(now() - 7 * 86400)')
     sql = sql.replace("toDateTime({date_to}, 'UTC')", '(now() + 1)')
-    sql = sql.replace('person_id NOT IN COHORT {internal_cohort_id}', "person_id != 'internal'")
+    members = ', '.join(f"'{person}'" for person in internal)
+    sql = sql.replace('person_id NOT IN COHORT {internal_cohort_id}',
+                      f'person_id NOT IN ({members})' if members else '1 = 1')
     return [statement.strip() for statement in sql.split(';') if statement.strip()]
 
 
@@ -176,6 +180,18 @@ process.stdout.write(JSON.stringify(events))
                 row = self.db.execute(queries(name)[index]).fetchone()
                 self.assertEqual(row['observed_sample_devices'], len(devices))
                 self.assertEqual(row['real_render_within_7d_devices'], expected)
+
+    def test_sample_followup_excludes_internal_renders_and_empty_cohort_changes_nothing(self):
+        # R20 #141: a device seen on the sample as a normal person, whose real render is by an internal person.
+        self.insert('shared', 'example_project_viewed', age=9, person='p1', experience_schema_version=1)
+        self.insert('shared', 'studio_export_finished', 'success', age=8, person='internal')
+        self.insert('user', 'example_project_viewed', age=9, person='p2', experience_schema_version=1)
+        self.insert('user', 'studio_export_finished', 'success', age=8, person='p2')
+        rows = lambda internal: dict(self.db.execute(queries('production_results.sql', internal)[2]).fetchone())
+        self.assertEqual(rows(('internal',)), {'observed_sample_devices': 2, 'real_render_within_7d_devices': 1})
+        # Cohort 641509 is empty today: the exclusion is wired but the result equals the pre-#141 query (2).
+        empty = rows(())
+        self.assertEqual(empty, {'observed_sample_devices': 2, 'real_render_within_7d_devices': 2})
 
     def test_production_filters_still_exclude_validation_and_old_schema_events(self):
         for outcome in ('completed', 'success'):

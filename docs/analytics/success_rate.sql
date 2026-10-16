@@ -1,6 +1,7 @@
 -- 1.5.8 出片成功率（v4 口径，2026-10-16 与 Dong 看板 uPaOzh6R / GO5TUM7y / FGl86jg9 / qRO0TeFS 对齐）。
 -- 口径见 docs/analytics/TRACKING_PLAN.md §6–§7。所有查询共用同一个 base / c 定义。
 --
+-- 分母为 0（稀疏的日期 / 版本 / 空窗口）时比率返回 NULL，不是 NaN（R20 #142：nullIf(分母, 0)）。
 -- 参数（发版/报数时替换，不再用 now() - 7d 滚动窗口）：
 --   {date_from}          固定 UTC 起点（含），例如 '2026-10-09 00:00:00'
 --   {date_to}            固定 UTC 终点（不含），例如 '2026-10-16 00:00:00'
@@ -71,9 +72,9 @@ WITH base AS (
   SELECT toDate(fts) AS d, countIf(fo = 'success') AS flow_ok, countIf(fqa) AS fq_all, countIf(fq) AS fq_prod FROM flows GROUP BY d
 )
 SELECT toString(d1.d) AS dt, d1.ok AS ok,
-  round(d1.ok / d1.q_all, 3) AS overall_attempt_rate, round(d1.ok / d1.q_prod, 3) AS product_attempt_rate,
-  round(d2.flow_ok / d2.fq_all, 3) AS overall_flow_rate, round(d2.flow_ok / d2.fq_prod, 3) AS product_flow_rate,
-  round(d1.partial_n / d1.q_prod, 3) AS partial_delivery_rate,
+  round(d1.ok / nullIf(d1.q_all, 0), 3) AS overall_attempt_rate, round(d1.ok / nullIf(d1.q_prod, 0), 3) AS product_attempt_rate,
+  round(d2.flow_ok / nullIf(d2.fq_all, 0), 3) AS overall_flow_rate, round(d2.flow_ok / nullIf(d2.fq_prod, 0), 3) AS product_flow_rate,
+  round(d1.partial_n / nullIf(d1.q_prod, 0), 3) AS partial_delivery_rate,
   d1.q_all AS q_all, d1.q_prod AS q_prod, d2.flow_ok AS flow_ok, d2.fq_all AS fq_all, d2.fq_prod AS fq_prod
 FROM d1 LEFT JOIN d2 ON d1.d = d2.d
 ORDER BY dt;
@@ -111,9 +112,9 @@ WITH base AS (
   FROM c GROUP BY pid
 )
 SELECT countIf(has_all AND f_all = 'success') AS overall_first_ok, countIf(has_all) AS overall_people,
-  round(overall_first_ok / overall_people, 3) AS overall_first_rate,
+  round(overall_first_ok / nullIf(overall_people, 0), 3) AS overall_first_rate,
   countIf(has_prod AND f_prod = 'success') AS product_first_ok, countIf(has_prod) AS product_people,
-  round(product_first_ok / product_people, 3) AS product_first_rate
+  round(product_first_ok / nullIf(product_people, 0), 3) AS product_first_rate
 FROM p;
 
 -- 图 3：失败身份（failure_stage × error_code × 归因），按 attempt 去重
@@ -214,9 +215,9 @@ WITH base AS (
   SELECT fv AS v, countIf(fo = 'success') AS flow_ok, countIf(fqa) AS fq_all, countIf(fq) AS fq_prod FROM flows GROUP BY fv
 )
 SELECT v1.v AS app_version, v1.ok AS ok,
-  round(v1.ok / v1.q_all, 3) AS overall_attempt_rate, round(v1.ok / v1.q_prod, 3) AS product_attempt_rate,
-  round(v2.flow_ok / v2.fq_all, 3) AS overall_flow_rate, round(v2.flow_ok / v2.fq_prod, 3) AS product_flow_rate,
-  round(v1.partial_n / v1.q_prod, 3) AS partial_delivery_rate,
+  round(v1.ok / nullIf(v1.q_all, 0), 3) AS overall_attempt_rate, round(v1.ok / nullIf(v1.q_prod, 0), 3) AS product_attempt_rate,
+  round(v2.flow_ok / nullIf(v2.fq_all, 0), 3) AS overall_flow_rate, round(v2.flow_ok / nullIf(v2.fq_prod, 0), 3) AS product_flow_rate,
+  round(v1.partial_n / nullIf(v1.q_prod, 0), 3) AS partial_delivery_rate,
   v1.q_all AS q_all, v1.q_prod AS q_prod, v2.flow_ok AS flow_ok, v2.fq_all AS fq_all, v2.fq_prod AS fq_prod
 FROM v1 LEFT JOIN v2 ON v1.v = v2.v
 ORDER BY app_version;

@@ -240,6 +240,7 @@ def exclusion_fixture():
     one(outcome='completed')
     one(outcome='success')
     one(outcome='cancelled')                                            # user_hard: outcome
+    one(outcome='canceled')                                             # ... US spelling alias (R20 #140)
     for code in V4['overall_excluded_error_codes']:                     # user_hard: error_code
         one(outcome='error', error_code=code)
     for kind in V4['overall_excluded_upstream_types']:                  # user_hard: upstream auth/quota
@@ -253,7 +254,7 @@ def exclusion_fixture():
     return e
 
 
-N_HARD = 1 + len(V4['overall_excluded_error_codes']) + len(V4['overall_excluded_upstream_types'])
+N_HARD = 2 + len(V4['overall_excluded_error_codes']) + len(V4['overall_excluded_upstream_types'])
 N_X = len(V4['product_extra_excluded_error_codes'])
 N_PF = len(V4['product_failure_codes']) + len(PRODUCT_FAILURE_UPSTREAM)
 EXPECTED_EXCL = {'ok': 2, 'q_all': 2 + N_X + N_PF, 'q_prod': 2 + N_PF,
@@ -277,7 +278,7 @@ def test_catalog_lists_every_rule_dong_named():
 def test_every_exclusion_and_product_failure_lands_in_the_right_denominator():
     # 2 ok; hard (N_HARD) out of both; user_x (N_X) only out of product; forced failures (N_PF) in both.
     assert _excl() == EXPECTED_EXCL
-    assert (N_HARD, N_X, N_PF) == (11, 5, 8)
+    assert (N_HARD, N_X, N_PF) == (12, 5, 8)
     # R19 #104: 8 forced product failures -> all/product denominators 15/10.
     assert (EXPECTED_EXCL['q_all'], EXPECTED_EXCL['q_prod']) == (15, 10)
     assert set(PRODUCT_FAILURE_UPSTREAM) == set(V4['product_failure_codes'])
@@ -314,7 +315,9 @@ EXTRA_EC = r"user_hard OR ec IN \(([^)]*)\)\) AS user_x"
 
 
 def _mutations():
-    out = {'cancel no longer excluded': lambda s: re.sub(r"\(o = 'cancelled'\s*OR", '(false OR', s, count=1)}
+    out = {'cancel no longer excluded': lambda s: re.sub(r"\(o = 'cancelled'\s*OR", '(false OR', s, count=1),
+           # R20 #140: dropping the US-spelling alias must be caught in every figure.
+           "'canceled' alias dropped": lambda s: s.replace("o_raw IN ('cancelled', 'canceled')", "o_raw IN ('cancelled')")}
     for code in V4['overall_excluded_error_codes']:
         out[f'error_code {code} no longer excluded'] = lambda s, c=code: _list_mutation(s, HARD_EC, lambda xs: [x for x in xs if x != c])
     for kind in V4['overall_excluded_upstream_types']:
@@ -386,3 +389,34 @@ def test_each_rule_mutation_is_caught_in_every_figure(figure, name):
     assert mutated != stmt, (figure, name)
     baseline = extract(exclusion_fixture().run(stmt))
     assert extract(exclusion_fixture().run(mutated)) != baseline, (figure, name)
+
+
+# --- R20 #142: an empty denominator yields NULL, never NaN/inf --------------------------------------
+
+def _only_product_excluded():
+    """One person whose only attempt is a product-only exclusion: product denominators are 0."""
+    e = Events()
+    e.add('Z', 0, attempt_id='z1', flow_id='FZ', outcome='error', error_code='connection')
+    return e
+
+
+def test_142_zero_product_denominator_is_null_not_nan():
+    stmts = statements()
+    day = _only_product_excluded().run(stmts[0])[0]
+    assert (day['q_all'], day['q_prod'], day['fq_prod']) == (1, 0, 0)
+    for key in ('product_attempt_rate', 'product_flow_rate', 'partial_delivery_rate'):
+        assert day[key] is None, key
+    assert day['overall_attempt_rate'] == 0.0
+    version = _only_product_excluded().run(stmts[4])[0]
+    for key in ('product_attempt_rate', 'product_flow_rate', 'partial_delivery_rate'):
+        assert version[key] is None, key
+    first = _only_product_excluded().run(stmts[1])[0]
+    assert first['product_people'] == 0 and first['product_first_rate'] is None
+
+
+def test_142_every_rate_division_is_guarded():
+    body = re.sub(r'--[^\n]*', '', SQL)
+    divisions = re.findall(r'[\w.]+ / [^\n,]+', body)
+    assert len(divisions) == 12
+    for expr in divisions:
+        assert re.fullmatch(r'[\w.]+ / nullIf\([\w.]+', expr.strip()), expr
