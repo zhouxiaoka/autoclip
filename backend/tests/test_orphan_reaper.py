@@ -84,3 +84,58 @@ def test_reaper_never_raises(monkeypatch):
 def test_desktop_main_hooks_reaper_before_start():
     src = open(os.path.join(os.path.dirname(__file__), '..', 'desktop_main.py'), encoding='utf-8').read()
     assert src.index('orphan_reaper.reap_orphans()') < src.index('manager.start()')
+
+
+# --- R10 #393: independent live owner, PID reuse, AccessDenied ---------------------------
+
+@pytest.fixture
+def live_owner():
+    """A separate, still-running process that stands in for another live AutoClip backend."""
+    owner = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+    try:
+        yield psutil.Process(owner.pid)
+    finally:
+        owner.kill()
+        owner.wait()
+
+
+def test_ffmpeg_of_another_live_backend_is_never_reaped(monkeypatch, live_owner):
+    monkeypatch.delenv(orphan_reaper.ENV, raising=False)
+    orphan_reaper.mark_environment()
+    token = orphan_reaper._owner_token(live_owner)
+    assert token != os.environ[orphan_reaper.ENV]  # must not short-circuit on "current"
+    other_live = _FakeProc(201, 'ffmpeg', {orphan_reaper.ENV: token})
+    assert orphan_reaper._owner_alive(*orphan_reaper._parse(token)) is True
+    assert orphan_reaper.find_orphans([other_live]) == []
+
+
+def test_reused_pid_with_a_different_create_time_counts_as_dead(monkeypatch, live_owner):
+    monkeypatch.delenv(orphan_reaper.ENV, raising=False)
+    orphan_reaper.mark_environment()
+    # The recorded owner had this PID, but the live process using it now started later.
+    stale = f'{live_owner.pid}:{live_owner.create_time() - 1000:.3f}'
+    orphan = _FakeProc(202, 'ffmpeg', {orphan_reaper.ENV: stale})
+    assert orphan_reaper.find_orphans([orphan]) == [orphan]
+
+
+def test_access_denied_owner_is_treated_as_alive(monkeypatch):
+    monkeypatch.delenv(orphan_reaper.ENV, raising=False)
+    orphan_reaper.mark_environment()
+
+    def denied(pid):
+        raise psutil.AccessDenied(pid)
+
+    monkeypatch.setattr(psutil, 'Process', denied)
+    proc = _FakeProc(203, 'ffmpeg', {orphan_reaper.ENV: '424242:1.000'})
+    assert orphan_reaper.find_orphans([proc]) == []
+
+
+def test_unreadable_environment_is_skipped(monkeypatch):
+    monkeypatch.delenv(orphan_reaper.ENV, raising=False)
+    orphan_reaper.mark_environment()
+
+    class Denied(_FakeProc):
+        def environ(self):
+            raise psutil.AccessDenied(self.pid)
+
+    assert orphan_reaper.find_orphans([Denied(204, 'ffmpeg.exe', {})]) == []
