@@ -128,6 +128,25 @@ def subtitle_route_failure(video, *, srt_available: bool, duration: Optional[flo
     return None
 
 
+def subtitle_source_failure(video, *, srt_available: bool, info: Optional[dict] = None,
+                            stage: str = "INGEST") -> Optional[PipelineFailure]:
+    """The one classification of a source the subtitle/content route cannot use (R23 #231), or None:
+    unreadable or under 1 s (``duration_or_fail``: ffmpeg decode only when ffprobe had no duration),
+    too short, or no audio without an SRT. The import gate and the content pipeline both call it, so an
+    unreadable source is reported as ``source_unreadable`` everywhere, never as "Whisper missing".
+
+    ``info`` is a ``probe()`` result the caller already has; without it one ffprobe runs here.
+    An unknown audio answer never blocks (see ``probe``)."""
+    info = info if info is not None else probe(Path(video))
+    try:
+        duration = duration_or_fail(video, info.get("duration"), stage)
+    except PipelineFailure as failure:
+        return failure
+    audio = info.get("audio")
+    return subtitle_route_failure(video, srt_available=srt_available, duration=duration,
+                                  audio=True if audio is None else audio, stage=stage)
+
+
 def is_no_audio_text(text: str) -> bool:
     return (text or "").startswith("这个视频没有声音")
 

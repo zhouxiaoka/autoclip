@@ -99,7 +99,8 @@ export function localTranscriptionGate(report: ImportReadiness | null, hasSubtit
 
 /** One mapping from a transcription check code (readiness report or coded backend 422) to the prompt (R20 #168). */
 export function gateKind(code: string | undefined): 'install' | 'installing' | null {
-  if (code === 'whisper_installing') return 'installing'
+  // R23 #232: both waiting states wait; neither is "not installed".
+  if (code === 'whisper_installing' || code === 'whisper_model_downloading') return 'installing'
   return code === 'whisper_not_installed' || code === 'whisper_install_failed' ? 'install' : null
 }
 

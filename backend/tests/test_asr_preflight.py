@@ -87,6 +87,7 @@ def test_adapter_makes_zero_paid_calls_when_asr_missing(tmp_path, monkeypatch):
 
     monkeypatch.setattr(adapter, '_generate_subtitle_automatically', transcribe)
     monkeypatch.setattr(media_precheck, 'subtitle_route_failure', lambda *a, **k: None)
+    monkeypatch.setattr(media_precheck, 'subtitle_source_failure', lambda *a, **k: None)  # placeholder video
     _asr(monkeypatch, False)
     video = tmp_path / 'talk.mp4'
     video.write_bytes(b'fixture')
@@ -112,6 +113,7 @@ def test_confirm_subtitle_route_makes_zero_paid_calls_when_asr_missing(tmp_path,
 
     _asr(monkeypatch, False)
     monkeypatch.setattr(media_precheck, 'subtitle_route_failure', lambda *a, **k: None)
+    monkeypatch.setattr(media_precheck, 'subtitle_source_failure', lambda *a, **k: None)  # placeholder video
     root = store.directory('p1')
     (root / 'raw').mkdir(parents=True)
     (root / 'raw' / 'input.mp4').write_bytes(b'fixture')
@@ -150,6 +152,7 @@ def test_cli_mcp_path_makes_zero_paid_calls_when_asr_missing(tmp_path, monkeypat
 
     paid = []
     monkeypatch.setattr(media_precheck, 'subtitle_route_failure', lambda *a, **k: None)
+    monkeypatch.setattr(media_precheck, 'subtitle_source_failure', lambda *a, **k: None)  # placeholder video
     monkeypatch.setattr(
         SimplePipelineAdapter, '_preflight_llm',
         staticmethod(lambda: paid.append('llm') or pytest.fail('paid llm')),

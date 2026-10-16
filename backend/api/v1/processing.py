@@ -3,7 +3,6 @@
 """
 
 from typing import List, Optional
-from backend.api.v1.gate_errors import gate_refusal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from ...core.database import get_db
@@ -23,11 +22,8 @@ async def process_project(
     processing_service: ProcessingService = Depends(get_processing_service)
 ):
     """开始处理项目"""
-    from backend.services.studio import readiness
-    try:
-        readiness.ensure_local_transcription_for_project(project_id)
-    except readiness.TranscriptionNotReady as exc:
-        raise gate_refusal(exc) from exc
+    from backend.api.v1 import transcription_gate
+    await transcription_gate.for_project(project_id)  # off the event loop (R23 #230)
     try:
         result = processing_service.process_project(project_id)
         return {

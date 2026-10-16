@@ -1655,13 +1655,15 @@ def confirm_project(project_id, body):
                 raise ValueError(str(blocked))
             if not srt_available:
                 from backend.services.studio import readiness
+                gate_code = readiness.transcription_gate_code()
+                if gate_code:
+                    # Coded 422 like every other gate refusal, so the desktop opens the install prompt (R22 #211);
+                    # the readiness code is kept as is, so installing / downloading stay waiting states (R23 #232).
+                    raise readiness.TranscriptionNotReady(gate_code)
                 try:
                     readiness.require_transcription(
                         stage='SUBTITLE', srt_available=False, analysis_mode='subtitle')
                 except PipelineFailure as missing:
-                    if missing.code in readiness.GATE_CODES:
-                        # Coded 422 like every other gate refusal, so the desktop opens the install prompt (R22 #211).
-                        raise readiness.TranscriptionNotReady(missing.code) from missing
                     raise ValueError(missing.user_message()) from missing
         previous = deepcopy(state)
         plan['confirmed_analysis'] = route

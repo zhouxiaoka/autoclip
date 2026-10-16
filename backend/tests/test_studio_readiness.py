@@ -44,6 +44,9 @@ def report_for(monkeypatch, settings):
     from backend.services import ai_model_settings as ai
     from backend.services.studio import readiness
     monkeypatch.setattr(ai, 'for_editing', lambda: settings)
+    # R23 #233: the report's analysis mode is the one planning reads; with a saved document that is its own mode.
+    from backend.services.studio import analysis_preferences
+    monkeypatch.setattr(analysis_preferences, 'load', lambda: analysis_preferences.AnalysisPreferences(analysis_mode=settings.analysis_mode))
     return readiness.report()
 
 

@@ -40,12 +40,9 @@ def get_websocket_service():
     return WebSocketNotificationService
 
 
-def _transcription_gate(video_path, srt_path) -> None:
-    from backend.services.studio import readiness
-    try:
-        readiness.ensure_local_transcription_for_paths(video_path, srt_path)
-    except readiness.TranscriptionNotReady as exc:
-        raise gate_refusal(exc) from exc
+async def _transcription_gate(video_path, srt_path) -> None:
+    from backend.api.v1 import transcription_gate
+    await transcription_gate.for_paths(video_path, srt_path)  # off the event loop (R23 #230)
 
 
 async def _stage_for_gate(video_file: UploadFile, *, has_srt: bool):
@@ -491,7 +488,7 @@ async def start_processing(
             else:
                 srt_path = None
 
-        _transcription_gate(video_path, srt_path)
+        await _transcription_gate(video_path, srt_path)
         
         # 更新项目状态为处理中
         project_service.update_project_status(project_id, "processing")
@@ -559,11 +556,8 @@ async def retry_processing(
         # 检查项目状态 - 允许失败、完成、处理中和等待中状态重试
         if project.status.value not in ["failed", "completed", "processing", "pending"]:
             raise HTTPException(status_code=400, detail="Project is not in failed, completed, processing, or pending status")
-        from backend.services.studio import readiness
-        try:  # gate before touching project status
-            readiness.ensure_local_transcription_for_project(project_id)
-        except readiness.TranscriptionNotReady as exc:
-            raise gate_refusal(exc) from exc
+        from backend.api.v1 import transcription_gate
+        await transcription_gate.for_project(project_id)  # gate before touching project status, off the loop (R23 #230)
         
         # 重置项目状态
         project_service.update_project_status(project_id, "pending")
@@ -678,7 +672,7 @@ async def retry_processing(
         
         # 字幕文件是可选的
         srt_path_str = str(srt_path) if srt_path.exists() else None
-        _transcription_gate(video_path, srt_path_str)
+        await _transcription_gate(video_path, srt_path_str)
         
         # 延迟导入，避免过早触发celery_app导入链
         from backend.tasks.processing import process_video_pipeline

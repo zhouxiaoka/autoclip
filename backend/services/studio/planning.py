@@ -73,7 +73,7 @@ def preferred_analysis_mode() -> str | None:
         return None
 
 
-def route_before_screening(requested_goal: str | None, video: Path) -> str | None:
+def route_before_screening(requested_goal: str | None, video: Path, info: dict | None = None) -> str | None:
     """Route the import gate must assume before any paid call: final goal without a screening answer,
     duration with the same ffmpeg fallback as recommend().
 
@@ -81,25 +81,33 @@ def route_before_screening(requested_goal: str | None, video: Path) -> str | Non
     cannot read: SourceUnreadable / under 1 s), so the gate must not answer for it (R22 #207).
     The full duration rule (ffmpeg decode fallback, up to 180 s) only runs when it can change the answer or
     when one ffprobe cannot read the source (R22 #206): if even the longest visual-eligible source would take
-    the subtitle route, a readable source is on the subtitle route."""
+    the subtitle route, a readable source is on the subtitle route.
+
+    ``info`` is the caller's ``media_precheck.probe()`` result, so the gate runs ffprobe once (R23 #230); a
+    duration recovered by the decode fallback is written back into it so the caller never decodes twice."""
     analysis_mode = preferred_analysis_mode()
     if analysis_mode is None:
         return None
     goal = final_goal(requested_goal, analysis_mode, vision_configured(analysis_mode))
     from backend.pipeline import media_precheck
     from backend.pipeline.failures import PipelineFailure
-    if resolve_route(analysis_mode, goal, VISUAL_MAX_SOURCE_SEC) == 'subtitle' and media_precheck.probe(video)['duration']:
+    if info is None:
+        info = media_precheck.probe(video)
+    if resolve_route(analysis_mode, goal, VISUAL_MAX_SOURCE_SEC) == 'subtitle' and info.get('duration'):
         return 'subtitle'  # readable by one ffprobe; the duration itself cannot change the route
     try:
-        duration = source_duration(video)
+        duration = source_duration(video, info)
     except PipelineFailure:
         return None
+    info['duration'] = duration
     return resolve_route(analysis_mode, goal, duration)
 
 
-def transcription_may_be_skipped() -> bool:
-    """For the readiness report: visual mode with a vision model can run without ASR (the backend gate decides per file)."""
-    analysis_mode = preferred_analysis_mode()
+def transcription_may_be_skipped(analysis_mode: str | None = None) -> bool:
+    """For the readiness report: visual mode with a vision model can run without ASR (the backend gate decides per file).
+    ``analysis_mode`` is the caller's ``preferred_analysis_mode()`` so the report reads it once (R23 #233)."""
+    if analysis_mode is None:
+        analysis_mode = preferred_analysis_mode()
     return analysis_mode == 'visual' and vision_configured(analysis_mode)
 
 VISION_FALLBACK_CODE = 'vision_unavailable_subtitle_fallback'

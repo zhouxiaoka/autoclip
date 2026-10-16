@@ -184,6 +184,9 @@ def adapter(tmp_path, monkeypatch):
     events = []
     monkeypatch.setattr(mod, "emit_progress", lambda pid, stage, message="", subpercent=None: events.append((stage, message)))
     monkeypatch.setattr(mod.SimplePipelineAdapter, "_prompt_files", lambda self, project_dir: {})
+    # Fixture videos are placeholders: treat them as readable (R23 #231 classifies real unreadable sources).
+    from backend.pipeline import media_precheck
+    monkeypatch.setattr(media_precheck, "subtitle_source_failure", lambda *a, **k: None)
     a = mod.SimplePipelineAdapter("proj-1", "task-1")
     a._events = events
     return a

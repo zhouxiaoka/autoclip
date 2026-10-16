@@ -285,7 +285,12 @@ class SimplePipelineAdapter:
             srt_available = bool(input_srt_path and Path(input_srt_path).exists())
             if not srt_available:
                 from backend.services.studio import readiness
-                readiness.require_transcription(stage="SUBTITLE", srt_available=False)
+                try:
+                    readiness.require_transcription(stage="SUBTITLE", srt_available=False)
+                except PipelineFailure as missing:
+                    # Same classification as the import gate (R23 #231): a source nothing can read is
+                    # source_unreadable, never "install Whisper".
+                    raise media_precheck.subtitle_source_failure(input_video_path, srt_available=False) or missing from None
             self._preflight_llm()
             checkpoint(self.project_id)
 

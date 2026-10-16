@@ -101,8 +101,8 @@ def _whisper_model(name: str) -> dict:
     return {**_check(False, 'whisper_model_missing', 'install_whisper'), 'model': model}
 
 
-def _visual(settings: ai_models.ModelSettings) -> dict:
-    mode = settings.analysis_mode
+def _visual(settings: ai_models.ModelSettings, mode: str | None = None) -> dict:
+    mode = mode or settings.analysis_mode
     if mode == 'subtitle':
         return _check(True, 'not_required')
     binding = ai_models.vision_follow_binding(settings)
@@ -139,18 +139,21 @@ def _ffmpeg() -> dict:
 def report() -> dict:
     settings = ai_models.for_editing()
     from backend.services.studio import planning
+    # One analysis-mode source for every field (R23 #233): the preference planning and the gate read
+    # (analysis_preferences.load, legacy file included), read once. Unreadable -> the document's own mode.
+    mode = planning.preferred_analysis_mode() or settings.analysis_mode
     transcription = _transcription(settings)
-    if not transcription.get('ok') and planning.transcription_may_be_skipped():
+    if not transcription.get('ok') and planning.transcription_may_be_skipped(mode):
         # Visual route possible: the desktop does not block; the import gate decides per file (R21 code health).
         transcription = {**transcription, 'skippable': True}
     checks = {
         'analysis': _analysis(settings),
         'transcription': transcription,
-        'visual': _visual(settings),
+        'visual': _visual(settings, mode),
         'ffmpeg': _ffmpeg(),
     }
     return {
-        'analysis_mode': settings.analysis_mode,
+        'analysis_mode': mode,
         'ready': all(item['ok'] for name, item in checks.items() if name != 'transcription') and checks['analysis']['ok'],
         'checks': checks,
     }
@@ -188,9 +191,12 @@ def require_transcription(*, stage: str = 'SUBTITLE', srt_available: bool = Fals
 
 LOCAL_TRANSCRIPTION_REQUIRED = '需要先安装本地转写：视频没有字幕，所选的本地 Whisper 还没装好。请到「设置 → 转写」一键安装，或改用云端转写后再导入。'
 LOCAL_TRANSCRIPTION_INSTALLING = '等待安装完成：本地 Whisper 正在安装，装好后再开始。'
+LOCAL_TRANSCRIPTION_DOWNLOADING = '等待下载完成：转写模型正在下载，下完后再开始。'
 
 
-GATE_CODES = ('whisper_not_installed', 'whisper_install_failed', 'whisper_installing')
+# Waiting states keep their own code end to end (R23 #232): never reported as whisper_not_installed.
+WAITING_CODES = ('whisper_installing', 'whisper_model_downloading')
+GATE_CODES = ('whisper_not_installed', 'whisper_install_failed') + WAITING_CODES
 
 
 class TranscriptionNotReady(ValueError):
@@ -202,7 +208,8 @@ class TranscriptionNotReady(ValueError):
 
     def __init__(self, code: str):
         self.code = code
-        super().__init__(LOCAL_TRANSCRIPTION_INSTALLING if code == 'whisper_installing' else LOCAL_TRANSCRIPTION_REQUIRED)
+        super().__init__({'whisper_installing': LOCAL_TRANSCRIPTION_INSTALLING,
+                          'whisper_model_downloading': LOCAL_TRANSCRIPTION_DOWNLOADING}.get(code, LOCAL_TRANSCRIPTION_REQUIRED))
 
     @property
     def detail(self) -> dict:
@@ -237,12 +244,18 @@ def ensure_local_transcription_for_import(*, srt_available: bool, video=None, ro
     code = _transcription(settings).get('code')
     if code not in GATE_CODES:
         return
-    if route == 'studio' and video is not None:
+    if video is None:
+        raise TranscriptionNotReady(code)  # the caller stages the file and asks again
+    from backend.pipeline import media_precheck
+    info = dict(media_precheck.probe(Path(video)))  # the gate's only ffprobe (R23 #230)
+    if route == 'studio':
         from backend.services.studio import planning
-        if planning.route_before_screening(goal, Path(video)) != 'subtitle':
+        if planning.route_before_screening(goal, Path(video), info) != 'subtitle':
             return  # visual, or planning stops first with its own code (source_unreadable, R22 #207)
-    if video is not None and _source_cannot_take_subtitle_route(video, srt_available):
-        return  # too short / no audio needs no Whisper: the pipeline reports the real source_* code
+    if _source_cannot_take_subtitle_route(video, info):
+        # Unreadable / too short / no audio needs no Whisper on any route: the pipeline reports the real
+        # source_* code from the same classification (R23 #231).
+        return
     raise TranscriptionNotReady(code)
 
 
@@ -269,9 +282,13 @@ def ensure_local_transcription_for_project(project_id: str) -> None:
     ensure_local_transcription_for_paths(video)
 
 
-def _source_cannot_take_subtitle_route(video, srt_available: bool) -> bool:
+def _source_cannot_take_subtitle_route(video, info: dict) -> bool:
     from backend.pipeline import media_precheck
-    try:
-        return media_precheck.subtitle_route_failure(video, srt_available=srt_available) is not None
-    except Exception:  # noqa: BLE001 - unreadable source: let the pipeline classify it
-        return True
+    return media_precheck.subtitle_source_failure(video, srt_available=False, info=info) is not None
+
+
+def transcription_gate_code() -> str | None:
+    """The gate code when ASR is not ready in a way the install prompt handles, else None (R23 #232: the check
+    code itself, so installing / downloading are never collapsed into whisper_not_installed)."""
+    code = transcription_check().get('code')
+    return code if code in GATE_CODES else None
