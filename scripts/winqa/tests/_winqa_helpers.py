@@ -175,6 +175,16 @@ if mode == 'redact-crash' and any(x.endswith('logpipe.py') for x in a):
             child.kill(); os.kill(os.getpid(), signal.SIGKILL)
         child.stdin.write(line); child.stdin.flush()
     sys.exit(0)
+if any(x.endswith('logpipe.py') for x in a) and os.environ.get('FAKE_LP_EVID'):
+    # #414 a2 evidence: same process (execv keeps the pid), no extra hop in the channel. A hard link keeps the status
+    # file readable after run_winqa.sh removes its LP_DIR.
+    ev = os.environ['FAKE_LP_EVID']
+    try:
+        st = a[a.index('--status') + 1]
+        os.link(st, ev + '.status')
+    except Exception as exc:
+        open(ev + '.status-err', 'w').write(type(exc).__name__)
+    open(ev + '.pid', 'w').write(str(os.getpid()))
 os.execv(os.environ['FAKE_REAL_PY'], [os.environ['FAKE_REAL_PY']] + a)
 '''
 
@@ -226,7 +236,7 @@ def _env(tmp_path, mode='', key=KEY, required=True, steps=('8', '8')):
                 'FAKE_MODE': mode, 'FAKE_DELIVERED': str(tmp_path / 'delivered.bin'), 'FAKE_MODES': str(tmp_path / 'modes.txt'),
                 'FAKE_REAL_PY': sys.executable, 'FAKE_ENVLEAK': str(tmp_path / 'envleak.txt'),
                 'FAKE_CMDS': str(tmp_path / 'cmds.txt'), 'FAKE_REQS': str(tmp_path / 'reqs.jsonl'),
-                'FAKE_KEY_SHA': hashlib.sha256(key.encode()).hexdigest()})
+                'FAKE_KEY_SHA': hashlib.sha256(key.encode()).hexdigest(), 'FAKE_LP_EVID': str(tmp_path / 'lp')})
     args = ['--prev', str(inst), '--candidate', str(inst), '--version', '1.5.8', '--out', str(tmp_path / 'ev'),
             '--from-step', steps[0], '--to-step', steps[1]]
     return env, args
@@ -326,3 +336,28 @@ def _verify(tmp_path, data, dg=None):
 
 
 __all__ = [n for n in dir() if not n.startswith('__')]
+
+
+def _save_failure_evidence(tmp_path, done, label):
+    """#414 a2: everything needed to place a one-off failure. Written under $WINQA_A2_EVIDENCE (or tmp_path) and
+    returned as a path for the assertion message. Contents are already scrubbed/fake (no real key in this harness)."""
+    import time
+    root = Path(os.environ.get('WINQA_A2_EVIDENCE') or tmp_path) / f'a2-evidence-{label}-{os.getpid()}-{time.time_ns()}'
+    root.mkdir(parents=True, exist_ok=True)
+    (root / 'rc.txt').write_text(str(done.returncode))
+    (root / 'stdout.bin').write_bytes(done.stdout); (root / 'stderr.bin').write_bytes(done.stderr)
+    lp = tmp_path / 'lp'
+    st = Path(str(lp) + '.status')
+    (root / 'logpipe-status.txt').write_text(st.read_text() if st.exists() else '<no status link>')
+    pid = Path(str(lp) + '.pid')
+    if pid.exists():
+        p = pid.read_text().strip()
+        alive = subprocess.run(['kill', '-0', p], capture_output=True).returncode == 0
+        (root / 'logpipe-pid.txt').write_text(f'{p} alive_after_run={alive}\n')
+    for rel in ('ev/run.log', 'ev/steps.txt', 'reqs.jsonl', 'cmds.txt'):
+        if (tmp_path / rel).exists():
+            shutil.copy(tmp_path / rel, root / rel.replace('/', '_'))
+    for f in (tmp_path / 'ev' / 'runs').glob('*/receipts.jsonl'):
+        shutil.copy(f, root / 'receipts.jsonl')
+    (root / 'tree.txt').write_text('\n'.join(sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob('*'))))
+    return str(root)

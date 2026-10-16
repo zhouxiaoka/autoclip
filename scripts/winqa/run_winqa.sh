@@ -72,31 +72,56 @@ FLAGS=""; [ "$SMOKE" = 1 ] && FLAGS="$FLAGS,smoke"; [ "$WITH_ASR" = 1 ] && FLAGS
 LP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/winqa-lp.XXXXXX")" || { echo "WINQA_E_LOGPIPE 70" >&2; exit 70; }
 LP_STATUS="$LP_DIR/status"; : > "$LP_STATUS" || { echo "WINQA_E_LOGPIPE 70" >&2; exit 70; }
 exec 3>&1 4>&2
-exec 5> >(exec python3 -u "$HERE/logpipe.py" --log "$LOG" --status "$LP_STATUS" --keys-fd 6 6< <(printf '%s\n' "$MODEL_API_KEY") 1>&3 2>&4)
-LP_SPAWN="${!:-}"   # pid of the process substitution where bash reports it; READY carries the authoritative pid
+# #414 v5 M3/#395: the process substitution is a bash subshell that WAITS for logpipe and appends "RC <real exit
+# status>" (137 after SIGKILL). The exit code comes only from that line, never from logpipe's own "EXIT" claim.
+exec 5> >(python3 -u "$HERE/logpipe.py" --log "$LOG" --status "$LP_STATUS" --keys-fd 6 6< <(printf '%s\n' "$MODEL_API_KEY") 1>&3 2>&4; echo "RC $?" >> "$LP_STATUS")
+LP_SPAWN="${!:-}"   # pid of the process substitution where bash reports it; READY carries logpipe's own pid
+# handshake bound (hardening, #389 not reproduced): WINQA_LOGPIPE_HANDSHAKE_S, default 30 s, 1..600
+HS="${WINQA_LOGPIPE_HANDSHAKE_S:-30}"
+case "$HS" in ''|*[!0-9]*) echo "WINQA_E_LOGPIPE 70 bad WINQA_LOGPIPE_HANDSHAKE_S" >&4; exit 70;; esac
+{ [ "$HS" -ge 1 ] && [ "$HS" -le 600 ]; } || { echo "WINQA_E_LOGPIPE 70 bad WINQA_LOGPIPE_HANDSHAKE_S" >&4; exit 70; }
 LP_PID=""; i=0
-while [ $i -lt 50 ]; do   # bounded handshake: 5 s
+while [ $i -lt $((HS * 10)) ]; do
   LP_PID="$(sed -n 's/^READY \([0-9][0-9]*\)$/\1/p' "$LP_STATUS" 2>/dev/null)"
   [ -n "$LP_PID" ] && break
-  grep -q '^EXIT ' "$LP_STATUS" 2>/dev/null && break
+  grep -q '^RC ' "$LP_STATUS" 2>/dev/null && break
   sleep 0.1; i=$((i + 1))
 done
 if [ -z "$LP_PID" ]; then
+  # the reason is decided BEFORE stopping it (stopping it writes an RC line of its own)
+  if grep -q '^RC ' "$LP_STATUS" 2>/dev/null; then why="died before READY ($(sed -n 's/^RC //p' "$LP_STATUS"))"; else why="handshake_timeout after ${HS}s"; fi
   exec 5>&-
-  case "$LP_SPAWN" in ''|*[!0-9]*) ;; *) kill -TERM "$LP_SPAWN" 2>/dev/null;; esac   # no handshake: stop it, never wait on it
-  echo "WINQA_E_LOGPIPE 70" >&4; rm -rf "$LP_DIR"; exit 70
+  # no handshake: stop logpipe (a child of the waiting subshell) and the subshell; never wait on them
+  case "$LP_SPAWN" in ''|*[!0-9]*) ;; *) pkill -TERM -P "$LP_SPAWN" 2>/dev/null; kill -TERM "$LP_SPAWN" 2>/dev/null;; esac
+  echo "WINQA_E_LOGPIPE 70 $why" >&4; rm -rf "$LP_DIR"; exit 70
 fi
 exec 1>&5 2>&5 5>&-
-logpipe_alive() { kill -0 "$LP_PID" 2>/dev/null && ! grep -q '^EXIT ' "$LP_STATUS" 2>/dev/null; }
-# close order: give the terminal back, close the only write end, bounded wait (10 s) for logpipe, then decide the
-# exit code from logpipe's REAL exit status (status file "EXIT <code>"; none = killed = failure).
+logpipe_alive() { kill -0 "$LP_PID" 2>/dev/null && ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null; }
+# close order: give the terminal back, close the only write end, bounded wait (10 s) for the "RC" line written by the
+# waiting subshell. Not there -> TERM, KILL, wait 1 s more. The external exit code then follows that real status, and
+# a verdict already written is downgraded through winqa_chain so the two always agree (I-C1).
+LP_REASON=""
 logpipe_close() {
   local rc="$1" n=0 lp
   exec 1>&3 2>&4
-  while kill -0 "$LP_PID" 2>/dev/null && [ $n -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
-  if kill -0 "$LP_PID" 2>/dev/null; then kill -TERM "$LP_PID" 2>/dev/null; echo "WINQA_E_LOGPIPE 70" >&4; rc=70; fi
-  lp="$(sed -n 's/^EXIT \([0-9][0-9]*\)$/\1/p' "$LP_STATUS" 2>/dev/null)"
-  if [ "${lp:-x}" != 0 ]; then [ "$rc" = 0 ] && echo "WINQA_E_LOGPIPE 70" >&4; [ "$rc" = 0 ] && rc=70; fi
+  while ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null && [ $n -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
+  if ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null; then
+    LP_REASON=drain_timeout; kill -TERM "$LP_PID" 2>/dev/null; sleep 0.2; kill -KILL "$LP_PID" 2>/dev/null
+    n=0; while ! grep -q '^RC ' "$LP_STATUS" 2>/dev/null && [ $n -lt 10 ]; do sleep 0.1; n=$((n + 1)); done
+  fi
+  lp="$(sed -n 's/^RC \([0-9][0-9]*\)$/\1/p' "$LP_STATUS" 2>/dev/null | tail -1)"
+  if [ -z "$LP_REASON" ] && [ "${lp:-x}" != 0 ]; then
+    case "$lp" in '') LP_REASON=died;; 1[2-9][0-9]) LP_REASON=died;; *) LP_REASON="exit=$lp";; esac
+  fi
+  if [ -n "$LP_REASON" ]; then
+    # #414 test_a2: a channel that died mid-run (the script then stops on SIGPIPE, rc 141) is announced once
+    echo "WINQA_E_LOGPIPE 70 $LP_REASON" >&4
+    [ "$rc" = 0 ] && rc=70
+    if [ -n "${VERDICT:-}" ] && [ -f "$VERDICT" ]; then
+      python3 "$HERE/py/winqa_verdict.py" downgrade --out "$OUT" --dest "$VERDICT" --reason "logpipe_${LP_REASON%%=*}" >/dev/null 2>&1 \
+        || rm -f "$VERDICT"
+    fi
+  fi
   rm -rf "$LP_DIR"
   return "$rc"
 }
@@ -131,7 +156,7 @@ SCP=(scp -q ${ID_OPT[@]+"${ID_OPT[@]}"} -o BatchMode=yes -o ConnectTimeout=20)
 # R29 #323: every remote call with a variable part goes through ONE fixed command line; the values travel as a JSON
 # line on stdin (py/winqa_req.py builds it from separate argv entries), the key as the next line when needed.
 ENTRY='powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\winqa\ps\entry.ps1'
-step() { logpipe_alive || { echo "WINQA_E_LOGPIPE 70" >&4; exit 70; }; echo; echo "==== [$(date +%H:%M:%S)] $*"; }
+step() { logpipe_alive || exit 70; echo; echo "==== [$(date +%H:%M:%S)] $*"; }
 remote() { "${SSH[@]}" "$@"; }                 # fixed strings only (hostname, fixed mkdir)
 rcall() {                                      # rcall OP ARGS...   (see py/winqa_req.py)
   local req; req="$(python3 "$HERE/py/winqa_req.py" "$@")" || return 64

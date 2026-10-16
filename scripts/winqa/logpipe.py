@@ -4,7 +4,8 @@ Bash 3.2 needs no FIFO, extra pids or tee.
 
     python3 logpipe.py --log FILE --status FILE --keys-fd N
 
-- Reads stdin (the script's stdout+stderr) and passes it through redact.LineScrubber (multi-line state, #316).
+- Reads stdin (the script's stdout+stderr) through redact.Stream, the same single path as redact.py --lines
+  (#414 v5 part A: one decoder + line-by-line scanner; nothing held back or rescanned).
 - Writes the scrubbed bytes to FILE (append) and to stdout (the original terminal). Nothing unscrubbed is written.
 - Handshake: after the keys are read and FILE is open it writes "READY <pid>" to the status file; the script does
   not start its business output before it sees that line.
@@ -36,17 +37,21 @@ def main(argv):
         return E_LOGPIPE
     code = 0
     try:
-        sc = redact.LineScrubber(keys)
+        if not redact.keys_ok(keys):
+            raise ValueError('key with a line break')
         with open(log, 'ab') as fh:
+            def write(b):
+                fh.write(b); fh.flush()
+                sys.stdout.buffer.write(b); sys.stdout.buffer.flush()
             _status(status, f'READY {os.getpid()}')
-            for line in sys.stdin.buffer:
-                out = sc.feed(line)
-                if out:
-                    fh.write(out); fh.flush()
-                    sys.stdout.buffer.write(out); sys.stdout.buffer.flush()
-            out = sc.close()
-            fh.write(out); fh.flush(); os.fsync(fh.fileno())
-            sys.stdout.buffer.write(out); sys.stdout.buffer.flush()
+            st = redact.Stream(keys, write)
+            while True:
+                chunk = os.read(0, 65536)
+                if not chunk:
+                    break
+                st.feed(chunk)
+            st.close()
+            fh.flush(); os.fsync(fh.fileno())
     except BaseException:
         code = E_LOGPIPE
         try:

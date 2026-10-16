@@ -704,7 +704,8 @@ def test_r23_190_utf16_without_bom_is_masked_and_written_back(tmp_path, codec):
 def test_r23_187_stdin_error_prints_nothing_and_exits_non_zero():
     bad = b'\xff\xfe' + '/Users/bob'.encode('utf-16-le') + b'\x00'
     p = subprocess.run(SH_REDACT, input=bad, capture_output=True)
-    assert p.returncode != 0 and p.stdout == b''
+    # #414 v5 I-A5: one streaming path - a failure stops output; what was already written was scrubbed
+    assert p.returncode == 3 and b'b\x00o\x00b' not in p.stdout and b'bob' not in p.stdout
     assert b'Traceback' not in p.stderr and b'bob' not in p.stderr
 
 

@@ -264,6 +264,16 @@ def test_p5_unrecoverable_legacy_obligations_make_a_resume_incomplete_not_green(
 
 # ------------------------------------------------------------------ #316 multi-line state machine
 
+def _stream(data, chunking=None, keys=()):
+    out = []
+    st = redact.Stream(list(keys), out.append)
+    parts = [data[i:i + chunking] for i in range(0, len(data), chunking)] if chunking else [data]
+    for p in parts:
+        st.feed(p)
+    st.close()
+    return b''.join(out), st
+
+
 @pytest.mark.parametrize('text', [
     'password="PRIVA\nPRIVB" after\n',
     'credentials={"a":"x",\n "b":"PRIVB"}\n',
@@ -273,33 +283,25 @@ def test_p5_unrecoverable_legacy_obligations_make_a_resume_incomplete_not_green(
 ])
 def test_316_live_lines_never_release_a_value_that_spans_lines(text):
     for chunking in (None, 1, 3):                      # whole, byte by byte and odd chunks (#316: across reads)
-        sc = redact.LineScrubber([])
-        out = b''
-        data = text.encode()
-        lines = data.splitlines(keepends=True)
-        if chunking:
-            lines = [data[i:i + chunking] for i in range(0, len(data), chunking)]
-        for l in lines:
-            out += sc.feed(l)
-        out += sc.close()
+        out, _ = _stream(text.encode(), chunking)
         assert b'PRIVB' not in out and b'PRIVA' not in out, (text, chunking, out)
 
 
 def test_316_unclosed_value_is_masked_to_eof_and_huge_values_sink(monkeypatch):
-    sc = redact.LineScrubber([])
-    out = sc.feed(b'ok line\n') + sc.feed(b'password="PRIV1\n') + sc.feed(b'PRIV2\n') + sc.close()
+    out, _ = _stream(b'ok line\npassword="PRIV1\nPRIV2\n')
     assert out.startswith(b'ok line\n') and b'PRIV' not in out
     monkeypatch.setattr(redact, 'HOLD_LIMIT', 64)
-    sc = redact.LineScrubber([])
-    out = sc.feed(b'secret={"a":"' + b'x' * 80 + b'\n') + sc.feed(b'PRIV3"}\n') + sc.close()
-    assert b'PRIV3' not in out and b'masked to the end' in out
+    out, st = _stream(b'secret={"a":"' + b'x' * 80 + b'\n' + b'PRIV3"}\nlater PRIV4\n')
+    assert b'PRIV3' not in out and b'PRIV4' not in out and st.sc.to_eof and out.count(b'\n') == 3
 
 
 def test_316_lines_mode_error_exits_non_zero_with_nothing_held():
     code = ("import sys; sys.path.insert(0, sys.argv[1]); import redact; "
-            "redact.scrub_bytes = lambda *a, **k: (_ for _ in ()).throw(RuntimeError('x')); sys.exit(redact._lines())")
+            "redact.scrub = lambda *a, **k: (_ for _ in ()).throw(RuntimeError('x')); "
+            "sys.exit(redact.run(0, sys.stdout.buffer, [], True))")
     done = subprocess.run([sys.executable, '-c', code, str(ROOT)], input=b'password="PRIVA\nb"\n', capture_output=True)
     assert done.returncode == 3 and b'PRIVA' not in done.stdout + done.stderr
+    assert done.stderr.strip() == b'WINQA_E_REDACT scan'
 
 
 @pytest.mark.parametrize('v', ['***suffix', '<url>suffix', '<user>suffix'])
@@ -339,6 +341,7 @@ def test_317_channel_not_up_exits_70_before_any_business_output(tmp_path, bash, 
         _fake_logpipe(tmp_path, '    sys.exit(1)')
     elif mode == 'no-handshake':
         _fake_logpipe(tmp_path, '    import time; time.sleep(30); sys.exit(0)')
+        env['WINQA_LOGPIPE_HANDSHAKE_S'] = '3'
     else:
         (tmp_path / 'ev').mkdir(); (tmp_path / 'ev' / 'run.log').mkdir()
     t0 = time.monotonic()
@@ -360,7 +363,7 @@ def test_317_channel_dying_after_the_last_step_turns_a_green_run_red(tmp_path, b
         "    for line in sys.stdin.buffer:\n"
         "        child.stdin.write(line); child.stdin.flush()\n"
         "    child.kill(); child.wait()\n"
-        "    sys.exit(0)"))
+        "    os.kill(os.getpid(), 9)"))   # v5 M3: the process the shell waits on is the one whose status counts
     done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=60)
     assert done.returncode == 70, (done.returncode, done.stderr[-300:])
     assert b'WINQA_E_LOGPIPE 70' in done.stderr
@@ -382,6 +385,7 @@ def test_317_child_holding_the_write_end_cannot_hang_the_close(tmp_path, bash):
     done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=60)
     assert time.monotonic() - t0 < 30
     assert done.returncode == 70, done.returncode
+    assert done.stderr.count(b'WINQA_E_LOGPIPE 70') == 1, done.stderr[-300:]   # #414: announced once, not twice
 
 
 # ------------------------------------------------------------------ #323 fixed entry + stdin request

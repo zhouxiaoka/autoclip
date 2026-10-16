@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 from _winqa_helpers import *  # noqa: F401,F403  (ROOT, KEY, LEAKS, fakes, _env, _run, ...)
-from _winqa_helpers import _ee, _rebuild, _verify, _export, STEPS_OK, _env, _run, _steps, _manifest, _tree, _vm_fixture, _py_bin, _assert_no_raw_on_control  # noqa: F401
+from _winqa_helpers import _ee, _rebuild, _verify, _export, STEPS_OK, _env, _run, _steps, _manifest, _tree, _vm_fixture, _py_bin, _assert_no_raw_on_control, _save_failure_evidence  # noqa: F401
 
 # ---- acceptance: the happy path exports structured evidence only, withholds the rest, keeps originals ----
 
@@ -58,8 +58,10 @@ def test_a2_failure_at_any_point_leaves_no_raw_file_keeps_originals_and_exits_no
     """#251 (VM-side scrub without the exact key), #253 (scp failure swallowed): copy/scrub, commit, transfer,
     truncated transfer and local verification failures all give FAIL + non-zero exit and an untouched $OUT."""
     done = _run(tmp_path, bash, mode)
-    assert done.returncode != 0, (mode, done.stdout[-800:])
-    assert 'pull_final=FAIL' in _steps(tmp_path), (mode, _steps(tmp_path), done.stdout[-800:])
+    if done.returncode == 0 or 'pull_final=FAIL' not in _steps(tmp_path):   # #414: keep evidence of a one-off failure
+        ev = _save_failure_evidence(tmp_path, done, mode)
+        pytest.fail(f'{mode}: rc={done.returncode} steps={_steps(tmp_path)!r} evidence={ev} '
+                    f'stderr={done.stderr[-300:]!r} stdout={done.stdout[-800:]!r}')
     assert not (tmp_path / 'ev' / 'env.json').exists(), mode
     # #311: every failure mode (TERM is a3) leaves no staging dir behind
     assert not list((tmp_path / 'home' / '.cache' / 'autoclip-winqa-stage').glob('winqa-stage.*')), mode
@@ -67,6 +69,29 @@ def test_a2_failure_at_any_point_leaves_no_raw_file_keeps_originals_and_exits_no
         exp = tmp_path / 'vm' / 'export'
         assert not list(exp.glob('*.zip')), 'a killed exporter must not leave a committed bundle'
 
+
+
+@pytest.mark.parametrize('bash', BASHES)
+def test_a2b_log_channel_lost_during_export_is_announced_not_silent(tmp_path, bash):
+    """#414 test_a2 flake, deterministic: the live-log channel dies while the exporter runs (the exact signature seen
+    once on zhoukaka: output ends at collect_logs, no pull_final receipt, rc 141). The run must still stop non-zero,
+    leave nothing raw and no staging dir, AND say on stderr that the log channel was lost (it used to be silent)."""
+    env, args = _env(tmp_path, 'export-killed')
+    ssh = tmp_path / 'bin' / 'ssh'
+    ssh.write_text(ssh.read_text().replace("    if req['op'] == 'py':\n", (
+        "    if req['op'] == 'py' and req['args']['script'] == 'export_evidence':\n"
+        "        import signal\n"
+        "        st = glob.glob(os.environ['TMPDIR'] + '/winqa-lp.*/status')[0]\n"
+        "        os.kill(int(open(st).read().split()[1]), signal.SIGKILL)\n"
+        "    if req['op'] == 'py':\n"), 1))
+    before = _tree(tmp_path / 'vm' / 'out')
+    done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=60)
+    assert _tree(tmp_path / 'vm' / 'out') == before
+    _assert_no_raw_on_control(tmp_path, done)
+    assert done.stdout.rstrip().endswith('-> collect_logs: ok (rc=0)'.encode()), done.stdout[-300:]   # the flake's shape
+    assert done.returncode == 141, (done.returncode, done.stderr[-300:])
+    assert done.stderr.count(b'WINQA_E_LOGPIPE 70') == 1, done.stderr[-300:]
+    assert not list((tmp_path / 'home' / '.cache' / 'autoclip-winqa-stage').glob('winqa-stage.*'))
 
 @pytest.mark.parametrize('bash', BASHES)
 def test_a3_term_during_transfer_exits_143_and_leaves_nothing_raw(tmp_path, bash):

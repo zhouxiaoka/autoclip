@@ -318,20 +318,6 @@ def _field_value_ex(s, a, name):
     return (a, b, False) if b > a else None
 
 
-def value_open_at_end(s) -> bool:
-    """True when a credential value in s is still open at its end (live line mode must hold the text)."""
-    until = -1
-    for m in _FIELD_TEXT.finditer(s):
-        if m.start() < until or not is_secret_field(m.group(2)):
-            continue
-        v = _field_value_ex(s, m.end(), m.group(2))
-        if v:
-            until = v[1]
-            if v[2]:
-                return True
-    return False
-
-
 def _field_ranges(s):
     out, until = [], -1
     for m in _FIELD_TEXT.finditer(s):
@@ -587,73 +573,338 @@ def _read_fd_keys(fd: int):
         return [k for k in (line.rstrip('\r\n') for line in fh) if k]
 
 
-def _stdin():
-    """R23 #187: on any error print nothing of the input and exit non-zero (no traceback)."""
-    try:
-        out = scrub_bytes(sys.stdin.buffer.read(), stream=True, keys=_env_keys())
-    except Exception as exc:
-        print(f'redact: ERROR {type(exc).__name__}; diagnostics withheld', file=sys.stderr)
-        return 3
-    sys.stdout.buffer.write(out)
-    return 0
+# ---------------------------------------------------------------------------------------------------------------
+# #414 design v5 part A: ONE streaming path for every live and whole-stream caller (--stdin, --lines, logpipe.py).
+#   bytes -> Decoder (encoding fixed once at the start, incremental) -> line splitter (\n, \r\n, chunk-independent)
+#         -> Scanner (line by line, carries only a small state across lines) -> encoder (input encoding) -> out
+# An unclosed credential value only sets state; nothing is buffered or rescanned (#383), so each line costs
+# O(line length). The state is judged on decoded text only, so UTF-16 input cannot slip past it (#382).
+# ---------------------------------------------------------------------------------------------------------------
+HOLD_LIMIT = 1 << 20      # an unclosed value longer than this: every later line is masked whole until EOF
+MAX_LINE = 1 << 16        # a longer line goes to the scanner in 64 KiB pieces, state carried (bounded memory)
+ENC_MARK = '[REDACTED:encoding]'
+STATS = {'scanned': 0}    # characters handed to the scanner (linearity is asserted on this counter, M12)
+E_USAGE, E_INTERNAL = 2, 3
+_STREAM_BOMS = [(b'\xef\xbb\xbf', 'utf-8'), (b'\xff\xfe\x00\x00', 'utf-32-le'), (b'\x00\x00\xfe\xff', 'utf-32-be'),
+                (b'\xff\xfe', 'utf-16-le'), (b'\xfe\xff', 'utf-16-be')]
 
 
-HOLD_LIMIT = 1 << 20     # R29 #316: an open credential value longer than this is masked to the end of the stream
+def key_byte_forms(keys):
+    """I-A7: every key form (exact + app-masked) as UTF-8, UTF-16LE and UTF-16BE bytes."""
+    return [f.encode(c) for f in _key_forms(keys) for c in ('utf-8', 'utf-16-le', 'utf-16-be')]
 
 
-def held_open(buf: bytes) -> bool:
-    """A credential value is still open at the end of buf in some reading -> hold it until it closes."""
-    text = buf.decode('utf-8', 'replace')
-    return any(value_open_at_end(''.join(v[0])) for v in _views(text))
+def key_leak(data: bytes, keys) -> bool:
+    """I-A7 check, shared by the stream writer and export_evidence (one function, design review M-2c)."""
+    return any(f and f in data for f in key_byte_forms(keys))
 
 
-class LineScrubber:
-    """R29 #316 multi-line state for live logs. Lines are released only when no credential value is open across
-    them (quotes/escapes, bracket stack, HTTP folding - see _field_value_ex). Held text crosses read chunks. At EOF
-    held text is scrubbed with open values masked to the end; past HOLD_LIMIT everything after the open value is
-    masked until EOF. Plain text is never released while a value is open."""
+def _quote_state(s, a, q):
+    esc, b = False, a
+    while b < len(s):
+        c = s[b]
+        if esc:
+            esc = False
+        elif c == '\\':
+            esc = True
+        elif c == q:
+            return None, b
+        b += 1
+    return ('Q', q, esc), len(s)
+
+
+def _struct_state(s, a, opener, depth=0, quote=None, esc=False):
+    closer, b = _CLOSE[opener], a
+    while b < len(s):
+        c = s[b]
+        if quote:
+            if esc:
+                esc = False
+            elif c == '\\':
+                esc = True
+            elif c == quote:
+                quote = None
+        elif c in '"\'':
+            quote = c
+        elif c == opener:
+            depth += 1
+        elif c == closer:
+            depth -= 1
+            if depth == 0:
+                return None, b + 1
+        b += 1
+    return ('S', opener, depth, quote, esc), len(s)
+
+
+def _is_header(name):
+    return any(_norm_field(name).endswith(w) for w in _TO_EOL)
+
+
+def end_state(s):
+    """State left at the end of one line scanned from NORMAL. Quotes in ordinary text are not tracked (M5): only
+    the value of a credential field can open a state. A credential field with nothing after it opens PENDING (M1):
+    its value is the first token of the next line."""
+    for view in _views(s):
+        st = _end_state_view(''.join(view[0]))
+        if st:
+            return st
+    return None
+
+
+def _end_state_view(s):
+    until, state = -1, None
+    for m in _FIELD_TEXT.finditer(s):
+        if m.start() < until or not is_secret_field(m.group(2)):
+            continue
+        name, a = m.group(2), m.end()
+        if s[a:].strip(' \t\r') == '':
+            return ('P', name)
+        c = s[a]
+        if c in '"\'':
+            st, until = _quote_state(s, a + 1, c)
+        elif c in _CLOSE:
+            st, until = _struct_state(s, a, c)
+        elif _is_header(name):
+            return ('H',)
+        else:
+            v = _field_value(s, a, name)
+            st, until = None, (v[1] if v else a)
+        state = st
+        if st:
+            return st
+    return state
+
+
+class Scanner:
+    """Line-by-line credential scanner. State across lines: None (NORMAL), ('Q', quote, escaped),
+    ('S', opener, depth, quote, escaped), ('H',) header folding, ('P', field) waiting for a value. Each line is
+    output as soon as it arrives: the part inside an open value becomes ***; nothing is held back or rescanned."""
 
     def __init__(self, keys):
-        self.keys, self.buf, self.sink, self.sunk = keys, b'', False, 0
+        self.keys, self.st, self.masked, self.to_eof, self.unclosed_seen = list(keys), None, 0, False, False
 
-    def feed(self, line: bytes) -> bytes:
-        if self.sink:
-            self.sunk += 1
-            return b''
-        self.buf += line
-        if len(self.buf) > HOLD_LIMIT:
-            out = scrub_bytes(self.buf, stream=True, keys=self.keys)   # the open value runs to the end: masked
-            self.buf, self.sink = b'', True
-            return out
-        if not self.buf.endswith(b'\n') or held_open(self.buf):   # partial line across reads, or a value open
-            return b''
-        out, self.buf = scrub_bytes(self.buf, stream=True, keys=self.keys), b''
+    def _hold(self, s, st):
+        self.st = st
+        self.masked += len(s)
+        if self.masked > HOLD_LIMIT:
+            self.to_eof = True
+        return SECRET if s else ''
+
+    def normal(self, s):
+        out = scrub(s, self.keys)
+        self.st = end_state(s)
+        self.masked = len(s) if self.st and self.st[0] != 'P' else 0   # the open part counts toward the limit
+        if self.masked > HOLD_LIMIT:
+            self.to_eof = True
         return out
 
-    def close(self) -> bytes:
-        out = scrub_bytes(self.buf, stream=True, keys=self.keys) if self.buf else b''
-        if self.sunk:
-            out += f'[redact: {self.sunk} line(s) masked to the end of the stream]\n'.encode()
-        self.buf = b''
-        return out
+    def line(self, s):
+        STATS['scanned'] += len(s)
+        if self.to_eof:
+            return SECRET if s else ''
+        st = self.st
+        if st is None:
+            return self.normal(s)
+        kind = st[0]
+        if kind == 'Q':
+            if st[2]:                        # the previous line ended with a backslash: this char is escaped
+                if not s:
+                    return self._hold(s, ('Q', st[1], False))
+                new, b = _quote_state(s, 1, st[1])
+            else:
+                new, b = _quote_state(s, 0, st[1])
+            if new:
+                return self._hold(s, new)
+            self.st, self.masked = None, 0
+            return SECRET + self.normal(s[b:])
+        if kind == 'S':
+            new, b = _struct_state(s, 0, st[1], st[2], st[3], st[4])
+            if new:
+                return self._hold(s, new)
+            self.st, self.masked = None, 0
+            return SECRET + self.normal(s[b:])
+        if kind == 'H':
+            if s[:1] in (' ', '\t'):         # HTTP folded continuation
+                return self._hold(s, st)
+            return self.normal(s)
+        # PENDING: the value of a credential field whose line ended right after the separator
+        name = st[1]
+        if s.strip(' \t\r') == '':
+            if _is_header(name):
+                self.st = None
+            return s
+        if _is_header(name):
+            if s[:1] in (' ', '\t'):
+                return self._hold(s, ('H',))
+            return self.normal(s)
+        a = len(s) - len(s.lstrip(' \t'))
+        c = s[a]
+        if c in '"\'':
+            new, b = _quote_state(s, a + 1, c)
+        elif c in _CLOSE:
+            new, b = _struct_state(s, a, c)
+        else:
+            v = _field_value(s, a, name)
+            new, b = None, (v[1] if v else len(s))
+        if new:
+            return s[:a] + self._hold(s[a:], new)
+        self.st, self.masked = None, 0
+        return s[:a] + SECRET + self.normal(s[b:] if c not in '"\'' else s[b:])
 
 
-def _lines():
-    """Live logs through LineScrubber. Any error: the held text is dropped, one fixed line, exit 3 (R29 #316: the
-    old handler withheld the line but still exited 0)."""
-    sc = LineScrubber(_env_keys())
+def _utf16_suspect(line):
+    """In a UTF-16 stream: text that is really another encoding (shifted by a byte, or 8-bit text appended)."""
+    if not line:
+        return False
+    if any(0xD800 <= ord(c) <= 0xDFFF for c in line):
+        return True
+    swapped = sum(1 for c in line if ord(c) > 0xFF and ord(c) & 0xFF == 0)
+    if swapped >= 2:
+        return True
+    return len(line) >= 4 and all(0x20 <= ord(c) >> 8 <= 0x7e and 0x09 <= ord(c) & 0xFF <= 0x7e for c in line)
+
+
+class Stream:
+    """Decoder + splitter + scanner + encoder for one byte stream. feed() any chunk sizes; close() at EOF.
+    Output bytes do not depend on how the input was chunked (I-A1)."""
+
+    def __init__(self, keys, write):
+        self.keys, self.write, self.sc = list(keys), write, Scanner(keys)
+        self.codec, self.errors, self.head, self.dec, self.pend, self.enc_lines = None, None, b'', None, '', 0
+
+    def _pick(self, final):
+        data = self.head
+        for bom, codec in _STREAM_BOMS:
+            if data.startswith(bom):
+                if not final and len(data) < 4 and bom == b'\xff\xfe':
+                    return False             # could still be a UTF-32LE BOM
+                self._set(codec, bom)
+                return True
+        if not final and len(data) < 4 and any(b.startswith(data) for b, _ in _STREAM_BOMS):
+            return False                     # only a BOM prefix so far (never waits on ordinary text, M14)
+        if not final and len(data) < 4:
+            return False                     # 4 bytes decide (a 10-byte first line is never held, M14)
+        data = data[:4]                      # only the first 4 bytes decide: the choice is chunk-independent
+        if len(data) >= 2 and data.count(0) * 4 >= len(data):
+            self._set('utf-16-le' if data[1::2].count(0) >= data[0::2].count(0) else 'utf-16-be', b'')
+        else:
+            self._set('utf-8', b'')
+        return True
+
+    def _set(self, codec, bom):
+        import codecs
+        self.codec, self.errors = codec, ('surrogateescape' if codec == 'utf-8' else 'surrogatepass')
+        self.dec = codecs.getincrementaldecoder(codec)(self.errors)
+        data, self.head = self.head[len(bom):], None
+        if bom:
+            self.write(bom)
+        self._text(self.dec.decode(data))
+
+    def feed(self, data: bytes):
+        if self.codec is None:
+            self.head += data
+            self._pick(False)
+            return
+        self._text(self.dec.decode(data))
+
+    def close(self):
+        if self.codec is None:
+            self._pick(True)
+        self._text(self.dec.decode(b'', final=True))
+        if self.pend:
+            self._line(self.pend, '')
+            self.pend = ''
+
+    def _text(self, t):
+        if not t:
+            return
+        self.pend += t
+        while True:
+            i = self.pend.find('\n')
+            if i < 0:
+                break
+            line, self.pend = self.pend[:i], self.pend[i + 1:]
+            if line.endswith('\r'):
+                self._line(line[:-1], '\r\n')
+            else:
+                self._line(line, '\n')
+        while len(self.pend) > MAX_LINE:
+            piece, self.pend = self.pend[:MAX_LINE], self.pend[MAX_LINE:]
+            self._line(piece, '')
+
+    def _conflict(self, line):
+        if self.codec == 'utf-8':
+            return '\x00' in line
+        if self.codec.startswith('utf-16'):
+            return _utf16_suspect(line)
+        return False
+
+    def _line(self, line, eol):
+        if self._conflict(line):
+            # M2 (PM ruling): a line whose encoding switched is output only as the marker; it may still open state
+            self.enc_lines += 1
+            STATS['scanned'] += len(line)
+            st = end_state(line.replace('\x00', '')) if self.sc.st is None else None
+            if st:
+                self.sc.st, self.sc.masked = st, 0
+            out = ENC_MARK + eol
+        elif self.codec == 'utf-8' and any('\udc80' <= c <= '\udcff' for c in line):
+            # bytes that are not UTF-8 (gb18030, shift_jis...): the byte-level reader masks this one line
+            before = self.sc.st
+            text = self.sc.line(line)
+            if before is None and self.sc.st is None:
+                data = scrub_bytes(line.encode('utf-8', 'surrogateescape'), keys=self.keys) + eol.encode()
+                self._emit(data, eol)
+                return
+            out = text + eol
+        else:
+            out = self.sc.line(line) + eol
+        self._emit(out.encode(self.codec, self.errors), eol)
+
+    def _emit(self, data, eol):
+        if key_leak(data, self.keys):        # I-A7: no output in any mode carries a key in any encoding
+            data = (SECRET + eol).encode(self.codec, self.errors)
+        self.write(data)
+
+
+def run(src_fd: int, out, keys, flush: bool) -> int:
+    """The one entry point (--stdin, --lines, logpipe.py). Exit codes: 0 done (warnings only on stderr),
+    3 internal error: nothing more is written, stderr gets only `WINQA_E_REDACT <stage>`."""
+    stage = ['decode']
+
+    def write(b):
+        stage[0] = 'write'
+        out.write(b)
+        if flush:
+            out.flush()
+        stage[0] = 'scan'
     try:
-        for line in sys.stdin.buffer:
-            out = sc.feed(line)
-            if out:
-                sys.stdout.buffer.write(out)
-                sys.stdout.buffer.flush()
-        sys.stdout.buffer.write(sc.close())
-        sys.stdout.buffer.flush()
-    except Exception as exc:
-        sys.stderr.write(f'redact: ERROR {type(exc).__name__}; held text withheld\n')
-        return 3
+        s = Stream(keys, write)
+        while True:
+            stage[0] = 'read'
+            chunk = os.read(src_fd, 65536)
+            stage[0] = 'scan'
+            if not chunk:
+                break
+            s.feed(chunk)
+        s.close()
+        stage[0] = 'write'
+        out.flush()
+    except Exception:
+        try:
+            sys.stderr.write(f'WINQA_E_REDACT {stage[0]}\n')
+        except Exception:
+            pass
+        return E_INTERNAL
+    if s.sc.to_eof:
+        sys.stderr.write('WINQA_W_REDACT_MASK_EOF\n')
+    elif s.sc.st is not None and s.sc.st[0] in ('Q', 'S'):
+        sys.stderr.write('WINQA_W_REDACT_UNCLOSED\n')
     return 0
+
+
+def keys_ok(keys):
+    return all('\n' not in k and '\r' not in k for k in keys)
 
 
 if __name__ == '__main__':
@@ -664,11 +915,18 @@ if __name__ == '__main__':
             _FD_KEYS = _read_fd_keys(int(a[i + 1]))
         except Exception as exc:
             print(f'redact: ERROR reading keys ({type(exc).__name__})', file=sys.stderr)
-            sys.exit(2)
+            sys.exit(E_USAGE)
         del a[i:i + 2]
-    if a == ['--stdin']:
-        sys.exit(_stdin())
-    if a == ['--lines']:
-        sys.exit(_lines())
+    if a in (['--stdin'], ['--lines']):
+        keys = _env_keys()
+        if not keys_ok(keys):
+            print('redact: ERROR key contains a line break', file=sys.stderr)
+            sys.exit(E_USAGE)
+        rc = run(0, sys.stdout.buffer, keys, flush=a == ['--lines'])
+        if os.environ.get('WINQA_REDACT_STATS') == '1':
+            sys.stderr.write(f"WINQA_STATS scanned={STATS['scanned']}\n")
+        if rc:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), 1)     # nothing more reaches the old stdout at exit
+        sys.exit(rc)
     print(__doc__.split('Usage: ')[1].split('\n\n')[0], file=sys.stderr)
-    sys.exit(2)
+    sys.exit(E_USAGE)

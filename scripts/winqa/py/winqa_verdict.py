@@ -112,7 +112,21 @@ def check_binding(out: Path, verdict) -> bool:
         b.get('receipts_upto_seq') == len([l for l in data.splitlines() if l.strip()])
 
 
+def downgrade(dest: Path, reason: str):
+    """I-C1: the run's external exit code is non-zero after the verdict was written (log channel lost): the
+    verdict on disk becomes a failure with that reason, so the file and the exit code agree."""
+    v = json.loads(dest.read_text(encoding='utf-8'))
+    v['overall'] = _worst(v.get('overall', 'rejected'), 'fail')
+    v['reasons'] = list(v.get('reasons') or []) + [reason]
+    tmp = dest.with_name(dest.name + '.tmp')
+    tmp.write_text(json.dumps(v, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    tmp.replace(dest)
+    return v
+
+
 def main(a):
+    if a and a[0] == 'downgrade':
+        downgrade(Path(wp._arg(a, '--dest')), wp._arg(a, '--reason') or 'external_failure'); return 0
     if not a or a[0] != 'final':
         print(__doc__, file=sys.stderr); return 2
     out = Path(wp._arg(a, '--out'))
