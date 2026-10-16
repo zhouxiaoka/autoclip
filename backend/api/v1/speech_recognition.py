@@ -417,21 +417,32 @@ async def test_speech_service(request: TestSpeechServiceRequest):
 QA_FAIL_MODEL_DOWNLOAD_ENV = "AUTOCLIP_QA_FAIL_MODEL_DOWNLOAD"
 
 
+QA_MOCK_DOWNLOAD_DETAIL = "qa_mock_model_download_500"
+
+
 def qa_fail_model_download() -> bool:
     import os
     return os.environ.get(QA_FAIL_MODEL_DOWNLOAD_ENV) == "1"
 
 
+def qa_simulated_download_failure(model: str) -> JSONResponse:
+    """The one place the QA switch acts (#405, #406): the local log says it is a QA simulation; the 500 is a plain
+    response, not an HTTPException, so FastApiIntegration reports nothing to Sentry; and no success-rate telemetry
+    is emitted. Only the model download request goes through here."""
+    logger.warning("QA 模拟 (QA simulated failure): %s=1, model download request for %s answered 500; "
+                   "not reported to Sentry, no success-rate telemetry", QA_FAIL_MODEL_DOWNLOAD_ENV, model)
+    return JSONResponse(status_code=500, content={"detail": QA_MOCK_DOWNLOAD_DETAIL})
+
+
 @router.post("/whisper-models/download")
 async def download_whisper_model(request: DownloadModelRequest):
-    if qa_fail_model_download():
-        logger.warning("QA switch %s=1: model download request answered 500", QA_FAIL_MODEL_DOWNLOAD_ENV)
-        raise HTTPException(status_code=500, detail="qa_mock_model_download_500")
     """开始下载 Whisper 模型（后台）。
 
     200 status=installed：本地已有完整模型。202 status=downloading：已开始或正在下载，
     结果看 GET /whisper-models/{name}/status。不能在这里说「下载完成」（RC156 Win QA #5）。
     """
+    if qa_fail_model_download():
+        return qa_simulated_download_failure(request.model)
     try:
         model_manager = get_model_manager()
         state = await model_manager.download_model(request.model)

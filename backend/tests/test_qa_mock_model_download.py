@@ -49,3 +49,61 @@ def test_no_shipped_config_sets_the_switch():
         files = [target] if target.is_file() else [p for p in target.rglob('*') if p.is_file() and p.stat().st_size < 2_000_000] if target.exists() else []
         for f in files:
             assert sr.QA_FAIL_MODEL_DOWNLOAD_ENV not in f.read_text(encoding='utf-8', errors='ignore'), f
+
+
+def test_switch_log_says_qa_simulation(client, monkeypatch, caplog):
+    """#405: the local log is still written and names it a QA simulation."""
+    import logging
+    monkeypatch.setenv(sr.QA_FAIL_MODEL_DOWNLOAD_ENV, '1')
+    http, _ = client
+    with caplog.at_level(logging.WARNING, logger=sr.logger.name):
+        res = http.post('/api/v1/whisper-models/download', json={'model': 'base'})
+    assert res.status_code == 500 and res.json()['detail'] == sr.QA_MOCK_DOWNLOAD_DETAIL
+    lines = [r.getMessage() for r in caplog.records if sr.QA_FAIL_MODEL_DOWNLOAD_ENV in r.getMessage()]
+    assert lines and all('QA 模拟' in line for line in lines), lines
+
+
+def test_endpoint_docstring_is_kept():
+    """#405: the switch check sits after the docstring, so the endpoint keeps its docs."""
+    assert sr.download_whisper_model.__doc__ and 'Whisper' in sr.download_whisper_model.__doc__
+
+
+def test_switch_sends_no_telemetry_and_nothing_to_sentry(client, monkeypatch):
+    """#406 + group decision: the simulated failure emits 0 success-rate events and 0 Sentry events (one place);
+    a real 5xx HTTPException through the same app and SDK setup is reported, so the counter can see a report."""
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+    from backend.core import llm_emit
+
+    telemetry = []
+    monkeypatch.setattr(llm_emit, '_post_event', lambda event, props: telemetry.append(event))
+    envelopes = []
+
+    class Transport(sentry_sdk.transport.Transport):
+        def capture_envelope(self, envelope):
+            envelopes.extend(item for item in envelope.items if item.type == 'event')
+
+    sentry_sdk.init(dsn='https://k@o0.ingest.sentry.io/0', transport=Transport(), default_integrations=False, auto_session_tracking=False,
+                    integrations=[StarletteIntegration(), FastApiIntegration()])
+    try:
+        monkeypatch.setenv(sr.QA_FAIL_MODEL_DOWNLOAD_ENV, '1')
+        http, calls = client
+        res = http.post('/api/v1/whisper-models/download', json={'model': 'base'})
+        sentry_sdk.flush()
+        assert res.status_code == 500 and calls == []
+        assert telemetry == [], telemetry
+        assert envelopes == [], 'QA simulated 500 reported to Sentry'
+
+        # control: a real download failure (HTTPException 500) is reported by the same setup
+        monkeypatch.delenv(sr.QA_FAIL_MODEL_DOWNLOAD_ENV)
+
+        class Broken:
+            async def download_model(self, model):
+                raise RuntimeError('disk full')
+        monkeypatch.setattr(sr, 'get_model_manager', lambda: Broken())
+        assert http.post('/api/v1/whisper-models/download', json={'model': 'base'}).status_code == 500
+        sentry_sdk.flush()
+        assert len(envelopes) >= 1, 'control: a real 5xx must be visible to the counter'
+    finally:
+        sentry_sdk.init(dsn=None)

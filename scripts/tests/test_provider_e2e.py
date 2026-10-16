@@ -1012,6 +1012,28 @@ class ProviderE2EPaidCallCountTests(unittest.TestCase):
             row = self._run(import_effect=effect)
         self.assertIsNone(row['billable_calls_before_failure'], 'compared by id, not by count')
 
+    def test_project_removed_after_import_is_unknown(self):
+        """#407: fewer projects after the import (one deleted) is not a proven rejection; a subset check fails this."""
+        from provider_e2e import harness
+        self.assertEqual(harness.import_rejected_count('source_too_short', frozenset({'a', 'b'}), frozenset({'a'})), (None, None))
+        self.assertEqual(harness.import_rejected_count('source_too_short', frozenset({'a', 'b'}), frozenset({'a', 'b'})), (0, 'import_rejected'))
+
+        def effect(d, E):
+            (d / 'projects' / 'gone').rmdir()
+            raise E(422, self.SOURCE_422)
+        before = harness.project_ids
+        seeded_once = []
+        def seeded(data_dir):
+            if not seeded_once:
+                seeded_once.append(1)
+                (data_dir / 'projects' / 'kept').mkdir(parents=True, exist_ok=True)
+                (data_dir / 'projects' / 'gone').mkdir(parents=True, exist_ok=True)
+            return before(data_dir)
+        with patch.object(harness, 'project_ids', seeded):
+            row = self._run(import_effect=effect)
+        self.assertIsNone(row['billable_calls_before_failure'], 'a project disappeared: unknown, not 0')
+        self.assertFalse(row['passed'])
+
     def test_422_without_source_code_is_not_a_block(self):
         row = self._run(import_effect=lambda d, E: (_ for _ in ()).throw(E(422, json.dumps({'detail': {'code': 'whisper_not_installed'}}))))
         self.assertFalse(row['passed'])

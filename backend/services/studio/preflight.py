@@ -147,7 +147,7 @@ def _after_ffprobe(path: Path, duration, audio, width, height, stderr: str = '')
     from backend.pipeline import media_precheck
     if duration and duration > 0:
         return MaterialProbe(ProbeState.READABLE, path, duration, audio, width, height, ffprobe_runs=1)
-    found, decode_err = media_precheck._ffmpeg_decode_duration(path)
+    found, decode_err = media_precheck.ffmpeg_decode_duration(path)
     if found:
         return MaterialProbe(ProbeState.READABLE, path, found, audio, width, height, ffprobe_runs=1, decode_runs=1)
     detail = media_precheck.sanitize_tool_output(f'ffprobe: {stderr or "no duration"}\nffmpeg: {decode_err}', path)

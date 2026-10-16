@@ -141,7 +141,7 @@ def sanitize_tool_output(text: str, video=None, limit: int = 600) -> str:
     return out.strip()[-limit:]
 
 
-def _ffmpeg_decode_duration(video) -> tuple[Optional[float], str]:
+def ffmpeg_decode_duration(video) -> tuple[Optional[float], str]:
     """Fallback: decode the file with ffmpeg and read the last ``time=``."""
     import re
     try:

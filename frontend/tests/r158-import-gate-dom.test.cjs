@@ -413,6 +413,29 @@ test('#371: link_import_without_whisper background install runs through the cont
   act(() => view.root.unmount())
 })
 
+test('#404: a background install that fails is shown (no longer hidden) with a retry that installs again', async () => {
+  const clock = fakeClock()
+  let report = check('whisper_not_installed', { repair: 'install_whisper' })
+  const installs = []
+  let runtime = { status: 'installing', progress: 10 }
+  const view = await render({ clock, readiness: async () => report,
+    pasteStart: { shouldBackgroundInstallWhisper: (allow, code) => code === 'whisper_not_installed', claimBackgroundWhisperInstall: () => installs.length === 0 },
+    speech: { installRuntime: async () => { installs.push('runtime'); runtime = installs.length > 1 ? { status: 'installing', progress: 0 } : runtime; report = check('whisper_installing'); return {} }, getRuntimeStatus: async () => runtime },
+    importImpl: async () => ({ project_id: 'p' }) })
+  await act(async () => {}); await act(async () => {})
+  assert.equal(view.host.querySelector('[role=alertdialog]'), null, 'running: inline')
+  runtime = { status: 'error' }
+  await clock.advance(2000); await act(async () => {}); await act(async () => {})
+  const dialog = view.host.querySelector('[role=alertdialog]')
+  assert.ok(dialog, 'failed background install is shown')
+  assert.match(dialog.textContent, /安装或模型下载失败/)
+  const retry = [...dialog.querySelectorAll('button')].find(b => b.textContent === '重试')
+  assert.ok(retry, 'retry entry')
+  await act(async () => { retry.click() }); await act(async () => {}); await act(async () => {})
+  assert.deepEqual(installs, ['runtime', 'runtime'], 'retry installs again')
+  act(() => view.root.unmount())
+})
+
 test('#372: model download 500 on the page shows failed with retry; polling does not resend', async () => {
   const clock = fakeClock()
   let report = check('whisper_model_missing', { model: 'small' })

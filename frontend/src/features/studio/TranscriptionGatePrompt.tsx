@@ -19,7 +19,9 @@ export interface TranscriptionGatePromptProps {
  * Every phase has an exit: install, wait with progress, continue, or retry / transcription settings. */
 export default function TranscriptionGatePrompt({ state, busy, onInstall, onRetry, onContinue, navigate }: TranscriptionGatePromptProps) {
   const settings = () => navigate(repairDestination('settings_transcription') as string)
-  if (state.phase === 'idle' || state.background) return null  // #371: a background install stays inline
+  // #371: a background install stays inline while it runs; #404: once it failed or timed out it is shown, with retry.
+  const ended = state.phase === 'failed' || state.phase === 'timeout'
+  if (state.phase === 'idle' || (state.background && !ended)) return null
   if (state.phase === 'install_required') return <div className="studio-readiness" role="alertdialog" aria-label={t('需要先安装本地转写')}>
     <b>{t('需要先安装本地转写')}</b>
     <span>{t('视频没有字幕，所选的本地 Whisper 还没装好。安装完成后再开始，或改用云端转写。')}</span>
@@ -34,13 +36,15 @@ export default function TranscriptionGatePrompt({ state, busy, onInstall, onRetr
       <span>{t('本地转写已就绪，可以继续导入。')}</span>
       <div className="studio-actions"><Btn size="sm" disabled={busy} onClick={onContinue}>{t('继续导入')}</Btn></div>
     </> : state.phase === 'failed' || state.phase === 'timeout' ? <>
-      <span className="studio-error">{t(state.phase === 'timeout' ? '安装长时间没有进展，可以重试，或到转写设置里查看。' : '安装或模型下载失败，可以重试，或到转写设置里查看。')}</span>
+      <span className="studio-error">{t(state.phase === 'timeout' ? '安装长时间没有进展，可以重试，或到转写设置里查看。'
+        : state.offline ? '暂时连不上本地后端。后端恢复后会自动继续，也可以重试。' : '安装或模型下载失败，可以重试，或到转写设置里查看。')}</span>
       <div className="studio-actions">
         <Btn size="sm" disabled={busy} onClick={() => void onRetry()}>{t('重试')}</Btn>
         <Btn size="sm" disabled={busy} onClick={settings}>{t('打开转写设置')}</Btn>
       </div>
     </> : <>
       <span>{t(state.phase === 'downloading' ? '正在下载转写模型，下载完成后即可继续。' : '本地 Whisper 正在安装，装好后再开始。')}</span>
+      {state.unreachable && <span className="studio-muted">{t('暂时连不上本地后端，正在重试…')}</span>}
       {state.percent != null && <span className="studio-muted" role="progressbar" aria-valuenow={state.percent} aria-valuemin={0} aria-valuemax={100}>{t('已完成 {{percent}}%', { percent: state.percent })}</span>}
       <div className="studio-actions"><Btn size="sm" onClick={settings}>{t('打开转写设置')}</Btn></div>
     </>}

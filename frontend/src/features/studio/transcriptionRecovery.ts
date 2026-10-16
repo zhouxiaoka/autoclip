@@ -11,7 +11,14 @@ import type { ReadinessCheck, ImportReadiness } from './importReadiness'
 export type RecoveryPhase = 'idle' | 'install_required' | 'installing' | 'downloading' | 'ready' | 'failed' | 'timeout'
 /** `background`: an install the page started by itself (link import without whisper, #371); the page shows it
  * inline and the dialog stays closed until a submit is blocked on it. */
-export interface RecoveryState { phase: RecoveryPhase; percent: number | null; model?: string; background?: boolean }
+export interface RecoveryState {
+  phase: RecoveryPhase; percent: number | null; model?: string; background?: boolean
+  /** #403: the last readiness poll could not reach the backend (network error, no HTTP response); polling goes on. */
+  unreachable?: boolean
+  /** #403: `failed` because the backend was unreachable for OFFLINE_MS; low-frequency polls continue the wait
+   * by themselves once the backend answers again. */
+  offline?: boolean
+}
 
 export interface RecoveryApi {
   readiness: () => Promise<ImportReadiness | null>
@@ -46,8 +53,18 @@ export interface ControllerOptions {
   onReport?: (report: ImportReadiness) => void
 }
 export const STALL_MS = 10 * 60 * 1000
-/** Consecutive unreachable readiness polls before an install wait is failed (offline, #372). */
-export const OFFLINE_POLLS = 3
+/** #403: continuous time the backend must be unreachable (network errors only) before a wait is failed. */
+export const OFFLINE_MS = 30 * 1000
+/** #403: poll interval once failed for being offline (the wait continues by itself when the backend is back). */
+export const OFFLINE_RETRY_MS = 10 * 1000
+
+/** #403: only a network error (no HTTP response: refused, reset, timed out) means the backend is unreachable.
+ * An HTTP error such as a readiness 500 is a reachable backend. */
+export function isNetworkError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return true
+  const response = (error as { response?: unknown }).response
+  return response === undefined || response === null
+}
 
 export function createRecoveryController(api: RecoveryApi, options: ControllerOptions = {}) {
   const stallMs = options.stallMs ?? STALL_MS
@@ -55,7 +72,8 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
   let state: RecoveryState = { phase: 'idle', percent: null }
   let installing = false // this controller started the install: carry it on to the model download
   let modelRequested = false // #372: the model download request went out and was accepted; never resend it by polling
-  let readFailures = 0 // #372: consecutive polls that could not reach the backend (offline)
+  let unreachableSince: number | null = null // #403: start of the current unreachable streak (network errors only)
+  let resumePhase: RecoveryPhase = 'installing' // #403: the wait an offline failure interrupted
   let progressAt = now()
   const listeners = new Set<(s: RecoveryState) => void>()
   const set = (raw: RecoveryState) => {
@@ -65,8 +83,10 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     listeners.forEach(fn => fn(state))
   }
   const read = async () => {
-    const report = await api.readiness().catch(() => null)
-    readFailures = report ? 0 : readFailures + 1
+    let report: ImportReadiness | null = null
+    let unreachable = false
+    try { report = await api.readiness() } catch (error) { unreachable = isNetworkError(error) }
+    if (unreachable) { if (unreachableSince === null) unreachableSince = now() } else unreachableSince = null
     if (report && options.onReport) options.onReport(report)
     return report
   }
@@ -121,7 +141,7 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     /** One-click install: runtime, then the model, without leaving the dialog. */
     async install(opts: { background?: boolean } = {}) {
       // #350: the request goes out first; the waiting phase (and its polls) starts only once it was accepted.
-      installing = false; modelRequested = false; readFailures = 0
+      installing = false; modelRequested = false; unreachableSince = null
       const background = opts.background ?? false
       if (state.background !== background) state = { ...state, background }
       const report = await read()
@@ -143,15 +163,23 @@ export function createRecoveryController(api: RecoveryApi, options: ControllerOp
     async retry() { await controller.install() },
     /** One poll; returns the new state. Waiting phases time out after stallMs without progress. */
     async poll(): Promise<RecoveryState> {
-      if (state.phase !== 'installing' && state.phase !== 'downloading') return state
+      const offlineFailed = state.phase === 'failed' && !!state.offline
+      if (state.phase !== 'installing' && state.phase !== 'downloading' && !offlineFailed) return state
       const report = await read()
-      if (!report && readFailures >= OFFLINE_POLLS) {
-        // #372 offline: the backend cannot be reached -> failed, and retry is offered.
-        installing = false; modelRequested = false
-        set({ ...state, phase: 'failed', percent: null })
+      if (offlineFailed) {
+        // #403: the backend answers again -> the interrupted wait continues by itself (no click needed).
+        if (!report) return state
+        state = { ...state, phase: resumePhase, offline: undefined, unreachable: undefined }
+        progressAt = now()
+      }
+      if (unreachableSince !== null && now() - unreachableSince >= OFFLINE_MS) {
+        // #403 offline: unreachable for OFFLINE_MS in a row -> failed (retry offered); low-frequency polls go on.
+        resumePhase = state.phase
+        set({ ...state, phase: 'failed', percent: null, offline: true, unreachable: true })
         return state
       }
-      const next = report ? await fromCheck(report.checks?.transcription) : state
+      const base = { ...state, unreachable: unreachableSince !== null ? true : undefined }
+      const next = report ? await fromCheck(report.checks?.transcription) : base
       if ((next.phase === 'installing' || next.phase === 'downloading') && next.percent === state.percent && next.phase === state.phase
         && now() - progressAt >= stallMs) {
         set({ ...next, phase: 'timeout' })

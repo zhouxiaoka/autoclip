@@ -228,18 +228,151 @@ test('#372 offline: install request network error -> failed -> retry works', asy
   assert.equal(c.state.phase, 'installing')
 })
 
-test('#372 offline: backend unreachable while waiting -> failed after OFFLINE_POLLS, then retryable', async () => {
-  let online = true
-  const api = { readiness: async () => { if (!online) throw new TypeError('Failed to fetch'); return check('whisper_installing') },
-    getRuntimeStatus: async () => ({ status: 'installing', progress: 5 }), getModels: async () => [],
-    installRuntime: async () => {}, downloadModel: async () => {} }
-  const c = recovery.createRecoveryController(api)
+// #403: only network errors count as unreachable, judged by time (OFFLINE_MS of continuous unreachability), polling
+// goes on meanwhile, and an offline failure keeps polling slowly and continues by itself when the backend is back.
+function clockedApi() {
+  const clock = { t: 0, down: false, error500: false, stage: 'installing', reads: 0 }
+  const netErr = () => Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', response: undefined })
+  const api = {
+    readiness: async () => {
+      clock.reads++
+      if (clock.down) throw netErr()
+      if (clock.error500) throw Object.assign(new Error('Request failed with status code 500'), { response: { status: 500 } })
+      return clock.stage === 'ready' ? check('ok') : check('whisper_installing')
+    },
+    getRuntimeStatus: async () => ({ status: 'installing', progress: Math.floor(clock.t / 1000) }), getModels: async () => [],
+    installRuntime: async () => {}, downloadModel: async () => {},
+  }
+  return { clock, api }
+}
+async function startWait(api, clock, extra = {}) {
+  const c = recovery.createRecoveryController(api, { now: () => clock.t, ...extra })
   c.open('whisper_not_installed'); await c.install()
-  online = false
-  for (let i = 0; i < recovery.OFFLINE_POLLS - 1; i++) { await c.poll(); assert.equal(c.state.phase, 'installing') }
-  await c.poll()
-  assert.equal(c.state.phase, 'failed')
-  online = true
-  await c.retry(); await c.poll()
   assert.equal(c.state.phase, 'installing')
+  return c
+}
+// poll every 2s (the page's cadence) from clock.t to `until`, recording the phases seen
+async function pollUntil(c, clock, until, step = 2000) {
+  const phases = []
+  while (clock.t < until) { clock.t += step; await c.poll(); phases.push(c.state.phase) }
+  return phases
+}
+
+test('#403 a 7s backend outage is not a failure: polling goes on and the wait continues by itself', async () => {
+  const { clock, api } = clockedApi()
+  let readyCalls = 0
+  const c = await startWait(api, clock, { onReady: () => { readyCalls++ } })
+  clock.down = true
+  const during = await pollUntil(c, clock, 7000)
+  assert.ok(!during.includes('failed'), `no failed during a 7s outage: ${during}`)
+  assert.equal(c.state.unreachable, true, 'the page says it is retrying')
+  assert.ok(clock.reads >= 4, 'polling did not stop while unreachable')
+  clock.down = false; clock.stage = 'ready'
+  await pollUntil(c, clock, 9000)
+  assert.equal(c.state.phase, 'ready')
+  assert.equal(readyCalls, 1, 'continued by itself, once')
+})
+
+test('#403 a blip resets the unreachable streak (20s down, one answer, 20s down -> still waiting)', async () => {
+  const { clock, api } = clockedApi()
+  const c = await startWait(api, clock)
+  clock.down = true
+  await pollUntil(c, clock, 20000)
+  clock.down = false
+  await pollUntil(c, clock, 22000)
+  assert.equal(c.state.unreachable, undefined, 'a reachable answer clears the unreachable flag')
+  clock.down = true
+  const phases = await pollUntil(c, clock, 42000)
+  assert.ok(!phases.includes('failed'), `40s down in total but never 30s in a row: ${phases}`)
+  assert.equal(c.state.phase, 'installing')
+})
+
+test('#403 threshold: 28s unreachable is still waiting, 30s unreachable is failed (a smaller threshold fails this)', async () => {
+  assert.equal(recovery.OFFLINE_MS, 30000)
+  const { clock, api } = clockedApi()
+  const c = await startWait(api, clock)
+  clock.down = true
+  clock.t += 1000; await c.poll()  // streak starts at t=1s
+  const early = await pollUntil(c, clock, 29000) // up to 28s of streak
+  assert.ok(!early.includes('failed'), `not failed before 30s: ${early}`)
+  clock.t = 31000; await c.poll()  // 30s of streak
+  assert.equal(c.state.phase, 'failed')
+  assert.equal(c.state.offline, true)
+})
+
+test('#403 a readiness 500 is a reachable backend, never counted as unreachable', async () => {
+  const { clock, api } = clockedApi()
+  const c = await startWait(api, clock)
+  clock.error500 = true
+  const phases = await pollUntil(c, clock, 60000)
+  assert.ok(!phases.includes('failed'), `500s for 60s do not fail as offline: ${phases}`)
+  assert.equal(c.state.unreachable, undefined)
+  assert.equal(recovery.isNetworkError({ response: { status: 500 } }), false)
+  assert.equal(recovery.isNetworkError(new TypeError('Failed to fetch')), true)
+  assert.equal(recovery.isNetworkError({ code: 'ECONNABORTED', response: undefined }), true)
+})
+
+test('#403 after an offline failure the slow polls continue the wait by themselves when the backend is back', async () => {
+  const { clock, api } = clockedApi()
+  let readyCalls = 0
+  const c = await startWait(api, clock, { onReady: () => { readyCalls++ } })
+  clock.down = true
+  await pollUntil(c, clock, 35000)
+  assert.equal(c.state.phase, 'failed'); assert.equal(c.state.offline, true)
+  await pollUntil(c, clock, 45000, 10000)
+  assert.equal(c.state.phase, 'failed', 'still offline -> still failed')
+  clock.down = false
+  await pollUntil(c, clock, 55000, 10000)
+  assert.equal(c.state.phase, 'installing', 'back: the interrupted wait resumes')
+  assert.equal(c.state.offline, undefined)
+  clock.stage = 'ready'
+  await pollUntil(c, clock, 57000)
+  assert.equal(c.state.phase, 'ready'); assert.equal(readyCalls, 1)
+  // a plain (non-offline) failure is not polled
+  const before = clock.reads
+  const d = recovery.createRecoveryController({ ...api, installRuntime: async () => { throw new Error('x') } }, { now: () => clock.t })
+  d.open('whisper_not_installed'); await d.install()
+  const reads = clock.reads
+  await d.poll()
+  assert.equal(d.state.phase, 'failed'); assert.equal(clock.reads, reads, 'install failure stays failed until retry')
+  assert.ok(reads > before)
+})
+
+test('#403 hook: an offline failure keeps polling at the low frequency and continues by itself', async () => {
+  // the hook's poll loop needs real timers, which loadTs's sandbox does not expose: transpile it here with them
+  const ts = require('typescript'); const vm = require('node:vm')
+  const { outputText } = ts.transpileModule(fs.readFileSync(path.join(dir, 'useTranscriptionRecovery.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } })
+  const hook = {}
+  vm.runInNewContext(outputText, { exports: hook, setTimeout, clearTimeout, require: id => id === './transcriptionRecovery' ? recovery : require(id) })
+  const { clock, api } = clockedApi()
+  clock.down = true
+  let controller, last
+  function Probe() { const [state, c] = hook.useTranscriptionRecovery(api, { now: () => clock.t, pollMs: 5, offlinePollMs: 20 }); controller = c; last = state; return null }
+  const host = document.createElement('div'); const root = createRoot(host)
+  await act(async () => { root.render(React.createElement(Probe)) })
+  try {
+  await act(async () => { controller.open('whisper_not_installed'); await controller.install() })
+  const wait = ms => act(async () => { await new Promise(r => setTimeout(r, ms)) })
+  await wait(20); clock.t = 31000; await wait(30)
+  assert.equal(last.phase, 'failed'); assert.equal(last.offline, true)
+  const reads = clock.reads
+  await wait(80)
+  assert.ok(clock.reads > reads, 'slow polls go on after an offline failure')
+  clock.down = false; clock.stage = 'ready'
+  await wait(80)
+  assert.equal(last.phase, 'ready')
+  } finally { await act(async () => root.unmount()) }  // a failing assertion must not leave the poll timers alive
+})
+test('#404 prompt: background installing stays hidden, background failed / timeout / offline are shown with retry', async () => {
+  const host = document.createElement('div'); const root = createRoot(host)
+  const show = async state => { await act(async () => { root.render(React.createElement(Prompt, { state, busy: false, onInstall() {}, onRetry() {}, onContinue() {}, navigate() {} })) }); return host }
+  assert.equal((await show({ phase: 'installing', percent: 10, background: true })).querySelector('[role=alertdialog]'), null)
+  for (const state of [{ phase: 'failed', percent: null, background: true }, { phase: 'timeout', percent: null, background: true }, { phase: 'failed', percent: null, background: true, offline: true }]) {
+    const view = await show(state)
+    assert.ok(view.querySelector('[role=alertdialog]'), JSON.stringify(state))
+    assert.ok([...view.querySelectorAll('button')].some(b => b.textContent === '重试'), JSON.stringify(state))
+  }
+  assert.match((await show({ phase: 'failed', percent: null, offline: true })).textContent, /后端恢复后会自动继续/)
+  assert.match((await show({ phase: 'installing', percent: 10, unreachable: true })).textContent, /暂时连不上本地后端，正在重试/)
+  await act(async () => root.unmount())
 })

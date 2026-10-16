@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { createRecoveryController, type ControllerOptions, type RecoveryApi, type RecoveryController, type RecoveryState } from './transcriptionRecovery'
+import { OFFLINE_RETRY_MS, createRecoveryController, type ControllerOptions, type RecoveryApi, type RecoveryController, type RecoveryState } from './transcriptionRecovery'
 
 /** React binding of the one recovery controller: state + a poll loop while installing / downloading.
  * `onReady` is read through a ref, so the page's latest continue callback runs when a wait finishes. */
-export function useTranscriptionRecovery(api: RecoveryApi, options: ControllerOptions & { pollMs?: number } = {}): [RecoveryState, RecoveryController] {
+export function useTranscriptionRecovery(api: RecoveryApi, options: ControllerOptions & { pollMs?: number; offlinePollMs?: number } = {}): [RecoveryState, RecoveryController] {
   const ref = useRef<RecoveryController | null>(null)
   const onReady = useRef(options.onReady)
   onReady.current = options.onReady
@@ -14,17 +14,20 @@ export function useTranscriptionRecovery(api: RecoveryApi, options: ControllerOp
   const [state, setState] = useState<RecoveryState>(controller.state)
   useEffect(() => controller.subscribe(setState), [controller])
   const waiting = state.phase === 'installing' || state.phase === 'downloading'
+  const offline = state.phase === 'failed' && !!state.offline // #403: keep polling slowly, continue when back
   useEffect(() => {
-    if (!waiting) return
+    if (!waiting && !offline) return
     let alive = true
     let timer: ReturnType<typeof setTimeout> | undefined
     const tick = async () => {
       const next = await controller.poll()
       if (!alive) return
       if (next.phase === 'installing' || next.phase === 'downloading') timer = setTimeout(tick, options.pollMs ?? 2000)
+      else if (next.phase === 'failed' && next.offline) timer = setTimeout(tick, options.offlinePollMs ?? OFFLINE_RETRY_MS)
     }
-    void tick()
+    if (waiting) void tick()
+    else timer = setTimeout(tick, options.offlinePollMs ?? OFFLINE_RETRY_MS)
     return () => { alive = false; if (timer) clearTimeout(timer) }
-  }, [waiting, controller, options.pollMs])
+  }, [waiting, offline, controller, options.pollMs, options.offlinePollMs])
   return [state, controller]
 }

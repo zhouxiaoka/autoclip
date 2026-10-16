@@ -1961,5 +1961,7 @@
   "正在下载转写模型，下载完成后即可继续。": "Baixando o modelo de transcrição. Você poderá continuar quando terminar.",
   "画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。": "A análise visual suporta fontes de até 120 minutos. Mudamos para a análise de legendas para continuar.",
   "读取素材画面失败，已改用字幕分析继续制作。": "Não foi possível ler os quadros da fonte. Mudamos para a análise de legendas para continuar.",
-  "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Falha ao baixar o modelo Whisper. Verifique a rede e baixe novamente em Configurações → Transcrição, ou mude a fonte para o espelho hf-mirror."
+  "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Falha ao baixar o modelo Whisper. Verifique a rede e baixe novamente em Configurações → Transcrição, ou mude a fonte para o espelho hf-mirror.",
+  "暂时连不上本地后端。后端恢复后会自动继续，也可以重试。": "Não foi possível acessar o backend local agora. Continuará automaticamente quando ele voltar, ou você pode tentar de novo.",
+  "暂时连不上本地后端，正在重试…": "Não foi possível acessar o backend local, tentando novamente…"
 }

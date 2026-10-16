@@ -1961,5 +1961,7 @@
   "正在下载转写模型，下载完成后即可继续。": "Downloading the transcription model. You can continue once it finishes.",
   "画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。": "Visual analysis supports sources up to 120 minutes. Switched to subtitle analysis to continue.",
   "读取素材画面失败，已改用字幕分析继续制作。": "Could not read frames from the source. Switched to subtitle analysis to continue.",
-  "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Whisper model download failed. Check your network and download again in Settings → Transcription, or switch the download source to the hf-mirror mirror."
+  "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Whisper model download failed. Check your network and download again in Settings → Transcription, or switch the download source to the hf-mirror mirror.",
+  "暂时连不上本地后端。后端恢复后会自动继续，也可以重试。": "Can't reach the local backend right now. It will continue automatically once the backend is back, or you can retry.",
+  "暂时连不上本地后端，正在重试…": "Can't reach the local backend right now, retrying…"
 }
