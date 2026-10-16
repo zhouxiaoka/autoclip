@@ -6,6 +6,9 @@ import type { Draft } from './types'
  * telemetry must all read this instead of `draft.subtitles` alone.
  */
 export function effectiveSubtitles(draft?: Pick<Partial<Draft>, 'subtitles' | 'packaging'> | null): boolean {
-  if (!draft || draft.subtitles === false || !draft.subtitles) return false
-  return draft.packaging?.captions_enabled !== false
+  if (!draft) return false
+  // R11: match the backend render — with template packaging, only packaging.captions_enabled
+  // decides the burned captions (draft.subtitles drives the legacy subtitle path only).
+  if (draft.packaging) return draft.packaging.captions_enabled !== false
+  return draft.subtitles === true
 }
