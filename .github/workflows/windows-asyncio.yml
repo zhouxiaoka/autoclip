@@ -18,6 +18,8 @@ on:
       - 'backend/services/studio/qa/**'
       - 'backend/tests/test_studio_qa.py'
       - 'scripts/windows_tests/test_studio_qa_windows.py'
+      - 'backend/core/orphan_reaper.py'
+      - 'backend/tests/test_orphan_reaper.py'
   pull_request:
     paths:
       - 'backend/core/windows_asyncio.py'
@@ -34,6 +36,8 @@ on:
       - 'backend/services/studio/qa/**'
       - 'backend/tests/test_studio_qa.py'
       - 'scripts/windows_tests/test_studio_qa_windows.py'
+      - 'backend/core/orphan_reaper.py'
+      - 'backend/tests/test_orphan_reaper.py'
   workflow_dispatch:
 
 permissions:
@@ -55,7 +59,7 @@ jobs:
           AUTOCLIP_DATA_DIR: ${{ runner.temp }}/autoclip-media-regression
           AUTOCLIP_APP_DIR: ${{ runner.temp }}/autoclip-media-regression
           SENTRY_DSN: ""
-        run: python -m pytest backend/tests/test_framing_concurrency.py backend/tests/test_sensevoice.py backend/tests/test_studio_store_recovery.py backend/tests/test_studio_persistent_write_failure.py scripts/windows_tests/test_studio_store.py -q
+        run: python -m pytest backend/tests/test_framing_concurrency.py backend/tests/test_sensevoice.py backend/tests/test_studio_store_recovery.py backend/tests/test_studio_persistent_write_failure.py scripts/windows_tests/test_studio_store.py backend/tests/test_orphan_reaper.py -q
       - name: Prepare FFmpeg for real interview-window rendering
         shell: pwsh
         run: |
