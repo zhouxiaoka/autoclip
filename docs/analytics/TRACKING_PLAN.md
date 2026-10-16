@@ -357,7 +357,7 @@ runtime = desktop   -- 主指标；web 可另列
 机器可读口径：`event_catalog.json` → `attribution.success_rate_v4`；SQL：[`success_rate.sql`](success_rate.sql)（两者必须一致，有测试）。
 
 - **一次尝试（attempt）** = `studio_generation_finished` / `studio_production_finished` 按 `attempt_id` 去重后取最后一条（缺 `attempt_id` 的历史行按事件 uuid 计）。重试是新的 attempt。
-- **一次流程（flow）** = 同一 `flow_id` 下最后一次 attempt 的结果（最终结果口径）。
+- **一次流程（flow）** = 沿 `retry_of` 回溯到重试链根（最多 4 跳），用根 attempt 的 `flow_id` 作流程键；结果取该流程 / 重试链里 **最后一次** attempt（最终结果口径）。`retry_of` = 被重试 attempt 的 `attempt_id`（失败态「重试」按钮产生）。
 - **一个人** = `person_id`（不是 `distinct_id` / 设备）。
 - **窗口** = 固定 UTC 日期参数 `{date_from}`（含）/ `{date_to}`（不含），不再用 `now() - 7d`。
 - **过滤** = `analytics_environment = production`、`runtime = desktop`、排除内部 cohort `{internal_cohort_id}`（450605 为 641509）。

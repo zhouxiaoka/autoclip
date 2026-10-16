@@ -201,7 +201,13 @@
         "service_restarted",
         "model_not_found",
         "bad_endpoint"
-      ]
+      ],
+      "flow_definition": {
+        "key": "flow_id of the retry-chain root (follow retry_of, max 4 hops)",
+        "outcome": "last attempt in the flow / retry chain",
+        "retry_link_property": "retry_of",
+        "max_retry_hops": 4
+      }
     }
   },
   "privacy": {

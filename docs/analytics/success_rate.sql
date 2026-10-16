@@ -8,7 +8,8 @@
 --
 -- 定义：
 --   attempt  = 一次终态尝试，按 attempt_id 去重（取最后一条）；缺 attempt_id 的历史行按事件 uuid 计。
---   flow     = 用户的一次出片流程（flow_id），取流程内最后一次 attempt 的结果。
+--   flow     = 用户的一次出片流程：沿 retry_of 回溯到重试链根（最多 4 跳），用根 attempt 的 flow_id；
+--              结果取该流程 / 重试链里最后一次 attempt。
 --   person   = person_id（不是 distinct_id / 设备）。
 --   success  = outcome IN ('completed','success')。partial 不算成功，单独算 partial-delivery 率。
 --   全量口径分母剔除（user_hard，只剔除明确的用户行为）：
@@ -30,7 +31,8 @@ WITH base AS (
     argMax(coalesce(toString(properties.error_code), ''), timestamp) AS ec,
     argMax(coalesce(toString(properties.upstream_error_type), ''), timestamp) AS ue,
     argMax(coalesce(toString(properties.failure_stage), '(空)'), timestamp) AS stage,
-    argMax(toString(properties.app_version), timestamp) AS v
+    argMax(toString(properties.app_version), timestamp) AS v,
+    argMax(coalesce(toString(properties.retry_of), ''), timestamp) AS rof
   FROM events
   WHERE event IN ('studio_generation_finished', 'studio_production_finished')
     AND toString(properties.analytics_environment) = 'production'
@@ -39,6 +41,15 @@ WITH base AS (
     AND timestamp < toDateTime({date_to}, 'UTC')
     AND person_id NOT IN COHORT {internal_cohort_id}
   GROUP BY aid
+), chained AS (
+  -- retry chain: follow retry_of up to 4 hops to the chain root, the flow is the root's flow.
+  SELECT b.*,
+    multiIf(p4.aid != '', p4.fid, p3.aid != '', p3.fid, p2.aid != '', p2.fid, p1.aid != '', p1.fid, b.fid) AS chain_fid
+  FROM base b
+  LEFT JOIN base p1 ON b.rof = p1.aid
+  LEFT JOIN base p2 ON p1.rof = p2.aid
+  LEFT JOIN base p3 ON p2.rof = p3.aid
+  LEFT JOIN base p4 ON p3.rof = p4.aid
 ), c AS (
   SELECT *,
     multiIf(o_raw IN ('completed', 'success'), 'success', o_raw = 'partial', 'partial', o_raw IN ('cancelled', 'canceled'), 'cancelled', 'error') AS o,
@@ -48,9 +59,10 @@ WITH base AS (
     (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked')) AS user_x,
     (o = 'success' OR NOT user_hard) AS qual_all,
     (o = 'success' OR NOT user_x) AS qual
-  FROM base
+  FROM chained
 ), flows AS (
-  SELECT fid, max(ts) AS fts, argMax(o, ts) AS fo, argMax(qual, ts) AS fq, argMax(qual_all, ts) AS fqa FROM c GROUP BY fid
+  -- per-flow outcome = the LAST attempt in the flow / retry chain
+  SELECT chain_fid AS fid, max(ts) AS fts, argMax(o, ts) AS fo, argMax(qual, ts) AS fq, argMax(qual_all, ts) AS fqa FROM c GROUP BY chain_fid
 ), d1 AS (
   SELECT toDate(ts) AS d, countIf(o = 'success') AS ok, countIf(qual_all) AS q_all, countIf(qual) AS q_prod,
     countIf(o = 'partial' AND qual) AS partial_n

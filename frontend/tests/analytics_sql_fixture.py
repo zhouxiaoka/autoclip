@@ -118,6 +118,14 @@ process.stdout.write(JSON.stringify(events))
         self.assertEqual(body.count("timestamp >= toDateTime({date_from}, 'UTC')"), 4)
         self.assertEqual(body.count('person_id NOT IN COHORT {internal_cohort_id}'), 4)
         self.assertIn('partial_delivery_rate', body)
+        # per-flow = last attempt of the retry chain (retry_of -> root flow_id).
+        self.assertEqual(v4['flow_definition']['retry_link_property'], 'retry_of')
+        self.assertIn("argMax(coalesce(toString(properties.retry_of), ''), timestamp) AS rof", body)
+        hops = v4['flow_definition']['max_retry_hops']
+        for i in range(1, hops + 1):
+            self.assertIn(f'LEFT JOIN base p{i} ON ', body)
+        self.assertNotIn(f'LEFT JOIN base p{hops + 1} ', body)
+        self.assertIn('SELECT chain_fid AS fid, max(ts) AS fts, argMax(o, ts) AS fo', body)
         for rate in ('overall_attempt_rate', 'product_attempt_rate', 'overall_flow_rate', 'product_flow_rate'):
             self.assertIn(rate, body)
 
