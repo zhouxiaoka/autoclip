@@ -10,8 +10,9 @@
 -- 定义：
 --   attempt  = 一次终态尝试，按 attempt_id 去重（取最后一条）；缺 attempt_id 的历史行按事件 uuid 计。
 --   flow     = 用户的一次出片流程：沿 retry_of 回溯到重试链根（最多 4 跳），用根 attempt 的 flow_id；
---              结果取该流程 / 重试链里最后一次 attempt：按 attempt_sequence（后端回执的项目内序号，#419）排，
---              其次按 retry_of 链末端（没有被再重试的 attempt），观察时间只用来打平（事件乱序到达不改结果）。
+--              结果取该流程 / 重试链里最后一次 attempt，排序键为 (attempt_sequence, leaf, ts)：先按 attempt_sequence
+--              （后端回执的项目内序号，#419；没有序号按 0，所以有序号的 attempt 总排在旧 attempt 后面），其次按 leaf
+--              （retry_of 链末端 = 没有被再重试的 attempt），ts（观察时间）只用来打平（事件乱序到达不改结果）。
 --   未知流程 = 没有 attempt_sequence 且有不止一个链末端的流程（#419 之前、同 flow_id 多次 attempt，无法证明哪次
 --              是最后一次）：不进图 1 / 图 5 的流程分子分母，单独计 unknown_flows（R26 #362）。attempt 级不受影响，
 --              单 attempt 或 retry_of 链完整的旧流程照常计算。
