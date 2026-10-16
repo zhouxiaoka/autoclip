@@ -1,0 +1,482 @@
+{
+ "_doc": "R22 shared redaction corpus: redact.scrub_homes, --stdin, file encodings (utf-8, BOM, utf-16, gb18030, shift_jis, big5, CRLF) and pull_run_installer.ps1 via the .sh redact pipe all read this file. chains: omit = every chain; stream/pwsh = URL scrubbing applies (stdin and ps1 chains only).",
+ "cases": [
+  {
+   "round": "R16-R20",
+   "text": "C:\\Users\\kris\\AppData\\Local\\AutoClip\\log.txt",
+   "expected": "C:\\Users\\<user>\\AppData\\Local\\AutoClip\\log.txt",
+   "id": "c000"
+  },
+  {
+   "round": "R16-R20",
+   "text": "\"C:\\\\Users\\\\kris\\\\AppData\"",
+   "expected": "\"C:\\\\Users\\\\<user>\\\\AppData\"",
+   "id": "c001"
+  },
+  {
+   "round": "R16-R20",
+   "text": "c:/users/kris/a.log",
+   "expected": "c:/users/<user>/a.log",
+   "note": "R22: root spelling is kept as written (was normalised to Users); name still masked",
+   "id": "c002"
+  },
+  {
+   "round": "R16-R20",
+   "text": "/Users/zhoukk/AutoClipQA/158",
+   "expected": "/Users/<user>/AutoClipQA/158",
+   "id": "c003"
+  },
+  {
+   "round": "R16-R20",
+   "text": "/home/runner/work/x",
+   "expected": "/home/<user>/work/x",
+   "id": "c004"
+  },
+  {
+   "round": "R16-R20",
+   "text": "GET /api/home/feed",
+   "expected": "GET /api/home/feed",
+   "id": "c005"
+  },
+  {
+   "round": "R16-R20",
+   "text": "C:\\Users\\qa",
+   "expected": "C:\\Users\\<user>",
+   "id": "c006"
+  },
+  {
+   "round": "R16-R20",
+   "text": "C:\\Users\\Jane Doe\\AppData\\x.log",
+   "expected": "C:\\Users\\<user>\\AppData\\x.log",
+   "id": "c007"
+  },
+  {
+   "round": "R16-R20",
+   "text": "{\"p\": \"C:\\\\Users\\\\Jane Doe\\\\a\"}",
+   "expected": "{\"p\": \"C:\\\\Users\\\\<user>\\\\a\"}",
+   "id": "c008"
+  },
+  {
+   "round": "R16-R20",
+   "text": "/Users/Jane Doe/AutoClipQA",
+   "expected": "/Users/<user>/AutoClipQA",
+   "id": "c009"
+  },
+  {
+   "round": "R16-R20",
+   "text": "/home/Jane Doe",
+   "expected": "/home/<user>",
+   "id": "c010"
+  },
+  {
+   "round": "R16-R20",
+   "text": "see /home/a and more /x",
+   "expected": "see /home/<user>/x",
+   "note": "R22 #151: no put-back after a space; whole segment up to the separator is masked",
+   "id": "c011"
+  },
+  {
+   "round": "R16-R20",
+   "text": "/Users/Jane Doe: Permission denied",
+   "expected": "/Users/<user>: Permission denied",
+   "id": "c012"
+  },
+  {
+   "round": "R16-R20",
+   "text": "C:\\Users\\Jane Doe: Access is denied",
+   "expected": "C:\\Users\\<user>: Access is denied",
+   "id": "c013"
+  },
+  {
+   "round": "R16-R20",
+   "text": "/home/Jane Doe:/bin/bash",
+   "expected": "/home/<user>:/bin/bash",
+   "id": "c014"
+  },
+  {
+   "round": "R16-R20",
+   "text": "log /Users/\\u5f20\\u4e09/a",
+   "expected": "log /Users/<user>/a",
+   "id": "c015"
+  },
+  {
+   "round": "R16-R20",
+   "text": "log /home/\\u5f20\\u4e09",
+   "expected": "log /home/<user>",
+   "id": "c016"
+  },
+  {
+   "round": "R16-R20",
+   "text": "log \"C:\\\\Users\\\\\\u5f20\\u4e09\\\\a\"",
+   "expected": "log \"C:\\\\Users\\\\<user>\\\\a\"",
+   "id": "c017"
+  },
+  {
+   "round": "R16-R20",
+   "text": "/Users/张三/a",
+   "expected": "/Users/<user>/a",
+   "id": "c018"
+  },
+  {
+   "round": "R16-R20",
+   "text": "C:\\Users\\u1234\\AppData\\x.log",
+   "expected": "C:\\Users\\<user>\\AppData\\x.log",
+   "id": "c019"
+  },
+  {
+   "round": "R16-R20",
+   "text": "C:\\Users\\uface",
+   "expected": "C:\\Users\\<user>",
+   "id": "c020"
+  },
+  {
+   "round": "R16-R20",
+   "text": "\"C:\\\\Users\\\\u1234\\\\a\"",
+   "expected": "\"C:\\\\Users\\\\<user>\\\\a\"",
+   "id": "c021"
+  },
+  {
+   "round": "R16-R20",
+   "text": "/Users/Jane Doe\r\nnext /home/Jane Doe\r\n",
+   "expected": "/Users/<user>\r\nnext /home/<user>\r\n",
+   "id": "c022"
+  },
+  {
+   "round": "R16-R20",
+   "text": "C:\\Users\\Jane Doe\r\nx",
+   "expected": "C:\\Users\\<user>\r\nx",
+   "id": "c023"
+  },
+  {
+   "round": "R16-R20",
+   "text": "/Users/O'Connor/a",
+   "expected": "/Users/<user>/a",
+   "id": "c024"
+  },
+  {
+   "round": "R16-R20",
+   "text": "C:\\Users\\O'Connor\\a",
+   "expected": "C:\\Users\\<user>\\a",
+   "id": "c025"
+  },
+  {
+   "round": "R16-R20",
+   "text": "open '/home/kris' now",
+   "expected": "open '/home/<user>",
+   "note": "R22 #151: no quote put-back; over-masking accepted",
+   "id": "c026"
+  },
+  {
+   "round": "R21",
+   "text": "C:/Users/\\u5f20\\u4e09/x",
+   "expected": "C:/Users/<user>/x",
+   "id": "c027"
+  },
+  {
+   "round": "R21",
+   "text": "see c:/users/\\u5f20\\u4e09",
+   "expected": "see c:/users/<user>",
+   "note": "R22: root spelling kept as written",
+   "id": "c028"
+  },
+  {
+   "round": "R21",
+   "text": "/Users/\\\\u5f20\\\\u4e09/x",
+   "expected": "/Users/<user>/x",
+   "note": "R22: escape layers decoded first; the \\\\ escape belongs to the name and is masked with it",
+   "id": "c029"
+  },
+  {
+   "round": "R21",
+   "text": "C:\\Users\\\\u5f20\\\\u4e09\\x",
+   "expected": "C:\\Users\\\\<user>\\x",
+   "id": "c030"
+  },
+  {
+   "round": "R21",
+   "text": "\\/Users\\/alice\\/x",
+   "expected": "\\/Users\\/<user>\\/x",
+   "id": "c031"
+  },
+  {
+   "round": "R21",
+   "text": "C:\\u005cUsers\\u005calice\\u005cx",
+   "expected": "C:\\u005cUsers\\u005c<user>\\u005cx",
+   "id": "c032"
+  },
+  {
+   "round": "R21",
+   "text": "\\u002fhome\\u002fbob\\u002fx",
+   "expected": "\\u002fhome\\u002f<user>\\u002fx",
+   "id": "c033"
+  },
+  {
+   "round": "R21",
+   "text": "C:\\\\Users\\\\alice\\u002fx",
+   "expected": "C:\\\\Users\\\\<user>\\u002fx",
+   "id": "c034"
+  },
+  {
+   "round": "R21",
+   "text": "/Users/D''Arcy/x",
+   "expected": "/Users/<user>/x",
+   "id": "c035"
+  },
+  {
+   "round": "R21",
+   "text": "/Users/D' Artagnan/x",
+   "expected": "/Users/<user>/x",
+   "id": "c036"
+  },
+  {
+   "round": "R21",
+   "text": "C:\\Users\\D' Artagnan",
+   "expected": "C:\\Users\\<user>",
+   "id": "c037"
+  },
+  {
+   "round": "R21",
+   "text": "/home/D''Arcy",
+   "expected": "/home/<user>",
+   "id": "c038"
+  },
+  {
+   "round": "R21",
+   "text": "x '/home/D''Arcy' y",
+   "expected": "x '/home/<user>",
+   "note": "R22 #151: no quote put-back",
+   "id": "c039"
+  },
+  {
+   "round": "R21",
+   "text": "x '/home/kris' y",
+   "expected": "x '/home/<user>",
+   "note": "R22 #151: no quote put-back",
+   "id": "c040"
+  },
+  {
+   "round": "R21",
+   "text": "GET \\/api\\/home\\/feed",
+   "expected": "GET \\/api\\/home\\/feed",
+   "id": "c041"
+  },
+  {
+   "round": "R18-R20 ps1",
+   "text": "C:\\Users\\Jane Doe\\x.log",
+   "expected": "C:\\Users\\<user>\\x.log",
+   "id": "c042"
+  },
+  {
+   "round": "R18-R20 ps1",
+   "text": "see /home/qa/y",
+   "expected": "see /home/<user>/y",
+   "id": "c043"
+  },
+  {
+   "round": "R18-R20 ps1",
+   "text": "C:\\Users\\张三\\a",
+   "expected": "C:\\Users\\<user>\\a",
+   "id": "c044"
+  },
+  {
+   "round": "R18-R20 ps1",
+   "text": "\"C:\\\\Users\\\\\\u5f20\\u4e09\\\\a\"",
+   "expected": "\"C:\\\\Users\\\\<user>\\\\a\"",
+   "id": "c045"
+  },
+  {
+   "round": "R18-R20 ps1",
+   "text": "https://signed.invalid/z?sig=1",
+   "expected": "<url>",
+   "chains": [
+    "stream",
+    "pwsh"
+   ],
+   "id": "c046"
+  },
+  {
+   "round": "R18-R20 ps1",
+   "text": "C:\\Users\\u1234\\x",
+   "expected": "C:\\Users\\<user>\\x",
+   "id": "c047"
+  },
+  {
+   "round": "R18-R20 ps1",
+   "text": "/Users/Jane Doe\r\nnext",
+   "expected": "/Users/<user>\r\nnext",
+   "id": "c048"
+  },
+  {
+   "round": "R18-R20 ps1",
+   "text": "/USERS/kris/x and /HOME/qa",
+   "expected": "/USERS/<user>/x and /HOME/qa",
+   "note": "R22 #153: Users is case-insensitive (macOS); /home stays case-sensitive (Linux)",
+   "id": "c049"
+  },
+  {
+   "round": "R18-R20 ps1",
+   "text": "HTTPS://x.invalid/y",
+   "expected": "HTTPS://x.invalid/y",
+   "chains": [
+    "stream",
+    "pwsh"
+   ],
+   "id": "c050"
+  },
+  {
+   "round": "R22 #150",
+   "text": "/Users/\\u005cu5f20\\u005cu4e09/x",
+   "expected": "/Users/<user>/x",
+   "id": "c051"
+  },
+  {
+   "round": "R22 #150",
+   "text": "\\/U\\u0073ers\\/alice",
+   "expected": "\\/U\\u0073ers\\/<user>",
+   "id": "c052"
+  },
+  {
+   "round": "R22 #150",
+   "text": "C:\\U\\u0073ers\\bob\\x",
+   "expected": "C:\\U\\u0073ers\\<user>\\x",
+   "id": "c053"
+  },
+  {
+   "round": "R22 #150",
+   "text": "\\u002f\\u0068ome\\u002fbob\\u002fx",
+   "expected": "\\u002f\\u0068ome\\u002f<user>\\u002fx",
+   "id": "c054"
+  },
+  {
+   "round": "R22 #150",
+   "text": "C:\\\\Users\\\\\\\\u5f20\\\\\\\\u4e09\\\\a",
+   "expected": "C:\\\\Users\\\\\\\\<user>\\\\a",
+   "id": "c055",
+   "note": "escaped layers straight after the root: the escaping backslashes stay, the name goes"
+  },
+  {
+   "round": "R22 #151",
+   "text": "/home/Jane Doe /x",
+   "expected": "/home/<user>/x",
+   "id": "c056"
+  },
+  {
+   "round": "R22 #151",
+   "text": "x '/home/D' Artagnan/x' y",
+   "expected": "x '/home/<user>/x' y",
+   "id": "c057"
+  },
+  {
+   "round": "R22 #151",
+   "text": "C:\\Users\\Jane Doe \\x",
+   "expected": "C:\\Users\\<user>\\x",
+   "id": "c058"
+  },
+  {
+   "round": "R22 #152",
+   "text": "/Users/A?B/x",
+   "expected": "/Users/<user>/x",
+   "id": "c059"
+  },
+  {
+   "round": "R22 #152",
+   "text": "/home/a<b>|c*/x",
+   "expected": "/home/<user>/x",
+   "id": "c060"
+  },
+  {
+   "round": "R22 #152",
+   "text": "C:\\Users\\a?b\\x",
+   "expected": "C:\\Users\\<user>?b\\x",
+   "id": "c061"
+  },
+  {
+   "round": "R22 #153",
+   "text": "/users/alice/x",
+   "expected": "/users/<user>/x",
+   "id": "c062"
+  },
+  {
+   "round": "R22 #153",
+   "text": "/USERS/alice",
+   "expected": "/USERS/<user>",
+   "id": "c063"
+  },
+  {
+   "round": "R22 #153",
+   "text": "see /UsErS/a b/x",
+   "expected": "see /UsErS/<user>/x",
+   "id": "c064"
+  },
+  {
+   "round": "R22",
+   "text": "/Users/<user>/x",
+   "expected": "/Users/<user>/x",
+   "id": "c065"
+  },
+  {
+   "round": "R22 out of scope",
+   "text": "/var/home/bob and \\\\server\\Users\\bob",
+   "expected": "/var/home/bob and \\\\server\\Users\\bob",
+   "id": "c066"
+  },
+  {
+   "round": "R22 #156",
+   "text": "/home/bob \\ud800 x",
+   "expected": "/home/<user>",
+   "id": "c067"
+  },
+  {
+   "round": "R22 #149 GBK",
+   "text": "C:\\Users\\乗张三\\AppData\\x.log",
+   "expected": "C:\\Users\\<user>\\AppData\\x.log",
+   "id": "c068"
+  },
+  {
+   "round": "R22 #149 GBK",
+   "text": "/home/乗俓强/x",
+   "expected": "/home/<user>/x",
+   "id": "c069"
+  },
+  {
+   "round": "R22 #149 GBK",
+   "text": "C:\\Users\\亅x\\a",
+   "expected": "C:\\Users\\<user>\\a",
+   "id": "c070"
+  },
+  {
+   "round": "R22 SJIS",
+   "text": "C:\\Users\\表示\\x",
+   "expected": "C:\\Users\\<user>\\x",
+   "id": "c071"
+  },
+  {
+   "round": "R22 SJIS",
+   "text": "/home/ソニー/x",
+   "expected": "/home/<user>/x",
+   "id": "c072"
+  },
+  {
+   "round": "R22 Big5",
+   "text": "C:\\Users\\功夫\\a",
+   "expected": "C:\\Users\\<user>\\a",
+   "id": "c073"
+  },
+  {
+   "round": "R22 Big5",
+   "text": "/Users/許功蓋: 拒絕存取",
+   "expected": "/Users/<user>: 拒絕存取",
+   "id": "c074"
+  },
+  {
+   "round": "R22 SJIS half-width",
+   "text": "C:\\Users\\ｿﾆｰ\\x",
+   "expected": "C:\\Users\\<user>\\x",
+   "note": "half-width kana read as GBK lead bytes swallow the next byte: over-masking only",
+   "expected_by_encoding": {
+    "shift_jis": "C:\\Users\\<user>"
+   },
+   "id": "c075"
+  }
+ ]
+}

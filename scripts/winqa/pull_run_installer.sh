@@ -89,6 +89,11 @@ SCP=(scp -q -i "${ID}" -o BatchMode=yes -o ConnectTimeout=20)
 "${SCP[@]}" "$(dirname "$0")/ps/pull_run_installer.ps1" "${USER_}@${HOST}:C:/winqa/ps/"
 umask 077; printf '%s' "${URL}" > "${TMP}/url"; unset URL
 "${SCP[@]}" "${TMP}/url" "${USER_}@${HOST}:C:/winqa/inst/.url-${RUN}"; rm -f "${TMP}/url"
-RC=0; "${SSH[@]}" "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\winqa\\ps\\pull_run_installer.ps1 -Run ${RUN} -Total ${ASIZE} -N ${PARTS} -WantZip ${ADIGEST}${EXP_EXE:+ -WantExe ${EXP_EXE}}" || RC=$?
+# R22: the ps1 has no scrubber of its own; all of its output goes through redact.py (one implementation).
+set +e
+"${SSH[@]}" "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\winqa\\ps\\pull_run_installer.ps1 -Run ${RUN} -Total ${ASIZE} -N ${PARTS} -WantZip ${ADIGEST}${EXP_EXE:+ -WantExe ${EXP_EXE}}" 2>"${TMP}/ps.err" | redact
+RC=${PIPESTATUS[0]}
+set -e
+redact <"${TMP}/ps.err" >&2
 "${SSH[@]}" "powershell -NoProfile -Command \"Remove-Item -Force -ErrorAction SilentlyContinue C:\\winqa\\inst\\.url-${RUN}\"" || true
 exit "${RC}"

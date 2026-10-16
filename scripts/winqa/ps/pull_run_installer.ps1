@@ -1,39 +1,11 @@
 param([string]$Run,[int64]$Total,[int]$N=16,[string]$WantZip='',[string]$WantExe='')
 # Exit codes: 4 missing/invalid digest; 6 download (HTTP/curl) failure; 7 hash mismatch; 1 any other error.
 # R16 #51: report on stderr and exit with the code; the Write-Err*r cmdlet under 'Stop' would abort before exit.
-# R21: home-directory scrubbing is redact.py's rule, ported line for line (WIN_PATTERN / POSIX_PATTERN
-# copied verbatim, Mask-HomeName == redact._mask); test_pwsh_and_python_redact_identically keeps them equal.
-# R22: redact.py additionally reads non-UTF-8 *bytes* in GBK units (NAME_GBK, 0x5C/0x7C trail bytes); this
-# script only scrubs .NET strings, where 乗 is one char, so the plain text rule is the complete rule here.
-$WinPattern = '\b([a-zA-Z]:)((?:\\*/|\\+u00(?:2[fF]|5[cC])|(?:\\\\)+|(?<![\\/])\\|\\(?!u[0-9a-fA-F]{4}))+)[uU][sS][eE][rR][sS]((?:\\*/|\\+u00(?:2[fF]|5[cC])|(?:\\\\)+|(?<![\\/])\\|\\(?!u[0-9a-fA-F]{4}))+)(?!<user>)((?:\\+u(?!00(?:2[fF]|5[cC]))[0-9a-fA-F]{4}|[^\\/"\r\n<>|*?:])+)'
-$PosixPattern = '(?<![\w.\\-])(\\*/|\\+u002[fF])(Users|home)((?:\\*/|\\+u00(?:2[fF]|5[cC])|(?:\\\\)+|(?<![\\/])\\|\\(?!u[0-9a-fA-F]{4}))+)(?!<user>)((?:\\+u(?!00(?:2[fF]|5[cC]))[0-9a-fA-F]{4}|[^\\/"\r\n<>|*?:])+)'
-function Mask-HomeName([string]$Name, [string]$Before, [string]$After) {
-  if ($Before -ceq "'") { $q = [regex]::Match($Name, "'(?=[ \t]|$)"); if ($q.Success) { return '<user>' + $Name.Substring($q.Index) } }
-  if (($After -ceq '/' -or $After -ceq '\') -and ($Name.EndsWith(' ') -or $Name.EndsWith("`t"))) {
-    return '<user>' + $Name.Substring($Name.IndexOfAny([char[]]@([char]' ', [char]"`t")))
-  }
-  return '<user>'
-}
-function Scrub-Homes([string]$Text) {
-  foreach ($kind in 'win', 'posix') {
-    $pattern = if ($kind -ceq 'win') { $WinPattern } else { $PosixPattern }
-    $src = $Text
-    $Text = [regex]::Replace($src, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{
-      param($m)
-      $before = if ($m.Index -gt 0) { [string]$src[$m.Index - 1] } else { '' }
-      $end = $m.Index + $m.Length
-      $after = if ($end -lt $src.Length) { [string]$src[$end] } else { '' }
-      $g = $m.Groups
-      $root = if ($kind -ceq 'win') { $g[1].Value + $g[2].Value + 'Users' + $g[3].Value } else { $g[1].Value + $g[2].Value + $g[3].Value }
-      $root + (Mask-HomeName $g[4].Value $before $after)
-    })
-  }
-  return $Text
-}
+# R22: this script has no scrubbing rule of its own. pull_run_installer.sh pipes everything it prints
+# (stdout and stderr, over ssh) through redact.py --stdin, the single implementation (home dirs, URLs).
+# Do not run it by hand where its output is kept unscrubbed.
 function Fail([int]$Code, [string]$Message) {
-  # R20 #120: case-sensitive replace (-creplace), as in Python re.
-  $clean = (Scrub-Homes $Message) -creplace 'https?://\S+', '<url>'
-  [Console]::Error.WriteLine($clean); exit $Code
+  [Console]::Error.WriteLine($Message); exit $Code
 }
 trap { Fail 1 ("unexpected error: " + $_.Exception.Message) }
 if($WantZip -notmatch '^[0-9a-f]{64}$'){ Fail 4 "artifact digest missing or invalid; refusing to download run $Run" }

@@ -160,7 +160,7 @@ def _zip_with_exe(payload=b'installer'):
     return buf.getvalue()
 
 
-def _ps(tmp_path, *, want_zip, want_exe='', curl_mode='ok', data=b'', run='9'):
+def _ps(tmp_path, *, want_zip, want_exe='', curl_mode='ok', data=b'', run='9', raw=False):
     inst = tmp_path / 'inst'
     inst.mkdir(exist_ok=True)
     (inst / '.url-9').write_text('https://signed.invalid/zip')
@@ -187,7 +187,7 @@ open(a[a.index("-o") + 1], "wb").write(open({str(src)!r}, "rb").read()[lo:hi + 1
     if want_exe:
         args += ['-WantExe', want_exe]
     env = {**os.environ, 'WINQA_INST': str(inst), 'WINQA_CURL': str(shim)}
-    return subprocess.run(args, env=env, capture_output=True, text=True), inst
+    return subprocess.run(args, env=env, capture_output=True, text=not raw), inst
 
 
 @need_pwsh
@@ -266,47 +266,6 @@ def test_exe_provenance_records_setup_sha256(tmp_path):
         exe_provenance.build(empty)
 
 
-@pytest.mark.parametrize('raw,expected', [
-    (r'C:\Users\kris\AppData\Local\AutoClip\log.txt', r'C:\Users\<user>\AppData\Local\AutoClip\log.txt'),
-    ('"C:\\\\Users\\\\kris\\\\AppData"', '"C:\\\\Users\\\\<user>\\\\AppData"'),
-    ('c:/users/kris/a.log', 'c:/Users/<user>/a.log'),
-    ('/Users/zhoukk/AutoClipQA/158', '/Users/<user>/AutoClipQA/158'),
-    ('/home/runner/work/x', '/home/<user>/work/x'),
-    ('GET /api/home/feed', 'GET /api/home/feed'),
-    (r'C:\Users\qa', r'C:\Users\<user>'),
-    (r'C:\Users\Jane Doe\AppData\x.log', r'C:\Users\<user>\AppData\x.log'),
-    ('{"p": "C:\\\\Users\\\\Jane Doe\\\\a"}', '{"p": "C:\\\\Users\\\\<user>\\\\a"}'),
-    ('/Users/Jane Doe/AutoClipQA', '/Users/<user>/AutoClipQA'),
-    ('/home/Jane Doe', '/home/<user>'),
-    ('see /home/a and more /x', 'see /home/<user> and more /x'),
-    # R18 #88: a spaced name followed by a colon is masked whole.
-    ('/Users/Jane Doe: Permission denied', '/Users/<user>: Permission denied'),
-    (r'C:\Users\Jane Doe: Access is denied', r'C:\Users\<user>: Access is denied'),
-    ('/home/Jane Doe:/bin/bash', '/home/<user>:/bin/bash'),
-    # R18 #85: \\u-escaped (Chinese) names in non-JSON text, all three platform forms.
-    (r'log /Users/\u5f20\u4e09/a', r'log /Users/<user>/a'),
-    (r'log /home/\u5f20\u4e09', r'log /home/<user>'),
-    (r'log "C:\\Users\\\u5f20\u4e09\\a"', r'log "C:\\Users\\<user>\\a"'),
-    ('/Users/张三/a', '/Users/<user>/a'),
-    # R20 #116: plain Windows names that look like \\uXXXX (u + 4 hex digits).
-    (r'C:\Users\u1234\AppData\x.log', r'C:\Users\<user>\AppData\x.log'),
-    (r'C:\Users\uface', r'C:\Users\<user>'),
-    ('"C:\\\\Users\\\\u1234\\\\a"', '"C:\\\\Users\\\\<user>\\\\a"'),
-    # R20 #117: CRLF line end after a spaced name.
-    ('/Users/Jane Doe\r\nnext /home/Jane Doe\r\n', '/Users/<user>\r\nnext /home/<user>\r\n'),
-    (r'C:\Users\Jane Doe' + '\r\nx', r'C:\Users\<user>' + '\r\nx'),
-    # R20 #118: apostrophe inside a name; surrounding quotes are kept.
-    ("/Users/O'Connor/a", '/Users/<user>/a'),
-    (r"C:\Users\O'Connor\a", r'C:\Users\<user>\a'),
-    ("open '/home/kris' now", "open '/home/<user>' now"),
-])
-def test_redact_scrubs_home_directories(tmp_path, raw, expected):
-    redact = _module('redact')
-    (tmp_path / 'e.log').write_bytes(raw.encode('utf-8'))   # bytes: CRLF cases must reach redact.py intact
-    redact.main(str(tmp_path))
-    assert (tmp_path / 'e.log').read_bytes().decode('utf-8') == expected
-
-
 @pytestmark_bash
 @pytest.mark.parametrize('bash', BASHES)
 def test_shell_diagnostics_use_redact_py(tmp_path, bash):
@@ -342,49 +301,9 @@ def test_redact_json_with_escaped_chinese_names_stays_valid(tmp_path, indent):
     out = (tmp_path / 'e.json').read_text(encoding='utf-8')
     data = json.loads(out)
     assert '张' not in out and '\\u5f20' not in out and '\\u4e09' not in out and '三' not in json.dumps(data, ensure_ascii=False)
-    assert data['paths'] == ['/Users/<user>/AutoClipQA', '/home/<user>', 'C:\\Users\\<user>\\AppData', 'C:\\Users\\<user>\\x', 'c:/Users/<user>/a.log']
+    assert data['paths'] == ['/Users/<user>/AutoClipQA', '/home/<user>', 'C:\\Users\\<user>\\AppData', 'C:\\Users\\<user>\\x', 'c:/users/<user>/a.log']
     assert data['nested']['cwd'] == '/Users/<user>/AutoClipQA: denied'
     assert data['api_key_masked'] == '***' and data['n'] == 3
-
-
-def test_ps1_uses_redact_py_patterns():
-    """R18 #86 / R20 #120: the ps1 error exit embeds redact.py's exact patterns and only uses -creplace."""
-    redact = _module('redact')
-    text = PS1.read_text(encoding='utf-8')
-    q = lambda s: "'" + s.replace("'", "''") + "'"
-    assert f'$WinPattern = {q(redact.WIN_PATTERN)}' in text
-    assert f'$PosixPattern = {q(redact.POSIX_PATTERN)}' in text
-    fail = text[text.index('function Fail'):text.index('trap {')]
-    assert '-creplace' in fail and not re.search(r'-i?replace\b', fail)
-
-
-PS1_ERROR_CASES = [
-    ('C:\\Users\\Jane Doe\\x.log', 'C:\\Users\\<user>\\x.log'),
-    ('/Users/Jane Doe: Permission denied', '/Users/<user>: Permission denied'),
-    ('GET /api/home/feed', 'GET /api/home/feed'),
-    ('see /home/qa/y', 'see /home/<user>/y'),
-    ('C:\\Users\\张三\\a', 'C:\\Users\\<user>\\a'),
-    ('"C:\\\\Users\\\\\\u5f20\\u4e09\\\\a"', '"C:\\\\Users\\\\<user>\\\\a"'),
-    ('https://signed.invalid/z?sig=1', '<url>'),
-    (r'C:\Users\u1234\x', r'C:\Users\<user>\x'),
-    ('/Users/Jane Doe\r\nnext', '/Users/<user>\r\nnext'),
-    ("/Users/O'Connor/a", '/Users/<user>/a'),
-    # R20 #120: POSIX roots are case-sensitive in Python; PowerShell must agree.
-    ('/USERS/kris/x and /HOME/qa', '/USERS/kris/x and /HOME/qa'),
-    ('HTTPS://x.invalid/y', 'HTTPS://x.invalid/y'),
-]
-
-
-@need_pwsh
-@pytest.mark.parametrize('raw,expected', PS1_ERROR_CASES)
-def test_pwsh_error_exit_redacts_like_redact_py(tmp_path, raw, expected):
-    """R18 #86: run the real ps1 error exit (digest guard echoes -Run) and compare with redact.py."""
-    redact = _module('redact')
-    assert redact.scrub_stream(raw) == expected
-    done, _ = _ps(tmp_path, want_zip='', run=raw)
-    assert done.returncode == 4, done.stdout + done.stderr
-    # text-mode capture folds CRLF to LF; leaked name parts would still show up.
-    assert done.stderr.rstrip('\n') == f'artifact digest missing or invalid; refusing to download run {expected}'.replace('\r\n', '\n')
 
 
 def test_redact_json_colliding_keys_are_all_kept(tmp_path):
@@ -404,7 +323,8 @@ def test_redact_json_is_scrubbed_after_parsing(tmp_path):
     redact = _module('redact')
     raw = '{"p": "\\/U\\u0073ers\\/kris\\/a", "w": "C:\\\\U\\u0073ers\\\\qa\\\\x"}'
     assert json.loads(raw) == {'p': '/Users/kris/a', 'w': 'C:\\Users\\qa\\x'}
-    assert redact.scrub_homes(raw) == raw, 'text rules alone do not see these; the JSON step must'
+    # R22 #150: the text scanner now decodes these escapes too (it used to miss them entirely).
+    assert redact.scrub_homes(raw) == '{"p": "\\/U\\u0073ers\\/<user>\\/a", "w": "C:\\\\U\\u0073ers\\\\<user>\\\\x"}'
     (tmp_path / 'e.json').write_text(raw, encoding='utf-8')
     redact.main(str(tmp_path))
     assert json.loads((tmp_path / 'e.json').read_text(encoding='utf-8')) == {'p': '/Users/<user>/a', 'w': 'C:\\Users\\<user>\\x'}
@@ -429,34 +349,6 @@ def test_pwsh_verify_only_replaces_its_own_files(tmp_path):
 
 
 # ---------------- R21: one rule for every spelling (#127 #128 #130 #131 #132) ----------------
-
-R21_CASES = [
-    (r'C:/Users/\u5f20\u4e09/x', 'C:/Users/<user>/x'),                          # 127
-    (r'see c:/users/\u5f20\u4e09', 'see c:/Users/<user>'),                       # 127
-    (r'/Users/\\u5f20\\u4e09/x', r'/Users/\\<user>/x'),                          # 130
-    (r'C:\Users\\u5f20\\u4e09\x', r'C:\Users\\<user>\x'),                        # 130
-    (r'\/Users\/alice\/x', r'\/Users\/<user>\/x'),
-    (r'C:\u005cUsers\u005calice\u005cx', r'C:\u005cUsers\u005c<user>\u005cx'),
-    (r'\u002fhome\u002fbob\u002fx', r'\u002fhome\u002f<user>\u002fx'),
-    (r'C:\\Users\\alice\u002fx', r'C:\\Users\\<user>\u002fx'),
-    ("/Users/D''Arcy/x", '/Users/<user>/x'),                                    # 132
-    ("/Users/D' Artagnan/x", '/Users/<user>/x'),                                # 132
-    ("C:\\Users\\D' Artagnan", 'C:\\Users\\<user>'),                            # 132
-    ("/home/D''Arcy", '/home/<user>'),                                          # 132
-    ("x '/home/D''Arcy' y", "x '/home/<user>' y"),                              # 132
-    ("x '/home/kris' y", "x '/home/<user>' y"),
-    (r'GET \/api\/home\/feed', r'GET \/api\/home\/feed'),
-]
-
-
-@pytest.mark.parametrize('raw,expected', R21_CASES)
-def test_redact_one_rule_for_every_spelling(tmp_path, raw, expected):
-    redact = _module('redact')
-    assert redact.scrub_homes(raw) == expected
-    (tmp_path / 'e.log').write_bytes(raw.encode('utf-8'))
-    redact.main(str(tmp_path))
-    assert (tmp_path / 'e.log').read_bytes().decode('utf-8') == expected
-
 
 def test_redact_json_with_bom_is_parsed(tmp_path):
     """R21 #131: a BOM must not make the JSON step fall back; BOM is kept on write."""
@@ -490,23 +382,6 @@ def test_redact_utf8_key_is_masked_in_byte_mode(tmp_path, monkeypatch):
     (tmp_path / 'e.log').write_bytes(raw)
     redact.main(str(tmp_path))
     assert (tmp_path / 'e.log').read_bytes() == b'k=*** m=*** \xff'
-
-
-CONSISTENCY_CORPUS = [raw for raw, _ in R21_CASES] + [
-    r'C:\Users\u1234\AppData\x.log', r'C:\Users\uface', '/Users/Jane Doe: Permission denied',
-    'see /home/a and more /x', 'GET /api/home/feed', "/Users/O'Connor/a", '/USERS/kris/x and /HOME/qa',
-    '"C:\\\\Users\\\\\\u5f20\\u4e09\\\\a"', 'C:\\Users\\Jane Doe\\x.log', '/home/Jane Doe', 'c:/users/kris/a.log',
-]
-
-
-@need_pwsh
-@pytest.mark.parametrize('raw', CONSISTENCY_CORPUS)
-def test_pwsh_and_python_redact_identically(tmp_path, raw):
-    """R21: py and ps1 apply the same rule; the ps1 error exit must print exactly redact.py's output."""
-    redact = _module('redact')
-    done, _ = _ps(tmp_path, want_zip='', run=raw)
-    assert done.returncode == 4, done.stdout + done.stderr
-    assert done.stderr.rstrip('\n') == 'artifact digest missing or invalid; refusing to download run ' + redact.scrub_stream(raw)
 
 
 # R22: GBK trail byte 0x5C ('\\', e.g. 乗 81 5C, 淺 9C 5C) or 0x7C ('|', e.g. 億 83 7C) inside a user
@@ -543,12 +418,179 @@ def test_redact_utf8_log_keeps_plain_rule(tmp_path):
     assert (tmp_path / 'e.log').read_bytes() == b'C:\\Users\\<user>\\AppData\\x.log /home/<user>/y\n'
 
 
-@need_pwsh
-@pytest.mark.parametrize('raw', ['C:\\Users\\乗\\AppData\\x.log', '/home/淺野/x', 'C:\\Users\\億x\\a', '/Users/张乗: 拒绝访问'])
-def test_pwsh_and_python_agree_on_5c_names_as_text(tmp_path, raw):
-    """ps1 only sees .NET strings (乗 is one char there); it must match redact.py's text rule."""
+
+
+# ---------------- R22: one implementation, one corpus (#129 #150-#156, SJIS/Big5) ----------------
+# backend/tests/fixtures/winqa_redact_corpus.json holds every R16-R22 sample (input/expected). The same
+# file drives four chains: redact.scrub_homes, --stdin bytes, evidence files in every supported
+# encoding/line ending, and pull_run_installer.ps1 output through the .sh redact pipe.
+
+CORPUS = json.loads((Path(__file__).parent / 'fixtures' / 'winqa_redact_corpus.json').read_text(encoding='utf-8'))['cases']
+CASE_IDS = [c['id'] for c in CORPUS]
+# (label, codec used to write the text, BOM bytes)
+FILE_ENCODINGS = [('utf-8', 'utf-8', b''), ('utf-8-bom', 'utf-8', b'\xef\xbb\xbf'),
+                  ('utf-16-le', 'utf-16-le', b'\xff\xfe'), ('utf-16-be', 'utf-16-be', b'\xfe\xff'),
+                  ('gbk', 'gbk', b''), ('shift_jis', 'shift_jis', b''), ('big5', 'big5', b'')]
+
+
+def _expected(case, label=None):
+    return case.get('expected_by_encoding', {}).get(label, case['expected'])
+
+
+def test_corpus_covers_every_round_and_encoding():
+    rounds = {c['round'].split()[0] for c in CORPUS}
+    assert {'R16-R20', 'R21', 'R18-R20', 'R22'} <= rounds
+    tags = ' '.join(c['round'] for c in CORPUS)
+    for tag in ('#150', '#151', '#152', '#153', '#156', 'GBK', 'SJIS', 'Big5'):
+        assert tag in tags, tag
+    assert any('\r\n' in c['text'] for c in CORPUS)
+
+
+@pytest.mark.parametrize('case', CORPUS, ids=CASE_IDS)
+def test_corpus_python(case):
     redact = _module('redact')
-    done, _ = _ps(tmp_path, want_zip='', run=raw)
+    fn = redact.scrub_stream if case.get('chains') else redact.scrub_homes
+    assert fn(case['text']) == case['expected']
+    assert fn(case['expected']) == case['expected'], 'scrubbing is idempotent'
+
+
+@pytest.mark.parametrize('case', CORPUS, ids=CASE_IDS)
+def test_corpus_stdin_bytes(case):
+    redact = _module('redact')
+    assert redact.scrub_stream_bytes(case['text'].encode('utf-8')) == redact.scrub_stream(case['text']).encode('utf-8')
+
+
+@pytest.mark.parametrize('case', [c for c in CORPUS if not c.get('chains')], ids=[c['id'] for c in CORPUS if not c.get('chains')])
+def test_corpus_files_every_encoding_and_line_ending(tmp_path, case):
+    """#129 CRLF kept, #155 UTF-16, #149 GBK, SJIS/Big5: same expectation as text, original bytes elsewhere."""
+    redact = _module('redact')
+    tried = 0
+    for label, codec, bom in FILE_ENCODINGS:
+        exp = _expected(case, label)
+        for eol in ('\n', '\r\n'):
+            body, want = f'head{eol}{case["text"]}{eol}tail 日志{eol}', f'head{eol}{exp}{eol}tail 日志{eol}'
+            try:
+                raw, out = bom + body.encode(codec), bom + want.encode(codec)
+            except UnicodeEncodeError:
+                continue   # sample not representable in this encoding
+            f = tmp_path / f'{label}{len(eol)}.log'
+            f.write_bytes(raw)
+            redact.main(str(tmp_path))
+            assert f.read_bytes() == out, (label, repr(eol), f.read_bytes())
+            f.unlink()
+            tried += 1
+    assert tried >= 4
+
+
+SH_REDACT = [sys.executable, str(ROOT / 'redact.py'), '--stdin']
+
+
+@need_pwsh
+@pytest.mark.parametrize('case', CORPUS, ids=CASE_IDS)
+def test_corpus_pwsh_output_through_sh_redact_pipe(tmp_path, case):
+    """The ps1 has no rule of its own; what it prints, piped through redact.py like the .sh does, equals the corpus."""
+    done, _ = _ps(tmp_path, want_zip='', run=case['text'], raw=True)
     assert done.returncode == 4, done.stdout + done.stderr
-    assert not any(c in done.stderr for c in '乗淺野億'), done.stderr
-    assert done.stderr.rstrip('\n') == 'artifact digest missing or invalid; refusing to download run ' + redact.scrub_stream(raw)
+    piped = subprocess.run(SH_REDACT, input=done.stderr, capture_output=True, check=True).stdout
+    redact = _module('redact')
+    want = 'artifact digest missing or invalid; refusing to download run ' + redact.scrub_stream(case['text'])
+    assert redact.scrub_stream(case['text']) == case['expected'] or not case.get('chains')
+    assert piped.decode('utf-8').rstrip('\r\n') == want.rstrip('\r\n')
+
+
+def test_ps1_has_no_scrubbing_rule_and_sh_pipes_it_through_redact():
+    """R22 code health: no second implementation (no patterns, no Scrub-Homes port) in the ps1."""
+    text = PS1.read_text(encoding='utf-8')
+    for gone in ('$WinPattern', '$PosixPattern', 'Scrub-Homes', 'Mask-HomeName', '<user>'):
+        assert gone not in text
+    sh = SH.read_text(encoding='utf-8')
+    run = sh[sh.index('pull_run_installer.ps1 -Run'):]
+    assert '2>"${TMP}/ps.err" | redact' in run and 'redact <"${TMP}/ps.err" >&2' in run
+    assert 'RC=${PIPESTATUS[0]}' in run
+
+
+@pytestmark_bash
+@pytest.mark.parametrize('bash', BASHES)
+def test_sh_redacts_everything_the_machine_prints_and_keeps_its_exit_code(tmp_path, bash):
+    done, _ = _run(tmp_path, bash)   # sets up the fake gh/curl/scp
+    assert done.returncode == 0
+    bins = tmp_path / 'bin'
+    _bin(bins, 'ssh', '''case "$*" in
+  *pull_run_installer.ps1*) echo 'round 1 C:\\Users\\Jane Doe\\x /Users/kris/y https://s.invalid/z?sig=1'
+                            echo 'zip sha256 mismatch C:\\Users\\乗张三\\dl' >&2; exit 7;;
+esac; exit 0''')
+    env = {**os.environ, 'PATH': f'{bins}:{os.environ["PATH"]}', 'WINQA_HOST': 'qa.invalid',
+           'WINQA_IDENTITY': str(tmp_path / 'id'), 'LANG': UTF8, 'LC_ALL': UTF8}
+    done = subprocess.run([bash, str(SH), '999'], env=env, capture_output=True, text=True)
+    assert done.returncode == 7, done.stderr
+    assert 'round 1 C:\\Users\\<user>\\x /Users/<user>/y <url>' in done.stdout
+    assert 'zip sha256 mismatch C:\\Users\\<user>\\dl' in done.stderr
+    for leak in ('Jane', 'kris', 'sig=1', '张三', '乗'):
+        assert leak not in done.stdout + done.stderr
+
+
+@pytest.mark.parametrize('raw', ['C:' + '\\' * 5000 + 'x', 'C:' + '\\' * 4000 + 'Users' + '\\' * 4000 + 'a',
+                                 '/home/' + '\\u005c' * 3000 + 'x', ('/Users/' + 'a ' * 20000 + '\n') * 5],
+                         ids=['backslash-run', 'root-backslash-runs', 'escaped-sep-run', 'long-spaced-names'])
+def test_redact_is_linear_on_hostile_input(raw):
+    """R22 #154: the old regex took >3 s on 28 backslashes; the scanner must stay well under a second."""
+    import time
+    redact = _module('redact')
+    t = time.perf_counter()
+    redact.scrub_stream(raw)
+    assert time.perf_counter() - t < 1.0
+
+
+def test_redact_json_crlf_and_bom_are_kept(tmp_path):
+    """R22 #129: a scrubbed JSON keeps CRLF line ends and its BOM."""
+    redact = _module('redact')
+    doc = json.dumps({'p': '/Users/alice/x', 'n': [1, 2]}, indent=2).replace('\n', '\r\n') + '\r\n'
+    for name, bom in (('a.json', b''), ('b.json', b'\xef\xbb\xbf')):
+        (tmp_path / name).write_bytes(bom + doc.encode('utf-8'))
+    redact.main(str(tmp_path))
+    for name, bom in (('a.json', b''), ('b.json', b'\xef\xbb\xbf')):
+        out = (tmp_path / name).read_bytes()
+        assert out.startswith(bom) and b'\r\n' in out and b'\n' not in out.replace(b'\r\n', b'')
+        assert json.loads(out.decode('utf-8-sig')) == {'p': '/Users/<user>/x', 'n': [1, 2]}
+
+
+@pytest.mark.parametrize('codec,bom', [('utf-16-le', b'\xff\xfe'), ('utf-16-be', b'\xfe\xff')])
+def test_redact_utf16_files(tmp_path, codec, bom):
+    """R22 #155: UTF-16 (BOM) logs and JSON are masked and written back in UTF-16 with the BOM."""
+    redact = _module('redact')
+    (tmp_path / 'e.log').write_bytes(bom + 'C:\\Users\\张三\\x\r\n'.encode(codec))
+    (tmp_path / 'e.json').write_bytes(bom + json.dumps({'p': '/home/bob/x'}).encode(codec))
+    redact.main(str(tmp_path))
+    assert (tmp_path / 'e.log').read_bytes() == bom + 'C:\\Users\\<user>\\x\r\n'.encode(codec)
+    assert json.loads((tmp_path / 'e.json').read_bytes()[2:].decode(codec)) == {'p': '/home/<user>/x'}
+
+
+def test_redact_lone_surrogate_json_is_masked_and_does_not_stop_the_run(tmp_path):
+    """R22 #156: '\\ud800' in JSON used to raise UnicodeEncodeError and stop every later file."""
+    redact = _module('redact')
+    (tmp_path / 'a.json').write_text('{"p": "\\ud800 /Users/bob/x"}', encoding='utf-8')
+    (tmp_path / 'b.log').write_text('/Users/carol/x\n', encoding='utf-8')
+    redact.main(str(tmp_path))
+    out = (tmp_path / 'a.json').read_text(encoding='utf-8')
+    assert '\\ud800' in out and 'bob' not in out and json.loads(out) == {'p': '\ud800 /Users/<user>/x'}
+    assert (tmp_path / 'b.log').read_text(encoding='utf-8') == '/Users/<user>/x\n'
+
+
+def test_redact_undecodable_file_is_reported_left_alone_and_others_continue(tmp_path, capsys):
+    redact = _module('redact')
+    bad = b'\xff\xfe' + '/Users/bob'.encode('utf-16-le') + b'\x00'   # odd-length UTF-16
+    (tmp_path / 'a.log').write_bytes(bad)
+    (tmp_path / 'b.log').write_text('/Users/carol/x\n', encoding='utf-8')
+    with pytest.raises(SystemExit) as exc:
+        redact.main(str(tmp_path))
+    assert exc.value.code == 2
+    assert (tmp_path / 'a.log').read_bytes() == bad
+    assert (tmp_path / 'b.log').read_text(encoding='utf-8') == '/Users/<user>/x\n'
+    assert 'a.log' in capsys.readouterr().err
+
+
+def test_redact_has_one_home_implementation():
+    """R22 code health: no home-directory regex and no per-encoding variants left in redact.py."""
+    src = (ROOT / 'redact.py').read_text(encoding='utf-8')
+    for gone in ('WIN_PATTERN', 'POSIX_PATTERN', 'NAME_GBK', '_mask(', 'gbk=', 'latin-1'):
+        assert gone not in src
