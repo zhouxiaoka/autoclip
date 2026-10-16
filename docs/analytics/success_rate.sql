@@ -11,7 +11,9 @@
 --   attempt  = 一次终态尝试，按 attempt_id 去重（取最后一条）；缺 attempt_id 的历史行按事件 uuid 计。
 --   flow     = 用户的一次出片流程：沿 retry_of 回溯到重试链根（最多 4 跳），用根 attempt 的 flow_id；
 --              结果取该流程 / 重试链里最后一次 attempt：按 attempt_sequence（后端回执的项目内序号，#419）排，
---              观察时间只用来打平；没有 attempt_sequence 的历史行按 0 计（R25 #346，事件乱序到达不改结果）。
+--              观察时间只用来打平（R25 #346，事件乱序到达不改结果）。
+--   未知     = 没有 attempt_sequence 的终态行（#419 之前的版本）：图 1 / 图 5 不进任何分母和分子、不进流程，
+--              只在 unknown_attempts 列计数（PM 口径，2026-10-17）。
 --   person   = person_id（不是 distinct_id / 设备）。
 --   success  = outcome IN ('completed','success')。partial 不算成功，单独算 partial-delivery 率。
 --   全量口径分母剔除（user_hard，只剔除明确的用户行为）：
@@ -32,8 +34,9 @@ WITH base AS (
     argMax(toString(coalesce(properties.flow_id, properties.attempt_id, toString(uuid))), timestamp) AS fid,
     argMax(person_id, timestamp) AS pid,
     max(timestamp) AS ts,
-    -- R25 #346: the backend receipt's per-project attempt sequence orders a flow; observation time only breaks ties
-    argMax(ifNull(toInt(properties.attempt_sequence), 0), timestamp) AS seq,
+    -- R25 #346: the backend receipt's per-project attempt sequence (NULL = legacy row without it: not in any
+    -- denominator, counted as unknown_attempts); it orders a flow, observation time only breaks ties
+    max(toInt(properties.attempt_sequence)) AS seq,
     argMax(toString(properties.outcome), timestamp) AS o_raw,
     argMax(coalesce(toString(properties.error_code), ''), timestamp) AS ec,
     argMax(coalesce(toString(properties.upstream_error_type), ''), timestamp) AS ue,
@@ -64,15 +67,16 @@ WITH base AS (
       OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
       OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
     (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked')) AS user_x,
-    (o = 'success' OR NOT user_hard) AS qual_all,
-    (o = 'success' OR NOT user_x) AS qual
+    (seq IS NOT NULL) AS known,
+    (known AND (o = 'success' OR NOT user_hard)) AS qual_all,
+    (known AND (o = 'success' OR NOT user_x)) AS qual
   FROM chained
 ), flows AS (
   -- per-flow outcome = the LAST attempt in the flow / retry chain
-  SELECT chain_fid AS fid, max(ts) AS fts, argMax(o, (seq, ts)) AS fo, argMax(qual, (seq, ts)) AS fq, argMax(qual_all, (seq, ts)) AS fqa FROM c GROUP BY chain_fid
+  SELECT chain_fid AS fid, max(ts) AS fts, argMax(o, (seq, ts)) AS fo, argMax(qual, (seq, ts)) AS fq, argMax(qual_all, (seq, ts)) AS fqa FROM c WHERE known GROUP BY chain_fid
 ), d1 AS (
-  SELECT toDate(ts) AS d, countIf(o = 'success') AS ok, countIf(qual_all) AS q_all, countIf(qual) AS q_prod,
-    countIf(o = 'partial' AND qual) AS partial_n
+  SELECT toDate(ts) AS d, countIf(o = 'success' AND known) AS ok, countIf(qual_all) AS q_all, countIf(qual) AS q_prod,
+    countIf(o = 'partial' AND qual) AS partial_n, countIf(NOT known) AS unknown_n
   FROM c GROUP BY d
 ), d2 AS (
   SELECT toDate(fts) AS d, countIf(fo = 'success') AS flow_ok, countIf(fqa) AS fq_all, countIf(fq) AS fq_prod FROM flows GROUP BY d
@@ -81,7 +85,8 @@ SELECT toString(d1.d) AS dt, d1.ok AS ok,
   round(d1.ok / nullIf(d1.q_all, 0), 3) AS overall_attempt_rate, round(d1.ok / nullIf(d1.q_prod, 0), 3) AS product_attempt_rate,
   round(d2.flow_ok / nullIf(d2.fq_all, 0), 3) AS overall_flow_rate, round(d2.flow_ok / nullIf(d2.fq_prod, 0), 3) AS product_flow_rate,
   round(d1.partial_n / nullIf(d1.q_prod, 0), 3) AS partial_delivery_rate,
-  d1.q_all AS q_all, d1.q_prod AS q_prod, d2.flow_ok AS flow_ok, d2.fq_all AS fq_all, d2.fq_prod AS fq_prod
+  d1.q_all AS q_all, d1.q_prod AS q_prod, d2.flow_ok AS flow_ok, d2.fq_all AS fq_all, d2.fq_prod AS fq_prod,
+  d1.unknown_n AS unknown_attempts
 FROM d1 LEFT JOIN d2 ON d1.d = d2.d
 ORDER BY dt;
 
@@ -178,8 +183,9 @@ WITH base AS (
     argMax(toString(coalesce(properties.flow_id, properties.attempt_id, toString(uuid))), timestamp) AS fid,
     argMax(person_id, timestamp) AS pid,
     max(timestamp) AS ts,
-    -- R25 #346: the backend receipt's per-project attempt sequence orders a flow; observation time only breaks ties
-    argMax(ifNull(toInt(properties.attempt_sequence), 0), timestamp) AS seq,
+    -- R25 #346: the backend receipt's per-project attempt sequence (NULL = legacy row without it: not in any
+    -- denominator, counted as unknown_attempts); it orders a flow, observation time only breaks ties
+    max(toInt(properties.attempt_sequence)) AS seq,
     argMax(toString(properties.outcome), timestamp) AS o_raw,
     argMax(coalesce(toString(properties.error_code), ''), timestamp) AS ec,
     argMax(coalesce(toString(properties.upstream_error_type), ''), timestamp) AS ue,
@@ -210,14 +216,15 @@ WITH base AS (
       OR ec IN ('authentication', 'llm_auth_invalid', 'invalid_key', 'insufficient_quota', 'llm_not_configured', 'cancelled', 'user_cancelled')
       OR ue IN ('invalid_key', 'insufficient_quota', 'permission_denied')) AS user_hard,
     (user_hard OR ec IN ('connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked')) AS user_x,
-    (o = 'success' OR NOT user_hard) AS qual_all,
-    (o = 'success' OR NOT user_x) AS qual
+    (seq IS NOT NULL) AS known,
+    (known AND (o = 'success' OR NOT user_hard)) AS qual_all,
+    (known AND (o = 'success' OR NOT user_x)) AS qual
   FROM chained
 ), flows AS (
-  SELECT chain_fid AS fid, argMax(v, (seq, ts)) AS fv, argMax(o, (seq, ts)) AS fo, argMax(qual, (seq, ts)) AS fq, argMax(qual_all, (seq, ts)) AS fqa FROM c GROUP BY chain_fid
+  SELECT chain_fid AS fid, argMax(v, (seq, ts)) AS fv, argMax(o, (seq, ts)) AS fo, argMax(qual, (seq, ts)) AS fq, argMax(qual_all, (seq, ts)) AS fqa FROM c WHERE known GROUP BY chain_fid
 ), v1 AS (
-  SELECT v, countIf(o = 'success') AS ok, countIf(qual_all) AS q_all, countIf(qual) AS q_prod,
-    countIf(o = 'partial' AND qual) AS partial_n
+  SELECT v, countIf(o = 'success' AND known) AS ok, countIf(qual_all) AS q_all, countIf(qual) AS q_prod,
+    countIf(o = 'partial' AND qual) AS partial_n, countIf(NOT known) AS unknown_n
   FROM c GROUP BY v
 ), v2 AS (
   SELECT fv AS v, countIf(fo = 'success') AS flow_ok, countIf(fqa) AS fq_all, countIf(fq) AS fq_prod FROM flows GROUP BY fv
@@ -226,7 +233,8 @@ SELECT v1.v AS app_version, v1.ok AS ok,
   round(v1.ok / nullIf(v1.q_all, 0), 3) AS overall_attempt_rate, round(v1.ok / nullIf(v1.q_prod, 0), 3) AS product_attempt_rate,
   round(v2.flow_ok / nullIf(v2.fq_all, 0), 3) AS overall_flow_rate, round(v2.flow_ok / nullIf(v2.fq_prod, 0), 3) AS product_flow_rate,
   round(v1.partial_n / nullIf(v1.q_prod, 0), 3) AS partial_delivery_rate,
-  v1.q_all AS q_all, v1.q_prod AS q_prod, v2.flow_ok AS flow_ok, v2.fq_all AS fq_all, v2.fq_prod AS fq_prod
+  v1.q_all AS q_all, v1.q_prod AS q_prod, v2.flow_ok AS flow_ok, v2.fq_all AS fq_all, v2.fq_prod AS fq_prod,
+  v1.unknown_n AS unknown_attempts
 FROM v1 LEFT JOIN v2 ON v1.v = v2.v
 ORDER BY app_version;
 

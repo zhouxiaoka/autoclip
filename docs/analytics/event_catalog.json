@@ -239,7 +239,8 @@
       ],
       "flow_definition": {
         "key": "flow_id of the retry-chain root (follow retry_of, max 4 hops)",
-        "outcome": "last attempt in the flow / retry chain, ordered by order_property (observation time only breaks ties; rows without it count as 0)",
+        "outcome": "last attempt in the flow / retry chain, ordered by order_property (observation time only breaks ties)",
+        "rows_without_order_property": "legacy (pre-#419): excluded from every denominator, numerator and flow in figures 1/5; counted in unknown_attempts",
         "retry_link_property": "retry_of",
         "order_property": "attempt_sequence",
         "max_retry_hops": 4

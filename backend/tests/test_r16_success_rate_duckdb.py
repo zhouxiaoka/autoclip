@@ -21,6 +21,11 @@ class Events:
     def add(self, person, minutes, event='studio_generation_finished', env='production', runtime='desktop',
             app_version='1.5.8', **props):
         self.n += 1
+        # R25 #346: v4 rows carry the backend receipt sequence (here: insertion order); legacy=True drops it.
+        if props.pop('legacy', False):
+            props.pop('attempt_sequence', None)
+        else:
+            props.setdefault('attempt_sequence', str(self.n))
         props = {'analytics_environment': env, 'runtime': runtime, 'app_version': app_version, **props}
         self.rows.append((f'u{self.n:04d}', event, person, DAY + timedelta(minutes=minutes), props))
 
@@ -426,8 +431,53 @@ def test_346_ordering_by_observation_time_is_caught(figure):
     assert rows[0]['flow_ok'] == 0  # the old argMax(o, ts): 100% -> 0%
 
 
-def test_346_legacy_rows_without_sequence_still_order_by_time():
-    e = Events()
-    e.add('L', 0, attempt_id='l1', flow_id='FL', outcome='error', error_code='timeout')
-    e.add('L', 5, attempt_id='l2', flow_id='FL', retry_of='l1', outcome='completed')
-    assert e.run(statements()[0])[0]['flow_ok'] == 1
+def _legacy(e, person, base=0):
+    """pre-#419 rows: no attempt_sequence. One success flow and one fail -> retry-success flow."""
+    e.add(person, base, attempt_id=person + 'l1', flow_id='F' + person + '1', outcome='completed', legacy=True)
+    e.add(person, base + 1, attempt_id=person + 'l2', flow_id='F' + person + '2', outcome='error', error_code='timeout', legacy=True)
+    e.add(person, base + 2, attempt_id=person + 'l3', flow_id='F' + person + '3', retry_of=person + 'l2', outcome='completed', legacy=True)
+
+
+@pytest.mark.parametrize('figure', [0, 4])
+def test_346_legacy_only_has_empty_denominators_and_counts_unknown(figure):
+    e = Events(); _legacy(e, 'L')
+    [row] = e.run(statements()[figure])
+    assert (row['ok'], row['q_all'], row['q_prod'], row['flow_ok'] or 0, row['fq_all'] or 0, row['unknown_attempts']) == (0, 0, 0, 0, 0, 3)
+    assert row['overall_attempt_rate'] is None and row['product_attempt_rate'] is None and row['overall_flow_rate'] is None
+
+
+@pytest.mark.parametrize('figure', [0, 4])
+def test_346_mixed_counts_only_rows_with_a_sequence(figure):
+    e = Events(); _legacy(e, 'L')
+    e.add('N', 0, attempt_id='n1', flow_id='FN', outcome='error', error_code='timeout')
+    e.add('N', 1, attempt_id='n2', flow_id='FN', retry_of='n1', outcome='completed')
+    [row] = e.run(statements()[figure])
+    assert (row['ok'], row['q_all'], row['flow_ok'], row['fq_all'], row['unknown_attempts']) == (1, 2, 1, 1, 3)
+    assert row['overall_attempt_rate'] == 0.5 and row['overall_flow_rate'] == 1.0
+
+
+LEGACY_MUTATIONS = {
+    'legacy counted in denominators': ('(seq IS NOT NULL) AS known', 'TRUE AS known'),
+    'legacy counted as failures': ("(known AND (o = 'success' OR NOT user_hard)) AS qual_all", "(NOT known OR o = 'success' OR NOT user_hard) AS qual_all"),
+    'legacy successes in the numerator': ("countIf(o = 'success' AND known) AS ok", "countIf(o = 'success') AS ok"),
+    'legacy rows in flows': ('FROM c WHERE known GROUP BY chain_fid', 'FROM c GROUP BY chain_fid'),
+    'legacy ordered as 0 (old rule)': ('max(toInt(properties.attempt_sequence)) AS seq', 'max(ifNull(toInt(properties.attempt_sequence), 0)) AS seq'),
+}
+
+
+@pytest.mark.parametrize('figure', [0, 4])
+@pytest.mark.parametrize('name', LEGACY_MUTATIONS)
+def test_346_legacy_rule_mutations_are_caught(figure, name):
+    old, new = LEGACY_MUTATIONS[name]
+    stmt = statements()[figure]
+    assert old in stmt, name
+    mutated = stmt.replace(old, new)
+    def run(e):
+        return e.run(mutated)[0]
+    only = Events(); _legacy(only, 'L')
+    mixed = Events(); _legacy(mixed, 'L')
+    mixed.add('N', 0, attempt_id='n1', flow_id='FN', outcome='error', error_code='timeout')
+    mixed.add('N', 1, attempt_id='n2', flow_id='FN', retry_of='n1', outcome='completed')
+    a, b = run(only), run(mixed)
+    got = ((a['ok'], a['q_all'], a['fq_all'] or 0, a['unknown_attempts']), (b['ok'], b['q_all'], b['flow_ok'], b['fq_all'], b['unknown_attempts']))
+    assert got != ((0, 0, 0, 3), (1, 2, 1, 1, 3)), name

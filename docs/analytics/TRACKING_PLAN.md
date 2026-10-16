@@ -372,7 +372,7 @@ person_id NOT IN COHORT {internal_cohort_id}
 机器可读口径：`event_catalog.json` → `attribution.success_rate_v4`；SQL：[`success_rate.sql`](success_rate.sql)（两者必须一致，有测试）。
 
 - **一次尝试（attempt）** = `studio_generation_finished` / `studio_production_finished` 按 `attempt_id` 去重后取最后一条（缺 `attempt_id` 的历史行按事件 uuid 计）。重试是新的 attempt。
-- **一次流程（flow）** = 沿 `retry_of` 回溯到重试链根（最多 4 跳），用根 attempt 的 `flow_id` 作流程键；结果取该流程 / 重试链里 **最后一次** attempt（最终结果口径）；“最后”按终态事件的 `attempt_sequence`（后端回执 `sequence`，项目内严格递增，#419）排，观察时间只用来打平，事件乱序到达不改结果；没有 `attempt_sequence` 的历史行按 0 计（R25 #346）。`retry_of` = 被重试 attempt 的 `attempt_id`（失败态「重试」按钮产生）。**依赖**：`retry_of` 的产生和前端白名单在 PR #419 里；本口径（#416）须与 #419 同批合入或在其之后合入，否则跨 flow 的重试串不起来、流程成功率偏低。
+- **一次流程（flow）** = 沿 `retry_of` 回溯到重试链根（最多 4 跳），用根 attempt 的 `flow_id` 作流程键；结果取该流程 / 重试链里 **最后一次** attempt（最终结果口径）；“最后”按终态事件的 `attempt_sequence`（后端回执 `sequence`，项目内严格递增，#419）排，观察时间只用来打平，事件乱序到达不改结果（R25 #346）。**没有 `attempt_sequence` 的旧数据（#419 之前的版本）不进成功率**：图 1 / 图 5 的分子、分母和流程都不算它，只在新列 `unknown_attempts` 里计数（PM 口径，2026-10-17）。`retry_of` = 被重试 attempt 的 `attempt_id`（失败态「重试」按钮产生）。**依赖**：`retry_of` 的产生和前端白名单在 PR #419 里；本口径（#416）须与 #419 同批合入或在其之后合入，否则跨 flow 的重试串不起来、流程成功率偏低。
 - **一个人** = `person_id`（不是 `distinct_id` / 设备）。
 - **窗口** = 固定 UTC 日期参数 `{date_from}`（含）/ `{date_to}`（不含），不再用 `now() - 7d`。
 - **过滤** = `analytics_environment = production`、`runtime = desktop`、排除内部 cohort `{internal_cohort_id}`（450605 为 641509）。
