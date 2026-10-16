@@ -59,24 +59,32 @@ class DesktopBackend:
         self.base_url = ''
         self._log = None
         self.log_path = data_dir / 'logs' / 'provider-e2e-backend.log'
+        # R17 #59: stdout (PORT=/BACKEND_URL= announcements) gets its own file. With stdout and
+        # stderr merged, a log line from another thread could land between print()'s "PORT=N"
+        # and its newline ("PORT=444652026-10-16 ... INFO"), the port never parsed and the case
+        # timed out after 120 s. The desktop app already reads them as separate pipes.
+        self.stdout_path = data_dir / 'logs' / 'provider-e2e-stdout.log'
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._out = None
 
     def start(self, timeout: float = 120) -> str:
         self.log_path.write_bytes(b'')
+        self.stdout_path.write_bytes(b'')
         log = self.log_path.open('ab')
         self._log = log
+        self._out = self.stdout_path.open('ab')
         self.process = subprocess.Popen(
             [self.python, '-u', '-m', 'backend.desktop_main'],
             cwd=str(ROOT),
             env=backend_env(self.data_dir),
-            stdout=log,
-            stderr=subprocess.STDOUT,
+            stdout=self._out,
+            stderr=log,
         )
         deadline = time.time() + timeout
         while time.time() < deadline:
             if self.process.poll() is not None:
                 raise RuntimeError(f'desktop backend exited {self.process.returncode} before announcing PORT')
-            text = self.log_path.read_text(encoding='utf-8', errors='replace')
+            text = self.stdout_path.read_text(encoding='utf-8', errors='replace')
             port = announced_port(text)
             if port:
                 self.base_url = f'http://127.0.0.1:{port}'
@@ -122,7 +130,8 @@ class DesktopBackend:
         self._close_log()
 
     def _close_log(self) -> None:
-        handle = getattr(self, '_log', None)
-        if handle is not None:
-            handle.close()
-            self._log = None
+        for name in ('_log', '_out'):
+            handle = getattr(self, name, None)
+            if handle is not None:
+                handle.close()
+                setattr(self, name, None)
