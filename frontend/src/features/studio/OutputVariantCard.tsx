@@ -15,6 +15,7 @@ import { platformLabel } from './platformLabel'
 import { packagingLabel, packagingFallbackHint } from './packagingLabel'
 import PublishKit from './PublishKit'
 import './quick-output.css'
+import { effectiveSubtitles } from './subtitleState'
 
 const framingHints: Record<NonNullable<OutputVariant['framing']>, string> = {
   speaker: '已按说话人重新取景',
@@ -44,7 +45,7 @@ export default function OutputVariantCard({ projectId, variant, draft, job, onRe
   const failed = variant.status === 'failed'
   const onDemand = variant.status === 'on_demand'
   const duration = job?.result?.duration ?? (draft ? draft.scenes.reduce((sum, scene) => sum + scene.end - scene.start, 0) : 0)
-  const packagingHint = packaging ? packagingFallbackHint(packaging, job?.result?.warnings, draft?.subtitles !== false) : ''
+  const packagingHint = packaging ? packagingFallbackHint(packaging, job?.result?.warnings, effectiveSubtitles(draft)) : ''
   const productionDetails = [outroEnabled ? t('包含 Made with AutoClip 片尾') : t('不含品牌片尾'), packaging && packagingLabel(packaging), variant.framing && t(framingHints[variant.framing])].filter(Boolean).join(' · ')
   const downloaded = () => {
     if (!shouldAskRating(projectId)) return

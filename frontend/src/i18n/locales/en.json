@@ -1940,5 +1940,6 @@
   "视觉": "Vision",
   "全部启用": "Enable all",
   "全部停用": "Disable all",
-  "未启用": "Not enabled"
+  "未启用": "Not enabled",
+  "关闭后成片不压字幕，标题和名牌保留。": "Off: no captions burned in; title and nameplates stay."
 }
