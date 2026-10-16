@@ -1072,3 +1072,28 @@ def test_r24_215_no_raw_file_ever_reaches_the_control_machine(tmp_path, bash, mo
         assert (ev / 'env.json').exists()
     if mode == 'interrupt':
         assert done.returncode == 143, done.stdout[-500:]
+
+
+@pytestmark_bash
+@pytest.mark.parametrize('bash', BASHES)
+def test_r24_stale_stage_from_killed_run_is_removed_and_stage_is_700(tmp_path, bash):
+    """Dong: a run killed with -9 leaves its private staging dir; the next run deletes it before starting, and the
+    staging dir is mode 700 (seen from inside the run)."""
+    env, args = _winqa_env(tmp_path, 'vm-python')
+    tmpd = tmp_path / 'tmp'
+    dead = subprocess.Popen(['true']); dead.wait()
+    stale = [tmpd / f'winqa-stage.{dead.pid}.abcdef', tmpd / 'winqa-stage.Xy12ab']   # dead pid; old unnumbered form
+    for d in stale:
+        d.mkdir()
+        (d / 'env.json').write_text('{"home": "C:\\\\Users\\\\kris"}')
+    live = tmpd / f'winqa-stage.{os.getpid()}.keep12'   # a run that is still alive is left alone
+    live.mkdir()
+    modes = tmp_path / 'modes.txt'
+    scp = tmp_path / 'bin' / 'scp'
+    scp.write_text(scp.read_text().replace('exit 0', f'st="$(dirname "$dst")"; stat -c %a "$st" 2>/dev/null >> "{modes}" || stat -f %Lp "$st" >> "{modes}"\nexit 0', 1))
+    done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=120)
+    assert all(not d.exists() for d in stale), done.stdout[-400:]
+    assert live.exists()
+    got = modes.read_text().split()
+    assert got and set(got) == {'700'}, got   # $STAGE itself (dst is $STAGE/in)
+    assert not [p for p in tmpd.glob(f'winqa-stage.*') if p != live]

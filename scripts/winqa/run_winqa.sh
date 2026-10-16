@@ -61,7 +61,14 @@ LOG="$OUT/run.log"
 # pulled files land in a private staging dir, are scrubbed there and only then copied into $OUT; on any exit
 # (Ctrl-C, ssh drop, set -u error) the trap removes the staging dir and scrubs $OUT once more.
 exec > >(WINQA_MODEL_API_KEY="$MODEL_API_KEY" python3 -u "$HERE/redact.py" --lines | tee -a "$LOG") 2>&1
-STAGE="$(mktemp -d "${TMPDIR:-/tmp}/winqa-stage.XXXXXX")"; chmod 700 "$STAGE"
+# A run killed with -9 cannot clean up: leftover winqa-stage.<pid>.* dirs whose run is gone are deleted first.
+for d in "${TMPDIR:-/tmp}"/winqa-stage.*; do
+  [ -d "$d" ] || continue
+  p="${d##*/winqa-stage.}"; p="${p%%.*}"
+  case "$p" in ''|*[!0-9]*) rm -rf "$d"; continue;; esac
+  kill -0 "$p" 2>/dev/null || rm -rf "$d"
+done
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/winqa-stage.$$.XXXXXX")"; chmod 700 "$STAGE"
 scrub_dir() { WINQA_MODEL_API_KEY="$MODEL_API_KEY" python3 "$HERE/redact.py" "$1" --drop-failed >/dev/null 2>&1; }
 final_scrub() { rm -rf "$STAGE"; scrub_dir "$OUT" || true; }
 trap final_scrub EXIT
