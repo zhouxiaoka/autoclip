@@ -81,6 +81,9 @@ def _assert_history_row(data, run_id):
     rows = [r for r in data['analysis_history'] if r['run_id'] == run_id]
     assert len(rows) == 1, data['analysis_history']
     assert rows[0]['analysis']['status'] == 'failed' and rows[0]['analysis']['error_code'] == 'authentication'
+    # R22 110: the history row itself (what 107/the observer reads for an older run) keeps the context
+    row = rows[0]['analysis']
+    assert (row.get('failure_stage'), row.get('http_status'), row.get('upstream_error_type')) == ('subtitle', 401, 'invalid_key'), row
 
 
 def _asr_401():
