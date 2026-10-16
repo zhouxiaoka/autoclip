@@ -19,7 +19,7 @@ const { createRoot } = require('react-dom/client')
 const { act } = React
 
 const dir = path.resolve(__dirname, '../src/features/studio')
-function load(file, mocks) {
+function load(file, mocks, clock) {
   const abs = path.join(dir, file)
   const { outputText } = ts.transpileModule(fs.readFileSync(abs, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX }, fileName: abs })
@@ -27,10 +27,10 @@ function load(file, mocks) {
   const req = id => {
     if (id in mocks) return mocks[id]
     if (id === 'react' || id === 'react/jsx-runtime') return require(id)
-    if (id.startsWith('./')) return load(id.slice(2) + (fs.existsSync(path.join(dir, id.slice(2) + '.tsx')) ? '.tsx' : '.ts'), mocks)
+    if (id.startsWith('./')) return load(id.slice(2) + (fs.existsSync(path.join(dir, id.slice(2) + '.tsx')) ? '.tsx' : '.ts'), mocks, clock)
     throw new Error('unexpected import ' + id)
   }
-  vm.runInNewContext(outputText, { exports, require: req, window, console, FormData: window.FormData, HTMLElement: window.HTMLElement, URL, Promise, setTimeout, clearTimeout })
+  vm.runInNewContext(outputText, { exports, require: req, window, console, FormData: window.FormData, HTMLElement: window.HTMLElement, URL, Promise, setTimeout: clock ? clock.setTimeout : setTimeout, clearTimeout: clock ? clock.clearTimeout : clearTimeout, ...(clock ? { Date: clock.Date } : {}) })
   return exports
 }
 
@@ -39,14 +39,14 @@ const Btn = ({ children, onClick, disabled, loading }) => h('button', { type: 'b
 const okCheck = { ok: true, code: 'ok', repair: 'none' }
 const READY = { analysis_mode: 'auto', ready: true, checks: { analysis: okCheck, transcription: okCheck, visual: okCheck, ffmpeg: okCheck } }
 
-function mount({ readiness, importImpl, dropZone = false, autostart = false }) {
+function mount({ readiness, importImpl, dropZone = false, autostart = false, speech = {}, clock, navigate = () => {} }) {
   const calls = []
   const realErrorText = load('errorText.ts', {})
   const mocks = {
     'react-i18next': { useTranslation() {} },
     '../../i18n': { t: (s, v) => v ? s.replace(/\{\{(\w+)\}\}/g, (_, k) => v[k]) : s, getLocale: () => 'zh-CN' },
     antd: { Select: () => null },
-    'react-router-dom': { useNavigate: () => () => {} },
+    'react-router-dom': { useNavigate: () => navigate },
     '../../ui': { Btn, Segmented: () => null, Dialog: () => null, StatusDot: ({ label }) => h('span', null, label) },
     './PlatformPicker': { default: () => null },
     './api': { studioApi: { readiness, import: body => { calls.push(body); return importImpl(body) } }, ...realErrorText },
@@ -59,7 +59,7 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false }) {
     './editingStyleSession': { readStyle: () => ({ key: '', result: null }) },
     './types': { defaultImportOptions: { goal: 'auto', language: 'source', aspect: null, duration: null, instruction: '' } },
     './ImportPreferences': { default: () => null },
-    '../../services/api': { speechApi: { installRuntime: async () => ({}), downloadModel: async () => ({}) } },
+    '../../services/api': { speechApi: { installRuntime: async () => ({}), downloadModel: async () => ({}), getRuntimeStatus: async () => ({ status: 'installing', progress: 0 }), getModels: async () => [], ...speech } },
     './platformLabel': { platformLabel: id => id },
     './platformMemory': { readRememberedPlatforms: () => null, resolvePlatforms: () => ({ platforms: ['douyin'], source: 'user' }), samePlatforms: () => true, writeRememberedPlatforms() {} },
     './pasteStart': { claimBackgroundWhisperInstall: () => false, importUrlKind: text => /^https:/.test(text || '') ? 'youtube' : null, isVideoFile: () => true, shouldAutoStart: () => false, shouldBackgroundInstallWhisper: () => false, UNDO_MS: 3000 },
@@ -68,7 +68,7 @@ function mount({ readiness, importImpl, dropZone = false, autostart = false }) {
   }
   // R22 #209: with autostart the real pasteStart decides, so a global paste really reaches arm() and its lock.
   if (autostart) delete mocks['./pasteStart']
-  const CreativeImport = load('CreativeImport.tsx', mocks).default
+  const CreativeImport = load('CreativeImport.tsx', mocks, clock).default
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
@@ -219,5 +219,101 @@ test('R22 #209: real paste-to-start: an idle paste swaps the source, a paste dur
   await pasteText('https://youtube.com/watch?v=idle')
   assert.equal(view.host.querySelector('textarea').value, 'https://youtube.com/watch?v=idle')
   assert.ok([...view.host.querySelectorAll('button')].some(b => b.textContent === '撤销'), 'idle paste arms auto start')
+  act(() => view.root.unmount())
+})
+
+// ---- R24 #232: waiting for a Whisper install / model download never traps the user (real render)
+function fakeClock() {
+  let now = 1_000_000
+  const timers = []
+  class FakeDate extends Date { constructor(...a) { super(...(a.length ? a : [now])) } static now() { return now } }
+  return {
+    Date: FakeDate,
+    setTimeout: (fn, ms) => { const id = timers.length + 1; timers.push({ id, fn, at: now + (ms || 0) }); return id },
+    clearTimeout: id => { const t = timers.find(x => x.id === id); if (t) t.fn = null },
+    async advance(ms) {
+      now += ms
+      for (const t of timers.filter(x => x.fn && x.at <= now)) { const fn = t.fn; t.fn = null; await act(async () => { fn() }); await act(async () => {}) }
+    },
+  }
+}
+const check = (code, extra = {}) => ({ analysis_mode: 'auto', ready: false, checks: { analysis: okCheck, transcription: { ok: false, code, repair: 'none', ...extra }, visual: okCheck, ffmpeg: okCheck } })
+// The import page loads with everything ready; the 422 opens the dialog; later polls see the real state.
+const thenReport = get => { let calls = 0; return async () => (++calls === 1 ? READY : get()) }
+const button = (host, text) => [...host.querySelectorAll('button')].find(b => b.textContent === text)
+
+async function openWaiting(view) {
+  await typeUrl(view.host, 'https://youtube.com/watch?v=one')
+  await act(async () => { startButton(view.host).click() })
+  await act(async () => {}); await act(async () => {})
+  const dialog = view.host.querySelector('[role=alertdialog]')
+  assert.ok(dialog, 'waiting dialog rendered')
+  assert.equal(dialog.getAttribute('aria-label'), '等待安装完成')
+  return dialog
+}
+
+test('R24 #232: the model download dialog shows live progress, then one click continues the same import', async () => {
+  const clock = fakeClock()
+  let report = check('whisper_model_downloading', { model: 'small' })
+  let percent = 35
+  const imports = []
+  const view = await render({ clock, readiness: thenReport(() => report),
+    speech: { getModels: async () => [{ name: 'small', status: 'downloading', downloadProgress: percent }] },
+    importImpl: async body => { imports.push(body); if (imports.length === 1) throw axios422({ code: 'whisper_model_downloading', message: 'x' }); return { project_id: 'p' } } })
+  await openWaiting(view)
+  assert.equal(view.host.querySelector('[role=progressbar]').getAttribute('aria-valuenow'), '35')
+  assert.match(view.host.textContent, /已完成 35%/)
+  percent = 80
+  await clock.advance(2000)
+  assert.equal(view.host.querySelector('[role=progressbar]').getAttribute('aria-valuenow'), '80')
+  assert.equal(button(view.host, '继续导入'), undefined, 'no continue while still downloading')
+  report = READY
+  await clock.advance(2000)
+  const go = button(view.host, '继续导入')
+  assert.ok(go, 'ready -> one-click continue')
+  await act(async () => { go.click() }); await act(async () => {}); await act(async () => {})
+  assert.equal(imports.length, 2, 'continue re-sends the import')
+  assert.equal(imports[1].get('url'), 'https://youtube.com/watch?v=one')
+  assert.equal(view.host.querySelector('[role=alertdialog]'), null)
+  act(() => view.root.unmount())
+})
+
+test('R24 #232: a failed install offers retry (restarts it and waits again) and transcription settings', async () => {
+  const clock = fakeClock()
+  const installs = []
+  const went = []
+  let runtime = { status: 'installing', progress: 20 }
+  const view = await render({ clock, navigate: to => went.push(to), readiness: thenReport(() => check('whisper_installing')),
+    speech: { getRuntimeStatus: async () => runtime, installRuntime: async () => { installs.push(1); runtime = { status: 'installing', progress: 1 }; return {} } },
+    importImpl: async () => { throw axios422({ code: 'whisper_installing', message: 'x' }) } })
+  await openWaiting(view)
+  assert.match(view.host.textContent, /已完成 20%/)
+  runtime = { status: 'error', progress: 20 }
+  await clock.advance(2000)
+  assert.match(view.host.textContent, /安装或模型下载失败/)
+  await act(async () => { button(view.host, '打开转写设置').click() })
+  assert.deepEqual(went, ['/settings?section=speech'])
+  await act(async () => { button(view.host, '重试').click() }); await act(async () => {}); await act(async () => {})
+  assert.equal(installs.length, 1, 'retry restarts the install')
+  assert.equal(button(view.host, '重试'), undefined, 'back to waiting after retry')
+  assert.match(view.host.textContent, /已完成 1%/)
+  act(() => view.root.unmount())
+})
+
+test('R24 #232: a stalled download times out into retry (model download again) or settings', async () => {
+  const clock = fakeClock()
+  const downloads = []
+  const view = await render({ clock, readiness: thenReport(() => check('whisper_model_downloading', { model: 'small' })),
+    speech: { getModels: async () => [{ name: 'small', status: 'downloading', downloadProgress: 5 }], downloadModel: async model => { downloads.push(model); return {} } },
+    importImpl: async () => { throw axios422({ code: 'whisper_model_downloading', message: 'x' }) } })
+  await openWaiting(view)
+  for (let i = 0; i < 5; i++) await clock.advance(2000)
+  assert.equal(button(view.host, '重试'), undefined, 'not a timeout yet')
+  await clock.advance(10 * 60 * 1000)
+  await clock.advance(2000)
+  assert.match(view.host.textContent, /长时间没有进展/)
+  assert.ok(button(view.host, '打开转写设置'))
+  await act(async () => { button(view.host, '重试').click() }); await act(async () => {}); await act(async () => {})
+  assert.deepEqual(downloads, ['small'])
   act(() => view.root.unmount())
 })

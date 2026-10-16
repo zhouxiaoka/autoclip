@@ -1949,5 +1949,12 @@
   "需要先安装本地转写：视频没有字幕，所选的本地 Whisper 还没装好。请到「设置 → 转写」一键安装，或改用云端转写后再导入。": "É preciso instalar primeiro a transcrição local: o vídeo não tem legendas e o Whisper local escolhido não está instalado. Instale-o em Definições → Transcrição ou mude para a nuvem e importe de novo.",
   "等待安装完成": "Aguardando a instalação terminar",
   "本地 Whisper 正在安装，装好后再开始。": "O Whisper local está sendo instalado. Comece quando terminar.",
-  "等待安装完成：本地 Whisper 正在安装，装好后再开始。": "Aguardando a instalação terminar: o Whisper local está sendo instalado. Comece quando terminar."
+  "等待安装完成：本地 Whisper 正在安装，装好后再开始。": "Aguardando a instalação terminar: o Whisper local está sendo instalado. Comece quando terminar.",
+  "本地转写已就绪，可以继续导入。": "A transcrição local está pronta. Você pode continuar a importação.",
+  "继续导入": "Continuar importação",
+  "安装长时间没有进展，可以重试，或到转写设置里查看。": "A instalação está parada há algum tempo. Tente novamente ou verifique as configurações de transcrição.",
+  "安装或模型下载失败，可以重试，或到转写设置里查看。": "A instalação ou o download do modelo falhou. Tente novamente ou verifique as configurações de transcrição.",
+  "已完成 {{percent}}%": "{{percent}}% concluído",
+  "这个素材无法使用": "Esta fonte não pode ser usada",
+  "换一个视频": "Usar outro vídeo"
 }

@@ -16,7 +16,7 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { asrReadinessProperties, gateKind, localTranscriptionGate, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import { asrReadinessProperties, gateKind, waitProgress, type WaitProgress, localTranscriptionGate, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
 import { platformLabel } from './platformLabel'
 import { readRememberedPlatforms, resolvePlatforms, samePlatforms, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
@@ -189,6 +189,24 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     const destination = repairDestination(item.repair)
     if (destination) navigate(destination)
   }
+  // R24 #232: the waiting prompt polls readiness and the install / download progress, continues the
+  // same import in one click once ready, and can restart a failed or stalled install.
+  const waitForTranscription = useRef(async (): Promise<WaitProgress> => {
+    const report = await studioApi.readiness()
+    if (report) setReadiness(report)
+    const check = report?.checks?.transcription
+    const runtime = check?.code === 'whisper_installing' ? await speechApi.getRuntimeStatus() : null
+    const models = check?.code === 'whisper_model_downloading' ? await speechApi.getModels() : null
+    return waitProgress(check, runtime, models)
+  }).current
+  const continueAfterWait = () => { setError(''); void submitRef.current?.('button') }
+  const retryWait = async () => {
+    const check = readiness?.checks?.transcription
+    try {
+      if (check?.model && (check.code === 'whisper_model_downloading' || check.code === 'whisper_model_failed')) await speechApi.downloadModel(check.model)
+      else await speechApi.installRuntime()
+    } catch { /* the next poll reports the state */ }
+  }
   const changePlatforms = (next: string[]) => {
     setPlatforms(next)
     if (remembered) writeRememberedPlatforms(next)
@@ -324,7 +342,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       </div>}
       {pending && <div className="ac-undo" role="status"><span>{t('即将开始制作。')}</span><button type="button" className="ac-undo-action" onClick={undo}>{t('撤销')}</button></div>}
       <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" loading={busy} onClick={() => submit('button')}>{busy?t("正在生成"):t("生成成片")}</Btn></div>
-      {(error === LOCAL_TRANSCRIPTION_GATE || error === LOCAL_TRANSCRIPTION_INSTALLING) && <TranscriptionGatePrompt kind={error} check={readiness?.checks?.transcription} busy={busy} repairing={repairing} repair={repair} navigate={navigate}/>}
+      {(error === LOCAL_TRANSCRIPTION_GATE || error === LOCAL_TRANSCRIPTION_INSTALLING) && <TranscriptionGatePrompt kind={error} check={readiness?.checks?.transcription} busy={busy} repairing={repairing} repair={repair} navigate={navigate} wait={waitForTranscription} onContinue={continueAfterWait} retry={retryWait}/>}
       {error&&error!==LOCAL_TRANSCRIPTION_GATE&&error!==LOCAL_TRANSCRIPTION_INSTALLING&&<p className="studio-error" role="alert">{error}</p>}
     </div>
     <Dialog open={preferences} onClose={()=>setPreferences(false)} title={t("制作偏好")} description={t("默认由 AI 匹配。你指定的选项优先，生成后也可以修改。")} footer={<div className="studio-actions"><Btn onClick={()=>{setOptions({...defaultImportOptions,instruction:options.instruction});setSubtitle(null);setBrowser('')}}>{t("恢复自动")}</Btn><Btn variant="cta" onClick={()=>setPreferences(false)}>{t("完成")}</Btn></div>}>

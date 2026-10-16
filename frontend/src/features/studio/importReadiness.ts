@@ -104,9 +104,17 @@ export function gateKind(code: string | undefined): 'install' | 'installing' | n
   return code === 'whisper_not_installed' || code === 'whisper_install_failed' ? 'install' : null
 }
 
+/** R24 #231: failures of the source itself (user cause, excluded from the success rate); retrying cannot help. */
+export const SOURCE_FAILURE_CODES = ['source_unreadable', 'source_too_short', 'source_no_audio'] as const
+export function sourceFailure(code: string | null | undefined): boolean {
+  return !!code && (SOURCE_FAILURE_CODES as readonly string[]).includes(code)
+}
+
 /** R22 #212: the settings entry a failed run offers, by error code. A Whisper gate code opens transcription
  * settings (where the one-click install lives); everything else keeps the model settings entry. */
 export function failureSettings(code: string | null | undefined): { label: string; to: string } {
+  // R24 #231: a source the pipeline cannot use is fixed by another file, not by settings or a retry.
+  if (sourceFailure(code)) return { label: '换一个视频', to: '/' }
   return gateKind(code || undefined)
     ? { label: '打开转写设置', to: repairDestination('settings_transcription') as string }
     : { label: '模型设置', to: repairDestination('settings_ai') as string }
@@ -125,4 +133,24 @@ export async function probeReadiness(load: () => Promise<ImportReadiness | null>
     } catch { /* retry */ }
   }
   return null
+}
+
+/** R24 #232: one poll of a Whisper install / model download, as the waiting prompt shows it. */
+export interface WaitProgress { state: 'waiting' | 'ready' | 'failed'; percent?: number | null }
+
+/** Reads the transcription check and the matching progress source; enum and number only. */
+export function waitProgress(check: ReadinessCheck | null | undefined,
+  runtime: { status?: string; progress?: number } | null, models: { name: string; status?: string; downloadProgress?: number | null }[] | null): WaitProgress {
+  if (!check || check.ok) return { state: 'ready' }
+  if (check.code === 'whisper_installing') {
+    if (runtime?.status === 'error') return { state: 'failed' }
+    return { state: 'waiting', percent: typeof runtime?.progress === 'number' ? runtime.progress : null }
+  }
+  if (check.code === 'whisper_model_downloading') {
+    const model = models?.find(item => item.name === check.model)
+    if (model?.status === 'error') return { state: 'failed' }
+    return { state: 'waiting', percent: model?.downloadProgress ?? null }
+  }
+  // Anything else (install failed, model failed, not installed) is no longer waiting.
+  return { state: 'failed' }
 }
