@@ -18,7 +18,8 @@ test('errorCode selects translated copy; unknown code falls back to the server m
 const React = require('react')
 const vm = require('node:vm')
 const ts = require('typescript')
-const { Window } = require('happy-dom')
+// happy-dom is ESM-only; dynamic import works on Node 20 and 22 (require(esm) is not unflagged on every 22.x).
+const loadWindow = async () => (await import('happy-dom')).Window
 const LANGS = ['zh', 'en', 'es', 'fr', 'ja', 'ko', 'pt', 'ru']
 const SOURCE = path.join(__dirname, '../src/components/SpeechRecognitionConfig.tsx')
 
@@ -38,9 +39,12 @@ function modelsResponse(errorCode) {
 async function mount(lang, errorCode, source = fs.readFileSync(SOURCE, 'utf8')) {
   const cat = JSON.parse(fs.readFileSync(path.join(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
   const t = (key, vars) => String(cat[key] || key).replace(/\{\{(\w+)\}\}/g, (_, k) => (vars || {})[k] ?? '')
+  const Window = await loadWindow()
   const window = new Window({ url: 'http://localhost/' })
-  const saved = { window: global.window, document: global.document, navigator: global.navigator }
-  Object.assign(global, { window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true })
+  // R15 #35: Node 21+ makes global.navigator a getter-only accessor, so plain assignment throws.
+  // Swap the property descriptors and always restore them in finally.
+  const restore = installGlobals({ window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true })
+  try {
   const h = React.createElement
   const ui = {
     Row: ({ label, hint, children }) => h('section', null, h('b', null, label), h('i', { className: 'hint' }, hint), children),
@@ -83,10 +87,31 @@ async function mount(lang, errorCode, source = fs.readFileSync(SOURCE, 'utf8')) 
   await React.act(async () => { await new Promise(r => setTimeout(r, 5)) })
   const hints = [...container.querySelectorAll('.hint')].map(n => n.textContent)
   await React.act(async () => { root.unmount() })
-  window.happyDOM.abort?.(); window.close()
-  Object.assign(global, saved)
   return { hints, cat, calls }
+  } finally {
+    try { window.happyDOM.abort?.(); window.close() } finally { restore() }
+  }
 }
+
+function installGlobals(values) {
+  const saved = Object.keys(values).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)])
+  for (const [key, value] of Object.entries(values)) {
+    Object.defineProperty(globalThis, key, { value, writable: true, configurable: true, enumerable: true })
+  }
+  return () => {
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else delete globalThis[key]
+    }
+  }
+}
+
+test('mount restores window/document/navigator exactly', async () => {
+  const before = ['window', 'document', 'navigator'].map(k => Object.getOwnPropertyDescriptor(globalThis, k))
+  await mount('en', 'whisper_download_failed')
+  const after = ['window', 'document', 'navigator'].map(k => Object.getOwnPropertyDescriptor(globalThis, k))
+  assert.deepEqual(after, before)
+})
 
 test('mounted SpeechRecognitionConfig shows the errorCode copy from loaded backend data in all eight locales', async () => {
   for (const lang of LANGS) {
