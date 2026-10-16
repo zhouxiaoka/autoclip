@@ -1456,7 +1456,7 @@ def _retry_parent(data, parent_attempt_id):
         settled = [a for a in attempts.receipts(data) if a.get('state') in attempts.TERMINAL]
         latest = max(settled, key=lambda a: a.get('sequence', 0), default=None)
         parent_attempt_id = latest['attempt_id'] if latest and latest['state'] in attempts.RETRYABLE_PARENT else None
-    if attempts.current(data):
+    if attempts.current(data) and not attempts.unbound(attempts.current(data)):
         raise attempts.RetryRejected('上一次重试还没结束，请稍后再试')
     return attempts.check_parent(data, parent_attempt_id)
 

@@ -55,6 +55,12 @@ def current(data):
     return next((a for a in reversed(receipts(data)) if a.get('state') == 'open'), None)
 
 
+def unbound(receipt) -> bool:
+    """A manual retry's production attempt waiting for confirmation: nothing runs for it yet, so a new retry
+    replaces it (it is closed as 'abandoned' by open_attempt) instead of being blocked by it."""
+    return bool(receipt) and receipt.get('kind') == 'production' and not receipt.get('run_id')
+
+
 def open_attempt(data, kind, *, trigger='initial', parent=None, run_id=None, key=None, now=None):
     """Create the next attempt inside the caller's locked state change. An earlier open attempt that never
     reached a terminal is closed as 'abandoned' (not a v4 terminal) - there is only ever one open attempt."""
@@ -84,7 +90,7 @@ def check_parent(data, parent_attempt_id):
         raise RetryRejected('要重试的那次制作不存在')
     if parent.get('state') not in RETRYABLE_PARENT:
         raise RetryRejected('只有失败或部分完成的制作可以重试')
-    newer = [a for a in receipts(data) if a.get('sequence', 0) > parent.get('sequence', 0) and a.get('state') in TERMINAL + ('open',)]
+    newer = [a for a in receipts(data) if a.get('sequence', 0) > parent.get('sequence', 0) and (a.get('state') in TERMINAL or (a.get('state') == 'open' and not unbound(a)))]
     if newer:
         raise RetryRejected('这次制作已经重试过了')
     return parent
