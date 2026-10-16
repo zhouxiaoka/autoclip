@@ -8,7 +8,7 @@ function loadWorkflow(MathImpl=Math){
  vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,Date,Math:MathImpl,JSON,Number,Array,Object,Map,Set,String,URL})
  return exports
 }
-const {withBackendReceipts}=require('./helpers/backend-receipts.cjs')
+const {withRealBackend: withBackendReceipts}=require('./helpers/real-backend.cjs')
 const workflow=withBackendReceipts(loadWorkflow())
 
 function tracker(){
@@ -126,12 +126,15 @@ test('automatic auth failures retain their code and pass catalog validation with
  }
 })
 
-test('old automatic failures use the analysis code and reject unrecognized codes',()=>{
+// R25: receipts come from the real backend, which always persists the generation's own code (_inspect writes it;
+// store._ensure_failure_identity normalizes anything outside STUDIO_ERROR_CODES to 'unexpected').
+test('automatic failures report the persisted code and never an unrecognized one',()=>{
  for(const code of ['subtitle_setup','private arbitrary message']){
   const {t,events}=tracker();t.watch('studio-generation','p1')
-  t.observeStudio(t.list()[0],{generation:{status:'failed'},analysis:{status:'failed',phase:'production',error_code:code}})
+  t.observeStudio(t.list()[0],{generation:{status:'failed',error_code:code},analysis:{status:'failed',phase:'production',error_code:code}})
   const finished=events.find(e=>e.name==='studio_generation_finished')
-  assert.equal(finished.props.error_code,code==='subtitle_setup'?'subtitle_setup':undefined)
+  assert.equal(finished.props.error_code,code==='subtitle_setup'?'subtitle_setup':'unexpected')
+  assert.equal(JSON.stringify(finished).includes('private'),false)
  }
 })
 

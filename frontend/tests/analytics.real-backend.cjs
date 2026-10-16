@@ -28,7 +28,7 @@ function load(name, mocks = {}, globals = {}) {
     }, ...globals }, { filename: file })
   return module.exports
 }
-const core = require('./helpers/backend-receipts.cjs').withBackendReceipts(load('workflow'))
+const core = require('./helpers/real-backend.cjs').withRealBackend(load('workflow'))
 
 test('native Mac architecture overrides the Intel webview UA before launch resolves', () => {
   const lifecycle = load('lifecycle', {
