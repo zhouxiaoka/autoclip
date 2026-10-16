@@ -1,11 +1,13 @@
-"""R19/R20 #108: the events the real 「重试这条」 flow emits, run through the real v4 success-rate SQL (DuckDB).
+"""R19/R20 #108, R21 #160/#161: the events the real 「重试这条」 flow emits, run through the real v4 success-rate SQL (DuckDB).
 
-Events come from the real frontend tracker + studio api (node helper). The SQL is #416's
-docs/analytics/success_rate.sql (fix/158-success-rate-sql-v4); until #416 merges a verbatim copy lives in
-tests/fixtures (sha256 pinned), afterwards the repo file itself is used. ClickHouse -> DuckDB via sqlglot,
+Events come from the real frontend tracker + studio api (node helper). The SQL is read ONLY from the repo file
+docs/analytics/success_rate.sql (one copy, no fixture, no keyword fallback). ClickHouse -> DuckDB via sqlglot,
 with toString/toDateTime/toDate/multiIf shims only (no logic rewritten).
+
+Dependency: the v4 file arrives with #416. Until #416 is merged into this branch's base, the repo still holds the
+exact pre-#416 file (git blob PRE_416_BLOB) and these tests skip with that reason; any other content without the
+v4 figures fails loudly.
 """
-import hashlib
 import json
 import shutil
 import subprocess
@@ -25,23 +27,29 @@ else:
     sqlglot = pytest.importorskip('sqlglot')
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURE = Path(__file__).parent / 'fixtures' / 'success_rate_v4_416.sql'
-FIXTURE_SHA = 'd0fc6df1d62e3e98ab6330966cac80735f5e0dc5b278220a0d9ec2270cf00e23'
+SQL = ROOT / 'docs' / 'analytics' / 'success_rate.sql'
+PRE_416_BLOB = '3edd5fbdc1a3d25597846932bb6d1c0984bd33a1'  # git blob of the file before #416 (v3, no retry chain)
 FIELDS = ['attempt_id', 'flow_id', 'outcome', 'error_code', 'upstream_error_type', 'failure_stage', 'app_version',
           'retry_of', 'analytics_environment', 'runtime']
 
 
-def _v4_sql():
-    repo = ROOT / 'docs' / 'analytics' / 'success_rate.sql'
-    text = repo.read_text(encoding='utf-8') if repo.exists() else ''
-    if 'retry chain' not in text:  # #416 not merged yet: pinned verbatim copy
-        assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == FIXTURE_SHA
-        text = FIXTURE.read_text(encoding='utf-8')
-    q = text.split('-- 图 1')[1].split('-- 图 2')[0]
-    q = q[q.index('\n') + 1:]
+def _blob(data: bytes) -> str:
+    import hashlib
+    return hashlib.sha1(b'blob %d\0' % len(data) + data).hexdigest()
+
+
+def _figure(n):
+    data = SQL.read_bytes()
+    if _blob(data) == PRE_416_BLOB:
+        pytest.skip('needs #416 (v4 docs/analytics/success_rate.sql); base still has the pre-#416 file')
+    text = data.decode('utf-8')
+    assert f'-- 图 {n}' in text, f'success_rate.sql has no figure {n}'
+    q = text.split(f'-- 图 {n}')[1]
+    q = q.split(f'-- 图 {n + 1}')[0] if f'-- 图 {n + 1}' in q else q
+    q = '\n'.join(line for line in q.splitlines()[1:] if not line.startswith('--'))
     q = (q.replace('{date_from}', "'2026-10-01 00:00:00'").replace('{date_to}', "'2026-11-01 00:00:00'")
          .replace('person_id NOT IN COHORT {internal_cohort_id}', 'person_id NOT IN (SELECT person_id FROM internal_cohort)'))
-    return sqlglot.transpile(q, read='clickhouse', write='duckdb')[0]
+    return sqlglot.transpile(q.strip().rstrip(';'), read='clickhouse', write='duckdb')[0]
 
 
 def _db(events):
@@ -58,7 +66,7 @@ def _db(events):
                 + ', '.join(f'{f} VARCHAR' for f in FIELDS) + '))')
     for i, e in enumerate(events):
         props = {f: (None if e['props'].get(f) is None else str(e['props'][f])) for f in FIELDS}
-        props.update(analytics_environment='production', runtime='desktop')
+        props.update(analytics_environment='production', runtime='desktop', app_version=props['app_version'] or '1.5.8')
         con.execute('INSERT INTO events VALUES (?, ?, ?, ?, ?)',
                     [f'u{i}', e['event'], 'person-1', f'2026-10-10 10:{i:02d}:00', props])
     return con
@@ -75,28 +83,52 @@ def _flow_events():
     return json.loads(out.stdout)
 
 
-def _chart1(events):
-    con = _db(events)
-    cur = con.execute(_v4_sql())
+def _chart(n, events):
+    cur = _db(events).execute(_figure(n))
     cols = [d[0] for d in cur.description]
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
-def test_partial_then_variant_retry_counts_one_successful_flow():
+def _one_flow(row, attempts, ok):
+    assert row['q_all'] == attempts and row['ok'] == ok
+    assert (row['flow_ok'], row['fq_all'], row['fq_prod']) == (1, 1, 1), row
+    assert row['overall_flow_rate'] == 1.0 and row['product_flow_rate'] == 1.0
+
+
+@pytest.mark.parametrize('figure', [1, 5])
+def test_partial_then_variant_retry_counts_one_successful_flow(figure):
     events = _flow_events()
     gen = [e['props'] for e in events if e['event'] == 'studio_generation_finished']
     assert len(gen) == 2 and gen[1]['attempt_id'] != gen[0]['attempt_id'] and gen[1]['retry_of'] == gen[0]['attempt_id']
-    [row] = _chart1(events)
-    assert row['q_all'] == 2 and row['ok'] == 1          # attempt level: partial + success
-    assert row['overall_flow_rate'] == 1.0 and row['product_flow_rate'] == 1.0  # one flow, last attempt = success
+    [row] = _chart(figure, events)
+    _one_flow(row, attempts=2, ok=1)   # attempt level: partial + success; flow level: exactly one, successful
 
 
-def test_without_retry_of_the_same_events_count_two_flows():
+@pytest.mark.parametrize('figure', [1, 5])
+def test_duplicate_terminal_events_still_one_attempt_each(figure):
+    events = _flow_events()
+    events += [json.loads(json.dumps(e)) for e in events if e['event'] == 'studio_generation_finished']
+    [row] = _chart(figure, events)
+    _one_flow(row, attempts=2, ok=1)
+
+
+@pytest.mark.parametrize('figure', [1, 5])
+def test_multi_hop_retry_chain_is_one_flow(figure):
+    """failed -> partial -> success, each retry pointing at the previous attempt; every hop has a new flow_id."""
+    hops = [('t-aaaaaaaaaaaa', 'failed', None), ('t-bbbbbbbbbbbb', 'partial', 't-aaaaaaaaaaaa'), ('t-cccccccccccc', 'completed', 't-bbbbbbbbbbbb')]
+    events = [{'event': 'studio_generation_finished', 'props': {'attempt_id': a, 'flow_id': 'f-' + a, 'outcome': o, 'retry_of': r,
+               'error_code': None if o == 'completed' else 'timeout'}} for a, o, r in hops]
+    [row] = _chart(figure, events)
+    _one_flow(row, attempts=3, ok=1)
+
+
+@pytest.mark.parametrize('figure', [1, 5])
+def test_without_retry_of_the_same_events_count_two_flows(figure):
     """Mutation guard: drop retry_of (or reuse a new flow) and the flow rate is no longer 1/1."""
     events = _flow_events()
     for e in events:
         e['props'].pop('retry_of', None)
         if e['event'] == 'studio_generation_finished':
             e['props']['flow_id'] = e['props']['attempt_id']
-    [row] = _chart1(events)
-    assert row['overall_flow_rate'] == 0.5
+    [row] = _chart(figure, events)
+    assert row['overall_flow_rate'] == 0.5 and row['fq_all'] == 2
