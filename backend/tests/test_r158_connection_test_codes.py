@@ -265,3 +265,48 @@ def test_expired_analysis_restart_branch_records_failure_stage(phase, stage):
     assert store._recover_interrupted_run(data) is True
     assert data['analysis']['error_code'] == store.RESTART_CODE
     assert data['analysis']['failure_stage'] == stage
+
+
+def _stale(instance):
+    return {'id': 'p158', 'analysis': {'status': 'running', 'run_id': 'r1', 'phase': 'screening', 'instance': instance}}
+
+
+def test_restart_after_clean_shutdown_reports_clean():
+    from backend.core import project_cancellation
+    from backend.services.studio import store
+    from backend.services.studio.shutdown_marker import mark_clean
+    old = 'a' * 32
+    mark_clean(old)
+    data = _stale(old)
+    assert store._recover_interrupted_run(data)
+    assert data['analysis']['shutdown_kind'] == 'clean'
+    # begin_shutdown is the graceful hook that writes this process's marker.
+    project_cancellation.begin_shutdown()
+    try:
+        from backend.services.studio.shutdown_marker import shutdown_kind
+        assert shutdown_kind(store.INSTANCE) == 'clean'
+    finally:
+        project_cancellation._shutting_down = False
+
+
+def test_restart_without_marker_reports_crash_or_unknown():
+    from backend.services.studio import store
+    from backend.services.studio.shutdown_marker import mark_clean
+    data = _stale('b' * 32)
+    assert store._recover_interrupted_run(data)
+    assert data['analysis']['shutdown_kind'] == 'unknown'  # no marker ever written
+    mark_clean('c' * 32)
+    data = _stale('b' * 32)
+    assert store._recover_interrupted_run(data)
+    assert data['analysis']['shutdown_kind'] == 'crash'
+
+
+def test_generation_restart_carries_shutdown_kind():
+    from backend.services.studio import store
+    from backend.services.studio.shutdown_marker import mark_clean
+    mark_clean('d' * 32)
+    data = _stale('d' * 32)
+    data['generation'] = {'status': 'production', 'auto_start': True}
+    assert store._recover_interrupted_run(data)
+    assert data['generation']['shutdown_kind'] == 'clean'
+    assert data['analysis']['shutdown_kind'] == 'clean'

@@ -165,6 +165,11 @@
     "config_source": [
       "preset",
       "customized"
+    ],
+    "shutdown_kind": [
+      "clean",
+      "crash",
+      "unknown"
     ]
   },
   "attribution": {
@@ -492,7 +497,8 @@
         "config_source": "config_source",
         "provider": "provider",
         "upstream_error_type": "upstream_error_type",
-        "failure_stage": "failure_stage"
+        "failure_stage": "failure_stage",
+        "shutdown_kind": "shutdown_kind"
       }
     },
     "studio_generation_finished": {
@@ -516,7 +522,8 @@
         "config_source": "config_source",
         "provider": "provider",
         "upstream_error_type": "upstream_error_type",
-        "failure_stage": "failure_stage"
+        "failure_stage": "failure_stage",
+        "shutdown_kind": "shutdown_kind"
       }
     },
     "studio_production_finished": {
@@ -536,7 +543,8 @@
         "config_source": "config_source",
         "provider": "provider",
         "upstream_error_type": "upstream_error_type",
-        "failure_stage": "failure_stage"
+        "failure_stage": "failure_stage",
+        "shutdown_kind": "shutdown_kind"
       }
     },
     "studio_export_finished": {

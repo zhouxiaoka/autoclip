@@ -424,7 +424,7 @@ def read(project_id: str, *, recover: bool = True):
     analysis = data.get('analysis')
     if isinstance(analysis, dict) and analysis.get('status') == 'running' and not analysis.get('instance'):
         stage = analysis.get('phase') if analysis.get('phase') in ('screening', 'production') else 'other'
-        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE, failure_stage=stage)
+        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE, failure_stage=stage, shutdown_kind='unknown')
     if patched:
         try:
             write(project_id, data, _recover_previous=False)
@@ -497,6 +497,8 @@ def _recover_interrupted_run(data):
     if not interrupted_run(data):
         return False
     analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else None
+    from backend.services.studio.shutdown_marker import shutdown_kind
+    kind = shutdown_kind((analysis or {}).get('instance'))
     generation = data.get('generation') if isinstance(data.get('generation'), dict) else None
     variants = [row for row in data.get('output_variants') or [] if isinstance(row, dict) and row.get('status') != 'on_demand']
     if generation and generation.get('status') == 'rendering' and variants:
@@ -513,9 +515,10 @@ def _recover_interrupted_run(data):
         if owned:
             return False
         stage = generation['status']
-        generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now())
+        generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now(), shutdown_kind=kind)
         data['analysis'] = {'status': 'failed', 'phase': stage, 'run_id': (analysis or {}).get('run_id'),
-                            'error': RESTART_MESSAGE, 'error_code': RESTART_CODE, 'outcome': 'failed', 'created_at': now()}
+                            'error': RESTART_MESSAGE, 'error_code': RESTART_CODE, 'outcome': 'failed', 'created_at': now(),
+                            'shutdown_kind': kind}
         return True
     if analysis and _stale_analysis(analysis):
         # Manual (confirmation) flows and visual analysis keep their wording; the flag is now persisted.
@@ -523,7 +526,7 @@ def _recover_interrupted_run(data):
             analysis.pop(key, None)
         phase = analysis.get('phase')
         stage = phase if phase in ('screening', 'production') else 'render' if phase == 'rendering' else 'other'
-        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE, failure_stage=stage)
+        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE, failure_stage=stage, shutdown_kind=kind)
         return True
     return False
 
