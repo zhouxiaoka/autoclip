@@ -101,12 +101,12 @@ scripts/winqa/run_winqa.sh ... --real --model-base-url <接口地址> --model <�
   - 有 `internal-desktop-provenance`（或 `internal-desktop-provenance-windows-x64`）时，解出的 exe 必须和其中记录的 sha256 一致。
 - `ps/pull_run_installer.ps1`：验收机端，分段下载、校验 zip/exe 哈希；缺 digest 同样退出码 4。
 - `exe_provenance.py`：CI 里给 Windows 安装包写 sha256 清单。
-- `redact.py`：证据脱敏，去掉 QA key、掩码 key 和个人目录（`C:\Users\x`、`/Users/x`、`/home/x`）。唯一实现：按编码（BOM / utf-8 / gb18030）严格解码、逐层还原转义后线性扫描，原编码和换行写回。`pull_run_installer.sh` 的全部输出（gh、curl、ssh、scp、远端 ps1、清理步骤的 stdout 和 stderr）都经 `redact.py --stdin`；redact 出错时输出丢弃、脚本非 0 退出（运行本身成功时退出码 8）。`ps/pull_run_installer.ps1` 自己不脱敏，**不要在 Windows 上手动直接运行它来收集证据**。边界规则：根目录后的名字从分隔符一直遮到下一个真正的分隔符（POSIX 只认 `/`，Windows 认 `\` 和 `/`）或行尾；原文、逐层解码后、各候选编码几种读法的遮盖范围取并集。样本表：`backend/tests/fixtures/winqa_redact_corpus.json`。
+- `redact.py`：证据脱敏，去掉 QA key、掩码 key 和个人目录（`C:\Users\x`、`/Users/x`、`/home/x`）。唯一实现：按编码（BOM / utf-8 / gb18030）严格解码、逐层还原转义后线性扫描，原编码和换行写回。`pull_run_installer.sh` 的全部输出（gh、curl、ssh、scp、远端 ps1、清理步骤的 stdout 和 stderr）都经 `redact.py --stdin`；redact 出错时输出丢弃、脚本非 0 退出（运行本身成功时退出码 8）。`ps/pull_run_installer.ps1` 自己不脱敏，**不要在 Windows 上手动直接运行它来收集证据**。边界规则：根目录后的名字从分隔符一直遮到下一个真正的分隔符（POSIX 只认 `/`，Windows 认 `\` 和 `/`）或行尾；原文、逐层解码后、各候选编码几种读法的遮盖范围取并集。样本表：`scripts/winqa/tests/fixtures/winqa_redact_corpus.json`。
 - 退出码：2 无 artifact；3 无下载地址；8 诊断脱敏失败；4 无有效 digest；5 provenance 列出但下载/解析失败；6 下载/HTTP 失败；7 哈希不符（坏分片已删）。
 
 ### 测试依赖（必需）
 
-- `pytest backend/tests/test_winqa_scripts.py` 需要 **PowerShell 7（pwsh）**；没装时 PowerShell 用例直接失败，不会跳过。
+- `pytest scripts/winqa/tests` 需要 **PowerShell 7（pwsh）**；没装时 PowerShell 用例直接失败，不会跳过。
   - macOS：`brew install --cask powershell`；Linux：见 PowerShell 官方安装说明；GitHub ubuntu/windows runner 自带。
   - 也可用 `WINQA_TEST_PWSH=/path/to/pwsh` 指定。
 - 可选 `WINQA_TEST_BASH32=/path/to/bash-3.2`，额外在 bash 3.2 下跑 .sh 用例（macOS 上自动用 /bin/bash）。

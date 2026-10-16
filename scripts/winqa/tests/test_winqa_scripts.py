@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2] / 'scripts' / 'winqa'
+ROOT = Path(__file__).resolve().parents[1]
 SH = ROOT / 'pull_run_installer.sh'
 PS1 = ROOT / 'ps' / 'pull_run_installer.ps1'
 DIGEST = 'a' * 64
@@ -240,7 +240,8 @@ def test_powershell_digest_guard_does_not_use_write_error():
 # ---------------- misc ----------------
 
 def test_no_hardcoded_host_or_token():
-    text = '\n'.join(p.read_text(encoding='utf-8') for p in ROOT.rglob('*') if p.is_file() and p.suffix in ('.sh', '.ps1', '.py', '.md'))
+    text = '\n'.join(p.read_text(encoding='utf-8') for p in ROOT.rglob('*') if p.is_file() and p.suffix in ('.sh', '.ps1', '.py', '.md')
+                     and p.relative_to(ROOT).parts[0] != 'tests')
     for needle in ('ghp_', 'github_pat_', '101.35.', 'BEGIN OPENSSH'):
         assert needle not in text
 
@@ -409,7 +410,7 @@ def test_redact_utf8_log_keeps_plain_rule(tmp_path):
 
 
 # ---------------- R22: one implementation, one corpus (#129 #150-#156, SJIS/Big5) ----------------
-# backend/tests/fixtures/winqa_redact_corpus.json holds every R16-R22 sample (input/expected). The same
+# scripts/winqa/tests/fixtures/winqa_redact_corpus.json holds every R16-R22 sample (input/expected). The same
 # file drives four chains: redact.scrub_homes, --stdin bytes, evidence files in every supported
 # encoding/line ending, and pull_run_installer.ps1 output through the .sh redact pipe.
 
@@ -908,7 +909,8 @@ def _scrub_code_outside_redact(root):
     hits = []
     for p in sorted(root.rglob('*')):
         rel = p.relative_to(root).as_posix()
-        if not p.is_file() or rel == REDACT_EXEMPT or p.suffix not in CODE_SUFFIXES or '__pycache__' in rel:
+        if not p.is_file() or rel == REDACT_EXEMPT or p.suffix not in CODE_SUFFIXES or '__pycache__' in rel \
+                or rel.startswith('tests/'):   # the harness's own tests hold planted samples, not shipped code
             continue
         for i, line in enumerate(p.read_text(encoding='utf-8', errors='replace').splitlines(), 1):
             if SCRUB_CODE.search(line) and not line.lstrip().startswith('#'):
@@ -1001,7 +1003,7 @@ def test_r24_214_mixed_utf8_and_utf16_runs_are_both_masked(tmp_path):
 # harness and its test_r24_215 were removed with that design) ----
 
 def _winqa_env(tmp_path, mode):
-    from backend.tests.test_winqa_export import _env
+    from _winqa_helpers import _env
     return _env(tmp_path, '' if mode == 'vm-python' else mode)
 
 
