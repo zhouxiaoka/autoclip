@@ -233,10 +233,74 @@ def _url_ranges(view):
     return out
 
 
+# R26 #255: one credential-field rule for JSON fields and text ("token=...", "Cookie: ...", '"api_token": 5').
+# A field name is split into words (camelCase, '-', '_', '.', spaces) and is a credential field when its last
+# words are one of these (an optional trailing "masked" is ignored): api_token, session_token, secret_access_key,
+# x-api-key, apiKey, ... but not tokens_used / max_tokens / token_count.
+_FIELD_TAIL = re.compile(r'(?:^|_)(?:api_?key|access_?key|secret_?key|private_?key|token|secret|password|passwd|'
+                         r'passphrase|cookie|authorization|credentials?|session_?id|signature|sig)(?:_?masked)?$')
+_TO_EOL = ('cookie', 'authorization')       # header-style values with spaces: masked to the end of the line
+_FIELD_TEXT = re.compile(r'(?<![A-Za-z0-9_\-])(["\']?)([A-Za-z][A-Za-z0-9_.\-]{0,63})\1[ \t]*[:=][ \t]*')
+_VALUE_CAP = 4096
+_CLOSE = {'{': '}', '[': ']'}
+
+
+def _norm_field(name):
+    s = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', name.strip(' "\''))
+    return re.sub(r'[\s.\-]+', '_', s).lower().strip('_')
+
+
+def is_secret_field(name) -> bool:
+    return isinstance(name, str) and bool(_FIELD_TAIL.search(_norm_field(name)))
+
+
+def _field_value(s, a, name):
+    """Raw [a, b) of the value that starts at a, or None."""
+    n = len(s)
+    if a >= n or s[a] in _EOL:
+        return None
+    lim = min(n, a + _VALUE_CAP)
+    c = s[a]
+    if c in '"\'':
+        b = a + 1
+        while b < lim and s[b] != c and s[b] not in _EOL:
+            b += 2 if s[b] == '\\' else 1
+        return (a + 1, min(b, lim)) if b > a + 1 else None
+    if c in _CLOSE:
+        depth, b = 0, a
+        while b < lim and s[b] not in _EOL:
+            depth += 1 if s[b] == c else -1 if s[b] == _CLOSE[c] else 0
+            b += 1
+            if depth == 0:
+                break
+        return a, b
+    b = a
+    if any(_norm_field(name).endswith(w) for w in _TO_EOL):
+        while b < lim and s[b] not in _EOL:
+            b += 1
+        while b > a and s[b - 1] in ' \t':
+            b -= 1
+    else:
+        while b < lim and not s[b].isspace() and s[b] not in ',;&"\'<>)}]':
+            b += 1
+    return (a, b) if b > a else None
+
+
+def _field_ranges(s):
+    out = []
+    for m in _FIELD_TEXT.finditer(s):
+        if not is_secret_field(m.group(2)):
+            continue
+        v = _field_value(s, m.end(), m.group(2))
+        if v and not s.startswith((SECRET, URLMARK, USER), v[0]):
+            out.append(v)
+    return out
+
+
 def _secret_ranges(view, keys):
     ch, st, en = view
     s = ''.join(ch)
-    out = []
+    out = [(st[a], en[b - 1], SECRET) for a, b in _field_ranges(s)]
     for key in keys:
         i = s.find(key)
         while key and i >= 0:
@@ -316,14 +380,11 @@ def scrub_diagnostic(text: str, keys=()) -> str:
 _LONE = re.compile('[\ud800-\udfff]')
 
 
-_SECRET_FIELD = re.compile(r'(?i)^(?:x-)?(?:api[_-]?key(?:[_-]?masked)?|authorization|proxy-authorization|'
-                           r'(?:access|refresh|id|auth)[_-]?token|token|secret|client[_-]?secret|password|passwd|'
-                           r'cookie|set-cookie)$')
-
-
 def scrub_obj(o, keys=(), field=None):
-    """Every string of a JSON-like value (dict keys included); values of credential fields (R25 #243) are masked
-    whole. The result stays valid JSON."""
+    """Every string of a JSON-like value (dict keys included); values of credential fields (R25 #243, R26 #255:
+    the same field rule as text, any value type: numbers, lists and objects too) are masked whole. Valid JSON."""
+    if field is not None and is_secret_field(field) and o not in (None, '', [], {}):
+        return SECRET
     if isinstance(o, dict):
         out = {}   # R20 #119: two home paths used as keys may scrub to one key; keep both.
         for k, v in o.items():
@@ -336,9 +397,9 @@ def scrub_obj(o, keys=(), field=None):
             out[ck] = scrub_obj(v, keys, k if isinstance(k, str) else None)
         return out
     if isinstance(o, (list, tuple)):
-        return [scrub_obj(x, keys, field) for x in o]
+        return [scrub_obj(x, keys) for x in o]
     if isinstance(o, str):
-        return SECRET if o and field and _SECRET_FIELD.match(field) else scrub(o, keys)
+        return scrub(o, keys)
     return o
 
 

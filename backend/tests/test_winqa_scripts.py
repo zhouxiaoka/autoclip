@@ -1301,3 +1301,42 @@ def test_r25_250_dot_dash_before_root(raw, want):
 def test_r25_247_probe_keeps_no_own_query_stripping():
     src = (ROOT / 'py' / 'winqa_probe.py').read_text(encoding='utf-8')
     assert "re.sub(r'\\?.*'" not in src
+
+
+# ---------------- R26 (#251-#259) ----------------
+
+R26_FIELD_TEXT = [('token=tv-111 next', 'tv-111'), ('Cookie: sid=cv-222; theme=dark', 'cv-222'),
+                  ('Set-Cookie: a=sc-333; Path=/', 'sc-333'), ('"api_token": "at-444", "ok": 1', 'at-444'),
+                  ('session_token: st-555', 'st-555'), ('secret_access_key=sk9-666', 'sk9-666'),
+                  ('&sessionToken=ct-777&x=1', 'ct-777'), ("{'password': 8888}", '8888'),
+                  ('x-api-key: xk-999 tail', 'xk-999'), ('"credentials": {"u": "cr-000"}', 'cr-000'),
+                  ('Authorization: Token tk-aaa', 'tk-aaa')]
+R26_FIELD_JSON = {'api_token': 'at-1', 'session_token': 'st-2', 'secret_access_key': 'sa-3', 'sessionToken': 'ss-4',
+                  'pin': {'password': 5551}, 'credentials': {'u': 'cr-6'}, 'auth': {'refresh_token': ['rt-7']},
+                  'tokens_used': 42, 'max_tokens': 9, 'note': 'kept'}
+
+
+@pytest.mark.parametrize('raw,leak', R26_FIELD_TEXT)
+def test_r26_255_text_lines_use_the_json_field_rule(tmp_path, raw, leak):
+    """R26 #255: the credential-field rule is the same in text (.log, .jsonl, stdin, lines) as in JSON."""
+    redact = _module('redact')
+    assert leak not in redact.scrub(raw)
+    for name in ('a.log', 'b.jsonl', 'c.txt'):
+        (tmp_path / name).write_text(raw + '\n', encoding='utf-8')
+    redact.main(str(tmp_path))
+    for name in ('a.log', 'b.jsonl', 'c.txt'):
+        assert leak not in (tmp_path / name).read_text(encoding='utf-8'), name
+    for mode in ('--stdin', '--lines'):
+        p = subprocess.run([sys.executable, str(ROOT / 'redact.py'), mode], input=(raw + '\n').encode(), capture_output=True)
+        assert p.returncode == 0 and leak.encode() not in p.stdout, (mode, p.stdout)
+
+
+def test_r26_255_json_fields_any_value_type_and_more_names(tmp_path):
+    redact = _module('redact')
+    (tmp_path / 'e.json').write_text(json.dumps(R26_FIELD_JSON), encoding='utf-8')
+    redact.main(str(tmp_path))
+    for got in (redact.scrub_obj(R26_FIELD_JSON), json.loads((tmp_path / 'e.json').read_text(encoding='utf-8'))):
+        text = json.dumps(got)
+        for v in ('at-1', 'st-2', 'sa-3', 'ss-4', '5551', 'cr-6', 'rt-7'):
+            assert v not in text, (v, text)
+        assert got['tokens_used'] == 42 and got['max_tokens'] == 9 and got['note'] == 'kept'
