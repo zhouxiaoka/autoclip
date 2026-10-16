@@ -103,6 +103,14 @@ export function gateKind(code: string | undefined): 'install' | 'installing' | n
   return code === 'whisper_not_installed' || code === 'whisper_install_failed' ? 'install' : null
 }
 
+/** R22 #212: the settings entry a failed run offers, by error code. A Whisper gate code opens transcription
+ * settings (where the one-click install lives); everything else keeps the model settings entry. */
+export function failureSettings(code: string | null | undefined): { label: string; to: string } {
+  return gateKind(code || undefined)
+    ? { label: '打开转写设置', to: repairDestination('settings_transcription') as string }
+    : { label: '模型设置', to: repairDestination('settings_ai') as string }
+}
+
 export const CLOUD_TRANSCRIPTION_DESTINATION = '/settings?section=speech&provider=cloud'
 
 /** R19 #115: how many times submit re-runs a failed readiness probe before handing the decision to the backend. */

@@ -1610,7 +1610,10 @@ def _inspect(project_id, options, url, browser):
         store.raise_owned_read_error(error)
         logger.warning('Studio screening failed: %s', type(error).__name__)
         capture_studio_exception(error, 'screening')
-        failure = {'status':'failed','phase':'screening','error':str(error)[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
+        # A PipelineFailure keeps its hint (e.g. "到「设置 → 转写」安装 Whisper"), not only str(error) (R22 #212).
+        from backend.pipeline.failures import PipelineFailure
+        text = error.user_message() if isinstance(error, PipelineFailure) else str(error)
+        failure = {'status':'failed','phase':'screening','error':text[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
         if getattr(error, 'probe_detail', None):
             failure['probe_detail'] = error.probe_detail
         context = studio_failure_context(error, 'screening')
@@ -1656,6 +1659,9 @@ def confirm_project(project_id, body):
                     readiness.require_transcription(
                         stage='SUBTITLE', srt_available=False, analysis_mode='subtitle')
                 except PipelineFailure as missing:
+                    if missing.code in readiness.GATE_CODES:
+                        # Coded 422 like every other gate refusal, so the desktop opens the install prompt (R22 #211).
+                        raise readiness.TranscriptionNotReady(missing.code) from missing
                     raise ValueError(missing.user_message()) from missing
         previous = deepcopy(state)
         plan['confirmed_analysis'] = route

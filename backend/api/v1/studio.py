@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import FileResponse, Response
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from backend.api.v1.gate_errors import gate_refusal
 from backend.core.database import get_db
@@ -58,7 +59,9 @@ async def _stage_for_gate(video, first_chunk, ext, *, srt_available: bool, route
         pass
     staged = await stage_upload(video, first_chunk, ext)
     try:
-        readiness.ensure_local_transcription_for_import(srt_available=srt_available, video=staged, route=route, goal=goal)
+        # ffprobe / ffmpeg-decode can take up to 180 s: never on the event loop (R22 #206).
+        await run_in_threadpool(readiness.ensure_local_transcription_for_import,
+                                srt_available=srt_available, video=staged, route=route, goal=goal)
     except BaseException as exc:
         staged.unlink(missing_ok=True)
         if isinstance(exc, readiness.TranscriptionNotReady):

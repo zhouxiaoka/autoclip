@@ -140,7 +140,7 @@ def report() -> dict:
     settings = ai_models.for_editing()
     from backend.services.studio import planning
     transcription = _transcription(settings)
-    if not transcription.get('ok') and planning.transcription_may_be_skipped(settings.analysis_mode):
+    if not transcription.get('ok') and planning.transcription_may_be_skipped():
         # Visual route possible: the desktop does not block; the import gate decides per file (R21 code health).
         transcription = {**transcription, 'skippable': True}
     checks = {
@@ -239,8 +239,8 @@ def ensure_local_transcription_for_import(*, srt_available: bool, video=None, ro
         return
     if route == 'studio' and video is not None:
         from backend.services.studio import planning
-        if planning.route_before_screening(settings.analysis_mode, goal, Path(video)) == 'visual':
-            return
+        if planning.route_before_screening(goal, Path(video)) != 'subtitle':
+            return  # visual, or planning stops first with its own code (source_unreadable, R22 #207)
     if video is not None and _source_cannot_take_subtitle_route(video, srt_available):
         return  # too short / no audio needs no Whisper: the pipeline reports the real source_* code
     raise TranscriptionNotReady(code)

@@ -63,20 +63,43 @@ def resolve_route(analysis_mode: str, goal: str, duration: float | None, *, ai_s
     return 'subtitle'
 
 
-def route_before_screening(analysis_mode: str, requested_goal: str | None, video: Path) -> str:
+def preferred_analysis_mode() -> str | None:
+    """The analysis mode recommend() will read (``analysis_preferences.load``: new settings, else the legacy
+    analysis-preferences.json). None when the saved preference is unreadable: recommend() then refuses on its
+    own before any paid call (R22 #208)."""
+    try:
+        return analysis_preferences.load().analysis_mode
+    except ValueError:
+        return None
+
+
+def route_before_screening(requested_goal: str | None, video: Path) -> str | None:
     """Route the import gate must assume before any paid call: final goal without a screening answer,
-    duration with the same ffmpeg fallback as recommend(). An unreadable source answers 'subtitle'."""
-    configured = vision_configured(analysis_mode)
-    goal = final_goal(requested_goal, analysis_mode, configured)
+    duration with the same ffmpeg fallback as recommend().
+
+    None means planning will stop on its own before any paid call (unreadable preference, or a source it
+    cannot read: SourceUnreadable / under 1 s), so the gate must not answer for it (R22 #207).
+    The full duration rule (ffmpeg decode fallback, up to 180 s) only runs when it can change the answer or
+    when one ffprobe cannot read the source (R22 #206): if even the longest visual-eligible source would take
+    the subtitle route, a readable source is on the subtitle route."""
+    analysis_mode = preferred_analysis_mode()
+    if analysis_mode is None:
+        return None
+    goal = final_goal(requested_goal, analysis_mode, vision_configured(analysis_mode))
+    from backend.pipeline import media_precheck
+    from backend.pipeline.failures import PipelineFailure
+    if resolve_route(analysis_mode, goal, VISUAL_MAX_SOURCE_SEC) == 'subtitle' and media_precheck.probe(video)['duration']:
+        return 'subtitle'  # readable by one ffprobe; the duration itself cannot change the route
     try:
         duration = source_duration(video)
-    except Exception:  # noqa: BLE001 - unreadable: the pipeline reports its own source_* code
-        duration = None
+    except PipelineFailure:
+        return None
     return resolve_route(analysis_mode, goal, duration)
 
 
-def transcription_may_be_skipped(analysis_mode: str) -> bool:
+def transcription_may_be_skipped() -> bool:
     """For the readiness report: visual mode with a vision model can run without ASR (the backend gate decides per file)."""
+    analysis_mode = preferred_analysis_mode()
     return analysis_mode == 'visual' and vision_configured(analysis_mode)
 
 VISION_FALLBACK_CODE = 'vision_unavailable_subtitle_fallback'
@@ -246,7 +269,7 @@ def recommend(video: Path, options: ImportOptions):
     elif screening_degrade:  # vision request failed during auto screening
         degrade_reason = VISION_FALLBACK_CODE
         result.reason = (result.reason + VISION_FALLBACK_MESSAGE)[:500]
-    elif invalid_degrade:  # visual mode screening returned an unparseable answer
+    elif invalid_degrade:  # auto mode screening returned an unparseable answer (E1; visual mode raises)
         degrade_reason = VISION_INVALID_FALLBACK_CODE
         result.reason = (VISION_INVALID_FALLBACK_MESSAGE + result.reason)[:500]
     explicit_visual = (consent.analysis_mode == 'visual' and not invalid_degrade and configured and mode in ('ai', 'local')

@@ -325,3 +325,12 @@ test('R19 #115: no settings file -> default local Whisper not installed, no SRT:
   await button(view.tree, '生成成片').props.onClick()
   assert.equal(view.calls.length, 0)
 })
+
+test('R22 #212: a whisper failure offers transcription settings (install entry), other failures keep model settings', () => {
+  for (const code of ['whisper_not_installed', 'whisper_install_failed']) {
+    assert.deepEqual({ ...readiness.failureSettings(code) }, { label: '打开转写设置', to: '/settings?section=speech' })
+  }
+  for (const code of ['llm_not_configured', 'source_unreadable', '', null, undefined]) {
+    assert.deepEqual({ ...readiness.failureSettings(code) }, { label: '模型设置', to: '/settings?section=ai' })
+  }
+})

@@ -30,7 +30,7 @@ function load(file, mocks) {
     if (id.startsWith('./')) return load(id.slice(2) + (fs.existsSync(path.join(dir, id.slice(2) + '.tsx')) ? '.tsx' : '.ts'), mocks)
     throw new Error('unexpected import ' + id)
   }
-  vm.runInNewContext(outputText, { exports, require: req, window, console, FormData: window.FormData, Promise, setTimeout, clearTimeout })
+  vm.runInNewContext(outputText, { exports, require: req, window, console, FormData: window.FormData, HTMLElement: window.HTMLElement, URL, Promise, setTimeout, clearTimeout })
   return exports
 }
 
@@ -39,7 +39,7 @@ const Btn = ({ children, onClick, disabled, loading }) => h('button', { type: 'b
 const okCheck = { ok: true, code: 'ok', repair: 'none' }
 const READY = { analysis_mode: 'auto', ready: true, checks: { analysis: okCheck, transcription: okCheck, visual: okCheck, ffmpeg: okCheck } }
 
-function mount({ readiness, importImpl, dropZone = false }) {
+function mount({ readiness, importImpl, dropZone = false, autostart = false }) {
   const calls = []
   const realErrorText = load('errorText.ts', {})
   const mocks = {
@@ -52,7 +52,7 @@ function mount({ readiness, importImpl, dropZone = false }) {
     './api': { studioApi: { readiness, import: body => { calls.push(body); return importImpl(body) } }, ...realErrorText },
     '../../analytics/studio': { trackQuickOutputPlatforms() {}, trackAsrReadiness() {}, trackOneClickStarted() {}, trackOneClickUndone() {}, trackAutoChoiceOverridden() {} },
     '../../analytics/workflow': { telemetryId: () => 't-importflow-aaaaaaaa' },
-    '../../analytics/flags': { useFlag: () => false, flagEnabled: name => dropZone && name === 'import_drop_zone', flagValue: () => 'button', flagAssigned: () => false, featureSnapshot: () => ({}) },
+    '../../analytics/flags': { useFlag: () => false, flagEnabled: name => dropZone && name === 'import_drop_zone', flagValue: name => autostart && name === 'one_click_paste_start' ? 'autostart' : 'button', flagAssigned: () => false, featureSnapshot: () => ({}) },
     '../../analytics/experience': { trackExperience() {} },
     './TemplatePicker': { default: () => null, templateImportFields: () => ({}) },
     './StyleProbeLine': { default: () => null },
@@ -66,6 +66,8 @@ function mount({ readiness, importImpl, dropZone = false }) {
     './importPreferencesStore': { readImportPreferences: () => null },
     './studio.css': {}, './quick-output.css': {},
   }
+  // R22 #209: with autostart the real pasteStart decides, so a global paste really reaches arm() and its lock.
+  if (autostart) delete mocks['./pasteStart']
   const CreativeImport = load('CreativeImport.tsx', mocks).default
   const host = document.createElement('div')
   document.body.appendChild(host)
@@ -196,5 +198,26 @@ test('R21 #177: 移除 is locked while waiting, and a failed import releases the
   // and a new source is accepted again
   await dropFile(view.host, 'second.mp4')
   assert.match(view.host.textContent, /second\.mp4/)
+  act(() => view.root.unmount())
+})
+
+test('R22 #209: real paste-to-start: an idle paste swaps the source, a paste during submit is refused by the lock', async () => {
+  const probe = hangingProbe()
+  const view = await render({ readiness: probe.readiness, importImpl: async () => { throw axios422('视频文件为空，请重新选择') }, dropZone: true, autostart: true })
+  await dropFile(view.host, 'first.mp4')
+  await act(async () => { [...view.host.querySelectorAll('button')].find(b => b.textContent === '撤销')?.click() })
+  await act(async () => { startButton(view.host).click() })
+  assert.equal(probe.pending.length, 1, 'submit is waiting on its readiness re-check')
+  await pasteText('https://youtube.com/watch?v=busy')
+  assert.match(view.host.textContent, /first\.mp4/, 'busy paste must not swap the source')
+  assert.equal(view.host.querySelector('textarea').value, '')
+  for (let i = 0; i < 3; i++) await act(async () => { probe.pending.shift()(new Error('down')) })
+  await act(async () => {})
+  assert.equal(view.calls.length, 1)
+  assert.equal(view.calls[0].get('video').name, 'first.mp4')
+  // lock released by the failure: the same real paste path now takes the link
+  await pasteText('https://youtube.com/watch?v=idle')
+  assert.equal(view.host.querySelector('textarea').value, 'https://youtube.com/watch?v=idle')
+  assert.ok([...view.host.querySelectorAll('button')].some(b => b.textContent === '撤销'), 'idle paste arms auto start')
   act(() => view.root.unmount())
 })
