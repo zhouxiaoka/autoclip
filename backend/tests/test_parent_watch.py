@@ -131,6 +131,7 @@ def test_terminate_children_stops_the_whole_tree():
 
 def test_shutdown_for_lost_parent_stops_children_server_and_exits_zero(monkeypatch):
     from backend import desktop_main
+    monkeypatch.setattr('backend.core.project_cancellation._shutting_down', False)
     calls = []
     monkeypatch.setattr(parent_watch, 'terminate_children', lambda: calls.append('children') or 2)
     disposed = []
@@ -158,6 +159,31 @@ def test_shutdown_for_lost_parent_stops_children_server_and_exits_zero(monkeypat
 
     assert calls == ['children', 'log-flush', ('exit', 0)]
     assert disposed == [True] and manager.is_running is False
+
+
+def test_lost_parent_fences_children_started_after_the_shutdown_snapshot(monkeypatch, tmp_path):
+    from backend import desktop_main
+    from backend.core import project_cancellation
+    # Keep the process-wide shutdown fence local to this test.
+    monkeypatch.setattr(project_cancellation, '_shutting_down', False, raising=False)
+    late_output = tmp_path / 'late-child'
+    def snapshot():
+        # The old implementation allows this render to spawn during shutdown,
+        # after terminate_children took its one snapshot of the process tree.
+        with pytest.raises(RuntimeError, match='服务已重启'):
+            with project_cancellation.bind('late-render'):
+                project_cancellation.run([sys.executable, '-c',
+                    'import pathlib,sys; pathlib.Path(sys.argv[1]).touch()', str(late_output)])
+        return 0
+    monkeypatch.setattr(parent_watch, 'terminate_children', snapshot)
+    monkeypatch.setattr('backend.core.database.engine', SimpleNamespace(dispose=lambda: None))
+    monkeypatch.setattr(desktop_main.logging, 'shutdown', lambda: None)
+    manager = desktop_main.DesktopServiceManager.__new__(desktop_main.DesktopServiceManager)
+    manager.logger = desktop_main.logging.getLogger('test')
+    manager.server = None
+    manager.server_thread = None
+    manager.shutdown_for_lost_parent(4242, exit=lambda code: None)
+    assert not late_output.exists()
 
 
 def test_desktop_main_starts_the_watch_after_the_server():

@@ -66,10 +66,10 @@ def _font_arg() -> str:
 
 def _stream_params(source: Path) -> dict:
     """Video time base / fps and audio layout of the content, so the outro concatenates by copy."""
-    raw = subprocess.run([
+    raw = _ffmpeg([
         get_ffprobe_path(), '-v', 'error', '-show_entries', 'stream=codec_type,time_base,r_frame_rate,sample_rate,channels',
         '-of', 'json', str(source),
-    ], check=True, capture_output=True, text=True, timeout=30).stdout
+    ], timeout=30, text=True).stdout
     streams = json.loads(raw).get('streams', [])
     video = next((s for s in streams if s.get('codec_type') == 'video'), {})
     audio = next((s for s in streams if s.get('codec_type') == 'audio'), {})
@@ -101,14 +101,14 @@ def _designed_outro(width: int, height: int, params: dict) -> Path | None:
             return target
         layout = 'mono' if params['channels'] == 1 else 'stereo'
         partial = target.with_suffix('.part.mp4')
-        subprocess.run([
+        _ffmpeg([
             get_ffmpeg_path(), '-v', 'error', '-i', str(asset),
             '-vf', f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={OUTRO_BACKGROUND},fps={params['fps']},format=yuv420p",
             '-af', f"aresample={params['sample_rate']},aformat=channel_layouts={layout}",
             '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-r', params['fps'], '-video_track_timescale', params['timescale'],
             '-c:a', 'aac', '-b:a', '160k', '-ar', params['sample_rate'], '-ac', str(params['channels']),
             '-movflags', '+faststart', '-y', str(partial),
-        ], check=True, capture_output=True, timeout=120)
+        ], timeout=120)
         os.replace(partial, target)
         return target
 
@@ -132,12 +132,15 @@ def append_outro(source: Path, destination: Path, *, width: int, height: int, en
         return False
 
 
-def _ffmpeg(cmd: list[str], timeout: float) -> subprocess.CompletedProcess:
-    """Use the project process group when a studio render is bound, so cancel reaches this ffmpeg."""
+def _ffmpeg(cmd: list[str], timeout: float, **kwargs) -> subprocess.CompletedProcess:
+    """Every branding child (ffprobe, outro conform, text outro, concat) starts here.
+
+    Bound renders use the project process group so cancel reaches the child. Once the
+    desktop shell exits (``begin_shutdown``) no new child may start, bound or not —
+    check and spawn share ``project_cancellation``'s lock with ``begin_shutdown``.
+    """
     from backend.core import project_cancellation
-    if project_cancellation.current():
-        return project_cancellation.run(cmd, check=True, capture_output=True, timeout=timeout)
-    return subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
+    return project_cancellation.run(cmd, check=True, capture_output=True, timeout=timeout, **kwargs)
 
 
 def _append(source: Path, partial: Path, width: int, height: int) -> None:

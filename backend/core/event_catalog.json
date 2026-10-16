@@ -28,6 +28,11 @@
       "desktop",
       "web",
       "python"
+    ],
+    "arch": [
+      "aarch64",
+      "x86_64",
+      "unknown"
     ]
   },
   "enums": {

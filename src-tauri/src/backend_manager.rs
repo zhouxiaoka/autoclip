@@ -113,11 +113,8 @@ impl BackendManager {
         // (%APPDATA%\AutoClip on Windows, ~/.local/share/AutoClip on Linux) —
         // on macOS this is exactly the old default, so existing installs keep
         // their data.
-        if std::env::var_os("AUTOCLIP_APP_DIR").is_none() {
-            if let Ok(data_dir) = app_handle.path().data_dir() {
-                cmd.env("AUTOCLIP_APP_DIR", data_dir.join("AutoClip"));
-            }
-        }
+        let app_dir = crate::telemetry_runtime::app_dir(app_handle.path().data_dir().ok());
+        crate::telemetry_runtime::configure_backend(&mut cmd, app_dir.as_deref());
 
         #[cfg(target_os = "windows")]
         {
