@@ -75,7 +75,7 @@ def app_path(tmp_path, monkeypatch):
                       'analysis': {'status': 'running', 'phase': 'production', 'message': adapter.STUDIO_PRODUCTION_MESSAGE,
                                    'instance': store.INSTANCE}})
 
-    monkeypatch.setattr(media_precheck, 'subtitle_source_failure', lambda *a, **k: None)
+    from backend.services.studio import preflight as _pf; monkeypatch.setattr(_pf, 'probe_material', lambda v: _pf.MaterialProbe(_pf.ProbeState.READABLE, v, 60.0, True))
     monkeypatch.setattr(adapter.SimplePipelineAdapter, '_prompt_files', lambda self, project_dir: {})
     info = {'provider': 'dashscope', 'model': 'qwen-plus', 'available': True, 'display_name': '通义千问'}
     monkeypatch.setattr(llm_manager, 'get_llm_manager', lambda: SimpleNamespace(get_current_provider_info=lambda: info))
