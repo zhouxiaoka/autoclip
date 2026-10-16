@@ -28,9 +28,8 @@ test('1.5.8 install gate copy exists in all 8 languages and the UI wires install
     const data = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${lang}.json`), 'utf8'))
     for (const key of keys) assert.ok(typeof data[key] === 'string' && data[key].length > 0, `${lang}: ${key}`)
   }
+  // Button behaviour is covered by the DOM render + click test (r158-whisper-gate-render.test.cjs, R18 #78).
   const ui = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/CreativeImport.tsx'), 'utf8')
   assert.ok(ui.includes("if (gate) { setError(gate === 'installing' ? LOCAL_TRANSCRIPTION_INSTALLING : LOCAL_TRANSCRIPTION_GATE); return false }"))
-  assert.match(ui, /repair: 'install_whisper'/)  // reuses the existing Settings → Transcription install flow
-  assert.match(ui, /navigate\(CLOUD_TRANSCRIPTION_DESTINATION\)/)  // only on click
-  assert.doesNotMatch(ui, /provider:\s*'cloud'/)  // never switches provider by itself
+  assert.match(ui, /<TranscriptionGatePrompt kind=\{error\}[^>]*repair=\{repair\} navigate=\{navigate\}/)
 })

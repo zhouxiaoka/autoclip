@@ -144,6 +144,11 @@ async def submit_task(
             input_srt_path = _get_task_config_value(task, "input_srt_path")
             if not input_video_path:
                 raise HTTPException(status_code=400, detail="任务缺少 input_video_path 配置")
+            from backend.services.studio import readiness
+            try:  # 1.5.8 gate before anything is queued (R18 #72)
+                readiness.ensure_local_transcription_for_paths(input_video_path, input_srt_path)
+            except readiness.TranscriptionNotReady as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
             result = queue_service.submit_video_processing_task(
                 project_id=task.project_id,
                 input_video_path=input_video_path,

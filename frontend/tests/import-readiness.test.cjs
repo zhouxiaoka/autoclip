@@ -133,6 +133,7 @@ function render(options = {}) {
       downloadModel: async model => { installs.push('model:' + model); return { status: 'downloading', model, message: '' } },
     } },
     './importReadiness': readiness,
+    './TranscriptionGatePrompt': { default: 'transcription-gate', LOCAL_TRANSCRIPTION_GATE: '需要先安装本地转写', LOCAL_TRANSCRIPTION_INSTALLING: '等待安装完成' },
     './studio.css': {},
     './quick-output.css': {},
   }

@@ -161,6 +161,7 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
         _err(str(e))
         return 2
 
+    from backend.services.studio.readiness import TranscriptionNotReady
     req = RunRequest(
         video=Path(args.video),
         srt=Path(args.srt) if args.srt else None,
@@ -171,9 +172,13 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
     )
     try:
         video_in_raw = prepare_project(req, link=not args.copy)
-    except (FileNotFoundError, ValueError) as e:  # ValueError: 1.5.8 local-transcription gate
+    except (FileNotFoundError, TranscriptionNotReady) as e:  # only the 1.5.8 gate, not any ValueError (R18 #77)
         outcome.update(ok=False, error_code='invalid_input', job_id=req.project_id)
-        _err(str(e))
+        if args.json:  # R18 #76: scripts read the contract from stdout
+            print(json.dumps({'ok': False, 'error_code': 'invalid_input', 'project_id': req.project_id,
+                              'error': str(e)}, ensure_ascii=False))
+        else:
+            _err(str(e))
         return 2
 
     if not args.json:

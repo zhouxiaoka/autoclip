@@ -144,6 +144,7 @@ def _job_update(project_id: str, **fields: Any) -> None:
 def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, Any]:
     """阻塞执行；在线程里调用。"""
     from backend.services.local_runner import configure_llm, prepare_project, run_pipeline, summarize_project
+    from backend.services.studio.readiness import TranscriptionNotReady
 
     with _pipeline_lock:
         try:
@@ -162,7 +163,7 @@ def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, An
             _job_update(req.project_id, status="completed", percent=100, stage="DONE", message="完成",
                         error_code="none", result=summary)
             return _jobs[req.project_id]
-        except ValueError as e:  # 1.5.8 local-transcription gate (Whisper missing / installing, no subtitle)
+        except TranscriptionNotReady as e:  # only the 1.5.8 gate; other ValueErrors are product failures (R18 #77)
             _job_update(req.project_id, status="failed", error_code="invalid_input", error=str(e)[:500])
             return _jobs[req.project_id]
         except Exception as e:  # noqa: BLE001
@@ -225,7 +226,8 @@ async def clip_video(
                 pass
     job = task.result()
     if job.get("status") != "completed":
-        return {"ok": False, "project_id": req.project_id, "error": job.get("error", "处理失败")}
+        return {"ok": False, "project_id": req.project_id, "error_code": job.get("error_code") or "failed",
+                "error": job.get("error", "处理失败")}
     return {"ok": True, **job["result"], "llm": job.get("llm")}
 
 

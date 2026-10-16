@@ -185,19 +185,42 @@ LOCAL_TRANSCRIPTION_REQUIRED = '需要先安装本地转写：视频没有字幕
 LOCAL_TRANSCRIPTION_INSTALLING = '等待安装完成：本地 Whisper 正在安装，装好后再开始。'
 
 
-def ensure_local_transcription_for_import(*, srt_available: bool, video=None) -> None:
-    """1.5.8 import gate for a local file: local Whisper selected, runtime missing, no SRT -> block.
+class TranscriptionNotReady(ValueError):
+    """1.5.8 gate refusal. Callers map exactly this (not any ValueError) to ``invalid_input``."""
+    error_code = 'invalid_input'
 
+
+def _gate_settings():
+    """Same settings view as the runtime ``transcription_check``: a missing or unreadable document
+    falls back to defaults (local Whisper), so the gate cannot pass what the pipeline will refuse."""
+    try:
+        settings = ai_models.load()
+    except Exception:  # noqa: BLE001
+        settings = None
+    return settings or ai_models.ModelSettings()
+
+
+def ensure_local_transcription_for_import(*, srt_available: bool, video=None, route: str = 'studio') -> None:
+    """1.5.8 import gate for a local file: local Whisper selected, runtime missing/installing, no SRT -> block.
+
+    ``route='studio'`` honours the saved analysis mode (visual-only needs no ASR). ``route='content'`` is the
+    CLI / MCP / legacy content pipeline, which always transcribes without an SRT, whatever the global mode.
     Never switches provider (no silent cloud fallback) and never installs anything.
     Links are not gated here: platform captions are tried first after download.
     """
-    try:
-        settings = ai_models.load()
-    except Exception:  # noqa: BLE001 - corrupt settings are handled by ensure_analysis_usable
-        return
-    if settings is None:
-        return
-    if not needs_transcription(srt_available=srt_available, analysis_mode=settings.analysis_mode):
+    if route == 'content':
+        settings = _gate_settings()
+        mode = None
+    else:
+        # Studio keeps the first-run path: no document yet -> the import page's own readiness prompt handles it.
+        try:
+            settings = ai_models.load()
+        except Exception:  # noqa: BLE001
+            return
+        if settings is None:
+            return
+        mode = settings.analysis_mode
+    if not needs_transcription(srt_available=srt_available, analysis_mode=mode):
         return
     choice = settings.transcription or ai_models.Transcription()
     if choice.provider != 'whisper_local':
@@ -207,16 +230,23 @@ def ensure_local_transcription_for_import(*, srt_available: bool, video=None) ->
         return
     if video is not None and _source_cannot_take_subtitle_route(video, srt_available):
         return  # too short / no audio needs no Whisper: the pipeline reports the real source_* code
-    raise ValueError(LOCAL_TRANSCRIPTION_INSTALLING if code == 'whisper_installing' else LOCAL_TRANSCRIPTION_REQUIRED)
+    raise TranscriptionNotReady(LOCAL_TRANSCRIPTION_INSTALLING if code == 'whisper_installing' else LOCAL_TRANSCRIPTION_REQUIRED)
 
 
-def ensure_local_transcription_for_paths(video, srt=None) -> None:
-    """Same gate for legacy entry points that already have files on disk (process / retry / CLI / MCP).
+def ensure_local_transcription_for_paths(video, srt=None, *, sibling_srt: bool = True, route: str = 'content') -> None:
+    """Same gate for entry points that already have files on disk (process / retry / submit / CLI / MCP).
+    Defaults to the content route: those paths run SimplePipelineAdapter, which ignores analysis_mode.
+
+    ``sibling_srt`` counts ``input.srt`` beside the video as subtitles. Only true when the video already
+    lives in a project raw dir (the pipeline reads that file); a user's source folder is never copied.
     A missing video is not gated here: those paths re-download or fail with their own error."""
     if not video or not Path(video).is_file():
         return
-    srt_ok = Path(srt).is_file() if srt else (Path(video).parent / 'input.srt').is_file()
-    ensure_local_transcription_for_import(srt_available=srt_ok, video=Path(video))
+    if srt:
+        srt_ok = Path(srt).is_file()
+    else:
+        srt_ok = sibling_srt and (Path(video).parent / 'input.srt').is_file()
+    ensure_local_transcription_for_import(srt_available=srt_ok, video=Path(video), route=route)
 
 
 def ensure_local_transcription_for_project(project_id: str) -> None:

@@ -52,13 +52,13 @@ async def _stage_for_gate(video_file: UploadFile, *, has_srt: bool):
     """Run the import gate; returns the staged upload path when the file had to be probed, else None."""
     from backend.services.studio import readiness
     try:
-        readiness.ensure_local_transcription_for_import(srt_available=has_srt)
+        readiness.ensure_local_transcription_for_import(srt_available=has_srt, route='content')
         return None
     except ValueError:
         pass
     staged = await stage_upload(video_file, b'', Path(video_file.filename or '').suffix.lower() or '.mp4')
     try:
-        readiness.ensure_local_transcription_for_import(srt_available=has_srt, video=staged)
+        readiness.ensure_local_transcription_for_import(srt_available=has_srt, video=staged, route='content')
     except ValueError as exc:
         staged.unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -105,28 +105,28 @@ async def upload_files(
         # 1.5.8: local Whisper selected but missing/installing and no subtitle -> refuse before creating a project.
         staged = await _stage_for_gate(video_file, has_srt=bool(srt_file))
 
-        # 创建项目
+        # 创建项目 + 落盘。从暂存成功到 move 结束都在同一个 try 里：任何一步失败都删暂存文件（R18 #75）。
         try:
             project = project_service.create_project(project_data)
-        except Exception:
+
+            # 保存文件到项目目录
+            project_id = str(project.id)
+            from ...core.path_utils import get_project_raw_directory
+            raw_dir = get_project_raw_directory(project_id)
+
+            # 保存视频文件
+            video_path = raw_dir / "input.mp4"
+            if staged is not None:
+                import shutil
+                shutil.move(str(staged), str(video_path))
+            else:
+                with open(video_path, "wb") as f:
+                    content = await video_file.read()
+                    f.write(content)
+        except BaseException:
             if staged is not None:
                 staged.unlink(missing_ok=True)
             raise
-        
-        # 保存文件到项目目录
-        project_id = str(project.id)
-        from ...core.path_utils import get_project_raw_directory
-        raw_dir = get_project_raw_directory(project_id)
-        
-        # 保存视频文件
-        video_path = raw_dir / "input.mp4"
-        if staged is not None:
-            import shutil
-            shutil.move(str(staged), str(video_path))
-        else:
-            with open(video_path, "wb") as f:
-                content = await video_file.read()
-                f.write(content)
         
         # 更新项目的视频路径
         project.video_path = str(video_path)

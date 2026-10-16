@@ -16,11 +16,12 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { asrReadinessProperties, localTranscriptionGate, CLOUD_TRANSCRIPTION_DESTINATION, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import { asrReadinessProperties, localTranscriptionGate, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
 import { platformLabel } from './platformLabel'
 import { readRememberedPlatforms, resolvePlatforms, samePlatforms, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
 import { readImportPreferences } from './importPreferencesStore'
+import TranscriptionGatePrompt, { LOCAL_TRANSCRIPTION_GATE, LOCAL_TRANSCRIPTION_INSTALLING } from './TranscriptionGatePrompt'
 import './studio.css'
 import './quick-output.css'
 
@@ -48,9 +49,6 @@ function repairLabel(item: ReadinessIssue) {
   return ''
 }
 
-/** Sentinel in the error slot: renders the install prompt instead of plain error text. */
-const LOCAL_TRANSCRIPTION_GATE = '需要先安装本地转写'
-const LOCAL_TRANSCRIPTION_INSTALLING = '等待安装完成'
 
 function uiLocale() {
   try { return getLocale() } catch { return 'en' }
@@ -309,18 +307,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       </div>}
       {pending && <div className="ac-undo" role="status"><span>{t('即将开始制作。')}</span><button type="button" className="ac-undo-action" onClick={undo}>{t('撤销')}</button></div>}
       <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" loading={busy} onClick={() => submit('button')}>{busy?t("正在生成"):t("生成成片")}</Btn></div>
-      {error === LOCAL_TRANSCRIPTION_GATE && <div className="studio-readiness" role="alertdialog" aria-label={t('需要先安装本地转写')}>
-        <b>{t('需要先安装本地转写')}</b>
-        <span>{t('视频没有字幕，所选的本地 Whisper 还没装好。安装完成后再开始，或改用云端转写。')}</span>
-        <div className="studio-actions">
-          <Btn size="sm" disabled={busy || repairing} loading={repairing} onClick={() => void repair({ key: 'transcription', ...(readiness?.checks?.transcription || { ok: false, code: 'whisper_not_installed' }), repair: 'install_whisper' } as ReadinessIssue)}>{t('一键安装')}</Btn>
-          <Btn size="sm" disabled={busy || repairing} onClick={() => navigate(CLOUD_TRANSCRIPTION_DESTINATION)}>{t('改用云端转写')}</Btn>
-        </div>
-      </div>}
-      {error === LOCAL_TRANSCRIPTION_INSTALLING && <div className="studio-readiness" role="alertdialog" aria-label={t('等待安装完成')}>
-        <b>{t('等待安装完成')}</b>
-        <span>{t('本地 Whisper 正在安装，装好后再开始。')}</span>
-      </div>}
+      {(error === LOCAL_TRANSCRIPTION_GATE || error === LOCAL_TRANSCRIPTION_INSTALLING) && <TranscriptionGatePrompt kind={error} check={readiness?.checks?.transcription} busy={busy} repairing={repairing} repair={repair} navigate={navigate}/>}
       {error&&error!==LOCAL_TRANSCRIPTION_GATE&&error!==LOCAL_TRANSCRIPTION_INSTALLING&&<p className="studio-error" role="alert">{error}</p>}
     </div>
     <Dialog open={preferences} onClose={()=>setPreferences(false)} title={t("制作偏好")} description={t("默认由 AI 匹配。你指定的选项优先，生成后也可以修改。")} footer={<div className="studio-actions"><Btn onClick={()=>{setOptions({...defaultImportOptions,instruction:options.instruction});setSubtitle(null);setBrowser('')}}>{t("恢复自动")}</Btn><Btn variant="cta" onClick={()=>setPreferences(false)}>{t("完成")}</Btn></div>}>

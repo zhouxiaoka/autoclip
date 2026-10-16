@@ -164,9 +164,10 @@ async def import_visual(
             staged.unlink(missing_ok=True)
         raise
     pid = str(project.id)
-    raw = store.directory(pid) / 'raw'
-    raw.mkdir(parents=True, exist_ok=True)
     try:
+        # mkdir inside the try: a failure here still runs the staging cleanup below (R18 #75).
+        raw = store.directory(pid) / 'raw'
+        raw.mkdir(parents=True, exist_ok=True)
         if subtitle_bytes is not None:
             (raw / 'input.srt').write_bytes(subtitle_bytes)
         if video:
@@ -359,7 +360,7 @@ def correct_plan(project_id: str, body: ImportOptions, db: Session = Depends(get
                 raise HTTPException(404, '原素材不存在，请重新导入')
         if not url:
             from backend.services.studio import readiness
-            call(readiness.ensure_local_transcription_for_paths, jobs.source(project_id))
+            call(readiness.ensure_local_transcription_for_paths, jobs.source(project_id), route='studio')
         previous_config = dict(project.processing_config or {})
         project.processing_config = {**previous_config, 'smart_import': body.model_dump()}
         db.commit()

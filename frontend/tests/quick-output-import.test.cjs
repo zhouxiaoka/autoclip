@@ -36,7 +36,7 @@ test('quick import submits platform targets, branding and auto-starts to results
   './importPreferencesStore':{readImportPreferences:()=>null},
   './types':{defaultImportOptions:{goal:'auto',language:'source',aspect:null,duration:null,instruction:''}},
   './ImportPreferences':{default:'preferences'},'../../services/api':{speechApi:{installRuntime:async()=>({started:true,message:''})}},
-  './importReadiness':loadReadiness(),'./studio.css':{},'./quick-output.css':{},
+  './importReadiness':loadReadiness(),'./TranscriptionGatePrompt':{default:'transcription-gate',LOCAL_TRANSCRIPTION_GATE:'需要先安装本地转写',LOCAL_TRANSCRIPTION_INSTALLING:'等待安装完成'},'./studio.css':{},'./quick-output.css':{},
  })
  const tree=nodes(component({onImported:async()=>{}}))
  await tree.find(node=>node.type==='button'&&node.props?.variant==='cta').props.onClick()
