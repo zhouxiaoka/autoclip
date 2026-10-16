@@ -13,7 +13,7 @@ On the next start the dead run's instance record is classified (cached per proce
 user_quit/update -> ``clean``, parent_lost -> ``parent_lost``, unacked -> ``unknown``, missing -> ``crash``,
 unreadable or invalid content -> ``unknown`` (also for a missing/invalid instance id).
 R20 #134/#99: one record per instance in ONE directory (``<data dir>/shutdown_markers/<instance>``), one
-prune rule. R19 #98's "shell got no 200 in time" is the same record with content ``unacked``, written by
+prune rule (run once at startup, in the background; never on the quit path). R19 #98's "shell got no 200 in time" is the same record with content ``unacked``, written by
 the shell only when no marker exists yet (a marker that landed in time wins). A record is released only
 when no project still references that instance, so several projects of one dead instance all read the
 same classification even if one of them fails to persist and the app restarts again. Pruning keeps the
@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+import time
 from pathlib import Path
 
 SHUTDOWN_KINDS = ('clean', 'parent_lost', 'crash', 'unknown')
@@ -35,15 +36,28 @@ _lock = threading.Lock()
 _consumed: dict[tuple[str, str], str] = {}
 
 
+MARKER_DIR_ENV = 'AUTOCLIP_SHUTDOWN_MARKER_DIR'
+_TMP_MAX_AGE = 3600.0
+
+
 def _root() -> Path:
+    """R21 #196: the desktop shell resolves the marker dir once and passes it in ``MARKER_DIR_ENV``;
+    the shell writes ``unacked`` into that same dir. Without the shell (CLI/dev): the data dir."""
+    configured = os.environ.get(MARKER_DIR_ENV, '').strip()
+    if configured:
+        return Path(configured).expanduser()
     from backend.core.path_utils import get_projects_directory
     return get_projects_directory().parent / 'shutdown_markers'
 
 
 def mark(kind: str, instance: str | None = None) -> bool:
-    """Atomically write this process's marker. Returns True once the marker is on disk."""
+    """Atomically write this process's marker. Returns True once the marker is on disk.
+
+    Runs on the quit path inside the shell's 3 s budget: it writes one file and never scans projects
+    (R21 #202). Pruning happens once at startup (``prune_in_background``)."""
     if kind not in MARKER_KINDS:
         return False
+    tmp = None
     try:
         if instance is None:
             from backend.services.studio.store import INSTANCE as instance
@@ -63,25 +77,69 @@ def mark(kind: str, instance: str | None = None) -> bool:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(tmp, path)
-        _prune(root)
+            tmp = None
         return True
     except Exception:  # noqa: BLE001 - a marker must never block shutdown
         return False
+    finally:
+        if tmp is not None:  # R21 #199: a failed write leaves no .tmp behind
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
-def _referenced(instance: str) -> bool:
+def _referenced(instance: str, record_mtime: float | None = None) -> bool:
     try:
-        from backend.services.studio.store import instance_referenced
-        return instance_referenced(instance)
+        from backend.services.studio.store import index_protects, reference_index
+        if record_mtime is None:
+            record_mtime = float('inf')  # unknown age: any unreadable project protects it
+        return index_protects(reference_index(), instance, record_mtime)
     except Exception:  # noqa: BLE001 - unsure -> keep the record
         return True
 
 
-def _prune(root: Path) -> None:
-    records = sorted((p for p in root.iterdir() if not p.name.startswith('.')), key=lambda p: p.stat().st_mtime)
-    for old in records[:-_KEEP]:
-        if not _referenced(old.name):
-            old.unlink(missing_ok=True)
+def prune(root: Path | None = None) -> int:
+    """Bound the record dir: keep the newest ``_KEEP`` records, never drop one an unrecovered project
+    may still reference, and drop orphan ``.tmp`` files older than an hour. ONE project scan total
+    (R21 #198/#202). Returns how many files were removed."""
+    try:
+        root = root or _root()
+        entries = [(p, p.stat().st_mtime) for p in root.iterdir() if p.is_file()]
+    except OSError:
+        return 0
+    removed = 0
+    now = time.time()
+    for path, mtime in entries:
+        if path.name.startswith('.') and path.name.endswith('.tmp') and now - mtime > _TMP_MAX_AGE:
+            path.unlink(missing_ok=True)
+            removed += 1
+    records = sorted(((p, m) for p, m in entries if not p.name.startswith('.')), key=lambda item: item[1])
+    candidates = records[:-_KEEP] if _KEEP else records
+    if not candidates:
+        return removed
+    try:
+        from backend.services.studio.store import index_protects, reference_index
+        index = reference_index()
+    except Exception:  # noqa: BLE001 - cannot tell -> keep everything
+        return removed
+    for path, mtime in candidates:
+        if not index_protects(index, path.name, mtime):
+            path.unlink(missing_ok=True)
+            removed += 1
+    return removed
+
+
+def prune_in_background() -> threading.Thread:
+    """Startup: prune off the request and quit paths (R21 #197/#202)."""
+    def run():
+        try:
+            prune()
+        except Exception:  # noqa: BLE001 - cleanup only
+            pass
+    thread = threading.Thread(target=run, name='shutdown-marker-prune', daemon=True)
+    thread.start()
+    return thread
 
 
 def _classify(path: Path) -> str:
@@ -123,7 +181,8 @@ def release(instance: str | None) -> None:
     try:
         root = _root()
         with _lock:
-            if (str(root), instance) in _consumed and not _referenced(instance):
-                (root / instance).unlink(missing_ok=True)
+            record = root / instance
+            if (str(root), instance) in _consumed and record.exists() and not _referenced(instance, record.stat().st_mtime):
+                record.unlink(missing_ok=True)
     except Exception:  # noqa: BLE001 - cleanup only; _prune bounds leftovers
         pass

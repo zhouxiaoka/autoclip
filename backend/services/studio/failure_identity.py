@@ -52,3 +52,27 @@ def provider_identity(role: str = 'analysis') -> dict:
     if not fields:
         return {}
     return {'provider': fields.get('provider') or 'other', 'config_source': fields.get('config_source') or 'customized'}
+
+
+def role_for(phase: str, plan: dict | None = None, goals=None) -> str:
+    """R21 #194: the role whose connection a phase actually calls. One rule for every start/terminal.
+
+    - screening: its only model call is the quick visual screening -> ``vision``.
+    - production / rendering: the visual route runs the vision model unless every goal is ``content``
+      (content is always cut from subtitles by the text model) -> ``vision``; else ``analysis``.
+    - anything else -> ``analysis``.
+    Telemetry/attribution only: routing never reads this."""
+    if phase == 'screening':
+        return 'vision'
+    if phase in ('production', 'rendering'):
+        plan = plan if isinstance(plan, dict) else {}
+        route = plan.get('confirmed_analysis') or plan.get('recommended_analysis')
+        selected = list(goals or plan.get('selected_goals') or [(plan.get('preferences') or {}).get('goal')])
+        if route == 'visual' and any(goal != 'content' for goal in selected):
+            return 'vision'
+    return 'analysis'
+
+
+def phase_identity(phase: str, plan: dict | None = None, goals=None) -> dict:
+    """provider + config_source frozen at a phase start, from the role that phase runs on (#194)."""
+    return provider_identity(role_for(phase, plan, goals))

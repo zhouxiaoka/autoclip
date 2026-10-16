@@ -274,7 +274,7 @@ def test_r20_134_prune_bounds_records_but_keeps_referenced_ones(monkeypatch, tmp
     for i, name in enumerate([OLD] + [f'{i:032x}' for i in range(1, 8)]):
         (root / name).write_text('unacked', encoding='ascii')
         _os.utime(root / name, (1000 + i, 1000 + i))
-    assert shutdown_marker.mark('user_quit', 'e' * 32)
+    shutdown_marker.prune()                 # R21 #202: pruning moved from mark() to startup
     left = {p.name for p in root.iterdir()}
     assert OLD in left                      # still needed by an unrecovered project
     assert len(left) == 3 + 1               # newest _KEEP + the referenced one

@@ -747,7 +747,7 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 
 `studio_screen_finished` / `studio_generation_finished` / `studio_production_finished` 失败时必带 `failure_stage`（含服务重启、IO 失败、调度失败路径）、`upstream_error_type`；全部带 `provider`（目录 slug 或 `other`）与 `config_source`（`preset` = 目录 base URL + 目录模型 id，否则 `customized`）。不发送 URL 或自定义模型名。
 
-`service_restarted` 失败另带 `shutdown_kind`，按上次进程在 `<数据目录>/shutdown_markers/<instance>` 留下的记录分类（每个 instance 一条记录、一个目录、一套修剪规则）：
+`service_restarted` 失败另带 `shutdown_kind`，按上次进程在 `<标记目录>/<instance>` 留下的记录分类（标记目录由桌面壳启动时统一解析为 `<应用目录>/shutdown_markers`，经 `AUTOCLIP_SHUTDOWN_MARKER_DIR` 交给后端，壳写 `unacked` 也写这里；无壳运行时为 `<数据目录>/shutdown_markers`）（每个 instance 一条记录、一个目录、一套修剪规则）：
 
 | 值 | 含义 |
 |---|---|
@@ -756,4 +756,4 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 | `crash` | 该 instance 没有任何记录 |
 | `unknown` | 壳发了退出通知但 3 秒内没拿到 200，退出前写了 `unacked`（unacked→unknown，不当 crash）；或记录不可读、内容无效、缺少/非法 instance id |
 
-**四种取值都算产品失败**（PM 口径）：`shutdown_kind` 只用于拆分原因，不从任何分母里剔除样本；`clean` 是否单独处理放到 1.5.9 之后再议。同一个 instance 下的多个项目读到同一个分类；记录在没有任何项目还引用该 instance 时才删除，超过 50 条时按时间修剪，仍被未恢复项目引用的不删。只发枚举，instance id 不出本机。
+**四种取值都算产品失败**（PM 口径）：`shutdown_kind` 只用于拆分原因，不从任何分母里剔除样本；`clean` 是否单独处理放到 1.5.9 之后再议。同一个 instance 下的多个项目读到同一个分类；记录在没有任何项目还引用该 instance 时才删除，修剪只在启动恢复之后于后台执行一次（退出路径不扫项目）：超过 50 条时按时间修剪，仍被未恢复项目引用的不删；读不了的项目只保护比它最后修改时间更新的记录；超过 1 小时的孤儿 `.tmp` 一并清理。只发枚举，instance id 不出本机。

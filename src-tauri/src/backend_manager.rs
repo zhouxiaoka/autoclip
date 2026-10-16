@@ -35,7 +35,7 @@ pub struct BackendManager {
     /// R19 #98: per-launch backend instance id (not secret) and the app dir the backend was given,
     /// so an unacknowledged shutdown intent can be recorded for exactly this backend.
     instance_id: Mutex<String>,
-    app_dir: Mutex<Option<PathBuf>>,
+    marker_dir: Mutex<Option<PathBuf>>,
     #[cfg(windows)]
     job: Mutex<Option<crate::windows_job::BackendJob>>,
 }
@@ -53,7 +53,7 @@ impl BackendManager {
             process: Arc::new(Mutex::new(None)),
             local_token: Mutex::new(String::new()),
             instance_id: Mutex::new(String::new()),
-            app_dir: Mutex::new(None),
+            marker_dir: Mutex::new(None),
             #[cfg(windows)]
             job: Mutex::new(None),
         }
@@ -130,7 +130,12 @@ impl BackendManager {
         // their data.
         let app_dir = crate::telemetry_runtime::app_dir(app_handle.path().data_dir().ok());
         crate::telemetry_runtime::configure_backend(&mut cmd, app_dir.as_deref());
-        *self.app_dir.lock().unwrap() = app_dir.clone();
+        // R21 #196: one marker dir, resolved here, handed to the backend; the shell writes `unacked` there too.
+        let markers = app_dir.as_deref().map(shutdown_marker_dir);
+        if let Some(dir) = markers.as_deref() {
+            cmd.env(SHUTDOWN_MARKER_DIR_ENV, dir);
+        }
+        *self.marker_dir.lock().unwrap() = markers;
 
         #[cfg(target_os = "windows")]
         {
@@ -204,7 +209,7 @@ impl BackendManager {
             // reads this exit as unknown instead of crash. Best effort; never blocks the kill.
             if !intent_acknowledged(&result) {
                 let instance = self.instance_id.lock().unwrap().clone();
-                if let Some(dir) = self.app_dir.lock().unwrap().as_deref() {
+                if let Some(dir) = self.marker_dir.lock().unwrap().as_deref() {
                     let _ = record_unacknowledged_intent(dir, &instance);
                 }
             }
@@ -551,15 +556,21 @@ pub(crate) fn intent_acknowledged(result: &std::io::Result<bool>) -> bool {
     matches!(result, Ok(true))
 }
 
-/// R19 #98 / R20 #134: the same per-instance record the backend writes (`<app_dir>/shutdown_markers/<instance>`)
+pub(crate) const SHUTDOWN_MARKER_DIR_ENV: &str = "AUTOCLIP_SHUTDOWN_MARKER_DIR";
+
+/// R21 #196: the single shutdown-record dir for this launch (shell and backend both use it).
+pub(crate) fn shutdown_marker_dir(app_dir: &std::path::Path) -> std::path::PathBuf {
+    app_dir.join("shutdown_markers")
+}
+
+/// R19 #98 / R20 #134: the same per-instance record the backend writes (`<marker dir>/<instance>`)
 /// with content `unacked` -> unknown. Created only if no marker exists yet: a marker that landed in time wins.
-pub(crate) fn record_unacknowledged_intent(app_dir: &std::path::Path, instance: &str) -> std::io::Result<()> {
+pub(crate) fn record_unacknowledged_intent(dir: &std::path::Path, instance: &str) -> std::io::Result<()> {
     if instance.len() != 32 || !instance.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "instance"));
     }
     use std::io::Write;
-    let dir = app_dir.join("shutdown_markers");
-    std::fs::create_dir_all(&dir)?;
+    std::fs::create_dir_all(dir)?;
     match std::fs::OpenOptions::new().write(true).create_new(true).open(dir.join(instance)) {
         Ok(mut file) => file.write_all(b"unacked"),
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
@@ -596,7 +607,7 @@ pub(crate) fn notify_shutdown_intent(port: u16, token: &str, intent: ShutdownInt
 
 #[cfg(test)]
 mod shutdown_intent_tests {
-    use super::{intent_acknowledged, new_instance_id, new_local_token, notify_shutdown_intent, record_unacknowledged_intent, ShutdownIntent};
+    use super::{intent_acknowledged, new_instance_id, new_local_token, notify_shutdown_intent, record_unacknowledged_intent, shutdown_marker_dir, ShutdownIntent, SHUTDOWN_MARKER_DIR_ENV};
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::mpsc;
@@ -686,9 +697,9 @@ mod shutdown_intent_tests {
         assert!(intent_acknowledged(&Ok(true)));
         let dir = std::env::temp_dir().join(format!("acr19-{}", new_instance_id().unwrap()));
         let instance = new_instance_id().unwrap();
-        record_unacknowledged_intent(&dir, &instance).unwrap();
+        record_unacknowledged_intent(&shutdown_marker_dir(&dir), &instance).unwrap();
         assert_eq!(std::fs::read(dir.join("shutdown_markers").join(&instance)).unwrap(), b"unacked");
-        assert!(record_unacknowledged_intent(&dir, "../../etc/passwd").is_err());
+        assert!(record_unacknowledged_intent(&shutdown_marker_dir(&dir), "../../etc/passwd").is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -699,7 +710,7 @@ mod shutdown_intent_tests {
         let instance = new_instance_id().unwrap();
         std::fs::create_dir_all(dir.join("shutdown_markers")).unwrap();
         std::fs::write(dir.join("shutdown_markers").join(&instance), b"user_quit").unwrap();
-        record_unacknowledged_intent(&dir, &instance).unwrap();
+        record_unacknowledged_intent(&shutdown_marker_dir(&dir), &instance).unwrap();
         assert_eq!(std::fs::read(dir.join("shutdown_markers").join(&instance)).unwrap(), b"user_quit");
         assert!(!dir.join("shutdown_unacked").exists());
         let _ = std::fs::remove_dir_all(&dir);
@@ -723,5 +734,16 @@ mod shutdown_intent_tests {
         assert!(notify < record && record < kill, "record before kill, after notify");
         assert!(stop.contains("if !intent_acknowledged(&result)"));
         assert!(!stop.contains("let _ = notify_shutdown_intent"), "result must not be discarded");
+    }
+    #[test]
+    fn shell_writes_unacked_into_the_dir_it_hands_the_backend() {
+        // R21 #196: one resolved dir, passed to the backend in env and used by stop() for `unacked`.
+        assert_eq!(SHUTDOWN_MARKER_DIR_ENV, "AUTOCLIP_SHUTDOWN_MARKER_DIR");
+        let src = include_str!("backend_manager.rs");
+        let start = &src[src.find("pub fn start").unwrap()..src.find("pub fn stop_with_intent").unwrap()];
+        assert!(start.contains("cmd.env(SHUTDOWN_MARKER_DIR_ENV, dir)"));
+        assert!(start.contains("*self.marker_dir.lock().unwrap() = markers;"));
+        let stop = &src[src.find("pub fn stop_with_intent").unwrap()..src.find("pub fn restart").unwrap()];
+        assert!(stop.contains("self.marker_dir.lock()"));
     }
 }

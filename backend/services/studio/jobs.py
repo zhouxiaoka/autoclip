@@ -1157,8 +1157,8 @@ def _auto_generate(project_id, plan):
         store.raise_owned_read_error(error)
         capture_studio_exception(error, 'production')
         code = studio_error_code(error)
-        from backend.services.studio.failure_identity import provider_identity
-        context = {**provider_identity(), **studio_failure_context(error, 'production')}
+        from backend.services.studio.failure_identity import phase_identity
+        context = {**phase_identity('production', plan), **studio_failure_context(error, 'production')}
         error_text = str(error)[:700]
         def fail(data):
             context.update(store.attempt_identity(data.get('analysis'), data.get('generation')))
@@ -1544,8 +1544,8 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             'created_at': store.now(),
         }
         state.setdefault('output_variants', [])
-        from backend.services.studio.failure_identity import provider_identity
-        state['analysis'] = {**provider_identity(), 'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
+        from backend.services.studio.failure_identity import phase_identity
+        state['analysis'] = {**phase_identity('screening'), 'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
         state['generation'].update(store.attempt_identity(state['analysis']))
         store.write(project_id, state)
         try:
@@ -1585,9 +1585,12 @@ def _inspect(project_id, options, url, browser):
         ensure_project_thumbnail(project_id)
         plan['id'] = uuid.uuid4().hex
         if options.auto_start:
+            from backend.services.studio.failure_identity import phase_identity
+            production_identity = phase_identity('production', plan)  # R21 #194: production re-freezes by its route
+
             def start_automatic(data):
                 run_id = (data.get('analysis') or {}).get('run_id')  # observers match the run across phases
-                data.update(plan=plan, analysis={**store.attempt_identity(data.get('analysis')), 'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
+                data.update(plan=plan, analysis={**production_identity, 'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
                 data['generation'].update(status='production', started_at=store.now(), **_generation_route(plan), **store.attempt_identity(data.get('analysis')))
                 return run_id
             run_id = store.change(project_id, start_automatic)
@@ -1619,8 +1622,8 @@ def _inspect(project_id, options, url, browser):
         failure = {'status':'failed','phase':'screening','error':str(error)[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
         if getattr(error, 'probe_detail', None):
             failure['probe_detail'] = error.probe_detail
-        from backend.services.studio.failure_identity import provider_identity
-        context = {**provider_identity(), **studio_failure_context(error, 'screening')}
+        from backend.services.studio.failure_identity import phase_identity
+        context = {**phase_identity('screening'), **studio_failure_context(error, 'screening')}
         failure.update(context)
         try:
             def fail_screening(data):
@@ -1682,8 +1685,8 @@ def confirm_project(project_id, body):
             for goal in body.goals
         }
         plan['confirmed_preferences'] = plan['goal_preferences'][body.goals[0]].copy()
-        from backend.services.studio.failure_identity import provider_identity
-        state['analysis'] = {**provider_identity(), 'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
+        from backend.services.studio.failure_identity import phase_identity
+        state['analysis'] = {**phase_identity('production', plan, body.goals), 'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
         try:
             executor.submit(_produce_selected, project_id, plan, _io_receipt=('analysis', state['analysis']['run_id'], 'production'))

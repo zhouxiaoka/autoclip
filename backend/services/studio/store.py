@@ -448,34 +448,54 @@ def read(project_id: str, *, recover: bool = True):
         _pending_links.pop(path, None)
     return data
 
-def _references_instance(data, instance):
-    """Unrecovered state that still needs instance's shutdown record to be classified."""
+def _instances_referenced(data):
+    """Dead instances whose shutdown record this project's unrecovered state still needs."""
+    out = set()
     analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else {}
-    if analysis.get('status') == 'running' and analysis.get('instance') == instance:
-        return True
+    if analysis.get('status') == 'running' and analysis.get('instance'):
+        out.add(analysis['instance'])
     for job in data.get('jobs') or []:
-        if isinstance(job, dict) and job.get('status') in ('queued', 'running') and job.get('instance') == instance:
-            return True
+        if isinstance(job, dict) and job.get('status') in ('queued', 'running') and job.get('instance'):
+            out.add(job['instance'])
     for variant in data.get('output_variants') or []:
         if not isinstance(variant, dict):
             continue
-        if variant.get('status') == 'preparing' and variant.get('instance') == instance:
-            return True
-        if variant.get('status') == 'queued' and variant.get('render_dispatch_instance') == instance:
-            return True
-    return False
+        if variant.get('status') == 'preparing' and variant.get('instance'):
+            out.add(variant['instance'])
+        if variant.get('status') == 'queued' and variant.get('render_dispatch_instance'):
+            out.add(variant['render_dispatch_instance'])
+    return out
 
 
-def instance_referenced(instance):
-    """R20 #99/#134: does any project on disk still reference this dead instance? Unreadable -> yes."""
+def _references_instance(data, instance):
+    return instance in _instances_referenced(data)
+
+
+def reference_index():
+    """R21 #198/#202: ONE scan of every project -> (referenced instances, unreadable floor).
+
+    A project that cannot be read only protects records it could reference: an instance writes its
+    shutdown record after its last project write, so records older than the unreadable file's mtime
+    are not its. ``floor`` is the oldest such mtime (None when every project was read)."""
+    referenced, floor = set(), None
     for path in get_projects_directory().glob('*/metadata/studio.json'):
         try:
             data = json.loads(path.read_text(encoding='utf-8'))
         except (OSError, ValueError):
-            return True
-        if isinstance(data, dict) and _references_instance(data, instance):
-            return True
-    return False
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                mtime = 0.0  # cannot even stat it: protect everything
+            floor = mtime if floor is None else min(floor, mtime)
+            continue
+        if isinstance(data, dict):
+            referenced |= _instances_referenced(data)
+    return referenced, floor
+
+
+def index_protects(index, instance, record_mtime):
+    referenced, floor = index
+    return instance in referenced or (floor is not None and record_mtime >= floor)
 
 
 def producer_alive(generation):

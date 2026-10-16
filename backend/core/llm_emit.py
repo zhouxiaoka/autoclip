@@ -93,6 +93,10 @@ class _RunAcc:
     last_outcome: str = ""
     last_stage: str = ""
     persisted_usage: dict = field(default_factory=dict)
+    # R21 #195: provider + config_source frozen together per role at that role's first request in
+    # this run; ``role`` is the role of the latest request. Never mixed across connections.
+    identities: dict = field(default_factory=dict)
+    role: str = ""
     # E2: one run accumulator is shared by worker threads (run_in_context); guard mutations.
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
@@ -283,7 +287,7 @@ def request_finished(
             outcome=outcome, finish_reason=finish_reason, failure_stage=failure_stage,
             error=error,
         )
-        _remember_run(properties)
+        _remember_run(properties, role="vision" if kind == "vision" else "analysis")
         _post_event(schema.EVENT_LLM_REQUEST_FINISHED, properties)
         return properties
     except Exception:  # noqa: BLE001 - telemetry must not break a model call
@@ -430,14 +434,22 @@ def run_snapshot(project_id: str | None = None) -> dict[str, Any]:
     acc = _run_acc.get()
     # Settings are a last-saved identity, not this run. Only fill gaps inside track_run.
     configured = configured_connection_fields() if acc is not None else {}
-    provider = (acc.provider if acc and acc.provider else None) or configured.get("provider")
+    # R21 #195: provider and config_source always come from ONE connection: the identity frozen for
+    # the latest request's role; before any request, the configured analysis connection as a pair.
+    frozen = acc.identities.get(acc.role) if acc is not None and acc.role else None
+    if frozen:
+        provider, source = frozen.get("provider"), frozen.get("config_source")
+    elif acc is not None and acc.provider:
+        provider, source = acc.provider, None  # the request's provider; no source we can vouch for
+    else:
+        provider, source = configured.get("provider"), configured.get("config_source")
     model = _safe_model((acc.model if acc and acc.model else None) or configured.get("model"))
     host = (acc.host if acc and acc.host else None) or configured.get("base_url_host")
     raw: dict[str, Any] = {
         "provider": provider,
         "model": model,
         "base_url_host": host,
-        "config_source": configured.get("config_source"),
+        "config_source": source,
         "http_status": acc.last_http_status if acc else None,
         "upstream_error_type": acc.last_upstream if acc else None,
         "billable_calls_before_failure": acc.billable if acc else 0,
@@ -577,10 +589,18 @@ def _request_properties(
     return properties
 
 
-def _remember_run(properties: dict[str, Any]) -> None:
+def _remember_run(properties: dict[str, Any], role: str = "analysis") -> None:
     acc = _run_acc.get()
     if acc is None:
         return
+    if role not in acc.identities:
+        try:
+            from backend.services.studio.failure_identity import provider_identity
+            identity = provider_identity(role)
+        except Exception:  # noqa: BLE001 - identity is attribution only; never lose the request
+            identity = {}
+        with acc.lock:
+            acc.identities.setdefault(role, identity)
     # E2: retries are counted per logical call. ``retry_count`` on a request is that call's
     # attempt index (text) or its own retry total (vision); only the rise above the peak
     # already counted for this call in this context is new. The peak lives in a contextvar,
@@ -595,6 +615,7 @@ def _remember_run(properties: dict[str, Any]) -> None:
         _retry_peak.set(0)
     with acc.lock:
         acc.calls += 1
+        acc.role = role
         acc.provider = properties.get("provider") or acc.provider
         acc.model = properties.get("model") or acc.model
         acc.host = properties.get("base_url_host") or acc.host
