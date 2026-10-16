@@ -10,7 +10,8 @@
 -- 定义：
 --   attempt  = 一次终态尝试，按 attempt_id 去重（取最后一条）；缺 attempt_id 的历史行按事件 uuid 计。
 --   flow     = 用户的一次出片流程：沿 retry_of 回溯到重试链根（最多 4 跳），用根 attempt 的 flow_id；
---              结果取该流程 / 重试链里最后一次 attempt。
+--              结果取该流程 / 重试链里最后一次 attempt：按 attempt_sequence（后端回执的项目内序号，#419）排，
+--              观察时间只用来打平；没有 attempt_sequence 的历史行按 0 计（R25 #346，事件乱序到达不改结果）。
 --   person   = person_id（不是 distinct_id / 设备）。
 --   success  = outcome IN ('completed','success')。partial 不算成功，单独算 partial-delivery 率。
 --   全量口径分母剔除（user_hard，只剔除明确的用户行为）：
@@ -28,6 +29,8 @@ WITH base AS (
     argMax(toString(coalesce(properties.flow_id, properties.attempt_id, toString(uuid))), timestamp) AS fid,
     argMax(person_id, timestamp) AS pid,
     max(timestamp) AS ts,
+    -- R25 #346: the backend receipt's per-project attempt sequence orders a flow; observation time only breaks ties
+    argMax(ifNull(toInt(properties.attempt_sequence), 0), timestamp) AS seq,
     argMax(toString(properties.outcome), timestamp) AS o_raw,
     argMax(coalesce(toString(properties.error_code), ''), timestamp) AS ec,
     argMax(coalesce(toString(properties.upstream_error_type), ''), timestamp) AS ue,
@@ -63,7 +66,7 @@ WITH base AS (
   FROM chained
 ), flows AS (
   -- per-flow outcome = the LAST attempt in the flow / retry chain
-  SELECT chain_fid AS fid, max(ts) AS fts, argMax(o, ts) AS fo, argMax(qual, ts) AS fq, argMax(qual_all, ts) AS fqa FROM c GROUP BY chain_fid
+  SELECT chain_fid AS fid, max(ts) AS fts, argMax(o, (seq, ts)) AS fo, argMax(qual, (seq, ts)) AS fq, argMax(qual_all, (seq, ts)) AS fqa FROM c GROUP BY chain_fid
 ), d1 AS (
   SELECT toDate(ts) AS d, countIf(o = 'success') AS ok, countIf(qual_all) AS q_all, countIf(qual) AS q_prod,
     countIf(o = 'partial' AND qual) AS partial_n
@@ -172,6 +175,8 @@ WITH base AS (
     argMax(toString(coalesce(properties.flow_id, properties.attempt_id, toString(uuid))), timestamp) AS fid,
     argMax(person_id, timestamp) AS pid,
     max(timestamp) AS ts,
+    -- R25 #346: the backend receipt's per-project attempt sequence orders a flow; observation time only breaks ties
+    argMax(ifNull(toInt(properties.attempt_sequence), 0), timestamp) AS seq,
     argMax(toString(properties.outcome), timestamp) AS o_raw,
     argMax(coalesce(toString(properties.error_code), ''), timestamp) AS ec,
     argMax(coalesce(toString(properties.upstream_error_type), ''), timestamp) AS ue,
@@ -206,7 +211,7 @@ WITH base AS (
     (o = 'success' OR NOT user_x) AS qual
   FROM chained
 ), flows AS (
-  SELECT chain_fid AS fid, argMax(v, ts) AS fv, argMax(o, ts) AS fo, argMax(qual, ts) AS fq, argMax(qual_all, ts) AS fqa FROM c GROUP BY chain_fid
+  SELECT chain_fid AS fid, argMax(v, (seq, ts)) AS fv, argMax(o, (seq, ts)) AS fo, argMax(qual, (seq, ts)) AS fq, argMax(qual_all, (seq, ts)) AS fqa FROM c GROUP BY chain_fid
 ), v1 AS (
   SELECT v, countIf(o = 'success') AS ok, countIf(qual_all) AS q_all, countIf(qual) AS q_prod,
     countIf(o = 'partial' AND qual) AS partial_n
