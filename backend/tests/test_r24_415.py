@@ -150,14 +150,20 @@ def test_296_frozen_takes_one_complete_source_never_stitches():
 
 
 def _no_settings(monkeypatch):
-    def boom(*_a, **_k):
-        raise AssertionError('settings were read for attribution')
-    monkeypatch.setattr(ai, 'load', boom)
+    """Settings stay readable (a misattribution would then show up) but every read is recorded."""
+    reads = []
+    real = ai.load
+
+    def load(*a, **k):
+        reads.append(1)
+        return real(*a, **k)
+    monkeypatch.setattr(ai, 'load', load)
+    return reads
 
 
 def test_297_text_request_without_frozen_identity_uses_the_config_it_sent(monkeypatch, posted):
-    _settings(analysis='other')
-    _no_settings(monkeypatch)
+    _settings(analysis='other')                         # saved analysis = GLM; the request sends DeepSeek
+    reads = _no_settings(monkeypatch)
     with llm_emit.track_run():
         with pytest.raises(_Status):
             llm_emit.observe_provider_call(_provider('https://api.deepseek.com', 'deepseek-flash'),
@@ -165,6 +171,7 @@ def test_297_text_request_without_frozen_identity_uses_the_config_it_sent(monkey
         snap = llm_emit.run_snapshot()
     assert {k: snap.get(k) for k in TEXT} == TEXT
     assert [p for e, p in posted if e == 'llm_request_finished'][-1]['provider'] == 'deepseek'
+    assert reads == []
 
 
 def test_297_vision_test_of_an_unsaved_form_is_attributed_to_the_form_not_saved_settings(monkeypatch, posted):
@@ -174,7 +181,7 @@ def test_297_vision_test_of_an_unsaved_form_is_attributed_to_the_form_not_saved_
     def urlopen(*_a, **_k):
         raise urllib.error.URLError(TimeoutError())
     monkeypatch.setattr(intelligence.urllib.request, 'urlopen', urlopen)
-    _no_settings(monkeypatch)
+    reads = _no_settings(monkeypatch)
     form = {'api_key': 'fixture-key', 'base_url': 'https://api.deepseek.com', 'model': 'deepseek-flash'}
     with llm_emit.track_run():
         with pytest.raises(intelligence.VisionRequestError):
@@ -183,6 +190,7 @@ def test_297_vision_test_of_an_unsaved_form_is_attributed_to_the_form_not_saved_
     request = [p for e, p in posted if e == 'llm_request_finished'][-1]
     assert request['provider'] == 'deepseek'
     assert {k: snap.get(k) for k in TEXT} == TEXT
+    assert reads == []
 
 
 # --- #292: screening identity survives settle, restart recovery and history replay -------------
@@ -240,6 +248,20 @@ def test_293_failed_studio_replace_keeps_the_ledger_protecting_the_surviving_sta
     assert store._read_refs(ledger) == {A}
     state.write_text('{not json', encoding='utf-8')     # studio.json briefly unreadable
     assert A in store.reference_index()
+
+
+def test_293_failed_replace_rolls_the_ledger_back_to_exactly_what_the_surviving_state_needs(monkeypatch):
+    _state, ledger = _project('p', A)
+    real = store._replace_state
+
+    def failing(tmp, dest):
+        if dest.name == 'studio.json':
+            raise OSError('fixture')
+        return real(tmp, dest)
+    monkeypatch.setattr(store, '_replace_state', failing)
+    with pytest.raises(OSError):
+        store.write('p', {'id': 'p', 'analysis': {'status': 'running', 'phase': 'production', 'instance': B}}, _recover_previous=False)
+    assert store._read_refs(ledger) == {A}               # B never reached disk: it must not pin a record
 
 
 def test_293_a_wrong_ledger_heals_on_the_next_write_even_if_references_did_not_change():
