@@ -13,7 +13,7 @@ const conn = (id, provider, extra = {}) => ({
 })
 const settings = (extra = {}) => ({
   version: 1, saved: true,
-  connections: [conn('infi', 'infistar'), conn('ds', 'dashscope'), conn('or', 'openrouter')],
+  connections: [conn('infi', 'infistar', { enabled_model_ids: ['gpt-4o-mini', 'qwen-plus'] }), conn('ds', 'dashscope'), conn('or', 'openrouter')],
   analysis: { connection_id: 'ds', model: 'qwen-plus', capability: 'text', model_source: 'user' },
   vision: null, cover: null,
   transcription: { provider: 'whisper_local', model: 'base', model_source: 'user' },
@@ -321,4 +321,21 @@ test('E1: cover-section model pick (setCoverModel) on a following cover is indep
   const switched = slots.applyFixedSelection(picked, 'analysis', 'gpt-4o-mini', 'infi')
   assert.equal(switched.cover.connection_id, 'ds')
   assert.equal(switched.cover.model, 'wanx2.1-t2i-turbo')
+})
+
+test('visibility: untouched gateway lists enable a recommendation; explicit lists are strict', () => {
+  const vis = loadTs('modelVisibility.ts', {})
+  const gw = conn('gw', 'api88')
+  const models = ['claude-sonnet-5', 'claude-sonnet-4-6', 'claude-opus-5', 'gpt-6-sol', 'codex-auto-review', 'gemini-3-pro', 'grok-4.5', 'mimo-v2.5']
+    .map(id => ({ id, analysis: true, image: false }))
+    .concat([{ id: 'gpt-image-2', analysis: false, image: true }, { id: 'veo-3.1', analysis: false, image: false, kind: 'video' }])
+  const base = settings({ connections: [gw] })
+  const rec = plain(vis.recommendedModelIds(base, gw, models))
+  assert.ok(rec.includes('claude-sonnet-5') && rec.includes('claude-opus-5') && rec.includes('gpt-image-2'))
+  assert.equal(rec.includes('claude-sonnet-4-6') || rec.includes('codex-auto-review') || rec.includes('veo-3.1'), false)
+  assert.ok(rec.length < models.length)
+  const groups = slots.collectModelGroups(base, { gw: { source: 'live', models } }, 'analysis').map(g => g.modelId)
+  assert.ok(groups.includes('claude-sonnet-5') && !groups.includes('codex-auto-review'))
+  const strict = settings({ connections: [{ ...gw, enabled_model_ids: ['grok-4.5'] }] })
+  assert.deepEqual(plain(slots.collectModelGroups(strict, { gw: { source: 'live', models } }, 'analysis').map(g => g.modelId)), ['grok-4.5'])
 })

@@ -53,6 +53,11 @@ test('catalog renders recommended / popular / local and keeps more collapsed', (
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'deepseek'))
   assert.ok(cards.some(node => node.props['data-provider-id'] === 'whisper'))
   assert.equal(cards.some(node => node.props['data-provider-id'] === 'openrouter'), false)
+  const moreBtn = nodes.find(node => node.props && node.props.className === 'ac-provider-more')
+  assert.ok(moreBtn)
+  assert.equal(moreBtn.props['aria-expanded'], false)
+  assert.match(textOf(moreBtn), /settings\.providers\.group\.more|更多服务商/)
+
   const whisper = cards.find(node => node.props['data-provider-id'] === 'whisper')
   assert.match(textOf(whisper), /settings\.providers\.available/)
   const deepseek = cards.find(node => node.props['data-provider-id'] === 'deepseek')
@@ -211,7 +216,7 @@ test('detail shows a configure form for an unconnected preset without writing a 
   })
   const nodes = flatten(tree)
   assert.equal(nodes.find(node => node.props && node.props['data-provider-id'])?.props['data-connect-kind'], 'compatible')
-  assert.match(textOf(tree), /settings\.providers\.unconnected_guide/)
+  assert.match(textOf(tree), /测试连接|可用模型/)
   const fields = nodes.find(node => node.props && node.props['data-fields'] === 'compatible')
   assert.ok(fields)
   fields.props.onClick()
@@ -233,51 +238,190 @@ test('catalog source does not send search text, keys, or full URLs to telemetry'
   }
 })
 
-for (const requestedProvider of ['', 'deepseek', 'custom:ds']) {
-  test(`manual model choice remains user-owned in ${requestedProvider || 'overview'}`, () => {
-    const updates = []
+test('overview uses DefaultModels and drops legacy CurrentAnalysis / transcription / cover blocks', () => {
+  const value = {
+    ...settings,
+    saved: true,
+    connections: [{ id: 'ds', name: 'DeepSeek', provider: 'deepseek', base_url: '', has_key: true, validation_status: 'ok' }],
+    analysis: { connection_id: 'ds', model: 'deepseek-chat', capability: 'auto', model_source: 'user' },
+  }
+  const m = { settings: value, lists: {}, busy: {}, listErrors: {}, keyHints: {}, update: () => {}, save: async () => ({}), load: async () => {} }
+  const Page = loadTs('AIModelSettings.tsx', {
+    './AddCustomProviderDialog': { default: () => null },
+    react: { ...React, useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}], useEffect: () => {} },
+    'react-i18next': { useTranslation: () => {} },
+    antd: { Select: () => null, Switch: () => null },
+    '../../i18n': i18n,
+    '../../ui': { ...ui, Section: () => null, Segmented: () => null },
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    '../../services/api': { speechApi: { getRuntimeStatus: async () => ({}), getModels: async () => ([]) }, default: { get: async () => ({}) } },
+    './useModelSettings': { useModelSettings: () => m },
+    './ProviderFields': { default: () => null },
+    './ModelPicker': { default: () => null },
+    './EndpointProviderSetup': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+    './ProviderCatalog': { default: props => React.createElement('div', { 'data-catalog': true, 'data-has-add': !!props.onAdd }) },
+    './DefaultModels': { default: () => React.createElement('div', { 'data-default-models': true }) },
+  }).default
+  const nodes = flatten(Page({ requestedSection: 'model', requestedProvider: '' }))
+  assert.ok(nodes.some(node => String(node.props?.['data-layout'] || '').startsWith('v6')))
+  assert.ok(nodes.some(node => node.props?.['data-default-models']))
+  assert.ok(nodes.some(node => node.props?.['data-catalog'] && node.props?.['data-has-add']))
+  assert.equal(nodes.some(node => node.props?.role === 'analysis'), false)
+})
+
+test('manual model choice via DefaultModels slots stays user-owned', () => {
+  const slots = loadTs('defaultModelSlots.ts', {
+    '../../i18n': i18n,
+    './modelSettingsLogic': loadTs('modelSettingsLogic.ts', { '../../i18n': i18n }),
+    './providerCatalogView': loadTs('providerCatalogView.ts', { '../../i18n': i18n }),
+    './modelDefaults': loadTs('modelDefaults.ts', { '../../i18n': i18n }),
+    './providerPresets': loadTs('providerPresets.ts', { '../../i18n': i18n }),
+  })
+  const value = {
+    ...settings,
+    saved: true,
+    connections: [{ id: 'ds', name: 'DeepSeek', provider: 'deepseek', base_url: '', has_key: true, validation_status: 'ok', api_key: '', image_api: 'auto', image_base_url: '' }],
+    analysis: { connection_id: 'ds', model: 'deepseek-flash', capability: 'auto', model_source: 'preset' },
+  }
+  const next = slots.applyFixedSelection(value, 'analysis', 'manually-selected-model', 'ds')
+  const { forSave } = loadTs('modelSettingsLogic.ts', { '../../i18n': i18n })
+  const saved = forSave(next)
+  assert.equal(saved.analysis.model, 'manually-selected-model')
+  assert.equal(saved.analysis.model_source, 'user', 'manual models must never opt into preset fallback')
+})
+
+for (const requestedProvider of ['deepseek', 'custom:ds']) {
+  test(`provider detail opens for ${requestedProvider}`, () => {
     const value = {
       ...settings,
       saved: true,
-      connections: [{ id: 'ds', name: 'Gateway', provider: requestedProvider.startsWith('custom:') ? 'compatible' : 'deepseek', base_url: 'https://gateway.example/v1', has_key: true }],
+      connections: [{
+        id: 'ds', name: 'Gateway',
+        provider: requestedProvider.startsWith('custom:') ? 'compatible' : 'deepseek',
+        base_url: 'https://gateway.example/v1', has_key: true,
+      }],
       analysis: { connection_id: 'ds', model: 'deepseek-flash', capability: 'auto', model_source: 'preset' },
     }
     const m = {
       settings: value, lists: {}, busy: {}, listErrors: {}, keyHints: {},
-      main: value.connections[0], update: patch => updates.push(patch),
+      update: () => {}, save: async () => ({}),
     }
     const Page = loadTs('AIModelSettings.tsx', {
       './AddCustomProviderDialog': { default: () => null },
-      react: { ...React, useState: initial => [typeof initial === 'function' ? (requestedProvider.startsWith('custom:') ? requestedProvider : initial()) : initial, () => {}], useEffect: () => {} },
+      react: {
+        ...React,
+        useState: initial => [typeof initial === 'function'
+          ? (requestedProvider.startsWith('custom:') ? requestedProvider : (catalogId => catalogId)(requestedProvider === 'deepseek' ? 'deepseek' : initial()))
+          : (requestedProvider === 'deepseek' ? 'deepseek' : initial), () => {}],
+        useEffect: () => {},
+      },
       'react-i18next': { useTranslation: () => {} },
       antd: { Select: () => null, Switch: () => null },
       '../../i18n': i18n,
       '../../ui': { ...ui, Section: () => null, Segmented: () => null },
       '../../utils/externalLinks': { openExternalLink: () => {} },
       '../../components/SpeechRecognitionConfig': { default: () => null },
-      '../../services/api': {},
+      '../../services/api': { speechApi: { getRuntimeStatus: async () => ({}), getModels: async () => ([]) }, default: { get: async () => ({}) } },
       './useModelSettings': { useModelSettings: () => m },
       './ProviderFields': { default: () => null },
       './ModelPicker': { default: () => null },
       './EndpointProviderSetup': { default: () => null },
-    './SenseVoiceConfig': { default: () => null },
+      './SenseVoiceConfig': { default: () => null },
       './ProviderCatalog': { default: () => null },
       './DefaultModels': { default: () => React.createElement('div', { 'data-default-models': true }) },
+      './ProviderDetail': { default: ({ preset }) => React.createElement('div', { 'data-detail': preset?.id, 'data-layout': 'v6' }) },
     }).default
+    // Force selectedId via requestedProvider prop effect is mocked; seed useState with provider id.
     const nodes = flatten(Page({ requestedSection: 'model', requestedProvider }))
-    assert.equal(nodes.some(node => node.props?.['data-default-models']), !requestedProvider)
     if (requestedProvider.startsWith('custom:')) {
       assert.ok(nodes.some(node => node.props?.['data-connect-kind'] === 'compatible'))
+    } else {
+      assert.ok(nodes.some(node => node.props?.['data-detail'] === 'deepseek' || node.props?.['data-provider-id'] === 'deepseek'))
     }
-    const picker = nodes.find(node => node.props?.role === 'analysis')
-    assert.ok(picker)
-    picker.props.onChange('manually-selected-model')
-    const { forSave } = loadTs('modelSettingsLogic.ts', { '../../i18n': i18n })
-    const saved = forSave({ ...value, ...updates[0] })
-    assert.equal(saved.analysis.model, 'manually-selected-model')
-    assert.equal(saved.analysis.model_source, 'user', 'manual models must never opt into preset fallback')
   })
 }
+
+test('provider detail uses two-column connect/models layout without analysis ModelPicker', () => {
+  const Detail = loadTs('ProviderDetail.tsx', {
+    '../../i18n': i18n, '../../ui': ui,
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    './ProviderFields': { default: () => React.createElement('div', { 'data-fields': true }) },
+    './EndpointProviderSetup': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+  }).default
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const tree = Detail({
+    preset: view.catalogPreset('deepseek'),
+    m: {
+      settings: {
+        ...settings,
+        connections: [{ id: 'ds', name: 'DeepSeek', provider: 'deepseek', has_key: true, validation_status: 'ok', base_url: '', image_api: 'auto', image_base_url: '' }],
+        analysis: { connection_id: 'ds', model: 'deepseek-chat', model_source: 'user' },
+      },
+      lists: {
+        ds: {
+          source: 'live', preview: false,
+          models: [
+            { id: 'deepseek-chat', analysis: true, capability: 'text' },
+            { id: 'deepseek-vl', analysis: true, capability: 'multimodal' },
+          ],
+        },
+      },
+      busy: {}, listErrors: {}, keyHints: {},
+      ensureCatalogProvider: () => {}, editConnection: () => {},
+    },
+    onBack: () => {},
+  })
+  const root = flatten(tree).find(node => String(node.props?.['data-layout'] || '').startsWith('v6'))
+  assert.ok(root)
+  assert.ok(flatten(tree).some(node => node.props?.['data-panel'] === 'connect'))
+  assert.ok(flatten(tree).some(node => node.props?.['data-panel'] === 'models'))
+  assert.equal(flatten(tree).some(node => node.props?.role === 'analysis'), false)
+  assert.match(textOf(tree), /可用模型|测通后/)
+})
+
+test('locked catalog detail shows editable 接口地址 and 测试连接', () => {
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const openai = view.catalogProviders().find(row => row.id === 'openai')
+  assert.ok(openai && openai.locked && openai.base_url)
+  const edits = []
+  const tests = []
+  const Detail = loadTs('ProviderDetail.tsx', {
+    '../../i18n': i18n, '../../ui': ui,
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    './ProviderFields': { default: ({ connection, onEdit }) => React.createElement('div', { 'data-fields': true },
+      React.createElement('input', { 'aria-label': '接口地址', value: connection.base_url, onChange: e => onEdit({ base_url: e.target.value }) }),
+      React.createElement('input', { 'aria-label': 'API Key', value: connection.api_key || '', onChange: e => onEdit({ api_key: e.target.value }) }),
+    ) },
+    './ModelPicker': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+  }).default
+  const detail = Detail({
+    preset: openai,
+    m: {
+      settings, lists: {}, busy: {}, listErrors: {}, testing: false, keyHints: {},
+      ensureCatalogProvider: (id, patch) => edits.push({ id, patch }),
+      editConnection: (c, patch) => edits.push({ id: c.id, patch }),
+      testCatalogProvider: (id, draft) => tests.push({ id, draft }),
+    },
+    onBack: () => {},
+  })
+  const nodes = flatten(detail)
+  const address = nodes.find(node => node.props?.['aria-label'] === '接口地址')
+  assert.ok(address)
+  assert.equal(address.props.value, openai.base_url)
+  const testBtn = nodes.find(node => node.type === 'button' && textOf(node).includes('测试连接'))
+  assert.ok(testBtn)
+  testBtn.props.onClick()
+  assert.equal(tests.length, 1)
+  assert.equal(tests[0].id, 'openai')
+  assert.equal(tests[0].draft.base_url, openai.base_url)
+})
+
 
 test('all endpoint-only catalog cards open an address entry flow without binding a default', () => {
   const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
@@ -285,12 +429,14 @@ test('all endpoint-only catalog cards open an address entry flow without binding
     '../../i18n': i18n, '../../ui': ui,
     '../../utils/externalLinks': { openExternalLink: () => {} },
     '../../components/SpeechRecognitionConfig': { default: () => null },
-    './ProviderFields': { default: () => null }, './ModelPicker': { default: () => null },
-    './SenseVoiceConfig': { default: () => null },
-    './EndpointProviderSetup': { default: ({ connection, onEdit }) => React.createElement('input', {
-      'data-endpoint-setup': connection.catalog_provider_id, value: connection.base_url,
+    './ProviderFields': { default: ({ connection, onEdit }) => React.createElement('input', {
+      'data-endpoint-setup': connection.catalog_provider_id || connection.provider,
+      'aria-label': '接口地址',
+      value: connection.base_url,
       onChange: event => onEdit({ base_url: event.target.value }),
     }) },
+    './ModelPicker': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
   }).default
   for (const preset of view.catalogProviders().filter(row => !row.base_url && row.protocol !== 'local')) {
     const opened = []
@@ -299,12 +445,19 @@ test('all endpoint-only catalog cards open an address entry flow without binding
     flatten(tree).find(node => node.props?.['data-provider-id'] === preset.id).props.onClick()
     assert.deepEqual(opened, [preset.id])
     const edits = []
-    const detail = Detail({ preset, m: { settings, lists: {}, busy: {}, listErrors: {},
-      ensureCatalogProvider: (id, patch) => edits.push({ id, patch }) }, onBack: () => {} })
-    const input = flatten(detail).find(node => node.props?.['data-endpoint-setup'] === preset.id)
-    assert.ok(input)
+    const tests = []
+    const detail = Detail({ preset, m: { settings, lists: {}, busy: {}, listErrors: {}, testing: false,
+      ensureCatalogProvider: (id, patch) => edits.push({ id, patch }),
+      testCatalogProvider: (id, draft) => tests.push({ id, draft }),
+      editConnection: () => {} }, onBack: () => {} })
+    const nodes = flatten(detail)
+    const input = nodes.find(node => node.props?.['data-endpoint-setup'] === preset.id)
+    assert.ok(input, preset.id)
+    assert.match(textOf(detail), /请先填写接口地址/)
     input.props.onChange({ target: { value: 'https://endpoint.example.test/v1' } })
     assert.deepEqual(edits, [{ id: preset.id, patch: { base_url: 'https://endpoint.example.test/v1' } }])
+    const testBtn = nodes.find(node => node.type === 'button' && textOf(node).includes('测试连接'))
+    assert.ok(testBtn, '测试连接 for ' + preset.id)
     assert.equal(settings.analysis, null)
   }
 })
@@ -350,5 +503,39 @@ test('R6 transient validation shows an existing hint without marking credentials
     assert.equal(nodes.some(node => node.props?.className?.includes('ac-note--error')), validation_status === 'failed')
     assert.equal(nodes.some(node => node.props?.status === 'error'), validation_status === 'failed')
     assert.equal(endpoint.endpointProviderReady(connection), validation_status === 'transient')
+  }
+})
+
+
+test('sponsor detail keeps only essentials: key, address, one-click, test, models', () => {
+  const view = loadTs('providerCatalogView.ts', { '../../i18n': i18n })
+  const Detail = loadTs('ProviderDetail.tsx', {
+    '../../i18n': i18n, '../../ui': ui,
+    '../../utils/externalLinks': { openExternalLink: () => {} },
+    '../../components/SpeechRecognitionConfig': { default: () => null },
+    './ProviderFields': { default: ({ connection }) => React.createElement('div', { 'data-fields': true },
+      React.createElement('button', { type: 'button' }, 'settings.providers.one_click'),
+      React.createElement('input', { 'aria-label': 'API 密钥', value: connection.api_key || '' }),
+      React.createElement('input', { 'aria-label': '接口地址', value: connection.base_url }),
+    ) },
+    './ModelPicker': { default: () => null },
+    './SenseVoiceConfig': { default: () => null },
+  }).default
+  for (const id of ['api88', 'infistar']) {
+    const preset = view.catalogPreset(id)
+    assert.ok(preset?.sponsor)
+    const tree = Detail({
+      preset,
+      m: { settings, lists: {}, busy: {}, listErrors: {}, testing: false, keyHints: {},
+        ensureCatalogProvider: () => {}, editConnection: () => {}, testCatalogProvider: () => {} },
+      onBack: () => {},
+    })
+    const text = textOf(tree)
+    assert.equal(/推广分成|项目维护|领取条件|注册并领取|接入说明|仅保存在本机|unconnected_guide|one_click_hint/.test(text), false)
+    assert.match(text, /测试连接/)
+    assert.match(text, /可用模型/)
+    assert.ok(flatten(tree).some(n => n.props?.['aria-label'] === '接口地址'))
+    assert.ok(flatten(tree).some(n => n.props?.['aria-label'] === 'API 密钥'))
+    assert.ok(flatten(tree).some(n => n.type === 'button' && /one_click|一键获取/.test(textOf(n))))
   }
 })

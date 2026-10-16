@@ -42,14 +42,14 @@ test('B2: catalog analysis switching preserves explicit bindings and follows onl
   }
 })
 
-test('catalog lists all 38 presets in the four product groups', () => {
+test('catalog lists all 39 presets in the four product groups', () => {
   const rows = view.catalogProviders()
-  assert.equal(rows.length, 38)
+  assert.equal(rows.length, 39)
   const groups = view.groupCatalog(rows)
   assert.equal(groups.recommended.length, 2)
   assert.equal(groups.popular.length, 10)
   assert.equal(groups.local.length, 4)
-  assert.equal(groups.more.length, 22)
+  assert.equal(groups.more.length, 23)
   assert.equal(groups.recommended.map(row => row.id).join(','), 'api88,infistar')
 })
 

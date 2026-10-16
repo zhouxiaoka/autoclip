@@ -44,7 +44,15 @@ export const VISION_UNSUPPORTED = 'vision_unsupported'
 export const VISION_HINT_KEY = '画面理解使用的模型不能看图。设置已保存，开始生成前会拦住。请换一个能看图的模型，或关闭画面识别。'
 export const VISION_BLOCK_MESSAGE = '画面理解使用的模型不能看图。请到「设置 → 模型」换一个能看图的模型，或关闭画面识别后再生成。'
 
-export const canEditAddress = (key?: ProviderKey) => key === 'compatible' || catalog.providers[key || '']?.locked === false
+/** Locked presets still show the official default and allow overrides (接口地址). */
+export const canEditAddress = (key?: string) => {
+  if (!key) return false
+  if (key === 'compatible') return true
+  const preset = catalog.providers[key]
+  if (!preset) return false
+  if (preset.protocol === 'local' && !preset.base_url) return false
+  return true
+}
 
 export function hintProviderForKey(apiKey?: string | null): ProviderKey | null {
   const key = (apiKey || '').trim()
