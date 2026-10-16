@@ -1063,96 +1063,16 @@ def test_r24_zip_members_are_scrubbed(tmp_path):
     assert b'kris' not in blob
 
 
-# ---- end to end: run_winqa.sh pull / pull_all, with the VM's Python missing and with an interruption ----
+# ---- end to end: run_winqa.sh export boundary -> test_winqa_export.py (R27 rewrite; the R24/R25 pull-then-scrub
+# harness and its test_r24_215 were removed with that design) ----
 
 def _winqa_env(tmp_path, mode):
-    """Fake VM: C:\\winqa\\out is tmp/vm/out (raw files incl. app-logs.zip), C:\\winqa\\out-scrubbed is
-    tmp/vm/out-scrubbed. Modes: vm-python, no-python (VM-side scrub fails), interrupt (TERM during scp),
-    local-crash (the control machine's redact.py crashes on the staging dir)."""
-    vm, bins, tmpd, home = tmp_path / 'vm', tmp_path / 'bin', tmp_path / 'tmp', tmp_path / 'home'
-    for d in (vm / 'out', bins, tmpd, home):
-        d.mkdir(parents=True, exist_ok=True)
-    (vm / 'out' / 'env.json').write_text(json.dumps({'home': 'C:\\Users\\kris', 'temp': 'C:\\Users\\kris\\AppData\\Local\\Temp'}))
-    (vm / 'out' / 'clean.json').write_text('{"removed": ["C:\\\\Users\\\\kris\\\\AppData\\\\Roaming\\\\AutoClip"]}')
-    (vm / 'out' / 'real').mkdir()
-    (vm / 'out' / 'real' / 'r.log').write_text('err /Users/kris/x Bearer abcdefgh123\n')
-    (vm / 'out' / 'real' / 'app.log.1').write_text('rotated C:\\Users\\kris\\a https://h.invalid/q?sig=SIG1\n')
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, 'w') as z:
-        z.writestr('backend/app.log', 'boot C:\\Users\\kris\\AppData\\Roaming\\AutoClip\n')
-        z.writestr('backend/app.log.2', 'old /home/kris/x\n')
-    (vm / 'out' / 'app-logs.zip').write_bytes(buf.getvalue())
-    redact_py, real_py = ROOT / 'redact.py', sys.executable
-    _bin(bins, 'ssh', f"""cmd="$*"
-case "$cmd" in
-  *Copy-Item*out-scrubbed*) rm -rf "{vm / 'out-scrubbed'}"; cp -R "{vm / 'out'}" "{vm / 'out-scrubbed'}"; exit 0;;
-  *redact.py*out-scrubbed*) [ "{mode}" = no-python ] && exit 1; exec "{real_py}" "{redact_py}" "{vm / 'out-scrubbed'}" --drop-failed;;
-  *redact.py*) echo "VM original touched" >&2; exit 9;;
-  *hostname*) echo vm; exit 0;;
-esac
-echo "remote: C:\\\\Users\\\\kris\\\\Desktop ok"; exit 0""")
-    _bin(bins, 'scp', f"""for a in "$@"; do last2="$last1"; last1="$a"; done
-case "$last2" in *out-scrubbed*) ;; *) exit 0;; esac
-src="${{last2#*:C:/winqa/out-scrubbed/}}"; dst="$last1"
-cd "{vm / 'out-scrubbed'}" && for f in $src; do [ -e "$f" ] && cp -R "$f" "$dst"; done
-[ "{mode}" = interrupt ] && kill -TERM $PPID
-exit 0""")
-    if mode == 'local-crash':   # redact.py on the staging dir dies; everything else uses the real interpreter
-        _bin(bins, 'python3', f"""case "$*" in *redact.py*/in" "--drop-failed*) exit 1;; esac
-exec "{real_py}" "$@"
-""")
-    inst = tmp_path / 'p.exe'
-    inst.write_bytes(b'MZ')
-    env = {k: v for k, v in os.environ.items() if k not in ('XDG_CACHE_HOME', 'WINQA_STAGE_ROOT')}
-    env.update({'PATH': f'{bins}:{os.environ["PATH"]}', 'WINQA_HOST': 'qa.invalid', 'WINQA_USER': 'qa', 'HOME': str(home),
-                'TMPDIR': str(tmpd), 'LANG': UTF8, 'LC_ALL': UTF8, 'WINQA_MODEL_API_KEY': ''})
-    args = ['--prev', str(inst), '--candidate', str(inst), '--version', '1.5.8', '--out', str(tmp_path / 'ev'),
-            '--from-step', '8', '--to-step', '8']
-    return env, args
+    from backend.tests.test_winqa_export import _env
+    return _env(tmp_path, '' if mode == 'vm-python' else mode)
 
 
 def _stage_root(tmp_path):
     return tmp_path / 'home' / '.cache' / 'autoclip-winqa-stage'
-
-
-def _tree_hashes(folder):
-    return {p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted(folder.rglob('*')) if p.is_file()}
-
-
-@pytestmark_bash
-@pytest.mark.parametrize('bash', BASHES)
-@pytest.mark.parametrize('mode', ['vm-python', 'no-python', 'interrupt', 'local-crash'])
-def test_r24_215_no_raw_file_ever_reaches_the_control_machine(tmp_path, bash, mode):
-    """R24 #215 + R25 #240/#241/#245: nothing on the control machine holds a raw name (also when interrupted); the
-    VM's C:\\winqa\\out (app-logs.zip included) is byte-for-byte unchanged; a failed scrub on either side copies
-    nothing into the evidence dir and fails the run; rotated logs (app.log.1, zip member app.log.2) are scrubbed."""
-    env, args = _winqa_env(tmp_path, mode)
-    before = _tree_hashes(tmp_path / 'vm' / 'out')
-    done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=120)
-    assert _tree_hashes(tmp_path / 'vm' / 'out') == before, 'VM originals must not be modified'
-    assert b'VM original touched' not in done.stderr + done.stdout
-    local = [p for d in ('ev', 'tmp', 'home') for p in (tmp_path / d).rglob('*') if p.is_file()]
-    for p in local:
-        data = p.read_bytes()
-        if p.suffix == '.zip':
-            with zipfile.ZipFile(p) as z:
-                data += b''.join(z.read(i) for i in z.infolist())
-        assert b'kris' not in data and b'abcdefgh123' not in data and b'SIG1' not in data, (mode, p, data[:300])
-    assert not list(_stage_root(tmp_path).glob('winqa-stage.*')), 'staging dir must be removed on exit'
-    assert b'kris' not in done.stdout + done.stderr
-    ev = tmp_path / 'ev'
-    steps = (ev / 'steps.txt').read_text() if (ev / 'steps.txt').exists() else ''
-    if mode == 'vm-python':
-        assert (ev / 'env.json').exists() and (ev / 'app-logs' / 'backend' / 'app.log').exists()
-        assert (ev / 'app-logs' / 'backend' / 'app.log.2').read_text() == 'old /home/<user>/x\n'
-        assert (ev / 'real' / 'app.log.1').read_text() == 'rotated C:\\Users\\<user>\\a <url>\n'
-        assert 'pull_final=ok' in steps
-    if mode in ('no-python', 'local-crash'):
-        assert not (ev / 'env.json').exists() and not (ev / 'app-logs' / 'backend').exists()
-        assert 'pull_final=FAIL' in steps and done.returncode == 1, (steps, done.stdout[-600:])
-    if mode == 'interrupt':
-        assert done.returncode == 143, done.stdout[-500:]
 
 
 @pytestmark_bash
@@ -1178,11 +1098,7 @@ def test_r24_stale_stage_from_killed_run_is_removed_and_stage_is_700(tmp_path, b
         os.utime(root / f'winqa-stage.{live_run.pid}.old24h', (old, old))
         live = root / f'winqa-stage.{live_run.pid}.keep12'   # a run that is still alive is left alone
         live.mkdir()
-        modes = tmp_path / 'modes.txt'
-        scp = tmp_path / 'bin' / 'scp'
-        txt = scp.read_text()
-        i = txt.rindex('exit 0')
-        scp.write_text(txt[:i] + f'st="$(dirname "$dst")"; stat -c %a "$st" 2>/dev/null >> "{modes}" || stat -f %Lp "$st" >> "{modes}"\nexit 0' + txt[i + 6:])
+        modes = tmp_path / 'modes.txt'   # the fake scp records the mode of every download target dir
         env['TMPDIR'] = str(tmp_path / 'tmp2')
         (tmp_path / 'tmp2').mkdir()
         env_old = dict(env, TMPDIR=str(tmpd))
@@ -1190,7 +1106,7 @@ def test_r24_stale_stage_from_killed_run_is_removed_and_stage_is_700(tmp_path, b
         assert [d for d in stale if d.exists() and d.parent == root] == [], done.stdout[-400:]
         assert live.exists()
         got = modes.read_text().split()
-        assert got and set(got) == {'700'}, got   # $STAGE itself (dst is $STAGE/in)
+        assert got and set(got) == {'700'}, got   # $STAGE/b, where the bundle lands
         assert not [p for p in root.glob('winqa-stage.*') if p != live]
         subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env_old, capture_output=True, timeout=120)
         assert not stale[-1].exists(), 'legacy dir under $TMPDIR is swept too'
