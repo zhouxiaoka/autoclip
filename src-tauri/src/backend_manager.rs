@@ -80,8 +80,8 @@ impl BackendManager {
             // The backend exits when this process is gone, even after kill -9 or a crash
             // (macOS has no Job Object; on Windows the job already covers it).
             .env("AUTOCLIP_PARENT_PID", std::process::id().to_string());
-        let token = new_local_token();
-        cmd.env("AUTOCLIP_SHUTDOWN_TOKEN", &token);
+        let token = new_local_token()?;
+        cmd.env("AUTOCLIP_SHUTDOWN_TOKEN", &token); // env only: never argv, never logged
         *self.local_token.lock().unwrap() = token;
 
         // 崩溃上报：构建时若注入了 SENTRY_DSN，传给 Python 后端（未配置则为空，sentry_setup no-op）
@@ -515,19 +515,11 @@ impl ShutdownIntent {
     }
 }
 
-/// 128 bits from the OS-seeded SipHash keys of two fresh RandomStates (no extra crate).
-fn new_local_token() -> String {
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
-    let mut out = String::new();
-    for salt in 0..2u64 {
-        let mut hasher = RandomState::new().build_hasher();
-        hasher.write_u64(salt);
-        hasher.write_u128(SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
-        hasher.write_u32(std::process::id());
-        out.push_str(&format!("{:016x}", hasher.finish()));
-    }
-    out
+/// 32 bytes from the OS CSPRNG, hex-encoded (64 chars). Fails the launch rather than fall back.
+fn new_local_token() -> Result<String, String> {
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes).map_err(|_| "无法生成本地令牌".to_string())?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// R16 #42: POST /internal/shutdown-intent on loopback and wait (bounded by `budget`) for 200.
@@ -628,9 +620,9 @@ mod shutdown_intent_tests {
     }
 
     #[test]
-    fn tokens_are_fresh_hex() {
-        let (a, b) = (new_local_token(), new_local_token());
-        assert_eq!(a.len(), 32);
+    fn tokens_are_32_csprng_bytes_and_fresh() {
+        let (a, b) = (new_local_token().unwrap(), new_local_token().unwrap());
+        assert_eq!(a.len(), 64); // 32 bytes
         assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(a, b);
     }
