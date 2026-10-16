@@ -1,5 +1,7 @@
 // R14 #32: the AUTO path registers its observer through the real studioApi.import entry
-// (no injected runId) and sees backend-shaped snapshots from 'screening' onwards.
+// and sees backend-shaped snapshots from 'screening' onwards. #419: the watch is bound to the backend run id the
+// import response returns (backend-owned attempt identity), and the terminal is projected from the backend receipt.
+const { withBackendReceipts } = require('./helpers/backend-receipts.cjs')
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
@@ -21,7 +23,7 @@ function load(file, mocks) {
 
 for (const reason of ['frame_extract_subtitle_fallback', 'source_too_long_subtitle_route']) {
   test(`real import entry → screening → production → completed carries ${reason} once`, async () => {
-    const wf = load('analytics/workflow.ts', {})
+    const wf = withBackendReceipts(load('analytics/workflow.ts', {}))
     const events = [], storage = new Map()
     const workflow = new wf.WorkflowTracker({ getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) },
       () => true, (event, props) => { events.push({ event, props }); return true })
@@ -42,7 +44,7 @@ for (const reason of ['frame_extract_subtitle_fallback', 'source_too_long_subtit
     await api.import(body)
     const watch = workflow.list().find(w => w.kind === 'studio-generation')
     assert.ok(watch, 'auto import must register the generation observer')
-    assert.equal(watch.runId, undefined, 'no injected runId')
+    assert.equal(watch.runId, 'run-1', 'bound to the backend run id from the import response, not inferred')
     const plan = { id: 'plan-1', mode: 'local', recommended_analysis: 'subtitle', degrade_reason: reason, preferences: {} }
     // Backend sequence written by inspect_project / _inspect / settle_generation (jobs.py).
     snapshots.push(

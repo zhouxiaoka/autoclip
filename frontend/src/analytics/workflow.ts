@@ -32,6 +32,7 @@ export interface AttemptReceipt {
   error_code?: string; failure_stage?: string | null; upstream_error_type?: string | null
   secondary_error_codes?: string[]; secondary_upstream_error_types?: string[]; secondary_failure_stages?: string[]
   summary?: Record<string, unknown>
+  degrade_reason?: string  // frozen from the attempt's own plan at settle (enum)
 }
 const SETTLED = ['completed', 'partial', 'failed']
 const TOKEN = /^t-[a-z0-9-]{10,100}$/
@@ -468,10 +469,10 @@ export class WorkflowTracker {
         event = 'studio_generation_finished'
         details = { ...generationSummary(snapshot), ...sum, http_status: failed ? sum.http_status : undefined,
           billable_calls_before_failure: failed ? sum.billable_calls_before_failure : undefined, ...causes, ...link,
-          degrade_reason: snapshot.plan?.degrade_reason, route: sum.route || snapshot.plan?.recommended_analysis, recommendation_mode: snapshot.plan?.mode }
+          degrade_reason: receipt.degrade_reason, route: sum.route || snapshot.plan?.recommended_analysis, recommendation_mode: snapshot.plan?.mode }
       } else {
         event = 'studio_production_finished'
-        details = { ...sum, ...causes, ...link, analysis_mode: snapshot.plan?.confirmed_analysis, degrade_reason: snapshot.plan?.degrade_reason }
+        details = { ...sum, ...causes, ...link, analysis_mode: snapshot.plan?.confirmed_analysis, degrade_reason: receipt.degrade_reason }
       }
       this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(pid), ...details, outcome }), receipt.attempt_id)
       if (w.seen.includes('finished')) {

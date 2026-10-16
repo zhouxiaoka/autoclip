@@ -123,13 +123,21 @@ def causes_of(record) -> list:
     return out
 
 
-def settle(receipt, state, record, now=None):
-    """Write the terminal once. Primary cause = failure_attribution over the structured causes."""
+DEGRADE_REASONS = ('vision_unavailable_subtitle_fallback', 'vision_invalid_subtitle_fallback',
+                   'frame_extract_subtitle_fallback', 'source_too_long_subtitle_route')  # catalog enums.degrade_reason
+
+
+def settle(receipt, state, record, now=None, plan=None):
+    """Write the terminal once. Primary cause = failure_attribution over the structured causes. The degrade
+    reason is frozen from this attempt's own plan (enum only), so a later re-screen cannot change it."""
     from backend.core.failure_attribution import rank_failures
     causes = causes_of(record) if state in ('failed', 'partial') else []
     ranked = rank_failures([{'error_code': c['code'], 'upstream_error_type': c['upstream'], 'failure_stage': c['stage'], '_c': c} for c in causes])
     receipt.update(state=state, finished_at=now, causes=[r['_c'] for r in ranked])
     receipt['summary'] = {k: record[k] for k in SUMMARY_KEYS if k in record and record[k] is not None}
+    reason = (plan or {}).get('degrade_reason')
+    if reason in DEGRADE_REASONS:
+        receipt['degrade_reason'] = reason
     if ranked:
         primary, others = ranked[0], ranked[1:]
         receipt.update(error_code=primary['error_code'], failure_stage=primary['failure_stage'] or None,
@@ -151,12 +159,13 @@ def reconcile(data, now=None):
         if generation.get('attempt_id') != receipt['attempt_id'] or generation.get('status') not in TERMINAL:
             return
         record = {**{k: v for k, v in analysis.items() if k in SUMMARY_KEYS}, **generation}
-        settle(receipt, generation['status'], record, now)
+        settle(receipt, generation['status'], record, now, data.get('plan') if isinstance(data.get('plan'), dict) else None)
     elif receipt['kind'] == 'production':
         if not receipt.get('run_id') or analysis.get('run_id') != receipt['run_id'] or analysis.get('phase') != 'production' \
                 or analysis.get('status') not in ('completed', 'failed'):
             return
-        settle(receipt, analysis.get('outcome') if analysis.get('outcome') in TERMINAL else analysis['status'], analysis, now)
+        settle(receipt, analysis.get('outcome') if analysis.get('outcome') in TERMINAL else analysis['status'], analysis, now,
+               data.get('plan') if isinstance(data.get('plan'), dict) else None)
 
 
 def public(receipt) -> dict:

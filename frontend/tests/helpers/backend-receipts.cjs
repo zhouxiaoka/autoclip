@@ -32,6 +32,7 @@ function receiptFor(w, s) {
   const receipt = {
     attempt_id: w.attemptId || id(w.runId || (kind === 'generation' ? snapshot.generation?.created_at : '') || w.token), flow_id: 't-flow000000000', sequence: 1,
     kind, state, run_id: w.runId || (kind === 'production' ? 'run-legacy' : undefined), retry_of: w.properties?.retry_of,
+    ...(snapshot.plan?.degrade_reason ? { degrade_reason: snapshot.plan.degrade_reason } : {}),
     summary: Object.fromEntries(SUMMARY.filter(k => record[k] !== undefined && record[k] !== null).map(k => [k, record[k]])),
     ...(failed ? { error_code: code || 'unexpected', failure_stage: record.failure_stage || (kind === 'generation' ? snapshot.analysis?.failure_stage : undefined),
       upstream_error_type: record.upstream_error_type || (kind === 'generation' ? snapshot.analysis?.upstream_error_type : undefined),
