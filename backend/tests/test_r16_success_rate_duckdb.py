@@ -218,3 +218,120 @@ def test_per_version_last_any_mutation_is_caught():
     assert old in stmt
     rows = {r['app_version']: r for r in fixture().run(stmt.replace(old, "if(max(o = 'success'), 'success', 'error') AS fo"))}
     assert rows['1.5.8']['flow_ok'] != 2
+
+
+# --- R18 #70/#71: every v4 exclusion rule and every forced product failure, mutated one by one ---
+
+import json  # noqa: E402
+
+V4 = json.loads((ROOT / 'docs/analytics/event_catalog.json').read_text(encoding='utf-8'))['attribution']['success_rate_v4']
+PRODUCT_FAILURE_UPSTREAM = ('model_not_found', 'bad_endpoint')
+
+
+def exclusion_fixture():
+    """Two successes + one single-attempt flow per rule (each its own person and flow)."""
+    e = Events()
+    n = iter(range(1000))
+
+    def one(**props):
+        i = next(n)
+        e.add(f'X{i}', i, attempt_id=f'x{i}', flow_id=f'FX{i}', **props)
+    one(outcome='completed')
+    one(outcome='success')
+    one(outcome='cancelled')                                            # user_hard: outcome
+    for code in V4['overall_excluded_error_codes']:                     # user_hard: error_code
+        one(outcome='error', error_code=code)
+    for kind in V4['overall_excluded_upstream_types']:                  # user_hard: upstream auth/quota
+        one(outcome='error', error_code='provider_error', upstream_error_type=kind)
+    for code in V4['product_extra_excluded_error_codes']:               # user_x: product-only exclusion
+        one(outcome='error', error_code=code)
+    for code in V4['product_failure_codes']:                            # forced product failures
+        one(outcome='error', error_code=code)
+    for kind in PRODUCT_FAILURE_UPSTREAM:                               # ... also as upstream type
+        one(outcome='error', error_code='provider_error', upstream_error_type=kind)
+    return e
+
+
+N_HARD = 1 + len(V4['overall_excluded_error_codes']) + len(V4['overall_excluded_upstream_types'])
+N_X = len(V4['product_extra_excluded_error_codes'])
+N_PF = len(V4['product_failure_codes']) + len(PRODUCT_FAILURE_UPSTREAM)
+EXPECTED_EXCL = {'ok': 2, 'q_all': 2 + N_X + N_PF, 'q_prod': 2 + N_PF,
+                 'flow_ok': 2, 'fq_all': 2 + N_X + N_PF, 'fq_prod': 2 + N_PF}
+
+
+def _excl(sql=None):
+    rows = exclusion_fixture().run(sql or statements()[0])
+    return {k: rows[0][k] for k in EXPECTED_EXCL}
+
+
+def test_catalog_lists_every_rule_dong_named():
+    assert set(V4['overall_excluded_outcomes']) == {'cancelled'}
+    assert {'cancelled', 'user_cancelled', 'authentication', 'llm_auth_invalid', 'invalid_key',
+            'insufficient_quota', 'llm_not_configured'} <= set(V4['overall_excluded_error_codes'])
+    assert set(V4['overall_excluded_upstream_types']) == {'invalid_key', 'insufficient_quota', 'permission_denied'}
+    assert set(V4['product_extra_excluded_error_codes']) == {'connection', 'source_too_short', 'source_no_audio', 'source_unreadable', 'source_blocked'}
+    assert set(V4['product_failure_codes']) == {'whisper_not_installed', 'service_restarted', 'model_not_found', 'bad_endpoint'}
+
+
+def test_every_exclusion_and_product_failure_lands_in_the_right_denominator():
+    # 2 ok; hard (N_HARD) out of both; user_x (N_X) only out of product; forced failures (N_PF) in both.
+    assert _excl() == EXPECTED_EXCL
+    assert (N_HARD, N_X, N_PF) == (11, 5, 6)
+
+
+def test_forced_product_failures_count_in_both_rates_and_attribution():
+    rows = exclusion_fixture().run(statements()[2])
+    by_code = {}
+    for r in rows:
+        by_code.setdefault(r['error_code'], set()).add(r['attribution'])
+    for code in V4['product_failure_codes']:
+        assert by_code[code] == {'product'}, code
+    for code in V4['product_extra_excluded_error_codes']:
+        assert by_code[code] == {'user_product_only'}, code
+    for code in V4['overall_excluded_error_codes']:
+        assert by_code[code] == {'user_both'}, code
+    # per-person first production also counts them as failures in both scopes
+    first = exclusion_fixture().run(statements()[1])[0]
+    assert (first['overall_first_ok'], first['overall_people']) == (2, 2 + N_X + N_PF)
+    assert (first['product_first_ok'], first['product_people']) == (2, 2 + N_PF)
+
+
+def _list_mutation(stmt, list_pattern, transform):
+    match = re.search(list_pattern, stmt)
+    assert match, list_pattern
+    items = re.findall(r"'(\w+)'", match.group(1))
+    new = ', '.join(f"'{x}'" for x in transform(items))
+    return stmt[:match.start(1)] + new + stmt[match.end(1):]
+
+
+HARD_EC = r"OR ec IN \(([^)]*)\)\s*OR ue IN"
+HARD_UE = r"OR ue IN \(([^)]*)\)\) AS user_hard"
+EXTRA_EC = r"user_hard OR ec IN \(([^)]*)\)\) AS user_x"
+
+
+def _mutations():
+    out = {'cancel no longer excluded': lambda s: re.sub(r"\(o = 'cancelled'\s*OR", '(false OR', s, count=1)}
+    for code in V4['overall_excluded_error_codes']:
+        out[f'error_code {code} no longer excluded'] = lambda s, c=code: _list_mutation(s, HARD_EC, lambda xs: [x for x in xs if x != c])
+    for kind in V4['overall_excluded_upstream_types']:
+        out[f'upstream {kind} no longer excluded'] = lambda s, k=kind: _list_mutation(s, HARD_UE, lambda xs: [x for x in xs if x != k])
+    for code in V4['product_extra_excluded_error_codes']:
+        out[f'{code} no longer product-excluded'] = lambda s, c=code: _list_mutation(s, EXTRA_EC, lambda xs: [x for x in xs if x != c])
+        out[f'{code} wrongly excluded from overall'] = lambda s, c=code: _list_mutation(s, HARD_EC, lambda xs: xs + [c])
+    for code in V4['product_failure_codes']:
+        out[f'{code} wrongly product-excluded'] = lambda s, c=code: _list_mutation(s, EXTRA_EC, lambda xs: xs + [c])
+        out[f'{code} wrongly excluded from overall'] = lambda s, c=code: _list_mutation(s, HARD_EC, lambda xs: xs + [c])
+    for kind in PRODUCT_FAILURE_UPSTREAM:
+        out[f'upstream {kind} wrongly excluded'] = lambda s, k=kind: _list_mutation(s, HARD_UE, lambda xs: xs + [k])
+    return out
+
+
+MUTATIONS_R18 = _mutations()
+
+
+@pytest.mark.parametrize('name', sorted(MUTATIONS_R18))
+def test_each_exclusion_rule_mutation_is_caught(name):
+    original = statements()[0]
+    mutated = MUTATIONS_R18[name](original)
+    assert mutated != original, name
+    assert _excl(mutated) != EXPECTED_EXCL, name
