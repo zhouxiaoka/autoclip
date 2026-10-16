@@ -1942,5 +1942,8 @@
   "全部启用": "Ativar todos",
   "全部停用": "Desativar todos",
   "未启用": "Não ativados",
-  "关闭后成片不压字幕，标题和名牌保留。": "Desligado: sem legendas gravadas; título e identificações permanecem."
+  "关闭后成片不压字幕，标题和名牌保留。": "Desligado: sem legendas gravadas; título e identificações permanecem.",
+  "画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。": "A análise visual suporta fontes de até 120 minutos. Mudamos para a análise de legendas para continuar.",
+  "读取素材画面失败，已改用字幕分析继续制作。": "Não foi possível ler os quadros da fonte. Mudamos para a análise de legendas para continuar.",
+  "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Falha ao baixar o modelo Whisper. Verifique a rede e baixe novamente em Configurações → Transcrição, ou mude a fonte para o espelho hf-mirror."
 }

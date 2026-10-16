@@ -1942,5 +1942,8 @@
   "全部启用": "Enable all",
   "全部停用": "Disable all",
   "未启用": "Not enabled",
-  "关闭后成片不压字幕，标题和名牌保留。": "Off: no captions burned in; title and nameplates stay."
+  "关闭后成片不压字幕，标题和名牌保留。": "Off: no captions burned in; title and nameplates stay.",
+  "画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。": "Visual analysis supports sources up to 120 minutes. Switched to subtitle analysis to continue.",
+  "读取素材画面失败，已改用字幕分析继续制作。": "Could not read frames from the source. Switched to subtitle analysis to continue.",
+  "Whisper 模型下载失败。请检查网络后到「设置 → 转写」重新下载，或在下载源中改用 hf-mirror 镜像。": "Whisper model download failed. Check your network and download again in Settings → Transcription, or switch the download source to the hf-mirror mirror."
 }

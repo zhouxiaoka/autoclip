@@ -37,6 +37,8 @@ export default function PlanSummary({projectId, plan, status, onChanged, onStart
     <div className={`studio-plan-summary ${awaiting?'studio-plan-confirm':''}`}>
       {plan?.degrade_reason==='vision_unavailable_subtitle_fallback'&&<p role="status" className="studio-muted">{t('视觉服务暂不可用，已切换为字幕分析继续制作。')}</p>}
       {plan?.degrade_reason==='vision_invalid_subtitle_fallback'&&<p role="status" className="studio-muted">{t('画面结果不可用，已改用字幕继续制作。')}</p>}
+      {plan?.degrade_reason==='frame_extract_subtitle_fallback'&&<p role="status" className="studio-muted">{t('读取素材画面失败，已改用字幕分析继续制作。')}</p>}
+      {plan?.degrade_reason==='source_too_long_subtitle_route'&&<p role="status" className="studio-muted">{t('画面分析最长支持 120 分钟的素材，已改用字幕分析继续制作。')}</p>}
       <div>{prefs?<><b>{awaiting?t("这段素材，可以这样做"):plan?.mode==='ai'?t("AI 建议"):plan?.mode==='manual'?t("你的方案"):t("当前方案")}</b><span className="studio-muted">{t(contentLabels[plan?.content_type || 'other'] ?? contentLabels.other)}{plan?.source_duration!=null?` · ${t('原素材 {{duration}}', { duration: fmtDuration(plan.source_duration) })}`:''} · {prefs.goal==='content'?t("按完整语义选段"):t('每条参考 {{seconds}} 秒', { seconds: prefs.duration })} · {aspectSummary} · {prefs.language==='source' ? t('原语言') : languages.find(l=>l.value===prefs.language)?.label}</span><details><summary>{t("查看判断依据")}{plan?.mode==='ai' && plan.confidence<.6?t("· 识别把握较低"):''}</summary><p className="studio-muted">{t(plan?.reason || '')}</p></details></>:<span className="studio-muted">{running?t("快速判断素材适合的制作类型"):t("可调整制作方案后重新识别")}</span>}</div>
       {awaiting && plan ? <>
         <Row label={t("分析方式")} hint={analysisMode==='visual'
