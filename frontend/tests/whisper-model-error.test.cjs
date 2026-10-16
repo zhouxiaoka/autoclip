@@ -17,6 +17,7 @@ test('errorCode selects translated copy; unknown code falls back to the server m
 // its real state logic. Only the HTTP layer is mocked, with backend-shaped responses.
 const React = require('react')
 const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 // happy-dom is ESM-only; dynamic import works on Node 20 and 22 (require(esm) is not unflagged on every 22.x).
 const loadWindow = async () => (await import('happy-dom')).Window
@@ -67,7 +68,7 @@ async function mount(lang, errorCode, source = fs.readFileSync(SOURCE, 'utf8')) 
   const load = (code, file) => {
     const exports = {}
     const out = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true }, fileName: file }).outputText
-    vm.runInNewContext(out, { exports, module: { exports }, window, console, Promise, setTimeout, clearTimeout, require: (id) => {
+    runInSandbox(out, { exports, module: { exports }, window, console, Promise, setTimeout, clearTimeout, require: (id) => {
       if (id in mocks) return mocks[id]
       if (id === '../features/settings/LocalModelPrepare') return load(fs.readFileSync(path.join(__dirname, '../src/features/settings/LocalModelPrepare.tsx'), 'utf8'), 'LocalModelPrepare.tsx')
       throw new Error('Unexpected dependency: ' + id)

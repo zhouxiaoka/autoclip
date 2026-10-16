@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function load(name, mocks = {}, globals = {}) {
@@ -12,7 +13,7 @@ function load(name, mocks = {}, globals = {}) {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true,
   } }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(js, {
+  runInSandbox(js, {
     exports: module.exports, module, Date, Math, console,
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key' },
     require: (id) => {
@@ -179,7 +180,7 @@ test('Sentry keeps only a valid anonymous id and drops emails', () => {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true,
   } }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(js, {
+  runInSandbox(js, {
     exports: module.exports, module, console,
     __env: { PROD: true, VITE_PUBLIC_SENTRY_DSN: 'https://public@example.invalid/1', VITE_APP_VERSION: '1.5.8' },
     require: (id) => {

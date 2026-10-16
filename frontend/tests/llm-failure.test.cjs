@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function loadClassifier() {
@@ -11,7 +12,7 @@ function loadClassifier() {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(code, { module, exports: module.exports })
+  runInSandbox(code, { module, exports: module.exports })
   return module.exports
 }
 

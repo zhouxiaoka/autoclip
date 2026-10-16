@@ -1,8 +1,9 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const exportsObject = {}
-vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/features/studio/importRouting.ts'), 'utf8'), {
+runInSandbox(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/features/studio/importRouting.ts'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText, { exports: exportsObject })
 const { needsImportConfirmation } = exportsObject

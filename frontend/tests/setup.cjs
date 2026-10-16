@@ -17,6 +17,9 @@
 //    hooked again (#302).
 'use strict'
 const OWNER = 'AC_STRICT_SETUP_OWNER'
+// #315: the owner marker is bound to one runner session. A new `node --test` runner (with this setup) is a fresh
+// session: it drops an inherited marker so its own test files are hooked again.
+if (process.execArgv.includes('--test') || process.argv.slice(1).includes('--test')) delete process.env[OWNER]
 if (process.env.NODE_TEST_CONTEXT && /\.test\.c?js$/.test(process.argv[1] || '') && !process.env[OWNER]
     && require('node:worker_threads').isMainThread) {
   process.env[OWNER] = String(process.pid)  // inherited by every child of this test file (#302)

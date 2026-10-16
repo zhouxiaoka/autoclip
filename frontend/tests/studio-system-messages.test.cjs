@@ -1,6 +1,7 @@
 const {test}=require('node:test')
 const assert=require('node:assert/strict')
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const React=require('react'),{renderToStaticMarkup}=require('react-dom/server'),{createInstance}=require('i18next')
 const langs=['zh','en','ja','ko','es','pt','ru','fr']
 const catalogs=Object.fromEntries(langs.map(l=>[l,require('../src/i18n/locales/'+l+'.json')]))
@@ -15,7 +16,7 @@ function history(i18n){
   'react-router-dom':{Link:p=>React.createElement('a',null,p.children)},
   './StudioDownloadLink':{default:()=>null},
  }
- vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'ExportHistory.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>{assert.ok(mocks[id],id);return mocks[id]}})
+ runInSandbox(ts.transpileModule(fs.readFileSync(path.join(root,'ExportHistory.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>{assert.ok(mocks[id],id);return mocks[id]}})
  return exports.default
 }
 test('export history renders localized server warnings/restart errors in all eight languages, retaining source titles and unknown errors',async()=>{

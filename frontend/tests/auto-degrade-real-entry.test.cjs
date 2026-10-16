@@ -3,6 +3,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 function load(file, mocks) {
   const exports = {}
   const resolve = name => {
@@ -13,7 +14,7 @@ function load(file, mocks) {
     if (!name.startsWith('.') || !hit) throw new Error('Unexpected dependency: ' + name)
     return load(hit, {})
   }
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), {
+  runInSandbox(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText, { exports, require: resolve, Date, Math, JSON, Number, Array, Object, Map, Set, String, URL, Promise, crypto: globalThis.crypto })
   return exports

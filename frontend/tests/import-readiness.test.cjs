@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function transpile(file) {
@@ -16,7 +17,7 @@ function transpile(file) {
 function loadReadiness() {
   const file = path.join(__dirname, '../src/features/studio/importReadiness.ts')
   const { exports, code } = transpile(file)
-  vm.runInNewContext(code, { exports, require() { throw new Error('unexpected import') } })
+  runInSandbox(code, { exports, require() { throw new Error('unexpected import') } })
   return exports
 }
 
@@ -136,7 +137,7 @@ function render(options = {}) {
     './studio.css': {},
     './quick-output.css': {},
   }
-  vm.runInNewContext(code, { FormData: FormDataMock, exports, require: id => { assert.ok(id in mocks, id); return mocks[id] } })
+  runInSandbox(code, { FormData: FormDataMock, exports, require: id => { assert.ok(id in mocks, id); return mocks[id] } })
   const tree = nodes(exports.default({ onImported: async () => {}, blocked: !!options.blocked, onBlocked: () => blocked.push('setup') }))
   return { tree, calls, navigations, installs, blocked }
 }

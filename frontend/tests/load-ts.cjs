@@ -1,6 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 const SETTINGS = path.join(__dirname, '../src/features/settings')
@@ -37,7 +38,7 @@ function loadTs(file, mocks = {}, fromDir = SETTINGS) {
     throw new Error(id)
   }
   // console is passed explicitly so a console.error inside the module reaches the strict setup (#299)
-  vm.runInNewContext(outputText, { exports, URL, console, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set })
+  runInSandbox(outputText, { exports, URL, console, require: requireImpl, crypto: { randomUUID: () => 'uuid' }, Map, Set })
   return exports
 }
 

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function loadApi({ baseUrl, tauri, invokes }) {
@@ -43,7 +44,7 @@ function loadApi({ baseUrl, tauri, invokes }) {
     antd: { message: { success() {} } },
   }
   const module = { exports: {} }
-  vm.runInNewContext(js, {
+  runInSandbox(js, {
     exports: module.exports, module, Blob, console,
     require: (id) => {
       if (id in mocks) return mocks[id]

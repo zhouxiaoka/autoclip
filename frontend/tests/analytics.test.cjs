@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 const { loadTs } = require('./load-ts.cjs')
 
@@ -24,7 +25,7 @@ function load(name, mocks = {}, globals = {}) {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true,
   } }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(js, { exports: module.exports, module, Blob, Date, Math, console, URL,
+  runInSandbox(js, { exports: module.exports, module, Blob, Date, Math, console, URL,
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key' },
     require: (id) => {
       if (id in mocks) return mocks[id]
@@ -637,7 +638,7 @@ test('actual Studio API enrolls accepted work and sends aggregate-only telemetry
   const file=path.join(__dirname,'../src/features/studio/api.ts')
   const js=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText
   const module={exports:{}}
-  vm.runInNewContext(js,{module,exports:module.exports,require:id=>({'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}}[id])})
+  runInSandbox(js,{module,exports:module.exports,require:id=>({'../../analytics/workflow':core,'../../analytics/posthog':{captureBusinessEvent:s.capture},'../../services/api':transport,'../../analytics/studio':aggregate,'../../analytics/observer':{workflow:s.tracker}}[id])})
   const api=module.exports.studioApi
   await api.import({filename:'private.mp4',url:'https://private.test/?key=secret'})
   await api.confirmPlan('private-project','private-plan',['highlight'],{language:'source'})
@@ -1105,7 +1106,7 @@ test('every flag evaluation carries app_version as a semver flag person property
   const source = fs.readFileSync(file, 'utf8').replaceAll('import.meta.env', '__env')
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(js, { exports: module.exports, module, console, localStorage: storage, window: {},
+  runInSandbox(js, { exports: module.exports, module, console, localStorage: storage, window: {},
     __env: { DEV: false, VITE_PUBLIC_POSTHOG_KEY: 'test-only-not-a-real-key', VITE_APP_VERSION: 'v1.5.7' },
     require: (id) => {
       if (id === 'posthog-js') return { __esModule: true, default: sdk }

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function load() {
@@ -11,7 +12,7 @@ function load() {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(js, { exports: module.exports, module, URL }, { filename: file })
+  runInSandbox(js, { exports: module.exports, module, URL }, { filename: file })
   return module.exports
 }
 

@@ -2,6 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 const { loadTs } = require('./load-ts.cjs')
 
@@ -18,7 +19,7 @@ function loadPicker() {
   const code = ts.transpileModule(fs.readFileSync('src/features/settings/ModelPicker.tsx', 'utf8'),
     { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
   const module = { exports: {} }
-  vm.runInNewContext(code, { module, exports: module.exports, require: name => modules[name] || assert.fail(name) })
+  runInSandbox(code, { module, exports: module.exports, require: name => modules[name] || assert.fail(name) })
   return module.exports.default
 }
 function findTypeSelect(node) {

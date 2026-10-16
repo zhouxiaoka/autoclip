@@ -3,12 +3,13 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 
 function load(rel) {
   const exports = {}
   const source = fs.readFileSync(path.join(__dirname, '../src', rel), 'utf8')
-  vm.runInNewContext(ts.transpileModule(source, {
+  runInSandbox(ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText, { exports, CSS: { supports: () => true }, Date, Math, JSON, Number, Array, Object, Map, Set, String, URL, RegExp })
   return exports

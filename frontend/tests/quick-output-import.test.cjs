@@ -1,18 +1,19 @@
 const {test}=require('node:test')
 const assert=require('node:assert/strict')
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 class FormDataMock { constructor(){this.rows=[]} append(key,value){this.rows.push([key,String(value)])} get(key){const row=this.rows.find(item=>item[0]===key);return row&&row[1]} entries(){return this.rows.values()} }
 
 function loadReadiness(){
  const exports={}
  const source=fs.readFileSync(path.join(__dirname,'../src/features/studio/importReadiness.ts'),'utf8')
- vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require(){throw new Error('importReadiness')}})
+ runInSandbox(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require(){throw new Error('importReadiness')}})
  return exports
 }
 function load(mocks){
  const exports={}
  const source=fs.readFileSync(path.join(__dirname,'../src/features/studio/CreativeImport.tsx'),'utf8')
- vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020}}).outputText,{FormData:FormDataMock,exports,require:id=>{assert.ok(id in mocks,id);return mocks[id]}})
+ runInSandbox(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020}}).outputText,{FormData:FormDataMock,exports,require:id=>{assert.ok(id in mocks,id);return mocks[id]}})
  return exports.default
 }
 function nodes(value){return !value||typeof value!=='object'?[]:Array.isArray(value)?value.flatMap(nodes):[value,...nodes(value.props?.children)]}

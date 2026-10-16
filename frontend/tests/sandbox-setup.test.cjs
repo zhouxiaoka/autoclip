@@ -105,6 +105,29 @@ test('probe', async () => {
   assert.equal(r.status, 0, r.stdout + r.stderr)
 })
 
+test('#313 console.error inside code run through the shared vm helper fails the test, own console or not', () => {
+  const helper = JSON.stringify(path.join(__dirname, 'vm-sandbox.cjs'))
+  failsOnlyWithSetup(`const { runInSandbox } = require(${helper})
+test('probe', () => { runInSandbox("console.error('loader swallowed: boom')", {}) })`, /loader swallowed: boom/)
+  failsOnlyWithSetup(`const { runInSandbox } = require(${helper})
+test('probe', () => { runInSandbox("console.log('x'); console.error('own console: boom')", { console: { log() {} } }) })`, /own console: boom/)
+})
+
+test('#315 a new runner started by a test file hooks its own test files again', () => {
+  const r = runWithSetup(`const fs = require('node:fs'); const path = require('node:path'); const os = require('node:os')
+const { spawnSync } = require('node:child_process')
+test('probe', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ac-runner-'))
+  const inner = path.join(dir, 'inner.test.cjs')
+  fs.writeFileSync(inner, "require('node:test').test('inner', () => { console.error('inner swallowed') })")
+  const env = { ...process.env }; delete env.NODE_TEST_CONTEXT
+  const out = spawnSync(process.execPath, ['--require', ${JSON.stringify(SETUP)}, '--test', inner], { encoding: 'utf8', env })
+  fs.rmSync(dir, { recursive: true, force: true })
+  if (out.status === 0) throw new Error('inner runner lost the strict setup: ' + out.stdout)
+})`)
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+})
+
 // happy-dom arrives with #418, which merges before this PR (agreed order #418 -> #422).
 let happy = null
 try { happy = require.resolve('happy-dom') } catch { /* not installed on this branch */ }
@@ -122,5 +145,9 @@ test('probe', () => { ${throwingClick} })`, /happy-dom event handler/)
 })
 test('#301 a window from a native import() of happy-dom is covered too', { skip: !happy && 'happy-dom comes with #418' }, () => {
   const url = JSON.stringify(happy && require('node:url').pathToFileURL(happy).href)
+  failsOnlyWithSetup(`test('probe', async () => { const { Window } = await import(${url}); const win = new Window(); ${throwingClick} })`, /happy-dom event handler/)
+})
+test('#314 a native import() of happy-dom with a ?query is covered too', { skip: !happy && 'happy-dom comes with #418' }, () => {
+  const url = JSON.stringify(happy && require('node:url').pathToFileURL(happy).href + '?x=1')
   failsOnlyWithSetup(`test('probe', async () => { const { Window } = await import(${url}); const win = new Window(); ${throwingClick} })`, /happy-dom event handler/)
 })

@@ -1,6 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 
@@ -31,7 +32,7 @@ function render(automatic, phase, status = 'running', buttons = [], calls = [], 
     return { default: empty }
   }
   const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  vm.runInNewContext(ts.transpileModule(source, {
+  runInSandbox(ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, { exports: exportsObject, require: moduleRequire })
   return renderToStaticMarkup(React.createElement(exportsObject.default, {

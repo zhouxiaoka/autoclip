@@ -1,6 +1,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
+const { runInSandbox } = require('./vm-sandbox.cjs')
 
 const flush = () => new Promise(resolve => setImmediate(resolve))
 function loadAppSection(initial = true, saveMode = 'success') {
@@ -34,7 +35,7 @@ function loadAppSection(initial = true, saveMode = 'success') {
   }).outputText
   const exports = {}
   // Expose the actual private component only in the test VM; no product export or copied logic.
-  vm.runInNewContext(output + '\nexports.testAppSection = AppSection;', {
+  runInSandbox(output + '\nexports.testAppSection = AppSection;', {
     exports, require: name => modules[name] || { default: () => null }, console,
   })
   const tree = exports.testAppSection({ analyticsOn: false, onAnalyticsChange() {} })
