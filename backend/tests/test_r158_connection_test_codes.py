@@ -310,3 +310,29 @@ def test_generation_restart_carries_shutdown_kind():
     assert store._recover_interrupted_run(data)
     assert data['generation']['shutdown_kind'] == 'clean'
     assert data['analysis']['shutdown_kind'] == 'clean'
+
+
+@pytest.mark.parametrize('status,code', [(401, 'invalid_key'), (429, 'rate_limited'), (503, 'http_5xx')])
+def test_visual_probe_http_status_is_kept(monkeypatch, status, code):
+    from backend.services.studio import intelligence, vision_settings
+    from backend.services import provider_validation
+
+    class _Ok:
+        ok = True
+
+        def as_api(self):
+            return {'success': True, 'ok': True, 'result': 'ok'}
+    monkeypatch.setattr(provider_validation, 'validate_connection', lambda *a, **k: _Ok())
+    monkeypatch.setattr(ai, 'chat_endpoint', lambda *a, **k: {'base_url': 'https://gw.example/v1', 'api_key': SECRET, 'model': 'm1'})
+
+    def fail(_body):
+        raise intelligence.VisionRequestError('http_error', '视觉接口请求失败', http_status=status)
+    monkeypatch.setattr(vision_settings, 'test', fail)
+    app = FastAPI()
+    from backend.api.v1.settings import router
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.post('/settings/ai-models/test', json={'connection': _conn().model_dump(), 'model': 'm1', 'vision': True, 'purpose': 'analysis'})
+    body = response.json()
+    assert body['http_status'] == status and body['error_code'] == code, body
+    _assert_safe(response.text)

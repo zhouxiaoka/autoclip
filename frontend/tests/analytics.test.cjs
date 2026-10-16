@@ -1397,5 +1397,7 @@ test('1.5.8 connection-test codes: 422 local validation, gemini-style results, t
   assert.equal(c.codeFromResult({ http_status: 429 }), 'rate_limited')
   assert.equal(c.codeFromResult({ error_code: 'dns' }), 'dns')
   assert.equal(c.codeFromResult({}), 'unknown')
+  for (const type of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) assert.equal(c.codeFromResult({ error_type: type }), 'unknown', type)
+  assert.equal(c.codeFromResult({ error_code: 'constructor' }), 'unknown')
   assert.equal(c.safeHttpStatus(503), 503); assert.equal(c.safeHttpStatus('503'), undefined)
 })

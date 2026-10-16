@@ -30,7 +30,7 @@ export function safeHttpStatus(value: unknown): number | undefined {
 export function codeFromResult(result: { error_code?: unknown; error_type?: unknown; http_status?: unknown } | null | undefined): ConnectionTestErrorCode {
   if (isConnectionTestErrorCode(result?.error_code)) return result!.error_code as ConnectionTestErrorCode
   const type = typeof result?.error_type === 'string' ? result.error_type : ''
-  if (BY_TYPE[type]) return BY_TYPE[type]
+  if (Object.prototype.hasOwnProperty.call(BY_TYPE, type)) return BY_TYPE[type]
   const status = safeHttpStatus(result?.http_status)
   if (status && status >= 500) return 'http_5xx'
   if (status === 429) return 'rate_limited'

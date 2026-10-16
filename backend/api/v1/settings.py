@@ -130,13 +130,15 @@ def test_connection_assignment(body: ConnectionTestRequest):
     except Exception as exc:
         from backend.core.upstream_errors import classify_exception
         from backend.core.connection_test_codes import connection_test_error_code
-        from backend.core.upstream_errors import network_kind_of
+        from backend.core.upstream_errors import network_kind_of, http_error_parts
+        from backend.core.connection_test_codes import safe_http_status
         classified = classify_exception(exc)
+        status = http_error_parts(exc)[0]  # e.g. the visual probe's 401/429/503 (VisionRequestError.http_status)
         return {
             'success': False, 'ok': False, 'result': 'transient' if classified.retryable else 'failed',
             'error_type': classified.error_type.value, 'hint_key': classified.hint_key, 'models': [],
-            'error_code': connection_test_error_code(classified.error_type.value, network_kind=network_kind_of(exc)),
-            'http_status': None, **({'config_source': source} if source else {}),
+            'error_code': connection_test_error_code(classified.error_type.value, http_status=status, network_kind=network_kind_of(exc)),
+            'http_status': safe_http_status(status), **({'config_source': source} if source else {}),
         }
 
 

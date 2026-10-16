@@ -597,7 +597,7 @@ def write(project_id, data, *, _recover_previous=True):
             key = terminal['run_id']
             if not any(row['run_id'] == key for row in history):
                 plan = state.get('plan') or {}
-                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id') if k in terminal}
+                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id', 'provider', 'config_source', 'upstream_error_type', 'failure_stage', 'shutdown_kind', 'http_status') if k in terminal}
                 plan_summary = {k: plan[k] for k in ('id', 'mode', 'confirmed_analysis', 'recommended_analysis') if k in plan}
                 subtitle_status = (plan.get('local_evidence') or {}).get('subtitle_status')
                 if subtitle_status:
