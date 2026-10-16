@@ -10,6 +10,8 @@
 能不能看图不靠猜：「测试图片理解」通过后记下 base_url + 模型，配置变了就回到未验证。
 付费视觉调用仍由 analysis_preferences 的显式同意控制，这里只提供端点。
 """
+import contextvars
+from contextlib import contextmanager
 import json
 import os
 import threading
@@ -190,12 +192,24 @@ def _resolve(body):
     return stored
 
 
-def test(body, *, identity=None):
-    """``identity``: the identity of the saved connection being tested (R25 #336); without it the
-    sent config's identity is used."""
+_tested_identity = contextvars.ContextVar('vision_tested_identity', default=None)
+
+
+@contextmanager
+def testing_identity(identity):
+    """R25 #336: the identity of the saved connection a settings-page test runs on."""
+    token = _tested_identity.set(dict(identity) if identity else None)
+    try:
+        yield
+    finally:
+        _tested_identity.reset(token)
+
+
+def test(body):
     from backend.services.studio.intelligence import vision_call
     import base64, struct, zlib
     config = _resolve(body)
+    identity = _tested_identity.get()  # R25 #336: else the sent config's identity
     if identity:
         config = {**config, 'identity': dict(identity)}
     def chunk(kind, data):

@@ -17,7 +17,8 @@ from backend.core.file_lock import ProcessLock  # noqa: E402
 
 
 def _lock_path():
-    return Path(get_projects_directory()) / '.studio-store.lock'
+    # Outside projects/: project listings must never see it.
+    return Path(get_projects_directory()).parent / '.studio-store.lock'
 
 
 # R25 #415 #335: every project writer AND the shutdown-marker scan->delete hold this lock; it also

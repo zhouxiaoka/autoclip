@@ -115,9 +115,10 @@ def test_connection_assignment(body: ConnectionTestRequest):
             from backend.core.connection_test_codes import vision_error_code
             endpoint = ai_models.chat_endpoint(connection, body.model)
             from backend.services.studio.failure_identity import connection_identity
+            from backend.services.studio.vision_settings import testing_identity
             # R25 #336: the tested connection's own identity, never inferred from its hostname.
-            vision = test(VisionSettingsInput(mode='custom', **endpoint),
-                          identity=connection_identity(connection, body.model))
+            with testing_identity(connection_identity(connection, body.model)):
+                vision = test(VisionSettingsInput(mode='custom', **endpoint))
             if not (vision.get('success') or vision.get('ok')):
                 from backend.core.upstream_errors import hint_key_for
                 payload = result.as_api()
