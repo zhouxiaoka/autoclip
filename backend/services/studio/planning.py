@@ -79,6 +79,12 @@ def transcription_may_be_skipped(analysis_mode: str) -> bool:
     """For the readiness report: visual mode with a vision model can run without ASR (the backend gate decides per file)."""
     return analysis_mode == 'visual' and vision_configured(analysis_mode)
 
+VISION_FALLBACK_CODE = 'vision_unavailable_subtitle_fallback'
+VISION_FALLBACK_MESSAGE = '视觉服务暂不可用，已切换为字幕分析继续制作。'
+# E1: AUTO mode, screening answered but the answer could not be parsed.
+VISION_INVALID_FALLBACK_CODE = 'vision_invalid_subtitle_fallback'
+VISION_INVALID_FALLBACK_MESSAGE = '画面结果不可用，已改用字幕继续制作。'
+
 
 def _is_parse_failure(error) -> bool:
     from backend.services.studio import intelligence
