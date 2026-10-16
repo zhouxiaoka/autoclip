@@ -21,6 +21,15 @@ class QualityGateTests(unittest.TestCase):
             self.assertIn('addopts=', commands[name])
             self.assertFalse(set(commands[name][3:]) & {'-k', '-m', '--ignore', '--deselect', '-n'})
 
+    def test_redline_frontend_loads_the_same_strict_setup_as_npm_test(self):
+        commands = {name: command for name, command, _ in quality_gate.checks('redline', sys.executable)}
+        command = commands['redline_frontend']
+        self.assertEqual(command[:4], ['node', '--require', './frontend/tests/setup.cjs', '--test'])
+        self.assertTrue((quality_gate.ROOT / command[2]).is_file())
+        self.assertTrue(any(arg.endswith('.test.cjs') for arg in command[4:]))
+        package = json.loads((quality_gate.ROOT / 'frontend/package.json').read_text())
+        self.assertIn('--require ./tests/setup.cjs', package['scripts']['test'])
+
     def test_backend_evidence_rejects_missing_modules_and_filtered_reload_cases(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'tests.xml'

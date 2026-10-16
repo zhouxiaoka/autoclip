@@ -25,7 +25,8 @@ def checks(group: str, python: str):
         ],
         'redline': [
             ('redline_backend', [python, '-m', 'pytest', '-c', 'backend/pytest.ini', '-o', 'addopts=', 'backend/tests/redline', '-q', '-r', 's'], ROOT),
-            ('redline_frontend', ['node', '--test', *[str(path.relative_to(ROOT)) for path in sorted((ROOT / 'frontend/tests').glob('redline-*.test.cjs'))]], ROOT),
+            # Same strict setup as `npm test` (#273): swallowed errors fail the redline tests too.
+            ('redline_frontend', ['node', '--require', './frontend/tests/setup.cjs', '--test', *[str(path.relative_to(ROOT)) for path in sorted((ROOT / 'frontend/tests').glob('redline-*.test.cjs'))]], ROOT),
         ],
         'backend': [
             ('media_test_dependencies', [python, '-c', "import cv2, numpy, shutil; assert shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg/ffprobe required'"], ROOT),
