@@ -157,14 +157,24 @@ export interface StudioSnapshot {
   example_version?: number
   analysis_history?: { run_id: string; plan?: StudioSnapshot['plan']; analysis: StudioSnapshot['analysis'] }[]
   plan?: { id: string; mode?: string; confirmed_analysis?: string; recommended_analysis?: string; degrade_reason?: 'vision_unavailable_subtitle_fallback' | 'vision_invalid_subtitle_fallback'; local_evidence?: { subtitle_status?: string } }
-  analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; config_source?: string; shutdown_kind?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
+  analysis?: { run_id?: string; phase?: string; status: string; outcome?: string; duration_ms?: number; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; config_source?: string; screening_identity?: { provider?: string; config_source?: string }; shutdown_kind?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; requested_goals?: string[]; succeeded_goals?: string[]; failed_goals?: string[]; result_count?: number } | null
   jobs?: { job_id: string; status: string; duration_ms?: number; finished_at?: string; error_code?: string; brand_outro?: boolean; result?: { outro_applied?: boolean; warnings?: string[]; template_render?: { template?: string; requested_template?: string; downgraded?: boolean; downgrade_reason?: string; encoder?: string; duration_ms?: number; failure_reason?: string; outcome?: string; os?: string; cpu_count?: number } }; qa?: StudioQa | null }[]
-  generation?: { auto_start?: boolean; status?: string; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; config_source?: string; shutdown_kind?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
+  generation?: { auto_start?: boolean; status?: string; screening_identity?: { provider?: string; config_source?: string }; error_code?: string; failure_stage?: string; http_status?: number; provider?: string; config_source?: string; shutdown_kind?: string; model?: string; base_url_host?: string; upstream_error_type?: string; billable_calls_before_failure?: number; retry_count?: number; degrade_count?: number; llm_calls?: number; prompt_tokens?: number; completion_tokens?: number; route?: string; portrait_style?: string; branding?: { outro_enabled?: boolean }; requested_platforms?: string[]; completed_variant_count?: number; skipped?: unknown[]; source_has_burned_subtitles?: boolean; created_at?: string; finished_at?: string; recommended_template?: string; accepted_recommendation?: boolean } | null
   output_variants?: { id?: string; draft_id: string; render_job_id?: string; strategy_id: string; status: string; framing?: string; branding?: { outro_enabled?: boolean }; trimmed_to_sec?: number; cover_job?: { job_id: string; status: string } | null; qa?: StudioQa | null }[]
   drafts?: { id: string; packaging?: { template?: string; fallback?: boolean } | null }[]
 }
 
 /** Aggregate counts for one automatic generation; no titles, captions, names or IDs. */
+/** R22 #220: screening's own provider/config_source. Production re-freezes ``analysis.provider`` by its
+ * route, so screen_finished reads the identity screening stored apart (older records: the flat fields). */
+export function screeningIdentity(snapshot: StudioSnapshot): { provider?: string; config_source?: string } {
+  const analysis = snapshot.analysis
+  for (const own of [analysis?.screening_identity, snapshot.generation?.auto_start ? snapshot.generation.screening_identity : undefined]) {
+    if (own && (own.provider || own.config_source)) return { provider: own.provider, config_source: own.config_source }
+  }
+  return { provider: analysis?.provider, config_source: analysis?.config_source }
+}
+
 export function generationSummary(snapshot: StudioSnapshot): Record<string, unknown> {
   const all = snapshot.output_variants || []
   // Backup clips are not packaged until someone asks for them: template counts cover produced versions.
@@ -373,7 +383,7 @@ export class WorkflowTracker {
         event = 'studio_export_finished'; outcome = job.status; details = { duration_ms: job.duration_ms, error_code: job.error_code, outro_applied: job.result?.outro_applied, warning_count: job.result?.warnings?.length }
       }
     } else if (w.kind === 'studio-screen') {
-      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, failure_stage: snapshot.analysis?.failure_stage, upstream_error_type: snapshot.analysis?.upstream_error_type, provider: snapshot.analysis?.provider, config_source: snapshot.analysis?.config_source, shutdown_kind: snapshot.analysis?.shutdown_kind, degrade_reason: snapshot.plan?.degrade_reason }
+      details = { duration_ms: snapshot.analysis?.duration_ms, error_code: snapshot.analysis?.error_code, failure_stage: snapshot.analysis?.failure_stage, upstream_error_type: snapshot.analysis?.upstream_error_type, ...screeningIdentity(snapshot), shutdown_kind: snapshot.analysis?.shutdown_kind, degrade_reason: snapshot.plan?.degrade_reason }
       const automatic = !!snapshot.generation?.auto_start && ['production', 'rendering'].includes(snapshot.analysis?.phase || '')
       if (automatic) {
         // Automatic output skips confirmation: screening ended once production started, whatever came after.

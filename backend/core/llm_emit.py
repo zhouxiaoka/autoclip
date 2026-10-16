@@ -93,10 +93,12 @@ class _RunAcc:
     last_outcome: str = ""
     last_stage: str = ""
     persisted_usage: dict = field(default_factory=dict)
-    # R21 #195: provider + config_source frozen together per role at that role's first request in
-    # this run; ``role`` is the role of the latest request. Never mixed across connections.
+    # R22 #195: provider + config_source per role, frozen at the START of that role's first request in
+    # this run (failure_identity.connection_identity); ``role`` is the role of the latest request.
     identities: dict = field(default_factory=dict)
     role: str = ""
+    # R22 #223: identity the current phase froze at its start; used until a request has run.
+    phase_identity: dict = field(default_factory=dict)
     # E2: one run accumulator is shared by worker threads (run_in_context); guard mutations.
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
@@ -275,8 +277,11 @@ def request_finished(
     finish_reason: str | None = None,
     failure_stage: str | None = None,
     error: BaseException | None = None,
+    identity: dict | None = None,
 ) -> dict[str, Any]:
-    """Sanitize one request, update the run accumulator, and post llm_request_finished."""
+    """Sanitize one request, update the run accumulator, and post llm_request_finished.
+
+    ``identity`` is the request's connection identity frozen when the request STARTED (R22 #195)."""
     try:
         properties = _request_properties(
             provider=provider, model=model, base_url=base_url, kind=kind, stage=stage,
@@ -287,7 +292,7 @@ def request_finished(
             outcome=outcome, finish_reason=finish_reason, failure_stage=failure_stage,
             error=error,
         )
-        _remember_run(properties, role="vision" if kind == "vision" else "analysis")
+        _remember_run(properties, role="vision" if kind == "vision" else "analysis", identity=identity)
         _post_event(schema.EVENT_LLM_REQUEST_FINISHED, properties)
         return properties
     except Exception:  # noqa: BLE001 - telemetry must not break a model call
@@ -298,6 +303,7 @@ def request_finished(
 def observe_provider_call(provider: Any, impl: Any, prompt: str, input_data: Any = None, **kwargs: Any):
     """Wrap LLMProvider.call. ``prompt`` / ``input_data`` stay in the callee only."""
     started = time.monotonic()
+    identity = _request_start_identity("analysis")  # R22 #195: frozen before the request is sent
     base_url = _provider_base_url(provider)
     from backend.core.llm_degrade import bound_request_model
     model = bound_request_model(getattr(provider, "model_name", None))
@@ -309,7 +315,7 @@ def observe_provider_call(provider: Any, impl: Any, prompt: str, input_data: Any
             provider=name, model=model, base_url=base_url, kind="text",
             stage=_current_stage(), http_status=_http_status(error), error=error,
             retries=current_retry_count(), duration_ms=_elapsed_ms(started),
-            outcome="error", failure_stage=_current_stage() or "analyze",
+            outcome="error", failure_stage=_current_stage() or "analyze", identity=identity,
         )
         raise
     usage = getattr(response, "usage", None) if response is not None else None
@@ -320,7 +326,7 @@ def observe_provider_call(provider: Any, impl: Any, prompt: str, input_data: Any
         prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
         reasoning_tokens=reasoning_tokens, retries=current_retry_count(),
         duration_ms=_elapsed_ms(started), outcome="success",
-        finish_reason=getattr(response, "finish_reason", None),
+        finish_reason=getattr(response, "finish_reason", None), identity=identity,
     )
     return response
 
@@ -332,8 +338,9 @@ def emit_vision_request(
     error: BaseException | None = None,
     result: Any = None,
     retries: int = 0,
+    identity: dict | None = None,
 ) -> dict[str, Any]:
-    """vision_call success and failure both go through here."""
+    """vision_call success and failure both go through here. ``identity``: frozen at request start."""
     try:
         config = config or {}
         usage = result.get("usage") if isinstance(result, dict) else None
@@ -346,8 +353,9 @@ def emit_vision_request(
                 finish_reason = None
         outcome = "error" if error is not None else "success"
         fields = _vision_connection_fields(config)
+        identity = identity or config.get("identity") or None
         return request_finished(
-            provider=fields.get("provider"),
+            provider=(identity or {}).get("provider") or fields.get("provider"),
             model=config.get("model") or fields.get("model"),
             base_url=config.get("base_url"),
             kind="vision",
@@ -362,6 +370,7 @@ def emit_vision_request(
             finish_reason=finish_reason,
             failure_stage=(_current_stage() or "vision") if outcome == "error" else None,
             http_status=_http_status(error) if error is not None else 200,
+            identity=identity,
         )
     except Exception:  # noqa: BLE001 - telemetry must not break vision_call
         logger.warning("vision llm_request_finished was not recorded")
@@ -434,13 +443,15 @@ def run_snapshot(project_id: str | None = None) -> dict[str, Any]:
     acc = _run_acc.get()
     # Settings are a last-saved identity, not this run. Only fill gaps inside track_run.
     configured = configured_connection_fields() if acc is not None else {}
-    # R21 #195: provider and config_source always come from ONE connection: the identity frozen for
-    # the latest request's role; before any request, the configured analysis connection as a pair.
-    frozen = acc.identities.get(acc.role) if acc is not None and acc.role else None
-    if frozen:
-        provider, source = frozen.get("provider"), frozen.get("config_source")
+    # R22 #195/#223: provider and config_source always come from ONE frozen connection: the latest
+    # request's role, else the identity the phase froze at its start, else (no phase) settings.
+    request = acc.identities.get(acc.role) if acc is not None and acc.role else None
+    if request:
+        provider, source = request.get("provider"), request.get("config_source")
     elif acc is not None and acc.provider:
-        provider, source = acc.provider, None  # the request's provider; no source we can vouch for
+        provider, source = acc.provider, None  # a request ran without a start identity: its own provider
+    elif acc is not None and acc.phase_identity:
+        provider, source = acc.phase_identity.get("provider"), acc.phase_identity.get("config_source")
     else:
         provider, source = configured.get("provider"), configured.get("config_source")
     model = _safe_model((acc.model if acc and acc.model else None) or configured.get("model"))
@@ -503,14 +514,10 @@ def configured_connection_fields(*, role: str = "analysis") -> dict[str, Any]:
             endpoint = ai.chat_endpoint(connection, binding.model)
         except Exception:  # noqa: BLE001 - identity does not need a usable endpoint
             endpoint = {}
-        from backend.services.studio.failure_identity import config_source
-        try:
-            source = config_source(connection.provider, connection.base_url, binding.model)
-        except Exception:  # noqa: BLE001
-            source = "customized"
+        from backend.services.studio.failure_identity import connection_identity
+        identity = connection_identity(connection, binding.model)  # the one identity rule
         return schema.sanitize_run_properties({
-            "provider": _provider_name(connection.provider) or "other",
-            "config_source": source,
+            **identity,
             "model": _safe_model(binding.model),
             "base_url": endpoint.get("base_url"),
         })
@@ -589,18 +596,34 @@ def _request_properties(
     return properties
 
 
-def _remember_run(properties: dict[str, Any], role: str = "analysis") -> None:
+def _request_start_identity(role: str) -> dict:
+    """R22 #195: the connection identity a request runs on, read BEFORE it is sent."""
+    try:
+        from backend.services.studio.failure_identity import provider_identity
+        return provider_identity(role)
+    except Exception:  # noqa: BLE001 - identity is attribution only; never lose the request
+        return {}
+
+
+def freeze_phase_identity(identity: dict | None) -> None:
+    """R22 #223: the identity a phase froze at its start; run snapshots and Sentry use it until a
+    request has run in this run accumulator."""
     acc = _run_acc.get()
     if acc is None:
         return
-    if role not in acc.identities:
-        try:
-            from backend.services.studio.failure_identity import provider_identity
-            identity = provider_identity(role)
-        except Exception:  # noqa: BLE001 - identity is attribution only; never lose the request
-            identity = {}
+    from backend.services.studio.failure_identity import frozen
+    with acc.lock:
+        acc.phase_identity = frozen(identity)
+
+
+def _remember_run(properties: dict[str, Any], role: str = "analysis", identity: dict | None = None) -> None:
+    acc = _run_acc.get()
+    if acc is None:
+        return
+    if identity:
+        from backend.services.studio.failure_identity import frozen
         with acc.lock:
-            acc.identities.setdefault(role, identity)
+            acc.identities.setdefault(role, frozen(identity))  # first request of the role wins
     # E2: retries are counted per logical call. ``retry_count`` on a request is that call's
     # attempt index (text) or its own retry total (vision); only the rise above the peak
     # already counted for this call in this context is new. The peak lives in a contextvar,

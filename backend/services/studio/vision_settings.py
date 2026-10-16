@@ -109,7 +109,10 @@ def effective():
     if settings:
         endpoint = ai.vision_endpoint(settings)
         binding = settings.vision or settings.analysis
+        from backend.services.studio.failure_identity import settings_identity
         return {**(endpoint or {'base_url': '', 'api_key': '', 'model': ''}),
+                # R22 #195: the identity of THIS connection, frozen with the endpoint it resolves to.
+                'identity': settings_identity(settings, 'vision'),
                 'mode': 'custom' if settings.vision else 'text_model', 'source': 'connections',
                 'text_model': binding.model if binding else '', 'timeout': settings.vision_timeout}
     saved = _saved()

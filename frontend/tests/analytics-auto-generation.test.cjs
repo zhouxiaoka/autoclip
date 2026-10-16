@@ -169,3 +169,16 @@ test('local render timeout retains a safe code for export and automatic partial 
   assert.equal(JSON.stringify(finished).includes('private'),false)
  }
 })
+
+test('R22 #220: auto screen_finished names the screening connection, not the production re-freeze',()=>{
+ const live={...SNAPSHOT,generation:{...SNAPSHOT.generation,status:'production',screening_identity:{provider:'kimi',config_source:'customized'},provider:'deepseek',config_source:'preset'},
+  analysis:{status:'running',phase:'production',run_id:'run-1',provider:'deepseek',config_source:'preset',screening_identity:{provider:'kimi',config_source:'customized'}}}
+ for(const snapshot of [live,{...live,analysis:{status:'running',phase:'rendering',run_id:'run-1',provider:'deepseek',config_source:'preset'}}]){
+  const {t,events}=tracker()
+  t.watch('studio-screen','p1',undefined,undefined,{},false,'run-1')
+  t.observeStudio(t.list().find(w=>w.kind==='studio-screen'),snapshot)
+  const screen=events.find(e=>e.name==='studio_screen_finished')
+  assert.equal(screen.props.outcome,'auto_started')
+  assert.equal(screen.props.provider,'kimi'); assert.equal(screen.props.config_source,'customized')
+ }
+})

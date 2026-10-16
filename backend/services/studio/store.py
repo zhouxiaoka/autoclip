@@ -471,31 +471,68 @@ def _references_instance(data, instance):
     return instance in _instances_referenced(data)
 
 
-def reference_index():
-    """R21 #198/#202: ONE scan of every project -> (referenced instances, unreadable floor).
+REFS_NAME = 'instance_refs.json'
 
-    A project that cannot be read only protects records it could reference: an instance writes its
-    shutdown record after its last project write, so records older than the unreadable file's mtime
-    are not its. ``floor`` is the oldest such mtime (None when every project was read)."""
-    referenced, floor = set(), None
+
+def _refs_path(project_id):
+    return directory(project_id) / 'metadata' / REFS_NAME
+
+
+def _write_refs(state_path, data, previous):
+    """R22 #221: a project -> instance reference ledger next to studio.json, rewritten in the same
+    write (before studio.json is replaced) whenever the referenced set changes. Pruning reads it when
+    studio.json itself cannot be read, so it never infers references from file times."""
+    refs = sorted(_instances_referenced(data))
+    path = state_path.with_name(REFS_NAME)
+    if path.exists() and previous is not None and refs == sorted(_instances_referenced(previous)):
+        return
+    tmp = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
+    try:
+        tmp.write_text(json.dumps(refs), encoding='ascii')
+        _replace_state(tmp, path)
+    except OSError:
+        logger.warning('Could not update the instance reference ledger')
+        try:
+            path.unlink(missing_ok=True)  # a stale ledger must not outlive the state it described
+        except OSError:
+            pass
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _read_refs(path):
+    value = json.loads(path.read_text(encoding='ascii'))
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError('invalid ledger')
+    return set(value)
+
+
+def reference_index():
+    """R22 #221/#198: ONE scan of every project -> the set of dead instances still referenced.
+
+    A project contributes the references in its studio.json AND in its ledger (``instance_refs.json``).
+    A project whose studio.json and ledger both cannot be read cannot be recovered either, so it
+    protects nothing: a long-broken file never pins records, and pruning stays bounded at ``_KEEP``."""
+    referenced = set()
     for path in get_projects_directory().glob('*/metadata/studio.json'):
         try:
             data = json.loads(path.read_text(encoding='utf-8'))
+            if isinstance(data, dict):
+                referenced |= _instances_referenced(data)
         except (OSError, ValueError):
-            try:
-                mtime = path.stat().st_mtime
-            except OSError:
-                mtime = 0.0  # cannot even stat it: protect everything
-            floor = mtime if floor is None else min(floor, mtime)
-            continue
-        if isinstance(data, dict):
-            referenced |= _instances_referenced(data)
-    return referenced, floor
+            pass
+        try:
+            referenced |= _read_refs(path.with_name(REFS_NAME))
+        except (OSError, ValueError):
+            pass
+    return frozenset(referenced)
 
 
-def index_protects(index, instance, record_mtime):
-    referenced, floor = index
-    return instance in referenced or (floor is not None and record_mtime >= floor)
+def index_protects(index, instance):
+    return instance in index
 
 
 def producer_alive(generation):
@@ -546,18 +583,8 @@ def interrupted_run(data):
     return bool(variants) and all(row.get('status') in ('completed', 'failed') for row in variants)
 
 
-ATTEMPT_IDENTITY_KEYS = ('provider', 'config_source')
-
-
-def attempt_identity(*sources):
-    """R16 #40: provider/config_source recorded when the attempt started; first source wins."""
-    out = {}
-    for source in sources:
-        if isinstance(source, dict):
-            for key in ATTEMPT_IDENTITY_KEYS:
-                if key not in out and isinstance(source.get(key), str) and source[key]:
-                    out[key] = source[key]
-    return out
+from backend.services.studio.failure_identity import IDENTITY_KEYS as ATTEMPT_IDENTITY_KEYS  # noqa: E402
+from backend.services.studio.failure_identity import frozen as attempt_identity  # noqa: E402,F401 - one rule
 
 
 def _record_restart_shutdown_kind(data, instance):
@@ -688,7 +715,7 @@ def write(project_id, data, *, _recover_previous=True):
             key = terminal['run_id']
             if not any(row['run_id'] == key for row in history):
                 plan = state.get('plan') or {}
-                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id', 'provider', 'config_source', 'upstream_error_type', 'failure_stage', 'shutdown_kind', 'http_status') if k in terminal}
+                summary = {k: terminal[k] for k in ('status', 'phase', 'outcome', 'duration_ms', 'error_code', 'requested_goals', 'succeeded_goals', 'failed_goals', 'result_count', 'run_id', 'provider', 'config_source', 'screening_identity', 'upstream_error_type', 'failure_stage', 'shutdown_kind', 'http_status') if k in terminal}
                 plan_summary = {k: plan[k] for k in ('id', 'mode', 'confirmed_analysis', 'recommended_analysis') if k in plan}
                 subtitle_status = (plan.get('local_evidence') or {}).get('subtitle_status')
                 if subtitle_status:
@@ -698,6 +725,7 @@ def write(project_id, data, *, _recover_previous=True):
     tmp = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+        _write_refs(path, data, previous if path.exists() else None)
         _replace_state(tmp, path)
         if usage_checkpoint is not None:
             usage_checkpoint[0].update(usage_checkpoint[1])

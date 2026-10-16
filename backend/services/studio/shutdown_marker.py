@@ -89,20 +89,18 @@ def mark(kind: str, instance: str | None = None) -> bool:
                 pass
 
 
-def _referenced(instance: str, record_mtime: float | None = None) -> bool:
+def _referenced(instance: str) -> bool:
     try:
         from backend.services.studio.store import index_protects, reference_index
-        if record_mtime is None:
-            record_mtime = float('inf')  # unknown age: any unreadable project protects it
-        return index_protects(reference_index(), instance, record_mtime)
+        return index_protects(reference_index(), instance)
     except Exception:  # noqa: BLE001 - unsure -> keep the record
         return True
 
 
 def prune(root: Path | None = None) -> int:
     """Bound the record dir: keep the newest ``_KEEP`` records, never drop one an unrecovered project
-    may still reference, and drop orphan ``.tmp`` files older than an hour. ONE project scan total
-    (R21 #198/#202). Returns how many files were removed."""
+    may still reference (studio.json or its reference ledger, R22 #221), and drop orphan ``.tmp`` files
+    older than an hour. ONE project scan total (R21 #202). Returns how many files were removed."""
     try:
         root = root or _root()
         entries = [(p, p.stat().st_mtime) for p in root.iterdir() if p.is_file()]
@@ -123,8 +121,8 @@ def prune(root: Path | None = None) -> int:
         index = reference_index()
     except Exception:  # noqa: BLE001 - cannot tell -> keep everything
         return removed
-    for path, mtime in candidates:
-        if not index_protects(index, path.name, mtime):
+    for path, _mtime in candidates:
+        if not index_protects(index, path.name):
             path.unlink(missing_ok=True)
             removed += 1
     return removed
@@ -182,7 +180,7 @@ def release(instance: str | None) -> None:
         root = _root()
         with _lock:
             record = root / instance
-            if (str(root), instance) in _consumed and record.exists() and not _referenced(instance, record.stat().st_mtime):
+            if (str(root), instance) in _consumed and record.exists() and not _referenced(instance):
                 record.unlink(missing_ok=True)
     except Exception:  # noqa: BLE001 - cleanup only; _prune bounds leftovers
         pass

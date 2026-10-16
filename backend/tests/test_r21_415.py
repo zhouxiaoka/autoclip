@@ -49,8 +49,10 @@ def _project(pid, data):
 
 
 def _vision_failure():
+    # R22 #195: vision_call freezes the identity before it sends; the emitter only carries it.
     llm_emit.emit_vision_request(config={'model': 'private-vision-model', 'base_url': 'https://vision.fixture.example/v1'},
-                                 started=time.monotonic(), error=RuntimeError('fixture'))
+                                 started=time.monotonic(), error=RuntimeError('fixture'),
+                                 identity=failure_identity.provider_identity('vision'))
 
 
 # --- #194 -------------------------------------------------------------------------------------
@@ -71,17 +73,6 @@ def test_194_screening_and_visual_production_freeze_the_vision_identity(two_conn
     assert failure_identity.phase_identity('screening') == EYES
     assert failure_identity.phase_identity('production', VISUAL_PLAN, ['highlight']) == EYES
     assert failure_identity.phase_identity('production', VISUAL_PLAN, ['content']) == TEXT
-
-
-def test_194_every_studio_start_and_terminal_uses_the_phase_resolver():
-    import inspect
-    from backend.services.studio import jobs
-    src = inspect.getsource(jobs)
-    assert 'provider_identity()' not in src                       # no default-analysis identity left
-    assert "phase_identity('screening')" in inspect.getsource(jobs.inspect_project) and "phase_identity('screening')" in inspect.getsource(jobs._inspect)
-    assert "phase_identity('production', plan, body.goals)" in inspect.getsource(jobs.confirm_project)
-    assert "phase_identity('production', plan)" in inspect.getsource(jobs._inspect)
-    assert "phase_identity('production', plan)" in inspect.getsource(jobs._auto_generate)
 
 
 def test_194_visual_production_start_request_terminal_all_name_the_vision_connection(two_connections):
@@ -172,7 +163,7 @@ def test_202_mark_on_the_quit_path_never_scans_projects(monkeypatch):
     monkeypatch.setattr(shutdown_marker, '_KEEP', 1)
     _records(shutdown_marker._root(), [f'{i:032x}' for i in range(1, 30)])
     scans = []
-    monkeypatch.setattr(store, 'reference_index', lambda: scans.append(1) or (set(), None))
+    monkeypatch.setattr(store, 'reference_index', lambda: scans.append(1) or frozenset())
     started = time.monotonic()
     assert shutdown_marker.mark('user_quit', 'e' * 32)
     assert scans == [] and time.monotonic() - started < 1
@@ -189,21 +180,7 @@ def test_202_prune_scans_projects_once_however_many_records(monkeypatch):
     assert len(list(root.iterdir())) == 1
 
 
-# --- #198 -------------------------------------------------------------------------------------
-
-def test_198_one_unreadable_project_only_protects_records_it_could_reference(monkeypatch):
-    monkeypatch.setattr(shutdown_marker, '_KEEP', 0)
-    root = shutdown_marker._root()
-    old, newer = OLD, 'a' * 32
-    _records(root, [old, newer], base=1000)
-    bad = _project('broken', {})
-    bad.write_text('{not json', encoding='utf-8')
-    os.utime(bad, (1000.5, 1000.5))                                            # written after `old` ended
-    shutdown_marker.prune()
-    left = {p.name for p in root.iterdir()}
-    assert old not in left                                                     # cannot be the broken file's
-    assert newer in left                                                       # might be: keep
-
+# --- #198 (R22 #221: the mtime rule is gone; see test_r22_415 for the reference ledger) ------------
 
 def test_198_release_is_not_blocked_by_an_unrelated_unreadable_project(tmp_path):
     root = shutdown_marker._root()
