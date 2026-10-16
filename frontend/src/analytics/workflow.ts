@@ -1,6 +1,6 @@
 /** Versioned business telemetry. Only explicit UI operations enroll projects. */
 export type Properties = Record<string, string | number | boolean | null | undefined>
-export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export' | 'studio-generation' | 'studio-cover' | 'studio-variant' | 'framing-runtime'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean; properties?: Properties; token?: string; runId?: string }
+export type Watch = { kind: 'project' | 'export' | 'bilibili' | 'youtube' | 'studio-screen' | 'studio-production' | 'studio-export' | 'studio-generation' | 'studio-cover' | 'studio-variant' | 'framing-runtime'; id: string; projectId?: string; since: number; seen: string[]; settled?: boolean; failed?: boolean; properties?: Properties; token?: string; runId?: string }
 export const WORKFLOW_KEY = 'autoclip.analytics.workflow.v2'
 const TTL = 7 * 86400000
 const LIMIT = 50
@@ -315,12 +315,20 @@ export class WorkflowTracker {
     const existing = this.watches.find(w => w.kind === kind && w.id === id && (!runId || w.runId === runId))
     if (existing && (!existing.settled || kind === 'studio-export') && !restart) return
     if (existing) this.watches = this.watches.filter(w => w !== existing)
-    // 1.5.8: a restart of the same kind/id is a retry: new attempt_id, linked to the previous one via retry_of.
-    const previous = existing || (restart ? [...this.watches].reverse().find(w => w.kind === kind && w.id === id) : undefined)
-    const retry = restart && previous?.token ? { retry_of: previous.token } : {}
-    this.watches.push({ kind, id, runId, projectId, since, seen: [], properties: safeStudioProperties({ ...this.context(projectId || id), ...properties, ...retry }), token: telemetryId() })
+    this.watches.push({ kind, id, runId, projectId, since, seen: [], properties: safeStudioProperties({ ...this.context(projectId || id), ...properties }), token: telemetryId() })
     this.prune()
     this.persist()
+  }
+  /** 1.5.8 one-click retry: attempt_id of the latest settled *failed* studio attempt of this project, else undefined. */
+  lastFailedAttempt(projectId: string): string | undefined {
+    const w = [...this.watches].reverse().find(w => ['studio-screen', 'studio-generation', 'studio-production'].includes(w.kind) && (w.projectId || w.id) === projectId && w.settled)
+    return w?.failed && w.token ? w.token : undefined
+  }
+  /** retry_of carried by the latest screen attempt of this project (manual flow: production inherits it). */
+  retryLink(projectId: string): string | undefined {
+    const w = [...this.watches].reverse().find(w => w.kind === 'studio-screen' && (w.projectId || w.id) === projectId)
+    const value = w?.properties?.retry_of
+    return typeof value === 'string' ? value : undefined
   }
   emitOnce(w: Watch, key: string, event: string, properties: Properties): void {
     if (!this.enabled() || !this.watches.includes(w) || w.seen.includes(key) || w.seen.length >= 2000) return
@@ -413,7 +421,7 @@ export class WorkflowTracker {
     }
     if (event) {
       this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(w.projectId || w.id), ...details, outcome }))
-      if (w.seen.includes('finished')) { w.settled = true; this.persist() }
+      if (w.seen.includes('finished')) { w.settled = true; w.failed = ['failed', 'error', 'partial'].includes(outcome || ''); this.persist() }
     }
   }
   observeTasks(w: Watch, tasks: TaskSnapshot[]): void {

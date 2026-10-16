@@ -3,32 +3,79 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { loadTs } = require('./load-ts.cjs')
 
-test('1.5.8 one-click retry: new attempt_id, linked to the failed one via retry_of', () => {
+function harness() {
   const workflow = loadTs(path.resolve(__dirname, '../src/analytics/workflow.ts'))
   const events = []
   const tracker = new workflow.WorkflowTracker({ getItem: () => null, setItem() {}, removeItem() {} },
     () => true, (event, props) => { events.push({ event, props }); return true })
-  const failed = { material_origin: 'user', generation: { status: 'failed', error_code: 'service_restarted' }, analysis: { status: 'failed', phase: 'production', error_code: 'service_restarted' } }
+  const studio = {
+    observeStudioOperation: async (_name, action, accepted = () => {}, props = {}) => { const r = await action(); accepted(r, { ...props }); return r },
+    studioImportProperties: () => ({}), studioGoals: () => ({}), observeStudioWorkspace: () => {},
+  }
+  const api = loadTs(path.resolve(__dirname, '../src/features/studio/api.ts'), {
+    '../../analytics/posthog': { captureBusinessEvent() {} },
+    '../../analytics/workflow': workflow,
+    '../../analytics/studio': studio,
+    '../../analytics/observer': { workflow: tracker },
+    '../../services/api': { default: { post: async () => ({ analysis_run_id: 'r-next' }), put: async () => ({}), get: async () => ({}) }, __esModule: true },
+    './noticeRuntime': { noteWorkspaceCompletion() {} },
+    './subtitleState': { effectiveSubtitles: x => x },
+  })
+  const finished = name => events.filter(e => e.event === name).map(e => e.props)
+  const watchOf = kind => tracker.list().filter(w => w.kind === kind).at(-1)
+  return { tracker, studioApi: api.studioApi, finished, watchOf }
+}
+const failedGen = { material_origin: 'user', generation: { status: 'failed', error_code: 'service_restarted' }, analysis: { status: 'failed', phase: 'production', error_code: 'service_restarted' } }
+const okGen = { ...failedGen, generation: { status: 'completed' }, analysis: { status: 'completed' } }
+
+test('1.5.8 Retry button after a failed automatic attempt: new attempt_id, retry_of = failed attempt (real api.analyze chain)', async () => {
+  const { tracker, studioApi, finished, watchOf } = harness()
   tracker.watch('studio-generation', 'p1')
-  tracker.observeStudio(tracker.list()[0], failed)
-  tracker.watch('studio-generation', 'p1', undefined, undefined, {}, true)
-  tracker.observeStudio(tracker.list().find(w => w.kind === 'studio-generation'), { ...failed, generation: { status: 'completed' }, analysis: { status: 'completed' } })
-  const finished = events.filter(e => e.event === 'studio_generation_finished')
-  assert.equal(finished.length, 2)
-  const [first, second] = finished.map(e => e.props)
+  tracker.observeStudio(watchOf('studio-generation'), failedGen)
+  await studioApi.analyze('p1', true, true)
+  tracker.observeStudio(watchOf('studio-generation'), okGen)
+  const [first, second] = finished('studio_generation_finished')
   assert.ok(first.attempt_id && second.attempt_id && first.attempt_id !== second.attempt_id)
   assert.equal(first.retry_of, undefined)
   assert.equal(second.retry_of, first.attempt_id)
 })
 
-test('1.5.8 failed-state Retry button reuses the rerun API, which restarts the watch (new attempt + retry_of)', () => {
+test('1.5.8 retry_of only from the Retry button and only when the previous attempt failed', async () => {
+  // not from a plain re-analyze / re-plan restart
+  let h = harness()
+  h.tracker.watch('studio-generation', 'p1'); h.tracker.observeStudio(h.watchOf('studio-generation'), failedGen)
+  await h.studioApi.analyze('p1', true)
+  await h.studioApi.correctPlan('p1', {})
+  h.tracker.watch('framing-runtime', 'p1', 'p1', undefined, {}, true)
+  for (const w of h.tracker.list()) assert.equal(w.properties.retry_of, undefined, w.kind)
+  // not when the previous attempt succeeded
+  h = harness()
+  h.tracker.watch('studio-generation', 'p1'); h.tracker.observeStudio(h.watchOf('studio-generation'), okGen)
+  await h.studioApi.analyze('p1', true, true)
+  assert.equal(h.watchOf('studio-generation').properties.retry_of, undefined)
+  // not when the previous attempt is still running
+  h = harness()
+  h.tracker.watch('studio-generation', 'p1')
+  await h.studioApi.analyze('p1', true, true)
+  assert.equal(h.watchOf('studio-generation').properties.retry_of, undefined)
+})
+
+test('1.5.8 manual retry: the production attempt that follows carries retry_of too', async () => {
+  const { tracker, studioApi, finished, watchOf } = harness()
+  tracker.watch('studio-screen', 'p1')
+  tracker.observeStudio(watchOf('studio-screen'), { material_origin: 'user', analysis: { status: 'failed', phase: 'screening', error_code: 'timeout' } })
+  const failedId = finished('studio_screen_finished')[0].attempt_id
+  await studioApi.analyze('p1', false, true)
+  assert.equal(watchOf('studio-screen').properties.retry_of, failedId)
+  await studioApi.confirmPlan('p1', 'plan-1', ['highlight'], {}, 'subtitle')
+  assert.equal(watchOf('studio-production').properties.retry_of, failedId)
+})
+
+test('1.5.8 Retry button passes retry=true; hidden in manual mode once drafts/clips/completed exports exist', () => {
   const fs = require('node:fs')
   const ui = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  const failed = ui.slice(ui.indexOf("workspace.analysis?.status==='failed'"))
-  assert.match(failed.slice(0, 900), /!workspace\.output_variants\?\.length && <Btn[^>]*onClick=\{\(\)=>act\('retry-analysis', async\(\)=>\{await studioApi\.analyze\(project\.id, !!automatic\)\}\)\}>\{t\("重试"\)\}/)
-  const api = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/api.ts'), 'utf8')
-  assert.match(api, /analyze: \(pid: string, automatic = false\)[\s\S]{0,300}workflow\.watch\('studio-screen', pid, undefined, undefined, props, true/)
-  // retry_of survives the property allow-list and is never accepted when not a telemetry id
+  assert.ok(ui.includes("(automatic ? !workspace.output_variants?.length : !(workspace.drafts.length || project.clips?.length || workspace.jobs?.some(job=>job.status==='completed'))) && <Btn"))
+  assert.ok(ui.includes("studioApi.analyze(project.id, !!automatic, true)"))
   const workflow = loadTs(path.resolve(__dirname, '../src/analytics/workflow.ts'))
   assert.equal(workflow.safeStudioProperties({ retry_of: 't-0123456789abc' }).retry_of, 't-0123456789abc')
   assert.equal(workflow.safeStudioProperties({ retry_of: 'https://x/sk-abc' }).retry_of, undefined)
@@ -65,5 +112,5 @@ test('1.5.8 failed-state action per code: user-cause codes get 「去设置」 +
   }
   // UI wiring: settings branch replaces Retry
   const ui = fs.readFileSync(path.resolve(__dirname, '../src/features/studio/StudioResults.tsx'), 'utf8')
-  assert.match(ui, /action\.kind==='settings' \? <><span className="studio-muted">\{t\(action\.reason\)\}<\/span><Btn[^>]*onClick=\{\(\)=>navigate\(action\.destination\)\}>\{t\("去设置"\)\}<\/Btn><\/> : !workspace\.output_variants\?\.length && <Btn/)
+  assert.ok(ui.includes(`action.kind==='settings' ? <><span className="studio-muted">{t(action.reason)}</span><Btn variant="cta" disabled={!!busy} onClick={()=>navigate(action.destination)}>{t("去设置")}</Btn></> : (automatic ? `))
 })

@@ -72,12 +72,17 @@ export const studioApi = {
       if (body.get?.('auto_start') === 'true') workflow.watch('studio-generation', result.project_id, undefined, undefined, observed)
     }, props)
   },
-  confirmPlan: (pid: string, planId: string, goals: Goal[], options: ImportOptions, analysisMode: AnalysisMode) => observeStudioOperation('studio_confirm', () => api.post<unknown, { analysis_run_id?: string }>(`/studio/${pid}/start`, {plan_id:planId, goals, analysis_mode:analysisMode, language:options.language, aspect:options.aspect, duration:options.duration}), (_result, props) => workflow.watch('studio-production', planId, pid, undefined, { ...props, ...workflow.context(pid), analysis_mode: analysisMode, ...studioGoals(goals) }, false, _result.analysis_run_id), { ...workflow.context(pid), analysis_mode: analysisMode, ...studioGoals(goals), aspect: options.aspect || 'auto' }),
+  confirmPlan: (pid: string, planId: string, goals: Goal[], options: ImportOptions, analysisMode: AnalysisMode) => observeStudioOperation('studio_confirm', () => api.post<unknown, { analysis_run_id?: string }>(`/studio/${pid}/start`, {plan_id:planId, goals, analysis_mode:analysisMode, language:options.language, aspect:options.aspect, duration:options.duration}), (_result, props) => { const retryOf = workflow.retryLink(pid); workflow.watch('studio-production', planId, pid, undefined, { ...props, ...workflow.context(pid), analysis_mode: analysisMode, ...studioGoals(goals), ...(retryOf ? { retry_of: retryOf } : {}) }, false, _result.analysis_run_id) }, { ...workflow.context(pid), analysis_mode: analysisMode, ...studioGoals(goals), aspect: options.aspect || 'auto' }),
   correctPlan: (pid: string, body: ImportOptions) => observeStudioOperation('studio_plan_update', () => api.put<unknown, { analysis_run_id?: string }>(`/studio/${pid}/plan`, body), (_result, props) => workflow.watch('studio-screen', pid, undefined, undefined, props, true, _result.analysis_run_id), {...workflow.context(pid), goal: body.goal, aspect: body.aspect || 'auto'}),
-  analyze: (pid: string, automatic = false) => observeStudioOperation('studio_rescreen', () => api.post<unknown, { analysis_run_id?: string }>(`/studio/${pid}/analyze`), (_result, props) => {
-    workflow.watch('studio-screen', pid, undefined, undefined, props, true, _result.analysis_run_id)
-    if (automatic) workflow.watch('studio-generation', pid, undefined, undefined, props, true)
-  }, workflow.context(pid)),
+  analyze: (pid: string, automatic = false, retry = false) => {
+    // 1.5.8: only the failed-state Retry button links attempts, and only when the previous attempt failed.
+    const retryOf = retry ? workflow.lastFailedAttempt(pid) : undefined
+    const link = retryOf ? { retry_of: retryOf } : {}
+    return observeStudioOperation('studio_rescreen', () => api.post<unknown, { analysis_run_id?: string }>(`/studio/${pid}/analyze`), (_result, props) => {
+      workflow.watch('studio-screen', pid, undefined, undefined, { ...props, ...link }, true, _result.analysis_run_id)
+      if (automatic) workflow.watch('studio-generation', pid, undefined, undefined, { ...props, ...link }, true)
+    }, workflow.context(pid))
+  },
   create: (pid: string, clip_ids: string[], title: string, reuse_existing = false): Promise<Draft> => observeStudioOperation('studio_draft_create', () => api.post(`/studio/${pid}/drafts`, { clip_ids, title, reuse_existing }), undefined, {...workflow.context(pid), source_type: 'content_clip'}),
   eventDraft: (pid: string, id: string): Promise<Draft> => observeStudioOperation('studio_draft_create', () => api.post(`/studio/${pid}/events/${id}/draft`), undefined, {...workflow.context(pid), source_type: 'visual_event'}),
   save: (pid: string, draft: Draft): Promise<Draft> => observeStudioOperation('studio_draft_save', () => api.put(`/studio/${pid}/drafts/${draft.id}`, draft), undefined, { ...workflow.context(pid), ...draftProperties(draft) }),

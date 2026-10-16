@@ -59,7 +59,7 @@ test('failed automatic output exposes a retry that reuses the project and automa
   const retry = buttons.find(button => button.children === '重试')
   assert.ok(retry, 'failed automatic output must have a retry entry')
   await retry.onClick()
-  assert.deepEqual(calls, [['test', true]])
+  assert.deepEqual(calls, [['test', true, true]])
 })
 test('active automatic output never offers a second analysis submission', () => {
   const buttons = []
