@@ -102,7 +102,7 @@ def cmd_produce(args: argparse.Namespace) -> int:
         elif ok:
             error_code = 'none'
         else:
-            error_code = mcp_telemetry.normalize_error(result.get('status'), ok=False)
+            error_code = mcp_telemetry.normalize_error(result.get('error_code') or result.get('status'), ok=False)  # R24 #284
         outcome = {'ok': ok, 'error_code': error_code, 'job_id': project_id, 'terminal': True}
         result['ok'] = ok
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -209,7 +209,8 @@ def _cmd_run_body(args, outcome, configure_llm, prepare_project, run_pipeline, s
         outcome.update(ok=False, error_code=normalize_error(result.get('error_code') or result.get('status'), ok=False),
                        job_id=req.project_id, terminal=True)
         if args.json:
-            print(json.dumps({"ok": False, "project_id": req.project_id, "error": result.get("error")}, ensure_ascii=False))
+            print(json.dumps({"ok": False, "project_id": req.project_id, "error": result.get("error"),
+                              "error_code": outcome.get("error_code")}, ensure_ascii=False))  # R24 #284
         else:
             _err(result.get("error") or "处理失败")
             print(_dim(f"日志：{os.getenv('LOG_FILE')}"), file=sys.stderr)

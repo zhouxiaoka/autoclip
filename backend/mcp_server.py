@@ -157,7 +157,10 @@ def _run_job(req: RunRequest, override: LLMOverride, link: bool) -> Dict[str, An
 
             result = run_pipeline(req, video_in_raw, on_progress=on_progress)
             if result.get("status") != "succeeded":
-                _job_update(req.project_id, status="failed", error_code="failed", error=result.get("error") or "处理失败")
+                from backend.services.mcp_telemetry import normalize_error
+                # R24 #284: keep a source failure's own code (source_unreadable ...), never fold it into "failed".
+                _job_update(req.project_id, status="failed", error_code=normalize_error(result.get("error_code"), ok=False),
+                            error=result.get("error") or "处理失败")
                 return _jobs[req.project_id]
             summary = summarize_project(req.project_id)
             _job_update(req.project_id, status="completed", percent=100, stage="DONE", message="完成",
