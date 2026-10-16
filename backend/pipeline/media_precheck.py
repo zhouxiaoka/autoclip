@@ -129,17 +129,21 @@ def subtitle_route_failure(video, *, srt_available: bool, duration: Optional[flo
 
 
 def subtitle_source_failure(video, *, srt_available: bool, info: Optional[dict] = None,
-                            stage: str = "INGEST") -> Optional[PipelineFailure]:
-    """The one classification of a source the subtitle/content route cannot use (R23 #231), or None:
-    unreadable or under 1 s (``duration_or_fail``: ffmpeg decode only when ffprobe had no duration),
-    too short, or no audio without an SRT. The import gate and the content pipeline both call it, so an
-    unreadable source is reported as ``source_unreadable`` everywhere, never as "Whisper missing".
+                            duration: Optional[float] = None, stage: str = "INGEST") -> Optional[PipelineFailure]:
+    """The one source classification for every route and entry (R23 #231, R24 #285): unreadable or under 1 s
+    (``duration_or_fail``), too short, or no audio without an SRT; None when the source is usable.
+    The import gate, the content pipeline, the Celery import and confirm all call this one function.
 
-    ``info`` is a ``probe()`` result the caller already has; without it one ffprobe runs here.
+    ``info`` is a ``probe()`` result the caller already has; ``duration`` a duration already validated
+    (e.g. the plan's). At most one ffprobe runs here, and none when ffprobe already ran (R24 #282):
+    a probed source without a duration goes straight to the ffmpeg decode fallback.
     An unknown audio answer never blocks (see ``probe``)."""
-    info = info if info is not None else probe(Path(video))
+    if info is None and (duration is None or not srt_available):
+        info = probe(Path(video))
+    probed = info is not None
+    info = info or {}
     try:
-        duration = duration_or_fail(video, info.get("duration"), stage)
+        duration = duration_or_fail(video, duration or info.get("duration"), stage, probed=probed)
     except PipelineFailure as failure:
         return failure
     audio = info.get("audio")
@@ -205,13 +209,19 @@ def _ffmpeg_decode_duration(video) -> tuple[Optional[float], str]:
     return None, stderr
 
 
-def probe_duration(video) -> tuple[Optional[float], str]:
+def probe_duration(video, *, probed: bool = False) -> tuple[Optional[float], str]:
     """Duration in seconds or None, plus diagnostics (ffprobe/ffmpeg stderr) when unreadable.
 
     Tries ffprobe format=duration first, then decodes with ffmpeg (#345: some Windows
     sources report no container duration to ffprobe).
     """
     probe_err = ""
+    if probed:
+        # R24 #282: ffprobe already ran and found no duration; do not run it a second time.
+        value, decode_err = _ffmpeg_decode_duration(video)
+        if value:
+            return value, ""
+        return None, sanitize_tool_output(f"ffprobe: no duration\nffmpeg: {decode_err}", video)
     try:
         from backend.utils.ffmpeg_utils import get_ffprobe_path
         result = subprocess.run(
@@ -243,11 +253,12 @@ class SourceUnreadable(PipelineFailure):
         self.probe_detail = detail
 
 
-def duration_or_fail(video, info_duration=None, stage: str = "INGEST") -> float:
-    """Readable duration ≥ 1 s, else SourceUnreadable / source_too_short."""
+def duration_or_fail(video, info_duration=None, stage: str = "INGEST", *, probed: bool = False) -> float:
+    """Readable duration ≥ 1 s, else SourceUnreadable / source_too_short.
+    ``probed``: the caller's ffprobe already ran (its duration is ``info_duration``), so only ffmpeg decodes."""
     duration = float(info_duration or 0)
     if duration <= 0:
-        found, detail = probe_duration(video)
+        found, detail = probe_duration(video, probed=probed)
         if found is None:
             raise SourceUnreadable(detail, stage)
         duration = found

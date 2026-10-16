@@ -377,8 +377,8 @@ def process_import_task(self, project_id: str, video_path: str, srt_file_path: O
         speech_error = None
         srt_path = srt_file_path
         # 比最短片段还短、或没有音轨又没带字幕：转写和分析注定白跑，先拦下（RC156 #10/#11）
-        from backend.pipeline.media_precheck import subtitle_route_failure
-        blocked = subtitle_route_failure(video_path, srt_available=bool(srt_path and Path(srt_path).exists()))
+        from backend.pipeline.media_precheck import subtitle_source_failure  # the one source classification (R24)
+        blocked = subtitle_source_failure(video_path, srt_available=bool(srt_path and Path(srt_path).exists()))
         if blocked:
             with session_scope() as db:
                 _fail_import(ProjectService(db), project_id, blocked.user_message(), error_code=blocked.code)

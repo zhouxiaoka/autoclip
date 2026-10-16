@@ -27,7 +27,7 @@ def source_duration(video: Path, info: dict | None = None) -> float:
     from backend.pipeline import media_precheck
     if info is None:
         info = intelligence._probe(video)
-    return media_precheck.duration_or_fail(video, info.get('duration'))
+    return media_precheck.duration_or_fail(video, info.get('duration'), probed=True)  # R24 #282
 
 
 def vision_configured(analysis_mode: str) -> bool:

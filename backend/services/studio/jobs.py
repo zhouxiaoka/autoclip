@@ -1649,7 +1649,7 @@ def confirm_project(project_id, body):
             from backend.pipeline.failures import PipelineFailure
             video = source(project_id)
             srt_available = (video.parent / 'input.srt').is_file()
-            blocked = media_precheck.subtitle_route_failure(
+            blocked = media_precheck.subtitle_source_failure(  # the one source classification (R24)
                 video, srt_available=srt_available, duration=plan.get('source_duration'))
             if blocked:
                 raise ValueError(str(blocked))
