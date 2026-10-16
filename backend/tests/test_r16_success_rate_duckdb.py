@@ -420,3 +420,51 @@ def test_142_every_rate_division_is_guarded():
     assert len(divisions) == 12
     for expr in divisions:
         assert re.fullmatch(r'[\w.]+ / nullIf\([\w.]+', expr.strip()), expr
+
+
+# --- R21 #203: the overall (全量) denominators can be 0 too: NULL, never 0% -------------------------
+
+OVERALL_RATES = ('overall_attempt_rate', 'overall_flow_rate')
+ALL_RATES = (*OVERALL_RATES, 'product_attempt_rate', 'product_flow_rate', 'partial_delivery_rate')
+
+
+def _all_user_excluded():
+    """Every attempt is a user cause (cancel / auth / quota): overall AND product denominators are 0."""
+    e = Events()
+    e.add('Y', 0, attempt_id='y1', flow_id='FY', outcome='cancelled')
+    e.add('Y', 5, attempt_id='y2', flow_id='FY2', outcome='error', error_code='authentication')
+    e.add('W', 9, attempt_id='w1', flow_id='FW', outcome='error', upstream_error_type='insufficient_quota')
+    return e
+
+
+def _assert_all_excluded_is_null(stmts):
+    for index in (0, 4):                                   # fig1 daily, fig5 per version
+        row = _all_user_excluded().run(stmts[index])[0]
+        assert (row['q_all'], row['q_prod'], row['fq_all'], row['fq_prod']) == (0, 0, 0, 0), index
+        for key in ALL_RATES:
+            assert row[key] is None, (index, key)
+    first = _all_user_excluded().run(stmts[1])[0]
+    assert (first['overall_people'], first['product_people']) == (0, 0)
+    assert first['overall_first_rate'] is None and first['product_first_rate'] is None
+
+
+def test_203_all_excluded_window_every_rate_is_null_per_column():
+    _assert_all_excluded_is_null(statements())
+
+
+def test_203_empty_window_has_no_zero_rate():
+    stmts = statements()
+    assert Events().run(stmts[0]) == [] and Events().run(stmts[4]) == []   # no day/version row at all
+    first = Events().run(stmts[1])[0]
+    assert first['overall_people'] == 0 and first['overall_first_rate'] is None
+    assert first['product_first_rate'] is None
+
+
+@pytest.mark.parametrize('column', [*OVERALL_RATES, 'overall_first_rate'])
+def test_203_zero_filling_an_overall_rate_is_caught(column):
+    """R21 #203 mutation (survived R21): ifNull(<overall rate>, 0) must fail the NULL regression."""
+    pattern = re.compile(r'round\(([^\n]*?)\) AS ' + column + r'\b')
+    mutated = pattern.sub(lambda m: f'ifNull(round({m.group(1)}), 0) AS {column}', SQL)
+    assert mutated != SQL
+    with pytest.raises(AssertionError):
+        _assert_all_excluded_is_null(statements(mutated))

@@ -354,14 +354,14 @@ person_id NOT IN COHORT {internal_cohort_id}
 
 `partial` 算出片未成功（分子只认 `outcome_canon=success`），另列 **partial-delivery 率** = `partial` 次数 / 产品口径分母。
 
-分母为 0（稀疏日期、版本或空窗口）时所有比率返回 NULL（`nullIf(分母, 0)`），看板显示为空，不显示 NaN。示例→真实出片转化（`production_results.sql` 04）的样例设备和真实出片两侧都排除内部 cohort（641509，目前为空名单，结果不变）。
+分母为 0（稀疏日期、版本或空窗口）时所有比率返回 NULL（`nullIf(分母, 0)`），不返回 NaN 或 0。线上看板（PostHog insight）合入后同步为本仓库 SQL；同步前线上旧 SQL 在分母为 0 时仍可能显示 NaN。示例→真实出片转化（`production_results.sql` 04）的样例设备和真实出片两侧都排除内部 cohort（641509，目前为空名单，结果不变）。
 
 ### 6.1 成功率（v4，2026-10-16；主指标，目标 ≥95%）
 
 机器可读口径：`event_catalog.json` → `attribution.success_rate_v4`；SQL：[`success_rate.sql`](success_rate.sql)（两者必须一致，有测试）。
 
 - **一次尝试（attempt）** = `studio_generation_finished` / `studio_production_finished` 按 `attempt_id` 去重后取最后一条（缺 `attempt_id` 的历史行按事件 uuid 计）。重试是新的 attempt。
-- **一次流程（flow）** = 沿 `retry_of` 回溯到重试链根（最多 4 跳），用根 attempt 的 `flow_id` 作流程键；结果取该流程 / 重试链里 **最后一次** attempt（最终结果口径）。`retry_of` = 被重试 attempt 的 `attempt_id`（失败态「重试」按钮产生）。
+- **一次流程（flow）** = 沿 `retry_of` 回溯到重试链根（最多 4 跳），用根 attempt 的 `flow_id` 作流程键；结果取该流程 / 重试链里 **最后一次** attempt（最终结果口径）。`retry_of` = 被重试 attempt 的 `attempt_id`（失败态「重试」按钮产生）。**依赖**：`retry_of` 的产生和前端白名单在 PR #419 里；本口径（#416）须与 #419 同批合入或在其之后合入，否则跨 flow 的重试串不起来、流程成功率偏低。
 - **一个人** = `person_id`（不是 `distinct_id` / 设备）。
 - **窗口** = 固定 UTC 日期参数 `{date_from}`（含）/ `{date_to}`（不含），不再用 `now() - 7d`。
 - **过滤** = `analytics_environment = production`、`runtime = desktop`、排除内部 cohort `{internal_cohort_id}`（450605 为 641509）。
