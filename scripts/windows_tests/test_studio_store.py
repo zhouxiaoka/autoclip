@@ -85,4 +85,3 @@ def test_native_windows_reader_leaves_failed_worker_retryable(state_path, monkey
     assert durable['jobs'][0]['status'] == 'failed'
     assert durable['jobs'][1]['status'] == 'queued'
     assert not list(state_path.parent.glob('*.tmp'))
-
