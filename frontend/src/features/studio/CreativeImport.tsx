@@ -56,6 +56,7 @@ function uiLocale() {
 
 function blockMessage(reason: string, readiness?: ImportReadiness | null) {
   if (reason === 'pending') return t('正在确认导入条件…')
+  if (reason === 'unavailable') return t('暂时无法确认导入条件，请稍后再试。')
   if (reason === 'analysis') return readiness?.checks?.analysis?.code === 'validation_failed'
     ? t('模型连接未通过校验。请到「设置 → 模型」按提示改密钥或地址后再生成。')
     : t('请先连接 AI 服务，再导入视频。')
@@ -208,6 +209,7 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     if (nextSource === 'file' ? !nextFile : !nextUrl.trim()) { setError(t("请先添加视频文件或链接")); return false }
     const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink })
     if (reason === 'pending') { setError(blockMessage(reason, readiness)); return false }
+    if (reason === 'unavailable') { setError(blockMessage(reason, readiness)); studioApi.readiness().then(setReadiness).catch(() => undefined); return false }
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
     const gate = reason === 'transcription' ? localTranscriptionGate(readiness, !!subtitle, nextSource) : null
     if (gate) { setError(gate === 'installing' ? LOCAL_TRANSCRIPTION_INSTALLING : LOCAL_TRANSCRIPTION_GATE); return false }

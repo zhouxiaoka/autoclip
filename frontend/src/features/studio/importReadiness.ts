@@ -25,7 +25,7 @@ export interface ReadinessIssue extends ReadinessCheck {
   key: 'analysis' | 'transcription' | 'visual' | 'ffmpeg'
 }
 
-export type BlockReason = 'pending' | 'analysis' | 'transcription' | 'visual' | 'ffmpeg'
+export type BlockReason = 'pending' | 'unavailable' | 'analysis' | 'transcription' | 'visual' | 'ffmpeg'
 export type TranscriptionRoute = 'platform_subs' | 'whisper' | 'cloud' | 'srt'
 
 export interface SubmissionOptions {
@@ -36,10 +36,11 @@ export interface SubmissionOptions {
 
 const ORDER = ['analysis', 'transcription', 'visual', 'ffmpeg'] as const
 
-/** Gate the import button. An attached SRT covers a missing transcriber. A failed probe does not trap the user. */
+/** Gate the import button. An attached SRT covers a missing transcriber. A failed probe blocks (retry re-probes). */
 export function submissionBlock(report: ImportReadiness | null, hasSubtitle: boolean, settled: boolean, options: SubmissionOptions = {}): BlockReason | null {
   if (!settled) return 'pending'
-  if (!report) return null
+  // R19 #115: a failed probe (null) is not proof the import can run; block and let the user retry.
+  if (!report) return 'unavailable'
   // A missing check is unknown, not failed: it never traps the user (same as a failed probe).
   const checks = report.checks
   if (checks?.analysis?.ok === false) return 'analysis'

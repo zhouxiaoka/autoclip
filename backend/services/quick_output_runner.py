@@ -54,7 +54,8 @@ def start(source: str, platforms: list[str], *, name: str | None = None, srt_pat
     create_tables()
     if not url:
         from backend.services.studio import readiness
-        readiness.ensure_local_transcription_for_import(srt_available=bool(subtitle), video=video)
+        # One decision for the route quick output really runs (Studio jobs honour analysis_mode). R19 #113
+        readiness.ensure_local_transcription_for_import(srt_available=bool(subtitle), video=video, route='studio')
     with SessionLocal() as db:
         project = ProjectService(db).create_project(ProjectCreate(
             name=name or (video.stem if not url else 'Quick output'), project_type='default', source_url=url,
@@ -68,7 +69,7 @@ def start(source: str, platforms: list[str], *, name: str | None = None, srt_pat
                 shutil.copy2(subtitle, raw / 'input.srt')
         else:
             target = prepare_project(RunRequest(video=video, srt=subtitle, name=project.name,
-                                                project_id=project_id, register_db=False))
+                                                project_id=project_id, register_db=False), gate=False)
             project.video_path = str(target)
             db.commit()
     import psutil

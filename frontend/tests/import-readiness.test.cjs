@@ -39,7 +39,8 @@ function report(overrides = {}) {
 test('submit waits for the probe, then blocks analysis, visual, ffmpeg, and transcription without an srt', () => {
   const { submissionBlock } = readiness
   assert.equal(submissionBlock(null, false, false), 'pending')
-  assert.equal(submissionBlock(null, false, true), null)
+  assert.equal(submissionBlock(null, false, true), 'unavailable')  // R19 #115: failed probe never lets the import through
+  assert.equal(submissionBlock(null, true, true), 'unavailable')
   assert.equal(submissionBlock(report({ analysis: check(false, 'not_configured', 'settings_ai') }), true, true), 'analysis')
   assert.equal(submissionBlock(report({ transcription: check(false, 'whisper_not_installed', 'install_whisper') }), false, true), 'transcription')
   assert.equal(submissionBlock(report({ transcription: check(false, 'whisper_not_installed', 'install_whisper') }), true, true), null)
@@ -261,4 +262,17 @@ test('ASR readiness properties infer provider from the check code and never need
 test('CreativeImport reads readiness transcription with optional chaining at every level', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/CreativeImport.tsx'), 'utf8')
   assert.doesNotMatch(source, /readiness\?\.checks\.|checks\?\.transcription\.code/)
+})
+
+test('R19 #115: a failed readiness probe (null) blocks the start instead of letting it through', async () => {
+  const view = render({ report: null })
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 0)
+})
+
+test('R19 #115: no settings file -> default local Whisper not installed, no SRT: blocked before start', async () => {
+  // /studio/readiness with no settings document reports the defaults (whisper_local, not installed).
+  const view = render({ report: report({ transcription: check(false, 'whisper_not_installed', 'install_whisper') }) })
+  await button(view.tree, '生成成片').props.onClick()
+  assert.equal(view.calls.length, 0)
 })

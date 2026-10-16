@@ -208,18 +208,9 @@ def ensure_local_transcription_for_import(*, srt_available: bool, video=None, ro
     Never switches provider (no silent cloud fallback) and never installs anything.
     Links are not gated here: platform captions are tried first after download.
     """
-    if route == 'content':
-        settings = _gate_settings()
-        mode = None
-    else:
-        # Studio keeps the first-run path: no document yet -> the import page's own readiness prompt handles it.
-        try:
-            settings = ai_models.load()
-        except Exception:  # noqa: BLE001
-            return
-        if settings is None:
-            return
-        mode = settings.analysis_mode
+    # Missing / unreadable settings fall back to defaults on every route, like the runtime check (R19 #115).
+    settings = _gate_settings()
+    mode = None if route == 'content' else settings.analysis_mode
     if not needs_transcription(srt_available=srt_available, analysis_mode=mode):
         return
     choice = settings.transcription or ai_models.Transcription()

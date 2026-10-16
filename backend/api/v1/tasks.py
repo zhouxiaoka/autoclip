@@ -146,7 +146,8 @@ async def submit_task(
                 raise HTTPException(status_code=400, detail="任务缺少 input_video_path 配置")
             from backend.services.studio import readiness
             try:  # 1.5.8 gate before anything is queued (R18 #72)
-                readiness.ensure_local_transcription_for_paths(input_video_path, input_srt_path)
+                # Only the SRT the queue receives counts; input.srt beside the video is not passed on (R19 #114).
+                readiness.ensure_local_transcription_for_paths(input_video_path, input_srt_path, sibling_srt=False)
             except readiness.TranscriptionNotReady as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             result = queue_service.submit_video_processing_task(
@@ -189,8 +190,8 @@ async def retry_task(
         if str(task.task_type.value if hasattr(task.task_type, "value") else task.task_type) == "video_processing":
             from backend.services.studio import readiness
             try:  # 1.5.8 gate before resetting the task
-                readiness.ensure_local_transcription_for_paths(_get_task_config_value(task, "input_video_path"), _get_task_config_value(task, "input_srt_path"))
-            except ValueError as exc:
+                readiness.ensure_local_transcription_for_paths(_get_task_config_value(task, "input_video_path"), _get_task_config_value(task, "input_srt_path"), sibling_srt=False)
+            except readiness.TranscriptionNotReady as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
         
         # 重置任务状态并重新提交

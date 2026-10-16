@@ -78,6 +78,22 @@ def _no_framing_install(monkeypatch, request):
         monkeypatch.setattr(framing, "start_install", lambda index_url=None: {"started": False, "message": "test"})
     yield
 
+@pytest.fixture(autouse=True)
+def _whisper_gate_only_in_gate_suites(monkeypatch, request):
+    # 1.5.8 R19 #115: with no settings document the import gate assumes the default local Whisper,
+    # which CI never has installed. Suites that are not about that gate keep their old import flow;
+    # the gate itself is covered by test_r158_whisper_* (real gate, no stub).
+    if request.node.get_closest_marker("stdlib_only"):
+        yield
+        return
+    name = getattr(request.node.module, "__name__", "")
+    if "test_r158_whisper_" in name:
+        yield
+        return
+    from backend.services.studio import readiness
+    monkeypatch.setattr(readiness, "ensure_local_transcription_for_import", lambda **kwargs: None)
+    yield
+
 @pytest.fixture(scope="session")
 def test_data_dir(tmp_path_factory):
     """创建测试数据目录"""

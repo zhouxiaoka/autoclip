@@ -300,7 +300,7 @@ def _set_project_status(project_id: str, status: str, error: Optional[str] = Non
         logger.warning(f"更新项目状态失败: {e}")
 
 
-def prepare_project(req: RunRequest, link: bool = True) -> Path:
+def prepare_project(req: RunRequest, link: bool = True, *, gate: bool = True) -> Path:
     """
     建项目目录、把视频放进 raw/（默认硬链接，失败则复制；`link=False` 强制复制）。
     返回 raw 里的视频路径。
@@ -318,7 +318,9 @@ def prepare_project(req: RunRequest, link: bool = True) -> Path:
     from backend.services.studio import readiness
     # The pipeline only sees the SRT copied below (explicit --srt), so a stray input.srt next to the
     # source does not count; the content route always transcribes, whatever the global analysis mode.
-    readiness.ensure_local_transcription_for_paths(req.video, req.srt, sibling_srt=False, route='content')
+    # gate=False: the caller (quick output) already ran the single decision for its own route (R19 #113).
+    if gate:
+        readiness.ensure_local_transcription_for_paths(req.video, req.srt, sibling_srt=False, route='content')
 
     project_dir = get_project_directory(req.project_id)
     raw_dir = project_dir / "raw"
