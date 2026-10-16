@@ -37,9 +37,21 @@ def _key() -> str:
     return ''
 
 
+_runtime_off = False
+
+
+def set_runtime_analytics_off(off: bool) -> None:
+    """R12 #17: in-process kill switch, flipped before privacy.json is written so API and
+    worker threads in this process stop at once — and stay off if the disk write fails."""
+    global _runtime_off
+    _runtime_off = bool(off)
+
+
 def _analytics_allowed() -> bool:
     """Product default is on (no privacy.json). privacy.json analytics:false is the opt-out.
     R11 #392: a file that exists but cannot be read/parsed never allows collection."""
+    if _runtime_off:
+        return False
     try:
         from backend.core.sentry_setup import _privacy_path
         path = _privacy_path()

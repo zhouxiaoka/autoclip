@@ -106,13 +106,14 @@ function publishAnonymousId(): void {
  * may be sent — never "on".
  */
 function consentIntent(): boolean {
-  if (preferenceOverride !== undefined) return isAnalyticsEnabled()
+  if (!POSTHOG_KEY) return false
+  // R12 #19: re-read the shared storage on every send/retry. Another window may have turned
+  // analytics off since this one queued an "on"; storage OFF always wins over a stale intent.
   try {
-    localStorage.getItem(OPT_OUT_STORAGE_KEY)
+    return localStorage.getItem(OPT_OUT_STORAGE_KEY) !== 'true'
   } catch {
     return false
   }
-  return isAnalyticsEnabled()
 }
 
 function publishConsent(): void {
@@ -315,7 +316,8 @@ export function isAnalyticsEnabled(): boolean {
   try {
     return localStorage.getItem(OPT_OUT_STORAGE_KEY) !== 'true'
   } catch {
-    return preferenceOverride ?? true
+    // R12 #16: an unreadable preference keeps SDK init, capture, flags and identity OFF.
+    return false
   }
 }
 

@@ -116,7 +116,9 @@ _privacy_lock = threading.Lock()
 
 
 def write_privacy(*, crash_reports: Optional[bool] = None, analytics: Optional[bool] = None) -> Path:
-    """R11 #392: atomic (temp file + os.replace) so a concurrent reader never sees a
+    """Single writer: only the backend API process writes privacy.json (settings endpoints);
+    worker processes only read it.
+    R11 #392: atomic (temp file + os.replace) so a concurrent reader never sees a
     truncated privacy.json; read-modify-write is serialized in-process. An unreadable
     existing file keeps collection OFF unless this call sets analytics explicitly."""
     path = _privacy_path()
@@ -127,9 +129,11 @@ def write_privacy(*, crash_reports: Optional[bool] = None, analytics: Optional[b
         if path.exists():
             try:
                 loaded = json.loads(path.read_text(encoding="utf-8"))
-                current = loaded if isinstance(loaded, dict) else {"analytics": False}
+                current = loaded if isinstance(loaded, dict) else {"analytics": False, "crash_reports": False}
             except Exception:  # noqa: BLE001
-                current = {"analytics": False}
+                # R12 #18: corrupt file => analytics AND crash reports default off; only the
+                # toggle named in this request changes below.
+                current = {"analytics": False, "crash_reports": False}
         if crash_reports is not None:
             current["crash_reports"] = bool(crash_reports)
         if analytics is not None:
@@ -257,6 +261,17 @@ def before_send(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     if fingerprint:
         clean["fingerprint"] = fingerprint
     return clean
+
+
+def clear_anonymous_user() -> None:
+    """R12 #17: drop Sentry user.id in this process now, without reading privacy.json."""
+    if not _initialized:
+        return
+    try:
+        import sentry_sdk
+        sentry_sdk.get_global_scope().set_user(None)
+    except Exception:  # noqa: BLE001
+        logger.debug("Sentry anonymous user was not cleared", exc_info=True)
 
 
 def sync_anonymous_user(distinct_id: str | None = None) -> None:

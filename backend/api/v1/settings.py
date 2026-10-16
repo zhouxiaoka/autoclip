@@ -299,11 +299,20 @@ class AnalyticsConsent(BaseModel):
 async def put_analytics_consent(body: AnalyticsConsent):
     """The UI analytics switch. Off: backend Sentry stops attaching user.id in every process
     (before_send rereads privacy.json); this process's scope user is cleared now."""
-    from backend.core.sentry_setup import sync_anonymous_user, write_privacy
+    from backend.core.sentry_setup import clear_anonymous_user, sync_anonymous_user, write_privacy
+    from backend.services.studio.qa.telemetry import set_runtime_analytics_off
+    if not body.enabled:
+        # R12 #17: stop collection in this process (API + worker threads) and drop the Sentry
+        # identity BEFORE touching disk; a failed write leaves it off.
+        set_runtime_analytics_off(True)
+        clear_anonymous_user()
     try:
         write_privacy(analytics=body.enabled)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=500 if isinstance(exc, OSError) else 400,
+                            detail="隐私设置保存失败" if isinstance(exc, OSError) else str(exc)) from exc
+    if body.enabled:
+        set_runtime_analytics_off(False)
     sync_anonymous_user()
     return {"enabled": body.enabled}
 

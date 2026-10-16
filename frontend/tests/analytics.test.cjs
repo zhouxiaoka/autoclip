@@ -516,6 +516,10 @@ test('SDK exceptions and unavailable storage cannot break business or override o
   const blocked = { getItem() { throw Error('blocked') }, setItem() { throw Error('blocked') } }
   const ph = load('posthog', { 'posthog-js': sdk, './workflow': core }, { localStorage: blocked, window: {} })
   ph.initAnalytics(); ph.trackPageview('/project/private?key=secret')
+  // R12 #16: unreadable preference => nothing initialised or captured until the user opts in.
+  assert.equal(config, undefined)
+  assert.equal(captured.length, 0)
+  ph.setAnalyticsEnabled(true); ph.trackPageview('/project/private?key=secret')
   assert.equal(captured[0].props.route, '/project/:id')
   assert.equal(config.autocapture, false)
   assert.equal(config.disable_session_recording, true)
@@ -1263,4 +1267,56 @@ test('R11: an opt-out keeps retrying after the backoff is exhausted until the AP
   for (const fn of timers.splice(0)) fn()
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(puts.length, settled) // once accepted, no more retries
+})
+
+test('R12 #16: unreadable preference keeps SDK init, capture, flags and identity OFF', async () => {
+  const calls = { init: 0, capture: 0, identity: 0, flags: 0 }
+  const broken = { getItem() { throw new Error('denied') }, setItem() { throw new Error('denied') }, removeItem() {} }
+  const ph = load('posthog', { 'posthog-js': {
+    init() { calls.init++ }, capture() { calls.capture++; return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {}, reloadFeatureFlags() { calls.flags++ },
+  }, './workflow': core }, {
+    localStorage: broken, window: {},
+    fetch: (url) => { if (String(url).includes('/settings/analytics-identity')) calls.identity++; return Promise.resolve({ ok: true }) },
+  })
+  ph.initAnalytics()
+  assert.equal(ph.isAnalyticsEnabled(), false)
+  assert.equal(ph.captureBusinessEvent('studio_import_started', {}), false)
+  ph.trackPageview('/')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(calls, { init: 0, capture: 0, identity: 0, flags: 0 })
+  assert.equal(ph.readLoadedFlag('pkg_templates_v1'), undefined)
+})
+
+test('R12 #19: two windows interleave — storage OFF from another window drops a queued ON retry', async () => {
+  const shared = memory()
+  const puts = []
+  let ok = false
+  const timers = []
+  const make = () => load('posthog', { 'posthog-js': { init() {}, capture() { return {} },
+    get_distinct_id: () => '018f6b2a-7c3d-7b2a-8c11-111111111111',
+    opt_in_capturing() {}, opt_out_capturing() {} }, './workflow': core }, {
+    localStorage: shared, window: {},
+    setTimeout: (fn) => { timers.push(fn); return timers.length }, clearTimeout: () => {},
+    fetch: (url, opts) => {
+      if (!String(url).includes('/settings/analytics-consent')) return Promise.resolve({ ok: true })
+      puts.push(JSON.parse(opts.body).enabled)
+      return Promise.resolve({ ok })
+    },
+  })
+  const a = make()
+  a.initAnalytics()
+  a.setAnalyticsEnabled(true) // A wants ON; the PUT fails and a retry is queued
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(timers.length > 0)
+  const b = make()
+  b.setAnalyticsEnabled(false) // B (another window) turns analytics OFF in shared storage
+  ok = true
+  await new Promise(resolve => setImmediate(resolve))
+  const before = puts.length
+  for (const fn of timers.splice(0)) fn() // A's queued retry fires
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(!puts.slice(before).includes(true), JSON.stringify(puts))
+  assert.equal(puts[puts.length - 1], false)
 })
