@@ -72,9 +72,11 @@ row(f'旧版运行中覆盖升级到 {cand_v}（+残留 python 占 _asyncio.pyd�
 celery = lc.get('celery_processes')
 row(f'启动 {cand_v}', lc.get('ok'), f"mode={lc.get('mode')} 端口文件 {lc.get('port_file_seconds')}s 健康 {lc.get('healthy_seconds')}s exe FileVersion {lc.get('exe_file_version')}")
 cel_logs = [l for l in (ck.get('log_celery_lines') or []) if 'Celery' in l]
+# Python 3.11: no backslash inside an f-string expression (R29: summarize failures are no longer ignored)
+cel_last = re.sub(r'^.*?(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d).*?(✅.*)$', r'\1 \2', cel_logs[-1])[:80] if cel_logs else '无'
 row('进程里没有 Celery', (celery == [] and lc.get('ok')) if celery is not None else None,
     f"候选版进程树：autoclip-desktop.exe + WebView2 + 1 个 python（-m backend.desktop_main），命令行含 celery 的 {len(celery or [])} 个；"
-    f"日志里唯一的 Celery 行来自升级前的 {prev_v}：{re.sub(r'^.*?(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d).*?(✅.*)$', r'\1 \2', cel_logs[-1])[:80] if cel_logs else '无'}")
+    f"日志里唯一的 Celery 行来自升级前的 {prev_v}：{cel_last}")
 for key, label in [('reported_version_matches', f"后端上报版本 = {cand_v}（实际 {ck.get('app_version')}）"), ('backend_health_200', '/health 200'),
                    ('settings_endpoint_200', '/api/v1/settings/ 200'), ('upgrade_kept_privacy_off', '升级后隐私设置保留'),
                    ('upgrade_kept_model_connection_and_key', '升级后模型连接和 key 保留'), ('upgrade_kept_project', '升级后项目保留'),
