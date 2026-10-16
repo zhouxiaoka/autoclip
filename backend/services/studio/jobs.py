@@ -226,7 +226,7 @@ def analyze_project(project_id, prefs, url=None, browser=None):
         if (data.get('analysis') or {}).get('status') == 'running':
             raise ValueError('视觉分析正在运行')
         from backend.services.studio.failure_identity import provider_identity
-        data['analysis'] = {**provider_identity(), 'status': 'running', 'phase': 'analysis', 'run_id': uuid.uuid4().hex, 'message': '下载素材' if url else '理解画面', 'instance': store.INSTANCE, 'created_at': store.now()}
+        data['analysis'] = {**provider_identity('vision'), 'status': 'running', 'phase': 'analysis', 'run_id': uuid.uuid4().hex, 'message': '下载素材' if url else '理解画面', 'instance': store.INSTANCE, 'created_at': store.now()}
         return data['analysis']['run_id']
     run_id = store.change(project_id, begin)
     try:

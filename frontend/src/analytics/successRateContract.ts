@@ -38,6 +38,7 @@ export const TELEMETRY_PROVIDERS = [
 ] as const
 export const ASR_PROVIDERS = ['whisper_local', 'sensevoice_local', 'cloud'] as const
 export const REQUEST_KINDS = ['text', 'vision'] as const
+export const CONFIG_SOURCES = ['preset', 'customized'] as const
 export const REQUEST_OUTCOMES = ['success', 'error'] as const
 export const VALIDATION_RESULTS = ['success', 'failed', 'skipped'] as const
 export const FINISH_REASONS = ['stop', 'length', 'content_filter', 'unknown'] as const
@@ -179,6 +180,7 @@ function sanitize(value: Record<string, unknown> | null | undefined, kind: 'requ
     }
   } else if (kind === 'run') {
     putEnum(out, raw, 'failure_stage', FAILURE_STAGES)
+    putEnum(out, raw, 'config_source', CONFIG_SOURCES)
     putHttpStatus(out, raw.http_status, 400)
     for (const key of ['llm_calls', 'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'retry_count', 'degrade_count', 'billable_calls_before_failure']) {
       putCount(out, raw, key)

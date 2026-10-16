@@ -42,13 +42,6 @@ _degrade_seq = itertools.count(1)
 _degrade_registry_lock = threading.Lock()
 _degrade_runs: dict[int, _DegradeAcc] = {}
 
-_PROVIDER_ALIASES = {
-    "siliconflow": "compatible",
-    "88api": "api88",
-    "88api.ai": "api88",
-    "api.88api.ai": "api88",
-    "unknown": "other",
-}
 _STAGE_ALIASES = {
     "INGEST": "ingest",
     "SUBTITLE": "subtitle",
@@ -444,6 +437,7 @@ def run_snapshot(project_id: str | None = None) -> dict[str, Any]:
         "provider": provider,
         "model": model,
         "base_url_host": host,
+        "config_source": configured.get("config_source"),
         "http_status": acc.last_http_status if acc else None,
         "upstream_error_type": acc.last_upstream if acc else None,
         "billable_calls_before_failure": acc.billable if acc else 0,
@@ -487,13 +481,24 @@ def configured_connection_fields(*, role: str = "analysis") -> dict[str, Any]:
         settings = ai.load()
         if not settings:
             return {}
-        binding = settings.vision if role == "vision" and getattr(settings, "vision", None) else settings.analysis
+        binding = settings.vision if role == "vision" and getattr(settings, "vision", None) else getattr(settings, "analysis", None)
         if not binding:
             return {}
-        connection = ai.connection_for(settings, binding)
-        endpoint = ai.chat_endpoint(connection, binding.model)
+        connection = next((c for c in settings.connections if c.id == binding.connection_id), None)
+        if connection is None:
+            return {}
+        try:
+            endpoint = ai.chat_endpoint(connection, binding.model)
+        except Exception:  # noqa: BLE001 - identity does not need a usable endpoint
+            endpoint = {}
+        from backend.services.studio.failure_identity import config_source
+        try:
+            source = config_source(connection.provider, connection.base_url, binding.model)
+        except Exception:  # noqa: BLE001
+            source = "customized"
         return schema.sanitize_run_properties({
-            "provider": _provider_name(connection.provider),
+            "provider": _provider_name(connection.provider) or "other",
+            "config_source": source,
             "model": _safe_model(binding.model),
             "base_url": endpoint.get("base_url"),
         })
@@ -700,15 +705,17 @@ def _provider_label(provider: Any, base_url: str) -> str:
     if name == "GeminiProvider":
         return "gemini"
     if name == "SiliconFlowProvider":
-        return "compatible"
+        return "siliconflow"
     host = schema.hostname_of_base_url(base_url) or ""
     try:
-        from backend.core.cloud_presets import CLOUD_PRESETS, is_api88_host
+        # R20 #138: the provider catalog is the only slug source (no private alias table here).
+        from backend.core.cloud_presets import is_api88_host
+        from backend.core.provider_presets import iter_providers
         if is_api88_host(host):
             return "api88"
-        for key, preset in CLOUD_PRESETS.items():
-            if schema.hostname_of_base_url(preset.base_url) == host:
-                return _provider_name(key) or "other"
+        for preset in iter_providers():
+            if host and preset.base_url and schema.hostname_of_base_url(preset.base_url) == host:
+                return _provider_name(preset.id) or "other"
     except Exception:  # noqa: BLE001
         pass
     if host in {"api.openai.com", ""}:
@@ -761,9 +768,8 @@ def _safe_model(value: Any) -> str | None:
 
 
 def _provider_name(value: Any) -> str | None:
-    text = str(value or "").strip().lower()
-    text = _PROVIDER_ALIASES.get(text, text)
-    return schema.sanitize_provider(text)
+    # Catalog ids + catalog aliases (provider_presets.json) via the shared sanitizer; nothing local.
+    return schema.sanitize_provider(str(value or "").strip().lower())
 
 
 def _http_status(error: BaseException | None) -> int | None:

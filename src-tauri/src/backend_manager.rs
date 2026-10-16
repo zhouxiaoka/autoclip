@@ -551,14 +551,20 @@ pub(crate) fn intent_acknowledged(result: &std::io::Result<bool>) -> bool {
     matches!(result, Ok(true))
 }
 
-/// R19 #98: `<app_dir>/shutdown_unacked/<instance>`; the backend maps "no marker + this record" to unknown.
+/// R19 #98 / R20 #134: the same per-instance record the backend writes (`<app_dir>/shutdown_markers/<instance>`)
+/// with content `unacked` -> unknown. Created only if no marker exists yet: a marker that landed in time wins.
 pub(crate) fn record_unacknowledged_intent(app_dir: &std::path::Path, instance: &str) -> std::io::Result<()> {
     if instance.len() != 32 || !instance.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "instance"));
     }
-    let dir = app_dir.join("shutdown_unacked");
+    use std::io::Write;
+    let dir = app_dir.join("shutdown_markers");
     std::fs::create_dir_all(&dir)?;
-    std::fs::write(dir.join(instance), b"unacked")
+    match std::fs::OpenOptions::new().write(true).create_new(true).open(dir.join(instance)) {
+        Ok(mut file) => file.write_all(b"unacked"),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 /// R16 #42: POST /internal/shutdown-intent on loopback and wait (bounded by `budget`) for 200.
@@ -681,8 +687,21 @@ mod shutdown_intent_tests {
         let dir = std::env::temp_dir().join(format!("acr19-{}", new_instance_id().unwrap()));
         let instance = new_instance_id().unwrap();
         record_unacknowledged_intent(&dir, &instance).unwrap();
-        assert_eq!(std::fs::read(dir.join("shutdown_unacked").join(&instance)).unwrap(), b"unacked");
+        assert_eq!(std::fs::read(dir.join("shutdown_markers").join(&instance)).unwrap(), b"unacked");
         assert!(record_unacknowledged_intent(&dir, "../../etc/passwd").is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unacked_record_never_overwrites_a_marker_that_landed() {
+        // R20 #134: one record per instance in the backend's shutdown_markers dir; marker wins.
+        let dir = std::env::temp_dir().join(format!("acr20-{}", new_instance_id().unwrap()));
+        let instance = new_instance_id().unwrap();
+        std::fs::create_dir_all(dir.join("shutdown_markers")).unwrap();
+        std::fs::write(dir.join("shutdown_markers").join(&instance), b"user_quit").unwrap();
+        record_unacknowledged_intent(&dir, &instance).unwrap();
+        assert_eq!(std::fs::read(dir.join("shutdown_markers").join(&instance)).unwrap(), b"user_quit");
+        assert!(!dir.join("shutdown_unacked").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

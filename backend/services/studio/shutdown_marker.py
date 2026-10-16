@@ -9,14 +9,15 @@ as service_restarted.
   overwrites a user_quit/update marker and is never reported as clean.
 - begin_shutdown() writes nothing: it runs on both paths.
 
-On the next start the dead run's instance marker is classified once (cached per process) and only
-deleted by release() after the recovered terminal is on disk (R19 #99), so a failed write followed by
-another restart still reads the same classification:
-user_quit/update -> ``clean``, parent_lost -> ``parent_lost``, missing -> ``crash``,
+On the next start the dead run's instance record is classified (cached per process):
+user_quit/update -> ``clean``, parent_lost -> ``parent_lost``, unacked -> ``unknown``, missing -> ``crash``,
 unreadable or invalid content -> ``unknown`` (also for a missing/invalid instance id).
-R19 #98: when the shell's intent got no 200 in time (slow disk, busy backend) it writes
-``<AUTOCLIP_APP_DIR>/shutdown_unacked/<instance>`` before killing; a missing marker with that record is
-``unknown`` (we cannot tell), never ``crash``. A marker that did land in time still wins.
+R20 #134/#99: one record per instance in ONE directory (``<data dir>/shutdown_markers/<instance>``), one
+prune rule. R19 #98's "shell got no 200 in time" is the same record with content ``unacked``, written by
+the shell only when no marker exists yet (a marker that landed in time wins). A record is released only
+when no project still references that instance, so several projects of one dead instance all read the
+same classification even if one of them fails to persist and the app restarts again. Pruning keeps the
+newest ``_KEEP`` records and never drops one that an unrecovered project still references.
 Enum only; nothing else leaves the box.
 """
 from __future__ import annotations
@@ -62,27 +63,29 @@ def mark(kind: str, instance: str | None = None) -> bool:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(tmp, path)
-        markers = sorted((p for p in root.iterdir() if not p.name.startswith('.')), key=lambda p: p.stat().st_mtime)
-        for old in markers[:-_KEEP]:
-            old.unlink(missing_ok=True)
+        _prune(root)
         return True
     except Exception:  # noqa: BLE001 - a marker must never block shutdown
         return False
 
 
-def _unacked(instance: str) -> Path | None:
-    app_dir = os.getenv('AUTOCLIP_APP_DIR')
-    return Path(app_dir).expanduser() / 'shutdown_unacked' / instance if app_dir else None
+def _referenced(instance: str) -> bool:
+    try:
+        from backend.services.studio.store import instance_referenced
+        return instance_referenced(instance)
+    except Exception:  # noqa: BLE001 - unsure -> keep the record
+        return True
+
+
+def _prune(root: Path) -> None:
+    records = sorted((p for p in root.iterdir() if not p.name.startswith('.')), key=lambda p: p.stat().st_mtime)
+    for old in records[:-_KEEP]:
+        if not _referenced(old.name):
+            old.unlink(missing_ok=True)
 
 
 def _classify(path: Path) -> str:
     if not path.exists():
-        unacked = _unacked(path.name)
-        try:
-            if unacked is not None and unacked.exists():
-                return 'unknown'
-        except OSError:
-            return 'unknown'
         return 'crash'
     try:
         content = path.read_text(encoding='ascii').strip()
@@ -92,7 +95,7 @@ def _classify(path: Path) -> str:
         return 'clean'
     if content == 'parent_lost':
         return 'parent_lost'
-    return 'unknown'
+    return 'unknown'  # 'unacked' (R19 #98) or anything unexpected
 
 
 def shutdown_kind(instance: str | None) -> str:
@@ -112,16 +115,15 @@ def shutdown_kind(instance: str | None) -> str:
 
 
 def release(instance: str | None) -> None:
-    """R19 #99: delete a dead instance's marker; call only after its terminal state was written."""
+    """Delete a dead instance's record once no project references it any more (R20 #99).
+
+    Call only after the caller's own terminal state was written."""
     if not instance or not re.fullmatch(r'[0-9a-f]{32}', str(instance)):
         return
     try:
         root = _root()
         with _lock:
-            if (str(root), instance) in _consumed:
+            if (str(root), instance) in _consumed and not _referenced(instance):
                 (root / instance).unlink(missing_ok=True)
-                unacked = _unacked(instance)
-                if unacked is not None:
-                    unacked.unlink(missing_ok=True)
-    except Exception:  # noqa: BLE001 - cleanup only; _KEEP pruning bounds leftovers
+    except Exception:  # noqa: BLE001 - cleanup only; _prune bounds leftovers
         pass

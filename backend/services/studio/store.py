@@ -448,6 +448,36 @@ def read(project_id: str, *, recover: bool = True):
         _pending_links.pop(path, None)
     return data
 
+def _references_instance(data, instance):
+    """Unrecovered state that still needs instance's shutdown record to be classified."""
+    analysis = data.get('analysis') if isinstance(data.get('analysis'), dict) else {}
+    if analysis.get('status') == 'running' and analysis.get('instance') == instance:
+        return True
+    for job in data.get('jobs') or []:
+        if isinstance(job, dict) and job.get('status') in ('queued', 'running') and job.get('instance') == instance:
+            return True
+    for variant in data.get('output_variants') or []:
+        if not isinstance(variant, dict):
+            continue
+        if variant.get('status') == 'preparing' and variant.get('instance') == instance:
+            return True
+        if variant.get('status') == 'queued' and variant.get('render_dispatch_instance') == instance:
+            return True
+    return False
+
+
+def instance_referenced(instance):
+    """R20 #99/#134: does any project on disk still reference this dead instance? Unreadable -> yes."""
+    for path in get_projects_directory().glob('*/metadata/studio.json'):
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return True
+        if isinstance(data, dict) and _references_instance(data, instance):
+            return True
+    return False
+
+
 def producer_alive(generation):
     """A CLI / MCP producer process (quick_output_runner) that is still running owns the run."""
     producer = generation.get('producer') if isinstance(generation, dict) else None

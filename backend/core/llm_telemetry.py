@@ -39,6 +39,8 @@ ASR_PROVIDERS: frozenset[str] = frozenset({
     "whisper_local", "sensevoice_local", "cloud",
 })
 REQUEST_KINDS: frozenset[str] = frozenset({"text", "vision"})
+#: R20 #137: run-level identity enum (preset = catalog URL + catalog model, else customized).
+CONFIG_SOURCES: tuple[str, ...] = ("preset", "customized")
 REQUEST_OUTCOMES: frozenset[str] = frozenset({"success", "error"})
 VALIDATION_RESULTS: frozenset[str] = frozenset({"success", "failed", "skipped"})
 FINISH_REASONS: frozenset[str] = frozenset({"stop", "length", "content_filter", "unknown"})
@@ -255,6 +257,7 @@ def _sanitize(value: Mapping[str, Any] | None, *, kind: str) -> dict[str, Any]:
             _put_count(out, raw, key)
     elif kind == "run":
         _put_enum(out, raw, "failure_stage", FAILURE_STAGES)
+        _put_enum(out, raw, "config_source", frozenset(CONFIG_SOURCES))
         _put_http_status(out, raw.get("http_status"), minimum=400)
         for key in (
             "llm_calls", "prompt_tokens", "completion_tokens", "reasoning_tokens",

@@ -1,11 +1,11 @@
 """1.5.8 terminal-event identity: provider slug + config_source enum, never URL/key/custom names.
 
-``provider`` is a catalog slug (or ``other``); ``config_source`` is ``preset`` when the analysis
+``provider`` is a catalog slug (or ``other``); ``config_source`` is ``preset`` when the role's
 connection uses the catalog base URL and a catalog model id, else ``customized``.
 """
 from __future__ import annotations
 
-CONFIG_SOURCES = ('preset', 'customized')
+from backend.core.llm_telemetry import CONFIG_SOURCES  # noqa: F401 - one enum, re-exported
 
 
 def _norm(url: str | None) -> str:
@@ -38,21 +38,17 @@ def config_source(provider: str | None, base_url: str | None, model: str | None)
     return 'preset'
 
 
-def provider_identity() -> dict:
-    """Provider slug + config_source of the saved analysis connection; {} when unknown."""
-    try:
-        from backend.services import ai_model_settings as ai
-        settings = ai.load()
-        binding = getattr(settings, 'analysis', None) if settings else None
-        connection = next((c for c in settings.connections if c.id == binding.connection_id), None) if binding else None
-    except Exception:  # noqa: BLE001 - telemetry identity can never fail a run
+ROLES = ('analysis', 'vision')
+
+
+def provider_identity(role: str = 'analysis') -> dict:
+    """R20 #136: provider slug + config_source of the connection the given role actually runs on; {} when
+    unknown. One resolver (llm_emit.configured_connection_fields) for start identity, run snapshot and
+    request events; callers freeze it at attempt start (store.attempt_identity: first source wins)."""
+    if role not in ROLES:
         return {}
-    if connection is None:
+    from backend.core.llm_emit import configured_connection_fields
+    fields = configured_connection_fields(role=role)
+    if not fields:
         return {}
-    from backend.core.llm_telemetry import sanitize_provider
-    slug = sanitize_provider(connection.provider) or 'other'
-    try:
-        source = config_source(connection.provider, connection.base_url, binding.model)
-    except Exception:  # noqa: BLE001
-        source = 'customized'
-    return {'provider': slug, 'config_source': source}
+    return {'provider': fields.get('provider') or 'other', 'config_source': fields.get('config_source') or 'customized'}

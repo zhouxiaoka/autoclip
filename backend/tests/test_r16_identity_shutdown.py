@@ -19,7 +19,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
     from backend.services.studio import failure_identity, shutdown_marker
-    monkeypatch.setattr(failure_identity, 'provider_identity', lambda: dict(LATER))
+    monkeypatch.setattr(failure_identity, 'provider_identity', lambda *_a, **_k: dict(LATER))
     shutdown_marker._consumed.clear()
 
 
@@ -66,7 +66,7 @@ def test_screening_start_records_identity_and_failure_keeps_it(monkeypatch):
     """Real inspect_project -> studio.json -> worker failure, with settings changed mid-run."""
     from backend.services.studio import failure_identity, jobs, readiness
     from backend.services.studio.models import ImportOptions
-    monkeypatch.setattr(failure_identity, 'provider_identity', lambda: dict(START))
+    monkeypatch.setattr(failure_identity, 'provider_identity', lambda *_a, **_k: dict(START))
     monkeypatch.setattr(readiness, 'ensure_analysis_usable', lambda: None)
     monkeypatch.setattr(jobs, 'mark_project', lambda *a, **k: None)
     submitted = []
@@ -77,7 +77,7 @@ def test_screening_start_records_identity_and_failure_keeps_it(monkeypatch):
     state = store.read('p40')
     for record in (state['analysis'], state['generation']):
         assert {k: record.get(k) for k in START} == START
-    monkeypatch.setattr(failure_identity, 'provider_identity', lambda: dict(LATER))
+    monkeypatch.setattr(failure_identity, 'provider_identity', lambda *_a, **_k: dict(LATER))
     from backend.services.studio import planning
     monkeypatch.setattr(planning, 'recommend', lambda *a, **k: (_ for _ in ()).throw(TimeoutError('slow upstream')))
     monkeypatch.setattr(jobs, 'source', lambda *a, **k: None)

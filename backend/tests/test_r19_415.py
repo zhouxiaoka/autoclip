@@ -23,7 +23,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv('AUTOCLIP_DATA_DIR', str(tmp_path))
     monkeypatch.setenv('AUTOCLIP_APP_DIR', str(tmp_path))
     from backend.services.studio import failure_identity, shutdown_marker
-    monkeypatch.setattr(failure_identity, 'provider_identity', lambda: dict(LATER))
+    monkeypatch.setattr(failure_identity, 'provider_identity', lambda *_a, **_k: dict(LATER))
     shutdown_marker._consumed.clear()
 
 
@@ -180,7 +180,7 @@ def test_101_unconfigured_token_rejects_every_request(monkeypatch, header):
 # --- #98: the shell got no 200 in time (timeout / non-200) -> unknown, never crash ----------------
 
 def _unacked(tmp_path, instance):
-    path = tmp_path / 'shutdown_unacked' / instance
+    path = tmp_path / 'shutdown_markers' / instance  # R20 #134: same dir/record as the marker
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text('unacked', encoding='ascii')
     return path
@@ -194,7 +194,7 @@ def test_98_unacknowledged_intent_without_marker_is_unknown_not_crash(tmp_path):
 
 def test_98_slow_marker_write_that_landed_still_reads_clean(tmp_path):
     from backend.services.studio import shutdown_marker
-    _unacked(tmp_path, OLD)                 # shell timed out first ...
+    _unacked(tmp_path, OLD)                 # shell timed out first (record already there) ...
     assert shutdown_marker.mark('user_quit', OLD)  # ... the slow write finished before the kill
     assert shutdown_marker.shutdown_kind(OLD) == 'clean'
 
@@ -228,3 +228,53 @@ def test_98_backend_uses_and_pops_the_shell_instance_id(tmp_path):
     env['AUTOCLIP_INSTANCE_ID'] = '../../etc'
     done = subprocess.run([sys.executable, '-c', script], cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
     assert re.search(r'INSTANCE=[0-9a-f]{32}\n', done.stdout) and '../' not in done.stdout
+
+
+# --- R20 #99 / #134: one record per instance, released only when no project references it ----------
+
+def _two_projects_mid_render():
+    _mid_render('pa')
+    _mid_render('pb')
+
+
+def test_r20_99_second_project_of_same_instance_keeps_clean_after_first_released(monkeypatch):
+    from backend.services.studio import shutdown_marker
+    assert shutdown_marker.mark('user_quit', OLD)
+    _two_projects_mid_render()
+    assert store.read('pa')['generation']['shutdown_kind'] == 'clean'   # A written, tries to release
+    real_write = store.write
+
+    def broken(*a, **k):
+        raise OSError('disk full')
+    monkeypatch.setattr(store, 'write', broken)
+    store.read('pb')                        # B's recovery write fails
+    shutdown_marker._consumed.clear()       # app restarts again
+    monkeypatch.setattr(store, 'write', real_write)
+    assert store.read('pb')['generation']['shutdown_kind'] == 'clean'   # was 'crash' on 6fbacce3
+    assert not (shutdown_marker._root() / OLD).exists()                  # released after the last one
+
+
+def test_r20_134_unacked_lives_in_the_single_marker_dir_and_is_released(tmp_path):
+    from backend.services.studio import shutdown_marker
+    record = _unacked(tmp_path, OLD)
+    assert record.parent == shutdown_marker._root()
+    _mid_render('p134')
+    assert store.read('p134')['generation']['shutdown_kind'] == 'unknown'
+    assert not record.exists()
+    assert not (tmp_path / 'shutdown_unacked').exists()
+
+
+def test_r20_134_prune_bounds_records_but_keeps_referenced_ones(monkeypatch, tmp_path):
+    import os as _os
+    from backend.services.studio import shutdown_marker
+    monkeypatch.setattr(shutdown_marker, '_KEEP', 3)
+    root = shutdown_marker._root()
+    root.mkdir(parents=True, exist_ok=True)
+    _mid_render('pkeep')                    # references OLD (oldest record)
+    for i, name in enumerate([OLD] + [f'{i:032x}' for i in range(1, 8)]):
+        (root / name).write_text('unacked', encoding='ascii')
+        _os.utime(root / name, (1000 + i, 1000 + i))
+    assert shutdown_marker.mark('user_quit', 'e' * 32)
+    left = {p.name for p in root.iterdir()}
+    assert OLD in left                      # still needed by an unrecovered project
+    assert len(left) == 3 + 1               # newest _KEEP + the referenced one
