@@ -1940,5 +1940,6 @@
   "视觉": "Vision",
   "全部启用": "Tout activer",
   "全部停用": "Tout désactiver",
-  "未启用": "Non activés"
+  "未启用": "Non activés",
+  "关闭后成片不压字幕，标题和名牌保留。": "Désactivé : aucun sous-titre incrusté ; le titre et les cartons restent."
 }

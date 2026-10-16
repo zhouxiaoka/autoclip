@@ -26,7 +26,9 @@ def build_fill(packaging, duration: float, fps: int = 30, safe_area: str = 'xiao
     duration = max(0.0, float(duration))
     total = max(1, _frames(duration, fps))
     lines = [str(line).strip() for line in (_get(packaging, 'title_lines', []) or []) if str(line).strip()]
-    cues = list(_get(packaging, 'cues', []) or [])
+    # #367 / P2: HTML templates must honor the same captions switch as ASS packaging_render.
+    captions_on = _get(packaging, 'captions_enabled', True)
+    cues = list(_get(packaging, 'cues', []) or []) if captions_on is not False else []
     emphasis = [str(_get(mark, 'text', '')).strip() for mark in (_get(packaging, 'emphasis', []) or [])]
     emphasis = [phrase for phrase in emphasis if phrase]
     words = []

@@ -108,6 +108,8 @@ class Packaging(BaseModel):
     speakers: list[PackagingSpeaker] = Field(default_factory=list, max_length=8)
     tags: list[PackagingMark] = Field(default_factory=list, max_length=8)
     tags_enabled: bool = True
+    # #367: users can switch the template captions off; titles/nameplates stay.
+    captions_enabled: bool = True
     highlights: list[PackagingMark] = Field(default_factory=list, max_length=40)
     burned_captions: bool = False
     fallback: bool = False

@@ -275,3 +275,24 @@ def test_re_render_of_an_old_empty_fallback_recovers_source_without_mutating_dra
     assert warnings == ['包装未能完整生成，已使用原字幕']
     burned = draft.model_copy(update={'packaging': draft.packaging.model_copy(update={'burned_captions': True})})
     assert render.recover_empty_packaging('project', burned, []) is burned
+
+
+def test_issue_367_template_captions_can_be_switched_off():
+    on = pr.scene_ass(_packaging(), SCENES, 0)
+    off = pr.scene_ass(_packaging(captions_enabled=False), SCENES, 0)
+    assert '第一句' in on
+    assert '第一句' not in off and 'first line' not in off
+    assert '好的投资人' in off  # title stays
+    assert _packaging().captions_enabled is True  # saved drafts keep captions
+
+
+def test_issue_367_switched_off_captions_are_not_recovered_from_source(monkeypatch):
+    from backend.services.studio import render
+    from backend.services.studio.models import Draft
+    draft = Draft(id='off', title='t', scenes=[{'id': 's', 'start': 0, 'end': 3}],
+                  packaging=_packaging(cues=[], fallback=True, captions_enabled=False))
+    monkeypatch.setattr(render, '_load_srt_entries', lambda _: [
+        {'start_time': '00:00:00,000', 'end_time': '00:00:03,000', 'text': 'source words'}])
+    warnings = []
+    assert render.recover_empty_packaging('p', draft, warnings) is draft
+    assert warnings == []
