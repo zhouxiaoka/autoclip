@@ -92,3 +92,13 @@ def test_229_one_sql_adapter():
         if p.name != 'success_rate_sql.py':
             assert 'backend.tests.success_rate_sql import' in text, f'{p.name} must use the shared adapter'
             assert 'def to_duckdb' not in text and 'CREATE MACRO' not in text, f'{p.name}: own adapter'
+
+
+@pytest.mark.parametrize('goals', [['content', 'highlight'], ['highlight', 'content']])
+def test_r24_page_gets_the_user_cause_stage_while_event_primary_stays_product(monkeypatch, tmp_path, goals):
+    """R24 PM rule: page and stats are separate. The record keeps the product primary (timeout/vision) for the
+    event, and carries each secondary cause's stage so the page can send 「去设置」 to the right row."""
+    a = _produce(monkeypatch, tmp_path, goals, intelligence.VisionRequestError('timeout', '视觉模型请求超时'))
+    assert a['error_code'] == 'timeout' and a['failure_stage'] == 'vision'
+    assert a['secondary_error_codes'] == ['authentication'] and a['secondary_upstream_error_types'] == ['invalid_key']
+    assert a['secondary_failure_stages'] == ['subtitle'], a

@@ -36,3 +36,29 @@ export function failureAction(errorCode?: string | null, upstreamType?: string |
     : isIn(USER_CAUSE_ERROR_CODES, errorCode) || isIn(USER_CAUSE_UPSTREAM_TYPES, errorCode) ? errorCode : ''
   return code ? { kind: 'settings', reason: USER_CAUSE_REASONS[code], destination: settingsDestination(failureStage) } : { kind: 'retry' }
 }
+
+export type PageFailureInfo = {
+  error_code?: string | null; upstream_error_type?: string | null; failure_stage?: string | null
+  secondary_error_codes?: readonly string[] | null; secondary_upstream_error_types?: readonly string[] | null; secondary_failure_stages?: readonly string[] | null
+}
+
+/** R24 (PM rule): page hint and stats are separate. Stats keep the product-first primary cause
+ * (backend failure_attribution); the page leads with the first cause the user can fix (e.g. auth),
+ * because retrying cannot fix it. Primary first, then secondaries in recorded order. */
+export function pageFailureAction(info: PageFailureInfo): FailureAction {
+  const primary = failureAction(info.error_code, info.upstream_error_type, info.failure_stage)
+  if (primary.kind === 'settings') return primary
+  const codes = info.secondary_error_codes || []
+  for (let i = 0; i < codes.length; i++) {
+    const action = failureAction(codes[i], info.secondary_upstream_error_types?.[i], info.secondary_failure_stages?.[i])
+    if (action.kind === 'settings') return action
+  }
+  return primary
+}
+
+const strings = (v: unknown) => Array.isArray(v) ? v.map(x => typeof x === 'string' ? x : '') : undefined
+/** The secondary causes of an analysis record, for the page rule. */
+export function pickSecondary(analysis: unknown): Pick<PageFailureInfo, 'secondary_error_codes' | 'secondary_upstream_error_types' | 'secondary_failure_stages'> {
+  const a = (analysis || {}) as Record<string, unknown>
+  return { secondary_error_codes: strings(a.secondary_error_codes), secondary_upstream_error_types: strings(a.secondary_upstream_error_types), secondary_failure_stages: strings(a.secondary_failure_stages) }
+}

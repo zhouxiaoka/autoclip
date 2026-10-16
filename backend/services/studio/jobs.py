@@ -1788,6 +1788,8 @@ def _produce_selected(project_id, plan):
             if others:
                 result['secondary_error_codes'] = [f['error_code'] for f in others]
                 result['secondary_upstream_error_types'] = [f.get('upstream_error_type') or '' for f in others]
+                # R24: page only (not an event field) - which settings row fixes a secondary user cause.
+                result['secondary_failure_stages'] = [f.get('failure_stage') or '' for f in others]
         store.change(project_id, lambda data:data.update(analysis=result))
         mark_project(project_id, 'failed' if errors else 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
