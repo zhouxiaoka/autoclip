@@ -361,3 +361,67 @@ def _save_failure_evidence(tmp_path, done, label):
         shutil.copy(f, root / 'receipts.jsonl')
     (root / 'tree.txt').write_text('\n'.join(sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob('*'))))
     return str(root)
+
+
+# ------------------------------------------------------------------ #414 v5 part B fixtures (M6: no hand-made verdicts)
+CAND = 'c' * 64
+INPUTS = {'candidate_sha256': CAND}
+
+
+def _wpwc():
+    sys.path[:0] = [str(ROOT / 'py'), str(ROOT)]
+    import winqa_plan as wp
+    import winqa_chain as wc
+    return wp, wc
+
+
+def make_run(out, run_id='r1', frm=8, to=8, flags=(), receipts=(('collect_logs', 'ok'),), files=None,
+             manifest_edit=None, bundle_status='ok', inputs=None):
+    """A real run directory written only through winqa_plan.create/record: the receipts given, then a final export
+    (pull_final) whose bundle (ZIP + members + manifest) is bound by its receipt, exactly as run_winqa.sh does."""
+    wp, _ = _wpwc()
+    out = Path(out)
+    plan = wp.create(out, run_id, frm, to, set(flags), dict(INPUTS if inputs is None else inputs))
+    for step, st in receipts:
+        wp.record(out, run_id, step, st, 0 if st == 'ok' else 1)
+    if files is None:
+        files = {f: b'{"ok": true}' for f in plan['required'] if f != 'steps.json'}
+    files = dict(files)
+    files.setdefault('steps.json', json.dumps(wp.all_receipts(out)).encode())
+    files = {k: v for k, v in files.items() if v is not None}     # None = leave that file out of the bundle
+    m = {'schema': 'test', 'plan_sha256': plan['plan_sha256'], 'required': plan['required'], 'status': 'complete',
+         'missing_required': [], 'ok_false': [], 'withheld': [], 'error_codes': {}, 'contract_problems': {},
+         'files': [{'name': n, 'sha256': hashlib.sha256(d).hexdigest()} for n, d in files.items()]}
+    if manifest_edit:
+        manifest_edit(m)
+    stage = out.parent / f'.stage-{run_id}'
+    shutil.rmtree(stage, ignore_errors=True)
+    (stage / 'x').mkdir(parents=True)
+    for n, d in files.items():
+        p = stage / 'x' / n
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(d)
+    (stage / 'x' / 'manifest.json').write_text(json.dumps(m))
+    with zipfile.ZipFile(stage / 'b.zip', 'w') as z:
+        for p in sorted((stage / 'x').rglob('*')):
+            if p.is_file():
+                z.writestr(p.relative_to(stage / 'x').as_posix(), p.read_bytes())
+    adir = Path(wp.record(out, run_id, 'pull_final', bundle_status, 0 if bundle_status == 'ok' else 3,
+                          bundle_zip=stage / 'b.zip', bundle_dir=stage / 'x') and
+                wp.runs_dir(out) / run_id / f"a{wp.receipts(out, run_id)[-1]['attempt']}" / 'pull_final')
+    for p in adir.rglob('*'):                                     # the evidence view, as run_winqa.sh copies it
+        if p.is_file() and p.name != 'manifest.json':
+            t = out / p.relative_to(adir)
+            t.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(p, t)
+    shutil.rmtree(stage)
+    return plan
+
+
+def make_passing_run(out, run_id='r1', **kw):
+    """The only way a test gets a passing verdict: a real run directory judged by winqa_chain.verify_chain."""
+    _, wc = _wpwc()
+    make_run(out, run_id, **kw)
+    r = wc.verify_chain(out, run_id, 'final')
+    assert r.passed, r.reasons
+    return r.as_dict(run_id)

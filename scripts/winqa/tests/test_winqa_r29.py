@@ -15,11 +15,12 @@ from pathlib import Path
 import pytest
 
 from _winqa_helpers import (KEY, ROOT, BASHES, _env, _run, _steps, _manifest, _py_bin, _ee, _rebuild, _verify,
-                            _export, STEPS_OK, _assert_no_raw_on_control, _tree)
+                            _export, STEPS_OK, _assert_no_raw_on_control, _tree, INPUTS, make_run, make_passing_run)
 
 sys.path[:0] = [str(ROOT / 'py'), str(ROOT)]
 import winqa_plan as wp  # noqa: E402
 import winqa_verdict as wv  # noqa: E402
+import winqa_chain as wc  # noqa: E402
 import redact  # noqa: E402
 
 PWSH = os.environ.get('WINQA_TEST_PWSH') or shutil.which('pwsh')
@@ -33,11 +34,12 @@ def _receipts(out):
 # ------------------------------------------------------------------ point 1: plan written once, receipts appended
 
 def test_p1_plan_is_written_once_and_a_changed_plan_is_rejected(tmp_path):
-    p = wp.create(tmp_path, 'r1', 8, 8, set())
+    p = wp.create(tmp_path, 'r1', 8, 8, set(), INPUTS)
     assert p['required'] == ['collect-logs-final.json', 'steps.json']
     with pytest.raises(FileExistsError):
-        wp.create(tmp_path, 'r1', 8, 8, set())
-    assert wp.main(['create', '--out', str(tmp_path), '--run-id', 'r1', '--from', '8', '--to', '8']) == wp.E_PLAN
+        wp.create(tmp_path, 'r1', 8, 8, set(), INPUTS)
+    assert wp.main(['create', '--out', str(tmp_path), '--run-id', 'r1', '--from', '8', '--to', '8',
+                    '--inputs', json.dumps(INPUTS)]) == wp.E_PLAN
     f = tmp_path / 'runs' / 'r1' / 'plan.json'
     d = json.loads(f.read_text()); d['required'].remove('collect-logs-final.json'); f.write_text(json.dumps(d))
     with pytest.raises(ValueError):
@@ -45,16 +47,15 @@ def test_p1_plan_is_written_once_and_a_changed_plan_is_rejected(tmp_path):
 
 
 def test_p1_steps_json_is_required_unconditionally_and_stage_exports_only_owe_due_files(tmp_path):
-    p = wp.create(tmp_path, 'r1', 0, 99, {'smoke', 'failure', 'real'})
+    p = wp.create(tmp_path, 'r1', 0, 99, {'smoke', 'failure', 'real'}, INPUTS)
     assert 'steps.json' in p['required'] and 'real/final.json' in p['required']
-    assert wp.due(p, 3) == ['install-prev.json', 'launch-prev.json', 'seed.json', 'clean.json', 'env.json', 'steps.json'] \
-        or set(wp.due(p, 3)) == {'clean.json', 'env.json', 'install-prev.json', 'launch-prev.json', 'seed.json', 'steps.json'}
+    assert set(wp.due(p, 3)) == {'clean.json', 'env.json', 'install-prev.json', 'launch-prev.json', 'seed.json', 'steps.json'}
     assert 'failure.json' not in wp.due(p, 3) and 'failure.json' in wp.due(p, 6)
     assert 'collect-logs-final.json' not in wp.due(p, 6)        # step 8 is final, never due at a stage export
 
 
 def test_p1_receipt_rows_are_appended_with_seq_and_a_failed_write_stops_the_run(tmp_path):
-    wp.create(tmp_path, 'r1', 8, 8, set())
+    wp.create(tmp_path, 'r1', 8, 8, set(), INPUTS)
     wp.record(tmp_path, 'r1', 'collect_logs', 'FAIL', 3)
     wp.record(tmp_path, 'r1', 'collect_logs', 'ok', 0)
     rows = wp.receipts(tmp_path, 'r1')
@@ -77,7 +78,7 @@ def test_p1_shell_stops_with_72_when_a_receipt_cannot_be_written(tmp_path, bash)
 
 def test_p1_bundle_must_match_the_local_plan_not_its_own_claim(tmp_path):
     """#318: verify takes required and plan_sha256 from the control machine's plan."""
-    plan = wp.create(tmp_path / 'ev', 'r1', 8, 8, set())
+    plan = wp.create(tmp_path / 'ev', 'r1', 8, 8, set(), INPUTS)
     pf = tmp_path / 'ev' / 'runs' / 'r1' / 'plan.json'
     src = tmp_path / 'out'; src.mkdir()
     (src / 'collect-logs-final.json').write_text('{"ok": true}')
@@ -111,14 +112,9 @@ def test_p2_receipt_ok_with_nonzero_exit_is_a_contract_problem():
 
 
 def test_p2_step_ok_but_its_file_says_ok_false_fails_the_verdict(tmp_path):
-    wp.create(tmp_path, 'r1', 8, 8, set())
-    wp.record(tmp_path, 'r1', 'collect_logs', 'ok', 0); wp.record(tmp_path, 'r1', 'pull_final', 'ok', 0)
-    plan = wp.load_plan(tmp_path, 'r1')
-    m = {'plan_sha256': plan['plan_sha256'], 'required': plan['required'], 'status': 'complete',
-         'missing_required': [], 'ok_false': ['collect-logs-final.json'], 'withheld': []}
-    assert wv.evaluate(tmp_path, 'r1', m)['overall'] == 'fail'
-    m['ok_false'] = []
-    assert wv.evaluate(tmp_path, 'r1', m)['overall'] == 'pass'
+    make_run(tmp_path, files={'collect-logs-final.json': b'{"ok": false}'})
+    assert wv.evaluate(tmp_path, 'r1')['overall'] == wc.FAIL
+    assert make_passing_run(tmp_path / 'b')['overall'] == wc.PASS
 
 
 def test_p2_winqa_probe_seed_exits_non_zero_when_it_writes_ok_false(tmp_path, monkeypatch):
@@ -175,38 +171,32 @@ def test_p2_collect_logs_exits_3_when_a_log_cannot_be_copied(tmp_path):
 
 # ------------------------------------------------------------------ point 3: one verdict, summarize renders it
 
-def _verdict_dir(tmp_path, statuses):
-    wp.create(tmp_path, 'r1', 8, 8, set())
-    for step, st in statuses:
-        wp.record(tmp_path, 'r1', step, st, 0 if st == 'ok' else 1)
-    plan = wp.load_plan(tmp_path, 'r1')
-    return {'plan_sha256': plan['plan_sha256'], 'required': plan['required'], 'status': 'complete',
-            'missing_required': [], 'ok_false': [], 'withheld': []}
-
-
 def test_p3_failure_latches_and_only_an_explicit_retry_of_a_retryable_step_clears_it(tmp_path):
-    m = _verdict_dir(tmp_path, [('collect_logs', 'FAIL'), ('collect_logs', 'ok'), ('pull_final', 'ok')])
-    assert wv.evaluate(tmp_path, 'r1', m)['overall'] == 'fail'          # a later ok is not a retry
+    make_run(tmp_path, receipts=[('collect_logs', 'FAIL'), ('collect_logs', 'ok')])
+    assert wv.evaluate(tmp_path, 'r1')['overall'] == wc.FAIL            # a later ok is not a retry
     rows = [{'seq': 1, 'step': 's', 'status': 'FAIL', 'exit_code': 1}, {'seq': 2, 'step': 's', 'status': 'ok',
                                                                          'exit_code': 0, 'retry_of': 1}]
     assert wv.step_results({}, rows, set())['s'] == 'FAIL'              # not retryable
     assert wv.step_results({}, rows, {'s'})['s'] == 'ok'                # retryable + names the failure
     rows[1]['retry_of'] = 7
     assert wv.step_results({}, rows, {'s'})['s'] == 'FAIL'
+    two = [{'seq': 1, 'step': 's', 'status': 'FAIL', 'exit_code': 1}, {'seq': 2, 'step': 's', 'status': 'FAIL', 'exit_code': 1},
+           {'seq': 3, 'step': 's', 'status': 'ok', 'exit_code': 0, 'retry_of': 2}]
+    assert wv.step_results({}, two, {'s'})['s'] == 'FAIL'               # one failure still not retried: the newest ok is not enough
 
 
 def test_p3_verdict_is_bound_and_summarize_renders_it_without_judging(tmp_path):
-    m = _verdict_dir(tmp_path, [('collect_logs', 'ok'), ('pull_final', 'ok')])
-    v = wv.evaluate(tmp_path, 'r1', m, 'ab' * 32)
+    v = make_passing_run(tmp_path)
     vf = tmp_path / 'v.json'; vf.write_text(json.dumps(v))
     (tmp_path / 'check-candidate.json').write_text(json.dumps({'assertions': {'backend_health_200': False}}))
     done = subprocess.run([sys.executable, str(ROOT / 'summarize.py'), str(tmp_path), '--verdict', str(vf)],
                           capture_output=True, text=True)
-    assert done.returncode == 0 and done.stdout.startswith('PASS'), done.stdout[:200]   # rows do not decide
-    v2 = dict(v, overall='fail', reasons=['step x failed']); vf.write_text(json.dumps(v2))
+    assert done.returncode == 0 and done.stdout.startswith('PASS'), (done.stdout[:200], done.stderr)   # rows do not decide
+    v2 = dict(v, overall=wc.FAIL, reasons=['step x failed']); vf.write_text(json.dumps(v2))
     done = subprocess.run([sys.executable, str(ROOT / 'summarize.py'), str(tmp_path), '--verdict', str(vf)],
                           capture_output=True, text=True)
-    assert done.stdout.startswith('FAIL') and '自动项全部通过' not in done.stdout
+    assert done.returncode == 3 and done.stdout == ''                   # a verdict file that disagrees is not rendered
+    vf.write_text(json.dumps(v))
     wp.record(tmp_path, 'r1', 'late', 'ok', 0)                           # receipts moved on: stale verdict
     done = subprocess.run([sys.executable, str(ROOT / 'summarize.py'), str(tmp_path), '--verdict', str(vf)],
                           capture_output=True, text=True)
@@ -214,16 +204,13 @@ def test_p3_verdict_is_bound_and_summarize_renders_it_without_judging(tmp_path):
 
 
 def test_p3_resume_reruns_decide_and_unrun_old_failures_stay(tmp_path):
-    wp.create(tmp_path, 'r1', 2, 2, set())
+    wp.create(tmp_path, 'r1', 2, 2, set(), INPUTS)
     wp.record(tmp_path, 'r1', 'clean', 'FAIL', 1); wp.record(tmp_path, 'r1', 'collect_logs', 'FAIL', 3)
-    wp.create(tmp_path, 'r2', 8, 8, set())
-    wp.record(tmp_path, 'r2', 'collect_logs', 'ok', 0); wp.record(tmp_path, 'r2', 'pull_final', 'ok', 0)
-    plan = wp.load_plan(tmp_path, 'r2')
+    plan = make_run(tmp_path, 'r2', files={'collect-logs-final.json': b'{"ok": true}', 'clean.json': b'{"ok": true}',
+                                           'env.json': b'{}'})
     assert 'clean.json' in plan['required'] and plan['resumes']['run_id'] == 'r1'
-    m = {'plan_sha256': plan['plan_sha256'], 'required': plan['required'], 'status': 'complete', 'missing_required': [],
-         'ok_false': [], 'withheld': []}
-    v = wv.evaluate(tmp_path, 'r2', m)
-    assert v['steps']['collect_logs'] == 'ok' and v['steps']['clean'] == 'FAIL' and v['overall'] == 'fail'
+    v = wv.evaluate(tmp_path, 'r2')
+    assert v['steps']['collect_logs'] == 'ok' and v['steps']['clean'] == 'FAIL' and v['overall'] == wc.FAIL
 
 
 # ------------------------------------------------------------------ point 5: migration keeps obligations
@@ -249,16 +236,12 @@ def test_p5_unrecoverable_legacy_obligations_make_a_resume_incomplete_not_green(
                                                       'exit_code': 0}) + '\n')
     wp.migrate(tmp_path)
     assert wp.load_plan(tmp_path, 'legacy')['required_unknown'] is True
-    wp.create(tmp_path, 'r2', 8, 8, set())
-    wp.record(tmp_path, 'r2', 'collect_logs', 'ok', 0); wp.record(tmp_path, 'r2', 'pull_final', 'ok', 0)
-    plan = wp.load_plan(tmp_path, 'r2')
-    m = {'plan_sha256': plan['plan_sha256'], 'required': plan['required'], 'status': 'complete', 'missing_required': [],
-         'ok_false': [], 'withheld': []}
-    v = wv.evaluate(tmp_path, 'r2', m)
-    assert v['overall'] == 'incomplete' and v['steps']['clean'] == 'ok', v
+    make_run(tmp_path, 'r2')
+    v = wv.evaluate(tmp_path, 'r2')
+    assert v['overall'] == wc.INCOMPLETE and v['steps']['clean'] == 'unknown', v   # M7: legacy never proves ok
     assert any('legacy' in r for r in v['reasons'])
     # a run from step 0 starts fresh obligations (nothing to resume)
-    wp.create(tmp_path, 'r3', 0, 0, set())
+    wp.create(tmp_path, 'r3', 0, 0, set(), INPUTS)
     assert wp.load_plan(tmp_path, 'r3')['required_unknown'] is False
 
 
@@ -479,9 +462,16 @@ def test_326_bundle_that_does_not_require_steps_json_is_rejected_on_its_own(tmp_
 # ------------------------------------------------------------------ #355 / #332 gate scope
 
 def test_355_quality_gate_treats_winqa_tests_like_the_backend_suite(tmp_path, monkeypatch):
-    sys.path.insert(0, str(ROOT.parents[1] / 'scripts'))
-    import quality_gate as qg
+    # load THIS tree's quality_gate as a fresh module (a cached one from another tree or test would bring its own
+    # ROOT), and patch only its own subprocess reference, never the process-wide module (other threads keep the real one)
+    import importlib.util, types
+    spec = importlib.util.spec_from_file_location('_qg355', ROOT.parents[1] / 'scripts' / 'quality_gate.py')
+    qg = importlib.util.module_from_spec(spec)
+    monkeypatch.syspath_prepend(str(ROOT.parents[1] / 'scripts'))
+    spec.loader.exec_module(qg)
     monkeypatch.setattr(qg, 'checks', lambda g, py: [('winqa_tests', ['true'], qg.ROOT)])
+    fake_sp = types.SimpleNamespace(**{k: getattr(subprocess, k) for k in ('CompletedProcess', 'TimeoutExpired', 'PIPE', 'STDOUT', 'DEVNULL', 'CalledProcessError')})
+    monkeypatch.setattr(qg, 'subprocess', fake_sp)
 
     def fake_run(cmd, **kw):
         if cmd and cmd[0] == 'git':
@@ -490,8 +480,8 @@ def test_355_quality_gate_treats_winqa_tests_like_the_backend_suite(tmp_path, mo
         Path(junit).write_text('<testsuite><testcase classname="test_winqa_export" name="t"><skipped/></testcase>'
                                '</testsuite>')
         return subprocess.CompletedProcess(cmd, 0)
-    monkeypatch.setattr(qg.subprocess, 'run', fake_run)
-    monkeypatch.setattr(qg.subprocess, 'check_output', lambda *a, **k: 'abc\n' if 'rev-parse' in a[0] else '')
+    fake_sp.run = fake_run
+    fake_sp.check_output = (lambda *a, **k: 'abc\n' if 'rev-parse' in a[0] else '')
     report = tmp_path / 'r.json'
     assert qg.run('backend', report, sys.executable) == 1
     entry = json.loads(report.read_text())['checks'][0]

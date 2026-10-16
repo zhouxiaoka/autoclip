@@ -4,7 +4,8 @@
     summarize.py EVIDENCE_DIR --verdict FILE
 
 R29 point 3: this file decides nothing. The conclusion is the verdict that py/winqa_verdict.py wrote, and it is
-rendered only if its binding (plan hash, receipts hash and count) still matches the evidence directory. The rows
+rendered only if winqa_chain.verify_chain(render), recomputed now (plan, receipt chain, bundle ZIP and members,
+the evidence view), gives the same binding and result (#386, M9). The rows
 below show evidence; their marks never change the conclusion."""
 import json
 import re
@@ -13,6 +14,7 @@ from pathlib import Path, PureWindowsPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'py'))
 import winqa_verdict  # noqa: E402
+import winqa_chain  # noqa: E402
 
 if len(sys.argv) != 4 or sys.argv[2] != '--verdict':
     print(__doc__, file=sys.stderr); sys.exit(2)
@@ -20,7 +22,7 @@ ev = Path(sys.argv[1])
 VERDICT = json.loads(Path(sys.argv[3]).read_text(encoding='utf-8'))
 if VERDICT.get('schema') != winqa_verdict.SCHEMA or not winqa_verdict.check_binding(ev, VERDICT):
     print('summarize: verdict is not bound to this evidence directory; not rendered', file=sys.stderr); sys.exit(3)
-_HEAD = {'pass': 'PASS', 'fail': 'FAIL', 'incomplete': 'INCOMPLETE', 'rejected': 'REJECTED'}[VERDICT['overall']]
+_HEAD = winqa_chain.LABELS[VERDICT['overall']]   # v5 M6: the verdict values exist only in winqa_chain
 print(f"{_HEAD}：{'；'.join(VERDICT['reasons']) or '全部步骤通过、必需证据完整'}\n")
 
 

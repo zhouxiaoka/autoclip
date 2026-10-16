@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from _winqa_helpers import KEY, ROOT, BASHES, _env, _assert_no_raw_on_control
+from _winqa_helpers import KEY, ROOT, BASHES, _env, _assert_no_raw_on_control, _wpwc
 
 REDACT = [sys.executable, str(ROOT / 'redact.py')]
 CODECS = ('utf-8', 'utf-16-le', 'utf-16-be')
@@ -284,7 +284,7 @@ def test_a13_logpipe_that_says_exit_0_then_is_killed_fails_the_run(tmp_path, bas
     assert done.returncode == 70, (done.returncode, done.stderr[-300:])
     assert b'WINQA_E_LOGPIPE 70 died\n' in done.stderr, done.stderr[-300:]
     v = _verdict(tmp_path)
-    assert v is None or v['overall'] != 'pass', v
+    assert v is None or not _wpwc()[1].is_pass(v), v
 
 
 @pytest.mark.parametrize('bash', BASHES)
@@ -304,7 +304,7 @@ def test_a14_logpipe_drain_slower_than_10s_gives_70_and_no_pass_verdict(tmp_path
     assert done.returncode == 70, (done.returncode, done.stderr[-300:])
     assert b'WINQA_E_LOGPIPE 70 drain_timeout' in done.stderr
     v = _verdict(tmp_path)
-    assert v is None or v['overall'] != 'pass', v
+    assert v is None or not _wpwc()[1].is_pass(v), v
 
 
 @pytest.mark.parametrize('bash', BASHES)
@@ -313,7 +313,7 @@ def test_a13b_green_run_reference_exits_0_with_a_pass_verdict(tmp_path, bash):
     env, args = _env(tmp_path)
     done = subprocess.run([bash, str(ROOT / 'run_winqa.sh')] + args, env=env, capture_output=True, timeout=120)
     assert done.returncode == 0, (done.returncode, done.stdout[-500:])
-    assert _verdict(tmp_path)['overall'] == 'pass'
+    assert _wpwc()[1].is_pass(_verdict(tmp_path))
 
 
 # ---------------------------------------------------------------- T-A11: #389 hardening (handshake bound)

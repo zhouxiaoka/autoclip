@@ -118,7 +118,7 @@ logpipe_close() {
     echo "WINQA_E_LOGPIPE 70 $LP_REASON" >&4
     [ "$rc" = 0 ] && rc=70
     if [ -n "${VERDICT:-}" ] && [ -f "$VERDICT" ]; then
-      python3 "$HERE/py/winqa_verdict.py" downgrade --out "$OUT" --dest "$VERDICT" --reason "logpipe_${LP_REASON%%=*}" >/dev/null 2>&1 \
+      python3 "$CHAIN_PY" downgrade --dest "$VERDICT" --reason "logpipe_${LP_REASON%%=*}" >/dev/null 2>&1 \
         || rm -f "$VERDICT"
     fi
   fi
@@ -126,8 +126,11 @@ logpipe_close() {
   return "$rc"
 }
 python3 "$PLAN_PY" migrate --out "$OUT" || { echo "FAIL: 旧证据迁移失败"; exit 71; }
-PLAN_SHA="$(python3 "$PLAN_PY" create --out "$OUT" --run-id "$RUN_ID" --from "$FROM" --to "$TO" --flags "${FLAGS#,}")" \
-  || { echo "FAIL: 写不了执行计划（plan.json）"; exit 71; }
+PREV_SHA=$(sha256sum "$PREV" | cut -d' ' -f1); CAND_SHA=$(sha256sum "$CAND" | cut -d' ' -f1)
+# v5 #385: the plan names the candidate installer; a resume for another candidate is refused (exit 71)
+PLAN_SHA="$(python3 "$PLAN_PY" create --out "$OUT" --run-id "$RUN_ID" --from "$FROM" --to "$TO" --flags "${FLAGS#,}" \
+  --inputs "{\"candidate_sha256\":\"$CAND_SHA\",\"prev_sha256\":\"$PREV_SHA\"}")"; PLAN_RC=$?
+[ "$PLAN_RC" = 0 ] || { echo "FAIL: 写不了执行计划（plan.json，rc=${PLAN_RC}；续跑必须是同一个候选安装包）"; exit 71; }
 PLAN="$OUT/runs/$RUN_ID/plan.json"
 # A run killed with -9 cannot clean up. R25 #248: staging dirs live under one fixed private root (not $TMPDIR, which
 # can change between runs); a leftover is deleted when its run is gone, its pid now belongs to another program, or
@@ -156,7 +159,9 @@ SCP=(scp -q ${ID_OPT[@]+"${ID_OPT[@]}"} -o BatchMode=yes -o ConnectTimeout=20)
 # R29 #323: every remote call with a variable part goes through ONE fixed command line; the values travel as a JSON
 # line on stdin (py/winqa_req.py builds it from separate argv entries), the key as the next line when needed.
 ENTRY='powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\winqa\ps\entry.ps1'
-step() { logpipe_alive || exit 70; echo; echo "==== [$(date +%H:%M:%S)] $*"; }
+CHAIN_PY="$HERE/py/winqa_chain.py"
+# v5 B2: before every step the one verification point re-checks plan, resume chain and receipt chain (exit 73)
+step() { logpipe_alive || exit 70; python3 "$CHAIN_PY" check --out "$OUT" --run-id "$RUN_ID" --mode stage || { echo "FAIL: 证据链校验失败"; exit 73; }; echo; echo "==== [$(date +%H:%M:%S)] $*"; }
 remote() { "${SSH[@]}" "$@"; }                 # fixed strings only (hostname, fixed mkdir)
 rcall() {                                      # rcall OP ARGS...   (see py/winqa_req.py)
   local req; req="$(python3 "$HERE/py/winqa_req.py" "$@")" || return 64
@@ -168,12 +173,10 @@ rcall_key() {                                  # rcall_key SCRIPT ARGS...: a py 
 }
 # R29 point 1/2: one receipt per result, written by winqa_plan.py (never printf'd JSON). exit_code is the
 # producer's real return code: `cmd; rec step $?`. A receipt that cannot be written stops the run (exit 72).
-RUN_FAILED=0
 rec() {   # rec STEP RC  (RC 0 -> ok, else FAIL with that code)
   local st=ok; [ "$2" = 0 ] || st=FAIL
   python3 "$PLAN_PY" record --out "$OUT" --run-id "$RUN_ID" --step "$1" --status "$st" --exit-code "$2" \
     || { echo "FAIL: 回执写入失败（$1）"; exit 72; }
-  [ "$st" = ok ] || RUN_FAILED=1
   echo "-> $1: $st (rc=${2})"
 }
 record() { local rc=$?; local c="${3:-$rc}"; [ "$2" = ok ] && c=0; [ "$2" != ok ] && [ "$c" = 0 ] && c=1; rec "$1" "$c"; }
@@ -207,16 +210,19 @@ export_bundle() {   # $1 = label for the step record, $2 = step number the expor
     --into "$STAGE/b/x" --plan "$PLAN" --upto "$2" --keys-stdin; rc=$?
   if [ "$rc" != 0 ] && [ "$rc" != 3 ]; then fail_export "$1" "证据包本地校验失败（rc=${rc}），未写入证据目录" "$rc"; return 1; fi
   mkdir -p "$OUT/bundles" || { fail_export "$1" "建不了 bundles 目录"; return 1; }
-  mv "$STAGE/b/x/manifest.json" "$OUT/bundles/$RUN_ID-$EXPORT_SEQ.manifest.json" || { fail_export "$1" "manifest 落盘失败"; return 1; }
-  cp -R "$STAGE/b/x/." "$OUT/" || { fail_export "$1" "证据落盘失败（cp），证据目录可能不完整"; return 1; }
+  # v5 #384/#386/M8/M9: the receipt binds the bundle. record keeps the ZIP in bundles/, moves the verified members
+  # to runs/<id>/a<n>/<step>/ and hashes them; the evidence view in $OUT is a copy that render re-checks.
+  local st=ok code=0 adir; [ "$status" = complete ] || { st=FAIL; code=3; }
+  adir="$(python3 "$PLAN_PY" record --out "$OUT" --run-id "$RUN_ID" --step "$1" --status "$st" --exit-code "$code" \
+          --bundle-zip "$STAGE/b/$file" --bundle-dir "$STAGE/b/x" --print-attempt-dir)" || { echo "FAIL: 回执写入失败（$1）"; exit 72; }
+  echo "-> $1: $st (rc=${code})"
   rm -rf "$STAGE/b"
-  [ "$2" -ge 99 ] && { FINAL_MANIFEST="$OUT/bundles/$RUN_ID-$EXPORT_SEQ.manifest.json"; FINAL_SHA="$digest"; }
-  if [ "$status" = complete ]; then record "$1" ok; else echo "FAIL: 必需证据缺失、为空或被扣留，见 bundles/$RUN_ID-$EXPORT_SEQ.manifest.json"; record "$1" FAIL 3; return 1; fi
+  cp "$adir/manifest.json" "$OUT/bundles/$RUN_ID-$EXPORT_SEQ.manifest.json" || { fail_export "$1" "manifest 落盘失败"; return 1; }
+  cp -R "$adir/." "$OUT/" && rm -f "$OUT/manifest.json" || { fail_export "$1" "证据落盘失败（cp），证据目录可能不完整"; return 1; }
+  if [ "$st" != ok ]; then echo "FAIL: 必需证据缺失、为空或被扣留，见 bundles/$RUN_ID-$EXPORT_SEQ.manifest.json"; return 1; fi
 }
-FINAL_MANIFEST=""; FINAL_SHA=""
 
 step "0. 本地准备  prev=$PREV ($PREV_VERSION)  candidate=$CAND ($VERSION)"
-PREV_SHA=$(sha256sum "$PREV" | cut -d' ' -f1); CAND_SHA=$(sha256sum "$CAND" | cut -d' ' -f1)
 want 0 && printf '{"prev":{"file":"%s","version":"%s","sha256":"%s"},"candidate":{"file":"%s","version":"%s","sha256":"%s"},"repo_commit":"%s","started_at":"%s"}\n' \
   "$(basename "$PREV")" "$PREV_VERSION" "$PREV_SHA" "$(basename "$CAND")" "$VERSION" "$CAND_SHA" \
   "$(git -C "$REPO" rev-parse HEAD 2>/dev/null)" "$(date -Iseconds)" > "$OUT/inputs.json"
@@ -261,7 +267,7 @@ fi
 if want 2; then
 step "2. 清理旧安装与用户数据（幂等）"
 rcall ps clean; rec clean $?
-rcall ps env PrevInstaller='C:\winqa\inst\prev-setup.exe' CandInstaller='C:\winqa\inst\candidate-setup.exe'
+rcall ps env PrevInstaller='C:\winqa\inst\prev-setup.exe' CandInstaller='C:\winqa\inst\candidate-setup.exe'; rec env $?   # v5 #388
 fi
 
 if want 3; then
@@ -350,10 +356,9 @@ step "9. 汇总"
 # R29 point 3: ONE function decides (py/winqa_verdict.py); summarize.py only renders that verdict. steps.txt is a
 # view the verdict writes. The exit code is the verdict's.
 VERDICT="$OUT/runs/$RUN_ID/verdict-final.json"
-python3 "$HERE/py/winqa_verdict.py" final --out "$OUT" --run-id "$RUN_ID" --manifest "$FINAL_MANIFEST" \
-  --bundle-sha256 "$FINAL_SHA" --dest "$VERDICT"; V_RC=$?
+python3 "$HERE/py/winqa_verdict.py" final --out "$OUT" --run-id "$RUN_ID" --dest "$VERDICT"; V_RC=$?
 [ -f "$VERDICT" ] || { echo "FAIL: 没有生成最终裁决"; exit 1; }
 python3 "$HERE/summarize.py" "$OUT" --verdict "$VERDICT" > "$OUT/summary.md"; S_RC=$?
 cat "$OUT/summary.md" || S_RC=1
 [ "$S_RC" = 0 ] || { echo "FAIL: 汇总渲染失败（rc=${S_RC}）"; exit 1; }
-[ "$V_RC" = 0 ] && [ "$RUN_FAILED" = 0 ] && exit 0 || exit 1
+[ "$V_RC" = 0 ] && exit 0 || exit 1   # the verdict alone decides (I-C1; logpipe_close may still downgrade both)
