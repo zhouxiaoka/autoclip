@@ -137,7 +137,7 @@ function render(options = {}) {
       downloadModel: async model => { installs.push('model:' + model); return { status: 'downloading', model, message: '' } },
     } },
     './importReadiness': readiness,
-    './TranscriptionGatePrompt': { default: 'transcription-gate', LOCAL_TRANSCRIPTION_GATE: '需要先安装本地转写', LOCAL_TRANSCRIPTION_INSTALLING: '等待安装完成' },
+    './TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c)},close(){},install:async()=>{},retry:async()=>{}}]},
     './studio.css': {},
     './quick-output.css': {},
   }
@@ -288,13 +288,14 @@ test('R20 #168: a coded backend 422 opens the install prompt (and the installing
   const gate = render({ importError: axios422({ code: 'whisper_not_installed', message: 'any wording' }) })
   await button(gate.tree, '生成成片').props.onClick()
   assert.equal(gate.calls.length, 1)
-  assert.equal(gate.errors.at(-1), '需要先安装本地转写')
+  globalThis.__recoveryOpened = []
+  await button(gate.tree, '生成成片').props.onClick()
   const wait = render({ importError: axios422({ code: 'whisper_installing', message: 'any wording' }) })
   await button(wait.tree, '生成成片').props.onClick()
-  assert.equal(wait.errors.at(-1), '等待安装完成')
   const failed = render({ importError: axios422({ code: 'whisper_install_failed', message: 'x' }) })
   await button(failed.tree, '生成成片').props.onClick()
-  assert.equal(failed.errors.at(-1), '需要先安装本地转写')
+  // #418 rewrite: the coded refusal opens the shared recovery controller with the code itself
+  assert.deepEqual(globalThis.__recoveryOpened, ['whisper_not_installed', 'whisper_installing', 'whisper_install_failed'])
 })
 
 test('R20 #168: the prompt is never chosen from the Chinese text; an uncoded 422 shows its message', async () => {
@@ -310,11 +311,9 @@ test('R21: the desktop follows the backend skippable flag instead of inferring t
   const missing = check(false, 'whisper_not_installed', 'install_whisper')
   const skippable = { ...report({ transcription: { ...missing, skippable: true } }), analysis_mode: 'visual' }
   assert.equal(readiness.submissionBlock(skippable, false, true, { source: 'file' }), null)
-  assert.equal(readiness.localTranscriptionGate(skippable, false, 'file'), null)
   // visual mode without the flag (e.g. no vision model): blocked like any other missing transcriber
   const visualOnly = { ...report({ transcription: missing }), analysis_mode: 'visual' }
   assert.equal(readiness.submissionBlock(visualOnly, false, true, { source: 'file' }), 'transcription')
-  assert.equal(readiness.localTranscriptionGate(visualOnly, false, 'file'), 'install')
   const source = fs.readFileSync(path.join(__dirname, '../src/features/studio/importReadiness.ts'), 'utf8')
   assert.doesNotMatch(source, /analysis_mode === 'visual'/)
 })

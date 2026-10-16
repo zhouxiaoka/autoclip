@@ -89,19 +89,9 @@ export function asrReadinessProperties(report: ImportReadiness | null, hasSubtit
   return { provider, code, has_subtitle: hasSubtitle, blocked }
 }
 
-/** 1.5.8: local file, local Whisper selected but not installed, no SRT -> blocking install prompt.
- * Offers the existing install flow or an explicit switch to cloud; never switches automatically. */
-export function localTranscriptionGate(report: ImportReadiness | null, hasSubtitle: boolean, source: SubmissionOptions['source']): 'install' | 'installing' | null {
-  if (hasSubtitle || source !== 'file') return null
-  if (report?.checks?.transcription?.skippable) return null  // the backend gate decides (R21)
-  return gateKind(report?.checks?.transcription?.code)
-}
-
 /** One mapping from a transcription check code (readiness report or coded backend 422) to the prompt (R20 #168). */
 export function gateKind(code: string | undefined): 'install' | 'installing' | null {
-  // R23 #232: both waiting states wait; neither is "not installed".
   if (code === 'whisper_installing' || code === 'whisper_model_downloading') return 'installing'
-  // R24 #281: a missing or failed model is repaired from the same prompt (runtime -> model).
   return code === 'whisper_not_installed' || code === 'whisper_install_failed' || code === 'whisper_model_missing' || code === 'whisper_model_failed' ? 'install' : null
 }
 
@@ -134,51 +124,4 @@ export async function probeReadiness(load: () => Promise<ImportReadiness | null>
     } catch { /* retry */ }
   }
   return null
-}
-
-/** R24 #232: one poll of a Whisper install / model download, as the waiting prompt shows it. */
-export interface WaitProgress { state: 'waiting' | 'ready' | 'failed'; percent?: number | null; phase?: 'install' | 'download' }
-
-/** Reads the transcription check and the matching progress source; enum and number only. */
-export function waitProgress(check: ReadinessCheck | null | undefined,
-  runtime: { status?: string; progress?: number } | null, models: { name: string; status?: string; downloadProgress?: number | null }[] | null): WaitProgress {
-  if (!check || check.ok) return { state: 'ready' }
-  if (check.code === 'whisper_installing') {
-    if (runtime?.status === 'error') return { state: 'failed' }
-    return { state: 'waiting', phase: 'install', percent: typeof runtime?.progress === 'number' ? runtime.progress : null }
-  }
-  if (check.code === 'whisper_model_downloading') {
-    const model = models?.find(item => item.name === check.model)
-    if (model?.status === 'error') return { state: 'failed' }
-    return { state: 'waiting', phase: 'download', percent: model?.downloadProgress ?? null }
-  }
-  // Anything else (install failed, model failed, not installed) is no longer waiting.
-  return { state: 'failed' }
-}
-
-export interface TranscriptionWaitApi {
-  readiness: () => Promise<ImportReadiness | null>
-  getRuntimeStatus: () => Promise<{ status?: string; progress?: number }>
-  getModels: () => Promise<{ name: string; status?: string; downloadProgress?: number | null }[]>
-  downloadModel: (model: string) => Promise<unknown>
-}
-
-/** R24 #280/#281: one poll used by the import page and the confirm page. It reads readiness and the matching
- * progress, and carries a fresh install on from runtime to model: once the runtime is in and the model is
- * missing, it starts that model's download once and keeps waiting. */
-export function createTranscriptionWait(api: TranscriptionWaitApi, onReport?: (report: ImportReadiness) => void): () => Promise<WaitProgress> {
-  const started = new Set<string>()
-  return async () => {
-    const report = await api.readiness()
-    if (report) onReport?.(report)
-    const check = report?.checks?.transcription
-    if (check?.code === 'whisper_model_missing' && check.model && !started.has(check.model)) {
-      started.add(check.model)
-      try { await api.downloadModel(check.model) } catch { /* the next poll reports the state */ }
-      return { state: 'waiting', phase: 'download', percent: 0 }
-    }
-    const runtime = check?.code === 'whisper_installing' ? await api.getRuntimeStatus() : null
-    const models = check?.code === 'whisper_model_downloading' ? await api.getModels() : null
-    return waitProgress(check, runtime, models)
-  }
 }

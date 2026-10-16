@@ -15,7 +15,7 @@ function view(mode,goals,available=true){
  './ImportPreferences':{default:'preferences'},
  './api':{studioApi:{confirmPlan:async(...args)=>calls.push(args)},errorText:String,errorCode:()=>undefined},
  'react-router-dom':{useNavigate:()=>()=>{}},'../../services/api':{speechApi:{}},
- './importReadiness':{gateKind:()=>null,createTranscriptionWait:()=>async()=>({state:'waiting'})},'./TranscriptionGatePrompt':{default:'gate-prompt',LOCAL_TRANSCRIPTION_GATE:'g',LOCAL_TRANSCRIPTION_INSTALLING:'i'}
+ './TranscriptionGatePrompt':{default:'transcription-gate'},'./transcriptionRecovery':{isRecoveryCode:c=>['whisper_not_installed','whisper_install_failed','whisper_model_missing','whisper_model_failed','whisper_installing','whisper_model_downloading'].includes(c)},'./useTranscriptionRecovery':{useTranscriptionRecovery:()=>[{phase:'idle',percent:null},{open:(c)=>{(globalThis.__recoveryOpened||(globalThis.__recoveryOpened=[])).push(c)},close(){},install:async()=>{},retry:async()=>{}}]}
  }).default
  const render=()=>{index=0;return component({projectId:'p',plan:{id:'plan',suggested_goals:goals,preferences:{goal:'content',aspect:'original',language:'source'},overrides:{}},status:'awaiting_confirmation',onChanged:()=>{}})}
  const nodes=n=>!n||typeof n!=='object'?[]:Array.isArray(n)?n.flatMap(nodes):[n,...nodes(n.props?.children)]

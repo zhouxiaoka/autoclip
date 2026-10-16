@@ -16,12 +16,14 @@ import { readStyle } from './editingStyleSession'
 import { defaultImportOptions, ImportOptions } from './types'
 import ImportPreferences from './ImportPreferences'
 import { speechApi } from '../../services/api'
-import { asrReadinessProperties, createTranscriptionWait, gateKind, localTranscriptionGate, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
+import { asrReadinessProperties, probeReadiness, repairDestination, submissionBlock, transcriptionRoute, visibleIssues, type ImportReadiness, type ReadinessIssue } from './importReadiness'
 import { platformLabel } from './platformLabel'
 import { readRememberedPlatforms, resolvePlatforms, samePlatforms, writeRememberedPlatforms, type PlatformSource } from './platformMemory'
 import { claimBackgroundWhisperInstall, importUrlKind, isVideoFile, shouldAutoStart, shouldBackgroundInstallWhisper, UNDO_MS } from './pasteStart'
 import { readImportPreferences } from './importPreferencesStore'
-import TranscriptionGatePrompt, { LOCAL_TRANSCRIPTION_GATE, LOCAL_TRANSCRIPTION_INSTALLING } from './TranscriptionGatePrompt'
+import TranscriptionGatePrompt from './TranscriptionGatePrompt'
+import { isRecoveryCode } from './transcriptionRecovery'
+import { useTranscriptionRecovery } from './useTranscriptionRecovery'
 import './studio.css'
 import './quick-output.css'
 
@@ -189,17 +191,10 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     const destination = repairDestination(item.repair)
     if (destination) navigate(destination)
   }
-  // R24 #232: the waiting prompt polls readiness and the install / download progress, continues the
-  // same import in one click once ready, and can restart a failed or stalled install.
-  const waitForTranscription = useRef(createTranscriptionWait({ readiness: () => studioApi.readiness(), getRuntimeStatus: () => speechApi.getRuntimeStatus(), getModels: () => speechApi.getModels(), downloadModel: model => speechApi.downloadModel(model) }, report => setReadiness(report))).current
-  const continueAfterWait = () => { setError(''); void submitRef.current?.('button') }
-  const retryWait = async () => {
-    const check = readiness?.checks?.transcription
-    try {
-      if (check?.model && (check.code === 'whisper_model_downloading' || check.code === 'whisper_model_failed')) await speechApi.downloadModel(check.model)
-      else await speechApi.installRuntime()
-    } catch { /* the next poll reports the state */ }
-  }
+  // #418 rewrite: the one install-recovery controller (shared with the confirm page): install -> download ->
+  // ready (one-click continue) / failed / timeout (retry or transcription settings).
+  const [recovery, recover] = useTranscriptionRecovery({ readiness: () => studioApi.readiness(), getRuntimeStatus: () => speechApi.getRuntimeStatus(), getModels: () => speechApi.getModels(), installRuntime: () => speechApi.installRuntime(), downloadModel: model => speechApi.downloadModel(model) })
+  const continueAfterRecovery = () => { recover.close(); setError(''); void submitRef.current?.('button') }
   const changePlatforms = (next: string[]) => {
     setPlatforms(next)
     if (remembered) writeRememberedPlatforms(next)
@@ -221,8 +216,10 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
     const reason = submissionBlock(readiness, !!subtitle, settled, { source: nextSource, allowLinkWithoutWhisper: allowLink })
     if (reason === 'pending') { setError(blockMessage(reason, readiness)); return false }
     trackAsrReadiness(asrReadinessProperties(readiness, !!subtitle))
-    const gate = reason === 'transcription' ? localTranscriptionGate(readiness, !!subtitle, nextSource) : null
-    if (gate) { setError(gate === 'installing' ? LOCAL_TRANSCRIPTION_INSTALLING : LOCAL_TRANSCRIPTION_GATE); return false }
+    const check = readiness?.checks?.transcription
+    if (reason === 'transcription' && nextSource === 'file' && !subtitle && !check?.skippable && isRecoveryCode(check?.code)) {
+      setError(''); recover.open(check!.code, check!.model); return false
+    }
     if (reason) { setError(blockMessage(reason, readiness)); return false }
     if (trigger !== 'button') setError('')
     return true
@@ -292,8 +289,9 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       navigate(`/project/${result.project_id}`)
     } catch (e) {
       // R20 #168: the backend gate sends a stable code; the prompt is chosen from it, never from the text.
-      const kind = gateKind(errorCode(e))
-      setError(kind === 'installing' ? LOCAL_TRANSCRIPTION_INSTALLING : kind === 'install' ? LOCAL_TRANSCRIPTION_GATE : t(errorText(e)))
+      const code = errorCode(e)
+      if (isRecoveryCode(code)) { setError(''); recover.open(code as string, readiness?.checks?.transcription?.model) }
+      else setError(t(errorText(e)))  // includes coded source refusals (source_unreadable ...): shown at once
     } finally { starting.current = false; setBusy(false) }
   }
   submitRef.current = submit
@@ -335,8 +333,8 @@ export default function CreativeImport({ onImported, blocked = false, onBlocked 
       </div>}
       {pending && <div className="ac-undo" role="status"><span>{t('即将开始制作。')}</span><button type="button" className="ac-undo-action" onClick={undo}>{t('撤销')}</button></div>}
       <div className="studio-row studio-import-bottom"><div><span className="studio-muted">{t('会按所选平台自动制作，数量由素材内容决定。')}</span>{!hidePreferences && <button className="studio-link studio-preferences-link" disabled={busy} onClick={()=>setPreferences(true)}>{t("高级偏好")}</button>}</div><Btn variant="cta" loading={busy} onClick={() => submit('button')}>{busy?t("正在生成"):t("生成成片")}</Btn></div>
-      {(error === LOCAL_TRANSCRIPTION_GATE || error === LOCAL_TRANSCRIPTION_INSTALLING) && <TranscriptionGatePrompt kind={error} check={readiness?.checks?.transcription} busy={busy} repairing={repairing} repair={repair} navigate={navigate} wait={waitForTranscription} onContinue={continueAfterWait} retry={retryWait}/>}
-      {error&&error!==LOCAL_TRANSCRIPTION_GATE&&error!==LOCAL_TRANSCRIPTION_INSTALLING&&<p className="studio-error" role="alert">{error}</p>}
+      <TranscriptionGatePrompt state={recovery} busy={busy} onInstall={() => recover.install()} onRetry={() => recover.retry()} onContinue={continueAfterRecovery} navigate={navigate}/>
+      {error&&<p className="studio-error" role="alert">{error}</p>}
     </div>
     <Dialog open={preferences} onClose={()=>setPreferences(false)} title={t("制作偏好")} description={t("默认由 AI 匹配。你指定的选项优先，生成后也可以修改。")} footer={<div className="studio-actions"><Btn onClick={()=>{setOptions({...defaultImportOptions,instruction:options.instruction});setSubtitle(null);setBrowser('')}}>{t("恢复自动")}</Btn><Btn variant="cta" onClick={()=>setPreferences(false)}>{t("完成")}</Btn></div>}>
       <ImportPreferences value={options} onChange={setOptions}/>
