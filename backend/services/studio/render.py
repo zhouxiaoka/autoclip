@@ -81,6 +81,22 @@ def _template_report(job, encoder: str) -> dict | None:
     }
 
 
+def _decoded_extent(progress_output) -> tuple:
+    """(seconds, frames) from ``ffmpeg -progress pipe:1``; end time = last pts + one frame."""
+    text = progress_output.decode('utf-8', 'ignore') if isinstance(progress_output, bytes) else str(progress_output or '')
+    out_us, frames = None, 0
+    for line in text.splitlines():
+        key, _, value = line.partition('=')
+        try:
+            if key == 'out_time_us' and value.strip().lstrip('-').isdigit():
+                out_us = int(value)
+            elif key == 'frame':
+                frames = int(value)
+        except ValueError:
+            continue
+    return (None if out_us is None else max(0, out_us) / 1_000_000), frames
+
+
 def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_outro=False, html_template=None, html_fallback=None, features=None, safe_area='xiaohongshu', requested_template=None):
     info = _probe(video)
     validate_scenes(draft.scenes, info.get('duration', 0))
@@ -307,13 +323,24 @@ def render_draft(project_id, video, draft: Draft, job_id, progress, *, brand_out
             raise ValueError('渲染输出无效，请重新导出')
         # R11 #413: probe metadata survives a truncated mp4 (faststart moov up front); only a
         # full decode proves every frame is readable before the file replaces the saved video.
+        # R12 #21: a clean cut at a packet boundary decodes without errors but short, so the
+        # decoded extent must also match the container and the drafted content.
+        # R12 #22: a decode timeout stays a typed TimeoutExpired (error_code=timeout).
         try:
             decoded = project_cancellation.run(
-                [get_ffmpeg_path(), '-v', 'error', '-xerror', '-i', str(ready), '-f', 'null', '-'],
+                [get_ffmpeg_path(), '-v', 'error', '-xerror', '-nostats', '-progress', 'pipe:1',
+                 '-i', str(ready), '-map', '0:v:0', '-f', 'null', '-'],
                 check=True, capture_output=True, timeout=max(120, duration * 2))
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        except (subprocess.CalledProcessError, OSError):
             raise ValueError('渲染输出无效，请重新导出') from None
         if (decoded.stderr or b'').strip():
+            raise ValueError('渲染输出无效，请重新导出')
+        decoded_seconds, decoded_frames = _decoded_extent(decoded.stdout)
+        fps = validated.get('fps') or 30
+        tolerance = max(0.5, 2 / fps if fps > 0 else 0.5)
+        if (decoded_frames <= 0 or decoded_seconds is None
+                or decoded_seconds < duration - tolerance
+                or decoded_seconds < sum(durations) - tolerance):
             raise ValueError('渲染输出无效，请重新导出')
         project_cancellation.checkpoint(project_id)
         os.replace(ready, output)
