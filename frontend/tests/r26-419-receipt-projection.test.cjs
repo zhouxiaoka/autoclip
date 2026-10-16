@@ -51,3 +51,15 @@ test('#347: a historical receipt reports its own frozen counts, not the live wor
   assert.equal(e.recommendation_mode, 'local'); assert.equal(e.route, 'subtitle')
   assert.equal(e.platform_count, undefined)  // not in the frozen summary: never filled from the live generation
 })
+
+test('#346: the terminal carries the receipt sequence as attempt_sequence, registered on both terminals', () => {
+  const fs = require('node:fs')
+  const catalog = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../docs/analytics/event_catalog.json'), 'utf8'))
+  const h = tracker()
+  const a = gen(A, 1, FA, 'failed'), b = { ...gen(B, 7, FA, 'completed'), retry_of: A }
+  h.t.watchAttempt('p1', a); h.t.watchAttempt('p1', b)
+  for (const w of h.t.list()) h.t.observeStudio(w, live([a, b]))
+  const seq = Object.fromEntries(h.finished('studio_generation_finished').map(p => [p.attempt_id, p.attempt_sequence]))
+  assert.deepEqual(seq, { [A]: 1, [B]: 7 })
+  for (const ev of ['studio_generation_finished', 'studio_production_finished']) assert.ok(catalog.events[ev].optional_properties.attempt_sequence, ev)
+})

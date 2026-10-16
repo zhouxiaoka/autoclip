@@ -137,6 +137,8 @@ export function safeStudioProperties(value: Record<string, unknown> | null = {})
       for (const goal of ['content', 'highlight', 'promo']) out[`${prefix}_${goal}`] = valid.includes(goal)
     }
   }
+  // R25 #346: the backend receipt's per-project sequence; success_rate.sql orders a flow's attempts by it.
+  if (typeof input.attempt_sequence === 'number' && Number.isInteger(input.attempt_sequence) && input.attempt_sequence >= 1) out.attempt_sequence = input.attempt_sequence
   if (typeof input.http_status === 'number' && Number.isInteger(input.http_status) && input.http_status >= 400 && input.http_status <= 599) out.http_status = input.http_status
   const ERROR_CODE = /^(http_[45][0-9]{2}|network|timeout|unknown|validation|missing_resource|unexpected|connection|authentication|rate_limited|provider_error|invalid_response|output_truncated|refused|multiple|llm_not_configured|llm_auth_invalid|whisper_not_installed|whisper_install_failed|transcription_empty|subtitle_setup|timeline_empty|source_blocked|source_too_short|source_no_audio|source_unreadable|frame_extract_failed|service_restarted)$/
   if (typeof input.error_code === 'string' && ERROR_CODE.test(input.error_code)) out.error_code = input.error_code
@@ -476,7 +478,7 @@ export class WorkflowTracker {
         event = 'studio_production_finished'
         details = { ...sum, recommendation_mode: undefined, route: undefined, ...causes, ...link, degrade_reason: receipt.degrade_reason }
       }
-      this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(pid), ...details, outcome, ...(receipt.flow_id ? { flow_id: receipt.flow_id } : {}) }), receipt.attempt_id)
+      this.emitOnce(w, 'finished', event, safeStudioProperties({ ...this.context(pid), ...details, outcome, ...(receipt.flow_id ? { flow_id: receipt.flow_id } : {}), attempt_sequence: receipt.sequence }), receipt.attempt_id)
       if (w.seen.includes('finished')) {
         w.settled = true; this.persist()
         const c = this.contexts[pid]

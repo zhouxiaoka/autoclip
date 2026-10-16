@@ -97,3 +97,19 @@ def test_mutation_guard_without_the_receipt_retry_of_it_is_two_flows(fig):
             e['props']['flow_id'] = e['props']['attempt_id']
     [row] = run_sql(figure(fig, SQL, WINDOW), _rows(result['events']))
     assert row['fq_all'] == 2 and row['overall_flow_rate'] == 0.5
+
+
+@pytest.mark.parametrize('fig', [1, 5])
+def test_346_out_of_order_observation_is_still_one_successful_flow(fig):
+    """R25 #346 on the real chain: the retry's terminal is observed BEFORE the partial one (offline client); the
+    events carry the receipt sequence and success_rate.sql orders by it, so figures 1 and 5 stay at 100%."""
+    result, receipts = _chain()
+    gen = [e for e in result['events'] if e['event'] == 'studio_generation_finished']
+    assert [e['props']['attempt_sequence'] for e in gen] == [r['sequence'] for r in receipts] == [1, 2]
+    reordered = [e for e in result['events'] if e not in gen] + list(reversed(gen))
+    [row] = run_sql(figure(fig, SQL, WINDOW), _rows(reordered))
+    assert (row['flow_ok'], row['fq_all']) == (1, 1), row
+    for e in reordered:  # mutation guard: without the producer's sequence it is 100% -> 0%
+        e['props'].pop('attempt_sequence', None)
+    [row] = run_sql(figure(fig, SQL, WINDOW), _rows(reordered))
+    assert row['flow_ok'] == 0
