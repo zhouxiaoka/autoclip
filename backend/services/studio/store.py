@@ -487,6 +487,20 @@ def interrupted_run(data):
     return bool(variants) and all(row.get('status') in ('completed', 'failed') for row in variants)
 
 
+ATTEMPT_IDENTITY_KEYS = ('provider', 'config_source')
+
+
+def attempt_identity(*sources):
+    """R16 #40: provider/config_source recorded when the attempt started; first source wins."""
+    out = {}
+    for source in sources:
+        if isinstance(source, dict):
+            for key in ATTEMPT_IDENTITY_KEYS:
+                if key not in out and isinstance(source.get(key), str) and source[key]:
+                    out[key] = source[key]
+    return out
+
+
 def _recover_interrupted_run(data):
     """Close a screening/production/rendering run whose worker died with the previous process.
 
@@ -509,16 +523,21 @@ def _recover_interrupted_run(data):
                     variant.update(status='failed', error='服务已重启，请重试这条', error_code=RESTART_CODE)
         settle_generation(data)
         if generation.get('status') != 'rendering':
+            if generation.get('error_code') == RESTART_CODE or any(v.get('error_code') == RESTART_CODE for v in variants):
+                # R16 #43: a restart midway through rendering records how the previous process ended.
+                generation['shutdown_kind'] = kind
+                data['analysis']['shutdown_kind'] = kind
             return True
     if generation and generation.get('status') in ('screening', 'production', 'rendering') and not (generation['status'] == 'rendering' and variants):
         owned = isinstance(analysis, dict) and analysis.get('status') == 'running' and analysis.get('instance') == INSTANCE
         if owned:
             return False
         stage = generation['status']
-        generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now(), shutdown_kind=kind)
+        identity = attempt_identity(analysis, generation)
+        generation.update(status='failed', error=RESTART_MESSAGE, error_code=RESTART_CODE, failure_stage=stage, finished_at=now(), shutdown_kind=kind, **identity)
         data['analysis'] = {'status': 'failed', 'phase': stage, 'run_id': (analysis or {}).get('run_id'),
                             'error': RESTART_MESSAGE, 'error_code': RESTART_CODE, 'outcome': 'failed', 'created_at': now(),
-                            'shutdown_kind': kind}
+                            'failure_stage': stage, 'shutdown_kind': kind, **identity}
         return True
     if analysis and _stale_analysis(analysis):
         # Manual (confirmation) flows and visual analysis keep their wording; the flag is now persisted.
@@ -568,7 +587,9 @@ def settle_generation(data):
                 data['generation']['error'] = reason
         data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now())
         error = data['generation'].get('error') if outcome == 'failed' else None
-        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code, 'failure_stage': 'render'} if code else {}), **({'error': error} if error else {})}
+        identity = attempt_identity(data.get('analysis'), data['generation'])
+        data['generation'].update(identity)
+        data['analysis'] = {**identity, 'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code, 'failure_stage': 'render'} if code else {}), **({'error': error} if error else {})}
 
 
 @_serialized

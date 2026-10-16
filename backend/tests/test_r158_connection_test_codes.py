@@ -280,11 +280,11 @@ def test_restart_after_clean_shutdown_reports_clean():
     data = _stale(old)
     assert store._recover_interrupted_run(data)
     assert data['analysis']['shutdown_kind'] == 'clean'
-    # begin_shutdown is the graceful hook that writes this process's marker.
+    # R16 #42: begin_shutdown also runs on parent loss, so it must not claim a clean quit.
     project_cancellation.begin_shutdown()
     try:
         from backend.services.studio.shutdown_marker import shutdown_kind
-        assert shutdown_kind(store.INSTANCE) == 'clean'
+        assert shutdown_kind(store.INSTANCE) != 'clean'
     finally:
         project_cancellation._shutting_down = False
 

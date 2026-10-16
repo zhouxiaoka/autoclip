@@ -1,16 +1,20 @@
 """1.5.8: tell a crash from a clean quit/update when a run is recovered as service_restarted.
 
-A graceful shutdown (project_cancellation.begin_shutdown) drops an empty file named after this
-process's store.INSTANCE. On recovery the dead run's instance decides ``shutdown_kind``:
-``clean`` (marker present), ``crash`` (markers exist but not this one), ``unknown`` (no instance
-or no marker ever written, e.g. pre-1.5.8 runs). Enum only; nothing else leaves the box.
+R16 #42: the desktop shell (Rust BackendManager::stop) calls POST /api/v1/health/shutdown-intent
+right before it kills the backend on a normal quit or update; that writes a ``clean`` marker named
+after this process's store.INSTANCE. When the parent watch sees the desktop app vanish (kill -9,
+crash) it writes ``parent_lost`` instead. begin_shutdown() writes nothing: it is hit on both paths.
+On recovery the dead run's instance decides ``shutdown_kind``: the marker's kind, ``crash``
+(markers exist but not this one), ``unknown`` (no instance or no marker ever written, e.g.
+pre-1.5.8 runs). Enum only; nothing else leaves the box.
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
-SHUTDOWN_KINDS = ('clean', 'crash', 'unknown')
+SHUTDOWN_KINDS = ('clean', 'parent_lost', 'crash', 'unknown')
+MARKER_KINDS = ('clean', 'parent_lost')
 _KEEP = 50
 
 
@@ -20,12 +24,21 @@ def _root() -> Path:
 
 
 def mark_clean(instance: str | None = None) -> None:
+    mark('clean', instance)
+
+
+def mark(kind: str, instance: str | None = None) -> None:
+    if kind not in MARKER_KINDS:
+        return
     try:
         if instance is None:
             from backend.services.studio.store import INSTANCE as instance
         root = _root()
         root.mkdir(parents=True, exist_ok=True)
-        (root / instance).touch()
+        path = root / instance
+        if kind == 'parent_lost' and path.exists() and path.read_text(encoding='ascii', errors='ignore').strip() in ('', 'clean'):
+            return  # the shell announced a clean quit first; the watch only saw that quit
+        path.write_text(kind, encoding='ascii')
         markers = sorted(root.iterdir(), key=lambda p: p.stat().st_mtime)
         for old in markers[:-_KEEP]:
             old.unlink(missing_ok=True)
@@ -38,8 +51,10 @@ def shutdown_kind(instance: str | None) -> str:
         return 'unknown'
     try:
         root = _root()
-        if (root / instance).exists():
-            return 'clean'
+        path = root / instance
+        if path.exists():
+            kind = path.read_text(encoding='ascii', errors='ignore').strip()
+            return kind if kind in MARKER_KINDS else 'clean'  # pre-R16 markers were empty
         return 'crash' if root.is_dir() and any(root.iterdir()) else 'unknown'
     except OSError:
         return 'unknown'

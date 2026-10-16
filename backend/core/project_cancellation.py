@@ -76,9 +76,8 @@ def begin_shutdown() -> None:
     global _shutting_down
     with _lock:
         _shutting_down = True
-    # 1.5.8: graceful exit marker so recovered runs can say clean vs crash.
-    from backend.services.studio.shutdown_marker import mark_clean
-    mark_clean()
+    # R16 #42: no shutdown marker here; this runs on a clean quit and on parent loss alike.
+    # The shell's shutdown-intent call writes ``clean``; parent_watch writes ``parent_lost``.
 
 
 def shutting_down() -> bool:

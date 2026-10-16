@@ -175,6 +175,11 @@ impl BackendManager {
     pub fn stop(&self) -> Result<(), String> {
         let mut status = self.status.lock().unwrap();
         let mut process = self.process.lock().unwrap();
+        // R16 #42: a normal quit/update tells the backend first, so runs it leaves behind are
+        // recovered as shutdown_kind=clean; a lost parent (crash, kill -9) never gets here.
+        if status.port != 0 && process.as_mut().map_or(false, |c| matches!(c.try_wait(), Ok(None))) {
+            let _ = notify_shutdown_intent(status.port);
+        }
         #[cfg(windows)]
         let terminated_tree = {
             let job = self.job.lock().unwrap().take();
@@ -480,5 +485,53 @@ impl BackendManager {
                 }
             }
         }
+    }
+}
+
+
+/// R16 #42: POST /api/v1/health/shutdown-intent on loopback, bounded to ~1.5 s so quitting never hangs.
+pub(crate) fn notify_shutdown_intent(port: u16) -> std::io::Result<bool> {
+    use std::io::{Read, Write};
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(500))?;
+    stream.set_read_timeout(Some(Duration::from_secs(1)))?;
+    stream.set_write_timeout(Some(Duration::from_millis(500)))?;
+    let request = format!(
+        "POST /api/v1/health/shutdown-intent HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    );
+    stream.write_all(request.as_bytes())?;
+    let mut head = [0u8; 12];
+    let read = stream.read(&mut head)?;
+    Ok(read >= 12 && &head[9..12] == b"200")
+}
+
+#[cfg(test)]
+mod shutdown_intent_tests {
+    use super::notify_shutdown_intent;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    #[test]
+    fn posts_shutdown_intent_before_kill() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut conn, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 512];
+            let n = conn.read(&mut buf).unwrap();
+            conn.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").unwrap();
+            String::from_utf8_lossy(&buf[..n]).to_string()
+        });
+        assert!(notify_shutdown_intent(port).unwrap());
+        let request = server.join().unwrap();
+        assert!(request.starts_with("POST /api/v1/health/shutdown-intent HTTP/1.1"));
+    }
+
+    #[test]
+    fn unreachable_backend_does_not_block() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        assert!(notify_shutdown_intent(port).is_err());
     }
 }

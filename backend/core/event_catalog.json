@@ -195,6 +195,7 @@
     ],
     "shutdown_kind": [
       "clean",
+      "parent_lost",
       "crash",
       "unknown"
     ]

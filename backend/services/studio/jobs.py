@@ -225,7 +225,8 @@ def analyze_project(project_id, prefs, url=None, browser=None):
     def begin(data):
         if (data.get('analysis') or {}).get('status') == 'running':
             raise ValueError('视觉分析正在运行')
-        data['analysis'] = {'status': 'running', 'phase': 'analysis', 'run_id': uuid.uuid4().hex, 'message': '下载素材' if url else '理解画面', 'instance': store.INSTANCE, 'created_at': store.now()}
+        from backend.services.studio.failure_identity import provider_identity
+        data['analysis'] = {**provider_identity(), 'status': 'running', 'phase': 'analysis', 'run_id': uuid.uuid4().hex, 'message': '下载素材' if url else '理解画面', 'instance': store.INSTANCE, 'created_at': store.now()}
         return data['analysis']['run_id']
     run_id = store.change(project_id, begin)
     try:
@@ -274,7 +275,7 @@ def _analyze(project_id, prefs, url, browser):
         def complete(data):
             data['events'] = [e.model_dump() for e in events]
             data['drafts'].extend({**d, 'updated_at': store.now()} for d in drafts)
-            data['analysis'] = {'status': 'completed', 'coverage': coverage, 'created_at': store.now()}
+            data['analysis'] = {**store.attempt_identity(data.get('analysis')), 'status': 'completed', 'coverage': coverage, 'created_at': store.now()}
         store.change(project_id, complete)
         mark_project(project_id, 'completed', studio_draft_count=len(store.read(project_id)['drafts']))
     except Exception as error:
@@ -1149,7 +1150,7 @@ def _auto_generate(project_id, plan):
                 data['events'] = events
             data['output_variants'].extend(variants)
             data['generation'].update(status='rendering', skipped=skipped, started_at=data['generation'].get('started_at') or store.now(), **_generation_route(data.get('plan')))
-            data['analysis'] = {'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
+            data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'running', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'message': '正在生成可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()}
         store.change(project_id, persist)
         _dispatch_pending_variants(project_id)
     except Exception as error:
@@ -1160,6 +1161,7 @@ def _auto_generate(project_id, plan):
         context = {**provider_identity(), **studio_failure_context(error, 'production')}
         error_text = str(error)[:700]
         def fail(data):
+            context.update(store.attempt_identity(data.get('analysis'), data.get('generation')))
             if data.get('generation'):
                 data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now(), **context)
             # 1.5.8: the manual-confirm terminal reads analysis; it needs the same stage/upstream/provider.
@@ -1249,7 +1251,7 @@ def append_platform_variants(project_id, platforms, branding):
         data['drafts'].extend({**draft, 'updated_at': store.now()} for draft in derived)
         data['output_variants'].extend(variants)
         data['generation'].update(status='rendering')
-        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在追加平台版本', 'instance': store.INSTANCE, 'created_at': store.now()}
+        data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'running', 'phase': 'rendering', 'message': '正在追加平台版本', 'instance': store.INSTANCE, 'created_at': store.now()}
     store.change(project_id, persist)
     _dispatch_pending_variants(project_id)
     return variants
@@ -1479,7 +1481,7 @@ def retry_variant(project_id, variant_id):
         item.pop('error', None)
         item.pop('error_code', None)
         data['generation'].update(status='rendering')
-        data['analysis'] = {'status': 'running', 'phase': 'rendering', 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
+        data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'running', 'phase': 'rendering', 'message': '正在重试成片版本', 'instance': store.INSTANCE, 'created_at': store.now()}
     store.change(project_id, update)
     _dispatch_pending_variants(project_id)
     return next(item for item in store.read(project_id)['output_variants'] if item['id'] == variant_id)
@@ -1542,7 +1544,9 @@ def inspect_project(project_id, options, url=None, browser=None, *, producer=Non
             'created_at': store.now(),
         }
         state.setdefault('output_variants', [])
-        state['analysis'] = {'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
+        from backend.services.studio.failure_identity import provider_identity
+        state['analysis'] = {**provider_identity(), 'status':'running', 'phase':'screening', 'run_id':uuid.uuid4().hex, 'message':'准备素材' if url else '快速判断适合的制作类型', 'instance':store.INSTANCE, 'created_at':store.now()}
+        state['generation'].update(store.attempt_identity(state['analysis']))
         store.write(project_id, state)
         try:
             from backend.core.llm_telemetry import emit_asr_readiness_checked
@@ -1583,8 +1587,8 @@ def _inspect(project_id, options, url, browser):
         if options.auto_start:
             def start_automatic(data):
                 run_id = (data.get('analysis') or {}).get('run_id')  # observers match the run across phases
-                data.update(plan=plan, analysis={'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
-                data['generation'].update(status='production', started_at=store.now(), **_generation_route(plan))
+                data.update(plan=plan, analysis={**store.attempt_identity(data.get('analysis')), 'status': 'running', 'phase': 'production', 'run_id': run_id, 'message': '正在制作可发布成片', 'instance': store.INSTANCE, 'created_at': store.now()})
+                data['generation'].update(status='production', started_at=store.now(), **_generation_route(plan), **store.attempt_identity(data.get('analysis')))
                 return run_id
             run_id = store.change(project_id, start_automatic)
             mark_project(project_id, 'processing', creative=plan['preferences'], awaiting_confirmation=False, import_staging=False)
@@ -1598,12 +1602,12 @@ def _inspect(project_id, options, url, browser):
                 code = studio_error_code(error)
                 def fail_automatic(data):
                     data['generation'].update(status='failed', error=message, error_code=code, finished_at=store.now(), failure_stage='dispatch', **_generation_route(plan))
-                    data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': message, 'error_code': code, 'failure_stage': 'dispatch'}
+                    data['analysis'] = {**store.attempt_identity(data.get('analysis'), data.get('generation')), 'status': 'failed', 'phase': 'production', 'error': message, 'error_code': code, 'failure_stage': 'dispatch'}
                 store.change(project_id, fail_automatic)
                 mark_project(project_id, 'failed')
             return
         def awaiting_confirmation(data):
-            data.update(plan=plan, analysis={'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)})
+            data.update(plan=plan, analysis={**store.attempt_identity(data.get('analysis')), 'status':'awaiting_confirmation', 'created_at':store.now(), 'duration_ms':round((monotonic() - started) * 1000)})
             if data.get('generation'):
                 data['generation']['status'] = 'awaiting_confirmation'
         store.change(project_id, awaiting_confirmation)
@@ -1620,6 +1624,8 @@ def _inspect(project_id, options, url, browser):
         failure.update(context)
         try:
             def fail_screening(data):
+                context.update(store.attempt_identity(data.get('analysis'), data.get('generation')))
+                failure.update(context)
                 data['analysis'] = failure
                 if (data.get('generation') or {}).get('auto_start'):
                     data['generation'].update(status='failed', error=failure['error'], error_code=failure['error_code'], finished_at=store.now(), **context)
@@ -1676,7 +1682,8 @@ def confirm_project(project_id, body):
             for goal in body.goals
         }
         plan['confirmed_preferences'] = plan['goal_preferences'][body.goals[0]].copy()
-        state['analysis'] = {'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
+        from backend.services.studio.failure_identity import provider_identity
+        state['analysis'] = {**provider_identity(), 'status':'running', 'phase':'production', 'run_id':uuid.uuid4().hex, 'message':'开始制作所选内容', 'instance':store.INSTANCE, 'created_at':store.now()}
         store.write(project_id, state)
         try:
             executor.submit(_produce_selected, project_id, plan, _io_receipt=('analysis', state['analysis']['run_id'], 'production'))
