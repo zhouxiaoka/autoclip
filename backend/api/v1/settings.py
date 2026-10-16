@@ -98,8 +98,11 @@ def fetch_connection_model_list(body: Any = Body(default=None)):
 @router.post('/ai-models/test')
 def test_connection_assignment(body: ConnectionTestRequest):
     from backend.services.provider_validation import validate_connection
+    source = None
     try:
         connection = ai_models.resolve_secret(body.connection, ai_models.for_editing())
+        from backend.services.studio.failure_identity import config_source as _config_source
+        source = _config_source(connection.provider, connection.base_url, body.model)
         if body.purpose in ('cover', 'transcription'):
             result = validate_connection(connection, body.model, purpose=body.purpose)
             if body.purpose == 'cover' and connection.image_base_url:
@@ -109,6 +112,7 @@ def test_connection_assignment(body: ConnectionTestRequest):
             result = validate_connection(connection, body.model)
         if (body.vision or body.purpose == 'vision') and body.purpose in ('analysis', 'vision') and result.ok:
             from backend.services.studio.vision_settings import test, VisionSettingsInput
+            from backend.core.connection_test_codes import vision_error_code
             endpoint = ai_models.chat_endpoint(connection, body.model)
             vision = test(VisionSettingsInput(mode='custom', **endpoint))
             if not (vision.get('success') or vision.get('ok')):
@@ -117,17 +121,22 @@ def test_connection_assignment(body: ConnectionTestRequest):
                 payload.update(
                     success=False, ok=False, result='failed',
                     error_type='unknown', hint_key=hint_key_for('unknown'),
+                    error_code=vision_error_code(vision), http_status=None, config_source=source,
                 )
                 return payload
-        return result.as_api()
+        return {**result.as_api(), 'config_source': source}
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         from backend.core.upstream_errors import classify_exception
+        from backend.core.connection_test_codes import connection_test_error_code
+        from backend.core.upstream_errors import network_kind_of
         classified = classify_exception(exc)
         return {
             'success': False, 'ok': False, 'result': 'transient' if classified.retryable else 'failed',
             'error_type': classified.error_type.value, 'hint_key': classified.hint_key, 'models': [],
+            'error_code': connection_test_error_code(classified.error_type.value, network_kind=network_kind_of(exc)),
+            'http_status': None, **({'config_source': source} if source else {}),
         }
 
 

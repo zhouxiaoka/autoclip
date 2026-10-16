@@ -58,6 +58,9 @@ class AccountModelList:
     message_key: str = ""
     base_url_host: str = ""
     pages: int = 0
+    # Connection-test telemetry only: integer upstream status and a coarse network kind.
+    http_status: int = 0
+    network_kind: str = ""
 
     def as_api(self) -> dict:
         return {
@@ -89,8 +92,11 @@ def _as_classified(error_type: str | UpstreamErrorType) -> ClassifiedUpstreamErr
     )
 
 
-def _failed(classified: ClassifiedUpstreamError, host: str, *, models: Optional[list[str]] = None, pages: int = 0) -> AccountModelList:
+def _failed(classified: ClassifiedUpstreamError, host: str, *, models: Optional[list[str]] = None, pages: int = 0,
+            http_status: int = 0, network_kind: str = "") -> AccountModelList:
     return AccountModelList(
+        http_status=http_status if 100 <= int(http_status or 0) <= 599 else 0,
+        network_kind=network_kind,
         ok=False,
         models=models or [],
         recommended={purpose: [] for purpose in _PURPOSES},
@@ -392,25 +398,27 @@ def fetch_provider_models(
         except Exception as exc:
             name = type(exc).__name__
             if not collected:
-                return _failed(classify_upstream_error(None, "", error_name=name), host, pages=pages)
+                from backend.core.upstream_errors import network_kind_of
+                return _failed(classify_upstream_error(None, "", error_name=name), host, pages=pages,
+                               network_kind=network_kind_of(exc))
             truncated = True
             break
 
         status = int(getattr(response, "status_code", 0) or 0)
         if status == 429 or 500 <= status <= 599:
             error_type = UpstreamErrorType.RATE_LIMITED if status == 429 else UpstreamErrorType.UPSTREAM_UNAVAILABLE
-            return _failed(_as_classified(error_type), host, pages=pages)
+            return _failed(_as_classified(error_type), host, pages=pages, http_status=status)
         text = _response_text(response)[:4000]
         content_type = _content_type(response)
         if _looks_like_html(text, content_type):
             classified = classify_upstream_error(status, text)
             if classified.error_type is not UpstreamErrorType.BAD_ENDPOINT:
                 classified = _as_classified(UpstreamErrorType.BAD_ENDPOINT)
-            return _failed(classified, host, pages=pages)
+            return _failed(classified, host, pages=pages, http_status=status)
         if status != 200:
             if status >= 400:
-                return _failed(_classify_http(status, text, models_path=True), host, pages=pages)
-            return _failed(_as_classified(UpstreamErrorType.BAD_ENDPOINT), host, pages=pages)
+                return _failed(_classify_http(status, text, models_path=True), host, pages=pages, http_status=status)
+            return _failed(_as_classified(UpstreamErrorType.BAD_ENDPOINT), host, pages=pages, http_status=status)
         payload, parse_error = _read_json(response)
         if parse_error:
             return _failed(parse_error, host, pages=pages)

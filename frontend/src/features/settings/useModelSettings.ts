@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { codeFromRequestError, codeFromResult, safeHttpStatus } from '../../analytics/connectionTestCode'
 import { message } from 'antd'
 import { t } from '../../i18n'
 import { errorText } from '../studio/api'
@@ -14,6 +15,13 @@ import { getProvider } from './providerPresets'
 import type { Role, SaveIssue } from './modelSettingsLogic'
 import { passed, telemetryHost, validationCopy, VISION_HINT_KEY, type ValidationResult } from './providerAccess'
 import { applyCustomProvider, mergeCustomList, type CustomProviderDraft } from './customProvider'
+
+
+/** 1.5.8: every failed connection test carries a closed-set code (+ integer HTTP status). */
+function connectionTestFailure(value: ValidationResult): Record<string, unknown> {
+  const status = safeHttpStatus(value.http_status)
+  return { error_code: codeFromResult(value), ...(status ? { http_status: status } : {}) }
+}
 
 export const roleLabel = (role: Role) =>
   ({ analysis: t('模型'), vision: t('画面理解模型'), cover: t('生图模型'), transcription: t('转写模型') })[role]
@@ -263,7 +271,11 @@ export function useModelSettings(placement: Placement = 'settings_model') {
         : status && status >= 500 && status <= 599 ? 'upstream_unavailable'
         : status === 401 ? 'invalid_key'
         : !status ? (error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT' ? 'timeout' : 'connection') : 'unknown'
-      return { success: false, ok: false, result: isRetryableUpstreamError(errorType) ? 'transient' : 'failed', error_type: errorType, hint_key: hintKeyForUpstreamError(errorType) }
+      const desktop = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
+      const emptyKey = !(connection.api_key || '').trim() && !connection.has_key
+      // Telemetry-only fields; the user-facing error_type/hint above are unchanged.
+      return { success: false, ok: false, result: isRetryableUpstreamError(errorType) ? 'transient' : 'failed', error_type: errorType, hint_key: hintKeyForUpstreamError(errorType),
+        error_code: codeFromRequestError(e, { emptyKey, desktop }), http_status: typeof status === 'number' ? status : null }
     }
   }
 
@@ -336,7 +348,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       const value = await probe(connection, binding.model, vision, role)
       emitValidation(connection, value)
       replace(logic.applyValidation(settings, connection.id, value))
-      finish(passed(value) ? 'completed' : 'failed')
+      finish(passed(value) ? 'completed' : 'failed', { config_source: value.config_source, ...(passed(value) ? {} : connectionTestFailure(value)) })
       if (passed(value)) {
         const normalized = { ...connection, base_url: value.normalized_base_url || connection.base_url }
         if (role === 'analysis' || role === 'vision') backfillModels(normalized, value)
@@ -405,7 +417,7 @@ export function useModelSettings(placement: Placement = 'settings_model') {
       emitValidation(connection, value)
       const applied = logic.applyValidation(settingsRef.current || next, connection.id, value)
       replace(applied)
-      finish(passed(value) ? 'completed' : 'failed')
+      finish(passed(value) ? 'completed' : 'failed', { config_source: value.config_source, ...(passed(value) ? {} : connectionTestFailure(value)) })
       if (passed(value)) {
         const normalized = { ...connection, base_url: value.normalized_base_url || connection.base_url }
         backfillModels(normalized, value)

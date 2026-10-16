@@ -247,7 +247,7 @@ multiIf(
 | `setup_action` | `placement`, `action` | `later` / `open_settings` / `one_click`（赞助商一键获取只记 action + provider，不记 URL / key） |
 | `import_blocked` | `reason` | 未配置就被导入挡住 |
 | `provider_configuration_save_requested` / `_finished` | `provider`, `outcome`（finished） | 保存设置；保存成功 ≠ 能调用 |
-| `provider_connection_test_requested` / `_finished` | `provider`, `outcome`（finished） | 现有连接测试 |
+| `provider_connection_test_requested` / `_finished` | `provider`, `outcome`（finished） | 现有连接测试。1.5.8：失败必带 `error_code`（闭集：`empty_key` `invalid_key` `insufficient_quota` `permission_denied` `bad_base_url` `model_not_found` `rate_limited` `http_5xx` `timeout` `dns` `cors` `network` `vision_unsupported` `output_truncated` `invalid_request` `unknown`）+ 整数 `http_status`（上游原始状态，本地 422 为 422）+ `config_source`（`preset`/`customized`）。禁止 URL/key/路径/上游 body |
 | `provider_validation_finished` | `provider`, `result` | **线 B 主事件**：保存前真实小请求。`result`=`success`/`failed`/`skipped`；失败带 `upstream_error_type`、`base_url_host` |
 
 ### 5.3 导入
@@ -741,3 +741,8 @@ Schema 测试必须用 §9 的 12 条夹具证明：sanitize 之后仍含这五�
 | T5 `legacy_stopped_or_tagged` | §8.2 / §8.3 旧事件停发，或继续发时每条带 `legacy=true`；死 wrapper 删除 | 仍出现在生产者里的 legacy 事件名，同一文件必须带 `legacy: true` |
 
 机读清单：`dates.close_transition` / `dates.stop_legacy_emit` / `dates.delete_wrappers` 均为 `"1.5.8"`。
+
+
+### 1.5.8 终态事件身份字段
+
+`studio_screen_finished` / `studio_generation_finished` / `studio_production_finished` 失败时必带 `failure_stage`（含服务重启、IO 失败、调度失败路径）、`upstream_error_type`；全部带 `provider`（目录 slug 或 `other`）与 `config_source`（`preset` = 目录 base URL + 目录模型 id，否则 `customized`）。不发送 URL 或自定义模型名。

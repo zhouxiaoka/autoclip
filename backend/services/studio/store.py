@@ -224,10 +224,11 @@ def _apply_read_receipts(path, data):
         elif kind == 'analysis':
             analysis = data.get('analysis') or {}
             if analysis.get('run_id') == identity[1] and analysis.get('phase') == identity[2] and analysis.get('status') == 'running':
-                analysis.update(status='failed', error=message, error_code=code)
+                stage = identity[2] if identity[2] in ('screening', 'production') else 'other'
+                analysis.update(status='failed', error=message, error_code=code, failure_stage=stage)
                 generation = data.get('generation') or {}
                 if generation.get('status') in ('screening', 'production'):
-                    generation.update(status='failed', error=message, error_code=code, finished_at=now())
+                    generation.update(status='failed', error=message, error_code=code, finished_at=now(), failure_stage=stage)
                 changed = True
         elif kind == 'preparation':
             variant = next((row for row in data['output_variants'] if row['id'] == identity[1]), {})
@@ -317,10 +318,11 @@ def _apply_io_failure(path, data):
                 data['analysis']['error'] = IO_FAILURE_MESSAGE
     analysis = data.get('analysis') or {}
     if 'analysis_run_id' in patch and analysis.get('status') == 'running' and analysis.get('run_id') == patch['analysis_run_id']:
-        analysis.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected')
+        stage = analysis.get('phase') if analysis.get('phase') in ('screening', 'production') else 'render' if analysis.get('phase') == 'rendering' else 'other'
+        analysis.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected', failure_stage=stage)
         generation = data.get('generation') or {}
         if generation.get('status') in ('screening', 'production', 'rendering'):
-            generation.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected', finished_at=patch['at'])
+            generation.update(status='failed', error=IO_FAILURE_MESSAGE, error_code='unexpected', finished_at=patch['at'], failure_stage=stage)
         changed = True
     return changed
 
@@ -421,7 +423,8 @@ def read(project_id: str, *, recover: bool = True):
     patched = _recover_interrupted_run(data) or patched
     analysis = data.get('analysis')
     if isinstance(analysis, dict) and analysis.get('status') == 'running' and not analysis.get('instance'):
-        analysis.update(status='failed', error='服务已重启，请重试分析')
+        stage = analysis.get('phase') if analysis.get('phase') in ('screening', 'production') else 'other'
+        analysis.update(status='failed', error='服务已重启，请重试分析', error_code=RESTART_CODE, failure_stage=stage)
     if patched:
         try:
             write(project_id, data, _recover_previous=False)
@@ -560,7 +563,7 @@ def settle_generation(data):
                 data['generation']['error'] = reason
         data['generation'].update(status=outcome, completed_variant_count=len(completed), finished_at=now())
         error = data['generation'].get('error') if outcome == 'failed' else None
-        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code} if code else {}), **({'error': error} if error else {})}
+        data['analysis'] = {'status': 'completed' if completed else 'failed', 'phase': 'rendering', 'run_id': (data.get('analysis') or {}).get('run_id'), 'outcome': outcome, 'created_at': now(), **({'error_code': code, 'failure_stage': 'render'} if code else {}), **({'error': error} if error else {})}
 
 
 @_serialized

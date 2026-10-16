@@ -425,3 +425,23 @@ def _parse_type(value: str) -> UpstreamErrorType:
         return UpstreamErrorType(value)
     except ValueError:
         return UpstreamErrorType.UNKNOWN
+
+
+_DNS_MARKERS = ('name or service not known', 'nodename nor servname', 'getaddrinfo', 'temporary failure in name resolution',
+                'no address associated', 'name resolution', 'failed to resolve', 'no such host', '11001')
+
+
+def network_kind_of(exc: BaseException | None) -> str:
+    """'dns' when a transport error is a name-resolution failure, '' otherwise.
+    Only the kind leaves this function; the exception text (may hold a host) never does."""
+    import socket
+    seen = 0
+    while exc is not None and seen < 8:
+        if isinstance(exc, socket.gaierror):
+            return 'dns'
+        text = str(exc).lower()
+        if any(marker in text for marker in _DNS_MARKERS):
+            return 'dns'
+        exc = exc.__cause__ or exc.__context__
+        seen += 1
+    return ''

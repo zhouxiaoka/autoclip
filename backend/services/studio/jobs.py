@@ -1156,12 +1156,14 @@ def _auto_generate(project_id, plan):
         store.raise_owned_read_error(error)
         capture_studio_exception(error, 'production')
         code = studio_error_code(error)
-        context = studio_failure_context(error, 'production')
+        from backend.services.studio.failure_identity import provider_identity
+        context = {**provider_identity(), **studio_failure_context(error, 'production')}
         error_text = str(error)[:700]
         def fail(data):
             if data.get('generation'):
                 data['generation'].update(status='failed', error=error_text, error_code=code, skipped=skipped, finished_at=store.now(), **context)
-            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000)}
+            # 1.5.8: the manual-confirm terminal reads analysis; it needs the same stage/upstream/provider.
+            data['analysis'] = {'status': 'failed', 'phase': 'production', 'run_id': (data.get('analysis') or {}).get('run_id'), 'error': error_text, 'error_code': code, 'duration_ms': round((monotonic() - started) * 1000), **context}
         store.change(project_id, fail)
         mark_project(project_id, 'failed')
 
@@ -1596,7 +1598,7 @@ def _inspect(project_id, options, url, browser):
                 code = studio_error_code(error)
                 def fail_automatic(data):
                     data['generation'].update(status='failed', error=message, error_code=code, finished_at=store.now(), failure_stage='dispatch', **_generation_route(plan))
-                    data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': message, 'error_code': code}
+                    data['analysis'] = {'status': 'failed', 'phase': 'production', 'error': message, 'error_code': code, 'failure_stage': 'dispatch'}
                 store.change(project_id, fail_automatic)
                 mark_project(project_id, 'failed')
             return
@@ -1613,7 +1615,9 @@ def _inspect(project_id, options, url, browser):
         failure = {'status':'failed','phase':'screening','error':str(error)[:700], 'error_code':studio_error_code(error), 'duration_ms':round((monotonic() - started) * 1000)}
         if getattr(error, 'probe_detail', None):
             failure['probe_detail'] = error.probe_detail
-        context = studio_failure_context(error, 'screening')
+        from backend.services.studio.failure_identity import provider_identity
+        context = {**provider_identity(), **studio_failure_context(error, 'screening')}
+        failure.update(context)
         try:
             def fail_screening(data):
                 data['analysis'] = failure

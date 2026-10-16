@@ -1,5 +1,6 @@
 /** Decision-oriented onboarding/settings events. Never accept raw configuration objects. */
 import { captureBusinessEvent } from './posthog'
+import { isConnectionTestErrorCode, safeHttpStatus } from './connectionTestCode'
 import { workflow } from './observer'
 import { sanitizeProviderValidationProperties, SuccessRateEvent } from './successRateContract'
 import { canonOutcome, errorCode, telemetryId, type Properties } from './workflow'
@@ -11,7 +12,7 @@ const enums: Record<string, readonly string[]> = {
   placement: ['home_setup', 'settings_model'], action: ['later', 'open_settings', 'one_click'],
   trigger: ['initial', 'import_blocked', 'auto', 'manual', 'provider_change', 'load', 'edit', 'portrait_preset'],
   section: ['ai', 'publish', 'app', 'feedback'], role: ['analysis', 'vision', 'cover', 'transcription'],
-  reason: ['setup_required', 'provider', 'model', 'key'], mode: ['initial', 'update'],
+  reason: ['setup_required', 'provider', 'model', 'key'], config_source: ['preset', 'customized'], mode: ['initial', 'update'],
   provider: ['dashscope', 'openai', 'gemini', 'deepseek', 'seed', 'kimi', 'glm', 'grok', 'infistar', 'api88', 'compatible', 'ollama', 'lmstudio', 'other'],
   source: ['live', 'cache', 'catalog'], outcome: ['success', 'error', 'blocked', 'unknown'],
   resolution: ['created', 'reused'], material_origin: ['sample', 'user', 'unknown'],
@@ -38,7 +39,9 @@ export function safeExperience(value: Record<string, unknown>): Properties {
   for (const key of ['operation_id', 'presentation_id', 'flow_id']) {
     if (typeof value[key] === 'string' && /^t-[a-z0-9-]{10,100}$/.test(value[key] as string)) out[key] = value[key] as string
   }
-  if (typeof value.error_code === 'string' && /^(http_[45][0-9]{2}|network|timeout|unknown|validation)$/.test(value.error_code)) out.error_code = value.error_code
+  if (typeof value.error_code === 'string' && (/^(http_[45][0-9]{2}|network|timeout|unknown|validation)$/.test(value.error_code) || isConnectionTestErrorCode(value.error_code))) out.error_code = value.error_code
+  const status = safeHttpStatus(value.http_status)
+  if (status) out.http_status = status
   return out
 }
 export function trackExperience(event: ExperienceEvent, properties: Record<string, unknown>) {

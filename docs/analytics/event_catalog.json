@@ -143,6 +143,28 @@
       "auto",
       "subtitle",
       "visual"
+    ],
+    "connection_test_error_code": [
+      "empty_key",
+      "invalid_key",
+      "insufficient_quota",
+      "permission_denied",
+      "bad_base_url",
+      "model_not_found",
+      "rate_limited",
+      "http_5xx",
+      "timeout",
+      "dns",
+      "cors",
+      "network",
+      "vision_unsupported",
+      "output_truncated",
+      "invalid_request",
+      "unknown"
+    ],
+    "config_source": [
+      "preset",
+      "customized"
     ]
   },
   "attribution": {
@@ -465,6 +487,12 @@
           "error_code",
           "failure_stage"
         ]
+      },
+      "enums": {
+        "config_source": "config_source",
+        "provider": "provider",
+        "upstream_error_type": "upstream_error_type",
+        "failure_stage": "failure_stage"
       }
     },
     "studio_generation_finished": {
@@ -484,7 +512,11 @@
         ]
       },
       "enums": {
-        "outcome": "studio_outcome"
+        "outcome": "studio_outcome",
+        "config_source": "config_source",
+        "provider": "provider",
+        "upstream_error_type": "upstream_error_type",
+        "failure_stage": "failure_stage"
       }
     },
     "studio_production_finished": {
@@ -500,7 +532,11 @@
         ]
       },
       "enums": {
-        "outcome": "studio_outcome"
+        "outcome": "studio_outcome",
+        "config_source": "config_source",
+        "provider": "provider",
+        "upstream_error_type": "upstream_error_type",
+        "failure_stage": "failure_stage"
       }
     },
     "studio_export_finished": {
@@ -701,6 +737,25 @@
     "studio_first_clip_ready": {
       "status": "keep",
       "domain": "studio"
+    },
+    "provider_connection_test_finished": {
+      "status": "core",
+      "domain": "provider",
+      "required": [
+        "provider",
+        "outcome"
+      ],
+      "required_when": {
+        "outcome=error": [
+          "error_code"
+        ]
+      },
+      "enums": {
+        "provider": "provider",
+        "outcome": "experience_outcome",
+        "error_code": "connection_test_error_code",
+        "config_source": "config_source"
+      }
     }
   }
 }
