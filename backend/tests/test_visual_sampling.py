@@ -76,9 +76,11 @@ def test_tail_recovery_is_bounded_and_never_sends_a_partial_or_stale_set(tmp_pat
         assert (folder / '3.jpg').read_bytes().startswith(b'\xff\xd8')
         assert sum(item['type'] == 'image_url' for item in content) == 4
     else:
-        with pytest.raises(intelligence.VisionRequestError) as caught:
+        with pytest.raises(intelligence.FrameExtractError) as caught:
             intelligence.sample(video, [0, .5, 1, 1.9], folder, width=160)
-        assert caught.value.code == ('timeout' if failure == 'timeout' else 'missing_resource')
+        # R11 #406: local frame extraction has its own code (not a vision outage).
+        assert caught.value.code == 'frame_extract_failed'
+        assert ('超时' in str(caught.value)) == (failure == 'timeout')
         assert len(tail_seeks) == (1 if failure == 'timeout' else 2)
         assert 'private-' not in str(caught.value)
         assert not (folder / '3.jpg').exists()
