@@ -63,7 +63,7 @@ scripts/winqa/run_winqa.sh ... --real --model-base-url <接口地址> --model <�
 | 5 | 启动候选；`/health` 版本、设置、升级后数据保留、预检、updater 清单、无 Celery | `launch-candidate.json` `check-candidate.json` |
 | 6 | 失败/回退探针（loopback 假模型，零费用）：初筛 500 回退字幕路线；分析全 500 带 `failure_stage`/`http_status`/`route`；连不上的端口 | `failure.json` |
 | 7 | CI 同款冒烟：包内 Python 跑 `scripts/verify_windows_install.py --launch-desktop` | `smoke.json` `windows-smoke.json` |
-| 8 | 收集应用日志（`ps/collect_logs.ps1`：后端与桌面壳日志）并脱敏 | `app-logs/`、`collect-logs-final.json` |
+| 8 | 收集应用日志（`ps/collect_logs.ps1`，日志包留在验收机），在验收机上导出证据包并校验后拉回 | `collect-logs-final.json`、`bundles/*.manifest.json` |
 | 9 | 汇总 | `summary.md` `windows-rows.draft.json` |
 | 10–14（`--real`） | 真实模型连接 + #266；Whisper 安装/模型下载；本地无字幕视频出片；B 站链接导入；项目列表终态 | `real/*.json` |
 
@@ -85,6 +85,11 @@ scripts/winqa/run_winqa.sh ... --real --model-base-url <接口地址> --model <�
 - `py/winqa_real.py`：`model` / `whisper` / `local` / `link` / `final` 真实场景；key 只从 stdin 读。
 - `summarize.py`：证据目录 → `summary.md` + `windows-rows.draft.json`。
 - `redact.py`：Windows QA 证据和诊断输出的脱敏实现，其它 winqa 脚本都调用它，不另写规则（测试 test_r25_247 扫描整个 scripts/）。规则表在所有模式下相同：真实 key 及应用打码形式、常见 key 形态、按字段名识别的凭据字段值（api_key*、authorization、*token、secret、password、cookie）、URL、用户主目录（覆盖文件头说明里列出的几种读法）。目录模式按内容处理所有文件（zip 内成员同规则，截图原样保留，认不出的二进制拒收）。`py/winqa_probe.py`、`py/winqa_real.py` 的 `save()` 先对整个结果（`scrub_obj`）脱敏再落盘。验收机上 `C:\winqa\out` 里的原件（含 app-logs.zip）从不改动：每次拉取先复制到 `C:\winqa\out-scrubbed`，在副本上脱敏后只拉副本；验收机上脱敏失败就不拉，本地临时目录里再脱敏失败（崩溃）就不写入证据目录，最后一次拉取记为 FAIL。控制机本地的实时日志逐行经 `redact.py --lines` 再写 run.log；临时目录在固定的私有目录（`~/.cache/autoclip-winqa-stage`，700）下，进程已退出、pid 被别的程序复用或超过 24 小时的残留在启动时删除。已知限制：三层及以上混合嵌套转义（且中间层只露出部分路径）可能识别不到。
+- `py/export_evidence.py`（R27，证据导出边界）：证据只以「在验收机上生成、脱敏、校验、提交过的证据包」离开验收机，控制机不再拉原文再补脱敏。
+  - 验收机：`export` 读 `C:\winqa\out`（只读，前后算整树哈希，不一致即中止），精确 key 只经 stdin 传入；只导出结构化 JSON（严格解码，UTF-8/UTF-8 BOM/带 BOM 的 UTF-16），用 `redact.scrub_obj` 加精确 key 脱敏并复核；截图、zip（含 app-logs.zip）、原始日志、媒体、混合编码、文件名不合规的文件记为 `withheld`（只记哈希和原因，原件不删），必需证据缺失或被扣留则包状态为 `incomplete`。包先写 `.part`，全部完成才改名为 `C:\winqa\export\<run>-<n>.zip`（提交）。
+  - 控制机：`run_winqa.sh` 只下载这一个文件（scp 失败即 FAIL），`verify` 核对哈希、成员与 manifest 一致、成员名和内容按同一策略复核，通过后才写入证据目录；manifest 存在 `bundles/`。
+  - 步骤结果追加写 `steps.jsonl`（run_id / step / attempt / status），同一步以最新一次为准，本次运行任何 FAIL 都让退出码非 0；`steps.txt` 是由它生成的视图。证据目录和临时目录都是 700。
+  - 原始日志、截图按需在验收机上人工处理（10/20 前的收缩范围）。导出时应用须已安装（用包内 Python）。
 
 ## 验收机拉包脚本（E9）
 
