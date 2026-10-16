@@ -6,10 +6,12 @@ WINQA_MODEL_API_KEY / callers), generic key shapes (sk-..., Bearer/Authorization
 credential-named JSON fields (api_key*, authorization, *token, secret, password, cookie), URLs, and personal home
 directories (C:\\Users\\x, X$\\Users\\x on UNC shares, /Users/x, /home/x) in the spellings listed below.
 
-Usage: python3 redact.py DIR [--drop-failed]   all files under DIR, by content (zip members too; images kept;
-                                               unreadable binary refused)
-       python3 redact.py --stdin                whole stream
-       python3 redact.py --lines                line by line (for a live `tee` log)
+Usage: python3 redact.py --stdin [--keys-fd N]  whole stream
+       python3 redact.py --lines [--keys-fd N]  line by line (for a live `tee` log)
+       Exact keys come from file descriptor N, one per line (R27 #308: never from argv). Without --keys-fd the
+       environment variables WINQA_MODEL_API_KEY / AUTOCLIP_QA_DASHSCOPE_KEY are read (pull_run_installer.sh).
+       Evidence files are no longer rewritten in place: they leave the test machine only through
+       py/export_evidence.py (R27 #312: the old directory / --drop-failed / zip / image mode is gone).
 
 Design (R24/R25): one boundary rule, applied to each reading below, union of the results.
 1. Readings. Text: raw; URL-decoded once; after one escape pass; fully decoded (escape layers \\\\ \\/ \\uXXXX %XX
@@ -22,16 +24,14 @@ Design (R24/R25): one boundary rule, applied to each reading below, union of the
 3. Name: from the raw offset where the name starts, in each participating reading, up to that reading's next
    separator or the end of the line. '.'/'..' segments are skipped.
 4. Union: all ranges are merged and replaced (<url> > <user> > ***). When in doubt, mask more.
-5. Files keep their encoding, BOM and line endings; a file that cannot be scrubbed is left unchanged and reported
-   (with --drop-failed it is deleted, and the exit code is 0 only if every such file was deleted).
+5. Streams keep their encoding, BOM and line endings.
 
 Known limitation: a home path hidden under three or more mixed escape layers whose intermediate layer is itself
 only a partial root (for example a JSON string of a URL-encoded JSON string of a path) may not be recognised; the
 readings cover raw, one URL decode, one escape pass and the fully decoded text.
 """
-import io, json, os, re, sys, zipfile
+import os, re, sys
 from bisect import bisect_right
-from pathlib import Path
 
 USER, URLMARK, SECRET = '<user>', '<url>', '***'
 _RANK = {URLMARK: 2, USER: 1, SECRET: 0}
@@ -40,9 +40,9 @@ _EOL = '\r\n'
 _WIN_SEPS, _POSIX_SEPS = '\\/', '/'
 # value group 2 is masked; the prefix stays readable
 _SECRET_PATTERNS = [re.compile(r'()(sk-[A-Za-z0-9_\-]{6,})'),
-                    re.compile(r'(?i)(authorization["\'=:\s]+)((?:(?:bearer|basic|token)\s+)?(?!\*\*\*)[^\s"\',]+)'),
-                    re.compile(r'(?i)(bearer\s+)((?!\*\*\*)[^\s"\',]+)'),
-                    re.compile(r'(?i)(api[_-]?key["\'=:\s]+)((?!\*\*\*)[^\s"\',]+)'),
+                    re.compile(r'(?i)(authorization["\'=:\s]+)((?:(?:bearer|basic|token)\s+)?(?!\*\*\*(?:[\s"\',]|$))[^\s"\',]+)'),
+                    re.compile(r'(?i)(bearer\s+)((?!\*\*\*(?:[\s"\',]|$))[^\s"\',]+)'),
+                    re.compile(r'(?i)(api[_-]?key["\'=:\s]+)((?!\*\*\*(?:[\s"\',]|$))[^\s"\',]+)'),
                     re.compile(r'("api_key_masked"\s*:\s*")((?!\*\*\*")[^"]+)')]
 
 
@@ -241,7 +241,6 @@ _FIELD_TAIL = re.compile(r'(?:^|_)(?:api_?key|access_?key|secret_?key|private_?k
                          r'passphrase|cookie|authorization|credentials?|session_?id|signature|sig)(?:_?masked)?$')
 _TO_EOL = ('cookie', 'authorization')       # header-style values with spaces: masked to the end of the line
 _FIELD_TEXT = re.compile(r'(?<![A-Za-z0-9_\-])(["\']?)([A-Za-z][A-Za-z0-9_.\-]{0,63})\1[ \t]*[:=][ \t]*')
-_VALUE_CAP = 4096
 _CLOSE = {'{': '}', '[': ']'}
 
 
@@ -259,7 +258,7 @@ def _field_value(s, a, name):
     n = len(s)
     if a >= n or s[a] in _EOL:
         return None
-    lim = min(n, a + _VALUE_CAP)
+    lim = n   # R27 #303: the whole value, however long (no 4096-character cap)
     c = s[a]
     if c in '"\'':
         b = a + 1
@@ -267,13 +266,22 @@ def _field_value(s, a, name):
             b += 2 if s[b] == '\\' else 1
         return (a + 1, min(b, lim)) if b > a + 1 else None
     if c in _CLOSE:
-        depth, b = 0, a
+        depth, b, quote = 0, a, None
         while b < lim and s[b] not in _EOL:
-            depth += 1 if s[b] == c else -1 if s[b] == _CLOSE[c] else 0
+            ch = s[b]
+            if quote:                                   # R27 #303: a } or ] inside a string does not close
+                if ch == '\\':
+                    b += 1
+                elif ch == quote:
+                    quote = None
+            elif ch in '"\'':
+                quote = ch
+            else:
+                depth += 1 if ch == c else -1 if ch == _CLOSE[c] else 0
             b += 1
-            if depth == 0:
+            if depth == 0 and not quote:
                 break
-        return a, b
+        return a, min(b, lim)
     b = a
     if any(_norm_field(name).endswith(w) for w in _TO_EOL):
         while b < lim and s[b] not in _EOL:
@@ -287,13 +295,16 @@ def _field_value(s, a, name):
 
 
 def _field_ranges(s):
-    out = []
+    out, until = [], -1
     for m in _FIELD_TEXT.finditer(s):
-        if not is_secret_field(m.group(2)):
+        # a field inside a value already being masked whole adds nothing (and would make long values quadratic)
+        if m.start() < until or not is_secret_field(m.group(2)):
             continue
         v = _field_value(s, m.end(), m.group(2))
-        if v and not s.startswith((SECRET, URLMARK, USER), v[0]):
+        # R27 #303: only a value that IS a mark is left alone; '***VISIBLE' is masked like any other value
+        if v and s[v[0]:v[1]] not in (SECRET, URLMARK, USER):
             out.append(v)
+            until = v[1]
     return out
 
 
@@ -377,9 +388,6 @@ def scrub_diagnostic(text: str, keys=()) -> str:
     return scrub(text, keys=keys)
 
 
-_LONE = re.compile('[\ud800-\udfff]')
-
-
 def scrub_obj(o, keys=(), field=None):
     """Every string of a JSON-like value (dict keys included); values of credential fields (R25 #243, R26 #255:
     the same field rule as text, any value type: numbers, lists and objects too) are masked whole. Valid JSON."""
@@ -401,23 +409,6 @@ def scrub_obj(o, keys=(), field=None):
     if isinstance(o, str):
         return scrub(o, keys)
     return o
-
-
-def _scrub_json(text: str, keys):
-    """R18 #85: parse first so escaped names are seen as text; returns None if not JSON."""
-    nl = '\r\n' if '\r\n' in text else '\n'
-    try:
-        data = json.loads(text)
-    except ValueError:
-        return None
-    clean = scrub_obj(data, keys)
-    if clean == data:
-        return text
-    s = json.dumps(clean, ensure_ascii=False, indent=2 if '\n' in text.strip() else None)
-    s = _LONE.sub(lambda m: '\\u%04x' % ord(m.group()), s)   # R22 #156: lone surrogates stay escaped
-    if nl == '\r\n':
-        s = s.replace('\n', '\r\n')                           # R22 #129: keep CRLF
-    return s + (nl if text.endswith('\n') else '')
 
 
 _BOMS = [(b'\xef\xbb\xbf', 'utf-8', 'surrogateescape'), (b'\xff\xfe\x00\x00', 'utf-32-le', 'surrogatepass'),
@@ -502,13 +493,10 @@ def _byte_ranges(body, codec, errors, off, keys):
     return [(offs[s], offs[e], (lab, codec, off)) for s, e, lab in text_ranges(text, keys)]
 
 
-def scrub_bytes(raw: bytes, key: str = '', json_file: bool = False, stream: bool = False, keys=()) -> bytes:
+def scrub_bytes(raw: bytes, key: str = '', stream: bool = True, keys=()) -> bytes:
+    """Byte stream (live log line or whole stream) in its own encoding; every reading masked."""
     keys = [k for k in ([key] if key else []) + list(keys) if k]
     bom, codec, errors, text = decode(raw)
-    if json_file:
-        scrubbed = _scrub_json(text, keys)
-        if scrubbed is not None:
-            return raw if scrubbed == text else bom + scrubbed.encode(codec, errors)
     body = raw[len(bom):]
     ranges = []
     for c, e, off in readings(raw)[2]:
@@ -543,78 +531,22 @@ def scrub_bytes(raw: bytes, key: str = '', json_file: bool = False, stream: bool
     return raw if new == raw else new
 
 
-_KEEP_BINARY = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp')   # screenshots: no text to scrub
-
-
-def _looks_binary(data: bytes) -> bool:
-    """NUL bytes and no reading (utf-8, UTF-16 LE/BE at either alignment) that is mostly text."""
-    if b'\x00' not in data or any(data.startswith(b) for b, _, _ in _BOMS):
-        return False
-    for codec, off in (('utf-8', 0), ('utf-16-le', 0), ('utf-16-le', 1), ('utf-16-be', 0), ('utf-16-be', 1)):
-        t = data[off:].decode(codec, 'replace')
-        bad = sum(1 for c in t if (ord(c) < 32 and c not in '\t\n\r\f') or c == '\ufffd' or 0xd800 <= ord(c) < 0xe000)
-        if bad * 10 <= len(t):
-            return False
-    return True
-
-
-def scrub_file(name: str, data: bytes, key: str = '') -> bytes:
-    """R25 #245: every file is handled by content, not by a suffix allow-list. Zip members get the same rule;
-    images are kept; anything else is scrubbed as text, and binary data that is not text in a known encoding is
-    refused (ValueError) instead of being passed through."""
-    suf = Path(name).suffix.lower()
-    if suf in _KEEP_BINARY:
-        return data
-    if data[:4] == b'PK\x03\x04' or suf == '.zip':
-        src = zipfile.ZipFile(io.BytesIO(data))
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as dst:
-            for info in src.infolist():
-                if not info.is_dir():
-                    dst.writestr(scrub(info.filename), scrub_file(info.filename, src.read(info), key))
-        return buf.getvalue()
-    if _looks_binary(data):
-        raise ValueError('binary data of unknown type')
-    return scrub_bytes(data, key, json_file=suf == '.json')
-
-
-def main(folder, drop_failed=False):
-    return _run(Path(folder), drop_failed)
-
-
-def _run(folder, drop_failed=False):
-    """Exit 0 when every file is scrubbed (or, with --drop-failed, every file that could not be is deleted);
-    any other outcome (crash included) is non-zero and callers must not use the directory."""
-    key = os.environ.get('WINQA_MODEL_API_KEY') or os.environ.get('AUTOCLIP_QA_DASHSCOPE_KEY', '')
-    hits, failed = 0, []
-    for p in sorted(folder.rglob('*')):
-        if not p.is_file():
-            continue
-        try:   # R23 #188: read, scrub and write per file
-            raw = p.read_bytes()
-            out = scrub_file(p.name, raw, key)
-            if out != raw:
-                p.write_bytes(out)
-                hits += 1
-        except Exception as exc:
-            rel = scrub(str(p.relative_to(folder)))
-            failed.append(rel)
-            if drop_failed:
-                p.unlink()
-            print(f'redact: ERROR {rel}: {type(exc).__name__}; file ' + ('deleted' if drop_failed else 'left unchanged'),
-                  file=sys.stderr)
-    print(f'redact: rewrote {hits} file(s)' + (f', {len(failed)} failed' if failed else ''))
-    if failed and not drop_failed:
-        raise SystemExit(2)
-    return hits
-
-
 def scrub_stream_bytes(raw: bytes) -> bytes:
     return scrub_bytes(raw, stream=True)
 
 
+_FD_KEYS = None
+
+
 def _env_keys():
+    if _FD_KEYS is not None:
+        return _FD_KEYS
     return [k for k in (os.environ.get('WINQA_MODEL_API_KEY'), os.environ.get('AUTOCLIP_QA_DASHSCOPE_KEY')) if k]
+
+
+def _read_fd_keys(fd: int):
+    with os.fdopen(fd, 'r', encoding='utf-8', errors='strict') as fh:
+        return [k for k in (line.rstrip('\r\n') for line in fh) if k]
 
 
 def _stdin():
@@ -643,8 +575,17 @@ def _lines():
 
 if __name__ == '__main__':
     a = sys.argv[1:]
+    if '--keys-fd' in a:
+        i = a.index('--keys-fd')
+        try:
+            _FD_KEYS = _read_fd_keys(int(a[i + 1]))
+        except Exception as exc:
+            print(f'redact: ERROR reading keys ({type(exc).__name__})', file=sys.stderr)
+            sys.exit(2)
+        del a[i:i + 2]
     if a == ['--stdin']:
         sys.exit(_stdin())
     if a == ['--lines']:
         sys.exit(_lines())
-    main(a[0], drop_failed='--drop-failed' in a[1:])
+    print(__doc__.split('Usage: ')[1].split('\n\n')[0], file=sys.stderr)
+    sys.exit(2)

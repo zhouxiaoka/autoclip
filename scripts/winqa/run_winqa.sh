@@ -11,6 +11,10 @@ IDENTITY="${WINQA_SSH_IDENTITY:-}"   # 可选：SSH 私钥文件路径；不设�
 REPO="${WINQA_REPO:-$(cd "$HERE/../.." && pwd)}"
 MODEL_BASE_URL="${WINQA_MODEL_BASE_URL:-}"; MODEL="${WINQA_MODEL:-}"; MODEL_PROVIDER="${WINQA_MODEL_PROVIDER:-dashscope}"
 MODEL_API_KEY="${WINQA_MODEL_API_KEY:-${AUTOCLIP_QA_DASHSCOPE_KEY:-}}"
+# R27 #308: the key stays in this shell only. It is never exported to ssh/scp/sftp or any other child; the log
+# scrubber gets it on a private pipe (--keys-fd) and the exporters on stdin.
+unset WINQA_MODEL_API_KEY AUTOCLIP_QA_DASHSCOPE_KEY
+export -n MODEL_API_KEY 2>/dev/null || true
 PREV=""; CAND=""; VERSION=""; PREV_VERSION=""
 MARKER='resources\backend\services\studio\readiness.py'
 UPDATER_URL='https://github.com/zhouxiaoka/autoclip/releases/latest/download/latest.json'
@@ -59,6 +63,8 @@ umask 077
 mkdir -p "$OUT"; chmod 700 "$OUT"   # R27 #259: the evidence dir is private too (asserted by the tests)
 LOG="$OUT/run.log"
 RUN_ID="r$TS-$$"; EXPORT_SEQ=0; REQ=""
+# R27 #306: required evidence of earlier steps survives a resume (--from-step skips the steps that declared it)
+[ -f "$OUT/required.txt" ] && REQ="$(tr -d '\r\n' < "$OUT/required.txt")"
 # evidence dirs from before R27 only have steps.txt: keep those results as attempts of run "legacy"
 if [ -f "$OUT/steps.txt" ] && [ ! -f "$OUT/steps.jsonl" ]; then
   while IFS='=' read -r k v; do [ -n "$k" ] && printf '{"run_id":"legacy","step":"%s","attempt":1,"status":"%s","at":""}\n' "$k" "$v"; done < "$OUT/steps.txt" > "$OUT/steps.jsonl"
@@ -66,7 +72,7 @@ fi
 # R27 (design-retro #414): evidence leaves the test machine only as a bundle that py/export_evidence.py built,
 # scrubbed, verified and committed THERE. Nothing raw is pulled and nothing is "rescued" here. The live log of
 # this script still goes through redact.py line by line before tee.
-exec > >(WINQA_MODEL_API_KEY="$MODEL_API_KEY" python3 -u "$HERE/redact.py" --lines | tee -a "$LOG") 2>&1
+exec > >(python3 -u "$HERE/redact.py" --lines --keys-fd 3 3< <(printf '%s\n' "$MODEL_API_KEY") | tee -a "$LOG") 2>&1
 # A run killed with -9 cannot clean up. R25 #248: staging dirs live under one fixed private root (not $TMPDIR, which
 # can change between runs); a leftover is deleted when its run is gone, its pid now belongs to another program, or
 # it is older than 24 h. Legacy winqa-stage.* dirs under $TMPDIR and /tmp get the same check.
@@ -86,7 +92,7 @@ done
 STAGE="$(mktemp -d "$STAGE_ROOT/winqa-stage.$$.XXXXXX")"; chmod 700 "$STAGE"
 cleanup() { rm -rf "$STAGE"; }
 trap cleanup EXIT
-trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
+trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP; trap 'exit 141' PIPE   # #311: the log scrubber died -> stop, clean up
 
 ID_OPT=(); [ -n "$IDENTITY" ] && ID_OPT=(-i "$IDENTITY")
 SSH=(ssh ${ID_OPT[@]+"${ID_OPT[@]}"} -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 "$USER_@$HOST")
@@ -98,39 +104,62 @@ rps() { "${SSH[@]}" 'powershell -NoProfile -ExecutionPolicy Bypass -Command -'; 
 # R27 #252: every result is appended to steps.jsonl as {run_id, step, attempt, status}; nothing is sorted or
 # de-duplicated. The latest attempt of a step decides its status, and any FAIL of THIS run latches a non-zero exit.
 RUN_FAILED=0
+# exit_code (R27 #306, the step's error code in the bundle): $3 if given, else the status of the command that
+# decided it (`cmd && record x ok || record x FAIL` -> the exit status of cmd), and 1 for a FAIL without a code.
 record() {
-  local n; n=$(grep -c "\"step\":\"$1\"" "$OUT/steps.jsonl" 2>/dev/null); n=$(( ${n:-0} + 1 ))
-  printf '{"run_id":"%s","step":"%s","attempt":%d,"status":"%s","at":"%s"}\n' "$RUN_ID" "$1" "$n" "$2" "$(date -Iseconds)" >> "$OUT/steps.jsonl"
+  local rc=$? n code; n=$(grep -c "\"step\":\"$1\"" "$OUT/steps.jsonl" 2>/dev/null); n=$(( ${n:-0} + 1 ))
+  code="${3:-$rc}"; [ "$2" = ok ] && [ -z "${3:-}" ] && code=0
+  [ "$2" != ok ] && [ "$code" = 0 ] && code=1
+  printf '{"run_id":"%s","step":"%s","attempt":%d,"status":"%s","exit_code":%d,"at":"%s"}\n' "$RUN_ID" "$1" "$n" "$2" "$code" "$(date -Iseconds)" >> "$OUT/steps.jsonl" \
+    || { echo "FAIL: 写不了 steps.jsonl"; RUN_FAILED=1; }
   [ "$2" = ok ] || RUN_FAILED=1
   echo "-> $1: $2 (attempt $n)"
 }
-require() { REQ="${REQ:+$REQ,}$1"; }   # evidence the export must contain (missing or withheld -> FAIL)
+require() {   # evidence the export must contain (missing, withheld or empty -> FAIL); kept for resumes (#306)
+  case "$1" in ''|*[!A-Za-z0-9._/-]*) echo "bad required name"; exit 2;; esac
+  case ",$REQ," in *",$1,"*) return 0;; esac
+  REQ="${REQ:+$REQ,}$1"
+  printf '%s\n' "$REQ" > "$OUT/required.txt" || { echo "FAIL: 写不了 required.txt"; RUN_FAILED=1; }
+}
 want() { [ "$FROM" -le "$1" ] && [ "$1" -le "$TO" ]; }
 # R27 export boundary. C:\winqa\out is never modified. export_evidence.py (bundled Python on the VM) reads the exact
 # key from stdin, builds C:\winqa\export\<run>-<n>.zip and commits it only after scrubbing and verifying; it prints
 # "EXPORT <complete|incomplete> <file> <sha256>". Here: download exactly that file (scp failure = FAIL #253), check
 # the hash, re-check every member with the same policy, and only then copy into $OUT. Any failure leaves $OUT as it
 # was and records FAIL.
+fail_export() { rm -rf "$STAGE/b"; echo "FAIL: $2"; record "$1" FAIL "${3:-1}"; return 1; }
 export_bundle() {   # $1 = label for the step record
-  local res line status file digest rc
+  local res line status file digest rc req_arg=""
   EXPORT_SEQ=$((EXPORT_SEQ + 1))
-  res=$(printf '%s\n' "$MODEL_API_KEY" | remote "$PS C:\\winqa\\ps\\runpy.ps1 C:\\winqa\\py\\export_evidence.py export --src C:\\winqa\\out --dest C:\\winqa\\export --bundle $RUN_ID-$EXPORT_SEQ --require '$REQ' --keys-stdin"); rc=$?
+  # #306: the step results so far go into the bundle as steps.json (from C:\winqa\ctl, never into C:\winqa\out)
+  python3 - "$OUT/steps.jsonl" "$STAGE/steps.json" <<'STEPS' || { fail_export "$1" "写不了 steps.json"; return 1; }
+import json, sys
+from pathlib import Path
+src = Path(sys.argv[1])
+rows = [json.loads(l) for l in src.read_text().splitlines() if l.strip()] if src.exists() else []
+Path(sys.argv[2]).write_text(json.dumps(rows, ensure_ascii=False, indent=2) + '\n')
+STEPS
+  remote 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force C:\winqa\ctl | Out-Null"' >/dev/null \
+    && "${SCP[@]}" "$STAGE/steps.json" "$USER_@$HOST:C:/winqa/ctl/" || { fail_export "$1" "steps.json 上传失败（scp）"; return 1; }
+  # #310: no quotes around --require. The Windows OpenSSH default shell is cmd and the script runs through
+  # powershell -File, where single quotes reach Python literally; require() only allows [A-Za-z0-9._/-] and commas.
+  [ -n "$REQ" ] && req_arg="--require $REQ"
+  res=$(printf '%s\n' "$MODEL_API_KEY" | remote "$PS C:\\winqa\\ps\\runpy.ps1 C:\\winqa\\py\\export_evidence.py export --src C:\\winqa\\out --dest C:\\winqa\\export --bundle $RUN_ID-$EXPORT_SEQ $req_arg --steps C:\\winqa\\ctl\\steps.json --keys-stdin"); rc=$?
   line=$(printf '%s\n' "$res" | tr -d '\r' | grep '^EXPORT ' | tail -1)
   read -r _ status file digest <<<"$line"
-  case "$rc:$status" in 0:complete|3:incomplete) ;; *) echo "FAIL: 验收机上导出失败（rc=$rc），没有可传的证据包"; record "$1" FAIL; return 1;; esac
-  case "$file" in "$RUN_ID-$EXPORT_SEQ.zip") ;; *) echo "FAIL: 导出结果不认识"; record "$1" FAIL; return 1;; esac
-  rm -rf "$STAGE/b"; mkdir -p "$STAGE/b"
-  if ! "${SCP[@]}" "$USER_@$HOST:C:/winqa/export/$file" "$STAGE/b/$file"; then
-    rm -rf "$STAGE/b"; echo "FAIL: 证据包下载失败（scp）"; record "$1" FAIL; return 1
-  fi
+  # #305: ${rc} - Bash 3.2 in a UTF-8 locale reads "$rc）" as one (unset) variable name and set -u exits
+  case "$rc:$status" in 0:complete|3:incomplete) ;; *) fail_export "$1" "验收机上导出失败（rc=${rc}），没有可传的证据包" "$rc"; return 1;; esac
+  case "$file" in "$RUN_ID-$EXPORT_SEQ.zip") ;; *) fail_export "$1" "导出结果不认识"; return 1;; esac
+  # #309: every local mkdir/mv/cp is checked; a failure records FAIL instead of a silent "ok"
+  rm -rf "$STAGE/b" && mkdir -p "$STAGE/b" || { fail_export "$1" "建不了临时目录"; return 1; }
+  "${SCP[@]}" "$USER_@$HOST:C:/winqa/export/$file" "$STAGE/b/$file" || { fail_export "$1" "证据包下载失败（scp）"; return 1; }
   printf '%s\n' "$MODEL_API_KEY" | python3 "$HERE/py/export_evidence.py" verify --bundle "$STAGE/b/$file" --sha256 "$digest" --into "$STAGE/b/x" --keys-stdin; rc=$?
-  if [ "$rc" != 0 ] && [ "$rc" != 3 ]; then
-    rm -rf "$STAGE/b"; echo "FAIL: 证据包本地校验失败，未写入证据目录"; record "$1" FAIL; return 1
-  fi
-  mkdir -p "$OUT/bundles"
-  mv "$STAGE/b/x/manifest.json" "$OUT/bundles/$RUN_ID-$EXPORT_SEQ.manifest.json"
-  cp -R "$STAGE/b/x/." "$OUT/"; rm -rf "$STAGE/b"
-  if [ "$status" = complete ]; then record "$1" ok; else echo "FAIL: 必需证据缺失或被扣留，见 bundles/$RUN_ID-$EXPORT_SEQ.manifest.json"; record "$1" FAIL; return 1; fi
+  if [ "$rc" != 0 ] && [ "$rc" != 3 ]; then fail_export "$1" "证据包本地校验失败（rc=${rc}），未写入证据目录" "$rc"; return 1; fi
+  mkdir -p "$OUT/bundles" || { fail_export "$1" "建不了 bundles 目录"; return 1; }
+  mv "$STAGE/b/x/manifest.json" "$OUT/bundles/$RUN_ID-$EXPORT_SEQ.manifest.json" || { fail_export "$1" "manifest 落盘失败"; return 1; }
+  cp -R "$STAGE/b/x/." "$OUT/" || { fail_export "$1" "证据落盘失败（cp），证据目录可能不完整"; return 1; }
+  rm -rf "$STAGE/b"
+  if [ "$status" = complete ]; then record "$1" ok; else echo "FAIL: 必需证据缺失、为空或被扣留，见 bundles/$RUN_ID-$EXPORT_SEQ.manifest.json"; record "$1" FAIL 3; return 1; fi
 }
 
 step "0. 本地准备  prev=$PREV ($PREV_VERSION)  candidate=$CAND ($VERSION)"
@@ -200,7 +229,7 @@ fi
 
 if want 4; then
 step "4. 旧版仍在运行 + 模拟残留 python 占住 _asyncio.pyd，静默覆盖安装候选 $VERSION"
-remote "$PS C:\\winqa\\ps\\install.ps1 -Installer C:\\winqa\\inst\\candidate-setup.exe -Label upgrade -ExpectVersion $VERSION -Marker '$MARKER' -LockLeftover -Interactive" && record upgrade ok || record upgrade FAIL
+remote "$PS C:\\winqa\\ps\\install.ps1 -Installer C:\\winqa\\inst\\candidate-setup.exe -Label upgrade -ExpectVersion $VERSION -Marker \"$MARKER\" -LockLeftover -Interactive" && record upgrade ok || record upgrade FAIL
 require install-upgrade.json
 fi
 
@@ -219,6 +248,7 @@ fi
 if want 6; then
 remote "$PS C:\\winqa\\ps\\ui_probe.ps1 -Label after-probes" >/dev/null
 remote "$PS C:\\winqa\\ps\\stop.ps1 -Label candidate" && record stop_candidate ok || record stop_candidate FAIL
+require stop-candidate.json
 fi
 want 6 && export_bundle export_after_6
 
@@ -226,7 +256,8 @@ if [ "$SMOKE" = 1 ] && want 7; then
   step "7. CI 同款安装后冒烟：自带 Python 跑 verify_windows_install.py --launch-desktop"
   A=""; [ "$WITH_ASR" = 1 ] && A="-WithAsr"
   remote "$PS C:\\winqa\\ps\\smoke.ps1 -LaunchDesktop $A" && record smoke ok || record smoke FAIL
-  require smoke.json
+  require smoke.json; require windows-smoke.json; require windows-smoke-desktop.json
+  [ "$WITH_ASR" = 1 ] && { require windows-sensevoice-installed.json; require windows-whisper-installed.json; }
   remote "$PS C:\\winqa\\ps\\stop.ps1 -Label smoke" >/dev/null
 fi
 
@@ -238,11 +269,13 @@ if want 10; then
   [ -n "$MODEL_BASE_URL" ] && [ -n "$MODEL" ] || { echo "第 10 步需要 --model-base-url 和 --model（或 WINQA_MODEL_BASE_URL / WINQA_MODEL）"; exit 2; }
   "${SCP[@]}" "$HERE/py/winqa_real.py" "$USER_@$HOST:C:/winqa/py/winqa_real.py"
   remote "$PS C:\\winqa\\ps\\launch.ps1 -Label real" && record launch_real ok || record launch_real FAIL
-  printf '%s\n' "$MODEL_API_KEY" | remote "$RP model --key-stdin --base-url '$MODEL_BASE_URL' --model '$MODEL' --provider '$MODEL_PROVIDER'" && record real_model ok || record real_model FAIL
+  printf '%s\n' "$MODEL_API_KEY" | remote "$RP model --key-stdin --base-url \"$MODEL_BASE_URL\" --model \"$MODEL\" --provider \"$MODEL_PROVIDER\"" && record real_model ok || record real_model FAIL
+  require real/model.json
 fi
 if want 11; then
   step "11. Whisper：安装前导入是否被预检拦住 → 走应用自己的安装路由 → 下载模型"
   "${SCP[@]}" "$HERE/py/winqa_real.py" "$USER_@$HOST:C:/winqa/py/winqa_real.py"; "${SCP[@]}" "$HERE/ps/hf_mirror.ps1" "$HERE/ps/clean.ps1" "$USER_@$HOST:C:/winqa/ps/"
+  require real/whisper.json
   if remote "$RP whisper"; then record real_whisper ok; else
     record real_whisper FAIL
     if [ "$HF_MIRROR" = 1 ]; then
@@ -251,6 +284,7 @@ if want 11; then
       remote "$PS C:\\winqa\\ps\\stop.ps1 -Label real-before-hf" >/dev/null
       remote "$PS C:\\winqa\\ps\\launch.ps1 -Label real-hf" && record launch_real_hf ok || record launch_real_hf FAIL
       remote "$RP whisper --label whisper-hfmirror" && record real_whisper_hfmirror ok || record real_whisper_hfmirror FAIL
+      require real/whisper-hfmirror.json
     fi
   fi
 fi
@@ -258,14 +292,17 @@ if want 12; then
   step "12. 本地视频（无字幕，${LOCAL_SECONDS}s）→ Whisper 转写 → 真实模型出片 → 导出 + ffprobe"
   "${SCP[@]}" "$HERE/py/winqa_real.py" "$USER_@$HOST:C:/winqa/py/winqa_real.py"
   remote "$RP local --seconds $LOCAL_SECONDS" && record real_local ok || record real_local FAIL
+  require real/local.json
 fi
 if want 13 && [ -n "$BILI_URL" ]; then
   step "13. B 站链接导入 → 进度 → 出片  $BILI_URL"
-  remote "$RP link --url '$BILI_URL'" && record real_link ok || record real_link FAIL
+  remote "$RP link --url \"$BILI_URL\"" && record real_link ok || record real_link FAIL
+  require real/link.json
 fi
 if want 14; then
   step "14. 首页/项目列表无卡住的 processing；截图；停止应用"
   remote "$RP final" && record real_final ok || record real_final FAIL
+  require real/final.json
   remote "$PS C:\\winqa\\ps\\ui_probe.ps1 -Label real" >/dev/null
   remote "$PS C:\\winqa\\ps\\stop.ps1 -Label real" >/dev/null
   remote "$PS C:\\winqa\\ps\\hf_mirror.ps1 -Off" >/dev/null
@@ -275,7 +312,7 @@ fi
 step "8. 收集日志并在验收机上导出证据包"
 # collect_logs.ps1 zips the app logs into C:\winqa\out\app-logs.zip; it stays on the test machine (R27 reduced
 # scope: raw logs, screenshots and media are withheld and listed in the manifest, handled by hand on the VM).
-remote "$PS C:\\winqa\\ps\\collect_logs.ps1 -Label final" || echo "WARN: collect_logs.ps1 failed"
+remote "$PS C:\\winqa\\ps\\collect_logs.ps1 -Label final" && record collect_logs ok || record collect_logs FAIL
 require collect-logs-final.json
 export_bundle pull_final
 

@@ -245,6 +245,19 @@ def test_no_hardcoded_host_or_token():
         assert needle not in text
 
 
+def _scrub_stream_files(folder):
+    """R27 #312: redact.py no longer rewrites evidence directories. These byte-level rule tests now drive the live
+    entry point (--stdin / --lines: scrub_bytes in stream mode, each file as one stream) on every file."""
+    redact = _module('redact')
+    keys = redact._env_keys()
+    for p in sorted(Path(folder).rglob('*')):
+        if p.is_file():
+            raw = p.read_bytes()
+            out = redact.scrub_bytes(raw, keys=keys)
+            if out != raw:
+                p.write_bytes(out)
+
+
 def _module(name):
     sys.path.insert(0, str(ROOT))
     try:
@@ -290,30 +303,13 @@ esac''')
 ZH_JSON_CASES = ['/Users/张三/AutoClipQA', '/home/张三', 'C:\\Users\\张三\\AppData', 'C:\\Users\\张 三\\x', 'c:/users/张三/a.log']
 
 
-@pytest.mark.parametrize('indent', [None, 2])
-def test_redact_json_with_escaped_chinese_names_stays_valid(tmp_path, indent):
-    """R18 #85: ensure_ascii JSON writes 张三 as \\u5f20\\u4e09; it must be masked and still parse."""
-    redact = _module('redact')
-    doc = {'paths': ZH_JSON_CASES, 'nested': {'cwd': ZH_JSON_CASES[0] + ': denied'}, 'api_key_masked': 'sk-…abc', 'n': 3}
-    raw = json.dumps(doc, indent=indent)   # ensure_ascii=True by default -> \\uXXXX escapes
-    assert '\\u5f20' in raw
-    (tmp_path / 'e.json').write_text(raw, encoding='utf-8')
-    redact.main(str(tmp_path))
-    out = (tmp_path / 'e.json').read_text(encoding='utf-8')
-    data = json.loads(out)
-    assert '张' not in out and '\\u5f20' not in out and '\\u4e09' not in out and '三' not in json.dumps(data, ensure_ascii=False)
-    assert data['paths'] == ['/Users/<user>/AutoClipQA', '/home/<user>', 'C:\\Users\\<user>\\AppData', 'C:\\Users\\<user>\\x', 'c:/users/<user>/a.log']
-    assert data['nested']['cwd'] == '/Users/<user>/AutoClipQA: denied'
-    assert data['api_key_masked'] == '***' and data['n'] == 3
 
 
 def test_redact_json_colliding_keys_are_all_kept(tmp_path):
     """R20 #119: two users' paths as keys scrub to one key; both entries must survive."""
     redact = _module('redact')
     doc = {'/Users/alice/a.log': 1, '/Users/bob/a.log': 2, '/Users/<user>/a.log#2': 3, 'other': 4}
-    (tmp_path / 'e.json').write_text(json.dumps(doc), encoding='utf-8')
-    redact.main(str(tmp_path))
-    data = json.loads((tmp_path / 'e.json').read_text(encoding='utf-8'))
+    data = redact.scrub_obj(doc)   # R27 #312: JSON evidence goes through scrub_obj (export_evidence.clean_json)
     assert sorted(data.values()) == [1, 2, 3, 4]
     assert all('alice' not in k and 'bob' not in k for k in data)
     assert data['/Users/<user>/a.log'] == 1 and data['other'] == 4
@@ -327,7 +323,7 @@ def test_redact_json_is_scrubbed_after_parsing(tmp_path):
     # R22 #150: the text scanner now decodes these escapes too (it used to miss them entirely).
     assert redact.scrub_homes(raw) == '{"p": "\\/U\\u0073ers\\/<user>\\/a", "w": "C:\\\\U\\u0073ers\\\\<user>\\\\x"}'
     (tmp_path / 'e.json').write_text(raw, encoding='utf-8')
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     assert json.loads((tmp_path / 'e.json').read_text(encoding='utf-8')) == {'p': '/Users/<user>/a', 'w': 'C:\\Users\\<user>\\x'}
 
 
@@ -351,15 +347,6 @@ def test_pwsh_verify_only_replaces_its_own_files(tmp_path):
 
 # ---------------- R21: one rule for every spelling (#127 #128 #130 #131 #132) ----------------
 
-def test_redact_json_with_bom_is_parsed(tmp_path):
-    """R21 #131: a BOM must not make the JSON step fall back; BOM is kept on write."""
-    redact = _module('redact')
-    raw = '\ufeff{"p": "\\/Users\\/alice\\/x", "w": "\\/U\\u0073ers\\/bob"}'
-    (tmp_path / 'e.json').write_bytes(raw.encode('utf-8'))
-    redact.main(str(tmp_path))
-    out = (tmp_path / 'e.json').read_bytes()
-    assert out.startswith(b'\xef\xbb\xbf')
-    assert json.loads(out.decode('utf-8-sig')) == {'p': '/Users/<user>/x', 'w': '/Users/<user>'}
 
 
 @pytest.mark.parametrize('suffix', ['.log', '.json'])
@@ -370,7 +357,7 @@ def test_redact_non_utf8_file_is_replaced_bytewise(tmp_path, suffix):
     tail = '\\AppData 日志\r\n'.encode('gbk') + b'\xff\xfe raw\n'
     raw = head + b'kris' + tail
     (tmp_path / ('e' + suffix)).write_bytes(raw)
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     assert (tmp_path / ('e' + suffix)).read_bytes() == head + b'<user>' + tail
 
 
@@ -381,7 +368,7 @@ def test_redact_utf8_key_is_masked_in_byte_mode(tmp_path, monkeypatch):
     monkeypatch.setenv('WINQA_MODEL_API_KEY', key)
     raw = ('k=' + key + ' m=' + key[:3] + '…' + key[-3:] + ' ').encode('utf-8') + b'\xff'
     (tmp_path / 'e.log').write_bytes(raw)
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     assert (tmp_path / 'e.log').read_bytes() == b'k=*** m=*** \xff'
 
 
@@ -398,7 +385,7 @@ def test_redact_gbk_name_with_5c_trail_byte_masked_whole(tmp_path, name, root):
     pre, suf = (s.encode('gbk') for s in root)
     raw = '错误 '.encode('gbk') + pre + name.encode('gbk') + suf + b'\r\n'
     (tmp_path / 'e.log').write_bytes(raw)
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     assert (tmp_path / 'e.log').read_bytes() == '错误 '.encode('gbk') + pre + b'<user>' + suf + b'\r\n'
 
 
@@ -415,7 +402,7 @@ def test_redact_utf8_log_keeps_plain_rule(tmp_path):
     redact = _module('redact')
     raw = 'C:\\Users\\张\\AppData\\x.log /home/乗/y\n'.encode('utf-8')
     (tmp_path / 'e.log').write_bytes(raw)
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     assert (tmp_path / 'e.log').read_bytes() == b'C:\\Users\\<user>\\AppData\\x.log /home/<user>/y\n'
 
 
@@ -476,7 +463,7 @@ def test_corpus_files_every_encoding_and_line_ending(tmp_path, case):
                 continue   # sample not representable in this encoding
             f = tmp_path / f'{label}{len(eol)}.log'
             f.write_bytes(raw)
-            redact.main(str(tmp_path))
+            _scrub_stream_files(tmp_path)
             assert f.read_bytes() == out, (label, repr(eol), f.read_bytes())
             f.unlink()
             tried += 1
@@ -547,7 +534,7 @@ def test_redact_json_crlf_and_bom_are_kept(tmp_path):
     doc = json.dumps({'p': '/Users/alice/x', 'n': [1, 2]}, indent=2).replace('\n', '\r\n') + '\r\n'
     for name, bom in (('a.json', b''), ('b.json', b'\xef\xbb\xbf')):
         (tmp_path / name).write_bytes(bom + doc.encode('utf-8'))
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     for name, bom in (('a.json', b''), ('b.json', b'\xef\xbb\xbf')):
         out = (tmp_path / name).read_bytes()
         assert out.startswith(bom) and b'\r\n' in out and b'\n' not in out.replace(b'\r\n', b'')
@@ -560,7 +547,7 @@ def test_redact_utf16_files(tmp_path, codec, bom):
     redact = _module('redact')
     (tmp_path / 'e.log').write_bytes(bom + 'C:\\Users\\张三\\x\r\n'.encode(codec))
     (tmp_path / 'e.json').write_bytes(bom + json.dumps({'p': '/home/bob/x'}).encode(codec))
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     assert (tmp_path / 'e.log').read_bytes() == bom + 'C:\\Users\\<user>\\x\r\n'.encode(codec)
     assert json.loads((tmp_path / 'e.json').read_bytes()[2:].decode(codec)) == {'p': '/home/<user>/x'}
 
@@ -570,23 +557,12 @@ def test_redact_lone_surrogate_json_is_masked_and_does_not_stop_the_run(tmp_path
     redact = _module('redact')
     (tmp_path / 'a.json').write_text('{"p": "\\ud800 /Users/bob/x"}', encoding='utf-8')
     (tmp_path / 'b.log').write_text('/Users/carol/x\n', encoding='utf-8')
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     out = (tmp_path / 'a.json').read_text(encoding='utf-8')
     assert '\\ud800' in out and 'bob' not in out and json.loads(out) == {'p': '\ud800 /Users/<user>/x'}
     assert (tmp_path / 'b.log').read_text(encoding='utf-8') == '/Users/<user>/x\n'
 
 
-def test_redact_undecodable_file_is_reported_left_alone_and_others_continue(tmp_path, capsys):
-    redact = _module('redact')
-    bad = b'\xff\xfe' + '/Users/bob'.encode('utf-16-le') + b'\x00'   # odd-length UTF-16
-    (tmp_path / 'a.log').write_bytes(bad)
-    (tmp_path / 'b.log').write_text('/Users/carol/x\n', encoding='utf-8')
-    with pytest.raises(SystemExit) as exc:
-        redact.main(str(tmp_path))
-    assert exc.value.code == 2
-    assert (tmp_path / 'a.log').read_bytes() == bad
-    assert (tmp_path / 'b.log').read_text(encoding='utf-8') == '/Users/<user>/x\n'
-    assert 'a.log' in capsys.readouterr().err
 
 
 BOUNDARY_TO_EOL = [("x '/home/kris' y", "x '/home/<user>"), ("open '/home/kris' now\nnext", "open '/home/<user>\nnext"),
@@ -655,7 +631,7 @@ def test_r23_181_shift_jis_halfwidth_names_masked_whole(tmp_path, name):
     raw = ('ログ C:\\Users\\' + name + '\\AppData\\x /home/' + name + '/y\r\n').encode('shift_jis')
     want = 'ログ C:\\Users\\<user>\\AppData\\x /home/<user>/y\r\n'.encode('shift_jis')
     (tmp_path / 'e.log').write_bytes(raw)
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     assert (tmp_path / 'e.log').read_bytes() == want
     p = subprocess.run(SH_REDACT, input=raw, capture_output=True)
     assert p.returncode == 0 and p.stdout == want
@@ -711,46 +687,17 @@ def test_r23_184_multi_layer_escapes_scale_linearly(unit):
     assert big < 3.5 * small + 0.02, (small, big)
 
 
-def test_r23_188_read_or_write_error_on_one_file_does_not_stop_the_rest(tmp_path, monkeypatch, capsys):
-    redact = _module('redact')
-    (tmp_path / 'a.log').write_text('/Users/bob/x\n', encoding='utf-8')
-    (tmp_path / 'b.log').write_text('/Users/carol/x\n', encoding='utf-8')
-    real = Path.read_bytes
-
-    def flaky(self):
-        if self.name == 'a.log':
-            raise PermissionError('denied')
-        return real(self)
-    monkeypatch.setattr(Path, 'read_bytes', flaky)
-    with pytest.raises(SystemExit) as exc:
-        redact.main(str(tmp_path))
-    assert exc.value.code == 2
-    assert (tmp_path / 'b.log').read_text(encoding='utf-8') == '/Users/<user>/x\n'
-    assert 'a.log' in capsys.readouterr().err
 
 
 @pytest.mark.parametrize('codec', ['utf-16-le', 'utf-16-be'])
 def test_r23_190_utf16_without_bom_is_masked_and_written_back(tmp_path, codec):
     redact = _module('redact')
     (tmp_path / 'e.log').write_bytes('C:\\Users\\kris\\x /home/bob/y\r\n'.encode(codec))
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     assert (tmp_path / 'e.log').read_bytes() == 'C:\\Users\\<user>\\x /home/<user>/y\r\n'.encode(codec)
     assert redact.scrub_stream_bytes('/Users/kris/x'.encode(codec)) == '/Users/<user>/x'.encode(codec)
 
 
-def test_r23_192_inexact_round_trip_is_refused_and_file_kept(tmp_path, monkeypatch, capsys):
-    """R23 #192: a reading that does not map back to the same bytes must leave the file untouched."""
-    redact = _module('redact')
-    monkeypatch.setattr(redact, '_FALLBACK', ('gb18030', 'replace'))   # lossy on purpose: \xff -> U+FFFD
-    bad = b'\xff C:\\Users\\kris\\x\n'
-    (tmp_path / 'a.log').write_bytes(bad)
-    with pytest.raises(SystemExit) as exc:
-        redact.main(str(tmp_path))
-    assert exc.value.code == 2
-    assert (tmp_path / 'a.log').read_bytes() == bad
-    assert 'a.log' in capsys.readouterr().err
-    with pytest.raises(ValueError):
-        redact.scrub_stream_bytes(bad)
 
 
 def test_r23_187_stdin_error_prints_nothing_and_exits_non_zero():
@@ -1039,7 +986,7 @@ def test_r24_214_mixed_utf8_and_utf16_runs_are_both_masked(tmp_path):
              'u16u8odd.log': u16 * 6 + b'!' + u8 + b'!'}
     for name, raw in files.items():
         (tmp_path / name).write_bytes(raw)
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     for name in files:
         out = (tmp_path / name).read_bytes()
         for leak in (b'kris', 'kris'.encode('utf-16-le'), b'bob', 'bob'.encode('utf-16-le'), 'bob'.encode('utf-16-le')[1:]):
@@ -1048,19 +995,6 @@ def test_r24_214_mixed_utf8_and_utf16_runs_are_both_masked(tmp_path):
     assert p.returncode == 0 and b'kris' not in p.stdout and 'bob'.encode('utf-16-le') not in p.stdout
 
 
-def test_r24_zip_members_are_scrubbed(tmp_path):
-    redact = _module('redact')
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, 'w') as z:
-        z.writestr('backend/app.log', 'C:\\Users\\kris\\AppData\\x\n/home/kris/y\n')
-        z.writestr('desktop/C:\\Users\\kris\\n.json', json.dumps({'p': '/Users/kris/z'}))
-        z.writestr('bin/x.dat', b'\x00\x01')
-    (tmp_path / 'app-logs.zip').write_bytes(buf.getvalue())
-    redact.main(str(tmp_path))
-    with zipfile.ZipFile(tmp_path / 'app-logs.zip') as z:
-        blob = b''.join(z.read(i) for i in z.infolist()) + ''.join(z.namelist()).encode()
-        assert z.read('backend/app.log') == b'C:\\Users\\<user>\\AppData\\x\n/home/<user>/y\n'
-    assert b'kris' not in blob
 
 
 # ---- end to end: run_winqa.sh export boundary -> test_winqa_export.py (R27 rewrite; the R24/R25 pull-then-scrub
@@ -1126,7 +1060,7 @@ def test_r25_242_bom_file_also_gets_mixed_encoding_readings(tmp_path):
              'bom16.log': b'\xff\xfe' + 'C:\\Users\\amy\\y\r\n'.encode('utf-16-le') + b'tail /home/kris/z\n'}
     for name, raw in files.items():
         (tmp_path / name).write_bytes(raw)
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     for name in files:
         out = (tmp_path / name).read_bytes()
         for w in ('kris', 'bob', 'amy'):
@@ -1147,7 +1081,7 @@ def test_r25_243_json_values_masked_by_field_name(tmp_path):
     redact = _module('redact')
     obj = redact.scrub_obj(R25_SECRET_JSON)
     (tmp_path / 'e.json').write_text(json.dumps(R25_SECRET_JSON), encoding='utf-8')
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     from_file = json.loads((tmp_path / 'e.json').read_text(encoding='utf-8'))
     for got in (obj, from_file):
         text = json.dumps(got)
@@ -1161,46 +1095,14 @@ def test_r25_244_directory_mode_masks_urls(tmp_path):
     """R25 #244: one rule table: file/directory mode masks URLs like the stream modes."""
     redact = _module('redact')
     (tmp_path / 'a.log').write_text('GET https://oss.invalid/f?Signature=SIG1&x=1 done\n', encoding='utf-8')
-    (tmp_path / 'b.json').write_text(json.dumps({'u': 'http://h.invalid/p?t=SIG2'}), encoding='utf-8')
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     assert (tmp_path / 'a.log').read_text(encoding='utf-8') == 'GET <url> done\n'
-    assert json.loads((tmp_path / 'b.json').read_text(encoding='utf-8')) == {'u': '<url>'}
+    assert redact.scrub_obj({'u': 'http://h.invalid/p?t=SIG2'}) == {'u': '<url>'}
     assert redact.scrub('see https://x.invalid/?k=1') == 'see <url>'
 
 
-def test_r25_245_no_suffix_allow_list(tmp_path):
-    """R25 #245: rotated logs, unknown suffixes and the same inside zips are scrubbed; images are kept; unknown
-    binary is refused (deleted with --drop-failed) instead of passed through."""
-    redact = _module('redact')
-    (tmp_path / 'app.log.1').write_text('C:\\Users\\kris\\a\n')
-    (tmp_path / 'trace.out').write_text('/home/kris/b\n')
-    (tmp_path / 'noext').write_text('/Users/kris/c\n')
-    png = b'\x89PNG\r\n\x1a\n' + b'\x00' * 32
-    (tmp_path / 'shot.png').write_bytes(png)
-    (tmp_path / 'blob.bin').write_bytes(b'\x00\x01\x02\x03kris\x00\x00\x00\xff\xfe\x00\x00' * 8)
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, 'w') as z:
-        z.writestr('backend/app.log.3', 'x /home/kris/y\n')
-        z.writestr('desktop/main.out', 'C:\\Users\\kris\\z\n')
-    (tmp_path / 'logs.zip').write_bytes(buf.getvalue())
-    redact.main(str(tmp_path), drop_failed=True)
-    assert (tmp_path / 'app.log.1').read_text() == 'C:\\Users\\<user>\\a\n'
-    assert (tmp_path / 'trace.out').read_text() == '/home/<user>/b\n'
-    assert (tmp_path / 'noext').read_text() == '/Users/<user>/c\n'
-    assert (tmp_path / 'shot.png').read_bytes() == png
-    assert not (tmp_path / 'blob.bin').exists()
-    with zipfile.ZipFile(tmp_path / 'logs.zip') as z:
-        assert z.read('backend/app.log.3') == b'x /home/<user>/y\n' and z.read('desktop/main.out') == b'C:\\Users\\<user>\\z\n'
 
 
-def test_r25_241_crash_is_non_zero_and_failed_files_deleted_is_zero(tmp_path):
-    """R25 #241: with --drop-failed the CLI exits 0 only when every unscrubbable file is gone; without it a failure
-    is exit 2 (callers treat any non-zero as "copy nothing")."""
-    (tmp_path / 'blob.bin').write_bytes(b'\x00\x01\x02\x03\x00\x00\x00\xff\xfe\x00\x00' * 8)
-    p = subprocess.run([sys.executable, str(ROOT / 'redact.py'), str(tmp_path)], capture_output=True)
-    assert p.returncode == 2 and (tmp_path / 'blob.bin').exists()
-    p = subprocess.run([sys.executable, str(ROOT / 'redact.py'), str(tmp_path), '--drop-failed'], capture_output=True)
-    assert p.returncode == 0 and not (tmp_path / 'blob.bin').exists()
 
 
 @pytest.mark.parametrize('raw,want', [
@@ -1239,7 +1141,7 @@ def test_r26_255_text_lines_use_the_json_field_rule(tmp_path, raw, leak):
     assert leak not in redact.scrub(raw)
     for name in ('a.log', 'b.jsonl', 'c.txt'):
         (tmp_path / name).write_text(raw + '\n', encoding='utf-8')
-    redact.main(str(tmp_path))
+    _scrub_stream_files(tmp_path)
     for name in ('a.log', 'b.jsonl', 'c.txt'):
         assert leak not in (tmp_path / name).read_text(encoding='utf-8'), name
     for mode in ('--stdin', '--lines'):
@@ -1249,9 +1151,7 @@ def test_r26_255_text_lines_use_the_json_field_rule(tmp_path, raw, leak):
 
 def test_r26_255_json_fields_any_value_type_and_more_names(tmp_path):
     redact = _module('redact')
-    (tmp_path / 'e.json').write_text(json.dumps(R26_FIELD_JSON), encoding='utf-8')
-    redact.main(str(tmp_path))
-    for got in (redact.scrub_obj(R26_FIELD_JSON), json.loads((tmp_path / 'e.json').read_text(encoding='utf-8'))):
+    for got in (redact.scrub_obj(R26_FIELD_JSON),):
         text = json.dumps(got)
         for v in ('at-1', 'st-2', 'sa-3', 'ss-4', '5551', 'cr-6', 'rt-7'):
             assert v not in text, (v, text)

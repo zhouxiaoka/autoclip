@@ -24,8 +24,15 @@ Invariants
       the exact keys, re-serialised as UTF-8 without BOM, and must be a fixed point of the scrubber with no key
       form left - otherwise the whole export aborts (a verification failure is a bug, not a file to drop).
 
+  I7  Evidence contract (R27 #306): `steps.json` (the control machine's step records: run_id, step, attempt,
+      status ok|FAIL, exit_code) is always required; every required file must be a non-empty JSON object or list
+      (`{}` is not evidence); the manifest carries `withheld` and `error_codes` (every `error_code` value found in
+      each exported required file). One validator (validate_bundle) checks all of it, recomputing classification,
+      required/missing/status and error_codes from the members: on the test machine against the re-opened .part
+      before the rename (#304) and again on the control machine (#307).
+
 Usage
-  export_evidence.py export --src DIR --dest DIR --bundle NAME [--require a.json,real/b.json] --keys-stdin
+  export_evidence.py export --src DIR --dest DIR --bundle NAME [--require a.json,real/b.json] [--steps FILE] --keys-stdin
       last stdout line: "EXPORT <complete|incomplete> <NAME>.zip <sha256>"; exit 0 complete, 3 incomplete,
       1 nothing committed.
   export_evidence.py verify --bundle FILE --sha256 HEX --into DIR --keys-stdin
@@ -38,7 +45,9 @@ _here = Path(__file__).resolve().parent
 sys.path[:0] = [str(_here), str(_here.parent)]   # on the VM redact.py sits next to this file; in the repo one up
 import redact  # noqa: E402
 
-SCHEMA, POLICY = 'winqa-evidence-bundle/1', 'winqa-export/1'
+SCHEMA, POLICY = 'winqa-evidence-bundle/2', 'winqa-export/1'
+STEPS = 'steps.json'
+_STEP_STATUS = ('ok', 'FAIL')
 _SEG = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$')
 _BUNDLE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$')
 _UTF16_BOMS = ((b'\xff\xfe', 'utf-16-le'), (b'\xfe\xff', 'utf-16-be'))
@@ -143,16 +152,56 @@ def check_clean(text: str, keys):
         raise ExportError('key form left after scrubbing')
 
 
-def export(src: Path, dest: Path, bundle: str, required, keys):
+def error_codes(data):
+    """Every `error_code` value at any depth (strings and numbers), sorted, unique."""
+    found = set()
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k == 'error_code' and isinstance(v, (str, int)) and not isinstance(v, bool) and v != '':
+                    found.add(str(v))
+                walk(v)
+        elif isinstance(o, list):
+            for x in o:
+                walk(x)
+    walk(data)
+    return sorted(found)
+
+
+def contract_problem(name: str, data):
+    """I7 content contract of one required file; None when it is evidence."""
+    if not isinstance(data, (dict, list)) or not data:
+        return 'empty'
+    if name == STEPS:
+        if not isinstance(data, list):
+            return 'steps_not_a_list'
+        for r in data:
+            if not isinstance(r, dict) or not isinstance(r.get('run_id'), str) or not isinstance(r.get('step'), str) \
+                    or not r['step'] or r.get('status') not in _STEP_STATUS \
+                    or not isinstance(r.get('attempt'), int) or isinstance(r.get('attempt'), bool) or r['attempt'] < 1 \
+                    or not isinstance(r.get('exit_code'), int) or isinstance(r.get('exit_code'), bool):
+                return 'steps_record'
+    return None
+
+
+def export(src: Path, dest: Path, bundle: str, required, keys, steps: Path = None):
     if not _BUNDLE.match(bundle):
         raise ExportError('bad bundle name')
+    required = sorted(set(required) | {STEPS})                              # I7: step results always required
     before = tree(src)                                                      # I1
+    inputs = [(rel, src / rel, src_sha) for rel, src_sha in before.items()]
+    if steps is not None:
+        inputs.append((STEPS, steps, sha(steps.read_bytes())))
     files, withheld, members = [], [], []
-    for rel, src_sha in before.items():
-        raw = (src / rel).read_bytes()                                       # the copy: read once into memory
+    for rel, path, src_sha in inputs:
+        raw = path.read_bytes()                                              # the copy: read once into memory
         if sha(raw) != src_sha:
             raise ExportError('source changed while exporting')
         entry = {'source_sha256': src_sha, 'size': len(raw)}
+        if rel == STEPS and path.parent == src:
+            withheld.append(dict(entry, name=rel, reason='reserved'))       # only the control machine's records
+            continue
         if not name_ok(rel, keys):
             withheld.append(dict(entry, name=None, name_sha256=sha(rel.encode('utf-8', 'surrogateescape')), reason='name'))
             continue
@@ -168,12 +217,12 @@ def export(src: Path, dest: Path, bundle: str, required, keys):
         members.append((rel, data))
     if tree(src) != before:                                                  # I1
         raise ExportError('originals changed during export')
-    exported = {f['name'] for f in files}
-    missing = sorted(r for r in required if r not in exported)
-    status = 'incomplete' if missing else 'complete'
+    parsed = {rel: json.loads(data) for rel, data in members}
+    problems, missing, codes = derive(required, parsed)
     manifest = {'schema': SCHEMA, 'policy': POLICY, 'bundle': bundle, 'created_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
-                'source_tree_sha256': tree_hash(before), 'status': status, 'required': sorted(required),
-                'missing_required': missing, 'files': files, 'withheld': withheld}
+                'source_tree_sha256': tree_hash(before), 'status': 'incomplete' if missing else 'complete',
+                'required': required, 'missing_required': missing, 'contract_problems': problems,
+                'error_codes': codes, 'files': files, 'withheld': withheld}
     mtext = json.dumps(manifest, ensure_ascii=False, indent=2) + '\n'
     check_clean(mtext, keys)
     dest.mkdir(parents=True, exist_ok=True)
@@ -187,36 +236,89 @@ def export(src: Path, dest: Path, bundle: str, required, keys):
             z.writestr(zipfile.ZipInfo('manifest.json', (1980, 1, 1, 0, 0, 0)), mtext.encode('utf-8'))
         fh.flush()
         os.fsync(fh.fileno())
-    digest = sha(part.read_bytes())
+    # #304: re-open what is actually on disk and run the full validator on it before the commit
+    try:
+        written = part.read_bytes()
+        m, _ = validate_bundle(written, keys)
+        if m['bundle'] != bundle or {f['name'] for f in m['files']} != {rel for rel, _ in members}:
+            raise ExportError('written bundle differs from what was exported')
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    digest = sha(written)
     os.replace(part, final)                                                  # commit
-    return status, final.name, digest, len(files), len(withheld)
+    return m['status'], final.name, digest, len(files), len(withheld)
 
 
-def verify(bundle: Path, digest: str, into: Path, keys):
-    raw = bundle.read_bytes()
-    if sha(raw) != digest.lower():
-        raise ExportError('bundle hash mismatch')
-    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+def derive(required, parsed):
+    """I7: missing required evidence, contract problems and error codes, all derived from the members."""
+    problems = {}
+    for r in required:
+        if r in parsed:
+            why = contract_problem(r, parsed[r])
+            if why:
+                problems[r] = why
+    missing = sorted(r for r in required if r not in parsed or r in problems)
+    codes = {r: error_codes(parsed[r]) for r in required if r in parsed and r != STEPS}
+    return problems, missing, codes
+
+
+_WITHHELD_KEYS = {'source_sha256', 'size', 'name', 'reason'}
+
+
+def validate_bundle(raw: bytes, keys):
+    """The one complete bundle check (I5-I7), used before the commit on the test machine and by verify on the
+    control machine. Returns (manifest, {member: bytes}); raises ExportError."""
+    try:
+        z = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile as exc:
+        raise ExportError('not a zip') from exc
+    with z:
         names = z.namelist()
         if len(set(names)) != len(names) or 'manifest.json' not in names:
             raise ExportError('bad member list')
         mtext = z.read('manifest.json').decode('utf-8')
         check_clean(mtext, keys)
         m = json.loads(mtext)
-        if m.get('schema') != SCHEMA or m.get('policy') != POLICY:
+        if not isinstance(m, dict) or m.get('schema') != SCHEMA or m.get('policy') != POLICY:
             raise ExportError('unknown bundle schema/policy')
+        if not isinstance(m.get('files'), list) or not isinstance(m.get('withheld'), list) \
+                or not isinstance(m.get('required'), list):
+            raise ExportError('manifest lacks files/withheld/required')
+        for w in m['withheld']:
+            if not isinstance(w, dict) or not _WITHHELD_KEYS <= set(w) or not w['reason']:
+                raise ExportError('bad withheld entry')
+        if STEPS not in m['required']:
+            raise ExportError('manifest does not require the step results')
         listed = {f['name']: f['sha256'] for f in m['files']}
-        if set(names) - {'manifest.json'} != set(listed):
+        if len(listed) != len(m['files']) or set(names) - {'manifest.json'} != set(listed):
             raise ExportError('members differ from manifest')
-        out = {}
+        out, parsed = {}, {}
         for n in listed:
             if not name_ok(n, keys):                                         # I5
                 raise ExportError('member name fails the name policy')
             data = z.read(n)
             if sha(data) != listed[n]:
                 raise ExportError('member hash mismatch')
-            check_clean(data.decode('utf-8'), keys)                         # I6 again, on the control machine
-            out[n] = data
+            if kind_of(data, n) != 'json' or decode_json_text(data) is None:  # #307: same classification
+                raise ExportError('member is not structured JSON')
+            text = data.decode('utf-8')
+            check_clean(text, keys)                                          # I6
+            out[n], parsed[n] = data, json.loads(text)
+    problems, missing, codes = derive(m['required'], parsed)                 # #307: recomputed, not trusted
+    status = 'incomplete' if missing else 'complete'
+    if m.get('missing_required') != missing or m.get('status') != status or m.get('contract_problems') != problems \
+            or m.get('error_codes') != codes:
+        raise ExportError('manifest status/required/missing/error_codes do not match the members')
+    return m, out
+
+
+def verify(bundle: Path, digest: str, into: Path, keys):
+    raw = bundle.read_bytes()
+    if sha(raw) != digest.lower():
+        raise ExportError('bundle hash mismatch')
+    m, out = validate_bundle(raw, keys)
+    mtext = json.dumps(m, ensure_ascii=False, indent=2) + '\n'
     shutil.rmtree(into, ignore_errors=True)
     into.mkdir(parents=True)
     for n, data in out.items():
@@ -239,7 +341,9 @@ def main(argv):
     try:
         if argv[0] == 'export':
             req = [r for r in (_arg(argv, '--require', '') or '').split(',') if r]
-            status, name, digest, n, w = export(Path(_arg(argv, '--src')), Path(_arg(argv, '--dest')), _arg(argv, '--bundle'), req, keys)
+            steps = _arg(argv, '--steps')
+            status, name, digest, n, w = export(Path(_arg(argv, '--src')), Path(_arg(argv, '--dest')), _arg(argv, '--bundle'),
+                                                req, keys, Path(steps) if steps else None)
             print(f'export: {n} file(s) exported, {w} withheld (kept on the test machine)')
             print(f'EXPORT {status} {name} {digest}')
             return 0 if status == 'complete' else 3
