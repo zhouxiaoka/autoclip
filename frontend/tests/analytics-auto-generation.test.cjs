@@ -2,10 +2,10 @@ const {test}=require('node:test')
 const assert=require('node:assert/strict')
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript')
 
-function loadWorkflow(){
+function loadWorkflow(MathImpl=Math){
  const source=fs.readFileSync(path.join(__dirname,'../src/analytics/workflow.ts'),'utf8')
  const exports={}
- vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,Date,Math,JSON,Number,Array,Object,Map,Set,String,URL})
+ vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,Date,Math:MathImpl,JSON,Number,Array,Object,Map,Set,String,URL})
  return exports
 }
 const workflow=loadWorkflow()
@@ -168,4 +168,38 @@ test('local render timeout retains a safe code for export and automatic partial 
   assert.equal(finished[0].props.outcome,outcome)
   assert.equal(JSON.stringify(finished).includes('private'),false)
  }
+})
+
+// Flake root cause: telemetryId() joined random base36 segments with '-', so a segment ending in
+// "sk" produced "sk-", which the catalog privacy check flags as a secret. Seeded reproduction:
+function seededMath(values){let i=0;return Object.assign(Object.create(Math),{random:()=>values[i++%values.length]})}
+const SK=(28*36+20)/1296   // (SK).toString(36) === '0.sk'
+
+test('seeded ids that would spell a secret marker are regenerated and pass catalog validation',()=>{
+ const {loadTs}=require('./load-ts.cjs')
+ const catalogApi=loadTs(path.resolve(__dirname,'../src/analytics/eventCatalog.ts'))
+ const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,'../../docs/analytics/event_catalog.json'),'utf8'))
+ assert.equal(SK.toString(36),'0.sk')
+ for(const values of [[SK,0.25,0.5,0.75],[SK]]){   // second: RNG stuck on the bad value
+  const wf=loadWorkflow(seededMath(values))
+  const events=[],store=new Map()
+  const t=new wf.WorkflowTracker({getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},()=>true,(name,props)=>{events.push({name,props});return true})
+  t.watch('studio-generation','p1')
+  t.observeStudio(t.list()[0],{generation:{status:'failed',error_code:'llm_auth_invalid',http_status:401,failure_stage:'analyze'}})
+  const finished=events.find(e=>e.name==='studio_generation_finished')
+  assert.ok(finished,'event emitted')
+  assert.equal(catalogApi.validateEvent(finished.name,finished.props,catalog).join(';'),'')
+  const id=wf.telemetryId()
+  assert.match(id,/^t-[a-z0-9-]{10,100}$/)
+  for(const marker of wf.ID_FORBIDDEN_MARKERS) assert.ok(!id.includes(marker),id)
+ }
+})
+
+test('id markers cover the catalog forbidden substrings (detector not weakened)',()=>{
+ const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,'../../docs/analytics/event_catalog.json'),'utf8'))
+ for(const marker of catalog.privacy.forbidden_substrings) assert.ok(workflow.ID_FORBIDDEN_MARKERS.includes(marker.toLowerCase()),marker)
+ const {loadTs}=require('./load-ts.cjs')
+ const catalogApi=loadTs(path.resolve(__dirname,'../src/analytics/eventCatalog.ts'))
+ assert.notEqual(catalogApi.validateEvent('studio_generation_finished',{flow_id:'t-abc-sk-123'},catalog).join(';'),'', 'a real sk- value must still be flagged')
+ for(let i=0;i<20000;i++){const id=workflow.telemetryId();for(const m of workflow.ID_FORBIDDEN_MARKERS) assert.ok(!id.includes(m),id)}
 })
