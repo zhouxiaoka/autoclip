@@ -369,6 +369,7 @@ async def get_whisper_models():
                 "downloadProgress": model_info.download_progress,
                 "localPath": model_info.local_path,
                 "errorMessage": model_info.error_message,
+                "errorCode": model_info.error_code,
                 "source": model_info.source,
             })
         
@@ -473,6 +474,7 @@ async def get_model_status(model_name: str):
             "downloadProgress": model_info.download_progress,
             "localPath": model_info.local_path,
             "errorMessage": model_info.error_message,
+            "errorCode": model_info.error_code,
             "source": model_info.source,
         }
         

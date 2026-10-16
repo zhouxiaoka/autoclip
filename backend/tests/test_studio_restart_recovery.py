@@ -149,6 +149,25 @@ def test_render_killed_after_one_saved_video_is_partial_and_keeps_it(sessions):
     assert disk['output_variants'][0]['status'] == 'completed'
 
 
+def test_restart_ignores_orphan_and_partial_files_without_completed_receipts(sessions):
+    done_job, done = _linked(1, 'completed')
+    cut_job, cut = _linked(2, 'running')
+    _project(sessions, _render_run([done_job, cut_job], [done, cut]))
+    folder = store.directory('p') / 'output/studio'
+    folder.mkdir(parents=True)
+    for name in ('j2.mp4', 'j2.part.mp4', 'j2.ready.part.mp4'):
+        (folder / name).write_bytes(b'orphan output without a durable completed receipt')
+    assert reconcile_interrupted_projects(sessions) == ['p']
+    data = _disk()
+    assert data['generation']['status'] == 'partial'
+    assert data['generation']['completed_variant_count'] == 1
+    assert data['output_variants'][1]['status'] == 'failed'
+    row = _row(sessions)
+    assert row.status.value == 'failed'
+    assert row.total_clips == 1
+    assert row.error_code == 'service_restarted'
+
+
 def _render_run(jobs, variants):
     return {'generation': {'status': 'rendering', 'auto_start': True},
             'analysis': {'status': 'running', 'phase': 'rendering', 'run_id': 'r', 'instance': OLD},

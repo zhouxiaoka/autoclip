@@ -70,6 +70,15 @@ class VisionRequestError(RuntimeError):
         return result
 
 
+class FrameExtractError(VisionRequestError):
+    """R11 #406: ffmpeg could not extract frames from the local source. A local media
+    problem, not a vision-service outage; callers that only know VisionRequestError still
+    get a safe message and diagnostics."""
+    def __init__(self, message):
+        super().__init__('frame_extract_failed', message)
+        self.phase = 'sample'
+
+
 def vision_call_at(phase, content):
     try:
         if phase in ('scan', 'refine'):
@@ -223,9 +232,9 @@ def _sampling_bounds(video):
             frame_seconds = 1
         return max(0, duration - max(.1, frame_seconds) - .001), max(.5, frame_seconds)
     except subprocess.TimeoutExpired:
-        raise VisionRequestError('timeout', '读取素材画面超时，请检查视频后重试；原素材已保留') from None
+        raise FrameExtractError('读取素材画面超时，请检查视频后重试；原素材已保留') from None
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError):
-        raise VisionRequestError('missing_resource', '无法读取素材画面，请检查视频后重试；原素材已保留') from None
+        raise FrameExtractError('无法读取素材画面，请检查视频后重试；原素材已保留') from None
 
 
 def sample(video, times, folder, width=640):
@@ -254,14 +263,14 @@ def sample(video, times, folder, width=640):
                 timestamp = seek
                 break
             except subprocess.TimeoutExpired:
-                raise VisionRequestError('timeout', '读取素材画面超时，请检查视频后重试；原素材已保留') from None
+                raise FrameExtractError('读取素材画面超时，请检查视频后重试；原素材已保留') from None
             except (OSError, subprocess.SubprocessError):
                 try:
                     frame.unlink(missing_ok=True)
                 except OSError:
                     pass  # A denied output directory must still produce a safe diagnostic.
         else:
-            raise VisionRequestError('missing_resource', '无法读取素材画面，请检查视频后重试；原素材已保留') from None
+            raise FrameExtractError('无法读取素材画面，请检查视频后重试；原素材已保留') from None
         content.extend([{'type': 'text', 'text': f'原片时间 {timestamp:.2f} 秒'}, {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(image).decode()}}])
     if not content:
         raise VisionRequestError('missing_resource', '没有可用素材画面，请检查视频后重试；原素材已保留')
