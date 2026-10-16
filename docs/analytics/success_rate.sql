@@ -1,4 +1,4 @@
--- 1.5.8 出片成功率（v4 口径，2026-10-16 与 Dong 看板 uPaOzh6R / GO5TUM7y / FGl86jg9 / qRO0TeFS 对齐）。
+-- 1.5.8 出片成功率（v4 口径）。线上看板 insight uPaOzh6R / GO5TUM7y / FGl86jg9 / qRO0TeFS 尚未更新，#416 与 #419 合入后同步为本文件。
 -- 口径见 docs/analytics/TRACKING_PLAN.md §6–§7。所有查询共用同一个 base / c 定义。
 --
 -- 分母为 0（稀疏的日期 / 版本 / 空窗口）时比率返回 NULL，不是 NaN（R20 #142：nullIf(分母, 0)）。
