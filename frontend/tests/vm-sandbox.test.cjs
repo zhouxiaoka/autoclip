@@ -19,6 +19,17 @@ test('#313 no test file calls node:vm directly; all loaders use runInSandbox', (
   assert.deepEqual(offenders, [], 'use runInSandbox from tests/vm-sandbox.cjs')
 })
 
+test('#330 no test file keeps an unused node:vm import', () => {
+  const unused = []
+  for (const name of fs.readdirSync(__dirname).filter(n => /\.c?js$|\.mjs$/.test(n)).sort()) {
+    if (ALLOWED.has(name)) continue
+    const text = fs.readFileSync(path.join(__dirname, name), 'utf8')
+    const bound = text.match(/\b(\w+)\s*=\s*require\(['"]node:vm['"]\)/)
+    if (bound && !new RegExp(`\\b${bound[1]}\\.`).test(text)) unused.push(name)
+  }
+  assert.deepEqual(unused, [], 'drop the unused node:vm import')
+})
+
 test('#313 the helper hands the sandbox the monitored console', () => {
   const { runInSandbox } = require('./vm-sandbox.cjs')
   assert.equal(runInSandbox('console', {}), console)

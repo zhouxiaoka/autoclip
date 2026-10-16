@@ -16,7 +16,6 @@ test('errorCode selects translated copy; unknown code falls back to the server m
 // R14 #31: mount the real SpeechRecognitionConfig in a DOM (happy-dom + react-dom/client), with
 // its real state logic. Only the HTTP layer is mocked, with backend-shaped responses.
 const React = require('react')
-const vm = require('node:vm')
 const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript')
 // happy-dom is ESM-only; dynamic import works on Node 20 and 22 (require(esm) is not unflagged on every 22.x).

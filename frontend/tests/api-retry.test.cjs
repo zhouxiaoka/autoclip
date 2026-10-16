@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm')
+const fs = require('node:fs'), path = require('node:path')
 const { runInSandbox } = require('./vm-sandbox.cjs')
 const ts = require('typescript'), axios = require('axios')
 

@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript')
+const fs = require('node:fs'), path = require('node:path'), ts = require('typescript')
 const { runInSandbox } = require('./vm-sandbox.cjs')
 const file = path.resolve(__dirname, '../src/features/studio/nativeDownload.ts')
 function load({ desktop = true, ready = true, result = { size_bytes: 42 }, fail = false, readyResult = true } = {}) {

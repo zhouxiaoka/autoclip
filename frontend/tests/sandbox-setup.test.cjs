@@ -105,6 +105,23 @@ test('probe', async () => {
   assert.equal(r.status, 0, r.stdout + r.stderr)
 })
 
+test('#329 a child forked with a "--test" script argument is still not hooked again', () => {
+  const r = runWithSetup(`const fs = require('node:fs'); const path = require('node:path'); const os = require('node:os')
+const { fork } = require('node:child_process')
+test('probe', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ac-fork-arg-'))
+  const child = path.join(dir, 'worker.test.cjs')
+  fs.writeFileSync(child, "process.stdout.write(process.env.AC_STRICT_SETUP_OWNER === String(process.pid) ? 'CHILD:HOOKED' : 'CHILD:CLEAN')")
+  const out = await new Promise((resolve, reject) => {
+    const cp = fork(child, ['--test'], { silent: true }); let text = ''
+    cp.stdout.on('data', d => { text += d }); cp.on('error', reject); cp.on('exit', () => resolve(text))
+  })
+  fs.rmSync(dir, { recursive: true, force: true })
+  if (out !== 'CHILD:CLEAN') throw new Error('a "--test" script argument re-hooked the child: ' + JSON.stringify(out))
+})`)
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+})
+
 test('#313 console.error inside code run through the shared vm helper fails the test, own console or not', () => {
   const helper = JSON.stringify(path.join(__dirname, 'vm-sandbox.cjs'))
   failsOnlyWithSetup(`const { runInSandbox } = require(${helper})

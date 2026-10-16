@@ -1,6 +1,6 @@
 const {test}=require('node:test')
 const assert=require('node:assert/strict')
-const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript')
+const fs=require('node:fs'),path=require('node:path'),ts=require('typescript')
 const { runInSandbox } = require('./vm-sandbox.cjs')
 class FormDataMock { constructor(){this.rows=[]} append(key,value){this.rows.push([key,String(value)])} get(key){const row=this.rows.find(item=>item[0]===key);return row&&row[1]} entries(){return this.rows.values()} }
 
