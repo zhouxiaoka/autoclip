@@ -189,7 +189,7 @@ class _TextProvider:
 def _text_request():
     def impl(*_a, **_k):
         raise RuntimeError('fixture')
-    with pytest.raises(RuntimeError):
+    with llm_emit.bind_context(identity=TEXT), pytest.raises(RuntimeError):  # R23: route identity
         llm_emit.observe_provider_call(_TextProvider(), impl, 'p')
 
 
@@ -210,7 +210,7 @@ def test_195_text_identity_is_read_before_the_request_is_sent(posted):
         _settings(analysis='other')
         raise RuntimeError('fixture')
     with llm_emit.track_run():
-        with pytest.raises(RuntimeError):
+        with llm_emit.bind_context(identity=TEXT), pytest.raises(RuntimeError):
             llm_emit.observe_provider_call(_TextProvider(), impl, 'p')
         snap = llm_emit.run_snapshot()
     assert _ident(snap) == TEXT

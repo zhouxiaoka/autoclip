@@ -227,8 +227,10 @@ def _sync_last_degrade(value: int) -> None:
 
 
 @contextmanager
-def bind_context(*, provider: str = "", model: str = "", base_url: str = "", kind: str = "text"):
+def bind_context(*, provider: str = "", model: str = "", base_url: str = "", kind: str = "text",
+                 identity: dict | None = None):
     token = _call_ctx.set({
+        "identity": dict(identity or {}),
         "provider": _provider_name(provider) or "",
         "model": _safe_model(model) or "",
         "base_url": base_url or "",
@@ -303,7 +305,9 @@ def request_finished(
 def observe_provider_call(provider: Any, impl: Any, prompt: str, input_data: Any = None, **kwargs: Any):
     """Wrap LLMProvider.call. ``prompt`` / ``input_data`` stay in the callee only."""
     started = time.monotonic()
-    identity = _request_start_identity("analysis")  # R22 #195: frozen before the request is sent
+    # R23 #415: the identity of the route's own connection, frozen when the route was resolved (same
+    # as vision). Never read settings here: a save between route and send must not move attribution.
+    identity = dict((_call_ctx.get() or {}).get("identity") or {})
     base_url = _provider_base_url(provider)
     from backend.core.llm_degrade import bound_request_model
     model = bound_request_model(getattr(provider, "model_name", None))
@@ -594,15 +598,6 @@ def _request_properties(
         failed_stage = normalize_failure_stage(failure_stage or stage or _current_stage()) or "analyze"
         properties["failure_stage"] = failed_stage
     return properties
-
-
-def _request_start_identity(role: str) -> dict:
-    """R22 #195: the connection identity a request runs on, read BEFORE it is sent."""
-    try:
-        from backend.services.studio.failure_identity import provider_identity
-        return provider_identity(role)
-    except Exception:  # noqa: BLE001 - identity is attribution only; never lose the request
-        return {}
 
 
 def freeze_phase_identity(identity: dict | None) -> None:

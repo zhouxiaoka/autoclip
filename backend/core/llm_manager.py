@@ -5,7 +5,7 @@ import hashlib
 import json
 import os
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
@@ -28,6 +28,9 @@ class _CallRoute:
     provider: Optional[LLMProvider]
     settings: Dict[str, Any]
     info: Dict[str, Any]
+    # R23 #415: provider + config_source of the connection this route was resolved from
+    # (failure_identity.connection_identity), frozen with the route; never re-read from settings.
+    identity: Dict[str, Any] = field(default_factory=dict)
 
 
 class LLMManager:
@@ -83,7 +86,8 @@ class LLMManager:
             except Exception:  # identity is optional; a configured provider can still run
                 info = {}
             settings = self.settings if isinstance(getattr(self, "settings", None), dict) else {}
-            return _CallRoute(getattr(self, "current_provider", None), dict(settings), dict(info))
+            identity = dict(getattr(self, "_route_identity", None) or {})
+            return _CallRoute(getattr(self, "current_provider", None), dict(settings), dict(info), identity)
     
     def _get_default_settings_file(self) -> Path:
         """获取默认设置文件路径"""
@@ -201,6 +205,7 @@ class LLMManager:
         self._apply_env_fallbacks(default_settings)
         self._apply_local_preset(default_settings)
         self._apply_cloud_preset(default_settings)
+        route_identity: Dict[str, Any] = {}
         from backend.services import ai_model_settings as ai
         try:
             configured = ai.load()
@@ -210,6 +215,8 @@ class LLMManager:
             binding = ai.require_analysis(configured)
             connection = ai.connection_for(configured, binding)
             endpoint = ai.chat_endpoint(connection, binding.model)
+            from backend.services.studio.failure_identity import connection_identity
+            route_identity = connection_identity(connection, binding.model)
             source = getattr(binding, 'model_source', None) or getattr(binding, 'source', None)
             if source not in ('preset', 'user'):
                 source = 'user'
@@ -220,6 +227,7 @@ class LLMManager:
                                     chunk_size=configured.chunk_size,
                                     min_score_threshold=configured.min_score_threshold,
                                     max_clips_per_collection=configured.max_clips_per_collection)
+        self._route_identity = route_identity  # kept off settings: settings.json is saved verbatim
         # Failed loads must remain retryable; never mark a broken assignment as loaded.
         self._settings_mtime = self._current_settings_mtime()
         self._settings_hash = self._current_settings_hash()
@@ -497,6 +505,7 @@ class LLMManager:
                     model=chosen,
                     base_url=str(info.get('base_url') or settings.get('openai_base_url') or settings.get('dashscope_base_url') or ''),
                     kind='text',
+                    identity=route.identity,
                 ):
                     response = provider.call(prompt, input_data, **kwargs)
             content = response.content
