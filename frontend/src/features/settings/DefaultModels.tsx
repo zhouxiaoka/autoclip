@@ -160,7 +160,6 @@ export default function DefaultModels({ settings, lists, onChange }: {
   return (
     <div id="ai-defaults" className="ac-default-models" ref={root}>
       <h3 className="ac-model-section-title">{t('默认模型')}</h3>
-      <p className="ac-note">{t('连接服务商后，为每项用途选择默认模型')}</p>
       <div className="ac-purpose-grid">
         {PURPOSE_SLOTS.map(slot => {
           const line = slotSummary(settings, lists, slot.id)

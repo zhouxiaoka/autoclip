@@ -766,7 +766,7 @@ function settingsHook(s, transport, initial) {
   const defaults=loadTs('modelDefaults.ts')
   const access=loadTs('providerAccess.ts',{'../../i18n':{t:x=>x},'./providers':providers,'../../analytics/successRateContract':load('successRateContract')})
   const urls=loadTs('providerUrl.ts')
-  const logic=load('../features/settings/modelSettingsLogic',{'./endpointProvider':loadTs('endpointProvider.ts'),'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls})
+  const logic=load('../features/settings/modelSettingsLogic',{'./endpointProvider':loadTs('endpointProvider.ts'),'./providers':providers,'./modelDefaults':defaults,'./providerAccess':access,'./providerUrl':urls,'./providerPresets':loadTs('providerPresets.ts',{'../../i18n':{t:x=>x}})})
   const slotLogic=loadTs('defaultModelSlots.ts',{'../../i18n':{t:x=>x}})
   const experience=load('experience',{'./posthog':{captureBusinessEvent:s.capture},'./observer':{workflow:s.tracker},'./workflow':core})
   const custom=load('../features/settings/customProvider',{'./providerUrl':urls,'./modelSettingsLogic':logic,'./providerAccess':access},{URL,crypto:{randomUUID:()=>'uuid'}})

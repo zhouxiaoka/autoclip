@@ -23,9 +23,15 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"([?&][^=&#\s\"'<>?]+=)[^&#\s\"'<>]+"), r"\1" + REDACTED),
     # E3: the whole Authorization / Proxy-Authorization value, whatever the scheme
     # (Bearer, Basic, Key, Token, raw). Header form and JSON/dict form.
-    (re.compile(r"(?i)((?:proxy-)?authorization[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\][\"',}\r\n]|\[REDACTED\]$)[^\"'\r\n}]+"), r"\1" + REDACTED),
+    # R10-R1: quoted value (JSON / dict / quoted header) → whole quoted string, including
+    # spaces and escaped quotes (Digest username=\"u\", response=\"…\").
+    (re.compile(r"(?i)((?:proxy-)?authorization[\"']?\s*[:=]\s*)([\"'])(?:\\.|(?!\2)[^\\\r\n])*\2"), r"\1\2" + REDACTED + r"\2"),
+    # R10-R1: unquoted header value → everything to end of line (Digest k="v", k2="v2").
+    (re.compile(r"(?i)((?:proxy-)?authorization[\"']?\s*[:=]\s*)(?![\s\"'])[^\r\n]+"), r"\1" + REDACTED),
     # Bare bearer / basic tokens outside a header
     (re.compile(r"(?i)\b(bearer|basic)\s+(?!\[REDACTED\])[A-Za-z0-9._~+/=\-]{6,}"), r"\1 " + REDACTED),
+    # R10-R1: quoted credential values may contain spaces: api_key="prefix x"
+    (re.compile(r"(?i)([\"']?(?:x-goog-api-key|x-api-key|api[_-]?key|apikey|access[_-]?token|secret[_-]?key|password)[\"']?\s*[:=]\s*)([\"'])(?:\\.|(?!\2)[^\\\r\n])*\2"), r"\1\2" + REDACTED + r"\2"),
     # key=value / "key": "value" credential fields
     (re.compile(r"(?i)([\"']?(?:x-goog-api-key|x-api-key|api[_-]?key|apikey|access[_-]?token|secret[_-]?key|password)[\"']?\s*[:=]\s*[\"']?)(?!\[REDACTED\])[^\s\"',;}&]+"), r"\1" + REDACTED),
     # Well-known key shapes
