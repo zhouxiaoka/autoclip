@@ -330,7 +330,11 @@ test('R22 #212: a whisper failure offers transcription settings (install entry),
   for (const code of ['whisper_not_installed', 'whisper_install_failed']) {
     assert.deepEqual({ ...readiness.failureSettings(code) }, { label: '打开转写设置', to: '/settings?section=speech' })
   }
-  for (const code of ['llm_not_configured', 'source_unreadable', '', null, undefined]) {
+  for (const code of ['llm_not_configured', '', null, undefined]) {
     assert.deepEqual({ ...readiness.failureSettings(code) }, { label: '模型设置', to: '/settings?section=ai' })
+  }
+  // R24 #231: a source failure is fixed with another file, not in settings.
+  for (const code of ['source_unreadable', 'source_too_short', 'source_no_audio']) {
+    assert.deepEqual({ ...readiness.failureSettings(code) }, { label: '换一个视频', to: '/' })
   }
 })

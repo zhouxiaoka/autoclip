@@ -4,9 +4,9 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 
-function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode, navs = []) {
+function render(automatic, phase, status = 'running', buttons = [], calls = [], errorCode, navs = [], error = 'failure') {
   const workspace = {
-    analysis: { status, phase, message: 'screening', error: 'failure', error_code: errorCode },
+    analysis: { status, phase, message: 'screening', error, error_code: errorCode },
     generation: automatic ? { auto_start: true, status: status === 'failed' ? 'failed' : 'screening' } : null,
     drafts: [], jobs: [], events: [], output_variants: [],
   }
@@ -86,4 +86,19 @@ test('R22 #212: a whisper_not_installed failure offers the transcription setting
   render(true, 'screening', 'failed', buttons, [], 'llm_not_configured', navs)
   buttons.find(button => button.children === '模型设置').onClick()
   assert.deepEqual(navs, ['/settings?section=ai'])
+})
+
+test('R24 #231: an unreadable source is shown at once as a source problem: no spinner, no retry, no settings, pick another file', () => {
+  const UNREADABLE = '无法读取这个视频的时长，文件可能已损坏、格式不受支持，或路径里有特殊字符。请换一个文件，或先用其他软件转成 MP4 后重新导入。'
+  for (const automatic of [true, false]) {
+    const buttons = [], navs = []
+    const html = render(automatic, 'screening', 'failed', buttons, [], 'source_unreadable', navs, UNREADABLE)
+    assert.match(html, /这个素材无法使用/)
+    assert.ok(html.includes(UNREADABLE), 'the unreadable message itself is on the page')
+    assert.doesNotMatch(html, /class="spin"|这次制作未完成/)
+    assert.equal(buttons.some(b => b.children === '重试'), false, 'retrying the same file cannot help')
+    assert.equal(buttons.some(b => b.children === '模型设置' || b.children === '打开转写设置'), false)
+    buttons.find(b => b.children === '换一个视频').onClick()
+    assert.deepEqual(navs, ['/'])
+  }
 })
