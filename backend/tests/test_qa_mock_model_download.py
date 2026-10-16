@@ -16,7 +16,7 @@ def client(monkeypatch):
             return 'downloading'
     monkeypatch.setattr(sr, 'get_model_manager', lambda: Manager())
     app = FastAPI()
-    app.include_router(sr.router, prefix='/api/v1/speech-recognition')
+    app.include_router(sr.router, prefix='/api/v1')
     return TestClient(app), calls
 
 
@@ -24,7 +24,7 @@ def test_off_by_default(client, monkeypatch):
     monkeypatch.delenv(sr.QA_FAIL_MODEL_DOWNLOAD_ENV, raising=False)
     http, calls = client
     assert sr.qa_fail_model_download() is False
-    res = http.post('/api/v1/speech-recognition/whisper-models/download', json={'model': 'base'})
+    res = http.post('/api/v1/whisper-models/download', json={'model': 'base'})
     assert res.status_code == 202 and calls == ['base']
 
 
@@ -37,7 +37,7 @@ def test_only_exact_one_enables(client, monkeypatch, value):
 def test_switch_answers_500_without_starting_a_download(client, monkeypatch):
     monkeypatch.setenv(sr.QA_FAIL_MODEL_DOWNLOAD_ENV, '1')
     http, calls = client
-    res = http.post('/api/v1/speech-recognition/whisper-models/download', json={'model': 'base'})
+    res = http.post('/api/v1/whisper-models/download', json={'model': 'base'})
     assert res.status_code == 500 and calls == []
 
 
