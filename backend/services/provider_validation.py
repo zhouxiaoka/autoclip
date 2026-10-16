@@ -193,8 +193,28 @@ def vision_follow_issue(settings: ai_models.ModelSettings) -> ValidationResult |
     )
 
 
+def _is_loopback_url(url: str | None) -> bool:
+    """R10 #399: only this machine counts. LAN IPs, link-local and ``.local`` gateways are
+    remote self-hosted services, so "start local Ollama" would mislead there. (Proxy
+    bypass still uses the wider ``is_local_url``.)"""
+    if not url:
+        return False
+    try:
+        from urllib.parse import urlparse
+        import ipaddress
+        host = (urlparse(url).hostname or '').lower().rstrip('.')
+    except Exception:  # noqa: BLE001
+        return False
+    if host == 'localhost' or host.endswith('.localhost'):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def _local_service_down(result: ValidationResult, base: str) -> ValidationResult:
-    if not result.ok and result.error_type == UpstreamErrorType.CONNECTION.value and is_local_url(base):
+    if not result.ok and result.error_type == UpstreamErrorType.CONNECTION.value and _is_loopback_url(base):
         result.hint_key = LOCAL_SERVICE_DOWN_HINT_KEY
     return result
 

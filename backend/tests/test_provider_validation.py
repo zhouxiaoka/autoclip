@@ -624,3 +624,29 @@ def test_e6_local_service_down_hint_exists_in_all_eight_locales():
         if lang != 'zh':
             assert text != LOCAL_SERVICE_DOWN_HINT_KEY, f'{lang} still uses Chinese source string'
             assert 'Ollama' in text, f'{lang} should name Ollama'
+
+
+# R10 #399: only loopback counts as "this machine"; LAN / .local gateways keep the generic hint.
+@pytest.mark.parametrize('base,local', [
+    ('http://127.0.0.1:11434/v1', True),
+    ('http://127.8.0.1:11434/v1', True),
+    ('http://localhost:1234/v1', True),
+    ('http://ollama.localhost:11434/v1', True),
+    ('http://[::1]:11434/v1', True),
+    ('http://192.168.1.20:11434/v1', False),
+    ('http://10.0.0.5:11434/v1', False),
+    ('http://172.16.3.4:8000/v1', False),
+    ('http://gpu-box.local:11434/v1', False),
+    ('http://169.254.10.10:11434/v1', False),
+    ('http://host.docker.internal:11434/v1', False),
+    ('https://api.example.com/v1', False),
+])
+def test_r10_local_service_down_hint_only_for_loopback(monkeypatch, base, local):
+    from types import SimpleNamespace
+    from backend.services import provider_validation as pv
+    fetched = SimpleNamespace(recommended={}, truncated=False, message_key='')
+    monkeypatch.setattr(pv, '_get_models', lambda *a, **k: ([], pv._classify(None, '', error_name='ConnectError'), fetched))
+    result = validate_connection(_connection(base_url=base), 'm')
+    assert result.error_type == 'connection'
+    expected = pv.LOCAL_SERVICE_DOWN_HINT_KEY if local else HINT_KEYS[UpstreamErrorType.CONNECTION]
+    assert result.hint_key == expected
